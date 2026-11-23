@@ -85,3 +85,19 @@ Workers append; keep one entry per gap, list the machines that hit it.
   beside the field.
 - Asked: make these optional with absence = "no check / no time", reported in the reply's claims,
   so no stand-in numbers are needed.
+
+## B12. Lathes with live tools, C and/or Y on a turret
+- Published widely (DN Lynx LMA, Puma Y/SY, DMG MORI NLX/CLX, Spinner TC, Mazak QT MY): a turret
+  with driven tools, a C-axis main spindle, often Y, sometimes a sub-spindle on W/B.
+- Format: kind `lathe` forbids rotaries and milling spindles; kind `mill-turn` asks for lin >= 3 and
+  a milling spindle (a live turret without Y has lin 2: refused).
+- Meanwhile: these are modelled as their 2-axis lathe (X, Z, turret), the rest named in `note`.
+- Asked: a turret `live` spindle counted as milling for a `lathe` kind with C (lin 2 or 3), and a
+  sub-spindle on a lathe.
+
+## B13. Things the format may want but that makers rarely publish
+- Rotary tilt ranges (DMG MORI DMU 65, DN DVF 5000 2nd gen, Okuma MU-5000V, Grob G350, Kern Micro HD,
+  Hyundai WIA XF6300, Chiron FZ 16 S: not published on the reachable pages): those machines are left
+  out rather than guessed.
+- The sense of + on a tilt (which way the table tips): never published; modelled right-handed.
+- Pivot height of a trunnion below the table top: never published; estimates named in each note.

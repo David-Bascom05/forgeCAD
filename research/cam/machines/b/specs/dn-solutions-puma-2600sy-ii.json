@@ -1,0 +1,124 @@
+{
+ "vendor": "DN Solutions",
+ "model": "PUMA 2600SY II",
+ "family": "PUMA 2100/2600 Y/SY II",
+ "source": [
+  "https://www.dn-solutions.com/us/product/turning-center/y-axis-horizontal/puma-2100-lsy--ii.do"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe-y",
+ "architecture": "Horizontal turning center with Y-axis live-tool turret and opposed sub-spindle; carrying arrangement not on fetched page.",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 260,
+  "Y": 105,
+  "Z": 830
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 376,
+ "max_turning_length_mm": 760,
+ "chuck_size_in": 10,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 4000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 22
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 599
+  },
+  "curve_points": null
+ },
+ "sub_spindle": {
+  "rpm_max": 6000,
+  "power_kw": 15
+ },
+ "live_tool": {
+  "rpm_max": 5000,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": 12,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 30,
+  "Y": null,
+  "Z": 30
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 1945,
+  "D": 3560,
+  "H": 2163
+ },
+ "weight_kg": 6550,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "bar_capacity_mm",
+  "control.standard",
+  "coolant.through_spindle",
+  "live_tool.power_kw",
+  "max_cutting_feed_m_min",
+  "rapid_m_min.Y",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle_nose_type",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm",
+  "tailstock",
+  "turret_index_s"
+ ],
+ "options": [
+  "B version (12 in chuck, 2800 r/min, 26 kW, 1123 N·m, sub 4500 r/min 7.5 kW)",
+  "L long-bed version (Z 1350, 1280 mm turning length)"
+ ],
+ "notes": "Only DN Solutions US product page summary table. Y rapid not published there. Page labels Length/Height/Width; D=Length. Not applicable to this machine kind (left null, not listed in unknown): spindle_nose_to_table_mm, spindle_center_to_column_mm, spindle_center_to_pallet_top_mm, table_mm, table_load_kg, rotary_table_dia_mm, pallet, changer, milling_head, rotary, rapid_m_min.A_or_B_rpm, rapid_m_min.C_rpm."
+}

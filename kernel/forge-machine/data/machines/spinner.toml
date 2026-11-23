@@ -1,0 +1,268 @@
+# Spinner machines: the maker's published specifications, restated (never copied); each record's
+# `source` is the page or catalogue read and `taken` the date. Estimates and UNKNOWNs are named in
+# each record's `note` and beside the field. Bodies are conservative envelopes from published
+# overall dimensions, not the maker's CAD. Format: docs/cam-machine.md.
+
+# ---------------------------------------------------------------------------------------------
+# Spinner U5-630: U-Advanced / U-Compact (U630).
+# X 630 Y 530 Z 465; 12000 rpm SK40 (DIN 69871) / BT40 / BBT40 / HSK63; 32 tools.
+[[machine]]
+name = "spinner-u5-630"
+kind = "table-table"
+control = "unknown"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.spinner.eu.com/en/cnc-milling-machines/5-axis-machines/u5-630 | https://www.spinner.eu.com/uploads/assets/downloads/LP-e-2026_07.pdf"
+taken = "2026-11-23"
+note = "B tilts the cradle about Y (-120..180 deg, published) and carries C; the sense of +B (which way the table tips) is UNKNOWN: modelled right-handed about +y; B's pivot below the table top UNKNOWN: 150 mm (estimate); which unit carries X/Y/Z: see the header (where not published, all on the head here); the tool-to-part motion is the same either way; spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate); spindle power as published: peak/other: 15 kW (base 12k in-line spindle; rating type not stated) (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); magazine options: 54, 90, 122; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; control UNKNOWN (not published)."
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-315, 315]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-265, 265]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-465, 0]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, -150]
+range = [-120, 180]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "B"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 565]
+rpm = [1, 12000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [1000, 500]
+interface = "SK40 (DIN 69871) / BT40 / BBT40 / HSK63"
+
+[[machine.changer]]
+pockets = 32
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 99   # UNKNOWN (unpublished): no weight check
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 565]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/spinner/u5-630/bed.fg"
+ignore = ["support-l", "support-r"]
+[[machine.body.box]]
+min = [-615, -565, -966.198086]
+max = [615, 565, -566.198086]
+
+[[machine.body]]
+name = "support-l"
+link = "base"
+part = "parts/spinner/u5-630/support-l.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-385, -565, -550]
+max = [385, -425, 0]
+
+[[machine.body]]
+name = "support-r"
+link = "base"
+part = "parts/spinner/u5-630/support-r.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-385, 425, -550]
+max = [385, 565, 0]
+
+[[machine.body]]
+name = "cradle"
+link = "B"
+part = "parts/spinner/u5-630/cradle.fg"
+ignore = ["rotary", "support-l", "support-r"]
+[[machine.body.box]]
+min = [-345, -405, -200]
+max = [345, 405, -80]
+
+[[machine.body]]
+name = "rotary"
+link = "C"
+part = "parts/spinner/u5-630/rotary.fg"
+ignore = ["cradle"]
+[[machine.body.cyl]]
+base = [0, 0, -80]
+axis = [0, 0, 1]
+r = 325
+h = 80
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/spinner/u5-630/nose.fg"
+[[machine.body.cyl]]
+base = [0, 0, 565]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/spinner/u5-630/head.fg"
+[[machine.body.box]]
+min = [-150, -150, 715]
+max = [150, 150, 1165]
+
+# ---------------------------------------------------------------------------------------------
+# Spinner TC600: TC universal lathes.
+# X 275 Y 90 Z 700; 4000 rpm built-in motor spindle, hollow hydraulic clamping.
+[[machine]]
+name = "spinner-tc600"
+kind = "lathe"
+control = "unknown"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.spinner.eu.com/en/cnc-lathes/universal-turning/tc600 | https://www.spinner.eu.com/uploads/assets/downloads/LP-e-2026_07.pdf"
+taken = "2026-11-23"
+note = "modelled as its 2-axis lathe: the Y axis, C axis and live tools are not modelled (FORMAT-GAPS B12); swing over bed UNKNOWN: the max turning diameter used; spindle power as published: peak/other 34 kW; torque max 325 N.m (no curve: no power check); where each stroke sits relative to the spindle centreline and chuck face is UNKNOWN: X's top end is put at the max turning radius and Z's at the max turning length + 50 mm (estimates); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the base frame is turned so x is the slide's X (a slant bed's angle is not modelled); the tailstock is not modelled; control UNKNOWN (not published)."
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [0, 700]
+home = 700
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-75, 200]   # radius; the program's X word is twice it
+home = 200
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+diameter = true
+
+[[machine.spindle]]
+name = "main"
+link = "base"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [1, 4000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [400, 650]
+interface = " (bar 65)"
+
+[[machine.turret]]
+name = "T1"
+link = "X"
+stations = 16
+index_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0)
+center = [379.46, 0, 0]
+index_axis = [0, 0, 1]
+
+[[machine.mount]]
+name = "turret"
+kind = "tool"
+link = "X"
+at = [219.46, 0, 0]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "chuck"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/spinner/tc600/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-219.46, -219.46, -610]
+max = [219.46, 219.46, -110]
+
+[[machine.body]]
+name = "chuck"
+link = "base"
+part = "parts/spinner/tc600/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -110]
+axis = [0, 0, 1]
+r = 139.46
+h = 110
+
+[[machine.body]]
+name = "turret"
+link = "X"
+part = "parts/spinner/tc600/turret.fg"
+[[machine.body.cyl]]
+base = [379.46, 0, -45]
+axis = [0, 0, 1]
+r = 160
+h = 90

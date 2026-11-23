@@ -1,0 +1,264 @@
+# Okuma machines: the maker's published specifications, restated (never copied); each record's
+# `source` is the page or catalogue read and `taken` the date. Estimates and UNKNOWNs are named in
+# each record's `note` and beside the field. Bodies are conservative envelopes from published
+# overall dimensions, not the maker's CAD. Format: docs/cam-machine.md.
+
+# ---------------------------------------------------------------------------------------------
+# Okuma GENOS M560-V: GENOS M, OSP (OSP-P series; exact model not stated).
+# X 1050 Y 560 Z 460; 12000 rpm; 32 tools.
+[[machine]]
+name = "okuma-genos-m560-v"
+kind = "vmc3"
+control = "okuma-osp"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.okuma.eu/products/by-process/milling/genos-m-series/genos-m560-v-e/ | https://www.okuma.co.jp/product/genos_m/ | https://www.okuma.co.jp/english/product/vmc/genosm.php"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle nose to table UNKNOWN: 150 to 150 + Z (estimate); spindle power as published: cont 18.5 kW; peak/other: 22 kW (short-time rating as '22/18.5') (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); overall 2564 x 3194 x 2746; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the dialect (okuma-osp) is not in forge-post yet."
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-280, 280]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-525, 525]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-460, 0]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 610]
+rpm = [1, 12000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [1000, 500]
+interface = "UNKNOWN"
+
+[[machine.changer]]
+pockets = 32
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 99   # UNKNOWN (unpublished): no weight check
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 610]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/okuma/genos-m560-v/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-650, -660, -700]
+max = [650, 1070, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/okuma/genos-m560-v/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-390, 620, -400]
+max = [390, 1070, 1260]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/okuma/genos-m560-v/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-520, -280, -250]
+max = [520, 280, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/okuma/genos-m560-v/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-650, -280, -100]
+max = [650, 280, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/okuma/genos-m560-v/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 610]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/okuma/genos-m560-v/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-140, -140, 760]
+max = [140, 620, 1210]
+
+# ---------------------------------------------------------------------------------------------
+# Okuma MB-46VII: MB-V, OSP (model not stated).
+# X 560 Y 460 Z 460; 8000 rpm; 20 tools.
+[[machine]]
+name = "okuma-mb-46vii"
+kind = "vmc3"
+control = "okuma-osp"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.okuma.eu/products/by-process/milling/mb-v-series/mb-46vab/"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle nose to table UNKNOWN: 150 to 150 + Z (estimate); spindle power as published: cont 7.5 kW; peak/other: 11 kW (short-time; '11/7.5') (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); magazine options: 32, 48, 98; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the dialect (okuma-osp) is not in forge-post yet."
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-230, 230]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-280, 280]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-460, 0]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 610]
+rpm = [1, 8000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [1000, 500]
+interface = "UNKNOWN"
+
+[[machine.changer]]
+pockets = 20
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 99   # UNKNOWN (unpublished): no weight check
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 610]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/okuma/mb-46vii/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-380, -560, -700]
+max = [380, 970, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/okuma/mb-46vii/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-300, 520, -400]
+max = [300, 970, 1260]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/okuma/mb-46vii/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-304, -230, -250]
+max = [304, 230, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/okuma/mb-46vii/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-380, -230, -100]
+max = [380, 230, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/okuma/mb-46vii/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 610]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/okuma/mb-46vii/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-140, -140, 760]
+max = [140, 520, 1210]
