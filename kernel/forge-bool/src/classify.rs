@@ -672,6 +672,7 @@ impl<'a> Index<'a> {
             if boxes[f.index()].contains(p)
                 && self.body.face(f).surface.distance(p) <= tol::LINEAR
                 && self.point_in_face(f, p) != Where::Outside
+                && on_carrier(&self.body.face(f).surface, p)
             {
                 return Where::On;
             }
@@ -707,6 +708,46 @@ impl<'a> Index<'a> {
         }
         Where::On
     }
+}
+
+/// Whether `p` is exactly on a plane's carrier, `n·(p - o) = 0` with no rounding (classify's `On`,
+/// read exactly: verify/forge-bool-proof FlatSites/Where.lean `classify_on_sound`, fact 1). Other
+/// surfaces: true, today's tolerance answer (their exact test is the curved screens').
+#[inline]
+fn on_carrier(s: &Surface, p: Point3) -> bool {
+    match s {
+        Surface::Plane(pl) => on_plane(pl, p),
+        _ => true,
+    }
+}
+
+/// `n·(p - o) = 0` exactly: each `p_i - o_i` is exact when TwoSum leaves no error, and then the
+/// sign of the dot product is `dot3`'s, which is exact; otherwise in exact dyadics.
+#[inline(never)]
+fn on_plane(pl: &forge_geom::Plane, p: Point3) -> bool {
+    let (o, n) = (pl.frame.origin, pl.frame.z().get());
+    // TwoSum (Knuth): s + e = a + b exactly (verify/ieee754 TwoSum.lean `two_sum_exact`)
+    let two_sum = |a: f64, b: f64| {
+        let s = a + b;
+        let bb = s - a;
+        (s, (a - (s - bb)) + (b - bb))
+    };
+    let (dx, ex) = two_sum(p.x, -o.x);
+    let (dy, ey) = two_sum(p.y, -o.y);
+    let (dz, ez) = two_sum(p.z, -o.z);
+    if ex == 0.0 && ey == 0.0 && ez == 0.0 {
+        forge_math::predicates::dot3(n, Vec3::new(dx, dy, dz)) == 0.0
+    } else {
+        on_plane_exact(o, n, p)
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn on_plane_exact(o: Point3, n: Vec3, p: Point3) -> bool {
+    use forge_math::exact::{DyPlane, DyV3, HPoint};
+    let plane = DyPlane::from_frame([o.x, o.y, o.z], [n.x, n.y, n.z]);
+    plane.side(&HPoint::from_dy(DyV3::from_f64(p.x, p.y, p.z))) == 0
 }
 
 /// The uses of face `f`'s boundary whose edges' boxes meet `bx` (only the bands near it, where
@@ -1195,6 +1236,43 @@ mod tests {
     use super::*;
     use forge_math::rng::Rng;
     use forge_math::{Frame, Vec2, dmath};
+
+    /// `on_plane` against the exact dyadic side, on both of its branches.
+    #[test]
+    fn on_plane_is_the_exact_side() {
+        use forge_math::exact::{DyPlane, DyV3, HPoint};
+        let exact = |pl: &forge_geom::Plane, p: Point3| {
+            let (o, n) = (pl.frame.origin, pl.frame.z().get());
+            let plane = DyPlane::from_frame([o.x, o.y, o.z], [n.x, n.y, n.z]);
+            plane.side(&HPoint::from_dy(DyV3::from_f64(p.x, p.y, p.z))) == 0
+        };
+        let mut rng = Rng::new(7);
+        let mut on = 0;
+        for k in 0..2000 {
+            let n = Vec3::new(rng.range(-1.0, 1.0), rng.range(-1.0, 1.0), rng.range(-1.0, 1.0));
+            let n = if k % 3 == 0 { Vec3::new(0.0, 0.0, 1.0) } else { n };
+            let Some(z) = n.normalize() else { continue };
+            // (origins far from the points too: TwoSum leaves an error, the exact branch decides)
+            let far = if k % 2 == 0 { 1.0 } else { 1e6 };
+            let o = Point3::new(rng.range(-far, far), rng.range(-far, far), 0.25);
+            let pl = forge_geom::Plane::new(Frame::from_z(o, z));
+            let q = Point3::new(
+                rng.range(-10.0, 10.0),
+                rng.range(-10.0, 10.0),
+                rng.range(-1.0, 1.0),
+            );
+            // a point of the plane as the kernel makes one (the origin, or a lattice point of z = 0.25)
+            let p = match k % 4 {
+                0 => o,
+                1 if k % 3 == 0 => Point3::new(q.x, q.y, 0.25),
+                _ => q,
+            };
+            let want = exact(&pl, p);
+            on += usize::from(want);
+            assert_eq!(on_plane(&pl, p), want, "{pl:?} {p:?}");
+        }
+        assert!(on > 300, "{on}");
+    }
     use forge_ops::{Axis2, Profile, ProfileLoop, Segment, extrude, revolve};
 
     const Y: Axis2 = Axis2 {
