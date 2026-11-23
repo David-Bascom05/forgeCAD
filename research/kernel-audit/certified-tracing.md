@@ -424,3 +424,18 @@ counts the branches. That count can come from Sturm or Descartes sign variations
 coefficients, refined only where the count is unsure. It is a 1D walk in u with a few hundred
 intervals, not a 2D or 3D box walk. Compared with the march's chains, it proves completeness, and
 the Krawczyk steps stay as they are for the branch-following part.
+
+### 10.2 Tried and reverted: the polynomial in v per u-interval
+
+For the line hosts (plane, cylinder, cone), P(u, v) = a(u) + v·d(u). So the other form on the host
+is a polynomial in v of degree ≤ 4, whose coefficients can be enclosed once per u-interval U. The
+walk then tested each V by the centred form of that polynomial, with no trig and no 3D evaluation
+per v-split. It was correct (the polynomials match the forms to 1e-9 at sampled points), but it was
+far slower: guard took 505M instructions, against 354M with the 2D mean-value walk, and frame took
+72G against 1.2G.
+
+The coefficients' enclosure over U carries U's whole width, with no mean-value term in u. Near the
+curve it excludes almost nothing until U is tiny, and every u-split pays the trig again. A 1D root
+count needs u-derivatives of the coefficients (a mean-value form in u for each c_k) or exact
+coefficient polynomials in (cos u, sin u) with a proper range bound, e.g. Bernstein on the
+half-angle tangent. Interval coefficients evaluated at a whole u-interval are not enough.
