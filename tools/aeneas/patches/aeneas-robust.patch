@@ -1,8 +1,8 @@
 diff --git a/src/PrePasses.ml b/src/PrePasses.ml
-index ebe7ae67..0ec3de10 100644
+index ebe7ae67..959cb0e8 100644
 --- a/src/PrePasses.ml
 +++ b/src/PrePasses.ml
-@@ -2372,6 +2372,183 @@ let fix_anon_const_initializers (crate : crate) (f : fun_decl) : fun_decl =
+@@ -2372,6 +2372,203 @@ let fix_anon_const_initializers (crate : crate) (f : fun_decl) : fun_decl =
      }
    else f
  
@@ -172,8 +172,28 @@ index ebe7ae67..0ec3de10 100644
 +            | _ -> [ st ])
 +          sts
 +      and lower_blk (b : block) : block = { b with statements = lower_stmts b.statements } in
-+      let new_body = lower_blk body.body in
-+      if !next = List.length body.locals.locals then f
++      (* Aeneas does not interpret unwinding (calls, drops and asserts are evaluated with their
++         [on_unwind] block ignored), but its loop checks visit those blocks; with
++         [--no-code-duplication] the cleanups are shared, and leave through [break i]. Empty them. *)
++      let no_unwind =
++        object
++          inherit [_] map_statement as super
++          method! visit_statement_kind env k =
++            let empty (b : block) : block = { b with statements = [] } in
++            let k =
++              match k with
++              | Call (c, p, b) -> Call (c, p, empty b)
++              | Drop (p, f, kd, b) -> Drop (p, f, kd, empty b)
++              | DropEmptyBox (p, b) -> DropEmptyBox (p, empty b)
++              | Assert (a, ak, b) -> Assert (a, ak, empty b)
++              | Panic (c, b) -> Panic (c, empty b)
++              | k -> k
++            in
++            super#visit_statement_kind env k
++        end
++      in
++      let new_body = lower_blk (no_unwind#visit_block () body.body) in
++      if false then f
 +      else
 +        {
 +          f with
@@ -186,7 +206,7 @@ index ebe7ae67..0ec3de10 100644
  let apply_passes (crate : crate) : crate =
    (* Passes that apply to the whole crate *)
    let crate = update_array_default crate in
-@@ -2384,6 +2561,7 @@ let apply_passes (crate : crate) : crate =
+@@ -2384,6 +2581,7 @@ let apply_passes (crate : crate) : crate =
        ("fix_anon_const_initializers", fix_anon_const_initializers);
        ("erase_body_regions", erase_body_regions);
        ("remove_unreachable", remove_unreachable);
