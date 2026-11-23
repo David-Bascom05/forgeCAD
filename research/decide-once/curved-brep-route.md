@@ -1,7 +1,9 @@
 # Curved decide-once on the B-rep route (route iii): design draft (2026-11-23)
 
-Status: this is a draft from the decide-once Lean coordinator. It goes to dol-curved
-(session_01Q19LzxCYQCLaMBUHLhN7Zr) for review and then to the master.
+Status: reviewed. dol-curved (session_01Q19LzxCYQCLaMBUHLhN7Zr) accepted the design on 2026-11-23
+and takes F6, the 2D nesting lemma and the builder's Lean L2. Their review and dol-curved-rust's arc
+model are folded in below (§1 step 1, the build order, nesting, §2, §5, §6). It goes to the master
+for sign-off.
 
 Context: research/decide-once/curved-design.md §2.5(b) and §7, and face-arrangement.md (A8).
 curved Rust measured that the formula route (§2.5a, design D2) covers 6.8% of the bench parts'
@@ -54,22 +56,42 @@ with:
 
 Steps, all exact, with each step's Skip named:
 
-1. **Crossing arcs.** For each pair of near faces `f`, `g` from different bodies on different
-   carriers:
-   - take the curve `q_f ∩ q_g`. For quadric pairs it is the exact pencil parametrisation (Levin;
-     Dupont–Lazard–Lazard–Petitjean), and curved Rust's stage (b) builds it now. Beyond Q1 it is
-     certified tracing;
-   - clip it to both trims. Its parameter breaks at the vertices where it meets a trim edge of `f`
-     or `g`. Each such vertex is a point of three carriers, certified by QVert: plane plus two
-     quadrics, or three quadrics, with RootCover for completeness;
-   - keep a sub-arc when its midpoint (an edge sample, QEdge) lies inside both trims. That is
-     decided by the per-face arrangement of step 3, never by a float point-in-face test.
+1. **Crossing arcs, by the sweep** (dol-curved-rust's model, adopted 2026-11-23). For each pair of
+   near faces `f`, `g` from different bodies on different carriers, the curve `q_f ∩ q_g` is built
+   from proposers that are already certified, with no parametrisation:
+   - **Events.** These are the x's of the discriminant of the curve's y-projection: `R(x, y) =
+     Res_z(q_f, q_g)` (the chain machinery computes and checks it), then the PRS of `(R, ∂_y R)`,
+     Bezout-checked, with x-only RootCover. They cover turning points and apparent crossings, so
+     between events the branches keep their y-order.
+   - **Slabs.** On a rational plane between events, each crossing is a certified edge sample
+     (QEdge), sorted by y.
+   - **Matching at an event.** Two rational planes `x_e ± δ`, and QArc boxes round the fiber's
+     multiple points, match the branches on each side.
+   - **Arcs** are chains of slab pieces. A trim vertex (QVert) is placed on its arc by its x and
+     its rank in y within its slab. The arc's "parameter" is the sweep order. A clip or a midpoint
+     is a slab sample between two vertices.
+   - **The frame must be generic**: no vertical component of the curve, and a nonzero `R`. The
+     sweep runs in a tilted rational frame. If a frame's check fails, the builder retilts once;
+     if it fails again, `Uncertified`.
+
+   What the proofs need from step 1 is completeness (every arc of `q_f ∩ q_g` in the trims is
+   found, F2) and exact adjacency (which branch continues which at an event). The sweep gives
+   both from QSample's completeness and the event certificates. No obligation (F1–F6, the core,
+   `flood_correct`) needs a parametrisation. The write needs each edge's carrier pair, its end
+   vertices and one interior sample to fix the branch; the sweep gives all three. If the kernel's
+   curved edge type wants a parametric curve, that is a conversion in the write, not in the
+   ledger.
+
+   **Build order, per face** (dol-curved: the clip in step 1 depends on step 3's nesting): the
+   trims first; then all crossing arcs on the face, unclipped; then trace the face graph (step 3);
+   then keep the arc pieces that lie on the face, and clip.
 
    For two faces of different bodies on one carrier (coplanar or co-quadric overlap), the imprint
    is `f`'s trim edges that lie inside `g`, as in flat's cut set. That needs the same nesting test
    as step 3.
 
-   Skips: `Uncertified` (a vertex or trace fails), `OutOfScope` (a surface kind beyond the phase).
+   Skips: `Uncertified` (a vertex, an event certificate or a sample fails), `OutOfScope` (a
+   surface kind beyond the phase).
 2. **Vertices.** These are the trim vertices plus the crossing-arc ends, deduplicated exactly: one
    certified point is one vertex (QVert's isolating box, then an exact equality test as a fallback).
 3. **Facets, per face.** On the face's carrier, the trim loops and the crossing arcs form a graph,
@@ -78,11 +100,15 @@ Steps, all exact, with each step's Skip named:
      tangents `±(∇q_f × ∇q_g)(v)` projected to `q_f`'s tangent plane, compared exactly as
      curved-design §7 describes. At a tangential vertex the order comes from the link (an isolating
      box's boundary crossings, which are edge samples).
-   - **Nesting.** A traced loop's region may hold others: annuli, holes. A loop `L` lies inside
-     loop `M` iff a constructed curve on `q_f` from a sample point of `L` to a reference point of
-     `M`'s outside crosses `M` an odd number of times. The curve is `q_f ∩` a rational plane through
-     two rational points. Its crossings with `M`'s arcs are certified vertices, counted exactly.
-     This is a 2D Jordan on a quadric patch, a much smaller thing than 3D ray parity.
+   - **Nesting.** A traced loop's region may hold others: annuli, holes. Whether a loop `L` lies
+     inside loop `M` is decided by a crossing count along one of the sweep's own sample planes
+     `x = c` in the tilted frame (QSample), as dol-curved advised. `q_f ∩ {x = c}` is a conic, its
+     crossings with `M`'s arcs are certified edge samples (`proposeEdgeAny_complete`), and the
+     y-order along the conic is exact, so the count is the one QSample already proves complete.
+     On a closed carrier (a sphere, or a cylinder band between caps) "`M`'s outside" has no
+     meaning. So the count is anchored at a point known to be in the face: a trim-edge sample
+     pushed to the face side by `o_f` and the trim's orientation. This is a 2D Jordan on a quadric
+     patch, a much smaller thing than 3D ray parity.
    - **Simple connectivity** isn't required. A facet with holes is one facet (W2; the write handles
      holes). The builder cuts only where a facet would otherwise be a wing at an edge or a pinched
      sector at a vertex. The cut is a seam piece in the face: `q_f ∩` a rational plane through
@@ -129,7 +155,9 @@ with both sides alike). The builder may also detect it first and Skip.
 region. Then its membership is constant there. It is decided by one certified ray from a room
 sample to infinity, counting crossings with `i`'s faces. That needs a 3D point-in-face on curved
 trims, done with the §1 step-3 nesting test on each hit face. If it isn't certified,
-`Skip::NoSeed`. On the gate, near bodies always have faces in the region, and a seedless class
+`Skip::NoSeed`. This also covers a class left seedless by the region itself, where all of body
+`i`'s faces are far (dol-curved). `far_unchanged` covers what they bound, but the builder must
+know about such a class in order to seed it, so it counts the class. On the gate, near bodies always have faces in the region, and a seedless class
 arises only for a body entirely containing, or missing, a pocket of the region. Expect it to be
 rare. The builder counts it.
 
@@ -139,7 +167,13 @@ rare. The builder counts it.
   and every point `x` of `relint f`, small neighbourhoods of `x` meet `A i` exactly on `f`'s
   inside (`o_f · q_f < 0`). This is the B-rep validity of the producing feature's output, stated
   locally. It is true of every valid solid with outward-oriented faces, and decide-once's own
-  outputs have it by construction (the write orients by `orient`).
+  outputs have it by construction (the write orients by `orient`). dol-curved states F6 with
+  a hypothesis per body, "`A i` is the solid bounded by its faces", rather than proving it from
+  nothing. `forge_topo::check` plus the producing feature's own validity supply that hypothesis.
+  `o_f` itself is exact: the kernel's `Face.same_sense` says whether the outward normal is the
+  surface's natural normal. For a plane, the natural normal is the oriented normal. For a
+  quadric, the natural normal's sign against `∇q_f` (for the canonical `QFace.toQuadric`) is a
+  fixed per-kind rule, which dol-curved states as a lemma per kind beside F6.
 - **F5 (already route B's):** rooms are open and connected, and disjoint from all faces. With F6 and
   `∂(A i) ⊆ ⋃ faces of i`, membership in `i` is constant on each room, and across a facet it flips
   iff the facet is a piece of `i`.
@@ -201,16 +235,19 @@ There is no `Wide` (v2 has no covectors) and no formula Skip.
 |---|---|---|
 | §1 builder, Rust (stages b–f) | curved Rust (dol-curved-rust) | this design |
 | `flood_correct` over IncLedger | the Lean coordinator | — |
-| F6 statement and proof | LemmaD or tier0 (master's call) | F5's room facts |
+| F6 statement and proof, and the per-kind sense lemma | dol-curved (assigned by the master) | F5's room facts |
 | 2D nesting lemma on a quadric patch, and the builder's L2 in Lean | dol-curved | QEdge/QVert |
 | bridge (2) | tier0 | F1–F6, `flood_correct` |
 
-## 6. Open questions for dol-curved
+## 6. Questions settled in review (2026-11-23)
 
-1. Is `o_f` (the face's sense relative to `∇q_f`) stored exactly on every B-rep face today, or does
-   it have to be derived from a sample?
-2. Tangent radial order (`Skip::Tangent`): how often do fillets produce faces tangent along a
-   crossing edge, as opposed to along their own trim? A fillet is tangent to its neighbours along
-   its trim, which is a B-rep edge, not a crossing, so I expect few.
-3. For the nesting test, which rational plane through two points is best on each quadric, given
-   the existing QLine? Any plane avoiding the axis would do.
+1. **`o_f` is stored exactly**, as `Face.same_sense`, which stage (a) reads into `CIn.outward`.
+   There is no sample. See F6 above.
+2. **The tangent radial order.** Fillets are tangent to their neighbours along their own trims.
+   Those are B-rep edges, so the tangency is in the input topology and `Skip::Tangent` does not
+   fire for them. A tool face tangent to a fillet along a crossing is rare. It is measured before
+   anything is designed for it.
+3. **The nesting plane** is the sweep's own sample plane `x = c` in the tilted frame, anchored in
+   the face on closed carriers (§1 step 3).
+4. **The arc model** is the sweep (§1 step 1), not the pencil parametrisation. No obligation needs
+   a parametrisation.

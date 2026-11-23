@@ -1,8 +1,9 @@
 # The inc (A8 v2) core's refinement: the split
 
-Target: `inc.IncCoreSpec` (ForgeBoolCore/IncSpecs.lean). On a well-formed v2 ledger (`LedgerWF2`),
-`inc::core` returns `ok`, and `outLF` of its outcome is `coreI (toLF l)`. With it,
-`endToEndF_of` gives `EndToEndF` at once, through `flat_refines`.
+Target: `inc.IncCoreSpec` (ForgeBoolCore/IncSpecs.lean). On a well-formed v2 ledger (`LedgerWF2`)
+and metric ledger (`MetricWF2`), `inc::core l r m` returns `ok`, and `outLF` of its outcome is
+`coreMI (toLF l)` on `m`'s thin and enclosed rooms. With no thin rooms, `coreMI` is `coreI`
+(`coreMI_nil`), and `endToEndF_of` gives `EndToEndF` at once, through `flat_refines`.
 
 The Lean it refines is verify/forge-exact/ForgeExact/DecideOnce/IncCore.lean (`coreI` and its
 stages). Funs.lean's `inc.*` is about 3.8k lines. The groups below follow the Rust functions, one
@@ -16,7 +17,8 @@ standard axioms and no sorry.
 | C, classify | `flood`, `witnesses`, `membership`, keep (`apply_rule`) | `memb` (flood head = least position), `classifyOk`, `keep`, `keepTab` | RefineUF, UFModel, RefineMemb, RefineClassify, RefineKeep, RefineRule |
 | K, touch | `around_e`, `around_v`, `fan_rel`, `fans`, `bad_vert`, `core_k` loops | `result`, `orient`, `aroundE`, `aroundV`, `badEdge`, `fanRel`, `badVert`, `coreK` | RefineFan, RefineUF |
 | U, unify | `same_set`, `dedup`, `unify` loops | `unify` (`joinRel`, `heads`, `faceOf`, `faceKey`, `atE`/`atV`, `outV`, `ecs`, `erel`) via `IncLedger.unify_eq` | RefineUnify* (most carries over), RefineUF |
-| E, core | `core` | `coreI`; then `IncCoreSpec` and `EndToEndF` | the coordinator |
+| M, collapse | `collapse` and its loops (since c2a0294) | `collapse` (MetricI) | RefineCollapse |
+| E, core | `core`, `core_k` | `coreMI`, `coreK`; then `IncCoreSpec` and `EndToEndF` | the coordinator |
 
 Size limits added: `LedgerWF2.small` now also has `n_rooms * nb ≤ Usize.max`, which `membership`'s table needs. It always holds on 64-bit targets, since both are below 2^32. It also has `nrowsL edge_facets < U32.max` and `nrowsL vert_edges < U32.max`, so the refusals' `as u32` casts name the right cell. And it has `vert_sectors.sec.len < U32.max`, for `fans`' union-find. `sectors_csr` (the sector rows' bounds) is a new field. `ledger_wf` checks `sectors_csr` already. It does not yet check `sectors_nodup` or the sector count; the Rust session has been asked to add both, so that `ledger_wf ↔ LedgerWF2` can hold.
 
@@ -35,4 +37,4 @@ Points to agree within each group:
 | S | done: `body_of_spec`, `cls_of_spec`, `split_ok_spec` (`= splitOk`), `split_spec` (`SplitOK`: piece table = `isPieceOf`, `rooms` = `(toLF l).rooms`, `room_pos` inverts it) | RefineIncTables, RefineIncSplit, RefineIncRooms |
 | C | done: `flood_spec`; `membership_spec` (row `i`, position `t` = `(toLF l).memb i (room rooms[t])`, via `memb_bridge` and the generic `head_leastI`); `core_loop0_spec` with `cAll_eq` (= `classifyOk`); `core_loop1_spec` with `keep_eq` (= `keep (ruleL nb r)` room by room) | RefineIncFlood, HeadBridgeI, RefineIncMemb, RefineIncClassify |
 | K | done except `core_k`'s assembly, which needs U's `unify`: `core_k_loop0_spec` (AInv) with `result_eq`, `orient_eq`; `around_e_spec`, `aroundE_len`, edge scan `core_k_loop1_spec` with `edges_find_eq`; `around_v_spec`, `fans_spec`, `bad_vert_spec` (= `badVert`, via the generic `fan_bad`), vert scan `core_k_loop2_spec` | RefineIncAssemble, RefineIncTouch, FanBridgeI, RefineIncFan |
-| U, E | to do | |
+| U, M, E | to do | |

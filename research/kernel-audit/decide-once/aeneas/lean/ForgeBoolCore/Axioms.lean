@@ -160,3 +160,4 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.fans_spec
 #print axioms forge_bool_core.inc.bad_vert_spec
 #print axioms forge_bool_core.inc.core_k_loop2_spec
+#print axioms forge_bool_core.inc.coreMI_nil
