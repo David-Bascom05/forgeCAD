@@ -116,6 +116,103 @@ theorem proposeEdge_complete {qj qk : Quadric} {c : Rat} {fuel : Nat} {es : List
       · cases h
   · simp [hb] at h
 
+/-! ## The linear case: both quadrics without `z²` (two planes, or a plane and a `z`-cylinder)
+
+If `zz = 0` for both, `q_j = a₁z + a₀` and `q_k = b₁z + b₀` on the plane, the quadratic `R`
+vanishes identically, and the elimination is linear: `b₁ q_j − a₁ q_k = b₁a₀ − a₁b₀ =: R`, and
+`z = −a₀/a₁` where `a₁ ≠ 0`. The certificates are the same ones (`onCurve`, `dOk`, `bezout`), so
+`proposeEdge_complete` covers this case as well (`proposeEdgeAny_complete`). -/
+
+def elimLin (qj qk : Quadric) (c : Rat) : Elim :=
+  let a := restr qj c
+  let b := restr qk c
+  { R := psub (pmul b.2.1 a.1) (pmul a.2.1 b.1)
+    N := a.1
+    D := a.2.1
+    U := [⟨b.2.1⟩]
+    V := [⟨pneg a.2.1⟩] }
+
+def proposeEdgeLin (qj qk : Quadric) (c : Rat) (fuel : Nat) : Option (List ESample) := do
+  let E := elimLin qj qk c
+  if !bezout qj qk c E.U E.V E.R then none
+  let ns ← rootsOf E.R fuel
+  let es := ns.map fun n => (⟨c, E.R, E.N, E.D, n, [], pneg (restr qj c).2.1⟩ : ESample)
+  if es.all (fun e => e.onCurve qj qk && e.dOk signFuel) then some es else none
+
+/-- The proposer for any pair: linear elimination when neither has `z²`. -/
+def proposeEdgeAny (qj qk : Quadric) (c : Rat) (fuel : Nat) : Option (List ESample) :=
+  if qj.zz = 0 ∧ qk.zz = 0 then
+    -- solve for z from a quadric whose z-coefficient on the plane is not zero
+    if Poly.isZero (restr qj c).2.1 then proposeEdgeLin qk qj c fuel else proposeEdgeLin qj qk c fuel
+  else proposeEdge qj qk c fuel
+
+section Model
+
+variable {K : Type} [Field K] [LE K] [LT K] [Std.IsLinearOrder K] [Std.LawfulOrderLT K]
+  [OrderedRing K] (M : Model K)
+
+theorem lin_ev_lin (qj : Quadric) (hz : qj.zz = 0) (c : Rat) (y z : K) :
+    Quadric.evK M qj (M.q c, y, z) = M.ev (restr qj c).2.1 y * z + M.ev (restr qj c).1 y := by
+  rw [← restrB_ev]
+  simp only [restrB, restr, evalWith_cons, evalWith_nil, yHom, Model.ev, hz, M.ι.map_zero]
+  grind
+
+theorem proposeEdgeLin_complete {qj qk : Quadric} (hz : qj.zz = 0) {c : Rat} {fuel : Nat}
+    {es : List ESample} (h : proposeEdgeLin qj qk c fuel = some es) {y z : K}
+    (hj : Quadric.evK M qj (M.q c, y, z) = 0) (hk : Quadric.evK M qk (M.q c, y, z) = 0) :
+    ∃ e ∈ es, Denotes M e.y y ∧ e.dOk signFuel = true ∧ e.onCurve qj qk = true ∧
+      planePt M e.c e.N e.D y = (M.q c, y, z) := by
+  unfold proposeEdgeLin at h
+  simp only [Option.bind_eq_bind] at h
+  by_cases hb : bezout qj qk c (elimLin qj qk c).U (elimLin qj qk c).V (elimLin qj qk c).R = true
+  · simp only [hb, Bool.not_true, Bool.false_eq_true, ite_false] at h
+    cases hr : rootsOf (elimLin qj qk c).R fuel with
+    | none => simp [hr] at h
+    | some ns =>
+      simp only [hr, Option.bind_some] at h
+      split at h
+      · rename_i hall
+        simp only [Option.some.injEq] at h
+        subst h
+        have hR := bezout_spec M hb hj hk
+        obtain ⟨n, hn, hd⟩ := rootsOf_complete M hr hR
+        refine ⟨_, List.mem_map_of_mem hn, hd, ?_⟩
+        have hok := List.all_eq_true.mp hall _ (List.mem_map_of_mem hn)
+        simp only [Bool.and_eq_true] at hok
+        refine ⟨hok.2, hok.1, ?_⟩
+        have hD := dOk_ne M (e := ⟨c, (elimLin qj qk c).R, (elimLin qj qk c).N, (elimLin qj qk c).D, n,
+          [], pneg (restr qj c).2.1⟩) hd hok.2
+        simp only [elimLin] at hD ⊢
+        have hl := lin_ev_lin M qj hz c y z
+        rw [hj] at hl
+        have hinv : M.ev (restr qj c).2.1 y * (M.ev (restr qj c).2.1 y)⁻¹ = 1 :=
+          Field.mul_inv_cancel hD
+        simp only [planePt]
+        have hz' : z = -(M.ev (restr qj c).1 y) / M.ev (restr qj c).2.1 y := by grind
+        rw [hz']
+      · cases h
+  · simp [hb] at h
+
+/-- **Every crossing is a proposed sample's point, for any pair.** -/
+theorem proposeEdgeAny_complete {qj qk : Quadric} {c : Rat} {fuel : Nat} {es : List ESample}
+    (h : proposeEdgeAny qj qk c fuel = some es) {y z : K}
+    (hj : Quadric.evK M qj (M.q c, y, z) = 0) (hk : Quadric.evK M qk (M.q c, y, z) = 0) :
+    ∃ e ∈ es, Denotes M e.y y ∧ e.dOk signFuel = true ∧
+      (e.onCurve qj qk = true ∨ e.onCurve qk qj = true) ∧
+      planePt M e.c e.N e.D y = (M.q c, y, z) := by
+  unfold proposeEdgeAny at h
+  split at h
+  · rename_i hz
+    split at h
+    · obtain ⟨e, he, h1, h2, h3, h4⟩ := proposeEdgeLin_complete M hz.2 h hk hj
+      exact ⟨e, he, h1, h2, Or.inr h3, h4⟩
+    · obtain ⟨e, he, h1, h2, h3, h4⟩ := proposeEdgeLin_complete M hz.1 h hj hk
+      exact ⟨e, he, h1, h2, Or.inl h3, h4⟩
+  · obtain ⟨e, he, h1, h2, h3, h4⟩ := proposeEdge_complete M h hj hk
+    exact ⟨e, he, h1, h2, Or.inl h3, h4⟩
+
+end Model
+
 /-! ## The shear: a generic projection
 
 Two crossings with one `y` (a configuration symmetric in `z`) make `D ≡ 0`, and the proposer
@@ -146,6 +243,8 @@ end Model
 #guard (proposeEdge sphere1 planeZ 0 30).map List.length = some 2
 -- the unit sphere and the cylinder x² + z² = 1/4 on x = 0: four crossings (0, ±√3/2, ±1/2)
 def cylY : Quadric := ⟨1, 0, 1, 0, 0, 0, 0, 0, 0, -1/4⟩
+-- two planes y = 1/2 and z = 0 on x = 0: one crossing, by the linear case
+#guard (proposeEdgeAny planeYh planeZ 0 30).map List.length = some 1
 -- unsheared, two crossings share y = √3/2: refused, never wrong
 #guard (proposeEdge sphere1 cylY 0 30).isNone
 -- sheared by λ = 1 they separate: four crossings

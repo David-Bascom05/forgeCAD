@@ -192,33 +192,59 @@ The reason: within a slab, two sectors can carry the same signs. A plane wall ca
 only along d. Two branches of one curve can swap the order of roots along a fibre and swap it
 back, so the sectors before the first swap and after the second agree on every sign.
 
-**Tier 1 (proposed, 2026-11-23; to be agreed with the LemmaD session): a cylindrical algebraic
-decomposition with Thom closure.** It is used only if the Tier-0 check fails. Fix rational
-directions: `u` (the fibres), `w` (the base's fibres), and `d` (level 1), mutually orthogonal and
-generic (the first triple in a fixed list for which every leading coefficient below is a nonzero
-constant). The separators are polynomial carriers that carry no face:
-1. **Fibre closure (level 3).** For every quadric carrier `q`, its polar plane `∂_u q = 0` (a plane,
-   since `q` is quadratic; `∂²_u q` is a constant). Every carrier's restriction to a `u`-line is
-   then in a family closed under `d/ds`. By **Thom's lemma**, every sign condition on such a
-   family is an interval or a point of the line.
-2. **Projection (level 2).** For the family `F` = carriers ∪ polar planes, as polynomials in the
-   `u`-coordinate `s` with coefficients in `ℚ[t, r]` (`t = d·x`, `r = w·x`): every `Disc_s(f)` and
-   `Res_s(f, g)`. These are cylinders along `u`, of degree ≤ 4 in `(t, r)`. Add their closure
-   under `∂_r`.
-3. **Sections (level 1).** The roots in `t` of `Disc_r(b)`, `Res_r(b, b′)` and the leading
-   coefficients, over the level-2 family `B`: algebraic event values `e_k`. The walls are the
-   planes `t = e_k` **at the events**, not between them. They have algebraic constants, and
-   their sign at a sample is `Alg.Num.cmp` (`cmp_spec`).
+**Tier 1 (agreed with the LemmaD session, 2026-11-23): a cylindrical algebraic decomposition
+with Thom closure.** It is used only if the Tier-0 check fails. Since A8 (§7), it lives in the
+proof-only reference; no runtime builds it.
 
-**Lemma D (restated).**
-- **R1, a theorem.** Every nonempty sign class of carriers ∪ separators is connected. Over an
-  event-free slab `e_k < t < e_{k+1}`, `B` is delineable along `r`, and by induction `F` is
-  delineable along `u` over each base cell. The fibre sign conditions are intervals (Thom), so each
-  sign class is a section or sector over a connected base cell, hence connected. The cells inside
-  the event planes `t = e_k` are the same construction one dimension down.
-- **R2–R5 are not automatic in a CAD** (the frontier condition can fail). Tier 1 therefore runs the
-  Tier-0 graph check on its own arrangement. If it passes, `Faithful`; if not, `Skip::Tier1`, to
-  the old path, counted. That is still one decided rule (D3): seams; if their check fails, the
+**Directions.** `u` (the fibres), `w` (the base's fibres) and `d` (level 1): rational, mutually
+orthogonal, and the first triple in a fixed list such that every member of `F` below has a nonzero
+**constant** `u`-leading coefficient. This excludes planes containing `u`, and quadrics with a
+ruling along `u`.
+
+**Separators.** Polynomial carriers that carry no face.
+1. **Fibre family `F` (level 3).** `F` holds:
+   - the input carriers, the input planes and the Tier-0 seams;
+   - for every quadric `q`, its polar plane `∂_u q = 0`. This is a plane: write `q = a s² + b s + c`
+     in the `u`-coordinate `s`; then `a` is constant and `b = ∂_u q` is linear.
+
+   `F` is closed under `d/ds`, so by **Thom's lemma** every sign condition on it is an interval
+   or a point of a `u`-line.
+2. **Base family `B` (level 2).** Polynomials in `(t, r) = (d·x, w·x)`, constant along `u`, so
+   cylinders:
+   - every `Disc_s(f)` and `Res_s(f, g)` for `f, g ∈ F`;
+   - **C1**: every `psc₁(f, g) = a·b′ − a′·b`, the principal subresultant coefficient: a plane,
+     the polar plane of the pencil member `a′q − aq′`. It is needed because `Res ≡ 0` on a base cell
+     does not fix the order of the roots (`f ∝ g` at a point swaps which roots coincide). For a
+     pair containing a plane it is a nonzero constant, and nothing is added;
+   - their closure under `∂_r`;
+   - **C3**: then replace all of it by a **squarefree basis** (pairwise coprime squarefree
+     factors). A discriminant can be a perfect square, and a resultant can have repeated factors;
+     without the basis, `Disc_r ≡ 0` and the level-1 events miss them.
+3. **Walls (level 1).** The planes `t = e_k` at every root of `Disc_r(b)`, `Res_r(b, b′)` and
+   the leading coefficients, over the basis `B`. They have algebraic constants, and their sign at
+   a sample is `Alg.Num.cmp`.
+
+Walls and level-2 cylinders are not in `F`, since they are constant along `u` (**C4**).
+
+**Lemma D (agreed).**
+- **R1, `cad_R1 : CADSpec … → ∀ X, RealisedK cs X → Connected (covCellK cs X)`.** `CADSpec`
+  states the semantic hypotheses:
+  - `F` closed under `∂_u` with constant nonzero leading coefficients;
+  - `B` sign-invariant on base cells implies `F` delineable and order-invariant over them (proved
+    for degree ≤ 2 from the Disc/Res/psc₁ formulas);
+  - `B` closed under `∂_r`;
+  - walls at all level-1 roots.
+
+  Delineability is parametric over any topological parameter space and any preconnected `C`
+  (event points and sections are not open).
+
+  **C2**: on a base cell where `Disc_s(f) ≡ 0`, `f = a(s − ρ)²` with `ρ = −b/2a` continuous (the
+  polar's root). No textbook "simple roots" hypothesis is needed for degree 2.
+
+  The executable side establishes `CADSpec` for its separator list.
+- **R2–R5**: Tier 1 reruns the graph check on its own arrangement. If it passes, `Faithful` (one
+  check-soundness theorem, generic in the arrangement and taking R1 as a hypothesis, shared with
+  Tier 0). If not, `Skip::Tier1`, counted. One decided rule (D3): seams; if their check fails, the
   CAD; if its check fails, skip.
 
 Cost: degree-4 cylinders and level-1 polynomials of degree up to 16 make Tier 1 expensive. It runs
@@ -567,3 +593,97 @@ Referenced:
   - Berberich, Kerber and Sagraloff, "Exact geometric-topological analysis of algebraic surfaces"
     (SoCG 2008): exact arrangements of quadrics by projection and lifting, the heavier alternative
     to Tier 1.
+
+## 7. A8 for curved: the face arrangement (assessment, 2026-11-23)
+
+The master moved the flat path to A8 (research/decide-once/face-arrangement.md, 2ff687bd on
+`decide-once-lean`):
+- the cells are **rooms** (components of the region minus the near faces) and **facets** (pieces
+  of faces, split only where other faces cross them), with explicit incidence (`Csr` tables);
+- the carrier ledger stays the proof's **reference**: a Lean definition that is never run;
+- the face ledger is proven a coarsening of it (`Refines`: maps ρ, σ, τ, ν with star bijections),
+  and `core_refines` carries every theorem over.
+
+The scheme is combinatorial over cells, so it applies to curved unchanged. The assessment:
+
+**1. Tier-0 failures: most disappear at runtime.** Rooms and facets are connected components by
+definition, so R1 holds of the face ledger by construction. The R1 failures behind §2.3 cannot
+occur in it:
+- the Steinmetz lobes, the plate with a hole, the LemmaD counterexample are disconnected sign
+  classes. In the face ledger they are distinct rooms or facets by construction.
+
+What remains is the **wing condition**. A face piece that reaches a crossing curve from both sides
+(two cylinders tangent along a line; a facet wrapping round an edge) breaks (e)'s bijection: two
+fine facets round the edge map to one face facet. Two remedies:
+- (W1) the builder splits such a facet locally, along a seam piece through the edge, only where it
+  occurs;
+- (W2) `edge_facets` and `vert_facets` rows count **wings** (a facet listed once per side it
+  reaches the cell from), with (e)/(v) a bijection onto wings. `around` then counts sheets, and the
+  tangent-cylinder union shows 4 and is refused.
+
+**Settled with the coordinator (face-arrangement.md at 9453b06f): W1.** W2 fails at vertices. A
+pinched facet, reaching a vertex in two sectors but listed once in `vert_facets`, can merge fan
+classes that the reference keeps apart, and so hide a non-manifold vertex. Mending that needs wing
+ids, which are facets in all but name.
+
+With W1, the interface, the core, `LedgerWF`'s no-repeat rows and the around/bad_vert proofs are
+unchanged:
+- unify re-joins the cut pieces;
+- a seam edge has one face round it, so it is never an output edge;
+- `Refines`' star bijections (e)/(v) are exactly the no-wings condition.
+
+The builder detects a wing when a facet's boundary loop runs along an edge both ways, or visits a
+vertex twice. Wings occur in flat too: a wedge touching a plate along a line, or an apex on a plate.
+
+**For curved, the cut is a piece of a Tier-0 seam** (§2.3's table), which lies in the reference
+arrangement as A8 requires:
+- the plane holding a contact line or contact circle;
+- the axial plane;
+- the nappe plane at an apex;
+- a plane through a crossing node.
+
+**2. Cells: fewer than flat's ratio, and the separators leave the runtime.** The carrier ledger
+pays more than flat's ~300 cells, because every seam (and Tier 1's CAD) splits space everywhere.
+The face ledger splits a face only where another near face crosses it, plus W1's local splits.
+Seams, polar planes, projection cylinders and level-1 walls all live only in the **reference**,
+which is never run. So:
+- Tier 1's cost leaves the gate entirely. §3's switch-on item 7 then counts the builder's local
+  splits, not CAD runs;
+- the only runtime geometry is the faces' own crossings: QSIC arcs for quadric pairs, certified
+  chains beyond them, vertices.
+
+**3. What the proof still needs.** `EndToEndF`'s conclusions are the reference's:
+- `correct_k`, `zeroThickness_iff_k` over `ExactK`;
+- and, for topological meaning, `xNonManifold_iff_top` over `Faithful` (q1).
+
+So the reference must still be `ExactK` and `Faithful`. Tier 0 / Tier 1 and Lemma D stay as
+proof obligations, now with no runtime cost. One open point: without a runtime check, the
+reference's R2–R5 must hold for every input in the domain. Tier 1's CAD does not give them
+automatically (§2.3).
+
+Two routes:
+- (a) prove them for the reference construction outright;
+- (b) state the topological theorem over the face ledger directly. Its rooms and facets are
+  components, so R1 is free there, and its incidence is explicit, so R2/R4/R5 become builder
+  obligations of the same kind as `Refines`.
+
+Route (b) may make `Faithful` on the reference unnecessary.
+
+The coordinator (9453b06f) answered:
+- `EndToEndF` is stated over any reference that has the old core's end-to-end facts, so curved
+  instantiates it with the `ExactK` carrier ledger, with no second simulation proof.
+- Route (b) would be a new L1 for the face ledger, not a corollary of `Refines`, which transfers
+  facts from the reference and not to it. It may still be cheaper than Lemma D on the CAD.
+
+It is open, with q1 and the master (face-arrangement.md §5).
+
+**4. Effect on the work in flight.**
+- L2 (this branch: QLine, QEdge, QVert, RootCover, QPropose) is the reference's executable and
+  stays. It also becomes the builder's exact fallback: the same certified crossings, computed only
+  between faces that meet.
+- Formula bodies make a room's membership a formula evaluation on any of its points
+  (`qform_compat`), so the curved `room_const` is free on the formula route.
+- Rust (dol-curved-rust): the builder targets the v2 ledger (ids, `Csr`), not covectors; Tier 1 is
+  never built in Rust.
+- Tier0 / LemmaD: their theorems are about the reference and remain needed (§3 above), at no
+  runtime cost.

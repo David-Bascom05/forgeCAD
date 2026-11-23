@@ -216,6 +216,11 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.lin_ev
   ForgeExact.DecideOnce.Curved.proposeEdge_complete
   ForgeExact.DecideOnce.Curved.shear_ev
+  ForgeExact.DecideOnce.Curved.proposeEdgeLin_complete
+  ForgeExact.DecideOnce.Curved.proposeEdgeAny_complete
+  ForgeExact.DecideOnce.Curved.covWith_spec
+  ForgeExact.DecideOnce.Curved.signF_sound
+  ForgeExact.DecideOnce.Curved.covOn_exact_sound
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region

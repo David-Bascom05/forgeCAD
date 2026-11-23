@@ -84,4 +84,53 @@ theorem covOn_spec [DecidableRel (α := K) (· < ·)] (P D : V3) {n : Num} {t : 
     simp only [covOfK, List.map_cons, List.map_map] at ih ⊢
     rw [sgnK_of_signIs hq, ih]
 
+/-! ## Any sound sign oracle (for the Rust's filters)
+
+The bridge decides a sign by a float filter first (interval evaluation on an enclosure of the
+sample) and falls back to `Num.sign`. The filter is a *partial oracle*: when it answers, the
+answer is the true sign. `covWith` builds a covector from any oracle, and `covWith_spec` needs only
+that soundness, so the filtered decision (`signF`) is covered by the same theorem as the exact one.
+-/
+
+/-- A covector from a sign oracle on the carriers. -/
+def covWith (sg : Quadric → Option Int) (qs : List Quadric) : Option Cov :=
+  qs.mapM fun q => (sg q).map sgnOfInt
+
+theorem covWith_spec [DecidableRel (α := K) (· < ·)] (sg : Quadric → Option Int) (pt : PK K)
+    (hs : ∀ q s, sg q = some s → SignIs (Quadric.evK M q pt) s) :
+    ∀ (qs : List Quadric) (X : Cov), covWith sg qs = some X →
+      X = covOfK (qs.map fun q => Quadric.evK M q) pt
+  | [], X, h => by simp [covWith] at h; subst h; simp [covOfK]
+  | q :: qs, X, h => by
+    simp only [covWith, List.mapM_cons, Option.bind_eq_bind, Option.bind_eq_some_iff,
+      Option.map_eq_some_iff, Option.pure_def, Option.some.injEq] at h
+    obtain ⟨s, ⟨i, hi, rfl⟩, rest, hrest, rfl⟩ := h
+    have ih := covWith_spec sg pt hs qs rest (by simpa [covWith] using hrest)
+    simp only [covOfK, List.map_cons, List.map_map] at ih ⊢
+    rw [sgnK_of_signIs (hs q i hi), ih]
+
+/-- The filtered sign: the filter's answer if it has one, else the exact one. -/
+def signF (flt : Quadric → Option Int) (exact : Quadric → Option Int) (q : Quadric) : Option Int :=
+  match flt q with
+  | some s => some s
+  | none => exact q
+
+/-- A filter and an exact decider, both sound, make a sound filtered sign. -/
+theorem signF_sound {pt : PK K} {flt exact : Quadric → Option Int}
+    (hf : ∀ q s, flt q = some s → SignIs (Quadric.evK M q pt) s)
+    (he : ∀ q s, exact q = some s → SignIs (Quadric.evK M q pt) s) :
+    ∀ q s, signF flt exact q = some s → SignIs (Quadric.evK M q pt) s := by
+  intro q s h
+  unfold signF at h
+  split at h
+  · rename_i s' hs'; simp only [Option.some.injEq] at h; subst h; exact hf q s' hs'
+  · exact he q s h
+
+/-- The line sample's exact decider is sound (`sign_spec`), so `covOn` is `covWith` of it. -/
+theorem covOn_exact_sound (P D : V3) {n : Num} {t : K} (ht : Denotes M n t) (fuel : Nat) :
+    ∀ q s, n.sign (alongLine q P D) fuel = some s → SignIs (Quadric.evK M q (linePt M P D t)) s := by
+  intro q s h
+  have := sign_spec M (alongLine q P D) fuel ht h
+  rwa [alongLine_ev] at this
+
 end ForgeExact.DecideOnce.Curved
