@@ -61,3 +61,4 @@ import ForgeBoolCore.RefineIncCore
 import ForgeBoolCore.RefineIncCollapseLean
 import ForgeBoolCore.RefineIncCollapse
 import ForgeBoolCore.RefineIncWF
+import ForgeBoolCore.RefineIncWFProp

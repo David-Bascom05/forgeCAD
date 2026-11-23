@@ -1,4 +1,4 @@
-import ForgeBoolCore.RefineIncWF
+import ForgeBoolCore.RefineIncWFProp
 import ForgeBoolCore.Specs
 import ForgeBoolCore.Refine
 import ForgeBoolCore.RefineUF
@@ -177,3 +177,4 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.wf_loop4_spec
 #print axioms forge_bool_core.inc.wf_loop5_spec
 #print axioms forge_bool_core.inc.wf_loop6_spec
+#print axioms forge_bool_core.inc.vertOK_iff
