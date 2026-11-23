@@ -1,4 +1,5 @@
 import ForgeBoolCore.RefineSplit
+import ForgeBoolCore.HeadBridge
 open Aeneas Aeneas.Std Result
 
 /-!
@@ -158,5 +159,152 @@ theorem piece_toL (l : Ledger) (e0 : Ext) (s : Split) (e : Ext) (hok0 : ExtOK l 
     rw [e]
     have := List.Nodup.idxOf_getElem hnd p (by simpa using hp)
     simpa using this
+
+/-! ## The flood's tables fit -/
+
+theorem at32_getD {v : alloc.vec.Vec U32} {k : Nat} (h : k < v.val.length) : at32 v k = (v.val[k]).val :=
+  at32_eq h
+
+theorem getElem!_u32 {v : List U32} {k : Nat} (h : k < v.length) : v[k]! = v[k] := getElem!_pos v k h
+
+theorem stream_mem (P M : alloc.vec.Vec U32) (n : Nat) (hP : n ≤ P.val.length) (hM : n ≤ M.val.length) :
+    ∀ k, k < n → at32 P k ∈ stream P.val M.val n ∧ at32 M k ∈ stream P.val M.val n := by
+  intro k hk
+  have key : ∀ m, k < m → m ≤ n →
+      at32 P k ∈ stream P.val M.val m ∧ at32 M k ∈ stream P.val M.val m := by
+    intro m hkm hm
+    induction m with
+    | zero => omega
+    | succ m ih =>
+      by_cases e1 : k = m
+      · subst e1
+        rw [at32_getD (by omega), at32_getD (by omega)]
+        simp [stream, getElem!_u32 (show k < P.val.length by omega), getElem!_u32 (show k < M.val.length by omega)]
+      · have := ih (by omega) (by omega)
+        simp only [stream, List.mem_append]
+        exact ⟨Or.inl (Or.inl this.1), Or.inl (Or.inl this.2)⟩
+  exact key n hk (Nat.le_refl _)
+
+/-- **`split`'s tables fit `flood`**, for every body. -/
+theorem splitWF_of (l : Ledger) (e0 : Ext) (s : Split) (e : Ext) (hs : SplitOK l e0 s e)
+    (hroom : 2 * s.facets.val.length < U32.max) {i : Nat} (hi : i < l.nb.val) : SplitWF s i := by
+  obtain ⟨_, hPl, hMl, hPM⟩ := hs.sides.2.2.2
+  have hT := hs.topes
+  have hTl : s.tope_pos.val.length = (allCells l e).length := hT.1
+  have hstream : ∀ k, k < s.facets.val.length →
+      at32 s.plus k ∈ stream s.plus.val s.minus.val s.facets.val.length ∧
+      at32 s.minus k ∈ stream s.plus.val s.minus.val s.facets.val.length := by
+    intro k hk
+    have key : ∀ m, k < m → m ≤ s.facets.val.length →
+        at32 s.plus k ∈ stream s.plus.val s.minus.val m ∧ at32 s.minus k ∈ stream s.plus.val s.minus.val m := by
+      intro m hkm hm
+      induction m with
+      | zero => omega
+      | succ m ih =>
+        by_cases e1 : k = m
+        · subst e1
+          rw [at32_getD (by omega), at32_getD (by omega)]
+          simp [stream, getElem!_u32 (show k < s.plus.val.length by omega),
+            getElem!_u32 (show k < s.minus.val.length by omega)]
+        · have := ih (by omega) (by omega)
+          simp only [stream, List.mem_append]
+          exact ⟨Or.inl (Or.inl this.1), Or.inl (Or.inl this.2)⟩
+    exact key s.facets.val.length hk (Nat.le_refl _)
+  have hpos : ∀ c ∈ stream s.plus.val s.minus.val s.facets.val.length,
+      c < s.tope_pos.val.length ∧ at32 s.tope_pos c < s.topes.val.length := by
+    intro c hc
+    have hcn := hT.2.2.1 c hc
+    refine ⟨by omega, ?_⟩
+    have := hT.2.2.2 c hcn
+    rw [if_pos hc] at this
+    have hl := tinv_small hT
+    have hlt := List.idxOf_lt_length_iff.mpr ((mem_dedup _ _).mpr hc)
+    have e2 : at32 s.tope_pos c = (s.tope_pos.val.getD c NONE).val := by
+      rw [at32_getD (by omega), List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega)]; rfl
+    rw [e2, this]; omega
+  refine ⟨by omega, by omega, hs.piece_len, fun k hk => by rw [hs.piece_row k hk]; exact hi,
+    fun k hk => (hpos _ (hstream k hk).1).1, fun k hk => (hpos _ (hstream k hk).2).1,
+    fun k hk => (hpos _ (hstream k hk).1).2, fun k hk => (hpos _ (hstream k hk).2).2, ?_⟩
+  have := tinv_small hT
+  have := dedup_length_le (stream s.plus.val s.minus.val s.facets.val.length)
+  rw [stream_length] at this; omega
+
+/-! ## The flood's pairs are the Lean's crossings -/
+
+theorem idxOf_map_inj {α β : Type} [BEq α] [LawfulBEq α] [BEq β] [LawfulBEq β] (f : α → β) :
+    ∀ (xs : List α) (a : α), (∀ x ∈ xs, f x = f a → x = a) → (xs.map f).idxOf (f a) = xs.idxOf a
+  | [], _, _ => rfl
+  | x :: xs, a, h => by
+    simp only [List.map_cons, List.idxOf_cons]
+    by_cases e : x = a
+    · subst e; simp
+    · have : ¬f x = f a := fun h' => e (h x (List.mem_cons_self ..) h')
+      have h1 : (f x == f a) = false := by simpa using this
+      have h2 : (x == a) = false := by simpa using e
+      simp only [h1, h2, cond_false, Bool.false_eq_true, if_false]
+      rw [idxOf_map_inj f xs a (fun y hy => h y (List.mem_cons_of_mem _ hy))]
+
+theorem floodEdges_eq (l : Ledger) (e0 : Ext) (s : Split) (e : Ext) (hok0 : ExtOK l e0) (hs : SplitOK l e0 s e)
+    (hpc : ∀ q ∈ pcs l, q.1 < l.cells.val.length) {i : Nat} (hi : i < l.nb.val) :
+    floodEdges s i s.facets.val.length =
+      ForgeBoolCore.UF.posPairs (toL l).topes ((toL l).crossings i) := by
+  have hFL := facets_toL l e0 hok0 hpc s.facets.val hs.facets
+  have hTL := topes_toL l e0 s e hok0 hs hpc
+  have hF : ∀ x ∈ s.facets.val, x.val < l.cells.val.length := by
+    intro x hx
+    have : x.val ∈ s.facets.val.map (·.val) := List.mem_map.mpr ⟨x, hx, rfl⟩
+    rw [hs.facets] at this
+    obtain ⟨q, hq, e⟩ := List.mem_map.mp ((mem_dedup _ _).mp this)
+    rw [← e]; exact hpc q hq
+  obtain ⟨_, _, _, _, hPl, hMl, hPM⟩ := hs.sides
+  have hT := hs.topes
+  -- a side's position, in the Lean's topes
+  have hpos : ∀ c ∈ stream s.plus.val s.minus.val s.facets.val.length,
+      ((toL l).topes).idxOf (covE l e c) = at32 s.tope_pos c := by
+    intro c hc
+    have hcn := hT.2.2.1 c hc
+    rw [← hTL]
+    have : s.topes.val.map (fun x => covE l e x.val) = (s.topes.val.map (·.val)).map (covE l e) := by
+      simp [List.map_map]
+    rw [this, idxOf_map_inj (covE l e) _ c (fun x hx h => covE_inj l e hs.ext
+      (by rw [hT.2.1] at hx; exact hT.2.2.1 x ((mem_dedup _ _).mp hx)) hcn h), hT.2.1]
+    have := hT.2.2.2 c hcn
+    rw [if_pos hc] at this
+    rw [at32_getD (by rw [hT.1]; exact hcn), ← this, List.getD_eq_getElem?_getD,
+      List.getElem?_eq_getElem (by rw [hT.1]; exact hcn)]; rfl
+  have hsm := stream_mem s.plus s.minus s.facets.val.length (by omega) (by omega)
+  have hlenL : (toL l).facets.length = s.facets.val.length := by rw [← hFL]; simp
+  -- by prefix
+  have key : ∀ k, k ≤ s.facets.val.length → floodEdges s i k =
+      ForgeBoolCore.UF.posPairs (toL l).topes
+        ((((toL l).facets.take k).filter (fun φ => !(toL l).isPieceOf i φ)).map (fun φ => (φ.plus, φ.minus))) := by
+    intro k hk
+    induction k with
+    | zero => simp [floodEdges, ForgeBoolCore.UF.posPairs]
+    | succ k ih =>
+      rw [floodEdges, ih (by omega), List.take_succ, List.getElem?_eq_getElem (by omega)]
+      have hfk : (toL l).facets[k]'(by omega) = cellL l (s.facets.val[k]'(by omega)).val := by
+        simp only [← hFL, List.getElem_map]
+      have hpk : pieceAt s k i = (toL l).isPieceOf i (cellL l (s.facets.val[k]'(by omega)).val) :=
+        piece_toL l e0 s e hok0 hs hpc (by omega) hi
+      simp only [Option.toList_some, List.filter_append, List.map_append, ForgeBoolCore.UF.posPairs] at *
+      rw [hfk]
+      congr 1
+      simp only [List.filter_cons, List.filter_nil, ← hpk]
+      cases hpc' : pieceAt s k i
+      · simp only [Bool.not_false, List.map_cons, List.map_nil, ite_true, ite_false, Bool.false_eq_true]
+        obtain ⟨_, h2, _, h4⟩ := hPM k (by omega)
+        have hc : (s.facets.val[k]'(by omega)).val < l.cells.val.length := hF _ (List.getElem_mem _)
+        rw [getElem!_u32 (show k < s.facets.val.length by omega)] at h2 h4
+        have ep : Cov.plus (cellL l (s.facets.val[k]'(by omega)).val) = covE l e (at32 s.plus k) := by
+          rw [at32_getD (by omega), covE, ← getElem!_u32 (show k < s.plus.val.length by omega), h2, side_plus,
+            cellL_covAt l e0 hc]
+        have em : Cov.minus (cellL l (s.facets.val[k]'(by omega)).val) = covE l e (at32 s.minus k) := by
+          rw [at32_getD (by omega), covE, ← getElem!_u32 (show k < s.minus.val.length by omega), h4, side_minus,
+            cellL_covAt l e0 hc]
+        rw [ep, em, hpos _ (hsm k (by omega)).1, hpos _ (hsm k (by omega)).2]
+      · simp
+  rw [key _ (Nat.le_refl _), ← hlenL, List.take_length]
+  rfl
 
 end forge_bool_core

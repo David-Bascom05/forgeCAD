@@ -36,3 +36,5 @@ import ForgeBoolCore.RefineLedger
 #print axioms forge_bool_core.facets_toL
 #print axioms forge_bool_core.topes_toL
 #print axioms forge_bool_core.piece_toL
+#print axioms forge_bool_core.splitWF_of
+#print axioms forge_bool_core.floodEdges_eq
