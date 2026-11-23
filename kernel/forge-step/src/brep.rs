@@ -749,7 +749,9 @@ impl Read<'_> {
                 let (frame, flip) = self.frame(xf).ok_or_else(bad)?;
                 let t = &mut self.f.toks;
                 let (major, minor) = (t.num().ok_or_else(bad)?, t.num().ok_or_else(bad)?);
-                match Torus::new(frame, major, minor) {
+                // a tube through the axis (a horn or spindle torus, OCCT's surface whatever its
+                // radii): its part off the axis, as STEP's spindle is read
+                match Torus::new(frame, major, minor).or_else(|| Torus::spindle(frame, major, minor)) {
                     Some(s) => Ok((Surface::Torus(s), flip)),
                     None => refuse(entity, "torus", format!("radii {major} and {minor}")),
                 }

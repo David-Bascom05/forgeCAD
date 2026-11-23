@@ -300,6 +300,13 @@ impl Proto {
             if d.u.period.is_none() && d.v.period.is_none() {
                 continue;
             }
+            // a face whose one loop is nothing but edges used once each way (a seam to the poles
+            // and back, as OpenCascade bounds a whole sphere or spindle) is whole
+            if pole_of(&s, 0, true).is_some()
+                && matches!(&self.faces[f].loops[..], [l] if encloses_nothing(l))
+            {
+                self.faces[f].loops.clear();
+            }
             let s = self.reframe_sphere(f, s);
             let windings: Vec<(i64, i64)> = self.faces[f].loops.iter().map(|l| self.winding(l, &s)).collect();
             let winding: Vec<usize> = (0..windings.len()).filter(|&i| windings[i] != (0, 0)).collect();
@@ -704,6 +711,54 @@ impl Proto {
                         range: Interval::new(1.5 * dmath::PI, 2.5 * dmath::PI),
                         start: n - 2,
                         end: n - 1,
+                        name,
+                    });
+                    Some(self.edges.len() - 1)
+                };
+                let m0 = half(x).ok_or("no meridian")?;
+                let m1 = half(-x).ok_or("no meridian")?;
+                self.faces[f].loops = vec![vec![(m1, true), (m0, false)]];
+                let (name, same_sense, shell) = (self.fresh(), self.faces[f].same_sense, self.faces[f].shell);
+                self.faces.push(PFace {
+                    surface: s.clone(),
+                    same_sense,
+                    name,
+                    shell,
+                    loops: vec![vec![(m0, true), (m1, false)]],
+                });
+                Ok(())
+            }
+            // a spindle torus's outer part: two meridians of the tube, pole to pole; a horn
+            // torus's poles are one point, the meridians closed circles through it
+            Surface::Torus(t) if t.is_spindle() && t.major > 0.0 => {
+                let (a, b) = (
+                    pole_of(&s, 0, false).ok_or("no pole")?,
+                    pole_of(&s, 0, true).ok_or("no pole")?,
+                );
+                let horn = a.distance(b) <= tol::LINEAR;
+                let na = self.fresh();
+                self.verts.push((a, na));
+                let va = self.verts.len() - 1;
+                let vb = if horn {
+                    va
+                } else {
+                    let nb = self.fresh();
+                    self.verts.push((b, nb));
+                    self.verts.len() - 1
+                };
+                let x: Vec3 = t.frame.x().into();
+                let z: Vec3 = t.frame.z().into();
+                let p = t.pole_v();
+                let (big, r) = (t.major, t.minor);
+                let mut half = |o: Vec3| -> Option<usize> {
+                    let frame = Frame::from_zx(t.frame.origin + o * big, o.cross(z).normalize()?, o)?;
+                    let name = self.fresh();
+                    self.edges.push(PEdge {
+                        curve: Curve::Circle(Circle { frame, radius: r }),
+                        // the tube's angle v: a point at c + r (cos v o + sin v z)
+                        range: Interval::new(dmath::TAU - p, dmath::TAU + p),
+                        start: va,
+                        end: vb,
                         name,
                     });
                     Some(self.edges.len() - 1)
@@ -1189,6 +1244,15 @@ fn unwrap(uv: Point2, near: Point2, du: Domain1, dv: Domain1) -> Point2 {
     Point2::new(fix(uv.x, near.x, du.period), fix(uv.y, near.y, dv.period))
 }
 
+/// Whether a loop is nothing but edges each used once each way: it bounds no area.
+fn encloses_nothing(l: &[(usize, bool)]) -> bool {
+    !l.is_empty()
+        && l.iter().all(|&(e, fwd)| {
+            l.iter().filter(|&&(x, y)| x == e && y == fwd).count() == 1
+                && l.iter().filter(|&&(x, y)| x == e && y != fwd).count() == 1
+        })
+}
+
 /// The surface's pole at the high or low end of the parameter a seam runs along (v for `dir` 0,
 /// u for 1), if it has one.
 fn pole_of(s: &Surface, dir: usize, up: bool) -> Option<Point3> {
@@ -1196,6 +1260,13 @@ fn pole_of(s: &Surface, dir: usize, up: bool) -> Option<Point3> {
         Surface::Sphere(k) => {
             let z: Vec3 = k.frame.z().into();
             Some(k.frame.origin + z * (if up { k.radius } else { -k.radius }))
+        }
+        // a spindle's outer part (a horn torus's too) ends at two poles on the axis, where the
+        // tube meets it; a horn torus's are one point, its centre
+        Surface::Torus(t) if dir == 0 && t.is_spindle() && t.major > 0.0 => {
+            let z: Vec3 = t.frame.z().into();
+            let h = t.minor * dmath::sin(t.pole_v());
+            Some(t.frame.origin + z * (if up { h } else { -h }))
         }
         // a cone's only pole is its apex, at its low v
         Surface::Cone(k) if !up => {

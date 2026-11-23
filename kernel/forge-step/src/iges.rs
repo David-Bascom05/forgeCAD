@@ -461,7 +461,8 @@ impl Read<'_> {
                 short(4)?;
                 let refd = (form == 1 && p.len() > 4).then(|| w(4));
                 let f = frame(self, w(0), w(1), refd)?;
-                match Torus::new(f, p[2] * s, p[3] * s) {
+                // a tube through the axis (horn or spindle): its part off the axis, as STEP's
+                match Torus::new(f, p[2] * s, p[3] * s).or_else(|| Torus::spindle(f, p[2] * s, p[3] * s)) {
                     Some(t) => Ok(Surface::Torus(t)),
                     None => refuse(id, "torus", format!("radii {} and {}", p[2], p[3])),
                 }

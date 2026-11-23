@@ -127,3 +127,40 @@ assert uses == 1, "the axis point is shared: moving it would move more than the 
 text = text.replace(pt.group(0), pt.group(0).replace(pt.group(1), far))
 open(os.path.join(out, "far-cylinder-axis.step"), "w").write(text)
 note("far-cylinder-axis.step", cyl, "cyl.step with its cylinder's axis origin moved 2 km along the axis: pi 25 20 expected")
+
+
+# 5. the tori as the real files write them: a toroidal surface of radii R <= r itself (not a
+#    revolve, which OCCT writes as a surface of revolution), one face bounded at its poles on the
+#    axis: a horn torus (R = r) and a spindle's outer part (R < r)
+import math
+from OCP.Geom import Geom_ToroidalSurface
+from OCP.gp import gp_Ax3
+from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeSolid, BRepBuilderAPI_Sewing
+from OCP.BRepLib import BRepLib
+from OCP.ShapeFix import ShapeFix_Solid
+from OCP.TopoDS import TopoDS
+
+for name, R, r in (("horn-torus-surface", 10.0, 10.0), ("spindle-torus-surface", 4.0, 5.0)):
+    pole = math.pi if R >= r else math.acos(-R / r)
+    surf = Geom_ToroidalSurface(gp_Ax3(), R, r)
+    face = BRepBuilderAPI_MakeFace(surf, 0.0, 2 * math.pi, -pole, pole, 1e-7).Face()
+    sew = BRepBuilderAPI_Sewing(1e-6)
+    sew.Add(face)
+    sew.Perform()
+    shell = TopoDS.Shell(sew.SewedShape()) if sew.SewedShape().ShapeType().name == "TopAbs_SHELL" else None
+    if shell is None:
+        from OCP.BRep import BRep_Builder as BB
+        from OCP.TopoDS import TopoDS_Shell
+        shell = TopoDS_Shell()
+        bb = BB()
+        bb.MakeShell(shell)
+        bb.Add(shell, face)
+    solid = BRepBuilderAPI_MakeSolid(shell).Solid()
+    BRepLib.OrientClosedSolid_s(solid)
+    fix = ShapeFix_Solid(solid)
+    fix.Perform()
+    solid = fix.Solid()
+    BRepTools.Write_s(solid, os.path.join(out, f"{name}.brep"))
+    step(solid, os.path.join(out, f"{name}.step"))
+    # the apple's volume in closed form: the region swept by the disc's part off the axis
+    note(f"{name}.brep/.step", solid, f"a toroidal surface of radii {R} and {r}, poles at v = +-{pole:.6f}")
