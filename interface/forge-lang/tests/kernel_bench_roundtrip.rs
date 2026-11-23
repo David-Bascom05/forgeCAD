@@ -147,3 +147,50 @@ fn a_budget_run_out_refuses() {
         );
     }
 }
+
+/// A spline dome (its wall square to the axis at a pole), alone and shelled 2, out to STEP at
+/// 1e-4: the file states 12.4 mm of accuracy, not the 1e-4 asked (an edge fitted near the pole
+/// lies that far off a fitted face). Our reader trims by the edges and reads the volume back within
+/// 1.4e-7 of exact; OpenCascade, trimming its own way, 2.3e-5 off at either 1e-3 or 1e-4. Each solid
+/// here must hold the asked accuracy and its exact volume (a 30-digit integration of the section
+/// about the axis) within its area times that (research/spline-loops/step-pole-fit.md). Open: ignored
+/// until the export fits a spline wall round its pole.
+#[test]
+#[ignore = "open: the STEP export's fit of a spline wall near its pole (12 mm stated)"]
+fn a_spline_dome_exports_within_its_stated_accuracy() {
+    let dome = include_str!("kernel_parts/shell_spline_dome.fg");
+    let alone: String = dome
+        .lines()
+        .filter(|l| !l.contains("skin"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for (src, exact) in [(alone.as_str(), 59629.338687932), (dome, 10994.9163243004)] {
+        let (r, cache) = common::run(src);
+        assert!(r.errors.is_empty(), "{}", forge_lang::report::text(&r, src));
+        let (f, ids) = cache.history();
+        let solids = forge_model::Part { features: f.to_vec() }
+            .regenerate_solids_ids(Some(ids))
+            .expect("builds");
+        let body = &solids.last().expect("a solid").body;
+        let opts = forge_step::Options {
+            tol: 1e-4,
+            ..forge_step::Options::default()
+        };
+        let e = forge_step::export(body, &opts).expect("writes");
+        assert!(
+            e.uncertainty <= 10.0 * opts.tol,
+            "{exact}: the file states {} mm",
+            e.uncertainty
+        );
+        let back = forge_step::import(e.text.as_bytes(), &forge_step::Limits::default()).expect("reads");
+        assert!(back.refusals.is_empty(), "{:?}", back.refusals);
+        let m = forge_topo::mass::mass_rel(&back.solids[0].body, 1e-9).expect("a mass");
+        assert!(
+            (m.volume - exact).abs() <= m.area * opts.tol,
+            "volume {} against {exact}: off {:.3e}, allowed {:.3e}",
+            m.volume,
+            m.volume - exact,
+            m.area * opts.tol
+        );
+    }
+}
