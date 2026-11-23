@@ -204,7 +204,7 @@ pub fn checker_moves(p: &OpPath) -> Vec<(Move, Phase, usize)> {
                     } else {
                         ([cm, sm, 0.0], [-sm, cm, 0.0])
                     };
-                    out.push((
+                    let mv = if to[2] == at[2] {
                         Move::Arc {
                             c: [c[0], c[1], at[2]],
                             x,
@@ -212,10 +212,25 @@ pub fn checker_moves(p: &OpPath) -> Vec<(Move, Phase, usize)> {
                             r,
                             t0: -th,
                             t1: th,
-                        },
-                        Phase::Cut,
-                        i,
-                    ));
+                        }
+                    } else {
+                        // helical: the height is linear in the angle; this piece's share, its
+                        // ends computed in f64 and the range widened past their rounding
+                        let za = at[2] + (to[2] - at[2]) * k as f64 / n as f64;
+                        let zb = at[2] + (to[2] - at[2]) * (k + 1) as f64 / n as f64;
+                        let w = 1e-9 * (1.0 + at[2].abs().max(to[2].abs()));
+                        Move::Helix {
+                            c: [c[0], c[1], 0.0],
+                            x,
+                            y,
+                            r,
+                            t0: -th,
+                            t1: th,
+                            z0: za.min(zb) - w,
+                            z1: za.max(zb) + w,
+                        }
+                    };
+                    out.push((mv, Phase::Cut, i));
                 }
                 at = to;
             }
@@ -420,7 +435,9 @@ pub fn certify_fixtured(
                                 }
                                 continue;
                             }
-                            Verdict::Hit { d, at, .. } => ("fail", d, at),
+                            Verdict::Hit { d, at, .. } => {
+                                ("fail", d, at)
+                            }
                             Verdict::Undecided { lower, .. } => ("undecided", lower, [f64::NAN; 3]),
                         };
                         o.fails.push((
@@ -611,6 +628,7 @@ pub fn pocket(
     stepover: f64,
     leave: f64,
     feed: (f64, f64),
+    ramp: Option<f64>,
 ) -> Result<OpPath, OpError> {
     let r = 0.5 * tool.tool.dc + leave;
     let mut passes = Vec::new();
@@ -633,22 +651,88 @@ pub fn pocket(
             why: "the tool does not fit the pocket".into(),
         });
     }
+    // a helical entry about a pass's start, of radius half the tool's, where that disk lies in
+    // the tool centres' region (exactly: then the helix stays where the passes go); else a
+    // plunge
+    let rh = 0.25 * tool.tool.dc;
+    let c0 = forge_cam_geom::boolean::region_of(&passes[0]);
     passes.reverse();
+    let helix_fits = |s: forge_cam_geom::region::P2| -> bool {
+        let a = forge_cam_geom::region::p2(s.x + rh, s.y);
+        let disk = Region {
+            loops: vec![forge_cam_geom::region::Loop {
+                segs: vec![Seg::Arc { a, b: a, c: s, ccw: true }],
+            }],
+        };
+        matches!(
+            forge_cam_geom::boolean::boolean(&disk, &c0, forge_cam_geom::boolean::Op::Diff),
+            Ok(d) if d.is_empty()
+        )
+    };
+    let fits: Vec<Vec<bool>> = passes
+        .iter()
+        .map(|ls| {
+            ls.iter()
+                .map(|l| ramp.is_some() && helix_fits(l.segs[0].start()))
+                .collect()
+        })
+        .collect();
     let mut mv = Vec::new();
     let s0 = passes[0][0].segs[0].start();
     let start = [s0.x, s0.y, h.clear];
+    let mut above = top;
     for z in levels(top, bottom, step) {
-        for loops in &passes {
-            for l in loops {
+        for (li, loops) in passes.iter().enumerate() {
+            for (lj, l) in loops.iter().enumerate() {
                 let s = l.segs[0].start();
-                mv.push(PMove::Rapid {
-                    to: [s.x, s.y, h.retract],
-                });
-                mv.push(PMove::Line {
-                    to: [s.x, s.y, z],
-                    f: feed.1,
-                    phase: Phase::Plunge,
-                });
+                if let (true, Some(deg)) = (fits[li][lj], ramp) {
+                    // down to the level above in air (it, and this disk, were cleared there),
+                    // then turns of the helix at the ramp angle, then in to the pass's start
+                    let p = [s.x + rh, s.y];
+                    mv.push(PMove::Rapid {
+                        to: [p[0], p[1], h.retract],
+                    });
+                    mv.push(PMove::Line {
+                        to: [p[0], p[1], above],
+                        f: feed.1,
+                        phase: Phase::Plunge,
+                    });
+                    let (sa, ca) = dmath::sin_cos(deg.to_radians());
+                    let per_turn = std::f64::consts::TAU * rh * sa / ca;
+                    let turns = ((above - z) / per_turn - 1e-9).ceil().max(1.0) as usize;
+                    let quarters = 4 * turns;
+                    for k in 1..=quarters {
+                        let a = std::f64::consts::FRAC_PI_2 * k as f64;
+                        let (sn, cs) = dmath::sin_cos(a);
+                        // the quarter points, the last exactly the start (a whole number of turns)
+                        let (x, y) = if k % 4 == 0 {
+                            (p[0], p[1])
+                        } else {
+                            (s.x + rh * cs, s.y + rh * sn)
+                        };
+                        let zk = above + (z - above) * k as f64 / quarters as f64;
+                        mv.push(PMove::Arc {
+                            to: [x, y, if k == quarters { z } else { zk }],
+                            c: [s.x, s.y],
+                            cw: false,
+                            f: feed.1,
+                        });
+                    }
+                    mv.push(PMove::Line {
+                        to: [s.x, s.y, z],
+                        f: feed.0,
+                        phase: Phase::Cut,
+                    });
+                } else {
+                    mv.push(PMove::Rapid {
+                        to: [s.x, s.y, h.retract],
+                    });
+                    mv.push(PMove::Line {
+                        to: [s.x, s.y, z],
+                        f: feed.1,
+                        phase: Phase::Plunge,
+                    });
+                }
                 let point = l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b);
                 if !point {
                     push_loop(&mut mv, &l.segs, z, feed.0);
@@ -660,6 +744,7 @@ pub fn pocket(
                 });
             }
         }
+        above = z;
     }
     mv.push(PMove::Rapid {
         to: [s0.x, s0.y, h.clear],

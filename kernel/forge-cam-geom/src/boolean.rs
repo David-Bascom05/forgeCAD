@@ -59,8 +59,20 @@ fn locate(cx: &mut Ctx, ex: &Exact, q: Pt, pc: &Piece) -> Where {
         // the same circle (one centre, one squared radius, as expressions): q, on pc, is on e's
         // circle by construction, and the pieces run the same way exactly when their senses
         // agree; only the span is left to decide
-        if let (Curve::Circle { c: c1, rad2: q1, ccw: w1, .. }, Curve::Circle { c: c2, rad2: q2, ccw: w2, .. }) =
-            (pc.curve, e.curve)
+        if let (
+            Curve::Circle {
+                c: c1,
+                rad2: q1,
+                ccw: w1,
+                ..
+            },
+            Curve::Circle {
+                c: c2,
+                rad2: q2,
+                ccw: w2,
+                ..
+            },
+        ) = (pc.curve, e.curve)
             && c1 == c2
             && q1 == q2
         {

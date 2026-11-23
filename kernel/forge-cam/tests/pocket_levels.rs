@@ -56,7 +56,7 @@ fn a_pocket_emits_every_nonempty_level() {
     };
     for rg in &regions {
         for s in [0.5 * r, 0.8 * r, r] {
-            let p = ops::pocket(rg, &t, 0, h, 0.0, -2.0, 1.0, s, 0.0, (500.0, 100.0)).unwrap();
+            let p = ops::pocket(rg, &t, 0, h, 0.0, -2.0, 1.0, s, 0.0, (500.0, 100.0), None).unwrap();
             // the levels the proof needs: every nonempty offset at r + k s
             let mut want = 0usize;
             let mut k = 0;

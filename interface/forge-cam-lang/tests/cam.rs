@@ -299,3 +299,33 @@ fn soft_jaws_need_the_top_faced() {
         cam.errors
     );
 }
+
+#[test]
+fn helical_ramps_are_posted_and_certified() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let cam = bracket(&dir, &|s| s);
+    assert!(cam.ok, "{:?}", cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>());
+    for name in ["bore", "cutj"] {
+        let o = cam.ops.iter().find(|o| o.name == name).unwrap();
+        assert_eq!(o.status, "built");
+        // helical pieces: arcs whose height changes
+        let mut at = o.paths[0].start;
+        let mut helical = 0;
+        for m in &o.paths[0].moves {
+            match *m {
+                forge_cam::ops::PMove::Arc { to, .. } => {
+                    if to[2] != at[2] {
+                        helical += 1;
+                    }
+                    at = to;
+                }
+                forge_cam::ops::PMove::Rapid { to } | forge_cam::ops::PMove::Line { to, .. } => at = to,
+                _ => {}
+            }
+        }
+        assert!(helical > 0, "{name}");
+    }
+    // in the program text: G3 blocks with a Z word
+    let txt = cam.programs.iter().find(|p| p.name == "p1").unwrap().text.clone().unwrap();
+    assert!(txt.lines().any(|l| l.contains("G3") && l.contains(" Z")), "{txt}");
+}

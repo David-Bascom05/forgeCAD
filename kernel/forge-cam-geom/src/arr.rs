@@ -223,7 +223,9 @@ pub fn meet(cx: &mut Ctx, a: &Piece, b: &Piece, on_a: &mut Vec<Pt>, on_b: &mut V
     // an end the two pieces share (the same expression, as neighbours in a loop have): it is one
     // of the meets, and the other follows rationally from it, with no root to take and no tie
     // to prove between the vertex and a recomputed copy of it
-    let shared = [a.s, a.e].into_iter().find(|&x| (x == b.s || x == b.e) && !a.full && !b.full);
+    let shared = [a.s, a.e]
+        .into_iter()
+        .find(|&x| (x == b.s || x == b.e) && !a.full && !b.full);
     let both = !a.full && !b.full && ((a.s == b.s && a.e == b.e) || (a.s == b.e && a.e == b.s));
     if let Some(v) = shared
         && let Some(other) = other_meet(cx, a, b, v)

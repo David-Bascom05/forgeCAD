@@ -46,12 +46,18 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `vise(NAME, across:, clamp:, parallel:, clearance:)` | a library vise (`generic-vise-150`, `generic-vise-100`) closed on the stock along `across` (`"x"` or `"y"`), gripping `clamp` mm of it, on parallels `parallel` wide (default 6); `clearance` default 1 |
 | `soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:, relief: "corners", min_contact:)` | soft jaws cut to what `from:` left, turned over, `grip` deep: the pocket is the opening of that outline by `tool`'s radius, grown by `fit` (default 0.02), with a relief of radius r + fit at each corner if asked. Refused unless what `from:` left seats in the pocket (exactly), the seat is at least `min_contact` mm² (default a quarter of the largest section), the blank keeps 3 mm of wall and the part stands more than the fixture clearance above the jaws. The value is a part (the jaws closed, pocketed: `setup(jaws, ..)` cuts them, held by the vise) and a fixture (`setup(f, from: op1, fixture: jaws)`) |
 | `facing(SETUP, tool:, to:, step:)` | zig-zag over the stock down to `to` |
-| `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:)` | everything between the stock outline and the part's section, as offset passes |
+| `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:, ramp:)` | everything between the stock outline and the part's section, as offset passes |
 | `contour(SETUP, tool:, side:, from:, to:, step:, leave:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
-| `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:)` | a hole feature's circle, to its depth |
-| `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:)` | every hole and slot of the part's section between the heights |
+| `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:, ramp:)` | a hole feature's circle, to its depth |
+| `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, ramp:)` | every hole and slot of the part's section between the heights |
 | `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), tap for a thread |
 | `program(SETUP, post:, number:)` | `fanuc`, `haas`, `linuxcnc`, `grbl` (default: the machine's control) |
+
+`ramp: DEG` (over 0, at most 30) enters each pass by a helix of half the tool's radius at that angle,
+about the pass's start, where that disk lies in the tool centres' region (decided exactly); else
+the pass is plunged. A helix is posted as G2/G3 with Z and checked as its arc swept over each
+piece's heights (a superset), in closed form against prism faces; next to any other face it is
+refused as undecided.
 
 Holes are read from the part's history (`hole(d:, depth:, thread:, ...)`), never recognised from
 the shape: `f.bolts` is the `bolts` hole feature with its diameter, depth, thread and fit.
@@ -100,4 +106,4 @@ minus what each op provably cleared (kernel/forge-cam/src/stock.rs), so it conta
 2.5D on parts whose faces are planes, and cylinders, cones and tori about z (others are refused by kind, typed):
 facing, clearing, contours, hole pockets and hole plans, with linking by retract. Not yet:
 adaptive clearing (patents first), 3-axis surfacing, 3+2, turning, 5-axis; slots, chamfer mills,
-engraving and thread milling as ops (the tools exist); helical ramps; the leftover check.
+engraving and thread milling as ops (the tools exist).

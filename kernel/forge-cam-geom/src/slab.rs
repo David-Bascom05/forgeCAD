@@ -450,11 +450,12 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
 pub fn tseg_box(s: &TSeg) -> [f64; 4] {
     match *s {
         TSeg::Line { a, b } => [a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])],
-        TSeg::Arc { c, r, .. } => [
-            Ival::pt(c[0]).sub(Ival::pt(r)).lo,
-            Ival::pt(c[1]).sub(Ival::pt(r)).lo,
-            Ival::pt(c[0]).add(Ival::pt(r)).hi,
-            Ival::pt(c[1]).add(Ival::pt(r)).hi,
+        // the circle's box, and the ends (which may lie off the circle by its gap)
+        TSeg::Arc { a, b, c, r, .. } => [
+            Ival::pt(c[0]).sub(Ival::pt(r)).lo.min(a[0]).min(b[0]),
+            Ival::pt(c[1]).sub(Ival::pt(r)).lo.min(a[1]).min(b[1]),
+            Ival::pt(c[0]).add(Ival::pt(r)).hi.max(a[0]).max(b[0]),
+            Ival::pt(c[1]).add(Ival::pt(r)).hi.max(a[1]).max(b[1]),
         ],
     }
 }
@@ -675,6 +676,15 @@ fn path_sec(pl: &Planar) -> (Sec, Ival) {
     match *pl {
         Planar::Line { a, b, z } => (Sec::Seg { a, b }, Ival::pt(z)),
         Planar::Arc { c, r, a, b, ccw, z } => (Sec::Arc { c, r, a, b, ccw }, Ival::pt(z)),
+        Planar::Helix {
+            c,
+            r,
+            a,
+            b,
+            ccw,
+            z0,
+            z1,
+        } => (Sec::Arc { c, r, a, b, ccw }, Ival::new(z0, z1)),
         Planar::Vertical { p, z0, z1 } => (Sec::Seg { a: p, b: p }, Ival::new(z0, z1)),
     }
 }

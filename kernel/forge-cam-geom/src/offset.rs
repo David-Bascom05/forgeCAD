@@ -701,7 +701,8 @@ fn to_loop(cx: &mut Ctx, kept: &[Piece], chain: &[usize]) -> OLoop {
     // zero-length line. A loop that rounds to one point stays one (an isolated point).
     // a loop within a few grid cells is below the grid: it is the point it shrinks to (as a
     // region it has no area; as tool centres, a plunge there clears the tool's disk)
-    let (mut x0, mut y0, mut x1, mut y1) = (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+    let (mut x0, mut y0, mut x1, mut y1) =
+        (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
     for v in &verts {
         x0 = x0.min(v.x);
         y0 = y0.min(v.y);
@@ -711,7 +712,10 @@ fn to_loop(cx: &mut Ctx, kept: &[Piece], chain: &[usize]) -> OLoop {
     let full = segs.len() == 1 && matches!(segs[0], Seg::Arc { .. });
     if !full && x1 - x0 <= 4.0 * GRID && y1 - y0 <= 4.0 * GRID {
         return OLoop {
-            segs: vec![Seg::Line { a: verts[0], b: verts[0] }],
+            segs: vec![Seg::Line {
+                a: verts[0],
+                b: verts[0],
+            }],
         };
     }
     if segs.len() > 1 {

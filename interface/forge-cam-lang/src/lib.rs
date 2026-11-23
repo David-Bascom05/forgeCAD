@@ -1064,6 +1064,12 @@ impl Cam {
                 let t = &self.tools[ti];
                 let d = t.tool.dc;
                 let step = get_num(a, "step", Some(0.5 * d))?;
+                // a helical entry at this angle (degrees) where it fits; else plunges
+                let ramp = match a.get("ramp") {
+                    None => None,
+                    Some(V::Num(x)) if *x > 0.0 && *x <= 30.0 => Some(*x),
+                    Some(_) => return Err("ramp: an angle in degrees, over 0 and at most 30".into()),
+                };
                 let fd = match kind {
                     "facing" => self.feeds_for(su, t, 0.7 * d, step.min(t.tool.lcf)),
                     "pocket" => self.feeds_for(su, t, get_num(a, "stepover", Some(0.4 * d))?, step),
@@ -1126,6 +1132,7 @@ impl Cam {
                             stepover,
                             get_num(a, "leave", Some(0.0))?,
                             (vf, vp),
+                            ramp,
                         )
                         .map_err(|e| format!("{e:?}"))?;
                         if stepover <= r {
@@ -1194,7 +1201,7 @@ impl Cam {
                                     loops: vec![l.clone()],
                                 };
                                 paths.push(
-                                    ops::pocket(&rg, t, ti, h, top, bottom, step, stepover, leave, (vf, vp))
+                                    ops::pocket(&rg, t, ti, h, top, bottom, step, stepover, leave, (vf, vp), ramp)
                                         .map_err(|e| format!("{e:?}"))?,
                                 );
                                 let o = if stepover <= 0.5 * d { opening(&rg, 0.5 * d) } else { None };
@@ -1251,6 +1258,7 @@ impl Cam {
                                         stepover,
                                         get_num(a, "leave", Some(0.0))?,
                                         (vf, vp),
+                                        ramp,
                                     )
                                     .map_err(|e| format!("{e:?}"))?,
                                 );

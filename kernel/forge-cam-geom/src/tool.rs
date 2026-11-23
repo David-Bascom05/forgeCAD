@@ -276,7 +276,10 @@ fn box_gap(s: &PSeg, rho: Ival, z: Ival) -> f64 {
         .sub(Ival::pt(rho.hi))
         .lo
         .max(Ival::pt(rho.lo).sub(Ival::pt(x1)).lo);
-    let gy = Ival::pt(y0).sub(Ival::pt(z.hi)).lo.max(Ival::pt(z.lo).sub(Ival::pt(y1)).lo);
+    let gy = Ival::pt(y0)
+        .sub(Ival::pt(z.hi))
+        .lo
+        .max(Ival::pt(z.lo).sub(Ival::pt(y1)).lo);
     gx.max(gy).max(0.0)
 }
 
