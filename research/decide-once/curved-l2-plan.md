@@ -183,3 +183,11 @@ digest test runs in 0.36 s. Of that, 76% is `gcd` normalising
 rationals, done through `Big`'s public API (Euclid with a float-estimated quotient, corrected
 exactly). The fix is in `Big`: a `divmod` and a `gcd` (or an inline-word accessor). They are
 asked of the decide-once Rust session, which owns it.
+
+**Milestone 1c (2026-11-23).** The linear edge case is mirrored: `elim_lin`, `propose_edge_lin`
+and `propose_edge_any` (QPropose.lean at 29e00be), with its `#guard` as a test. The digest is
+re-committed and equal natively and on wasm. **Retarget (the master, same day):** the runtime
+ledger moves to A8, the face ledger (curved-design.md §7). Separators, Tier 1 included, move into
+the reference, which never runs. So the covector-specific parts here (`cov_on`, `edge_cov`,
+`vert_cov`, `classes_of`, `SForm::on_cov`) are paused until the v2 interface is fixed. The exact
+numerics and the certified proposers carry over as the builder's exact fallback.

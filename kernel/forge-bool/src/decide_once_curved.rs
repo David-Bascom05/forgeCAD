@@ -13,7 +13,7 @@
 //! | `QLine` | QLine.lean | `along_line`, `cov_on`: the exact covector of a point on a rational line |
 //! | `QSep` | QSep.lean | the Tier-0 seams from a face's frame, and their classes |
 //! | `QEdge` | QEdge.lean | edge samples on a plane `x = c`, their on-curve and Bezout certificates, `edge_cov` |
-//! | `QPropose` | QPropose.lean | `elim`, `mk_edge`, `propose_edge` (complete, by `roots_of`), the shear |
+//! | `QPropose` | QPropose.lean | `elim`, `mk_edge`, `propose_edge`, the linear case `elim_lin`/`propose_edge_lin`, `propose_edge_any` (complete, by `roots_of`), the shear |
 //! | `QVert` | QVert.lean | vertex samples, `vert_cov`, and `bezout3` (completeness); the proposer is next |
 //! | `QForm` | QForm.lean | `SForm` and `on_cov`: a body's sign formula on a covector |
 //!
@@ -876,6 +876,68 @@ pub fn propose_edge(qj: &Quadric, qk: &Quadric, c: &Q, fuel: usize) -> Option<Ve
     }
 }
 
+/// `elimLin qj qk c`: both quadrics without `z²`, so `q_j = a₁z + a₀`, `q_k = b₁z + b₀` on the
+/// plane, `b₁ q_j − a₁ q_k = R := b₁a₀ − a₁b₀`, and `z = −a₀/a₁`.
+pub fn elim_lin(qj: &Quadric, qk: &Quadric, c: &Q) -> Elim {
+    let a = restr(qj, c);
+    let b = restr(qk, c);
+    Elim {
+        r: psub(&pmul(&b.1, &a.0), &pmul(&a.1, &b.0)),
+        n: a.0.clone(),
+        d: a.1.clone(),
+        u: vec![b.1.clone()],
+        v: vec![pneg(&a.1)],
+    }
+}
+
+/// `proposeEdgeLin`: the linear case's crossings, each certified, or `None`
+/// (`proposeEdgeLin_complete`).
+pub fn propose_edge_lin(qj: &Quadric, qk: &Quadric, c: &Q, fuel: usize) -> Option<Vec<ESample>> {
+    let e = elim_lin(qj, qk, c);
+    if !bezout(qj, qk, c, &e.u, &e.v, &e.r) {
+        None
+    } else {
+        match roots_of(&e.r, fuel) {
+            None => None,
+            Some(ns) => {
+                let qk_q = pneg(&restr(qj, c).1);
+                let mut es: Vec<ESample> = Vec::with_capacity(ns.len());
+                let mut ok = true;
+                let mut i = 0;
+                while i < ns.len() {
+                    let s = ESample {
+                        c: c.clone(),
+                        r: e.r.clone(),
+                        n: e.n.clone(),
+                        d: e.d.clone(),
+                        y: ns[i].clone(),
+                        qj: Vec::new(),
+                        qk: qk_q.clone(),
+                    };
+                    ok = ok && s.on_curve(qj, qk) && s.d_ok(SIGN_FUEL);
+                    es.push(s);
+                    i += 1;
+                }
+                if ok { Some(es) } else { None }
+            }
+        }
+    }
+}
+
+/// **`proposeEdgeAny`**: the proposer for any pair, linear when neither has `z²`, solving for
+/// `z` from a quadric with a `z` term on the plane (`proposeEdgeAny_complete`).
+pub fn propose_edge_any(qj: &Quadric, qk: &Quadric, c: &Q, fuel: usize) -> Option<Vec<ESample>> {
+    if qj.zz.is_zero() && qk.zz.is_zero() {
+        if is_zero_p(&restr(qj, c).1) {
+            propose_edge_lin(qk, qj, c, fuel)
+        } else {
+            propose_edge_lin(qj, qk, c, fuel)
+        }
+    } else {
+        propose_edge(qj, qk, c, fuel)
+    }
+}
+
 /// `shears`: the generic projections tried, in order; the decided rule is the first `λ` for
 /// which every proposal of the boolean succeeds, and past the list `Skip::Budget`.
 pub fn shears() -> Vec<Q> {
@@ -1211,6 +1273,14 @@ mod tests {
             ..Quadric::default()
         };
         assert!(propose_edge(&sphere1(), &cyl_y, &qi(0), 30).is_none());
+        // the linear case: y = 1/2 and z = 0 on x = 0 cross once
+        let es = propose_edge_any(&plane_yh(), &plane_z(), &qi(0), 30).unwrap();
+        assert_eq!(es.len(), 1);
+        assert_eq!(
+            edge_cov(&[plane_yh(), plane_z(), sphere1()], &es[0], SIGN_FUEL),
+            Some(vec![Sgn::Zero, Sgn::Zero, Sgn::Neg])
+        );
+        assert!(propose_edge(&plane_yh(), &plane_z(), &qi(0), 30).is_none());
         let l = qi(1);
         let (s1, c1) = (sphere1().shear(&l), cyl_y.shear(&l));
         let es = propose_edge(&s1, &c1, &qi(0), 30).unwrap();
@@ -1434,7 +1504,7 @@ mod digest {
             let mut j = i + 1;
             while j < qs.len() {
                 let c = q(g.next(), 8);
-                let s = match propose_edge(&qs[i], &qs[j], &c, ROOT_FUEL) {
+                let s = match propose_edge_any(&qs[i], &qs[j], &c, ROOT_FUEL) {
                     Some(es) => {
                         let mut t = format!("{}:", es.len());
                         let mut k = 0;
@@ -1470,5 +1540,5 @@ mod digest {
         assert_eq!(h, DIGEST, "the exact path's digest changed: {h:#018x}");
     }
 
-    const DIGEST: u64 = 0x3a7aacb84adadac1;
+    const DIGEST: u64 = 0xe2c8e3e43408b4a8;
 }
