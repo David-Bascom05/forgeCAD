@@ -467,6 +467,15 @@ fn sec_box(s: &Sec) -> [f64; 4] {
     }
 }
 
+/// Trim.lean's Piece.ok, proven in outward-rounded arithmetic: r > 0, neither end at the centre,
+/// and the sweep strictly under a half turn in the arc's sense.
+fn arc_ok(a: [f64; 2], b: [f64; 2], c: [f64; 2], r: f64, ccw: bool) -> bool {
+    let (ua, ub) = (sub2(a, c), sub2(b, c));
+    let cr = cross(ua, ub);
+    let off = |u: [Ival; 2]| dot(u, u).lo > 0.0;
+    r > 0.0 && off(ua) && off(ub) && if ccw { cr.lo > 0.0 } else { cr.hi < 0.0 }
+}
+
 /// An arc piece's stored ends may lie off its circle by `gap` (the trim is the circle's arc plus
 /// the radial pieces to them): the end candidates may then exceed the truth by gap, and the
 /// radial pieces lie up to gap nearer, so the low end comes down by twice the gap (never below
@@ -522,11 +531,21 @@ fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], cutoff: f64) -> 
             i += 1;
             continue;
         }
-        let (s, gap) = match region[i] {
-            TSeg::Line { a, b } => (Sec::Seg { a, b }, 0.0),
-            TSeg::Arc { a, b, c, r, ccw } => (Sec::Arc { c, r, a, b, ccw }, crate::check::arc_gap(a, b, c, r)),
+        let (s, gap, ok) = match region[i] {
+            TSeg::Line { a, b } => (Sec::Seg { a, b }, 0.0, true),
+            TSeg::Arc { a, b, c, r, ccw } => (
+                Sec::Arc { c, r, a, b, ccw },
+                crate::check::arc_gap(a, b, c, r),
+                arc_ok(a, b, c, r, ccw),
+            ),
         };
-        let d = less_gap(dist(path, &s), gap);
+        // an arc piece outside the proven candidates' hypothesis (Trim.lean's Piece.ok) gives
+        // no lower bound: 0
+        let d = if ok {
+            less_gap(dist(path, &s), gap)
+        } else {
+            Ival { lo: 0.0, hi: f64::INFINITY }
+        };
         if d.lo < lo {
             lo = d.lo;
         }
