@@ -20,6 +20,7 @@ pub mod decisions;
 pub mod imprint;
 pub mod nary;
 pub mod shape;
+pub mod size;
 pub mod ssi;
 pub mod unify;
 
