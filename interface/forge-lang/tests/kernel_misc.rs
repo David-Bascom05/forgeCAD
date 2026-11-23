@@ -1299,10 +1299,32 @@ fn a_spline_wall_too_thick_for_its_curvature_is_refused_where_it_folds() {
     }
 }
 
-/// A plate whose wall is a wavy spline (crossing nowhere) builds, then its face fails to mesh
-/// (ConstraintThroughPoint). Open: ignored until the mesher takes the face.
+/// A spline dome (its wall reaching the axis at a pole) meshes at chord 2e-4: about 0.4M
+/// points, past the CDT's first budget of 2^18, which then takes what the chord asks for
+/// (`Refine::need`, ∫κ dA / (2√3 c) triangles, four times over). It was refused, "refinement did
+/// not settle" (from fix-shell, 504a8b9). Closed, and within the chord of the body's volume.
 #[test]
-#[ignore = "open: ConstraintThroughPoint meshing a wavy spline wall"]
+fn a_spline_dome_meshes_at_a_fine_chord() {
+    let (b, v) = body(include_str!("kernel_parts/mesh_spline_dome.fg"));
+    let q = forge_mesh::Quality {
+        chord: 2e-4,
+        ..forge_mesh::Quality::default()
+    };
+    let m = forge_mesh::tessellate(&b, &q).expect("meshes");
+    assert!(m.positions.len() > 1 << 18, "{} points", m.positions.len());
+    assert!(m.open_edges().is_empty());
+    let area = forge_topo::mass::mass(&b).expect("mass").area;
+    assert!(
+        (m.volume() - v).abs() <= q.chord * area,
+        "{} against {v}",
+        m.volume()
+    );
+}
+
+/// A plate whose wall is a wavy spline (19 points, one tight turn back, crossing nowhere) builds
+/// and meshes: its chords, crossing a neighbour's near the turn, are cut by the crossing pre-pass
+/// (it failed ConstraintThroughPoint; from the import branch, CADFS 00468533 and 00893869).
+#[test]
 fn a_wavy_spline_wall_meshes() {
     use forge_lang::fuzz::{Verdict, judge_built};
     let (v, _) = judge_built(include_str!("kernel_parts/mesh_wavy_spline.fg"));
@@ -1388,3 +1410,4 @@ bore = hole(at: spot.p, d: d, depth: thru, flip: true)
     let exact = 80.0 * 30.0 * 6.0 + boss - dmath::PI * 2.5 * 2.5 * 36.0;
     assert!((v - exact).abs() < 1e-6, "volume {v}, through the boss {exact}");
 }
+

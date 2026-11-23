@@ -4,6 +4,8 @@
 
 pub mod body;
 pub mod check;
+pub mod chords;
+pub mod extent;
 pub mod mass;
 pub mod name;
 pub mod small;

@@ -114,7 +114,7 @@ impl Proto {
         }
     }
 
-    /// Where an edge's samples lie on `s`, unwrapped from `from`.
+    /// Where an edge's samples lie on `s`, each projected near the last and unwrapped from it.
     fn walk(&self, u: (usize, bool), s: &Surface, n: usize, out: &mut Vec<Point2>) {
         let e = &self.edges[u.0];
         let d = s.domain();
@@ -122,10 +122,11 @@ impl Proto {
             let k = if u.1 { i } else { n - i };
             let t = e.range.lo + e.range.width() * k as f64 / n as f64;
             let p = e.curve.eval(t);
-            let uv = s.project(p);
+            // each sample near the last: the walk follows the edge (where the surface meets
+            // itself, as a closed span's ends, either answer is nearest)
             let uv = match out.last() {
-                Some(&near) => unwrap(uv, near, d.u, d.v),
-                None => uv,
+                Some(&near) => unwrap(s.project_near(p, near), near, d.u, d.v),
+                None => s.project(p),
             };
             out.push(uv);
         }

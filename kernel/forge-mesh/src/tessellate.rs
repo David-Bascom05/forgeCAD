@@ -1,4 +1,4 @@
-use crate::cdt::{CdtError, Refine, Triangulation, triangulate_within, zip};
+use crate::cdt::{CdtError, Refine, Triangulation, triangulate_as_far, triangulate_within, zip};
 use crate::mesh::TriMesh;
 use forge_geom::CurveGeom;
 use forge_geom::{Curve, Surface, SurfaceGeom};
@@ -29,26 +29,37 @@ pub enum TessError {
     Face { face: FaceId, error: CdtError },
 }
 
-/// Angle step that keeps chords on a circle of radius `r` within quality.
+/// Angle step that keeps chords on a circle of radius `r` within quality, exactly: the step θ
+/// whose sag r (1 − cos θ/2) is the chord, as 4 asin √(chord / 2r) (1 − cos θ/2 = 2 sin² θ/4;
+/// 2 acos(1 − chord / r) loses the digits of a small chord / r). No floor: a step too small for
+/// its edge is the point cap's typed error.
 fn arc_step(r: f64, q: &Quality) -> f64 {
-    let by_chord = if q.chord >= r {
+    let x = q.chord / r;
+    let by_chord = if x >= 1.0 {
         dmath::PI
     } else {
-        2.0 * dmath::acos(1.0 - q.chord / r)
+        4.0 * dmath::asin((0.5 * x).sqrt())
     };
-    by_chord.min(q.max_angle).max(1e-4)
+    by_chord.min(q.max_angle)
 }
 
 /// Chords along an edge. On a face curved both ways a chord along the edge and one across
-/// it make a triangle that sags by both their sags: there each gets half of the tolerance,
-/// a step shorter by sqrt 2 (`fine`; research/mesh-bounds/).
+/// it make a triangle that sags by both their sags: there each gets half of the tolerance
+/// (`fine`; research/mesh-bounds/), by each curve's own exact bound at half the chord.
 fn edge_segments(curve: &Curve, range: forge_math::Interval, q: &Quality, fine: bool) -> usize {
     let width = range.width();
+    // half the tolerance, exactly (each bound below is closed form in it), the angle as it was
+    let half = Quality {
+        chord: 0.5 * q.chord,
+        ..*q
+    };
+    let q = if fine { &half } else { q };
     let n = match curve {
         Curve::Line(_) => 1.0,
         Curve::Circle(c) => width / arc_step(c.radius, q),
         Curve::Ellipse(e) => width / arc_step(e.major, q),
-        Curve::Parabola(_) | Curve::Hyperbola(_) => 64.0,
+        Curve::Parabola(c) => conic_segments(width, 1.0 / (2.0 * c.focal), 2.0 * c.focal, q),
+        Curve::Hyperbola(c) => conic_segments(width, c.a, c.b / c.a, q),
         // the chain already follows the curvature; split each link by the chord its sag allows
         Curve::Intersection(c) => width * (c.sag / q.chord).sqrt().max(1.0),
         Curve::Procedural(c) => c.segments(range, q.chord) as f64,
@@ -56,12 +67,203 @@ fn edge_segments(curve: &Curve, range: forge_math::Interval, q: &Quality, fine: 
     // a curved edge gets two chords at least: a face bounded by a line and a short arc
     // still has three corners to triangulate
     let least = if matches!(curve, Curve::Line(_)) { 1 } else { 2 };
-    let n = if fine && least == 2 {
-        n * core::f64::consts::SQRT_2
-    } else {
-        n
-    };
     (n.ceil() as usize).max(least)
+}
+
+/// Chords of equal parameter steps along a conic whose second derivative is at most `bend` long
+/// (mm per unit parameter squared) and whose tangent turns at most one radian per `turn` of
+/// parameter: a chord of step h strays from its curve by at most h^2 bend / 8 (the linear
+/// interpolant's error, with its kernel, (t - t0)(t1 - t) / 2, at most h^2 / 8), and turns through
+/// at most h / turn.
+/// - parabola P(t) = (t^2 / 4f) x + t y: P'' = x / 2f, its tangent turns 1 / 2f per unit at most
+///   (at the vertex);
+/// - hyperbola P(t) = a sqrt(1 + t^2) x + b t y: |P''| = a (1 + t^2)^(-3/2) <= a, and its tangent
+///   turns |P' x P''| / |P'|^2 <= a b / b^2 = a / b per unit (at t = 0).
+fn conic_segments(width: f64, bend: f64, turn: f64, q: &Quality) -> f64 {
+    let by_chord = width * (bend.abs() / (8.0 * q.chord)).sqrt();
+    let by_angle = width / (turn.abs() * q.max_angle);
+    by_chord.max(by_angle)
+}
+
+/// Whether the triangle `x`, its corners on the sphere of centre `o` and radius `r`, sags past
+/// `chord` at the centre's foot on its plane, the deepest point of the triangle when it lies in
+/// it (cold: only a triangle whose centroid sags near the chord asks).
+#[cold]
+#[inline(never)]
+fn foot_sags(o: forge_math::Point3, r: f64, x: [forge_math::Point3; 3], chord: f64) -> bool {
+    let n = (x[1] - x[0]).cross(x[2] - x[0]);
+    let nn = n.dot(n);
+    if nn <= 0.0 {
+        return false;
+    }
+    let foot = o + n * ((x[0] - o).dot(n) / nn);
+    // in the triangle: on the inner side of each edge (as the normal turns)
+    let side = |a: forge_math::Point3, b: forge_math::Point3| (b - a).cross(foot - a).dot(n) >= 0.0;
+    side(x[0], x[1]) && side(x[1], x[2]) && side(x[2], x[0]) && (foot.distance(o) - r).abs() > chord
+}
+
+/// Whether the chord x–y, its ends on the cone `c`, sags past `chord` anywhere: the signed
+/// distance (ρ − R₀)·cos α − z·sin α is convex along the chord (ρ the norm of an affine map), so
+/// its deepest point is where its slope is zero, ρ′ = tan α·Δz (a root of a quadratic in the
+/// chord's parameter, (q + sp)² = k²(c₀ + 2sq + s²p)), or where the chord passes nearest the axis
+/// (ρ's kink); each candidate inside the chord is judged (cold: only a chord whose middle sags
+/// past half the chord asks).
+#[cold]
+#[inline(never)]
+fn cone_chord_sags(c: &forge_geom::Cone, x: forge_math::Point3, y: forge_math::Point3, chord: f64) -> bool {
+    let (a, b) = (c.frame.point_to_local(x), c.frame.point_to_local(y));
+    let (dx, dy, dz) = (b.x - a.x, b.y - a.y, b.z - a.z);
+    let p = dx * dx + dy * dy;
+    let q = a.x * dx + a.y * dy;
+    let c0 = a.x * a.x + a.y * a.y;
+    let k = c.tan_a() * dz;
+    let sags = |s: f64| s > 0.0 && s < 1.0 && Surface::Cone(*c).implicit(x.lerp(y, s)).abs() > chord;
+    if p <= 0.0 {
+        return false;
+    }
+    // nearest the axis
+    if sags(-q / p) {
+        return true;
+    }
+    // the slope's zeros: p(p − k²)s² + 2q(p − k²)s + (q² − k²c₀) = 0
+    let a2 = p * (p - k * k);
+    if a2 == 0.0 {
+        return false;
+    }
+    let disc = (q / p) * (q / p) - (q * q - k * k * c0) / a2;
+    if disc < 0.0 {
+        return false;
+    }
+    let (m, h) = (-q / p, disc.sqrt());
+    sags(m - h) || sags(m + h)
+}
+
+/// Whether the triangle `x`, its corners on the cone `c`, sags past `chord` where the cone's
+/// axis crosses it (the distance's kink, ρ = 0).
+fn cone_axis_sags(c: &forge_geom::Cone, x: [forge_math::Point3; 3], chord: f64) -> bool {
+    let l = x.map(|p| c.frame.point_to_local(p));
+    // the axis meets the triangle only if the triangle's shadow on the xy plane holds the origin
+    let cross = |a: forge_math::Point3, b: forge_math::Point3| a.x * b.y - a.y * b.x;
+    let (s0, s1, s2) = (cross(l[0], l[1]), cross(l[1], l[2]), cross(l[2], l[0]));
+    if !((s0 >= 0.0 && s1 >= 0.0 && s2 >= 0.0) || (s0 <= 0.0 && s1 <= 0.0 && s2 <= 0.0)) {
+        return false;
+    }
+    cone_axis_point_sags(c, l, chord)
+}
+
+#[cold]
+#[inline(never)]
+fn cone_axis_point_sags(c: &forge_geom::Cone, l: [forge_math::Point3; 3], chord: f64) -> bool {
+    // the axis's point in the triangle's plane: weights from the shadow, the height from them
+    let cross = |a: forge_math::Point3, b: forge_math::Point3| a.x * b.y - a.y * b.x;
+    let w = [cross(l[1], l[2]), cross(l[2], l[0]), cross(l[0], l[1])];
+    let total = w[0] + w[1] + w[2];
+    if total == 0.0 {
+        return false;
+    }
+    let z = (w[0] * l[0].z + w[1] * l[1].z + w[2] * l[2].z) / total;
+    Surface::Cone(*c)
+        .implicit(c.frame.point_to_world(forge_math::Point3::new(0.0, 0.0, z)))
+        .abs()
+        > chord
+}
+
+/// On a torus (major R, minor r) a point's F = h² − r², h its distance from the core circle:
+/// in the torus's frame |p|² + R² − r² − 2R·ρ (ρ its distance from the axis). |h − r| = |F|/(h + r).
+fn torus_f(t: &forge_geom::Torus, p: forge_math::Point3) -> f64 {
+    let l = t.frame.point_to_local(p);
+    let rho = (l.x * l.x + l.y * l.y).sqrt();
+    l.x * l.x + l.y * l.y + l.z * l.z + t.major * t.major - t.minor * t.minor - 2.0 * t.major * rho
+}
+
+/// Whether the chord x–y, its ends on the torus `t`, is shown within `chord` of it. Along the
+/// chord a + s·d (in the torus's frame) F is zero at its ends, and its third derivative is
+/// −2R·ρ''' with ρ''' = −3(αγ − β²)(γs + β)/ρ⁵ (ρ² = α + 2βs + γs², over the shadows on the
+/// plane square to the axis): at most 6R·(αγ − β²)·max(|β|, |β + γ|)/ρ⁵, ρ its least on the
+/// chord. So F strays from the parabola through its ends and middle by at most that over 6·(√3/36);
+/// and a point where |h − r| reached the chord would have |F| ≥ chord·(2r − chord). A chord that
+/// reaches the axis (ρ's kink) is not shown within it, and is split. (A tube no thicker than the
+/// chord is left to the middle's test.)
+fn torus_chord_holds(
+    t: &forge_geom::Torus,
+    x: forge_math::Point3,
+    y: forge_math::Point3,
+    chord: f64,
+) -> bool {
+    if t.minor <= chord {
+        return true;
+    }
+    let (a, b) = (t.frame.point_to_local(x), t.frame.point_to_local(y));
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let (al, be, ga) = (a.x * a.x + a.y * a.y, a.x * dx + a.y * dy, dx * dx + dy * dy);
+    // the least ρ² on the chord
+    let s = if ga > 0.0 { (-be / ga).clamp(0.0, 1.0) } else { 0.0 };
+    let rho2 = al + 2.0 * be * s + ga * s * s;
+    if rho2 <= 0.0 {
+        return false;
+    }
+    let rho = rho2.sqrt();
+    // (αγ − β² = γ·ρ² at the nearest point when it lies inside the chord: exactly, without the
+    // cancellation, so a chord passing near the axis is not shown within the chord by rounding)
+    let cross2 = if s > 0.0 && s < 1.0 {
+        ga * rho2
+    } else {
+        (al * ga - be * be).max(0.0)
+    };
+    let third = 6.0 * t.major * cross2 * be.abs().max((be + ga).abs()) / (rho2 * rho2 * rho);
+    let stray = third * 3f64.sqrt() / 216.0;
+    torus_f(t, x.lerp(y, 0.5)).abs() + stray < chord * (2.0 * t.minor - chord)
+}
+
+/// Whether the triangle `x`, its corners on the torus `t`, lies within `chord` of it inside (its
+/// edges are judged as chords). F = h² − r² has gradient 2(p − c(p)), c(p) the core circle's
+/// point nearest p, so in the triangle's plane (normal n) its slope is zero only where p − c ∥ n:
+/// c at the angle of n's shadow on the plane square to the axis or the opposite one, p = c + t·n
+/// on the plane; besides, F has a kink on the axis. Each such point in the triangle is judged.
+/// (A plane square to the axis has F constant round the circle ρ = R in it, whose points in the
+/// triangle reach its edges unless the triangle holds the whole circle: a triangle that large is
+/// left to its other tests.)
+fn torus_triangle_holds(t: &forge_geom::Torus, x: [forge_math::Point3; 3], chord: f64) -> bool {
+    let l = x.map(|p| t.frame.point_to_local(p));
+    let n = (l[1] - l[0]).cross(l[2] - l[0]);
+    let nn = n.length();
+    if nn <= 0.0 {
+        return true;
+    }
+    let n = n * (1.0 / nn);
+    let inside = |p: forge_math::Point3| {
+        let side = |a: forge_math::Point3, b: forge_math::Point3| (b - a).cross(p - a).dot(n) >= 0.0;
+        side(l[0], l[1]) && side(l[1], l[2]) && side(l[2], l[0])
+    };
+    let off = |p: forge_math::Point3| {
+        let rho = (p.x * p.x + p.y * p.y).sqrt();
+        let d = rho - t.major;
+        ((d * d + p.z * p.z).sqrt() - t.minor).abs() > chord
+    };
+    let nxy = (n.x * n.x + n.y * n.y).sqrt();
+    if nxy > 0.0 {
+        for sign in [1.0, -1.0] {
+            let (ex, ey) = (sign * n.x / nxy, sign * n.y / nxy);
+            let c = forge_math::Point3::new(t.major * ex, t.major * ey, 0.0);
+            let s = n.dot(l[0] - c);
+            let p = c + n * s;
+            // (its shadow on the plane square to the axis along c's direction, past the axis)
+            if t.major + s * sign * nxy > 0.0 && inside(p) && off(p) {
+                return false;
+            }
+        }
+    }
+    // the axis's point in the plane, when the triangle's shadow holds the axis
+    let cross = |a: forge_math::Point3, b: forge_math::Point3| a.x * b.y - a.y * b.x;
+    let w = [cross(l[1], l[2]), cross(l[2], l[0]), cross(l[0], l[1])];
+    let total = w[0] + w[1] + w[2];
+    if total != 0.0 && w.iter().all(|&v| v * total >= 0.0) {
+        let z = (w[0] * l[0].z + w[1] * l[1].z + w[2] * l[2].z) / total;
+        if off(forge_math::Point3::new(0.0, 0.0, z)) {
+            return false;
+        }
+    }
+    true
 }
 
 /// Whether the surface curves both ways, so a triangle on it sags by its sag along each side.
@@ -657,7 +859,7 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
     if body.dead > 0 {
         return tessellate(&body.compact(), q);
     }
-    cut_finer(body, q).map_err(|x| x.0)
+    tessellate_with(body, q, false)
 }
 
 /// `tessellate`, but a body from a file (`Body::from_file`), whose edges may meet only within their
@@ -671,14 +873,8 @@ pub fn tessellate_tolerant(body: &Body, q: &Quality) -> Result<TriMesh, TessErro
     if body.dead > 0 {
         return tessellate_tolerant(&body.compact(), q);
     }
-    match cut_finer(body, q) {
-        Err((e, finer, pins)) if e.tangled() => tessellate_with(body, q, &finer, &pins, true),
-        r => r.map_err(|x| x.0),
-    }
+    tessellate_with(body, q, true)
 }
-
-/// What failed, with how finely its edges had been cut and where they had been pinned.
-type Failed = (TessError, Vec<usize>, Vec<Vec<f64>>);
 
 impl TessError {
     /// A boundary that crosses or repeats itself or has two points in one place.
@@ -694,115 +890,105 @@ impl TessError {
     }
 }
 
-// a face whose boundary chords cross (two of its edges running close, as a curve all but
-// touching a line, or nearly tangent where they meet) gets its edges cut finer, so their
-// chords follow them closer, until they no longer do
-fn cut_finer(body: &Body, q: &Quality) -> Result<TriMesh, Failed> {
-    let mut finer = vec![1usize; body.edges.len()];
-    let mut pins: Vec<Vec<f64>> = vec![Vec::new(); body.edges.len()];
-    let mut rounds = 0;
-    loop {
-        match tessellate_with(body, q, &finer, &pins, false) {
-            Err(TessError::Face {
-                face,
-                error: CdtError::ConstraintsIntersect { .. },
-            }) if rounds < if body.from_file { 3 } else { 9 } => {
-                let radius = |e: forge_topo::EdgeId| match &body.edge(e).curve {
-                    Curve::Circle(c) => c.radius,
-                    _ => f64::INFINITY,
-                };
-                let tightest = body
-                    .face(face)
-                    .loops
-                    .iter()
-                    .flat_map(|&l| body.lp(l).coedges())
-                    .map(|c| radius(body.coedge(c).edge))
-                    .fold(f64::INFINITY, f64::min);
-                for &l in &body.face(face).loops {
-                    for c in body.lp(l).coedges() {
-                        // circles tangent at a shared vertex: halving both keeps their first chords
-                        // crossed, so past five rounds the tightest stays as it is
-                        let e = body.coedge(c).edge;
-                        if rounds < 5 || radius(e) > tightest {
-                            finer[e.index()] *= 2;
-                        }
-                    }
-                }
-                // edges touching with no vertex there (a hole tangent inside a face's rim): chords
-                // cross near the point at any fineness, unless each has a sample at it
-                if rounds == 4 {
-                    pin_touches(body, face, &mut pins);
-                }
-                rounds += 1;
-            }
-            Err(e) => return Err((e, finer, pins)),
-            Ok(m) => return Ok(m),
-        }
-    }
+/// The edges' samples, shared by the faces on each side, and for each mesh vertex that is a sample
+/// inside an edge, that edge and the sample's parameter.
+struct Samples {
+    of: Vec<Vec<(f64, u32)>>,
+    owner: Vec<(u32, f64)>,
 }
 
-/// A parameter on each of two edges of face `f` where they touch away from their ends.
-fn pin_touches(body: &Body, f: forge_topo::FaceId, pins: &mut [Vec<f64>]) {
-    const N: usize = 256;
-    let mut edges: Vec<forge_topo::EdgeId> = Vec::new();
-    for &l in &body.face(f).loops {
-        edges.extend(body.lp(l).coedges().map(|c| body.coedge(c).edge));
+impl Samples {
+    /// The chord of an edge between mesh vertices `a` and `b`, as that edge and the index of its
+    /// first sample, if the two are neighbours along one edge.
+    fn chord(&self, body: &Body, a: u32, b: u32) -> Option<(usize, usize)> {
+        let owned = |x: u32| self.owner.get(x as usize).is_some_and(|o| o.0 != u32::MAX);
+        if !owned(a) && !owned(b) {
+            // between two of the body's vertices (or vertices taken for them): a line, or an
+            // edge whose samples joined others'
+            return (0..self.of.len()).find_map(|e| {
+                let s = &self.of[e];
+                s.windows(2)
+                    .position(|w| (w[0].1, w[1].1) == (a, b) || (w[0].1, w[1].1) == (b, a))
+                    .map(|k| (e, k))
+                    .filter(|_| !body.edge(forge_topo::EdgeId(e as u32)).coedges.is_empty())
+            });
+        }
+        for (x, y) in [(a, b), (b, a)] {
+            if !owned(x) {
+                continue;
+            }
+            let (e, t) = self.owner[x as usize];
+            let s = &self.of[e as usize];
+            let k = s.partition_point(|p| p.0 < t);
+            if s.get(k).is_none_or(|p| p.1 != x) {
+                continue;
+            }
+            if s.get(k + 1).is_some_and(|p| p.1 == y) {
+                return Some((e as usize, k));
+            }
+            if k > 0 && s[k - 1].1 == y {
+                return Some((e as usize, k - 1));
+            }
+        }
+        None
     }
-    edges.sort_unstable_by_key(|e| e.index());
-    edges.dedup();
-    if edges.len() > 64 {
-        return;
-    }
-    let at = |r: forge_math::Interval, k: usize| r.lo + r.width() * (k as f64 + 0.5) / N as f64;
-    let sampled: Vec<Vec<forge_math::Point3>> = edges
-        .iter()
-        .map(|&e| {
-            let d = body.edge(e);
-            (0..N).map(|k| d.curve.eval(at(d.range, k))).collect()
-        })
-        .collect();
-    for i in 0..edges.len() {
-        for j in i + 1..edges.len() {
-            let (a, b) = (body.edge(edges[i]), body.edge(edges[j]));
-            let (mut d2, mut ka, mut kb) = (f64::INFINITY, 0, 0);
-            for (x, p) in sampled[i].iter().enumerate() {
-                for (y, q) in sampled[j].iter().enumerate() {
-                    let d = p.distance_sq(*q);
-                    if d < d2 {
-                        (d2, ka, kb) = (d, x, y);
-                    }
+
+    /// The samples changed by `cut`, and the edges it changed.
+    fn apply(&mut self, body: &Body, cut: Cut, mesh: &mut TriMesh, changed: &mut Vec<usize>) {
+        match cut {
+            Cut::At { edge, t, v } => {
+                let s = &mut self.of[edge];
+                let k = s.partition_point(|p| p.0 < t);
+                let id = v.unwrap_or_else(|| {
+                    let id = mesh.add_vertex(body.edge(forge_topo::EdgeId(edge as u32)).curve.eval(t));
+                    self.owner.resize(id as usize + 1, (u32::MAX, 0.0));
+                    self.owner[id as usize] = (edge as u32, t);
+                    id
+                });
+                s.insert(k, (t, id));
+                changed.push(edge);
+            }
+            Cut::Cross { e, t, f, u } => {
+                let id = mesh.add_vertex(body.edge(forge_topo::EdgeId(e as u32)).curve.eval(t));
+                self.owner.resize(id as usize + 1, (u32::MAX, 0.0));
+                self.owner[id as usize] = (e as u32, t);
+                for (g, w) in [(e, t), (f, u)] {
+                    let s = &mut self.of[g];
+                    let k = s.partition_point(|p| p.0 < w);
+                    s.insert(k, (w, id));
+                    changed.push(g);
                 }
             }
-            let (mut ta, mut tb) = (at(a.range, ka), at(b.range, kb));
-            for _ in 0..8 {
-                tb = b.curve.closest(a.curve.eval(ta), b.range);
-                ta = a.curve.closest(b.curve.eval(tb), a.range);
-            }
-            let inside =
-                |t: f64, r: forge_math::Interval| t > r.lo + 1e-6 * r.width() && t < r.hi - 1e-6 * r.width();
-            if a.curve.eval(ta).distance(b.curve.eval(tb)) <= 2.0 * forge_math::tol::LINEAR
-                && inside(ta, a.range)
-                && inside(tb, b.range)
-            {
-                pins[edges[i].index()].push(ta);
-                pins[edges[j].index()].push(tb);
+            Cut::Same { from, to } => {
+                for (e, s) in self.of.iter_mut().enumerate() {
+                    let mut hit = false;
+                    for x in s.iter_mut().filter(|x| x.1 == from) {
+                        x.1 = to;
+                        hit = true;
+                    }
+                    if hit {
+                        // (a vertex met twice in a row is met once)
+                        s.dedup_by_key(|x| x.1);
+                        changed.push(e);
+                    }
+                }
+                if let Some(o) = self.owner.get_mut(from as usize) {
+                    o.0 = u32::MAX;
+                }
             }
         }
     }
 }
 
-fn tessellate_with(
-    body: &Body,
-    q: &Quality,
-    finer: &[usize],
-    pins: &[Vec<f64>],
-    mend: bool,
-) -> Result<TriMesh, TessError> {
+fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, TessError> {
     let mut mesh = TriMesh::default();
     let vertex_index: Vec<u32> = body.vertices.iter().map(|v| mesh.add_vertex(v.point)).collect();
 
     // per edge: its parameter samples and their mesh indices (ends are the body's vertices)
-    let mut edge_samples: Vec<Vec<(f64, u32)>> = Vec::with_capacity(body.edges.len());
+    let mut samples = Samples {
+        of: Vec::with_capacity(body.edges.len()),
+        owner: vec![(u32::MAX, 0.0); vertex_index.len()],
+    };
     let (mut trig, mut pts) = (Vec::new(), Vec::new());
     for e in body.edge_ids() {
         let edge = body.edge(e);
@@ -810,7 +996,7 @@ fn tessellate_with(
             .coedges
             .iter()
             .any(|&c| doubly_curved(&body.face(body.coedge_face(c)).surface));
-        let n = edge_segments(&edge.curve, edge.range, q, fine) * finer[e.index()];
+        let n = edge_segments(&edge.curve, edge.range, q, fine);
         // a file's arc of a huge radius, or a bad number: no room to be had, and no mesh
         if n > MAX_EDGE_CUTS {
             return Err(TessError::Face {
@@ -823,15 +1009,68 @@ fn tessellate_with(
         edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts);
         for (i, &p) in pts.iter().enumerate() {
             let t = edge.range.lo + edge.range.width() * ((i + 1) as f64 / n as f64);
-            s.push((t, mesh.add_vertex(p)));
+            let id = mesh.add_vertex(p);
+            samples.owner.push((e.0, t));
+            s.push((t, id));
         }
         s.push((edge.range.hi, vertex_index[edge.end.index()]));
-        for &t in &pins[e.index()] {
-            let k = s.partition_point(|x| x.0 < t);
-            s.insert(k, (t, mesh.add_vertex(edge.curve.eval(t))));
-        }
-        edge_samples.push(s);
+        samples.of.push(s);
     }
+
+    // each face's boundary drawn flat, its crossing chords split first (on their edges, so the
+    // faces on both sides take the new samples), until no face's chords cross
+    let nf = body.faces.len();
+    // (boxed: a prep holds a procedural face's 9 x 9 nodes, and moves)
+    let mut preps: Vec<Option<Box<Prep>>> = (0..nf).map(|_| None).collect();
+    let mut splits = 0usize;
+    // a file's face is drawn again for its cuts this many times, then drawn as it is (`mend`):
+    // each drawing projects all its boundary again, and a damaged face's crossings within its
+    // tolerance need not end where a body made here's do (the base gave a file's faces 3 rounds)
+    const FILE_ROUNDS: u32 = 8;
+    let mut drawn = if mend { vec![0u32; nf] } else { Vec::new() };
+    // (the first face not drawn: faces before it stay drawn until a cut moves it back)
+    let mut i = 0;
+    while i < nf {
+        if preps[i].is_some() {
+            i += 1;
+            continue;
+        }
+        let f = FaceId(i as u32);
+        let prep = prepare_face(body, f, &samples.of, q, &mesh)
+            .map_err(|error| TessError::Face { face: f, error })?;
+        let tired = mend && {
+            drawn[i] += 1;
+            drawn[i] > FILE_ROUNDS
+        };
+        let cuts = if tired {
+            Vec::new()
+        } else {
+            uncross(body, &prep, &samples, &mesh, mend).map_err(|error| TessError::Face { face: f, error })?
+        };
+        if cuts.is_empty() {
+            preps[i] = Some(prep);
+            continue;
+        }
+        splits += cuts.len();
+        if splits > MAX_EDGE_CUTS {
+            return Err(TessError::Face {
+                face: f,
+                error: CdtError::Internal("crossing chords would take too many points"),
+            });
+        }
+        let mut changed = Vec::new();
+        for cut in cuts {
+            samples.apply(body, cut, &mut mesh, &mut changed);
+        }
+        for e in changed {
+            for &c in &body.edge(forge_topo::EdgeId(e as u32)).coedges {
+                let g = body.coedge_face(c).index();
+                preps[g] = None;
+                i = i.min(g);
+            }
+        }
+    }
+    let edge_samples = samples.of;
 
     // every mesh segment an edge's own samples make, as each sample's neighbours along its edges
     // (start offsets, then neighbours): a face's inner chord must never repeat one (four
@@ -882,18 +1121,11 @@ fn tessellate_with(
         on,
         edges,
     };
-    for f in body.face_ids() {
-        // a cone is unrolled only to reach its apex cleanly; unrolled, two coarse chords of
-        // curves meeting at a sharp corner can cross (in its parameters both run straight)
-        match tessellate_face(body, f, &edge_samples, &segments, q, (true, mend), &mut mesh) {
-            Err(CdtError::ConstraintsIntersect { .. })
-                if matches!(body.face(f).surface, Surface::Cone(_)) =>
-            {
-                tessellate_face(body, f, &edge_samples, &segments, q, (false, mend), &mut mesh)
-            }
-            r => r,
-        }
-        .map_err(|error| TessError::Face { face: f, error })?;
+    for (i, prep) in preps.into_iter().enumerate() {
+        let f = FaceId(i as u32);
+        let prep = prep.expect("every face drawn");
+        mesh_face(body, f, prep, &segments, q, mend, &mut mesh)
+            .map_err(|error| TessError::Face { face: f, error })?;
     }
     mesh.edges = edge_samples
         .iter()
@@ -902,15 +1134,269 @@ fn tessellate_with(
     Ok(mesh)
 }
 
-fn tessellate_face(
+/// A change to the edges' samples, so a face's boundary chords stop crossing.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Cut {
+    /// Edge `edge` takes a sample at `t`: mesh vertex `v` (a point of another edge's on its curve),
+    /// or a new one on it.
+    At { edge: usize, t: f64, v: Option<u32> },
+    /// Mesh vertex `from` is `to` (two boundary points one place): every edge takes `to` for it.
+    Same { from: u32, to: u32 },
+    /// Two edges of a file's body that cross within its tolerance: each takes a sample where
+    /// they cross (at `t` and `u`), one new mesh vertex for both, so the face is pinched there
+    /// and the faces across both edges take it too.
+    Cross { e: usize, t: f64, f: usize, u: f64 },
+}
+
+/// The cuts that make a face's boundary chords, as drawn flat for its triangulation, meet only
+/// at shared ends: none crossing, touching or running along another, and no two points in one
+/// place.
+///
+/// Every pair of chords is decided once, exactly (orient2d on the very numbers the triangulation
+/// is given), and a pair in conflict is resolved by one rule, in this order:
+/// - a point of one chord on the other's curve, within LINEAR (the model's: two points that close
+///   are one), is on it: at one of that chord's ends it is that end's vertex (`Same`: a hole
+///   tangent inside a rim, each with a sample at the touch), else that curve's sample there, the
+///   same mesh vertex (a vertex of one on the other, as a hole's on its rim);
+/// - else the longer chord (as drawn) of the two that can be cut is halved in its parameter: a
+///   chord of a curve, longer than its edge's tolerance (LINEAR, or a file's edge's own, wider: a
+///   chord shorter is its curve, to it; so a file's edges that cross within their tolerance stop
+///   being cut at once, and are drawn as they are).
+///
+/// Chords that follow their curves closer each round stop crossing once they are closer than the
+/// curves are apart; curves that themselves cross leave chords that cannot be cut, and that is the
+/// face's own error (`ConstraintsIntersect`), or with `mend` (a file's body, whose edges meet only
+/// within its tolerance) the triangulation's to draw as it is.
+#[inline(never)]
+fn uncross(
+    body: &Body,
+    prep: &Prep,
+    samples: &Samples,
+    mesh: &TriMesh,
+    mend: bool,
+) -> Result<Vec<Cut>, CdtError> {
+    let pts = &prep.scaled;
+    let global = |i: u32| prep.global[i as usize];
+    let orient = forge_math::predicates::orient2d;
+    let sign = |x: f64| (x > 0.0) as i8 - (x < 0.0) as i8;
+    // closed segments a-b and c-d meet
+    let meet = |a: Point2, b: Point2, c: Point2, d: Point2| {
+        let (o1, o2) = (sign(orient(a, b, c)), sign(orient(a, b, d)));
+        let (o3, o4) = (sign(orient(c, d, a)), sign(orient(c, d, b)));
+        if o1 * o2 > 0 || o3 * o4 > 0 {
+            return false;
+        }
+        if o1 == 0 && o2 == 0 {
+            // along one line: whether their spans overlap
+            let s = |p: Point2| if a.x != b.x { p.x } else { p.y };
+            return s(c).max(s(d)) >= s(a).min(s(b)) && s(c).min(s(d)) <= s(a).max(s(b));
+        }
+        true
+    };
+    let near = |a: u32, b: u32| {
+        mesh.positions[a as usize].distance(mesh.positions[b as usize]) <= forge_math::tol::LINEAR
+    };
+    let mut cuts: Vec<Cut> = Vec::new();
+    let add = |c: Cut, cuts: &mut Vec<Cut>| {
+        if !cuts.contains(&c) {
+            cuts.push(c);
+        }
+    };
+    // two points in one place, as drawn: one point, if they are one in space
+    let same = |x: u32, y: u32, cuts: &mut Vec<Cut>| {
+        let (gx, gy) = (global(x), global(y));
+        if gx != gy && near(gx, gy) {
+            add(
+                Cut::Same {
+                    from: gx.max(gy),
+                    to: gx.min(gy),
+                },
+                cuts,
+            );
+        }
+    };
+
+    // every pair of chords whose boxes overlap, each once (`forge_topo::chords::near_pairs`:
+    // monotone chains, so two chords of one chain that share no end are never compared)
+    type Seg = (u32, u32);
+    let pair = |s: Seg, t: Seg, cuts: &mut Vec<Cut>| -> Result<(), CdtError> {
+        let ((a, b), (c, d)) = (s, t);
+        if a == c || a == d || b == c || b == d {
+            return Ok(());
+        }
+        let (pa, pb, pc, pd) = (pts[a as usize], pts[b as usize], pts[c as usize], pts[d as usize]);
+        if pa.y.max(pb.y) < pc.y.min(pd.y)
+            || pc.y.max(pd.y) < pa.y.min(pb.y)
+            || pa.x.max(pb.x) < pc.x.min(pd.x)
+            || pc.x.max(pd.x) < pa.x.min(pb.x)
+        {
+            return Ok(());
+        }
+        let mut at_one = false;
+        for (x, px) in [(a, pa), (b, pb)] {
+            for (y, py) in [(c, pc), (d, pd)] {
+                if px == py {
+                    at_one = true;
+                    same(x, y, cuts);
+                }
+            }
+        }
+        if at_one || !meet(pa, pb, pc, pd) {
+            return Ok(());
+        }
+        match resolve(
+            body,
+            samples,
+            mesh,
+            [global(a), global(b)],
+            [global(c), global(d)],
+            [pa.distance(pb), pc.distance(pd)],
+        ) {
+            Some(c) => add(c, cuts),
+            // the curves themselves cross, as drawn
+            // a file's: cut where they cross, on both, one vertex
+            None if mend => {
+                if let Some(c) = crossing(
+                    body,
+                    samples,
+                    mesh,
+                    [global(a), global(b)],
+                    [global(c), global(d)],
+                ) {
+                    add(c, cuts);
+                }
+            }
+            None => return Err(CdtError::ConstraintsIntersect { a, b }),
+        }
+        Ok(())
+    };
+    let mut zeros: Vec<Seg> = Vec::new();
+    forge_topo::chords::near_pairs(
+        &pts[..],
+        &prep.loops,
+        |a, b| zeros.push((a, b)),
+        |s, t| pair(s, t, &mut cuts),
+    )?;
+    for (a, b) in zeros {
+        same(a, b, &mut cuts);
+    }
+    Ok(cuts)
+}
+
+/// The cut for two chords in conflict, between mesh vertices `s` and `t`, drawn `drawn` long.
+fn resolve(
+    body: &Body,
+    samples: &Samples,
+    mesh: &TriMesh,
+    s: [u32; 2],
+    t: [u32; 2],
+    drawn: [f64; 2],
+) -> Option<Cut> {
+    let chords = [s, t].map(|x| samples.chord(body, x[0], x[1]));
+    let curve = |e: usize| &body.edge(forge_topo::EdgeId(e as u32)).curve;
+    // a point of the other chord on this one's curve
+    for (x, other) in [(0, t), (1, s)] {
+        let Some((e, k)) = chords[x] else { continue };
+        let (sa, sb) = (samples.of[e][k], samples.of[e][k + 1]);
+        let c = curve(e);
+        for v in other {
+            let p = mesh.positions[v as usize];
+            let at = c.closest(p, forge_math::Interval::new(sa.0, sb.0));
+            if c.eval(at).distance(p) > forge_math::tol::LINEAR {
+                continue;
+            }
+            let end = if at <= sa.0 {
+                Some(sa.1)
+            } else if at >= sb.0 {
+                Some(sb.1)
+            } else {
+                None
+            };
+            return Some(match end {
+                Some(w) if w == v => continue,
+                Some(w) if mesh.positions[w as usize].distance(p) <= forge_math::tol::LINEAR => Cut::Same {
+                    from: v.max(w),
+                    to: v.min(w),
+                },
+                Some(_) => continue,
+                None => Cut::At {
+                    edge: e,
+                    t: at,
+                    v: Some(v),
+                },
+            });
+        }
+    }
+    // the longer that can be cut, halved
+    let mut best: Option<(f64, usize, f64)> = None;
+    for x in 0..2 {
+        let Some((e, k)) = chords[x] else { continue };
+        let (sa, sb) = (samples.of[e][k], samples.of[e][k + 1]);
+        let m = 0.5 * (sa.0 + sb.0);
+        let long = mesh.positions[sa.1 as usize].distance(mesh.positions[sb.1 as usize]);
+        let tol = body
+            .edge(forge_topo::EdgeId(e as u32))
+            .tol
+            .max(forge_math::tol::LINEAR);
+        if matches!(curve(e), Curve::Line(_)) || !(m > sa.0 && m < sb.0) || long <= tol {
+            continue;
+        }
+        if best.is_none_or(|b| drawn[x] > b.0) {
+            best = Some((drawn[x], e, m));
+        }
+    }
+    best.map(|(_, edge, t)| Cut::At { edge, t, v: None })
+}
+
+/// Where two chords of curves that cannot be cut further come closest, as a parameter of each
+/// curve, if inside both: where a file's two edges cross within its tolerance.
+fn crossing(body: &Body, samples: &Samples, mesh: &TriMesh, s: [u32; 2], t: [u32; 2]) -> Option<Cut> {
+    let (e, k) = samples.chord(body, s[0], s[1])?;
+    let (f, l) = samples.chord(body, t[0], t[1])?;
+    if e == f {
+        return None;
+    }
+    let (a0, a1) = (samples.of[e][k], samples.of[e][k + 1]);
+    let (b0, b1) = (samples.of[f][l], samples.of[f][l + 1]);
+    let p = |v: u32| mesh.positions[v as usize];
+    // the closest points of the two segments (both of positive length), by their parameters
+    let (d1, d2, r) = (p(a1.1) - p(a0.1), p(b1.1) - p(b0.1), p(a0.1) - p(b0.1));
+    let (aa, ee, bb) = (d1.dot(d1), d2.dot(d2), d1.dot(d2));
+    let (c, ff) = (d1.dot(r), d2.dot(r));
+    let den = aa * ee - bb * bb;
+    if aa <= 0.0 || ee <= 0.0 || den <= 0.0 {
+        return None;
+    }
+    let x = ((bb * ff - c * ee) / den).clamp(0.0, 1.0);
+    let y = ((bb * x + ff) / ee).clamp(0.0, 1.0);
+    let (t, u) = (a0.0 + (a1.0 - a0.0) * x, b0.0 + (b1.0 - b0.0) * y);
+    (t > a0.0 && t < a1.0 && u > b0.0 && u < b1.0).then_some(Cut::Cross { e, t, f, u })
+}
+
+/// A face's boundary drawn flat for its triangulation, and the layout it is drawn in.
+struct Prep {
+    su: f64,
+    sv: f64,
+    uv: Vec<Point2>,
+    global: Vec<u32>,
+    loops: Vec<Vec<u32>>,
+    twice: Vec<u32>,
+    /// `uv` laid out: the triangulation's very points (before a cone's apex run is one point).
+    scaled: Vec<Point2>,
+    lo: Point2,
+    hi: Point2,
+    cells: Option<Cells>,
+    nodes: Option<(Nodes, Counts)>,
+    layout: Layout,
+}
+
+fn prepare_face(
     body: &Body,
     f: FaceId,
     edge_samples: &[Vec<(f64, u32)>],
-    segments: &Segments,
     q: &Quality,
-    (unroll, mend): (bool, bool),
-    mesh: &mut TriMesh,
-) -> Result<(), CdtError> {
+    mesh: &TriMesh,
+) -> Result<Box<Prep>, CdtError> {
     let face = body.face(f);
     let surface = &face.surface;
     let (su, sv) = match surface {
@@ -951,8 +1437,12 @@ fn tessellate_face(
             walk.pop();
             walk.remove(0);
         }
-        let mut samples = Vec::new();
-        let mut ids = Vec::new();
+        let len: usize = walk
+            .iter()
+            .map(|&c| edge_samples[body.coedge(c).edge.index()].len() - 1)
+            .sum();
+        let mut samples = Vec::with_capacity(len);
+        let mut ids = Vec::with_capacity(len);
         for c in walk {
             let co = body.coedge(c);
             let s = &edge_samples[co.edge.index()];
@@ -989,7 +1479,7 @@ fn tessellate_face(
     let layout = match surface {
         // unrolled where the face reaches the apex: there its rulings meet, and a triangle with a
         // corner at the apex must not lie along one
-        Surface::Cone(c) if unroll && c.radius_at(lo.y) <= forge_math::tol::LINEAR => Layout::Unrolled {
+        Surface::Cone(c) if c.radius_at(lo.y) <= forge_math::tol::LINEAR => Layout::Unrolled {
             u_mid: 0.5 * (lo.x + hi.x),
             apex_v: c.apex_v(),
             sin_a: c.sin_a(),
@@ -1040,6 +1530,9 @@ fn tessellate_face(
     // where each such point went (id and parameters), looked up rather than searched for: a
     // seam's samples are all met twice, and a linear search for each was quadratic in them
     let mut placed: std::collections::HashMap<(u32, u64, u64), u32> = std::collections::HashMap::new();
+    let total: usize = rings.iter().map(|r| r.len()).sum();
+    uv.reserve(total);
+    global.reserve(total);
     for (pts, ids) in rings.into_iter().zip(ring_globals) {
         // a loop through one vertex twice (a face pinched where a curve touches its boundary):
         // one point, met twice
@@ -1061,11 +1554,63 @@ fn tessellate_face(
         }
         loops.push(lp);
     }
+    // a chord met there and back in one loop (two edges' chords made one where they run within
+    // the tolerance) bounds nothing: only a point met twice can begin one
+    if !twice.is_empty() {
+        for l in &mut loops {
+            drop_spikes(l);
+        }
+        loops.retain(|l| l.len() >= 3);
+    }
+    let scaled = uv.iter().map(|&p| layout.put(p)).collect();
+    Ok(Box::new(Prep {
+        su,
+        sv,
+        uv,
+        global,
+        loops,
+        twice,
+        scaled,
+        lo,
+        hi,
+        cells,
+        nodes,
+        layout,
+    }))
+}
+
+fn mesh_face(
+    body: &Body,
+    f: FaceId,
+    prep: Box<Prep>,
+    segments: &Segments,
+    q: &Quality,
+    mend: bool,
+    mesh: &mut TriMesh,
+) -> Result<(), CdtError> {
+    let face = body.face(f);
+    let surface = &face.surface;
+    let Prep {
+        su,
+        sv,
+        mut uv,
+        mut global,
+        mut loops,
+        twice,
+        scaled,
+        lo,
+        hi,
+        cells,
+        nodes,
+        layout,
+    } = *prep;
 
     if loops.len() == 1
         && !matches!(surface, Surface::Procedural(_))
         && let Some(tris) = strips(surface, &uv, &global, q, mesh)
     {
+        mesh.triangles.reserve(tris.len());
+        mesh.face_of.reserve(tris.len());
         for [a, b, c] in tris {
             if a == b || b == c || c == a {
                 continue;
@@ -1084,6 +1629,8 @@ fn tessellate_face(
     {
         let off = |x, y, p| strays_from(surface, x, y, p, q.chord);
         if let Some(tris) = proc_strips(pr, &uv, &global, &n.want(surface, q, true), q.chord, &off, mesh) {
+            mesh.triangles.reserve(tris.len());
+            mesh.face_of.reserve(tris.len());
             for [a, b, c] in tris {
                 mesh.triangles
                     .push(if face.same_sense { [a, b, c] } else { [a, c, b] });
@@ -1112,7 +1659,11 @@ fn tessellate_face(
         }
     }
 
-    let mut scaled: Vec<Point2> = uv.iter().map(|&p| layout.put(p)).collect();
+    let mut scaled: Vec<Point2> = match layout {
+        // (its apex run made one point above)
+        Layout::Unrolled { .. } => uv.iter().map(|&p| layout.put(p)).collect(),
+        Layout::Scaled(..) => scaled,
+    };
     let mut interior = Vec::new();
     // a cone that tapers little takes the grid of its widest radius: developable, so any chord of
     // a cell sags no more than its way round
@@ -1170,6 +1721,7 @@ fn tessellate_face(
                 );
                 let stairs = if g.any && exact { g.staircase() } else { None };
                 g.settle(stairs.is_some());
+                interior.reserve((nu - 1) * (nv - 1));
                 for i in 1..nu {
                     for j in 1..nv {
                         if !g.covered(i, j) {
@@ -1299,26 +1851,141 @@ fn tessellate_face(
         on_edge(ia, ib)
             || (!flat
                 && (shared(ia, ib)
-                    || (!bounded2(a, b, grid) && off(pos(ia, a).lerp(pos(ib, b), 0.5), a.lerp(b, 0.5)))))
+                    || (!bounded2(a, b, grid) && {
+                        let (x, y) = (pos(ia, a), pos(ib, b));
+                        let m = x.lerp(y, 0.5);
+                        off(m, a.lerp(b, 0.5))
+                            || match surface {
+                                // on a cone a chord's deepest point is not its middle: convex
+                                // along it and zero at its ends, its sag is at most twice the
+                                // middle's, so only a middle sagging past half the chord asks
+                                Surface::Cone(c) => {
+                                    surface.implicit(m).abs() > 0.5 * q.chord
+                                        && cone_chord_sags(c, x, y, q.chord)
+                                }
+                                // on a torus, a bound: what its middle sags and how far the chord
+                                // can stray from the parabola through its ends and middle
+                                Surface::Torus(t) => !torus_chord_holds(t, x, y, q.chord),
+                                _ => false,
+                            }
+                    })))
     };
     // (a long triangle on a cone, between rulings at its two ends, can sag in its middle past
     // its sides too)
     let both_ways = doubly_curved(surface) || matches!(surface, Surface::Procedural(_) | Surface::Cone(_));
+    // on a sphere the triangle's deepest point is the centre's foot on its plane when that lies
+    // in it (else an edge's middle, tested with the edges): the centroid is tested first, and
+    // the foot only where the centroid's sag is within what the foot can add to it (with the
+    // edges within the chord, at most 8rc/(9 d) for d the foot's distance from the centre, d at
+    // least √(r² − 8rc/3): research/tessellation-proof)
+    let foot_margin = match surface {
+        Surface::Sphere(sp) if 8.0 * q.chord < 3.0 * sp.radius => {
+            let r = sp.radius;
+            8.0 * r * q.chord / (9.0 * (r * r - 8.0 * r * q.chord / 3.0).sqrt())
+        }
+        _ => f64::INFINITY,
+    };
     let triangle = |v: [u32; 3], p: [Point2; 3]| {
         let m = Point2::new((p[0].x + p[1].x + p[2].x) / 3.0, (p[0].y + p[1].y + p[2].y) / 3.0);
         let grid = v.iter().all(|&k| k >= nb);
         !(grid && (0..3).all(|k| within(p[k], p[(k + 1) % 3]))) && !bounded3(p, grid) && {
             let x = [0, 1, 2].map(|k| pos(v[k], p[k]));
-            off(x[0].lerp(x[1], 0.5).lerp(x[2], 1.0 / 3.0), m)
+            let g = x[0].lerp(x[1], 0.5).lerp(x[2], 1.0 / 3.0);
+            off(g, m)
+                || match surface {
+                    Surface::Sphere(sp) => {
+                        let sag = surface.implicit(g).abs();
+                        sag + foot_margin > q.chord && foot_sags(sp.frame.origin, sp.radius, x, q.chord)
+                    }
+                    // on a cone the distance is convex over the triangle's plane with no zero of
+                    // its slope inside but along a line to its edges: its deepest point is on an
+                    // edge (judged with the edges) or where the axis crosses it
+                    Surface::Cone(c) => cone_axis_sags(c, x, q.chord),
+                    Surface::Torus(t) => !torus_triangle_holds(t, x, q.chord),
+                    _ => false,
+                }
         }
     };
-    let strays = Tests(edge, triangle, both_ways);
+    // what the chord asks of an ideal mesh, asked only of a refinement past the budget its
+    // boundary gives it: triangles of side √(8 r c) where the larger curvature is 1/r (sagging
+    // c each), so ∫κ dA / (2√3 c) of them and half as many points, the integral on a grid of
+    // the layout's box (a cell counted where its middle is in the face)
+    let need = || {
+        let (mut lo, mut hi) = (scaled[0], scaled[0]);
+        for p in &scaled {
+            (lo.x, lo.y, hi.x, hi.y) = (lo.x.min(p.x), lo.y.min(p.y), hi.x.max(p.x), hi.y.max(p.y));
+        }
+        let polys: Vec<Vec<Point2>> = loops
+            .iter()
+            .map(|l| l.iter().map(|&i| scaled[i as usize]).collect())
+            .collect();
+        const G: usize = 64;
+        let (hx, hy) = ((hi.x - lo.x) / G as f64, (hi.y - lo.y) / G as f64);
+        let mut curving = 0.0;
+        for i in 0..G {
+            for j in 0..G {
+                let p = Point2::new(lo.x + (i as f64 + 0.5) * hx, lo.y + (j as f64 + 0.5) * hy);
+                let mut inside = false;
+                for poly in &polys {
+                    inside ^= forge_math::predicates::inside_polygon(p, poly);
+                }
+                if !inside {
+                    continue;
+                }
+                let uv = layout.uv(p);
+                // the cell's area in (u, v): the layout's own stretch there
+                let (du, dv) = (
+                    layout.uv(Point2::new(p.x + hx, p.y)) - uv,
+                    layout.uv(Point2::new(p.x, p.y + hy)) - uv,
+                );
+                let cell = (du.x * dv.y - du.y * dv.x).abs();
+                let d = surface.deriv(uv);
+                let n = d.du.cross(d.dv);
+                let a = n.length();
+                if a.is_nan() || a <= 0.0 {
+                    continue;
+                }
+                let n = n * (1.0 / a);
+                let (e, f, g) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
+                let (l, m, nn) = (n.dot(d.duu), n.dot(d.duv), n.dot(d.dvv));
+                let det = e * g - f * f;
+                if det.is_nan() || det <= 0.0 {
+                    continue;
+                }
+                let k = (l * nn - m * m) / det;
+                let h = (e * nn - 2.0 * f * m + g * l) / (2.0 * det);
+                let kappa = h.abs() + (h * h - k).max(0.0).sqrt();
+                if kappa.is_finite() {
+                    curving += kappa * a * cell;
+                }
+            }
+        }
+        let triangles = curving / (2.0 * 3f64.sqrt() * q.chord);
+        Some(crate::cdt::Need {
+            chord: q.chord,
+            points: (0.5 * triangles).min(u64::MAX as f64) as u64 + scaled.len() as u64,
+        })
+    };
+    let strays = Tests(edge, triangle, both_ways, need);
     let zipped = match &loops[..] {
         [lp] if interior.is_empty() && twice.is_empty() => zip(&scaled, lp, &strays),
         _ => None,
     };
+    // (a file's face whose refinement does not settle is drawn as far as it got, and said to be)
+    let mut settled = true;
+    let mut far = |tangled: bool| -> Result<Triangulation, CdtError> {
+        let (t, s) = triangulate_as_far(&scaled, &loops, &interior, Some(&strays), tangled)?;
+        settled &= s;
+        Ok(t)
+    };
     let tri = match zipped.map_or_else(
-        || triangulate_within(&scaled, &loops, &interior, Some(&strays), false),
+        || {
+            if mend {
+                far(false)
+            } else {
+                triangulate_within(&scaled, &loops, &interior, Some(&strays), false)
+            }
+        },
         |triangles| {
             Ok(Triangulation {
                 points: Vec::new(),
@@ -1327,35 +1994,16 @@ fn tessellate_face(
         },
     ) {
         Ok(t) => t,
-        // loops touching at a point (the solid is sound round it): in the plane of the triangulation
-        // only, each copy of the point a hair along its own loop
-        Err(CdtError::DuplicatePoint { a, b }) if apart_touching(&scaled, &loops, a, b).is_some() => {
-            let mut parted = scaled.clone();
-            let mut tried = Err(CdtError::DuplicatePoint { a, b });
-            let mut at = (a, b);
-            for _ in 0..16 {
-                let Some(q) = apart_touching(&parted, &loops, at.0, at.1) else {
-                    break;
-                };
-                parted[at.1 as usize] = q;
-                tried = triangulate_within(&parted, &loops, &interior, Some(&strays), false);
-                match &tried {
-                    Err(CdtError::DuplicatePoint { a, b }) => at = (*a, *b),
-                    _ => break,
-                }
-            }
-            match tried {
-                Err(_) if mend => triangulate_within(&scaled, &loops, &interior, Some(&strays), true)?,
-                t => t?,
-            }
-        }
         // a file's edges that meet only within their tolerance can cross in the plane of the
         // triangulation: drawn as they are, the mesh parts from the next face by that little
-        Err(_) if mend => triangulate_within(&scaled, &loops, &interior, Some(&strays), true)?,
+        Err(_) if mend => far(true)?,
         Err(e) => {
             if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {
                 let pts: Vec<String> = scaled.iter().map(|p| format!("{:e},{:e}", p.x, p.y)).collect();
-                let ls: Vec<String> = loops.iter().map(|l| format!("{}+{}", l[0], l.len())).collect();
+                let ls: Vec<String> = loops
+                    .iter()
+                    .map(|l| l.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(","))
+                    .collect();
                 let ins: Vec<String> = interior.iter().map(|p| format!("{:e},{:e}", p.x, p.y)).collect();
                 let text = format!("{}\n{}\n{}\n", pts.join(" "), ls.join(" "), ins.join(" "));
                 let _ = std::fs::write(path, text);
@@ -1363,6 +2011,9 @@ fn tessellate_face(
             return Err(e);
         }
     };
+    if !settled {
+        mesh.unsettled.push(f.0);
+    }
     let mut index = global;
     let known = cache.into_inner();
     if let Some(g) = &grid {
@@ -1386,6 +2037,8 @@ fn tessellate_face(
         }
     }
 
+    mesh.triangles.reserve(tri.triangles.len());
+    mesh.face_of.reserve(tri.triangles.len());
     for t in &tri.triangles {
         let [a, b, c] = t.map(|k| index[k as usize]);
         // two corners on one pole: the triangle collapses to the pole and is dropped
@@ -1398,6 +2051,34 @@ fn tessellate_face(
         mesh.face_of.push(f.0);
     }
     Ok(())
+}
+
+/// A loop without its runs there and back (`x y x` is `x`), round its end too.
+fn drop_spikes(l: &mut Vec<u32>) {
+    let mut out: Vec<u32> = Vec::with_capacity(l.len());
+    for &i in l.iter() {
+        if out.len() >= 2 && out[out.len() - 2] == i {
+            out.pop();
+        } else {
+            out.push(i);
+        }
+    }
+    loop {
+        let n = out.len();
+        if n >= 3 && out[n - 1] == out[1] {
+            // x | y x ...: the first is a spike's tip
+            out.pop();
+            out.remove(0);
+        } else if n >= 3 && out[n - 2] == out[0] {
+            // ... x y | x: the last is
+            out.truncate(n - 2);
+        } else if n >= 2 && out[n - 1] == out[0] {
+            out.pop();
+        } else {
+            break;
+        }
+    }
+    *l = out;
 }
 
 /// Where a face is laid out flat for the triangulation.
@@ -1501,10 +2182,16 @@ fn strays_from(s: &Surface, x: forge_math::Point3, y: forge_math::Point3, uv: Po
     true
 }
 
-/// A refinement's tests: edges, triangles, and whether triangles are looked at.
-struct Tests<E, T>(E, T, bool);
+/// A refinement's tests: edges, triangles, whether triangles are looked at, and what its chord
+/// asks for.
+struct Tests<E, T, N>(E, T, bool, N);
 
-impl<E: Fn(u32, u32, Point2, Point2) -> bool, T: Fn([u32; 3], [Point2; 3]) -> bool> Refine for Tests<E, T> {
+impl<
+    E: Fn(u32, u32, Point2, Point2) -> bool,
+    T: Fn([u32; 3], [Point2; 3]) -> bool,
+    N: Fn() -> Option<crate::cdt::Need>,
+> Refine for Tests<E, T, N>
+{
     fn edge(&self, a: u32, b: u32, pa: Point2, pb: Point2) -> bool {
         (self.0)(a, b, pa, pb)
     }
@@ -1513,6 +2200,10 @@ impl<E: Fn(u32, u32, Point2, Point2) -> bool, T: Fn([u32; 3], [Point2; 3]) -> bo
     }
     fn triangles(&self) -> bool {
         self.2
+    }
+    #[cold]
+    fn need(&self) -> Option<crate::cdt::Need> {
+        (self.3)()
     }
 }
 
@@ -1844,8 +2535,9 @@ fn proc_strips(
     }
     // per point: parameters, position, the boundary's index (u32::MAX inside); the boundary's
     // first, each with its place round the rectangle (one per side, counter-clockwise from (u0, v0))
-    let mut pts: Vec<(Point2, forge_math::Point3, u32)> = Vec::new();
-    let mut outer: Vec<(f64, usize)> = Vec::new();
+    let ring = bottom.len() + right.len() + top.len() + left.len();
+    let mut pts: Vec<(Point2, forge_math::Point3, u32)> = Vec::with_capacity(ring + mu * nv);
+    let mut outer: Vec<(f64, usize)> = Vec::with_capacity(ring);
     let place = |p: Point2, side: usize| match side {
         0 => (p.x - u0) / w,
         1 => 1.0 + (p.y - v0) / h,
@@ -2089,34 +2781,58 @@ fn strips(
     // a cone's radius changes between rows, so a triangle reaching across can sag past the
     // chord in its middle or along a side: each is checked (cheaply: the distance is exact),
     // and where one strays the Delaunay meshes the face instead
-    if let Surface::Cone(_) = surface {
-        let off = |x: forge_math::Point3| surface.implicit(x).abs() > q.chord;
-        let strays = tris.iter().any(|t| {
-            let p = t.map(|i| mesh.positions[i as usize]);
-            off(p[0].lerp(p[1], 0.5).lerp(p[2], 1.0 / 3.0))
-                || (0..3).any(|k| off(p[k].lerp(p[(k + 1) % 3], 0.5)))
-        });
-        if strays {
-            mesh.positions.truncate(added);
-            return None;
+    // (each at its deepest point, as the refinement judges it: on a cone, its edges' deepest
+    // points and where the axis crosses it; on a sphere, its edges' middles and the centre's foot;
+    // on a torus, its edges by the bound and its inside where F's slope is zero; a cylinder's rows
+    // are an arc's chords apart, its triangles' deepest points their edges' middles, each within
+    // the chord)
+    let strays = match surface {
+        Surface::Cone(c) => {
+            let off = |x: forge_math::Point3| surface.implicit(x).abs() > q.chord;
+            tris.iter().any(|t| {
+                let p = t.map(|i| mesh.positions[i as usize]);
+                off(p[0].lerp(p[1], 0.5).lerp(p[2], 1.0 / 3.0))
+                    || (0..3).any(|k| {
+                        let m = p[k].lerp(p[(k + 1) % 3], 0.5);
+                        let sag = surface.implicit(m).abs();
+                        sag > q.chord
+                            || (sag > 0.5 * q.chord && cone_chord_sags(c, p[k], p[(k + 1) % 3], q.chord))
+                    })
+                    || cone_axis_sags(c, p, q.chord)
+            })
         }
+        Surface::Sphere(sp) => {
+            let margin = if 8.0 * q.chord < 3.0 * sp.radius {
+                let r = sp.radius;
+                8.0 * r * q.chord / (9.0 * (r * r - 8.0 * r * q.chord / 3.0).sqrt())
+            } else {
+                f64::INFINITY
+            };
+            let sag = |x: forge_math::Point3| surface.implicit(x).abs();
+            tris.iter().any(|t| {
+                let p = t.map(|i| mesh.positions[i as usize]);
+                (0..3).any(|k| sag(p[k].lerp(p[(k + 1) % 3], 0.5)) > q.chord) || {
+                    let g = sag(p[0].lerp(p[1], 0.5).lerp(p[2], 1.0 / 3.0));
+                    g > q.chord || (g + margin > q.chord && foot_sags(sp.frame.origin, sp.radius, p, q.chord))
+                }
+            })
+        }
+        Surface::Torus(tor) => tris.iter().any(|t| {
+            let p = t.map(|i| mesh.positions[i as usize]);
+            let sag = |x: forge_math::Point3| surface.implicit(x).abs();
+            (0..3).any(|k| {
+                sag(p[k].lerp(p[(k + 1) % 3], 0.5)) > q.chord
+                    || !torus_chord_holds(tor, p[k], p[(k + 1) % 3], q.chord)
+            }) || sag(p[0].lerp(p[1], 0.5).lerp(p[2], 1.0 / 3.0)) > q.chord
+                || !torus_triangle_holds(tor, p, q.chord)
+        }),
+        _ => false,
+    };
+    if strays {
+        mesh.positions.truncate(added);
+        return None;
     }
     Some(tris)
-}
-
-/// Where point `b` goes to part from `a` at the same place: a hair in from it towards its neighbours
-/// along its own loop.
-fn apart_touching(pts: &[Point2], loops: &[Vec<u32>], a: u32, b: u32) -> Option<Point2> {
-    let lp = loops
-        .iter()
-        .find(|l| l.contains(&b) && !l.contains(&a))
-        .or_else(|| loops.iter().find(|l| l.contains(&b)))?;
-    let k = lp.iter().position(|&x| x == b)?;
-    let n = lp.len();
-    let (p, q) = (pts[lp[(k + n - 1) % n] as usize], pts[lp[(k + 1) % n] as usize]);
-    let at = pts[b as usize];
-    let mid = Point2::new(0.5 * (p.x + q.x), 0.5 * (p.y + q.y));
-    Some(at.lerp(mid, 1e-7))
 }
 
 #[cfg(test)]
@@ -2125,6 +2841,261 @@ mod tests {
     use forge_math::rng::Rng;
     use forge_math::{Frame, Point3, Vec3};
     use forge_ops::{Profile, extrude};
+
+    /// A parabola's and a hyperbola's chords stray from them by no more than the chord and turn by
+    /// no more than the angle, at every tolerance, near the vertex and far out (where a fixed count
+    /// of chords strayed by any amount).
+    #[test]
+    fn conic_chords_hold_the_tolerance() {
+        use forge_geom::curve::{Hyperbola, Parabola};
+        use forge_math::Interval;
+        let curves = [
+            Curve::Parabola(Parabola {
+                frame: Frame::WORLD,
+                focal: 0.5,
+            }),
+            Curve::Parabola(Parabola {
+                frame: Frame::WORLD,
+                focal: 40.0,
+            }),
+            Curve::Hyperbola(Hyperbola {
+                frame: Frame::WORLD,
+                a: 3.0,
+                b: 0.5,
+            }),
+            Curve::Hyperbola(Hyperbola {
+                frame: Frame::WORLD,
+                a: 0.2,
+                b: 7.0,
+            }),
+        ];
+        for c in &curves {
+            for range in [
+                Interval::new(-1.0, 1.0),
+                Interval::new(-30.0, 80.0),
+                Interval::new(2.0, 2.5),
+            ] {
+                for (chord, max_angle) in [(0.01, 0.26), (1e-4, 0.26), (0.5, 1.0)] {
+                    let q = Quality { chord, max_angle };
+                    let n = edge_segments(c, range, &q, false);
+                    let mut worst: f64 = 0.0;
+                    for i in 0..n {
+                        let at = |k: usize| range.lo + range.width() * k as f64 / n as f64;
+                        let (a, b) = (c.eval(at(i)), c.eval(at(i + 1)));
+                        let (u, w) = (c.deriv(at(i)).d1, c.deriv(at(i + 1)).d1);
+                        let turn = dmath::atan2(u.cross(w).length(), u.dot(w));
+                        assert!(turn <= max_angle * (1.0 + 1e-9), "{c:?} {range:?} turns {turn}");
+                        for j in 1..16 {
+                            let t = at(i) + (at(i + 1) - at(i)) * j as f64 / 16.0;
+                            let p = c.eval(t);
+                            let w = b - a;
+                            let s = ((p - a).dot(w) / w.dot(w)).clamp(0.0, 1.0);
+                            worst = worst.max((a + w * s).distance(p));
+                        }
+                    }
+                    assert!(
+                        worst <= chord * (1.0 + 1e-9),
+                        "{c:?} {range:?} at {chord}: {worst} in {n}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// A circle's chords sag by the tolerance at most, exactly: at any chord over radius (where
+    /// the old floor of 1e-4 rad let a huge arc's chords sag past it) and at half the tolerance
+    /// on a face curved both ways (where n·√2 gave up to 1.0007 of the half).
+    /// On a sphere the triangle's deepest point is the centre's foot on its plane: a triangle
+    /// whose edges' middles and centroid sag within the chord, its foot past it, asks to be
+    /// split; one whose foot lies outside it does not (its deepest points are its edges' middles).
+    #[test]
+    fn a_spheres_triangle_is_judged_at_its_deepest_point() {
+        use forge_math::{Point3, Vec3};
+        let (o, r) = (Point3::new(0.0, 0.0, 0.0), 10.0);
+        let at = |theta: f64, phi: f64| {
+            Point3::new(
+                r * forge_math::dmath::sin(theta) * forge_math::dmath::cos(phi),
+                r * forge_math::dmath::sin(theta) * forge_math::dmath::sin(phi),
+                r * forge_math::dmath::cos(theta),
+            )
+        };
+        // an acute triangle round the pole, its foot inside, sagging about 0.0225
+        let tri = [at(0.0671, 0.0), at(0.0671, 2.1), at(0.0671, 4.2)];
+        let sag = |p: Point3| r - p.distance(o);
+        let mid = |a: Point3, b: Point3| a.lerp(b, 0.5);
+        let g = tri[0].lerp(tri[1], 0.5).lerp(tri[2], 1.0 / 3.0);
+        let deepest = r - (tri[0] - o).dot(Vec3::new(0.0, 0.0, 1.0));
+        let tested = sag(g).max(sag(mid(tri[0], tri[1]))).max(sag(mid(tri[1], tri[2])));
+        // a chord between what the tests see and the foot's sag
+        let chord = 0.5 * (tested + deepest);
+        assert!(tested < chord && chord < deepest, "{tested} {chord} {deepest}");
+        assert!(foot_sags(o, r, tri, chord));
+        assert!(!foot_sags(o, r, tri, deepest * 1.0001));
+        // an obtuse triangle beside the pole: the foot outside, no say
+        let obtuse = [at(0.05, 0.0), at(0.05, 0.3), at(0.05, 0.6)];
+        assert!(!foot_sags(o, r, obtuse, 1e-9));
+    }
+
+    /// On a cone a chord's deepest point is not its middle: a chord whose middle sags within the
+    /// chord, a point of it past, asks to be split; past its deepest point, it does not.
+    #[test]
+    fn a_cones_chord_is_judged_at_its_deepest_point() {
+        use forge_math::Point3;
+        let cone = forge_geom::Cone::new(Frame::WORLD, 10.0, 0.5).expect("a cone");
+        let s = Surface::Cone(cone);
+        // two points of it, far apart in height and a little apart in angle
+        let at = |z: f64, phi: f64| {
+            let r = cone.radius_at(z);
+            Point3::new(
+                r * forge_math::dmath::cos(phi),
+                r * forge_math::dmath::sin(phi),
+                z,
+            )
+        };
+        let (x, y) = (at(0.0, 0.0), at(30.0, 0.35));
+        assert!(s.implicit(x).abs() < 1e-12 && s.implicit(y).abs() < 1e-12);
+        let mid = s.implicit(x.lerp(y, 0.5)).abs();
+        let deepest = (0..=20000)
+            .map(|i| s.implicit(x.lerp(y, i as f64 / 20000.0)).abs())
+            .fold(0.0, f64::max);
+        assert!(deepest > 1.05 * mid, "{mid} {deepest}");
+        let between = 0.5 * (mid + deepest);
+        assert!(cone_chord_sags(&cone, x, y, between));
+        assert!(!cone_chord_sags(&cone, x, y, deepest * 1.0001));
+    }
+
+    /// On a torus, what the rule accepts lies within the chord: random chords and triangles with
+    /// their corners on it, each accepted one sampled densely (and the rule accepts most of what
+    /// the middle's and centroid's tests do: it is a bound, not a wall).
+    #[test]
+    fn a_toruss_accepted_chords_and_triangles_hold_the_chord() {
+        use forge_math::Point3;
+        let t = forge_geom::Torus::new(Frame::WORLD, 20.0, 5.0).expect("a torus");
+        let s = Surface::Torus(t);
+        let at = |u: f64, v: f64| {
+            let (su, cu) = forge_math::dmath::sin_cos(u);
+            let (sv, cv) = forge_math::dmath::sin_cos(v);
+            Point3::new((20.0 + 5.0 * cv) * cu, (20.0 + 5.0 * cv) * su, 5.0 * sv)
+        };
+        let mut r = Rng::new(7);
+        let chord = 0.05;
+        let (mut chords, mut tris) = ((0, 0), (0, 0));
+        for _ in 0..4000 {
+            let (u, v) = (
+                r.range(0.0, forge_math::dmath::TAU),
+                r.range(0.0, forge_math::dmath::TAU),
+            );
+            let x: [Point3; 3] = core::array::from_fn(|_| at(u + r.range(-0.1, 0.1), v + r.range(-0.2, 0.2)));
+            let deepest = |n: usize, f: &dyn Fn(f64, f64) -> Point3| {
+                let mut d = 0.0f64;
+                for i in 0..=n {
+                    for j in 0..=(n - i) {
+                        d = d.max(s.implicit(f(i as f64 / n as f64, j as f64 / n as f64)).abs());
+                    }
+                }
+                d
+            };
+            let mid = s.implicit(x[0].lerp(x[1], 0.5)).abs();
+            if mid <= chord {
+                chords.1 += 1;
+                if torus_chord_holds(&t, x[0], x[1], chord) {
+                    chords.0 += 1;
+                    let d = deepest(400, &|a, _| x[0].lerp(x[1], a));
+                    assert!(d <= chord * (1.0 + 1e-9), "a chord accepted at {d}");
+                }
+            }
+            let mids = (0..3).all(|k| s.implicit(x[k].lerp(x[(k + 1) % 3], 0.5)).abs() <= chord)
+                && s.implicit(x[0].lerp(x[1], 0.5).lerp(x[2], 1.0 / 3.0)).abs() <= chord;
+            if mids && (0..3).all(|k| torus_chord_holds(&t, x[k], x[(k + 1) % 3], chord)) {
+                tris.1 += 1;
+                if torus_triangle_holds(&t, x, chord) {
+                    tris.0 += 1;
+                    let d = deepest(60, &|a, b| x[0] + (x[1] - x[0]) * a + (x[2] - x[0]) * b);
+                    assert!(d <= chord * (1.0 + 1e-6), "a triangle accepted at {d}");
+                }
+            }
+        }
+        assert!(chords.0 * 10 >= chords.1 * 9, "{chords:?}");
+        assert!(tris.1 > 100, "{tris:?}");
+    }
+
+    /// The torus's chord bound certifies no chord that strays: one through the axis (its middle
+    /// on the torus, R = 2r, the diameter from the outer equator to the inner one opposite), and
+    /// random chords on tori near their axis and with their shadows on a line through it.
+    #[test]
+    fn the_toruss_chord_bound_certifies_no_stray() {
+        use forge_math::Point3;
+        let deepest = |s: &Surface, x: Point3, y: Point3| {
+            (0..=2000)
+                .map(|i| s.implicit(x.lerp(y, i as f64 / 2000.0)).abs())
+                .fold(0.0, f64::max)
+        };
+        let t = forge_geom::Torus::new(Frame::WORLD, 10.0, 5.0).expect("a torus");
+        let s = Surface::Torus(t);
+        let (x, y) = (Point3::new(15.0, 0.0, 0.0), Point3::new(-5.0, 0.0, 0.0));
+        assert!(s.implicit(x.lerp(y, 0.5)).abs() < 1e-12);
+        assert!(
+            !torus_chord_holds(&t, x, y, 0.05),
+            "a chord through the axis certified"
+        );
+        let mut r = Rng::new(3);
+        for (major, minor) in [(10.0, 5.0), (5.02, 5.0), (5.2, 5.0), (30.0, 5.0)] {
+            let Some(t) = forge_geom::Torus::new(Frame::WORLD, major, minor) else {
+                continue;
+            };
+            let s = Surface::Torus(t);
+            let at = |u: f64, v: f64| {
+                let (su, cu) = forge_math::dmath::sin_cos(u);
+                let (sv, cv) = forge_math::dmath::sin_cos(v);
+                Point3::new((major + minor * cv) * cu, (major + minor * cv) * su, minor * sv)
+            };
+            for k in 0..20000 {
+                let (u, v) = (
+                    r.range(0.0, forge_math::dmath::TAU),
+                    r.range(0.0, forge_math::dmath::TAU),
+                );
+                // half of them with both ends at one u: shadows on a line through the axis
+                let du = if k % 2 == 0 { 0.0 } else { r.range(-0.3, 0.3) };
+                let (x, y) = (at(u, v), at(u + du, v + r.range(-1.0, 1.0)));
+                for chord in [0.05, 0.5] {
+                    if s.implicit(x.lerp(y, 0.5)).abs() <= chord && torus_chord_holds(&t, x, y, chord) {
+                        let d = deepest(&s, x, y);
+                        assert!(
+                            d <= chord * (1.0 + 1e-6),
+                            "R {major} r {minor}: certified at {d} > {chord}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn arc_chords_hold_the_tolerance_exactly() {
+        use forge_geom::curve::Circle;
+        use forge_math::Interval;
+        for (r, chord) in [(1.0, 0.01), (1e6, 1e-6), (1e9, 1e-6), (0.5, 0.25), (40.0, 1e-3)] {
+            for max_angle in [dmath::PI / 12.0, 1.0] {
+                let q = Quality { chord, max_angle };
+                let step = arc_step(r, &q);
+                // the sag of one step, computed stably
+                let sag = 2.0 * r * dmath::sin(0.25 * step).powi(2);
+                assert!(sag <= chord * (1.0 + 1e-12), "{r} {chord}: {sag}");
+                assert!(step <= max_angle);
+                for fine in [false, true] {
+                    let c = Curve::Circle(Circle {
+                        frame: Frame::WORLD,
+                        radius: r,
+                    });
+                    let width = 1e-3f64.min(dmath::PI);
+                    let n = edge_segments(&c, Interval::new(0.0, width), &q, fine);
+                    let sag = 2.0 * r * dmath::sin(0.25 * width / n as f64).powi(2);
+                    let allowed = if fine { 0.5 * chord } else { chord };
+                    assert!(sag <= allowed * (1.0 + 1e-12), "{r} {chord} {fine}: {sag}");
+                }
+            }
+        }
+    }
 
     /// On a pole in all but rounding, the normal is noise: it must not ask for a million steps.
     #[test]
