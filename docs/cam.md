@@ -51,7 +51,8 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:, ramp:)` | a hole feature's circle, to its depth |
 | `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, ramp:)` | every hole and slot of the part's section between the heights |
 | `engrave(SETUP, PART.SKETCH, tool:, depth:, step:, from:)` | the tool's tip along the sketch's lines, arcs and circles (not construction), on a plane facing +z, in levels down to `depth` below it. The groove must be in the model (G1 is checked against the part, never a blanket tolerance); the stock records each line's and circle's band of the tip's radius as cleared (a V tool clears more, so G4 may list the rest of the groove) |
-| `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), tap for a thread |
+| `thread_mill(SETUP, PART.HOLE, tool:, length:)` | a hole's recorded thread (`thread:`, or `screw:` with `fit: "tap"`), the model not carrying it: declares a cosmetic thread Δ per place (the ring from the bore to the major diameter over `length`, default the depth less two pitches), listed in the op's `removals`, and is certified against P ∖ Δ (never a blanket tolerance). Down the bore, in to the radius, up a helix of the pitch (G3: right hand), out |
+| `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), tap for a thread; `plan: "drill"` leaves the thread (to `thread_mill`) |
 | `program(SETUP, post:, number:)` | `fanuc`, `haas`, `linuxcnc`, `grbl` (default: the machine's control) |
 
 `ramp: DEG` (over 0, at most 30) enters each pass by a helix of half the tool's radius at that angle,
@@ -90,7 +91,7 @@ ops[]      name, kind (facing|clear|contour|pocket|drill), setup, status (built|
            certificate {verdict (pass|fail), certified, pairs, cells, least_cutter_distance, against},
            checks[] (failures only) {rule, verdict (fail|undecided), certified, value, limit, unit,
                     at, tool_part (cutter|shank/holder), other, phase (cut|plunge|link|rapid), move},
-           leftover {status}, refusal | null
+           removals[] (declared Δ, e.g. cosmetic threads), leftover {status}, refusal | null
 blocking[] {op, why}      fixes[] {op, fix}      suggestions[] {kind: NeedTool, op, why}
 programs[] {name, post, lines, round_trip, error | null}
 leftover   {computed, rule, regions[] {setup, z, boxes, why (uncut | held by fixture)}}: decided at the
@@ -107,4 +108,4 @@ minus what each op provably cleared (kernel/forge-cam/src/stock.rs), so it conta
 2.5D on parts whose faces are planes, and cylinders, cones and tori about z (others are refused by kind, typed):
 facing, clearing, contours, hole pockets and hole plans, with linking by retract. Not yet:
 adaptive clearing (patents first), 3-axis surfacing, 3+2, turning, 5-axis; slots, chamfer mills,
-thread milling as an op (the tools exist).
+threads modelled as helicoidal faces (`thread(hole:)`): the lowering refuses them, so a modelled thread is milled as a declared Δ only when the model records it instead.

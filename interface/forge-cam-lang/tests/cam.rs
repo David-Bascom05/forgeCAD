@@ -360,3 +360,37 @@ fn engraving_follows_the_sketch_into_the_modelled_groove() {
     assert_eq!(o.status, "refused");
     assert!(o.checks.iter().any(|c| c.rule == "gouge"), "{:?}", o.checks);
 }
+
+#[test]
+fn a_thread_milled_as_a_declared_cosmetic_thread() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("block_m6_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(cam.ok, "{:?} {:?}", cam.errors, cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>());
+    // the drill plan leaves the thread: no tap
+    let d = cam.ops.iter().find(|o| o.name == "tapd").unwrap();
+    assert!(d.plan.iter().all(|p| !p.starts_with("tap")), "{:?}", d.plan);
+    // the thread mill declares its Δ and climbs a helix of the pitch
+    let t = cam.ops.iter().find(|o| o.name == "thr").unwrap();
+    assert_eq!(t.removals.len(), 1);
+    assert!(t.removals[0].starts_with("cosmetic_thread M6x1"), "{}", t.removals[0]);
+    let txt = cam.program_text().unwrap().0;
+    assert!(txt.lines().any(|l| l.contains("G3") && l.contains(" Z")), "{txt}");
+    let mut j = String::new();
+    cam.json().write(&mut j);
+    assert!(j.contains("\"removals\":[\"cosmetic_thread M6x1"), "{j}");
+    // a hole that records no thread: nothing to declare, so no thread milling
+    let tmp = std::env::temp_dir().join(format!("forge-cam-m6-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let part = std::fs::read_to_string(dir.join("block_m6.fg")).unwrap();
+    std::fs::write(
+        tmp.join("block_m6.fg"),
+        part.replace("screw: \"M6\", fit: \"tap\"", "d: 5"),
+    )
+    .unwrap();
+    let cam = forge_cam_lang::run(&src, &tmp);
+    let _ = std::fs::remove_dir_all(&tmp);
+    let t = cam.ops.iter().find(|o| o.name == "thr").unwrap();
+    assert_eq!(t.status, "refused");
+    assert!(t.refusal.as_deref().unwrap().contains("records no thread"), "{:?}", t.refusal);
+}

@@ -233,7 +233,8 @@ impl InProcess {
     }
 }
 
-fn flat(r: &Region, z: f64, mu: f64, id: u32) -> Face {
+/// A horizontal face over a region at height z (its arcs in pieces of at most a quarter turn).
+pub fn flat(r: &Region, z: f64, mu: f64, id: u32) -> Face {
     let mut segs = vec![];
     let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
     for l in &r.loops {
