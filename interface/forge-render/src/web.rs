@@ -231,6 +231,7 @@ pub async fn bench_offscreen(
             marks: &[],
             world: &[],
             behind: &[],
+            solid: &[],
         };
         all.push(r.frame(&target.view, &mut scene, &cam, overlay));
         // a buffer the GPU has just been told to write maps once it has got that far

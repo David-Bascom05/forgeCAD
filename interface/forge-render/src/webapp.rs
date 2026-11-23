@@ -54,6 +54,8 @@ enum Ask {
     Apply(forge_lang::error::Op),
     /// The next frame's pixels, for the page (`app_pixels`).
     Pixels(js_sys::Function),
+    /// Words for the toolpath simulation (`app_camsim`).
+    CamSim(String),
     /// A click on what the shell noted by this name (`app_click`): the tests' hand. The button
     /// (0 primary, 1 secondary) and whether a double click.
     Click(String, u8, bool),
@@ -424,6 +426,8 @@ impl Host {
                     if let Some(s) = &mut self.gui.fg {
                         s.rebuild();
                     }
+                    // a machining document reads its parts: run again with what arrived
+                    self.gui.camsim_reload();
                 }
                 Ask::Apply(op) => {
                     if let Err(e) = self.gui.fg_apply(op) {
@@ -431,6 +435,11 @@ impl Host {
                     }
                 }
                 Ask::Pixels(f) => self.pixels(f),
+                Ask::CamSim(c) => {
+                    if let Err(e) = self.gui.camsim_command(&c) {
+                        self.gui.shell.status = e;
+                    }
+                }
                 Ask::Click(name, button, double) => match self.gui.shell.place(&name) {
                     Some(r) => {
                         let at = r.center();
@@ -702,6 +711,7 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         // the last build's time in the worker, ms
         ("build_ms", doc.map_or(Json::Null, |s| num(s.build_ms))),
         ("built", built.unwrap_or(Json::Null)),
+        ("camsim", g.camsim_state().unwrap_or(Json::Null)),
         ("cam", cam_json(g)),
         // a pick of the view in flight (the host draws on until it is answered)
         ("pick_busy", g.pick_busy().into()),
@@ -951,6 +961,13 @@ pub fn app_apply(op: &str) -> Result<(), JsValue> {
     let op = forge_lang::error::Op::from_json(&j).ok_or("not an op")?;
     ask(Ask::Apply(op));
     Ok(())
+}
+
+/// Words for the open machining document's simulation (`Gui::camsim_command`): `t=12.5`,
+/// `play`, `colour=compare`, ...
+#[wasm_bindgen]
+pub fn app_camsim(cmd: &str) {
+    ask(Ask::CamSim(cmd.to_string()));
 }
 
 /// A click on what the shell noted as `name` (the tests' hand): `button` 0 primary, 1

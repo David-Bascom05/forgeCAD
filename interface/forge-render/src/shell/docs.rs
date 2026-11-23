@@ -58,6 +58,8 @@ per_doc!(
         drawing: Option<super::drawing::DrawingEnv>,
         new_drawing: Option<super::drawing::NewDrawing>,
         dwgdoc: Option<super::dwgdoc::DwgDoc>,
+        camsim: Option<Box<crate::gui_camsim_panel::CamSimUi>>,
+        camsim_job: crate::gui_camsim_panel::SimJob,
         cam: Option<super::cam::CamWs>,
     ],
     app [
@@ -104,6 +106,8 @@ impl ShellDoc {
             drawing: None,
             new_drawing: None,
             dwgdoc: None,
+            camsim: None,
+            camsim_job: Default::default(),
             cam: None,
         }
     }
