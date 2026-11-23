@@ -223,11 +223,17 @@ fn degenerate(s: &Sec) -> Option<[f64; 2]> {
 /// The least distance between two section curves.
 pub fn dist(s: &Sec, t: &Sec) -> Ival {
     // arcs reach here as pieces of at most a quarter turn (faces are lowered so, trims split so,
-    // moves are cut so): never a whole circle, whose sector (a == b) the candidates do not cover
-    // (proven for cross(a − c, b − c) > 0 only: DistArc.lean)
+    // moves are cut so): strictly under a half turn, as the candidates are proven for
+    // (cross(a − c, b − c) > 0 in the arc's sense: DistArc.lean)
     debug_assert!(
-        ![s, t].iter().any(|x| matches!(x, Sec::Arc { a, b, .. } if a == b)),
-        "slab::dist takes arcs of under a half turn"
+        [s, t].iter().all(|x| match **x {
+            Sec::Arc { c, a, b, ccw, .. } => {
+                let cr = (a[0] - c[0]) * (b[1] - c[1]) - (a[1] - c[1]) * (b[0] - c[0]);
+                if ccw { cr > 0.0 } else { cr < 0.0 }
+            }
+            Sec::Seg { .. } => true,
+        }),
+        "slab::dist takes arcs strictly under a half turn"
     );
     if let Some(q) = degenerate(s) {
         return pt_sec(q, t);
@@ -614,12 +620,19 @@ impl Prism {
                 };
                 let ccw = x[0] * y[1] - x[1] * y[0] > 0.0;
                 let (q0, q1) = (o[2] + ax[2] * f.q.lo, o[2] + ax[2] * f.q.hi);
+                let (a, b) = (at(f.p.lo), at(f.p.hi));
+                // the closed form's arc candidates hold for arcs strictly under a half turn
+                // (DistArc.lean); a wider wall is left to the general branch and bound
+                let cr = (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+                if !(if ccw { cr > 0.0 } else { cr < 0.0 }) {
+                    return None;
+                }
                 Some(Prism::Wall {
                     sec: Sec::Arc {
                         c: [o[0], o[1]],
                         r,
-                        a: at(f.p.lo),
-                        b: at(f.p.hi),
+                        a,
+                        b,
                         ccw,
                     },
                     z0: q0.min(q1),

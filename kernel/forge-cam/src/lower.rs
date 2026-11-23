@@ -40,7 +40,7 @@ fn mu(scale: f64) -> f64 {
     tol::LINEAR + 64.0 * f64::EPSILON * (1.0 + scale)
 }
 
-/// Every face of the body, lowered (a full cylinder becomes two halves).
+/// Every face of the body, lowered (a full cylinder becomes four quarters).
 pub fn lower(body: &Body) -> Result<Vec<Face>, LowerError> {
     let mut out = Vec::new();
     for (k, fid) in body.face_ids().enumerate() {
@@ -170,7 +170,7 @@ enum Rev {
 
 /// A face of a surface of revolution, bounded by circles about the axis and by seams (lines
 /// along a generator, or a torus's tube circles): its parameter box, cut into pieces of at most a
-/// half turn each, by the rational half-angle map about their middles.
+/// quarter turn each, by the rational half-angle map about their middles.
 fn revolve(
     body: &Body,
     fid: FaceId,
@@ -291,7 +291,9 @@ fn revolve(
         _ => Ival::new(vlo - m, vhi + m),
     };
     let w = u1 - u0;
-    let n = ((w / std::f64::consts::PI) - 1e-12).ceil().max(1.0) as usize;
+    // pieces of at most a quarter turn: a wall's section arc is then strictly under a half
+    // turn, as slab::dist's arc candidates need (DistArc.lean)
+    let n = ((w / std::f64::consts::FRAC_PI_2) - 1e-12).ceil().max(1.0) as usize;
     let half = 0.5 * w / n as f64;
     let th = dmath::sin(0.5 * half) / dmath::cos(0.5 * half) * (1.0 + 1e-12);
     for i in 0..n {
