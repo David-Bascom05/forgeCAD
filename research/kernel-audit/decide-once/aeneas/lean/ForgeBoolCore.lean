@@ -32,3 +32,13 @@ import ForgeBoolCore.EndToEnd
 import ForgeBoolCore.Integrate
 import ForgeBoolCore.RefineSplitOk
 import ForgeBoolCore.RefineCollapse
+import ForgeBoolCore.RefineUnifyHas
+import ForgeBoolCore.RefineUnifyClasses
+import ForgeBoolCore.RefineUnifyJoin
+import ForgeBoolCore.RefineUnifyFaces
+import ForgeBoolCore.RefineUnifyAt
+import ForgeBoolCore.RefineUnifyErel
+import ForgeBoolCore.RefineUnifyEdges
+import ForgeBoolCore.RefineUnifyLean
+import ForgeBoolCore.RefineUnifyFacts
+import ForgeBoolCore.RefineUnify

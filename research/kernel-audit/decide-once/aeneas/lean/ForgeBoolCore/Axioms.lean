@@ -21,6 +21,7 @@ import ForgeBoolCore.EndToEnd
 import ForgeBoolCore.Integrate
 import ForgeBoolCore.RefineSplitOk
 import ForgeBoolCore.RefineCollapse
+import ForgeBoolCore.RefineUnify
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -109,3 +110,11 @@ import ForgeBoolCore.RefineCollapse
 #print axioms forge_bool_core.collapse_spec_proof
 #print axioms forge_bool_core.K.collapse_eq
 #print axioms forge_bool_core.end_to_end_U
+#print axioms forge_bool_core.has_spec
+#print axioms forge_bool_core.same_set_spec
+#print axioms forge_bool_core.faces_at_spec
+#print axioms forge_bool_core.u_join_spec
+#print axioms forge_bool_core.u_faces_loop_spec
+#print axioms forge_bool_core.u_erel_spec
+#print axioms forge_bool_core.u_edges_loop_spec
+#print axioms forge_bool_core.unify_spec'
