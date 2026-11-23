@@ -1,6 +1,17 @@
 # The app in a browser (docs/web.md): built for wasm32, then in Chromium with a software WebGPU
 # adapter, end to end on `forgecad web`'s files and every bench part and example against the
-# native build, bit for bit. The Forgejo CI runs the same script (its `web` job).
+# native build, bit for bit. The Forgejo CI runs the same steps in one job
+# (interface/forge-render/web/tests/ci.sh, its `web` job); here they are split to run at once:
+#   cli      the native `forgecad` (serves the page)        root workspace, release
+#   parity   the native reference, forge-parity             forge-render's workspace, release
+#   wasm     the page: wasm32 release build + wasm-bindgen  forge-render's workspace; the
+#            default build and the threaded artifact (THREADS=only) at once, put together after
+#   clippy   the wasm32 build stays warning-free
+#   browser  for the default build and for the threaded artifact (THREADED=1, which adds
+#            responsive.cjs): e2e on one runner, and parity on every bench part and example in
+#            three shards that between them test each file once (PARITY_SHARD in parity.cjs)
+# The commands, crates, profiles and flags are ci.sh's. Each Rust job has its own build cache,
+# saved only from main (and manual runs), so a pull request restores main's and never races it.
 name: web
 
 on:
@@ -9,29 +20,169 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  CARGO_INCREMENTAL: 0
+
 jobs:
-  web:
+  cli:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    env:
-      CARGO_INCREMENTAL: 0
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: toolchain (rust-toolchain.toml)
         run: rustup show
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            . -> target
-            interface/forge-render -> target
+          workspaces: . -> target
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      - run: cargo build --release --locked -p forge-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forgecad
+          path: target/release/forgecad
+          retention-days: 1
+
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: interface/forge-render
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain (rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: interface/forge-render -> target
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      - run: cargo build --release --locked --bin forge-parity
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-parity
+          path: interface/forge-render/target/release/forge-parity
+          retention-days: 1
+
+  wasm:
+    strategy:
+      fail-fast: false
+      matrix:
+        threads: ["", only]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: interface/forge-render
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain (rust-toolchain.toml)
+        run: rustup show && rustup target add wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: interface/forge-render -> target
+          key: threads-${{ matrix.threads }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      # the release binary of the version Cargo.toml pins, not a 1.5 min `cargo install`
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.130
+      - run: wasm-bindgen --version | grep -x 'wasm-bindgen 0.2.130'
+      - run: NO_MESHES=1 THREADS=${{ matrix.threads }} sh web/build.sh "$GITHUB_WORKSPACE/target/web"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web${{ matrix.threads && '-threads' || '' }}
+          path: target/web${{ matrix.threads && '/threads' || '' }}
+          retention-days: 1
+
+  clippy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: interface/forge-render
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain (rust-toolchain.toml)
+        run: rustup show && rustup target add wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: interface/forge-render -> target
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      # the browser build stays warning-free (it broke unseen before: a native-only dependency)
+      - run: cargo clippy --lib --locked --target wasm32-unknown-unknown -- -D warnings
+
+  browser:
+    needs: [cli, parity, wasm]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # the default build, and the threaded artifact (docs/web.md)
+        threaded: ["", "1"]
+        # e2e (and, threaded, responsive.cjs) on one runner; parity's three shards on three
+        test: [e2e, 0, 1, 2]
+    name: browser${{ matrix.threaded && ' (threaded)' || '' }} ${{ matrix.test }}
+    env:
+      THREADED: ${{ matrix.threaded }}
+      FORGECAD: ${{ github.workspace }}/bin/forgecad
+      FORGE_PARITY: ${{ github.workspace }}/bin/forge-parity
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.63.0-chromium-${{ runner.os }}
       - name: playwright
         run: |
           mkdir -p "$HOME/pw" && cd "$HOME/pw"
           npm init -y >/dev/null && npm install --no-save playwright@1.63.0
           npx playwright install --with-deps chromium
           echo "NODE_PATH=$HOME/pw/node_modules" >> "$GITHUB_ENV"
-      - name: build, end to end, parity
-        run: sh interface/forge-render/web/tests/ci.sh
+      - uses: actions/download-artifact@v4
+        with:
+          name: forgecad
+          path: bin
+      - uses: actions/download-artifact@v4
+        with:
+          name: forge-parity
+          path: bin
+      - uses: actions/download-artifact@v4
+        with:
+          name: web
+          path: target/web
+      - uses: actions/download-artifact@v4
+        if: matrix.threaded
+        with:
+          name: web-threads
+          path: target/web/threads
+      - run: chmod +x bin/forgecad bin/forge-parity
+      - name: end to end
+        if: matrix.test == 'e2e'
+        working-directory: interface/forge-render
+        run: node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
+      - name: parity (shard ${{ matrix.test }} of 3)
+        if: matrix.test != 'e2e'
+        working-directory: interface/forge-render
+        env:
+          PARITY_SHARD: ${{ matrix.test }}/3
+        run: node web/tests/parity.cjs "$GITHUB_WORKSPACE/target/web"
+      # the threaded artifact: the page never blocks for a build
+      - name: responsive
+        if: matrix.threaded && matrix.test == 'e2e'
+        working-directory: interface/forge-render
+        run: node web/tests/responsive.cjs "$GITHUB_WORKSPACE/target/web"
+
+  # the one check a pull request waits on, as before the split: every job above passed
+  web:
+    name: web
+    needs: [cli, parity, wasm, clippy, browser]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo '${{ toJSON(needs) }}'
+          test '${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}' = false

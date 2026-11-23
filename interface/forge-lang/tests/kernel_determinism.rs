@@ -7,6 +7,8 @@
 //!
 //! `after_a_caught_panic_*`: an op run on a thread where an earlier op was cut short by a panic
 //! (audit items 1 and 3: thread-local state left set) gives what a fresh thread gives.
+// every test runs `fg` as a process five ways: WASI starts none, so native only
+#![cfg(not(target_os = "wasi"))]
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -126,7 +128,7 @@ const PARTS: [&str; 4] = [
 /// A fresh directory for this run under cargo's test scratch (never the source tree: every file
 /// fg writes, the STEP and its `-flat` sibling, goes here).
 fn tmp() -> PathBuf {
-    let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("kernel-det-{}", std::process::id()));
+    let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("kernel-det-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&d).expect("mkdir");
     d
 }

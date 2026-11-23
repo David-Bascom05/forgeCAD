@@ -38,7 +38,16 @@ pub enum RuleError {
     TableOrder { row: usize },
     /// The rule gave an allowance that is not positive.
     Allowance { ba: f64 },
+    /// Allowance table row `row` puts the neutral layer outside the material: its K is `k`, not
+    /// in [0, 1] (K = (BA / angle - R) / t). Every row is checked: BA linear in angle between rows
+    /// keeps K in [0, 1] where every row has it (verify/sheet's Rules.lean), so no interpolated
+    /// allowance can leave the material.
+    RowK { row: usize, k: f64 },
 }
+
+/// A sheet's thickness is a stock's to this (mm): far under any gauge step, over the rounding of
+/// an inch stock written in mm.
+pub const STOCK_MATCH: f64 = 0.005;
 
 /// Radii in a table match to this.
 const RADIUS_MATCH: f64 = 1e-9;
@@ -60,6 +69,12 @@ impl BendRule {
                 angle * (radius + checked_k(k)? * t)
             }
             BendRule::Allowance(rows) => {
+                for (row, r) in rows.iter().enumerate() {
+                    let k = (r.ba / r.angle - r.radius) / t;
+                    if !(0.0..=1.0).contains(&k) {
+                        return Err(RuleError::RowK { row, k });
+                    }
+                }
                 let mine: Vec<(f64, f64)> = rows
                     .iter()
                     .filter(|r| (r.radius - radius).abs() <= RADIUS_MATCH)
@@ -161,19 +176,48 @@ impl Scaled {
 pub struct Stock {
     pub thickness: f64,
     pub rule: BendRule,
-    /// Inside radii the press brake has tooling for; the first is the default.
+    /// Inside radii the press brake has tooling for; the first is the default. Empty: not
+    /// stated (no radius is checked).
     pub radii: Vec<f64>,
     /// The shortest flange the die can hold, from the mold line.
     pub min_flange: Scaled,
+    /// The minimum flange is to the outer virtual sharp (the outside dimension, as fabricators
+    /// quote it), not the mold line on the reference skin.
+    pub flange_outside: bool,
     pub hole_to_bend: Scaled,
     pub hole_to_edge: Scaled,
     pub min_slot: Scaled,
     /// The smallest round hole across.
     pub min_hole: Scaled,
+    /// The least distance from a bend zone (its tangent line) to an edge of the blank that does
+    /// not run into the bend: a notch's side, an outline jog beside the bend.
+    pub bend_to_edge: Scaled,
+    /// The narrowest web of material: between two holes, a hole and the edge's other side, or
+    /// across a neck of the outline.
+    pub min_web: Scaled,
+    /// The bend angles this stock is bent to (least, greatest; unsigned, radians), over the
+    /// process's.
+    pub angles: Option<(f64, f64)>,
     /// The relief rule for this stock (its kerf taken from the shop's).
     pub relief: crate::relief::ReliefRule,
     /// The sheet's hardness, Rockwell B, where the shop states it (hardware needs it).
     pub hardness: Option<f64>,
+    /// Where hole to bend and bend to edge are measured from.
+    pub bend_ref: BendRef,
+    /// The longest bend line in this stock, over the process's.
+    pub bend_length_max: Option<f64>,
+    /// Operations the shop offers but not in this stock (`Bend` for a stock it only cuts).
+    pub not: Vec<Operation>,
+}
+
+/// What a distance to a bend is measured from on the flat.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum BendRef {
+    /// The bend zone's edge, its tangent line (the fabricators' usual statement).
+    #[default]
+    Tangent,
+    /// The bend zone's centre line ("half the die width from the bend's centre").
+    Centre,
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -191,6 +235,61 @@ pub struct ShopProfile {
     /// The press's forming tools.
     pub forms: Vec<crate::form::FormTool>,
     pub form_rules: crate::form::FormRules,
+    /// What the shop does; None: not stated, so not checked.
+    pub operations: Option<Vec<Operation>>,
+}
+
+/// A process a shop offers. A sheet that needs one the shop does not list is
+/// `Violation::OperationNotOffered`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Operation {
+    Laser,
+    Waterjet,
+    Bend,
+    Hem,
+    Punch,
+    Form,
+    Hardware,
+    Countersink,
+    Tap,
+    PowderCoat,
+    Deburr,
+}
+
+impl Operation {
+    pub const ALL: [Operation; 11] = [
+        Operation::Laser,
+        Operation::Waterjet,
+        Operation::Bend,
+        Operation::Hem,
+        Operation::Punch,
+        Operation::Form,
+        Operation::Hardware,
+        Operation::Countersink,
+        Operation::Tap,
+        Operation::PowderCoat,
+        Operation::Deburr,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Operation::Laser => "laser",
+            Operation::Waterjet => "waterjet",
+            Operation::Bend => "bend",
+            Operation::Hem => "hem",
+            Operation::Punch => "punch",
+            Operation::Form => "form",
+            Operation::Hardware => "hardware",
+            Operation::Countersink => "countersink",
+            Operation::Tap => "tap",
+            Operation::PowderCoat => "powder_coat",
+            Operation::Deburr => "deburr",
+        }
+    }
+
+    pub fn from_name(s: &str) -> Option<Operation> {
+        Operation::ALL.into_iter().find(|o| o.name() == s)
+    }
 }
 
 /// What a fabricator's machines take, each limit optional. Sizes are of the flat blank, either way
@@ -212,14 +311,20 @@ pub struct Process {
     pub angles: Option<(f64, f64)>,
     /// The smallest part handled: (shorter side, longer side) at least.
     pub part_min: Option<(f64, f64)>,
+    /// The largest and smallest blank of a part with bends, where they differ from a flat
+    /// part's (the brake's limits, not the laser's).
+    pub bent_max: Option<(f64, f64)>,
+    pub bent_min: Option<(f64, f64)>,
 }
 
 impl ShopProfile {
-    /// The stock of this thickness, to the rounding a thickness is written with.
+    /// The stock of this thickness, to the rounding a thickness is written with: within
+    /// `STOCK_MATCH` (a vendor's 0.063 in is 1.6002 mm, written 1.60), the nearest.
     pub fn stock(&self, t: f64) -> Option<&Stock> {
         self.stock
             .iter()
-            .find(|s| (s.thickness - t).abs() <= 1e-9 * t.abs().max(1.0))
+            .filter(|s| (s.thickness - t).abs() <= STOCK_MATCH)
+            .min_by(|a, b| (a.thickness - t).abs().total_cmp(&(b.thickness - t).abs()))
     }
 
     /// The relief rule for a sheet of thickness `t`, if the shop stocks it, with the shop's kerf.
@@ -236,6 +341,16 @@ impl ShopProfile {
             .iter()
             .map(|s| s.thickness)
             .min_by(|a, b| (a - t).abs().total_cmp(&(b - t).abs()))
+    }
+
+    /// Whether the shop does `op` (yes where it does not say).
+    pub fn offers(&self, op: Operation) -> bool {
+        self.operations.as_ref().is_none_or(|ops| ops.contains(&op))
+    }
+
+    /// Whether the shop does `op` in thickness `t` (its stock's own exceptions too).
+    pub fn offers_in(&self, op: Operation, t: f64) -> bool {
+        self.offers(op) && self.stock(t).is_none_or(|s| !s.not.contains(&op))
     }
 }
 
@@ -308,5 +423,29 @@ mod tests {
                 nearest: 2.0
             })
         );
+    }
+
+    #[test]
+    fn an_allowance_row_off_the_material_is_refused_by_row() {
+        // K of a row is (BA / angle - R) / t: row 1 has (6 / 2 - 2) / 2 = 0.5, row 2 (2 / 1 - 2.5)
+        // / 2 = -0.25 (the neutral layer above the inside skin): refused, naming row 2, whatever
+        // angle is asked (an interpolated BA between good rows is good)
+        let row = |radius, angle, ba| AllowanceRow { radius, angle, ba };
+        let bad = BendRule::Allowance(vec![row(2.0, 1.0, 3.0), row(2.0, 2.0, 6.0), row(2.5, 1.0, 2.0)]);
+        for angle in [1.0, 1.5, 2.0] {
+            assert_eq!(
+                bad.allowance(2.0, 2.0, angle),
+                Err(RuleError::RowK { row: 2, k: -0.25 })
+            );
+        }
+        // past the back skin: K = (12 / 2 - 2) / 2 = 2
+        let far = BendRule::Allowance(vec![row(2.0, 2.0, 12.0)]);
+        assert_eq!(
+            far.allowance(2.0, 2.0, 2.0),
+            Err(RuleError::RowK { row: 0, k: 2.0 })
+        );
+        // the edges of the material are in it
+        let edges = BendRule::Allowance(vec![row(2.0, 1.0, 2.0), row(2.0, 2.0, 8.0)]);
+        assert_eq!(edges.allowance(2.0, 2.0, 1.5), Ok(5.0));
     }
 }

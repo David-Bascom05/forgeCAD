@@ -53,6 +53,13 @@ impl Listener {
     /// Listens at `path`, its folder already private. A stale path left by a dead listener is
     /// replaced; one a live listener answers at is an error (`AddrInUse`).
     pub fn bind(path: &Path) -> io::Result<Listener> {
+        // WASI (the browser's build, the wasm test suite) listens on nothing: refused, typed
+        if cfg!(target_os = "wasi") {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "no local connections under WASI",
+            ));
+        }
         if path.exists() {
             if connect(path).is_ok() {
                 return Err(io::Error::new(
@@ -122,6 +129,12 @@ impl Listener {
 
 /// Connects to the listener at `path`.
 pub fn connect(path: &Path) -> io::Result<Stream> {
+    if cfg!(target_os = "wasi") {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "no local connections under WASI",
+        ));
+    }
     #[cfg(unix)]
     {
         Ok(Stream {
@@ -213,11 +226,29 @@ impl Write for &Stream {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(target_os = "wasi"))]
     use std::io::{BufRead, BufReader};
 
+    /// Under WASI there are no local connections: both ends refuse, with no thread or pid.
+    #[cfg(target_os = "wasi")]
+    #[test]
+    fn wasi_refuses_both_ends() {
+        let p = std::path::Path::new("/tmp/forge-ipc-wasi.sock");
+        assert_eq!(
+            Listener::bind(p).err().map(|e| e.kind()),
+            Some(io::ErrorKind::Unsupported)
+        );
+        assert_eq!(
+            connect(p).err().map(|e| e.kind()),
+            Some(io::ErrorKind::Unsupported)
+        );
+    }
+
+    // a thread and a socket: native only
+    #[cfg(not(target_os = "wasi"))]
     #[test]
     fn a_line_goes_both_ways_and_a_live_path_is_not_taken_over() {
-        let dir = std::env::temp_dir().join(format!("forge-ipc-{}", std::process::id()));
+        let dir = forge_dirs::temp_dir().join(format!("forge-ipc-{}", forge_dirs::process_id()));
         private_dir(&dir).unwrap();
         let path = dir.join("t.sock");
         let l = Listener::bind(&path).unwrap();

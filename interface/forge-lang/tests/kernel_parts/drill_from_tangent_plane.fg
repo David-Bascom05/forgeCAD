@@ -1,0 +1,18 @@
+# A block with a round crown (an arc of radius 20) and a bore of radius 10 along it, drilled down
+# (radius 4) from a plane tangent to the crown's top, up to the bore's surface: the cut fails as
+# NotClosed (an edge on too many faces). Starting the drill 1 above the crown, it builds. Restated
+# in round numbers from a CADFS part (00308391) that fails the same way.
+sketch side(on: xz) {
+  l0 = line((-30, 0), (30, 0))
+  l1 = line((30, 0), (30, 20))
+  l2 = line((30, 20), (20, 20))
+  a3 = arc(center: (0, 20), from: (20, 20), to: (-20, 20))
+  l4 = line((-20, 20), (-30, 20))
+  l5 = line((-30, 20), (-30, 0))
+  bore = circle((0, 20), 10)
+}
+body = extrude(side, 30)
+sketch top(on: offset(xy, 40)) {
+  c = circle((0, -15), 4)
+}
+drill = cut(top, upto(body.side(side.bore)))

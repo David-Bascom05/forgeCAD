@@ -24,10 +24,8 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        #[cfg(target_family = "wasm")]
-        let threads = 1;
-        #[cfg(not(target_family = "wasm"))]
-        let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).min(8);
+        // one on wasm unless the host gives threads (forge_par)
+        let threads = forge_math::par::threads().min(8);
         Options { threads }
     }
 }
@@ -1529,16 +1527,11 @@ pub(crate) struct Memo {
 }
 
 fn par_map<T: Send>(items: &[usize], threads: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
-    #[cfg(target_family = "wasm")]
-    let threads = {
-        let _ = threads;
-        1
-    };
     if threads <= 1 || items.len() < 2 {
         return items.iter().map(|&i| f(i)).collect();
     }
     let chunk = items.len().div_ceil(threads);
-    std::thread::scope(|s| {
+    forge_math::par::scope(|s| {
         let hs: Vec<_> = items
             .chunks(chunk)
             .map(|c| {

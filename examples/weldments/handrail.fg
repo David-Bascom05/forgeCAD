@@ -1,0 +1,35 @@
+# A handrail: a CHS rail along a line, a tangent bend and a line, on three posts coped to it
+# (each post's top cut to the rail's round outline, the saddle a tube fitter cuts), and a base
+# plate under each post.
+shared L1 = 800
+shared R = 250
+shared L2 = 600
+shared Hp = 900
+shared rail_sec = "CHS 48.3x3.2"
+shared post_sec = "CHS 42.4x2.6"
+shared t_pad = 6
+
+sketch plan(on: xy) {
+  path route(start: (0, 0)) {
+    line(to: (L1, 0))
+    tarc(to: (L1 + R, R))
+    line(to: (L1 + R, R + L2))
+  }
+  base = line((0, 0), (L1, 0), construction: true)
+  side = line((L1 + R, R), (L1 + R, R + L2), construction: true)
+}
+sketch posts(on: rotate(plan.plane, about: plan.base, by: 90deg)) {
+  a = line((100, 0), (100, -Hp))
+  b = line((L1 - 100, 0), (L1 - 100, -Hp))
+}
+sketch posts2(on: rotate(plan.plane, about: plan.side, by: 90deg)) {
+  c = line((L2 - 100, 0), (L2 - 100, -Hp))
+}
+rail = members(plan.route, section: rail_sec)
+post = members([posts.a, posts.b, posts2.c], section: post_sec)
+cope = end_trim(post[0], to: rail[0])
+cope2 = end_trim(post[1], to: rail[0])
+cope3 = end_trim(post[2], to: rail[2])
+pad = end_cap(post[0], end: "end", t: t_pad)
+pad2 = end_cap(post[1], end: "end", t: t_pad)
+pad3 = end_cap(post[2], end: "end", t: t_pad)

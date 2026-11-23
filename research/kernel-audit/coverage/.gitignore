@@ -3,3 +3,6 @@ aeneas/placecuts/target/
 aeneas/placecuts/placecuts.llbc
 aeneas/placecuts/Cargo.lock
 aeneas/placecuts/target
+aeneas/clearstep/clearstep.llbc
+aeneas/clearstep/Cargo.lock
+aeneas/clearstep/target

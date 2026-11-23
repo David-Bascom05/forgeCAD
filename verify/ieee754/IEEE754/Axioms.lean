@@ -5,6 +5,8 @@ import Lean
 import IEEE754.Binary64
 import IEEE754.Compare
 import IEEE754.Computed
+import IEEE754.TwoSum
+import IEEE754.TwoProduct
 import IEEE754.Dmath.Reduction
 import IEEE754.Dmath.CosPoly
 import IEEE754.Dmath.SinCos

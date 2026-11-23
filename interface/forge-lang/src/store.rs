@@ -242,7 +242,7 @@ mod tests {
     use super::*;
 
     fn scratch(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("forge-store-{name}-{}", std::process::id()));
+        let d = forge_dirs::temp_dir().join(format!("forge-store-{name}-{}", forge_dirs::process_id()));
         let _ = forge_dirs::fs::remove_dir_all(&d);
         d
     }

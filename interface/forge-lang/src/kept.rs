@@ -58,7 +58,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn dir(tag: &str, files: &[(&str, &str)]) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("forge-kept-{tag}-{}", std::process::id()));
+        let d = forge_dirs::temp_dir().join(format!("forge-kept-{tag}-{}", forge_dirs::process_id()));
         forge_dirs::fs::create_dir_all(&d).expect("temp dir");
         for (name, text) in files {
             forge_dirs::fs::write(d.join(name), text).expect("write");

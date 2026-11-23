@@ -1,0 +1,19 @@
+[package]
+name = "forge-brake"
+description = "Press-brake simulation for ForgeCAD sheet metal: tooling as data, exact partial refolds, certified tool clearance through the motion, bend-sequence planning"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../forge-math" }
+forge-ops = { path = "../forge-ops" }
+forge-sheet = { path = "../forge-sheet" }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+forge-sheet = { path = "../forge-sheet" }
+forge-math = { path = "../forge-math" }
