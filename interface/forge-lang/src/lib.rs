@@ -53,6 +53,7 @@ pub mod thermo_kept;
 pub mod tightbox;
 pub mod undo;
 pub mod units;
+pub mod urdf;
 pub mod uses;
 pub mod validity;
 pub mod values;
@@ -187,6 +188,8 @@ pub struct Options {
     /// of part marker); what follows is evaluated (its rows, its errors) but not built, and the
     /// part is the one as it stood there.
     pub until: Option<String>,
+    /// An assembly: its kinematic structure for an export (`AsmOut::kin`, `urdf.rs`).
+    pub kin: bool,
 }
 
 impl Default for Options {
@@ -210,6 +213,7 @@ impl Default for Options {
             comp_anchors: false,
             fit_sizes: false,
             until: None,
+            kin: false,
         }
     }
 }

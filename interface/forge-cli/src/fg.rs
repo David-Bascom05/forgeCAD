@@ -677,6 +677,9 @@ impl Session {
         {
             return self.export_mesh(a);
         }
+        if a.words.first().is_some_and(|w| w == "urdf") {
+            return self.export_urdf(a);
+        }
         let (run, _) = self.built(&a.file)?;
         if let Some(fmt) = a.words.first().filter(|w| *w == "dxf" || *w == "dwg") {
             let dwg = fmt == "dwg";
@@ -867,6 +870,43 @@ impl Session {
             json: Json::obj(j),
             png: Some(e.bytes),
         })
+    }
+
+    /// `urdf [tol MM] [angle DEG] [effort N] [velocity V] [travel MM] [cut J].. [package NAME]`:
+    /// the part or assembly as a URDF robot (research/export/urdf.md). The reply's bytes are a
+    /// ZIP of `NAME.urdf` and `meshes/*.stl`; a refusal is typed (`kind`, `fixes`).
+    fn export_urdf(&mut self, a: &Args) -> Result<Reply, String> {
+        use forge_lang::urdf;
+        let o = urdf::Options::parse(&a.words)?;
+        let (_, src) = self.read(&a.file)?;
+        let path = self.path(&a.file)?;
+        let dir = path.parent().map(Path::to_path_buf);
+        let opts = Options {
+            dir: dir.clone(),
+            root: self.root.clone(),
+            render: true,
+            kin: true,
+            overlap: false,
+            ..Options::default()
+        };
+        let run = forge_lang::run(&src, opts, Default::default()).0;
+        let name = Path::new(&a.file)
+            .file_stem()
+            .map_or_else(|| "part".into(), |n| n.to_string_lossy().into_owned());
+        match urdf::export(&run, &name, dir.as_deref(), &o) {
+            Ok(e) => Ok(Reply {
+                ok: true,
+                text: e.text(),
+                json: e.json(),
+                png: Some(e.zip),
+            }),
+            Err(e) => Ok(Reply {
+                ok: false,
+                text: format!("error {e}"),
+                json: Json::obj(vec![("ok", false.into()), ("error", e.json())]),
+                png: None,
+            }),
+        }
     }
 
     /// What part B changed from part A: features and params added, removed and changed (with
