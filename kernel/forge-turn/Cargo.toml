@@ -1,0 +1,21 @@
+[package]
+name = "forge-turn"
+description = "ForgeCAD turning: the part's exact half-profile, ISO inserts, lathe ops (face, rough, finish with exact nose-radius compensation, groove, part-off, thread, drill), the certified 2D clearance checker and lathe posts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-cam-geom = { path = "../forge-cam-geom" }
+forge-math = { path = "../forge-math" }
+forge-geom = { path = "../forge-geom" }
+forge-topo = { path = "../forge-topo" }
+forge-tooling = { path = "../forge-tooling" }
+forge-post = { path = "../forge-post" }
+
+[dev-dependencies]
+forge-ops = { path = "../forge-ops" }
+
+[lints]
+workspace = true
