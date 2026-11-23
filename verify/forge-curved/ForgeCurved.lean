@@ -22,3 +22,5 @@ import ForgeCurved.SweepCross
 import ForgeCurved.SweepFacet
 import ForgeCurved.SweepBound
 import ForgeCurved.RealModel
+import ForgeCurved.QTransverse
+import ForgeCurved.QEvents

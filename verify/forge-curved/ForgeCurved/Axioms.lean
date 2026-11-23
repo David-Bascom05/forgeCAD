@@ -87,3 +87,10 @@ import ForgeCurved
 #print axioms ForgeCurved.Sweep.crossesAll_facets_bounded
 #print axioms ForgeCurved.evK_real
 #print axioms ForgeCurved.carriersOf_real
+#print axioms ForgeCurved.hasFDerivAt_qR
+#print axioms ForgeCurved.transverse1
+#print axioms ForgeCurved.transverse2
+#print axioms ForgeCurved.off_transverse1
+#print axioms ForgeCurved.off_transverse2
+#print axioms ForgeCurved.off_noTriple
+#print axioms ForgeCurved.slab_regular
