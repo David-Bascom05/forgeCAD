@@ -240,6 +240,13 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.homSub_ev
   ForgeExact.DecideOnce.Curved.secondProj_spec
   ForgeExact.DecideOnce.Curved.proposeVert3_complete
+  ForgeExact.DecideOnce.Curved.proposeTriple_complete
+  ForgeExact.DecideOnce.Curved.cramer3
+  ForgeExact.DecideOnce.Curved.proposeTripleX_complete
+  ForgeExact.DecideOnce.Curved.rawEvents_complete
+  ForgeExact.DecideOnce.Curved.eventsOf_complete
+  ForgeExact.DecideOnce.Curved.eventsOf_sep
+  ForgeExact.DecideOnce.Curved.planes_between
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region
