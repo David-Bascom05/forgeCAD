@@ -16,8 +16,7 @@ forge-post = { path = "../../kernel/forge-post" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-math = { path = "../../kernel/forge-math" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
-
-[dev-dependencies]
+# the filesystem the browser build fills in memory (std::fs natively)
 forge-dirs = { path = "../../kernel/forge-dirs" }
 
 [lints]
