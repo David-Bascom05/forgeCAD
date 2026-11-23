@@ -454,4 +454,132 @@ theorem tangentPair_localConn (z₀ : ℝ) : FaceLocal.LocalConn tangentPair (0,
     simp only [tangentPair, List.mem_cons, List.not_mem_nil, or_false] at hc
     rcases hc with rfl | rfl | rfl <;> fun_prop) (tangentContact z₀)
 
+/-! ## Cylinder–plane line contact -/
+
+/-- The cylinder `x² + (y - 1)² = 1`, tangent to the plane `y = 0` along the `z` axis, with the
+contact seam `x = 0`. -/
+def cylPlane : List (Carrier R3 ℝ) :=
+  [fun p => p.1 ^ 2 + (p.2.1 - 1) ^ 2 - 1, fun p => p.2.1, fun p => p.1]
+
+/-- Swap `x` and `y`, and move `z₀` to `0`. -/
+def swapXY (z₀ : ℝ) : R3 ≃ₜ R3 where
+  toFun p := (p.2.1, p.1, p.2.2 + -z₀)
+  invFun q := (q.2.1, q.1, q.2.2 + z₀)
+  left_inv p := by simp
+  right_inv q := by simp
+  continuous_toFun := by fun_prop
+  continuous_invFun := by fun_prop
+
+/-- The graphs: the cylinder `u = 1 - √(1 - w²)` and the plane `u = 0`. -/
+noncomputable def cpA : Fin 2 → ℝ × ℝ → ℝ
+  | 0 => fun d => 1 - Real.sqrt (1 - d.1 ^ 2)
+  | 1 => fun _ => 0
+
+theorem sgnK_one_sub_sqrt (e : ℝ × ℝ) (he : ‖e‖ < 1 / 2) :
+    sgnK (1 - Real.sqrt (1 - e.1 ^ 2)) = sq (sgnK e.1) := by
+  have h1 : |e.1| < 1 / 2 := by
+    have := (norm_fst_le e).trans_lt he; rwa [Real.norm_eq_abs] at this
+  rcases eq_or_ne e.1 0 with h0 | h0
+  · simp [h0, sgnK, sq]
+  · have hp : 0 < e.1 ^ 2 := by positivity
+    have hlt : Real.sqrt (1 - e.1 ^ 2) < 1 := by
+      rw [Real.sqrt_lt' one_pos]; linarith
+    rw [sgnK_pos (by linarith)]
+    rcases lt_or_gt_of_ne h0 with h | h
+    · rw [sgnK_neg h]; rfl
+    · rw [sgnK_pos h]; rfl
+
+/-- **Every point of the contact line of a cylinder and its tangent plane is a contact point.** -/
+noncomputable def cylPlaneContact (z₀ : ℝ) : ContactAt cylPlane (0, 0, z₀) where
+  T := swapXY z₀
+  hT := by simp [swapXY]
+  m := 2
+  a := cpA
+  ha k := by fin_cases k <;> (simp only [cpA]; fun_prop)
+  ha0 k := by fin_cases k <;> simp [cpA]
+  kind i := if i.1 = 0 then some 0 else if i.1 = 1 then some 1 else none
+  fl i := i.1 = 0
+  V := {p | |p.1| < 1 / 2 ∧ |p.2.1| < 1 / 2}
+  hV := (isOpen_lt (continuous_abs.comp continuous_fst) continuous_const).inter
+    (isOpen_lt (continuous_abs.comp (continuous_fst.comp continuous_snd)) continuous_const)
+  hxV := by norm_num
+  hm i _ y hy := by
+    obtain ⟨h1, h2⟩ := hy
+    have hx2 : y.1 ^ 2 ≤ 1 := by nlinarith [abs_lt.mp h1, sq_abs y.1]
+    set s := Real.sqrt (1 - y.1 ^ 2)
+    have hs : s ^ 2 = 1 - y.1 ^ 2 := Real.sq_sqrt (by linarith)
+    have hs0 : 0 ≤ s := Real.sqrt_nonneg _
+    have hy' := abs_lt.mp h2
+    fin_cases i
+    · have : y.1 ^ 2 + (y.2.1 - 1) ^ 2 - 1 = (y.2.1 - (1 - s)) * (y.2.1 - (1 + s)) := by
+        nlinarith [hs]
+      show sgnK (y.1 ^ 2 + (y.2.1 - 1) ^ 2 - 1) = fS true (sgnK (y.2.1 - (1 - √(1 - y.1 ^ 2))))
+      rw [this, sgnK_mul_neg (by linarith)]
+    · show sgnK y.2.1 = fS false (sgnK (y.2.1 - 0))
+      rw [sub_zero]; rfl
+    · show sgnK y.1 = fS false (sgnK y.1)
+      rfl
+  used o := by
+    rcases o with _ | k
+    · exact ⟨⟨2, by simp [cylPlane]⟩, show (0 : ℝ) = 0 from rfl, by simp⟩
+    · fin_cases k
+      · exact ⟨⟨0, by simp [cylPlane]⟩,
+          show (0 : ℝ) ^ 2 + ((0 : ℝ) - 1) ^ 2 - 1 = 0 by norm_num, by simp⟩
+      · exact ⟨⟨1, by simp [cylPlane]⟩, show (0 : ℝ) = 0 from rfl, by simp⟩
+  δ₀ := 1 / 2
+  hδ₀ := by norm_num
+  ord k l d d' hd hd' hs := by
+    have e01 : ∀ e : ℝ × ℝ, cpA 0 e - cpA 1 e = (1 - Real.sqrt (1 - e.1 ^ 2)) * 1 := by
+      intro e; simp only [cpA]; ring
+    have e10 : ∀ e : ℝ × ℝ, cpA 1 e - cpA 0 e = (1 - Real.sqrt (1 - e.1 ^ 2)) * (-1) := by
+      intro e; simp only [cpA]; ring
+    fin_cases k <;> fin_cases l
+    · simp
+    · simp only [Fin.zero_eta, Fin.isValue, Fin.mk_one]
+      rw [e01, e01, sgnK_mul_pos' one_pos, sgnK_mul_pos' one_pos, sgnK_one_sub_sqrt d hd,
+        sgnK_one_sub_sqrt d' hd', hs]
+    · simp only [Fin.zero_eta, Fin.isValue, Fin.mk_one]
+      rw [e10, e10, sgnK_mul_neg (by norm_num), sgnK_mul_neg (by norm_num), sgnK_one_sub_sqrt d hd,
+        sgnK_one_sub_sqrt d' hd', hs]
+    · simp
+
+/-- **Local connectivity on the contact line of a cylinder and a tangent plane.** -/
+theorem cylPlane_localConn (z₀ : ℝ) : FaceLocal.LocalConn cylPlane (0, 0, z₀) :=
+  localConn_of_contact (fun c hc => by
+    simp only [cylPlane, List.mem_cons, List.not_mem_nil, or_false] at hc
+    rcases hc with rfl | rfl | rfl <;> fun_prop) (cylPlaneContact z₀)
+
+/-! ## Which tangencies decide-once takes (the master's ruling, 2026-11-23) -/
+
+/-- The kinds of tangential contact between two near faces. -/
+inductive TangentKind
+  /-- a sphere touching a plane at one point -/
+  | spherePlanePoint
+  /-- a cylinder touching a plane along a line -/
+  | cylPlaneLine
+  /-- coaxial equal radii: surfaces of revolution about one axis touching along a circle -/
+  | coaxialEqualRadii
+  /-- two cylinders with parallel axes touching along a line: the union is non-manifold there,
+  and the deliverable is the refusal (four wings at the contact edge) -/
+  | cylCylLine
+  /-- anything else (sphere–sphere, sphere–cylinder off axis, crossed cylinders touching at a
+  point, cone tangencies, internal tangencies of unequal surfaces, higher contact) -/
+  | other
+  deriving DecidableEq, Repr
+
+/-- **Taken by decide-once**: the three manifold kinds with local models, and the refused
+tangent-cylinder line. Everything else is a counted `Skip` (the old path handles it, as with
+`Skip::Wide`). -/
+def TangentKind.taken : TangentKind → Bool
+  | .other => false
+  | _ => true
+
+/-- Which of the taken kinds have a local model on this branch: `cylPlaneLine`
+(`cylPlane_localConn`) and, as the seamed reference picture, `cylCylLine`
+(`tangentPair_localConn`). `spherePlanePoint` and `coaxialEqualRadii` are owed. -/
+def TangentKind.modelled : TangentKind → Bool
+  | .cylPlaneLine => true
+  | .cylCylLine => true
+  | _ => false
+
 end ForgeCurved
