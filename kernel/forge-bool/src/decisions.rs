@@ -232,6 +232,24 @@ pub fn decide(
     if !open {
         with_stats(|s| s.unscoped += 1);
     }
+    if dump() {
+        // (measurement: curved-fallback-rates.md buckets these by |measure|)
+        eprintln!(
+            "decision {} | {} | {:e} | {:e} | {}",
+            kind.name(),
+            site.name(),
+            measure,
+            limit,
+            answer
+        );
+    }
+}
+
+/// FORGE_DECISIONS_DUMP set: every decision to stderr, one line each, and each plan's close as a
+/// `decision-plan` line. Read once.
+fn dump() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("FORGE_DECISIONS_DUMP").is_some())
 }
 
 /// `f` (a check of a result: forge-topo's), with its edge-on-face answers recorded under the
@@ -328,6 +346,9 @@ impl Drop for Scope {
         let Some(ledger) = LEDGER.with(|l| l.borrow_mut().take()) else {
             return;
         };
+        if dump() {
+            eprintln!("decision-plan {} {}", ledger.path, ledger.recs.len());
+        }
         let found = close(ledger, self.outcome);
         if found > 0 && std::env::var_os("FORGE_DECISIONS_STRICT").is_some() && !std::thread::panicking() {
             panic!("decision log: {found} facts decided two ways within one boolean (see decisions::report)");
