@@ -380,12 +380,52 @@ class Tr:
             raise Unresolved(str(x))
 
     def sketch(self, f):
-        a = Arrangement(f["ents"])
-        fr = self.frame_of(f, a)
+        if any(e["kind"] == "skEllipticalArc" for e in f["ents"]):
+            # the program's record of an elliptical arc holds no geometry: the solved curve is the sketch record's
+            k, ents = self.arcs_from_record(f["ents"])
+            a = Arrangement(ents)
+            self.used.add(k)
+            fr = Frame(self.raw["sketches"][k]["sketchMatrix"])
+            f = dict(f, ents=ents)
+        else:
+            a = Arrangement(f["ents"])
+            fr = self.frame_of(f, a)
         self.sk[f["id"]] = (a, fr)
         self.sketch_ents[f["id"]] = f["ents"]
         if a.approx:
             self.notes.add("approx")
+
+    def arcs_from_record(self, ents):
+        """The sketch's entities with each elliptical arc's curve read from the one unused sketch record whose entities
+        are the program's, kind for kind and in order. Every line's ends must be the record's too; else unresolved."""
+        kinds = lambda xs: [(x[0], bool(x[1])) for x in xs]
+        ours = [e for e in ents if e["kind"] != "skPoint"]
+        want = kinds((e["kind"], e.get("construction")) for e in ours)
+        hits = []
+        for k, rec in enumerate(self.raw.get("sketches", [])):
+            if k in self.used or "sketchMatrix" not in rec:
+                continue
+            theirs = [x for x in rec.get("entities", []) if x.get("sketchEntityType") != "skPoint"]
+            if kinds((x.get("sketchEntityType"), x.get("isConstruction")) for x in theirs) == want:
+                hits.append((k, theirs))
+        if len(hits) != 1:
+            raise Unsupported("sketch curve skEllipticalArc")
+        k, theirs = hits[0]
+        mm = lambda v: (v["x"] * 1000, v["y"] * 1000)
+        out, by = [], {id(e): x for e, x in zip(ours, theirs)}
+        for e in ents:
+            x = by.get(id(e))
+            if x is None:
+                out.append(e)
+            elif e["kind"] == "skLineSegment":
+                if max(math.dist(e["start"], mm(x["startPosition2d"])), math.dist(e["end"], mm(x["endPosition2d"]))) > 1e-6:
+                    raise Unsupported("sketch curve skEllipticalArc")
+                out.append(e)
+            elif e["kind"] == "skEllipticalArc":
+                out.append(dict(earc_of(x), id=e["id"], construction=e.get("construction", False)))
+            else:
+                out.append(e)
+        return k, out
 
     def frame_of(self, f, a):
         # the dataset's record: the unused sketch sharing most of these points and radii, the first if tied
@@ -1654,6 +1694,34 @@ class Tr:
                 getattr(self, f["op"])(f)
         if not self.lines:
             raise Unsupported("no solid feature")
+
+
+def earc_of(x):
+    """A sketch record's elliptical arc as an entity: its centre, major axis and parameter range as recorded, its two
+    semi-axes solved from the points recorded at the start, a quarter, half way and the end (parameters spaced
+    evenly), in mm. The minor axis is the major turned a quarter counter-clockwise; a fit off by more than 1e-9 is
+    refused."""
+    g = x["geometry"]
+    c, u = (g["center2d"]["x"] * 1000, g["center2d"]["y"] * 1000), (g["majorAxis2d"]["x"], g["majorAxis2d"]["y"])
+    l = math.hypot(*u)
+    u = (u[0] / l, u[1] / l)
+    t0, t1 = x["startParameter"], x["endParameter"]
+    while t1 <= t0:
+        t1 += 2 * math.pi
+    rows = []
+    for k, f in (("startPosition2d", 0.0), ("quarterPosition2d", 0.25), ("midPosition2d", 0.5), ("endPosition2d", 1.0)):
+        t = t0 + (t1 - t0) * f
+        p = (x[k]["x"] * 1000 - c[0], x[k]["y"] * 1000 - c[1])
+        # p = a cos t u + b sin t w, w = (-u.y, u.x): along u and along w
+        rows.append((math.cos(t), math.sin(t), p[0] * u[0] + p[1] * u[1], -p[0] * u[1] + p[1] * u[0]))
+    sa = sum(r[0] * r[0] for r in rows)
+    sb = sum(r[1] * r[1] for r in rows)
+    a = sum(r[0] * r[2] for r in rows) / sa if sa else 0.0
+    b = sum(r[1] * r[3] for r in rows) / sb if sb else 0.0
+    off = max(max(abs(a * r[0] - r[2]), abs(b * r[1] - r[3])) for r in rows)
+    if not (a > 0 and b > 0) or off > 1e-9 * max(a, b, 1.0):
+        raise Unsupported("sketch curve skEllipticalArc")
+    return {"kind": "skEllipseArc", "center": list(c), "majorAxis": list(u), "majorRadius": a, "minorRadius": b, "sense": 1, "t0": t0, "t1": t1}
 
 
 def chain_pieces(pieces):

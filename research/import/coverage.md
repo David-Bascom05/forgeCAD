@@ -20,8 +20,8 @@ come from `research/import/tally.py`.
 | set | parts | untranslated before | after | match (1e-4) before | after |
 |---|---:|---:|---:|---:|---:|
 | FreeCAD library, bodies | 677 | 130 | 49 | 394 | 515 |
-| CADFS, all parts | 1914 | 640 | 615 | 1099 | 1112 |
-| CADFS, parts with a fillet | 476 | 238 | 228 | 164 | 166 |
+| CADFS, all parts | 1914 | 640 | 612 | 1099 | 1114 |
+| CADFS, parts with a fillet | 476 | 238 | 227 | 164 | 167 |
 | WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new |
 
 No part got worse on any set: no match was lost, and nothing that built before stopped building.
@@ -143,15 +143,66 @@ volumes agree to 1e-12.
 | part | before | after |
 |---|---|---|
 | FreeCAD 5ab390cb.Body, .Body001 | untranslated (`GeomEllipse`) | match: 2.2e-10 and 2e-15 in volume |
-| FreeCAD 82d7764f.PolarPattern004 | untranslated (`GeomArcOfEllipse`) | match: 5.9e-5 in volume, 8.8e-6 in area (nothing in it is approx; not yet explained) |
+| FreeCAD 82d7764f.PolarPattern004 | untranslated (`GeomArcOfEllipse`) | match: 5.9e-5 in volume, 8.8e-6 in area. The residual is the truth's measurement, not the part (below). |
 | CADFS 00737513 | approx, 8.0e-5 / 1.0e-4 | match: 2.3e-5 / 6.5e-8 |
 | CADFS 00298092 | approx, a match | a match, no longer approx (2.3e-11) |
 | CADFS 00340940, 00879304, 00910674 | approx, 5.6e-4 to 6.1e-4 off | 1.0e-4 to 1.6e-4 off: **the STEP's ellipse is the approximation**. 00340940 is a 25 by 12.5 ellipse extruded 76.2. We build π·25·12.5·76.2 = 74809.175 to 1e-15; Onshape's STEP measures 74797.390. Reported, not counted. |
 
 The other 21 CADFS parts with an ellipse come out as before: one already matched (00472699), two are refused at a
-fillet, and 18 stop on another cause. Six of those 18 stop on `skEllipticalArc`, whose FeatureScript records hold no
-geometry (`skEllipticalArc(sketch, "E0", {})`). Their solved curve is only in the sketch record, under another id, so
-they stay untranslated.
+fillet, and 18 stop on another cause.
+
+**CADFS's elliptical arcs.** The FeatureScript record of an elliptical arc holds no geometry
+(`skEllipticalArc(sketch, "E0", {})`); the solved curve is only in the dataset's sketch record, under a UUID. The
+reader now takes the one unused sketch record whose entities are the program's, kind and construction flag in order,
+and reads each arc from it by position. Each line's ends must be that record's too, to 1e-6. The arc's centre, major
+axis and parameter range are recorded. Its two semi-axes are solved from the points recorded at the start, a
+quarter, half way and the end, and a fit off by more than 1e-9 is refused.
+
+| part | after |
+|---|---|
+| 00565164 | match: 3.1e-6 / 6.6e-6 |
+| 00869959 | match: 4.9e-6 / 8.5e-6 |
+| 00044536 | refused: an intersect that comes out empty (feature 9), past the arc |
+| 00541379 | untranslated: sketch text, past the arc |
+| 00124542, 00588035 | untranslated: no one sketch record has the program's entities (the arc stays unread) |
+
+### The truth's own measurement error
+
+82d7764f's 5.9e-5 was traced feature by feature against FreeCAD's stored shapes. Each matches ours until Fillet002,
+a radius-2 fillet along the elliptical cut's edges: there the stored shape is 2.0 smaller in volume than ours. That
+2.0 is not in the geometry. It is the gap between two ways OCCT measures the same stored shape:
+
+- `BRepGProp::VolumeProperties` as the truth tools call it (no precision given) gives 27743.68;
+- with a precision of 1e-9 it gives 27745.69, ours to 1e-6.
+
+A part of my own settles which is right. A 100 by 60 by 10 block has an elliptical hole (20 by 10), and both of the
+hole's edges are rounded at 2. The rolling ball between a plane and a wall square to it removes (1 - π/4)r² of
+section, at a centroid x̄ = r(10 - 3π)/(3(4 - π)) from the edge. By Pappus the volume is therefore exactly
+V = block - hole - 2(1 - π/4)r²(L + 2πx̄), with L the ellipse's perimeter: 53545.663021384.
+
+| measure | value | off |
+|---|---|---|
+| Forge's kernel | 53545.663021377 | 1.3e-13 |
+| OCCT's fillet, measured as the truth tools do | 53545.683154 | 3.8e-7 |
+| OCCT's fillet, measured with a precision of 1e-9 | 53545.662982 | 7e-10 |
+
+The default measure is not wrong everywhere, and the precise one is not right everywhere. On 5ab390cb.Body001 (an
+ellipse 20 by 15 padded 0.4, exactly π·20·15·0.4 = 376.991118) the default is exact, while the precise call gives
+376.990968 and moves the area by 6e-5. OCCT's Gauss–Kronrod integrator (`VolumePropertiesGK`, 1e-9, spans on) is a
+third, independent measure. It agrees with the right one in all three cases above: 376.991118, 26028.8318 (82d7764f,
+ours 5e-8 off), 53545.663 (my part).
+
+**This reaches beyond ellipses.** Of the 79 FreeCAD bodies counted as mismatches, the two OCCT measures of the
+stored shape disagree by over 1e-5 on 68. Against the precise one, 48 of the 79 are within 1e-4. They are mostly 5
+bodies of one model (Body020, 024, 027, 028, 031) copied in 11 files, off by 1.0e-4 to 1.5e-4 under the default
+measure and by 1e-7 to 4e-6 under the precise one. On the other 20 where they disagree, the default is the nearer to
+ours (Body030 and 033 of that model, and c106d15f.Body): there the precise measure is off by up to 1.2e-2. The CADFS STEP truths are measured in the same way.
+
+None of this changes the counts above: they keep the truth as it was measured. Choosing, part by part, whichever
+measure agrees with ours would be no test, so a re-measure has to fix its rule first. The rule proposed is the
+Gauss–Kronrod volume for every truth, and the default and precise areas where their volumes agree with it; a truth
+whose measures disagree beyond the tolerance is reported as uncertain, not counted either way. It is for the owner to
+adopt.
 
 ### What still stops FreeCAD (49 bodies)
 
@@ -181,12 +232,12 @@ All 1914 sampled parts:
 
 | class | before | after |
 |---|---:|---:|
-| match | 1099 | 1112 |
-| mismatch | 81 | 84 |
-| refused | 85 | 92 |
+| match | 1099 | 1114 |
+| mismatch | 81 | 83 |
+| refused | 85 | 93 |
 | fail | 8 | 11 |
 | timeout | 1 | 1 |
-| untranslated | 640 | 615 |
+| untranslated | 640 | 612 |
 
 **Draft on an extrude (24 → 0 under that name).** Onshape's extrude draft is Forge's `taper:`, on a depth. Its sign
 was read from the STEP: with the pull-direction flag set, Onshape narrows the extrude as Forge's positive taper does
@@ -235,7 +286,7 @@ Ranked for the parts with a fillet (all 1914 parts in brackets):
 | a variable or conic fillet | 9 (9) | all 9 are conic: **missing: a conic cross-section fillet** (`vary` covers variable radii) |
 | BLEND_EDGE / BLEND_FACE / OFFSET_* of an unknown feature, no edge or face on the carrier | 24 | importer: queries on blends' and offsets' own faces |
 | feature deleteBodies | 4 (17) | importer (bodies dropped from the part) |
-| sketch curve skEllipticalArc | 2 (6) | `earc` exists and is written; importer: the FeatureScript record holds no geometry, only the sketch record does |
+| sketch curve skEllipticalArc | 1 (2) | read from the dataset's sketch record where one record has the program's entities (above); in these 2, none does |
 | a pattern of many bodies, a mirror in a curved face, an axis on a solid's edge | 7 (18) | importer; a curved mirror has no form |
 
 ## WHUCAD
