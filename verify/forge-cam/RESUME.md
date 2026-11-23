@@ -46,17 +46,26 @@ Expect about 2 min with the Mathlib cache. Post.lean's `step` takes about 45 s.
 - **The Δ search's bound.** lower ≤ sdRZ(D, h − z) over the cells is the interval extension's
   claim, which is L5 (ival.rs against verify/ieee754).
 
-## When the vise code lands
+## The vise code (3e8a91d, 0a4c189): done
 
-1. Check that `fixture_collision` certifies **both** T and N against the vise or jaws at a c'
-   strictly greater than c. `G2_of_closedForm` needs c < c', because F ⊕ B_c is closed.
-2. Check that the vise's jaws lower to prism faces that are within μ of the true faces and
-   cover their frontier. That is `Certified`'s hypothesis.
-3. Check that the soft-jaw seating check implements H ∩ blank ⊆ grip slab ("pocket no deeper
-   than the part").
-4. Check that the "held by fixture" leftover is computed as `leftoverHeld` (S_end ∩ K less the
-   grown part).
-5. If 2.5D contours with arcs are in active use: segment–arc in Dist2 (over ℝ, or ℚ(√d) for an
+ForgeCam/Vise.lean adds 7 theorems (41 in all).
+- The fixture model, a union of boxes, meets `Certified`'s face hypothesis with μ = 0.
+- forge-cam's `fixture_collision` (every body, the cutter included, at limit = fclear,
+  Clear iff lower ≥ fclear + μ) gives G2 for the open c-neighbourhood (`G2open_of_closedForm`).
+  The closed F ⊕ B_c of §7b needs certifying at c' > c.
+- `held_band`: a band with z1 ≤ jaw_top is held. forge-cam labels a straddling band "uncut" whole,
+  and allows a 1e-9 slack; `band_split` gives the exact split.
+- The G6 counterexamples round-trip on all four dialects at 0a4c189 (checked in Rust).
+  Vanishing arcs (start = end after quantisation, which a control reads as a full circle) are
+  outside the G6 model. The model treats arcs as records, so 0a4c189's refusal of them is
+  untested by it.
+
+## Still to do when asked
+
+1. Soft jaws, when they land. Check that the seating check implements H ∩ blank ⊆ grip slab,
+   that the jaw faces lower to prism faces (the pockets' walls are arcs and segments), and that
+   `Certified` holds for them.
+2. If 2.5D contours with arcs are in active use: segment–arc in Dist2 (over ℝ, or ℚ(√d) for an
    executable form), then arc–arc.
-6. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
+3. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
    expansion in the G6 model, L5 for the checker's intervals, and L4 (Aeneas).

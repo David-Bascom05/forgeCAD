@@ -34,3 +34,10 @@ import ForgeCam
 #print axioms ForgeCam.Dist2.segSegLo_attained
 #print axioms ForgeCam.Dist2.segSeg_D
 #print axioms ForgeCam.Dist2.clearFace_segSeg
+#print axioms ForgeCam.frontier_box_subset
+#print axioms ForgeCam.frontier_fixture_faces
+#print axioms ForgeCam.certified_vise
+#print axioms ForgeCam.G2open_of_closedForm
+#print axioms ForgeCam.held_band
+#print axioms ForgeCam.uncut_band
+#print axioms ForgeCam.band_split
