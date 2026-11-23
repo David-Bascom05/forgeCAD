@@ -479,6 +479,203 @@ theorem wf_loop1_spec (c : Csr) (n : Nat) (ne : Usize) (hne : ne.val = nrowsL c)
         cases this
   · exact ⟨he, h⟩
 
+/-! ### Loop 2: the verts -/
+
+def rowU (ids : List U32) (lo hi : Nat) : List U32 := (ids.drop lo).take (hi - lo)
+
+/-- The checks on one sector, as the Rust makes them. -/
+def secP (l : Ledger) (lo hi slo shi : Nat) (x : Sector) : Prop :=
+  (rowU' l.vert_sectors.sec.val slo shi).countP (secEq · x) = 1 ∧ x.facet.val < nfacets l ∧
+  (rowU l.vert_edges.ids.val lo hi).count x.a = 1 ∧ (rowU l.vert_edges.ids.val lo hi).count x.b = 1 ∧
+  1 ≤ (rowU l.edge_facets.ids.val (stAt l.edge_facets x.a.val) (stAt l.edge_facets (x.a.val + 1))).count x.facet ∧
+  1 ≤ (rowU l.edge_facets.ids.val (stAt l.edge_facets x.b.val) (stAt l.edge_facets (x.b.val + 1))).count x.facet
+where rowU' (secs : List Sector) (lo hi : Nat) : List Sector := (secs.drop lo).take (hi - lo)
+
+theorem row_bounds (c : Csr) (n : Nat) (hc : CsrOK c n) (k : Usize) (hk : k.val + 1 < c.start.val.length) :
+    row c k ⦃ r => r.1.val = stAt c k.val ∧ r.2.val = stAt c (k.val + 1) ∧
+      stAt c k.val ≤ stAt c (k.val + 1) ∧ stAt c (k.val + 1) ≤ c.ids.val.length ⦄ := by
+  apply WP.spec_mono (row_spec c k hk)
+  rintro ⟨a, b⟩ ⟨ha, hb⟩
+  exact ⟨ha, hb, csr_mono hc (k := k.val) 1 hk, csr_le_len hc hk⟩
+
+theorem mem_of_count_one {β : Type} [BEq β] [LawfulBEq β] {L : List β} {x : β} (h : L.count x = 1) : x ∈ L := by
+  apply List.count_pos_iff.mp; omega
+
+set_option maxHeartbeats 2000000 in
+theorem wf_loop2_sec_spec (l : Ledger) (hef : CsrOK l.edge_facets (nfacets l))
+    (hve : CsrOK l.vert_edges (nrowsL l.edge_facets))
+    (nf : Usize) (hnf : nf.val = nfacets l) (lo hi slo shi : Usize) (hlo : lo.val ≤ hi.val)
+    (hhi : hi.val ≤ l.vert_edges.ids.val.length) (hslo : slo.val ≤ shi.val) (hshi : shi.val ≤ l.vert_sectors.sec.val.length)
+    (ok0 ok : Bool) (j : Usize) (hj : slo.val ≤ j.val ∧ j.val ≤ shi.val)
+    (h : ok = true ↔ ok0 = true ∧ ∀ t, slo.val ≤ t → t < j.val →
+      secP l lo.val hi.val slo.val shi.val (l.vert_sectors.sec.val.getD t default)) :
+    ledger_wf_loop2_loop1 l.edge_facets.start l.edge_facets.ids l.vert_edges.ids l.vert_sectors.sec nf ok lo hi slo shi j
+      ⦃ r => r = true ↔ ok0 = true ∧ ∀ t, slo.val ≤ t → t < shi.val →
+        secP l lo.val hi.val slo.val shi.val (l.vert_sectors.sec.val.getD t default) ⦄ := by
+  unfold ledger_wf_loop2_loop1
+  apply loop.spec_decr_nat (fun (q : Bool × Usize) => shi.val + 1 - q.2.val)
+    (fun q => slo.val ≤ q.2.val ∧ q.2.val ≤ shi.val ∧ (q.1 = true ↔ ok0 = true ∧ ∀ t, slo.val ≤ t → t < q.2.val →
+      secP l lo.val hi.val slo.val shi.val (l.vert_sectors.sec.val.getD t default)))
+  · rintro ⟨o, k⟩ ⟨hka, hkb, ho⟩
+    unfold ledger_wf_loop2_loop1.body
+    simp only at hka hkb ho ⊢
+    split
+    · rename_i hot
+      have hok := ho.mp hot
+      split
+      · rename_i hlt
+        have hkl : k.val < l.vert_sectors.sec.val.length := by scalar_tac
+        step as ⟨sc, hsc⟩
+        have hg : l.vert_sectors.sec.val.getD k.val default = sc := by
+          rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hkl, Option.getD_some, hsc]
+        -- the step: o' = true ↔ secP sc
+        have hfin : ∀ (o' : Bool), (o' = true ↔ secP l lo.val hi.val slo.val shi.val sc) →
+            ∀ (k1 : Usize), k1.val = k.val + 1 →
+            (o' = true ↔ ok0 = true ∧ ∀ t, slo.val ≤ t → t < k1.val →
+              secP l lo.val hi.val slo.val shi.val (l.vert_sectors.sec.val.getD t default)) := by
+          intro o' ho' k1 hk1
+          rw [hk1, ho']
+          constructor
+          · intro hp
+            refine ⟨hok.1, fun t h1 h2 => ?_⟩
+            rcases Nat.lt_or_ge t k.val with h3 | h3
+            · exact hok.2 t h1 h3
+            · have : t = k.val := by omega
+              subst this; rw [hg]; exact hp
+          · rintro ⟨_, hp⟩
+            have := hp k.val hka (by omega); rw [hg] at this; exact this
+        step with count_sec_spec (alloc.vec.Vec.deref l.vert_sectors.sec) slo shi sc hslo
+          (by simp [alloc.vec.Vec.deref]; exact hshi) as ⟨c0, hc0⟩
+        simp only [alloc.vec.Vec.deref, Slice.from_val] at hc0
+        have hc0v : c0.val = (secP.rowU' l.vert_sectors.sec.val slo.val shi.val).countP (secEq · sc) := hc0
+        have hvd : (alloc.vec.Vec.deref l.vert_edges.ids).val.length = l.vert_edges.ids.val.length := by
+          simp [alloc.vec.Vec.deref]
+        have hed : (alloc.vec.Vec.deref l.edge_facets.ids).val.length = l.edge_facets.ids.val.length := by
+          simp [alloc.vec.Vec.deref]
+        have hnefl : nrowsL l.edge_facets + 1 = l.edge_facets.start.val.length := by
+          have := hef.nonempty; unfold nrowsL
+          have : 0 < l.edge_facets.start.val.length := List.length_pos_iff.mpr this
+          omega
+        have hrowmem : ∀ x : U32, (rowU l.vert_edges.ids.val lo.val hi.val).count x = 1 →
+            x.val + 1 < l.edge_facets.start.val.length := by
+          intro x hx
+          have hm := mem_of_count_one hx
+          have := hve.ids x (List.mem_of_mem_drop (List.mem_of_mem_take hm))
+          omega
+        -- each failing branch: `o' = false` and `secP` fails
+        have hfalse : ∀ (k1 : Usize), k1.val = k.val + 1 → ¬ secP l lo.val hi.val slo.val shi.val sc →
+            (false = true ↔ ok0 = true ∧ ∀ t, slo.val ≤ t → t < k1.val →
+              secP l lo.val hi.val slo.val shi.val (l.vert_sectors.sec.val.getD t default)) := by
+          intro k1 hk1 hn
+          exact hfin false ⟨(fun h => by cases h), fun h => absurd h hn⟩ k1 hk1
+        split
+        · rename_i hc1
+          have hc1v : c0.val = 1 := by rw [hc1]; rfl
+          step as ⟨i1, hi1⟩
+          have hi1v : i1.val = sc.facet.val := by scalar_tac
+          split
+          · rename_i hfl
+            have hflv : sc.facet.val < nfacets l := by rw [← hnf, ← hi1v]; scalar_tac
+            step with count_in_spec (alloc.vec.Vec.deref l.vert_edges.ids) lo hi sc.a hlo (by rw [hvd]; exact hhi)
+              as ⟨ca, hca⟩
+            simp only [alloc.vec.Vec.deref, Slice.from_val] at hca
+            split
+            · rename_i hca1
+              have hcav : (rowU l.vert_edges.ids.val lo.val hi.val).count sc.a = 1 := by
+                rw [rowU, ← hca, hca1]; rfl
+              step with count_in_spec (alloc.vec.Vec.deref l.vert_edges.ids) lo hi sc.b hlo (by rw [hvd]; exact hhi)
+                as ⟨cb, hcb⟩
+              simp only [alloc.vec.Vec.deref, Slice.from_val] at hcb
+              split
+              · rename_i hcb1
+                have hcbv : (rowU l.vert_edges.ids.val lo.val hi.val).count sc.b = 1 := by
+                  have : cb = 1#usize := by simpa using hcb1
+                  rw [rowU, ← hcb, this]; rfl
+                have hra := hrowmem sc.a hcav
+                have hrb := hrowmem sc.b hcbv
+                step as ⟨ia, hia⟩
+                have hiav : ia.val = sc.a.val := by scalar_tac
+                step with row_bounds l.edge_facets _ hef ia (by rw [hiav]; exact hra) as ⟨ar, hal, hah, hal1, hal2⟩
+                obtain ⟨alo, ahi⟩ := ar
+                simp only at hal hah ⊢
+                step as ⟨ib, hib⟩
+                have hibv : ib.val = sc.b.val := by scalar_tac
+                step with row_bounds l.edge_facets _ hef ib (by rw [hibv]; exact hrb) as ⟨br, hbl, hbh, hbl1, hbl2⟩
+                obtain ⟨blo, bhi⟩ := br
+                simp only at hbl hbh ⊢
+                step with count_in_spec (alloc.vec.Vec.deref l.edge_facets.ids) alo ahi sc.facet
+                  (by rw [hal, hah]; exact hal1) (by rw [hed, hah]; exact hal2) as ⟨cfa, hcfa⟩
+                simp only [alloc.vec.Vec.deref, Slice.from_val] at hcfa
+                have hcfav : cfa.val = (rowU l.edge_facets.ids.val (stAt l.edge_facets sc.a.val)
+                    (stAt l.edge_facets (sc.a.val + 1))).count sc.facet := by
+                  rw [hcfa, rowU, hal, hah, hiav]
+                split
+                · rename_i hge1
+                  step with count_in_spec (alloc.vec.Vec.deref l.edge_facets.ids) blo bhi sc.facet
+                    (by rw [hbl, hbh]; exact hbl1) (by rw [hed, hbh]; exact hbl2) as ⟨cfb, hcfb⟩
+                  simp only [alloc.vec.Vec.deref, Slice.from_val] at hcfb
+                  have hcfbv : cfb.val = (rowU l.edge_facets.ids.val (stAt l.edge_facets sc.b.val)
+                      (stAt l.edge_facets (sc.b.val + 1))).count sc.facet := by
+                    rw [hcfb, rowU, hbl, hbh, hibv]
+                  step as ⟨k1, hk1⟩
+                  refine ⟨by scalar_tac, by scalar_tac, hfin _ ?_ k1 (by scalar_tac), by scalar_tac⟩
+                  simp only [decide_eq_true_eq]
+                  constructor
+                  · intro hge2
+                    exact ⟨by rw [← hc0v]; exact hc1v, hflv, hcav, hcbv, by rw [← hcfav]; scalar_tac,
+                      by rw [← hcfbv]; scalar_tac⟩
+                  · rintro ⟨_, _, _, _, _, h6⟩
+                    rw [← hcfbv] at h6; scalar_tac
+                · rename_i hge1
+                  step as ⟨k1, hk1⟩
+                  refine ⟨by scalar_tac, by scalar_tac, hfalse k1 (by scalar_tac) ?_, by scalar_tac⟩
+                  rintro ⟨_, _, _, _, h5, _⟩
+                  rw [← hcfav] at h5; exact hge1 (by scalar_tac)
+              · rename_i hcb1
+                step as ⟨k1, hk1⟩
+                refine ⟨by scalar_tac, by scalar_tac, ?_, by scalar_tac⟩
+                have hcbf : ¬ cb = 1#usize := by simpa using hcb1
+                refine hfin _ ⟨fun h => absurd h hcb1, fun hp => ?_⟩ k1 (by scalar_tac)
+                exfalso
+                apply hcbf; have := hp.2.2.2.1; rw [rowU, ← hcb] at this
+                apply UScalar.eq_of_val_eq; rw [this]; rfl
+            · rename_i hca1
+              try simp only [Std.bind_ok]
+              try dsimp only
+              try simp only [Std.bind_ok, Bool.false_eq_true, ite_false]
+              step as ⟨k1, hk1⟩
+              refine ⟨by scalar_tac, by scalar_tac, hfalse k1 (by scalar_tac) ?_, by scalar_tac⟩
+              rintro ⟨_, _, h3, _⟩
+              apply hca1; rw [rowU, ← hca] at h3; apply UScalar.eq_of_val_eq; rw [h3]; rfl
+          · rename_i hfl
+            try simp only [Std.bind_ok]
+            try dsimp only
+            try simp only [Std.bind_ok, Bool.false_eq_true, ite_false]
+            step as ⟨k1, hk1⟩
+            refine ⟨by scalar_tac, by scalar_tac, hfalse k1 (by scalar_tac) ?_, by scalar_tac⟩
+            rintro ⟨_, h2, _⟩
+            apply hfl; rw [← hnf] at h2; scalar_tac
+        · rename_i hc1
+          simp only [Std.bind_ok, uncurry, Bool.false_eq_true, ite_false]
+          step as ⟨k1, hk1⟩
+          refine ⟨by scalar_tac, by scalar_tac, hfalse k1 (by scalar_tac) ?_, by scalar_tac⟩
+          rintro ⟨h1, _⟩
+          apply hc1; apply UScalar.eq_of_val_eq; rw [hc0v, h1]; rfl
+      · rename_i hge
+        simp only [WP.spec_ok]
+        have : k.val = shi.val := by scalar_tac
+        simp only [this] at ho; exact ho
+    · rename_i hof
+      simp only [WP.spec_ok]
+      have : o = false := by simpa using hof
+      rw [this] at ho ⊢
+      constructor
+      · intro h; cases h
+      · intro h2; exfalso
+        have := ho.mpr ⟨h2.1, fun a h1 ha => h2.2 a h1 (by omega)⟩
+        cases this
+  · exact ⟨hj.1, hj.2, h⟩
+
 end inc
 
 end forge_bool_core
