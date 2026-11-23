@@ -328,6 +328,8 @@ pub(crate) fn cylinders_coincident(c: &Cylinder, d: &Cylinder) -> bool {
 
 /// Parallel axes give lines (or the same cylinder), equal ones with crossing axes two
 /// ellipses; anything else is a quartic space curve, left to the general path.
+// (out of line, as when `coincident` called it too: folded into its one caller it cost that more)
+#[inline(never)]
 fn cylinder_cylinder(c: &Cylinder, d: &Cylinder) -> SurfaceSurface {
     let a = c.frame.z();
     if a.cross(d.frame.z()).length() > tol::ANGULAR {
