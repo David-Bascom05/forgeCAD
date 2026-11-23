@@ -21,14 +21,13 @@
 //!    rounded once from their exact points, edges as straight runs, loops walked round each face.
 
 use crate::boolean::{BoolError, Op};
-use forge_bool_core::row::{row_get, row_set};
-use forge_bool_core::{
-    self as core, BodyId, CellId, FaceId as CFace, Ledger, Outcome, Refusal, Row, Rule, Sgn,
-};
+use crate::decide_once_row as row;
+use forge_bool_core::{self as core, BodyId, CellId, FaceId as CFace, Ledger, Outcome, Refusal, Rule, Sgn};
 use forge_geom::{Curve, Line, Surface};
 use forge_math::exact::{Dy, DyPlane, DyV3, HPoint, meet3};
 use forge_math::{Interval, Point3};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
+use row::{Row, row_get, row_set};
 use std::cell::RefCell;
 use std::hash::{BuildHasherDefault, Hasher};
 
@@ -1477,14 +1476,10 @@ impl Pts {
 /// `None` (the exact test decides). The f64 points are within a few ulps of the exact ones.
 fn crosses_f(q: [f64; 3], a: [f64; 3], b: [f64; 3], s: usize, t: usize) -> Option<bool> {
     const E: f64 = 1e-12;
-    let scale = 1.0
-        + q[s]
-            .abs()
-            .max(q[t].abs())
-            .max(a[s].abs())
-            .max(a[t].abs())
-            .max(b[s].abs())
-            .max(b[t].abs());
+    // (every coordinate of the three points, the dropped axis too: `Pts::pf`'s bound is relative
+    // to a point's largest coordinate)
+    let m3 = |p: [f64; 3]| p[0].abs().max(p[1].abs()).max(p[2].abs());
+    let scale = 1.0 + m3(q).max(m3(a)).max(m3(b));
     let above = |x: f64| -> Option<bool> {
         let d = x - q[t];
         if d.abs() > E * scale { Some(d > 0.0) } else { None }
@@ -1708,7 +1703,7 @@ fn build_ledger(
     // a cell of the open region: strictly inside every wall (as masks)
     let (mut wpos, mut wneg, mut wall_mask) = (0u64, 0u64, 0u64);
     for (&w, &s) in cls.walls.iter().zip(&cls.wall_in) {
-        let b = core::row::bit(w as usize);
+        let b = row::bit(w as usize);
         wall_mask |= b;
         match s {
             Sgn::Pos => wpos |= b,
@@ -1929,8 +1924,12 @@ fn build_ledger(
         nb,
         face_body: fs.iter().map(|f| BodyId(f.body as u32)).collect(),
         face_class: cls.of_face.clone(),
-        width: cls.planes.len() as u32,
-        cells: tab.cells.clone(),
+        // (the core's ledger holds sign lists; the bridge's rows unpacked once here)
+        cells: tab
+            .cells
+            .iter()
+            .map(|&r| row::row_signs(r, cls.planes.len()))
+            .collect(),
         pieces: pieces.iter().map(|&(f, c)| (CellId(c), CFace(f))).collect(),
         inside: Vec::new(),
         edges: edges.into_iter().map(CellId).collect(),
@@ -1981,21 +1980,18 @@ fn witness_point(b: &Built, cls: &Classes, t: u32) -> HPoint {
 /// range, distinct edge ids, and the counts the core's u32 ids and usize sizes can hold.
 fn ledger_wf(l: &Ledger) -> bool {
     let n = l.cells.len();
-    let distinct = |xs: Vec<&core::Row>| {
-        let mut xs: Vec<(u64, u64)> = xs.iter().map(|r| (r.pos, r.neg)).collect();
-        xs.sort_unstable();
+    let distinct = |xs: Vec<&[Sgn]>| {
+        let mut xs = xs;
+        xs.sort();
         xs.windows(2).all(|w| w[0] != w[1])
     };
     let mut es: Vec<u32> = l.edges.iter().map(|e| e.0).collect();
     es.sort_unstable();
     let total = n as u128 + 2 * l.pieces.len() as u128 + 1;
-    let wmask = core::row::width_mask(l.width as usize);
+    let w = l.cells.first().map_or(0, |c| c.len());
     l.nb > 0
-        && l.width <= core::row::MAX_WIDTH
-        && l.cells
-            .iter()
-            .all(|r| r.pos & r.neg == 0 && (r.pos | r.neg) & !wmask == 0)
-        && distinct(l.cells.iter().collect())
+        && l.cells.iter().all(|c| c.len() == w)
+        && distinct(l.cells.iter().map(|c| &c[..]).collect())
         && l.pieces.iter().all(|(c, _)| (c.0 as usize) < n)
         && l.inside.iter().all(|(c, _)| (c.0 as usize) < n)
         && l.edges.iter().all(|c| (c.0 as usize) < n)
@@ -2043,7 +2039,7 @@ fn fill(bodies: &[&Body], rule: &Rule) -> Result<Filled, Skip> {
         add_walls(&mut cls, lo, hi);
     }
     // (rows hold 64 classes: past that the old path, counted)
-    if cls.planes.len() > core::row::MAX_WIDTH as usize {
+    if cls.planes.len() > row::MAX_WIDTH as usize {
         SKIP_WIDE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         return Err(Skip::Wide);
     }
@@ -2336,11 +2332,6 @@ fn plan_of(bodies: &[&Body], rule: &Rule) -> Result<Option<Plan>, BoolError> {
         write(&w, out).unwrap_or_else(|| panic!("decide-once: the result's segments do not close into loops"))
     };
     match outcome {
-        // (more classes than a row holds: the old path, counted)
-        Outcome::Skip(_) => {
-            SKIP_WIDE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            Ok(None)
-        }
         Outcome::Empty => Ok(Some(written(None))),
         Outcome::Refused(Refusal::ZeroThickness(c)) => Err(BoolError::ZeroThickness {
             at: cell_point(&built, c.0),
@@ -2363,10 +2354,8 @@ fn plan_of(bodies: &[&Body], rule: &Rule) -> Result<Option<Plan>, BoolError> {
 fn why_split(l: &Ledger) -> Option<String> {
     let mut seen: HashMap<(u32, u32), u32> = HashMap::default();
     for &(c, f) in &l.pieces {
-        let x = l.cells[c.0 as usize];
-        let zeros: Vec<usize> = (0..l.width as usize)
-            .filter(|&k| core::row::row_get(x, k) == Sgn::Zero)
-            .collect();
+        let x = &l.cells[c.0 as usize];
+        let zeros: Vec<usize> = (0..x.len()).filter(|&k| x[k] == Sgn::Zero).collect();
         if zeros.len() != 1 {
             return Some(format!(
                 "piece of face {} has zeros {zeros:?}, face class {}",
