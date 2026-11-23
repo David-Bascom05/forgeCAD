@@ -49,8 +49,13 @@ theorem rel_mult {zs : Bool} {r : ℚ} (hm : Mult r (-1074))
     rw [(hrep zs).2, sub_self, abs_zero]; positivity
 
 /-- `u = 2⁻⁵³`, `η = 2⁻¹⁰⁷⁵` over ℚ. -/
-abbrev uq : ℚ := 2 ^ (-53 : ℤ)
-abbrev ηq : ℚ := 2 ^ (-1075 : ℤ)
+irreducible_def uq : ℚ := 2 ^ (-53 : ℤ)
+irreducible_def ηq : ℚ := 2 ^ (-1075 : ℤ)
+
+theorem uq_pos : 0 < uq := by rw [uq_def]; positivity
+theorem ηq_pos : 0 < ηq := by rw [ηq_def]; positivity
+theorem uq_le1 : uq ≤ 1 := by rw [uq_def]; exact zpow_le_one_of_nonpos₀ (by norm_num) (by norm_num)
+theorem ηq_le1 : ηq ≤ 1 := by rw [ηq_def]; exact zpow_le_one_of_nonpos₀ (by norm_num) (by norm_num)
 
 theorem fin_of_le {zs : Bool} {r : ℚ} (h : |r| ≤ 2 ^ (1023 : ℤ)) :
     (IEEE754.round IEEE754.binary64 zs r).isFinite :=
@@ -69,7 +74,8 @@ theorem fin_of_le8 {zs : Bool} {r : ℚ} (h : |r| ≤ 8 * Kmax) :
   rw [this, ← Kmax_def]; exact h
 
 theorem err_le {zs : Bool} {r : ℚ} (h : (IEEE754.round IEEE754.binary64 zs r).isFinite) :
-    |(IEEE754.round IEEE754.binary64 zs r).val - r| ≤ uq * |r| + ηq := F64.Ops.round_err' h
+    |(IEEE754.round IEEE754.binary64 zs r).val - r| ≤ uq * |r| + ηq := by
+  rw [uq_def, ηq_def]; exact F64.Ops.round_err' h
 
 /-- **Two-sum on bounded doubles**: exact, finite, its two parts' magnitudes within
 `(1 + 2u)(|a| + |b|) + 2η`, and on any grid `a` and `b` share. -/
@@ -82,9 +88,9 @@ theorem twoSum_good {a b : _root_.F64} (ha : a.isFinite) (hb : b.isFinite)
         Mult (twoSum a b).1.val L ∧ Mult (twoSum a b).2.val L) := by
   have hab : |a.val + b.val| ≤ |a.val| + |b.val| := abs_add_le _ _
   have h1 := Kmax_ge
-  have hu : uq ≤ 1 := zpow_le_one_of_nonpos₀ (by norm_num) (by norm_num)
-  have hη : ηq ≤ 1 := zpow_le_one_of_nonpos₀ (by norm_num) (by norm_num)
-  have hu0 : 0 ≤ uq := by positivity
+  have hu : uq ≤ 1 := uq_le1
+  have hη : ηq ≤ 1 := ηq_le1
+  have hu0 : 0 ≤ uq := uq_pos.le
   have hs : (FP.add a b).isFinite := by
     rw [add_eq_round ha hb]; exact fin_of_le8 (by linarith only [hab, hm, h1])
   have es : |(FP.add a b).val - (a.val + b.val)| ≤ uq * |a.val + b.val| + ηq := by
@@ -169,8 +175,8 @@ theorem fold_grow_good (L : ℤ) (hL : -1074 ≤ L) :
       have hx := hr x (by simp)
       have hxs : ∀ y ∈ xs, Good L y := fun y h => hr y (by simp [h])
       simp only [List.length_cons, Nat.cast_add, Nat.cast_one, massL_cons, esumL_cons] at hk hB ⊢
-      have hu0 : (0 : ℚ) ≤ uq := by positivity
-      have hη0 : (0 : ℚ) ≤ ηq := by positivity
+      have hu0 : (0 : ℚ) ≤ uq := uq_pos.le
+      have hη0 : (0 : ℚ) ≤ ηq := ηq_pos.le
       have hm0 := massL_nonneg out
       have hm1 := massL_nonneg xs
       have hT0 : 0 ≤ |q.val| + massL out + (|x.val| + massL xs) := by positivity
@@ -337,20 +343,28 @@ theorem le_succ_mul {t r : ℚ} (ht : 0 ≤ t) (hr : 0 ≤ r) : t ≤ t * (r + 1
 /-- A sequence of grows: each of `xs` grown into `out` in turn. -/
 def growMany (out xs : List _root_.F64) : List _root_.F64 := xs.foldl growL out
 
-theorem growMany_good (L : ℤ) (hL : -1074 ≤ L) (N : ℕ) :
-    ∀ (xs out : List _root_.F64), (∀ x ∈ out, Good L x) → (∀ x ∈ xs, Good L x) →
+/-- A property of expansions preserved by every grow made under `growL_good`'s premises (the
+expansion theory's invariant; `True` when only the sums matter). -/
+def GrowInv (L : ℤ) (P : List _root_.F64 → Prop) : Prop :=
+  ∀ e b, P e → (∀ x ∈ e, Good L x) → Good L b → (e.length : ℚ) * (8 * uq) ≤ 1 →
+    (|b.val| + massL e) * (1 + 4 * e.length * uq) + 3 * e.length * ηq ≤ Kmax → P (growL e b)
+
+theorem growMany_good (L : ℤ) (hL : -1074 ≤ L) (N : ℕ) (P : List _root_.F64 → Prop)
+    (hP : GrowInv L P) :
+    ∀ (xs out : List _root_.F64), P out → (∀ x ∈ out, Good L x) → (∀ x ∈ xs, Good L x) →
       out.length + xs.length ≤ N → (N : ℚ) * xs.length * (8 * uq) ≤ 1 →
       (massL out + massL xs) * (1 + 8 * N * xs.length * uq) + 6 * N * xs.length * ηq ≤ Kmax →
+      P (growMany out xs) ∧
       (∀ x ∈ growMany out xs, Good L x) ∧ esumL (growMany out xs) = esumL out + esumL xs ∧
         massL (growMany out xs) ≤
           (massL out + massL xs) * (1 + 8 * N * xs.length * uq) + 6 * N * xs.length * ηq
-  | [], out, ho, _, _, _, _ => by simp [growMany]; exact ho
-  | x :: rest, out, ho, hx, hl, hk, hB => by
+  | [], out, hPo, ho, _, _, _, _ => by simp [growMany]; exact ⟨hPo, ho⟩
+  | x :: rest, out, hPo, ho, hx, hl, hk, hB => by
       simp only [List.length_cons, Nat.cast_add, Nat.cast_one, massL_cons, esumL_cons] at hl hk hB ⊢
       have hxg := hx x (by simp)
       have hrest : ∀ y ∈ rest, Good L y := fun y h => hx y (by simp [h])
-      have hu0 : (0 : ℚ) ≤ uq := by positivity
-      have hη0 : (0 : ℚ) ≤ ηq := by positivity
+      have hu0 : (0 : ℚ) ≤ uq := uq_pos.le
+      have hη0 : (0 : ℚ) ≤ ηq := ηq_pos.le
       have hN0 : (0 : ℚ) ≤ N := Nat.cast_nonneg N
       have hr0 : (0 : ℚ) ≤ rest.length := Nat.cast_nonneg _
       have hM0 := massL_nonneg out
@@ -426,9 +440,10 @@ theorem growMany_good (L : ℤ) (hL : -1074 ≤ L) (N : ℕ) :
           6 * N * rest.length * ηq ≤ Kmax := by
         have e : 6 * (N : ℚ) * (rest.length + 1) * ηq = 6 * N * rest.length * ηq + 6 * N * ηq := by ring
         linarith
-      obtain ⟨h1, h2, h3⟩ := growMany_good L hL N rest (growL out x) g1 hrest hlen hk' hB'
-      simp only [growMany, List.foldl_cons] at h1 h2 h3 ⊢
-      refine ⟨h1, by rw [h2, g2]; ring, ?_⟩
+      obtain ⟨h0, h1, h2, h3⟩ := growMany_good L hL N P hP rest (growL out x)
+        (hP out x hPo ho hxg hnu hB1) g1 hrest hlen hk' hB'
+      simp only [growMany, List.foldl_cons] at h0 h1 h2 h3 ⊢
+      refine ⟨h0, h1, by rw [h2, g2]; ring, ?_⟩
       have e : 6 * (N : ℚ) * (rest.length + 1) * ηq = 6 * N * rest.length * ηq + 6 * N * ηq := by ring
       linarith
 
@@ -517,5 +532,265 @@ theorem prodTerms_good {Le Lo : ℤ} (hΛ : -1074 ≤ Le + Lo) (e o : List _root
           (1 + 2 * uq) * (|a.val| * massL o) + (1 + 2 * uq) * (massL rest * massL o) := by ring
       have : 2 * ((rest.length : ℚ) + 1) * o.length * ηq = 2 * o.length * ηq + 2 * rest.length * o.length * ηq := by ring
       linarith
+
+/-! ## The expansion theory, as one named hypothesis -/
+
+/-- The sign of an exact value, as `exp_sign` writes it. -/
+def sgnQ (q : ℚ) : _root_.F64 :=
+  if 0 < q then F64.Ops.ofBits 4607182418800017408
+  else if q < 0 then F64.Ops.ofBits 13830554455654793216 else Z
+
+/-- **The expansion theory** (Shewchuk 1997), the one lemma this proof assumes, as a hypothesis
+(never an axiom), for verify/ieee754 to discharge: an invariant `P` of expansions (Shewchuk's:
+nonoverlapping, increasing magnitude), held by the empty expansion, kept by every
+Grow-Expansion with zero elimination made under `growL_good`'s premises, under which the sign
+of the last nonzero component is the sign of the exact sum. -/
+structure ExpansionTheory where
+  P : List _root_.F64 → Prop
+  nil : P []
+  grow : ∀ L, -1074 ≤ L → GrowInv L P
+  sign : ∀ e, P e → (∀ x ∈ e, x.isFinite) → signL e = sgnQ (esumL e)
+
+/-! ## The pieces' facts -/
+
+theorem comp_le_mass {l : List _root_.F64} {x : _root_.F64} (h : x ∈ l) : |x.val| ≤ massL l := by
+  induction l with
+  | nil => simp at h
+  | cons y ys ih =>
+      simp only [massL_cons]
+      rcases List.mem_cons.mp h with rfl | h
+      · have := massL_nonneg ys; linarith
+      · have := ih h; have := abs_nonneg y.val; linarith
+
+theorem ofL_eq (x : _root_.F64) : ofL x = growL [] x := by
+  unfold ofL growL; simp
+
+theorem ofL_good {L : ℤ} {x : _root_.F64} (hx : Good L x) :
+    (∀ y ∈ ofL x, Good L y) ∧ esumL (ofL x) = x.val ∧ massL (ofL x) = |x.val| ∧ (ofL x).length ≤ 1 := by
+  unfold ofL
+  split
+  · simp; exact hx
+  · rename_i h
+    have := eq_zero_val hx.1 (by simpa [F64.Ops.ne_def'] using h)
+    simp [this]
+
+theorem neg_good {L : ℤ} {x : _root_.F64} (hx : Good L x) : Good L (FP.neg x) :=
+  ⟨by simpa using hx.1, by rw [FP.val_neg]; exact mult_neg hx.2⟩
+
+theorem esumL_negL (e : List _root_.F64) : esumL (negL e) = -esumL e := by
+  induction e with
+  | nil => simp [negL]
+  | cons x xs ih => simp only [negL, List.map_cons, esumL_cons, FP.val_neg] at ih ⊢; rw [ih]; ring
+
+theorem massL_negL (e : List _root_.F64) : massL (negL e) = massL e := by
+  induction e with
+  | nil => simp [negL]
+  | cons x xs ih => simp only [negL, List.map_cons, massL_cons, FP.val_neg, abs_neg] at ih ⊢; rw [ih]
+
+theorem negL_good {L : ℤ} {e : List _root_.F64} (he : ∀ x ∈ e, Good L x) :
+    (∀ y ∈ negL e, Good L y) ∧ esumL (negL e) = -esumL e ∧ massL (negL e) = massL e ∧
+      (negL e).length = e.length := by
+  unfold negL
+  refine ⟨?_, esumL_negL e, massL_negL e, by simp⟩
+  intro y hy; simp at hy; obtain ⟨x, hx, rfl⟩ := hy; exact neg_good (he x hx)
+
+/-- `C0 = 2¹⁰⁰`, the inputs' bound, opaque. -/
+irreducible_def C0 : ℚ := 2 ^ (100 : ℤ)
+
+theorem C0_ge : 1 ≤ C0 := by rw [C0_def]; exact one_le_zpow₀ (by norm_num) (by norm_num)
+theorem C0_A : 4 * C0 ≤ Amax := by
+  rw [C0_def, Amax_def]
+  have : (4 : ℚ) = 2 ^ (2 : ℤ) := by norm_num
+  rw [this, ← two_zpow_add]; exact two_zpow_le (by norm_num)
+theorem C0_K : 1024 * (C0 * C0) ≤ Kmax := by
+  rw [C0_def, Kmax_def, ← two_zpow_add]
+  have : (1024 : ℚ) = 2 ^ (10 : ℤ) := by norm_num
+  rw [this, ← two_zpow_add]; exact two_zpow_le (by norm_num)
+theorem uq_small : uq ≤ 1 / 2 ^ 20 := by rw [uq_def]; norm_num
+theorem ηq_le_uq : ηq ≤ uq := by rw [ηq_def, uq_def]; exact zpow_le_zpow_right₀ (by norm_num) (by norm_num)
+theorem ηq_small : ηq ≤ 1 := ηq_le1
+
+/-- A crude grow budget: `M (1 + 8 N k u) + 6 N k η ≤ 2 M + 1` for `N, k ≤ 32`. -/
+theorem budget2 {M : ℚ} {N k : ℕ} (hM : 0 ≤ M) (hN : N ≤ 32) (hk : k ≤ 32) :
+    M * (1 + 8 * N * k * uq) + 6 * N * k * ηq ≤ 2 * M + 1 ∧ (N : ℚ) * k * (8 * uq) ≤ 1 := by
+  have hN' : (N : ℚ) ≤ 32 := by exact_mod_cast hN
+  have hk' : (k : ℚ) ≤ 32 := by exact_mod_cast hk
+  have h0 : (0 : ℚ) ≤ N := Nat.cast_nonneg _
+  have h1 : (0 : ℚ) ≤ k := Nat.cast_nonneg _
+  have hu := uq_small
+  have hu0 : (0 : ℚ) ≤ uq := uq_pos.le
+  have hη := ηq_small
+  have hη0 : (0 : ℚ) ≤ ηq := ηq_pos.le
+  have nk : (N : ℚ) * k ≤ 1024 := by nlinarith
+  have nk0 : (0 : ℚ) ≤ N * k := by positivity
+  have a : 8 * (N : ℚ) * k * uq ≤ 1 := by
+    have h2 : (N : ℚ) * k * uq ≤ 1024 * (1 / 2 ^ 20) := mul_le_mul nk hu hu0 (by norm_num)
+    have e : 8 * (N : ℚ) * k * uq = 8 * (N * k * uq) := by ring
+    have : (8 : ℚ) * (1024 * (1 / 2 ^ 20)) ≤ 1 := by norm_num
+    rw [e]; exact le_trans (mul_le_mul_of_nonneg_left h2 (by norm_num)) this
+  have b : 6 * (N : ℚ) * k * ηq ≤ 1 := by
+    have h3 : (N : ℚ) * k * ηq ≤ N * k * uq := mul_le_mul_of_nonneg_left ηq_le_uq nk0
+    have e : 6 * (N : ℚ) * k * ηq = 6 * (N * k * ηq) := by ring
+    have e2 : 8 * (N : ℚ) * k * uq = 8 * (N * k * uq) := by ring
+    rw [e2] at a; rw [e]
+    have : 6 * (N * k * ηq) ≤ 8 * (N * k * uq) := by
+      have := mul_le_mul_of_nonneg_left h3 (by norm_num : (0 : ℚ) ≤ 6)
+      have : (0 : ℚ) ≤ N * k * uq := by positivity
+      linarith
+    exact le_trans this a
+  refine ⟨?_, by have e : (N : ℚ) * k * (8 * uq) = 8 * N * k * uq := by ring
+                 rw [e]; exact a⟩
+  have := mul_le_mul_of_nonneg_left a hM
+  have e : M * (1 + 8 * N * k * uq) = M + M * (8 * N * k * uq) := by ring
+  rw [e]; linarith
+
+/-! ## `disc`'s exact branch on the models -/
+
+theorem growMany_len (out xs : List _root_.F64) : (growMany out xs).length ≤ out.length + xs.length := by
+  induction xs generalizing out with
+  | nil => simp [growMany]
+  | cons x xs ih =>
+      simp only [growMany, List.foldl_cons, List.length_cons] at ih ⊢
+      have := ih (growL out x); have := growL_len out x; omega
+
+theorem C0_sq : C0 ≤ C0 * C0 := by have := C0_ge; nlinarith
+theorem C0_16 : 16 ≤ C0 := by
+  rw [C0_def]; have : (16 : ℚ) = 2 ^ (4 : ℤ) := by norm_num
+  rw [this]; exact two_zpow_le (by norm_num)
+
+/-- A difference of two inputs as an expansion. -/
+theorem diff_facts {a b : _root_.F64} (ha : Good (-200) a ∧ |a.val| ≤ C0)
+    (hb : Good (-200) b ∧ |b.val| ≤ C0) :
+    let D := diffL a b
+    (∀ x ∈ D, Good (-200) x) ∧ esumL D = a.val - b.val ∧ massL D ≤ 3 * C0 ∧ D.length ≤ 2 := by
+  intro D
+  obtain ⟨o1, o2, o3, o4⟩ := ofL_good ha.1
+  have hC := C0_ge
+  have hK := C0_K
+  have hs := C0_sq
+  have hu := uq_small
+  have hu0 : (0 : ℚ) ≤ uq := uq_pos.le
+  have hη := ηq_small
+  have hη0 : (0 : ℚ) ≤ ηq := ηq_pos.le
+  have hl : ((ofL a).length : ℚ) ≤ 1 := by exact_mod_cast o4
+  have hl0 : (0 : ℚ) ≤ (ofL a).length := Nat.cast_nonneg _
+  have hm : |(FP.neg b).val| + massL (ofL a) ≤ 2 * C0 := by
+    rw [FP.val_neg, abs_neg, o3]; linarith [ha.2, hb.2]
+  have hm0 : 0 ≤ |(FP.neg b).val| + massL (ofL a) := add_nonneg (abs_nonneg _) (massL_nonneg _)
+  have h16 := C0_16
+  have f1 : (1 + 4 * ((ofL a).length : ℚ) * uq) ≤ 1 + 4 * (1 / 2 ^ 20) := by nlinarith
+  have f2 : 3 * ((ofL a).length : ℚ) * ηq ≤ 3 := by nlinarith
+  have bnd : (|(FP.neg b).val| + massL (ofL a)) * (1 + 4 * (ofL a).length * uq) +
+      3 * (ofL a).length * ηq ≤ 3 * C0 := by
+    have := mul_le_mul hm f1 (by positivity) (by positivity)
+    have : 2 * C0 * (1 + 4 * (1 / 2 ^ 20)) + 3 ≤ 3 * C0 := by
+      have e : 2 * C0 * (1 + 4 * (1 / 2 ^ 20)) = 2 * C0 + C0 * (8 / 2 ^ 20) := by ring
+      have : C0 * (8 / 2 ^ 20) ≤ C0 * (1 / 4) := mul_le_mul_of_nonneg_left (by norm_num) (by linarith)
+      linarith
+    linarith
+  obtain ⟨g1, g2, g3⟩ := growL_good (-200) (by norm_num) (ofL a) (FP.neg b) o1 (neg_good hb.1)
+    (by nlinarith) (by linarith)
+  simp only [D, diffL]
+  refine ⟨g1, ?_, by linarith, ?_⟩
+  · rw [g2, o2, FP.val_neg]; ring
+  · have := growL_len (ofL a) (FP.neg b); omega
+
+/-- A product of two such expansions. -/
+theorem mul_facts (Tth : ExpansionTheory) {D E : List _root_.F64} (hD : ∀ x ∈ D, Good (-200) x)
+    (hE : ∀ x ∈ E, Good (-200) x) (hmD : massL D ≤ 3 * C0) (hmE : massL E ≤ 3 * C0)
+    (hlD : D.length ≤ 2) (hlE : E.length ≤ 2) :
+    let M := mulL D E
+    Tth.P M ∧ (∀ x ∈ M, Good (-400) x) ∧ esumL M = esumL D * esumL E ∧
+      massL M ≤ 21 * (C0 * C0) + 1 ∧ M.length ≤ 8 := by
+  intro M
+  have hC := C0_ge
+  have hA := C0_A
+  have hu := uq_small
+  have hu0 : (0 : ℚ) ≤ uq := uq_pos.le
+  have hη := ηq_small
+  have hη0 : (0 : ℚ) ≤ ηq := ηq_pos.le
+  have cD : ∀ x ∈ D, Good (-200) x ∧ |x.val| ≤ Amax := fun x h =>
+    ⟨hD x h, by have := comp_le_mass h; linarith⟩
+  have cE : ∀ x ∈ E, Good (-200) x ∧ |x.val| ≤ Amax := fun x h =>
+    ⟨hE x h, by have := comp_le_mass h; linarith⟩
+  obtain ⟨t1, t2, t3⟩ := prodTerms_good (Le := -200) (Lo := -200) (by norm_num) D E cD cE
+  have hlen : (prodTerms D E).length ≤ 8 := by
+    rw [prodTerms_len]; have := Nat.mul_le_mul (Nat.mul_le_mul_left 2 hlD) hlE; omega
+  have hmD0 := massL_nonneg D
+  have hmE0 := massL_nonneg E
+  have hmT : massL (prodTerms D E) ≤ 10 * (C0 * C0) := by
+    have a : massL D * massL E ≤ 3 * C0 * (3 * C0) := mul_le_mul hmD hmE hmE0 (by positivity)
+    have b : (D.length : ℚ) * E.length ≤ 4 := by
+      have : (D.length : ℚ) ≤ 2 := by exact_mod_cast hlD
+      have : (E.length : ℚ) ≤ 2 := by exact_mod_cast hlE
+      have : (0 : ℚ) ≤ E.length := Nat.cast_nonneg _
+      nlinarith
+    have hs := C0_sq
+    have : (1 + 2 * uq) * (massL D * massL E) ≤ (1 + 2 * (1 / 2 ^ 20)) * (3 * C0 * (3 * C0)) :=
+      mul_le_mul (by linarith) a (by positivity) (by positivity)
+    have : 2 * (D.length : ℚ) * E.length * ηq ≤ 8 := by
+      have : (0 : ℚ) ≤ D.length * E.length := by positivity
+      have := mul_le_mul b hη hη0 (by norm_num)
+      nlinarith
+    have h16 := C0_16
+    have e : (1 + 2 * (1 / 2 ^ 20 : ℚ)) * (3 * C0 * (3 * C0)) = 9 * (C0 * C0) + (C0 * C0) * (18 / 2 ^ 20) := by ring
+    have : (C0 * C0) * (18 / 2 ^ 20) + 8 ≤ C0 * C0 := by
+      have : (256 : ℚ) ≤ C0 * C0 := by nlinarith
+      have : (C0 * C0) * (18 / 2 ^ 20) ≤ (C0 * C0) * (1 / 2) := mul_le_mul_of_nonneg_left (by norm_num) (by positivity)
+      linarith
+    linarith
+  obtain ⟨bA, bB⟩ := budget2 (M := 0 + massL (prodTerms D E)) (N := 8) (k := (prodTerms D E).length)
+    (by have := massL_nonneg (prodTerms D E); linarith) (by norm_num) (by omega)
+  have hK := C0_K
+  obtain ⟨m0, m1, m2, m3⟩ := growMany_good (-400) (by norm_num) 8 Tth.P (Tth.grow (-400) (by norm_num))
+    (prodTerms D E) [] Tth.nil (by simp) (by simpa using t1) (by simp; omega) (by simpa using bB)
+    (by simp only [massL_nil] at bA ⊢; nlinarith)
+  simp only [M]; rw [mulL_eq]
+  refine ⟨m0, m1, by rw [m2, t2]; simp, ?_, ?_⟩
+  · simp only [massL_nil, zero_add] at m3 bA; have := mul_self_nonneg C0; linarith
+  · have := growMany_len [] (prodTerms D E); simp at this; omega
+
+/-- A sum of two such expansions (the first carrying the invariant). -/
+theorem add_facts (Tth : ExpansionTheory) {A B : List _root_.F64} (hPA : Tth.P A)
+    (hA : ∀ x ∈ A, Good (-400) x) (hB : ∀ x ∈ B, Good (-400) x) {X : ℚ}
+    (hm : massL A + massL B ≤ X) (hX : 2 * X + 1 ≤ Kmax) (hl : A.length + B.length ≤ 32) :
+    Tth.P (addL A B) ∧ (∀ x ∈ addL A B, Good (-400) x) ∧ esumL (addL A B) = esumL A + esumL B ∧
+      massL (addL A B) ≤ 2 * X + 1 ∧ (addL A B).length ≤ A.length + B.length := by
+  have h0 : 0 ≤ massL A + massL B := by have := massL_nonneg A; have := massL_nonneg B; linarith
+  obtain ⟨bA, bB⟩ := budget2 (M := massL A + massL B) (N := A.length + B.length) (k := B.length) h0
+    hl (by omega)
+  obtain ⟨m0, m1, m2, m3⟩ := growMany_good (-400) (by norm_num) (A.length + B.length) Tth.P
+    (Tth.grow (-400) (by norm_num)) B A hPA hA hB le_rfl (by exact_mod_cast bB) (by
+      have : (↑(A.length + B.length) : ℚ) = (A.length : ℚ) + B.length := by push_cast; ring
+      linarith)
+  have e : addL A B = growMany A B := rfl
+  rw [e]
+  refine ⟨m0, m1, m2, by linarith, growMany_len A B⟩
+
+/-- **`disc`'s exact branch**: on the domain (inputs on the `2⁻²⁰⁰` grid, within `2¹⁰⁰`), with
+the expansion theory, the expansion `disc` forms has the sign of `|p − c|² − r²`. -/
+theorem disc_model (Tth : ExpansionTheory) (px py cx cy r : _root_.F64)
+    (hpx : Good (-200) px ∧ |px.val| ≤ C0) (hpy : Good (-200) py ∧ |py.val| ≤ C0)
+    (hcx : Good (-200) cx ∧ |cx.val| ≤ C0) (hcy : Good (-200) cy ∧ |cy.val| ≤ C0)
+    (hr : Good (-200) r ∧ |r.val| ≤ C0) :
+    signL (addL (addL (mulL (diffL px cx) (diffL px cx)) (mulL (diffL py cy) (diffL py cy)))
+      (negL (mulL (ofL r) (ofL r)))) =
+      sgnQ ((px.val - cx.val) ^ 2 + (py.val - cy.val) ^ 2 - r.val ^ 2) := by
+  obtain ⟨x1, x2, x3, x4⟩ := diff_facts hpx hcx
+  obtain ⟨y1, y2, y3, y4⟩ := diff_facts hpy hcy
+  obtain ⟨r1, r2, r3, r4⟩ := ofL_good hr.1
+  have hC := C0_ge
+  have hK := C0_K
+  obtain ⟨a0, a1, a2, a3, a4⟩ := mul_facts Tth x1 x1 x3 x3 x4 x4
+  obtain ⟨b0, b1, b2, b3, b4⟩ := mul_facts Tth y1 y1 y3 y3 y4 y4
+  obtain ⟨c0, c1, c2, c3, c4⟩ := mul_facts Tth r1 r1 (by rw [r3]; linarith [hr.2])
+    (by rw [r3]; linarith [hr.2]) (by omega) (by omega)
+  obtain ⟨n1, n2, n3, n4⟩ := negL_good c1
+  obtain ⟨s0, s1, s2, s3, s4⟩ := add_facts Tth a0 a1 b1 (X := 42 * (C0 * C0) + 2) (by linarith)
+    (by nlinarith) (by omega)
+  obtain ⟨t0, t1, t2, t3, t4⟩ := add_facts Tth s0 s1 n1 (X := 2 * (42 * (C0 * C0) + 2) + 1 + (21 * (C0 * C0) + 1))
+    (by rw [n3]; linarith) (by nlinarith) (by omega)
+  rw [Tth.sign _ t0 (fun x h => (t1 x h).1), t2, s2, n2, a2, b2, c2, x2, y2, r2]
+  congr 1; ring
 
 end forge_sheet_core

@@ -12,6 +12,7 @@ import ForgeSheetCore.ZoneErr
 import ForgeSheetCore.RefineZone
 import ForgeSheetCore.RefineExact
 import ForgeSheetCore.ExactModel
+import ForgeSheetCore.RefineDisc
 
 /-! Only the standard axioms: each listed theorem about the translated Rust rests on `propext`,
 `Classical.choice` and `Quot.sound` alone (a `sorry` or `native_decide` fails the build). -/
@@ -55,3 +56,6 @@ elab "#standard_axioms " ids:ident* : command => do
   forge_sheet_core.round_mult forge_sheet_core.rel_mult forge_sheet_core.twoSum_good
   forge_sheet_core.fold_grow_good forge_sheet_core.twoProduct_good forge_sheet_core.growL_good
   forge_sheet_core.growMany_good forge_sheet_core.mulL_eq forge_sheet_core.prodTerms_good
+  forge_sheet_core.diff_facts forge_sheet_core.mul_facts forge_sheet_core.add_facts
+  forge_sheet_core.disc_model forge_sheet_core.FILTER_eq forge_sheet_core.disc_filter
+  forge_sheet_core.disc_spec

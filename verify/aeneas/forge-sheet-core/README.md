@@ -46,6 +46,18 @@ Proven (no `sorry`; `lean/ForgeSheetCore/Axioms.lean` checks the standard axioms
   finite, is within `ptwE` of the exact `o + A (R cos φ, R sin φ, −σ y)`, the local point's errors
   (`locE`: the angle's rounding, dmath's `2⁻⁵²`, each product's) carried through the axes.
   Composed from `mul_approx`/`add_approx`, one forward-error rule per operation.
+- `disc_spec` (RefineDisc.lean; models RefineExact.lean, ExactModel.lean): exact.rs `disc`, the
+  shipped `sign(|p − c|² − r²)`. On the domain (every input a multiple of `2⁻²⁰⁰`, at most `2¹⁰⁰`
+  in magnitude) it returns `+1`, `−1` or `+0` as the exact value of the input doubles is positive,
+  negative or zero. The filter branch is proved outright (`disc_filter`: on the domain every
+  rounding lands on the `2⁻¹⁰⁷⁴` grid, so is relatively accurate, `rel_mult`, which is
+  Filter16.lean's model). The exact branch is the refinement specs (`exp_*_spec`: the Rust loops
+  are the list models `diffL`, `mulL`, `addL`, `negL`, `signL`) and `disc_model`: every two-sum
+  and two-product the expansions make is exact, finite and on the grid, so their sum is the exact
+  value. The one assumption is the sign theorem of the expansion theory (Shewchuk 1997: the
+  invariant kept by Grow-Expansion with zero elimination, under which the top nonzero component
+  has the sum's sign), carried as the hypothesis `Tth : ExpansionTheory`, never an axiom, for
+  verify/ieee754 to discharge. `line_gap` is next, on the same pieces.
 - under them: the least-root union–find (`new_spec`, `find_spec`, `union_spec`), ported from the
   decide-once core's proofs (research/kernel-audit/decide-once/aeneas: the same `union_find.rs`),
   with every `+= 1` (overflow-checked in the canonical translation) shown not to overflow.
