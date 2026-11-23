@@ -46,6 +46,7 @@ pub mod settings;
 pub mod sheet;
 mod sheetui;
 pub mod sketching;
+pub mod sktext;
 pub mod theme;
 pub mod thermo;
 pub mod thermo_material;
@@ -757,6 +758,7 @@ impl Shell {
         self.build_banner(ui);
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
+        self.sktext_ui(&ctx);
         self.mode_bar(&ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);

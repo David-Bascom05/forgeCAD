@@ -26,6 +26,12 @@ pub struct More {
     pub construction: bool,
     /// Text placed: the point it stands on and what it says, for Emboss after the sketch.
     pub texts: Vec<(String, String)>,
+    /// The sketch's own texts (`text(..)` in the block): opened ones and new ones.
+    pub sktexts: Vec<crate::shell::sktext::SkText>,
+    /// Opened texts deleted, by name: taken out at Finish.
+    pub sktexts_gone: Vec<String>,
+    /// The text whose dialog is up.
+    pub sktext_open: Option<usize>,
     /// How many copies a pattern makes, sides a polygon has (unset: Inventor's default).
     pub count: usize,
     /// A corner fillet's radius or chamfer's leg (unset: a fifth of the shorter side).
@@ -1137,6 +1143,23 @@ impl SketchMode {
                     self.add_all(rows);
                 }
             }
+            SkTool::SketchText => {
+                // a click on a text's start opens it again
+                let near = |t: &crate::shell::sktext::SkText| {
+                    let (dx, dy) = (t.x - at.0, t.y - at.1);
+                    dx * dx + dy * dy <= 4.0 * reach * reach
+                };
+                if let Some(k) = self.more.sktexts.iter().position(near) {
+                    self.more.sktext_open = Some(k);
+                    return true;
+                }
+                let (_, q) = self.word(at, reach);
+                // an em a person can read at this zoom, to the millimetre
+                let size = (reach * 4.0).round().max(1.0);
+                let t = crate::shell::sktext::SkText::new(tidy(q.0), tidy(q.1), size);
+                self.more.sktexts.push(t);
+                self.more.sktext_open = Some(self.more.sktexts.len() - 1);
+            }
             SkTool::Text => {
                 let (w, q) = self.word(at, reach);
                 let p = match w.named() {
@@ -2064,6 +2087,7 @@ impl SkTool {
             SkTool::SkFillet => "Click near a corner where two lines meet",
             SkTool::SkChamfer => "Click near a corner where two lines meet",
             SkTool::Text => "Click where the text starts; Emboss takes it after the sketch",
+            SkTool::SketchText => "Click where the text's baseline starts; its words and style in the dialog",
             SkTool::Trim => "Click the piece of a line to trim away",
             SkTool::Extend => "Click near the end of a line to extend",
             SkTool::Split => "Click a line where it should split",

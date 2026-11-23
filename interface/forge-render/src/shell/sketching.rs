@@ -59,7 +59,10 @@ pub enum SkTool {
     EllipseBox,
     SkFillet,
     SkChamfer,
+    /// A point where Emboss's 3D text starts, after the sketch.
     Text,
+    /// Text in the sketch itself (`text(..)`): its baseline starts at the click.
+    SketchText,
     Move,
     Stretch,
     Copy,

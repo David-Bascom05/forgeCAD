@@ -60,7 +60,8 @@ sketch,Circumscribed Polygon,"A regular polygon by its centre and the middle of 
 sketch,Point,"A sketch point: a hole centre, or something to dimension to",sketch_point
 sketch,Fillet,Round the corner where two lines meet,
 sketch,Chamfer,Bevel the corner where two lines meet,
-sketch,Text,Place text for Emboss to raise or cut after the sketch,
+sketch,Text,"Text in the sketch: click where its baseline starts, then its words, font, size, style, alignment and angle; Extrude raises or cuts it",
+sketch,Emboss Text,Place a point where Emboss's 3D text starts after the sketch,
 sketch,Project Geometry,Bring edges or faces of the part onto the sketch plane as fixed geometry,sketch_project
 sketch,Move,"Move chosen geometry from a base point to another",
 sketch,Copy,"Copy chosen geometry from a base point to another",

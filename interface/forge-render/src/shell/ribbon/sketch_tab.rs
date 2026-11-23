@@ -166,7 +166,14 @@ pub(super) fn groups(s: &Shell) -> Vec<SkGroup> {
                         t("Chamfer", "skchamfer", SkTool::SkChamfer),
                     ],
                 ),
-                one(t("Text", "sktext", SkTool::Text)),
+                split(
+                    "Text",
+                    None,
+                    vec![
+                        t("Text", "sktext", SkTool::SketchText),
+                        t("Emboss Text", "engrave", SkTool::Text),
+                    ],
+                ),
             ],
         ),
         // Inventor's Pattern panel in here too: the tab fits a 1600 wide window with every word

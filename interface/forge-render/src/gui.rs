@@ -3268,6 +3268,7 @@ impl Gui {
         );
         m.units = "mm";
         m.set_params(o.params.clone());
+        m.more.sktexts = o.texts.clone();
         if !o.sources.is_empty() {
             m.take_sources(o.sources.clone());
         }
@@ -3295,7 +3296,7 @@ impl Gui {
             return;
         }
         let got = o
-            .write_back(&m.rows, m.kept())
+            .write_back_with(&m.rows, m.kept(), &m.more.sktexts, &m.more.sktexts_gone)
             .map_err(|e| format!("{}: {}", e.kind(), e.text()));
         let got = got.and_then(|ops| {
             if ops.is_empty() {
@@ -3342,7 +3343,7 @@ impl Gui {
         if matches!(m.edit, SketchFor::Forge(_)) {
             return self.fg_finish_edit(m);
         }
-        if m.rows.is_empty() {
+        if m.rows.is_empty() && m.more.sktexts.is_empty() {
             return;
         }
         let taken = self
@@ -3355,7 +3356,14 @@ impl Gui {
             .map(|k| format!("sk{k}"))
             .find(|n| !taken.contains(n))
             .expect("a free name");
-        match crate::shell::fgsketch::block(&name, &m.head, &m.rows) {
+        let block = crate::shell::fgsketch::block(&name, &m.head, &m.rows).and_then(|b| {
+            if m.more.sktexts.is_empty() {
+                return Ok(b);
+            }
+            let taken: std::collections::HashSet<String> = taken.iter().cloned().collect();
+            crate::shell::sktext::write(&b, &name, &m.more.sktexts, &[], &taken).map(|w| w.0)
+        });
+        match block {
             Ok(text) => {
                 let added = self
                     .fg_apply(forge_lang::error::Op::AddFeature { before: None, text })

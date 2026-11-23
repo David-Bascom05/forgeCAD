@@ -7,6 +7,7 @@
 
 use super::super::fgtool::ToolError;
 use super::super::sketching::rows::{D, Flat, Part, Pt, Ref, Refd, Row, Src, V};
+use super::super::sktext::{self, SkText};
 use super::{Out, fmt};
 use forge_lang::error::{Literal, Op, ParamKey};
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, Span, Stmt, StmtKind, Unit};
@@ -37,6 +38,8 @@ struct St {
     name: Option<String>,
     /// The Forge names of what its row makes, in the order the row names them.
     ents: Vec<String>,
+    /// A sketch text: held beside the rows (`Opened::texts`), never taken out with them.
+    text: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -65,6 +68,8 @@ pub struct Opened {
     own: usize,
     /// What each `project` row's reference came to as the block solved it, by its words.
     pub sources: HashMap<String, Result<Vec<Refd>, String>>,
+    /// The block's texts, as written.
+    pub texts: Vec<SkText>,
 }
 
 struct Rd<'a> {
@@ -79,6 +84,7 @@ struct Rd<'a> {
     rows: Vec<Row>,
     of: Vec<RowOf>,
     sources: HashMap<String, Result<Vec<Refd>, String>>,
+    texts: Vec<SkText>,
 }
 
 /// A point argument: where it is, and how it's written.
@@ -275,6 +281,21 @@ impl Rd<'_> {
         };
         if args.iter().any(|a| matches!(a.value.kind, ExprKind::Comp { .. })) {
             return what("a list comprehension");
+        }
+        // a text: an item of its own beside the rows, its numbers where they're written
+        if f == "text" {
+            let Some(n) = name else {
+                return what("an unnamed `text`");
+            };
+            let t = SkText::read(n, args, self.params, self.env)?;
+            self.texts.push(t);
+            stmts.push(St {
+                span: s.span,
+                name: Some(n.to_string()),
+                ents: vec![],
+                text: true,
+            });
+            return Ok(());
         }
         let id = name.and_then(|n| {
             self.view
@@ -660,6 +681,7 @@ impl Rd<'_> {
             span: s.span,
             name: name.map(str::to_string),
             ents: ents.iter().map(|e| e.1.clone()).collect(),
+            text: false,
         });
         for (named, fg) in ents {
             // a loop's sides are named by index; the loop itself has no single word
@@ -812,6 +834,7 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
         rows: vec![],
         of: vec![],
         sources: HashMap::new(),
+        texts: vec![],
     };
     let mut stmts = vec![];
     let mut read_only = None;
@@ -825,7 +848,7 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
             ));
         }
     }
-    let (rows, of, sources) = (rd.rows, rd.of, rd.sources);
+    let (rows, of, sources, texts) = (rd.rows, rd.of, rd.sources, rd.texts);
     let mut taken: HashSet<String> = forge_lang::edit::bound(&prog).into_iter().collect();
     taken.extend(forge_lang::edit::bound(body));
     taken.extend(params.keys().cloned());
@@ -849,6 +872,7 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
         taken,
         own: mine.len(),
         sources,
+        texts,
     })
 }
 
@@ -895,6 +919,45 @@ impl Opened {
             per.push(ents);
         }
         (out, per)
+    }
+
+    /// The edit Finish makes with the sketch's texts too: `write_back`'s, then the texts
+    /// changed, added and `gone` written into the same ReplaceFeature (their params set).
+    pub fn write_back_with(
+        &self,
+        rows: &[Row],
+        kept: &[usize],
+        texts: &[SkText],
+        gone: &[String],
+    ) -> Result<Vec<Op>, ToolError> {
+        let mut ops = self.write_back(rows, kept)?;
+        if gone.is_empty() && !texts.iter().any(SkText::changed) {
+            return Ok(ops);
+        }
+        let parsed = syntax::parse(&self.src).map_err(|e| ToolError::NoForgeForm {
+            tool: "sketch",
+            why: e.text(),
+        })?;
+        let block = match ops.iter().position(|o| matches!(o, Op::ReplaceFeature { .. })) {
+            Some(k) => match ops.remove(k) {
+                Op::ReplaceFeature { text, .. } => text,
+                _ => unreachable!("a ReplaceFeature"),
+            },
+            None => {
+                let (first, block) = find(&parsed, &self.id).expect("opened from this text");
+                self.src[first.span.lo as usize..block.span.hi as usize].to_string()
+            }
+        };
+        let (text, sets) = sktext::write(&block, &own_name(&parsed, &self.id), texts, gone, &self.taken)?;
+        ops.insert(
+            0,
+            Op::ReplaceFeature {
+                id: self.id.clone(),
+                text,
+            },
+        );
+        ops.extend(sets);
+        Ok(ops)
     }
 
     /// The edit Finish makes: nothing when nothing changed; else the block put back in its place
@@ -967,6 +1030,7 @@ impl Opened {
             }
         }
         let gone: Vec<usize> = (0..self.stmts.len())
+            .filter(|st| !self.stmts[*st].text)
             .filter(|st| {
                 !kept
                     .iter()
