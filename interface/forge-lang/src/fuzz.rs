@@ -2176,7 +2176,7 @@ fn copybody(g: &mut G) -> Option<Vec<String>> {
 fn scaled_here(g: &mut G, m: String, always: bool) -> String {
     let h = (*g.label as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
     let h = h ^ (h >> 29);
-    if !always && h % 3 != 0 {
+    if !always && !h.is_multiple_of(3) {
         return m;
     }
     let k = [0.375, 0.5, 0.8, 1.25, 1.5, 2.0, 3.0][(h >> 8) as usize % 7];
