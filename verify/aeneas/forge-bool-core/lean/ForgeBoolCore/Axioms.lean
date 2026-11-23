@@ -1,3 +1,4 @@
+import ForgeBoolCore.RefineIncWF
 import ForgeBoolCore.Specs
 import ForgeBoolCore.Refine
 import ForgeBoolCore.RefineUF
@@ -127,3 +128,46 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.unify_spec_proof
 #print axioms forge_bool_core.end_to_end_proof
 #print axioms forge_bool_core.end_to_end_encode_proof
+#print axioms forge_bool_core.inc.endToEndF_of
+#print axioms forge_bool_core.inc.rows_spec
+#print axioms forge_bool_core.inc.row_spec
+#print axioms forge_bool_core.inc.body_of_spec
+#print axioms forge_bool_core.inc.cls_of_spec
+#print axioms forge_bool_core.inc.splitOk_iff
+#print axioms forge_bool_core.inc.split_ok_spec
+#print axioms forge_bool_core.inc.ins_spec
+#print axioms forge_bool_core.inc.split_loop1_spec
+#print axioms forge_bool_core.inc.split_loop0_spec
+#print axioms forge_bool_core.inc.split_spec
+#print axioms forge_bool_core.inc.flood_spec
+#print axioms ForgeBoolCore.UF.head_leastI
+#print axioms forge_bool_core.inc.membership_loop0_spec
+#print axioms forge_bool_core.inc.memb_bridge
+#print axioms forge_bool_core.inc.membership_spec
+#print axioms forge_bool_core.inc.core_loop0_spec
+#print axioms forge_bool_core.inc.cAll_eq
+#print axioms forge_bool_core.inc.core_loop1_spec
+#print axioms forge_bool_core.inc.keep_eq
+#print axioms forge_bool_core.inc.core_k_loop0_spec
+#print axioms forge_bool_core.inc.result_eq
+#print axioms forge_bool_core.inc.orient_eq
+#print axioms forge_bool_core.inc.around_e_spec
+#print axioms forge_bool_core.inc.aroundE_len
+#print axioms forge_bool_core.inc.core_k_loop1_spec
+#print axioms forge_bool_core.inc.edges_find_eq
+#print axioms ForgeBoolCore.UF.fan_bad
+#print axioms forge_bool_core.inc.around_v_spec
+#print axioms forge_bool_core.inc.fans_spec
+#print axioms forge_bool_core.inc.bad_vert_spec
+#print axioms forge_bool_core.inc.core_k_loop2_spec
+#print axioms forge_bool_core.inc.coreMI_nil
+#print axioms forge_bool_core.inc.core_k_spec
+#print axioms forge_bool_core.inc.core_spec
+#print axioms forge_bool_core.inc.incCoreSpec_of
+#print axioms forge_bool_core.inc.KI.collapse_pos
+#print axioms forge_bool_core.inc.collapse_specI
+#print axioms forge_bool_core.inc.incCoreSpec_of_unify
+#print axioms forge_bool_core.inc.csr_ok_spec
+#print axioms forge_bool_core.inc.count_in_spec
+#print axioms forge_bool_core.inc.count_sec_spec
+#print axioms forge_bool_core.inc.wf_loop1_spec

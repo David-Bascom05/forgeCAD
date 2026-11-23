@@ -476,6 +476,31 @@ The per-phase split for upto and housing is asked of decide-once (Rust). **Risk:
 0.4M does not close, the switch stays off, and v1 stays proven and shipped-ready. A8 is still
 worth doing for curved: the same cells, and the Tier-1 separators move into the reference.
 
+## 3b. Provability of the speed steps (owner's rules, 2026-11-23)
+
+- **The shipped code is proven, not checked.** Proven code carries no runtime proof. Checks run in
+  debug builds, tests and CI only. Speed is measured in wall-clock time.
+  - So the builder (R3) is proven to produce a well-formed ledger (`LedgerWF2`) that refines the
+    plane ledger (`Refines`), and `inc::core` is proven against `coreMI` (`IncCoreSpec`).
+  - Release builds run neither `ledger_wf` nor a Refines check.
+- **The checker is an oracle, not a guard.** A Refines checker, plus `ledger_wf`, may live in
+  forge-bool-core, translated and proven (`ledger_wf ↔ LedgerWF2`, `refines_check ↔ Refines`).
+  - It is the debug assert's oracle, and a development aid for the builder.
+  - Its cost is measured separately and never counted as part of the boolean.
+  - It is never a permanent fallback path.
+- **Any optimisation that is provable is allowed, and the proof grows to cover it.** That covers
+  trim/split reuse, the whole-plane shortcut, the D7 memo, parallel planes, and anything faster.
+- **For each step, the Lean coordinator:**
+  - checks that it is provable;
+  - writes its statement here;
+  - plans the extra Lean, asking the master for more proof sessions when the volume grows.
+- **For each step, decide-once and bool-speed:**
+  1. keep its semantics a function of exact data (memo keys exact; parallel results merged in a
+     fixed order, so the ledger is a function of the input);
+  2. keep code inside forge-bool-core in Aeneas style (plain loops, no closures, iterators, maps,
+     floats or threads). Code outside it is proven through what it hands the core;
+  3. send the step's statement and commit for review before it is relied on.
+
 ## 4. Order of work and gates
 
 Step 0 is the sign-off of this design: the §1 interface, `Refines` (§2.2 and §2.2a), the

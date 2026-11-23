@@ -9,6 +9,7 @@ import ForgeExact.DecideOnce.Simulation
 import ForgeExact.DecideOnce.RoomConst
 import ForgeExact.DecideOnce.MetricI
 import ForgeExact.DecideOnce.CoverageI
+import ForgeExact.DecideOnce.FloodCorrect
 import ForgeExact.DecideOnce.Nef
 import ForgeExact.DecideOnce.Rungs
 import ForgeExact.Jordan
@@ -183,3 +184,5 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Refines.collapse_exact_off_thin
   ForgeExact.DecideOnce.IncLedger.coverageKI
   ForgeExact.DecideOnce.IncLedger.coverageMI
+  ForgeExact.DecideOnce.IncLedger.flood_correct
+  ForgeExact.DecideOnce.IncLedger.classifyOk_of_flood
