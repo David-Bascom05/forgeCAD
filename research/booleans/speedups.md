@@ -342,7 +342,7 @@ The master's instruction was to compare, per part and per op, default threads (t
 
 ### The table
 
-Commit `fc9…`, this branch: the line after "W1 fastest-wins" in the log. Median of 11 paired rounds
+Commit `a78da45`. Median of 11 paired rounds
 on a 4-vCPU VM; each round runs t1, then tN, then tN again. A/A is the second tN over the first: it
 is this VM's noise, and it reaches ±10% on runs under 15 ms. "Helpers" is the number of threads
 the tN run started (strace `clone3`).
