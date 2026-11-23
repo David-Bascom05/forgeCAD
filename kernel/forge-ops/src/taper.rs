@@ -64,8 +64,11 @@ pub(crate) fn unit(v: Vec2) -> Vec2 {
     v * (1.0 / v.length_sq().sqrt().max(f64::MIN_POSITIVE))
 }
 
-/// Where the carriers of two neighbours, offset, meet nearest `near`.
-fn meet(a: &Segment, b: &Segment, d: f64, near: Point2) -> Option<Point2> {
+/// Where the carriers of two neighbours, offset, meet: of a line's or a circle's two meets with a
+/// circle, the one on the side of the centre's foot on the line (of the centres' line) where their
+/// joint `from` was, so a joint is followed however far it goes; where it was on that axis, the
+/// one nearest `near`.
+fn meet(a: &Segment, b: &Segment, d: f64, near: Point2, from: Point2) -> Option<Point2> {
     // a carrier as a line (point, direction) or a circle (centre, radius)
     enum C {
         L(Point2, Vec2),
@@ -90,6 +93,12 @@ fn meet(a: &Segment, b: &Segment, d: f64, near: Point2) -> Option<Point2> {
         let f = p - c;
         let b = f.dot(t);
         let disc = b * b - (f.dot(f) - r * r);
+        // (a line all but tangent, by rounding only: it touches)
+        let disc = if disc < 0.0 && disc >= -1e-12 * (b * b + r * r).max(1.0) {
+            0.0
+        } else {
+            disc
+        };
         (disc >= 0.0).then(|| {
             let q = disc.sqrt();
             [p + t * (-b + q), p + t * (-b - q)]
@@ -110,7 +119,19 @@ fn meet(a: &Segment, b: &Segment, d: f64, near: Point2) -> Option<Point2> {
                 p + t * ((w.x * u.y - w.y * u.x) / den)
             })
         }
-        (C::L(p, t), C::O(c, r)) | (C::O(c, r), C::L(p, t)) => on_line(p, t, c, r).map(pick),
+        (C::L(p, t), C::O(c, r)) | (C::O(c, r), C::L(p, t)) => on_line(p, t, c, r).map(|x| {
+            // the foot of the centre on the line moves square to it, so the side is along t
+            let foot = p + t * (c - p).dot(t);
+            let was = (from - (foot - t.perp() * d)).dot(t);
+            let side = |y: Point2| (y - foot).dot(t);
+            if was.abs() <= 1e-9 * (1.0 + r) || (side(x[0]) > 0.0) == (side(x[1]) > 0.0) {
+                pick(x)
+            } else if (side(x[0]) > 0.0) == (was > 0.0) {
+                x[0]
+            } else {
+                x[1]
+            }
+        }),
         (C::O(c, r), C::O(e, s)) => {
             let w = e - c;
             let dist = w.length_sq().sqrt();
@@ -119,14 +140,78 @@ fn meet(a: &Segment, b: &Segment, d: f64, near: Point2) -> Option<Point2> {
             }
             let x = (dist * dist + r * r - s * s) / (2.0 * dist);
             let h2 = r * r - x * x;
+            let h2 = if h2 < 0.0 && h2 >= -1e-12 * (r * r).max(1.0) {
+                0.0
+            } else {
+                h2
+            };
             (h2 >= 0.0).then(|| {
                 let t = w * (1.0 / dist);
                 let m = c + t * x;
                 let h = h2.sqrt();
-                pick([m + t.perp() * h, m - t.perp() * h])
+                let was = (from - c).dot(t.perp());
+                if was.abs() <= 1e-9 * (1.0 + r) || h == 0.0 {
+                    pick([m + t.perp() * h, m - t.perp() * h])
+                } else if was > 0.0 {
+                    m + t.perp() * h
+                } else {
+                    m - t.perp() * h
+                }
             })
         }
     }
+}
+
+/// Joint `i` of a loop offset `d`: where segment `i` starts.
+fn joint(segs: &[(Segment, u64)], i: usize, d: f64) -> Option<Point2> {
+    let n = segs.len();
+    let (a, b) = (&segs[(i + n - 1) % n].0, &segs[i].0);
+    let (ta, tb) = (unit(ends_dir(a).1), unit(ends_dir(b).0));
+    let p = b.start();
+    let left = unit(ta + tb).perp();
+    let c = ta.x * tb.y - ta.y * tb.x;
+    // tangent neighbours stay tangent, their joint moves square to both
+    if c.abs() < 1e-7 && ta.dot(tb) > 0.0 {
+        Some(p + left * d)
+    } else {
+        meet(a, b, d, p + left * d, p)
+    }
+}
+
+/// Arc `i`'s sweep, offset `d`, from the turn `raw` between its joints: the one nearest what it
+/// was (`sweep`), so it shrinks through nothing rather than jump a turn. Where it has moved at all
+/// (only an arc meeting a neighbour at an angle turns) it may have turned more than half a turn on
+/// the way (a major arc shrinking to its point, which the nearest takes for a whole circle), and
+/// the sweep followed there in steps that each turn less than half a turn decides.
+fn arc_sweep(segs: &[(Segment, u64)], i: usize, d: f64, sweep: f64, raw: f64) -> f64 {
+    let near = |to: f64, mut sw: f64| {
+        while sw - to > dmath::PI {
+            sw -= dmath::TAU;
+        }
+        while sw - to < -dmath::PI {
+            sw += dmath::TAU;
+        }
+        sw
+    };
+    let sw = near(sweep, raw);
+    let Segment::Arc { center, .. } = segs[i].0 else {
+        return sw;
+    };
+    if (sw - sweep).abs() <= 0.25 {
+        return sw;
+    }
+    let n = segs.len();
+    let at = |x: Point2| dmath::atan2(x.y - center.y, x.x - center.x);
+    const STEPS: u32 = 32;
+    let mut last = sweep;
+    for k in 1..STEPS {
+        let t = d * f64::from(k) / f64::from(STEPS);
+        let (Some(p), Some(q)) = (joint(segs, i, t), joint(segs, (i + 1) % n, t)) else {
+            return sw;
+        };
+        last = near(last, at(q) - at(p));
+    }
+    near(last, raw)
 }
 
 /// A loop offset `d` to its left (material's side), or None where its segments no longer meet.
@@ -145,17 +230,7 @@ fn offset(segs: &[(Segment, u64)], d: f64) -> Option<Vec<Moved>> {
     let n = segs.len();
     let mut joints = Vec::with_capacity(n);
     for i in 0..n {
-        let (a, b) = (&segs[(i + n - 1) % n].0, &segs[i].0);
-        let (ta, tb) = (unit(ends_dir(a).1), unit(ends_dir(b).0));
-        let p = b.start();
-        let left = unit(ta + tb).perp();
-        let c = ta.x * tb.y - ta.y * tb.x;
-        // tangent neighbours stay tangent, their joint moves square to both
-        joints.push(if c.abs() < 1e-7 && ta.dot(tb) > 0.0 {
-            p + left * d
-        } else {
-            meet(a, b, d, p + left * d)?
-        });
+        joints.push(joint(segs, i, d)?);
     }
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
@@ -178,14 +253,7 @@ fn offset(segs: &[(Segment, u64)], d: f64) -> Option<Vec<Moved>> {
                 let r = if sweep > 0.0 { radius - d } else { radius + d };
                 let at = |x: Point2| dmath::atan2(x.y - center.y, x.x - center.x);
                 let a0 = at(p);
-                // the sweep nearest what it was: it shrinks through nothing rather than jump a turn
-                let mut sw = at(q) - a0;
-                while sw - sweep > dmath::PI {
-                    sw -= dmath::TAU;
-                }
-                while sw - sweep < -dmath::PI {
-                    sw += dmath::TAU;
-                }
+                let sw = arc_sweep(segs, i, d, sweep, at(q) - a0);
                 Moved {
                     seg: Segment::Arc {
                         center,
@@ -818,6 +886,196 @@ mod tests {
         let shut = 0.5 / t;
         let exact = q(60.0, 32.0 * t, 4.0 * t * t, d) - q(4.0, -10.0 * t, 4.0 * t * t, shut);
         close(volume(tapered(&plate, d, -a, 7)), exact);
+    }
+
+    /// A round hole growing into the plate's side (an arc reaching a line: C, at offset 0.5)
+    /// is refused there, with no edge event before it.
+    #[test]
+    fn a_round_hole_meets_the_side() {
+        let plate = profile(vec![
+            lp(&[(0.0, 0.0), (10.0, 0.0), (10.0, 6.0), (0.0, 6.0)], 1),
+            ProfileLoop::new(vec![(
+                Segment::Circle {
+                    center: Point2::new(8.0, 3.0),
+                    radius: 1.0,
+                    ccw: false,
+                },
+                11,
+            )]),
+        ]);
+        let a = 45f64.to_radians();
+        match tapered(&plate, 0.6, a, 7) {
+            Err(TaperError::WallsCross { at }) => close(at, 0.5),
+            other => panic!("{other:?}"),
+        }
+        assert!(tapered(&plate, 0.4, a, 7).is_ok());
+    }
+
+    /// A half disc: its arc meets its chord at a right angle (joints on a circle-line meet), and
+    /// tapered in it closes to a point at offset r / 2: exact against its sections, the segment of
+    /// the circle of radius r - t above the chord moved t.
+    #[test]
+    fn a_half_disc_closes_to_its_point() {
+        let r = 2.0;
+        let half = profile(vec![ProfileLoop::new(vec![
+            (
+                Segment::Arc {
+                    center: Point2::new(0.0, 0.0),
+                    radius: r,
+                    start: 0.0,
+                    sweep: PI,
+                },
+                1,
+            ),
+            (
+                Segment::Line {
+                    a: Point2::new(-r, 0.0),
+                    b: Point2::new(r, 0.0),
+                },
+                2,
+            ),
+        ])]);
+        let a = 45f64.to_radians();
+        let area = |t: f64| {
+            let q = r - t;
+            if t >= q {
+                0.0
+            } else {
+                q * q * dmath::acos(t / q) - t * (q * q - t * t).sqrt()
+            }
+        };
+        for d in [0.5, 1.5] {
+            // Simpson's rule, fine enough for 1e-9 here (the section is smooth up to its point)
+            let (n, h) = (20000, d / 20000.0);
+            let exact = (0..=n)
+                .map(|k| {
+                    let w = if k == 0 || k == n {
+                        1.0
+                    } else if k % 2 == 1 {
+                        4.0
+                    } else {
+                        2.0
+                    };
+                    w * area(k as f64 * h * tan(a))
+                })
+                .sum::<f64>()
+                * h
+                / 3.0;
+            assert!((volume(tapered(&half, d, a, 7)) - exact).abs() <= 1e-6 * exact);
+        }
+    }
+
+    /// A major segment of a disc (its arc more than half a turn, closed by its chord at an angle):
+    /// tapered in, the chord crosses the centre and the region closes to a point where the chord
+    /// turns tangent (its joints lost, J, the loop's collapse). Its arc turns more than half a turn
+    /// on the way, which `offset` follows. Exact against its sections: the disc of radius r - t
+    /// cut by the chord moved t, the centre e0 - t inside it.
+    #[test]
+    fn a_major_segment_shrinks_past_its_centre_to_a_point() {
+        let (r, a0, sw) = (2.5, 1.0, 4.4);
+        let (s, c) = (dmath::sin_cos(a0), dmath::sin_cos(a0 + sw));
+        let (p, q) = (Point2::new(r * s.1, r * s.0), Point2::new(r * c.1, r * c.0));
+        let seg = profile(vec![ProfileLoop::new(vec![
+            (
+                Segment::Arc {
+                    center: Point2::new(0.0, 0.0),
+                    radius: r,
+                    start: a0,
+                    sweep: sw,
+                },
+                1,
+            ),
+            (Segment::Line { a: q, b: p }, 2),
+        ])]);
+        let n = (p - q) * (1.0 / (p - q).length());
+        let e0 = (Point2::new(0.0, 0.0) - q).dot(n.perp());
+        let area = |t: f64| {
+            let (rho, e) = (r - t, e0 - t);
+            if rho <= 0.0 || e <= -rho {
+                0.0
+            } else {
+                rho * rho * dmath::acos(-e / rho) + e * (rho * rho - e * e).sqrt()
+            }
+        };
+        let a = 50f64.to_radians();
+        // past the point it closes to: (r + e0) / 2 from the start
+        let d = 0.6 * (r + e0) / tan(a);
+        let (k, h) = (20000, d / 20000.0);
+        let exact = (0..=k)
+            .map(|i| {
+                let w = if i == 0 || i == k {
+                    1.0
+                } else if i % 2 == 1 {
+                    4.0
+                } else {
+                    2.0
+                };
+                w * area(i as f64 * h * tan(a))
+            })
+            .sum::<f64>()
+            * h
+            / 3.0;
+        assert!((volume(tapered(&seg, d, a, 7)) - exact).abs() <= 1e-6 * exact);
+    }
+
+    /// A rectangle with a round notch in its top, meeting it square: the notch grows as the bottom
+    /// rises, and its lowest point reaches the bottom at offset 1.25 (S, an arc reaching a line,
+    /// on the curved path): refused there, built below.
+    #[test]
+    fn a_round_notch_splits_where_it_reaches_the_bottom() {
+        let p2 = Point2::new;
+        let notch = profile(vec![ProfileLoop::new(vec![
+            (
+                Segment::Line {
+                    a: p2(0.0, 0.0),
+                    b: p2(10.0, 0.0),
+                },
+                1,
+            ),
+            (
+                Segment::Line {
+                    a: p2(10.0, 0.0),
+                    b: p2(10.0, 4.0),
+                },
+                2,
+            ),
+            (
+                Segment::Line {
+                    a: p2(10.0, 4.0),
+                    b: p2(6.5, 4.0),
+                },
+                3,
+            ),
+            (
+                Segment::Arc {
+                    center: p2(5.0, 4.0),
+                    radius: 1.5,
+                    start: 0.0,
+                    sweep: -PI,
+                },
+                4,
+            ),
+            (
+                Segment::Line {
+                    a: p2(3.5, 4.0),
+                    b: p2(0.0, 4.0),
+                },
+                5,
+            ),
+            (
+                Segment::Line {
+                    a: p2(0.0, 4.0),
+                    b: p2(0.0, 0.0),
+                },
+                6,
+            ),
+        ])]);
+        let a = 60f64.to_radians();
+        match tapered(&notch, 0.75, a, 7) {
+            Err(TaperError::WallsCross { at }) => close(at, 1.25 / tan(a)),
+            other => panic!("{other:?}"),
+        }
+        assert!(tapered(&notch, 0.7, a, 7).is_ok());
     }
 
     /// A rounded rectangle whose corners close to points on the way (E events, its arcs' radii):
