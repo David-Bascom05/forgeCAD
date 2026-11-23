@@ -3,6 +3,8 @@
 # kernel crates (kernel/forge-model/tests/hidden_inputs.rs scans for them). Each is classed:
 #   keyed       in the op memo's key
 #   speed       a cache or counter whose answers are a function of its own key, or stats
+#               (also a clock that picks only how many threads run, with bits identical at
+#               1/2/4/16 threads; a clock that picks a path or a value is must-fix 5)
 #   no-output   reviewed: does not reach an op's output (geometry, ids, verdict)
 #   must-fix N  item N of forgecad-gate/instant-load/op-memo-proof.md ("Audit"): an op's output
 #               depends on it today; remove it or key it, then reclass the line
