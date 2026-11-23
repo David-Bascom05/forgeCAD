@@ -890,6 +890,15 @@ fn part(run: &Run, name: &str, dir: Option<&Path>, o: &Options, ex: &mut Exporte
     })
 }
 
+/// A solid in a link: its occurrence, material, unit-density mass properties, and where it is
+/// in the link's frame.
+type Held<'a> = (
+    String,
+    Option<&'a forge_material::Material>,
+    &'a forge_topo::mass::MassProps,
+    Frame,
+);
+
 /// Union-find over a few bodies.
 fn find(p: &mut [usize], mut i: usize) -> usize {
     while p[i] != i {
@@ -952,14 +961,14 @@ fn assembly(
     let mut group_of = vec![usize::MAX; n];
     let mut groups: Vec<Vec<usize>> = vec![];
     let mut slot: BTreeMap<usize, usize> = BTreeMap::new();
-    for i in 0..n {
+    for (i, of) in group_of.iter_mut().enumerate() {
         let r = find(&mut uf, i);
         let g = *slot.entry(r).or_insert_with(|| {
             groups.push(vec![]);
             groups.len() - 1
         });
         groups[g].push(i);
-        group_of[i] = g;
+        *of = g;
     }
     let root = first_ground.map_or(0, |g| group_of[g]);
     if first_ground.is_none() {
@@ -1157,14 +1166,7 @@ fn assembly(
     let mut mesh_of: Vec<Option<String>> = vec![None; asm.parts.len()];
     let mut mnames = Names::default();
     let mut visuals: Vec<Vec<Visual>> = (0..groups.len()).map(|_| vec![]).collect();
-    let mut pieces: Vec<
-        Vec<(
-            String,
-            Option<&forge_material::Material>,
-            &forge_topo::mass::MassProps,
-            Frame,
-        )>,
-    > = (0..groups.len()).map(|_| vec![]).collect();
+    let mut pieces: Vec<Vec<Held>> = (0..groups.len()).map(|_| vec![]).collect();
     let mut missing = vec![];
     let mut vnames = Names::default();
     for (k, (path, doc, pose)) in asm.occurrences.iter().enumerate() {
@@ -1476,9 +1478,9 @@ fn write(robot: &str, links: &[Wl], joints: &[Wj], o: &Options, ex: &Exported) -
     let _ = writeln!(
         s,
         "<!-- {} -->",
-        comment(&format!(
+        comment(
             "written by forgeCAD (export urdf): metres, kilograms, radians; meshes in mm, scaled 0.001; research/export/urdf.md"
-        ))
+        )
     );
     for c in &ex.cut {
         let _ = writeln!(

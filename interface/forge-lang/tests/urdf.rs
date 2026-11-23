@@ -237,7 +237,7 @@ fn mul(a: &M4, b: &M4) -> M4 {
 }
 
 fn rot_axis(u: [f64; 3], t: f64) -> M4 {
-    let (s, c) = (t.sin(), t.cos());
+    let (s, c) = dmath::sin_cos(t);
     let (x, y, z) = (u[0], u[1], u[2]);
     let k = 1.0 - c;
     [
@@ -427,8 +427,8 @@ b = extrude(plan, H)
     let l = &e.links[0];
     assert!(close(l.mass.expect("mass"), m, 1e-9), "{:?} vs {m}", l.mass);
     let com = [a / 2.0, b / 2.0, c / 2.0];
-    for k in 0..3 {
-        assert!((l.com[k] - com[k]).abs() < 1e-12, "com {:?}", l.com);
+    for (got, want) in l.com.iter().zip(com) {
+        assert!((got - want).abs() < 1e-12, "com {:?}", l.com);
     }
     let i = l.inertia.expect("inertia");
     let want = [
@@ -443,9 +443,9 @@ b = extrude(plan, H)
             i[k][k],
             want[k]
         );
-        for j in 0..3 {
+        for (j, x) in i[k].iter().enumerate() {
             if j != k {
-                assert!(i[k][j].abs() < 1e-12 * want[0], "I{k}{j} {}", i[k][j]);
+                assert!(x.abs() < 1e-12 * want[0], "I{k}{j} {x}");
             }
         }
     }
