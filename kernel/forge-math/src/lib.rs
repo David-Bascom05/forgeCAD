@@ -7,6 +7,7 @@
 use forge_alloc as _;
 
 pub mod dmath;
+#[cfg(feature = "exact")]
 pub mod exact;
 pub mod frame;
 pub mod hash;
