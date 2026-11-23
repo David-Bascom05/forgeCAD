@@ -1410,4 +1410,3 @@ bore = hole(at: spot.p, d: d, depth: thru, flip: true)
     let exact = 80.0 * 30.0 * 6.0 + boss - dmath::PI * 2.5 * 2.5 * 36.0;
     assert!((v - exact).abs() < 1e-6, "volume {v}, through the boss {exact}");
 }
-
