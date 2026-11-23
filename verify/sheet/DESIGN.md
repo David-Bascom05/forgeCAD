@@ -44,12 +44,8 @@ Differential tests (committed digests; `SHEET_LEAN=1` runs the oracle and rewrit
   first). Today: orient2d / float length, float sqrt in `distance`.
 * Spread cap: every two points of a class within 2L; the box-diagonal test region.rs uses implies it.
 * `inside` without a turned ray: horizontal ray, edge a→b counts iff `(a.y > p.y) ≠ (b.y > p.y)`
-  and `(b.y > a.y) = (side(a,b,p) > 0)`, over the loop's class points (lines end on them);
-  each arc adds its lens `inDisc(p,c,r)` ∧ (`side(a,b,p) < 0` for a ccw arc, `> 0` cw), XOR.
-  Ties by simulation of simplicity, p moved by (δ³, δ²): `side` = orient2d where nonzero, else
-  `b.x − a.x`, else `a.y − b.y` (`side_move`); `inDisc` on the circle = below the centre's
-  height, or level and left of it (`disc_move`). `crosses_reverse` then holds for every p
-  (fix-sheet's finding: with plain orient a point on a chord's line could count unevenly).
+  and `(b.y > a.y) = (orient(a,b,p) > 0)`, over the loop's class points (lines end on them);
+  each arc adds its lens `|p−c|² < r²` ∧ (`orient(a,b,p) < 0` for a ccw arc, `> 0` cw), XOR.
 * `holds_hole` without the 0.3/0.7 vote: a hole goes to the outer loop holding its least-named
   vertex that is innermost (every other outer loop holding the vertex holds that loop's
   representative). One exact query; no areas.

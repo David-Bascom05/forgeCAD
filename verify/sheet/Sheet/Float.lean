@@ -157,37 +157,6 @@ theorem filter_sound {a b a' b' s1 s2 c L lo hi : ℚ}
       mul_le_mul_of_nonneg_left (by nlinarith) (by positivity)
     nlinarith
 
-/-- The disc's filter: strict inside, strict outside, everything else (ties included) to the
-exact rule. -/
-def filterLt (c lo hi : ℚ) : Option Bool :=
-  if c < lo then some true else if hi < c then some false else none
-
-/-- **The disc's filter is the exact rule** (`|p − c|² < r²` on the exact values). -/
-theorem filterLt_sound {a b a' b' s1 s2 c L lo hi : ℚ}
-    (ha : |a' - a| ≤ u * |a|) (hb : |b' - b| ≤ u * |b|)
-    (hs1 : |s1 - a' * a'| ≤ u * |a' * a'|) (hs2 : |s2 - b' * b'| ≤ u * |b' * b'|)
-    (hc : |c - (s1 + s2)| ≤ u * |s1 + s2|)
-    (hlo : lo ≤ L * L * (1 - u) ^ 4) (hhi : L * L * (1 + u) ^ 4 ≤ hi) (v : Bool)
-    (hv : filterLt c lo hi = some v) : v = decide (a * a + b * b < L * L) := by
-  obtain ⟨c1, c2⟩ := sq_sum_bounds ha hb hs1 hs2 hc
-  have hu := u_lt
-  have hu0 := u_pos
-  have q4 : 0 < (1 - u) ^ 4 := by have : 0 < 1 - u := by linarith
-                                  positivity
-  unfold filterLt at hv
-  split_ifs at hv with h1 h2
-  · cases hv
-    symm; apply decide_eq_true
-    have : (1 - u) ^ 4 * (a ^ 2 + b ^ 2) < (1 - u) ^ 4 * (L * L) := by nlinarith
-    have := lt_of_mul_lt_mul_left this q4.le
-    nlinarith
-  · cases hv
-    symm; apply decide_eq_false
-    intro hlt
-    have : (1 + u) ^ 4 * (a ^ 2 + b ^ 2) ≤ (1 + u) ^ 4 * (L * L) :=
-      mul_le_mul_of_nonneg_left (by nlinarith) (by positivity)
-    nlinarith
-
 /-- The same, from the doubles: `dx = px ⊖ qx`, `dy = py ⊖ qy`, `c = dx ⊗ dx ⊕ dy ⊗ dy`, under
 the preconditions; the exact `a, b` are the differences of the doubles' values. -/
 theorem near_filter_sound {px py qx qy : F64}

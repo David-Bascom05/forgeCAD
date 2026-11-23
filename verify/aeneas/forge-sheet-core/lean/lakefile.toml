@@ -15,9 +15,3 @@ path = "../../../sheet"
 
 [[lean_lib]]
 name = "ForgeSheetCore"
-
-# forge-math's translation (the aeneas session's, verify/aeneas/forge-math): the zone fold's
-# Frame::point_to_world is proven against it, not a copy.
-[[require]]
-name = "forgemath"
-path = "../../forge-math/lean"

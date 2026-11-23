@@ -5,12 +5,4 @@ import ForgeSheetCore.RefineClasses
 import ForgeSheetCore.RefineOwner
 import ForgeSheetCore.WalkModel
 import ForgeSheetCore.RefineChain
-import ForgeSheetCore.RefinePlace
-import ForgeSheetCore.DevelopErr
-import ForgeSheetCore.JointErr
-import ForgeSheetCore.RefineJoint
-import ForgeSheetCore.SetbackErr
-import ForgeSheetCore.RefineSetback
-import ForgeSheetCore.ZoneErr
-import ForgeSheetCore.RefineZone
 import ForgeSheetCore.Axioms
