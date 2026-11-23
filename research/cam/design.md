@@ -47,8 +47,10 @@ forge-material (`data/materials.toml`) and forge-vendor (bendsim/sheet-vendors b
 
 Why the post is in kernel/: its output is part of what is proven. The NC text must read back to
 the motion within a stated rounding (§5 G6), and text must be the same bits in the browser and
-native. Rust's float formatting (`{:.4}` and so on) is deterministic and needs no platform library.
-It must still be pinned by a test that compares native and wasm output.
+native. Numbers are printed from integer-quantised values: each coordinate is rounded to the
+dialect's resolution in exact integer arithmetic, then its digits are printed
+(libraries-machines-posts-feeds.md §5.3). The output then depends on no formatting library, and a
+native-vs-wasm text test pins it.
 
 Why not one `forge-cam` crate: the geometry half is what gets proven and goes through Aeneas
 (L4). Keeping it small and free of policy (link order, defaults) keeps that proof tractable. The
@@ -200,7 +202,7 @@ The obligations for one operation:
   limits, and the kinematics are continuous along the piece (no flip at a singularity).
 - **G6, the post.** Let I be the Lean model of the G-code subset we emit (modal state, G0/G1/G2/G3,
   planes, G90/G91, units, the canned cycles we use expanded to motion; after Kramer's RS274/NGC,
-  literature.md §9). Then I(post(g)) = g′, where g′ is g with every coordinate rounded to the
+  literature.md §9; Tekriwal & Sottile's Coq/Why3 RS274 semantics is the one mechanised precedent, literature.md §10). Then I(post(g)) = g′, where g′ is g with every coordinate rounded to the
   dialect's digits, and G1 to G5 hold for g′. The obligation is checked on g′, so the rounding is
   inside the proof, not an excuse after it.
 
@@ -237,7 +239,7 @@ cells per move on a real adaptive path.
   and results merge in op order. The n-ary boolean's rule (README.md) carries over.
 - Trig only through `forge_math::dmath`. Helices and arcs are evaluated with it.
 - No FMA, and no platform math library.
-- G-code number formatting is Rust's, pinned by a native-vs-wasm text test.
+- G-code numbers are printed from integer-quantised values, pinned by a native-vs-wasm text test.
 - Feeds and speeds arithmetic uses the same IEEE operations, so the same bits everywhere.
 
 ### 5.6 No third-party crates in kernel/
@@ -275,7 +277,7 @@ repository's branches are run now. They are rough, ±50%.
 
 | phase | what | why in this order | effort |
 |---|---|---|---|
-| **0. The risk** | Exact 2D region offsetting of line/arc regions with islands, through topology change: the offset front, with its events from wavefront.rs and Held's Voronoi method. The swept region of a disk along a line/arc path and its exact union. The L1 spec (G1, G3, G4 for 2.5D). The certified checker, a forge-brake `Problem` for a flat, ball or bull tool along a line or arc against faces, and its `sd_err` budget proven. | Everything 2.5D stands on robust offsets. Offsetting is where open-source CAM fails most (opensource.md: libarea and Clipper are float-only). The certified checker is the claim no one else makes; if it is too slow, the design changes. A go/no-go gate, measured on bench pockets. | 6–10 |
+| **0. The risk** | Exact 2D region offsetting of line/arc regions with islands, each pass offset from the *original* boundary so every vertex stays degree 2 over the input (literature.md, Implications §1), through topology change: the offset front, with its events from wavefront.rs and Held's Voronoi method. The swept region of a disk along a line/arc path and its exact union. The L1 spec (G1, G3, G4 for 2.5D). The certified checker, a forge-brake `Problem` for a flat, ball or bull tool along a line or arc against faces, and its `sd_err` budget proven. | Everything 2.5D stands on robust offsets. Open-source CAM offsets in floats (libarea) or on an integer grid (Clipper2), never exactly (opensource.md). The certified checker is the claim no one else makes; if it is too slow, the design changes. A go/no-go gate, measured on bench pockets. | 6–10 |
 | **1. Usable 2.5D** | The `machining` document; setups, WCS, box/cylinder/from-solid stock. Ops: facing, 2D contour (comp in computer and in control), pocket (offset), slot, trace, engrave (forge-font glyphs exist), 2D chamfer, bore and circular, drilling with the standard canned cycles, and drill plans read from hole features (spot, drill, peck, tap, ream, from `fit`). Leads, ramps (helix, profile), retract planes. Posts: Fanuc-generic, Haas, LinuxCNC, GRBL. The setup sheet (HTML, from the reply). Tool and holder TOML, the built-in set, the Fusion JSON importer. A stock preview by dexel; the exact L2 for checks. | This is what most parts need (job-shop work is mostly 2.5D and drilling: commercial.md). With hole knowledge from the history, it is already better than recognising holes. | 10–14 |
 | **2. Adaptive clearing** | Constant-engagement roughing (2D adaptive), built from the exact engagement computation, with a clean-room design (patents.md lists what to avoid), the minimum cutting radius and slot clearing. 2D rest machining from the in-process stock. Feeds and speeds with chip thinning, from the cutting-data library. Cycle-time estimates with the machine's accelerations. | Adaptive is the one 2D op shops pick a CAM for (commercial.md). It needs phase 0's exact stock and offsets. | 6–10 |
 | **3. 3-axis surfacing** | Drop-cutter and push-cutter in closed form for planes and quadrics, with certified B&B for tori, sweeps and splines. Ops: 3D adaptive roughing (z-level slices of the part), parallel, contour/waterline (the traced slice of the offset), scallop, pencil (the offset body's creases), steep-and-shallow, flat, and rest finishing from the ball opening (research/fillets). 3D gouge checking on the full part. | It needs the curved boolean's L2 (ROADMAP item 4) for exact stock, so it comes after that matures. Until then the 3D checker is B&B against the part, which needs no stock boolean. | 12–20 |
