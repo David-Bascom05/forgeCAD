@@ -214,12 +214,26 @@ fn random_loft(seed: u64) -> Result<String, String> {
     let plane = Frame::from_z(origin, z);
     let rise = rng.range(0.5, 20.0);
     let t = z.get() * rise + plane.x() * rng.range(-5.0, 5.0) + plane.y() * rng.range(-5.0, 5.0);
-    let p0 = Profile { plane, loops: vec![lines(&pts, 1)] };
-    let scaled: Vec<Point2> = pts.iter().map(|p| Point2::new(p.x * lambda, p.y * lambda)).collect();
-    let p1 = Profile { plane: plane.with_origin(origin + t), loops: vec![lines(&scaled, 1)] };
+    let p0 = Profile {
+        plane,
+        loops: vec![lines(&pts, 1)],
+    };
+    let scaled: Vec<Point2> = pts
+        .iter()
+        .map(|p| Point2::new(p.x * lambda, p.y * lambda))
+        .collect();
+    let p1 = Profile {
+        plane: plane.with_origin(origin + t),
+        loops: vec![lines(&scaled, 1)],
+    };
     let tool = guarded(|| {
-        forge_ops::loft(&[p0, p1], forge_ops::LoftKind::Ruled, &forge_ops::LoftGuides::None, 1)
-            .map_err(|e| format!("{e:?}"))
+        forge_ops::loft(
+            &[p0, p1],
+            forge_ops::LoftKind::Ruled,
+            &forge_ops::LoftGuides::None,
+            1,
+        )
+        .map_err(|e| format!("{e:?}"))
     });
     let kernel = match &tool {
         Ok(b) => Ok(b),

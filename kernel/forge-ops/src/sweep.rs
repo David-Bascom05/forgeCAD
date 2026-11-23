@@ -707,15 +707,16 @@ fn wind(
     let vec3 = |v: Vec2| plane.x() * v.x + plane.y() * v.y;
     // the side of the axis the profile is on
     let perp2 = dir2.perp();
-    let mut side = 0.0f64;
+    // (exactly for lines, arcs and circles: Segment::reach, as revolve)
+    let (mut lo, mut hi) = (0.0f64, 0.0f64);
     for l in &profile.loops {
         for (s, _) in &l.segments {
-            for p in s.side_samples() {
-                let r = (p - axis.origin).dot(perp2);
-                side = if r.abs() > side.abs() { r } else { side };
-            }
+            let (a, b) = s.reach(axis.origin, perp2);
+            lo = lo.min(a);
+            hi = hi.max(b);
         }
     }
+    let side = if hi >= -lo { hi } else { lo };
     if side.abs() <= tol::LINEAR {
         return Err(CoilError::CrossesAxis);
     }
@@ -748,17 +749,39 @@ fn wind(
     if rmin <= tol::LINEAR {
         return Err(CoilError::CrossesAxis);
     }
-    let (lo, hi) = (0..ring.len())
-        .map(|k| extent(k).1)
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |a, h| {
-            (a.0.min(h.0), a.1.max(h.1))
-        });
-    if pitch <= hi - lo + tol::LINEAR {
-        return Err(CoilError::TurnsTouch);
-    }
     let angle = dmath::TAU * turns;
     let b = sign * pitch / dmath::TAU;
     let a = pitch / dmath::TAU * dmath::sin(taper) / dmath::cos(taper);
+    // the turns touch exactly where the section comes within LINEAR of its translate by a whole
+    // number of turns that fits (research/sweep-spec, Screw.coil_injective): k (T a, T b) in
+    // (r, h) for 1 <= k, k T <= angle. A section with a spline keeps the sufficient bound: the
+    // pitch past its height.
+    if curves.iter().any(Option::is_some) {
+        let (lo, hi) = (0..ring.len())
+            .map(|k| extent(k).1)
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |a, h| {
+                (a.0.min(h.0), a.1.max(h.1))
+            });
+        if pitch <= hi - lo + tol::LINEAR {
+            return Err(CoilError::TurnsTouch);
+        }
+    } else {
+        // past the k whose translate's box is clear of the section's box, every larger k is too
+        // (both components of the shift grow with k)
+        let (br, bh) = forge_geom::screw::sections_box(&ring);
+        let mut k = 1.0;
+        while k * dmath::TAU <= angle + tol::ANGULAR {
+            let w = Vec2::new(k * dmath::TAU * a, k * dmath::TAU * b);
+            let clear = w.x.abs() > br.hi - br.lo + tol::LINEAR || w.y.abs() > bh.hi - bh.lo + tol::LINEAR;
+            if clear {
+                break;
+            }
+            if !forge_geom::screw::apart_from_translate(&ring, w, tol::LINEAR) {
+                return Err(CoilError::TurnsTouch);
+            }
+            k += 1.0;
+        }
+    }
     if rmin + (a * angle).min(0.0) <= tol::LINEAR {
         return Err(CoilError::BadTaper);
     }
@@ -939,6 +962,37 @@ mod tests {
             coil(&bar, up, &wind(1.5, 2.0, 0.0, Handed::Right), 1).unwrap_err(),
             CoilError::TurnsTouch
         );
+        // a section taller than the pitch that slants clear of its next turn builds (the height
+        // bound refused it); one that slants too little meets its next turn and is refused
+        let poly = |pts: [(f64, f64); 4]| Profile {
+            plane: standing,
+            loops: vec![ProfileLoop::new(
+                (0..4)
+                    .map(|i| {
+                        let (a, b) = (pts[i], pts[(i + 1) % 4]);
+                        (
+                            Segment::Line {
+                                a: Point2::new(a.0, a.1),
+                                b: Point2::new(b.0, b.1),
+                            },
+                            i as u64,
+                        )
+                    })
+                    .collect(),
+            )],
+        };
+        let slanted = poly([(8.0, 0.0), (9.0, 0.0), (15.0, 6.0), (14.0, 6.0)]);
+        for handed in [Handed::Right, Handed::Left] {
+            let b = coil(&slanted, up, &wind(4.0, 2.5, 0.0, handed), 1).unwrap();
+            valid(&b);
+        }
+        let steep = poly([(8.0, 0.0), (11.0, 0.0), (12.0, 6.0), (9.0, 6.0)]);
+        assert_eq!(
+            coil(&steep, up, &wind(4.0, 2.5, 0.0, Handed::Right), 1).unwrap_err(),
+            CoilError::TurnsTouch
+        );
+        // under one turn nothing can meet, whatever the height
+        valid(&coil(&steep, up, &wind(4.0, 0.9, 0.0, Handed::Right), 1).unwrap());
         assert_eq!(
             coil(&bar, up, &wind(4.0, 0.0, 0.0, Handed::Right), 1).unwrap_err(),
             CoilError::BadTurns
