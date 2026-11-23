@@ -202,12 +202,34 @@ fn a_sweep_into_itself_is_refused_and_one_just_clear_builds() {
         (Point3::new(3.0, 0.0, 7.0), Point3::new(-5.0, 0.0, 7.0)),
     );
     assert!(matches!(
-        tool(back),
+        tool(back.clone()),
         Err(RegenError::Sweep {
             error: SweepError::SelfIntersecting,
             ..
         })
     ));
+    // both regens decide it the same way: the n-ary one builds its tools too (only the batch
+    // classifier's and the oracle's shapes are made without the solid)
+    let part = forge_model::Part {
+        features: vec![Feature::Sweep(Box::new(Sweep {
+            profile: pipe.clone(),
+            path: back,
+            ends: PathEnds::Path,
+            op: Combine::New,
+        }))],
+    };
+    for r in [part.regenerate().map(|_| ()), part.regenerate_nary(1).map(|_| ())] {
+        assert!(
+            matches!(
+                r,
+                Err(RegenError::Sweep {
+                    error: SweepError::SelfIntersecting,
+                    ..
+                })
+            ),
+            "{r:?}"
+        );
+    }
     // a U-turn of radius 2.03 with a tube of radius 2: the legs 0.06 apart
     let b = 2.03;
     let u = path(
