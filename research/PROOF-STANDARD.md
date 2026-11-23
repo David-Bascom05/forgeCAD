@@ -38,7 +38,7 @@ has been reported to the master.
 | Feature | Owner session (branch suffix) | Has | Next |
 |---|---|---|---|
 | Boolean, flat | decide-once-lean, decide-once (Rust), ieee | L1 L2 L3 L4 L5 (partial L6). L4: `forge_bool_core::core` end to end, `end_to_end_proof` (no hypotheses; size limits in `LedgerWF`/`LFits`) | the bridge's `build_ledger` to L4 (`LedgerWF` on its Aeneas skeleton; debug_assert meanwhile); local ledger: `LocalCompat` (dol-jordan) and its other `ExactIn` clauses |
-| Boolean, curved | exact-curved, trace | L1 (quadrics) | L2 executable, L3 |
+| Boolean, curved | exact-curved, trace, dol-curved (decide-once design: research/decide-once/curved-design.md) | L1 (quadrics) | L2 executable, L3; decide-once Q0 (`ExactK`, `Faithful`: DecideOnce/Curved.lean) |
 | Fillets / rounds | fillet-spec, fillets, conic-fillet | — | L1 (ball closing), L2 |
 | Splines | spline-spec | — | L1, L2 oracle |
 | Sheet metal (fold, regions, refold) | sheet-spec, fix-sheet | — | L1 fold, L2 refold checker |

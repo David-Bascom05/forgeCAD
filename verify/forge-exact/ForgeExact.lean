@@ -17,4 +17,5 @@ import ForgeExact.DecideOnce.Sample
 import ForgeExact.DecideOnce.Sampler
 import ForgeExact.DecideOnce.Frontier
 import ForgeExact.DecideOnce.Local
+import ForgeExact.DecideOnce.Curved
 import ForgeExact.Axioms
