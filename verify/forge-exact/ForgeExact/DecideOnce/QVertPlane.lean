@@ -107,7 +107,7 @@ theorem proposeVertPlane_complete {qa qb P : Quadric}
     (ha : Quadric.evK M qa (x, y, z) = 0) (hb : Quadric.evK M qb (x, y, z) = 0)
     (hp : Quadric.evK M P (x, y, z) = 0) :
     ∃ v ∈ vs, Denotes M v.x x ∧ v.dOk signFuel = true ∧ v.onVert qa qb P = true ∧
-      M.ev v.Dy x ≠ 0 ∧ y = -(M.ev v.Ny x) / M.ev v.Dy x := by
+      vertPt M v.Ny v.Dy v.Nz v.Dz x = (x, y, z) := by
   unfold proposeVertPlane at h
   simp only [Option.bind_eq_bind] at h
   by_cases hz : P.lz = 0
@@ -131,25 +131,116 @@ theorem proposeVertPlane_complete {qa qb P : Quadric}
           refine ⟨mkVertP qa qb P E n, List.mem_map_of_mem hn, hd, ?_⟩
           have hok := List.all_eq_true.mp hall _ (List.mem_map_of_mem hn)
           simp only [Bool.and_eq_true] at hok
-          obtain ⟨hy, _⟩ := vdOk_ne M hd hok.2
-          refine ⟨hok.2, hok.1, hy, ?_⟩
-          -- y from the linear combination of the two conics
+          obtain ⟨hy, hzd⟩ := vdOk_ne M hd hok.2
+          refine ⟨hok.2, hok.1, ?_⟩
+          have hyv : y = -(M.ev (mkVertP qa qb P E n).Ny x) / M.ev (mkVertP qa qb P E n).Dy x := by
+            -- y from the linear combination of the two conics
+            have hzp := planeZOf_eq M hP hz hp
+            have ea := substZ_ev M qa (planeZOf P).1 (planeZOf P).2.1 (planeZOf P).2.2 x y
+            have eb := substZ_ev M qb (planeZOf P).1 (planeZOf P).2.1 (planeZOf P).2.2 x y
+            rw [← hzp, ha] at ea
+            rw [← hzp, hb] at eb
+            have hl := linT M (onPlane qa P) (onPlane qb P) x y
+            simp only [onPlane] at hl
+            simp only [onPlane] at ea eb hE
+            rw [hE] at hl
+            rw [ea, eb] at hl
+            simp only [mkVertP] at hy ⊢
+            have hinv : M.ev E.D x * (M.ev E.D x)⁻¹ = 1 := Field.mul_inv_cancel hy
+            grind
           have hzp := planeZOf_eq M hP hz hp
-          have ea := substZ_ev M qa (planeZOf P).1 (planeZOf P).2.1 (planeZOf P).2.2 x y
-          have eb := substZ_ev M qb (planeZOf P).1 (planeZOf P).2.1 (planeZOf P).2.2 x y
-          rw [← hzp, ha] at ea
-          rw [← hzp, hb] at eb
-          have hl := linT M (onPlane qa P) (onPlane qb P) x y
-          simp only [onPlane] at hl
-          simp only [onPlane] at ea eb hE
-          rw [hE] at hl
-          rw [ea, eb] at hl
-          simp only [mkVertP] at hy ⊢
-          have hinv : M.ev E.D x * (M.ev E.D x)⁻¹ = 1 := Field.mul_inv_cancel hy
+          simp only [mkVertP] at hyv hzd ⊢
+          simp only [vertPt, Prod.mk.injEq, true_and]
+          refine ⟨hyv.symm, ?_⟩
+          simp only [Model.ev, eval_padd, eval_psub, eval_pscale, eval_pmul, evalWith_cons,
+            evalWith_nil] at hzd ⊢
+          simp only [Model.ev] at hyv hy
+          simp only [planeZOf] at hzp
+          rw [M.q_div _ _ hz, M.q_div _ _ hz, M.q_div _ _ hz, M.q_neg, M.q_neg, M.q_neg] at hzp
+          have hl : M.q P.lz ≠ 0 := fun h0 => hz ((M.q_eq (a := P.lz) (b := 0)).mp (by rw [h0, M.q_zero]))
+          have hDne : evalWith M.ι E.D x ≠ 0 := by simpa [mkVertP] using hy
+          rw [hzp, hyv]
+          simp only [Model.q, M.ι.map_zero, M.ι.map_one] at hl ⊢
           grind
         · cases h
 
 end Model
+
+/-! ## The exchange of `y` and `z` (a plane with no `z`-term), and the gcd step -/
+
+/-- `q(x, z, y)`. -/
+def _root_.ForgeExact.Quad.Quadric.swapYZ (q : Quadric) : Quadric :=
+  ⟨q.xx, q.zz, q.yy, q.xz, q.xy, q.yz, q.lx, q.lz, q.ly, q.c⟩
+
+/-- A sample of the exchanged problem, read back. -/
+def VSample.swapBack (v : VSample) : VSample :=
+  ⟨v.R, v.Nz, v.Dz, v.Ny, v.Dy, v.x, v.Qa, v.Qb, v.Qc⟩
+
+/-- The plane-vertex proposer for any plane not of the form `x = const`. Every check runs on the
+original quadrics. -/
+def proposeVertPlaneAny (qa qb P : Quadric) (fuel : Nat) : Option (List VSample) :=
+  if P.lz ≠ 0 then proposeVertPlane qa qb P fuel
+  else if P.ly ≠ 0 then
+    match proposeVertPlane qa.swapYZ qb.swapYZ P.swapYZ fuel with
+    | none => none
+    | some vs =>
+      let ws := vs.map VSample.swapBack
+      if ws.all (fun v => v.onVert qa qb P && v.dOk signFuel) then some ws else none
+  else none
+
+/-- `G = s R_A + t R_B`, checked: a common root of `R_A` and `R_B` is a root of `G`. -/
+def gcdOk (G s t RA RB : Poly) : Bool := Poly.eqv G (padd (pmul s RA) (pmul t RB))
+
+section Model2
+
+variable {K : Type} [Field K] [LE K] [LT K] [Std.IsLinearOrder K] [Std.LawfulOrderLT K]
+  [OrderedRing K] (M : Model K)
+
+theorem swapYZ_ev (q : Quadric) (x y z : K) :
+    Quadric.evK M q.swapYZ (x, y, z) = Quadric.evK M q (x, z, y) := by
+  simp only [Quadric.swapYZ, Quadric.evK]; grind
+
+/-- **Every common root of `R_A` and `R_B` is a root of `G`.** -/
+theorem gcd_cover {G s t RA RB : Poly} (h : gcdOk G s t RA RB = true) {x : K}
+    (ha : M.ev RA x = 0) (hb : M.ev RB x = 0) : M.ev G x = 0 := by
+  have e := eqv_spec M h x
+  simp only [Model.ev, eval_padd, eval_pmul] at e ha hb ⊢
+  rw [e, ha, hb]; grind
+
+theorem proposeVertPlaneAny_complete {qa qb P : Quadric}
+    (hP : P.xx = 0 ∧ P.yy = 0 ∧ P.zz = 0 ∧ P.xy = 0 ∧ P.xz = 0 ∧ P.yz = 0) {fuel : Nat}
+    {vs : List VSample} (h : proposeVertPlaneAny qa qb P fuel = some vs) {x y z : K}
+    (ha : Quadric.evK M qa (x, y, z) = 0) (hb : Quadric.evK M qb (x, y, z) = 0)
+    (hp : Quadric.evK M P (x, y, z) = 0) :
+    ∃ v ∈ vs, Denotes M v.x x ∧ v.dOk signFuel = true ∧ v.onVert qa qb P = true ∧
+      vertPt M v.Ny v.Dy v.Nz v.Dz x = (x, y, z) := by
+  unfold proposeVertPlaneAny at h
+  split at h
+  · exact proposeVertPlane_complete M hP h ha hb hp
+  · split at h
+    · rename_i hz hy
+      split at h
+      · cases h
+      · rename_i vs0 h0
+        dsimp only at h
+        split at h
+        · rename_i hall
+          simp only [Option.some.injEq] at h
+          subst h
+          have hP' : P.swapYZ.xx = 0 ∧ P.swapYZ.yy = 0 ∧ P.swapYZ.zz = 0 ∧ P.swapYZ.xy = 0 ∧
+              P.swapYZ.xz = 0 ∧ P.swapYZ.yz = 0 := by
+            simp only [Quadric.swapYZ]; exact ⟨hP.1, hP.2.2.1, hP.2.1, hP.2.2.2.2.1, hP.2.2.2.1, hP.2.2.2.2.2⟩
+          obtain ⟨v, hv, hd, _, _, hpt⟩ := proposeVertPlane_complete M hP' h0
+            (by rw [swapYZ_ev]; exact ha) (by rw [swapYZ_ev]; exact hb) (by rw [swapYZ_ev]; exact hp)
+          have hok := List.all_eq_true.mp hall _ (List.mem_map_of_mem hv)
+          simp only [Bool.and_eq_true] at hok
+          refine ⟨v.swapBack, List.mem_map_of_mem hv, hd, hok.2, hok.1, ?_⟩
+          simp only [vertPt, Prod.mk.injEq] at hpt ⊢
+          exact ⟨hpt.1, hpt.2.2, hpt.2.1⟩
+        · cases h
+    · cases h
+
+end Model2
 
 -- the plane z = 0, the unit sphere and the plane y = 0: the two vertices (±1, 0, 0)
 #guard (proposeVertPlane sphere1 planeY0 planeZ 30).map List.length = some 2
@@ -157,7 +248,8 @@ end Model
 def planeTilt : Quadric := ⟨0, 0, 0, 0, 0, 0, 1, 1, 2, -1/2⟩
 def cylZ : Quadric := ⟨1, 1, 0, 0, 0, 0, 0, 0, 0, -1/4⟩
 #guard (proposeVertPlane sphere1 cylZ planeTilt 30).isSome
--- a plane with no z-term is refused (the exchange of y and z is the next step)
+-- a plane with no z-term: refused by the plain proposer, found through the exchange
 #guard (proposeVertPlane sphere1 planeZ planeY0 30).isNone
+#guard (proposeVertPlaneAny sphere1 planeZ planeY0 30).map List.length = some 2
 
 end ForgeExact.DecideOnce.Curved
