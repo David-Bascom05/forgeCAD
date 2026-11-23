@@ -200,19 +200,19 @@ fn size(b: &Box3) -> f64 {
 
 /// Whether a plane square to one of a few axes parts the two hulls by more than `gap`.
 fn apart(x: &Patch, y: &Patch, gap: f64) -> bool {
-    let axes = [
-        Vec3::X,
-        Vec3::Y,
-        Vec3::Z,
-        x.normal(),
-        y.normal(),
-        y.centre() - x.centre(),
-    ];
-    axes.iter().any(|ax| {
-        let Some(u) = ax.normalize() else { return false };
-        let (ix, iy) = (x.extent(u.get()), y.extent(u.get()));
+    let along = |u: Vec3| {
+        let (ix, iy) = (x.extent(u), y.extent(u));
         ix.hi + gap < iy.lo || iy.hi + gap < ix.lo
-    })
+    };
+    let parts = |ax: Vec3| ax.normalize().is_some_and(|u| along(u.get()));
+    // the same axes in the same order (x, y and z already unit), the dearer ones worked out only
+    // when the cheap ones fail
+    along(Vec3::X)
+        || along(Vec3::Y)
+        || along(Vec3::Z)
+        || parts(x.normal())
+        || parts(y.normal())
+        || parts(y.centre() - x.centre())
 }
 
 impl Pair<'_> {
@@ -284,7 +284,8 @@ impl Pair<'_> {
     /// and how far each parameter moves the point (per unit).
     #[allow(clippy::type_complexity)]
     fn at(&self, x: &[f64; 4]) -> (Point3, Vec<f64>, Vec<[f64; 4]>, Vec3, Vec3, [f64; 4]) {
-        match *self {
+        // by reference: the quadric is read, not copied out on every step
+        match self {
             Pair::Spans(a, b) => {
                 let (p, q) = (a.at(Point2::new(x[0], x[1])), b.at(Point2::new(x[2], x[3])));
                 let f = p.p - q.p;
