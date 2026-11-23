@@ -1,0 +1,17 @@
+name = "forgeboolproof"
+version = "0.1.0"
+defaultTargets = ["ForgeBoolProof"]
+# Mathlib, Aeneas's library and forge-exact shared with verify/forge-curved's checkout (same pins).
+packagesDir = "../forge-curved/.lake/packages"
+
+[leanOptions]
+relaxedAutoImplicit = false
+autoImplicit = false
+
+# The body layer (BodyModel: ⟦b⟧, ValidSolid, exactOf) and F5/F6 (rooms, facets, res_eq_reg).
+[[require]]
+name = "forgecurved"
+path = "../forge-curved"
+
+[[lean_lib]]
+name = "ForgeBoolProof"
