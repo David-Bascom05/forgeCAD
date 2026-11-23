@@ -2123,7 +2123,7 @@ mod v2check {
         }
         let n = facets.len();
         let mut parent: Vec<usize> = (0..n).collect();
-        fn find(p: &mut Vec<usize>, x: usize) -> usize {
+        fn find(p: &mut [usize], x: usize) -> usize {
             let mut x = x;
             while p[x] != x {
                 p[x] = p[p[x]];
