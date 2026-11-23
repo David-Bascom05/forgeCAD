@@ -23,6 +23,8 @@ pub mod decide_once_curved_ref;
 mod decide_once_row;
 #[cfg(feature = "decisions")]
 pub mod decisions;
+#[cfg(any(test, feature = "decisions"))]
+pub mod edge_screen;
 pub mod imprint;
 pub mod nary;
 pub mod shape;
