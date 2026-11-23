@@ -272,3 +272,42 @@ Anything outside the lemmas' hypotheses is reported undecided, so the verdict is
 - more than three surfaces, or dependent normals.
 
 The sampled check (`apexCheck`) is no longer used.
+
+## 4. Curves where three or more surfaces meet, and edges touching surfaces
+
+**Triple curves (`QRef.tripleCurves`, `curveSectors`).** On a plane `a`, two quadrics whose
+restrictions are proportional (one conic) meet along that conic, with `a`. Take a rational point
+`p` of it, found exactly on a rational line in the plane. Let `T` be the surfaces through `p`,
+with gradients `g_j`.
+
+**Theorem 4.1.** Suppose `|T| ≥ 3`, no gradient is zero, and no two are parallel, and all are
+orthogonal to `D = g_0 × g_1` (they share the tangent line `D`). Then near `p` the result is a
+3-manifold with boundary iff the kept sectors of the line arrangement `{g_j · d = 0}`, in the
+normal plane `D⊥`, form one cyclic run (or none, or all).
+
+*Proof.*
+- By the implicit function theorem, the surfaces near `p` are transversal in the normal plane: no
+  two normals are parallel. So a neighbourhood is homeomorphic to `(−ε, ε) × (a neighbourhood of
+  0 in D⊥)`, with the surfaces mapped to the lines `{g_j·d = 0}`.
+- Off the lines, membership is the history on the sector's signs; the other quadrics keep their
+  signs near `p` (`sign_nbhd`).
+- A union of closed sectors of a circle-arrangement is an arc iff it is one cyclic run. Its
+  product with an interval is a disc (the link at `p`) iff it is an arc. Otherwise the link has
+  several pieces.
+- The code orders the `2|T|` rays `± g_j × D` exactly (by the half and the cross product in the
+  basis `g_0`, `D × g_0`). It takes each sector's direction as the sum of its bounding rays, and
+  counts the changes of kept round the cycle: more than two means more than one run. ∎
+
+If two normals are parallel at `p`, the surfaces are tangent there, and the pencil analysis (§2)
+judges it. The triple-curve test stands aside.
+
+**Edges touching surfaces (`QRef.edgeTouches`).** These are detected exactly:
+- on a plane `a`, the curve `a ∩ b` tangent to `c`'s trace at a rational point `p`;
+- found as a rational root of the plane pencil `det(C_b + t C_c)`, whose member's singular point
+  lies on both conics;
+- with the normals of `a`, `b`, `c` pairwise non-parallel, and the history varying across the
+  eight local sign patterns.
+
+The local verdict needs second order along the edge (the edge and the surface part quadratically
+away from `p`), so such a contact is reported undecided, and the verdict is ambiguous. This
+replaces the hint check as the reference's own detection of these contacts.

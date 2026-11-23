@@ -225,8 +225,9 @@ def runCurved (j : Json) : Except String Json := do
   if strict then ambiguous := ambiguous ++ nearNotes.filter (·.startsWith "surfaces")
   let excl := cts.map (·.excl)
   let (apexBad, apexUnd) := apexDecide A solids
-  let bad := cts.filterMap (·.bad) ++ edgeBad ++ apexBad
-  let opens := cts.filterMap (·.open_) ++ apexUnd
+  let (triBad, triUnd) := tripleCurves A
+  let bad := cts.filterMap (·.bad) ++ edgeBad ++ apexBad ++ triBad
+  let opens := cts.filterMap (·.open_) ++ apexUnd ++ edgeTouches A ++ triUnd
   let empty := tree.witness.isNone && tree.und.all fun b => A.anyKept (signsAt A b) excl == some false
   let verdict :=
     if !ambiguous.isEmpty then "ambiguous"
