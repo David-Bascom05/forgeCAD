@@ -92,8 +92,10 @@ What the checks caught while the examples were written (each now a test, tests/r
    generate 11 ms, post and round trip 0.13 ms, certify 267 ms, of which ~73% the in-process
    stock's exact booleans. Done: the normal path keeps the stock as columns (stair.rs: it loses
    only rectangles proven inside a cut's swept outline, `rect_in_convex`, so it stays a superset
-   and G3 against it is sound) with no booleans: certify 58 ms, `forgecad cam` 70 ms end to end
-   (was 276). The exact stock and the G4 leftover run in `cam F check` and as the test oracle.
+   and G3 against it is sound) with no booleans; the staircase's inside test on its steps (no
+   exact region); a box pre-test per check (the image lies in the core's box grown by r and,
+   along x, by the depth: the smear never exceeds it, `smear_le` at xm = 0; only a positive gap
+   concludes). Certify 267 → 31 ms on the shaft job. The exact stock and the G4 leftover run in `cam F check` and as the test oracle.
    Next: G1 for the nose disc by construction from the exact offset (the remaining checks are
    the input-dependent ones: the insert's flanks and the holder against the part and the
    chuck).

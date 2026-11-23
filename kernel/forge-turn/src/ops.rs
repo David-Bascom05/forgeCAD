@@ -1222,7 +1222,7 @@ impl StockModel {
             StockModel::Exact(r) => remove(r, obs, q, rep),
             StockModel::Columns(c) => {
                 if c.clear_poly(q) {
-                    match Obstacle::of_valid("stock", &c.region(), 0.0) {
+                    match Obstacle::of_stair("stock", c) {
                         Ok(o) => *obs = o,
                         Err(_) => rep.stock_skipped += 1,
                     }
