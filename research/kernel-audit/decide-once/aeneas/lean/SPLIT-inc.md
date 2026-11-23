@@ -39,4 +39,4 @@ Points to agree within each group:
 | K | done: `core_k_loop0_spec` (AInv) with `result_eq`, `orient_eq`; `around_e_spec`, `aroundE_len`, edge scan `core_k_loop1_spec` with `edges_find_eq`; `around_v_spec`, `fans_spec`, `bad_vert_spec` (= `badVert`, via the generic `fan_bad`), vert scan `core_k_loop2_spec` | RefineIncAssemble, RefineIncTouch, FanBridgeI, RefineIncFan |
 | E | done: `core_k_spec` (= `coreK`, given `UnifySpec`), `core_spec` (= `coreMI`, given `UnifySpec` and `CollapseSpec`), `incCoreSpec_of`. The K lemmas now take any keep vector with `KeepRel` to a Lean table, so they serve the collapsed table too | RefineIncCore |
 | U | to do: `UnifySpec` | |
-| M | to do: `CollapseSpec` | |
+| M | started: the Lean collapse by positions over the face ledger (`KI.collapse_pos`, RefineCollapse Part 1 ported). Rust loops 0, 1, 3, 5 and 6 are definitionally v1's (shown by unfolding); 2, 4, 7, 8 and the main function still need specs | RefineIncCollapseLean |
