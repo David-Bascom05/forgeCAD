@@ -24,12 +24,12 @@ lemma pio2_close {C : ℚ} (hC : C = PIO2_1.val + PIO2_1T.val ∨ C = PIO2_1.val
   rcases hC with rfl | rfl | rfl <;> (push_cast; rw [abs_le]; constructor <;> norm_num at h1 h2 ⊢ <;> linarith)
 
 /-- **`rem_pio2`'s accuracy.** For finite `x` with `|x| ≤ 2048`: `y0`, `y1` finite, `|n| ≤ 1305`,
-`|y0 + y1 − (x − n·π/2)| ≤ 2^-56`, `|y1| ≤ 2^-53·|y0| + 2^-64`, and `|y0 + y1| ≤ 0.7855`. -/
+`|y0 + y1 − (x − n·π/2)| ≤ 2^-56`, `|y1| ≤ 2^-53·|y0| + 2^-64`, and `|y0 + y1| ≤ 0.78541`. -/
 theorem remPio2_spec {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
     (remPio2 x).2.1.isFinite ∧ (remPio2 x).2.2.isFinite ∧ |(remPio2 x).1| ≤ 1305 ∧
       |((remPio2 x).2.1.val + (remPio2 x).2.2.val : ℝ) - (x.val - (remPio2 x).1 * (Real.pi / 2))| ≤ 1 / 2 ^ 56 ∧
       |(remPio2 x).2.2.val| ≤ 2 ^ (-53 : ℤ) * |(remPio2 x).2.1.val| + 1 / 2 ^ 64 ∧
-      |(remPio2 x).2.1.val + (remPio2 x).2.2.val| ≤ 7855 / 10000 := by
+      |(remPio2 x).2.1.val + (remPio2 x).2.2.val| ≤ 78541 / 100000 := by
   obtain ⟨h1, h2, h3, ⟨C, hC, h4⟩, h5, h6⟩ := remPio2_rat hx hb
   refine ⟨h1, h2, h3, ?_, h5, ?_⟩
   · have hc := pio2_close hC
@@ -61,7 +61,7 @@ theorem remPio2_spec {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
       (x.val - (remPio2 x).1 * PIO2_1.val)
     have b := abs_sub (((remPio2 x).2.1.val + (remPio2 x).2.2.val - (x.val - (remPio2 x).1 * C)) +
       (x.val - (remPio2 x).1 * PIO2_1.val)) ((remPio2 x).1 * (C - PIO2_1.val))
-    have : (1 : ℚ) / 2 ^ 60 + 78540 / 100000 + 1305 * (61 / 10 ^ 12) ≤ 7855 / 10000 := by norm_num
+    have : (1 : ℚ) / 2 ^ 60 + 78540 / 100000 + 1305 * (61 / 10 ^ 12) ≤ 78541 / 100000 := by norm_num
     linarith
 
 end IEEE754.Dmath

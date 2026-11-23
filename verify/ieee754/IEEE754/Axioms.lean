@@ -6,6 +6,7 @@ import IEEE754.Binary64
 import IEEE754.Compare
 import IEEE754.Computed
 import IEEE754.Dmath.Reduction
+import IEEE754.Dmath.CosPoly
 
 /-!
 # Only the standard axioms
@@ -63,4 +64,4 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.F64.two_product_exact
   -- dmath: rem_pio2
   IEEE754.Dmath.quadrant IEEE754.Dmath.rem1 IEEE754.Dmath.tail IEEE754.Dmath.refine
-  IEEE754.Dmath.remPio2_rat IEEE754.Dmath.remPio2_spec
+  IEEE754.Dmath.remPio2_rat IEEE754.Dmath.remPio2_spec IEEE754.Dmath.ksin_poly IEEE754.Dmath.kcos_poly
