@@ -55,6 +55,17 @@ proposer, and it answers `none` when the cover does not check (`Skip::Budget`). 
 checked both ways (`sp^k = p·w` and `p = sp·h`; `sqfree_roots`). **`rootsOf_complete`**: if
 `rootsOf p fuel = some ns`, every root of `p` in any model is denoted by some number in `ns`.
 
+**The sweep statements** are committed by the LemmaD session (46369a9 on `dol-curved-lemmad`,
+ForgeCurved/Sweep.lean): `Slab`, `Transverse`, `NoTriple`, `NoCrit`, `ZeroGraphs`, `CrossesAll`,
+`GraphLemma`, `FacetCrossing`. `crossesAll_edges` (edge cells cross every sweep plane) is proven.
+They hold over any real normed space with a linear sweep, so the sweep-plane version is an
+instance. `qsampler_covers` is stated against them.
+
+**Correction to the critical set: properness.** Zeros over compact sub-slabs must be bounded
+(`Proper`). xy = 1 in z = 0 against the sweep x has no critical point, yet its branches are graphs
+over only part of a slab containing x = 0. The direction rule therefore also requires that no curve
+has an asymptotic direction within a level plane, a leading-form test checked exactly.
+
 **Obligation from A8 (the master, 2026-11-23): every arc at a vertex is found.** The face
 builder's sectors need it, at transversal vertices from the tangents' exact order, and at
 tangential vertices from the crossings on a certified box's faces (`proposeEdgeAny_complete`).
