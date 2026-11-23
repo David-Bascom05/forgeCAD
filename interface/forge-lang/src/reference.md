@@ -28,7 +28,7 @@ expect volume = 11966 +- 0.1%
 `#` starts a comment. A comment line `# units in` (or `cm`, `m`, `ft`, `mm`) is the part's
 own unit for people: the app shows lengths and takes bare numbers typed in it, converting to mm as
 it writes them; the text's numbers stay mm and nothing builds from the line. `#~ID ` starts a line
-`Suppress {id}` took out of the build (`#~ID< `, `#~ID> `: one it put on a line of its own). Numbers: `12`, `0.5`, `1e3`, with a unit `mm` or `deg`; `inch(0.063)` is a length of 0.063 in, 25.4 mm to the inch exactly. A minus sign
+`Suppress {id}` took out of the build (`#~ID< `, `#~ID> `: one it put on a line of its own). Numbers: `12`, `0.5`, `1e3`, with a unit `mm`, `in` or `deg` written right after the digits. `in` is inches, a length, 25.4 mm exactly (`0.063in` is 1.6002 mm). A unit is the letters glued to the number, so `5in` is always a number in inches; `5 in OCC`, with a space, is a number and the keyword `in` (proved: LexUnits.lean). A minus sign
 directly before a digit, where no value precedes it, is part of the number (`-1`, `(-1, 2)`);
 `a -1` and `a - 1` subtract. Strings: `"M6"`. Names: letters, digits, `_`. Keywords: `shared param
 fn for in if else return expect and or not true false sketch path at component` (`at:` is still a keyword
@@ -803,7 +803,7 @@ hardware it presses in, and the tolerances it quotes, with where the data came f
 Every field is optional: a rule a profile leaves out is not checked.
 
 ```
-sheet(PROFILE, t: inch(0.063), vendor: "sendcutsend", material: "5052-H32 aluminum")
+sheet(PROFILE, t: 0.063in, vendor: "sendcutsend", material: "5052-H32 aluminum")
 shared fab = vendor("fabworks", material: "304")     # a shop, for sheet(.., shop: fab)
 ```
 
@@ -817,7 +817,7 @@ wins over the vendor's stock (a radius it does not tool is then RadiusNotTooled 
 nearest ids), `VendorMaterial` (the materials offered; SetArg), `VendorThickness` (the stocked
 thicknesses in mm and inches with gauges; SetParam on `t` to the nearest). A vendor that states no
 bend rule for a stock it bends (a partial profile) leaves `r:` and `bend:` to the sheet
-(MissingArg). `inch(0.063)` is 1.6002 mm exactly.
+(MissingArg). `0.063in` is 1.6002 mm exactly.
 
 Built in, each restated from the vendor's public design pages, read 2026-11-22 (jlc 2026-11-23), its sources in the
 file and in research/sheet-metal/vendors/. Not the vendors' own, not endorsed by them: verify with

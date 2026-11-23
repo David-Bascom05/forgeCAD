@@ -855,10 +855,11 @@ fn expect(ev: &mut Eval, s: &syntax::Stmt, m: &Measure) -> Option<ExpectResult> 
         }
         return Some(ExpectResult { metric, measured, ok });
     };
+    let inch = |x: f64, u: syntax::Unit| if u == syntax::Unit::In { x * 25.4 } else { x };
     let lit = |e: &syntax::Expr| match e.kind {
-        ExprKind::Num(x, _) => Some(x),
+        ExprKind::Num(x, u) => Some(inch(x, u)),
         ExprKind::Neg(ref a) => match a.kind {
-            ExprKind::Num(x, _) => Some(-x),
+            ExprKind::Num(x, u) => Some(-inch(x, u)),
             _ => None,
         },
         _ => None,

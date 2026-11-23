@@ -1,6 +1,6 @@
 //! Vendor profiles in Forge: a sheet takes its vendor's radius and K for its stock (so the flat
 //! develops by them), a vendor shop at the part level, the refusals with their options and fixes,
-//! a project's own profile, inch(..), and the DFM report: each rule just inside and just outside its
+//! a project's own profile, inches (`0.063in`), and the DFM report: each rule just inside and just outside its
 //! limit, with where it is.
 use forge_lang::dfm;
 use forge_lang::edit::apply;
@@ -43,7 +43,7 @@ fn errors(r: &Run) -> Vec<&'static str> {
 
 #[test]
 fn a_sheet_bends_by_its_vendors_stock() {
-    let r = run(&part("sendcutsend", "5052-H32 aluminum", "inch(0.063)", 40.0));
+    let r = run(&part("sendcutsend", "5052-H32 aluminum", "0.063in", 40.0));
     assert!(r.errors.is_empty(), "{:?}", errors(&r));
     let sh = &r.sheets[0];
     // the calculator's row for 0.063 in 5052: radius 0.035 in, K 0.42
@@ -67,7 +67,7 @@ fn a_sheet_bends_by_its_vendors_stock() {
 #[test]
 fn a_vendor_shop_at_the_part_level() {
     let src = r#"shared fab = vendor("fabworks", material: "304")
-shared t = inch(0.06)
+shared t = 0.06in
 param plan.L = 60
 param plan.W = 40
 param up.h = 20
@@ -101,14 +101,14 @@ fn what_the_vendor_does_not_offer_is_refused_with_the_options() {
     let fixed = apply(&src, &fix[0]).unwrap();
     assert!(run(&fixed).errors.is_empty());
     // a material it does not offer
-    let r = run(&part("sendcutsend", "5025 aluminium", "inch(0.063)", 40.0));
+    let r = run(&part("sendcutsend", "5025 aluminium", "0.063in", 40.0));
     assert_eq!(errors(&r), ["VendorMaterial"]);
     let fix = r.errors[0].fixes();
     assert!(
         matches!(&fix[0], Op::SetArg { arg, text, .. } if arg == "material" && text == "\"5052-H32 aluminum\"")
     );
     // a vendor not found
-    let r = run(&part("sendcutsnd", "5052", "inch(0.063)", 40.0));
+    let r = run(&part("sendcutsnd", "5052", "0.063in", 40.0));
     assert_eq!(errors(&r), ["UnknownVendor"]);
     assert!(matches!(&r.errors[0].fixes()[0], Op::SetArg { text, .. } if text == "\"sendcutsend\""));
 }
@@ -166,7 +166,7 @@ fn rule<'a>(r: &'a dfm::Report, rule: &str) -> Vec<&'a dfm::Item> {
 fn dfm_hole_to_bend_just_inside_and_just_outside() {
     // SendCutSend: half the die width (0.472 in) from the bend's centre, for 0.063 in 5052
     let limit = 0.236 * IN;
-    let probe = dfm(&part("sendcutsend", "5052", "inch(0.063)", 75.0));
+    let probe = dfm(&part("sendcutsend", "5052", "0.063in", 75.0));
     let near = rule(&probe, "HoleNearBend");
     assert_eq!(near.len(), 1, "{}", probe.text());
     let i = near[0];
@@ -182,7 +182,7 @@ fn dfm_hole_to_bend_just_inside_and_just_outside() {
     // moving the hole away from the bend (-x) adds to the distance one for one
     let gap = i.measured.unwrap() - limit;
     for (dx, flagged) in [(gap + 0.01, true), (gap - 0.01, false)] {
-        let r = dfm(&part("sendcutsend", "5052", "inch(0.063)", 75.0 + dx));
+        let r = dfm(&part("sendcutsend", "5052", "0.063in", 75.0 + dx));
         assert_eq!(
             !rule(&r, "HoleNearBend").is_empty(),
             flagged,
@@ -197,7 +197,7 @@ fn dfm_hole_size_and_edge_just_inside_and_just_outside() {
     // 0.5 t for both
     let t = 0.063 * IN;
     let with_r = |r: f64, y: f64| {
-        part("sendcutsend", "5052", "inch(0.063)", 40.0)
+        part("sendcutsend", "5052", "0.063in", 40.0)
             .replace("param hs.r = 2", &format!("param hs.r = {r}"))
             .replace("param hs.y = 25", &format!("param hs.y = {y}"))
     };
@@ -214,8 +214,7 @@ fn dfm_hole_size_and_edge_just_inside_and_just_outside() {
 fn dfm_flange_bend_length_and_operations() {
     // 0.303 in the least formed flange for 0.063 in 5052 (measured from the mold line)
     let flange = |h: f64| {
-        part("sendcutsend", "5052", "inch(0.063)", 40.0)
-            .replace("param up.h = 20", &format!("param up.h = {h}"))
+        part("sendcutsend", "5052", "0.063in", 40.0).replace("param up.h = 20", &format!("param up.h = {h}"))
     };
     let short = dfm(&flange(0.303 * IN - 0.01));
     assert_eq!(rule(&short, "FlangeTooShort").len(), 1, "{}", short.text());
@@ -227,14 +226,14 @@ fn dfm_flange_bend_length_and_operations() {
     // a hem: SendCutSend does not hem
     let hemmed = format!(
         "{}tip = hem(base.edge(plan.outline[3]), kind: \"open\", gap: t, length: 10)\n",
-        part("sendcutsend", "5052", "inch(0.063)", 40.0)
+        part("sendcutsend", "5052", "0.063in", 40.0)
     );
     let r = dfm(&hemmed);
     let ops = rule(&r, "OperationNotOffered");
     assert_eq!(ops.len(), 1, "{}", r.text());
     assert_eq!(ops[0].feature, "tip");
     // 6061 is cut, not bent
-    let r = dfm(&part("sendcutsend", "6061", "inch(0.125)", 40.0));
+    let r = dfm(&part("sendcutsend", "6061", "0.125in", 40.0));
     assert_eq!(rule(&r, "OperationNotOffered").len(), 1, "{}", r.text());
 }
 
@@ -252,7 +251,7 @@ fn dfm_reports_refusals_and_parts_without_a_shop() {
         "{s}"
     );
     // the JSON of a clean part: the vendor's provenance and the rules it was held to
-    let r = dfm(&part("sendcutsend", "5052", "inch(0.063)", 40.0));
+    let r = dfm(&part("sendcutsend", "5052", "0.063in", 40.0));
     assert_eq!(r.count(), 0, "{}", r.text());
     let mut s = String::new();
     r.json().write(&mut s);
@@ -262,7 +261,7 @@ fn dfm_reports_refusals_and_parts_without_a_shop() {
 
 #[test]
 fn inches() {
-    let r = run("shared a = inch(1)\nshared b = a + inch(0.5)\n");
+    let r = run("shared a = 1in\nshared b = a + 0.5in\n");
     assert!(r.errors.is_empty());
     let v = |n: &str| match &r.shared.iter().find(|p| p.key.name == n).unwrap().value {
         forge_lang::eval::Value::Num(x) => x.v,
@@ -275,7 +274,7 @@ fn inches() {
 #[test]
 fn a_partial_vendor_makes_up_no_bend_data() {
     // OSH Cut states no radius or K: a bent sheet must say its own
-    let src = part("oshcut", "5052", "inch(0.063)", 40.0);
+    let src = part("oshcut", "5052", "0.063in", 40.0);
     assert_eq!(errors(&run(&src)), ["MissingArg"]);
     let own = src.replace(
         "vendor: \"oshcut\"",

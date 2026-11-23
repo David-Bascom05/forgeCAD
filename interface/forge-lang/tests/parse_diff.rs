@@ -573,6 +573,7 @@ fn lexed(src: &str) -> String {
             TokKind::Num(_, Unit::None) => "n0".into(),
             TokKind::Num(_, Unit::Mm) => "n1".into(),
             TokKind::Num(_, Unit::Deg) => "n2".into(),
+            TokKind::Num(_, Unit::In) => "n3".into(),
             TokKind::Str(_) => "s".into(),
             TokKind::Id(_) => "i".into(),
             TokKind::Kw(w) => format!("k{}", KEYWORDS.iter().position(|k| k == w).expect("a keyword")),
@@ -653,6 +654,9 @@ fn lexer_is_the_model() {
         "deg",
         "1..2",
         "7.",
+        "0.063in",
+        "5in",
+        " in ",
     ];
     for _ in 0..if long() { 100000 } else { 8000 } {
         let k = rng.below(24);
@@ -675,7 +679,7 @@ fn lexer_is_the_model() {
     }
     let answers: Vec<(String, String)> = texts.iter().map(|t| (hex(t), lexed(t))).collect();
     for kind in [
-        "eN ", "eU ", "eS ", "eC ", "n0:", "n1:", "n2:", "k", "o", "s:", "c:", "j:",
+        "eN ", "eU ", "eS ", "eC ", "n0:", "n1:", "n2:", "n3:", "k", "o", "s:", "c:", "j:",
     ] {
         let k = answers
             .iter()

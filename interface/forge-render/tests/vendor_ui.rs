@@ -6,7 +6,7 @@
 
 use forge_render::gui::{Gui, Headless};
 
-const PART: &str = r#"shared t = inch(0.063)
+const PART: &str = r#"shared t = 0.063in
 param plan.L = 80
 param plan.W = 50
 param up.h = 20

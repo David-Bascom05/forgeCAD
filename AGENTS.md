@@ -27,7 +27,7 @@ bolts = pattern(of: bolt, layout: lin(along: plan.outline[0].dir, n: count(2), s
 round = fillet(edges(of: boss, crease: "convex"), r)
 ```
 
-Sheet metal can be held to a fabricator's published capabilities: `sheet(plan, t: inch(0.063),
+Sheet metal can be held to a fabricator's published capabilities: `sheet(plan, t: 0.063in,
 vendor: "sendcutsend", material: "5052-H32 aluminum")` takes the vendor's radius and K for that
 stock and refuses a thickness or material it does not offer, with the options as fixes;
 `query F dfm` lists every violation (rule, measured, limit, faces, place on the flat).

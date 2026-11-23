@@ -13,7 +13,10 @@ fn every_builtin_reads_and_writes_back_the_same() {
             v.source.as_deref().is_some_and(|s| s.starts_with("https://")),
             "{file}"
         );
-        assert!(matches!(v.taken.as_deref(), Some("2026-11-22" | "2026-11-23")), "{file}");
+        assert!(
+            matches!(v.taken.as_deref(), Some("2026-11-22" | "2026-11-23")),
+            "{file}"
+        );
         assert!(v.note.as_deref().is_some_and(|n| n.contains(VERIFY)), "{file}");
         // every material named for density is one forge-material has
         for m in &v.materials {
@@ -195,5 +198,9 @@ fn jlc_holds_its_published_bend_table() {
     // no radius or K published: none checked, none made up
     assert!(s.radii.is_empty());
     assert!(shop.offers(fs::Operation::Hem));
-    assert!(shop.hardware.iter().any(|h| h.code == "CLS-M3-1" && h.hole == 4.25));
+    assert!(
+        shop.hardware
+            .iter()
+            .any(|h| h.code == "CLS-M3-1" && h.hole == 4.25)
+    );
 }

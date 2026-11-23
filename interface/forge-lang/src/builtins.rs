@@ -35,7 +35,6 @@ pub const BUILTINS: &[&str] = &[
     "max",
     "count",
     "ratio",
-    "inch",
     "len",
     "polar",
     "pt",
@@ -763,18 +762,6 @@ fn math1(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value
             };
             values::derive(&x, v, Dim::Angle)
         }
-        // a length in inches: 25.4 mm exactly (`inch(0.063)`, a vendor's stock)
-        "inch" => {
-            if !matches!(x.dim, Dim::Length | Dim::Any | Dim::Ratio) {
-                return Err(Error::WrongDim {
-                    span: sp,
-                    what: "inch(..) takes a number of inches",
-                    want: Dim::Length,
-                    found: x.dim,
-                });
-            }
-            values::derive(&x, x.v * 25.4, Dim::Length)
-        }
         "count" => {
             if !x.is_whole() || x.v < 0.0 {
                 return Err(Error::NotWhole { span: sp, value: x.v });
@@ -813,7 +800,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
     }
     match name {
         "properties" => crate::props::call(ev, args, span),
-        "sqrt" | "abs" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "count" | "ratio" | "inch" => {
+        "sqrt" | "abs" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "count" | "ratio" => {
             math1(ev, name, args, span)
         }
         // index arithmetic: the whole quotient and the remainder of two counts (`div(k, 5)` is

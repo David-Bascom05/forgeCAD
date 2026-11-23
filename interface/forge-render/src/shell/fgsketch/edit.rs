@@ -126,6 +126,7 @@ impl Rd<'_> {
             ExprKind::Num(_, u) => How::Lit(match u {
                 Unit::Deg => "deg",
                 Unit::Mm => "mm",
+                Unit::In => "in",
                 Unit::None => "",
             }),
             ExprKind::Name(n) => match self.params.get(n) {
