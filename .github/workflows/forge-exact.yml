@@ -44,6 +44,9 @@ jobs:
           echo "$out"
           echo "$out" | sed -n 1p | grep -q '"verdict":"nonmanifold"'
           echo "$out" | sed -n 2p | grep -q '"verdict":"solid".*"volume":"7"'
+      - name: curved_exact is not vacuous (the representative curved inputs are certified)
+        working-directory: verify/forge-exact
+        run: .lake/build/bin/curved-guards
       - name: rust (rust-toolchain.toml)
         run: rustup show
       - uses: Swatinem/rust-cache@v2

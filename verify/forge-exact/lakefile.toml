@@ -1,6 +1,6 @@
 name = "forgeexact"
 version = "0.1.0"
-defaultTargets = ["ForgeExact", "forge-exact", "sweep-ref"]
+defaultTargets = ["ForgeExact", "forge-exact", "sweep-ref", "curved-guards"]
 
 [leanOptions]
 relaxedAutoImplicit = false
@@ -22,3 +22,9 @@ root = "Main"
 [[lean_exe]]
 name = "sweep-ref"
 root = "SweepMain"
+
+# Non-vacuity of `curved_exact`: the representative curved inputs are certified (compiled; the
+# interpreted #guard of all five takes minutes).
+[[lean_exe]]
+name = "curved-guards"
+root = "CurvedGuards"
