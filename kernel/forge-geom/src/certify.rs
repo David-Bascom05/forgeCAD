@@ -70,6 +70,16 @@ fn ia(a: I, b: I) -> I {
     }
 }
 
+/// a * b, rounded outward: forge_math's `*`, inlined here (the same operations, the same bits).
+#[inline]
+fn im(a: I, b: I) -> I {
+    let c = [a.lo * b.lo, a.lo * b.hi, a.hi * b.lo, a.hi * b.hi];
+    I {
+        lo: c[0].min(c[1]).min(c[2]).min(c[3]).next_down(),
+        hi: c[0].max(c[1]).max(c[2]).max(c[3]).next_up(),
+    }
+}
+
 /// a - x for a float x, rounded outward.
 #[inline]
 fn isf(a: I, x: f64) -> I {
@@ -1202,7 +1212,7 @@ impl Bp {
         let mut p = Bp::zero(dt, dv);
         for i in 0..=dt {
             for j in 0..=dv {
-                p.c[i * (dv + 1) + j] = self.at(i, j) + o.at(i, j);
+                p.c[i * (dv + 1) + j] = ia(self.at(i, j), o.at(i, j));
             }
         }
         p
@@ -1211,7 +1221,7 @@ impl Bp {
         Bp {
             dt: self.dt,
             dv: self.dv,
-            c: self.c.iter().map(|c| *c * x).collect(),
+            c: self.c.iter().map(|c| im(*c, x)).collect(),
         }
     }
     fn mul(&self, o: &Bp) -> Bp {
@@ -1227,7 +1237,7 @@ impl Bp {
                     for l in 0..=o.dv {
                         let b = o.at(k, l);
                         if b != I::point(0.0) {
-                            p.c[(i + k) * w + j + l] = p.c[(i + k) * w + j + l] + a * b;
+                            p.c[(i + k) * w + j + l] = ia(p.c[(i + k) * w + j + l], im(a, b));
                         }
                     }
                 }
@@ -1259,19 +1269,19 @@ fn bernstein(p: &Bp, t: I, v: I) -> Coeffs {
         // shift: p(lo + h x), Horner-like Taylor shift
         for k in 0..d {
             for i in (k..d).rev() {
-                c[i] = c[i] + c[i + 1] * lo;
+                c[i] = ia(c[i], im(c[i + 1], I::point(lo)));
             }
         }
         let h = I::point(hi) - I::point(lo);
         let mut hp = I::point(1.0);
         for ci in c.iter_mut().take(d + 1) {
-            *ci = *ci * hp;
-            hp = hp * h;
+            *ci = im(*ci, hp);
+            hp = im(hp, h);
         }
         // power to Bernstein: b_k = sum_{i <= k} C(k, i) / C(d, i) a_i
         let a = *c;
         for k in 0..=d {
-            c[k] = (0..=k).fold(I::point(0.0), |acc, i| acc + a[i] * r[k][i]);
+            c[k] = (0..=k).fold(I::point(0.0), |acc, i| ia(acc, im(a[i], r[k][i])));
         }
     };
     let (rn, rm) = (ratios(n), if m == n { ratios(n) } else { ratios(m) });
@@ -1425,12 +1435,21 @@ struct Chart {
     /// The half turns of u's and v's charts (1 or -1: cos and sin negated).
     turn: f64,
     turn_v: f64,
+    /// False for a chart left out (`charts_in` with `skip`): its image misses the region or is
+    /// clear of the other form, and f was not built.
+    live: bool,
 }
 
 impl Host {
     /// The charts of a line host (plane: one, in (u, v); cylinder and cone: two, t = tan(u/2)
     /// over [-1, 1] and the half turn), with the other form as a polynomial on each.
     fn charts(&self, other: &Form, region: &V) -> Option<Vec<Chart>> {
+        self.charts_in(other, region, false)
+    }
+
+    /// `charts`, each chart whose image misses the region or is clear of the other form left
+    /// out with `skip` (`live` false, no polynomial built).
+    fn charts_in(&self, other: &Form, region: &V, skip: bool) -> Option<Vec<Chart>> {
         let (_, v) = self.domain(region)?;
         if v.is_empty() {
             return Some(Vec::new());
@@ -1474,6 +1493,29 @@ impl Host {
             }
         };
         for &(turn, turn_v) in turns {
+            let t = match self.form {
+                Form::Plane { .. } => self.domain(region)?.0,
+                _ => I::new(-1.0, 1.0),
+            };
+            let v = match self.form {
+                Form::Sphere { .. } | Form::Torus { .. } => I::new(-1.0, 1.0),
+                _ => v,
+            };
+            if skip {
+                let dead = Chart {
+                    f: Bp::zero(0, 0),
+                    t,
+                    v,
+                    turn,
+                    turn_v,
+                    live: false,
+                };
+                let image = self.chart_box(&dead, t, v);
+                if meets(&image, region).is_none() || other.off_cheap(&image) {
+                    out.push(dead);
+                    continue;
+                }
+            }
             // l(t, v) homogenised by w (plane: w = 1, l = (u, v, 0); a line host: w = 1 + t^2;
             // sphere and torus: w = (1 + t^2)(1 + s^2), s the v chart's variable)
             let (w, l): (Bp, [Bp; 3]) = match self.form {
@@ -1564,20 +1606,13 @@ impl Host {
                     sq(&a).add(&w2.mul(&rho2).scale(-(I::point(big * big).widened() * 4.0)))
                 }
             };
-            let t = match self.form {
-                Form::Plane { .. } => self.domain(region)?.0,
-                _ => I::new(-1.0, 1.0),
-            };
-            let v = match self.form {
-                Form::Sphere { .. } | Form::Torus { .. } => I::new(-1.0, 1.0),
-                _ => v,
-            };
             out.push(Chart {
                 f,
                 t,
                 v,
                 turn,
                 turn_v,
+                live: true,
             });
         }
         Some(out)
@@ -1609,6 +1644,41 @@ impl Host {
                 (2.0 * (big + r) * c, 2.0 * r * c)
             }
         }
+    }
+
+    /// A chart's (t, v) point, in floats: a guide, not an enclosure (chart_box is that).
+    fn chart_point(&self, ch: &Chart, t: f64, v: f64) -> Point3 {
+        let half = |x: f64, turn: f64| -> (f64, f64) {
+            let w = 1.0 + x * x;
+            ((1.0 - x * x) / w * turn, 2.0 * x / w * turn)
+        };
+        let (l, o): ([f64; 3], Point3) = match self.form {
+            Form::Plane { o, .. } => ([t, v, 0.0], o),
+            Form::Cylinder { o, r, .. } | Form::Cone { o, r, .. } => {
+                let (c, s) = half(t, ch.turn);
+                let rho = match self.form {
+                    Form::Cone { sin, cos, .. } => r + v * (sin / cos),
+                    _ => r,
+                };
+                ([c * rho, s * rho, v], o)
+            }
+            Form::Sphere { o, r } | Form::Torus { o, r, .. } => {
+                let big = match self.form {
+                    Form::Torus { big, .. } => big,
+                    _ => 0.0,
+                };
+                let (cu, su) = half(t, ch.turn);
+                let (cv, sv) = half(v, ch.turn_v);
+                let ring = big + cv * r;
+                ([cu * ring, su * ring, sv * r], o)
+            }
+        };
+        let m = &self.m;
+        Point3::new(
+            o.x + m[0][0] * l[0] + m[0][1] * l[1] + m[0][2] * l[2],
+            o.y + m[1][0] * l[0] + m[1][1] * l[1] + m[1][2] * l[2],
+            o.z + m[2][0] * l[0] + m[2][1] * l[1] + m[2][2] * l[2],
+        )
     }
 
     /// The points of a chart's (t, v) box.
@@ -2348,6 +2418,633 @@ fn certify_param(a: &Surface, b: &Surface, region: Box3, curves: &[IntCurve]) ->
     Some(())
 }
 
+/// A leaf of the charts' walk that holds one arc. F is monotone along each of its sides (one
+/// partial one-signed over the box and the sides across it one-signed, or both partials
+/// one-signed), so each side holds at most one zero, exactly where its two corners differ in sign,
+/// and the zeros inside are one arc joining the two such sides.
+#[derive(Clone, Copy, Debug)]
+struct Leaf {
+    chart: usize,
+    t: I,
+    s: I,
+    /// F's sign at (t.lo, s.lo), (t.hi, s.lo), (t.lo, s.hi), (t.hi, s.hi).
+    corner: [f64; 4],
+    /// The signs of dF/dt and dF/ds over the box (0: not one-signed), and lower bounds on their
+    /// sizes, from the Bernstein coefficients.
+    dt: f64,
+    ds: f64,
+    slope_t: f64,
+    slope_s: f64,
+    /// The sides the arc ends on (0: t.lo, 1: t.hi, 2: s.lo, 3: s.hi).
+    sides: [usize; 2],
+    /// The arc's points are found along t (s solved), or along s.
+    by_t: bool,
+}
+
+/// The two corners of each side, low end of its stretch first.
+const SIDE_CORNERS: [(usize, usize); 4] = [(0, 2), (1, 3), (0, 1), (2, 3)];
+
+/// The arc's two ends: each the leaf and the end (0 or 1) it joins, or None where the arc leaves the
+/// walked region.
+type Ends = [Option<(usize, usize)>; 2];
+
+/// A leaf from a box's Bernstein coefficients (bidegree n, m), if they make one: Some(None) where
+/// the box holds no zero after all (monotone with no sign change on its boundary).
+fn leaf_of(chart: usize, t: I, s: I, c: &[I], n: usize, m: usize) -> Option<Option<Leaf>> {
+    let at = |i: usize, j: usize| c[i * (m + 1) + j];
+    let sign = |x: I| {
+        if x.lo > 0.0 {
+            1.0
+        } else if x.hi < 0.0 {
+            -1.0
+        } else {
+            0.0
+        }
+    };
+    // one-signed differences along s (dt = false) or t: the sign and the least size
+    let rate = |along_t: bool| -> (f64, f64) {
+        let (len, across) = if along_t { (m, n) } else { (n, m) };
+        if across == 0 {
+            return (0.0, 0.0);
+        }
+        let (mut pos, mut neg, mut least) = (true, true, f64::INFINITY);
+        for i in 0..=len {
+            for j in 0..across {
+                let d = if along_t {
+                    at(j + 1, i) - at(j, i)
+                } else {
+                    at(i, j + 1) - at(i, j)
+                };
+                pos &= d.lo > 0.0;
+                neg &= d.hi < 0.0;
+                if !(pos || neg) {
+                    return (0.0, 0.0);
+                }
+                least = least.min(if pos { d.lo } else { -d.hi });
+            }
+        }
+        (if pos { 1.0 } else { -1.0 }, least * across as f64)
+    };
+    let side_sign = |side: usize| -> f64 {
+        let vals: Vec<I> = match side {
+            0 => (0..=m).map(|j| at(0, j)).collect(),
+            1 => (0..=m).map(|j| at(n, j)).collect(),
+            2 => (0..=n).map(|i| at(i, 0)).collect(),
+            _ => (0..=n).map(|i| at(i, m)).collect(),
+        };
+        if vals.iter().all(|x| x.lo > 0.0) {
+            1.0
+        } else if vals.iter().all(|x| x.hi < 0.0) {
+            -1.0
+        } else {
+            0.0
+        }
+    };
+    let corner = [sign(at(0, 0)), sign(at(n, 0)), sign(at(0, m)), sign(at(n, m))];
+    let (dt, lt) = rate(true);
+    let (ds, ls) = rate(false);
+    let over_t = ds != 0.0 && side_sign(2) != 0.0 && side_sign(3) != 0.0;
+    let over_s = dt != 0.0 && side_sign(0) != 0.0 && side_sign(1) != 0.0;
+    let both = dt != 0.0 && ds != 0.0 && corner.iter().all(|&x| x != 0.0);
+    if !(over_t || over_s || both) {
+        return None;
+    }
+    let sides: Vec<usize> = (0..4)
+        .filter(|&k| corner[SIDE_CORNERS[k].0] != corner[SIDE_CORNERS[k].1])
+        .collect();
+    match sides.len() {
+        0 => return Some(None),
+        2 => {}
+        _ => return None,
+    }
+    // (an arc between the t-sides is found along t; between the s-sides along s; otherwise
+    // along either, both partials being one-signed)
+    let by_t = if over_t {
+        true
+    } else if over_s {
+        false
+    } else {
+        sides.contains(&0) || sides.contains(&1)
+    };
+    let shrink = 1.0 - 1e-12;
+    Some(Some(Leaf {
+        chart,
+        t,
+        s,
+        corner,
+        dt,
+        ds,
+        slope_t: lt / t.width() * shrink,
+        slope_s: ls / s.width() * shrink,
+        sides: [sides[0], sides[1]],
+        by_t,
+    }))
+}
+
+/// F at (t, s) in floats, with a bound on its distance from the exact value of the polynomial
+/// with interval coefficients (rounding of the sum and the powers, the coefficients' radii).
+fn value_bound(f: &Bp, t: f64, s: f64) -> (f64, f64) {
+    let (mut v, mut abs, mut rad) = (0.0, 0.0, 0.0);
+    let mut tp = 1.0;
+    for i in 0..=f.dt {
+        let mut sp = 1.0;
+        for j in 0..=f.dv {
+            let c = f.c[i * (f.dv + 1) + j];
+            let x = c.mid() * tp * sp;
+            v += x;
+            abs += x.abs();
+            rad += (c.hi - c.lo) * (tp * sp).abs();
+            sp *= s;
+        }
+        tp *= t;
+    }
+    // at most 100 roundings along any term's way into the sum (degrees <= 8, 81 terms): 2^-53 each,
+    // doubled for slack; the radii's own sum rounded up likewise
+    (
+        v,
+        (abs * 2e-14 + rad * (1.0 + 1e-12)) * (1.0 + 1e-12) + f64::MIN_POSITIVE,
+    )
+}
+
+/// The root of F(x, ·) (`solve_s`) or F(·, x) in `range`, F rising there if `up` > 0, by Newton
+/// kept in its bracket.
+fn root_along(f: &Bp, solve_s: bool, x: f64, range: I, up: f64, guess: Option<f64>) -> f64 {
+    // the univariate restriction's coefficients in the other variable
+    let mut g = [0.0f64; 9];
+    let (len, across) = if solve_s { (f.dt, f.dv) } else { (f.dv, f.dt) };
+    let mut xp = 1.0;
+    for i in 0..=len {
+        for (j, gj) in g.iter_mut().enumerate().take(across + 1) {
+            let c = if solve_s {
+                f.c[i * (f.dv + 1) + j]
+            } else {
+                f.c[j * (f.dv + 1) + i]
+            };
+            *gj += c.mid() * xp;
+        }
+        xp *= x;
+    }
+    let eval = |y: f64| -> (f64, f64) {
+        let (mut v, mut d) = (0.0, 0.0);
+        for j in (0..=across).rev() {
+            d = d * y + v;
+            v = v * y + g[j];
+        }
+        (v, d)
+    };
+    let (mut lo, mut hi) = (range.lo, range.hi);
+    let mut y = guess.filter(|g| *g > lo && *g < hi).unwrap_or(0.5 * (lo + hi));
+    for _ in 0..64 {
+        let (v, d) = eval(y);
+        if v == 0.0 {
+            return y;
+        }
+        // below the root F has the sign -up
+        if (v > 0.0) != (up > 0.0) {
+            lo = y;
+        } else {
+            hi = y;
+        }
+        let newton = y - v / d;
+        let next = if d != 0.0 && newton > lo && newton < hi {
+            newton
+        } else {
+            0.5 * (lo + hi)
+        };
+        if (next - y).abs() <= 4.0 * f64::EPSILON * (1.0 + y.abs())
+            || hi - lo <= f64::EPSILON * (1.0 + lo.abs())
+        {
+            return next;
+        }
+        y = next;
+    }
+    y
+}
+
+/// Whether every cell of the box, halved along each axis down to `depth` levels where needed, is
+/// clear of one of the two forms (their Lipschitz and nappe tests): then neither meets the other
+/// in it.
+fn clear_of_one(fa: Form, fb: Form, b: &V, depth: u32) -> bool {
+    if fa.off_cheap(b) || fb.off_cheap(b) {
+        return true;
+    }
+    if depth == 0 {
+        return false;
+    }
+    let halves = |x: I| {
+        let (p, q) = x.split();
+        [p, q]
+    };
+    let (xs, ys, zs) = (halves(b[0]), halves(b[1]), halves(b[2]));
+    xs.iter().all(|&x| {
+        ys.iter()
+            .all(|&y| zs.iter().all(|&z| clear_of_one(fa, fb, &[x, y, z], depth - 1)))
+    })
+}
+
+/// The trace in the host's charts, with no march: one Bernstein subdivision of each chart into
+/// leaves that are zero-free, off the region, or one arc (a graph box); the arcs joined across
+/// their leaves' edges into chains; points along each chain at the march's spacing, each pulled
+/// onto both surfaces and proven within LINEAR / 2 of its arc. The charts partition the host (a
+/// sphere's two charts of v in [-pi/2, pi/2]), and the leaves the charts, so every zero in the
+/// region is in exactly one arc: complete and none twice by construction. None where it does not
+/// apply (a singular point near, a leaf that is none of the three at the least size, a chain that
+/// does not join): the march and its certificate then decide.
+fn param_trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
+    let (fa, fb) = (Form::of(a)?, Form::of(b)?);
+    let size = region.diagonal().max(1e-6);
+    let step = 0.5 * (size / 64.0).max(10.0 * tol::LINEAR);
+    let grown = region.grow(step);
+    // the walked region: past `grown`, so an arc's end in it lies outside `grown`
+    let walked = region.grow(3.0 * step);
+    for f in [fa, fb] {
+        if f.singular().is_some_and(|x| walked.grow(SITES[0]).contains(x)) {
+            return None;
+        }
+    }
+    let reg = of_box(&walked);
+    // no curve in the walked region when each of its cells, to two levels of halving, is clear
+    // of one of the surfaces
+    if clear_of_one(fa, fb, &reg, 2) {
+        return Some(Vec::new());
+    }
+    let (host, other) = host_of(fa, fb)?;
+    let all = host.charts_in(&other, &reg, true)?;
+    let sphere = matches!(host.form, Form::Sphere { .. });
+    // (a sphere's charts with turn_v = -1 cover it again)
+    let used: Vec<usize> = (0..all.len())
+        .filter(|&k| all[k].live && (!sphere || all[k].turn_v > 0.0))
+        .collect();
+    let (rt, rv) = host.chart_rates(&reg);
+    let least = (step / 16.0).max(LEAST);
+    let mut budget = 1usize << 14;
+    let mut leaves: Vec<Leaf> = Vec::new();
+    for &k in &used {
+        let ch = &all[k];
+        let (n, m) = (ch.f.dt, ch.f.dv);
+        if (n + 1) * (m + 1) > BERN {
+            return None;
+        }
+        let mut stack = Vec::with_capacity(64);
+        stack.push((ch.t, ch.v, bernstein(&ch.f, ch.t, ch.v)));
+        while let Some((t, v, c)) = stack.pop() {
+            budget = budget.checked_sub(1)?;
+            let c_ = &c[..(n + 1) * (m + 1)];
+            if one_sign(c_) {
+                continue;
+            }
+            let p = host.chart_box(ch, t, v);
+            if meets(&p, &reg).is_none() || other.off_cheap(&p) {
+                continue;
+            }
+            match leaf_of(k, t, v, c_, n, m) {
+                Some(Some(l)) => {
+                    leaves.push(l);
+                    continue;
+                }
+                Some(None) => continue,
+                None => {}
+            }
+            let (lt, lv) = (rt * t.width(), rv * v.width());
+            if lt.max(lv) <= least {
+                return None;
+            }
+            let along_t = lt >= lv;
+            let (cl, cr) = halve(&c, n, m, along_t);
+            if along_t {
+                let (x, y) = t.split();
+                stack.push((x, v, cl));
+                stack.push((y, v, cr));
+            } else {
+                let (x, y) = v.split();
+                stack.push((t, x, cl));
+                stack.push((t, y, cr));
+            }
+        }
+    }
+    let ends = join_leaves(&host, &all, &leaves)?;
+    let mut curves = Vec::new();
+    let mut seen = vec![false; leaves.len()];
+    for start in 0..leaves.len() {
+        if seen[start] {
+            continue;
+        }
+        // back to an open end (or round to the start), then forward collecting leaves with the end
+        // each is entered by
+        let (mut at, mut out) = (start, 0usize);
+        let mut closed = false;
+        let mut guard = 0;
+        while let Some((next, by)) = ends[at][out] {
+            guard += 1;
+            if guard > leaves.len() {
+                return None;
+            }
+            at = next;
+            out = 1 - by;
+            if at == start {
+                closed = true;
+                break;
+            }
+        }
+        // `at` is entered by its end `out` (open there, or the loop's start)
+        let first = at;
+        let mut way: Vec<(usize, usize)> = Vec::new();
+        let mut entered = out;
+        loop {
+            if seen[at] {
+                return None;
+            }
+            seen[at] = true;
+            way.push((at, entered));
+            match ends[at][1 - entered] {
+                Some((next, by)) => {
+                    if next == first && closed {
+                        break;
+                    }
+                    at = next;
+                    entered = by;
+                }
+                None => break,
+            }
+        }
+        let mut pts = chain_points(&host, &all, &leaves, &way, closed, step, rt, rv, a, b)?;
+        if pts.len() < 3 {
+            return None;
+        }
+        // along na x nb, as the march runs (its consumers read the curve's way from it)
+        let d = crate::intcurve::direction(a, b, pts[0])?;
+        let first_step = d.dot(pts[1] - pts[0]);
+        if first_step == 0.0 || first_step.is_nan() {
+            return None;
+        }
+        if first_step < 0.0 {
+            pts.reverse();
+            if closed {
+                // (the same first point)
+                pts.rotate_right(1);
+            }
+        }
+        if closed {
+            if pts.iter().all(|p| grown.contains(*p)) {
+                curves.push(crate::intcurve::finish(a, b, pts, true, step));
+                continue;
+            }
+            // a loop through the region's edge: open runs, starting where it is outside
+            let k = pts.iter().position(|p| !grown.contains(*p)).expect("one outside");
+            let mut turned = pts[k..].to_vec();
+            turned.extend_from_slice(&pts[..=k]);
+            runs(a, b, &turned, &grown, step, &mut curves);
+        } else {
+            if grown.contains(pts[0]) || grown.contains(*pts.last().expect("points")) {
+                return None;
+            }
+            runs(a, b, &pts, &grown, step, &mut curves);
+        }
+    }
+    Some(curves)
+}
+
+/// The open chains of `pts` (both ends outside `grown`): each stretch inside, with the point
+/// before it and the one after, as the march leaves them.
+fn runs(a: &Surface, b: &Surface, pts: &[Point3], grown: &Box3, step: f64, out: &mut Vec<IntCurve>) {
+    let mut i = 0;
+    while i < pts.len() {
+        if !grown.contains(pts[i]) {
+            i += 1;
+            continue;
+        }
+        let from = i - 1;
+        while grown.contains(pts[i]) {
+            i += 1;
+        }
+        out.push(crate::intcurve::finish(a, b, pts[from..=i].to_vec(), false, step));
+    }
+}
+
+/// Each leaf's arc ends joined to its neighbours': an end on a side (or a chart seam) shared with
+/// another leaf with an end on its side there is that leaf's when F changes sign over the two
+/// sides' common stretch (each end of it a corner of one of them, of known sign: a side holds at
+/// most one zero). An end with no such neighbour lies in a box off the walked region (a zero-free
+/// box cannot hold it). None if an end has two, if the joins are not mutual, or if an arc ends at
+/// a sphere's pole.
+fn join_leaves(host: &Host, charts: &[Chart], leaves: &[Leaf]) -> Option<Vec<Ends>> {
+    let sphere = matches!(host.form, Form::Sphere { .. });
+    let angular_t = !matches!(host.form, Form::Plane { .. });
+    let angular_s = matches!(host.form, Form::Torus { .. });
+    // the chart across a seam of chart k: u's half turn (t = +-1) or v's (s = +-1)
+    let across = |k: usize, in_t: bool| -> Option<usize> {
+        let (tu, tv) = (charts[k].turn, charts[k].turn_v);
+        let (tu, tv) = if in_t { (-tu, tv) } else { (tu, -tv) };
+        charts.iter().position(|c| c.turn == tu && c.turn_v == tv)
+    };
+    let line = |l: &Leaf, side: usize| match side {
+        0 => l.t.lo,
+        1 => l.t.hi,
+        2 => l.s.lo,
+        _ => l.s.hi,
+    };
+    let stretch = |l: &Leaf, side: usize| if side < 2 { l.s } else { l.t };
+    // every arc end, by its side and the side's line, for the neighbour search
+    let mut index: Vec<(usize, u64, usize, usize)> = Vec::new();
+    for (i, l) in leaves.iter().enumerate() {
+        for (e, &side) in l.sides.iter().enumerate() {
+            index.push((side, line(l, side).to_bits(), i, e));
+        }
+    }
+    index.sort_unstable();
+    let mut ends: Vec<Ends> = vec![[None, None]; leaves.len()];
+    for (i, l) in leaves.iter().enumerate() {
+        for (e, &side) in l.sides.iter().enumerate() {
+            let x = line(l, side);
+            if sphere && side >= 2 && x.abs() == 1.0 {
+                return None;
+            }
+            let seam = if side < 2 { angular_t } else { angular_s };
+            let (chart, there) = if seam && x.abs() == 1.0 {
+                (across(l.chart, side < 2)?, -x)
+            } else {
+                (l.chart, x)
+            };
+            let facing = side ^ 1;
+            let key = (facing, there.to_bits());
+            let from = index.partition_point(|q| (q.0, q.1) < key);
+            let span = stretch(l, side);
+            let (sl, sh) = (l.corner[SIDE_CORNERS[side].0], l.corner[SIDE_CORNERS[side].1]);
+            let mut hit = None;
+            for &(_, _, j, f) in index[from..].iter().take_while(|q| (q.0, q.1) == key) {
+                let o = &leaves[j];
+                if o.chart != chart || j == i {
+                    continue;
+                }
+                let ospan = stretch(o, facing);
+                let (lo, hi) = (span.lo.max(ospan.lo), span.hi.min(ospan.hi));
+                if lo.is_nan() || hi.is_nan() || lo >= hi {
+                    continue;
+                }
+                let (ol, oh) = (o.corner[SIDE_CORNERS[facing].0], o.corner[SIDE_CORNERS[facing].1]);
+                let sign_at = |x: f64| -> f64 {
+                    if x == span.lo {
+                        sl
+                    } else if x == ospan.lo {
+                        ol
+                    } else if x == span.hi {
+                        sh
+                    } else {
+                        oh
+                    }
+                };
+                if sign_at(lo) != sign_at(hi) {
+                    if hit.is_some() {
+                        return None;
+                    }
+                    hit = Some((j, f));
+                }
+            }
+            ends[i][e] = hit;
+        }
+    }
+    for (i, e) in ends.iter().enumerate() {
+        for (k, x) in e.iter().enumerate() {
+            if let Some((j, f)) = *x
+                && ends[j][f] != Some((i, k))
+            {
+                return None;
+            }
+        }
+    }
+    Some(ends)
+}
+
+/// Where a leaf's arc meets its side, in the leaf's own variable (t if `by_t`).
+fn end_value(f: &Bp, l: &Leaf, side: usize) -> f64 {
+    match (l.by_t, side) {
+        (true, 0) => l.t.lo,
+        (true, 1) => l.t.hi,
+        (true, _) => root_along(f, false, if side == 2 { l.s.lo } else { l.s.hi }, l.t, l.dt, None),
+        (false, 2) => l.s.lo,
+        (false, 3) => l.s.hi,
+        (false, _) => root_along(f, true, if side == 0 { l.t.lo } else { l.t.hi }, l.s, l.ds, None),
+    }
+}
+
+/// The chain's points: along each leaf's arc in its order, at the march's spacing (`step`), each
+/// on both surfaces and proven within LINEAR / 2 of the arc. `way`: (leaf, the end it is entered by).
+#[allow(clippy::too_many_arguments)]
+fn chain_points(
+    host: &Host,
+    charts: &[Chart],
+    leaves: &[Leaf],
+    way: &[(usize, usize)],
+    closed: bool,
+    step: f64,
+    rt: f64,
+    rv: f64,
+    a: &Surface,
+    b: &Surface,
+) -> Option<Vec<Point3>> {
+    // the arc's point at x in the leaf's own variable, from a guess at the other: the point, t, s
+    let point = |l: &Leaf, x: f64, guess: Option<f64>| -> (Point3, f64, f64) {
+        let f = &charts[l.chart].f;
+        let (t, s) = if l.by_t {
+            (x, root_along(f, true, x, l.s, l.ds, guess))
+        } else {
+            (root_along(f, false, x, l.t, l.dt, guess), x)
+        };
+        (host.chart_point(&charts[l.chart], t, s), t, s)
+    };
+    let other_of = |l: &Leaf, t: f64, s: f64| if l.by_t { s } else { t };
+    // each leaf's way along its own variable, from the end it is entered by to the other
+    let spans: Vec<(f64, f64)> = way
+        .iter()
+        .map(|&(li, by)| {
+            let l = &leaves[li];
+            let f = &charts[l.chart].f;
+            (end_value(f, l, l.sides[by]), end_value(f, l, l.sides[1 - by]))
+        })
+        .collect();
+    // dense: each leaf's span cut until chords are at most `step`
+    let mut dense: Vec<(usize, f64, f64, Point3)> = Vec::new(); // (place in `way`, value, other, point)
+    for (w, &(li, _)) in way.iter().enumerate() {
+        let l = &leaves[li];
+        let (x0, x1) = spans[w];
+        let (p0, t0, s0) = point(l, x0, None);
+        let (p1, t1, s1) = point(l, x1, None);
+        let (y0, y1) = (other_of(l, t0, s0), other_of(l, t1, s1));
+        let mut stack = vec![(x0, y0, p0, x1, y1, p1, 0u32)];
+        let mut out = Vec::new();
+        while let Some((xa, ya, pa, xb, yb, pb, d)) = stack.pop() {
+            if pa.distance(pb) <= step || d >= 24 {
+                out.push((xa, ya, pa));
+                continue;
+            }
+            let xm = 0.5 * (xa + xb);
+            let (pm, tm, sm) = point(l, xm, Some(0.5 * (ya + yb)));
+            let ym = other_of(l, tm, sm);
+            stack.push((xm, ym, pm, xb, yb, pb, d + 1));
+            stack.push((xa, ya, pa, xm, ym, pm, d + 1));
+        }
+        // the leaf's last point is the next leaf's first
+        if w + 1 == way.len() && !closed {
+            out.push((x1, y1, p1));
+        }
+        dense.extend(out.into_iter().map(|(x, y, p)| (w, x, y, p)));
+    }
+    if closed {
+        let first = dense[0];
+        dense.push(first);
+    }
+    // arc length along the dense chain, then points at even spacing at most `step`
+    let mut at = vec![0.0f64];
+    for k in 1..dense.len() {
+        let l = at[k - 1] + dense[k - 1].3.distance(dense[k].3);
+        at.push(l);
+    }
+    let total = *at.last()?;
+    // (the chords run a little short of the arc: a margin keeps the true spacing within `step`)
+    let count = ((total * 1.001 / step).ceil() as usize).max(1);
+    let gap = total / count as f64;
+    let mut pts = Vec::with_capacity(count + 1);
+    let mut k = 0;
+    let last = if closed { count } else { count + 1 };
+    for q in 0..last {
+        let want = gap * q as f64;
+        while k + 2 < dense.len() && at[k + 1] < want {
+            k += 1;
+        }
+        let (w0, x0, y0, _) = dense[k];
+        let (w1, x1, y1, _) = dense[k + 1];
+        let frac = if at[k + 1] > at[k] {
+            ((want - at[k]) / (at[k + 1] - at[k])).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        // within one leaf the value is interpolated; towards the next leaf, to this one's exit
+        let end = if w0 == w1 { x1 } else { spans[w0].1 };
+        let l = &leaves[way[w0].0];
+        let guess = if w0 == w1 { y0 + (y1 - y0) * frac } else { y0 };
+        let (p, t, s) = point(l, x0 + (end - x0) * frac, Some(guess));
+        // how far p is from the arc: the root's distance (|F| / slope) times the rate, with the
+        // chart map's own enclosure
+        let f = &charts[l.chart].f;
+        let (v, e) = value_bound(f, t, s);
+        let (slope, rate) = if l.by_t { (l.slope_s, rv) } else { (l.slope_t, rt) };
+        let off = (v.abs() + e) / slope * (1.0 + 1e-12);
+        // the float point's distance from the exact image of (t, s): inside the enclosure
+        let pb = host.chart_box(&charts[l.chart], I::point(t), I::point(s));
+        let pc = [p.x, p.y, p.z];
+        let map = (0..3)
+            .map(|i| (pc[i] - pb[i].lo).max(pb[i].hi - pc[i]).max(0.0))
+            .fold(0.0, f64::max)
+            * 1.7320508075688772;
+        let q = crate::intcurve::refine(a, b, p)?;
+        if q.distance(p) + off * rate + map > 0.5 * tol::LINEAR {
+            return None;
+        }
+        pts.push(q);
+    }
+    Some(pts)
+}
+
 /// The cheaper host of the pair to walk, and the other form.
 fn host_of(fa: Form, fb: Form) -> Option<(Host, Form)> {
     let rank = |f: &Form| match f {
@@ -2505,7 +3202,7 @@ const TRACED_MOST: usize = 32;
 thread_local! {
     static TRACED: std::cell::RefCell<Traced> = const { std::cell::RefCell::new(Vec::new()) };
     static LAST: std::cell::Cell<Option<Refusal>> = const { std::cell::Cell::new(None) };
-    static COUNTS: std::cell::Cell<[usize; 6]> = const { std::cell::Cell::new([0; 6]) };
+    static COUNTS: std::cell::Cell<[usize; 7]> = const { std::cell::Cell::new([0; 7]) };
 }
 
 /// The last refusal on this thread, taken.
@@ -2514,8 +3211,9 @@ pub fn last_refusal() -> Option<Refusal> {
 }
 
 /// On this thread so far: [certified first time, certified after a finer trace, refused, out of
-/// scope, certificates proven in the charts alone, certificates that took the 3D steps].
-pub fn counts() -> [usize; 6] {
+/// scope, certificates proven in the charts alone, certificates that took the 3D steps, traces made
+/// in the charts with no march].
+pub fn counts() -> [usize; 7] {
     COUNTS.with(|c| c.get())
 }
 
@@ -2557,6 +3255,10 @@ pub(crate) fn traced(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCu
 
 /// `traced`, computed.
 fn traced_fresh(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
+    if let Some(cs) = param_trace(a, b, region) {
+        count(6);
+        return Some(cs);
+    }
     let first = crate::intcurve::trace_marched(a, b, region, 1.0);
     let why = match first.as_deref().map(|cs| certify(a, b, region, cs)) {
         Some(Ok(())) => {

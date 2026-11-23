@@ -92,7 +92,7 @@ speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|sta
 speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|thread_local|thread_local! {  x 2
 no-output (a read's limit, held by budget::scoped and cleared when it goes, unwinding too; a_read_that_panics_leaves_no_limit_behind)  @ forge-geom/src/budget.rs|static|static LEFT: Cell<u64> = const { Cell::new(u64::MAX) };
 no-output (a read's limit, held by budget::scoped and cleared when it goes, unwinding too; a_read_that_panics_leaves_no_limit_behind)  @ forge-geom/src/budget.rs|thread_local|thread_local! {
-speed (counts of certified, re-traced, refused and out-of-scope traces: stats, read only by counts())  @ forge-geom/src/certify.rs|static|static COUNTS: std::cell::Cell<[usize; 6]> = const { std::cell::Cell::new([0; 6]) };
+speed (counts of certified, re-traced, refused and out-of-scope traces: stats, read only by counts())  @ forge-geom/src/certify.rs|static|static COUNTS: std::cell::Cell<[usize; 7]> = const { std::cell::Cell::new([0; 7]) };
 no-output (the last refusal, kept for last_refusal(): a diagnostic, no kernel code reads it)  @ forge-geom/src/certify.rs|static|static LAST: std::cell::Cell<Option<Refusal>> = const { std::cell::Cell::new(None) };
 speed (the last pairs certified, with their answers: each a function of its key, the two surfaces and the region compared exactly)  @ forge-geom/src/certify.rs|static|static TRACED: std::cell::RefCell<Traced> = const { std::cell::RefCell::new(Vec::new()) };
 no-output (COUNTS and LAST: stats and a diagnostic)  @ forge-geom/src/certify.rs|thread_local|thread_local! {

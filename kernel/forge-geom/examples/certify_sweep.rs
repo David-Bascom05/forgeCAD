@@ -60,6 +60,31 @@ fn chains(r: &SurfaceSurface) -> Option<Vec<IntCurve>> {
     }
 }
 
+/// Whether two traces are the same curves: as many, as many closed, every point of each within the
+/// other's chain (its sag and LINEAR) of some chain of the other. (Points past the region are left
+/// out: each trace runs one point past it, wherever its own spacing puts that point.)
+fn agree(x: &[IntCurve], y: &[IntCurve], region: &Box3) -> bool {
+    let near = |p: Point3, cs: &[IntCurve]| {
+        cs.iter().any(|c| {
+            let n = c.pts.len();
+            let segs = if c.closed { n } else { n - 1 };
+            (0..segs).any(|i| {
+                let (a, b) = (c.pts[i], c.pts[(i + 1) % n]);
+                let d = b - a;
+                let t = ((p - a).dot(d) / d.dot(d).max(1e-300)).clamp(0.0, 1.0);
+                p.distance(a + d * t) <= c.sag + 1e-6
+            })
+        })
+    };
+    let closed = |cs: &[IntCurve]| cs.iter().filter(|c| c.closed).count();
+    x.len() == y.len()
+        && closed(x) == closed(y)
+        && x.iter()
+            .all(|c| c.pts.iter().all(|&p| !region.contains(p) || near(p, y)))
+        && y.iter()
+            .all(|c| c.pts.iter().all(|&p| !region.contains(p) || near(p, x)))
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let n: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(400);
@@ -70,7 +95,8 @@ fn main() {
     // per pair: [march certified, march refused, closed form certified, closed form refused, closed form n/a]
     let mut tally: BTreeMap<String, [usize; 5]> = BTreeMap::new();
     let mut whys: BTreeMap<String, usize> = BTreeMap::new();
-    let (mut t_march, mut t_cert) = (0.0, 0.0);
+    let (mut t_march, mut t_cert, mut t_traced) = (0.0, 0.0, 0.0);
+    let (mut agreed, mut disagreed, mut refused_traced) = (0usize, 0usize, 0usize);
     for _ in 0..n {
         let (i, j) = (rng.below(5), 1 + rng.below(4));
         let (i, j) = (i.min(j), i.max(j));
@@ -91,6 +117,29 @@ fn main() {
                     .flat_map(|c| c.pts.iter().map(|p| (p.x, p.y, p.z)))
                     .collect();
                 println!("BITS {key} {c:?} {pts:?}");
+            }
+            // the trace the kernel uses (in the charts with no march where it can): the same curves as
+            // the certified march, each point of either within the other's sag of its polyline
+            let t2 = Instant::now();
+            let traced = forge_geom::intcurve::trace(&a, &b, region);
+            t_traced += t2.elapsed().as_secs_f64();
+            if bits {
+                let pts: Vec<_> = traced
+                    .iter()
+                    .flatten()
+                    .flat_map(|c| c.pts.iter().map(|p| (p.x, p.y, p.z)))
+                    .collect();
+                println!("TRACED {key} {pts:?}");
+            }
+            if c.is_ok() {
+                match &traced {
+                    Some(ts) if agree(ts, cs, &region) => agreed += 1,
+                    Some(ts) => {
+                        disagreed += 1;
+                        println!("  DISAGREE {key}: traced {} curves, march {}", ts.len(), cs.len());
+                    }
+                    None => refused_traced += 1,
+                }
             }
             match c {
                 Ok(()) => {
@@ -154,11 +203,14 @@ fn main() {
     for (k, v) in &whys {
         println!("  {k}: {v}");
     }
-    println!("march {t_march:.2} s, certificate {t_cert:.2} s");
+    println!("march {t_march:.2} s, certificate {t_cert:.2} s, the kernel's trace {t_traced:.2} s");
+    println!(
+        "the kernel's trace against the certified march: {agreed} agree, {disagreed} disagree, {refused_traced} refused"
+    );
     let c = forge_geom::certify::counts();
     println!(
-        "certificates proven in the charts alone {}, by 3D steps {}",
-        c[4], c[5]
+        "traced in the charts with no march {}; certificates proven in the charts alone {}, by 3D steps {}",
+        c[6], c[4], c[5]
     );
 }
 

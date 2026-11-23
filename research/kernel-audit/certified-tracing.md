@@ -575,3 +575,95 @@ Two causes remain, and both are structural.
    130M of 3D work. They are equal-radius cylinders with crossing axes, the mitre: the curve
    crosses itself at the singular points, so the param path declines and the 3D path, with its
    Lagrange sites, is needed. Handling a crossing site in the charts is the "pipes" step.
+
+## 12. March-free tracing in the charts
+
+`param_trace` builds the trace itself, with no march. Wherever it applies, it replaces both the
+march's seed octree and the certificate after it. Where it does not apply it returns None, and the
+march and its certificate decide as before.
+
+**One walk is the proof.** The walked region is the region grown by 3 steps, so an arc's open end
+lies outside the region grown by one step, where the march's chains end. First, two levels of 3D
+cells are tried: if each cell is clear of one form, there is no curve. Then each chart of the host
+is subdivided once in Bernstein form (one conversion per chart, then halving), into leaves of four
+kinds:
+- zero-free (one-signed coefficients);
+- off the walked region, or clear of the other form;
+- a graph over t: dF/ds one-signed and both s-sides one-signed;
+- a graph over s: the same with t and s swapped;
+- bimonotone: both partials one-signed and all four corners one-signed.
+
+In the last three kinds F is monotone along every side, so each side holds at most one zero,
+exactly where its corners differ in sign. The zeros inside form one arc joining the two such sides.
+The bimonotone kind is the one that matters. Without it, an arc that cuts a box's corner is neither
+graph kind at any depth, and the walk ran down to its least size on 8 of manifold's traces. Corner
+signs are exact: a corner Bernstein coefficient is the value there. A box that is none of the kinds
+at the least size (step/16) returns None.
+
+The charts partition the host. Cylinder, cone and torus use their half-angle charts over [-1, 1]
+and the half turns. A sphere uses only its two charts with turn_v = 1, since the other two cover
+it again, and an arc that reaches a pole returns None. The leaves partition each chart. Together
+these give completeness and "none twice" by construction:
+- every zero in the walked region lies in exactly one leaf's arc, or on a side two leaves share;
+- **joins:** an arc's end on a side (or a chart seam: t = ±1 to the half turn's ∓1, with s
+  unchanged) belongs to the neighbour whose facing side has an end, where F changes sign over the
+  two sides' common stretch, each end of which is a corner of one of them;
+- two candidates, or joins that are not mutual, return None;
+- an end with no neighbour lies in a box off the walked region, since a zero-free box cannot hold
+  it, so it lies outside the region grown by one step.
+
+**Points.** Each chain is sampled in its leaves' own variable, densely until chords are at most
+one step. Points are then placed at even arc length, within one step apart with a 0.1% margin;
+downstream code relies on that spacing (blend's spring segments). Each point is a root of the
+univariate restriction, found by Newton kept in its bracket from an interpolated guess, mapped
+in floats, then pulled onto both surfaces by `refine`, as the march does. Each point is also
+proven within LINEAR / 2 of its arc:
+- |F| is bounded by the float sum plus a rounding and radius bound (`value_bound`);
+- dividing by the leaf's least slope gives the root's distance;
+- that distance times the chart rate, plus the interval map's enclosure, plus the refine move,
+  must stay within LINEAR / 2.
+Chains are oriented along na x nb, as the march runs them: a fillet test refused its round with
+the other orientation. Open chains are cut into the stretches inside the region grown by one step,
+each with one point past it at both ends, as the march leaves them.
+
+**Validation.**
+- The sweep (examples/certify_sweep): on seven seeds of 300 random pairs, the kernel's trace and
+  the certified march agree wherever the march certifies: as many curves, as many closed, every
+  point of each within the other's sag. That is 0 disagreements and 0 refusals. The new path takes
+  177 to 209 of each 300 pairs.
+- Native = wasm on 150 pairs, its points included.
+- Feature on: scoreboard 0 worse; release tests pass (forge-geom 141, forge-bool 42,
+  forge-model 204, forge-lang 814).
+
+**Cost.** Cold build (`benchparts resolve`, callgrind Ir, FORGECAD_CACHE=off, off and on built
+from the same sources):
+
+| part     | off    | on     | on / off |
+|----------|--------|--------|----------|
+| gearbox  | 236.2M | 236.5M | 1.001    |
+| volute   | 931.3M | 932.1M | 1.001    |
+| crank    | 3.6M   | 3.6M   | 1.001    |
+| valve    | 117.0M | 117.0M | 1.000    |
+| heatsink | 89.2M  | 89.3M  | 1.001    |
+| quadarm  | 46.4M  | 47.4M  | 1.021    |
+| conrod   | 55.4M  | 55.4M  | 1.000    |
+| jack     | 279.7M | 279.7M | 1.000    |
+| frame    | 387.0M | 238.2M | 0.615    |
+| manifold | 220.9M | 26.4M  | 0.120    |
+| bracket  | 10.0M  | 10.2M  | 1.013    |
+| insert   | 25.9M  | 25.9M  | 1.000    |
+| clamp    | 11.4M  | 11.4M  | 1.000    |
+| hub      | 22.7M  | 22.5M  | 0.990    |
+| guard    | 52.5M  | 6.5M   | 0.124    |
+
+Over all 15 parts, on is 2,154M against off's 2,437M. Two parts remain over:
+- **quadarm and bracket:** their traces are mostly empty, with both surfaces crossing the region
+  without meeting. The charts' polynomial algebra and conversion cost more there than the march's
+  octree, which rejects in a few float tests.
+- **The 0.1% parts:** their traces are out of scope (procedural surfaces), and the cost is the
+  wrapper's form check and memo.
+
+A note for the result cache (interface/forge-lang/src/store.rs): its key hashes every source file
+and the build profile, but not Cargo features. A feature-on binary and a feature-off one built from
+the same sources share entries. Each reads results the other made, though the two can differ in
+their curves (not in the parts measured here, which agree to the bit in their CLI output).
