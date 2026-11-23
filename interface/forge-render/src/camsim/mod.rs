@@ -8,6 +8,7 @@
 //! dexels.
 
 pub mod draw;
+pub mod machine;
 pub mod timeline;
 pub mod zmap;
 
@@ -65,6 +66,12 @@ pub struct Sim {
     /// Per setup: the part as columns on that setup's grid.
     pub part_maps: Vec<Option<PartMap>>,
     pub markers: Vec<Marker>,
+    /// Each posted program run on its machine (by setup), or why it could not be.
+    pub machines: Vec<Result<machine::MachineView, String>>,
+    /// The machine run playing (an index into `machines`), or the toolpath (None).
+    pub source: Option<usize>,
+    /// The toolpath's own timeline and markers, while a machine's play.
+    own: Option<(Timeline, Vec<Marker>)>,
     play: Option<Play>,
     /// The stock shown and the time it was made for.
     shown: Option<(f64, usize, ZMap)>,
@@ -95,10 +102,20 @@ impl Sim {
             part_tris,
             part_maps: vec![],
             markers: vec![],
+            machines: vec![],
+            source: None,
+            own: None,
             play: None,
             shown: None,
         };
         sim.markers = sim.markers_of();
+        // each setup's posted program on its machine
+        sim.machines = (0..sim.setups.len())
+            .map(|s| {
+                let r = sim.cam.machine_run(s)?;
+                Ok(machine::MachineView::of(&sim.cam, r, s))
+            })
+            .collect();
         sim.set_cells(CELLS);
         sim
     }
@@ -128,6 +145,54 @@ impl Sim {
             every: (self.tl.segs.len() / 48).max(16),
         });
         self.shown = None;
+    }
+
+    /// Plays machine run `m` (the posted text on its machine), or the toolpath (None).
+    pub fn set_source(&mut self, m: Option<usize>) -> Result<(), String> {
+        if m == self.source {
+            return Ok(());
+        }
+        // back to the toolpath's own first
+        if let Some((tl, mk)) = self.own.take() {
+            self.tl = tl;
+            self.markers = mk;
+        }
+        self.source = None;
+        if let Some(i) = m {
+            let mv = match self.machines.get(i) {
+                Some(Ok(mv)) => mv,
+                Some(Err(e)) => return Err(e.clone()),
+                None => return Err("no such machine run".into()),
+            };
+            let tl = mv.tl.clone();
+            let mut mk = mv.markers.clone();
+            // the certified checks and leftover stay, placed on the machine's time by their op
+            for m in &self.markers {
+                let mut m = m.clone();
+                if let Some(o) = m.op
+                    && let (Some(a), Some(b)) = (self.tl.ops.get(o), tl.ops.get(o))
+                {
+                    let f = if a.t1 > a.t0 { (m.t - a.t0) / (a.t1 - a.t0) } else { 0.0 };
+                    m.t = b.t0 + f * (b.t1 - b.t0);
+                } else if m.op.is_none() {
+                    m.t = tl.ops.iter().filter(|o| o.setup == m.setup).map(|o| o.t1).fold(0.0, f64::max);
+                }
+                mk.push(m);
+            }
+            mk.sort_by(|a, b| a.t.total_cmp(&b.t));
+            let own_tl = std::mem::replace(&mut self.tl, tl);
+            let own_mk = std::mem::replace(&mut self.markers, mk);
+            self.own = Some((own_tl, own_mk));
+            self.source = Some(i);
+        }
+        let cells = self.cells();
+        self.set_cells(cells);
+        Ok(())
+    }
+
+    /// The machine run playing, if one is.
+    pub fn machine(&self) -> Option<&machine::MachineView> {
+        self.machines.get(self.source?)?.as_ref().ok()
     }
 
     pub fn cells(&self) -> usize {

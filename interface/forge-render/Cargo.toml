@@ -64,6 +64,8 @@ forge-post = { path = "../../kernel/forge-post" }
 forge-cam = { path = "../../kernel/forge-cam" }
 # the tools' revolved profiles (the simulation's tool and stock)
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
+# the machine simulation: machines as data, the posted text on them (forge-machine)
+forge-machine = { path = "../../kernel/forge-machine" }
 png = "=0.18.1"
 # a background image's file (zune: MIT OR Apache-2.0 OR Zlib), already in the lock
 zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std"] }

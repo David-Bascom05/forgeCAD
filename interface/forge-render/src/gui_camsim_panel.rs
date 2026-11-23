@@ -68,6 +68,8 @@ pub struct CamSimUi {
     pub part: PartShow,
     pub tool: bool,
     pub fixture: bool,
+    /// The machine's bodies, when a machine run plays.
+    pub machine: bool,
     pub follow: bool,
     pub path_width: f32,
     pub tab: Tab,
@@ -105,6 +107,7 @@ impl CamSimUi {
             part: PartShow::Ghost,
             tool: true,
             fixture: true,
+            machine: true,
             follow: false,
             path_width: 2.0,
             tab: Tab::Program,
@@ -607,8 +610,81 @@ fn verdict(ui: &mut Ui, st: &CamSimUi, t: &crate::shell::theme::Theme) {
     }
 }
 
+/// What plays: the toolpath, or a posted program on its machine.
+fn source(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
+    let mut want = st.sim.source;
+    ui.horizontal_wrapped(|ui| {
+        ui.label(egui::RichText::new("Play").color(t.ink2));
+        ui.radio_value(&mut want, None, "Toolpath");
+        for (k, m) in st.sim.machines.iter().enumerate() {
+            match m {
+                Ok(mv) => {
+                    ui.radio_value(&mut want, Some(k), format!("Posted code on {}", mv.run.def.name))
+                        .on_hover_text(format!("{} ({}): the text interpreted on the machine's kinematics, every body checked", mv.run.program, mv.run.dialect));
+                }
+                Err(e) => {
+                    ui.add_enabled(false, egui::RadioButton::new(false, "Machine"))
+                        .on_disabled_hover_text(e.clone());
+                }
+            }
+        }
+    });
+    if want != st.sim.source {
+        let t0 = st.t / st.total().max(1e-9);
+        if let Err(e) = st.sim.set_source(want) {
+            ui.colored_label(t.error, e);
+        }
+        st.drawn_key = None;
+        let total = st.total();
+        st.jump(t0 * total);
+    }
+    if let Some(mv) = st.sim.machine() {
+        let r = &mv.run;
+        let lines = [
+            format!(
+                "{} lines of {} on {}: {} motions, {} (at least {})",
+                r.text.lines().count(),
+                r.dialect,
+                r.def.name,
+                r.tl.segments.len(),
+                clock(r.tl.t_stop),
+                clock(r.tl.t_min)
+            ),
+            if r.wcs_given {
+                format!("work offset G54 {:?} (the setup's)", r.wcs)
+            } else {
+                format!(
+                    "work offset G54 {:?}: placed here, the stock centred on the {} datum, its bottom on it (the document gives no `at:`)",
+                    r.wcs,
+                    r.setup().part_mount
+                )
+            },
+            format!(
+                "{} body pairs checked through the motion: {} contacts, {} violations",
+                r.contacts.pairs_checked,
+                r.contacts.contacts.len(),
+                r.tl.violations.len()
+            ),
+        ];
+        for l in lines {
+            ui.label(egui::RichText::new(l).small().color(t.ink2));
+        }
+        let joints = mv.joints_at(st.t);
+        ui.label(
+            egui::RichText::new(
+                joints.iter().map(|(n, v)| format!("{n} {v:.3}")).collect::<Vec<_>>().join("  "),
+            )
+            .monospace()
+            .small()
+            .color(t.ink),
+        );
+    }
+}
+
 fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     verdict(ui, st, t);
+    source(ui, st, t);
+    ui.separator();
     let mut jump = None;
     egui::ScrollArea::vertical()
         .id_salt("camsim:program")
@@ -803,6 +879,9 @@ fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     });
     ui.checkbox(&mut st.tool, "Tool and holder");
     ui.checkbox(&mut st.fixture, "Workholding");
+    if st.sim.machine().is_some() {
+        ui.checkbox(&mut st.machine, "Machine");
+    }
 }
 
 fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {

@@ -1097,6 +1097,7 @@ dependencies = [
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
+ "forge-machine",
  "forge-math",
  "forge-model",
  "forge-post",
@@ -1209,6 +1210,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-machine"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-material"
 version = "0.1.0"
 dependencies = [
@@ -1289,6 +1299,7 @@ dependencies = [
  "forge-harness",
  "forge-history",
  "forge-lang",
+ "forge-machine",
  "forge-material",
  "forge-math",
  "forge-mesh",

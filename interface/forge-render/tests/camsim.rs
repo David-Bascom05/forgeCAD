@@ -270,3 +270,73 @@ fn a_refused_ops_check_is_a_marker_on_its_move() {
             .any(|m| m.rule == "leftover" && m.region.is_some())
     );
 }
+
+/// The flange's posted program on the generic VMC (forge-machine): interpreted, timed, every
+/// body checked through it; the tip the machine puts the tool at is the posted path's; played as
+/// the simulation's source, its stock is the toolpath's.
+#[test]
+fn the_flanges_posted_program_on_its_machine() {
+    let mut sim = flange();
+    let mv = sim.machines[0].as_ref().expect("a machine run");
+    let m = &mv.run;
+    assert_eq!(m.def.name, "generic-vmc3");
+    assert!(!m.wcs_given, "the flange gives no `at:`: placed");
+    assert!(m.tl.segments.len() > 300);
+    assert!(m.tl.violations.is_empty(), "{:?}", m.tl.violations);
+    // every feed's tip, in the document's frame, ends on the posted path (rapids also go home)
+    let ends: Vec<[f64; 3]> = sim.tl.segs.iter().map(|g| g.b).collect();
+    for g in mv.tl.segs.iter().filter(|g| g.kind != Kind::Rapid) {
+        let d = ends
+            .iter()
+            .map(|q| (0..3).map(|k| (q[k] - g.b[k]).powi(2)).sum::<f64>().sqrt())
+            .fold(f64::INFINITY, f64::min);
+        assert!(d < 1e-6, "a machine motion ends {d} from the posted path");
+    }
+    // an arc's middle is where the machine puts the tool halfway
+    for (g, &k) in mv.tl.segs.iter().zip(&mv.seg_of) {
+        let s = &m.tl.segments[k];
+        let want = m.tip(&s.at(0.37), s.tool.unwrap()).unwrap();
+        let got = g.at(0.37);
+        let d = (0..3).map(|i| (want[i] - got[i]).powi(2)).sum::<f64>().sqrt();
+        assert!(d < 1e-6, "piece {k} ({:?}, arc {:?}) off the machine's by {d}: {got:?} vs {want:?}", g.kind, g.arc);
+    }
+    // every op of the program found by its comment
+    for (k, sp) in mv.tl.ops.iter().enumerate() {
+        assert!(sp.end > sp.first, "op {k} ({}) not in the program", sp.name);
+    }
+    // the stock bottom sits on the table (the stated placement) and the contour goes to -0.5:
+    // the cutter enters the table, and the machine run says so
+    assert!(sim.setups[0].stock.min[2].abs() < 1e-9);
+    assert!(
+        m.contacts.contacts.iter().any(|c| c.a == "table" && c.b.contains("cutter")),
+        "{:?}",
+        m.contacts.contacts.first()
+    );
+    assert!(mv.markers.iter().any(|k| k.rule == "machine_collision"));
+    // T12 is loaded where T1 stood (M06 with no retract before it): its first rapid starts
+    // inside the stock; the check flags it (line 394, N3930), and the stock shows it below
+    let stock_lines: Vec<usize> = m
+        .contacts
+        .contacts
+        .iter()
+        .filter(|c| c.a == "stock" || c.b == "stock")
+        .map(|c| c.line)
+        .collect();
+    assert!(stock_lines.contains(&394), "{stock_lines:?}");
+    // played as the source: the machine's time, the same stock at the end
+    let end_tp = {
+        let total = sim.tl.total;
+        sim.stock_at(total).unwrap().0.clone()
+    };
+    sim.set_source(Some(0)).unwrap();
+    assert_eq!(sim.machine().map(|m| m.setup), Some(0));
+    assert!((sim.tl.total - sim.machines[0].as_ref().unwrap().run.tl.t_stop).abs() < 1e-6);
+    let total = sim.tl.total;
+    let end_m = sim.stock_at(total).unwrap().0.clone();
+    let diff = end_m.hi.iter().zip(&end_tp.hi).filter(|(a, b)| (**a - **b).abs() > 1e-3).count();
+    // the same but where that rapid went through the boss
+    assert!(diff * 20 < end_tp.hi.len(), "{diff} columns differ");
+    // and back
+    sim.set_source(None).unwrap();
+    assert!(sim.machine().is_none());
+}

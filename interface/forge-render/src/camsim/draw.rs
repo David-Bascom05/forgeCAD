@@ -173,6 +173,11 @@ fn shade(c: [f32; 3], n: [f32; 3]) -> [f32; 4] {
     [c[0] * k, c[1] * k, c[2] * k, 1.0]
 }
 
+/// The baked light, for other drawers (the machine's bodies).
+pub fn shade_pub(c: [f32; 3], n: [f32; 3]) -> [f32; 4] {
+    shade(c, n)
+}
+
 fn quad(p: [[f32; 3]; 4], c: [f32; 4], out: &mut Vec<WorldVert>) {
     for k in [0, 1, 2, 0, 2, 3] {
         out.push(WorldVert { at: p[k], colour: c });

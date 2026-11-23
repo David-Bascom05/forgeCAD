@@ -18,7 +18,7 @@ impl Gui {
         };
         let job = &mut self.shell.camsim_job;
         // a finished simulation
-        let done = job.slot.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let done = crate::plat::lock(&job.slot).take();
         if let Some((text, sim)) = done {
             job.running = None;
             let mut ui = CamSimUi::new(sim, &w.path);
@@ -60,7 +60,7 @@ impl Gui {
                 let waker = self.waker.clone();
                 crate::plat::spawn("forge-camsim", move || {
                     let sim = Sim::open(&text, &dir);
-                    *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some((text, sim));
+                    *crate::plat::lock(&slot) = Some((text, sim));
                     waker();
                 });
             }
@@ -197,6 +197,23 @@ pub fn geometry(
             .any(|m| m.severe() && m.op == Some(g.op as usize) && (m.t - st.t).abs() <= g.dt.max(1e-6));
         draw::tool(&tu.shape, p, fail, &mut solid);
     }
+    // the machine about the part, when its run plays; a body in a collision now, red
+    if st.machine
+        && let Some(mv) = st.sim.machine()
+    {
+        let hit: Vec<String> = mv
+            .run
+            .contacts
+            .contacts
+            .iter()
+            .filter(|c| {
+                let g = &mv.run.tl.segments[c.segment];
+                st.t >= g.t0 && st.t <= g.t0 + g.t_stop.max(g.t_min)
+            })
+            .flat_map(|c| [c.a.clone(), c.b.clone()])
+            .collect();
+        mv.draw(st.t, &hit, &mut solid);
+    }
     // the toolpath
     let show = PathShow {
         ops: &st.show_ops,
@@ -279,6 +296,27 @@ impl Gui {
                     }
                 }
                 "follow" => st.follow = on()?,
+                "source" => {
+                    let want = match v {
+                        "toolpath" => None,
+                        "machine" => Some(
+                            st.sim
+                                .machines
+                                .iter()
+                                .position(|m| m.is_ok())
+                                .ok_or_else(|| {
+                                    st.sim.machines.iter().find_map(|m| m.as_ref().err().cloned()).unwrap_or_else(|| "no machine run".into())
+                                })?,
+                        ),
+                        _ => return Err(format!("`{cmd}`: toolpath or machine")),
+                    };
+                    let f = st.t / st.total().max(1e-9);
+                    st.sim.set_source(want)?;
+                    st.drawn_key = None;
+                    let total = st.total();
+                    st.jump(f * total);
+                }
+                "machine" => st.machine = on()?,
                 "rapids" => st.rapids = on()?,
                 "played" => st.played_only = on()?,
                 "stock" => st.stock = on()?,
@@ -341,6 +379,11 @@ impl Gui {
             ("refused", n(refused as f64)),
             ("ok", st.sim.cam.ok.into()),
             ("certification", st.sim.cam.certification().into()),
+            ("source", st.sim.machine().map_or(Json::from("toolpath"), |m| Json::from(m.run.def.name.clone()))),
+            (
+                "machine_errors",
+                Json::Arr(st.sim.machines.iter().filter_map(|m| m.as_ref().err().map(|e| Json::from(e.clone()))).collect()),
+            ),
         ]))
     }
 }
