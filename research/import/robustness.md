@@ -85,7 +85,7 @@ All of these are fixed at the root.
 | iges (mesh) | index `u32::MAX` in cdt.rs | a loop's count cut to 1; one face's points far from the origin for their spread, so the super triangle rounded to nothing and a point fell on its side | points the super triangle cannot hold are an error; inserting on the hull is an error, not a missing neighbour |
 | fg | stack overflow at 5000 brackets, a 30 000-term sum, 5000 unary minuses | the recursive descent parser, evaluation and drop of a tree that deep | the parser refuses depth past 400 (each nested expression, block and prefix operator, and each link of a chain counts) with `Syntax(TooDeep)` at its span; evaluation nesting (calls included) is held at 600, as `Fuel`. Both fit a thread's 2 MB stack (checked under `ulimit -s 2048`) |
 | fg | shift overflow in the fast parser | a nonterminal past 64 used as a terminal's bit | `checked_shl` |
-| fg | i64 overflow (range end + 1), capacity overflow, an assert in `Frame::rotated_about_z`, i64 overflow in the sheet's vertex grid | numbers no part has: count(1e26), count(2^63 − 1), −1e308 deg, a flange leg of 2^63 | a number not finite or past 1e12 (angles: 1e5 rad) is `TooLarge` where it is evaluated; a range holds at most 2^20 items. (`dmath::sin_cos` past its reduction's 2^20 π/2 gives no unit pair; making it take whole turns off first changed the exact results of the speed gate's fuzz parts, which pass such arguments, so the kernel is left as it is and the language's bound keeps files from it) |
+| fg | i64 overflow (range end + 1), capacity overflow, an assert in `Frame::rotated_about_z`, i64 overflow in the sheet's vertex grid | numbers no part has: count(1e26), count(2^63 − 1), −1e308 deg, a flange leg of 2^63 | a number not finite or past 1e12 (angles: 1e5 rad) is `TooLarge` where a builtin that is not arithmetic takes it (a feature's, a sketch's or a placement's argument; §Language below); a range, and an index, holds at most 2^20. (`dmath::sin_cos` past its reduction's 2^20 π/2 gives no unit pair; making it take whole turns off first changed the exact results of the speed gate's fuzz parts, which pass such arguments, so the kernel is left as it is and the language's bound keeps files from it) |
 | fg | 309 GB asked at once; 2 GB in the crossing sweep and the sketch | polar(n: 2^32), polar(n: 1e6) | a count that sizes geometry (a polygon's sides, a pattern's copies) is at most 100 000 (`TooLarge`); the sweep's margin is rounding's (1e-6), not 1e-3 |
 | fg | 1.5 GB in `fg check` | a loop made 65 536 sketches and cutouts | a run executes at most 10^7 statements and makes at most 20 000 features (`Fuel`) |
 | fg | 4.7 GB asked at once | a hull of 3000 discs: the sketch's freedom took a dense rank of one block | a block past 2^21 entries is taken as of full rank (its freedom not counted) |
@@ -137,7 +137,8 @@ the browser build. Each reader's:
   - Parse depth 400.
   - Evaluation nesting 600; calls 100 000 per statement and 10^6 per run.
   - 10^7 statements and 20 000 features per run; components 2000.
-  - Numbers within 1e12 (angles within 1e5 rad); ranges within 2^20 items; a count that sizes
+  - Numbers within 1e12 (angles within 1e5 rad) where they enter the kernel; ranges and indices
+    within 2^20 items; a count that sizes
     geometry within 100 000.
   - The sketch's dense rank is capped at 2^21 entries.
 - **Zips (FCStd, 3MF):** members are capped before they inflate: 256 MB each, 1 GB in all,
@@ -146,6 +147,45 @@ the browser build. Each reader's:
   are counted through components before any is made.
 
 The fuzzer's wall-clock timeout is how missing budgets are found, as the first finding was.
+
+### Language: the limits, modelled in Lean
+
+The owner's rule: a branch that changes the .fg language extends research/forge-lang/lean in the same
+branch. Here:
+
+- **Parse depth** (`Syntax(TooDeep)` past 400): a check the parser's actions make beyond the
+  grammar, like `AssignToNonName`. The grammar, the lexer and the Lean parse are unchanged.
+  `FG_LEAN=1 cargo test --release -p forge-lang --test parse_diff` passes with the digest as it was.
+- **The magnitude bound** is checked where values enter the kernel (`builtins::within_bounds`, in
+  `Args::bind`, on every builtin but the pure numeric ones), not on every expression. Arithmetic,
+  user functions and `sqrt` .. `len` may carry larger values. A check on every expression would
+  observe every number, and every literal would become structural: a data edit to 1e13 would
+  re-read fine and re-run as an error.
+  - In Lean (ForgeLang/Bounds.lean), the bound is `runK`: the run, then `Bounded` on the finished
+    model's numbers.
+  - `setParam_bounded` (P4): a data edit's re-read checks the same numbers a re-run does.
+  - `setParam_bounded_ids` (P5), and `runK_mono`, `runK_unique`, `runK_error_stable` (P1, P2).
+- **Ranges and indices**: at most 2^20 items. `Core.toIx` bounds them at `maxList`, and Rust refuses
+  an index past it too. Split.lean's `split_let` takes the bound (new: `split_let_ok`), and Sites.lean's
+  `split_independent` is re-proved.
+- **Nesting is counted at calls only**: a call adds its callee body's static depth
+  (`syntax::body_depth`) to the run's nest, refused past 200 (`NEST_BUDGET`); a statement is at
+  most 400 deep (the parser). There is no per-expression wrapper, so the evaluator's hot path is as
+  it was. In Lean, `stack_depth_le` bounds the recursion at 400 + 200 = 600 levels, the same bound
+  the per-expression count gave. `admits_some` and `admits_zero` give the guard's invariant: the
+  stack's body depths sum within the budget. Calls themselves stay at 128 deep (`DEPTH_BUDGET`).
+- **The other limits are fuel**: statements 10^7, features 20 000. They count further work as the
+  core's fuel counts calls, and run out as `Fuel`.
+- **Checks:** `lake build` (each target the rule names); Axioms.lean lists the new theorems;
+  CheckAxioms: 2264 theorems, axioms only propext, Classical.choice, Quot.sound.
+- **Nothing that builds is refused.** Every repository .fg (301), the FreeCAD library's 547
+  translated parts and 980 translated CADFS parts (research/cadfs's cadfs.py on the importer branch)
+  were built on the base branch and on this one, each in its own process with 3 GB and 300 s. Their
+  errors are identical message for message, with 0 parts newly refused. One repository thermoform part
+  runs out of the 3 GB on both.
+- **Speed.** The functions these limits touch are net at or below the base on every part the
+  gate's language rows run (callgrind, per function): the per-expression check is gone, and the
+  evaluator's list and tuple building no longer grows through a fallible collect.
 
 ## 2. STEP import quality
 

@@ -133,6 +133,8 @@ pub struct FnDef {
     pub span: Span,
     /// A function of a used file (`uses.rs`): its body sees that file's names, not the caller's.
     pub lib: Option<std::rc::Weak<crate::uses::Lib>>,
+    /// How deep a call of it recurses (`syntax::body_depth`), counted against `NEST_BUDGET`.
+    pub depth: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -345,6 +347,25 @@ impl ParamIx {
     }
 }
 
+/// What a whole run has spent, shared by every evaluation it makes (each component's call, at
+/// any depth): function calls and component evaluations, and statements executed (`STEP_BUDGET`).
+#[derive(Default)]
+pub(crate) struct Total {
+    run: std::cell::Cell<(usize, usize)>,
+    pub(crate) steps: std::cell::Cell<u64>,
+}
+
+impl Total {
+    /// Function calls and component evaluations so far.
+    pub(crate) fn get(&self) -> (usize, usize) {
+        self.run.get()
+    }
+
+    pub(crate) fn set(&self, v: (usize, usize)) {
+        self.run.set(v);
+    }
+}
+
 pub struct Eval<'s> {
     pub src: &'s str,
     pub rules: Rules,
@@ -364,7 +385,7 @@ pub struct Eval<'s> {
     pub errors: Vec<Error>,
     pub warnings: Vec<Warning>,
     ctx: Ctx,
-    sketch: Option<Rc<RefCell<Sk>>>,
+    pub(crate) sketch: Option<Rc<RefCell<Sk>>>,
     /// Inside a path block: its last segment and current end point.
     path: Option<PathState>,
     pub expects: Vec<Stmt>,
@@ -432,9 +453,7 @@ pub struct Eval<'s> {
     pub comp_path: String,
     /// The whole run's budget, shared by every evaluation it makes (each component's call, at
     /// any depth): function calls, and component evaluations.
-    pub(crate) total: Rc<std::cell::Cell<(usize, usize)>>,
-    /// Statements the whole run has executed, every evaluation's (`STEP_BUDGET`).
-    pub(crate) steps: Rc<std::cell::Cell<u64>>,
+    pub(crate) total: Rc<Total>,
     /// How deep in calls this evaluation starts (a component's, its caller's depth).
     pub(crate) depth0: usize,
     /// Each pattern's copied features, by its id in the history: what an anchor on one of its
@@ -462,9 +481,10 @@ pub const TOTAL_COMPONENTS: usize = 2_000;
 
 /// How deep calls may nest (the evaluator's own stack is the limit).
 pub const DEPTH_BUDGET: usize = 128;
-/// How deep expressions may nest in evaluation, calls and all (a parsed one is at most
-/// `syntax::fast::MAX_DEPTH`): within a 2 MB thread stack.
-pub const NEST_BUDGET: usize = 600;
+/// How deep the functions being called may nest their bodies, each call its body's depth
+/// (`syntax::body_depth`). A statement itself is at most `syntax::fast::MAX_DEPTH` (400) deep, so an
+/// evaluation recurses at most 600 levels: within a 2 MB thread stack.
+pub const NEST_BUDGET: usize = 200;
 /// The largest magnitude a number may have, in mm, radians or a count: past it a value is a
 /// file's corruption or a runaway, and the kernel's tolerances and loops mean nothing there.
 pub const MAX_MAGNITUDE: f64 = 1e12;
@@ -540,7 +560,6 @@ impl<'s> Eval<'s> {
             comps: vec![],
             comp_path: String::new(),
             total: Default::default(),
-            steps: Default::default(),
             depth0: 0,
             copied: HashMap::new(),
         }
@@ -562,7 +581,6 @@ impl<'s> Eval<'s> {
         c.fns = self.fns.clone();
         c.comp_path = self.comp_path.clone();
         c.total = self.total.clone();
-        c.steps = self.steps.clone();
         c.depth0 = self.depth0 + self.ctx.in_fn;
         // the component definitions above it, as functions are: a block may place them
         for (n, (v, sp)) in &self.scopes[0] {
@@ -1169,8 +1187,8 @@ impl<'s> Eval<'s> {
 
     pub fn stmt(&mut self, s: &Stmt) -> R<()> {
         // loops in loops can ask for any number of statements, and each feature is kept
-        let n = self.steps.get() + 1;
-        self.steps.set(n);
+        let n = self.total.steps.get() + 1;
+        self.total.steps.set(n);
         if n > STEP_BUDGET || self.feats.len() > MAX_FEATURES {
             let (func, budget) = if n > STEP_BUDGET {
                 ("statements", STEP_BUDGET as usize)
@@ -1252,6 +1270,7 @@ impl<'s> Eval<'s> {
                         body: body.clone(),
                         span: s.span,
                         lib: None,
+                        depth: syntax::body_depth(body),
                     }),
                 );
                 Ok(())
@@ -1627,40 +1646,7 @@ impl<'s> Eval<'s> {
 
     // ---- expressions -------------------------------------------------------------------------
 
-    #[inline(always)]
     pub fn expr(&mut self, e: &Expr) -> R<Value> {
-        // the parser bounds one expression's depth; calls nest them, so the evaluation's own
-        // depth is held too (the stack is the limit, and a file can ask for any depth)
-        self.nest += 1;
-        if self.nest > NEST_BUDGET {
-            self.nest -= 1;
-            return Err(Error::Fuel {
-                span: e.span,
-                func: "nested evaluation".into(),
-                budget: NEST_BUDGET,
-            });
-        }
-        let r = self.expr_in(e);
-        self.nest -= 1;
-        // no part has such a number: refused where it arises, before the kernel sees it
-        // (NaN is past every bound: `is_finite` first)
-        if let Ok(Value::Num(n)) = &r {
-            let most = if n.dim == Dim::Angle {
-                MAX_ANGLE
-            } else {
-                MAX_MAGNITUDE
-            };
-            if !n.v.is_finite() || n.v.abs() > most {
-                return Err(Error::TooLarge {
-                    span: e.span,
-                    value: n.v,
-                });
-            }
-        }
-        r
-    }
-
-    fn expr_in(&mut self, e: &Expr) -> R<Value> {
         match &e.kind {
             ExprKind::Num(v, u) => Ok(Value::Num(match u {
                 Unit::Deg => Num::konst(v.to_radians(), Dim::Angle),
@@ -1672,12 +1658,19 @@ impl<'s> Eval<'s> {
             ExprKind::Str(s) => Ok(Value::Str(s.as_str().into())),
             ExprKind::Bool(b) => Ok(Value::Bool(*b)),
             ExprKind::Name(n) => self.lookup(n, e.span),
+            // (sized once, not grown through a fallible collect)
             ExprKind::List(xs) => {
-                let v: Vec<Value> = xs.iter().map(|x| self.expr(x)).collect::<R<_>>()?;
+                let mut v = Vec::with_capacity(xs.len());
+                for x in xs {
+                    v.push(self.expr(x)?);
+                }
                 Ok(Value::List(Rc::new(v)))
             }
             ExprKind::Tuple(xs) => {
-                let v: Vec<Value> = xs.iter().map(|x| self.expr(x)).collect::<R<_>>()?;
+                let mut v = Vec::with_capacity(xs.len());
+                for x in xs {
+                    v.push(self.expr(x)?);
+                }
                 Ok(Value::Tuple(Rc::new(v)))
             }
             ExprKind::Map(entries) => {
@@ -1752,14 +1745,17 @@ impl<'s> Eval<'s> {
                         return Err(Error::NotWhole { span: sp, value: x.v });
                     }
                 }
-                // (bounds within MAX_MAGNITUDE: `expr` refused any past it)
-                let (a0, b0) = (a.v.round() as i64, b.v.round() as i64 + i64::from(*inclusive));
-                if b0.saturating_sub(a0) > MAX_LIST as i64 {
+                // a range is a size: its length, and its bounds, within what a list may hold
+                // (worked out in f64 first: a bound past i64 would wrap)
+                let len = b.v - a.v + f64::from(u8::from(*inclusive));
+                // (NaN fails every comparison; with both bounds finite, so is the length)
+                if !(len <= MAX_LIST as f64 && a.v.abs() <= MAX_MAGNITUDE && b.v.abs() <= MAX_MAGNITUDE) {
                     return Err(Error::TooLarge {
                         span: e.span,
-                        value: (b0 - a0) as f64,
+                        value: if len.is_finite() { len } else { b.v },
                     });
                 }
+                let (a0, b0) = (a.v.round() as i64, b.v.round() as i64 + i64::from(*inclusive));
                 // a range is control: its bounds are observed (however many times it runs, none
                 // too), its values constants, no data's provenance
                 self.observe(&a);
@@ -1828,6 +1824,15 @@ impl<'s> Eval<'s> {
                         what: "an index",
                         want: Dim::Count,
                         found: iv.dim,
+                    });
+                }
+                // an index is a count: within what a list may hold, as a range's length (the Lean
+                // model's `toIx`); and so within i64 below
+                let within = iv.v.abs() <= MAX_LIST as f64; // (NaN fails it)
+                if !within {
+                    return Err(Error::TooLarge {
+                        span: i.span,
+                        value: iv.v,
                     });
                 }
                 if let Value::Asm(a) = &ov {
@@ -2193,6 +2198,15 @@ impl<'s> Eval<'s> {
                 None
             }
         };
+        // the evaluation's own depth: each call adds its body's (the parser bounds the rest)
+        if self.nest + def.depth > NEST_BUDGET {
+            return Err(Error::Fuel {
+                span,
+                func: "nested evaluation".into(),
+                budget: NEST_BUDGET,
+            });
+        }
+        self.nest += def.depth;
         let saved = std::mem::take(&mut self.ctx);
         self.ctx.in_fn = saved.in_fn + 1;
         self.ctx.top_stmt = saved.top_stmt;
@@ -2200,6 +2214,7 @@ impl<'s> Eval<'s> {
         if let Some(n) = &named {
             if saved.loops.iter().any(Option::is_none) {
                 self.ctx = saved;
+                self.nest -= def.depth;
                 return Err(Error::PositionalId {
                     span,
                     rule: Rule::KeyedIds,
@@ -2224,6 +2239,7 @@ impl<'s> Eval<'s> {
         self.scopes.truncate(1);
         self.scopes.extend(saved_scopes);
         self.ctx = saved;
+        self.nest -= def.depth;
         r?;
         Ok(self.ret.take().unwrap_or(Value::Unresolved))
     }

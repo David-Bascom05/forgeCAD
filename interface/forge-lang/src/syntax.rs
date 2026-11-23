@@ -1919,6 +1919,61 @@ pub fn parse_table(src: &str) -> R<Vec<Stmt>> {
     p.run()
 }
 
+/// How deep evaluating `e` recurses: a level for it and each expression it holds, nested. The
+/// parser bounds it (`fast::MAX_DEPTH`), so this recursion is bounded too.
+pub fn expr_depth(e: &Expr) -> usize {
+    let max = |xs: &mut dyn Iterator<Item = &Expr>| xs.map(expr_depth).max().unwrap_or(0);
+    1 + match &e.kind {
+        ExprKind::Num(..) | ExprKind::Str(_) | ExprKind::Bool(_) | ExprKind::Name(_) => 0,
+        ExprKind::List(xs) | ExprKind::Tuple(xs) => max(&mut xs.iter()),
+        ExprKind::Map(xs) => max(&mut xs.iter().map(|x| &x.1)),
+        ExprKind::Comp { item, iter, cond, .. } => {
+            max(&mut [&**item, &**iter].into_iter().chain(cond.as_deref()))
+        }
+        ExprKind::Range { lo, hi, .. } => max(&mut [&**lo, &**hi].into_iter()),
+        ExprKind::Bin(_, a, b) | ExprKind::Index(a, b) => max(&mut [&**a, &**b].into_iter()),
+        ExprKind::Neg(a) | ExprKind::Not(a) | ExprKind::Attr(a, _) => expr_depth(a),
+        ExprKind::Call(f, args) => max(&mut std::iter::once(&**f).chain(args.iter().map(|a| &a.value))),
+        ExprKind::If { cond, then, other } => max(&mut [&**cond, &**then, &**other].into_iter()),
+    }
+}
+
+/// How deep evaluating `body` recurses: a level for each statement and block it nests, and its
+/// expressions' depths (`expr_depth`). What one call of a function with this body adds.
+pub fn body_depth(body: &[Stmt]) -> usize {
+    let exprs = |xs: &mut dyn Iterator<Item = &Expr>| xs.map(expr_depth).max().unwrap_or(0);
+    body.iter()
+        .map(|s| {
+            1 + match &s.kind {
+                StmtKind::Shared { value, .. }
+                | StmtKind::Param { value, .. }
+                | StmtKind::Assign { value, .. }
+                | StmtKind::Return(value)
+                | StmtKind::Expr(value) => expr_depth(value),
+                // a function's own body counts where it is called
+                StmtKind::Fn { .. } => 0,
+                StmtKind::For { iter, body, .. } => expr_depth(iter).max(body_depth(body)),
+                StmtKind::If { cond, then, other } => expr_depth(cond)
+                    .max(body_depth(then))
+                    .max(other.as_deref().map_or(0, body_depth)),
+                StmtKind::Expect { args, cmp, at, .. } => exprs(
+                    &mut args
+                        .iter()
+                        .chain(
+                            cmp.iter()
+                                .flat_map(|c| std::iter::once(&c.1).chain(c.2.as_ref().map(|x| &x.0))),
+                        )
+                        .chain(at.iter().map(|x| &x.1)),
+                ),
+                StmtKind::Block { args, body, .. } => {
+                    exprs(&mut args.iter().map(|a| &a.value)).max(body_depth(body))
+                }
+            }
+        })
+        .max()
+        .unwrap_or(0)
+}
+
 /// Every statement, nested ones too, in source order.
 pub fn walk<'s>(stmts: &'s [Stmt], f: &mut dyn FnMut(&'s Stmt)) {
     for s in stmts {

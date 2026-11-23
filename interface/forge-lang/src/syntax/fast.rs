@@ -255,16 +255,21 @@ pub(super) struct Fast {
 pub(super) const MAX_DEPTH: u32 = 400;
 
 impl Fast {
-    /// One level deeper, or the refusal past `MAX_DEPTH`.
-    #[inline]
+    /// One level deeper, or the refusal past `MAX_DEPTH`. (A parse ends at its first error, so
+    /// only the paths that succeed give the level back.)
+    #[inline(always)]
     fn deeper(&mut self) -> F<()> {
         self.deep += 1;
         if self.deep > MAX_DEPTH {
-            return Err(Box::new(Error::Syntax(SyntaxError::TooDeep {
-                span: self.span(),
-            })));
+            return Err(self.too_deep());
         }
         Ok(())
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn too_deep(&self) -> Box<Error> {
+        Box::new(Error::Syntax(SyntaxError::TooDeep { span: self.span() }))
     }
 
     #[inline]
@@ -860,25 +865,20 @@ impl Fast {
 
     // ---- expressions ------------------------------------------------------------------------
 
-    #[inline]
     pub(super) fn expr(&mut self, fk: u64) -> F<Expr> {
         self.deeper()?;
-        let e = self.expr_in(fk)?;
-        self.deep -= 1;
-        Ok(e)
-    }
-
-    fn expr_in(&mut self, fk: u64) -> F<Expr> {
         self.pick(EXPR, fk)?;
         let a = self.or(after(P::ExprOr, 0, fk))?;
         let fk = after(P::ExprOr, 1, fk);
         if self.pick(IFPART, fk)? == P::IfpartEmpty {
+            self.deep -= 1;
             return Ok(a);
         }
         self.shift(t::IF)?;
         let cond = self.or(after(P::IfpartIf, 1, fk))?;
         self.shift(t::ELSE)?;
         let other = self.expr(after(P::IfpartIf, 3, fk))?;
+        self.deep -= 1;
         let span = a.span.to(other.span);
         Ok(Expr {
             kind: ExprKind::If {
@@ -1138,31 +1138,31 @@ impl Fast {
         let lo = a.span.lo;
         let d = self.deep;
         loop {
-            let q = self.pick(POSTREST, fk)?;
-            if q != P::PostrestLparen && q != P::PostrestDot && q != P::PostrestLbrack {
-                self.deep = d;
-                return Ok(a);
-            }
-            self.deeper()?;
-            let (kind, hi) = match q {
+            let (kind, hi) = match self.pick(POSTREST, fk)? {
                 P::PostrestLparen => {
+                    self.deeper()?;
                     self.take()?;
                     let args = self.args(after(P::PostrestLparen, 1, fk))?;
                     let hi = self.shift(t::RPAREN)?.hi;
                     (ExprKind::Call(Box::new(a), args), hi)
                 }
                 P::PostrestDot => {
+                    self.deeper()?;
                     self.take()?;
                     let (n, s) = self.id()?;
                     (ExprKind::Attr(Box::new(a), n), s.hi)
                 }
                 P::PostrestLbrack => {
+                    self.deeper()?;
                     self.take()?;
                     let i = self.expr(after(P::PostrestLbrack, 1, fk))?;
                     let hi = self.shift(t::RBRACK)?.hi;
                     (ExprKind::Index(Box::new(a), Box::new(i)), hi)
                 }
-                _ => return Ok(a),
+                _ => {
+                    self.deep = d;
+                    return Ok(a);
+                }
             };
             a = Expr {
                 kind,

@@ -46,8 +46,21 @@ def verdict(d, t):
         return out
     vol = sum(abs(x["vol"]) for x in seen)
     area = sum(x["area"] for x in seen)
-    out["dvol"] = (vol - t["vol"]) / t["vol"] if t.get("vol") else None
-    out["darea"] = (area - t["area"]) / t["area"] if t.get("area") else None
+    tv, ta = t.get("vol"), t.get("area")
+    if "rule" in t:
+        # the importer's truth rule (research/import/truth.md on its branch; tools/find-parts/recreate/
+        # truth_rule.py `judged`): Gauss-Kronrod's volume, the area of whichever measure agrees with
+        # it to a tenth of the tolerance judged by, else the truth is uncertain and counts neither way
+        r, near = t["rule"], 1e-4
+        v = r["vol_gk"]
+        agree = lambda x: abs(x - v) <= near * max(v, 1e-12)
+        cand = [a for a, w in ((r["area_eps"], r["vol_eps"]), (r["area"], r["vol"])) if agree(w)]
+        if not cand or (len(cand) == 2 and abs(cand[0] - cand[1]) > near * max(abs(cand[0]), 1e-12)):
+            out["uncertain"] = True
+            return out
+        tv, ta = v, cand[0]
+    out["dvol"] = (vol - tv) / tv if tv else None
+    out["darea"] = (area - ta) / ta if ta else None
     boxes = [x["box"] for x in seen if x["box"]]
     tb = t.get("bbox") or t.get("box")
     if boxes and tb and len(boxes) == len(seen):
@@ -106,10 +119,15 @@ def report(paths):
                 c["compared"] += 1
             if v.get("dbox") is not None and v["dbox"] < 1e-3:
                 c["box"] += 1
+            if v.get("uncertain"):
+                c["uncertain"] += 1
         n = c["files"] or 1
         print(f"== {path}")
-        print("  ", " ".join(f"{k}={c[k]} ({100*c[k]/n:.1f}%)" for k in ["files", "read", "valid", "compared", "match", "match1", "valid+match", "box", "refused", "parse_err", "crash", "timeout"]))
+        print("  ", " ".join(f"{k}={c[k]} ({100*c[k]/n:.1f}%)" for k in ["files", "read", "valid", "compared", "uncertain", "match", "match1", "valid+match", "box", "refused", "parse_err", "crash", "timeout"]))
         print(f"   matching {100*c['valid+match']/n:.1f}% / warned {100*c['warned']/n:.1f}% / refused {100*c['refused']/n:.1f}%")
+        if c["uncertain"]:
+            j = max(1, n - c["uncertain"])
+            print(f"   matching where the truth is certain {100*c['valid+match']/j:.1f}% ({c['valid+match']} of {j})")
         print("   problems(files):", probs.most_common(14))
         print("   refused(files):", refs.most_common(14))
         print("   crash:", panics.most_common(6))

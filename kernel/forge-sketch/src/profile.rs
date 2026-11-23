@@ -132,6 +132,23 @@ fn chain_loops(open: &[(Segment, EntityId)]) -> Result<Vec<ProfileLoop>, Extract
     // the first node within the tolerance, found through a grid of cells that size (a search
     // of every node was quadratic: minutes on a sketch of tens of thousands of segments)
     let mut nodes: Vec<Point2> = Vec::new();
+    if open.len() <= 64 {
+        // few: a search of every node, as before (the grid costs more than it saves)
+        let mut node_of = |p: Point2| -> usize {
+            match nodes.iter().position(|q| q.distance(p) <= tol::LINEAR) {
+                Some(i) => i,
+                None => {
+                    nodes.push(p);
+                    nodes.len() - 1
+                }
+            }
+        };
+        let ends: Vec<(usize, usize)> = open
+            .iter()
+            .map(|(s, _)| (node_of(s.start()), node_of(s.end())))
+            .collect();
+        return chain_ends(open, &ends);
+    }
     let mut grid: std::collections::HashMap<(i64, i64), Vec<usize>> = std::collections::HashMap::new();
     let cell = |p: Point2| {
         (
@@ -139,17 +156,7 @@ fn chain_loops(open: &[(Segment, EntityId)]) -> Result<Vec<ProfileLoop>, Extract
             (p.y / tol::LINEAR).floor() as i64,
         )
     };
-    let small = open.len() <= 64;
     let mut node_of = |p: Point2| -> usize {
-        if small {
-            return match nodes.iter().position(|q| q.distance(p) <= tol::LINEAR) {
-                Some(i) => i,
-                None => {
-                    nodes.push(p);
-                    nodes.len() - 1
-                }
-            };
-        }
         let (i, j) = cell(p);
         let mut best: Option<usize> = None;
         for a in i.saturating_sub(1)..=i.saturating_add(1) {
@@ -171,6 +178,15 @@ fn chain_loops(open: &[(Segment, EntityId)]) -> Result<Vec<ProfileLoop>, Extract
         .iter()
         .map(|(s, _)| (node_of(s.start()), node_of(s.end())))
         .collect();
+    chain_ends(open, &ends)
+}
+
+/// `chain_loops` once each segment's two ends are numbered.
+#[inline(always)]
+fn chain_ends(
+    open: &[(Segment, EntityId)],
+    ends: &[(usize, usize)],
+) -> Result<Vec<ProfileLoop>, ExtractError> {
     let mut incident: Vec<Vec<usize>> = Vec::new();
     for (k, &(a, b)) in ends.iter().enumerate() {
         for v in [a, b] {
@@ -469,46 +485,48 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
         .collect();
     let shapes: Vec<Shape> = all.iter().map(|(s, ..)| shape(s)).collect();
     let mut meets_itself: Vec<Option<(u64, u64)>> = vec![None; loops.len()];
-    // only segments whose boxes come within a margin can meet: a sweep finds those pairs (every
-    // pair was quadratic), then they are judged in the order every pair was
-    let pairs = if all.len() <= 64 {
-        // few: every pair, as before (the boxes cost more than they save)
-        (0..all.len())
-            .flat_map(|i| (i + 1..all.len()).map(move |j| (i, j)))
-            .collect()
+    // few: every pair, as before (the boxes cost more than they save); else only segments whose
+    // boxes come within a margin can meet: a sweep finds those pairs (every pair was quadratic),
+    // then they are judged in the order every pair was
+    let n = all.len();
+    let pairs = if n <= 64 {
+        Pairs::Every { i: 0, j: 1, n }
     } else {
-        crossing_candidates(&all)
+        Pairs::Listed(crossing_candidates(&all).into_iter())
     };
     for (i, j) in pairs {
-        {
-            let (si, sj) = (&all[i].0, &all[j].0);
-            let ends = [si.start(), si.end(), sj.start(), sj.end()];
-            let shared: Vec<Point2> = ends[..2]
-                .iter()
-                .copied()
-                .filter(|p| ends[2..].iter().any(|q| q.distance(*p) <= tol::LINEAR))
-                .collect();
-            // a tangent joint solved to ~1e-9 mm still splits into two roots up to sqrt(2 r delta) apart
-            let near = 1e-6 + (2.0 * radius(&shapes[i]).max(radius(&shapes[j])) * 1e-8).sqrt();
-            let same = all[i].2 == all[j].2;
-            let bad = match hits(&shapes[i], &shapes[j]) {
-                Hit::Overlap => true,
-                Hit::Points(ps) => ps.iter().any(|p| {
-                    !shared.iter().any(|q| q.distance(*p) <= near)
-                        && (same || crosses(&shapes[i], &shapes[j], *p, &ends, near))
-                }),
-            };
-            if !bad {
-                continue;
+        let (si, sj) = (&all[i].0, &all[j].0);
+        let ends = [si.start(), si.end(), sj.start(), sj.end()];
+        // the ends of the first the second shares (at most two: no list made for them)
+        let mut both = [ends[0]; 2];
+        let mut nb = 0;
+        for p in &ends[..2] {
+            if ends[2..].iter().any(|q| q.distance(*p) <= tol::LINEAR) {
+                both[nb] = *p;
+                nb += 1;
             }
-            if same {
-                meets_itself[all[i].2].get_or_insert((all[i].1, all[j].1));
-            } else {
-                return Err(ExtractError::SelfIntersection {
-                    a: EntityId(all[i].1),
-                    b: EntityId(all[j].1),
-                });
-            }
+        }
+        let shared = &both[..nb];
+        // a tangent joint solved to ~1e-9 mm still splits into two roots up to sqrt(2 r delta) apart
+        let near = 1e-6 + (2.0 * radius(&shapes[i]).max(radius(&shapes[j])) * 1e-8).sqrt();
+        let same = all[i].2 == all[j].2;
+        let bad = match hits(&shapes[i], &shapes[j]) {
+            Hit::Overlap => true,
+            Hit::Points(ps) => ps.iter().any(|p| {
+                !shared.iter().any(|q| q.distance(*p) <= near)
+                    && (same || crosses(&shapes[i], &shapes[j], *p, &ends, near))
+            }),
+        };
+        if !bad {
+            continue;
+        }
+        if same {
+            meets_itself[all[i].2].get_or_insert((all[i].1, all[j].1));
+        } else {
+            return Err(ExtractError::SelfIntersection {
+                a: EntityId(all[i].1),
+                b: EntityId(all[j].1),
+            });
         }
     }
     for (l, m) in loops.iter().zip(meets_itself) {
@@ -522,6 +540,35 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
         }
     }
     Ok(())
+}
+
+/// The pairs `check_crossings` judges, in order: every one of `n` segments' (`i < j`), or a list.
+enum Pairs {
+    Every { i: usize, j: usize, n: usize },
+    Listed(std::vec::IntoIter<(usize, usize)>),
+}
+
+impl Iterator for Pairs {
+    type Item = (usize, usize);
+
+    #[inline]
+    fn next(&mut self) -> Option<(usize, usize)> {
+        match self {
+            Pairs::Every { i, j, n } => {
+                if *j >= *n {
+                    *i += 1;
+                    *j = *i + 1;
+                    if *j >= *n {
+                        return None;
+                    }
+                }
+                let p = (*i, *j);
+                *j += 1;
+                Some(p)
+            }
+            Pairs::Listed(l) => l.next(),
+        }
+    }
 }
 
 /// The pairs of segments whose boxes come within a margin, in the order every pair is judged:
