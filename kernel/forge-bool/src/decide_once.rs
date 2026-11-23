@@ -88,7 +88,7 @@ struct In {
     hi: [f64; 3],
     loops: Vec<Vec<VertexId>>,
     /// each loop's box, from the kernel's vertices
-    lboxes: Vec<([f64; 3], [f64; 3])>,
+    lboxes: forge_topo::small::Small<([f64; 3], [f64; 3]), 2>,
 }
 
 fn lin() -> f64 {
@@ -114,7 +114,7 @@ fn inputs(bodies: &[&Body]) -> Result<Vec<In>, Skip> {
             let mut lo = [f64::INFINITY; 3];
             let mut hi = [f64::NEG_INFINITY; 3];
             let mut loops = Vec::with_capacity(face.loops.len());
-            let mut lboxes = Vec::with_capacity(face.loops.len());
+            let mut lboxes = forge_topo::small::Small::default();
             for &lp in face.loops.iter() {
                 vs.clear();
                 let (mut llo, mut lhi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
@@ -360,16 +360,21 @@ fn snap(fs: &[In]) -> Result<(Vec<DyPlane>, Vec<usize>), Skip> {
     for &(a, b) in &pairs {
         uf.union(a, b);
     }
-    // the spread cap: every pair of a class whose region is not empty within 2·LINEAR
+    // the spread cap: every pair of a class whose region is not empty within 2·LINEAR (a pair is
+    // within LINEAR by its own test, so only classes of three or more; their members listed
+    // only then)
+    let roots: Vec<usize> = (0..n).map(|i| uf.find(i)).collect();
+    let mut count = vec![0u32; n];
+    for &r in &roots {
+        count[r] += 1;
+    }
     let mut members: HashMap<usize, Vec<usize>> = HashMap::default();
-    for i in 0..n {
-        let r = uf.find(i);
-        members.entry(r).or_default().push(i);
+    for (i, &r) in roots.iter().enumerate() {
+        if count[r] >= 3 {
+            members.entry(r).or_default().push(i);
+        }
     }
     for ms in members.values() {
-        if ms.len() < 3 {
-            continue; // a pair is within LINEAR by its own test
-        }
         for (x, &a) in ms.iter().enumerate() {
             for &b in &ms[x + 1..] {
                 if tol_eq(&fs[a], &fs[b], 2.0) == Some(false) {
