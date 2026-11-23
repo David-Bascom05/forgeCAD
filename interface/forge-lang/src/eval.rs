@@ -940,7 +940,7 @@ impl<'s> Eval<'s> {
             self.ctx.top_stmt = Some(s.full);
             self.calls = 0;
             if let Err(e) = self.stmt(s) {
-                self.errors.push(e);
+                self.errors.push(self.deleted_or(e));
                 // a failed statement's name stands for nothing known, so errors don't cascade
                 if let StmtKind::Assign { name, .. } | StmtKind::Block { name, .. } = &s.kind
                     && !self.scopes[0].contains_key(name)
@@ -1533,30 +1533,12 @@ impl<'s> Eval<'s> {
             self.rule(self.rules.scoped_params, err)?;
             return Ok(self.param_num((false, k), span));
         }
-        Err(self.unknown_name(name, span))
-    }
-
-    /// The error of a name bound nowhere in reach (out of the way of `lookup`, which every read
-    /// takes): `Deleted` for a name a `delete` unbound, else UnknownName with the nearest names.
-    #[cold]
-    #[inline(never)]
-    fn unknown_name(&self, name: &str, span: Span) -> Error {
-        // a name a `delete` unbound: its body is no longer in the part
-        if let Some((Value::Str(by), _)) = self.scopes[0].get(&format!("{DELETED}{name}")) {
-            return crate::feat_error::FeatError::Deleted {
-                span,
-                id: name.into(),
-                by: by.to_string(),
-            }
-            .into();
-        }
         // the nearest name in reach: bound, a param, a function, a built-in
         let here = self.ctx.owner.clone();
         let names = self
             .scopes
             .iter()
             .flat_map(|s| s.keys().map(String::as_str))
-            .filter(|n| !n.starts_with(DELETED))
             .chain(self.shared.iter().map(|p| p.key.name.as_str()))
             .chain(
                 self.locals
@@ -1567,16 +1549,34 @@ impl<'s> Eval<'s> {
             .chain(self.fns.keys().map(String::as_str))
             .chain(crate::builtins::BUILTINS.iter().copied())
             .chain(crate::shapes::NAMES.iter().copied());
-        Error::UnknownName {
+        Err(Error::UnknownName {
             span,
             name: name.into(),
             near: crate::edit_ops::nearest(name, names),
+        })
+    }
+
+    /// A statement's error, unless it is a name a `delete` unbound (read after the delete): then
+    /// `Deleted`, its body being no longer in the part. Only on the way of an error: a name that is
+    /// bound is read as it always was.
+    #[cold]
+    #[inline(never)]
+    fn deleted_or(&self, e: Error) -> Error {
+        if let Error::UnknownName { span, name, .. } = &e
+            && let Some((Value::Str(by), _)) = self.scopes[0].get(&format!("{DELETED}{name}"))
+        {
+            return crate::feat_error::FeatError::Deleted {
+                span: *span,
+                id: name.clone(),
+                by: by.to_string(),
+            }
+            .into();
         }
+        e
     }
 
     /// After a `delete`: each top-level name bound to a feature whose body it removed is unbound,
-    /// and marked (under `DELETED`, a key no name can spell) so a read of it is `Deleted`. Nothing
-    /// is added on the way of a name that is bound: a part with no delete reads names as before.
+    /// and marked (under `DELETED`, a key no name can spell) so that reading it is `Deleted`.
     pub(crate) fn unbind_deleted(&mut self, bodies: &[usize], by: &str) {
         let gone: Vec<String> = self.scopes[0]
             .iter()
