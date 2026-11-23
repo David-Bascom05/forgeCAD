@@ -23,3 +23,5 @@ import ForgeExact.Quad.Cert
 import ForgeExact.QRef.Run
 import ForgeExact.QRef.Octree
 import ForgeExact.Axioms
+import ForgeExact.Fillet
+import ForgeExact.Ops.Axioms

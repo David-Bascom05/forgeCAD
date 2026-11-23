@@ -51,7 +51,8 @@ has been reported to the master.
 | Intersection tracing | trace | step lemma (Krawczyk) | phase B, binary64 |
 | .fg language | ieee (language proofs) | lexer, LL(1), edits, reparse | — |
 | Extrude / revolve / sweep / loft / coil / thread | sweep-spec | — | L1 |
-| Shell / draft / hole / rib / chamfer / pattern | ops-spec, fix-shell, fix-draft | — | L1 |
+| Shell / draft / hole / rib / chamfer / pattern-of-features | ops-spec, fix-shell, fix-draft | L1 partial: pattern P1–P3, hole H1 H3 H4, chamfer C1 C2 (plane pair), draft D1–D3 (planes) | L1 recarrier, shell, rib; L2 reference; L6 harness |
+| Thicken | surfaces (thin/thicken) | — | L1 with ValidSheet |
 | Surfaces and thin | surfaces | — | ValidSheet with fundamentals |
 | Sketch text | sketch-text | exact glyph geometry | L1 |
 | Weldments | weldments | — | L1 (members are extrudes and half-spaces) |

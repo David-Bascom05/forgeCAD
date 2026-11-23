@@ -1338,3 +1338,83 @@ fn a_wavy_spline_wall_meshes() {
     let (v, _) = judge_built(include_str!("kernel_parts/mesh_wavy_spline.fg"));
     assert!(matches!(v, Verdict::Ok), "{v:?}");
 }
+
+/// A through hole goes through a rib that stands above the rest of the part. The box a through
+/// hole is sized by (`hole::reach`) left ribs out, so this hole ran 7 mm, through the plate only,
+/// and stopped 1 mm into the rib (research/ops-spec/design.md §2, H1: a finite depth is exact iff
+/// it clears the part). The column it removes is exact: the disc under the tent's ridge,
+/// 40·π·R² − (34/30)·(4R³/3) with R = 2.5.
+#[test]
+fn thru_hole_goes_through_a_rib_above_the_part() {
+    let src = "shared L = 80
+shared W = 30
+shared t = 6
+param web.w = 8
+param bore.d = 5
+param tent.y = -15
+param tent.x0 = 10
+param tent.xm = 40
+param tent.x1 = 70
+param tent.top = 40
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+sketch tent(on: offset(xz, y)) {
+  path a(start: (x0, t)) {
+    line(to: (xm, top))
+    line(to: (x1, t))
+  }
+}
+web = rib(tent.a, w, flip: true)
+sketch spot(on: xy) {
+  c = pt(L / 2, W / 2)
+}
+bore = hole(at: spot.c, d: d, depth: thru, flip: true)
+";
+    let (b, v) = body(src);
+    assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+    let r: f64 = 2.5;
+    let plate_and_rib = 80.0 * 30.0 * 6.0 + 60.0 * 34.0 / 2.0 * 8.0;
+    let column = 40.0 * dmath::PI * r * r - 34.0 / 30.0 * (4.0 * r * r * r / 3.0);
+    assert!(
+        (v - (plate_and_rib - column)).abs() < 1e-6,
+        "volume {v}, through the rib {}",
+        plate_and_rib - column
+    );
+}
+
+/// A through hole goes through a tapered boss. `hole::reach` gave a tapered (and a slanted)
+/// extrude no box at all, so this hole ran 7 mm, through the plate only, and stopped at the
+/// boss's foot. Exact: the plate, the boss's frustum (radius 10 narrowing by 30 tan 2°), less the
+/// hole's 36 mm column.
+#[test]
+fn thru_hole_goes_through_a_tapered_boss() {
+    let src = "shared L = 80
+shared W = 30
+shared t = 6
+param top.r = 10
+param boss.h = 30
+param boss.a = 2deg
+param bore.d = 5
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+sketch top(on: base.end) {
+  c = circle((L / 2, W / 2), r)
+}
+boss = extrude(top.c, h, taper: a)
+sketch spot(on: xy) {
+  p = pt(L / 2, W / 2)
+}
+bore = hole(at: spot.p, d: d, depth: thru, flip: true)
+";
+    let (b, v) = body(src);
+    assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+    let (r0, h) = (10.0f64, 30.0f64);
+    let r1 = r0 - h * dmath::sin(2f64.to_radians()) / dmath::cos(2f64.to_radians());
+    let boss = dmath::PI * h / 3.0 * (r0 * r0 + r0 * r1 + r1 * r1);
+    let exact = 80.0 * 30.0 * 6.0 + boss - dmath::PI * 2.5 * 2.5 * 36.0;
+    assert!((v - exact).abs() < 1e-6, "volume {v}, through the boss {exact}");
+}
