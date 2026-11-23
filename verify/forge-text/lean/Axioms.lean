@@ -14,6 +14,7 @@ theorem's axioms; none may be `sorryAx` or `Lean.ofReduceBool`. -/
 #print axioms ForgeText.chain_append
 #print axioms ForgeText.step_inv
 #print axioms ForgeText.decode_closes
+#print axioms ForgeText.contourOf_closes
 #print axioms ForgeText.total_append
 #print axioms ForgeText.sides_rot1
 #print axioms ForgeText.polyWinding_rot1

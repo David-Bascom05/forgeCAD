@@ -114,4 +114,28 @@ theorem step_out_prefix (w : Walk) (q : Pt × Bool) : ∃ t, (step w q).out = w.
     · exact ⟨[], by simp⟩
     · exact ⟨_, rfl⟩
 
+/-- A contour from its points, as `contour` walks them: from the first on point (or, with none,
+from midway between the first two), over the points after it round to the one before it, and
+back to the start on the curve. Fewer than two points make nothing. -/
+def contourOf (ps : List (Pt × Bool)) : List Seg :=
+  if 2 ≤ ps.length then
+    match ps.findIdx? (·.2) with
+    | some k =>
+      let s := (ps.getD k (⟨0, 0⟩, true)).1
+      decode s (ps.drop (k + 1) ++ ps.take k ++ [(s, true)])
+    | none =>
+      let s := mid (ps.getD 0 (⟨0, 0⟩, true)).1 (ps.getD 1 (⟨0, 0⟩, true)).1
+      decode s (ps.drop 1 ++ ps.take 1 ++ [(s, true)])
+  else []
+
+/-- Every contour so made is closed: its pieces chain from a start and end back on it. -/
+theorem contourOf_closes (ps : List (Pt × Bool)) :
+    ∃ s, Chain s (contourOf ps) ∧ endOf s (contourOf ps) = s := by
+  unfold contourOf
+  split
+  · split
+    · exact ⟨_, decode_closes _ _⟩
+    · exact ⟨_, decode_closes _ _⟩
+  · exact ⟨⟨0, 0⟩, trivial, rfl⟩
+
 end ForgeText

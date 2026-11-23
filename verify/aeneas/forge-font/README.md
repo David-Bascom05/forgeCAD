@@ -11,4 +11,4 @@ then `lake build` in `lean/`.
 
 | Level | |
 |---|---|
-| L4 | translated: 22 definitions, none opaque; elaborates. Proofs against verify/forge-text's specs (`decode`, `decode_closes`): in progress |
+| L4 | translated: 22 definitions, none opaque. Proven (`lean/ForgeFont/{Walk,Contour}.lean`, standard axioms only: `lake env lean Axioms.lean`): `step_spec`, one step of the walk is ForgeText's `step`; `contour_spec`, `glyf_core::contour` returns ForgeText's `contourOf` of the points `first..=last` on the doubled grid, with no overflow and no failed index, for every glyph whose three arrays have one length and `first ≤ last` in range; `contour_closes`, so every contour it makes is closed. Rust's truncating `/` is the spec's floor division here because every sum it halves is even (`Grid`). Next: `read_simple` (never fails, and its arrays have the lengths `contour` needs) |
