@@ -581,6 +581,20 @@ fn a_sketch_drawn_on_a_face_is_written_in_forge_and_extruded() {
 }
 
 #[test]
+fn a_click_on_a_faces_edge_starts_the_sketch_on_that_face() {
+    let Some((mut h, _)) = open(BLOCK, "sketch-edge") else {
+        return;
+    };
+    assert!(h.click("tool:Start Sketch"));
+    h.step();
+    assert!(h.gui.shell.sketch_pick);
+    // the top's front edge: the pick takes the edge, the sketch the planar face turned to the eye
+    point_at(&mut h, [30.0, 0.0, 20.0]);
+    assert!(h.gui.shell.sketch.is_some(), "{}", h.gui.shell.status);
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().head, "base.end");
+}
+
+#[test]
 fn project_geometry_takes_edges_and_faces_clicked_and_writes_forge_project() {
     use forge_render::shell::sketching::{SkTool, rows, rows::Row};
     let Some((mut h, _)) = open(PLAIN, "project") else {

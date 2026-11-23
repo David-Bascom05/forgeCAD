@@ -32,6 +32,7 @@ fn units_area(g: &TestGlyph) -> f64 {
         .map(|s| match *s {
             Seg::Line(a, b) => a.x * b.y - b.x * a.y,
             Seg::Quad(a, m, b) => a.x * b.y - b.x * a.y + 2.0 / 3.0 * (m - a).cross(b - a),
+            Seg::Cubic(..) => unreachable!("the test fonts are TrueType"),
         })
         .sum();
     a2.abs() / 2.0

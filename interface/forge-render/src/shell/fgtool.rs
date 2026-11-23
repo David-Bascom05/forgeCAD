@@ -48,6 +48,12 @@ pub enum SlotKind {
     RevAxis,
     /// Where an extent ends: faces of the part, a work plane or a sketch's plane.
     UpTo,
+    /// A weldment member (`frame[2]`), from the browser.
+    Member,
+    /// Weldment members, from the browser; several listed.
+    Members,
+    /// What a member's end is trimmed to: a face, a work plane or a sketch, a member or a body.
+    TrimTo,
 }
 
 impl SlotKind {
@@ -60,6 +66,7 @@ impl SlotKind {
                 | SlotKind::Path
                 | SlotKind::Features
                 | SlotKind::UpTo
+                | SlotKind::Members
         )
     }
 
@@ -78,6 +85,7 @@ impl SlotKind {
                 | SlotKind::SheetEdge
                 | SlotKind::RevAxis
                 | SlotKind::UpTo
+                | SlotKind::TrimTo
         )
     }
 
@@ -93,6 +101,9 @@ impl SlotKind {
                 | SlotKind::Points
                 | SlotKind::RevAxis
                 | SlotKind::UpTo
+                | SlotKind::Member
+                | SlotKind::Members
+                | SlotKind::TrimTo
         )
     }
 
@@ -120,6 +131,9 @@ impl SlotKind {
                 "Select a sketch line, a straight edge, a cylindrical face, a work axis or an origin axis"
             }
             SlotKind::UpTo => "Select the faces, a work plane or a sketch to end at",
+            SlotKind::Member => "Select a member in the browser",
+            SlotKind::Members => "Select members in the browser",
+            SlotKind::TrimTo => "Select a face, a work plane, a sketch, a member or a body to trim to",
         }
     }
 }
@@ -305,7 +319,7 @@ pub(super) type Form = (
 );
 
 /// The tools there are a Forge form for, by the ribbon's kind.
-pub const KINDS: [&str; 37] = [
+pub const KINDS: [&str; 41] = [
     "extrude",
     "revolve",
     "hole",
@@ -343,7 +357,29 @@ pub const KINDS: [&str; 37] = [
     "facefillet",
     "offsetface",
     "moveface",
+    "members",
+    "endtrim",
+    "endcap",
+    "cornerplate",
 ];
+
+/// Where a section's pierce point sits on the path (`members(.., align:)`).
+pub const ALIGNS: [&str; 11] = [
+    "center",
+    "centroid",
+    "origin",
+    "top",
+    "bottom",
+    "left",
+    "right",
+    "top_left",
+    "top_right",
+    "bottom_left",
+    "bottom_right",
+];
+
+/// How two members meet at a node.
+pub const CORNERS: [&str; 2] = ["miter", "butt"];
 
 const OUTPUT: &[(&str, &str)] = &[
     ("Join", "join"),
@@ -493,6 +529,15 @@ pub(super) fn choices_of(kind: &str) -> Vec<Choice> {
             ],
         )],
         "movebody" | "copybody" => vec![c("Motion", &[("Slide", "movebody"), ("Spin", "rotate")])],
+        "members" => vec![
+            c("Section", &[("Library", "folder"), ("Sketch", "sketch")]),
+            c("Corner", &[("Miter", "chamfer"), ("Butt", "combine")]),
+        ],
+        "endtrim" => vec![c(
+            "End",
+            &[("Nearer", "endtrim"), ("Start", "endtrim"), ("End", "endtrim")],
+        )],
+        "endcap" => vec![c("End", &[("End", "endcap"), ("Start", "endcap")])],
         _ => vec![],
     }
 }
@@ -900,6 +945,55 @@ pub(super) fn form_of(kind: &str, c: &dyn Fn(&str) -> &'static str) -> Option<Fo
             vec![],
             vec![],
         ),
+        "members" => {
+            let mut slots = vec![slot("Layout", K::Path)];
+            let mut words = vec![];
+            let align = if c("Section") == "Sketch" {
+                slots.push(slot("Section", K::Profile));
+                "origin"
+            } else {
+                words.push(("section", "SHS 40x40x3".to_string()));
+                "center"
+            };
+            words.push(("align", align.to_string()));
+            // a corner of its own at the nodes picked: its kind and gap there
+            slots.push(maybe("Corner Points", K::Points));
+            words.push(("corner_at", "butt".to_string()));
+            (
+                slots,
+                vec![
+                    param("gap", "0", Dim::Length),
+                    param("dx", "0", Dim::Length),
+                    param("dy", "0", Dim::Length),
+                    param("turn", "0", Dim::Angle),
+                    param("corner_gap", "0", Dim::Length),
+                ],
+                words,
+                vec![("mirror", false)],
+            )
+        }
+        "endtrim" => (
+            vec![slot("Members", K::Members), slot("To", K::TrimTo)],
+            vec![param("gap", "0", Dim::Length)],
+            vec![],
+            vec![],
+        ),
+        "endcap" => (
+            vec![slot("Member", K::Member)],
+            vec![param("t", "5", Dim::Length)],
+            vec![],
+            vec![],
+        ),
+        "cornerplate" => (
+            vec![slot("Member A", K::Member), slot("Member B", K::Member)],
+            vec![
+                param("size", "80", Dim::Length),
+                param("t", "5", Dim::Length),
+                param("corner_cut", "10", Dim::Length),
+            ],
+            vec![],
+            vec![],
+        ),
         _ => return None,
     })
 }
@@ -914,6 +1008,10 @@ fn base_name(kind: &str) -> &str {
         "emboss" => "emboss",
         "direct" | "moveface" | "offsetface" | "deleteface" | "replaceface" => "direct",
         "facefillet" => "fillet",
+        "members" => "frame",
+        "endtrim" => "trim",
+        "endcap" => "cap",
+        "cornerplate" => "plate",
         k => k,
     }
 }
@@ -986,7 +1084,18 @@ impl FgTool {
         if k >= c.items.len() || c.on == k {
             return;
         }
+        let was = c.on;
         c.on = k;
+        // the old form's own words, as it starts: a word still at its default takes the new
+        // form's default (a sketched section's `origin`, not the library's `center`)
+        let old_defaults = {
+            let mut before = self.choices.clone();
+            if let Some(b) = before.iter_mut().find(|b| b.name == name) {
+                b.on = was;
+            }
+            let pick = |n: &str| before.iter().find(|c| c.name == n).map_or("", |c| c.word());
+            form_of(self.kind, &pick).map(|f| f.2).unwrap_or_default()
+        };
         let choices = self.choices.clone();
         let pick = |n: &str| choices.iter().find(|c| c.name == n).map_or("", |c| c.word());
         let Some((mut slots, mut params, mut words, mut flags)) = form_of(self.kind, &pick) else {
@@ -1003,7 +1112,10 @@ impl FgTool {
             }
         }
         for w in &mut words {
-            if let Some(o) = self.words.iter().find(|o| o.0 == w.0) {
+            let untouched = |o: &(&str, String)| old_defaults.iter().any(|d| d.0 == o.0 && d.1 == o.1);
+            if let Some(o) = self.words.iter().find(|o| o.0 == w.0)
+                && !untouched(o)
+            {
                 w.1 = o.1.clone();
             }
         }
@@ -1665,6 +1777,106 @@ impl FgTool {
                 self.one("Wall")?
             ),
             "unfold" => format!("{n} = unfold({})", self.one("Sheet")?),
+            "members" => {
+                let zero = |p: &str| self.value(p) == Some(0.0);
+                let library = self.choice("Section") != "Sketch";
+                let section = if library {
+                    format!("{:?}", self.word("section").trim())
+                } else {
+                    self.one("Section")?
+                };
+                let mut args = format!("{}, section: {section}", self.listed("Layout")?);
+                let align = self.word("align");
+                let align = align.trim();
+                if !ALIGNS.contains(&align) {
+                    return Err(ToolError::NoForgeForm {
+                        tool: "Members",
+                        why: format!("{align:?} is no alignment: one of {}", ALIGNS.join(", ")),
+                    });
+                }
+                if align != if library { "center" } else { "origin" } {
+                    args.push_str(&format!(", align: {align:?}"));
+                }
+                if zero("dx") && zero("dy") {
+                    skip.extend(["dx", "dy"]);
+                } else {
+                    args.push_str(", offset: (dx, dy)");
+                }
+                if zero("turn") {
+                    skip.push("turn");
+                } else {
+                    args.push_str(", turn: turn");
+                }
+                if self.flag("mirror") {
+                    args.push_str(", mirror: true");
+                }
+                if self.choice("Corner") == "Butt" {
+                    args.push_str(", corner: \"butt\"");
+                }
+                if zero("gap") {
+                    skip.push("gap");
+                } else {
+                    args.push_str(", gap: gap");
+                }
+                let at = &self.the("Corner Points").picks;
+                if at.is_empty() {
+                    skip.push("corner_gap");
+                } else {
+                    let kind = self.word("corner_at");
+                    let kind = kind.trim();
+                    if !CORNERS.contains(&kind) {
+                        return Err(ToolError::NoForgeForm {
+                            tool: "Members",
+                            why: format!("{kind:?} is no corner: miter or butt"),
+                        });
+                    }
+                    let each: Vec<String> = at
+                        .iter()
+                        .map(|p| format!("({p}, {kind:?}, corner_gap)"))
+                        .collect();
+                    args.push_str(&format!(", corners: [{}]", each.join(", ")));
+                }
+                format!("{n} = members({args})")
+            }
+            "endtrim" => {
+                let gap = if self.value("gap") == Some(0.0) {
+                    skip.push("gap");
+                    ""
+                } else {
+                    ", gap: gap"
+                };
+                let end = match self.choice("End") {
+                    "Start" => ", end: \"start\"",
+                    "End" => ", end: \"end\"",
+                    _ => "",
+                };
+                format!(
+                    "{n} = end_trim({}, to: {}{gap}{end})",
+                    self.listed("Members")?,
+                    self.one("To")?
+                )
+            }
+            "endcap" => {
+                let end = if self.choice("End") == "Start" {
+                    "start"
+                } else {
+                    "end"
+                };
+                format!("{n} = end_cap({}, end: {end:?}, t: t)", self.one("Member")?)
+            }
+            "cornerplate" => {
+                let chamfer = if self.value("corner_cut") == Some(0.0) {
+                    skip.push("corner_cut");
+                    ""
+                } else {
+                    ", chamfer: corner_cut"
+                };
+                format!(
+                    "{n} = corner_plate({}, {}, size: size, t: t{chamfer})",
+                    self.one("Member A")?,
+                    self.one("Member B")?
+                )
+            }
             _ => {
                 return Err(ToolError::NoForgeForm {
                     tool: self.kind,
@@ -1683,6 +1895,85 @@ impl FgTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn members_write_their_section_and_only_the_options_set() {
+        let mut t = FgTool::new("members", &[]).unwrap();
+        assert_eq!(t.name, "frame1");
+        assert_eq!(t.text(), Err(ToolError::MissingPick { slot: "Layout" }));
+        t.take(Ok("lay.r".into()));
+        assert_eq!(
+            t.text().unwrap(),
+            "frame1 = members(lay.r, section: \"SHS 40x40x3\")\n"
+        );
+        // a second layout piece, butt corners, a gap, a turn, mirrored, aligned to its top
+        t.take(Ok("side.post".into()));
+        t.choose("Corner", 1);
+        t.words.iter_mut().find(|w| w.0 == "align").unwrap().1 = "top".into();
+        for (p, v) in [("gap", "0.5"), ("turn", "90")] {
+            t.params.iter_mut().find(|x| x.name == p).unwrap().text = v.into();
+        }
+        t.flags[0].1 = true;
+        assert_eq!(
+            t.text().unwrap(),
+            "param frame1.gap = 0.5\nparam frame1.turn = 90deg\n\
+             frame1 = members([lay.r, side.post], section: \"SHS 40x40x3\", align: \"top\", turn: turn, mirror: true, corner: \"butt\", gap: gap)\n"
+        );
+    }
+
+    #[test]
+    fn members_take_a_sketched_section_an_offset_and_a_corner_of_their_own() {
+        let mut t = FgTool::new("members", &[]).unwrap();
+        t.choose("Section", 1);
+        assert!(t.words.iter().all(|w| w.0 != "section"));
+        t.take(Ok("lay.r".into()));
+        assert_eq!(t.text(), Err(ToolError::MissingPick { slot: "Section" }));
+        t.active = 1;
+        t.take(Ok("sec.outline".into()));
+        t.params.iter_mut().find(|x| x.name == "dy").unwrap().text = "10".into();
+        t.active = 2;
+        t.take(Ok("lay.p0".into()));
+        t.params.iter_mut().find(|x| x.name == "corner_gap").unwrap().text = "1".into();
+        assert_eq!(
+            t.text().unwrap(),
+            "param frame1.dx = 0\nparam frame1.dy = 10\nparam frame1.corner_gap = 1\n\
+             frame1 = members(lay.r, section: sec.outline, offset: (dx, dy), corners: [(lay.p0, \"butt\", corner_gap)])\n"
+        );
+        // an alignment that isn't one is refused, typed
+        t.words.iter_mut().find(|w| w.0 == "align").unwrap().1 = "middle".into();
+        assert_eq!(t.text().map_err(|e| e.kind()), Err("NoForgeForm"));
+    }
+
+    #[test]
+    fn end_trim_end_cap_and_corner_plate_write_their_calls() {
+        let mut t = FgTool::new("endtrim", &[]).unwrap();
+        t.take(Ok("legs[0]".into()));
+        t.active = 1;
+        t.take(Ok("top[0]".into()));
+        assert_eq!(t.text().unwrap(), "trim1 = end_trim(legs[0], to: top[0])\n");
+        t.choose("End", 1);
+        t.params[0].text = "2".into();
+        assert_eq!(
+            t.text().unwrap(),
+            "param trim1.gap = 2\ntrim1 = end_trim(legs[0], to: top[0], gap: gap, end: \"start\")\n"
+        );
+
+        let mut c = FgTool::new("endcap", &[]).unwrap();
+        c.take(Ok("legs[0]".into()));
+        assert_eq!(
+            c.text().unwrap(),
+            "param cap1.t = 5\ncap1 = end_cap(legs[0], end: \"end\", t: t)\n"
+        );
+
+        let mut p = FgTool::new("cornerplate", &[]).unwrap();
+        p.take(Ok("top[0]".into()));
+        p.take(Ok("top[1]".into()));
+        assert_eq!(
+            p.text().unwrap(),
+            "param plate1.size = 80\nparam plate1.t = 5\nparam plate1.corner_cut = 10\n\
+             plate1 = corner_plate(top[0], top[1], size: size, t: t, chamfer: corner_cut)\n"
+        );
+    }
 
     #[test]
     fn a_fillet_writes_its_param_and_its_edges_by_anchor() {

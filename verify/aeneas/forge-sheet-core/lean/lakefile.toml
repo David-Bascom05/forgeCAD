@@ -1,0 +1,17 @@
+name = "forgesheetcore"
+version = "0.1.0"
+defaultTargets = ["ForgeSheetCore"]
+
+# The float bridge (Aeneas's library, verify/ieee754, f64 as binary64); this crate has no floats,
+# but the translation imports it as every crate's does.
+[[require]]
+name = "aeneasf64"
+path = "../../bridge"
+
+# The spec the translation is proven against: verify/sheet (Classes.lean, Region.lean).
+[[require]]
+name = "sheet"
+path = "../../../sheet"
+
+[[lean_lib]]
+name = "ForgeSheetCore"

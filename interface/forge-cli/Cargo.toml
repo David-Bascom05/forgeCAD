@@ -11,6 +11,7 @@ name = "forgecad"
 path = "src/main.rs"
 
 [dependencies]
+forge-dirs = { path = "../../kernel/forge-dirs" }
 forge-math = { path = "../../kernel/forge-math" }
 forge-geom = { path = "../../kernel/forge-geom" }
 forge-topo = { path = "../../kernel/forge-topo" }
@@ -22,6 +23,9 @@ forge-import = { path = "../forge-import" }
 forge-lang = { path = "../forge-lang" }
 forge-cam-lang = { path = "../forge-cam-lang" }
 forge-step = { path = "../../kernel/forge-step" }
+
+[dev-dependencies]
+forge-material = { path = "../../kernel/forge-material" }
 
 [lints]
 workspace = true

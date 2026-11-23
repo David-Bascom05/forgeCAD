@@ -417,7 +417,7 @@ pub struct Node {
 pub type R = u32;
 
 /// A node's identity, for sharing: equal keys are the same exact value, built once.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Key {
     Lit(bool, Vec<u32>, i64),
     Op(u8, u32, u32),
@@ -426,7 +426,8 @@ enum Key {
 /// The arena of exact reals. Nodes are only appended, so children precede parents; `mark` and
 /// `release` drop temporaries in a stack discipline.
 ///
-/// Nodes are hash-consed (an expression built twice is one node), and constants fold: an
+/// Nodes are shared by a sorted index (an ordered map on each node's key, no hashing, so no seed
+/// and the same structure on every target): an expression built twice is one node, and constants fold: an
 /// operation on two literals that is exact in dyadics is a literal. So `x − x` is the literal 0
 /// by construction, and the separation bound counts each distinct radical once.
 #[derive(Clone, Debug, Default)]
@@ -434,7 +435,7 @@ pub struct Ctx {
     pub nodes: Vec<Node>,
     /// How many exact (big-float) evaluations were needed: for tracing the filter's rate.
     pub exact_evals: u64,
-    memo: std::collections::HashMap<Key, R>,
+    memo: std::collections::BTreeMap<Key, R>,
     keys: Vec<Key>,
 }
 

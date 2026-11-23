@@ -6,7 +6,7 @@
 //! offset (the plate's outline outside, the boss outside, the bore inside), every move subdivided
 //! until the op has N moves; each move certified for the cutter (limit −tol) and the shank and
 //! holder (limit +clearance) against every face whose box is near.
-use forge_cam_geom::check::{Face, Move, Verdict, apart, certify, swept_box};
+use forge_cam_geom::check::{Face, Move, Verdict, apart, swept_box};
 use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, Region, Seg, p2};
 use forge_cam_geom::tool::{Cutter, Holder, assemble};
@@ -194,57 +194,70 @@ fn main() {
             moves(&plate[0].segs, 2.0, k, &mut mv);
             moves(&boss[0].segs, 13.0, k, &mut mv);
             moves(&bore[0].segs, 1.0, k, &mut mv);
+            let grid = forge_cam_geom::check::Grid::new(&faces, clear + 1e-6);
             let t0 = std::time::Instant::now();
-            let (mut cells, mut pairs, mut near, mut bad) = (0usize, 0usize, 0usize, 0usize);
-            let mut lowest = f64::INFINITY;
-            let mut slow = 0;
-            for m in &mv {
-                let sb = swept_box(m, t.rmax(), t.top());
-                for f in &faces {
-                    pairs += 1;
-                    if apart(&sb, &f.bbox, clear.max(0.0) + f.mu) {
-                        continue;
-                    }
-                    for b in &t.bodies {
-                        let lim = if b.part == forge_cam_geom::tool::Part::Cutter {
-                            -tol
-                        } else {
-                            clear
-                        };
-                        if apart(
-                            &forge_cam_geom::check::swept_box_body(m, b),
-                            &f.bbox,
-                            lim.max(0.0) + f.mu,
-                        ) {
+            // the moves are independent: chunks on all cores (forge_math::par, FORGECAD_THREADS)
+            const CHUNK: usize = 64;
+            let parts = forge_math::par::map(mv.len().div_ceil(CHUNK), |c| {
+                let mut cand: Vec<u32> = Vec::new();
+                let mut seen = forge_cam_geom::check::Seen::default();
+                let (mut cells, mut pairs, mut near, mut bad) = (0usize, 0usize, 0usize, 0usize);
+                let mut lowest = f64::INFINITY;
+                for m in &mv[c * CHUNK..((c + 1) * CHUNK).min(mv.len())] {
+                    let sb = swept_box(m, t.rmax(), t.top());
+                    // each body's swept box, once per move (as ops::certify does)
+                    let bbs: Vec<_> = t
+                        .bodies
+                        .iter()
+                        .map(|b| forge_cam_geom::check::swept_box_body(m, b))
+                        .collect();
+                    grid.near(&sb, &mut cand, &mut seen);
+                    for &fi in &cand {
+                        let f = &faces[fi as usize];
+                        pairs += 1;
+                        if apart(&sb, &f.bbox, clear.max(0.0) + f.mu) {
                             continue;
                         }
-                        near += 1;
-                        let tc = std::time::Instant::now();
-                        let (v, c) = certify(b, f, m, lim, tol / 4.0, 200_000);
-                        cells += c;
-                        if tc.elapsed().as_millis() > 20 && slow < 5 {
-                            slow += 1;
-                            println!(
-                                "  slow: {:?} {c} cells {:?} part {:?} face {} {:?} move {m:?}",
-                                tc.elapsed(),
-                                v,
-                                b.part,
-                                f.id,
-                                f.surf
+                        let mut shared = None;
+                        for (b, bb) in t.bodies.iter().zip(&bbs) {
+                            let lim = if b.part == forge_cam_geom::tool::Part::Cutter {
+                                -tol
+                            } else {
+                                clear
+                            };
+                            if apart(bb, &f.bbox, lim.max(0.0) + f.mu) {
+                                continue;
+                            }
+                            near += 1;
+                            let (v, c) = forge_cam_geom::check::certify_shared(
+                                b,
+                                f,
+                                m,
+                                lim,
+                                tol / 4.0,
+                                200_000,
+                                &mut shared,
                             );
-                        }
-                        match v {
-                            Verdict::Clear { lower } => lowest = lowest.min(lower),
-                            _ => {
-                                bad += 1;
-                                if bad <= 3 {
-                                    println!("  not clear: {v:?} part {:?} face {} move {m:?}", b.part, f.id);
-                                }
+                            cells += c;
+                            match v {
+                                Verdict::Clear { lower } => lowest = lowest.min(lower),
+                                _ => bad += 1,
                             }
                         }
                     }
                 }
+                (cells, pairs, near, bad, lowest)
+            });
+            let (mut cells, mut pairs, mut near, mut bad) = (0usize, 0usize, 0usize, 0usize);
+            let mut lowest = f64::INFINITY;
+            for (c, p, n, b, l) in parts {
+                cells += c;
+                pairs += p;
+                near += n;
+                bad += b;
+                lowest = lowest.min(l);
             }
+            let _ = lowest;
             let dt = t0.elapsed().as_secs_f64();
             println!(
                 "{tname}: {} moves, {pairs} move-face pairs, {near} near body-face checks, {cells} cells ({:.2}/move), {bad} not clear, {:.3} s ({:.1} us/move)",

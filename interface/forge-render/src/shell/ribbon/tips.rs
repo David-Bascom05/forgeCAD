@@ -65,6 +65,7 @@ pub(super) fn scope(s: &Shell) -> &'static str {
             SHEET_TAB => "sheet",
             FLAT_TAB => "flat",
             THERMO_TAB => "thermo",
+            super::super::WELD_TAB => "weld",
             _ => "tools",
         }
     }
@@ -230,7 +231,17 @@ mod tests {
     fn every_ribbon_tool_on_every_tab_has_its_own_tip() {
         let mut s = Shell::default();
         let mut missing = vec![];
-        for tab in [0, 1, 2, 3, 4, SHEET_TAB, FLAT_TAB, THERMO_TAB] {
+        for tab in [
+            0,
+            1,
+            2,
+            3,
+            4,
+            SHEET_TAB,
+            FLAT_TAB,
+            THERMO_TAB,
+            super::super::super::WELD_TAB,
+        ] {
             s.tab = tab;
             let scope = scope(&s);
             let names: Vec<&str> = if tab == 1 {

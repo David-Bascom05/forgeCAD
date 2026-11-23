@@ -8,7 +8,8 @@ use forge_lang::{Options, Run};
 use std::path::{Path, PathBuf};
 
 fn dir(name: &str) -> PathBuf {
-    let d = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("pins-{name}-{}", std::process::id()));
+    let d =
+        PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("pins-{name}-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&d).unwrap();
     d
 }

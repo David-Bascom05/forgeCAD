@@ -384,9 +384,9 @@ mod tests {
                 if let Some(p) = a.checked_mul(b) {
                     assert_eq!(x.mul(&y), n(p));
                 }
-                if b > 0 {
+                if let (Some(q0), Some(r0)) = (a.checked_div(b), a.checked_rem(b)) {
                     let (q, r) = x.divrem(&y);
-                    assert_eq!((q, r), (n(a / b), n(a % b)));
+                    assert_eq!((q, r), (n(q0), n(r0)));
                 }
                 assert_eq!(x.cmp(&y), a.cmp(&b));
             }

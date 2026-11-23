@@ -6,6 +6,7 @@
 //! - a horizontal plane at z_f with region T: min = sd(D(path, T), z_f − z_t);
 //! - a vertical wall over a horizontal segment, or a vertical cylinder over an arc, for heights
 //!   in [z0, z1]: min = min over Δ ∈ [z0 − z_t, z1 − z_t] of sd(D(path, section), Δ);
+//!
 //! with D the least 2D distance between the path and the section, a closed form: the least of the
 //! distances between each curve's ends and the other curve, the feet of the normals common to
 //! both (a centre's foot on a line; the line of centres for two circles), and 0 where they meet.
@@ -24,9 +25,12 @@ pub enum Prism {
         z: f64,
         region: Vec<TSeg>,
         boxes: Vec<[f64; 4]>,
+        /// Each piece's end gap (arc_gap; 0 for a line), or −1 for an arc outside Piece.ok:
+        /// worked out once with the face.
+        gaps: Vec<f64>,
     },
-    /// A vertical face over a section curve, for heights z0..z1.
-    Wall { sec: Sec, z0: f64, z1: f64 },
+    /// A vertical face over a section curve, for heights z0..z1; `gap` its arc's end gap.
+    Wall { sec: Sec, z0: f64, z1: f64, gap: f64 },
 }
 
 /// A section or path curve in xy.
@@ -69,6 +73,35 @@ struct Cand {
     sure: bool,
 }
 
+/// The candidates of one distance, on the stack (at most 4 ends, then a curve pair's own).
+struct Cands {
+    v: [Cand; 12],
+    n: usize,
+}
+
+impl Cands {
+    fn new() -> Cands {
+        Cands {
+            v: [Cand {
+                d: Ival::pt(0.0),
+                sure: false,
+            }; 12],
+            n: 0,
+        }
+    }
+    fn push(&mut self, c: Cand) {
+        self.v[self.n] = c;
+        self.n += 1;
+    }
+}
+
+impl std::ops::Deref for Cands {
+    type Target = [Cand];
+    fn deref(&self) -> &[Cand] {
+        &self.v[..self.n]
+    }
+}
+
 /// The least of the candidates: [min of all lows, min of the sure ones' highs].
 fn least(cs: &[Cand]) -> Ival {
     let mut lo = f64::INFINITY;
@@ -106,45 +139,84 @@ fn in_sector(c: [f64; 2], a: [f64; 2], b: [f64; 2], ccw: bool, v: [Ival; 2]) -> 
 
 /// The distance from a point to a section curve (always realised).
 pub fn pt_sec(q: [f64; 2], s: &Sec) -> Ival {
+    pt_pre(q, &pre(s))
+}
+
+/// A section curve with what every point's distance to it shares, worked out once: a segment's
+/// direction and its square length (the same arithmetic as before, done once per curve).
+enum Pre {
+    Seg {
+        a: [f64; 2],
+        b: [f64; 2],
+        d: [Ival; 2],
+        dd: Ival,
+    },
+    Other(Sec),
+}
+
+fn pre(s: &Sec) -> Pre {
     match *s {
         Sec::Seg { a, b } => {
             let d = sub2(b, a);
-            let w = sub2(q, a);
-            let dd = dot(d, d);
-            let t = dot(w, d).div(dd);
-            let (da, db) = (len(w), len(sub2(q, b)));
-            if t.hi <= 0.0 {
-                return da;
-            }
-            if t.lo >= 1.0 {
-                return db;
-            }
-            let perp = cross(d, w).abs().div(dd.sqrt());
-            if t.lo >= 0.0 && t.hi <= 1.0 {
-                return perp;
-            }
-            Ival {
-                lo: perp.lo,
-                hi: da.hi.min(db.hi),
+            Pre::Seg {
+                a,
+                b,
+                d,
+                dd: dot(d, d),
             }
         }
+        _ => Pre::Other(*s),
+    }
+}
+
+fn pt_pre(q: [f64; 2], s: &Pre) -> Ival {
+    let s = match s {
+        Pre::Seg { a, b, d, dd } => return pt_seg(q, *a, *b, *d, *dd),
+        Pre::Other(s) => s,
+    };
+    match *s {
+        Sec::Seg { .. } => unreachable!("segments are Pre::Seg"),
         Sec::Arc { c, r, a, b, ccw } => {
             let v = sub2(q, c);
-            let circ = len(v).sub(p(r)).abs();
+            let side = in_sector(c, a, b, ccw, v);
+            if side == 1 {
+                return len(v).sub(p(r)).abs();
+            }
             let (da, db) = (len(sub2(q, a)), len(sub2(q, b)));
             let ends = Ival {
                 lo: da.lo.min(db.lo),
                 hi: da.hi.min(db.hi),
             };
-            match in_sector(c, a, b, ccw, v) {
-                1 => circ,
-                -1 => ends,
-                _ => Ival {
-                    lo: circ.lo.min(ends.lo),
-                    hi: ends.hi,
-                },
+            if side == -1 {
+                return ends;
+            }
+            let circ = len(v).sub(p(r)).abs();
+            Ival {
+                lo: circ.lo.min(ends.lo),
+                hi: ends.hi,
             }
         }
+    }
+}
+
+fn pt_seg(q: [f64; 2], a: [f64; 2], b: [f64; 2], d: [Ival; 2], dd: Ival) -> Ival {
+    let w = sub2(q, a);
+    let t = dot(w, d).div(dd);
+    // only what the answer needs
+    if t.hi <= 0.0 {
+        return len(w);
+    }
+    if t.lo >= 1.0 {
+        return len(sub2(q, b));
+    }
+    let perp = cross(d, w).abs().div(dd.sqrt());
+    if t.lo >= 0.0 && t.hi <= 1.0 {
+        return perp;
+    }
+    let (da, db) = (len(w), len(sub2(q, b)));
+    Ival {
+        lo: perp.lo,
+        hi: da.hi.min(db.hi),
     }
 }
 
@@ -189,35 +261,52 @@ fn degenerate(s: &Sec) -> Option<[f64; 2]> {
 
 /// The least distance between two section curves.
 pub fn dist(s: &Sec, t: &Sec) -> Ival {
+    // arcs reach here as pieces of at most a quarter turn (faces are lowered so, trims split so,
+    // moves are cut so): strictly under a half turn, as the candidates are proven for
+    // (cross(a − c, b − c) > 0 in the arc's sense: DistArc.lean)
+    debug_assert!(
+        [s, t].iter().all(|x| match **x {
+            Sec::Arc { c, a, b, ccw, .. } => {
+                let cr = cross(sub2(a, c), sub2(b, c));
+                if ccw { cr.lo > 0.0 } else { cr.hi < 0.0 }
+            }
+            Sec::Seg { .. } => true,
+        }),
+        "slab::dist takes arcs strictly under a half turn"
+    );
     if let Some(q) = degenerate(s) {
         return pt_sec(q, t);
     }
     if let Some(q) = degenerate(t) {
         return pt_sec(q, s);
     }
-    let mut cs: Vec<Cand> = Vec::new();
+    let mut cs = Cands::new();
     let (sa, sb) = ends(s);
     let (ta, tb) = ends(t);
+    let (ps, pt) = (pre(s), pre(t));
     cs.push(Cand {
-        d: pt_sec(sa, t),
+        d: pt_pre(sa, &pt),
         sure: true,
     });
     cs.push(Cand {
-        d: pt_sec(sb, t),
+        d: pt_pre(sb, &pt),
         sure: true,
     });
     cs.push(Cand {
-        d: pt_sec(ta, s),
+        d: pt_pre(ta, &ps),
         sure: true,
     });
     cs.push(Cand {
-        d: pt_sec(tb, s),
+        d: pt_pre(tb, &ps),
         sure: true,
     });
     match (*s, *t) {
         (Sec::Seg { a, b }, Sec::Seg { a: c, b: d }) => {
-            // they cross: 0
-            let (u, v) = (sub2(b, a), sub2(d, c));
+            // they cross: 0 (the segments' directions as worked out above)
+            let (u, v) = match (&ps, &pt) {
+                (Pre::Seg { d: u, .. }, Pre::Seg { d: v, .. }) => (*u, *v),
+                _ => (sub2(b, a), sub2(d, c)),
+            };
             let o1 = cross(u, sub2(c, a));
             let o2 = cross(u, sub2(d, a));
             let o3 = cross(v, sub2(a, c));
@@ -332,9 +421,9 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
                 // concentric: |r1 − r2| wherever the sectors overlap
                 let v1 = sub2(a1, c1);
                 let v2 = sub2(a2, c2);
-                let o = if in_sector(c1, a1, b1, w1, v2) > 0 || in_sector(c2, a2, b2, w2, v1) > 0 {
-                    1
-                } else if in_sector(c1, a1, b1, w1, sub2(b2, c2)) > 0
+                let o = if in_sector(c1, a1, b1, w1, v2) > 0
+                    || in_sector(c2, a2, b2, w2, v1) > 0
+                    || in_sector(c1, a1, b1, w1, sub2(b2, c2)) > 0
                     || in_sector(c2, a2, b2, w2, sub2(b1, c1)) > 0
                 {
                     1
@@ -404,11 +493,12 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
 pub fn tseg_box(s: &TSeg) -> [f64; 4] {
     match *s {
         TSeg::Line { a, b } => [a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])],
-        TSeg::Arc { c, r, .. } => [
-            Ival::pt(c[0]).sub(Ival::pt(r)).lo,
-            Ival::pt(c[1]).sub(Ival::pt(r)).lo,
-            Ival::pt(c[0]).add(Ival::pt(r)).hi,
-            Ival::pt(c[1]).add(Ival::pt(r)).hi,
+        // the circle's box, and the ends (which may lie off the circle by its gap)
+        TSeg::Arc { a, b, c, r, .. } => [
+            Ival::pt(c[0]).sub(Ival::pt(r)).lo.min(a[0]).min(b[0]),
+            Ival::pt(c[1]).sub(Ival::pt(r)).lo.min(a[1]).min(b[1]),
+            Ival::pt(c[0]).add(Ival::pt(r)).hi.max(a[0]).max(b[0]),
+            Ival::pt(c[1]).add(Ival::pt(r)).hi.max(a[1]).max(b[1]),
         ],
     }
 }
@@ -417,6 +507,29 @@ fn sec_box(s: &Sec) -> [f64; 4] {
     match *s {
         Sec::Seg { a, b } => tseg_box(&TSeg::Line { a, b }),
         Sec::Arc { c, r, a, b, ccw } => tseg_box(&TSeg::Arc { a, b, c, r, ccw }),
+    }
+}
+
+/// Trim.lean's Piece.ok, proven in outward-rounded arithmetic: r > 0, neither end at the centre,
+/// and the sweep strictly under a half turn in the arc's sense.
+fn arc_ok(a: [f64; 2], b: [f64; 2], c: [f64; 2], r: f64, ccw: bool) -> bool {
+    let (ua, ub) = (sub2(a, c), sub2(b, c));
+    let cr = cross(ua, ub);
+    let off = |u: [Ival; 2]| dot(u, u).lo > 0.0;
+    r > 0.0 && off(ua) && off(ub) && if ccw { cr.lo > 0.0 } else { cr.hi < 0.0 }
+}
+
+/// An arc piece's stored ends may lie off its circle by `gap` (the trim is the circle's arc plus
+/// the radial pieces to them): the end candidates may then exceed the truth by gap, and the
+/// radial pieces lie up to gap nearer, so the low end comes down by twice the gap (never below
+/// 0: the closed form needs ρ ≥ 0). The high end stays: it is realised at real points.
+fn less_gap(d: Ival, gap: f64) -> Ival {
+    if gap == 0.0 {
+        return d;
+    }
+    Ival {
+        lo: Ival::pt(d.lo).sub(Ival::pt(2.0 * gap)).lo.max(0.0),
+        hi: d.hi,
     }
 }
 
@@ -438,12 +551,16 @@ fn box_gap(a: &[f64; 4], b: &[f64; 4]) -> f64 {
 /// The least distance from a path curve to a flat region (0 if they meet). Pieces whose box is
 /// farther than `cutoff` count by that box bound alone (a lower bound; the distance only
 /// matters below the tool's reach).
-fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], cutoff: f64) -> Ival {
+fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], gaps: &[f64], cutoff: f64) -> Ival {
     let mut lo = f64::INFINITY;
     let mut hi = f64::INFINITY;
     let pb = sec_box(path);
+    // the region's box (its pieces' boxes hold it)
+    let mut rb = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
     let mut i = 0;
     while i < region.len() {
+        let b = &boxes[i];
+        rb = [rb[0].min(b[0]), rb[1].min(b[1]), rb[2].max(b[2]), rb[3].max(b[3])];
         let g = box_gap(&pb, &boxes[i]);
         if g > cutoff {
             if g < lo {
@@ -452,11 +569,26 @@ fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], cutoff: f64) -> 
             i += 1;
             continue;
         }
+        // its distance is at least g ≥ hi ≥ lo: it changes neither end
+        if g >= hi {
+            i += 1;
+            continue;
+        }
         let s = match region[i] {
             TSeg::Line { a, b } => Sec::Seg { a, b },
             TSeg::Arc { a, b, c, r, ccw } => Sec::Arc { c, r, a, b, ccw },
         };
-        let d = dist(path, &s);
+        let (gap, ok) = (gaps[i].max(0.0), gaps[i] >= 0.0);
+        // an arc piece outside the proven candidates' hypothesis (Trim.lean's Piece.ok) gives
+        // no lower bound: 0
+        let d = if ok {
+            less_gap(dist(path, &s), gap)
+        } else {
+            Ival {
+                lo: 0.0,
+                hi: f64::INFINITY,
+            }
+        };
         if d.lo < lo {
             lo = d.lo;
         }
@@ -465,10 +597,15 @@ fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], cutoff: f64) -> 
         }
         i += 1;
     }
-    // inside: the path's start is a face point at distance 0
+    // inside: the path's start is a face point at distance 0 (outside the region's box it is
+    // outside the region, and the ray cast is not needed)
     let (a, _) = ends(path);
-    let tr = crate::check::Trim {
-        segs: region.to_vec(),
+    if a[0] < rb[0] || a[0] > rb[2] || a[1] < rb[1] || a[1] > rb[3] {
+        return Ival { lo, hi };
+    }
+    let tr = crate::check::TrimRef {
+        segs: region,
+        gaps: Some(gaps),
     };
     let side = tr.classify(Ival::pt(a[0]), Ival::pt(a[1]));
     if side > 0 {
@@ -505,10 +642,24 @@ impl Prism {
                         });
                     }
                     let boxes = region.iter().map(tseg_box).collect();
+                    let gaps = region
+                        .iter()
+                        .map(|t| match *t {
+                            TSeg::Line { .. } => 0.0,
+                            TSeg::Arc { a, b, c, r, ccw } => {
+                                if arc_ok(a, b, c, r, ccw) {
+                                    crate::check::arc_gap(a, b, c, r)
+                                } else {
+                                    -1.0
+                                }
+                            }
+                        })
+                        .collect();
                     return Some(Prism::Flat {
                         z: o[2],
                         region,
                         boxes,
+                        gaps,
                     });
                 }
                 // vertical, u horizontal and v along ±z, over a rectangular trim
@@ -542,6 +693,7 @@ impl Prism {
                         sec: Sec::Seg { a, b },
                         z0: q0.min(q1),
                         z1: q0.max(q1),
+                        gap: 0.0,
                     });
                 }
                 None
@@ -561,16 +713,25 @@ impl Prism {
                 };
                 let ccw = x[0] * y[1] - x[1] * y[0] > 0.0;
                 let (q0, q1) = (o[2] + ax[2] * f.q.lo, o[2] + ax[2] * f.q.hi);
+                let (a, b) = (at(f.p.lo), at(f.p.hi));
+                // the closed form's arc candidates hold for arcs strictly under a half turn
+                // (DistArc.lean); a wider wall is left to the general branch and bound
+                // the sign proven (outward-rounded), else not a prism: the guard never errs
+                let cr = cross(sub2(a, [o[0], o[1]]), sub2(b, [o[0], o[1]]));
+                if !(if ccw { cr.lo > 0.0 } else { cr.hi < 0.0 }) {
+                    return None;
+                }
                 Some(Prism::Wall {
                     sec: Sec::Arc {
                         c: [o[0], o[1]],
                         r,
-                        a: at(f.p.lo),
-                        b: at(f.p.hi),
+                        a,
+                        b,
                         ccw,
                     },
                     z0: q0.min(q1),
                     z1: q0.max(q1),
+                    gap: crate::check::arc_gap(a, b, [o[0], o[1]], r),
                 })
             }
             _ => None,
@@ -608,6 +769,15 @@ fn path_sec(pl: &Planar) -> (Sec, Ival) {
     match *pl {
         Planar::Line { a, b, z } => (Sec::Seg { a, b }, Ival::pt(z)),
         Planar::Arc { c, r, a, b, ccw, z } => (Sec::Arc { c, r, a, b, ccw }, Ival::pt(z)),
+        Planar::Helix {
+            c,
+            r,
+            a,
+            b,
+            ccw,
+            z0,
+            z1,
+        } => (Sec::Arc { c, r, a, b, ccw }, Ival::new(z0, z1)),
         Planar::Vertical { p, z0, z1 } => (Sec::Seg { a: p, b: p }, Ival::new(z0, z1)),
     }
 }
@@ -653,10 +823,33 @@ pub fn certify(
     res: f64,
     budget: usize,
 ) -> (Verdict, usize) {
+    certify_shared(body, f, pr, pl, limit, res, budget, &mut None)
+}
+
+/// `certify`, the move's distance to the face's section shared between calls for the same move
+/// and face (the bodies of one tool): `shared` holds it once computed, with the cutoff it was
+/// computed to (segments beyond it count only by their box gap); a body that needs a larger
+/// cutoff computes it again.
+#[allow(clippy::too_many_arguments)]
+pub fn certify_shared(
+    body: &Body,
+    f: &Face,
+    pr: &Prism,
+    pl: &Planar,
+    limit: f64,
+    res: f64,
+    budget: usize,
+    shared: &mut Option<(Ival, f64)>,
+) -> (Verdict, usize) {
     let (path, zt) = path_sec(pl);
     let (lim_clear, lim_hit) = (limit + f.mu, limit - f.mu);
     let (d, dz) = match pr {
-        Prism::Flat { z, region, boxes } => {
+        Prism::Flat {
+            z,
+            region,
+            boxes,
+            gaps,
+        } => {
             let dz = Ival::pt(*z).sub(zt);
             // the face is wholly beyond the body's heights by more than the limit: no distance
             // needed (sd at ρ = 0 is already a lower bound for every ρ)
@@ -668,12 +861,29 @@ pub fn certify(
                 .add(Ival::pt(limit.abs()))
                 .add(Ival::pt(f.mu))
                 .hi;
-            (dist_region(&path, region, boxes, cutoff), dz)
+            let d = match *shared {
+                Some((d, cut)) if cut >= cutoff => d,
+                _ => {
+                    let d = dist_region(&path, region, boxes, gaps, cutoff);
+                    *shared = Some((d, cutoff));
+                    d
+                }
+            };
+            (d, dz)
         }
-        Prism::Wall { sec, z0, z1 } => (
-            dist(&path, sec),
-            Ival::new(Ival::pt(*z0).sub(zt).lo, Ival::pt(*z1).sub(zt).hi),
-        ),
+        Prism::Wall { sec, z0, z1, gap } => {
+            let d = match *shared {
+                Some((d, _)) => d,
+                None => {
+                    // a wall's arc ends are its parametrisation's, evaluated: off the circle by
+                    // their rounding, accounted as for trims
+                    let d = less_gap(dist(&path, sec), *gap);
+                    *shared = Some((d, f64::INFINITY));
+                    d
+                }
+            };
+            (d, Ival::new(Ival::pt(*z0).sub(zt).lo, Ival::pt(*z1).sub(zt).hi))
+        }
     };
     // the one-dimensional search over the height offset Δ
     let lo_rho = Ival::pt(d.lo);
@@ -727,4 +937,78 @@ pub fn certify(
         return (Verdict::Undecided { lower, cells }, cells);
     }
     (Verdict::Clear { lower: lower - f.mu }, cells)
+}
+
+#[cfg(test)]
+mod gap_tests {
+    use super::*;
+
+    /// A trim arc whose stored ends lie off its circle (by an exaggerated 1e-3 here, ~1e-11 in
+    /// practice): the trim is the circle's arc plus the radial pieces to the ends. From points
+    /// all around, dist_region's low end must not exceed the distance to that trim (sampled
+    /// densely: the samples' least is at least the truth).
+    #[test]
+    fn an_arc_with_ends_off_its_circle_never_overstates_the_distance() {
+        let (c, r, g) = ([0.0, 0.0], 1.0, 1e-3);
+        // ends pushed in and out along their radii, a quarter turn ccw
+        let a = [r - g, 0.0];
+        let b = [0.0, r + g];
+        let region = vec![
+            TSeg::Arc {
+                a,
+                b,
+                c,
+                r,
+                ccw: true,
+            },
+            TSeg::Line { a: b, b: [-2.0, 2.0] },
+            TSeg::Line {
+                a: [-2.0, 2.0],
+                b: [2.0, -2.0],
+            },
+            TSeg::Line { a: [2.0, -2.0], b: a },
+        ];
+        let boxes: Vec<[f64; 4]> = region.iter().map(tseg_box).collect();
+        let gaps: Vec<f64> = region
+            .iter()
+            .map(|t| match *t {
+                TSeg::Line { .. } => 0.0,
+                TSeg::Arc { a, b, c, r, .. } => crate::check::arc_gap(a, b, c, r),
+            })
+            .collect();
+        // the trim's points: the arc on its circle, the radial pieces, the lines
+        let mut pts: Vec<[f64; 2]> = vec![];
+        for k in 0..=4000 {
+            // the quarter turn by the rational map (no libm in a test that must match wasm)
+            let t = k as f64 / 4000.0;
+            let w = 1.0 + t * t;
+            pts.push([r * (1.0 - t * t) / w, r * 2.0 * t / w]);
+        }
+        for k in 0..=100 {
+            let u = k as f64 / 100.0;
+            pts.push([r - g * u, 0.0]);
+            pts.push([0.0, r + g * u]);
+        }
+        let mut seed = 0x2545f4914f6cdd1du64;
+        let mut rnd = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        for _ in 0..2000 {
+            // points near the arc's ends, where the end candidates matter
+            let e = if rnd() < 0.5 { a } else { b };
+            let q = [e[0] + (rnd() - 0.5) * 0.02, e[1] + (rnd() - 0.5) * 0.02];
+            let d = dist_region(&Sec::Seg { a: q, b: q }, &region, &boxes, &gaps, 10.0);
+            // the truth, from the samples (each a real trim point: the true least is ≤ theirs,
+            // so compare against their least less the samples' spacing)
+            let mut m = f64::INFINITY;
+            for p in &pts {
+                m = m.min(((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt());
+            }
+            let spacing = std::f64::consts::FRAC_PI_2 / 4000.0 + g / 100.0;
+            assert!(d.lo <= m + spacing, "q {q:?}: lo {} vs trim {m}", d.lo);
+        }
+    }
 }

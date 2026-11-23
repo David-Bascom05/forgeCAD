@@ -508,7 +508,13 @@ impl Pool {
     const MIN: usize = 1024;
 
     fn new(law: &Law, tris: &[Tri], wrinkle: bool, nodes: usize, hinges: Vec<Hinge>, female: bool) -> Pool {
-        let n = forge_math::par::threads().min(tris.len() / 256).max(1);
+        // a pool of std's threads, kept from call to call (not a scope): one thread where a host
+        // gives the threads instead (forge_par), as std can't start one there
+        let n = if forge_math::par::spawner().is_some() {
+            1
+        } else {
+            forge_math::par::threads().min(tris.len() / 256).max(1)
+        };
         let n = if n > 1 && tris.len() >= Self::MIN { n } else { 1 };
         let mut incident: Vec<Vec<(u32, u8)>> = vec![vec![]; if hinges.is_empty() { 0 } else { nodes }];
         for (k, h) in hinges.iter().enumerate() {

@@ -134,6 +134,9 @@ pub fn angle_cmp(cx: &mut Ctx, u: Pt, v1: Pt, v2: Pt, ccw: bool) -> Ordering {
 
 /// Where a point known to be on the piece's curve sits along it, compared with another such point.
 pub fn along_cmp(cx: &mut Ctx, pc: &Piece, a: Pt, b: Pt) -> Ordering {
+    if a == b {
+        return Ordering::Equal;
+    }
     match pc.curve {
         Curve::Line { p, d, .. } => {
             let m = cx.mark();
@@ -156,6 +159,10 @@ pub fn along_cmp(cx: &mut Ctx, pc: &Piece, a: Pt, b: Pt) -> Ordering {
 
 /// Whether a point known to be on the piece's curve is within its span (ends included).
 pub fn on_span(cx: &mut Ctx, pc: &Piece, x: Pt) -> bool {
+    // one of its own ends (the same expression): within, with no sign to decide
+    if x == pc.s || x == pc.e {
+        return true;
+    }
     match pc.curve {
         Curve::Line { p, d, dd } => {
             let m = cx.mark();
@@ -213,6 +220,34 @@ pub fn meet(cx: &mut Ctx, a: &Piece, b: &Piece, on_a: &mut Vec<Pt>, on_b: &mut V
     }
     let mut cand: Vec<Pt> = Vec::new();
     let mut overlap = false;
+    // an end the two pieces share (the same expression, as neighbours in a loop have): it is one
+    // of the meets, and the other follows rationally from it, with no root to take and no tie
+    // to prove between the vertex and a recomputed copy of it
+    let shared = [a.s, a.e]
+        .into_iter()
+        .find(|&x| (x == b.s || x == b.e) && !a.full && !b.full);
+    let both = !a.full && !b.full && ((a.s == b.s && a.e == b.e) || (a.s == b.e && a.e == b.s));
+    if let Some(v) = shared
+        && let Some(other) = other_meet(cx, a, b, v)
+    {
+        cand.push(v);
+        match other {
+            // both ends shared: those are the two meets (distinct curves meet at most twice)
+            Some(_) if both => cand.push(if v == a.s { a.e } else { a.s }),
+            Some(o) => cand.push(o),
+            None => {}
+        }
+        let mut i = 0;
+        while i < cand.len() {
+            let x = cand[i];
+            if on_span(cx, a, x) && on_span(cx, b, x) {
+                on_a.push(x);
+                on_b.push(x);
+            }
+            i += 1;
+        }
+        return;
+    }
     match (a.curve, b.curve) {
         (Curve::Line { p: p1, d: d1, .. }, Curve::Line { p: p2, d: d2, .. }) => {
             let den = cross(cx, d1, d2);
@@ -289,6 +324,62 @@ pub fn meet(cx: &mut Ctx, a: &Piece, b: &Piece, on_a: &mut Vec<Pt>, on_b: &mut V
             k += 1;
         }
     }
+}
+
+/// Given a point v on both curves, the other meet: Some(None) for two lines (they meet once),
+/// Some(Some(w)) for a line and a circle (Vieta: t_v + t_w = −2 b / dd) or two circles (v
+/// mirrored in the line of centres), w = v when they touch there. None when the curves
+/// coincide (the caller then treats the overlap in full).
+fn other_meet(cx: &mut Ctx, a: &Piece, b: &Piece, v: Pt) -> Option<Option<Pt>> {
+    match (a.curve, b.curve) {
+        (Curve::Line { d: d1, .. }, Curve::Line { d: d2, .. }) => {
+            let den = cross(cx, d1, d2);
+            if sgn(cx, den) == 0 { None } else { Some(None) }
+        }
+        (Curve::Line { .. }, Curve::Circle { .. }) => Some(Some(vieta(cx, a, b, v))),
+        (Curve::Circle { .. }, Curve::Line { .. }) => Some(Some(vieta(cx, b, a, v))),
+        (Curve::Circle { c: c1, .. }, Curve::Circle { c: c2, .. }) => {
+            let dv = sub(cx, c2, c1);
+            let dd = norm2(cx, dv);
+            if sgn(cx, dd) == 0 {
+                // concentric through a common point: the same circle
+                return None;
+            }
+            // w = 2 (c1 + k dv) − v, k = ((v − c1)·dv) / dd
+            let w = sub(cx, v, c1);
+            let num = dot(cx, w, dv);
+            let k = cx.div(num, dd);
+            let kd = scale(cx, dv, k);
+            let foot = add(cx, c1, kd);
+            let two = cx.lit(2.0);
+            let f2 = scale(cx, foot, two);
+            Some(Some(sub(cx, f2, v)))
+        }
+    }
+}
+
+/// The line's other meet with the circle, given one at v.
+fn vieta(cx: &mut Ctx, l: &Piece, c: &Piece, v: Pt) -> Pt {
+    let (p, d, dd) = match l.curve {
+        Curve::Line { p, d, dd } => (p, d, dd),
+        _ => unreachable!(),
+    };
+    let cc = match c.curve {
+        Curve::Circle { c, .. } => c,
+        _ => unreachable!(),
+    };
+    // t_v + t_w = −2 (p − c)·d / dd, t_v = (v − p)·d / dd
+    let f = sub(cx, p, cc);
+    let b = dot(cx, f, d);
+    let vp = sub(cx, v, p);
+    let tv = dot(cx, vp, d);
+    let two = cx.lit(2.0);
+    let b2 = cx.mul(two, b);
+    let s = cx.add(b2, tv);
+    let ns = cx.neg(s);
+    let t = cx.div(ns, dd);
+    let off = scale(cx, d, t);
+    add(cx, p, off)
 }
 
 fn line_circle(cx: &mut Ctx, l: &Piece, c: &Piece, out: &mut Vec<Pt>) {

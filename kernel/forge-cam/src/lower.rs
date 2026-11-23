@@ -40,7 +40,7 @@ fn mu(scale: f64) -> f64 {
     tol::LINEAR + 64.0 * f64::EPSILON * (1.0 + scale)
 }
 
-/// Every face of the body, lowered (a full cylinder becomes two halves).
+/// Every face of the body, lowered (a full cylinder becomes four quarters).
 pub fn lower(body: &Body) -> Result<Vec<Face>, LowerError> {
     let mut out = Vec::new();
     for (k, fid) in body.face_ids().enumerate() {
@@ -148,103 +148,279 @@ fn lower_face(body: &Body, fid: FaceId, k: usize, out: &mut Vec<Face>) -> Result
             ));
             Ok(())
         }
-        Surface::Cylinder(cy) => {
-            let o = p3(cy.frame.origin);
-            let (x, y, z) = (
-                v3(cy.frame.x().get()),
-                v3(cy.frame.y().get()),
-                v3(cy.frame.z().get()),
-            );
-            let (mut vlo, mut vhi) = (f64::INFINITY, f64::NEG_INFINITY);
-            let mut seams: Vec<f64> = Vec::new();
-            let mut mid_angle: Option<f64> = None;
-            let angle = |p: V3| -> f64 {
-                let d = sub(p, o);
-                dmath::atan2(dot(d, y), dot(d, x))
-            };
-            for (cv, range, _, _) in edges(body, fid) {
-                match &cv {
-                    Curve::Circle(c) => {
-                        let cz = v3(c.frame.z().get());
-                        let co = sub(p3(c.frame.origin), o);
-                        let off = [
-                            co[0] - dot(co, z) * z[0],
-                            co[1] - dot(co, z) * z[1],
-                            co[2] - dot(co, z) * z[2],
-                        ];
-                        if (dot(cz, z).abs() - 1.0).abs() > 1e-12
-                            || dot(off, off).sqrt() > tol::LINEAR
-                            || (c.radius - cy.radius).abs() > tol::LINEAR
-                        {
-                            return Err(unsupported("a cylinder edge that is not a circle about its axis"));
-                        }
-                        let v = dot(co, z);
-                        vlo = vlo.min(v);
-                        vhi = vhi.max(v);
-                        if mid_angle.is_none() {
-                            mid_angle = Some(angle(p3(cv.eval(0.5 * (range.lo + range.hi)))));
-                        }
-                    }
-                    Curve::Line(l) => {
-                        if (dot(v3(l.dir.get()), z).abs() - 1.0).abs() > 1e-12 {
-                            return Err(unsupported("a cylinder edge line not along its axis"));
-                        }
-                        let (a, b) = (p3(cv.eval(range.lo)), p3(cv.eval(range.hi)));
-                        seams.push(angle(a));
-                        for p in [a, b] {
-                            let v = dot(sub(p, o), z);
-                            vlo = vlo.min(v);
-                            vhi = vhi.max(v);
-                        }
-                    }
-                    _ => return Err(unsupported("a cylinder edge other than a circle or a line")),
-                }
-            }
-            seams.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
-            // the angular range [u0, u1] (u1 − u0 ≤ 2π)
-            let tau = std::f64::consts::TAU;
-            let (u0, u1) = if seams.len() <= 1 {
-                let s = seams.first().copied().unwrap_or(0.0);
-                (s, s + tau)
-            } else if seams.len() == 2 {
-                let (a, b) = (seams[0].min(seams[1]), seams[0].max(seams[1]));
-                let mid = mid_angle.ok_or_else(|| unsupported("a cylinder strip with no circle edge"))?;
-                let m = if mid < a { mid + tau } else { mid };
-                if m > a && m < b { (a, b) } else { (b, a + tau) }
-            } else {
-                return Err(unsupported("a cylinder face with more than two seams"));
-            };
-            // pieces of at most a half turn each, by the rational map about their middles
-            let w = u1 - u0;
-            let n = ((w / std::f64::consts::PI) - 1e-12).ceil().max(1.0) as usize;
-            let half = 0.5 * w / n as f64;
-            // t range: tan(half/2), padded outward by a relative 1e-12 (inside mu)
-            let th = dmath::sin(0.5 * half) / dmath::cos(0.5 * half) * (1.0 + 1e-12);
-            for i in 0..n {
-                let um = u0 + half * (2 * i + 1) as f64;
-                let (s, c) = dmath::sin_cos(um);
-                let xm = [c * x[0] + s * y[0], c * x[1] + s * y[1], c * x[2] + s * y[2]];
-                let ym = [-s * x[0] + c * y[0], -s * x[1] + c * y[1], -s * x[2] + c * y[2]];
-                out.push(Face::new(
-                    Surf::Cyl {
-                        o,
-                        x: xm,
-                        y: ym,
-                        ax: z,
-                        r: cy.radius,
-                    },
-                    Ival::new(-th, th),
-                    Ival::new(vlo - m, vhi + m),
-                    None,
-                    m,
-                    k as u32,
-                ));
-            }
-            Ok(())
-        }
+        Surface::Cylinder(cy) => revolve(body, fid, k, m, cy.frame, Rev::Cyl(cy.radius), out),
+        Surface::Cone(cn) => revolve(body, fid, k, m, cn.frame, Rev::Cone(cn.radius, cn.tan_a()), out),
+        Surface::Torus(t) => revolve(body, fid, k, m, t.frame, Rev::Torus(t.major, t.minor), out),
         s => Err(unsupported(&format!(
-            "a {} face (this phase lowers planes and cylinders)",
+            "a {} face (this phase lowers planes, cylinders, cones and tori)",
             s.kind()
         ))),
     }
+}
+
+/// A surface of revolution about its frame's z.
+#[derive(Clone, Copy)]
+enum Rev {
+    Cyl(f64),
+    /// Radius at v = 0, and its change per unit of v.
+    Cone(f64, f64),
+    /// Major and minor radius.
+    Torus(f64, f64),
+}
+
+/// A face of a surface of revolution, bounded by circles about the axis and by seams (lines
+/// along a generator, or a torus's tube circles): its parameter box, cut into pieces of at most a
+/// quarter turn each, by the rational half-angle map about their middles.
+fn revolve(
+    body: &Body,
+    fid: FaceId,
+    k: usize,
+    m: f64,
+    fr: forge_math::Frame,
+    rev: Rev,
+    out: &mut Vec<Face>,
+) -> Result<(), LowerError> {
+    let unsupported = |why: &str| LowerError::Unsupported {
+        face: k,
+        why: why.to_string(),
+    };
+    let o = p3(fr.origin);
+    let (x, y, z) = (v3(fr.x().get()), v3(fr.y().get()), v3(fr.z().get()));
+    let angle = |p: V3| -> f64 {
+        let d = sub(p, o);
+        dmath::atan2(dot(d, y), dot(d, x))
+    };
+    let (mut vlo, mut vhi) = (f64::INFINITY, f64::NEG_INFINITY);
+    let mut phis: Vec<f64> = Vec::new();
+    let mut seams: Vec<f64> = Vec::new();
+    let mut mid_angle: Option<f64> = None;
+    for (cv, range, vs, ve) in edges(body, fid) {
+        match &cv {
+            Curve::Circle(c) => {
+                let cz = v3(c.frame.z().get());
+                let co = sub(p3(c.frame.origin), o);
+                let h = dot(co, z);
+                let off = [co[0] - h * z[0], co[1] - h * z[1], co[2] - h * z[2]];
+                let about_axis =
+                    (dot(cz, z).abs() - 1.0).abs() <= 1e-12 && dot(off, off).sqrt() <= tol::LINEAR;
+                if about_axis {
+                    let ok = match rev {
+                        Rev::Cyl(r) => (c.radius - r).abs() <= tol::LINEAR,
+                        Rev::Cone(r0, kk) => (c.radius - (r0 + h * kk)).abs() <= tol::LINEAR,
+                        Rev::Torus(big, r) => {
+                            ((c.radius - big).powi(2) + h * h).sqrt() - r <= tol::LINEAR
+                                && r - ((c.radius - big).powi(2) + h * h).sqrt() <= tol::LINEAR
+                        }
+                    };
+                    if !ok {
+                        return Err(unsupported("a circle edge off its surface"));
+                    }
+                    vlo = vlo.min(h);
+                    vhi = vhi.max(h);
+                    if let Rev::Torus(big, _) = rev {
+                        phis.push(dmath::atan2(h, c.radius - big));
+                    }
+                    if mid_angle.is_none() {
+                        mid_angle = Some(angle(p3(cv.eval(0.5 * (range.lo + range.hi)))));
+                    }
+                } else if matches!(rev, Rev::Torus(..)) {
+                    // a tube circle: a seam at its centre's angle
+                    seams.push(angle(p3(c.frame.origin)));
+                } else {
+                    return Err(unsupported("a circle edge that is not about the axis"));
+                }
+            }
+            Curve::Line(_) => {
+                // a generator: both ends at one angle
+                let (aa, ab) = (angle(vs), angle(ve));
+                if (aa - ab).abs() > 1e-9 || matches!(rev, Rev::Torus(..)) {
+                    return Err(unsupported("a line edge that is not a generator"));
+                }
+                seams.push(aa);
+                for p in [vs, ve] {
+                    let v = dot(sub(p, o), z);
+                    vlo = vlo.min(v);
+                    vhi = vhi.max(v);
+                }
+            }
+            _ => return Err(unsupported("an edge other than a circle or a line")),
+        }
+    }
+    seams.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    seams.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+    let tau = std::f64::consts::TAU;
+    let (u0, u1) = if seams.len() <= 1 {
+        let s = seams.first().copied().unwrap_or(0.0);
+        (s, s + tau)
+    } else if seams.len() == 2 {
+        let (a, b) = (seams[0], seams[1]);
+        let mid = mid_angle.ok_or_else(|| unsupported("a strip with no circle edge"))?;
+        let mm = if mid < a { mid + tau } else { mid };
+        if mm > a && mm < b { (a, b) } else { (b, a + tau) }
+    } else {
+        return Err(unsupported("a face with more than two seams"));
+    };
+    // the second parameter: height for cylinders and cones, the tube angle's half tangent for tori
+    let mut phi_mid = 0.0;
+    let q = match rev {
+        Rev::Torus(..) => {
+            phis.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            phis.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+            if phis.len() != 2 {
+                return Err(unsupported(
+                    "a torus face not bounded by two circles about its axis",
+                ));
+            }
+            // the face's tube arc: between the two circles, the way that passes the face's own
+            // middle (a sample point of an edge's interior is on the face's closure; the tube
+            // seam, if any, is not needed: a face of a torus here spans less than half its tube)
+            let (p0, mut p1) = (phis[0], phis[1]);
+            if p1 - p0 > std::f64::consts::PI {
+                // the short way passes through ±π
+                p1 -= std::f64::consts::TAU;
+            }
+            let (lo, hi) = (p0.min(p1), p0.max(p1));
+            if hi - lo >= std::f64::consts::PI {
+                return Err(unsupported("a torus face over half its tube or more"));
+            }
+            phi_mid = 0.5 * (lo + hi);
+            let hw = 0.5 * (hi - lo);
+            let t = dmath::sin(0.5 * hw) / dmath::cos(0.5 * hw);
+            Ival::new(-t * (1.0 + 1e-12) - m, t * (1.0 + 1e-12) + m)
+        }
+        _ => Ival::new(vlo - m, vhi + m),
+    };
+    let w = u1 - u0;
+    // pieces of at most a quarter turn: a wall's section arc is then strictly under a half
+    // turn, as slab::dist's arc candidates need (DistArc.lean)
+    let n = ((w / std::f64::consts::FRAC_PI_2) - 1e-12).ceil().max(1.0) as usize;
+    let half = 0.5 * w / n as f64;
+    let th = dmath::sin(0.5 * half) / dmath::cos(0.5 * half) * (1.0 + 1e-12);
+    for i in 0..n {
+        let um = u0 + half * (2 * i + 1) as f64;
+        let (s, c) = dmath::sin_cos(um);
+        let xm = [c * x[0] + s * y[0], c * x[1] + s * y[1], c * x[2] + s * y[2]];
+        let ym = [-s * x[0] + c * y[0], -s * x[1] + c * y[1], -s * x[2] + c * y[2]];
+        let surf = match rev {
+            Rev::Cyl(r) => Surf::Cyl {
+                o,
+                x: xm,
+                y: ym,
+                ax: z,
+                r,
+            },
+            Rev::Cone(r0, kk) => Surf::Cone {
+                o,
+                x: xm,
+                y: ym,
+                ax: z,
+                r0,
+                k: kk,
+            },
+            Rev::Torus(big, r) => {
+                let (sm, cm) = dmath::sin_cos(phi_mid);
+                Surf::Torus {
+                    o,
+                    x: xm,
+                    y: ym,
+                    ax: z,
+                    big,
+                    r,
+                    cm,
+                    sm,
+                }
+            }
+        };
+        out.push(Face::new(surf, Ival::new(-th, th), q, None, m, k as u32));
+    }
+    Ok(())
+}
+
+/// The part turned over about the x axis, for a second setup: (x, y, z) ↦ (x, −y, h − z), with
+/// `h` = its lowest plus its highest z so it keeps its height range. A proper rotation, so
+/// every face keeps its side; the parameters are renamed so that the lowering's conventions
+/// (planes' u × v outward, walls' u horizontal with v up, revolved faces about +z) still hold:
+/// - planes: o' = T(o), u' = −R u, v' = −R v over (−p, −q): T(o + p u + q v);
+/// - cylinders, cones and tori: x' = R x, y' = −R y, ax' = −R ax over (−p, −q) (the rational
+///   half-angle map is odd, so t ↦ −t mirrors the angle), a cone's k' = −k, a torus's
+///   middle tube angle mirrored (sm' = −sm).
+///
+/// R negates y and z, exactly; h − z rounds once, by which every face's mu grows.
+pub fn turned(faces: &[Face], h: f64) -> Result<Vec<Face>, LowerError> {
+    let r = |v: V3| [v[0], -v[1], -v[2]];
+    let n = |v: V3| [-v[0], v[1], v[2]];
+    let t = |o: V3| [o[0], -o[1], h - o[2]];
+    let neg = |i: Ival| Ival::new(-i.hi, -i.lo);
+    let mut out = Vec::with_capacity(faces.len());
+    for (k, f) in faces.iter().enumerate() {
+        let surf = match f.surf {
+            Surf::Plane { o, u, v } => Surf::Plane {
+                o: t(o),
+                u: n(u),
+                v: n(v),
+            },
+            Surf::Cyl { o, x, y, ax, r: rr } => Surf::Cyl {
+                o: t(o),
+                x: r(x),
+                y: n(y),
+                ax: n(ax),
+                r: rr,
+            },
+            Surf::Cone { o, x, y, ax, r0, k } => Surf::Cone {
+                o: t(o),
+                x: r(x),
+                y: n(y),
+                ax: n(ax),
+                r0,
+                k: -k,
+            },
+            Surf::Torus {
+                o,
+                x,
+                y,
+                ax,
+                big,
+                r: rr,
+                cm,
+                sm,
+            } => Surf::Torus {
+                o: t(o),
+                x: r(x),
+                y: n(y),
+                ax: n(ax),
+                big,
+                r: rr,
+                cm,
+                sm: -sm,
+            },
+            Surf::Sphere { .. } => {
+                return Err(LowerError::Unsupported {
+                    face: k,
+                    why: "a sphere is not turned over in this phase".into(),
+                });
+            }
+        };
+        let trim = f.trim.as_ref().map(|tr| Trim {
+            segs: tr
+                .segs
+                .iter()
+                .map(|s| match *s {
+                    TSeg::Line { a, b } => TSeg::Line {
+                        a: [-a[0], -a[1]],
+                        b: [-b[0], -b[1]],
+                    },
+                    TSeg::Arc { a, b, c, r, ccw } => TSeg::Arc {
+                        a: [-a[0], -a[1]],
+                        b: [-b[0], -b[1]],
+                        c: [-c[0], -c[1]],
+                        r,
+                        ccw,
+                    },
+                })
+                .collect(),
+        });
+        let mu = f.mu + 4.0 * f64::EPSILON * (h.abs() + f.bbox[2].lo.abs().max(f.bbox[2].hi.abs()));
+        out.push(Face::new(surf, neg(f.p), neg(f.q), trim, mu, f.id));
+    }
+    Ok(out)
 }

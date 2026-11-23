@@ -298,8 +298,10 @@ impl Sheet {
                     return None;
                 };
                 let (p, q) = straight(w, seg).ok()?;
-                let e = (q - p) * (1.0 / p.distance(q));
-                (e.cross(d).abs() <= 1e-9).then(|| match j.kind {
+                let len = p.distance(q);
+                let e = (q - p) * (1.0 / len);
+                // parallel by the one rule: off it by at most the tolerance over the edge's length
+                (e.cross(d).abs() * len <= tol::LINEAR).then(|| match j.kind {
                     JointKind::Bend { angle, radius } => crate::build::setback_of(&self.gauge, radius, angle),
                     JointKind::Hem(h) => h.setback(t),
                     JointKind::Rip { .. } | JointKind::Tangent => 0.0,

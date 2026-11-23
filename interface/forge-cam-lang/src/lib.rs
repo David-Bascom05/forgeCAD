@@ -55,9 +55,23 @@ enum V {
     Tool(usize),
     Setup(usize),
     Holes(usize, String),
+    /// A part's sketch, by name.
+    Sketch(usize, String),
     Stock(StockSpec),
+    Vise(ViseSpec),
+    /// Soft jaws: their index, and the jaws as a part.
+    Jaws(usize, usize),
     #[allow(dead_code)]
     Op(usize),
+}
+
+#[derive(Clone, Debug)]
+struct ViseSpec {
+    name: String,
+    axis: usize,
+    clamp: Option<f64>,
+    parallel: f64,
+    clearance: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -67,6 +81,13 @@ enum StockSpec {
 }
 
 struct PartIn {
+    /// The part's source and where it is, to read its sketches.
+    src: String,
+    pdir: std::path::PathBuf,
+    /// The workholding a setup of this part gets unless it names one (soft jaws, held to be cut).
+    hold: Option<forge_cam::fixture::Fixture>,
+    /// This is part `k` turned over about x (a later setup's view of it).
+    turn_of: Option<usize>,
     file: String,
     faces: Vec<Face>,
     holes: Vec<holes::HoleInfo>,
@@ -84,8 +105,15 @@ struct SetupIn {
     tol: f64,
     clearance: f64,
     heights: Heights,
+    /// The work offset: the machine coordinates of the WCS origin (as G54 holds them; the
+    /// tool's length comes from H). None: not placed (G5 then checks the spans only).
+    at: Option<[f64; 3]>,
     /// The in-process stock as the ops so far left it.
     ip: forge_cam::stock::InProcess,
+    /// The workholding, if the setup names one.
+    fixture: Option<forge_cam::fixture::Fixture>,
+    /// The setup this one continues, the part turned over.
+    from: Option<usize>,
 }
 
 /// One operation, as made and as checked.
@@ -108,12 +136,21 @@ pub struct OpOut {
     pub time_s: f64,
     pub least: f64,
     pub plan: Vec<String>,
+    /// The stock it is asked to leave on the part (δ).
+    pub leave: f64,
+    /// The target it is certified against when not the part: P ∖ Δ for declared removals.
+    target: Option<Vec<Face>>,
+    /// Declared removals (Δ): what each is and where.
+    pub removals: Vec<String>,
     /// The stock this op starts from (G2, G3 are checked against it).
     stock_before: Option<forge_cam::stock::InProcess>,
+    /// What the op provably clears: (region, or the whole box; its final floor).
+    voids: Vec<(Option<Region>, f64)>,
 }
 
 pub struct ProgramOut {
     pub name: String,
+    pub setups: Vec<usize>,
     pub post: String,
     pub text: Option<String>,
     pub lines: usize,
@@ -130,6 +167,9 @@ pub struct Leftover {
     pub z1: f64,
     /// Each left-over region's box, xmin ymin xmax ymax.
     pub boxes: Vec<[f64; 4]>,
+    /// "held by fixture" (the band is within the jaws' grip: no op of this setup may reach it)
+    /// or "uncut".
+    pub why: &'static str,
 }
 
 pub struct Cam {
@@ -144,6 +184,14 @@ pub struct Cam {
     pub ops: Vec<OpOut>,
     pub programs: Vec<ProgramOut>,
     lib: Library,
+    jaws: Vec<forge_cam::fixture::SoftJaws>,
+}
+
+impl PartIn {
+    /// Its lowest plus its highest z: turning over about x maps z to h − z.
+    fn h(&self) -> f64 {
+        self.bbox.0[2] + self.bbox.1[2]
+    }
 }
 
 fn num(v: &V) -> Option<f64> {
@@ -158,6 +206,32 @@ fn tuple3(v: &V) -> Option<[f64; 3]> {
 }
 
 impl Cam {
+    /// The part turned over about x, made once.
+    fn turned_part(&mut self, i: usize) -> Result<usize, String> {
+        if let Some(k) = self.parts.iter().position(|p| p.turn_of == Some(i)) {
+            return Ok(k);
+        }
+        let p = &self.parts[i];
+        let h = p.h();
+        let faces =
+            forge_cam::lower::turned(&p.faces, h).map_err(|e| format!("turning the part over: {e:?}"))?;
+        let (lo, hi) = p.bbox;
+        let turned = PartIn {
+            src: p.src.clone(),
+            pdir: p.pdir.clone(),
+            hold: None,
+            turn_of: Some(i),
+            file: p.file.clone(),
+            faces,
+            // a hole is drilled from the side it opens on, in the setup that sees it so
+            holes: vec![],
+            bbox: ([lo[0], -hi[1], h - hi[2]], [hi[0], -lo[1], h - lo[2]]),
+            group: p.group.clone(),
+        };
+        self.parts.push(turned);
+        Ok(self.parts.len() - 1)
+    }
+
     fn eval(&self, e: &Expr, env: &BTreeMap<String, V>) -> Result<V, String> {
         Ok(match &e.kind {
             ExprKind::Num(x, _) => V::Num(*x),
@@ -184,6 +258,17 @@ impl Cam {
                 V::Part(i) => {
                     if self.parts[i].holes.iter().any(|h| &h.name == name) {
                         V::Holes(i, name.clone())
+                    } else if forge_lang::sketch_view(
+                        &self.parts[i].src,
+                        name,
+                        forge_lang::Options {
+                            dir: Some(self.parts[i].pdir.clone()),
+                            ..Default::default()
+                        },
+                    )
+                    .is_some()
+                    {
+                        V::Sketch(i, name.clone())
                     } else {
                         let have: Vec<&str> = self.parts[i].holes.iter().map(|h| h.name.as_str()).collect();
                         return Err(format!(
@@ -210,6 +295,39 @@ impl Cam {
                         return Ok(V::Stock(StockSpec::Box { min: lo, max: hi }));
                     }
                     return Err("box(margin: (x, y, z)) or box(min: (..), max: (..))".into());
+                }
+                if fname == "vise" {
+                    let a = self.named(args, env)?;
+                    let name = match a.get("#0") {
+                        Some(V::Str(s)) => s.clone(),
+                        _ => {
+                            return Err(
+                                "vise(\"NAME\", across: \"x\", clamp: MM, parallel: MM, clearance: MM)"
+                                    .into(),
+                            );
+                        }
+                    };
+                    self.lib.vise(&name).map_err(|e| format!("{e:?}"))?;
+                    let axis = match get_str(&a, "across", Some("x"))?.as_str() {
+                        "x" => 0,
+                        "y" => 1,
+                        o => {
+                            return Err(format!(
+                                "across: \"x\" or \"y\" (the jaws close along it), not `{o}`"
+                            ));
+                        }
+                    };
+                    return Ok(V::Vise(ViseSpec {
+                        name,
+                        axis,
+                        clamp: match a.get("clamp") {
+                            None => None,
+                            Some(V::Num(x)) => Some(*x),
+                            Some(_) => return Err("`clamp` must be a number".into()),
+                        },
+                        parallel: get_num(&a, "parallel", Some(6.0))?,
+                        clearance: get_num(&a, "clearance", Some(1.0))?,
+                    }));
                 }
                 return Err(format!(
                     "`{fname}` is a statement's built-in here: give it its own name"
@@ -269,6 +387,7 @@ pub fn run(src: &str, dir: &Path) -> Cam {
         ops: vec![],
         programs: vec![],
         lib: Library::builtin(),
+        jaws: vec![],
     };
     let prog = match syntax::parse(src) {
         Ok(p) => p,
@@ -357,7 +476,29 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                 .push(format!("line {}: {e}", line_of(src, st.span.lo as usize)));
         }
     }
+    // an op no program posted has no certificate: its checks run on the posted path only
+    let posted: Vec<usize> = cam
+        .programs
+        .iter()
+        .filter(|p| p.round_trip)
+        .flat_map(|p| p.setups.clone())
+        .collect();
+    for o in &mut cam.ops {
+        if o.status == "built" && !posted.contains(&o.setup) {
+            o.status = "unposted";
+            o.refusal =
+                Some("not certified: no program(..) posts this setup (checks run on the posted path)".into());
+        }
+    }
     cam.leftover();
+    for s in &cam.setups {
+        if s.at.is_none() {
+            cam.warnings.push(format!(
+                "setup `{}` is not placed (`at:` the work offset): G5 checked each axis's span against the travel, not the positions",
+                s.name
+            ));
+        }
+    }
     if cam.ops.iter().any(|o| o.status != "built") || cam.programs.iter().any(|p| p.error.is_some()) {
         cam.ok = false;
     }
@@ -374,16 +515,38 @@ impl Cam {
     fn leftover(&mut self) {
         let mut all_ok = true;
         for (si, s) in self.setups.iter().enumerate() {
+            // a setup a later one continues (the part turned over) ends in that one: its stock,
+            // turned, is where the later one starts, so G4 is decided at the chain's end
+            if self.setups.iter().any(|t| t.from == Some(si)) {
+                continue;
+            }
             let part = &self.parts[s.part];
+            // G4 grows the part by δ + ε: the stock the chain's ops were asked to leave (the
+            // most of them), and the tolerance
+            let mut chain = vec![si];
+            while let Some(k) = self.setups[*chain.last().unwrap()].from {
+                chain.push(k);
+            }
+            let delta = self
+                .ops
+                .iter()
+                .filter(|o| chain.contains(&o.setup))
+                .map(|o| o.leave)
+                .fold(0.0, f64::max);
+            let grow = delta + s.tol;
             let mut zs = s.ip.levels();
             for f in &part.faces {
                 if let Some(forge_cam_geom::slab::Prism::Flat { z, .. }) = &f.prism {
                     zs.push(*z);
                 }
             }
+            if let Some(f) = &s.fixture {
+                zs.push(f.jaw_top);
+            }
             zs.retain(|z| *z >= s.ip.min[2] && *z <= s.ip.max[2]);
             zs.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            zs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+            // exact: a band ends at the jaws' top exactly, so none straddles it
+            zs.dedup();
             for w in zs.windows(2) {
                 let zm = 0.5 * (w[0] + w[1]);
                 let Ok(Some(mat)) = s.ip.material(zm) else {
@@ -392,8 +555,43 @@ impl Cam {
                     }
                     continue;
                 };
-                let left = match forge_cam::section::section(&part.faces, zm, 1e-5) {
-                    Ok(sec) => match forge_cam_geom::offset::offset(&sec, -s.tol) {
+                // the part's section for this band, and how far it may be grown. Its own, by
+                // δ + ε; or, where it has none (outside the part's heights) or none can be taken
+                // (a band thinner than the section's resolution at a face), a section at z′ just
+                // past either end, by √((δ + ε)² − dz²), dz the band's farthest height from z′: a
+                // point within that of (x, y, z′) ∈ P is within δ + ε of P (P ⊕ B is
+                // three-dimensional), whatever z′ is
+                let e = 0.5 * grow;
+                let mut tries = vec![(zm, grow)];
+                for zp in [w[0] - e, w[1] + e] {
+                    let dz = (zp - w[0]).abs().max((zp - w[1]).abs());
+                    let g2 = grow * grow - dz * dz;
+                    if g2 > 0.0 {
+                        tries.push((zp, (g2.sqrt() * (1.0 - 1e-12)).max(0.0)));
+                    }
+                }
+                let mut found = None;
+                let mut failed = false;
+                for (zp, g) in tries {
+                    match forge_cam::section::section(&part.faces, zp, 1e-5) {
+                        Ok(sec) => {
+                            if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                                eprintln!("G4 band {w:?}: section at {zp}, grown {g}");
+                            }
+                            found = Some((sec, g));
+                            break;
+                        }
+                        Err(forge_cam::section::SectionError::Empty) => {}
+                        Err(e) => {
+                            if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                                eprintln!("G4 at z {zp}: section {e:?}");
+                            }
+                            failed = true;
+                        }
+                    }
+                }
+                let left = match found {
+                    Some((sec, g)) => match forge_cam_geom::offset::offset(&sec, -g) {
                         Ok((grown, _)) => forge_cam_geom::boolean::boolean(
                             &mat,
                             &forge_cam_geom::boolean::region_of(&grown),
@@ -401,17 +599,22 @@ impl Cam {
                         ),
                         Err(e) => Err(e),
                     },
-                    // no part at this height: all the material is left over
-                    Err(forge_cam::section::SectionError::Empty) => Ok(mat
+                    None if failed => {
+                        all_ok = false;
+                        continue;
+                    }
+                    // no part at or near this height: all the material is left over
+                    None => Ok(mat
                         .loops
                         .iter()
                         .map(|l| forge_cam_geom::offset::OLoop { segs: l.segs.clone() })
                         .collect()),
-                    Err(_) => {
-                        all_ok = false;
-                        continue;
-                    }
                 };
+                if let Err(e) = &left
+                    && std::env::var("FORGE_CAM_DEBUG").is_ok()
+                {
+                    eprintln!("G4 band {w:?}: {e:?}");
+                }
                 match left {
                     Ok(ls) if !ls.is_empty() => {
                         let boxes = ls
@@ -423,16 +626,48 @@ impl Cam {
                                     for p in [sg.start(), sg.end()] {
                                         b = [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)];
                                     }
+                                    // an arc may bulge past its ends: its circle's box bounds it
+                                    if let Seg::Arc { a, c, .. } = *sg {
+                                        let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                                        b = [
+                                            b[0].min(c.x - r),
+                                            b[1].min(c.y - r),
+                                            b[2].max(c.x + r),
+                                            b[3].max(c.y + r),
+                                        ];
+                                    }
                                 }
                                 b
                             })
                             .collect();
-                        self.leftover.push(Leftover {
-                            setup: si,
-                            z0: w[0],
-                            z1: w[1],
-                            boxes,
-                        });
+                        // held by the fixture: under the jaws' top, and within the fixture's
+                        // clearance of one of its pieces (where no tool may go)
+                        let held = |b: &[f64; 4]| match &s.fixture {
+                            Some(f) if w[1] <= f.jaw_top => f.boxes().iter().any(|(_, lo, hi)| {
+                                let c = f.clearance;
+                                b[0] <= hi[0] + c
+                                    && b[2] >= lo[0] - c
+                                    && b[1] <= hi[1] + c
+                                    && b[3] >= lo[1] - c
+                                    && w[0] <= hi[2] + c
+                                    && w[1] >= lo[2] - c
+                            }),
+                            _ => false,
+                        };
+                        let boxes: Vec<[f64; 4]> = boxes;
+                        let (hb, ub): (Vec<[f64; 4]>, Vec<[f64; 4]>) =
+                            boxes.into_iter().partition(|b| held(b));
+                        for (boxes, why) in [(hb, "held by fixture"), (ub, "uncut")] {
+                            if !boxes.is_empty() {
+                                self.leftover.push(Leftover {
+                                    setup: si,
+                                    z0: w[0],
+                                    z1: w[1],
+                                    boxes,
+                                    why,
+                                });
+                            }
+                        }
                     }
                     Ok(_) => {}
                     Err(_) => all_ok = false,
@@ -468,6 +703,10 @@ impl Cam {
                     }
                 }
                 self.parts.push(PartIn {
+                    src: src.clone(),
+                    pdir: path.parent().map(|p| p.to_path_buf()).unwrap_or_default(),
+                    hold: None,
+                    turn_of: None,
                     file,
                     faces,
                     holes,
@@ -503,16 +742,39 @@ impl Cam {
                 Ok(V::Tool(self.tools.len() - 1))
             }
             "setup" => {
-                let part = match a.get("#0") {
-                    Some(V::Part(i)) => *i,
+                let mut part = match a.get("#0") {
+                    Some(V::Part(i)) | Some(V::Jaws(_, i)) => *i,
                     _ => return Err("setup(PART, ..)".into()),
                 };
+                // a later setup: the part turned over about x, as the earlier one left it
+                let from = match a.get("from") {
+                    None => None,
+                    Some(V::Setup(k)) => {
+                        if self.setups[*k].part != part {
+                            return Err("from: a setup of the same part".into());
+                        }
+                        Some(*k)
+                    }
+                    Some(_) => {
+                        return Err("from: SETUP (the setup this one continues, the part turned over)".into());
+                    }
+                };
+                if from.is_some() {
+                    part = self.turned_part(part)?;
+                }
                 let machine = match a.get("machine") {
                     Some(V::Machine(m)) => m.clone(),
                     _ => "generic-vmc3".into(),
                 };
                 let (plo, phi) = self.parts[part].bbox;
                 let stock = match a.get("stock") {
+                    None if from.is_some() => {
+                        let ip = self.setups[from.unwrap()].ip.turned(self.parts[part].h());
+                        Stock {
+                            min: ip.min,
+                            max: ip.max,
+                        }
+                    }
                     Some(V::Stock(StockSpec::Margin(m))) => Stock {
                         min: [plo[0] - m[0], plo[1] - m[1], plo[2]],
                         max: [phi[0] + m[0], phi[1] + m[1], phi[2] + m[2]],
@@ -536,6 +798,41 @@ impl Cam {
                         stock.max[2],
                     ],
                 };
+                let fixture = match a.get("fixture") {
+                    None => self.parts[part].hold.clone(),
+                    Some(V::Vise(v)) => {
+                        let l = self.lib.vise(&v.name).map_err(|e| format!("{e:?}"))?;
+                        let size = forge_cam::fixture::ViseSize {
+                            jaw_width: l.jaw_width,
+                            jaw_height: l.jaw_height,
+                            jaw_thickness: l.jaw_thickness,
+                            max_opening: l.max_opening,
+                            bed_depth: l.bed_depth,
+                        };
+                        let clamp = v
+                            .clamp
+                            .ok_or("fixture: vise(.., clamp: MM): how much of the stock the jaws grip")?;
+                        Some(
+                            forge_cam::fixture::vise(
+                                &v.name,
+                                size,
+                                &stock,
+                                v.axis,
+                                clamp,
+                                v.parallel,
+                                v.clearance,
+                            )
+                            .map_err(|e| format!("fixture: {e}"))?,
+                        )
+                    }
+                    Some(V::Jaws(j, _)) => {
+                        if from.is_none() {
+                            return Err("fixture: soft jaws hold the part as an earlier setup left it: give `from: SETUP`".into());
+                        }
+                        Some(self.jaws[*j].fixture.clone())
+                    }
+                    Some(_) => return Err("fixture: vise(\"NAME\", across:, clamp:)".into()),
+                };
                 let clear = stock.max[2] + get_num(a, "clear", Some(10.0))?;
                 let retract = stock.max[2] + get_num(a, "retract", Some(3.0))?;
                 self.setups.push(SetupIn {
@@ -545,14 +842,28 @@ impl Cam {
                     stock,
                     origin,
                     wcs: get_num(a, "wcs", Some(0.0))? as u32,
+                    at: match a.get("at") {
+                        None => None,
+                        Some(v) => {
+                            Some(tuple3(v).ok_or("at: (x, y, z), the WCS origin in machine coordinates")?)
+                        }
+                    },
                     tol: get_num(a, "tol", Some(0.01))?,
                     clearance: get_num(a, "clearance", Some(0.1))?,
                     heights: Heights { clear, retract },
-                    ip: forge_cam::stock::InProcess::new(stock.min, stock.max),
+                    ip: match from {
+                        // what the earlier setup provably cleared, turned over, inside this stock
+                        Some(k) if a.get("stock").is_none() => self.setups[k].ip.turned(self.parts[part].h()),
+                        _ => forge_cam::stock::InProcess::new(stock.min, stock.max),
+                    },
+                    fixture,
+                    from,
                 });
                 Ok(V::Setup(self.setups.len() - 1))
             }
-            "facing" | "contour" | "pocket" | "clear" | "drill" => self.op(name, f, a),
+            "facing" | "contour" | "pocket" | "clear" | "drill" | "engrave" | "thread_mill"
+            | "edge_break" => self.op(name, f, a),
+            "soft_jaw" => self.soft_jaw(name, a),
             "program" => {
                 let su: Vec<usize> = match a.get("#0") {
                     Some(V::Setup(i)) => vec![*i],
@@ -575,9 +886,1008 @@ impl Cam {
                 Ok(V::Num(0.0))
             }
             _ => Err(format!(
-                "`{f}` is not a machining built-in (part, machine, tool, setup, facing, contour, pocket, drill, program, box)"
+                "`{f}` is not a machining built-in (part, machine, tool, setup, facing, contour, pocket, drill, engrave, thread_mill, edge_break, program, box)"
             )),
         }
+    }
+
+    /// Soft jaws for the part as setup `from:` left it, turned over: the pocket is what the jaw
+    /// tool cuts of the part's sections in the grip band grown by `fit`; refused unless the
+    /// part, and everything `from:` left in the band, seats in it, and the seat carries at least
+    /// `min_contact` (default a quarter of the part's largest section).
+    fn soft_jaw(&mut self, name: &str, a: &BTreeMap<String, V>) -> Result<V, String> {
+        let v = match a.get("#0") {
+            Some(V::Vise(v)) => v.clone(),
+            _ => return Err("soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:)".into()),
+        };
+        let k = match a.get("from") {
+            Some(V::Setup(k)) => *k,
+            _ => return Err("soft_jaw(.., from: SETUP): the setup whose result the jaws hold".into()),
+        };
+        let tool_r = match a.get("tool") {
+            Some(V::Tool(t)) => 0.5 * self.tools[*t].tool.dc,
+            _ => return Err("soft_jaw(.., tool: TOOL): the tool that cuts the jaws' pocket".into()),
+        };
+        let vl = self.lib.vise(&v.name).map_err(|e| format!("{e:?}"))?.clone();
+        let bl = self
+            .lib
+            .jaw_blank(&get_str(a, "blank", None)?)
+            .map_err(|e| format!("{e:?}"))?
+            .clone();
+        let grip = get_num(a, "grip", None)?;
+        let fit = get_num(a, "fit", Some(0.02))?;
+        let relief = match a.get("relief") {
+            None => false,
+            Some(V::Str(x)) if x == "corners" => true,
+            Some(_) => {
+                return Err(
+                    "relief: \"corners\" (a relief of the tool's radius at each of the part's corners)"
+                        .into(),
+                );
+            }
+        };
+        let orig = self.setups[k].part;
+        let tp = self.turned_part(orig)?;
+        let part = &self.parts[tp];
+        let h = part.h();
+        let (seat, top) = (part.bbox.0[2], part.bbox.0[2] + grip);
+        // the band's sub-bands: between the part's flat faces' heights and the levels of the
+        // stock the earlier setup left (turned)
+        let mut zs = vec![seat, top];
+        for f in &part.faces {
+            if let Some(forge_cam_geom::slab::Prism::Flat { z, .. }) = &f.prism
+                && *z > seat
+                && *z < top
+            {
+                zs.push(*z);
+            }
+        }
+        for z in self.setups[k].ip.levels() {
+            if h - z > seat && h - z < top {
+                zs.push(h - z);
+            }
+        }
+        zs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        zs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+        // the jaws grip what the earlier setup left in the band (it contains the part, and the
+        // true stock): its proven material, turned over
+        let mut band = vec![];
+        for w in zs.windows(2) {
+            let zm = 0.5 * (w[0] + w[1]);
+            let m = self.setups[k]
+                .ip
+                .material(h - zm)
+                .map_err(|e| {
+                    format!(
+                        "soft_jaw: the stock {} left at z {:.3}: {e}",
+                        self.setups[k].name,
+                        h - zm
+                    )
+                })?
+                .ok_or_else(|| {
+                    format!(
+                        "soft_jaw: nothing to grip at z {:.3} of {}",
+                        h - zm,
+                        self.setups[k].name
+                    )
+                })?;
+            band.push(forge_cam::stock::mirror_y(&m));
+        }
+        let part = &self.parts[tp];
+        // reliefs: a disk of the jaw tool's radius at each convex corner of the part's sections
+        // in the band and of what the earlier setup left there
+        let mut relief_at = vec![];
+        if relief {
+            for w in zs.windows(2) {
+                let zm = 0.5 * (w[0] + w[1]);
+                if let Ok(sec) = forge_cam::section::section(&part.faces, zm, 1e-5) {
+                    relief_at.extend(forge_cam::fixture::corners(&sec));
+                }
+            }
+            for b in &band {
+                relief_at.extend(forge_cam::fixture::corners(b));
+            }
+            relief_at.sort_by(|a, b| (a.x, a.y).partial_cmp(&(b.x, b.y)).unwrap());
+            relief_at.dedup();
+        }
+        let height = part.bbox.1[2] - part.bbox.0[2];
+        let sj = forge_cam::fixture::soft_jaws(
+            name,
+            forge_cam::fixture::ViseSize {
+                jaw_width: vl.jaw_width,
+                jaw_height: vl.jaw_height,
+                jaw_thickness: vl.jaw_thickness,
+                max_opening: vl.max_opening,
+                bed_depth: vl.bed_depth,
+            },
+            forge_cam::fixture::BlankSize {
+                width: bl.width,
+                height: bl.height,
+                thickness: bl.thickness,
+            },
+            v.axis,
+            &band,
+            seat,
+            grip,
+            height,
+            fit,
+            tool_r,
+            &relief_at,
+            v.clearance,
+        )
+        .map_err(|e| format!("soft_jaw: {e}"))?;
+        // nothing the earlier setup left above the part's top may lie in the blank: turned over,
+        // it would be inside the jaws below the seat, where the part could not go down
+        // (softJaw_needs_grip)
+        {
+            let ip = &self.setups[k].ip;
+            let top_k = h - seat;
+            let b = sj.block;
+            let blank = forge_cam_geom::region::Region {
+                loops: vec![forge_cam_geom::region::Loop {
+                    segs: {
+                        let pt = |x: f64, y: f64| forge_cam_geom::region::p2(x, y);
+                        let (a, bb, c, d) = (
+                            pt(b.min[0], b.min[1]),
+                            pt(b.max[0], b.min[1]),
+                            pt(b.max[0], b.max[1]),
+                            pt(b.min[0], b.max[1]),
+                        );
+                        vec![
+                            Seg::Line { a, b: bb },
+                            Seg::Line { a: bb, b: c },
+                            Seg::Line { a: c, b: d },
+                            Seg::Line { a: d, b: a },
+                        ]
+                    },
+                }],
+            };
+            let mut zs: Vec<f64> = ip.levels().into_iter().filter(|z| *z >= top_k).collect();
+            zs.insert(0, top_k);
+            zs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            zs.dedup();
+            for w in zs.windows(2) {
+                let zm = 0.5 * (w[0] + w[1]);
+                let m = ip
+                    .material(zm)
+                    .map_err(|e| format!("soft_jaw: the stock {} left: {e}", self.setups[k].name))?;
+                if let Some(m) = m {
+                    let inside = forge_cam_geom::boolean::boolean(
+                        &forge_cam::stock::mirror_y(&m),
+                        &blank,
+                        forge_cam_geom::boolean::Op::Inter,
+                    )
+                    .map_err(|e| format!("soft_jaw: {e:?}"))?;
+                    if !inside.is_empty() {
+                        return Err(format!(
+                            "soft_jaw: `{}` leaves stock above the part's top (z {:.3} to {:.3}, its frame), which would sit in the jaws below the seat: face it to z {top_k:.3} in `{}` (facing(.., to: {top_k:.3}))",
+                            self.setups[k].name, w[0], w[1], self.setups[k].name
+                        ));
+                    }
+                }
+            }
+        }
+        let largest = band.iter().map(forge_cam::fixture::area).fold(0.0, f64::max);
+        let min_contact = get_num(a, "min_contact", Some(0.25 * largest))?;
+        if sj.contact < min_contact {
+            return Err(format!(
+                "soft_jaw: the part's seat in the jaws is {:.1} mm², under the {min_contact:.1} mm² asked: grip where the part is wider, or a lower min_contact",
+                sj.contact
+            ));
+        }
+        let b = sj.block;
+        self.parts.push(PartIn {
+            src: String::new(),
+            pdir: Default::default(),
+            hold: Some(sj.hold.clone()),
+            turn_of: None,
+            file: format!("{name} (soft jaws, {})", bl.name),
+            faces: sj.part.clone(),
+            holes: vec![],
+            bbox: (b.min, b.max),
+            group: "N".into(),
+        });
+        self.jaws.push(sj);
+        Ok(V::Jaws(self.jaws.len() - 1, self.parts.len() - 1))
+    }
+
+    /// The tool's tip along a sketch's curves (lines, arcs, circles; not construction), on a
+    /// plane facing +z, in levels down to `depth` below it. What it clears for the stock: each
+    /// line's and circle's band of the tip's radius, from the floor up (a V tool clears at least
+    /// that: wider above).
+    #[allow(clippy::too_many_arguments)]
+    fn engrave(
+        &self,
+        su: usize,
+        a: &BTreeMap<String, V>,
+        t: &ToolUse,
+        ti: usize,
+        h: Heights,
+        feed: (f64, f64),
+        step: f64,
+        voids: &mut Vec<(Option<Region>, f64)>,
+    ) -> Result<Vec<OpPath>, String> {
+        let (pi, sk) = match a.get("#1") {
+            Some(V::Sketch(p, n)) if *p == self.setups[su].part => (*p, n.clone()),
+            Some(V::Sketch(..)) => {
+                return Err("engrave: the sketch is on the part the other way up: engrave it in a setup that holds it so".into());
+            }
+            _ => return Err("engrave(SETUP, PART.SKETCH, tool:, depth:)".into()),
+        };
+        let part = &self.parts[pi];
+        let opts = || forge_lang::Options {
+            dir: Some(part.pdir.clone()),
+            ..Default::default()
+        };
+        // the sketch's plane, from the part's query (r9-rounded: toolpath placement only; the
+        // path is certified as posted)
+        let ans = forge_lang::query::ask(&part.src, Some(part.pdir.clone()), None, &format!("frame {sk}"));
+        if !ans.ok {
+            return Err(format!("engrave: {}", ans.text.trim()));
+        }
+        let v3 = |k: &str| -> Option<[f64; 3]> {
+            let Json::Obj(fs) = &ans.json else { return None };
+            let (_, Json::Arr(xs)) = fs.iter().find(|(n, _)| n == k)? else {
+                return None;
+            };
+            let n = |j: &Json| if let Json::Num(x) = j { Some(*x) } else { None };
+            Some([n(&xs[0])?, n(&xs[1])?, n(&xs[2])?])
+        };
+        let (o, x, y, z) = match (v3("origin"), v3("x"), v3("y"), v3("z")) {
+            (Some(o), Some(x), Some(y), Some(z)) => (o, x, y, z),
+            _ => return Err("engrave: the sketch's frame".into()),
+        };
+        if (z[2] - 1.0).abs() > 1e-9 || z[0].abs() > 1e-9 || z[1].abs() > 1e-9 {
+            return Err("engrave: the sketch's plane must face +z in this setup".into());
+        }
+        let view = forge_lang::sketch_view(&part.src, &sk, opts()).ok_or("engrave: the sketch")?;
+        let s = &view.s;
+        let w = |p: forge_math::Point2| [o[0] + x[0] * p.x + y[0] * p.y, o[1] + x[1] * p.x + y[1] * p.y];
+        // each curve: its start, and its moves as (to, Some((centre, cw)) for an arc)
+        type Piece = ([f64; 2], Vec<([f64; 2], Option<([f64; 2], bool)>)>);
+        let mut curves: Vec<Piece> = vec![];
+        // the sketch's handedness in the part's xy: x × y along +z keeps arcs' sense
+        let flip = x[0] * y[1] - x[1] * y[0] < 0.0;
+        let tip = 0.5 * t.tool.tip_d.max(0.0);
+        let mut bands: Vec<Region> = vec![];
+        for id in s.entity_ids() {
+            if s.is_construction(id) {
+                continue;
+            }
+            match s.entity(id) {
+                Some(forge_sketch::Entity::Line { a: pa, b: pb }) => {
+                    let (p0, p1) = (w(s.point(pa)), w(s.point(pb)));
+                    curves.push((p0, vec![(p1, None)]));
+                    if tip > 0.0 {
+                        bands.push(stadium(p0, p1, tip));
+                    }
+                }
+                Some(forge_sketch::Entity::Arc {
+                    center,
+                    start,
+                    end,
+                    ccw,
+                }) => {
+                    let (c, p0, p1) = (w(s.point(center)), w(s.point(start)), w(s.point(end)));
+                    let ccw = ccw != flip;
+                    // in pieces of at most a quarter turn, as posted
+                    let r = ((p0[0] - c[0]).powi(2) + (p0[1] - c[1]).powi(2)).sqrt();
+                    let a0 = forge_math::dmath::atan2(p0[1] - c[1], p0[0] - c[0]);
+                    let mut a1 = forge_math::dmath::atan2(p1[1] - c[1], p1[0] - c[0]);
+                    let tau = std::f64::consts::TAU;
+                    if ccw {
+                        while a1 <= a0 {
+                            a1 += tau;
+                        }
+                    } else {
+                        while a1 >= a0 {
+                            a1 -= tau;
+                        }
+                    }
+                    let n = ((a1 - a0).abs() / std::f64::consts::FRAC_PI_2).ceil().max(1.0) as usize;
+                    let mut mv = vec![];
+                    for k in 1..=n {
+                        let to = if k == n {
+                            p1
+                        } else {
+                            let (sn, cs) = forge_math::dmath::sin_cos(a0 + (a1 - a0) * k as f64 / n as f64);
+                            [c[0] + r * cs, c[1] + r * sn]
+                        };
+                        mv.push((to, Some((c, !ccw))));
+                    }
+                    curves.push((p0, mv));
+                }
+                Some(forge_sketch::Entity::Circle { center, r }) => {
+                    let c = w(s.point(center));
+                    let r = s.params()[r];
+                    let p0 = [c[0] + r, c[1]];
+                    let mv = (1..=4)
+                        .map(|k| {
+                            let to = match k {
+                                1 => [c[0], c[1] + r],
+                                2 => [c[0] - r, c[1]],
+                                3 => [c[0], c[1] - r],
+                                _ => p0,
+                            };
+                            (to, Some((c, false)))
+                        })
+                        .collect();
+                    curves.push((p0, mv));
+                    if tip > 0.0 && r > tip {
+                        bands.push(ring(c, r, tip));
+                    }
+                }
+                _ => {}
+            }
+        }
+        if curves.is_empty() {
+            return Err(format!(
+                "engrave: the sketch `{sk}` has no lines, arcs or circles to follow"
+            ));
+        }
+        let top = get_num(a, "from", Some(o[2]))?;
+        let depth = get_num(a, "depth", None)?;
+        // a NaN depth is refused too
+        if depth.is_nan() || depth <= 0.0 {
+            return Err("engrave: depth > 0".into());
+        }
+        let bottom = o[2] - depth;
+        let mut mv = vec![];
+        for z in ops::levels(top, bottom, step) {
+            for (p0, ms) in &curves {
+                mv.push(PMove::Rapid {
+                    to: [p0[0], p0[1], h.retract],
+                });
+                mv.push(PMove::Line {
+                    to: [p0[0], p0[1], z],
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+                let mut at = *p0;
+                for (to, arc) in ms {
+                    mv.push(match arc {
+                        None => PMove::Line {
+                            to: [to[0], to[1], z],
+                            f: feed.0,
+                            phase: Phase::Cut,
+                        },
+                        Some((c, cw)) => PMove::Arc {
+                            to: [to[0], to[1], z],
+                            c: *c,
+                            cw: *cw,
+                            f: feed.0,
+                        },
+                    });
+                    at = *to;
+                }
+                mv.push(PMove::Line {
+                    to: [at[0], at[1], h.retract],
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            }
+        }
+        let first = curves[0].0;
+        mv.push(PMove::Rapid {
+            to: [first[0], first[1], h.clear],
+        });
+        // the bands it clears, united (none is claimed if the union cannot be formed)
+        let mut u: Option<Region> = None;
+        for b in bands {
+            u = match u {
+                None => Some(b),
+                Some(r) => forge_cam_geom::boolean::boolean(&r, &b, forge_cam_geom::boolean::Op::Union)
+                    .ok()
+                    .map(|l| forge_cam_geom::boolean::region_of(&l)),
+            };
+            if u.is_none() {
+                break;
+            }
+        }
+        if let Some(u) = u {
+            voids.push((Some(u), bottom));
+        }
+        Ok(vec![OpPath {
+            tool: ti,
+            start: [first[0], first[1], h.clear],
+            moves: mv,
+            rpm: 0.0,
+            coolant: forge_post::Coolant::Flood,
+        }])
+    }
+
+    /// Thread milling a hole's recorded thread, the model not carrying it: a declared removal Δ
+    /// (cosmetic_thread) per place, the ring between the bore and the thread's major diameter
+    /// over the thread's length, and the op certified against a target bounding a superset of
+    /// P ∖ Δ: the bore's wall cut back below the band, Δ's outer wall and its floor added, the
+    /// part's other faces as they are. The path: down the drilled bore, in to the radius, up a
+    /// helix of the pitch (G3 climbing: a right-hand thread), back to the axis, out.
+    #[allow(clippy::too_many_arguments)]
+    fn thread_mill(
+        &self,
+        su: usize,
+        a: &BTreeMap<String, V>,
+        t: &ToolUse,
+        ti: usize,
+        h: Heights,
+        feed: (f64, f64),
+        out: &mut OpOut,
+        voids: &mut Vec<(Option<Region>, f64)>,
+    ) -> Result<Vec<OpPath>, String> {
+        use forge_cam_geom::check::Surf;
+        let (pi, hn) = match a.get("#1") {
+            Some(V::Holes(p, n)) if *p == self.setups[su].part => (*p, n.clone()),
+            Some(V::Holes(..)) => {
+                return Err("the hole is milled from the side it opens on: in a setup that holds the part that way up".into());
+            }
+            _ => return Err("thread_mill(SETUP, PART.HOLE, tool:, length:)".into()),
+        };
+        let part = &self.parts[pi];
+        let hole = part.holes.iter().find(|x| x.name == hn).unwrap().clone();
+        let Some((major, pitch)) = hole.thread else {
+            return Err(format!(
+                "the hole `{hn}` records no thread: give it `thread:` (or a screw with fit: \"tap\")"
+            ));
+        };
+        if hole.dir != [0.0, 0.0, -1.0] {
+            return Err(format!("the hole `{hn}` is not along −z: it needs its own setup"));
+        }
+        if t.tool.kind != Kind::ThreadMill {
+            return Err(format!("thread_mill: `{}` is not a thread mill", t.tool.id));
+        }
+        if (t.tool.tp - pitch).abs() > 1e-9 {
+            out.fix = Some(format!("a thread mill of pitch {pitch}"));
+            return Err(format!(
+                "thread_mill: the tool's pitch {} is not the thread's {pitch}",
+                t.tool.tp
+            ));
+        }
+        let (rb, rm, rt) = (0.5 * hole.d, 0.5 * major, 0.5 * t.tool.dc);
+        if rt >= rb {
+            out.fix = Some(format!("a thread mill under {:.3} mm across", hole.d));
+            return Err(format!(
+                "thread_mill: the tool ({} mm) does not go down the bore ({} mm)",
+                t.tool.dc, hole.d
+            ));
+        }
+        let rc = rm - rt;
+        let depth = match hole.depth {
+            Some(d) => d,
+            None => hole.places[0][2] - part.bbox.0[2],
+        };
+        let len = get_num(a, "length", Some(depth - 2.0 * pitch))?;
+        if !(len > 0.0 && len <= depth) {
+            return Err(format!(
+                "thread_mill: length {len} must be over 0 and at most the hole's depth {depth}"
+            ));
+        }
+        // the target: P ∖ Δ's boundary (a superset's), for every place
+        let mut faces: Vec<Face> = vec![];
+        let mut extra: Vec<Face> = vec![];
+        let mut id = 6000u32;
+        let bands: Vec<([f64; 2], f64, f64)> = hole
+            .places
+            .iter()
+            .map(|p| ([p[0], p[1]], p[2] - len, p[2]))
+            .collect();
+        for f in &part.faces {
+            let mut kept = Some(f.clone());
+            // a flat face at the band's heights (the mouth's, an inner shoulder's): Δ's disk
+            // taken out of it
+            if let Some(forge_cam_geom::slab::Prism::Flat { z, region, .. }) = &f.prism
+                && bands.iter().any(|(_, zb, zt)| *z >= zb - 1e-9 && *z <= zt + 1e-9)
+            {
+                let mut rg = trim_region(region);
+                for (c, zb, zt) in &bands {
+                    if *z < zb - 1e-9 || *z > zt + 1e-9 {
+                        continue;
+                    }
+                    let a0 = p2(c[0] + rm, c[1]);
+                    let disk = Region {
+                        loops: vec![Loop {
+                            segs: vec![Seg::Arc {
+                                a: a0,
+                                b: a0,
+                                c: p2(c[0], c[1]),
+                                ccw: true,
+                            }],
+                        }],
+                    };
+                    rg = match rg.and_then(|r| {
+                        forge_cam_geom::boolean::boolean(&r, &disk, forge_cam_geom::boolean::Op::Diff).ok()
+                    }) {
+                        Some(l) if !l.is_empty() => Some(forge_cam_geom::boolean::region_of(&l)),
+                        _ => None,
+                    };
+                }
+                kept = match rg {
+                    Some(r) => Some(forge_cam::stock::flat(&r, *z, f.mu, f.id)),
+                    // nothing of the face is left, or it could not be cut: the face as it is
+                    // (a superset: never less strict)
+                    None => Some(f.clone()),
+                };
+            }
+            if let Surf::Cyl { o, x, y, ax, r } = f.surf
+                && ax[0] == 0.0
+                && ax[1] == 0.0
+                && (r - rb).abs() <= 1e-6
+            {
+                for (c, zb, zt) in &bands {
+                    if (o[0] - c[0]).abs() > 1e-6 || (o[1] - c[1]).abs() > 1e-6 {
+                        continue;
+                    }
+                    // heights: o.z + ax.z q; the wall kept below the band only
+                    let (q_at_zb, q_at_zt) = ((zb - o[2]) * ax[2], (zt - o[2]) * ax[2]);
+                    let (qlo_band, qhi_band) = (q_at_zb.min(q_at_zt), q_at_zb.max(q_at_zt));
+                    let below = if ax[2] > 0.0 {
+                        forge_cam_geom::ival::Ival::new(f.q.lo, f.q.hi.min(qlo_band))
+                    } else {
+                        forge_cam_geom::ival::Ival::new(f.q.lo.max(qhi_band), f.q.hi)
+                    };
+                    kept = if below.lo < below.hi {
+                        Some(Face::new(f.surf, f.p, below, None, f.mu, f.id))
+                    } else {
+                        None
+                    };
+                    // Δ's outer wall over the band, the same sector at the major radius
+                    let band = forge_cam_geom::ival::Ival::new(qlo_band.max(f.q.lo.min(qlo_band)), qhi_band);
+                    extra.push(Face::new(
+                        Surf::Cyl { o, x, y, ax, r: rm },
+                        f.p,
+                        band,
+                        None,
+                        f.mu,
+                        id,
+                    ));
+                    id += 1;
+                }
+            }
+            if let Some(k) = kept {
+                faces.push(k);
+            }
+        }
+        for (c, zb, zt) in &bands {
+            // Δ's floor: the ring at the band's bottom
+            extra.push(forge_cam::stock::flat(
+                &ring(*c, 0.5 * (rb + rm), 0.5 * (rm - rb)),
+                *zb,
+                1e-9,
+                id,
+            ));
+            id += 1;
+            out.removals.push(format!(
+                "cosmetic_thread M{major}x{pitch} of `{hn}` at ({:.3}, {:.3}): the ring {rb:.3}..{rm:.3} mm from z {zb:.3} to {zt:.3}",
+                c[0], c[1]
+            ));
+        }
+        faces.extend(extra);
+        out.target = Some(faces);
+        // the path, each place in turn
+        let mut mv = vec![];
+        let first = bands[0].0;
+        for (c, zb, zt) in &bands {
+            mv.push(PMove::Rapid {
+                to: [c[0], c[1], h.retract],
+            });
+            mv.push(PMove::Line {
+                to: [c[0], c[1], *zb],
+                f: feed.1,
+                phase: Phase::Plunge,
+            });
+            mv.push(PMove::Line {
+                to: [c[0] + rc, c[1], *zb],
+                f: feed.0,
+                phase: Phase::Cut,
+            });
+            let turns = ((zt - zb) / pitch - 1e-9).ceil().max(1.0) as usize;
+            for k in 1..=4 * turns {
+                let p = match k % 4 {
+                    1 => [c[0], c[1] + rc],
+                    2 => [c[0] - rc, c[1]],
+                    3 => [c[0], c[1] - rc],
+                    _ => [c[0] + rc, c[1]],
+                };
+                mv.push(PMove::Arc {
+                    to: [p[0], p[1], zb + pitch * k as f64 / 4.0],
+                    c: *c,
+                    cw: false,
+                    f: feed.0,
+                });
+            }
+            let zend = zb + pitch * turns as f64;
+            mv.push(PMove::Line {
+                to: [c[0], c[1], zend],
+                f: feed.0,
+                phase: Phase::Cut,
+            });
+            mv.push(PMove::Line {
+                to: [c[0], c[1], h.retract],
+                f: feed.0,
+                phase: Phase::Link,
+            });
+            // what it clears: the disk of the major radius, from the band's bottom up
+            let a0 = p2(c[0] + rm, c[1]);
+            let disk = Region {
+                loops: vec![Loop {
+                    segs: vec![Seg::Arc {
+                        a: a0,
+                        b: a0,
+                        c: p2(c[0], c[1]),
+                        ccw: true,
+                    }],
+                }],
+            };
+            voids.push((Some(disk), *zb));
+        }
+        mv.push(PMove::Rapid {
+            to: [first[0], first[1], h.clear],
+        });
+        Ok(vec![OpPath {
+            tool: ti,
+            start: [first[0], first[1], h.clear],
+            moves: mv,
+            rpm: 0.0,
+            coolant: forge_post::Coolant::Flood,
+        }])
+    }
+
+    /// Edge break (a declared removal, the master's option (a)): the part's top edges at `at:`
+    /// (default its top) broken by a 45° chamfer of `size:` s with a 90° chamfer mill. Δ is the
+    /// band of the top within s of its edges, below the 45° surface z' = z − s + d, d the
+    /// distance inside the top's outline R. The op is certified against P ∖ Δ: the top eroded
+    /// to E = R ⊖ s, the walls cut to z − s, and the chamfer surfaces from each piece of E down
+    /// to the same piece moved out by s (planes for lines, cones for arcs; a line's ends at a
+    /// sharp corner meet the next line's on the corner's bisector). The path: the tool's axis on
+    /// R ⊕ c with c = r_tip + e at depth z − s − e (e = 0.2 mm), where the tool's flank is that
+    /// surface; every point of R ⊕ c is c from R, so the flank never goes below it. In this
+    /// phase the top must be the part's top, with only vertical walls through the band, and the
+    /// pieces of E must meet tangentially wherever an arc meets (a sharp corner between lines is
+    /// taken; one with an arc is refused).
+    #[allow(clippy::too_many_arguments)]
+    fn edge_break(
+        &self,
+        su: usize,
+        a: &BTreeMap<String, V>,
+        t: &ToolUse,
+        ti: usize,
+        h: Heights,
+        feed: (f64, f64),
+        out: &mut OpOut,
+    ) -> Result<Vec<OpPath>, String> {
+        use forge_cam_geom::check::{Surf, TSeg, Trim};
+        use forge_cam_geom::ival::Ival;
+        let part = &self.parts[self.setups[su].part];
+        if t.tool.kind != Kind::Chamfer || (t.tool.angle - 90.0).abs() > 1e-9 {
+            out.fix = Some("a 90° chamfer mill (chamfer-10-90)".into());
+            return Err(format!("edge_break: `{}` is not a 90° chamfer mill", t.tool.id));
+        }
+        let ztop = part.bbox.1[2];
+        let z = get_num(a, "at", Some(ztop))?;
+        let s = get_num(a, "size", None)?;
+        let (r0, rt) = (0.5 * t.tool.tip_d, 0.5 * t.tool.dc);
+        const E: f64 = 0.2;
+        let c = r0 + E;
+        if s.is_nan() || s <= 0.0 {
+            return Err("edge_break: size must be over 0".into());
+        }
+        if c + s >= rt {
+            out.fix = Some(format!("a chamfer mill over {:.3} mm across", 2.0 * (c + s)));
+            return Err(format!(
+                "edge_break: a {s} mm break needs the flank out to {:.3} mm; the tool's is {rt}",
+                c + s
+            ));
+        }
+        if (z - ztop).abs() > 1e-9 {
+            return Err(format!(
+                "edge_break: at z = {z} is not the part's top ({ztop}); this phase breaks the top's edges only"
+            ));
+        }
+        let zc = z - s;
+        let mu = 1e-9;
+        // the top's outline R: the union of the flat faces at z
+        let mut tops: Option<Region> = None;
+        let mut faces: Vec<Face> = vec![];
+        for f in &part.faces {
+            if let Some(forge_cam_geom::slab::Prism::Flat { z: fz, region, .. }) = &f.prism
+                && (fz - z).abs() <= 1e-9
+            {
+                let rg = trim_region(region)
+                    .ok_or_else(|| format!("edge_break: the top face {} has an open trim", f.id))?;
+                tops = Some(match tops {
+                    None => rg,
+                    Some(r) => forge_cam_geom::boolean::region_of(
+                        &forge_cam_geom::boolean::boolean(&r, &rg, forge_cam_geom::boolean::Op::Union)
+                            .map_err(|e| format!("edge_break: the top's faces: {e:?}"))?,
+                    ),
+                });
+                continue;
+            }
+            if f.bbox[2].hi <= zc + f.mu {
+                faces.push(f.clone());
+                continue;
+            }
+            // through the band: a vertical wall, kept below z − s
+            match f.surf {
+                Surf::Cyl { o, ax, .. } if ax[0] == 0.0 && ax[1] == 0.0 && ax[2].abs() == 1.0 => {
+                    // heights o.z + ax.z q
+                    let qc = (zc - o[2]) * ax[2];
+                    let below = if ax[2] > 0.0 {
+                        Ival::new(f.q.lo, f.q.hi.min(qc))
+                    } else {
+                        Ival::new(f.q.lo.max(qc), f.q.hi)
+                    };
+                    if below.lo < below.hi {
+                        faces.push(Face::new(f.surf, f.p, below, None, f.mu, f.id));
+                    }
+                }
+                Surf::Plane { o, u, v } if u[2] == 0.0 && v[0] == 0.0 && v[1] == 0.0 && v[2].abs() == 1.0 => {
+                    // vertical over a rectangle of (p, q) (q the height): kept below z − s
+                    let mut ok = true;
+                    let (mut p0, mut p1, mut q0, mut q1) =
+                        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+                    match &f.trim {
+                        Some(tr) if tr.segs.len() == 4 => {
+                            for sg in &tr.segs {
+                                match *sg {
+                                    TSeg::Line { a, b } if a[0] == b[0] || a[1] == b[1] => {
+                                        for pt in [a, b] {
+                                            p0 = p0.min(pt[0]);
+                                            p1 = p1.max(pt[0]);
+                                            q0 = q0.min(pt[1]);
+                                            q1 = q1.max(pt[1]);
+                                        }
+                                    }
+                                    _ => ok = false,
+                                }
+                            }
+                        }
+                        _ => ok = false,
+                    }
+                    if !ok {
+                        return Err(format!(
+                            "edge_break: the wall {} through the break's band is not a rectangle; this phase breaks a top over plain walls",
+                            f.id
+                        ));
+                    }
+                    // heights o.z + v.z q
+                    let qc = (zc - o[2]) * v[2];
+                    let (q0, q1) = if v[2] > 0.0 {
+                        (q0, q1.min(qc))
+                    } else {
+                        (q0.max(qc), q1)
+                    };
+                    if q0 < q1 {
+                        let c4 = [[p0, q0], [p1, q0], [p1, q1], [p0, q1]];
+                        let segs = (0..4)
+                            .map(|k| TSeg::Line {
+                                a: c4[k],
+                                b: c4[(k + 1) % 4],
+                            })
+                            .collect();
+                        faces.push(Face::new(
+                            f.surf,
+                            Ival::new(p0 - f.mu, p1 + f.mu),
+                            Ival::new(q0 - f.mu, q1 + f.mu),
+                            Some(Trim { segs }),
+                            f.mu,
+                            f.id,
+                        ));
+                    }
+                }
+                _ => {
+                    return Err(format!(
+                        "edge_break: face {} reaches into the break's band (z {zc:.3} to {z:.3}) and is not a vertical wall; this phase breaks a top over vertical walls",
+                        f.id
+                    ));
+                }
+            }
+        }
+        let rg = tops.ok_or_else(|| format!("edge_break: the part has no flat face at z = {z}"))?;
+        // E = R ⊖ s, as many loops as R (no feature narrower than 2s)
+        let (el, _) = forge_cam_geom::offset::offset(&rg, s).map_err(|e| format!("edge_break: {e:?}"))?;
+        let el: Vec<_> = el
+            .into_iter()
+            .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b)))
+            .collect();
+        if el.len() != rg.loops.len() {
+            out.fix = Some(format!(
+                "a break under half the top's narrowest feature (size < {s})"
+            ));
+            return Err(format!(
+                "edge_break: the top eroded by {s} has {} loops where the top has {}: a feature is narrower than the break",
+                el.len(),
+                rg.loops.len()
+            ));
+        }
+        let er = forge_cam_geom::boolean::region_of(&el);
+        let mut id = 7000u32;
+        faces.push(forge_cam::stock::flat(&er, z, mu, id));
+        id += 1;
+        // the chamfer surfaces, piece by piece of E
+        let rt2 = std::f64::consts::FRAC_1_SQRT_2;
+        let dir = |sg: &Seg, at_end: bool| -> [f64; 2] {
+            match *sg {
+                Seg::Line { a, b } => {
+                    let (dx, dy) = (b.x - a.x, b.y - a.y);
+                    let l = (dx * dx + dy * dy).sqrt();
+                    [dx / l, dy / l]
+                }
+                Seg::Arc { a, b, c, ccw } => {
+                    let p = if at_end { b } else { a };
+                    let (rx, ry) = (p.x - c.x, p.y - c.y);
+                    let l = (rx * rx + ry * ry).sqrt();
+                    if ccw { [-ry / l, rx / l] } else { [ry / l, -rx / l] }
+                }
+            }
+        };
+        let cross = |u: [f64; 2], v: [f64; 2]| u[0] * v[1] - u[1] * v[0];
+        let dotp = |u: [f64; 2], v: [f64; 2]| u[0] * v[0] + u[1] * v[1];
+        for l in &er.loops {
+            let n = l.segs.len();
+            for (i, sg) in l.segs.iter().enumerate() {
+                let prev = &l.segs[(i + n - 1) % n];
+                let next = &l.segs[(i + 1) % n];
+                // a junction: tangent (no miter), or a sharp corner between two lines
+                let junction = |p: &Seg, q: &Seg, at: Seg| -> Result<Option<[f64; 2]>, String> {
+                    let (u0, u1) = (dir(p, true), dir(q, false));
+                    if cross(u0, u1).abs() <= 1e-9 && dotp(u0, u1) > 0.0 {
+                        return Ok(None);
+                    }
+                    let pt = at.start();
+                    match (p, q) {
+                        (Seg::Line { .. }, Seg::Line { .. }) if cross(u0, u1) > 0.0 => {
+                            // outward normals (inside on the left): the corner's bisector
+                            let (n0, n1) = ([u0[1], -u0[0]], [u1[1], -u1[0]]);
+                            let k = s / (1.0 + dotp(n0, n1));
+                            Ok(Some([pt.x + k * (n0[0] + n1[0]), pt.y + k * (n0[1] + n1[1])]))
+                        }
+                        _ => Err(format!(
+                            "edge_break: the top's corner at ({:.3}, {:.3}) is sharp where an arc meets (or turns inward); this phase breaks sharp corners between lines only",
+                            pt.x, pt.y
+                        )),
+                    }
+                };
+                match *sg {
+                    Seg::Line { a: pa, b: pb } => {
+                        let u2 = dir(sg, false);
+                        let nn = [u2[1], -u2[0]];
+                        let len = ((pb.x - pa.x).powi(2) + (pb.y - pa.y).powi(2)).sqrt();
+                        let qb = s * std::f64::consts::SQRT_2;
+                        // bottom ends: moved out by s, or the corner
+                        let ca = junction(prev, sg, *sg)?;
+                        let cb = junction(sg, next, *next)?;
+                        let along = |p: [f64; 2]| (p[0] - pa.x) * u2[0] + (p[1] - pa.y) * u2[1];
+                        let pa_b = ca.map(along).unwrap_or(0.0);
+                        let pb_b = cb.map(along).unwrap_or(len);
+                        let poly = [[0.0, 0.0], [len, 0.0], [pb_b, qb], [pa_b, qb]];
+                        let segs: Vec<TSeg> = (0..4)
+                            .map(|k| TSeg::Line {
+                                a: poly[k],
+                                b: poly[(k + 1) % 4],
+                            })
+                            .collect();
+                        // o + p u + q v: u along the piece, v down the 45° slope outward; the
+                        // quadrilateral runs anticlockwise in (p, q) when u × v points out of the
+                        // part (up and out)
+                        faces.push(Face::new(
+                            Surf::Plane {
+                                o: [pa.x, pa.y, z],
+                                u: [u2[0], u2[1], 0.0],
+                                v: [nn[0] * rt2, nn[1] * rt2, -rt2],
+                            },
+                            Ival::new(pa_b.min(0.0) - mu, pb_b.max(len) + mu),
+                            Ival::new(-mu, qb + mu),
+                            Some(Trim { segs }),
+                            mu,
+                            id,
+                        ));
+                        id += 1;
+                    }
+                    Seg::Arc {
+                        a: pa,
+                        b: pb,
+                        c: cc,
+                        ccw,
+                    } => {
+                        junction(prev, sg, *sg)?;
+                        junction(sg, next, *next)?;
+                        let r1 = ((pa.x - cc.x).powi(2) + (pa.y - cc.y).powi(2)).sqrt();
+                        let full = pa == pb;
+                        // pieces of at most a quarter turn
+                        let t0 = forge_math::dmath::atan2(pa.y - cc.y, pa.x - cc.x);
+                        let mut t1 = if full {
+                            t0 + if ccw {
+                                std::f64::consts::TAU
+                            } else {
+                                -std::f64::consts::TAU
+                            }
+                        } else {
+                            forge_math::dmath::atan2(pb.y - cc.y, pb.x - cc.x)
+                        };
+                        if !full {
+                            if ccw {
+                                while t1 <= t0 {
+                                    t1 += std::f64::consts::TAU;
+                                }
+                            } else {
+                                while t1 >= t0 {
+                                    t1 -= std::f64::consts::TAU;
+                                }
+                            }
+                        }
+                        let m = (((t1 - t0).abs() / (0.5 * std::f64::consts::PI)).ceil() as usize).max(1);
+                        for k in 0..m {
+                            let (u0, u1) = (
+                                t0 + (t1 - t0) * k as f64 / m as f64,
+                                t0 + (t1 - t0) * (k + 1) as f64 / m as f64,
+                            );
+                            let um = 0.5 * (u0 + u1);
+                            let hh = 0.5 * (u1 - u0).abs();
+                            let (sm, cm) = forge_math::dmath::sin_cos(um);
+                            // tan of a quarter of the sweep, widened a little (a superset)
+                            let th = forge_math::dmath::sin(0.5 * hh) / forge_math::dmath::cos(0.5 * hh)
+                                * (1.0 + 1e-12);
+                            // ccw (the centre inside): the radius grows going down; cw shrinks
+                            let kk = if ccw { 1.0 } else { -1.0 };
+                            faces.push(Face::new(
+                                Surf::Cone {
+                                    o: [cc.x, cc.y, z],
+                                    x: [cm, sm, 0.0],
+                                    y: [-sm, cm, 0.0],
+                                    ax: [0.0, 0.0, -1.0],
+                                    r0: r1,
+                                    k: kk,
+                                },
+                                Ival::new(-th, th),
+                                Ival::new(0.0, s),
+                                None,
+                                mu,
+                                id,
+                            ));
+                            id += 1;
+                        }
+                    }
+                }
+            }
+        }
+        out.target = Some(faces);
+        out.removals.push(format!(
+            "edge_break {s} x 45° of the top at z {z:.3}: the band within {s} of its edges, from z {zc:.3} up, below the 45° surface"
+        ));
+        // the path: the axis on R ⊕ c, the tip at z − s − e
+        let (pl, _) = forge_cam_geom::offset::offset(&rg, -c).map_err(|e| format!("edge_break: {e:?}"))?;
+        let np = pl
+            .iter()
+            .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b)))
+            .count();
+        if np != rg.loops.len() {
+            out.fix = Some(format!(
+                "a chamfer mill with a smaller tip (its axis runs {c:.3} mm off the edge)"
+            ));
+            return Err(format!(
+                "edge_break: the tool's axis path R ⊕ {c:.3} has {np} loops where the top has {}: a hole is too small for the tool",
+                rg.loops.len()
+            ));
+        }
+        let zt = zc - E;
+        ops::contour(
+            &rg,
+            ops::Cut {
+                tool: t,
+                tidx: ti,
+                h,
+                feed,
+            },
+            ops::Span {
+                top: zt,
+                bottom: zt,
+                step: 1.0,
+            },
+            c - rt,
+            true,
+        )
+        .map(|p| vec![p])
+        .map_err(|e| format!("{e:?}"))
     }
 
     fn feeds_for(&self, su: usize, t: &ToolUse, ae: f64, ap: f64) -> Option<feeds::Feeds> {
@@ -611,6 +1921,9 @@ impl Cam {
                 "contour" => "contour",
                 "pocket" => "pocket",
                 "clear" => "clear",
+                "engrave" => "engrave",
+                "thread_mill" => "thread_mill",
+                "edge_break" => "edge_break",
                 _ => "drill",
             },
             setup: su,
@@ -629,7 +1942,11 @@ impl Cam {
             time_s: 0.0,
             least: f64::INFINITY,
             plan: vec![],
+            leave: get_num(a, "leave", Some(0.0))?,
+            target: None,
+            removals: vec![],
             stock_before: Some(s.ip.clone()),
+            voids: vec![],
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
         let paths: Result<Vec<OpPath>, String> = match kind {
@@ -643,6 +1960,12 @@ impl Cam {
                 let t = &self.tools[ti];
                 let d = t.tool.dc;
                 let step = get_num(a, "step", Some(0.5 * d))?;
+                // a helical entry at this angle (degrees) where it fits; else plunges
+                let ramp = match a.get("ramp") {
+                    None => None,
+                    Some(V::Num(x)) if *x > 0.0 && *x <= 30.0 => Some(*x),
+                    Some(_) => return Err("ramp: an angle in degrees, over 0 and at most 30".into()),
+                };
                 let fd = match kind {
                     "facing" => self.feeds_for(su, t, 0.7 * d, step.min(t.tool.lcf)),
                     "pocket" => self.feeds_for(su, t, get_num(a, "stepover", Some(0.4 * d))?, step),
@@ -655,9 +1978,25 @@ impl Cam {
                 out.feeds = fd;
                 let h = s.heights;
                 match kind {
+                    "engrave" => self.engrave(su, a, t, ti, h, (vf, vp), step, &mut voids),
+                    "thread_mill" => self.thread_mill(su, a, t, ti, h, (vf, vp), &mut out, &mut voids),
+                    "edge_break" => self.edge_break(su, a, t, ti, h, (vf, vp), &mut out),
                     "facing" => {
                         let z = get_num(a, "to", Some(part.bbox.1[2]))?;
-                        let p = ops::facing(&s.stock, t, ti, h, s.stock.max[2], z, step, (vf, vp));
+                        let p = ops::facing(
+                            &s.stock,
+                            ops::Cut {
+                                tool: t,
+                                tidx: ti,
+                                h,
+                                feed: (vf, vp),
+                            },
+                            ops::Span {
+                                top: s.stock.max[2],
+                                bottom: z,
+                                step,
+                            },
+                        );
                         voids.push((None, z));
                         Ok(vec![p])
                     }
@@ -671,7 +2010,9 @@ impl Cam {
                         let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
                             .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
                         let islands = outer_or_inner(&sec, true)?;
-                        let g = r;
+                        // the tool may pass wholly outside the stock: a strip between the part
+                        // and the stock's face narrower than the tool is still cleared
+                        let g = 2.0 * r;
                         let (x0, y0, x1, y1) = (
                             s.stock.min[0] - g,
                             s.stock.min[1] - g,
@@ -694,21 +2035,22 @@ impl Cam {
                         let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                         let p = ops::pocket(
                             &rg,
-                            t,
-                            ti,
-                            h,
-                            top,
-                            bottom,
-                            step,
+                            ops::Cut {
+                                tool: t,
+                                tidx: ti,
+                                h,
+                                feed: (vf, vp),
+                            },
+                            ops::Span { top, bottom, step },
                             stepover,
                             get_num(a, "leave", Some(0.0))?,
-                            (vf, vp),
+                            ramp,
                         )
                         .map_err(|e| format!("{e:?}"))?;
-                        if stepover <= r {
-                            if let Some(o) = opening(&rg, r) {
-                                voids.push((Some(o), bottom));
-                            }
+                        if stepover <= r
+                            && let Some(o) = opening(&rg, r)
+                        {
+                            voids.push((Some(o), bottom));
                         }
                         Ok(vec![p])
                     }
@@ -726,86 +2068,160 @@ impl Cam {
                             let r = 0.5 * d;
                             if let Ok((c, _)) = forge_cam_geom::offset::offset(&rg, -(r + leave)) {
                                 let cr = forge_cam_geom::boolean::region_of(&c);
+                                if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                                    let o = forge_cam_geom::offset::offset(&cr, -r).map(|x| x.0.len());
+                                    let i = forge_cam_geom::offset::offset(&cr, r).map(|x| x.0.len());
+                                    eprintln!("band: c {} loops; outer {o:?} inner {i:?}", c.len());
+                                }
                                 if let (Ok((outer, _)), Ok((inner, _))) = (
                                     forge_cam_geom::offset::offset(&cr, -r),
                                     forge_cam_geom::offset::offset(&cr, r),
+                                ) && let Ok(band) = forge_cam_geom::boolean::boolean(
+                                    &forge_cam_geom::boolean::region_of(&outer),
+                                    &forge_cam_geom::boolean::region_of(&inner),
+                                    forge_cam_geom::boolean::Op::Diff,
                                 ) {
-                                    if let Ok(band) = forge_cam_geom::boolean::boolean(
-                                        &forge_cam_geom::boolean::region_of(&outer),
-                                        &forge_cam_geom::boolean::region_of(&inner),
-                                        forge_cam_geom::boolean::Op::Diff,
-                                    ) {
-                                        voids.push((Some(forge_cam_geom::boolean::region_of(&band)), bottom));
-                                    }
+                                    voids.push((Some(forge_cam_geom::boolean::region_of(&band)), bottom));
                                 }
                             }
-                            ops::contour(&rg, t, ti, h, top, bottom, step, leave, true, (vf, vp))
-                                .map(|p| vec![p])
-                                .map_err(|e| format!("{e:?}"))
+                            ops::contour(
+                                &rg,
+                                ops::Cut {
+                                    tool: t,
+                                    tidx: ti,
+                                    h,
+                                    feed: (vf, vp),
+                                },
+                                ops::Span { top, bottom, step },
+                                leave,
+                                true,
+                            )
+                            .map(|p| vec![p])
+                            .map_err(|e| format!("{e:?}"))
                         } else {
-                            ops::contour(&rg, t, ti, h, top, bottom, step, leave, false, (vf, vp))
-                                .map(|p| vec![p])
-                                .map_err(|e| format!("{e:?}"))
+                            ops::contour(
+                                &rg,
+                                ops::Cut {
+                                    tool: t,
+                                    tidx: ti,
+                                    h,
+                                    feed: (vf, vp),
+                                },
+                                ops::Span { top, bottom, step },
+                                leave,
+                                false,
+                            )
+                            .map(|p| vec![p])
+                            .map_err(|e| format!("{e:?}"))
                         }
                     }
                     _ => {
-                        // a pocket of a hole feature: its circle, its depth
-                        let (pi, hn) = match a.get("#1") {
-                            Some(V::Holes(p, n)) => (*p, n.clone()),
-                            _ => return Err("pocket(SETUP, PART.HOLE, tool: ..)".into()),
-                        };
-                        let hole = self.parts[pi]
-                            .holes
-                            .iter()
-                            .find(|x| x.name == hn)
-                            .unwrap()
-                            .clone();
-                        if hole.dir != [0.0, 0.0, -1.0] {
-                            return Err(format!(
-                                "the hole `{hn}` is not drilled along −z: it needs its own setup"
-                            ));
-                        }
-                        let stepover = get_num(a, "stepover", Some(0.4 * d))?;
-                        let mut paths = vec![];
-                        for p in &hole.places {
-                            let r = 0.5 * hole.d;
-                            let st = p2(p[0] + r, p[1]);
-                            let rg = Region {
-                                loops: vec![Loop {
-                                    segs: vec![Seg::Arc {
-                                        a: st,
-                                        b: st,
-                                        c: p2(p[0], p[1]),
-                                        ccw: true,
-                                    }],
-                                }],
-                            };
-                            let bottom = match hole.depth {
-                                Some(dd) => p[2] - dd,
-                                None => self.parts[pi].bbox.0[2] - 0.5,
-                            };
-                            paths.push(
-                                ops::pocket(
-                                    &rg,
-                                    t,
-                                    ti,
-                                    h,
-                                    p[2],
-                                    bottom,
-                                    step,
-                                    stepover,
-                                    get_num(a, "leave", Some(0.0))?,
-                                    (vf, vp),
-                                )
-                                .map_err(|e| format!("{e:?}"))?,
-                            );
-                            if stepover <= 0.5 * d {
-                                if let Some(o) = opening(&rg, 0.5 * d) {
+                        // with no hole named: every hole and slot of the part's section between
+                        // two heights (its inner loops, each a pocket; islands inside them kept)
+                        if a.get("#1").is_none() {
+                            let top = get_num(a, "from", None)?;
+                            let bottom = get_num(a, "to", None)?;
+                            let zmid = 0.5 * (top + bottom);
+                            let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
+                                .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                            let holes = outer_or_inner(&sec, false)?;
+                            let stepover = get_num(a, "stepover", Some(0.4 * d))?;
+                            let leave = get_num(a, "leave", Some(0.0))?;
+                            let mut paths = vec![];
+                            for l in &holes.loops {
+                                let rg = Region {
+                                    loops: vec![l.clone()],
+                                };
+                                paths.push(
+                                    ops::pocket(
+                                        &rg,
+                                        ops::Cut {
+                                            tool: t,
+                                            tidx: ti,
+                                            h,
+                                            feed: (vf, vp),
+                                        },
+                                        ops::Span { top, bottom, step },
+                                        stepover,
+                                        leave,
+                                        ramp,
+                                    )
+                                    .map_err(|e| format!("{e:?}"))?,
+                                );
+                                let o = if stepover <= 0.5 * d {
+                                    opening(&rg, 0.5 * d)
+                                } else {
+                                    None
+                                };
+                                if let Some(o) = o {
                                     voids.push((Some(o), bottom));
                                 }
                             }
+                            Ok(paths)
+                        } else {
+                            let (pi, hn) = match a.get("#1") {
+                            Some(V::Holes(p, n)) if *p == self.setups[su].part => (*p, n.clone()),
+                            Some(V::Holes(..)) => return Err("the hole is drilled from the side it opens on: in a setup that holds the part that way up".into()),
+                            _ => return Err("pocket(SETUP, PART.HOLE, tool: ..) or pocket(SETUP, from:, to:, tool: ..)".into()),
+                        };
+                            let hole = self.parts[pi]
+                                .holes
+                                .iter()
+                                .find(|x| x.name == hn)
+                                .unwrap()
+                                .clone();
+                            if hole.dir != [0.0, 0.0, -1.0] {
+                                return Err(format!(
+                                    "the hole `{hn}` is not drilled along −z: it needs its own setup"
+                                ));
+                            }
+                            let stepover = get_num(a, "stepover", Some(0.4 * d))?;
+                            let mut paths = vec![];
+                            for p in &hole.places {
+                                let r = 0.5 * hole.d;
+                                let st = p2(p[0] + r, p[1]);
+                                let rg = Region {
+                                    loops: vec![Loop {
+                                        segs: vec![Seg::Arc {
+                                            a: st,
+                                            b: st,
+                                            c: p2(p[0], p[1]),
+                                            ccw: true,
+                                        }],
+                                    }],
+                                };
+                                let bottom = match hole.depth {
+                                    Some(dd) => p[2] - dd,
+                                    None => self.parts[pi].bbox.0[2] - 0.5,
+                                };
+                                paths.push(
+                                    ops::pocket(
+                                        &rg,
+                                        ops::Cut {
+                                            tool: t,
+                                            tidx: ti,
+                                            h,
+                                            feed: (vf, vp),
+                                        },
+                                        ops::Span {
+                                            top: p[2],
+                                            bottom,
+                                            step,
+                                        },
+                                        stepover,
+                                        get_num(a, "leave", Some(0.0))?,
+                                        ramp,
+                                    )
+                                    .map_err(|e| format!("{e:?}"))?,
+                                );
+                                if stepover <= 0.5 * d
+                                    && let Some(o) = opening(&rg, 0.5 * d)
+                                {
+                                    voids.push((Some(o), bottom));
+                                }
+                            }
+                            Ok(paths)
                         }
-                        Ok(paths)
                     }
                 }
             }
@@ -820,6 +2236,7 @@ impl Cam {
             }
         };
         out.paths = paths;
+        out.voids = voids.clone();
         for (v, floor) in voids {
             match v {
                 None => self.setups[su].ip.face_to(floor),
@@ -839,7 +2256,10 @@ impl Cam {
         voids: &mut Vec<(Option<Region>, f64)>,
     ) -> Result<Vec<OpPath>, String> {
         let (pi, hn) = match a.get("#1") {
-            Some(V::Holes(p, n)) => (*p, n.clone()),
+            Some(V::Holes(p, n)) if *p == self.setups[su].part => (*p, n.clone()),
+            Some(V::Holes(..)) => {
+                return Err("the hole is drilled from the side it opens on: in a setup that holds the part that way up".into());
+            }
             _ => return Err("drill(SETUP, PART.HOLE, plan: \"auto\")".into()),
         };
         let hole = self.parts[pi]
@@ -885,7 +2305,14 @@ impl Cam {
             .iter()
             .find(|t| t.kind == Kind::Spot && t.dc >= drill_d)
             .cloned();
+        // plan "auto": spot, drill, tap a thread; "drill": spot and drill, the thread left to a
+        // thread mill
+        let plan_kind = get_str(a, "plan", Some("auto"))?;
+        if plan_kind != "auto" && plan_kind != "drill" {
+            return Err("plan: \"auto\" (spot, drill, tap a thread) or \"drill\" (no tap)".into());
+        }
         let tap = match hole.thread {
+            Some(_) if plan_kind == "drill" => None,
             Some((major, pitch)) => {
                 let t = self
                     .lib
@@ -929,8 +2356,20 @@ impl Cam {
                 .map(|x| 0.3 * x.vf)
                 .unwrap_or(100.0);
             // a 90° spot to just under the drill's radius: the chamfer ring the drill centres in
-            let dspot = 0.45 * drill_d / (0.5 * t.tool.angle).to_radians().tan().max(1e-9);
-            let mut p = ops::holes(&hole.places, CycleKind::Drill, t, ti, h, 0.0, 0.0, f);
+            let (sn, cs) = forge_math::dmath::sin_cos((0.5 * t.tool.angle).to_radians());
+            let dspot = 0.45 * drill_d / (sn / cs).max(1e-9);
+            let mut p = ops::holes(
+                &hole.places,
+                CycleKind::Drill,
+                ops::Cut {
+                    tool: t,
+                    tidx: ti,
+                    h,
+                    feed: (f, f),
+                },
+                0.0,
+                0.0,
+            );
             for m in &mut p.moves {
                 if let PMove::Cycle { z, r, .. } = m {
                     *z = *r - 2.0 - dspot;
@@ -950,12 +2389,14 @@ impl Cam {
         paths.push(ops::holes(
             &hole.places,
             kind,
-            t,
-            ti,
-            h,
+            ops::Cut {
+                tool: t,
+                tidx: ti,
+                h,
+                feed: (f, f),
+            },
             depth,
             if peck { t.tool.dc } else { 0.0 },
-            f,
         ));
         // each hole's circle is cleared down to where the full diameter reaches
         for p in &hole.places {
@@ -995,12 +2436,14 @@ impl Cam {
             let mut p = ops::holes(
                 &hole.places,
                 CycleKind::Tap,
-                t,
-                ti,
-                h,
+                ops::Cut {
+                    tool: t,
+                    tidx: ti,
+                    h,
+                    feed: (f, f),
+                },
                 depth.min(hole.depth.unwrap_or(depth)),
                 0.0,
-                f,
             );
             p.rpm = rpm;
             paths.push(p);
@@ -1014,14 +2457,144 @@ impl Cam {
 
 /// The opening of a region by a disc of radius r, (R ⊖ B_r) ⊕ B_r: what a pocket with
 /// stepover ≤ r provably clears.
-fn opening(rg: &Region, r: f64) -> Option<Region> {
-    let (c, _) = forge_cam_geom::offset::offset(rg, r).ok()?;
-    if c.is_empty() {
+/// A flat face's trim (its pieces, loop after loop) as a region: each loop closes where a piece
+/// ends at its loop's start.
+fn trim_region(segs: &[forge_cam_geom::check::TSeg]) -> Option<Region> {
+    use forge_cam_geom::check::TSeg;
+    let mut loops = vec![];
+    let mut cur: Vec<Seg> = vec![];
+    for t in segs {
+        let s = match *t {
+            TSeg::Line { a, b } => Seg::Line {
+                a: p2(a[0], a[1]),
+                b: p2(b[0], b[1]),
+            },
+            TSeg::Arc { a, b, c, ccw, .. } => Seg::Arc {
+                a: p2(a[0], a[1]),
+                b: p2(b[0], b[1]),
+                c: p2(c[0], c[1]),
+                ccw,
+            },
+        };
+        cur.push(s);
+        if cur[0].start() == s.end() {
+            loops.push(Loop {
+                segs: std::mem::take(&mut cur),
+            });
+        }
+    }
+    if !cur.is_empty() || loops.is_empty() {
         return None;
     }
-    let cr = forge_cam_geom::boolean::region_of(&c);
-    let (o, _) = forge_cam_geom::offset::offset(&cr, -r).ok()?;
-    Some(forge_cam_geom::boolean::region_of(&o))
+    Some(Region { loops })
+}
+
+/// The points within w of the segment p0 p1: a stadium (two lines, two half circles in quarter
+/// arcs), anticlockwise.
+fn stadium(p0: [f64; 2], p1: [f64; 2], w: f64) -> Region {
+    let (dx, dy) = (p1[0] - p0[0], p1[1] - p0[1]);
+    let l = (dx * dx + dy * dy).sqrt();
+    let (ux, uy) = (dx / l * w, dy / l * w);
+    let (nx, ny) = (-uy, ux);
+    let q = |p: [f64; 2], a: f64, b: f64| p2(p[0] + a, p[1] + b);
+    let (a0, a1, a2) = (q(p1, -nx, -ny), q(p1, ux, uy), q(p1, nx, ny));
+    let (b0, b1, b2) = (q(p0, nx, ny), q(p0, -ux, -uy), q(p0, -nx, -ny));
+    let (c1, c0) = (p2(p1[0], p1[1]), p2(p0[0], p0[1]));
+    Region {
+        loops: vec![Loop {
+            segs: vec![
+                Seg::Line { a: b2, b: a0 },
+                Seg::Arc {
+                    a: a0,
+                    b: a1,
+                    c: c1,
+                    ccw: true,
+                },
+                Seg::Arc {
+                    a: a1,
+                    b: a2,
+                    c: c1,
+                    ccw: true,
+                },
+                Seg::Line { a: a2, b: b0 },
+                Seg::Arc {
+                    a: b0,
+                    b: b1,
+                    c: c0,
+                    ccw: true,
+                },
+                Seg::Arc {
+                    a: b1,
+                    b: b2,
+                    c: c0,
+                    ccw: true,
+                },
+            ],
+        }],
+    }
+}
+
+/// The points within w of the circle about c of radius r (r > w): a ring.
+fn ring(c: [f64; 2], r: f64, w: f64) -> Region {
+    let circ = |rr: f64, ccw: bool| {
+        let a = p2(c[0] + rr, c[1]);
+        Loop {
+            segs: vec![Seg::Arc {
+                a,
+                b: a,
+                c: p2(c[0], c[1]),
+                ccw,
+            }],
+        }
+    };
+    Region {
+        loops: vec![circ(r + w, true), circ(r - w, false)],
+    }
+}
+
+fn opening(rg: &Region, r: f64) -> Option<Region> {
+    let dbg = |e: &dyn std::fmt::Debug| {
+        if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+            eprintln!("opening: {e:?}");
+        }
+    };
+    let (c, _) = forge_cam_geom::offset::offset(rg, r).map_err(|e| dbg(&e)).ok()?;
+    // the tool centres' region; an isolated point of it (where the tool just fits) clears the
+    // disk of radius r about it, so it is grown as that disk, apart from the rest
+    let (pts, rest): (Vec<_>, Vec<_>) = c
+        .into_iter()
+        .partition(|l| l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b));
+    let mut out: Option<Region> = None;
+    if !rest.is_empty() {
+        let cr = forge_cam_geom::boolean::region_of(&rest);
+        let (o, _) = forge_cam_geom::offset::offset(&cr, -r)
+            .map_err(|e| dbg(&e))
+            .ok()?;
+        out = Some(forge_cam_geom::boolean::region_of(&o));
+    }
+    for l in pts {
+        let c = l.segs[0].start();
+        let a = p2(c.x + r, c.y);
+        let disk = Region {
+            loops: vec![Loop {
+                segs: vec![Seg::Arc {
+                    a,
+                    b: a,
+                    c,
+                    ccw: true,
+                }],
+            }],
+        };
+        out = Some(match out {
+            None => disk,
+            Some(o) => forge_cam_geom::boolean::region_of(
+                &forge_cam_geom::boolean::boolean(&o, &disk, forge_cam_geom::boolean::Op::Union)
+                    .map_err(|e| dbg(&e))
+                    .ok()?,
+            ),
+        });
+    }
+    out
 }
 
 /// The section's outer loops alone (outside work), or its islands as pocket boundaries.
@@ -1050,9 +2623,109 @@ fn outer_or_inner(sec: &Region, outer: bool) -> Result<Region, String> {
 }
 
 impl Cam {
+    /// G5 for one op's posted path: with the setup placed (`at:`), every position (an arc by its
+    /// circle's box, a superset) as each joint sees it (the spindle's Z: the tip's plus the tool's
+    /// length, stick-out and holder gauge) within the joint's travel, proven in outward-rounded
+    /// arithmetic; unplaced, each axis's span within its travel's width. The first violation.
+    fn axis_limits(&self, oi: usize, posted: &OpPath) -> Option<CheckOut> {
+        let s = &self.setups[self.ops[oi].setup];
+        let m = self.lib.machine(&s.machine).ok()?;
+        let t = &self.tools[posted.tool];
+        let gauge = t
+            .holder
+            .as_ref()
+            .and_then(|h| self.lib.holder(h).ok())
+            .map_or(0.0, |h| h.gauge_length);
+        let len = t.stickout + gauge;
+        // the path's box in program coordinates (part frame less the WCS origin)
+        let mut lo = [f64::INFINITY; 3];
+        let mut hi = [f64::NEG_INFINITY; 3];
+        let mut add = |p: [f64; 3]| {
+            for k in 0..3 {
+                lo[k] = lo[k].min(p[k] - s.origin[k]);
+                hi[k] = hi[k].max(p[k] - s.origin[k]);
+            }
+        };
+        add(posted.start);
+        let mut at = posted.start;
+        for mv in &posted.moves {
+            match *mv {
+                PMove::Rapid { to } | PMove::Line { to, .. } => {
+                    add(to);
+                    at = to;
+                }
+                PMove::Arc { to, c, .. } => {
+                    let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt() * (1.0 + 1e-12);
+                    add([c[0] - r, c[1] - r, to[2].min(at[2])]);
+                    add([c[0] + r, c[1] + r, to[2].max(at[2])]);
+                    add(to);
+                    at = to;
+                }
+                PMove::Cycle { .. } => {}
+            }
+        }
+        use forge_cam_geom::ival::Ival;
+        for k in 0..3 {
+            let Some(j) = m.joints.iter().find(|j| {
+                let a = j.axis;
+                (0..3).all(|q| if q == k { a[q].abs() == 1.0 } else { a[q] == 0.0 })
+            }) else {
+                continue;
+            };
+            let sign = j.axis[k];
+            let extra = if k == 2 { len } else { 0.0 };
+            let fail = |value: f64, limit: f64, what: String| CheckOut {
+                rule: "axis_limit",
+                verdict: "fail",
+                value,
+                limit,
+                at: [f64::NAN; 3],
+                tool_part: "machine",
+                other: what,
+                phase: "path",
+                move_index: 0,
+            };
+            match s.at {
+                Some(o) => {
+                    // the joint's coordinate at the box's ends: sign (p + at) + extra
+                    for (p, end) in [(lo[k], "least"), (hi[k], "greatest")] {
+                        let v = Ival::pt(p).add(Ival::pt(o[k])).add(Ival::pt(extra)).scale(sign);
+                        if !(v.lo >= j.range[0] && v.hi <= j.range[1]) {
+                            let lim = if v.lo < j.range[0] { j.range[0] } else { j.range[1] };
+                            return Some(fail(
+                                if v.lo < j.range[0] { v.lo } else { v.hi },
+                                lim,
+                                format!(
+                                    "joint {}: the path's {end} reach is outside its travel {:?}",
+                                    j.name, j.range
+                                ),
+                            ));
+                        }
+                    }
+                }
+                None => {
+                    let span = Ival::pt(hi[k]).sub(Ival::pt(lo[k])).hi;
+                    let width = j.range[1] - j.range[0];
+                    if span > width {
+                        return Some(fail(
+                            span,
+                            width,
+                            format!(
+                                "joint {}: the path spans {span:.3} mm, the travel {width:.3} mm",
+                                j.name
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Posts the setups' ops, reads the text back, and certifies the path the text means.
     fn post(&mut self, name: &str, setups: &[usize], post: &str, number: u32) -> ProgramOut {
         let mut po = ProgramOut {
+            setups: setups.to_vec(),
             name: name.into(),
             post: post.into(),
             text: None,
@@ -1211,7 +2884,7 @@ impl Cam {
                 let (to, ph, f) = match m {
                     forge_post::Motion::Rapid(p) => (back(*p), Phase::Rapid, 0.0),
                     forge_post::Motion::Feed(p, f) => (back(*p), Phase::Cut, *f as f64 / fscale),
-                    forge_post::Motion::Arc { to, c, cw, f } => {
+                    forge_post::Motion::Arc { to, c, cw, f, .. } => {
                         let t = back(*to);
                         if start.is_none() {
                             start = Some(t);
@@ -1282,11 +2955,136 @@ impl Cam {
             };
             let tool = self.tools[path.tool].clone();
             let part = &self.parts[s.part];
-            let stock_faces = match self.ops[oi].stock_before.as_ref().map(|ip| ip.faces()) {
-                Some(Ok(f)) => f,
-                _ => s.stock.faces(),
+            // the stock at each move: the op's start, then after each completed level (a
+            // retract after cutting at depth d), its voids cleared down to d (levels go down)
+            let base = self.ops[oi]
+                .stock_before
+                .clone()
+                .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
+            let faces_of = |ip: &forge_cam::stock::InProcess| {
+                let t0 = std::time::Instant::now();
+                let r = ip.faces();
+                if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                    eprintln!(
+                        "{}: stock faces {:?} in {:?} (voids {}, under {})",
+                        s.name,
+                        r.as_ref().map(|f| f.len()),
+                        t0.elapsed(),
+                        ip.voids.len(),
+                        ip.under.len()
+                    );
+                }
+                r.unwrap_or_else(|e| {
+                    if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                        eprintln!("stock faces: {e}");
+                    }
+                    s.stock.faces()
+                })
             };
-            let sum = ops::certify(&posted, &tool, &part.faces, &stock_faces, s.tol, s.clearance);
+            let mut stages = vec![(0usize, faces_of(&base))];
+            let mut deepest = f64::INFINITY;
+            let mut cut_z: Option<f64> = None;
+            for (i, m) in posted.moves.iter().enumerate() {
+                match *m {
+                    // a level's depth: the lowest point it cut (the feed back up is not one)
+                    PMove::Line {
+                        to,
+                        phase: Phase::Cut,
+                        ..
+                    }
+                    | PMove::Arc { to, .. } => cut_z = Some(cut_z.map_or(to[2], |c: f64| c.min(to[2]))),
+                    PMove::Line {
+                        phase: Phase::Link, ..
+                    }
+                    | PMove::Rapid { .. } => {
+                        if let Some(z) = cut_z.take()
+                            && z < deepest
+                            && !self.ops[oi].voids.is_empty()
+                        {
+                            deepest = z;
+                            let mut ip = base.clone();
+                            for (v, floor) in &self.ops[oi].voids {
+                                let f = floor.max(z);
+                                match v {
+                                    None => ip.face_to(f),
+                                    Some(r) => ip.cut(r.clone(), f),
+                                }
+                            }
+                            if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                                let m = ip.material(z + 0.1).map(|m| {
+                                    m.map(|m| {
+                                        (
+                                            m.loops.len(),
+                                            m.loops.iter().map(|l| l.segs.len()).collect::<Vec<_>>(),
+                                        )
+                                    })
+                                });
+                                eprintln!("stage at {z}: levels {:?} material above {m:?}", ip.levels());
+                            }
+                            stages.push((i, faces_of(&ip)));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                eprintln!(
+                    "{}: voids {:?} stages {:?}",
+                    self.ops[oi].name,
+                    self.ops[oi]
+                        .voids
+                        .iter()
+                        .map(|v| (v.0.as_ref().map(|r| r.loops.len()), v.1))
+                        .collect::<Vec<_>>(),
+                    stages.iter().map(|s| (s.0, s.1.len())).collect::<Vec<_>>()
+                );
+            }
+            let (ffaces, fclear) = match &s.fixture {
+                Some(f) => (f.faces(), f.clearance),
+                None => (vec![], 0.0),
+            };
+            let target = self.ops[oi].target.as_ref().unwrap_or(&part.faces);
+            let mut sum = ops::certify_fixtured(
+                &posted,
+                &tool,
+                target,
+                &stages,
+                &ffaces,
+                fclear,
+                s.tol,
+                s.clearance,
+            );
+            if let Some(f) = &s.fixture {
+                for c in &mut sum.checks {
+                    if c.rule == "fixture_collision"
+                        && let Some(id) = c.other.strip_prefix("fixture face ").and_then(|x| x.parse().ok())
+                        && let Some(p) = f.piece_of(id)
+                    {
+                        c.other = format!("{} ({p})", c.other);
+                    }
+                }
+            }
+            // G5: every position the posted path reaches, as the machine's joints see it
+            if let Some(c) = self.axis_limits(oi, &posted) {
+                sum.clear = false;
+                sum.checks.insert(0, c);
+            }
+            // the lowest the tool's tip goes in a move that met the fixture
+            let ends: Vec<[f64; 3]> = std::iter::once(posted.start)
+                .chain(posted.moves.iter().scan(posted.start, |at, m| {
+                    match *m {
+                        PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => *at = to,
+                        PMove::Cycle { .. } => {}
+                    }
+                    Some(*at)
+                }))
+                .collect();
+            let low_fix = sum
+                .checks
+                .iter()
+                .filter(|c| c.rule == "fixture_collision")
+                .filter_map(|c| Some(ends.get(c.move_index)?[2].min(ends.get(c.move_index + 1)?[2])))
+                .fold(f64::INFINITY, f64::min);
             let op = &mut self.ops[oi];
             op.moves += posted.moves.len();
             op.pairs += sum.pairs;
@@ -1304,6 +3102,24 @@ impl Cam {
                     c.rule, c.verdict, c.move_index, c.phase, c.value, c.limit, c.other
                 ));
                 op.fix = Some(match c.rule {
+                    "axis_limit" => "SetArg at: a work offset that keeps the program within travel, or the part placed elsewhere on the table (or a shorter tool for Z)".into(),
+                    "fixture_collision" => {
+                        let f = s.fixture.as_ref().expect("a fixture check has a fixture");
+                        let seat = s.stock.min[2];
+                        let clamp = f.jaw_top - seat;
+                        let fit = low_fix - f.clearance - seat;
+                        if low_fix.is_finite() && low_fix < f.jaw_top + f.clearance && fit > 0.0 {
+                            format!(
+                                "SetArg clamp: grip at most {fit:.2} mm (now {clamp:.2}): raise the stock in the vise; or leave below z = {:.2} to a second setup; or SetArg leave",
+                                f.jaw_top + f.clearance
+                            )
+                        } else {
+                            format!(
+                                "the cut reaches the jaws (top z = {:.2}): split the setup (machine this in a second setup, the part turned over), or SetArg clear: a higher clearance height for the rapids",
+                                f.jaw_top
+                            )
+                        }
+                    }
                     "holder_collision" if c.other.starts_with("stock") => "SetArg tool: a tool whose flutes reach the depth (lcf above the stock top), or clear the stock above first".into(),
                     "holder_collision" => "SetArg stickout: a longer stick-out, or a smaller holder".into(),
                     "rapid_clear" => "SetArg clear: a higher clearance height".into(),
@@ -1320,6 +3136,23 @@ impl Cam {
             po.text = None;
         }
         po
+    }
+
+    /// Whether a program's setups are all placed (`at:`), so G5 checked its positions.
+    fn placed(&self, p: &ProgramOut) -> bool {
+        p.setups.iter().all(|&i| self.setups[i].at.is_some())
+    }
+
+    /// "full": every check proven, G5 on every position; "except G5": released, but a posted
+    /// setup is not placed, so G5 checked spans only; "refused": not released.
+    pub fn certification(&self) -> &'static str {
+        if !self.ok {
+            "refused"
+        } else if self.programs.iter().all(|p| self.placed(p)) {
+            "full"
+        } else {
+            "except G5"
+        }
     }
 
     /// The reply, `forgecad.cam/1`.
@@ -1352,6 +3185,36 @@ impl Cam {
                     ),
                     ("tol", n(s.tol)),
                     ("clearance", n(s.clearance)),
+                    ("at", s.at.map(v3).unwrap_or(Json::Null)),
+                    (
+                        "fixture",
+                        match &s.fixture {
+                            None => Json::Null,
+                            Some(f) => Json::obj(vec![
+                                ("kind", Json::Str("vise".into())),
+                                ("name", Json::Str(f.name.clone())),
+                                ("across", Json::Str(if f.axis == 0 { "x" } else { "y" }.into())),
+                                ("jaw_top", n(f.jaw_top)),
+                                ("clamp", n(f.jaw_top - s.stock.min[2])),
+                                ("clearance", n(f.clearance)),
+                                (
+                                    "pieces",
+                                    Json::Arr(
+                                        f.boxes()
+                                            .into_iter()
+                                            .map(|(k, lo, hi)| {
+                                                Json::obj(vec![
+                                                    ("name", Json::Str(k)),
+                                                    ("min", v3(lo)),
+                                                    ("max", v3(hi)),
+                                                ])
+                                            })
+                                            .collect(),
+                                    ),
+                                ),
+                            ]),
+                        },
+                    ),
                     (
                         "heights",
                         Json::obj(vec![
@@ -1441,6 +3304,10 @@ impl Cam {
                         "plan",
                         Json::Arr(o.plan.iter().map(|s| Json::Str(s.clone())).collect()),
                     ),
+                    (
+                        "removals",
+                        Json::Arr(o.removals.iter().map(|s| Json::Str(s.clone())).collect()),
+                    ),
                     ("feeds", feeds.unwrap_or(Json::Null)),
                     (
                         "path",
@@ -1508,12 +3375,26 @@ impl Cam {
                     ("post", Json::Str(p.post.clone())),
                     ("lines", n(p.lines as f64)),
                     ("round_trip", p.round_trip.into()),
+                    (
+                        "certified",
+                        Json::Str(
+                            if p.error.is_some() {
+                                "no"
+                            } else if self.placed(p) {
+                                "full"
+                            } else {
+                                "except G5 (unchecked: no `at:`)"
+                            }
+                            .into(),
+                        ),
+                    ),
                     ("error", p.error.clone().map(Json::Str).unwrap_or(Json::Null)),
                 ])
             })
             .collect();
         Json::obj(vec![
             ("ok", self.ok.into()),
+            ("certification", Json::Str(self.certification().into())),
             ("schema", Json::Str("forgecad.cam/1".into())),
             ("errors", Json::Arr(self.errors.iter().map(|e| Json::Str(e.clone())).collect())),
             ("warnings", Json::Arr(self.warnings.iter().map(|e| Json::Str(e.clone())).collect())),
@@ -1527,7 +3408,7 @@ impl Cam {
                 "leftover",
                 Json::obj(vec![
                     ("computed", self.leftover_done.into()),
-                    ("rule", Json::Str("G4: final stock ⊆ (part ⊕ B_tol) ∪ these regions, by z band".into())),
+                    ("rule", Json::Str("G4: final stock ⊆ (part ⊕ B_{leave + tol}) ∪ these regions, by z band".into())),
                     (
                         "regions",
                         Json::Arr(
@@ -1538,7 +3419,7 @@ impl Cam {
                                         ("setup", Json::Str(self.setups[l.setup].name.clone())),
                                         ("z", Json::Arr(vec![Json::Num(l.z0), Json::Num(l.z1)])),
                                         ("boxes", Json::Arr(l.boxes.iter().map(|b| Json::Arr(b.iter().map(|x| Json::Num(*x)).collect())).collect())),
-                                        ("why", Json::Str("uncut".into())),
+                                        ("why", Json::Str(l.why.into())),
                                     ])
                                 })
                                 .collect(),
@@ -1548,7 +3429,7 @@ impl Cam {
             ),
             (
                 "scope",
-                Json::Str("Proven: the cutter, shank and holder clear the exact part (within tol for the cutter on cuts), rapids clear part and stock, on the posted path. Not claimed: cutting physics, the machine's fidelity, the true in-process stock beyond the proven-cleared voids.".into()),
+                Json::Str("Proven: the cutter, shank and holder clear the exact part (within tol for the cutter on cuts), rapids clear part and stock, and every body of the tool keeps the fixture's clearance from the fixture as modelled (a placed vise's boxes), on the posted path. Not claimed: cutting physics, the machine's fidelity, the true in-process stock beyond the proven-cleared voids.".into()),
             ),
         ])
     }
@@ -1577,6 +3458,16 @@ impl Cam {
                 s.heights.clear,
                 s.heights.retract
             ));
+            if let Some(f) = &s.fixture {
+                h.push_str(&format!(
+                    "<p>Held in the vise <b>{}</b>, jaws closed along {}, gripping {:.2} mm of the stock (jaw top z = {:.2}, part frame), on parallels; every move keeps {} mm from the vise as modelled. Measure the vise before trusting the clearance.</p>\n",
+                    esc(&f.name),
+                    if f.axis == 0 { "x" } else { "y" },
+                    f.jaw_top - s.stock.min[2],
+                    f.jaw_top,
+                    f.clearance
+                ));
+            }
         }
         h.push_str("<h2>Tools</h2>\n<table><tr><th>T</th><th>tool</th><th>type</th><th>D</th><th>flutes</th><th>holder</th><th>stick-out</th><th>source</th></tr>\n");
         for t in &self.tools {

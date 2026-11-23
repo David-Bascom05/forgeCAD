@@ -56,6 +56,32 @@ fn locate(cx: &mut Ctx, ex: &Exact, q: Pt, pc: &Piece) -> Where {
     let mut i = 0;
     while i < ex.elems.len() {
         let e = ex.elems[i].piece;
+        // the same circle (one centre, one squared radius, as expressions): q, on pc, is on e's
+        // circle by construction, and the pieces run the same way exactly when their senses
+        // agree; only the span is left to decide
+        if let (
+            Curve::Circle {
+                c: c1,
+                rad2: q1,
+                ccw: w1,
+                ..
+            },
+            Curve::Circle {
+                c: c2,
+                rad2: q2,
+                ccw: w2,
+                ..
+            },
+        ) = (pc.curve, e.curve)
+            && c1 == c2
+            && q1 == q2
+        {
+            if arr::on_span(cx, &e, q) {
+                return if w1 == w2 { Where::Same } else { Where::Opposite };
+            }
+            i += 1;
+            continue;
+        }
         if on_curve(cx, &e, q) {
             let m = cx.mark();
             let (t1, t2) = (arr::tangent(cx, pc, q), arr::tangent(cx, &e, q));
@@ -182,11 +208,13 @@ pub fn boolean(a: &Region, b: &Region, op: Op) -> Result<Vec<OLoop>, OffsetError
     crate::offset::link(&mut cx, &kept)
 }
 
-/// The loops as a region (each loop's pieces as given).
+/// The loops as a region (each loop's pieces as given). A loop that is one point is left out:
+/// a region is its area, and a point has none.
 pub fn region_of(loops: &[OLoop]) -> Region {
     Region {
         loops: loops
             .iter()
+            .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], region::Seg::Line { a, b } if a == b)))
             .map(|l| region::Loop { segs: l.segs.clone() })
             .collect(),
     }

@@ -29,10 +29,10 @@ fn close(a: P2, b: P2, tol: f64) -> bool {
 /// becomes a near-tie.
 fn merge_arcs(lp: Vec<Seg>) -> Vec<Seg> {
     let same = |x: &Seg, y: &Seg| matches!((x, y), (Seg::Arc { c: c1, ccw: w1, .. }, Seg::Arc { c: c2, ccw: w2, .. }) if c1 == c2 && w1 == w2);
-    if lp.iter().all(|s| same(s, &lp[0])) {
-        if let Seg::Arc { a, c, ccw, .. } = lp[0] {
-            return vec![Seg::Arc { a, b: a, c, ccw }];
-        }
+    if lp.iter().all(|s| same(s, &lp[0]))
+        && let Seg::Arc { a, c, ccw, .. } = lp[0]
+    {
+        return vec![Seg::Arc { a, b: a, c, ccw }];
     }
     // rotate so the loop starts at a break between different pieces
     let n = lp.len();
@@ -57,11 +57,12 @@ fn merge_arcs(lp: Vec<Seg>) -> Vec<Seg> {
 pub fn section(faces: &[Face], z: f64, mu: f64) -> Result<Region, SectionError> {
     let mut pieces: Vec<Seg> = Vec::new();
     for f in faces {
-        if f.bbox[2].hi < z || f.bbox[2].lo > z {
+        // a face within mu of the height counts (a flat face there is refused below)
+        if f.bbox[2].hi < z - mu || f.bbox[2].lo > z + mu {
             continue;
         }
         match &f.prism {
-            Some(Prism::Wall { sec, z0, z1 }) => {
+            Some(Prism::Wall { sec, z0, z1, .. }) => {
                 if *z0 < z && z < *z1 {
                     pieces.push(match *sec {
                         Sec::Seg { a, b } => Seg::Line {

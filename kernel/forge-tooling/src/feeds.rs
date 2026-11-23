@@ -180,7 +180,7 @@ mod tests {
             },
             [0.0, 1e9],
         );
-        assert!((full.rpm - 9549.296585513721).abs() < 1e-6);
+        assert!((full.rpm - 9_549.296_585_513_72).abs() < 1e-6);
         // ae/D = 0.1: k = 2 sqrt(0.09) = 0.6
         assert!((light.fz / full.fz - 1.0 / 0.6).abs() < 1e-12);
         assert!((light.hex - full.fz).abs() < 1e-12);
