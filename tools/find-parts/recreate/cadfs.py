@@ -31,8 +31,6 @@ TEXT = "text"  # a text sketch's regions: every glyph of each of its texts
 TEXT_FONTS = {
     "OpenSans-Regular.ttf": ("Open Sans", False, False),
     "OpenSans-Bold.ttf": ("Open Sans", True, False),
-    "OpenSans-Italic.ttf": ("Open Sans", False, True),
-    "OpenSans-BoldItalic.ttf": ("Open Sans", True, True),
 }
 SUPPORTED = {"sweep", "loft", "sketch", "extrude", "revolve", "fillet", "chamfer", "shell", "cPlane", "cPoint", "assignVariable", "hole", "mirror", "circularPattern", "transform", "booleanBodies"}
 PLANES = {"Front": ((0.0, -1.0, 0.0), (1.0, 0.0, 0.0)), "Top": ((0.0, 0.0, 1.0), (1.0, 0.0, 0.0)), "Right": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))}

@@ -180,7 +180,7 @@ TrueType quadratic is a degree-2 control spline on its three points, a CFF cubic
 its four. `size` is the em; the baseline starts at `at` (aligned by the line's advance), turned by
 `angle`; a list of strings, `text(["FIRST", "SECOND"], ..)`, sets each line the font's
 ascender − descender + line gap below the one before (a string holds no line break).
-`font:` is a shipped family (Open Sans: Regular, Bold, Italic, Bold Italic; Source Sans 3:
+`font:` is a shipped family (Open Sans 1.10: Regular, Bold; Source Sans 3:
 Regular, CFF outlines; SIL OFL 1.1) or a .ttf/.otf file beside the part, which is its one face
 (`bold`/`italic` must be its own). The text's regions are only its own glyphs' (whatever else
 the sketch draws): each outside contour with the counters inside it as holes, which loop lies

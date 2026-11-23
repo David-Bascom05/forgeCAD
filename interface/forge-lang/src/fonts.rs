@@ -1,4 +1,4 @@
-//! The fonts shipped with ForgeCAD, by family and style: Open Sans 1.10 (TrueType outlines; the
+//! The fonts shipped with ForgeCAD, by family and style: Open Sans 1.10 Regular and Bold (TrueType outlines; the
 //! version Onshape sets sketch text in; Apache License 2.0) and Source Sans 3 (CFF outlines; SIL
 //! Open Font License 1.1). Both licences allow them to be embedded and redistributed with
 //! software (fonts/README.md records where each came from, its licence and its hash).
@@ -25,16 +25,6 @@ const FACES: &[Face] = &[
         family: "Open Sans",
         style: "Bold",
         bytes: include_bytes!("../fonts/OpenSans-Bold.ttf"),
-    },
-    Face {
-        family: "Open Sans",
-        style: "Italic",
-        bytes: include_bytes!("../fonts/OpenSans-Italic.ttf"),
-    },
-    Face {
-        family: "Open Sans",
-        style: "Bold Italic",
-        bytes: include_bytes!("../fonts/OpenSans-BoldItalic.ttf"),
     },
     Face {
         family: "Source Sans 3",
@@ -137,5 +127,6 @@ mod tests {
             }
         });
         assert!(shipped("Source Sans 3", true, false).is_none());
+        assert!(shipped("Open Sans", false, true).is_none());
     }
 }

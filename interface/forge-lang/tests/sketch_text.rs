@@ -44,7 +44,7 @@ fn raised_and_cut_text_builds_valid() {
         "",
         ", font: \"Source Sans 3\"",
         ", bold: true",
-        ", italic: true, align: \"center\"",
+        ", font: \"Source Sans 3\", align: \"center\"",
     ] {
         for op in ["extrude", "cut"] {
             let r = run(&part("FORGE 40", font, op));
@@ -136,6 +136,7 @@ fn refusals_are_typed() {
     // a family not shipped, a style it lacks, a character it lacks, nothing drawn
     assert!(kind(part("A", ", font: \"Nope Sans\"", "extrude")).contains("NoFamily"));
     assert!(kind(part("A", ", font: \"Source Sans 3\", bold: true", "extrude")).contains("NoStyle"));
+    assert!(kind(part("A", ", italic: true", "extrude")).contains("NoStyle"));
     assert!(kind(part("A\u{4e2d}", "", "extrude")).contains("NoGlyph"));
     assert!(kind(part("  ", "", "extrude")).contains("Empty"));
     // Open Sans's C cedilla: its cedilla crosses the C, refused rather than joined
