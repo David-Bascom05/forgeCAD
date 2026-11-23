@@ -260,6 +260,8 @@ pub fn json(run: &Run, src: &str) -> Json {
                 .into_iter()
                 // the sheets' area apart, where the part has sheets: volume and area are the solids'
                 .chain(sheet_area(m).map(|a| ("sheet_area", a.into())))
+                // the bodies that are sheets, by the features that made them
+                .chain(sheet_bodies(run).map(|ids| ("sheets", ids)))
                 .chain([
                     (
                         "problems",
@@ -288,6 +290,18 @@ pub fn json(run: &Run, src: &str) -> Json {
         f.push(("drawings", crate::drawing::block::summary(src, "")));
     }
     Json::obj(f)
+}
+
+/// The features whose bodies are sheets, where the part has any.
+fn sheet_bodies(run: &Run) -> Option<Json> {
+    let ids: Vec<Json> = run
+        .solids
+        .iter()
+        .filter(|s| s.sheet)
+        .filter_map(|s| run.feats.iter().find(|f| f.idx == s.solid))
+        .map(|f| f.id.as_str().into())
+        .collect();
+    (!ids.is_empty()).then_some(Json::Arr(ids))
 }
 
 /// The area of the part's sheets, where it has any.
