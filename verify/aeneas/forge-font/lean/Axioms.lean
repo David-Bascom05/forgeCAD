@@ -18,6 +18,7 @@ theorem's axioms; none may be `sorryAx` or `Lean.ofReduceBool`. -/
 #print axioms ForgeFont.curve_spec
 #print axioms ForgeFont.flex_spec
 #print axioms ForgeFont.op_spec
+#print axioms ForgeFont.call_spec
 #print axioms ForgeFont.one_spec
 #print axioms ForgeFont.run_loop_spec
 #print axioms ForgeFont.run_spec

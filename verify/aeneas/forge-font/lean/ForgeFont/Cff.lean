@@ -1198,6 +1198,127 @@ def RunInv (d : Slice U8) (p : cff_core.Pen) (s : cff_core.Stack) (f : cff_core.
 theorem stack_val : cff_core.STACK.val = 48 := by simp [cff_core.STACK]
 theorem nesting_val : cff_core.NESTING.val = 10 := by simp [cff_core.NESTING]
 
+/-- `one`'s subroutine call (the same for `b0 = 10` and `b0 = 29`), proven apart from `one_spec`:
+its goal is that branch of `one` as translated. -/
+theorem call_spec (d : Slice U8) (gsubrs local_ : Slice Usize) (f : cff_core.Frame)
+    (frames : alloc.vec.Vec cff_core.Frame) (p : cff_core.Pen) (s : cff_core.Stack)
+    (m : cff_core.Machine) (i i1 : Usize) (b0 : U8)
+    (hp : PenOk p) (hn1 : Near (2^37 * (used m + 1 : Nat)) p)
+    (hc1 : p.contour.val.length ≤ 60 * (used m + 1)) (ho1' : p.out.val.length ≤ used m + 1)
+    (hst1 : m.stems.val ≤ 24 * (used m + 1)) (hs : StackOk (2^31) s.v s.lo) (hlo : s.lo.val = 0)
+    (hfe : f.e.val ≤ d.val.length) (hfr : frames.val.length ≤ 10)
+    (hfrs : ∀ g ∈ frames.val, g.o.val ≤ g.e.val ∧ g.e.val ≤ d.val.length)
+    (hsteps : m.steps.val ≤ 65536) (hsi : i.val + 1 = m.steps.val) (hfo1 : i1.val ≤ f.e.val) :
+    (do
+      let (o, v) ← alloc.vec.Vec.pop alloc.alloc.Global s.v
+      match o with
+      | none =>
+        ok (cff_core.NO_NUMBER, { f with o := i1 }, frames, p,
+          { s with v }, { m with steps := i })
+      | some k =>
+        let i2 ← k % cff_core.ONE
+        if i2 != 0#i64
+        then
+          ok (cff_core.NOT_WHOLE, { f with o := i1 }, frames, p,
+            { s with v }, { m with steps := i })
+        else
+          let idx ← if b0 = 10#u8
+                      then ok local_
+                      else ok gsubrs
+          let i3 ← k / cff_core.ONE
+          let o1 ← cff_core.subr d idx i3
+          match o1 with
+          | none =>
+            ok (cff_core.NOT_THERE, { f with o := i1 }, frames, p,
+              { s with v }, { m with steps := i })
+          | some p1 =>
+            let (a, b) := p1
+            let i4 := alloc.vec.Vec.len frames
+            let i5 ← i4 + 1#usize
+            if i5 > cff_core.NESTING
+            then
+              ok (cff_core.NESTED, { f with o := i1 }, frames, p,
+                { s with v }, { m with steps := i })
+            else
+              let frames1 ← alloc.vec.Vec.push frames { f with o := i1 }
+              ok (cff_core.OK, { s := a, e := b, o := a }, frames1, p,
+                { s with v }, { m with steps := i }) :
+      Result (U8 × cff_core.Frame × alloc.vec.Vec cff_core.Frame × cff_core.Pen × cff_core.Stack ×
+        cff_core.Machine)) ⦃ e' f' frames' p' s' m' =>
+      RunInv d p' s' f' frames' m' ∧
+      ((m'.steps.val + 1 = m.steps.val ∧ frames'.val.length ≤ frames.val.length + 1) ∨
+        e' ≠ cff_core.OK) ⦄ := by
+  have tick : ∀ (p' : cff_core.Pen) (s' : cff_core.Stack) (f' : cff_core.Frame)
+      (frames' : alloc.vec.Vec cff_core.Frame) (m' : cff_core.Machine), m'.steps = i →
+      PenOk p' → Near (2^37 * (used m + 1 : Nat)) p' →
+      p'.contour.val.length ≤ 60 * (used m + 1) → p'.out.val.length ≤ used m + 1 →
+      m'.stems.val ≤ 24 * (used m + 1) → StackOk (2^31) s'.v s'.lo → s'.lo.val = 0 →
+      f'.e.val ≤ d.val.length → frames'.val.length ≤ 10 →
+      (∀ g ∈ frames'.val, g.o.val ≤ g.e.val ∧ g.e.val ≤ d.val.length) →
+      RunInv d p' s' f' frames' m' := by
+    intro p' s' f' frames' m' hm a b c e g k l q r t
+    have : used m' = used m + 1 := by simp only [used, hm]; omega
+    exact ⟨a, by rw [this]; exact b, by rw [hm]; omega, by rw [this]; exact c, by rw [this]; exact e,
+      by rw [this]; exact g, k, l, q, r, t⟩
+  have hpop : alloc.vec.Vec.pop alloc.alloc.Global s.v ⦃ r =>
+      (∀ k, r.1 = some k → Small (2^31) k) ∧ StackOk (2^31) r.2 s.lo ⦄ := by
+    simp only [alloc.vec.Vec.pop, WP.spec_ok]
+    refine ⟨fun k hk => hs.2.2 k (List.mem_of_getLast? hk), ?_, ?_, ?_⟩
+    · simp; omega
+    · simp; have := hs.2.1; omega
+    · intro y hy; exact hs.2.2 y (List.mem_of_mem_dropLast (by simpa using hy))
+  apply WP.spec_bind hpop
+  rintro ⟨o, v⟩ ⟨hk, hsv⟩
+  simp only [uncurry_apply_pair]
+  have base : ∀ e' : U8, RunInv d p { s with v := v } { f with o := i1 } frames { m with steps := i } ∧
+      ((i.val + 1 = m.steps.val ∧ frames.val.length ≤ frames.val.length + 1) ∨ e' ≠ cff_core.OK) :=
+    fun _ => ⟨tick p _ _ frames _ rfl hp hn1 hc1 ho1' hst1 hsv hlo hfe hfr hfrs, Or.inl ⟨hsi, by omega⟩⟩
+  cases o with
+  | none => simp only [WP.spec_ok, WP.uncurry'_pair]; exact base _
+  | some k =>
+    have hk' := hk k rfl
+    obtain ⟨hk0, hk1⟩ := hk'
+    simp only []
+    have hone := one_val
+    step as ⟨r2, hr2⟩
+    by_cases hz : (r2 != 0#i64) = true
+    · rw [if_pos hz]; simp only [WP.spec_ok, WP.uncurry'_pair]; exact base _
+    · rw [if_neg hz]
+      apply WP.spec_bind (m := if b0 = 10#u8 then ok local_ else ok gsubrs) (Pₘ := fun _ : Slice Usize => True)
+      · by_cases hb : b0 = 10#u8 <;> simp [hb]
+      intro idx _
+      step as ⟨k3, hk3⟩
+      have hk3b : -2^40 ≤ k3.val ∧ k3.val ≤ 2^40 := by
+        have hr0 : r2.val = 0 := by simpa using hz
+        have hdm := Int.tmod_add_mul_tdiv k.val 65536
+        rw [one_val] at hr2 hk3
+        rw [← hr2, hr0, ← hk3] at hdm
+        constructor <;> omega
+      step with subr_spec d idx k3 hk3b as ⟨o1, ho1s⟩
+      cases o1 with
+      | none => simp only [WP.spec_ok, WP.uncurry'_pair]; exact base _
+      | some ab =>
+        obtain ⟨a, b⟩ := ab
+        obtain ⟨hab, hbd⟩ := ho1s a b rfl
+        apply WP.spec_bind (Pₘ := fun i5 : Usize => i5.val = frames.val.length + 1)
+        · step*
+        intro i5 hi5
+        by_cases hnest : i5 > cff_core.NESTING
+        · rw [if_pos hnest]; simp only [WP.spec_ok, WP.uncurry'_pair]; exact base _
+        · rw [if_neg hnest]
+          have h10 : frames.val.length + 1 ≤ 10 := by have := nesting_val; scalar_tac
+          apply WP.spec_bind (alloc.vec.Vec.push_spec frames { f with o := i1 } (by scalar_tac))
+          intro frames1 hfr1
+          simp only [WP.spec_ok, WP.uncurry'_pair]
+          refine ⟨tick p _ _ _ _ rfl hp hn1 hc1 ho1' hst1 hsv hlo (by simpa using hbd)
+            (by rw [hfr1]; simp; omega) ?_, Or.inl ⟨hsi, by rw [hfr1]; simp⟩⟩
+          intro g hg
+          rw [hfr1] at hg
+          simp only [List.mem_append, List.mem_singleton] at hg
+          rcases hg with hg | rfl
+          · exact hfrs g hg
+          · exact ⟨by simpa using hfo1, by simpa using hfe⟩
+
 set_option hygiene false in
 /-- `one`'s operand branch (the same for `b0 ≥ 32` and `b0 = 28`). -/
 macro "operand_tac" : tactic => `(tactic| (
@@ -1278,125 +1399,13 @@ theorem one_spec (d : Slice U8) (gsubrs local_ : Slice Usize) (f : cff_core.Fram
   rw [if_neg c28]
   by_cases c10 : b0 = 10#u8
   · rw [if_pos c10]
-    have hpop : alloc.vec.Vec.pop alloc.alloc.Global s.v ⦃ r =>
-        (∀ k, r.1 = some k → Small (2^31) k) ∧ StackOk (2^31) r.2 s.lo ⦄ := by
-      simp only [alloc.vec.Vec.pop, WP.spec_ok]
-      refine ⟨fun k hk => hs.2.2 k (List.mem_of_getLast? hk), ?_, ?_, ?_⟩
-      · simp; omega
-      · simp; have := hs.2.1; omega
-      · intro y hy; exact hs.2.2 y (List.mem_of_mem_dropLast (by simpa using hy))
-    apply WP.spec_bind hpop
-    rintro ⟨o, v⟩ ⟨hk, hsv⟩
-    simp only [uncurry_apply_pair]
-    have base : ∀ e' : U8, RunInv d p { s with v := v } { f with o := i1 } frames { m with steps := i } ∧
-        ((i.val + 1 = m.steps.val ∧ frames.val.length ≤ frames.val.length + 1) ∨ e' ≠ cff_core.OK) :=
-      fun _ => ⟨tick p _ _ frames _ rfl hp hn1 hc1 ho1' hst1 hsv hlo hfe hfr hfrs, Or.inl ⟨hsi, by omega⟩⟩
-    cases o with
-    | none => simp only [WP.spec_ok, WP.uncurry'_pair]; exact base _
-    | some k =>
-      have hk' := hk k rfl
-      obtain ⟨hk0, hk1⟩ := hk'
-      simp only []
-      have hone := one_val
-      step as ⟨r2, hr2⟩
-      by_cases hz : (r2 != 0#i64) = true
-      · rw [if_pos hz]; simp only [WP.spec_ok, WP.uncurry'_pair]; exact base _
-      · rw [if_neg hz]
-        apply WP.spec_bind (m := if b0 = 10#u8 then ok local_ else ok gsubrs) (Pₘ := fun _ : Slice Usize => True)
-        · by_cases hb : b0 = 10#u8 <;> simp [hb]
-        intro idx _
-        step as ⟨k3, hk3⟩
-        have hk3b : -2^40 ≤ k3.val ∧ k3.val ≤ 2^40 := by
-          have hr0 : r2.val = 0 := by simpa using hz
-          have hdm := Int.tmod_add_mul_tdiv k.val 65536
-          rw [one_val] at hr2 hk3
-          rw [← hr2, hr0, ← hk3] at hdm
-          constructor <;> omega
-        step with subr_spec d idx k3 hk3b as ⟨o1, ho1s⟩
-        cases o1 with
-        | none => simp only [WP.spec_ok, WP.uncurry'_pair]; exact base _
-        | some ab =>
-          obtain ⟨a, b⟩ := ab
-          obtain ⟨hab, hbd⟩ := ho1s a b rfl
-          apply WP.spec_bind (Pₘ := fun i5 : Usize => i5.val = frames.val.length + 1)
-          · step*
-          intro i5 hi5
-          by_cases hnest : i5 > cff_core.NESTING
-          · rw [if_pos hnest]; simp only [WP.spec_ok, WP.uncurry'_pair]; exact base _
-          · rw [if_neg hnest]
-            have h10 : frames.val.length + 1 ≤ 10 := by have := nesting_val; scalar_tac
-            apply WP.spec_bind (alloc.vec.Vec.push_spec frames { f with o := i1 } (by scalar_tac))
-            intro frames1 hfr1
-            simp only [WP.spec_ok, WP.uncurry'_pair]
-            refine ⟨tick p _ _ _ _ rfl hp hn1 hc1 ho1' hst1 hsv hlo (by simpa using hbd)
-              (by rw [hfr1]; simp; omega) ?_, Or.inl ⟨hsi, by rw [hfr1]; simp⟩⟩
-            intro g hg
-            rw [hfr1] at hg
-            simp only [List.mem_append, List.mem_singleton] at hg
-            rcases hg with hg | rfl
-            · exact hfrs g hg
-            · exact ⟨by simpa using hfo1, by simpa using hfe⟩
+    exact call_spec d gsubrs local_ f frames p s m i i1 b0 hp hn1 hc1 ho1' hst1 hs hlo hfe hfr hfrs
+      hsteps hsi hfo1
   rw [if_neg c10]
   by_cases c29 : b0 = 29#u8
   · rw [if_pos c29]
-    have hpop : alloc.vec.Vec.pop alloc.alloc.Global s.v ⦃ r =>
-        (∀ k, r.1 = some k → Small (2^31) k) ∧ StackOk (2^31) r.2 s.lo ⦄ := by
-      simp only [alloc.vec.Vec.pop, WP.spec_ok]
-      refine ⟨fun k hk => hs.2.2 k (List.mem_of_getLast? hk), ?_, ?_, ?_⟩
-      · simp; omega
-      · simp; have := hs.2.1; omega
-      · intro y hy; exact hs.2.2 y (List.mem_of_mem_dropLast (by simpa using hy))
-    apply WP.spec_bind hpop
-    rintro ⟨o, v⟩ ⟨hk, hsv⟩
-    simp only [uncurry_apply_pair]
-    have base : ∀ e' : U8, RunInv d p { s with v := v } { f with o := i1 } frames { m with steps := i } ∧
-        ((i.val + 1 = m.steps.val ∧ frames.val.length ≤ frames.val.length + 1) ∨ e' ≠ cff_core.OK) :=
-      fun _ => ⟨tick p _ _ frames _ rfl hp hn1 hc1 ho1' hst1 hsv hlo hfe hfr hfrs, Or.inl ⟨hsi, by omega⟩⟩
-    cases o with
-    | none => simp only [WP.spec_ok, WP.uncurry'_pair]; exact base _
-    | some k =>
-      have hk' := hk k rfl
-      obtain ⟨hk0, hk1⟩ := hk'
-      simp only []
-      have hone := one_val
-      step as ⟨r2, hr2⟩
-      by_cases hz : (r2 != 0#i64) = true
-      · rw [if_pos hz]; simp only [WP.spec_ok, WP.uncurry'_pair]; exact base _
-      · rw [if_neg hz]
-        apply WP.spec_bind (m := if b0 = 10#u8 then ok local_ else ok gsubrs) (Pₘ := fun _ : Slice Usize => True)
-        · by_cases hb : b0 = 10#u8 <;> simp [hb]
-        intro idx _
-        step as ⟨k3, hk3⟩
-        have hk3b : -2^40 ≤ k3.val ∧ k3.val ≤ 2^40 := by
-          have hr0 : r2.val = 0 := by simpa using hz
-          have hdm := Int.tmod_add_mul_tdiv k.val 65536
-          rw [one_val] at hr2 hk3
-          rw [← hr2, hr0, ← hk3] at hdm
-          constructor <;> omega
-        step with subr_spec d idx k3 hk3b as ⟨o1, ho1s⟩
-        cases o1 with
-        | none => simp only [WP.spec_ok, WP.uncurry'_pair]; exact base _
-        | some ab =>
-          obtain ⟨a, b⟩ := ab
-          obtain ⟨hab, hbd⟩ := ho1s a b rfl
-          apply WP.spec_bind (Pₘ := fun i5 : Usize => i5.val = frames.val.length + 1)
-          · step*
-          intro i5 hi5
-          by_cases hnest : i5 > cff_core.NESTING
-          · rw [if_pos hnest]; simp only [WP.spec_ok, WP.uncurry'_pair]; exact base _
-          · rw [if_neg hnest]
-            have h10 : frames.val.length + 1 ≤ 10 := by have := nesting_val; scalar_tac
-            apply WP.spec_bind (alloc.vec.Vec.push_spec frames { f with o := i1 } (by scalar_tac))
-            intro frames1 hfr1
-            simp only [WP.spec_ok, WP.uncurry'_pair]
-            refine ⟨tick p _ _ _ _ rfl hp hn1 hc1 ho1' hst1 hsv hlo (by simpa using hbd)
-              (by rw [hfr1]; simp; omega) ?_, Or.inl ⟨hsi, by rw [hfr1]; simp⟩⟩
-            intro g hg
-            rw [hfr1] at hg
-            simp only [List.mem_append, List.mem_singleton] at hg
-            rcases hg with hg | rfl
-            · exact hfrs g hg
-            · exact ⟨by simpa using hfo1, by simpa using hfe⟩
+    exact call_spec d gsubrs local_ f frames p s m i i1 b0 hp hn1 hc1 ho1' hst1 hs hlo hfe hfr hfrs
+      hsteps hsi hfo1
   rw [if_neg c29]
   have hfrp : alloc.vec.Vec.pop alloc.alloc.Global frames ⦃ r =>
       (∀ g, r.1 = some g → g.o.val ≤ g.e.val ∧ g.e.val ≤ d.val.length) ∧
@@ -1425,7 +1434,7 @@ theorem one_spec (d : Slice U8) (gsubrs local_ : Slice Usize) (f : cff_core.Fram
   have hU : used m ≤ 65535 := by simp only [used]; omega
   have hM : (2:Int)^37 * (used m : Int) + 150 * 2^31 ≤ 2^62 := by
     have : (used m : Int) ≤ 65535 := by exact_mod_cast hU
-    nlinarith
+    omega
   step with op_spec d { f with o := i1 } p s m.stems m.width_read m.done b0 (2^37 * (used m : Int))
     (2^31) hs hlo hp hn (by norm_num) (by norm_num) hM (by scalar_tac) (by scalar_tac) hfo1
     (by simp; scalar_tac) (by scalar_tac) as ⟨e1, f1, p1, s1, st1, wr1, dn1, hop⟩
@@ -1434,7 +1443,7 @@ theorem one_spec (d : Slice U8) (gsubrs local_ : Slice Usize) (f : cff_core.Fram
   refine ⟨tick p1 _ f1 frames _ rfl hp1 (near_mono hn1' ?_) (by omega) (by omega) (by simp; omega)
     ⟨by simp, by simp [alloc.vec.Vec.new], by simp [alloc.vec.Vec.new]⟩ (by simp)
     (by rw [hfe1]; exact hfe) hfr hfrs, Or.inl ⟨hsi, by omega⟩⟩
-  push_cast; nlinarith
+  push_cast; omega
 
 theorem run_loop_spec (d : Slice U8) (gsubrs local_ : Slice Usize) (p : cff_core.Pen)
     (s : cff_core.Stack) (f : cff_core.Frame) (frames : alloc.vec.Vec cff_core.Frame)
