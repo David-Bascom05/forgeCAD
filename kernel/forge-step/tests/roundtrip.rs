@@ -113,7 +113,8 @@ fn analytic_bodies_come_back_the_same() {
 }
 
 /// The numbers count in the file's own unit: a cube of side 1 in centimetres.
-/// An assembly's placements are not read, and a body from such a file says so.
+/// Placements that place nothing ask nothing; an occurrence with no placement is counted, and a
+/// body from such a file says so (tests/assembly.rs has assemblies placed).
 #[test]
 fn a_file_with_assembly_structure_is_marked() {
     let body = &parts()[0].1;
@@ -128,26 +129,23 @@ fn a_file_with_assembly_structure_is_marked() {
     };
     let places = "#9001=CARTESIAN_POINT('',(0.,0.,0.));\n#9002=CARTESIAN_POINT('',(1.,0.,0.));\n\
                   #9003=AXIS2_PLACEMENT_3D('',#9001,$,$);\n#9004=AXIS2_PLACEMENT_3D('',#9002,$,$);\n";
-    // onto itself: nothing asked, nothing said
-    let same = with(&format!(
-        "{places}#9005=ITEM_DEFINED_TRANSFORMATION('','',#9003,#9003);\n"
-    ));
-    assert_eq!(same.stats.assembly, 0);
-    assert!(!same.solids[0].body.unplaced);
-    // moved
-    let moved = with(&format!(
-        "{places}#9005=ITEM_DEFINED_TRANSFORMATION('','',#9003,#9004);\n"
-    ));
-    assert_eq!(moved.stats.assembly, 1);
-    assert!(moved.solids[0].body.unplaced);
-    // used twice
+    // a transformation nothing uses places nothing
+    for to in ["#9003", "#9004"] {
+        let t = with(&format!(
+            "{places}#9005=ITEM_DEFINED_TRANSFORMATION('','',#9003,{to});\n"
+        ));
+        assert_eq!(t.stats.assembly, 0);
+        assert_eq!(t.solids.len(), 1);
+        assert!(!t.solids[0].body.unplaced);
+    }
+    // occurrences with no placement: counted, and said on the body
     let twice = with(
         "#9005=NEXT_ASSEMBLY_USAGE_OCCURRENCE('','','',#1,#2,$);\n\
          #9006=NEXT_ASSEMBLY_USAGE_OCCURRENCE('','','',#1,#2,$);\n",
     );
-    assert_eq!(twice.stats.assembly, 1);
+    assert_eq!(twice.stats.assembly, 2);
     assert!(twice.solids[0].body.unplaced);
-    // mapped onto itself, once
+    // a mapped item no representation lists maps nothing
     let mapped = with(&format!(
         "{places}#9005=REPRESENTATION_MAP(#9003,#1);\n#9006=MAPPED_ITEM('',#9005,#9003);\n"
     ));

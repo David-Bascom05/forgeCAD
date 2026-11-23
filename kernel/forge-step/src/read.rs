@@ -1366,46 +1366,66 @@ fn mesh_agrees(body: &Body, m: &forge_topo::mass::MassProps) -> Result<Option<St
     Ok(None)
 }
 
-/// How many placements a file gives that move a part, and how many extra uses of a part or of a
-/// mapped shape, none of which are applied. A placement onto itself (Onshape wraps every part in one)
-/// asks for nothing.
-fn assembly_asks(f: &File<'_>, reader: &Reader<'_>) -> usize {
-    let moves = |a: Option<&Value>, b: Option<&Value>| match (a, b) {
-        (Some(Value::Ref(a)), Some(Value::Ref(b))) => match (reader.placement(*a), reader.placement(*b)) {
-            (Ok(p), Ok(q)) => {
-                let near = |x: Vec3, y: Vec3| x.dot(y) >= 1.0 - 1e-12;
-                p.origin.distance(q.origin) > 1e-9 * (1.0 + (p.origin - Point3::ORIGIN).abs_max())
-                    || !near(p.x().into(), q.x().into())
-                    || !near(p.z().into(), q.z().into())
-            }
-            // a part placed by something not read: moved, for all that can be told
-            _ => true,
-        },
-        _ => true,
+/// Each solid at every place the file's assembly puts it (crate::asm): a part placed twice is two
+/// bodies, a part placed once elsewhere is moved there. A solid whose placement can't be followed
+/// is refused, never left where it stands; placements given and not applied (an occurrence with
+/// none, a placement nothing stands under) are counted in `stats.assembly` and said on each body.
+fn place(
+    f: &File<'_>,
+    ctx: Option<u32>,
+    solids: Vec<Solid>,
+    refusals: &mut Vec<Refusal>,
+    stats: &mut Stats,
+) -> Vec<Solid> {
+    let ids: Vec<u32> = solids.iter().map(|s| s.entity).collect();
+    let Some(u) = ctx.and_then(|c| units_of(f, c)) else {
+        return solids;
     };
-    let (mut asks, mut used) = (0, BTreeMap::<u32, usize>::new());
-    for &(_, at, n) in &f.ids {
-        for r in &f.records[at as usize..(at + n) as usize] {
-            let a = f.args(r);
-            match f.name(r) {
-                "NEXT_ASSEMBLY_USAGE_OCCURRENCE" => {
-                    if let Some(Value::Ref(part)) = a.get(4) {
-                        *used.entry(*part).or_default() += 1;
-                    }
-                }
-                "ITEM_DEFINED_TRANSFORMATION" => asks += usize::from(moves(a.get(2), a.get(3))),
-                "MAPPED_ITEM" => {
-                    if let Some(Value::Ref(map)) = a.get(1) {
-                        *used.entry(*map).or_default() += 1;
-                        let origin = f.records_of(*map).and_then(|x| x.first()).map(|x| f.args(x));
-                        asks += usize::from(moves(origin.as_ref().and_then(|o| o.first()), a.get(2)));
-                    }
-                }
-                _ => {}
-            }
+    let reader = Reader { f, u, depth: 0 };
+    let pl = crate::asm::placements(f, &ids, |id| reader.placement(id).ok());
+    stats.assembly = pl.unresolved;
+    let mut out = Vec::with_capacity(solids.len());
+    let mut total = 0usize;
+    for s in solids {
+        if let Some((by, why)) = pl.refused.get(&s.entity) {
+            refusals.push(Refusal {
+                entity: if *by == 0 { s.entity } else { *by },
+                kind: "assembly".into(),
+                why: format!("solid #{}: {why}", s.entity),
+            });
+            continue;
+        }
+        let frames = pl.of.get(&s.entity).map_or(&[Frame::WORLD][..], |v| &v[..]);
+        if total + frames.len() > crate::asm::MAX_INSTANCES {
+            refusals.push(Refusal {
+                entity: s.entity,
+                kind: "assembly".into(),
+                why: "past 100 000 placed bodies in one file".into(),
+            });
+            continue;
+        }
+        total += frames.len();
+        for (k, fr) in frames.iter().enumerate() {
+            let at_home = crate::asm::is_identity(fr);
+            let mut body = if at_home && k == 0 {
+                s.body.clone()
+            } else {
+                crate::asm::placed(&s.body, if at_home { &Frame::WORLD } else { fr }, k)
+            };
+            body.unplaced = pl.unresolved > 0;
+            let mass = match (&s.mass, at_home) {
+                (Some(m), false) => Some(crate::asm::placed_mass(m, fr)),
+                (m, _) => m.clone(),
+            };
+            out.push(Solid {
+                entity: s.entity,
+                name: s.name.clone(),
+                body,
+                mass,
+            });
         }
     }
-    asks + used.values().map(|&k| k - 1).sum::<usize>()
+    out
 }
 
 /// The first n chars of x's Debug text, stopping there (a spline's whole text is megabytes).
@@ -1561,9 +1581,6 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
             }
         }
     }
-    if let Some(u) = any_ctx.and_then(|c| units_of(&f, c)) {
-        stats.assembly = assembly_asks(&f, &Reader { f: &f, u, depth: 0 });
-    }
     for (id, r) in roots {
         let ctx = ctx_of.get(&id).copied().or(any_ctx);
         let Some(u) = ctx.and_then(|c| units_of(&f, c)) else {
@@ -1624,15 +1641,12 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                         continue;
                     }
                     match done {
-                        Ok((mut body, mass)) => {
-                            body.unplaced = stats.assembly > 0;
-                            solids.push(Solid {
-                                entity: id,
-                                name,
-                                body,
-                                mass,
-                            })
-                        }
+                        Ok((body, mass)) => solids.push(Solid {
+                            entity: id,
+                            name,
+                            body,
+                            mass,
+                        }),
                         Err(why) => refusals.push(Refusal {
                             entity: id,
                             kind: f.name(&r).to_string(),
@@ -1644,6 +1658,9 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
             }
             break;
         }
+    }
+    if !only_measure && !solids.is_empty() {
+        solids = place(&f, any_ctx, solids, &mut refusals, &mut stats);
     }
     if solids.is_empty() && refusals.is_empty() && !only_measure {
         return Err(ImportError::NoSolids);
