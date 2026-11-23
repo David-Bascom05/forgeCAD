@@ -57,6 +57,22 @@ pub fn vise(
     parallels: Option<&Record>,
     jaws: Option<&Record>,
 ) -> Result<Placed, WhError> {
+    vise_with(name, rec, stock, axis, clamp, parallels, jaws, None)
+}
+
+/// `vise`, with soft jaws stepped: `ledge` deep under the stock's edges, the stock seated on the
+/// ledges (no parallels).
+#[allow(clippy::too_many_arguments)]
+pub fn vise_with(
+    name: &str,
+    rec: &Record,
+    stock: &Box3,
+    axis: usize,
+    clamp: f64,
+    parallels: Option<&Record>,
+    jaws: Option<&Record>,
+    ledge: Option<f64>,
+) -> Result<Placed, WhError> {
     want(rec, &[Kind::Vise, Kind::SelfCentring])?;
     if axis > 1 {
         return Err(refuse(
@@ -160,23 +176,42 @@ pub fn vise(
     )];
     if let Some((tb, _, sw)) = soft {
         let j = jaws.expect("soft is from jaws");
-        bodies.push(Body::new(
-            format!("soft jaw ({})", j.name),
-            Role::Jaw,
+        let (mut j0, mut j1) = (
             vec![bx(a, (s0 - tb, s0), acr(sw), (bed, top))],
-        ));
-        bodies.push(Body::new(
-            format!("soft jaw ({})", j.name),
-            Role::Jaw,
             vec![bx(a, (s1, s1 + tb), acr(sw), (bed, top))],
-        ));
+        );
+        if let Some(ld) = ledge {
+            if !(ld > 0.0 && 2.0 * ld < size[a]) || seat <= bed {
+                return Err(refuse(
+                    name,
+                    format!(
+                        "ledges {ld:.2} deep under {:.2} of stock, {:.2} above the bed",
+                        size[a],
+                        seat - bed
+                    ),
+                    "shallower ledges, or a grip less than the blank's height",
+                ));
+            }
+            j0.push(bx(a, (s0, s0 + ld), acr(sw), (bed, seat)));
+            j1.push(bx(a, (s1 - ld, s1), acr(sw), (bed, seat)));
+        }
+        let tag = if ledge.is_some() { "step jaw" } else { "soft jaw" };
+        bodies.push(Body::new(format!("{tag} ({})", j.name), Role::Jaw, j0));
+        bodies.push(Body::new(format!("{tag} ({})", j.name), Role::Jaw, j1));
         notes.push(format!(
             "soft jaws {}: {tb:.2} mm each, uncut (the soft_jaws op cuts their pocket)",
             j.name
         ));
     }
+    if ledge.is_some() && soft.is_none() {
+        return Err(refuse(
+            name,
+            "step ledges are cut in soft jaws",
+            "give the soft-jaw blank",
+        ));
+    }
     let need = seat - bed;
-    if need > 1e-9 {
+    if need > 1e-9 && ledge.is_none() {
         let Some(p) = parallels else {
             return Err(refuse(
                 name,

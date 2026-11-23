@@ -57,10 +57,27 @@ pub struct Spin {
 /// A chuck gripping a bar of diameter `bar_d` with its jaws' face at `z_face`, `grip` of the
 /// bar inside the jaws (at most the jaws' length).
 pub fn chuck(name: &str, rec: &Record, bar_d: f64, z_face: f64, grip: f64) -> Result<Spin, WhError> {
+    chuck_jaws(name, rec, bar_d, z_face, grip, true)
+}
+
+/// `chuck`; `hard`: the record's hard-jaw gripping range applies (soft jaws bored to the part
+/// grip what they were bored to: generate.rs checks them).
+pub fn chuck_jaws(
+    name: &str,
+    rec: &Record,
+    bar_d: f64,
+    z_face: f64,
+    grip: f64,
+    hard: bool,
+) -> Result<Spin, WhError> {
     want(rec, Kind::Chuck)?;
     let (bd, bl) = (rec.get("body_d")?, rec.get("body_len")?);
     let (jh, jl) = (rec.get("jaw_height")?, rec.get("jaw_len")?);
-    let (gmin, gmax) = (rec.get("grip_min")?, rec.get("grip_max")?);
+    let (gmin, gmax) = if hard {
+        (rec.get("grip_min")?, rec.get("grip_max")?)
+    } else {
+        (bar_d, bar_d)
+    };
     if !(bar_d >= gmin && bar_d <= gmax) {
         return Err(refuse(
             name,

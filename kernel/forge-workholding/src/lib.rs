@@ -16,6 +16,7 @@
 //! simulation poses with the table, and what the leftover report calls "held". Lathe devices give
 //! their envelope of revolution (lathe.rs).
 pub mod cli;
+pub mod generate;
 pub mod geom;
 pub mod lathe;
 pub mod mill;
