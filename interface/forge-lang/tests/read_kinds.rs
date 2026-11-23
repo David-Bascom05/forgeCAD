@@ -132,6 +132,8 @@ fn a_part_that_does_not_parse_is_refused_with_nothing_of_it() {
 }
 
 /// The rack copied outside any git checkout: its assemblies read ../hw and ../frame as before.
+// copies with `cp`, a process: WASI starts none, so native only
+#[cfg(not(target_os = "wasi"))]
 #[test]
 fn the_rack_outside_git_loads() {
     let src_dir = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/rack18u"));

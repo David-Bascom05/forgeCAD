@@ -116,7 +116,7 @@ impl Object {
             positions: self.positions.clone(),
             triangles: self.triangles.clone(),
             face_of: self.face_of.clone(),
-            edges: Vec::new(),
+            ..TriMesh::default()
         }
     }
 
