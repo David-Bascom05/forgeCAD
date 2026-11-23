@@ -77,4 +77,16 @@ theorem dedupAux_length_le : ∀ (xs s : List α), (dedupAux xs s).length ≤ xs
 
 theorem dedup_length_le (xs : List α) : (dedup xs).length ≤ xs.length := dedupAux_length_le xs []
 
+theorem idxOf_dedup_snoc_old {xs : List α} {x c : α} (hc : c ∈ xs) :
+    (dedup (xs ++ [x])).idxOf c = (dedup xs).idxOf c := by
+  rw [dedup_snoc]
+  split
+  · simp
+  · rw [List.idxOf_append, if_pos ((mem_dedup _ _).mpr hc)]
+
+theorem idxOf_dedup_snoc_new {xs : List α} {x : α} (hx : x ∉ xs) :
+    (dedup (xs ++ [x])).idxOf x = (dedup xs).length := by
+  rw [dedup_snoc, if_neg hx, List.idxOf_append, if_neg (fun h => hx ((mem_dedup _ _).mp h))]
+  simp
+
 end ForgeBoolCore.Dedup

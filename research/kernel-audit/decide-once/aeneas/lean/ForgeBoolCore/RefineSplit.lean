@@ -264,4 +264,222 @@ theorem split_loop1_spec (l : Ledger) (e0 : Ext) (hok : ExtOK l e0) (F : alloc.v
       rw [← this]; exact ⟨hi, hok1, hgr, hlen, hPl, hMl, hPM⟩
   · exact hinv
 
+/-! ## Loop 2: the topes, first-seen, with their positions -/
+
+/-- A first-seen table: `Tp` lists the stream `S` without repeats, and `T` holds each id's
+position in it, or `NONE`. -/
+def TInv (T Tp : List U32) (S : List Nat) (n : Nat) : Prop :=
+  T.length = n ∧ Tp.map (·.val) = dedup S ∧ (∀ x ∈ S, x < n) ∧
+  ∀ c, c < n → (T.getD c NONE).val = if c ∈ S then (dedup S).idxOf c else U32.max
+
+theorem tinv_none_iff {T Tp : List U32} {S : List Nat} {n p : Nat} (h : TInv T Tp S n) (hp : p < n)
+    (hsmall : (dedup S).length < U32.max) : (T.getD p NONE).val = U32.max ↔ p ∉ S := by
+  rw [h.2.2.2 p hp]
+  by_cases hs : p ∈ S
+  · simp only [hs, ite_true, not_true_eq_false, iff_false]
+    have := List.idxOf_lt_length_iff.mpr ((mem_dedup _ _).mpr hs); omega
+  · simp [hs]
+
+theorem tinv_add_old {T Tp : List U32} {S : List Nat} {n p : Nat} (h : TInv T Tp S n) (hp : p ∈ S) :
+    TInv T Tp (S ++ [p]) n := by
+  obtain ⟨h1, h2, h3, h4⟩ := h
+  refine ⟨h1, by rw [h2, dedup_snoc, if_pos hp, List.append_nil], fun x hx => ?_, fun c hc => ?_⟩
+  · rcases List.mem_append.mp hx with hx | hx
+    · exact h3 x hx
+    · simp at hx; subst hx; exact h3 _ hp
+  · rw [h4 c hc]
+    have : c ∈ S ++ [p] ↔ c ∈ S := by simp; intro e; subst e; exact hp
+    by_cases hcs : c ∈ S
+    · rw [if_pos hcs, if_pos (this.mpr hcs), idxOf_dedup_snoc_old hcs]
+    · rw [if_neg hcs, if_neg (fun h' => hcs (this.mp h'))]
+
+theorem tinv_add_new {T Tp : List U32} {S : List Nat} {n : Nat} (h : TInv T Tp S n) (p : U32)
+    (hp : p.val < n) (hnot : p.val ∉ S) (v : U32) (hv : v.val = (dedup S).length) :
+    TInv (T.set p.val v) (Tp ++ [p]) (S ++ [p.val]) n := by
+  obtain ⟨h1, h2, h3, h4⟩ := h
+  refine ⟨by simp [h1], by rw [List.map_append, h2, dedup_snoc, if_neg hnot]; rfl, fun x hx => ?_, fun c hc => ?_⟩
+  · rcases List.mem_append.mp hx with hx | hx
+    · exact h3 x hx
+    · simp at hx; subst hx; exact hp
+  · rw [getD_set_u32 _ _ _ _ (by omega)]
+    by_cases e : c = p.val
+    · subst e
+      rw [if_pos rfl, if_pos (by simp), idxOf_dedup_snoc_new hnot, hv]
+    · rw [if_neg e, h4 c hc]
+      have : c ∈ S ++ [p.val] ↔ c ∈ S := by simp [e]
+      by_cases hcs : c ∈ S
+      · rw [if_pos hcs, if_pos (this.mpr hcs), idxOf_dedup_snoc_old hcs]
+      · rw [if_neg hcs, if_neg (fun h' => hcs (this.mp h'))]
+
+/-- The sides in the order loop 2 meets them: each facet's plus, then its minus. -/
+def stream (P M : List U32) : Nat → List Nat
+  | 0 => []
+  | k + 1 => stream P M k ++ [P[k]!.val] ++ [M[k]!.val]
+
+theorem stream_length (P M : List U32) : ∀ k, (stream P M k).length = 2 * k
+  | 0 => rfl
+  | k + 1 => by simp [stream, stream_length P M k]; omega
+
+theorem tinv_small {T Tp : List U32} {S : List Nat} {n : Nat} (h : TInv T Tp S n) :
+    Tp.length = (dedup S).length := by
+  have := congrArg List.length h.2.1; simpa using this
+
+/-- Loop 2's minus half and step, from the table after the plus half. -/
+theorem split_loop2_spec (F P M T Tp : alloc.vec.Vec U32) (n : Nat) (i : Usize)
+    (hP : P.val.length = F.val.length) (hM : M.val.length = F.val.length)
+    (hin : ∀ k, k < F.val.length → P.val[k]!.val < n ∧ M.val[k]!.val < n)
+    (hroom : 2 * F.val.length < U32.max) (hi : i.val ≤ F.val.length)
+    (hinv : TInv T.val Tp.val (stream P.val M.val i.val) n) :
+    split_loop2 F P M T Tp i ⦃ r => TInv r.1.val r.2.val (stream P.val M.val F.val.length) n ⦄ := by
+  unfold split_loop2
+  apply loop.spec_decr_nat
+    (fun (q : alloc.vec.Vec U32 × alloc.vec.Vec U32 × Usize) => F.val.length - q.2.2.val)
+    (fun q => q.2.2.val ≤ F.val.length ∧ TInv q.1.val q.2.1.val (stream P.val M.val q.2.2.val) n)
+  · rintro ⟨T0, Tp0, j⟩ ⟨hj, hti⟩
+    unfold split_loop2.body
+    simp only at hj hti ⊢
+    split
+    · rename_i hlt
+      have hjl : j.val < F.val.length := by scalar_tac
+      obtain ⟨hpn, hmn⟩ := hin j.val hjl
+      have hS := stream_length P.val M.val j.val
+      have hd0 : (dedup (stream P.val M.val j.val)).length < U32.max := by
+        have := dedup_length_le (stream P.val M.val j.val); omega
+      have hT0 := hti.1
+      step as ⟨p, hp⟩
+      have hpv : P.val[j.val]! = p := by rw [getElem!_pos _ _ (by omega), hp]
+      step as ⟨i2, hi2⟩
+      have hi2v : i2.val = p.val := by rw [hi2]; scalar_tac
+      rw [hpv] at hpn
+      step as ⟨g, hg⟩
+      have hgv : (T0.val.getD p.val NONE) = g := by
+        simp only [hi2v] at hg
+        rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega), hg]; rfl
+      split
+      · rename_i hnone
+        have hnot : p.val ∉ stream P.val M.val j.val :=
+          (tinv_none_iff hti hpn hd0).mp (by rw [hgv, hnone, none_val])
+        step as ⟨i5, hi5⟩
+        have hi5v : i5.val = p.val := by rw [hi5]; scalar_tac
+        step as ⟨w, hw, hback⟩
+        obtain ⟨w1, back⟩ := w
+        simp only at hw hback ⊢
+        have hTpl := tinv_small hti
+        step as ⟨i6, hi6⟩
+        have hi6v : i6.val = (dedup (stream P.val M.val j.val)).length := by
+          rw [hi6, UScalar.cast_val_eq]; simp only [alloc.vec.Vec.len_val]
+          rw [Nat.mod_eq_of_lt (by have := U32.max_eq; simp; omega)]; simpa using hTpl
+        step as ⟨Tp1, hTp1⟩
+        have h1 : TInv (back i6).val Tp1.val (stream P.val M.val j.val ++ [P.val[j.val]!.val]) n := by
+          rw [hback, alloc.vec.Vec.set_val_eq, hTp1, hi5v, hpv]
+          exact tinv_add_new hti p hpn hnot i6 hi6v
+        try simp only [Std.bind_ok]
+        generalize back i6 = T1 at h1 ⊢
+        have hti1 := h1
+        have hS := stream_length P.val M.val j.val
+        have hd1 : (dedup (stream P.val M.val j.val ++ [P.val[j.val]!.val])).length < U32.max := by
+          have h1 := dedup_length_le (stream P.val M.val j.val ++ [P.val[j.val]!.val])
+          have h2 : (stream P.val M.val j.val ++ [P.val[j.val]!.val]).length = 2 * j.val + 1 := by simp [hS]
+          omega
+        have hT1 := hti1.1
+        step as ⟨m, hm⟩
+        have hmv : M.val[j.val]! = m := by rw [getElem!_pos _ _ (by omega), hm]
+        rw [hmv] at hmn
+        step as ⟨i4, hi4⟩
+        have hi4v : i4.val = m.val := by rw [hi4]; scalar_tac
+        step as ⟨g, hg⟩
+        have hgv : (T1.val.getD m.val NONE) = g := by
+          simp only [hi4v] at hg
+          rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega), hg]; rfl
+        have hnext : stream P.val M.val (j.val + 1) =
+            stream P.val M.val j.val ++ [P.val[j.val]!.val] ++ [m.val] := by simp only [stream, hmv]
+        split
+        · rename_i hnone
+          have hnot : m.val ∉ stream P.val M.val j.val ++ [P.val[j.val]!.val] :=
+            (tinv_none_iff hti1 hmn hd1).mp (by rw [hgv, hnone, none_val])
+          step as ⟨i7, hi7⟩
+          have hi7v : i7.val = m.val := by rw [hi7]; scalar_tac
+          step as ⟨w, hw, hback⟩
+          obtain ⟨w1, back⟩ := w
+          simp only at hw hback ⊢
+          have hTpl := tinv_small hti1
+          step as ⟨i8, hi8⟩
+          have hi8v : i8.val = (dedup (stream P.val M.val j.val ++ [P.val[j.val]!.val])).length := by
+            rw [hi8, UScalar.cast_val_eq]; simp only [alloc.vec.Vec.len_val]
+            rw [Nat.mod_eq_of_lt (by have := U32.max_eq; simp; omega)]; simpa using hTpl
+          step as ⟨Tp2, hTp2⟩
+          step as ⟨j1, hj1⟩
+          refine ⟨by scalar_tac, ?_, by scalar_tac⟩
+          rw [hj1, hnext, hback, alloc.vec.Vec.set_val_eq, hTp2, hi7v]
+          exact tinv_add_new hti1 m hmn hnot i8 hi8v
+        · rename_i hsome
+          have hin : m.val ∈ stream P.val M.val j.val ++ [P.val[j.val]!.val] := by
+            by_contra hn
+            exact hsome (UScalar.eq_of_val_eq (by rw [← hgv, (tinv_none_iff hti1 hmn hd1).mpr hn, none_val]))
+          step as ⟨j1, hj1⟩
+          refine ⟨by scalar_tac, ?_, by scalar_tac⟩
+          rw [hj1, hnext]
+          exact tinv_add_old hti1 hin
+
+      · rename_i hsome
+        have hin' : p.val ∈ stream P.val M.val j.val := by
+          by_contra hn
+          exact hsome (UScalar.eq_of_val_eq (by rw [← hgv, (tinv_none_iff hti hpn hd0).mpr hn, none_val]))
+        have h1 : TInv T0.val Tp0.val (stream P.val M.val j.val ++ [P.val[j.val]!.val]) n := by
+          rw [hpv]; exact tinv_add_old hti hin'
+        simp only [Std.bind_ok]
+        generalize T0 = T1 at h1 ⊢
+        generalize Tp0 = Tp1 at h1 ⊢
+        have hti1 := h1
+        have hS := stream_length P.val M.val j.val
+        have hd1 : (dedup (stream P.val M.val j.val ++ [P.val[j.val]!.val])).length < U32.max := by
+          have h1 := dedup_length_le (stream P.val M.val j.val ++ [P.val[j.val]!.val])
+          have h2 : (stream P.val M.val j.val ++ [P.val[j.val]!.val]).length = 2 * j.val + 1 := by simp [hS]
+          omega
+        have hT1 := hti1.1
+        step as ⟨m, hm⟩
+        have hmv : M.val[j.val]! = m := by rw [getElem!_pos _ _ (by omega), hm]
+        rw [hmv] at hmn
+        step as ⟨i4, hi4⟩
+        have hi4v : i4.val = m.val := by rw [hi4]; scalar_tac
+        step as ⟨g, hg⟩
+        have hgv : (T1.val.getD m.val NONE) = g := by
+          simp only [hi4v] at hg
+          rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega), hg]; rfl
+        have hnext : stream P.val M.val (j.val + 1) =
+            stream P.val M.val j.val ++ [P.val[j.val]!.val] ++ [m.val] := by simp only [stream, hmv]
+        split
+        · rename_i hnone
+          have hnot : m.val ∉ stream P.val M.val j.val ++ [P.val[j.val]!.val] :=
+            (tinv_none_iff hti1 hmn hd1).mp (by rw [hgv, hnone, none_val])
+          step as ⟨i7, hi7⟩
+          have hi7v : i7.val = m.val := by rw [hi7]; scalar_tac
+          step as ⟨w, hw, hback⟩
+          obtain ⟨w1, back⟩ := w
+          simp only at hw hback ⊢
+          have hTpl := tinv_small hti1
+          step as ⟨i8, hi8⟩
+          have hi8v : i8.val = (dedup (stream P.val M.val j.val ++ [P.val[j.val]!.val])).length := by
+            rw [hi8, UScalar.cast_val_eq]; simp only [alloc.vec.Vec.len_val]
+            rw [Nat.mod_eq_of_lt (by have := U32.max_eq; simp; omega)]; simpa using hTpl
+          step as ⟨Tp2, hTp2⟩
+          step as ⟨j1, hj1⟩
+          refine ⟨by scalar_tac, ?_, by scalar_tac⟩
+          rw [hj1, hnext, hback, alloc.vec.Vec.set_val_eq, hTp2, hi7v]
+          exact tinv_add_new hti1 m hmn hnot i8 hi8v
+        · rename_i hsome
+          have hin : m.val ∈ stream P.val M.val j.val ++ [P.val[j.val]!.val] := by
+            by_contra hn
+            exact hsome (UScalar.eq_of_val_eq (by rw [← hgv, (tinv_none_iff hti1 hmn hd1).mpr hn, none_val]))
+          step as ⟨j1, hj1⟩
+          refine ⟨by scalar_tac, ?_, by scalar_tac⟩
+          rw [hj1, hnext]
+          exact tinv_add_old hti1 hin
+
+    · rename_i hge
+      simp only [WP.spec_ok]
+      have : j.val = F.val.length := by scalar_tac
+      rw [← this]; exact hti
+  · exact ⟨hi, hinv⟩
+
 end forge_bool_core
