@@ -1,4 +1,4 @@
-//! Undo and redo of a Forge file's edits (`.fc`'s `act undo|redo`): each edit written through
+//! Undo and redo of a Forge file's edits: each edit written through
 //! `write` is logged beside the file (`F.fg.log`, one JSON object a line: the text before and
 //! after), and `step` takes the last one back or puts the last taken back in again. A step is
 //! refused, nothing written, when the file is no longer the text the log ends on (a hand edit

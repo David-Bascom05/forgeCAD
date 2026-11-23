@@ -1,8 +1,6 @@
-//! The bench parts (parts/bench), ported by hand from the retired part format: each builds with no
-//! errors and no lints to what its original built to. The numbers are the originals' own,
-//! measured the way these are (volume, faces, edges, bodies, each body finished and joined as
-//! Forge's stages join them) on the last kernel that still read the old format, when every port
-//! matched them.
+//! The bench parts (parts/bench): each builds with no errors and no lints to its recorded
+//! numbers (volume, faces, edges, bodies, each body finished and joined as Forge's stages join
+//! them).
 
 use forge_lang::Options;
 

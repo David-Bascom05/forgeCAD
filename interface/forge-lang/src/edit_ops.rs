@@ -291,7 +291,9 @@ pub fn ast_rename(prog: &mut [Stmt], from: &str, to: &str) {
                         ex(d, from, to);
                     }
                 }
-                body.iter_mut().for_each(|b| st(b, from, to));
+                std::rc::Rc::make_mut(body)
+                    .iter_mut()
+                    .for_each(|b| st(b, from, to));
             }
             StmtKind::For { vars, iter, body } => {
                 vars.iter_mut().for_each(|v| name(v, from, to));
@@ -357,7 +359,7 @@ pub fn apply_respell(src: &str, span: Span, to: &str) -> R<String> {
     Ok(format!("{}{to}{}", &src[..lo], &src[hi..]))
 }
 
-/// The nearest of `names` to `name`, two edits or fewer away (as .fc's `try:` found them). At
+/// The nearest of `names` to `name`, two edits or fewer away. At
 /// equal distance a name the part binds (a param, a feature, a local, a function) comes before
 /// a built-in, then the alphabetically first: `tt` in a part with a param `t` is `t`, not `pt`.
 pub fn nearest<'a>(name: &str, names: impl Iterator<Item = &'a str>) -> Option<String> {

@@ -5,8 +5,8 @@
 //! cold build, then the part again with one dimension (`EDITED`) times 1.01 through the first
 //! build's cache (the reference's edit is that sum too).
 
-/// The dimension each part's edit changes: the .fc part's first param where the .fg part has
-/// it, else the .fg part's first (as the reference's counts were taken).
+/// The dimension each part's edit changes: the reference part's first param where the .fg part
+/// has it, else the .fg part's first (as the reference's counts were taken).
 const EDITED: &[(&str, &str)] = &[
     ("gearbox", "L"),
     ("volute", "dx"),
@@ -61,12 +61,15 @@ fn main() {
         .expect("fg part");
     let name = EDITED.iter().find(|e| e.0 == part).expect("a bench part").1;
     let edit = edited(&src, name);
+    let written = std::cell::Cell::new(false);
     let opts = || {
-        let dir = std::env::temp_dir().join(format!("forge-fgcount-{}", std::process::id()));
+        // (one name for every run, not one by process id: a count must not depend on its digits)
+        let dir = std::env::temp_dir().join("forge-fgcount");
         std::fs::create_dir_all(&dir).expect("temp dir");
-        let font = dir.join(forge_lang::bench::FONT);
-        if !font.exists() {
-            std::fs::write(&font, forge_lang::bench::font_bytes()).expect("font");
+        // (written once a run, as when the directory was new each run: the font's making is
+        // counted once, as the reference counted it)
+        if !written.replace(true) {
+            std::fs::write(dir.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
         }
         let o = forge_lang::Options {
             dir: Some(dir),

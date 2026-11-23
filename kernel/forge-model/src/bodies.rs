@@ -233,6 +233,14 @@ pub fn unwrapped(f: &Feature) -> Feature {
 /// `step_solids_finished`, given `plain`: `unwrapped` of each of the first `i + 1` features,
 /// kept by a caller that steps through the history, so that a step need not unwrap every
 /// feature before it again.
+/// Whether `step_solids_plain` of feature `i`, given the part before it finished, reads nothing of
+/// the one solid before it but that it is there: a feature that changes the part (a fillet, a
+/// shell, ..) on a part of one body works on that body finished alone. A caller that keeps the
+/// solids can then hand in an empty body in its place, not a copy.
+pub fn finished_suffices(features: History<'_>, i: usize) -> bool {
+    !multi(&features.upto(i + 1)) && crate::modifies(&features[i])
+}
+
 pub fn step_solids_plain(
     features: History<'_>,
     plain: Option<&[Feature]>,

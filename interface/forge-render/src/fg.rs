@@ -473,11 +473,11 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     from: match &d.num.src {
                         Src::Const => From::Const,
                         Src::Driving(p) => From::Driving((**p).clone()),
-                        Src::Driven(ps) => From::Driven(ps.iter().cloned().collect()),
+                        Src::Driven(ps) => From::Driven(ps.iter().map(|k| (**k).clone()).collect()),
                     },
                 })
                 .collect(),
-            reads: f.reads.iter().cloned().collect(),
+            reads: f.reads.iter().map(|k| (**k).clone()).collect(),
             frame: f.frame,
         })
         .collect();
@@ -1852,7 +1852,7 @@ impl Session {
         let path = self.path.as_ref().ok_or("no file to save to")?;
         std::fs::write(path, &self.src).map_err(|e| format!("{path}: {e}"))?;
         self.saved = self.src.clone();
-        // the undo depth kept with it (`F.fg.log`), as `.fc`'s op log kept it: for the next
+        // the undo depth kept with it (`F.fg.log`): for the next
         // time it opens, and `fg edit F Undo`
         forge_lang::undo::keep(std::path::Path::new(path), &self.undo, &self.src, &self.redo)
             .map_err(|e| format!("{path}.log: {e}"))?;
