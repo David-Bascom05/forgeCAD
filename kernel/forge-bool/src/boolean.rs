@@ -2551,6 +2551,12 @@ pub(crate) fn trim(
                 let bends = !on_spring
                     && !matches!(edge.curve, Curve::Line(_) | Curve::Circle(_) | Curve::Ellipse(_))
                     && !holds_edge(&across, edge);
+                // where the surface across does not hold an intersection edge (an imprint between two
+                // faces on one surface, as a cut made again: a plane through its middle), the curve's
+                // other surface does, exactly, and crosses the face along it
+                let held = if bends { held_across(body, f, edge) } else { None };
+                let bends = held.as_ref().map_or(bends, |h| h.1);
+                let across = held.as_ref().map_or(&across, |h| &h.0);
                 doubtful |= bends;
                 let found = if on_spring {
                     fenced.push((k, e));
@@ -2598,16 +2604,13 @@ pub(crate) fn trim(
                     ));
                     CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
                 } else {
-                    with_hairs!(
-                        curve_surface_in(&curve, range, &across, near),
-                        |hairs| log::hairs(
-                            [(bodies[0], faces[0]), (bodies[1], faces[1])],
-                            body,
-                            e,
-                            (&curve, range, &across),
-                            &hairs,
-                        )
-                    )
+                    with_hairs!(curve_surface_in(&curve, range, across, near), |hairs| log::hairs(
+                        [(bodies[0], faces[0]), (bodies[1], faces[1])],
+                        body,
+                        e,
+                        (&curve, range, &across),
+                        &hairs,
+                    ))
                 };
                 decided!({
                     let sine = match (&curve, &edge.curve) {
@@ -2774,7 +2777,7 @@ pub(crate) fn trim(
                 };
                 for (h, grazing) in hits.into_iter().flat_map(|h| {
                     let grazing = h.contact != Contact::Crossing;
-                    let near = crossings_near(&curve, range, &across, h);
+                    let near = crossings_near(&curve, range, across, h);
                     decided!(if grazing {
                         let pair = [(bodies[0], faces[0]), (bodies[1], faces[1])];
                         log::contact(pair, body, e, h.point, 0, "curve_surface: a touching root");
@@ -4255,6 +4258,33 @@ pub(crate) fn through_smooth_edge(
 /// The surface that meets face `f`'s surface along the edge of coedge `c`:
 /// the neighbouring face's, or for a seam (or an edge between two faces on
 /// one surface, like revolve halves) the plane through the edge, across it.
+/// The surface across face `f` at an edge the one across did not hold: for an intersection edge the
+/// curve's surface that is not the face's (each decided once), which holds it exactly; and whether
+/// the edge bends off that one too.
+#[cold]
+#[inline(never)]
+fn held_across(body: &Body, f: FaceId, edge: &forge_topo::Edge) -> Option<(Surface, bool)> {
+    let Curve::Intersection(ic) = &edge.curve else {
+        return None;
+    };
+    let s = &body.face(f).surface;
+    // (an analytic pair: one surface the same as the face's is coincident with it, so that alone
+    // decides it; a procedural one keeps the plane)
+    if [&ic.a, &ic.b, s]
+        .iter()
+        .any(|x| matches!(x, Surface::Procedural(_)))
+    {
+        return None;
+    }
+    let here = |x: &Surface| ssi::coincident(x, s);
+    let other = match (here(&ic.a), here(&ic.b)) {
+        (true, false) => &ic.b,
+        (false, true) => &ic.a,
+        _ => return None,
+    };
+    Some((other.clone(), !holds_edge(other, edge)))
+}
+
 pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surface> {
     let edge = body.edge(body.coedge(c).edge);
     if let Curve::Procedural(pc) = &edge.curve
@@ -4301,19 +4331,6 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
                 })
             }
             Curve::Ellipse(e) => Surface::Plane(Plane::new(e.frame)),
-            // where two surfaces meet: the one that is not this face's holds it exactly and crosses
-            // the face along it (an imprint between two faces on one surface, as a cut made again)
-            Curve::Intersection(ic)
-                if [&ic.a, &ic.b].iter().any(|x| *x == s || ssi::coincident(x, s))
-                    && ![&ic.a, &ic.b].iter().all(|x| *x == s || ssi::coincident(x, s)) =>
-            {
-                let other = if ic.a == *s || ssi::coincident(&ic.a, s) {
-                    &ic.b
-                } else {
-                    &ic.a
-                };
-                other.clone()
-            }
             // likewise the parabolic wall square to a parabola's plane (a vertex blend's rim)
             Curve::Parabola(pa) if n.dot(pa.frame.z()).abs() > 1.0 - 1e-6 => {
                 let h = pa.frame.z() * edge.range.width().max(1.0);

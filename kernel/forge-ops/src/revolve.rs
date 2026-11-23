@@ -170,27 +170,12 @@ struct SegInfo {
     forward: bool,
 }
 
-/// A pole's tolerance: as far as its edges' ends lie from it, at least LINEAR. A profile's arc may
-/// end a little short of the axis point the line gives; the surfaces of revolution have their
-/// poles on the axis, within LINEAR of a point `on_axis` takes for one. Nothing else needs more,
-/// and a wider ball would hide geometry once a boolean leaves only a stub of an edge ending there
-/// (a cone's apex 3·LINEAR through a face: its last ruling 3.4e-5 long).
-fn pole_tolerances(body: &mut Body, poles: &[VertexId]) {
-    if poles.is_empty() {
-        return;
-    }
-    let mut need = vec![tol::LINEAR; poles.len()];
-    for e in body.edge_ids() {
-        let edge = body.edge(e);
-        for (end, t) in [(edge.start, edge.range.lo), (edge.end, edge.range.hi)] {
-            if let Some(k) = poles.iter().position(|&v| v == end) {
-                need[k] = need[k].max(body.vertex(end).point.distance(edge.curve.eval(t)));
-            }
-        }
-    }
-    for (&v, n) in poles.iter().zip(need) {
-        body.vertices[v.0 as usize].tol = n;
-    }
+/// A pole's tolerance grown to hold the end of an edge's curve there.
+#[inline(never)]
+fn hold_pole(body: &mut Body, v: VertexId, curve: &Curve, t: f64) {
+    let gap = body.vertex(v).point.distance(curve.eval(t));
+    let vx = &mut body.vertices[v.0 as usize];
+    vx.tol = vx.tol.max(gap);
 }
 
 impl Revolver<'_> {
@@ -405,7 +390,6 @@ impl Revolver<'_> {
         }
         // on a whole turn a segment on the axis makes nothing, so a point between two such is on nothing
         let mut made = vec![0u8; pverts.len()];
-        let mut poles: Vec<VertexId> = Vec::new();
         for s in &segs {
             if !matches!(self.surface_of(&s.seg), Ok(None)) {
                 made[s.start] += 1;
@@ -419,19 +403,19 @@ impl Revolver<'_> {
                 .enumerate()
                 .any(|(i, &p)| self.on_axis(p) && made[i] == 2);
         for (i, &p) in pverts.iter().enumerate() {
-            if self.on_axis(p) && self.full && made[i] == 0 {
+            let axis = self.on_axis(p);
+            if axis && self.full && made[i] == 0 {
                 for c in vid.iter_mut() {
                     c.push(VertexId(u32::MAX));
                 }
-            } else if self.on_axis(p) && copies == 1 && !seam_end[i] {
+            } else if axis && copies == 1 && !seam_end[i] {
                 // a whole-turn disc has no seam to end there: nothing uses the vertex
                 vid[0].push(VertexId(u32::MAX));
-            } else if self.on_axis(p) {
-                // (its tolerance is what its edges and faces need: `pole_tolerances`)
+            } else if axis {
+                // (its tolerance is what its edges need, set as they are made)
                 let v = self
                     .body
                     .add_vertex(self.point3(p), self.root.with_str("pole").with(pvert_name[i]));
-                poles.push(v);
                 for c in vid.iter_mut() {
                     c.push(v);
                 }
@@ -467,6 +451,23 @@ impl Revolver<'_> {
                 let (v0, v1) = (vid[k][s.start], vid[k][s.end]);
                 let (start, end) = if s.forward { (v0, v1) } else { (v1, v0) };
                 let name = self.root.with_str("copy").with(k as u64).with(s.id);
+                // a pole's tolerance: as far as its edges' ends lie from it, at least LINEAR. A
+                // profile's arc may end a little short of the axis point the line gives; the
+                // surfaces of revolution have their poles on the axis, within LINEAR of a point
+                // `on_axis` takes for one. Nothing else needs more, and a wider ball would hide
+                // geometry once a boolean leaves only a stub of an edge ending there (a cone's apex
+                // 3·LINEAR through a face: its last ruling 3.4e-5 long)
+                // (a line's ends are the profile's points, as the vertices are, to rounding)
+                for (i, at_lo) in [(s.start, s.forward), (s.end, !s.forward)] {
+                    if !matches!(s.seg, Segment::Line { .. }) && self.on_axis(pverts[i]) {
+                        hold_pole(
+                            &mut self.body,
+                            vid[k][i],
+                            &curve,
+                            if at_lo { range.lo } else { range.hi },
+                        );
+                    }
+                }
                 let e = self.body.add_edge(curve, range, start, end, name);
                 if surface.is_none() {
                     shared = Some(e);
@@ -543,7 +544,6 @@ impl Revolver<'_> {
             self.add_cap(shell, 0, &segs, &eid, &loop_ranges);
             self.add_cap(shell, 1, &segs, &eid, &loop_ranges);
         }
-        pole_tolerances(&mut self.body, &poles);
         if copies == 1 {
             // what the second half-turn was named finds the whole
             let root = self.root;
