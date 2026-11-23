@@ -1049,17 +1049,6 @@ fn a_bore_beside_a_tapered_lobe_builds() {
     assert!(matches!(v, Verdict::Ok), "{v:?}");
 }
 
-/// A tapered cut whose walls meet before its depth: today an invalid body (EdgeDegenerate), which
-/// the judge calls a fail. Due: a clean refusal. Open: ignored until the draft says the tool
-/// collapses.
-#[test]
-#[ignore = "open: the collapsed taper builds an invalid body"]
-fn a_taper_that_collapses_is_refused_cleanly() {
-    use forge_lang::fuzz::{Verdict, judge_built};
-    let (v, _) = judge_built(include_str!("kernel_parts/taper_collapses.fg"));
-    assert!(matches!(v, Verdict::Refused(_)), "{v:?}");
-}
-
 /// A ball cut centred on the top face over a 1 deg tapered rounded-rectangle pocket: the boolean
 /// stops on SplitCrossed (the sphere). Open: ignored until the boolean splits the sphere cleanly.
 #[test]
@@ -1154,4 +1143,72 @@ fn a_fillet_on_both_edges_of_a_crescent_builds() {
     use forge_lang::fuzz::{Verdict, judge_built};
     let (v, _) = judge_built(include_str!("kernel_parts/fillet_crescent_both_edges.fg"));
     assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A tapered cut whose walls meet before its depth: the hexagon's walls, 80 deg, close on its
+/// centre at sqrt 3 / tan 80 deg = 0.305 down, short of the 0.5 asked, so the pit is the pyramid
+/// they make, as a square's is (forge-ops taper.rs: past a closed profile there is nothing). It
+/// built an invalid body (EdgeDegenerate): the slab's top joints were merged by distance, and a
+/// hexagon's lie 2 GONE apart where its sides have shrunk to GONE; and sides shrinking at other
+/// rates were kept a few GONE long. Exact volumes from the profile's half-planes moved in.
+#[test]
+fn a_taper_whose_walls_meet_is_the_pyramid_they_make() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let src = include_str!("kernel_parts/taper_collapses.fg");
+    let irregular = src.replace("(1, -s)])", "(1.3, -s)])");
+    for (src, exact) in [
+        (src.to_string(), 1598.9420381157493),
+        (irregular, 1598.9048017085177),
+    ] {
+        let (v, _) = judge_built(&src);
+        assert!(matches!(v, Verdict::Ok), "{v:?}");
+        let b = built(&src).body;
+        let vol = forge_topo::mass::mass(&b).expect("a mass").volume;
+        assert!((vol - exact).abs() <= 1e-9 * exact, "volume {vol}, exact {exact}");
+    }
+}
+
+/// The same pit says so (a lint, the part still built): its walls close at sqrt 3 / tan 80 deg,
+/// short of its depth. The fixes set the depth to where they close, or the taper to the largest
+/// angle that reaches the depth (three figures, towards 0), and each leaves no lint.
+#[test]
+fn a_taper_that_closes_short_of_its_depth_says_so() {
+    use forge_lang::error::{Error, Op, Warning};
+    let src = include_str!("kernel_parts/taper_collapses.fg");
+    let lints = |src: &str| -> Vec<Error> {
+        let r = forge_lang::run(src, forge_lang::Options::default(), Default::default()).0;
+        assert!(r.errors.is_empty(), "{:?}", r.errors);
+        r.warnings
+            .into_iter()
+            .filter_map(|w| match w {
+                Warning::Lint(e @ Error::TaperCloses { .. }) => Some(e),
+                _ => None,
+            })
+            .collect()
+    };
+    let found = lints(src);
+    let [Error::TaperCloses { at, depth, .. }] = &found[..] else {
+        panic!("{found:?}")
+    };
+    let (s, c) = dmath::sin_cos(80f64.to_radians());
+    let h = 3f64.sqrt() / (s / c);
+    assert!((at - h).abs() < 1e-9 && *depth == 0.5, "{at} {depth}");
+    let fixes = found[0].fixes();
+    let values: Vec<(String, f64)> = fixes
+        .iter()
+        .map(|f| match f {
+            Op::SetParam { param, value } => (param.to_string(), value.value),
+            o => panic!("{o:?}"),
+        })
+        .collect();
+    assert_eq!(
+        values,
+        vec![("pit.d".to_string(), 0.305), ("pit.a".to_string(), 73.8)]
+    );
+    for f in &fixes {
+        let fixed = forge_lang::edit::apply(src, f).expect("applies");
+        assert!(lints(&fixed).is_empty(), "{f:?}");
+    }
+    // at 70 deg the walls do not meet: no lint
+    assert!(lints(&src.replace("80deg", "70deg")).is_empty());
 }

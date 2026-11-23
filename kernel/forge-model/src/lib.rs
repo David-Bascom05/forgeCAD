@@ -2141,6 +2141,10 @@ fn tool(i: usize, id: u64, f: &Feature, build: bool) -> Result<Tool, RegenError>
         let slabs = forge_ops::tapered(profile, *distance, *angle, id).map_err(|e| match e {
             forge_ops::TaperError::Extrude(error) => RegenError::Extrude { feature: i, error },
             forge_ops::TaperError::Draft(error) => RegenError::Draft { feature: i, error },
+            forge_ops::TaperError::WallsCross { at } => RegenError::Draft {
+                feature: i,
+                error: forge_ops::DraftError::WallsCross { at },
+            },
         })?;
         let mut b = Body::new();
         for (k, s) in slabs.into_iter().enumerate() {
