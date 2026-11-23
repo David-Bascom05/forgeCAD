@@ -57,7 +57,7 @@ theorem membership_loop0_spec (l : Ledger) (hw : LedgerWF2 l)
       have hin := hw.inside _ (pieces_mem' hjl)
       rw [hg] at hin
       simp only at hin
-      have hnr := hsm.2.2.2.2.2
+      have hnr := hsm.2.2.2.2.2.1
       clear hg
       step as ⟨i1, hi1⟩
       have hi1v : i1.val = (b : U32).val := by rw [hi1]; scalar_tac
@@ -251,7 +251,7 @@ theorem membership_loop1_loop0_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) 
       r.1 = s.piece_of ∧ r.2.1 = s.rooms ∧ r.2.2.1 = s.room_pos ∧
       r.2.2.2.val = (List.range s.rooms.val.length).map (membRow l s i.val) ⦄ := by
   have hsm := hw.small
-  have hnr := hsm.2.2.2.2.2
+  have hnr := hsm.2.2.2.2.2.1
   have hrl := rooms_len_le l s hs
   have hnbv : (UScalar.cast UScalarTy.Usize l.nb : Usize).val = l.nb.val := by scalar_tac
   unfold membership_loop1_loop0
@@ -357,7 +357,7 @@ theorem membership_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitO
     membership l s ⦃ r => r.val.map (·.val) = membTab l s l.nb.val ⦄ := by
   unfold membership
   have hsm := hw.small
-  have hnr := hsm.2.2.2.2.2
+  have hnr := hsm.2.2.2.2.2.1
   step as ⟨nb, hnb⟩
   step as ⟨nr, hnr'⟩
   have hnbv : nb.val = l.nb.val := by rw [hnb]; scalar_tac

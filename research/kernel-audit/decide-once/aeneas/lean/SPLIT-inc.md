@@ -18,7 +18,7 @@ standard axioms and no sorry.
 | U, unify | `same_set`, `dedup`, `unify` loops | `unify` (`joinRel`, `heads`, `faceOf`, `faceKey`, `atE`/`atV`, `outV`, `ecs`, `erel`) via `IncLedger.unify_eq` | RefineUnify* (most carries over), RefineUF |
 | E, core | `core` | `coreI`; then `IncCoreSpec` and `EndToEndF` | the coordinator |
 
-Size limits added: `LedgerWF2.small` now also has `n_rooms * nb ≤ Usize.max`, which `membership`'s table needs. It always holds on 64-bit targets, since both are below 2^32.
+Size limits added: `LedgerWF2.small` now also has `n_rooms * nb ≤ Usize.max`, which `membership`'s table needs. It always holds on 64-bit targets, since both are below 2^32. It also has `nrowsL edge_facets < U32.max` and `nrowsL vert_edges < U32.max`, so the refusals' `as u32` casts name the right cell.
 
 Points to agree within each group:
 - **Lists vs sets.** The Rust orders faces by head, edges by erel root, and verts in listed order,
@@ -34,5 +34,5 @@ Points to agree within each group:
 | T | done: `rows_spec`, `row_spec` (`ledger_wf`'s equivalence is still to do) | RefineIncTables.lean |
 | S | done: `body_of_spec`, `cls_of_spec`, `split_ok_spec` (`= splitOk`), `split_spec` (`SplitOK`: piece table = `isPieceOf`, `rooms` = `(toLF l).rooms`, `room_pos` inverts it) | RefineIncTables, RefineIncSplit, RefineIncRooms |
 | C | done: `flood_spec`; `membership_spec` (row `i`, position `t` = `(toLF l).memb i (room rooms[t])`, via `memb_bridge` and the generic `head_leastI`); `core_loop0_spec` with `cAll_eq` (= `classifyOk`); `core_loop1_spec` with `keep_eq` (= `keep (ruleL nb r)` room by room) | RefineIncFlood, HeadBridgeI, RefineIncMemb, RefineIncClassify |
-| K | started: `core_k_loop0_spec` (AInv: result in facet order, rpos, senses) with `result_eq`, `orient_eq` | RefineIncAssemble |
+| K | started: `core_k_loop0_spec` (AInv: result in facet order, rpos, senses) with `result_eq`, `orient_eq`; `around_e_spec`, `aroundE_len`, the edge scan `core_k_loop1_spec` with `edges_find_eq`. Next: `around_v`, `fans`, `bad_vert`, the vert scan | RefineIncAssemble, RefineIncTouch |
 | U, E | to do | |

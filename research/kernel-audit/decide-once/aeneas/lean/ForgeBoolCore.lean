@@ -54,3 +54,4 @@ import ForgeBoolCore.HeadBridgeI
 import ForgeBoolCore.RefineIncMemb
 import ForgeBoolCore.RefineIncClassify
 import ForgeBoolCore.RefineIncAssemble
+import ForgeBoolCore.RefineIncTouch
