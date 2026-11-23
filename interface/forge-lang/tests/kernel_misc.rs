@@ -1044,6 +1044,28 @@ extrude2 = extrude(s4, 2)
     }
 }
 
+/// A spline dome (its wall reaching the axis at a pole) meshes at chord 2e-4: about 0.4M
+/// points, past the CDT's first budget of 2^18, which then takes what the chord asks for
+/// (`Refine::need`, ∫κ dA / (2√3 c) triangles, four times over). It was refused, "refinement did
+/// not settle" (from fix-shell, 504a8b9). Closed, and within the chord of the body's volume.
+#[test]
+fn a_spline_dome_meshes_at_a_fine_chord() {
+    let (b, v) = body(include_str!("kernel_parts/mesh_spline_dome.fg"));
+    let q = forge_mesh::Quality {
+        chord: 2e-4,
+        ..forge_mesh::Quality::default()
+    };
+    let m = forge_mesh::tessellate(&b, &q).expect("meshes");
+    assert!(m.positions.len() > 1 << 18, "{} points", m.positions.len());
+    assert!(m.open_edges().is_empty());
+    let area = forge_topo::mass::mass(&b).expect("mass").area;
+    assert!(
+        (m.volume() - v).abs() <= q.chord * area,
+        "{} against {v}",
+        m.volume()
+    );
+}
+
 /// A plate whose wall is a wavy spline (19 points, one tight turn back, crossing nowhere) builds
 /// and meshes: its chords, crossing a neighbour's near the turn, are cut by the crossing pre-pass
 /// (it failed ConstraintThroughPoint; from the import branch, CADFS 00468533 and 00893869).

@@ -1683,7 +1683,67 @@ fn mesh_face(
             off(x[0].lerp(x[1], 0.5).lerp(x[2], 1.0 / 3.0), m)
         }
     };
-    let strays = Tests(edge, triangle, both_ways);
+    // what the chord asks of an ideal mesh, asked only of a refinement past the budget its
+    // boundary gives it: triangles of side √(8 r c) where the larger curvature is 1/r (sagging
+    // c each), so ∫κ dA / (2√3 c) of them and half as many points, the integral on a grid of
+    // the layout's box (a cell counted where its middle is in the face)
+    let need = || {
+        let (mut lo, mut hi) = (scaled[0], scaled[0]);
+        for p in &scaled {
+            (lo.x, lo.y, hi.x, hi.y) = (lo.x.min(p.x), lo.y.min(p.y), hi.x.max(p.x), hi.y.max(p.y));
+        }
+        let polys: Vec<Vec<Point2>> = loops
+            .iter()
+            .map(|l| l.iter().map(|&i| scaled[i as usize]).collect())
+            .collect();
+        const G: usize = 64;
+        let (hx, hy) = ((hi.x - lo.x) / G as f64, (hi.y - lo.y) / G as f64);
+        let mut curving = 0.0;
+        for i in 0..G {
+            for j in 0..G {
+                let p = Point2::new(lo.x + (i as f64 + 0.5) * hx, lo.y + (j as f64 + 0.5) * hy);
+                let mut inside = false;
+                for poly in &polys {
+                    inside ^= forge_math::predicates::inside_polygon(p, poly);
+                }
+                if !inside {
+                    continue;
+                }
+                let uv = layout.uv(p);
+                // the cell's area in (u, v): the layout's own stretch there
+                let (du, dv) = (
+                    layout.uv(Point2::new(p.x + hx, p.y)) - uv,
+                    layout.uv(Point2::new(p.x, p.y + hy)) - uv,
+                );
+                let cell = (du.x * dv.y - du.y * dv.x).abs();
+                let d = surface.deriv(uv);
+                let n = d.du.cross(d.dv);
+                let a = n.length();
+                if a.is_nan() || a <= 0.0 {
+                    continue;
+                }
+                let n = n * (1.0 / a);
+                let (e, f, g) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
+                let (l, m, nn) = (n.dot(d.duu), n.dot(d.duv), n.dot(d.dvv));
+                let det = e * g - f * f;
+                if det.is_nan() || det <= 0.0 {
+                    continue;
+                }
+                let k = (l * nn - m * m) / det;
+                let h = (e * nn - 2.0 * f * m + g * l) / (2.0 * det);
+                let kappa = h.abs() + (h * h - k).max(0.0).sqrt();
+                if kappa.is_finite() {
+                    curving += kappa * a * cell;
+                }
+            }
+        }
+        let triangles = curving / (2.0 * 3f64.sqrt() * q.chord);
+        Some(crate::cdt::Need {
+            chord: q.chord,
+            points: (0.5 * triangles).min(u64::MAX as f64) as u64 + scaled.len() as u64,
+        })
+    };
+    let strays = Tests(edge, triangle, both_ways, need);
     let zipped = match &loops[..] {
         [lp] if interior.is_empty() && twice.is_empty() => zip(&scaled, lp, &strays),
         _ => None,
@@ -1884,10 +1944,16 @@ fn strays_from(s: &Surface, x: forge_math::Point3, y: forge_math::Point3, uv: Po
     true
 }
 
-/// A refinement's tests: edges, triangles, and whether triangles are looked at.
-struct Tests<E, T>(E, T, bool);
+/// A refinement's tests: edges, triangles, whether triangles are looked at, and what its chord
+/// asks for.
+struct Tests<E, T, N>(E, T, bool, N);
 
-impl<E: Fn(u32, u32, Point2, Point2) -> bool, T: Fn([u32; 3], [Point2; 3]) -> bool> Refine for Tests<E, T> {
+impl<
+    E: Fn(u32, u32, Point2, Point2) -> bool,
+    T: Fn([u32; 3], [Point2; 3]) -> bool,
+    N: Fn() -> Option<crate::cdt::Need>,
+> Refine for Tests<E, T, N>
+{
     fn edge(&self, a: u32, b: u32, pa: Point2, pb: Point2) -> bool {
         (self.0)(a, b, pa, pb)
     }
@@ -1896,6 +1962,10 @@ impl<E: Fn(u32, u32, Point2, Point2) -> bool, T: Fn([u32; 3], [Point2; 3]) -> bo
     }
     fn triangles(&self) -> bool {
         self.2
+    }
+    #[cold]
+    fn need(&self) -> Option<crate::cdt::Need> {
+        (self.3)()
     }
 }
 

@@ -51,12 +51,23 @@ pub enum CdtError {
         rounds: u32,
         points: u32,
     },
+    /// The chord asks for more points than a face may have (`CEILING`): about `required` at
+    /// `chord` (`Refine::need`). A coarser chord meshes it.
+    TooFine {
+        chord: f64,
+        required: u64,
+    },
     /// An invariant broke; a bug, not bad input.
     Internal(&'static str),
 }
 
 /// Rounds of refinement before it counts as unsettled.
 const ROUNDS: usize = 200;
+/// The most points one face's triangulation may have, whatever its chord asks.
+pub const CEILING: usize = 1 << 23;
+/// A refinement's points over what its chord asks of an ideal mesh (`Refine::need`): splitting at
+/// the middles of edges and triangles makes about twice as many.
+const SAFETY: u64 = 4;
 const NONE: u32 = u32::MAX;
 const SUPER: u32 = 3;
 
@@ -774,6 +785,19 @@ pub trait Refine {
     /// Whether a triangle gets a point at its centroid; never asked unless `triangles`.
     fn triangle(&self, v: [u32; 3], p: [Point2; 3]) -> bool;
     fn triangles(&self) -> bool;
+    /// About how many points the refinement's tolerance asks for: asked once, only of a
+    /// refinement past the budget a face's boundary alone gives it.
+    fn need(&self) -> Option<Need> {
+        None
+    }
+}
+
+/// What a refinement's chord asks for: about `points` points (an ideal mesh's, of triangles
+/// sagging `chord` each).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Need {
+    pub chord: f64,
+    pub points: u64,
 }
 
 /// A polygon with no inner points, zipped from its leftmost point along both sides, each step the
@@ -1043,17 +1067,43 @@ fn within(
         let triangles = refine.triangles();
         // a cascade that never ends stops at a number of rounds (each halves what it splits:
         // two hundred halvings are past any double's precision), one that only grows at a budget
-        // of points (a quarter of a million, or four for each point given); either fails, typed
-        let budget = (4 * (points.len() + kept.len())).max(1 << 18);
+        // of points: a quarter of a million, or four for each point given, and past that what
+        // the chord asks for (`Refine::need`, asked then), four times over, up to `CEILING`;
+        // either fails, typed (past the ceiling, as `TooFine`)
+        let mut budget = (4 * (points.len() + kept.len())).max(1 << 18);
+        let mut need: Option<Option<Need>> = None;
         let unsettled = |rounds: usize, mesh: &Mesh| CdtError::Unsettled {
             rounds: rounds as u32,
             points: (mesh.pts.len() as u32).saturating_sub(SUPER),
         };
         settled = false;
         for round in 0..rounds {
+            if mesh.pts.len() > budget && need.is_none() {
+                let n = refine.need();
+                need = Some(n);
+                if let Some(n) = n {
+                    // (an ideal mesh past the ceiling: no refinement fits under it)
+                    if n.points > CEILING as u64 && !as_far {
+                        return Err(CdtError::TooFine {
+                            chord: n.chord,
+                            required: n.points,
+                        });
+                    }
+                    let want = n.points.saturating_mul(SAFETY).min(CEILING as u64) as usize;
+                    budget = budget.max(want);
+                }
+            }
             if mesh.pts.len() > budget {
                 if as_far {
                     break;
+                }
+                if let Some(Some(n)) = need
+                    && budget >= CEILING
+                {
+                    return Err(CdtError::TooFine {
+                        chord: n.chord,
+                        required: n.points,
+                    });
                 }
                 return Err(unsettled(round, &mesh));
             }
@@ -1698,6 +1748,61 @@ mod tests {
 
     /// A refinement that never settles (every edge split, every round) stops at the point budget
     /// with a clean error, not after 200 rounds of doubling.
+    /// A refinement past the budget its boundary gives it gets what its chord asks for, four times
+    /// over, up to the ceiling; past the ceiling it is refused, typed, with the chord and the count.
+    #[test]
+    fn the_budget_is_what_the_chord_asks_for() {
+        struct Asks(usize, u64);
+        impl Refine for Asks {
+            // every edge longer than 1/k of the square split: about k² triangles
+            fn edge(&self, _: u32, _: u32, a: Point2, b: Point2) -> bool {
+                a.distance(b) > 1.0 / self.0 as f64
+            }
+            fn triangle(&self, _: [u32; 3], _: [Point2; 3]) -> bool {
+                false
+            }
+            fn triangles(&self) -> bool {
+                false
+            }
+            fn need(&self) -> Option<Need> {
+                Some(Need {
+                    chord: 1e-3,
+                    points: self.1,
+                })
+            }
+        }
+        // the unit square, its sides cut at 1/k (k = 256)
+        let k = 256;
+        let mut square = Vec::new();
+        for (o, d) in [
+            ((0.0, 0.0), (1.0, 0.0)),
+            ((1.0, 0.0), (0.0, 1.0)),
+            ((1.0, 1.0), (-1.0, 0.0)),
+            ((0.0, 1.0), (0.0, -1.0)),
+        ] {
+            for i in 0..k {
+                let t = i as f64 / k as f64;
+                square.push(Point2::new(o.0 + d.0 * t, o.1 + d.1 * t));
+            }
+        }
+        let lp = vec![(0..square.len() as u32).collect::<Vec<_>>()];
+        // past 2^18 points, and given what it needs it settles
+        let t = triangulate_within(&square, &lp, &[], Some(&Asks(k, 200_000)), false).unwrap();
+        assert!(t.points.len() > 1 << 18, "{}", t.points.len());
+        // what it asks for told too small: unsettled, as before
+        let small = triangulate_within(&square, &lp, &[], Some(&Asks(k, 1000)), false);
+        assert!(matches!(small, Err(CdtError::Unsettled { .. })), "{small:?}");
+        // an ideal mesh past the ceiling: refused at once, with the chord and the count
+        let fine = triangulate_within(&square, &lp, &[], Some(&Asks(k, 1 << 24)), false);
+        assert_eq!(
+            fine.map(|_| ()),
+            Err(CdtError::TooFine {
+                chord: 1e-3,
+                required: 1 << 24
+            })
+        );
+    }
+
     #[test]
     fn refinement_that_never_settles_fails() {
         struct Always;
