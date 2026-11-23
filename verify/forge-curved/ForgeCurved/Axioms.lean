@@ -144,3 +144,4 @@ import ForgeCurved
 #print axioms ForgeCurved.grad_cone
 #print axioms ForgeCurved.Nesting.anchored
 #print axioms ForgeCurved.Nesting.flip_of_transversal
+#print axioms ForgeCurved.BranchOrder.branch_order
