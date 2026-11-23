@@ -3,6 +3,7 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 -/
 import Lean
 import ForgeMesh.Funs
+import ForgeMesh.Basic
 
 /-!
 # No axiom in the CDT's translation
@@ -27,3 +28,5 @@ elab "#standard_axioms " ids:ident* : command => do
 #standard_axioms
   forge_mesh.cdt.triangulate_within forge_mesh.cdt.triangulate_as_far forge_mesh.cdt.within
   forge_mesh.cdt.zip
+  forge_mesh.nx_spec forge_mesh.pv_spec forge_mesh.slot_spec forge_mesh.least_spec
+  forge_mesh.most_spec forge_mesh.same_chord_spec
