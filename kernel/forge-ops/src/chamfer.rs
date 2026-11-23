@@ -293,10 +293,21 @@ pub fn chamfer_with(
     for e in fit_e {
         fit[e.index()] = true;
     }
-    rebuild_some(&mut out, &verts, &fit).map_err(|e| match e {
-        RebuildError::Collapsed { edge } => ChamferError::TooLarge { edge },
-        e => ChamferError::Rebuild(e),
-    })?;
+    // a face between two chamfers taken whole (a disc's wall, both rims chamfered half its height):
+    // its seam collapses, and the two rims are one edge between the chamfers
+    let mut closed = 0;
+    loop {
+        match rebuild_some(&mut out, &verts, &fit) {
+            Ok(()) => break,
+            Err(RebuildError::Collapsed { edge })
+                if closed < 4 && close_band(&mut out, edge, &mut verts, &mut fit) =>
+            {
+                closed += 1;
+            }
+            Err(RebuildError::Collapsed { edge }) => return Err(ChamferError::TooLarge { edge }),
+            Err(e) => return Err(ChamferError::Rebuild(e)),
+        }
+    }
     let out = out.into_compact();
     let problems = check_against(&out, &src);
     let flagged: Vec<bool> = forge_topo::changed_faces(&out, &src)
@@ -314,6 +325,92 @@ pub fn chamfer_with(
         return Err(ChamferError::Invalid(problems));
     }
     Ok(out)
+}
+
+/// Where edge `name`, the seam of a band face between two closed rims, has collapsed (its two
+/// ends at one point): the band is taken whole. Its rims are one edge between the faces beyond,
+/// its seam goes, and its ends are one vertex. False, nothing changed, for any other edge.
+fn close_band(out: &mut Body, name: forge_topo::Name, verts: &mut [bool], fit: &mut [bool]) -> bool {
+    let Some(e) = out.edge_ids().find(|&x| out.edge(x).name == name) else {
+        return false;
+    };
+    let seam = out.edge(e).clone();
+    let [c0, c1] = seam.coedges[..] else { return false };
+    let f = out.coedge_face(c0);
+    if out.coedge_face(c1) != f || out.face(f).loops.len() != 1 {
+        return false;
+    }
+    let uses: Vec<(EdgeId, bool)> = out
+        .lp(out.face(f).loops[0])
+        .coedges()
+        .map(|c| (out.coedge(c).edge, out.coedge(c).forward))
+        .collect();
+    let rims: Vec<EdgeId> = uses.iter().map(|u| u.0).filter(|&x| x != e).collect();
+    let [a, b] = rims[..] else { return false };
+    let closed = |x: EdgeId| out.edge(x).start == out.edge(x).end;
+    if uses.len() != 4 || a == b || !closed(a) || !closed(b) {
+        return false;
+    }
+    let (va, vb) = (out.edge(a).start, out.edge(b).start);
+    if [va, vb] != [seam.start, seam.end] && [vb, va] != [seam.start, seam.end] {
+        return false;
+    }
+    // each chamfer's foot on the band still on it (the seam as it was): the chamfers meet or
+    // overlap there. A foot past the band's far rim is a chamfer wider than its face
+    let on_seam = |v: VertexId| {
+        let p = out.vertex(v).point;
+        let t = seam.curve.closest(p, seam.range);
+        seam.curve.eval(t).distance(p) <= tol::LINEAR
+    };
+    if !on_seam(va) || !on_seam(vb) {
+        return false;
+    }
+    // the face beyond b, and how it walks b: it walks a the way a runs where they agree
+    let Some(&cb) = out.edge(b).coedges.iter().find(|&&c| out.coedge_face(c) != f) else {
+        return false;
+    };
+    let g = out.coedge_face(cb);
+    let (xa, xb) = (out.edge(a), out.edge(b));
+    let ta = xa.curve.deriv(xa.range.mid()).d1;
+    let tb = xb
+        .curve
+        .deriv(xb.curve.closest(xa.curve.eval(xa.range.mid()), xb.range))
+        .d1;
+    let way = out.coedge(cb).forward == (ta.dot(tb) > 0.0);
+    out.kill_face(f);
+    let Some(&l) = out
+        .face(g)
+        .loops
+        .iter()
+        .find(|&&l| out.lp(l).coedges().any(|c| c == cb))
+    else {
+        return false;
+    };
+    let new: Vec<(EdgeId, bool)> = out
+        .lp(l)
+        .coedges()
+        .map(|c| {
+            let co = out.coedge(c);
+            if co.edge == b {
+                (a, way)
+            } else {
+                (co.edge, co.forward)
+            }
+        })
+        .collect();
+    out.replace_loop(g, l, &new);
+    for x in &mut out.edges {
+        if x.start == vb {
+            x.start = va;
+        }
+        if x.end == vb {
+            x.end = va;
+        }
+    }
+    verts[vb.index()] = false;
+    verts[va.index()] = true;
+    fit[a.index()] = true;
+    true
 }
 
 struct Work {

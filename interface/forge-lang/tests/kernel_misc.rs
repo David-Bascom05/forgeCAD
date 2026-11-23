@@ -1087,3 +1087,36 @@ fn the_flush_notch_twin_rounds() {
     let (v, _) = judge_built(include_str!("kernel_parts/fillet_flush_notch_twin.fg"));
     assert!(matches!(v, Verdict::Ok), "{v:?}");
 }
+
+/// Both rims of a disc 4 thick chamfered 2 (the scale-programs session's repro, 16 CADFS parts):
+/// the chamfers meet at mid-height and take the wall whole, and the two cones meet in its place.
+/// Refused as TooLarge (the wall's seam collapses); now the wall goes, its rims are one edge. Wider
+/// chamfers overlap on the wall (each foot still on it) and build; one whose foot would lie past
+/// the wall's far rim is still too large.
+#[test]
+fn chamfers_meeting_across_a_wall_take_it() {
+    use std::f64::consts::PI;
+    let disc = |c: f64| {
+        format!(
+            r#"
+shared c = {c}
+sketch s(on: xy) {{
+  o = circle((0, 0), 15)
+}}
+b = extrude(s, 4)
+f = chamfer(edges(between: (b.side(s.o), b.start)) + edges(between: (b.end, b.side(s.o))), c)
+"#
+        )
+    };
+    // the disc less a ring of each chamfer's triangle (Pappus), less their overlap once
+    let disc_v = PI * 15.0 * 15.0 * 4.0;
+    let ring = |c: f64| 2.0 * PI * (c * c / 2.0) * (15.0 - c / 3.0);
+    let v = body(&disc(2.0)).1;
+    let want = disc_v - 2.0 * ring(2.0);
+    assert!((v - want).abs() <= 1e-6 * want, "{v} against {want}");
+    // at 3 the triangles overlap in one with corners (14, 2), (15, 1), (15, 3)
+    let v = body(&disc(3.0)).1;
+    let want = disc_v - 2.0 * ring(3.0) + 2.0 * PI * 1.0 * (44.0 / 3.0);
+    assert!((v - want).abs() <= 1e-6 * want, "{v} against {want}");
+    assert!(kernel_util::refusal(&disc(5.0)).contains("TooLarge"));
+}
