@@ -18,7 +18,9 @@ unproven contract is a `def … : Prop` in Lean, never a `sorry`.
 
 **Owners:** SPINE (§E, the composition, the body layer, forge-topo validity); TRANSLATE (the
 Aeneas translation of forge-bool and its types); FLAT-SITES (classify.rs, point_in_face, G1/§1a,
-G11 flat, G13–G15); FALLBACK (G2–G10, G12, A8 as the fallback, and the fallback being unneeded).
+G11 flat, G13–G15); FALLBACK (G2–G10, G12, A8 as the fallback, and the fallback being unneeded); CURVED-SITES
+(the curved guess sites: G11 on curved faces, coincidence, unify's curved decisions, poles and
+seams, and the curved screens S3/S4).
 
 ## E. The end-to-end theorem and its hypotheses
 
@@ -98,7 +100,11 @@ G11 flat, G13–G15); FALLBACK (G2–G10, G12, A8 as the fallback, and the fallb
 | G9 | `SCRATCH`, cached `FaceInfo` (`CacheOK b`) | FALLBACK | open | — |
 | G10 | `nary`'s `Batch` and threads | FALLBACK | open | — |
 | G11 | flat `LINEAR`/`RIM` tolerance tests | FLAT-SITES | open | — |
-| G11c | curved `LINEAR`/`RIM` tolerance tests (curved-fallback-rates.md) | none this round | open, deferred (curved) | — |
+| G11c | curved `LINEAR`/`RIM` tolerance tests (curved-fallback-rates.md) | CURVED-SITES | open | — |
+| C.coinc | `ssi::coincident`, `same_carrier`: coincident carriers decided exactly | CURVED-SITES | open | — |
+| C.unify | unify's curved decisions | CURVED-SITES | open | — |
+| C.cuts | the `on_edge` / `place_cuts` coincidence sites on curved faces | CURVED-SITES | open | — |
+| C.poles | poles and seams (`sphere_nearest`'s pole rule, periodic seams) | CURVED-SITES | open | — |
 | G12 | the `decide_once` feature becomes the fallback branch | FALLBACK | open | — |
 | G13 | `face_point`'s unchecked inward step | FLAT-SITES | open | — |
 | G14 | trim_in's box-only accept | FLAT-SITES | open | — |
@@ -120,5 +126,5 @@ G11 flat, G13–G15); FALLBACK (G2–G10, G12, A8 as the fallback, and the fallb
 
 | id | contract | owner | status | file / theorem |
 |---|---|---|---|---|
-| S3 | a screened vertex is transversal | SPINE | proven on dol-curved (8dbdc11d) | landing: spine PR 2, VertexScreen.lean |
-| S4 | the angle comparator is the angular order | SPINE | proven on dol-curved (83b5f267) | landing: spine PR 2, AngleOrder.lean |
+| S3 | a screened vertex is transversal | CURVED-SITES (landing: SPINE) | proven on dol-curved (8dbdc11d) | landing: spine PR 2, VertexScreen.lean |
+| S4 | the angle comparator is the angular order | CURVED-SITES (landing: SPINE) | proven on dol-curved (83b5f267) | landing: spine PR 2, AngleOrder.lean |
