@@ -602,3 +602,24 @@ not explain 00402272. What decides between the cliff and carrying the plane on (
 beyond is an earlier round, smooth, or how far the spring runs off) is open. Asked for: 00402272's
 region restated as a small .fg (the census worker offered), and the rest of the 15.
 
+**00402272, looked at in its region** (the census worker's cut-down translation; not committed).
+- A 71.12 × 142.24 × 11.938 tray: a pocket 9.398 deep, concave corner rounds f2 r 10.795, convex
+  outer corner rounds f3 r 10.795. Then f4 re-adds the pocket's sharp-cornered outline 2.54 thick,
+  and f5 rounds f4's corner edges at r 10.795.
+- f4's sharp corners stick out past f3's outer rounds, so its exposed side faces are short pieces
+  (about 2.46) at the corners. Beyond them the side planes are f4's interface with the tray's wall
+  material.
+- Onshape's f5 blend is tangent to both carried f4 side planes (axis at (±22.733, ±58.293)). Its feet
+  lie on that interface, off any face, and its cut runs through the wall's material. That is (c),
+  the carried supports with the cut ∩ S, and it is not explained by merging coplanar faces into one
+  generator (the coplanar pocket walls face the other way).
+- 00196819, by contrast, is a cliff on the rim where its side face meets another feature's face.
+
+So the convex rule has two behaviours in the data, and the deciding predicate is still open. One
+guess is whether the plane past the face's end is exposed boundary (a rim: cliff) or an interface
+the earlier features left inside the solid (carried on). The census list of 15 is in hand: 00123784,
+00153157, 00154651, 00196819, 00318570, 00321679, 00366714, 00402272, 00476278, 00607956, 00684321,
+00685754, 00761058, 00924177, 00958346 (with features, verdicts, r and widths, from the census
+worker). Each is to be classified (cliff, carried, or roll) by `cliffcheck.py` before a rule is
+proposed.
+
