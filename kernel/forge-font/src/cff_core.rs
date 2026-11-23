@@ -445,79 +445,110 @@ pub fn run(d: &[u8], cs: (usize, usize), gsubrs: &[usize], local: &[usize]) -> R
         o: cs.0,
     };
     let mut frames: Vec<Frame> = Vec::with_capacity(NESTING);
-    let mut stems: usize = 0;
-    let mut width_read = false;
-    let mut steps = STEPS;
-    let mut done = false;
-    // the top charstring's `return`: it stops there, unended
-    let mut left = false;
+    let mut m = Machine {
+        stems: 0,
+        width_read: false,
+        steps: STEPS,
+        done: false,
+        left: false,
+    };
     let mut err = OK;
-    while err == OK && !done && !left && (f.o < f.e || !frames.is_empty()) {
+    while err == OK && !m.done && !m.left && (f.o < f.e || !frames.is_empty()) {
         if f.o >= f.e {
             // a subroutine run off its end returns
             f = frames.pop().unwrap_or(f);
-        } else if steps == 0 {
-            err = TOO_LONG;
         } else {
-            steps -= 1;
-            let b0 = byte_or0(d, f.o);
-            f.o += 1;
-            if b0 >= 32 || b0 == 28 {
-                match operand(d, f.o, f.e, b0) {
-                    Some((v, o)) => {
-                        f.o = o;
-                        if s.v.len() >= STACK {
-                            err = OVERFLOW;
-                        } else {
-                            s.v.push(v);
-                        }
-                    }
-                    None => err = TRUNCATED,
-                }
-            } else if b0 == 10 || b0 == 29 {
-                // callsubr callgsubr
-                match s.v.pop() {
-                    None => err = NO_NUMBER,
-                    Some(k) => {
-                        if k % ONE != 0 {
-                            err = NOT_WHOLE;
-                        } else {
-                            let idx = if b0 == 10 { local } else { gsubrs };
-                            match subr(d, idx, k / ONE) {
-                                None => err = NOT_THERE,
-                                Some((a, b)) => {
-                                    if frames.len() + 1 > NESTING {
-                                        err = NESTED;
-                                    } else {
-                                        frames.push(f);
-                                        f = Frame { s: a, e: b, o: a };
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } else if b0 == 11 {
-                // return
-                match frames.pop() {
-                    Some(g) => f = g,
-                    None => left = true,
-                }
-            } else {
-                err = op(d, &mut f, &mut p, &mut s, &mut stems, &mut width_read, &mut done, b0);
-                s.v.clear();
-                s.lo = 0;
-            }
+            err = one(d, gsubrs, local, &mut f, &mut frames, &mut p, &mut s, &mut m);
         }
     }
     if err != OK {
         return Err(fail(err));
     }
-    if !done {
+    if !m.done {
         return Err(fail(NO_END));
     }
     close(&mut p);
     Ok(p.out)
+}
+
+/// The machine's counters and flags.
+pub struct Machine {
+    pub stems: usize,
+    pub width_read: bool,
+    pub steps: usize,
+    pub done: bool,
+    /// The top charstring's `return`: it stops there, unended.
+    pub left: bool,
+}
+
+/// One step: an operand, a call, a return or an operator, at `f.o < f.e`.
+#[allow(clippy::too_many_arguments)]
+fn one(
+    d: &[u8],
+    gsubrs: &[usize],
+    local: &[usize],
+    f: &mut Frame,
+    frames: &mut Vec<Frame>,
+    p: &mut Pen,
+    s: &mut Stack,
+    m: &mut Machine,
+) -> Code {
+    if m.steps == 0 {
+        return TOO_LONG;
+    }
+    m.steps -= 1;
+    let b0 = byte_or0(d, f.o);
+    f.o += 1;
+    if b0 >= 32 || b0 == 28 {
+        match operand(d, f.o, f.e, b0) {
+            Some((v, o)) => {
+                f.o = o;
+                if s.v.len() >= STACK {
+                    OVERFLOW
+                } else {
+                    s.v.push(v);
+                    OK
+                }
+            }
+            None => TRUNCATED,
+        }
+    } else if b0 == 10 || b0 == 29 {
+        // callsubr callgsubr
+        match s.v.pop() {
+            None => NO_NUMBER,
+            Some(k) => {
+                if k % ONE != 0 {
+                    NOT_WHOLE
+                } else {
+                    let idx = if b0 == 10 { local } else { gsubrs };
+                    match subr(d, idx, k / ONE) {
+                        None => NOT_THERE,
+                        Some((a, b)) => {
+                            if frames.len() + 1 > NESTING {
+                                NESTED
+                            } else {
+                                frames.push(*f);
+                                *f = Frame { s: a, e: b, o: a };
+                                OK
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else if b0 == 11 {
+        // return
+        match frames.pop() {
+            Some(g) => *f = g,
+            None => m.left = true,
+        }
+        OK
+    } else {
+        let e = op(d, f, p, s, &mut m.stems, &mut m.width_read, &mut m.done, b0);
+        s.v.clear();
+        s.lo = 0;
+        e
+    }
 }
 
 /// One operator other than an operand, a call or a return.

@@ -3,7 +3,9 @@
 //! past and do nothing; `seac` accents and the deprecated arithmetic operators are refused.
 //!
 //! Every coordinate a charstring makes is a sum of its operands, each an integer or a 16.16
-//! fixed-point number, so the outlines come out exact in f64 (multiples of 2^-16).
+//! fixed-point number, so the outlines come out exact in f64 (multiples of 2^-16). The charstring
+//! itself is run by `cff_core` in integers of 2^-16 units (proven in verify/aeneas/forge-font);
+//! this shell reads the table and maps its points to f64.
 
 use crate::{FontError, Seg, cff_core};
 use forge_math::Point2;

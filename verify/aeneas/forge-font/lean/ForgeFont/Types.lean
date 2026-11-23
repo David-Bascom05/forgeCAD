@@ -73,6 +73,16 @@ structure cff_core.Frame where
   e : Std.Usize
   o : Std.Usize
 
+/-- [forge_font::cff_core::Machine]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 475:0-482:1
+    Visibility: public -/
+structure cff_core.Machine where
+  stems : Std.Usize
+  width_read : Bool
+  steps : Std.Usize
+  done : Bool
+  left : Bool
+
 /-- [forge_font::glyf_core::Pi]
     Source: 'kernel/forge-font/src/glyf_core.rs', lines 14:0-17:1
     Visibility: public -/

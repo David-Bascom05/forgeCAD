@@ -1086,7 +1086,7 @@ def cff_core.operand
           else ok none
 
 /-- [forge_font::cff_core::op]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 525:0-597:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 556:0-628:1 -/
 def cff_core.op
   (d : Slice Std.U8) (f : cff_core.Frame) (p : cff_core.Pen)
   (s : cff_core.Stack) (stems : Std.Usize) (width_read : Bool) (done1 : Bool)
@@ -1350,27 +1350,169 @@ def cff_core.op
                                             ok (cff_core.UNKNOWN, f, p, s,
                                               stems, width_read, done1)
 
+/-- [forge_font::cff_core::one]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 486:0-552:1 -/
+def cff_core.one
+  (d : Slice Std.U8) (gsubrs : Slice Std.Usize) («local» : Slice Std.Usize)
+  (f : cff_core.Frame) (frames : alloc.vec.Vec cff_core.Frame)
+  (p : cff_core.Pen) (s : cff_core.Stack) (m : cff_core.Machine) :
+  Result (Std.U8 × cff_core.Frame × (alloc.vec.Vec cff_core.Frame) ×
+    cff_core.Pen × cff_core.Stack × cff_core.Machine)
+  := do
+  if m.steps = 0#usize
+  then ok (cff_core.TOO_LONG, f, frames, p, s, m)
+  else
+    let i ← m.steps - 1#usize
+    let b0 ← cff_core.byte_or0 d f.o
+    let i1 ← f.o + 1#usize
+    if b0 >= 32#u8
+    then
+      let o ← cff_core.operand d i1 f.e b0
+      match o with
+      | none =>
+        ok (cff_core.TRUNCATED, { f with o := i1 }, frames, p, s,
+          { m with steps := i })
+      | some p1 =>
+        let (v, o1) := p1
+        let i2 := alloc.vec.Vec.len s.v
+        if i2 >= cff_core.STACK
+        then
+          ok (cff_core.OVERFLOW, { f with o := o1 }, frames, p, s,
+            { m with steps := i })
+        else
+          let v1 ← alloc.vec.Vec.push s.v v
+          ok (cff_core.OK, { f with o := o1 }, frames, p, { s with v := v1 },
+            { m with steps := i })
+    else
+      if b0 = 28#u8
+      then
+        let o ← cff_core.operand d i1 f.e b0
+        match o with
+        | none =>
+          ok (cff_core.TRUNCATED, { f with o := i1 }, frames, p, s,
+            { m with steps := i })
+        | some p1 =>
+          let (v, o1) := p1
+          let i2 := alloc.vec.Vec.len s.v
+          if i2 >= cff_core.STACK
+          then
+            ok (cff_core.OVERFLOW, { f with o := o1 }, frames, p, s,
+              { m with steps := i })
+          else
+            let v1 ← alloc.vec.Vec.push s.v v
+            ok (cff_core.OK, { f with o := o1 }, frames, p, { s with v := v1 },
+              { m with steps := i })
+      else
+        if b0 = 10#u8
+        then
+          let (o, v) ← alloc.vec.Vec.pop alloc.alloc.Global s.v
+          match o with
+          | none =>
+            ok (cff_core.NO_NUMBER, { f with o := i1 }, frames, p,
+              { s with v }, { m with steps := i })
+          | some k =>
+            let i2 ← k % cff_core.ONE
+            if i2 != 0#i64
+            then
+              ok (cff_core.NOT_WHOLE, { f with o := i1 }, frames, p,
+                { s with v }, { m with steps := i })
+            else
+              let idx ← if b0 = 10#u8
+                          then ok «local»
+                          else ok gsubrs
+              let i3 ← k / cff_core.ONE
+              let o1 ← cff_core.subr d idx i3
+              match o1 with
+              | none =>
+                ok (cff_core.NOT_THERE, { f with o := i1 }, frames, p,
+                  { s with v }, { m with steps := i })
+              | some p1 =>
+                let (a, b) := p1
+                let i4 := alloc.vec.Vec.len frames
+                let i5 ← i4 + 1#usize
+                if i5 > cff_core.NESTING
+                then
+                  ok (cff_core.NESTED, { f with o := i1 }, frames, p,
+                    { s with v }, { m with steps := i })
+                else
+                  let frames1 ← alloc.vec.Vec.push frames { f with o := i1 }
+                  ok (cff_core.OK, { s := a, e := b, o := a }, frames1, p,
+                    { s with v }, { m with steps := i })
+        else
+          if b0 = 29#u8
+          then
+            let (o, v) ← alloc.vec.Vec.pop alloc.alloc.Global s.v
+            match o with
+            | none =>
+              ok (cff_core.NO_NUMBER, { f with o := i1 }, frames, p,
+                { s with v }, { m with steps := i })
+            | some k =>
+              let i2 ← k % cff_core.ONE
+              if i2 != 0#i64
+              then
+                ok (cff_core.NOT_WHOLE, { f with o := i1 }, frames, p,
+                  { s with v }, { m with steps := i })
+              else
+                let idx ← if b0 = 10#u8
+                            then ok «local»
+                            else ok gsubrs
+                let i3 ← k / cff_core.ONE
+                let o1 ← cff_core.subr d idx i3
+                match o1 with
+                | none =>
+                  ok (cff_core.NOT_THERE, { f with o := i1 }, frames, p,
+                    { s with v }, { m with steps := i })
+                | some p1 =>
+                  let (a, b) := p1
+                  let i4 := alloc.vec.Vec.len frames
+                  let i5 ← i4 + 1#usize
+                  if i5 > cff_core.NESTING
+                  then
+                    ok (cff_core.NESTED, { f with o := i1 }, frames, p,
+                      { s with v }, { m with steps := i })
+                  else
+                    let frames1 ←
+                      alloc.vec.Vec.push frames { f with o := i1 }
+                    ok (cff_core.OK, { s := a, e := b, o := a }, frames1, p,
+                      { s with v }, { m with steps := i })
+          else
+            if b0 = 11#u8
+            then
+              let (o, frames1) ← alloc.vec.Vec.pop alloc.alloc.Global frames
+              match o with
+              | none =>
+                ok (cff_core.OK, { f with o := i1 }, frames1, p, s,
+                  { m with steps := i, left := true })
+              | some g =>
+                ok (cff_core.OK, g, frames1, p, s, { m with steps := i })
+            else
+              let (e, f1, p1, s1, i2, b, b1) ←
+                cff_core.op d { f with o := i1 } p s m.stems m.width_read
+                  m.done b0
+              let v ← alloc.vec.Vec.clear alloc.alloc.Global s1.v
+              ok (e, f1, frames, p1, { v, lo := 0#usize },
+                { m with stems := i2, width_read := b, steps := i, done := b1 })
+
 /-- [forge_font::cff_core::run]: loop body 0:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 455:4-512:5
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 456:4-463:5
     Visibility: public -/
 @[rust_loop_body]
 def cff_core.run_loop.body
   (d : Slice Std.U8) (gsubrs : Slice Std.Usize) («local» : Slice Std.Usize)
-  (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (f : cff_core.Frame)
-  (frames : alloc.vec.Vec cff_core.Frame) (stems : Std.Usize)
-  (width_read : Bool) (steps : Std.Usize) (done1 : Bool) (left : Bool)
-  (err : Std.U8) :
-  Result (ControlFlow (cff_core.Pen × (alloc.vec.Vec Std.I64) ×
-    cff_core.Frame × (alloc.vec.Vec cff_core.Frame) × Std.Usize × Bool ×
-    Std.Usize × Bool × Bool × Std.U8) (cff_core.Pen × Bool × Std.U8))
+  (p : cff_core.Pen) (s : cff_core.Stack) (f : cff_core.Frame)
+  (frames : alloc.vec.Vec cff_core.Frame) (m : cff_core.Machine) (err : Std.U8)
+  :
+  Result (ControlFlow (cff_core.Pen × cff_core.Stack × cff_core.Frame ×
+    (alloc.vec.Vec cff_core.Frame) × cff_core.Machine × Std.U8) (cff_core.Pen
+    × cff_core.Machine × Std.U8))
   := do
   if err = cff_core.OK
   then
-    if done1
-    then ok (done (p, done1, err))
+    if m.done
+    then ok (done (p, m, err))
     else
-      if left
-      then ok (done (p, done1, err))
+      if m.left
+      then ok (done (p, m, err))
       else
         if f.o < f.e
         then
@@ -1378,339 +1520,45 @@ def cff_core.run_loop.body
           then
             let (o, frames1) ← alloc.vec.Vec.pop alloc.alloc.Global frames
             let f1 ← lift (core.option.Option.unwrap_or o f)
-            ok (cont (p, v, f1, frames1, stems, width_read, steps, done1, left,
-              err))
+            ok (cont (p, s, f1, frames1, m, err))
           else
-            if steps = 0#usize
-            then
-              ok (cont (p, v, f, frames, stems, width_read, steps, done1, left,
-                cff_core.TOO_LONG))
-            else
-              let steps1 ← steps - 1#usize
-              let b0 ← cff_core.byte_or0 d f.o
-              let i ← f.o + 1#usize
-              if b0 >= 32#u8
-              then
-                let o ← cff_core.operand d i f.e b0
-                match o with
-                | none =>
-                  ok (cont (p, v, { f with o := i }, frames, stems, width_read,
-                    steps1, done1, left, cff_core.TRUNCATED))
-                | some p1 =>
-                  let (v1, o1) := p1
-                  let i1 := alloc.vec.Vec.len v
-                  if i1 >= cff_core.STACK
-                  then
-                    ok (cont (p, v, { f with o := o1 }, frames, stems,
-                      width_read, steps1, done1, left, cff_core.OVERFLOW))
-                  else
-                    let v2 ← alloc.vec.Vec.push v v1
-                    ok (cont (p, v2, { f with o := o1 }, frames, stems,
-                      width_read, steps1, done1, left, err))
-              else
-                if b0 = 28#u8
-                then
-                  let o ← cff_core.operand d i f.e b0
-                  match o with
-                  | none =>
-                    ok (cont (p, v, { f with o := i }, frames, stems,
-                      width_read, steps1, done1, left, cff_core.TRUNCATED))
-                  | some p1 =>
-                    let (v1, o1) := p1
-                    let i1 := alloc.vec.Vec.len v
-                    if i1 >= cff_core.STACK
-                    then
-                      ok (cont (p, v, { f with o := o1 }, frames, stems,
-                        width_read, steps1, done1, left, cff_core.OVERFLOW))
-                    else
-                      let v2 ← alloc.vec.Vec.push v v1
-                      ok (cont (p, v2, { f with o := o1 }, frames, stems,
-                        width_read, steps1, done1, left, err))
-                else
-                  if b0 = 10#u8
-                  then
-                    let (o, v1) ← alloc.vec.Vec.pop alloc.alloc.Global v
-                    match o with
-                    | none =>
-                      ok (cont (p, v1, { f with o := i }, frames, stems,
-                        width_read, steps1, done1, left, cff_core.NO_NUMBER))
-                    | some k =>
-                      let i1 ← k % cff_core.ONE
-                      if i1 != 0#i64
-                      then
-                        ok (cont (p, v1, { f with o := i }, frames, stems,
-                          width_read, steps1, done1, left, cff_core.NOT_WHOLE))
-                      else
-                        let idx ←
-                          if b0 = 10#u8
-                          then ok «local»
-                          else ok gsubrs
-                        let i2 ← k / cff_core.ONE
-                        let o1 ← cff_core.subr d idx i2
-                        match o1 with
-                        | none =>
-                          ok (cont (p, v1, { f with o := i }, frames, stems,
-                            width_read, steps1, done1, left,
-                            cff_core.NOT_THERE))
-                        | some p1 =>
-                          let (a, b) := p1
-                          let i3 := alloc.vec.Vec.len frames
-                          let i4 ← i3 + 1#usize
-                          if i4 > cff_core.NESTING
-                          then
-                            ok (cont (p, v1, { f with o := i }, frames, stems,
-                              width_read, steps1, done1, left,
-                              cff_core.NESTED))
-                          else
-                            let frames1 ←
-                              alloc.vec.Vec.push frames { f with o := i }
-                            ok (cont (p, v1, { s := a, e := b, o := a },
-                              frames1, stems, width_read, steps1, done1, left,
-                              err))
-                  else
-                    if b0 = 29#u8
-                    then
-                      let (o, v1) ← alloc.vec.Vec.pop alloc.alloc.Global v
-                      match o with
-                      | none =>
-                        ok (cont (p, v1, { f with o := i }, frames, stems,
-                          width_read, steps1, done1, left, cff_core.NO_NUMBER))
-                      | some k =>
-                        let i1 ← k % cff_core.ONE
-                        if i1 != 0#i64
-                        then
-                          ok (cont (p, v1, { f with o := i }, frames, stems,
-                            width_read, steps1, done1, left,
-                            cff_core.NOT_WHOLE))
-                        else
-                          let idx ←
-                            if b0 = 10#u8
-                            then ok «local»
-                            else ok gsubrs
-                          let i2 ← k / cff_core.ONE
-                          let o1 ← cff_core.subr d idx i2
-                          match o1 with
-                          | none =>
-                            ok (cont (p, v1, { f with o := i }, frames, stems,
-                              width_read, steps1, done1, left,
-                              cff_core.NOT_THERE))
-                          | some p1 =>
-                            let (a, b) := p1
-                            let i3 := alloc.vec.Vec.len frames
-                            let i4 ← i3 + 1#usize
-                            if i4 > cff_core.NESTING
-                            then
-                              ok (cont (p, v1, { f with o := i }, frames,
-                                stems, width_read, steps1, done1, left,
-                                cff_core.NESTED))
-                            else
-                              let frames1 ←
-                                alloc.vec.Vec.push frames { f with o := i }
-                              ok (cont (p, v1, { s := a, e := b, o := a },
-                                frames1, stems, width_read, steps1, done1,
-                                left, err))
-                    else
-                      if b0 = 11#u8
-                      then
-                        let (o, frames1) ←
-                          alloc.vec.Vec.pop alloc.alloc.Global frames
-                        match o with
-                        | none =>
-                          ok (cont (p, v, { f with o := i }, frames1, stems,
-                            width_read, steps1, done1, true, err))
-                        | some g =>
-                          ok (cont (p, v, g, frames1, stems, width_read,
-                            steps1, done1, left, err))
-                      else
-                        let (err1, f1, p1, s, stems1, width_read1, done2) ←
-                          cff_core.op d { f with o := i } p
-                            { v, lo := 0#usize } stems width_read done1 b0
-                        let v1 ← alloc.vec.Vec.clear alloc.alloc.Global s.v
-                        ok (cont (p1, v1, f1, frames, stems1, width_read1,
-                          steps1, done2, left, err1))
+            let (err1, f1, frames1, p1, s1, m1) ←
+              cff_core.one d gsubrs «local» f frames p s m
+            ok (cont (p1, s1, f1, frames1, m1, err1))
         else
           let b ← alloc.vec.Vec.is_empty frames
           if b
-          then ok (done (p, done1, err))
+          then ok (done (p, m, err))
           else
             if f.o >= f.e
             then
               let (o, frames1) ← alloc.vec.Vec.pop alloc.alloc.Global frames
               let f1 ← lift (core.option.Option.unwrap_or o f)
-              ok (cont (p, v, f1, frames1, stems, width_read, steps, done1,
-                left, err))
+              ok (cont (p, s, f1, frames1, m, err))
             else
-              if steps = 0#usize
-              then
-                ok (cont (p, v, f, frames, stems, width_read, steps, done1,
-                  left, cff_core.TOO_LONG))
-              else
-                let steps1 ← steps - 1#usize
-                let b0 ← cff_core.byte_or0 d f.o
-                let i ← f.o + 1#usize
-                if b0 >= 32#u8
-                then
-                  let o ← cff_core.operand d i f.e b0
-                  match o with
-                  | none =>
-                    ok (cont (p, v, { f with o := i }, frames, stems,
-                      width_read, steps1, done1, left, cff_core.TRUNCATED))
-                  | some p1 =>
-                    let (v1, o1) := p1
-                    let i1 := alloc.vec.Vec.len v
-                    if i1 >= cff_core.STACK
-                    then
-                      ok (cont (p, v, { f with o := o1 }, frames, stems,
-                        width_read, steps1, done1, left, cff_core.OVERFLOW))
-                    else
-                      let v2 ← alloc.vec.Vec.push v v1
-                      ok (cont (p, v2, { f with o := o1 }, frames, stems,
-                        width_read, steps1, done1, left, err))
-                else
-                  if b0 = 28#u8
-                  then
-                    let o ← cff_core.operand d i f.e b0
-                    match o with
-                    | none =>
-                      ok (cont (p, v, { f with o := i }, frames, stems,
-                        width_read, steps1, done1, left, cff_core.TRUNCATED))
-                    | some p1 =>
-                      let (v1, o1) := p1
-                      let i1 := alloc.vec.Vec.len v
-                      if i1 >= cff_core.STACK
-                      then
-                        ok (cont (p, v, { f with o := o1 }, frames, stems,
-                          width_read, steps1, done1, left, cff_core.OVERFLOW))
-                      else
-                        let v2 ← alloc.vec.Vec.push v v1
-                        ok (cont (p, v2, { f with o := o1 }, frames, stems,
-                          width_read, steps1, done1, left, err))
-                  else
-                    if b0 = 10#u8
-                    then
-                      let (o, v1) ← alloc.vec.Vec.pop alloc.alloc.Global v
-                      match o with
-                      | none =>
-                        ok (cont (p, v1, { f with o := i }, frames, stems,
-                          width_read, steps1, done1, left, cff_core.NO_NUMBER))
-                      | some k =>
-                        let i1 ← k % cff_core.ONE
-                        if i1 != 0#i64
-                        then
-                          ok (cont (p, v1, { f with o := i }, frames, stems,
-                            width_read, steps1, done1, left,
-                            cff_core.NOT_WHOLE))
-                        else
-                          let idx ←
-                            if b0 = 10#u8
-                            then ok «local»
-                            else ok gsubrs
-                          let i2 ← k / cff_core.ONE
-                          let o1 ← cff_core.subr d idx i2
-                          match o1 with
-                          | none =>
-                            ok (cont (p, v1, { f with o := i }, frames, stems,
-                              width_read, steps1, done1, left,
-                              cff_core.NOT_THERE))
-                          | some p1 =>
-                            let (a, b1) := p1
-                            let i3 := alloc.vec.Vec.len frames
-                            let i4 ← i3 + 1#usize
-                            if i4 > cff_core.NESTING
-                            then
-                              ok (cont (p, v1, { f with o := i }, frames,
-                                stems, width_read, steps1, done1, left,
-                                cff_core.NESTED))
-                            else
-                              let frames1 ←
-                                alloc.vec.Vec.push frames { f with o := i }
-                              ok (cont (p, v1, { s := a, e := b1, o := a },
-                                frames1, stems, width_read, steps1, done1,
-                                left, err))
-                    else
-                      if b0 = 29#u8
-                      then
-                        let (o, v1) ← alloc.vec.Vec.pop alloc.alloc.Global v
-                        match o with
-                        | none =>
-                          ok (cont (p, v1, { f with o := i }, frames, stems,
-                            width_read, steps1, done1, left,
-                            cff_core.NO_NUMBER))
-                        | some k =>
-                          let i1 ← k % cff_core.ONE
-                          if i1 != 0#i64
-                          then
-                            ok (cont (p, v1, { f with o := i }, frames, stems,
-                              width_read, steps1, done1, left,
-                              cff_core.NOT_WHOLE))
-                          else
-                            let idx ←
-                              if b0 = 10#u8
-                              then ok «local»
-                              else ok gsubrs
-                            let i2 ← k / cff_core.ONE
-                            let o1 ← cff_core.subr d idx i2
-                            match o1 with
-                            | none =>
-                              ok (cont (p, v1, { f with o := i }, frames,
-                                stems, width_read, steps1, done1, left,
-                                cff_core.NOT_THERE))
-                            | some p1 =>
-                              let (a, b1) := p1
-                              let i3 := alloc.vec.Vec.len frames
-                              let i4 ← i3 + 1#usize
-                              if i4 > cff_core.NESTING
-                              then
-                                ok (cont (p, v1, { f with o := i }, frames,
-                                  stems, width_read, steps1, done1, left,
-                                  cff_core.NESTED))
-                              else
-                                let frames1 ←
-                                  alloc.vec.Vec.push frames { f with o := i }
-                                ok (cont (p, v1, { s := a, e := b1, o := a },
-                                  frames1, stems, width_read, steps1, done1,
-                                  left, err))
-                      else
-                        if b0 = 11#u8
-                        then
-                          let (o, frames1) ←
-                            alloc.vec.Vec.pop alloc.alloc.Global frames
-                          match o with
-                          | none =>
-                            ok (cont (p, v, { f with o := i }, frames1, stems,
-                              width_read, steps1, done1, true, err))
-                          | some g =>
-                            ok (cont (p, v, g, frames1, stems, width_read,
-                              steps1, done1, left, err))
-                        else
-                          let (err1, f1, p1, s, stems1, width_read1, done2) ←
-                            cff_core.op d { f with o := i } p
-                              { v, lo := 0#usize } stems width_read done1 b0
-                          let v1 ← alloc.vec.Vec.clear alloc.alloc.Global s.v
-                          ok (cont (p1, v1, f1, frames, stems1, width_read1,
-                            steps1, done2, left, err1))
-  else ok (done (p, done1, err))
+              let (err1, f1, frames1, p1, s1, m1) ←
+                cff_core.one d gsubrs «local» f frames p s m
+              ok (cont (p1, s1, f1, frames1, m1, err1))
+  else ok (done (p, m, err))
 
 /-- [forge_font::cff_core::run]: loop 0:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 455:4-512:5
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 456:4-463:5
     Visibility: public -/
 @[rust_loop]
 def cff_core.run_loop
   (d : Slice Std.U8) (gsubrs : Slice Std.Usize) («local» : Slice Std.Usize)
-  (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (f : cff_core.Frame)
-  (frames : alloc.vec.Vec cff_core.Frame) (stems : Std.Usize)
-  (width_read : Bool) (steps : Std.Usize) (done1 : Bool) (left : Bool)
-  (err : Std.U8) :
-  Result (cff_core.Pen × Bool × Std.U8)
+  (p : cff_core.Pen) (s : cff_core.Stack) (f : cff_core.Frame)
+  (frames : alloc.vec.Vec cff_core.Frame) (m : cff_core.Machine) (err : Std.U8)
+  :
+  Result (cff_core.Pen × cff_core.Machine × Std.U8)
   := do
   loop
-    (fun (p1, v1, f1, frames1, stems1, width_read1, steps1, done2, left1, err1)
-      => cff_core.run_loop.body d gsubrs «local» p1 v1 f1 frames1 stems1
-      width_read1 steps1 done2 left1 err1)
-    (p, v, f, frames, stems, width_read, steps, done1, left, err)
+    (fun (p1, s1, f1, frames1, m1, err1) => cff_core.run_loop.body d gsubrs
+      «local» p1 s1 f1 frames1 m1 err1)
+    (p, s, f, frames, m, err)
 
 /-- [forge_font::cff_core::run]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 431:0-521:1
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 431:0-472:1
     Visibility: public -/
 def cff_core.run
   (d : Slice Std.U8) (cs : (Std.Usize × Std.Usize)) (gsubrs : Slice Std.Usize)
@@ -1725,21 +1573,27 @@ def cff_core.run
              then ok i1
              else ok (Slice.len d)
   let frames := alloc.vec.Vec.with_capacity cff_core.Frame cff_core.NESTING
-  let steps ← cff_core.STEPS
-  let (p, done1, err) ←
+  let i4 ← cff_core.STEPS
+  let (p, m, err) ←
     cff_core.run_loop d gsubrs «local»
       {
         «at» := { x := 0#i64, y := 0#i64 },
         start := none,
         contour := (alloc.vec.Vec.new cff_core.SegC),
         out := (alloc.vec.Vec.new (alloc.vec.Vec cff_core.SegC))
-      } v { s := i, e := i3, o := i } frames 0#usize false steps false false
-      cff_core.OK
+      } { v, lo := 0#usize } { s := i, e := i3, o := i } frames
+      {
+        stems := 0#usize,
+        width_read := false,
+        steps := i4,
+        done := false,
+        left := false
+      } cff_core.OK
   if err != cff_core.OK
   then let fe ← cff_core.fail err
        ok (core.result.Result.Err fe)
   else
-    if done1
+    if m.done
     then let p1 ← cff_core.close p
          ok (core.result.Result.Ok p1.out)
     else
