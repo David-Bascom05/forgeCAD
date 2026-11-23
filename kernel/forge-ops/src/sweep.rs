@@ -63,6 +63,11 @@ pub enum SweepError {
     },
     /// The path brings the swept solid back into itself.
     SelfIntersecting,
+    /// The profile's frame cannot be carried along path piece `index` (its tangent or the carried
+    /// axes vanish): the frame rule has no answer there, so nothing is swept (no fallback).
+    Frame {
+        index: usize,
+    },
     /// A rail or centre line is a free curve: a loft takes lines and arcs there.
     CurveGuide {
         index: usize,
@@ -122,26 +127,24 @@ impl PathSeg {
         (Frame::from_z(circle.frame.origin, z), sweep.abs())
     }
 
-    /// The frame `f` carried from the piece's start to its end.
-    fn carry(&self, f: &Frame) -> Frame {
+    /// The frame `f` carried from the piece's start to its end (the frame rule, research/sweep-spec
+    /// DESIGN.md §3.3): along a line translated, along an arc turned about its axis, along a
+    /// spline by its spine's rotation (`spine`, the one `stretches` made). None where the carried
+    /// axes vanish.
+    fn carry(&self, f: &Frame, spine: Option<&Spine>) -> Option<Frame> {
         match *self {
             PathSeg::Spline(ref c) => {
-                let at = c.ends().1;
-                let Some(spine) = spine_of(c) else {
-                    return f.with_origin(at);
-                };
+                let (start, at) = c.ends();
+                let spine = spine?;
                 let z = spine.end_turn(f.z().get());
                 let x = spine.end_turn(f.x().get());
-                let start = c.ends().0;
                 let o = at + spine.end_turn(f.origin - start);
-                z.normalize()
-                    .and_then(|z| Frame::from_zx(o, z, x))
-                    .unwrap_or_else(|| f.with_origin(at))
+                z.normalize().and_then(|z| Frame::from_zx(o, z, x))
             }
-            PathSeg::Line { a, b } => f.with_origin(f.origin + (b - a)),
+            PathSeg::Line { a, b } => Some(f.with_origin(f.origin + (b - a))),
             PathSeg::Arc { circle, sweep, .. } => {
                 let (r, angle) = PathSeg::turn(&circle, sweep);
-                r.rotated_about_z(angle).compose(&r.inverse().compose(f))
+                Some(r.rotated_about_z(angle).compose(&r.inverse().compose(f)))
             }
         }
     }
@@ -161,10 +164,10 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
 /// A sweep whose caller knows the path keeps the solid clear of itself (a wire harness's tube,
 /// whose bends are no tighter than the tube): the same body, without the self-intersection test.
 pub fn sweep_unchecked(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result<Body, SweepError> {
-    let (prep, stretches) = stretches(profile, path)?;
+    let (prep, stretches, end) = stretches(profile, path)?;
     let segs: Vec<Segment> = prep.segments().cloned().collect();
     let mut planes: Vec<Frame> = stretches.iter().map(|s| s.plane()).collect();
-    planes.push(path[path.len() - 1].carry(&planes[planes.len() - 1]));
+    planes.push(end);
     let curves = planes
         .iter()
         .map(|f| segs.iter().map(|s| section_curve(s, f)).collect())
@@ -276,7 +279,7 @@ pub fn sweep_stretches(
     profile: &crate::Profile,
     path: &[PathSeg],
 ) -> Result<(crate::Profile, Vec<Stretch>), SweepError> {
-    stretches(profile, path).map(|(p, s)| (p.profile, s))
+    stretches(profile, path).map(|(p, s, _)| (p.profile, s))
 }
 
 /// Each piece's start and end tangents, once the path is found tangent-continuous.
@@ -301,10 +304,11 @@ pub(crate) fn check_path(path: &[PathSeg]) -> Result<Vec<(UnitVec3, UnitVec3)>, 
     Ok(tangents)
 }
 
+/// The path's stretches, and the profile's frame at the path's end.
 fn stretches(
     profile: &crate::Profile,
     path: &[PathSeg],
-) -> Result<(crate::skin::Prepared, Vec<Stretch>), SweepError> {
+) -> Result<(crate::skin::Prepared, Vec<Stretch>, Frame), SweepError> {
     let first = path.first().ok_or(SweepError::EmptyPath)?;
     let tangents = check_path(path)?;
     let t0 = tangents[0].0;
@@ -352,9 +356,13 @@ fn stretches(
                 }
             }
         });
-        plane = s.carry(&plane);
+        let spine = match out.last() {
+            Some(Stretch::Along { spine, .. }) => Some(spine),
+            _ => None,
+        };
+        plane = s.carry(&plane, spine).ok_or(SweepError::Frame { index: k })?;
     }
-    Ok((prep, out))
+    Ok((prep, out, plane))
 }
 
 /// A segment as a curve of its plane.

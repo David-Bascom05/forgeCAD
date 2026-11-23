@@ -21,3 +21,27 @@
 12	 ???:0x0000000000198340
 13	 PROGRAM TOTALS
 14	 ???:0x0000000000198300
+
+# At 4693bd7d (the pinch refused before building): gate +4083..+4234 on the same three lines.
+# regen1 housing seq run as above: base 140497902, new 140497433 (-469). New minus base, by function:
+-469	 PROGRAM TOTALS
+-180	 ???:forge_geom::meet::intersect
+-126	 ./stdio-common/./stdio-common/vfscanf-internal.c:__vfscanf_internal
+-80	 ./stdlib/../stdlib/strtol_l.c:____strtoul_l_internal
+-64	 ./elf/../sysdeps/x86_64/dl-machine.h:_dl_relocate_object
+-46	 ???:<forge_geom::meet::Alg>::grad
+-40	 ./elf/./elf/do-rel.h:_dl_relocate_object
+-14	 ???:0x00000000001982b0
+-12	 ???:0x00000000001982f0
+-7	 ???:0x0000000000956ea4
+-5	 ???:0x0000000000198240
+-4	 ???:0x0000000000956ec0
+-1	 ./string/../sysdeps/x86_64/multiarch/memchr-avx2.S:__memchr_avx2
+4	 ???:0x0000000000958130
+5	 ???:0x0000000000197e60
+5	 ???:core::str::converts::from_utf8
+7	 ???:0x0000000000958114
+12	 ???:0x0000000000197f10
+14	 ???:0x0000000000197ed0
+63	 ???:<forge_geom::meet::Trig>::roots
+# (forge_geom::meet is unchanged source: inlining moved with screw.rs's new functions in the crate.)
