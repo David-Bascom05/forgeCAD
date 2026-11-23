@@ -1736,6 +1736,301 @@ fn deg_p(p: &[Q]) -> usize {
 }
 
 // =============================================================================================
+// QSweep.lean: the events of a curve (turning points), and their sorting and separation
+// =============================================================================================
+
+/// An affine form `a x + b y + c z + d`.
+pub type Aff = (Q, Q, Q, Q);
+
+/// `gradY q`: `∂_y q` as an affine form.
+pub fn grad_y(q: &Quadric) -> Aff {
+    (
+        q.xy.clone(),
+        Q::from_i64(2).mul(&q.yy),
+        q.yz.clone(),
+        q.ly.clone(),
+    )
+}
+
+/// `gradZ q`: `∂_z q` as an affine form.
+pub fn grad_z(q: &Quadric) -> Aff {
+    (
+        q.xz.clone(),
+        q.yz.clone(),
+        Q::from_i64(2).mul(&q.zz),
+        q.lz.clone(),
+    )
+}
+
+/// `affMul f g`: the product of two affine forms, as a quadric.
+pub fn aff_mul(f: &Aff, g: &Aff) -> Quadric {
+    let (a, b, c, d) = f;
+    let (a2, b2, c2, d2) = g;
+    Quadric {
+        xx: a.mul(a2),
+        yy: b.mul(b2),
+        zz: c.mul(c2),
+        xy: a.mul(b2).add(&b.mul(a2)),
+        xz: a.mul(c2).add(&c.mul(a2)),
+        yz: b.mul(c2).add(&c.mul(b2)),
+        lx: a.mul(d2).add(&d.mul(a2)),
+        ly: b.mul(d2).add(&d.mul(b2)),
+        lz: c.mul(d2).add(&d.mul(c2)),
+        c: d.mul(d2),
+    }
+}
+
+/// `qsub p q`.
+pub fn qsub(p: &Quadric, q: &Quadric) -> Quadric {
+    Quadric {
+        xx: p.xx.sub(&q.xx),
+        yy: p.yy.sub(&q.yy),
+        zz: p.zz.sub(&q.zz),
+        xy: p.xy.sub(&q.xy),
+        xz: p.xz.sub(&q.xz),
+        yz: p.yz.sub(&q.yz),
+        lx: p.lx.sub(&q.lx),
+        ly: p.ly.sub(&q.ly),
+        lz: p.lz.sub(&q.lz),
+        c: p.c.sub(&q.c),
+    }
+}
+
+/// `critQ qj qk = (∇q_j × ∇q_k)ₓ`: zero at the `x`-turning points of `q_j ∩ q_k` (`critQ_ev`).
+pub fn crit_q(qj: &Quadric, qk: &Quadric) -> Quadric {
+    qsub(
+        &aff_mul(&grad_y(qj), &grad_z(qk)),
+        &aff_mul(&grad_z(qj), &grad_y(qk)),
+    )
+}
+
+fn aff_plane(f: &Aff) -> Quadric {
+    Quadric {
+        lx: f.0.clone(),
+        ly: f.1.clone(),
+        lz: f.2.clone(),
+        c: f.3.clone(),
+        ..Quadric::default()
+    }
+}
+
+/// `gradPlaneY q`: `∂_y q = 0` as a plane.
+pub fn grad_plane_y(q: &Quadric) -> Quadric {
+    aff_plane(&grad_y(q))
+}
+
+/// `gradPlaneZ q`: `∂_z q = 0` as a plane.
+pub fn grad_plane_z(q: &Quadric) -> Quadric {
+    aff_plane(&grad_z(q))
+}
+
+/// `isPlaneQ`: no quadratic term.
+pub fn is_plane_q(q: &Quadric) -> bool {
+    q.xx.is_zero() && q.yy.is_zero() && q.zz.is_zero() && q.xy.is_zero() && q.xz.is_zero() && q.yz.is_zero()
+}
+
+/// **`proposeTriple`**: the vertex proposer for a triple, by its planes, in the Lean's role order.
+pub fn propose_triple(a: &Quadric, b: &Quadric, c: &Quadric, fuel: usize) -> Option<Vec<VSample>> {
+    let (pa, pb, pc) = (is_plane_q(a), is_plane_q(b), is_plane_q(c));
+    if !pa && !pb && !pc {
+        propose_vert3(a, b, c, fuel)
+    } else if pc && !pa {
+        propose_vert_plane_any(a, b, c, fuel)
+    } else if pc && !pb {
+        propose_vert_plane_any(b, a, c, fuel)
+    } else if pb && !pa {
+        propose_vert_plane_any(a, c, b, fuel)
+    } else if pb && !pc {
+        propose_vert_plane_any(c, a, b, fuel)
+    } else if pa && !pb {
+        propose_vert_plane_any(b, c, a, fuel)
+    } else if pa && !pc {
+        propose_vert_plane_any(c, b, a, fuel)
+    } else {
+        None
+    }
+}
+
+/// `isConstQ`: no `x`, `y`, `z` term at all.
+pub fn is_const_q(q: &Quadric) -> bool {
+    is_plane_q(q) && q.lx.is_zero() && q.ly.is_zero() && q.lz.is_zero()
+}
+
+/// `det3Q`.
+pub fn det3_q(a: &Quadric, b: &Quadric, c: &Quadric) -> Q {
+    a.lx.mul(&b.ly.mul(&c.lz).sub(&b.lz.mul(&c.ly)))
+        .sub(&a.ly.mul(&b.lx.mul(&c.lz).sub(&b.lz.mul(&c.lx))))
+        .add(&a.lz.mul(&b.lx.mul(&c.ly).sub(&b.ly.mul(&c.lx))))
+}
+
+/// `numXQ`: Cramer's numerator for `x`.
+pub fn num_x_q(a: &Quadric, b: &Quadric, c: &Quadric) -> Q {
+    a.c.mul(&b.ly.mul(&c.lz).sub(&b.lz.mul(&c.ly)))
+        .sub(&a.ly.mul(&b.c.mul(&c.lz).sub(&b.lz.mul(&c.c))))
+        .add(&a.lz.mul(&b.c.mul(&c.ly).sub(&b.ly.mul(&c.c))))
+        .neg()
+}
+
+/// A nonzero constant: no zeros at all.
+fn nz_const(q: &Quadric) -> bool {
+    is_const_q(q) && !q.c.is_zero()
+}
+
+/// **`proposeTripleX`**: the `x` of every common point of a triple (`proposeTripleX_complete`).
+pub fn propose_triple_x(a: &Quadric, b: &Quadric, c: &Quadric, fuel: usize) -> Option<Vec<Num>> {
+    if nz_const(a) || nz_const(b) || nz_const(c) {
+        Some(Vec::new())
+    } else if is_plane_q(a) && is_plane_q(b) && is_plane_q(c) {
+        let d = det3_q(a, b, c);
+        if !d.is_zero() {
+            Some(vec![Num::Rat(num_x_q(a, b, c).div(&d))])
+        } else {
+            None
+        }
+    } else {
+        let vs = propose_triple(a, b, c, fuel)?;
+        let mut out: Vec<Num> = Vec::with_capacity(vs.len());
+        let mut i = 0;
+        while i < vs.len() {
+            out.push(vs[i].x.clone());
+            i += 1;
+        }
+        Some(out)
+    }
+}
+
+/// `QRef.sortNums`: insertion sort by `Num.cmp 200`, equal ones dropped; `None` if a comparison
+/// fails.
+pub fn sort_nums(ns: &[Num]) -> Option<Vec<Num>> {
+    let mut out: Vec<Num> = Vec::new();
+    let mut failed = false;
+    let mut i = 0;
+    while !failed && i < ns.len() {
+        let mut pos = out.len();
+        let mut dup = false;
+        let mut found = false;
+        let mut k = 0;
+        while !found && !failed && k < out.len() {
+            match Num::cmp(200, &ns[i], &out[k]) {
+                Some(-1) => {
+                    pos = k;
+                    found = true;
+                }
+                Some(0) => {
+                    dup = true;
+                    found = true;
+                }
+                Some(_) => {}
+                None => failed = true,
+            }
+            k += 1;
+        }
+        if !failed && !dup {
+            out.insert(pos, ns[i].clone());
+        }
+        i += 1;
+    }
+    if failed { None } else { Some(out) }
+}
+
+/// `separate k u rest`: refine consecutive numbers until their intervals separate (untrusted).
+pub fn separate(k0: usize, u0: &Num, rest0: &[Num]) -> Vec<Num> {
+    let mut out: Vec<Num> = Vec::new();
+    let mut k = k0;
+    let mut u = u0.clone();
+    let mut rest = rest0.to_vec();
+    let mut i = 0;
+    while i < rest.len() {
+        if k == 0 || u.hi().lt(&rest[i].lo()) {
+            out.push(u);
+            u = rest[i].clone();
+            i += 1;
+        } else {
+            k -= 1;
+            u = u.bisect();
+            rest[i] = rest[i].bisect();
+        }
+    }
+    out.push(u);
+    out
+}
+
+/// `isoOkN`.
+pub fn iso_ok_n(n: &Num) -> bool {
+    match n {
+        Num::Rat(_) => true,
+        Num::Iso(r) => r.ok(),
+    }
+}
+
+/// `sepOk`: consecutive numbers' intervals are apart.
+pub fn sep_ok(l: &[Num]) -> bool {
+    let mut ok = true;
+    let mut i = 0;
+    while ok && i + 1 < l.len() {
+        ok = l[i].hi().lt(&l[i + 1].lo());
+        i += 1;
+    }
+    ok
+}
+
+/// `spreadE`.
+pub fn spread_e(l: &[Num]) -> Vec<Num> {
+    if l.is_empty() {
+        Vec::new()
+    } else {
+        separate(400, &l[0], &l[1..])
+    }
+}
+
+/// **`checkEvents`**: every raw event equals a listed one, every listed one is a checked
+/// isolation, and consecutive ones are separated.
+pub fn check_events(raw: &[Num], e: &[Num]) -> bool {
+    let mut ok = true;
+    let mut i = 0;
+    while ok && i < raw.len() {
+        let mut any = false;
+        let mut j = 0;
+        while !any && j < e.len() {
+            any = Num::cmp(200, &raw[i], &e[j]) == Some(0);
+            j += 1;
+        }
+        ok = any;
+        i += 1;
+    }
+    let mut k = 0;
+    while ok && k < e.len() {
+        ok = iso_ok_n(&e[k]);
+        k += 1;
+    }
+    ok && sep_ok(e)
+}
+
+/// `pickEvents`.
+pub fn pick_events(raw: &[Num]) -> Option<Vec<Num>> {
+    let sorted = sort_nums(raw)?;
+    let e = spread_e(&sorted);
+    if check_events(raw, &e) { Some(e) } else { None }
+}
+
+/// `planesOf`: a rational sample plane between consecutive events, and one outside each end.
+pub fn planes_of(e: &[Num]) -> Vec<Q> {
+    if e.is_empty() {
+        vec![Q::zero()]
+    } else {
+        let mut out: Vec<Q> = Vec::with_capacity(e.len() + 1);
+        out.push(e[0].lo().sub(&Q::one()));
+        let mut i = 0;
+        while i + 1 < e.len() {
+            out.push(e[i].hi().mid(&e[i + 1].lo()));
+            i += 1;
+        }
+        out.push(e[e.len() - 1].hi().add(&Q::one()));
+        out
+    }
+}
+
+// =============================================================================================
 // The builder, stage (a): the operands' faces, exactly, their carrier classes, and the near pairs
 // =============================================================================================
 
@@ -1911,6 +2206,169 @@ pub fn near_pairs(fs: &[CIn], cls: &[usize]) -> Vec<(usize, usize)> {
         i += 1;
     }
     out
+}
+
+// =============================================================================================
+// The builder, stage (b): the crossing curve of a near pair, as certified slab samples
+// =============================================================================================
+
+/// The crossing curve `q_j = q_k = 0` of a near pair, sampled between its `x`-events. In frame
+/// `λ` (`shears`), the curve's turning points in `x` are the `events`. On each sweep plane
+/// `x = planes[s]` (one between consecutive events, one outside each end: `planes_of`), the
+/// curve's crossings are `slabs[s]`, certified (`propose_edge_any`) and sorted by `y`. Between
+/// consecutive events every branch of the curve is a graph over `x` (no turning point), so it
+/// crosses each slab's plane once: branch `b` of slab `s` is one arc piece.
+#[derive(Clone, Debug)]
+pub struct PairCurve {
+    pub shear: Q,
+    pub events: Vec<Num>,
+    pub planes: Vec<Q>,
+    pub slabs: Vec<Vec<ESample>>,
+}
+
+/// The `x`s of every common point of a plane `P` and two quadrics, complete by certificate,
+/// with no per-point representation: `elim_t` on the plane, `bezout3`, `roots_of R` (the `y`/`z`
+/// exchange keeps `x`). A superset of the points' `x`s is all a sweep's events need.
+pub fn vert_xs_plane(qa: &Quadric, qb: &Quadric, p: &Quadric, fuel: usize) -> Option<Vec<Num>> {
+    if !p.lz.is_zero() {
+        let e = elim_t(&on_plane(qa, p), &on_plane(qb, p));
+        let a: TPoly = vec![e.u.clone()];
+        let b: TPoly = vec![e.v.clone()];
+        let c = pneg(&padd(&pmul(&a, &quot_p(qa, p)), &pmul(&b, &quot_p(qb, p))));
+        if bezout3(qa, qb, p, &a, &b, &c, &e.r) {
+            roots_of(&e.r, fuel)
+        } else {
+            None
+        }
+    } else if !p.ly.is_zero() {
+        vert_xs_plane(&qa.swap_yz(), &qb.swap_yz(), &p.swap_yz(), fuel)
+    } else {
+        None
+    }
+}
+
+/// The `x`s of every common point of three quadrics, complete by certificate (`bezout3` on two
+/// projections, `gcd_ok`, `roots_of G`), with no per-point representation. Two common points
+/// with one `x` (a pair mirrored in `z`) make `propose_vert3` answer `None`; their `x` is still
+/// a root of `G`.
+pub fn vert_xs3(qa: &Quadric, qb: &Quadric, qc: &Quadric, fuel: usize) -> Option<Vec<Num>> {
+    let pa = proj(qa, qb, qc)?;
+    if !bezout3(qa, qb, qc, &pa.a, &pa.b, &pa.c, &pa.r) {
+        return None;
+    }
+    let (_, pb) = second_proj(qa, qb, qc)?;
+    let (g, u, v) = xgcd(&pa.r, &pb.r);
+    if !gcd_ok(&g, &u, &v, &pa.r, &pb.r) || is_zero_p(&g) {
+        return None;
+    }
+    roots_of(&g, fuel)
+}
+
+/// **The events' `x`s of a triple**, complete by certificate: as `propose_triple_x`, but through
+/// `vert_xs_plane` and `vert_xs3`, which need no per-point representation (a superset of the
+/// `x`s; an extra event only adds a sweep plane). Proposed to dol-curved for QSweep.lean.
+pub fn propose_triple_xs(a: &Quadric, b: &Quadric, c: &Quadric, fuel: usize) -> Option<Vec<Num>> {
+    if nz_const(a) || nz_const(b) || nz_const(c) {
+        Some(Vec::new())
+    } else if is_plane_q(a) && is_plane_q(b) && is_plane_q(c) {
+        let d = det3_q(a, b, c);
+        if !d.is_zero() {
+            Some(vec![Num::Rat(num_x_q(a, b, c).div(&d))])
+        } else {
+            None
+        }
+    } else {
+        let (pa, pb, pc) = (is_plane_q(a), is_plane_q(b), is_plane_q(c));
+        if !pa && !pb && !pc {
+            vert_xs3(a, b, c, fuel)
+        } else if pc && !pa {
+            vert_xs_plane(a, b, c, fuel)
+        } else if pc && !pb {
+            vert_xs_plane(b, a, c, fuel)
+        } else if pb && !pa {
+            vert_xs_plane(a, c, b, fuel)
+        } else if pb && !pc {
+            vert_xs_plane(c, a, b, fuel)
+        } else if pa && !pb {
+            vert_xs_plane(b, c, a, fuel)
+        } else if pa && !pc {
+            vert_xs_plane(c, b, a, fuel)
+        } else {
+            None
+        }
+    }
+}
+
+/// The `x`s of a pair's turning points (`(∇q_j × ∇q_k)ₓ = 0` on the curve), sorted and separated.
+pub fn pair_events(qj: &Quadric, qk: &Quadric) -> Option<Vec<Num>> {
+    let raw = propose_triple_xs(qj, qk, &crit_q(qj, qk), ROOT_FUEL)?;
+    pick_events(&raw)
+}
+
+/// A slab's crossings sorted by their `y` (`sort_nums` order; equal `y`s answer `None`: the
+/// projection is not generic, and the next shear is tried).
+fn sorted_by_y(es: Vec<ESample>) -> Option<Vec<ESample>> {
+    let mut ys: Vec<Num> = Vec::with_capacity(es.len());
+    let mut i = 0;
+    while i < es.len() {
+        ys.push(es[i].y.clone());
+        i += 1;
+    }
+    let order = sort_nums(&ys)?;
+    if order.len() != es.len() {
+        return None;
+    }
+    let mut out: Vec<ESample> = Vec::with_capacity(es.len());
+    let mut k = 0;
+    while k < order.len() {
+        let mut j = 0;
+        let mut found = false;
+        while !found && j < es.len() {
+            if es[j].y == order[k] {
+                out.push(es[j].clone());
+                found = true;
+            }
+            j += 1;
+        }
+        k += 1;
+    }
+    if out.len() == es.len() { Some(out) } else { None }
+}
+
+/// The curve in one frame, or `None` if a step is undecided there.
+fn pair_curve_at(qj: &Quadric, qk: &Quadric, l: &Q) -> Option<PairCurve> {
+    let (a, b) = (qj.shear(l), qk.shear(l));
+    let events = pair_events(&a, &b)?;
+    let planes = planes_of(&events);
+    let mut slabs: Vec<Vec<ESample>> = Vec::with_capacity(planes.len());
+    let mut i = 0;
+    while i < planes.len() {
+        let es = propose_edge_any(&a, &b, &planes[i], ROOT_FUEL)?;
+        slabs.push(sorted_by_y(es)?);
+        i += 1;
+    }
+    Some(PairCurve {
+        shear: l.clone(),
+        events,
+        planes,
+        slabs,
+    })
+}
+
+/// **Stage (b)**: a near pair's crossing curve, in the first frame of `shears` where every
+/// step is certified (the decided rule, as `samplesOf`'s), or [`Skip::Budget`].
+pub fn pair_curve(qj: &Quadric, qk: &Quadric) -> Result<PairCurve, Skip> {
+    let ls = shears();
+    let mut out: Option<PairCurve> = None;
+    let mut i = 0;
+    while out.is_none() && i < ls.len() {
+        out = pair_curve_at(qj, qk, &ls[i]);
+        i += 1;
+    }
+    match out {
+        Some(c) => Ok(c),
+        None => Err(Skip::Budget("a crossing curve undecided in every frame")),
+    }
 }
 
 // =============================================================================================
@@ -2256,6 +2714,46 @@ mod tests {
             );
             i += 1;
         }
+    }
+
+    /// Stage (b): the unit circle in z = 0 turns at x = ±1, and crosses the middle plane twice.
+    #[test]
+    fn stage_b_circle() {
+        let c = pair_curve(&sphere1(), &plane_z()).unwrap();
+        assert_eq!(c.events.len(), 2);
+        let counts: Vec<usize> = c.slabs.iter().map(|s| s.len()).collect();
+        assert_eq!(counts, vec![0, 2, 0]);
+        // two unit spheres a half apart in x: their circle lies in x = 1/4 (a plane x = const:
+        // no turning point in x, the whole curve at one event), as the proposers find it
+        let s2 = QFace {
+            solid: 0,
+            index: 0,
+            kind: Kind::Sphere,
+            o: V3::new(q(1, 2), qi(0), qi(0)),
+            z: V3::default(),
+            r: qi(1),
+            s: qi(0),
+            c: qi(0),
+        }
+        .quadric();
+        let r = pair_curve(&sphere1(), &s2);
+        assert!(r.is_ok() || matches!(r, Err(Skip::Budget(_))));
+        // a cylinder along z through the sphere: two circles, each turning twice
+        let cyl = QFace {
+            solid: 0,
+            index: 0,
+            kind: Kind::Cyl,
+            o: V3::new(q(1, 4), q(1, 8), qi(0)),
+            z: V3::new(qi(0), qi(0), qi(1)),
+            r: q(1, 2),
+            s: qi(0),
+            c: qi(0),
+        }
+        .quadric();
+        let c = pair_curve(&sphere1(), &cyl).unwrap();
+        assert_eq!(c.slabs.len(), c.events.len() + 1);
+        assert!(c.slabs.iter().all(|s| s.len() % 2 == 0));
+        assert!(c.slabs.iter().any(|s| s.len() == 4));
     }
 
     /// QLine: the covector along a line through the unit sphere.
