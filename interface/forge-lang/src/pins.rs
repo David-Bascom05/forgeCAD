@@ -148,7 +148,7 @@ fn lexical(p: &Path) -> Option<PathBuf> {
     }
     // the folders above the file resolved as the filesystem has them (links), the file not
     let parent = out.parent()?;
-    let real = std::fs::canonicalize(parent).unwrap_or(parent.to_path_buf());
+    let real = forge_dirs::fs::canonicalize(parent).unwrap_or(parent.to_path_buf());
     Some(real.join(out.file_name()?))
 }
 

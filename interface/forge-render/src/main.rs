@@ -111,7 +111,7 @@ fn args() -> Result<Args, String> {
             "--lod-px" => a.lod_px = num(it.next(), &k)?,
             "--settings" => {
                 let f = it.next().ok_or(USAGE)?;
-                let text = std::fs::read_to_string(&f).map_err(|e| format!("{f}: {e}"))?;
+                let text = forge_dirs::fs::read_to_string(&f).map_err(|e| format!("{f}: {e}"))?;
                 a.look = Some(forge_render::shell::settings::Settings::from_toml(&text).look());
             }
             "--style" => {
@@ -189,7 +189,7 @@ fn stage(a: &Args) -> Result<Stage, String> {
     let t = now_ms();
     // an assembly .fg: its parts where it solves them (the rack bench)
     if a.part.ends_with(".fg")
-        && std::fs::read_to_string(&a.part).is_ok_and(|t| forge_render::fg::is_assembly(&t))
+        && forge_dirs::fs::read_to_string(&a.part).is_ok_and(|t| forge_render::fg::is_assembly(&t))
     {
         let st = forge_render::asmshot::stage(&a.part)?;
         let (center, radius) = st.scene.bounds();
@@ -340,7 +340,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
         println!("{} {:?}", r.adapter.name, drawn);
         let mut out = format!("P6\n{} {}\n255\n", a.size.0, a.size.1).into_bytes();
         out.extend(target.read_rgb(&r));
-        std::fs::write(path, out).map_err(|e| e.to_string())?;
+        forge_dirs::fs::write(path, out).map_err(|e| e.to_string())?;
     }
     if a.bench {
         let motion = (a.moving > 0).then(|| Motion::new(&s.scene, a.moving));
@@ -483,7 +483,7 @@ fn run() -> Result<(), String> {
     let a = args()?;
     if let Some(path) = &a.export {
         let (mesh, _) = forge_render::load::open(&a.part, a.cache)?;
-        return std::fs::write(path, mesh.to_bytes()).map_err(|e| e.to_string());
+        return forge_dirs::fs::write(path, mesh.to_bytes()).map_err(|e| e.to_string());
     }
     if a.dims {
         // a closed pipe (`| head`) is no error
@@ -500,7 +500,7 @@ fn run() -> Result<(), String> {
     }
     if a.shot.is_some()
         && a.part.ends_with(".fg")
-        && std::fs::read_to_string(&a.part).is_ok_and(|t| forge_render::fg::is_assembly(&t))
+        && forge_dirs::fs::read_to_string(&a.part).is_ok_and(|t| forge_render::fg::is_assembly(&t))
     {
         return asm_shot(&a);
     }
@@ -626,7 +626,7 @@ fn asm_shot(a: &Args) -> Result<(), String> {
         }
         let mut out = format!("P6\n{} {}\n255\n", a.size.0, a.size.1).into_bytes();
         out.extend(target.read_rgb(&r));
-        std::fs::write(&file, out).map_err(|e| e.to_string())?;
+        forge_dirs::fs::write(&file, out).map_err(|e| e.to_string())?;
         println!("{file}: explode {amount:.2}");
     }
     Ok(())

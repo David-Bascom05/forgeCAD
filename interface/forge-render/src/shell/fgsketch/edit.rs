@@ -1065,7 +1065,7 @@ mod tests {
     }
 
     fn demo() -> String {
-        std::fs::read_to_string(concat!(
+        forge_dirs::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../examples/demo/part_tools.fg"
         ))
@@ -1073,9 +1073,9 @@ mod tests {
     }
 
     fn files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
-        for e in std::fs::read_dir(dir).unwrap().flatten() {
+        for e in forge_dirs::fs::read_dir(dir).unwrap().flatten() {
             let p = e.path();
-            if p.is_dir() {
+            if forge_dirs::fs::is_dir(&p) {
                 files(&p, out);
             } else if p.extension().is_some_and(|x| x == "fg") {
                 out.push(p);
@@ -1104,7 +1104,7 @@ mod tests {
         let (mut editable, mut looked, mut sketches) = (0, 0, 0);
         let mut bad = vec![];
         for p in &paths {
-            let src = std::fs::read_to_string(p).unwrap();
+            let src = forge_dirs::fs::read_to_string(p).unwrap();
             let Ok(prog) = syntax::parse(&src) else { continue };
             // a component's sketches too, by their ids from outside (`peg.s`)
             let mut ids: Vec<String> = vec![];

@@ -38,7 +38,7 @@ pub fn load(src: &str) -> Option<PartMesh> {
 }
 
 fn load_from(dir: &Path, src: &str) -> Option<PartMesh> {
-    PartMesh::from_bytes(&std::fs::read(path_in(dir, src)).ok()?)
+    PartMesh::from_bytes(&forge_dirs::fs::read(path_in(dir, src)).ok()?)
 }
 
 /// Stores it. A cache that can't be written is no failure: the next open builds again.
@@ -51,10 +51,10 @@ pub fn store(src: &str, mesh: &PartMesh) {
 // written whole and then moved into place, so a reader never sees half a file
 fn store_in(dir: &Path, src: &str, mesh: &PartMesh) {
     let path = path_in(dir, src);
-    let _ = std::fs::create_dir_all(dir);
-    let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
-    if std::fs::write(&tmp, mesh.to_bytes()).is_ok() && std::fs::rename(&tmp, &path).is_err() {
-        let _ = std::fs::remove_file(&tmp);
+    let _ = forge_dirs::fs::create_dir_all(dir);
+    let tmp = path.with_extension(format!("{}.tmp", forge_dirs::process_id()));
+    if forge_dirs::fs::write(&tmp, mesh.to_bytes()).is_ok() && forge_dirs::fs::rename(&tmp, &path).is_err() {
+        let _ = forge_dirs::fs::remove_file(&tmp);
     }
 }
 
@@ -78,8 +78,8 @@ mod tests {
         store_in(&dir, "part a", &mesh);
         assert_eq!(load_from(&dir, "part a"), Some(mesh));
         assert_eq!(load_from(&dir, "part b"), None);
-        std::fs::write(path_in(&dir, "part a"), b"FCMESH01 cut short").unwrap();
+        forge_dirs::fs::write(path_in(&dir, "part a"), b"FCMESH01 cut short").unwrap();
         assert_eq!(load_from(&dir, "part a"), None);
-        std::fs::remove_dir_all(&dir).unwrap();
+        forge_dirs::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -202,7 +202,7 @@ pub fn call(ev: &mut Eval, args: &[crate::syntax::Arg], span: Span) -> R<Value> 
         if ev
             .dir
             .as_ref()
-            .is_some_and(|d| std::fs::symlink_metadata(d.join(&file)).is_ok())
+            .is_some_and(|d| forge_dirs::fs::symlink_metadata(d.join(&file)).is_ok())
         {
             return Err(err(UseErr::NotForge { span, file }));
         }

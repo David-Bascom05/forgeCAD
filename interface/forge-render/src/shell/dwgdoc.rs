@@ -216,7 +216,6 @@ pub struct DwgDoc {
 }
 
 /// The file name from a path.
-#[cfg(not(target_arch = "wasm32"))]
 fn base_name(path: &str) -> String {
     path.rsplit(['/', '\\']).next().unwrap_or(path).to_string()
 }
@@ -477,9 +476,8 @@ impl DwgDoc {
     }
 
     /// A DWG file from disk.
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn open(path: &str) -> Result<DwgDoc, String> {
-        let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+        let bytes = forge_dirs::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
         DwgDoc::from_bytes(Some(path.to_string()), &base_name(path), &bytes)
     }
 
@@ -983,7 +981,7 @@ impl DwgDoc {
         };
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(p) = self.path.clone() {
-            match std::fs::write(&p, &bytes) {
+            match forge_dirs::fs::write(&p, &bytes) {
                 Ok(()) => self.say(format!("Saved {} as {v}", self.name)),
                 Err(e) => self.say(format!("Can't save {p}: {e}")),
             }
@@ -994,7 +992,6 @@ impl DwgDoc {
     }
 
     /// Writes it to a new path, which it's saved to from now on.
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn save_as(&mut self, path: &str) {
         let path = if path.to_ascii_lowercase().ends_with(".dwg") {
             path.to_string()

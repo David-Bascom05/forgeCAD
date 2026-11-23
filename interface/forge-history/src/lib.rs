@@ -30,8 +30,8 @@ pub const TRAILER_PATH: &str = "ForgeCAD-Path";
 pub const TRAILER_VERSION: &str = "ForgeCAD-Version";
 
 pub fn now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    forge_math::clock::system_now()
+        .duration_since(forge_math::clock::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64)
 }
 
@@ -118,7 +118,7 @@ impl History {
     pub fn turn_on(dir: &Path) -> Result<History, Error> {
         let repo = Repo::init(dir, forge_git::HashKind::Sha1)?;
         let gi = dir.join(".gitignore");
-        if !gi.exists() {
+        if !forge_dirs::fs::exists(&gi) {
             forge_git::fsutil::write_new(&gi, STARTER_IGNORE.as_bytes())?;
         }
         Ok(History { repo })
@@ -149,7 +149,7 @@ impl History {
     pub fn set_identity(&mut self, name: &str, email: &str) -> Result<(), Error> {
         let p = self.repo.common.join("config");
         let mut lock = forge_git::fsutil::Lock::take(&p)?;
-        let t = std::fs::read_to_string(&p).unwrap_or_default();
+        let t = forge_dirs::fs::read_to_string(&p).unwrap_or_default();
         let t = forge_git::config::append_value(&t, "user", "name", name);
         let t = forge_git::config::append_value(&t, "user", "email", email);
         lock.write(t.as_bytes())?;
@@ -211,7 +211,7 @@ impl History {
                 Some(t) => forge_git::tree::lookup(&self.repo.odb, t, &r)?.is_some(),
                 None => false,
             };
-            if !held && !ign.ignored(&r, false) && !paths.contains(&r) && i.is_file() {
+            if !held && !ign.ignored(&r, false) && !paths.contains(&r) && forge_dirs::fs::is_file(i) {
                 paths.push(r);
             }
         }
@@ -254,7 +254,7 @@ impl History {
         let mut paths = Vec::new();
         for file in files {
             let rel = self.rel(file)?;
-            if file.is_file() && !ignore.ignored(&rel, false) && !paths.contains(&rel) {
+            if forge_dirs::fs::is_file(file) && !ignore.ignored(&rel, false) && !paths.contains(&rel) {
                 paths.push(rel);
             }
         }
@@ -430,7 +430,7 @@ impl History {
     pub fn content(&self, path: &str, at: Option<&Oid>) -> Result<Option<Vec<u8>>, Error> {
         match at {
             Some(c) => self.repo.file_at(c, path),
-            None => match std::fs::read(self.abs(path)) {
+            None => match forge_dirs::fs::read(self.abs(path)) {
                 Ok(d) => Ok(Some(d)),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
                 Err(e) => Err(e.into()),
@@ -469,15 +469,15 @@ impl History {
             match self.repo.file_at(at, p)? {
                 Some(data) => {
                     if let Some(d) = dest.parent() {
-                        std::fs::create_dir_all(d)?;
+                        forge_dirs::fs::create_dir_all(d)?;
                     }
                     let mut lock = forge_git::fsutil::Lock::take(&dest)?;
                     lock.write(&data)?;
                     lock.commit()?;
                 }
                 None => {
-                    if dest.is_file() {
-                        std::fs::remove_file(&dest)?;
+                    if forge_dirs::fs::is_file(&dest) {
+                        forge_dirs::fs::remove_file(&dest)?;
                     }
                 }
             }

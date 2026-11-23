@@ -1490,7 +1490,7 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             let st = walls.as_ref().filter(|_| ev.checks).map(|pr| {
                 let key = format!("thermoform walls {key} {pr:?}");
                 let key_of = key.clone();
-                let t0 = std::time::Instant::now();
+                let t0 = forge_math::clock::Instant::now();
                 let st = ev.b.memo(key, || {
                     // kept on disk by all it is made from: the same, bit for bit
                     let disk = crate::thermo_kept::stretch_key(&key_of, &spec, &f);
