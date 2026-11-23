@@ -407,6 +407,13 @@ fn circle_circle(c0: Point2, r0: f64, c1: Point2, r1: f64) -> Vec<Point2> {
     vec![m - n * h, m + n * h]
 }
 
+/// Where two pieces meet: the fractions on each (`meet`'s, kept within 2 TOL of both).
+pub(crate) fn crossings(x: &Piece, y: &Piece) -> Vec<(f64, f64)> {
+    let (mut ux, mut uy) = (Vec::new(), Vec::new());
+    meet(x, y, &mut ux, &mut uy);
+    ux.into_iter().zip(uy).collect()
+}
+
 /// The least distance between two line or arc pieces, and the point of `x` where it is, in closed
 /// form: the least over where they meet (`meet`), the ends of each against the other, and
 /// the interior critical points (a line against an arc: the foot of the arc's centre on the line;

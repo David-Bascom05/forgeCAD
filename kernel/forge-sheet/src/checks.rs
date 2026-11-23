@@ -795,7 +795,7 @@ fn webs(sheet: &Sheet, stock: &Stock, flat: &Flat) -> Vec<Violation> {
 
 /// The flat blank's bounding rectangles, (shorter, longer), at the turns that may be least: the
 /// pattern's axes and each edge of its hull (the least-area rectangle has a side on one). Extents
-/// are exact for lines and arcs; splines by samples.
+/// are exact for lines and arcs, and for splines to 1e-9 of their size (`spline_extent`).
 fn blank_sizes(pattern: &crate::pattern::Pattern) -> Option<Vec<(f64, f64)>> {
     let pieces: Vec<Piece> = pattern.contours.iter().flatten().filter_map(piece_of).collect();
     if pieces.is_empty() {
@@ -829,7 +829,11 @@ fn blank_sizes(pattern: &crate::pattern::Pattern) -> Option<Vec<(f64, f64)>> {
                         }
                     }
                 }
-                Piece::Spline { .. } => (0..=64).for_each(|k| s(q.at(k as f64 / 64.0))),
+                Piece::Spline { .. } => {
+                    let (a, b) = spline_extent(q, d);
+                    lo = lo.min(a);
+                    hi = hi.max(b);
+                }
             }
         }
         hi - lo
@@ -1007,7 +1011,9 @@ impl Zone {
     /// A loop's distance from the zone (0 reaching in), and its nearest segment.
     fn to_loop(&self, l: &[(Piece, u64)]) -> (f64, u64) {
         for (p, id) in l {
-            if (0..=8).any(|k| self.inside(p.at(k as f64 / 8.0))) {
+            // a piece wholly inside starts inside; one that enters crosses a side, which `gap`
+            // measures as 0: its start decides, no samples needed
+            if self.inside(p.at(0.0)) {
                 return (0.0, *id);
             }
         }
@@ -1139,27 +1145,82 @@ fn moved(p: &Piece, by: &Place) -> Piece {
     }
 }
 
-/// How far a ray from `o` along `d` runs before it meets the piece (infinite if it misses):
-/// lines exactly, curves by 64 chords.
+/// How far a ray from `o` along `d` runs before it meets the piece (infinite if it misses): the
+/// ray as a segment past the piece's box, met exactly (`region::crossings`: lines and arcs in
+/// closed form, splines by their certified roots).
 fn ray(o: Point2, d: Vec2, p: &Piece) -> f64 {
-    let pts: Vec<Point2> = match p {
-        Piece::Line { a, b } => vec![*a, *b],
-        _ => (0..=64).map(|k| p.at(k as f64 / 64.0)).collect(),
+    let b = p.bbox();
+    let far = [(b.x0, b.y0), (b.x1, b.y0), (b.x0, b.y1), (b.x1, b.y1)]
+        .iter()
+        .map(|&(x, y)| Point2::new(x, y).distance(o))
+        .fold(0.0, f64::max);
+    let n = d.length();
+    if n == 0.0 || !far.is_finite() {
+        return f64::INFINITY;
+    }
+    let reach = 2.0 * far + 1.0;
+    let seg = Piece::Line {
+        a: o,
+        b: o + d * (reach / n),
     };
     let mut best = f64::INFINITY;
-    for w in pts.windows(2) {
-        let e = w[1] - w[0];
-        let den = d.cross(e);
-        if den.abs() <= 1e-15 {
-            continue;
-        }
-        let u = (w[0] - o).cross(e) / den;
-        let v = (w[0] - o).cross(d) / den;
-        if u > TOUCH && (-1e-12..=1.0 + 1e-12).contains(&v) {
-            best = best.min(u);
+    for (u, _) in crate::region::crossings(&seg, p) {
+        // along the ray, in units of d (as the chords' solve gave it)
+        let t = u * reach / n;
+        if t > TOUCH {
+            best = best.min(t);
         }
     }
     best
+}
+
+/// The least and greatest of `d · p` over a spline piece, to 1e-9 of its size: each Bezier span's
+/// control hull bounds it (positive weights), halved where the hull's bound is looser than its
+/// ends' values.
+fn spline_extent(q: &Piece, d: Vec2) -> (f64, f64) {
+    let Piece::Spline { ref s, t0, t1 } = *q else {
+        return (0.0, 0.0);
+    };
+    let range = forge_math::Interval::new(t0.min(t1), t0.max(t1));
+    let val = |h: &[f64; 4]| (h[0] / h[3]) * d.x + (h[1] / h[3]) * d.y;
+    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    let mut stack: Vec<(Vec<[f64; 4]>, u32)> = s.bezier_pieces(range).into_iter().map(|h| (h, 0)).collect();
+    let size = stack
+        .iter()
+        .flat_map(|(h, _)| h.iter().map(|x| val(x).abs()))
+        .fold(1.0, f64::max);
+    while let Some((h, level)) = stack.pop() {
+        let (e0, e1) = (val(&h[0]), val(&h[h.len() - 1]));
+        lo = lo.min(e0.min(e1));
+        hi = hi.max(e0.max(e1));
+        let (hlo, hhi) = h
+            .iter()
+            .map(val)
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| {
+                (a.min(v), b.max(v))
+            });
+        // the span cannot beat what is found: done; else halve it (de Casteljau)
+        if (hlo >= lo - 1e-9 * size && hhi <= hi + 1e-9 * size) || level >= 60 {
+            lo = lo.min(hlo.max(lo - 1e-9 * size));
+            hi = hi.max(hhi.min(hi + 1e-9 * size));
+            continue;
+        }
+        let mut rows = h.clone();
+        let mut left = vec![rows[0]];
+        let mut right = vec![rows[rows.len() - 1]];
+        while rows.len() > 1 {
+            rows = rows
+                .windows(2)
+                .map(|w| std::array::from_fn(|k| 0.5 * (w[0][k] + w[1][k])))
+                .collect();
+            left.push(rows[0]);
+            right.push(rows[rows.len() - 1]);
+        }
+        right.reverse();
+        stack.push((left, level + 1));
+        stack.push((right, level + 1));
+    }
+    (lo, hi)
 }
 
 fn unit(v: Vec2) -> Vec2 {
@@ -1168,11 +1229,19 @@ fn unit(v: Vec2) -> Vec2 {
 }
 
 /// The least distance between two sets of pieces: (distance, the point on a, the point on b, a's
-/// segment id). Alternating nearest points from starts along each piece of a.
+/// segment id). Lines and arcs in closed form; a pair with a spline by alternating nearest points
+/// from starts along its piece of a.
 fn gap(a: &[(Piece, u64)], b: &[Piece]) -> (f64, Point2, Point2, u64) {
     let mut best = (f64::INFINITY, Point2::ORIGIN, Point2::ORIGIN, 0);
     for (pa, id) in a {
         for pb in b {
+            // lines and arcs in closed form (`region::closest`); splines by projection
+            if let Some((d, p)) = crate::region::closest(pa, pb) {
+                if d < best.0 {
+                    best = (d, p, pb.at(pb.nearest(p)), *id);
+                }
+                continue;
+            }
             for k in 0..=16 {
                 let mut u = k as f64 / 16.0;
                 let mut p = pa.at(u);
@@ -1280,4 +1349,48 @@ fn reach(w: &Wall, p0: Point2, p1: Point2) -> f64 {
         .flat_map(|(s, _)| s.samples(16))
         .map(left)
         .fold(0.0, f64::max)
+}
+
+#[cfg(test)]
+mod exact_tests {
+    use super::*;
+
+    #[test]
+    fn a_splines_extent_and_a_rays_reach_are_exact() {
+        let pts: Vec<Point3> = [(0.0, 0.0), (1.0, 3.0), (2.0, -2.0), (3.0, 2.5), (4.0, 0.0)]
+            .iter()
+            .map(|&(x, y)| Point3::new(x, y, 0.0))
+            .collect();
+        let s = Spline::from_nurbs(3, &[0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0], &pts, None).unwrap();
+        let q = Piece::Spline {
+            s: std::sync::Arc::new(s),
+            t0: 0.0,
+            t1: 1.0,
+        };
+        for d in [Vec2::new(0.0, 1.0), Vec2::new(0.6, 0.8), Vec2::new(-1.0, 0.0)] {
+            let (lo, hi) = spline_extent(&q, d);
+            let (mut a, mut b) = (f64::INFINITY, f64::NEG_INFINITY);
+            for k in 0..=200_000 {
+                let v = q.at(k as f64 / 200_000.0).to_vec().dot(d);
+                a = a.min(v);
+                b = b.max(v);
+            }
+            // holds every point, and is no looser than the bound it promises
+            assert!(lo <= a + 1e-12 && hi >= b - 1e-12, "{lo} {hi} {a} {b}");
+            assert!(a - lo < 1e-6 && hi - b < 1e-6, "{lo} {hi} {a} {b}");
+        }
+        // a ray onto an arc: the circle's own crossing, not a chord's
+        let arc = Piece::Arc {
+            c: Point2::new(0.0, 0.0),
+            r: 5.0,
+            t0: 0.0,
+            t1: dmath::PI,
+        };
+        let t = ray(Point2::new(0.3, 0.0), Vec2::new(0.0, 1.0), &arc);
+        assert!((t - (25.0f64 - 0.09).sqrt()).abs() < 1e-12, "{t}");
+        assert_eq!(
+            ray(Point2::new(9.0, 0.0), Vec2::new(0.0, 1.0), &arc),
+            f64::INFINITY
+        );
+    }
 }
