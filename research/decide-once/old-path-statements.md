@@ -79,6 +79,19 @@ The parts:
   - `ValidSolid δ b := ∃ bs, exactOf b = some bs ∧ ValidExact bs`;
   - `⟦b⟧ := denoteExact (exactOf b)`;
   - `exactOf = none` (a vertex whose meet isn't unique in its δ-ball) is a typed refusal.
+  **Open, pending the master (2026-11-23).** On real kernel bodies the f64 planes round a 4+ face
+  vertex are only approximately concurrent, so exactOf's unique-meet vertex is `none` on normal
+  parts. B:3387's trial refused bench part insert (VertexNotUnique at (40.3, −17, 36)).
+  - Recommended, option (iv), vertex clusters:
+    - the exact body is its exact carriers plus its topology;
+    - each f64 vertex corresponds to a connected exact cluster of diameter ≤ δ;
+    - `Refines_δ` is one-to-one up to vertex clusters;
+    - `exactOf = none` only for invalid input;
+    - a refusal happens only when a decision needs a vertex that nothing separates.
+  - Rejected:
+    - (i) per-face canonical triples: the faces don't close;
+    - (ii) decide-once's snap: it merges coincident planes, not concurrent ones;
+    - (iii) f64 vertex points read exactly: the faces aren't planar.
   Done in BodyModel.lean, b66293ec (`exactOf`, `exactOf_refines`, `denote_spec`, `denote_refines`).
   Also asked: `exactOf = none` when a second branch of the meet enters an edge's δ-tube.
   `exactOf_refines` needs `hface` and `hedge` (each stored region and curve within δ of its exact
