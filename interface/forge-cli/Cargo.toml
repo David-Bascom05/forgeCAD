@@ -23,6 +23,7 @@ forge-import = { path = "../forge-import" }
 forge-lang = { path = "../forge-lang" }
 forge-cam-lang = { path = "../forge-cam-lang" }
 forge-machine-lang = { path = "../forge-machine-lang" }
+forge-machine-builder = { path = "../forge-machine-builder" }
 forge-step = { path = "../../kernel/forge-step" }
 
 [dev-dependencies]

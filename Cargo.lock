@@ -125,6 +125,7 @@ dependencies = [
  "forge-geom",
  "forge-import",
  "forge-lang",
+ "forge-machine-builder",
  "forge-machine-lang",
  "forge-material",
  "forge-math",
@@ -309,11 +310,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-machine-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-machine",
+ "forge-machine-lang",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-machine-lang"
 version = "0.1.0"
 dependencies = [
  "forge-lang",
  "forge-machine",
+ "forge-machine-builder",
  "forge-math",
  "forge-mesh",
 ]

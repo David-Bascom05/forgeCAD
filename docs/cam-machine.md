@@ -131,6 +131,34 @@ the second rotary carried by the first); lathes have a diameter X, mills a lengt
 - Mill-turn: part mounts `main` (link C) and `sub` (link C2 on Z2); the milling head's tool mount is
   `bhead` on B.
 
+## Your own machines (the machine builder)
+
+`interface/forge-machine-builder` writes and checks machines so nobody has to write this TOML by
+hand (research/cam/machine-builder.md). The format is the one above; the builder's files are
+canonical (reading one and writing it again gives the same bytes).
+
+```
+forgecad machine list [--json]              every machine the search order sees: level, file,
+                                            and the machines of the same name it hides
+forgecad machine new NAME --template KIND   KIND: vmc3 trunnion head-table lathe mill-turn gantry
+forgecad machine new NAME --from MACHINE    a clone of any machine listed (built-in, user, project)
+     [--project | --user]                   where it is saved (default: the user's folder)
+     [--own | --keep-cites]                 copied values: cited unknown (default), the source's
+                                            cites only, or no cites (the user's own)
+forgecad machine check FILE.toml|NAME [--json] [--no-parts]
+```
+
+A new machine's copied values are cited `status = "unknown"` with a basis naming where they came
+from: they are not this machine's. A value the user enters carries no cite; in a user or project
+file an uncited value is reported as the user's own (status `user`). A clone of a built-in machine
+brings its body parts (`parts/NAME/BODY.fg` beside the file).
+
+`check` reports: the reader's validation; every pair of bodies at home; every pair through travel
+(`proven` clear for all joint values, `hit` with the joint values and a point, `near`, or
+`sampled`: lines swept clear but the poses between them not proven); each body's part inside its
+envelope; the provenance of every value, listing those cited unknown as not checked. Exit 0 ok,
+1 problems, 2 usage.
+
 ## Simulation (posted G-code)
 
 `forge-machine` reads the posted text itself, not the toolpath it came from, and drives the joints
@@ -138,7 +166,7 @@ with it. That is the check Fusion's simulation skips: Fusion simulates the toolp
 post.
 
 ```
-forgecad machine list                       the machines (built in, then cam/machines/*.toml)
+forgecad machine list                       the machines (project, user, built in)
 forgecad machine SETUP.toml [--json]        run a setup: exit 0 ok, 1 refused, 2 error
 ```
 
