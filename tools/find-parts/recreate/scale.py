@@ -275,6 +275,25 @@ def cause(r):
     return f"{r['class']}: {s[:120]}"
 
 
+RANK = ["sweep", "loft", "shell", "fillet", "chamfer", "hole", "revolve", "mirror", "circularPattern", "transform", "booleanBodies", "intersect", "cut", "extrude"]
+
+
+def mismatch_cause(r):
+    """A mismatch's likely cause, by what it shows: bodies the program makes against the source's solids, a volume
+    right with the area off, or else the most particular feature kind the part holds."""
+    t = r.get("truth") or {}
+    pb, so = r.get("program_bodies"), t.get("solids")
+    if pb is not None and so is not None and pb != so + t.get("copies", 0) and pb != so:
+        return f"bodies: the program makes {'more' if pb > so else 'fewer'} than the source has"
+    if r.get("evol", 1) < 1e-6:
+        return "volume right, area off"
+    kinds = set(r.get("features") or []) | set(r.get("ops") or [])
+    for k in RANK:
+        if k in kinds:
+            return f"off, with {k}" + (" (approx curve)" if "approx" in (r.get("notes") or []) else "")
+    return "off, other"
+
+
 def tally_cmd(a):
     opt = lambda k, dflt=None: a[a.index(k) + 1] if k in a else dflt
     tol = float(opt("--tol", str(TOL)))
@@ -317,7 +336,43 @@ def tally_cmd(a):
         b = C("<1e-3" if r["evol"] < 1e-3 else "<1e-2" if r["evol"] < 1e-2 else "<10%" if r["evol"] < 0.1 else "big" for r in mm)
         for k in ("<1e-3", "<1e-2", "<10%", "big"):
             print(f"| {k} | {b[k]} |")
+        print("\n| mismatch cause | parts | e.g. |\n|---|---:|---|")
+        m = collections.defaultdict(list)
+        for r in mm:
+            m[mismatch_cause(r)].append(r["id"])
+        for k, ids in sorted(m.items(), key=lambda x: -len(x[1]))[:10]:
+            print(f"| {k} | {len(ids)} | {', '.join(sorted(ids)[:3])} |")
+
+
+VERDICT = ("id", "class", "status", "cls", "why", "v", "sig", "features", "ops", "notes", "program_bodies", "whole", "partial", "t")
+MEASURES = ("vol", "area", "evol", "earea", "bodies", "faces", "cpu")
+
+
+def export_cmd(a):
+    """export CORPUS RUN.. --out FILE.jsonl.gz: each part's verdict (and, but for Fusion, our measures and the
+    source's), for the repository. Fusion's rows are verdicts and causes alone: nothing of its geometry is committed."""
+    import gzip
+
+    opt = lambda k: a[a.index(k) + 1]
+    corpus, out = a[0], opt("--out")
+    rows = {}
+    for run in [x for x in a[1:] if x != out and x != "--out"]:
+        for l in open(os.path.join(run, "results.jsonl")):
+            try:
+                r = json.loads(l)
+            except ValueError:
+                continue
+            klass(r)
+            keep = VERDICT if corpus == "fusion" else VERDICT + MEASURES
+            o = {k: r[k] for k in keep if k in r}
+            if corpus != "fusion" and r.get("truth"):
+                o["truth"] = {k: v for k, v in r["truth"].items() if k != "copy_measures"}
+            rows[r["id"]] = o
+    with gzip.open(out, "wt") as f:
+        for i in sorted(rows):
+            f.write(json.dumps(rows[i], separators=(",", ":")) + "\n")
+    print(len(rows), "rows to", out)
 
 
 if __name__ == "__main__":
-    {"ids": ids_cmd, "run": run_cmd, "tally": tally_cmd}[sys.argv[1]](sys.argv[2:])
+    {"ids": ids_cmd, "run": run_cmd, "tally": tally_cmd, "export": export_cmd}[sys.argv[1]](sys.argv[2:])
