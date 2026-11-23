@@ -1499,7 +1499,9 @@ impl Gui {
             let ao = v.renderer.ao;
             if self.shell.fg.as_ref().is_some_and(|p| {
                 p.thermo.analysis != crate::shell::thermo_ui::Analysis::None && !self.fg_walls.is_empty()
-            }) {
+            }) || self.shell.camsim.is_some()
+            {
+                // and a simulation: its light is baked in, its depth has no normals to occlude by
                 v.renderer.ao = false;
             }
             let (key, map) = gui_overlay::map_of(&self.fg_walls, self.shell.fg.as_ref());

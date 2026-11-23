@@ -22,6 +22,7 @@ async function sim(p, cmd) {
   await p.evaluate((c) => window.forgecad.fc.app_camsim(c), cmd);
   // the words are taken on the app's next turn; a frame read after them draws them
   await t.pixels(p);
+  await t.pixels(p);
   return p.evaluate(() => window.forgecad.state());
 }
 

@@ -299,25 +299,25 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         let b = |ui: &mut Ui, s: &str, tip: &str| ui.button(s).on_hover_text(tip).clicked();
-        if b(ui, "⏮", "To the start") {
+        if b(ui, "|<", "To the start") {
             st.jump(0.0);
         }
-        if b(ui, "◀", "Back a move") {
+        if b(ui, "<", "Back a move") {
             let to = st.sim.tl.step(st.t, true);
             st.jump(to);
         }
-        let play = if st.playing { "⏸" } else { "▶" };
+        let play = if st.playing { "Pause" } else { "Play" };
         if b(ui, play, "Play or pause (Space)") {
             if !st.playing && st.t >= total {
                 st.t = 0.0;
             }
             st.playing = !st.playing;
         }
-        if b(ui, "▶|", "On a move") {
+        if b(ui, ">", "On a move") {
             let to = st.sim.tl.step(st.t, false);
             st.jump(to);
         }
-        if b(ui, "⏭", "To the end") {
+        if b(ui, ">|", "To the end") {
             st.jump(total);
         }
         ui.separator();
@@ -471,7 +471,7 @@ fn heading(ui: &mut Ui, t: &crate::shell::theme::Theme, s: &str) {
 fn panel(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f32) {
     ui.horizontal(|ui| {
         if ui
-            .small_button(if st.folded { "◀" } else { "▶" })
+            .small_button(if st.folded { "<" } else { ">" })
             .on_hover_text(if st.folded {
                 "Open the panel"
             } else {
@@ -576,9 +576,9 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                         ui.add_space(12.0);
                         ui.checkbox(&mut st.show_ops[k], "");
                         let (mark, c) = if op.status == "built" {
-                            ("✔", t.success)
+                            ("ok", t.success)
                         } else {
-                            ("✖", t.error)
+                            ("refused", t.error)
                         };
                         ui.colored_label(c, mark);
                         let label = egui::RichText::new(format!("{} ({})", op.name, op.kind)).color(if now {
@@ -602,7 +602,7 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             // the in-process stock as this op leaves it
                             if ui
-                                .small_button("⇥")
+                                .small_button("after")
                                 .on_hover_text("The stock after this op")
                                 .clicked()
                             {
