@@ -92,8 +92,11 @@ What each table means:
   it, one per side, so the map is one to one. (v) is a surjection onto the sectors, with connected
   fibres.
 
-  The alternative, W1, has the builder cut every wing apart along a seam. It needs no interface
-  change but puts the detection in every builder, flat and curved.
+  A builder may still cut a wing apart along a seam that lies in the reference arrangement (W1).
+  The cut pieces are just more facets, with multiplicity 1, so the result is a valid W2 ledger, and
+  the core and proofs do not care which a builder chose. Curved cuts along its Tier-0 seam pieces
+  where that is natural (curved-design.md §7). It emits wings or sectors where cutting is not
+  natural, for example tangent cylinders.
 
 The core reads the tables as follows. This is today's algorithm with lookups in place of
 covector arithmetic.
