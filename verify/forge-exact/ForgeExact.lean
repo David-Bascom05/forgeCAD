@@ -25,3 +25,4 @@ import ForgeExact.QRef.Octree
 import ForgeExact.Axioms
 import ForgeExact.Fillet
 import ForgeExact.Ops.Axioms
+import ForgeExact.Swept.Axioms

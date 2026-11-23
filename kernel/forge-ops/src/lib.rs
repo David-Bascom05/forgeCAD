@@ -40,7 +40,7 @@ pub use shell::{ShellError, offset_solid, shell};
 pub use strip::{face_fillet, full_round};
 pub use sweep::{
     CoilError, Handed, PathSeg, Stretch, SweepError, Winding, Wound, coil, coil_motion, sweep,
-    sweep_stretches,
+    sweep_stretches, sweep_unchecked,
 };
 pub use taper::{TaperError, closes_at, tapered};
 pub use thicken::{ThickenError, thicken};
