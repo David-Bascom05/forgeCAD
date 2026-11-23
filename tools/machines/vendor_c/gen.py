@@ -179,8 +179,9 @@ def vmc3(vendor, name, control, src, note, *, tx, ty, tz, hmin, hmax, D, table, 
     m.cite("spindle.S1.nose", hmin_status, src if hmin_status == "published" else None,
            value=f"spindle nose to table {hmin}-{hmax} mm" if hmin_status == "published" else None,
            basis=None if hmin_status == "published" else
-           f"nose-to-table unpublished; nose put {hmin} mm above the table top at Z's bottom, the least that keeps "
-           "the machine clear of itself through its travel: the head errs low (more Hits), the tool's reach errs long")
+           f"true value unpublished; nose put {hmin} mm above the table top at Z's bottom: the least value "
+           "consistent with the self-collision test, not data; the head errs low (more Hits), the tool's reach "
+           "errs long")
     m.cite("mount.spindle.at", "estimate", basis="gauge point taken at the spindle nose face (see spindle.S1.nose)")
     m.cite("mount.table.at", "estimate", basis="table top centre at the travel's centre; table thickness ours")
     m.cite("body.table", "estimate", src, value=f"table {L} x {W} mm",
@@ -236,7 +237,9 @@ def gantry(vendor, name, control, src, note, *, tx, ty, tz, passage, rapid, feed
         for x in (c if isinstance(c, list) else [c]):
             m.cite(path, **x)
     m.cite("spindle.S1.nose", "estimate",
-           basis=f"nose height unpublished; put 5 mm above the bed top at Z's bottom (Z travel {tz} mm), the least that keeps the machine clear of itself through its travel: the spindle errs low (more Hits), the tool's reach errs long")
+           basis=f"true value unpublished; nose put 5 mm above the bed top at Z's bottom (Z travel {tz} mm): the "
+           "least value consistent with the self-collision test, not data; the spindle errs low (more Hits), the "
+           "tool's reach errs long")
     m.cite("mount.spindle.at", "estimate", basis="gauge point at the spindle nose (see spindle.S1.nose)")
     m.cite("mount.bed.at", "estimate", basis="bed top at the travel's centre")
     m.cite("body.bed", "estimate", basis=f"a {bx} x {by} mm slab, top = the work surface; thickness ours")

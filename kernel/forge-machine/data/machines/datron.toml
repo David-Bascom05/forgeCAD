@@ -300,7 +300,7 @@ value = "DATRON next; runs SimPL, with a G-code wrapper translating G/M codes (d
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "estimate"
-basis = "nose height unpublished; put 5 mm above the bed top at Z's bottom (Z travel 220 mm), the least that keeps the machine clear of itself through its travel: the spindle errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the bed top at Z's bottom (Z travel 220 mm): the least value consistent with the self-collision test, not data; the spindle errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"
@@ -586,7 +586,7 @@ value = "DATRON next; runs SimPL, with a G-code wrapper translating G/M codes (d
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "estimate"
-basis = "nose height unpublished; put 5 mm above the bed top at Z's bottom (Z travel 220 mm), the least that keeps the machine clear of itself through its travel: the spindle errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the bed top at Z's bottom (Z travel 220 mm): the least value consistent with the self-collision test, not data; the spindle errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"
@@ -879,7 +879,7 @@ value = "Y 720 mm with the tool changer (830 mm without)"
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "estimate"
-basis = "nose height unpublished; put 5 mm above the bed top at Z's bottom (Z travel 245 mm), the least that keeps the machine clear of itself through its travel: the spindle errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the bed top at Z's bottom (Z travel 245 mm): the least value consistent with the self-collision test, not data; the spindle errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"

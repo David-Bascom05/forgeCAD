@@ -7,9 +7,9 @@ library, until the format can say a guide bushing, a gang slide and several path
 
 Sources (keys): CMJ = cmj.citizen.co.jp/english/product/cincom/cincom_{l20b5,l32,a20,m32}.html;
 MCC = marucit.com (L20 page; L32 2019 brochure PDF; A20 2016 brochure PDF); DE = citizen.de L20
-brochure PDF; STAR = star-m.jp/eng/products/lathe/swiss_type/<model>.html; STAR-US =
-starcnc.com/product/<model>/ (**fetched with a browser User-Agent before the no-spoofing rule
-reached the research agent: values marked † must be re-sourced before use**); TA =
+brochure PDF; STAR = star-m.jp/eng/products/lathe/swiss_type/<model>.html (re-read 2026-11-23 with a plain
+client; starcnc.com values were fetched with a browser User-Agent and are discarded, coordinator's
+rule); TA =
 tsugamiamerica.com machine pages and Focus brochure PDFs; NOM = nomurads.co.jp (the official
 site; nomura-ds.co.jp is now unrelated).
 
@@ -27,17 +27,18 @@ Tools (L20): gang 6 turning 12 mm (13/16), gang rotary 21–25 at 6,000 rpm 1.0 
 guide bushing switchable GB/GBL, synchronous GB standard [CMJ, DE]. Max tool counts disagree
 between CMJ (38/34/45/41), MCC (38/45/46) and DE (20+α … 31+α).
 
-## Star (FANUC on the US pages †; star-m.jp gives the same headline values unless noted)
+## Star (star-m.jp only)
 
 | model | bar | headstock stroke (GB / RMGB / non-GB) | axes, paths | main / sub | rapids | control | mass |
 |---|---|---|---|---|---|---|---|
-| SR-20J II A/B | 20 | 205 / 160 / 50 | X1 Y1 Z1 X2 Z2 C1 C2 (+Y2 on B); 2 paths | 10,000 3.7/2.2 both | 35 m/min (Y2 24) | FANUC 32i-B † | 2,750 kg |
-| SR-32J III A/B | 32 | 320 / 286.5 / 80 | as SR-20J II | 8,000 7.5/11; 8,000 3.7/5.5 | 35 (Y2 24) | FANUC 32i-B († and brochure p7) | 4,100 kg |
-| SR-20R IV type E | 20 | 205 / 160 / 2.5 D ≤ 50 | +B1; 5 + 4 axes | 10,000 3.7/2.2 both | 35 (Y2 15; B1 27,000°/min) | FANUC 31i-B | 2,600 kg |
-| SB-20R II | 20 (25.4 opt) | 205 (196 MR25) / — / 2.5 D ≤ 50 | 4 + 3 | 10,000 3.7/2.2; 10,000 2.2/1.5 | 35 | FANUC 0i-TF Plus or Mitsubishi M80V (brochure) | 2,000 kg |
-| SW-20 | 20 | 205 | 11 axes, 3 paths (4/4/3) | 10,000 2.2/3.7 both | 35 / 20 per axis | FANUC 31i-B5 † | 3,400 kg |
+| SR-20J II A/B | 20 | 205 / 160 / 50 | X1 Y1 Z1 X2 Z2 C1 C2 (+Y2 on B); 2 paths | 10,000 3.7/2.2 both | 35 m/min (Y2 24) | — | 2,750 kg |
+| SR-32J III A/B | 32 | 320 / 286.5 / 80 | as SR-20J II | 8,000 7.5/11; 8,000 3.7/5.5 | 35 (Y2 24) | — | 4,100 kg |
+| SR-20R IV type E | 20 | 205 / 160 / 2.5 D ≤ 50 | +B1; 5 + 4 axes | 10,000 3.7/2.2 both | 35 (Y2 15; B1 27,000°/min) | — | 2,600 kg |
+| SB-20R II | 20 (25.4 opt) | 205 (196 MR25) / — / 2.5 D ≤ 50 | 4 + 3 | 10,000 3.7/2.2; 10,000 2.2/1.5 | 35 | FANUC or Mitsubishi (models not named) | 2,000 kg |
+| SW-20 | 20 | 205 | 11 axes, 3 paths (4/4/3) | 10,000 2.2/3.7 both | 35 / 20 per axis | — | 3,400 kg |
 
-C1/C2 rapid 198,000°/min †. SB-16 is discontinued (SB-16R Type G).
+star-m.jp gives the C axes only as "C-axis control" (no resolution or rate). Controller models and the
+SB-16 status are UNKNOWN from star-m.jp. SW-20 is 2,588 × 1,300 × 1,765 mm there.
 
 ## Tsugami (convertible guide bushing / chucker on all)
 

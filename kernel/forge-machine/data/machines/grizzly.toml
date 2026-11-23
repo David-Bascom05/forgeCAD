@@ -238,7 +238,7 @@ value = "spindle motor 1.5 HP DC; no curve published"
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "unknown"
-basis = "nose-to-table unpublished; nose put 5 mm above the table top at Z's bottom, the least that keeps the machine clear of itself through its travel: the head errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the table top at Z's bottom: the least value consistent with the self-collision test, not data; the head errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"
@@ -541,7 +541,7 @@ basis = "max tool weight unpublished; 3 kg held (what SYIL publishes for its BT3
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "unknown"
-basis = "nose-to-table unpublished; nose put 5 mm above the table top at Z's bottom, the least that keeps the machine clear of itself through its travel: the head errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the table top at Z's bottom: the least value consistent with the self-collision test, not data; the head errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"
@@ -842,7 +842,7 @@ basis = "max tool weight unpublished; 3 kg held (what SYIL publishes for its BT3
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "unknown"
-basis = "nose-to-table unpublished; nose put 5 mm above the table top at Z's bottom, the least that keeps the machine clear of itself through its travel: the head errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the table top at Z's bottom: the least value consistent with the self-collision test, not data; the head errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"
@@ -1127,7 +1127,7 @@ value = "spindle motor 1-1/3 HP DC; no curve published"
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "unknown"
-basis = "nose-to-table unpublished; nose put 5 mm above the table top at Z's bottom, the least that keeps the machine clear of itself through its travel: the head errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the table top at Z's bottom: the least value consistent with the self-collision test, not data; the head errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"

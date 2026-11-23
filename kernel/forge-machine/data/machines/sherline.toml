@@ -244,7 +244,7 @@ value = "90 VDC motor, 60 W output"
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "unknown"
-basis = "nose-to-table unpublished; nose put 5 mm above the table top at Z's bottom, the least that keeps the machine clear of itself through its travel: the head errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the table top at Z's bottom: the least value consistent with the self-collision test, not data; the head errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"
@@ -529,7 +529,7 @@ value = "90 VDC motor, 60 W output"
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "unknown"
-basis = "nose-to-table unpublished; nose put 5 mm above the table top at Z's bottom, the least that keeps the machine clear of itself through its travel: the head errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the table top at Z's bottom: the least value consistent with the self-collision test, not data; the head errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"

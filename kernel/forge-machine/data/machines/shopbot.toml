@@ -241,7 +241,7 @@ basis = "gantry clearance unpublished; the beam's underside put at the Z travel 
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "estimate"
-basis = "nose height unpublished; put 5 mm above the bed top at Z's bottom (Z travel 130 mm), the least that keeps the machine clear of itself through its travel: the spindle errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the bed top at Z's bottom (Z travel 130 mm): the least value consistent with the self-collision test, not data; the spindle errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"
@@ -502,7 +502,7 @@ basis = "gantry clearance unpublished; the beam's underside put at the Z travel 
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "estimate"
-basis = "nose height unpublished; put 5 mm above the bed top at Z's bottom (Z travel 130 mm), the least that keeps the machine clear of itself through its travel: the spindle errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the bed top at Z's bottom (Z travel 130 mm): the least value consistent with the self-collision test, not data; the spindle errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"
@@ -785,7 +785,7 @@ basis = "gantry clearance unpublished; the beam's underside put at the Z travel 
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "estimate"
-basis = "nose height unpublished; put 5 mm above the bed top at Z's bottom (Z travel 130 mm), the least that keeps the machine clear of itself through its travel: the spindle errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the bed top at Z's bottom (Z travel 130 mm): the least value consistent with the self-collision test, not data; the spindle errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"
@@ -1046,7 +1046,7 @@ basis = "gantry clearance unpublished; the beam's underside put at the Z travel 
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "estimate"
-basis = "nose height unpublished; put 5 mm above the bed top at Z's bottom (Z travel 200 mm), the least that keeps the machine clear of itself through its travel: the spindle errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the bed top at Z's bottom (Z travel 200 mm): the least value consistent with the self-collision test, not data; the spindle errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"
@@ -1307,7 +1307,7 @@ basis = "gantry clearance unpublished; the beam's underside put at the Z travel 
 [[machine.cite]]
 path = "spindle.S1.nose"
 status = "estimate"
-basis = "nose height unpublished; put 5 mm above the bed top at Z's bottom (Z travel 200 mm), the least that keeps the machine clear of itself through its travel: the spindle errs low (more Hits), the tool's reach errs long"
+basis = "true value unpublished; nose put 5 mm above the bed top at Z's bottom (Z travel 200 mm): the least value consistent with the self-collision test, not data; the spindle errs low (more Hits), the tool's reach errs long"
 
 [[machine.cite]]
 path = "mount.spindle.at"
