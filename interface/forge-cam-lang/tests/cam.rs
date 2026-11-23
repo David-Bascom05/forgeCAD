@@ -692,12 +692,13 @@ fn a_pocket_keeps_its_islands() {
     let corners = [[8.0, 8.0], [52.0, 8.0], [52.0, 32.0], [8.0, 32.0]];
     for l in cam.leftover.iter().filter(|l| l.z0 >= 6.0 - 1e-9) {
         for b in &l.boxes {
-            // the stock's ring outside the plate, or a corner of the well
+            // the stock's ring outside the plate, or a corner of the well (a box an arc's
+            // circle gives: of radius 3, or 3 + 1e-6 for G4's tool-radius piece)
             let ring = b[0] <= 0.0 && b[2] >= 60.0;
             let corner = corners.iter().any(|c| {
-                (b[0] - c[0]).abs().min((b[2] - c[0]).abs()) < 1e-6
-                    && (b[1] - c[1]).abs().min((b[3] - c[1]).abs()) < 1e-6
-                    && b[2] - b[0] <= 6.0 + 1e-9
+                (b[0] - c[0]).abs().min((b[2] - c[0]).abs()) < 1e-5
+                    && (b[1] - c[1]).abs().min((b[3] - c[1]).abs()) < 1e-5
+                    && b[2] - b[0] <= 6.0 + 1e-5
             });
             assert!(ring || corner, "{b:?}");
         }
@@ -748,13 +749,14 @@ fn slots_follow_their_centrelines() {
         "{:?}",
         op.refusal
     );
+}
 
 /// G5's runtime half: the posted S and F, as read back, within the machine's spindle range and
 /// feed limit (a machine of the project's own library, slower than the generic one).
 #[test]
 fn posted_speeds_and_feeds_are_within_the_machine() {
     let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
-    let dir = std::env::temp_dir().join(format!("forge-cam-g5rt-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("forge-cam-g5rt-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(dir.join("cam")).unwrap();
     std::fs::copy(src_dir.join("flange.fg"), dir.join("flange.fg")).unwrap();
     let machine = |rpm: &str, feed: &str| {
