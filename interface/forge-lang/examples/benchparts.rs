@@ -12,8 +12,8 @@
 //!   benchparts font DIR            the block font the parts' text uses, as DIR/block.ttf
 //!   benchparts check [NAME]        each part's features, faces, validity, closed mesh and times
 //!   benchparts nary FILE.fg        a part file's n-ary regen, ok or its error (for shrinking)
-//! (`run`'s instructions less `resolve`'s are the kernel's regen alone, as the .fc gate counted
-//! one regen of a part whose selectors were resolved beforehand.)
+//! (`run`'s instructions less `resolve`'s are the kernel's regen alone: one regen of a part whose
+//! selectors were resolved beforehand.)
 use forge_math::hash::BitHasher;
 use forge_model::{Feature, Part, Solid};
 
@@ -32,7 +32,8 @@ fn names() -> Vec<String> {
 
 /// A folder with the block font in it, for the parts' text.
 fn font_dir() -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("forge-benchparts-{}", std::process::id()));
+    // (one name for every run, not one by process id: a count must not depend on the id's digits)
+    let dir = std::env::temp_dir().join("forge-benchparts");
     std::fs::create_dir_all(&dir).expect("temp dir");
     std::fs::write(dir.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
     dir
@@ -57,7 +58,12 @@ fn bench(name: &str) -> (Part, Vec<u64>) {
 }
 
 fn source(name: &str) -> String {
-    let path = format!("{}/parts/bench/{name}.fg", env!("CARGO_MANIFEST_DIR"));
+    // (FORGE_BENCH_PARTS: the folder the speed gate copies them to, a path of one length from
+    // any checkout, so a count does not depend on where the checkout is)
+    let path = match std::env::var("FORGE_BENCH_PARTS") {
+        Ok(dir) => format!("{dir}/{name}.fg"),
+        Err(_) => format!("{}/parts/bench/{name}.fg", env!("CARGO_MANIFEST_DIR")),
+    };
     std::fs::read_to_string(&path).expect("a bench part")
 }
 
@@ -106,6 +112,8 @@ fn bits_of(r: &Result<Vec<Solid>, forge_model::RegenError>) -> u64 {
     h.finish()
 }
 
+/// (never inlined: the speed gate counts this call alone, `--toggle-collect=*benchparts::regen`)
+#[inline(never)]
 fn regen(part: &Part, ids: &[u64], mode: &str) -> Result<Vec<Solid>, forge_model::RegenError> {
     match mode {
         "seq" => part.regenerate_solids_ids(Some(ids)),

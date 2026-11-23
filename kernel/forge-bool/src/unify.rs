@@ -256,16 +256,21 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
 const SAME: f64 = 0.5 * tol::LINEAR;
 
 /// Whether live edge `e` lies between two faces on one surface, facing the same way (`keys` as
-/// `unify` makes them).
+/// `unify` makes them); or has one plane face on both sides: a slit, a spur or a bridge between
+/// two of its loops, which bounds nothing. (One face round a cylinder or cone on both sides is
+/// mostly its seam, which the face needs.)
 fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
     let x = body.edge(e);
     if !x.alive || x.coedges.len() != 2 {
         return false;
     }
     let (a, b) = (body.coedge_face(x.coedges[0]), body.coedge_face(x.coedges[1]));
+    if a == b {
+        return keys[a.index()].0 == 1 && !kept(body, x.name);
+    }
     let (ka, kb) = (keys[a.index()], keys[b.index()]);
     // (far looser than the test below: faces on one surface differ by tolerances here)
-    if a == b || ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
+    if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
         return false;
     }
     let (fa, fb) = (body.face(a), body.face(b));
@@ -304,11 +309,12 @@ fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
     };
     decided!(log_same(body, a, b, same));
     // unless a feature split the face there on purpose
-    same && !body
-        .joins
-        .kept
-        .iter()
-        .any(|&k| x.name == k || x.name.is_piece_of(k))
+    same && !kept(body, x.name)
+}
+
+/// Whether a feature split a face on purpose along the edge named `name`.
+fn kept(body: &Body, name: forge_topo::Name) -> bool {
+    body.joins.kept.iter().any(|&k| name == k || name.is_piece_of(k))
 }
 
 /// unify's answer for faces `a` and `b` of `body` (planes or cylinders near one surface), beside
@@ -484,7 +490,9 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
         if j == i + 1 || (i == 0 && j == n - 1) {
             // walked there and straight back: a spur
             if n == 2 {
-                return None;
+                // a loop of the one edge there and back, inside the face: it bounds nothing and
+                // goes with the face's other such loops once every join is done
+                return Some((fa, fa));
             }
             cs.retain(|&c| c != ca && c != cb);
         } else {

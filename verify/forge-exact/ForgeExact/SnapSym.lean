@@ -25,6 +25,7 @@ structure Sym where
   proj : ∀ S c, Snap.proj (plane S) (f c) = f (Snap.proj S c)
   grow : ∀ b l, box (b.grow l) = (box b).grow l
   inter : ∀ a b, box (a.inter b) = (box a).inter (box b)
+  hull : ∀ a b, box (a.hull b) = (box a).hull (box b)
   nonempty : ∀ R, (box R).nonempty = R.nonempty
   corners : ∀ R c, c ∈ (box R).corners ↔ ∃ c0 ∈ R.corners, c = f c0
 
@@ -37,6 +38,7 @@ def Sym.comp (g h : Sym) : Sym where
   proj S c := by simp only [Function.comp, g.proj, h.proj]
   grow b l := by simp only [Function.comp, g.grow, h.grow]
   inter a b := by simp only [Function.comp, g.inter, h.inter]
+  hull a b := by simp only [Function.comp, g.hull, h.hull]
   nonempty R := by simp only [Function.comp, g.nonempty, h.nonempty]
   corners R c := by
     simp only [Function.comp]
@@ -68,6 +70,10 @@ theorem Sym.near_eq (g : Sym) (S T : Plane) (R : Box) (d : Rat) :
     obtain ⟨c0, hc0, rfl⟩ := (g.corners R c).mp hc
     rw [g.proj, g.within]; exact h c0 hc0
 
+theorem Sym.extent_eq (g : Sym) (l : Rat) (a b : Carrier) :
+    extent l (g.carrier a) (g.carrier b) = g.box (extent l a b) := by
+  simp only [Snap.extent, Sym.carrier, g.hull, g.grow]
+
 theorem Sym.region_eq (g : Sym) (l : Rat) (a b : Carrier) :
     region l (g.carrier a) (g.carrier b) = g.box (region l a b) := by
   simp only [Snap.region, Sym.carrier, g.inter, g.grow]
@@ -76,7 +82,7 @@ theorem Sym.region_eq (g : Sym) (l : Rat) (a b : Carrier) :
 theorem tolEq_sym (g : Sym) (l : Rat) (a b : Carrier) :
     tolEq l (g.carrier a) (g.carrier b) = tolEq l a b := by
   unfold tolEq
-  rw [g.region_eq, g.nonempty]
+  rw [g.region_eq, g.nonempty, g.extent_eq]
   simp only [Sym.carrier, g.near_eq]
 
 theorem conn_sym_fwd (g : Sym) (l : Rat) {cs : List Carrier} {a b : Carrier}
@@ -160,6 +166,9 @@ def translate (t : V3) : Sym where
   inter a b := by
     apply box_ext <;> apply v3_ext <;>
       simp only [Box.inter, add_x, add_y, add_z, qmax_add, qmin_add]
+  hull a b := by
+    apply box_ext <;> apply v3_ext <;>
+      simp only [Box.hull, add_x, add_y, add_z, qmax_add, qmin_add]
   nonempty R := by simp only [Box.nonempty, add_x, add_y, add_z]; grind
   corners R c := by
     rw [Box.mem_corners]
@@ -191,6 +200,9 @@ def mirrorX : Sym where
   inter a b := by
     apply box_ext <;> apply v3_ext <;> simp only [Box.inter, qmax_neg, qmin_neg] <;>
       first | rfl | rw [qmin_comm] | rw [qmax_comm]
+  hull a b := by
+    apply box_ext <;> apply v3_ext <;> simp only [Box.hull, qmax_neg, qmin_neg] <;>
+      first | rfl | rw [qmin_comm] | rw [qmax_comm]
   nonempty R := by simp only [Box.nonempty]; grind
   corners R c := by
     rw [Box.mem_corners]
@@ -219,6 +231,7 @@ def swapXY : Sym where
   grow b l := by
     apply box_ext <;> apply v3_ext <;> simp only [Box.grow, sub_x, sub_y, sub_z, add_x, add_y, add_z]
   inter a b := by apply box_ext <;> apply v3_ext <;> simp only [Box.inter]
+  hull a b := by apply box_ext <;> apply v3_ext <;> simp only [Box.hull]
   nonempty R := by simp only [Box.nonempty]; grind
   corners R c := by
     rw [Box.mem_corners]
@@ -246,6 +259,7 @@ def swapYZ : Sym where
   grow b l := by
     apply box_ext <;> apply v3_ext <;> simp only [Box.grow, sub_x, sub_y, sub_z, add_x, add_y, add_z]
   inter a b := by apply box_ext <;> apply v3_ext <;> simp only [Box.inter]
+  hull a b := by apply box_ext <;> apply v3_ext <;> simp only [Box.hull]
   nonempty R := by simp only [Box.nonempty]; grind
   corners R c := by
     rw [Box.mem_corners]

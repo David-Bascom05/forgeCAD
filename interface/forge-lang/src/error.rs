@@ -7,10 +7,36 @@ use crate::values::{Dim, Ty};
 use forge_agent::json::Json;
 
 /// A param: shared (no owner) or local to the feature path `owner` (`boss`, `lug.hub`, `bolt[2]`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq)]
 pub struct ParamKey {
     pub owner: Vec<Seg>,
     pub name: String,
+}
+
+// by owner, then name; one key (a set's, shared) is itself at once
+impl std::hash::Hash for ParamKey {
+    fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
+        self.owner.hash(h);
+        self.name.hash(h);
+    }
+}
+impl PartialEq for ParamKey {
+    fn eq(&self, o: &ParamKey) -> bool {
+        std::ptr::eq(self, o) || (self.owner == o.owner && self.name == o.name)
+    }
+}
+impl PartialOrd for ParamKey {
+    fn partial_cmp(&self, o: &ParamKey) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(o))
+    }
+}
+impl Ord for ParamKey {
+    fn cmp(&self, o: &ParamKey) -> std::cmp::Ordering {
+        if std::ptr::eq(self, o) {
+            return std::cmp::Ordering::Equal;
+        }
+        (&self.owner, &self.name).cmp(&(&o.owner, &o.name))
+    }
 }
 
 impl PartialOrd for Seg {
@@ -165,7 +191,7 @@ pub enum Op {
     /// statement made, where missing), or with no text is taken out.
     SetProperty { key: String, text: Option<String> },
     /// The statement making `id`, its params, and every statement reading it out of the build,
-    /// their lines kept as comments `#~ID ..` (`.fc`'s suppress).
+    /// their lines kept as comments `#~ID ..`.
     Suppress { id: String },
     /// The lines `Suppress {id}` kept as comments put back.
     Unsuppress { id: String },
@@ -1033,12 +1059,12 @@ impl Error {
             ],
             // what reads the entity goes too, or the edit keeps it
             EntityStillRead { reader, .. } => vec![Op::DeleteFeature { id: reader.clone() }],
-            // a size too big for where it goes: as large as builds (.fc's `try:`)
+            // a size too big for where it goes: as large as builds
             Build { fit: Some(fit), .. } => vec![Op::SetParam {
                 param: fit.0.clone(),
                 value: fit.1,
             }],
-            // a misspelt name: the nearest in reach (.fc's `try:`)
+            // a misspelt name: the nearest in reach
             UnknownName {
                 span, near: Some(n), ..
             } if span.hi > span.lo => vec![Op::Respell {

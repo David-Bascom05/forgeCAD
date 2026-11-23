@@ -111,6 +111,23 @@ tools/speed/wasm.sh                                 # wasm instruction counts, r
 wasm is single-threaded (wasm32-wasip1 has no threads), so the n-ary regen runs on one thread
 there.
 
+The .fg language has a Lean proof in `research/forge-lang/lean`. It covers:
+- the lexer model;
+- the LL(1) grammar and parser;
+- scope and built-in names;
+- edit ops, undo and refactors.
+
+A change to any of these extends that proof in the same commit. After it, check the
+language against its proof:
+
+```
+cd research/forge-lang/lean && lake build ForgeLang.LL1.Impl && lake build ForgeLang.LL1.ImplUnifiedDoc \
+  && lake build && lake build fgparse fglex && lake env lean Axioms.lean   # no sorryAx, no ofReduceBool
+FG_LEAN=1 cargo test --release -p forge-lang --test parse_diff             # Rust against the Lean oracle; commit the digest
+```
+
+CI (`lean.yml`) runs both, and fails if the committed digest is not the oracle's.
+
 The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first use.
 
 `interface/forge-render` is its own workspace, so wgpu never enters the commands above. From there:

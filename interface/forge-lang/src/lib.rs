@@ -299,7 +299,7 @@ impl Run {
 /// Parses, checks, evaluates and (with `opts.build`) builds `src`, reusing `cache`'s stages
 /// where the history is unchanged. Returns the run and the cache for the next. With
 /// `opts.fit_sizes`, a fillet, chamfer, shell or face fillet the kernel refused, its size driven
-/// by a param, gets the largest value of that param that builds as its fix (.fc's `try:`).
+/// by a param, gets the largest value of that param that builds as its fix.
 pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let fit = opts.fit_sizes;
     let (mut run, mut cache) = run_once(src, opts.clone(), cache);
@@ -309,7 +309,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     (run, cache)
 }
 
-/// Halvings, then bisection steps, in the search for a size that builds (as .fc's).
+/// Halvings, then bisection steps, in the search for a size that builds.
 const FIT_HALVINGS: i32 = 8;
 const FIT_STEPS: usize = 12;
 
@@ -532,7 +532,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
             && !(whole.is_some() && ev.b.stages.last().is_some_and(|st| st.solids.len() == 1));
         let solids = if each { props::solids(&ev) } else { vec![] };
         // every solid's own mass is wanted anyway: the whole is their sum, not worked out again
-        // over the joined body (twice the integrals, where .fc did them once)
+        // over the joined body (that would do the integrals twice)
         // (the joined body still gives the box)
         let boxed = whole;
         let whole = match whole {
@@ -545,8 +545,8 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         let mass = |b: &forge_topo::Body| forge_topo::mass::mass(b);
         let each_mass =
             || -> Option<Vec<_>> { each.then(|| solids.iter().map(|x| mass(&x.2).ok()).collect()) };
-        // under a budget (spent on this thread) one after another, as before
-        let (w, e, o) = if forge_geom::budget::left() == u64::MAX {
+        // under a budget (spent on this thread), or with one thread to run on, one after another
+        let (w, e, o) = if forge_geom::budget::left() == u64::MAX && forge_math::par::threads() > 1 {
             std::thread::scope(|s| {
                 let w = whole.map(|b| s.spawn(move || mass(b)));
                 let bx = boxed.map(|b| s.spawn(move || tightbox::tight_box(b)));
