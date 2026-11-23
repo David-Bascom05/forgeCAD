@@ -27,8 +27,8 @@ side = "table"
 type = "linear"
 axis = [0, -1, 0]
 range = [-500, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.joint]]
 name = "X"
@@ -37,8 +37,8 @@ side = "table"
 type = "linear"
 axis = [-1, 0, 0]
 range = [-760, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.joint]]
 name = "Z"
@@ -47,8 +47,8 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-510, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.spindle]]
 name = "S1"
@@ -174,7 +174,7 @@ basis = "travel length published; where the control's machine zero sits in it is
 [[machine.cite]]
 path = "joint.X.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.X.max_feed"
@@ -184,7 +184,7 @@ basis = "max cutting feed unpublished; held at the rapid so t_min stays a lower 
 [[machine.cite]]
 path = "joint.Y.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.max_feed"
@@ -194,7 +194,7 @@ basis = "max cutting feed unpublished; held at the rapid so t_min stays a lower 
 [[machine.cite]]
 path = "joint.Z.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.max_feed"
@@ -312,8 +312,8 @@ side = "table"
 type = "linear"
 axis = [0, -1, 0]
 range = [-600, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.joint]]
 name = "X"
@@ -322,8 +322,8 @@ side = "table"
 type = "linear"
 axis = [-1, 0, 0]
 range = [-1060, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.joint]]
 name = "Z"
@@ -332,8 +332,8 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-560, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.spindle]]
 name = "S1"
@@ -459,7 +459,7 @@ basis = "travel length published; where the control's machine zero sits in it is
 [[machine.cite]]
 path = "joint.X.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.X.max_feed"
@@ -469,7 +469,7 @@ basis = "max cutting feed unpublished; held at the rapid so t_min stays a lower 
 [[machine.cite]]
 path = "joint.Y.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.max_feed"
@@ -479,7 +479,7 @@ basis = "max cutting feed unpublished; held at the rapid so t_min stays a lower 
 [[machine.cite]]
 path = "joint.Z.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.max_feed"
@@ -597,8 +597,8 @@ side = "table"
 type = "linear"
 axis = [0, -1, 0]
 range = [-500, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.joint]]
 name = "X"
@@ -607,8 +607,8 @@ side = "table"
 type = "linear"
 axis = [-1, 0, 0]
 range = [-760, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.joint]]
 name = "Z"
@@ -617,8 +617,8 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-510, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.spindle]]
 name = "S1"
@@ -744,7 +744,7 @@ basis = "travel length published; where the control's machine zero sits in it is
 [[machine.cite]]
 path = "joint.X.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.X.max_feed"
@@ -754,7 +754,7 @@ basis = "max cutting feed unpublished; held at the rapid so t_min stays a lower 
 [[machine.cite]]
 path = "joint.Y.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.max_feed"
@@ -764,7 +764,7 @@ basis = "max cutting feed unpublished; held at the rapid so t_min stays a lower 
 [[machine.cite]]
 path = "joint.Z.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.max_feed"
@@ -882,8 +882,8 @@ side = "table"
 type = "linear"
 axis = [0, -1, 0]
 range = [-600, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.joint]]
 name = "X"
@@ -892,8 +892,8 @@ side = "table"
 type = "linear"
 axis = [-1, 0, 0]
 range = [-1060, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.joint]]
 name = "Z"
@@ -902,8 +902,8 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-560, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.spindle]]
 name = "S1"
@@ -1029,7 +1029,7 @@ basis = "travel length published; where the control's machine zero sits in it is
 [[machine.cite]]
 path = "joint.X.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.X.max_feed"
@@ -1039,7 +1039,7 @@ basis = "max cutting feed unpublished; held at the rapid so t_min stays a lower 
 [[machine.cite]]
 path = "joint.Y.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.max_feed"
@@ -1049,7 +1049,7 @@ basis = "max cutting feed unpublished; held at the rapid so t_min stays a lower 
 [[machine.cite]]
 path = "joint.Z.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.max_feed"
@@ -1167,8 +1167,8 @@ side = "table"
 type = "linear"
 axis = [0, -1, 0]
 range = [-600, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.joint]]
 name = "X"
@@ -1177,8 +1177,8 @@ side = "table"
 type = "linear"
 axis = [-1, 0, 0]
 range = [-1050, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.joint]]
 name = "Z"
@@ -1187,8 +1187,8 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-600, 0]
-rapid = 10000
-max_feed = 10000
+rapid = 60000
+max_feed = 60000
 
 [[machine.spindle]]
 name = "S1"
@@ -1314,7 +1314,7 @@ basis = "travel length published; where the control's machine zero sits in it is
 [[machine.cite]]
 path = "joint.X.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.X.max_feed"
@@ -1324,7 +1324,7 @@ basis = "max cutting feed unpublished; held at the rapid so t_min stays a lower 
 [[machine.cite]]
 path = "joint.Y.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.max_feed"
@@ -1334,7 +1334,7 @@ basis = "max cutting feed unpublished; held at the rapid so t_min stays a lower 
 [[machine.cite]]
 path = "joint.Z.rapid"
 status = "unknown"
-basis = "rapids unpublished on the open page; 10,000 mm/min held low"
+basis = "rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.max_feed"

@@ -27,7 +27,7 @@ side = "table"
 type = "linear"
 axis = [0, -1, 0]
 range = [-305, 0]
-rapid = 3600
+rapid = 10000
 max_feed = 3600
 
 [[machine.joint]]
@@ -37,7 +37,7 @@ side = "head"
 type = "linear"
 axis = [1, 0, 0]
 range = [-400, 0]
-rapid = 3600
+rapid = 10000
 max_feed = 3600
 
 [[machine.joint]]
@@ -47,7 +47,7 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-135, 0]
-rapid = 3000
+rapid = 10000
 max_feed = 3000
 
 [[machine.spindle]]
@@ -191,27 +191,18 @@ value = "feed XY 7-3,600 mm/min, Z 7-3,000 mm/min"
 
 [[machine.cite]]
 path = "joint.X.rapid"
-status = "estimate"
-source = "https://www.rolanddg.com/products/milling-machines/mdx-50-benchtop-cnc-mill/specifications"
-taken = "2026-11-23"
-value = "max feed only"
-basis = "rapid unpublished; held at the published max feed (a lower bound for speed, so t_min may be long)"
+status = "unknown"
+basis = "rapid unpublished (only max feed is); 10,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.rapid"
-status = "estimate"
-source = "https://www.rolanddg.com/products/milling-machines/mdx-50-benchtop-cnc-mill/specifications"
-taken = "2026-11-23"
-value = "max feed only"
-basis = "rapid unpublished; held at the published max feed (a lower bound for speed, so t_min may be long)"
+status = "unknown"
+basis = "rapid unpublished (only max feed is); 10,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.rapid"
-status = "estimate"
-source = "https://www.rolanddg.com/products/milling-machines/mdx-50-benchtop-cnc-mill/specifications"
-taken = "2026-11-23"
-value = "max feed only"
-basis = "rapid unpublished; held at the published max feed (a lower bound for speed, so t_min may be long)"
+status = "unknown"
+basis = "rapid unpublished (only max feed is); 10,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "machine.layout"
@@ -326,7 +317,7 @@ side = "table"
 type = "linear"
 axis = [0, -1, 0]
 range = [-152.4, 0]
-rapid = 1800
+rapid = 10000
 max_feed = 1800
 
 [[machine.joint]]
@@ -336,7 +327,7 @@ side = "head"
 type = "linear"
 axis = [1, 0, 0]
 range = [-203.2, 0]
-rapid = 1800
+rapid = 10000
 max_feed = 1800
 
 [[machine.joint]]
@@ -346,7 +337,7 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-60.5, 0]
-rapid = 1800
+rapid = 10000
 max_feed = 1800
 
 [[machine.spindle]]
@@ -485,27 +476,18 @@ value = "operating speed 6-1,800 mm/min"
 
 [[machine.cite]]
 path = "joint.X.rapid"
-status = "estimate"
-source = "https://www.rolanddg.com/products/milling-machines/srm-20-compact-milling-machine/specifications"
-taken = "2026-11-23"
-value = "max 1,800 mm/min"
-basis = "rapid unpublished; held at the published max feed"
+status = "unknown"
+basis = "rapid unpublished (only max feed is); 10,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.rapid"
-status = "estimate"
-source = "https://www.rolanddg.com/products/milling-machines/srm-20-compact-milling-machine/specifications"
-taken = "2026-11-23"
-value = "max 1,800 mm/min"
-basis = "rapid unpublished; held at the published max feed"
+status = "unknown"
+basis = "rapid unpublished (only max feed is); 10,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.rapid"
-status = "estimate"
-source = "https://www.rolanddg.com/products/milling-machines/srm-20-compact-milling-machine/specifications"
-taken = "2026-11-23"
-value = "max 1,800 mm/min"
-basis = "rapid unpublished; held at the published max feed"
+status = "unknown"
+basis = "rapid unpublished (only max feed is); 10,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "machine.layout"

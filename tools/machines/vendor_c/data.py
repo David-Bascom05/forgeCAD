@@ -188,9 +188,9 @@ ROUTER_C = {"spindle.S1.rpm": pub(CR, "Carbide Compact Router 12,000-30,000 rpm"
             "spindle.S1.interface": pub(CR, "1/4 in collet; 65 mm router mount")}
 for nm, x_in, y_in in (("shapeoko-4", 17.5, 17.5), ("shapeoko-4-xl", 33, 17.5), ("shapeoko-4-xxl", 33, 33)):
     x, y, z = round(x_in * 25.4, 1), round(y_in * 25.4, 1), 101.6
-    router("carbide3d", nm, "carbide-motion", SO4, CNOTE, x, y, z, rapid=2540, feed=2540, passage=None,
+    router("carbide3d", nm, "carbide-motion", SO4, CNOTE, x, y, z, rapid=20000, feed=20000, passage=None,
            cites=dict(
-               rapid=unk("speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"),
+               rapid=unk("speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"),
                feed=unk("speeds unpublished by Carbide 3D; held at the rapid"),
                **{"joint.X.range": pub(SO4, f"cutting area {x_in} x {y_in} x 4 in"),
                   "machine.control": pub(SO4, "Carbide Motion on V3 electronics; accepts standard G-code"),
@@ -200,12 +200,12 @@ for nm, x_in, y_in in (("shapeoko-4", 17.5, 17.5), ("shapeoko-4-xl", 33, 17.5), 
     [MACHINES[-1].cite(k, **v) for k, v in ROUTER_C.items()]
 for nm, x, y in (("shapeoko-5-pro-2x2", 623, 623), ("shapeoko-5-pro-4x2", 1237, 623),
                  ("shapeoko-5-pro-4x4", 1237, 1237)):
-    router("carbide3d", nm, "carbide-motion", SO5, CNOTE, x, y, 155, rapid=5080, feed=5080, passage=101.6,
+    router("carbide3d", nm, "carbide-motion", SO5, CNOTE, x, y, 155, rapid=20000, feed=20000, passage=101.6,
            cites=dict(
                rapid=dict(status="estimate", source="https://community.carbide3d.com/t/max-feed-speed-on-pro-5/91075",
                           value="user report (not Carbide 3D): XY 200 in/min as shipped, 275 in/min cap",
-                          basis="unpublished by the maker; the user-reported 200 in/min (5,080 mm/min) held "
-                                "(the lower), Z assumed no faster: secondary source"),
+                          basis="unpublished by the maker (the user report is context only); 20,000 mm/min "
+                                "held high so t_min stays a lower bound (time estimates err short)"),
                feed=est("unpublished; held at the rapid"),
                **{"machine.control": pub(SO4, "Carbide Motion")}),
            **ROUTER)
@@ -303,11 +303,11 @@ N3 = "https://shop.carbide3d.com/products/nomad-3"
 MACHINES.append(bridge(
     "carbide3d", "nomad-3", "carbide-motion", N3,
     NOTE + "; Carbide Motion: no carbide-motion dialect yet; manual tool change (no changer); enclosed",
-    tx=203.2, ty=203.2, tz=76.2, nose=81.2, table=(203.2, 203.2), rapid=2540, feed=2540, rpm=[9000, 24000],
+    tx=203.2, ty=203.2, tz=76.2, nose=81.2, table=(203.2, 203.2), rapid=20000, feed=20000, rpm=[9000, 24000],
     iface="ER11", tmax=(60, 7), changer=None,
     nose_cite=dict(status="estimate", basis="true value unpublished; nose put 5 mm above the table at Z's "
                    "bottom: the least value consistent with the self-collision test, not data"),
-    cites={**{f"joint.{a}.{f}": unk("speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low")
+    cites={**{f"joint.{a}.{f}": unk("speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)")
               for a in "XYZ" for f in ("rapid", "max_feed")},
            "machine.layout": pub(N3G, "the Y axis is the table; X and Z move the spindle (p.31)"),
            "spindle.S1.rpm": pub(N3, "130 W brushless, 9,000-24,000 rpm"),
@@ -321,7 +321,7 @@ R50M = "https://downloadcenter.rolanddg.com/contents/manuals/MDX-50_USE_EN_R6.pd
 MACHINES.append(bridge(
     "roland", "roland-mdx-50", "roland-nc", R50,
     NOTE + "; RML-1 or NC code over USB: no Roland dialect yet; resins only (metal not supported per Roland)",
-    tx=400, ty=305, tz=135, nose=140, table=(400, 305), rapid={"X": 3600, "Y": 3600, "Z": 3000},
+    tx=400, ty=305, tz=135, nose=140, table=(400, 305), rapid=10000,
     feed={"X": 3600, "Y": 3600, "Z": 3000}, rpm=[4500, 15000], iface="collet (6.35 / 3.175 mm shanks)",
     tmax=(60, 6.35), changer=(5, 0.1, 0.2), spindle_r=40,
     nose_cite=dict(status="estimate", source=R50M, value="figure p.18: 130 mm spindle-head bottom to table; Z position not stated",
@@ -329,8 +329,7 @@ MACHINES.append(bridge(
                          "table at Z's bottom, the least value consistent with the self-collision test, not data"),
     cites={**{f"joint.{a}.{f}": pub(R50, "feed XY 7-3,600 mm/min, Z 7-3,000 mm/min")
               for a in "XYZ" for f in ("max_feed",)},
-           **{f"joint.{a}.rapid": est("rapid unpublished; held at the published max feed (a lower bound "
-                                      "for speed, so t_min may be long)", source=R50, value="max feed only")
+           **{f"joint.{a}.rapid": unk("rapid unpublished (only max feed is); 10,000 mm/min held high so t_min stays a lower bound (time estimates err short)")
               for a in "XYZ"},
            "machine.layout": pub(R50M, "the table moves in Y, the spindle head in X (pp.33-34); Z on the head "
                                        "(p.18 figure)"),
@@ -349,13 +348,13 @@ SRMM = "https://downloadcenter.rolanddg.com/contents/manuals/SRM-20_USE_EN_R4.pd
 MACHINES.append(bridge(
     "roland", "roland-srm-20", "roland-nc", SRM,
     NOTE + "; RML-1 or NC code: no Roland dialect yet; manual tool change (no changer)",
-    tx=203.2, ty=152.4, tz=60.5, nose=130.75, table=(232.2, 156.6), rapid=1800, feed=1800, rpm=[3000, 7000],
+    tx=203.2, ty=152.4, tz=60.5, nose=130.75, table=(232.2, 156.6), rapid=10000, feed=1800, rpm=[3000, 7000],
     iface="collet (6 mm included)", tmax=(50, 6), changer=None, spindle_r=30,
     nose_cite=dict(status="published", source=SRM, value="collet tip to table 130.75 mm max",
                    basis="the collet tip taken as the gauge point, at Z's top"),
     cites={**{f"joint.{a}.max_feed": pub(SRM, "operating speed 6-1,800 mm/min") for a in "XYZ"},
-           **{f"joint.{a}.rapid": est("rapid unpublished; held at the published max feed", source=SRM,
-                                      value="max 1,800 mm/min") for a in "XYZ"},
+           **{f"joint.{a}.rapid": unk("rapid unpublished (only max feed is); 10,000 mm/min held high so t_min stays a lower bound (time estimates err short)")
+              for a in "XYZ"},
            "machine.layout": pub(SRMM, "the table moves in Y (p.15); the spindle head in X and Z (p.14)"),
            "spindle.S1.rpm": pub(SRM, "3,000-7,000 rpm (DC motor type 380)"),
            "spindle.S1.interface": pub(SRM, "collet; 6 mm collet included"),
@@ -529,7 +528,7 @@ for nm, path, tx, ty, tz, table, tool, pockets, typo in [
     ("quaser-mv6-40", "mv184-15", 2040, 800, 661, (2250, 800), (300, 76.2), 48, False),
 ]:
     url = QS.format(path)
-    slow = unk("rapids unpublished on the open pages; 10,000 mm/min held low")
+    slow = unk("rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)")
     cites = {f"joint.{a}.{f}": slow if f == "rapid" else unk(FEED_UNK) for a in "XYZ" for f in ("rapid", "max_feed")}
     cites.update({
         "spindle.S1.rpm": [pub(url, "spindle options 12,000 to 24,000 rpm" + (" (printed \"112K ~ 24K\")" if typo else "")),
@@ -545,8 +544,8 @@ for nm, path, tx, ty, tz, table, tool, pockets, typo in [
     MACHINES.append(vmc3(
         "quaser", nm, "unknown", url,
         NOTE + "; Quaser's open pages give travels, table, taper, rpm and ATC only (spec PDFs need a login)",
-        tx=tx, ty=ty, tz=tz, hmin=5, hmax=tz + 5, D=ty / 2 + table[1] / 2 + 50, table=table, rapid=10000,
-        feed=10000, rpm=[100, 12000], iface="40 taper", tmax=tool, changer=(pockets, 0.1, 7),
+        tx=tx, ty=ty, tz=tz, hmin=5, hmax=tz + 5, D=ty / 2 + table[1] / 2 + 50, table=table, rapid=60000,
+        feed=60000, rpm=[100, 12000], iface="40 taper", tmax=tool, changer=(pockets, 0.1, 7),
         coolants=("flood",), nose_r=80, head=(360, 480), tt=60, rapid_src=False, hmin_status="unknown",
         D_pub=False, cites=cites))
 
@@ -560,7 +559,7 @@ for nm, path, tx, ty, tz, table, kw, pockets in [
     ("smart-sv6", "vertical-machining-center/sv-6", 1600, 800, 800, (1750, 800), "20/25 hp", 30),
 ]:
     url = SM.format(path)
-    slow = unk("rapids unpublished; 10,000 mm/min held low")
+    slow = unk("rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)")
     cites = {f"joint.{a}.{f}": slow if f == "rapid" else unk(FEED_UNK) for a in "XYZ" for f in ("rapid", "max_feed")}
     cites.update({
         "spindle.S1.rpm": [pub(url, "12,000 rpm"), unk(RPM_MIN_UNK.format(v=100))],
@@ -576,8 +575,8 @@ for nm, path, tx, ty, tz, table, kw, pockets in [
         "smart", nm, "unknown", url,
         NOTE + "; the open page gives travels, table, taper, rpm, power and ATC only" +
         ("" if pockets else "; ATC not stated: no changer recorded (M6 refused)"),
-        tx=tx, ty=ty, tz=tz, hmin=5, hmax=tz + 5, D=ty / 2 + table[1] / 2 + 50, table=table, rapid=10000,
-        feed=10000, rpm=[100, 12000], iface="CAT40", tmax=(250, 80), changer=(pockets, 0.1, 7) if pockets else None,
+        tx=tx, ty=ty, tz=tz, hmin=5, hmax=tz + 5, D=ty / 2 + table[1] / 2 + 50, table=table, rapid=60000,
+        feed=60000, rpm=[100, 12000], iface="CAT40", tmax=(250, 80), changer=(pockets, 0.1, 7) if pockets else None,
         coolants=("flood",), nose_r=80, head=(360, 480), tt=60, rapid_src=False, hmin_status="unknown",
         D_pub=False, cites=cites))
 
@@ -775,7 +774,7 @@ for nm, slug, x, y, z, tab, iface, rpm, pockets, kg in [
     ("victor-vcenter-g105", "vcenter-g105-boxway-machining-center-68", 1050, 600, 600, (1100, 600), "BBT50", 6000, 24, 15),
 ]:
     url = VT.format(slug)
-    slow = unk("rapids unpublished on the open page; 10,000 mm/min held low")
+    slow = unk("rapids unpublished; 60,000 mm/min (above any rapid published for this class) held high so t_min stays a lower bound (time estimates err short)")
     cites = {f"joint.{a}.{f}": slow if f == "rapid" else unk(FEED_UNK) for a in "XYZ" for f in ("rapid", "max_feed")}
     cites.update({
         "spindle.S1.rpm": [pub(url, f"{rpm} rpm"), unk(RPM_MIN_UNK.format(v=100))],
@@ -790,7 +789,7 @@ for nm, slug, x, y, z, tab, iface, rpm, pockets, kg in [
     MACHINES.append(vmc3(
         "victor", nm, "unknown", url,
         NOTE + "; the open page gives travels, table, taper, rpm, motor and ATC only (victorcnc.com unreachable)",
-        tx=x, ty=y, tz=z, hmin=5, hmax=z + 5, D=y / 2 + tab[1] / 2 + 50, table=tab, rapid=10000, feed=10000,
+        tx=x, ty=y, tz=z, hmin=5, hmax=z + 5, D=y / 2 + tab[1] / 2 + 50, table=tab, rapid=60000, feed=60000,
         rpm=[100, rpm], iface=iface, tmax=(250, 80), changer=(pockets, 0.1, kg), coolants=("flood",),
         nose_r=100 if big else 80, head=(440, 560) if big else (360, 480), tt=80 if big else 60, rapid_src=False,
         hmin_status="unknown", D_pub=False, cites=cites))

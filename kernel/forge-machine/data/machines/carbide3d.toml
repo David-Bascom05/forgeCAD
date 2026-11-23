@@ -27,8 +27,8 @@ side = "head"
 type = "linear"
 axis = [0, 1, 0]
 range = [-444.5, 0]
-rapid = 2540
-max_feed = 2540
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "X"
@@ -37,8 +37,8 @@ side = "head"
 type = "linear"
 axis = [1, 0, 0]
 range = [-444.5, 0]
-rapid = 2540
-max_feed = 2540
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "Z"
@@ -47,8 +47,8 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-101.6, 0]
-rapid = 2540
-max_feed = 2540
+rapid = 20000
+max_feed = 20000
 
 [[machine.spindle]]
 name = "S1"
@@ -163,17 +163,17 @@ basis = "travel length published; where the control's machine zero sits in it is
 [[machine.cite]]
 path = "joint.X.rapid"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.rapid"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.rapid"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.X.max_feed"
@@ -285,8 +285,8 @@ side = "head"
 type = "linear"
 axis = [0, 1, 0]
 range = [-444.5, 0]
-rapid = 2540
-max_feed = 2540
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "X"
@@ -295,8 +295,8 @@ side = "head"
 type = "linear"
 axis = [1, 0, 0]
 range = [-838.2, 0]
-rapid = 2540
-max_feed = 2540
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "Z"
@@ -305,8 +305,8 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-101.6, 0]
-rapid = 2540
-max_feed = 2540
+rapid = 20000
+max_feed = 20000
 
 [[machine.spindle]]
 name = "S1"
@@ -421,17 +421,17 @@ basis = "travel length published; where the control's machine zero sits in it is
 [[machine.cite]]
 path = "joint.X.rapid"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.rapid"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.rapid"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.X.max_feed"
@@ -543,8 +543,8 @@ side = "head"
 type = "linear"
 axis = [0, 1, 0]
 range = [-838.2, 0]
-rapid = 2540
-max_feed = 2540
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "X"
@@ -553,8 +553,8 @@ side = "head"
 type = "linear"
 axis = [1, 0, 0]
 range = [-838.2, 0]
-rapid = 2540
-max_feed = 2540
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "Z"
@@ -563,8 +563,8 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-101.6, 0]
-rapid = 2540
-max_feed = 2540
+rapid = 20000
+max_feed = 20000
 
 [[machine.spindle]]
 name = "S1"
@@ -679,17 +679,17 @@ basis = "travel length published; where the control's machine zero sits in it is
 [[machine.cite]]
 path = "joint.X.rapid"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.rapid"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.rapid"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.X.max_feed"
@@ -801,8 +801,8 @@ side = "head"
 type = "linear"
 axis = [0, 1, 0]
 range = [-623, 0]
-rapid = 5080
-max_feed = 5080
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "X"
@@ -811,8 +811,8 @@ side = "head"
 type = "linear"
 axis = [1, 0, 0]
 range = [-623, 0]
-rapid = 5080
-max_feed = 5080
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "Z"
@@ -821,8 +821,8 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-155, 0]
-rapid = 5080
-max_feed = 5080
+rapid = 20000
+max_feed = 20000
 
 [[machine.spindle]]
 name = "S1"
@@ -940,7 +940,7 @@ status = "estimate"
 source = "https://community.carbide3d.com/t/max-feed-speed-on-pro-5/91075"
 taken = "2026-11-23"
 value = "user report (not Carbide 3D): XY 200 in/min as shipped, 275 in/min cap"
-basis = "unpublished by the maker; the user-reported 200 in/min (5,080 mm/min) held (the lower), Z assumed no faster: secondary source"
+basis = "unpublished by the maker (the user report is context only); 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.rapid"
@@ -948,7 +948,7 @@ status = "estimate"
 source = "https://community.carbide3d.com/t/max-feed-speed-on-pro-5/91075"
 taken = "2026-11-23"
 value = "user report (not Carbide 3D): XY 200 in/min as shipped, 275 in/min cap"
-basis = "unpublished by the maker; the user-reported 200 in/min (5,080 mm/min) held (the lower), Z assumed no faster: secondary source"
+basis = "unpublished by the maker (the user report is context only); 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.rapid"
@@ -956,7 +956,7 @@ status = "estimate"
 source = "https://community.carbide3d.com/t/max-feed-speed-on-pro-5/91075"
 taken = "2026-11-23"
 value = "user report (not Carbide 3D): XY 200 in/min as shipped, 275 in/min cap"
-basis = "unpublished by the maker; the user-reported 200 in/min (5,080 mm/min) held (the lower), Z assumed no faster: secondary source"
+basis = "unpublished by the maker (the user report is context only); 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.X.max_feed"
@@ -1064,8 +1064,8 @@ side = "head"
 type = "linear"
 axis = [0, 1, 0]
 range = [-623, 0]
-rapid = 5080
-max_feed = 5080
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "X"
@@ -1074,8 +1074,8 @@ side = "head"
 type = "linear"
 axis = [1, 0, 0]
 range = [-1237, 0]
-rapid = 5080
-max_feed = 5080
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "Z"
@@ -1084,8 +1084,8 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-155, 0]
-rapid = 5080
-max_feed = 5080
+rapid = 20000
+max_feed = 20000
 
 [[machine.spindle]]
 name = "S1"
@@ -1203,7 +1203,7 @@ status = "estimate"
 source = "https://community.carbide3d.com/t/max-feed-speed-on-pro-5/91075"
 taken = "2026-11-23"
 value = "user report (not Carbide 3D): XY 200 in/min as shipped, 275 in/min cap"
-basis = "unpublished by the maker; the user-reported 200 in/min (5,080 mm/min) held (the lower), Z assumed no faster: secondary source"
+basis = "unpublished by the maker (the user report is context only); 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.rapid"
@@ -1211,7 +1211,7 @@ status = "estimate"
 source = "https://community.carbide3d.com/t/max-feed-speed-on-pro-5/91075"
 taken = "2026-11-23"
 value = "user report (not Carbide 3D): XY 200 in/min as shipped, 275 in/min cap"
-basis = "unpublished by the maker; the user-reported 200 in/min (5,080 mm/min) held (the lower), Z assumed no faster: secondary source"
+basis = "unpublished by the maker (the user report is context only); 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.rapid"
@@ -1219,7 +1219,7 @@ status = "estimate"
 source = "https://community.carbide3d.com/t/max-feed-speed-on-pro-5/91075"
 taken = "2026-11-23"
 value = "user report (not Carbide 3D): XY 200 in/min as shipped, 275 in/min cap"
-basis = "unpublished by the maker; the user-reported 200 in/min (5,080 mm/min) held (the lower), Z assumed no faster: secondary source"
+basis = "unpublished by the maker (the user report is context only); 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.X.max_feed"
@@ -1327,8 +1327,8 @@ side = "head"
 type = "linear"
 axis = [0, 1, 0]
 range = [-1237, 0]
-rapid = 5080
-max_feed = 5080
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "X"
@@ -1337,8 +1337,8 @@ side = "head"
 type = "linear"
 axis = [1, 0, 0]
 range = [-1237, 0]
-rapid = 5080
-max_feed = 5080
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "Z"
@@ -1347,8 +1347,8 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-155, 0]
-rapid = 5080
-max_feed = 5080
+rapid = 20000
+max_feed = 20000
 
 [[machine.spindle]]
 name = "S1"
@@ -1466,7 +1466,7 @@ status = "estimate"
 source = "https://community.carbide3d.com/t/max-feed-speed-on-pro-5/91075"
 taken = "2026-11-23"
 value = "user report (not Carbide 3D): XY 200 in/min as shipped, 275 in/min cap"
-basis = "unpublished by the maker; the user-reported 200 in/min (5,080 mm/min) held (the lower), Z assumed no faster: secondary source"
+basis = "unpublished by the maker (the user report is context only); 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.rapid"
@@ -1474,7 +1474,7 @@ status = "estimate"
 source = "https://community.carbide3d.com/t/max-feed-speed-on-pro-5/91075"
 taken = "2026-11-23"
 value = "user report (not Carbide 3D): XY 200 in/min as shipped, 275 in/min cap"
-basis = "unpublished by the maker; the user-reported 200 in/min (5,080 mm/min) held (the lower), Z assumed no faster: secondary source"
+basis = "unpublished by the maker (the user report is context only); 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.rapid"
@@ -1482,7 +1482,7 @@ status = "estimate"
 source = "https://community.carbide3d.com/t/max-feed-speed-on-pro-5/91075"
 taken = "2026-11-23"
 value = "user report (not Carbide 3D): XY 200 in/min as shipped, 275 in/min cap"
-basis = "unpublished by the maker; the user-reported 200 in/min (5,080 mm/min) held (the lower), Z assumed no faster: secondary source"
+basis = "unpublished by the maker (the user report is context only); 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.X.max_feed"
@@ -1590,8 +1590,8 @@ side = "table"
 type = "linear"
 axis = [0, -1, 0]
 range = [-203.2, 0]
-rapid = 2540
-max_feed = 2540
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "X"
@@ -1600,8 +1600,8 @@ side = "head"
 type = "linear"
 axis = [1, 0, 0]
 range = [-203.2, 0]
-rapid = 2540
-max_feed = 2540
+rapid = 20000
+max_feed = 20000
 
 [[machine.joint]]
 name = "Z"
@@ -1610,8 +1610,8 @@ side = "head"
 type = "linear"
 axis = [0, 0, 1]
 range = [-76.2, 0]
-rapid = 2540
-max_feed = 2540
+rapid = 20000
+max_feed = 20000
 
 [[machine.spindle]]
 name = "S1"
@@ -1729,32 +1729,32 @@ basis = "travel length published; where the control's machine zero sits in it is
 [[machine.cite]]
 path = "joint.X.rapid"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.X.max_feed"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.rapid"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Y.max_feed"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.rapid"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "joint.Z.max_feed"
 status = "unknown"
-basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+basis = "speeds unpublished by Carbide 3D; 20,000 mm/min held high so t_min stays a lower bound (time estimates err short)"
 
 [[machine.cite]]
 path = "machine.layout"
