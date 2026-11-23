@@ -36,6 +36,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 import zlib
@@ -367,8 +368,32 @@ def census(data):
     return out
 
 
+local = threading.local()
+
+
+def occt(path):
+    """OCCT's truth through this thread's fork server (occt_truth.py --serve), started again if it dies."""
+    for _ in range(2):
+        s = getattr(local, "srv", None)
+        if s is None or s.poll() is not None:
+            s = local.srv = subprocess.Popen([VENV, "-I", os.path.join(HERE, "occt_truth.py"), "--serve", str(OCCT_TIME)],
+                                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, cwd=HERE,
+                                             preexec_fn=lambda: os.nice(10))
+        try:
+            s.stdin.write(path + "\n")
+            s.stdin.flush()
+            line = s.stdout.readline()
+            if line:
+                return json.loads(line)
+        except (BrokenPipeError, json.JSONDecodeError):
+            pass
+        s.kill()
+        local.srv = None
+    return {"crash": "occt server died"}
+
+
 def one(path):
-    o = child([VENV, "-I", os.path.join(HERE, "occt_truth.py"), path], OCCT_TIME, 5 << 30)
+    o = occt(path)
     with open(path, "rb") as f:
         data = f.read()
     d = child([BIN], OURS_TIME, OURS_MEM, stdin=data)

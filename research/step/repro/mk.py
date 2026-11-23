@@ -106,6 +106,13 @@ def near_flat_cone(st):
     return surf, zr(4.0), zr(10.0), True
 
 
+def offset_plane(st):
+    """The top face on an OFFSET_SURFACE: a plane 2 below, offset 2 up, as ABC's and AutoMate's files have them."""
+    base = st.add(f"PLANE('',{st.ax((0, 0, 8.0))})")
+    surf = st.add(f"OFFSET_SURFACE('',{base},2.0,.F.)")
+    return surf, 10.0, 10.0, True
+
+
 def whole_torus():
     """A torus whose one face has no loops: a ring, closed both ways (CADFS 00000550 and others)."""
     st = Step()
@@ -159,10 +166,11 @@ def elbow(name="elbow", turn=90.0, R=63.5, r=27.94, inner=None):
     return st.text(st.solid(faces), name)
 
 
-def seamed_cylinder(name, seam="bspline", r=10.0, h=20.0):
+def seamed_cylinder(name, seam="bspline", r=10.0, h=20.0, far=0.0):
     """A plain cylinder whose side is one loop: bottom rim, seam up, top rim back, seam down, the seam one edge used
     both ways, as Parasolid and Onshape write it (AutoMate parts). The seam a degree-1 B-spline (`bspline`, as
-    those files have it) or a LINE (`line`)."""
+    those files have it) or a LINE (`line`). `far`: the LINE's base point that far below along it, as CATIA writes
+    some lines (NIST stc_07, in inches: an edge's line based 4.3 km off the part)."""
     st = Step()
     bot, top = st.circle(0, r), st.circle(h, r)
     # the circles' vertices: the second entity each circle() made after its CIRCLE
@@ -170,7 +178,7 @@ def seamed_cylinder(name, seam="bspline", r=10.0, h=20.0):
     vt = [i + 1 for i, l in enumerate(st.lines) if l.startswith("VERTEX_POINT")][1]
     if seam == "line":
         d = st.add(f"VECTOR('',{st.dir((0, 0, 1))},{h!r})")
-        c = st.add(f"LINE('',{st.pt((r, 0, 0))},{d})")
+        c = st.add(f"LINE('',{st.pt((r, 0, -far))},{d})")
     else:
         c = st.add(f"B_SPLINE_CURVE_WITH_KNOTS('',1,({st.pt((r, 0, 0))},{st.pt((r, 0, h))}),.UNSPECIFIED.,.F.,.U.,(2,2),(0.,{h!r}),.PIECEWISE_BEZIER_KNOTS.)")
     se = st.add(f"EDGE_CURVE('',#{vb},#{vt},{c},.T.)")
@@ -230,16 +238,38 @@ def split_rim_cylinder(name, rim="bspline", sense=False, r=10.0, h=20.0):
     return st.text(st.solid(faces), name)
 
 
+def spool(name="spool", R=224.958991521041, r=220.958991521041, half=29.66):
+    """A spool: the inner side of a torus far larger than the part (R 225, r 221, so its waist is radius 4), between
+    discs at z = +-half where it has widened to 6, as Onshape wrote CADFS 00000188's: the integrals are right and
+    the mesh came out 3.5% off, so the body is imported warned."""
+    st = Step()
+    rho = R - math.sqrt(r * r - half * half)
+    lo, hi = st.circle(-half, rho), st.circle(half, rho)
+    tor = st.add(f"TOROIDAL_SURFACE('',{st.ax((0, 0, 0))},{R!r},{r!r})")
+    pb = st.add(f"PLANE('',{st.ax((0, 0, -half))})")
+    pt = st.add(f"PLANE('',{st.ax((0, 0, half))})")
+    faces = [
+        # the torus's normal at its inner side points to the axis, into the material
+        st.face([st.loop(lo, True, True), st.loop(hi, False)], tor, False),
+        st.face([st.loop(lo, False, True)], pb, False),
+        st.face([st.loop(hi, True, True)], pt, True),
+    ]
+    return st.text(st.solid(faces), name)
+
+
 def main(out):
     os.makedirs(out, exist_ok=True)
     made = {
         "near_flat_cone": tube("near_flat_cone", near_flat_cone),
         "whole_torus": whole_torus(),
+        "offset_plane": tube("offset_plane", offset_plane),
         "lemon_ring": tube("lemon_ring", lemon_ring),
         "elbow": elbow(),
+        "spool": spool(),
         "elbow_tube": elbow("elbow_tube", inner=19.05),
         "seamed_cylinder": seamed_cylinder("seamed_cylinder"),
         "seamed_cylinder_line": seamed_cylinder("seamed_cylinder_line", "line"),
+        "far_line_origin": seamed_cylinder("far_line_origin", "line", far=168738.0 * 25.4),
         "split_rim_circle_t": split_rim_cylinder("split_rim_circle_t", "circle", True),
         "split_rim_circle_f": split_rim_cylinder("split_rim_circle_f", "circle", False),
         "split_rim_bspline_t": split_rim_cylinder("split_rim_bspline_t", "bspline", True),

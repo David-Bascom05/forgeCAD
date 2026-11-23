@@ -5,10 +5,12 @@ area, the same with a precision of 1e-9, and the Gauss-Kronrod volume at 1e-9; s
 the distinct ones (a solid placed twice shares its TShape). Also valid, counts and box. One JSON line on stdout.
 
   $VENV/bin/python -I occt_truth.py FILE
+  $VENV/bin/python -I occt_truth.py --serve SECONDS     # paths on stdin; a forked, capped child per file
 
 Run by scale.py, one process per file with its own time and memory cap. The file is data: nothing in it runs.
 """
 import json
+import os
 import resource
 import sys
 import time
@@ -17,8 +19,9 @@ EPS = 1e-9
 MEM = 4 << 30
 
 
-def main(path):
+def main(path, out=None):
     resource.setrlimit(resource.RLIMIT_AS, (MEM, MEM))
+    out = out or sys.stdout
     from OCP.Bnd import Bnd_Box
     from OCP.BRepBndLib import BRepBndLib
     from OCP.BRepCheck import BRepCheck_Analyzer
@@ -33,7 +36,7 @@ def main(path):
     t0 = time.time()
     r = STEPControl_Reader()
     if r.ReadFile(path) != IFSelect_RetDone:
-        print(json.dumps({"err": "unreadable"}))
+        print(json.dumps({"err": "unreadable"}), file=out)
         return
     r.TransferRoots()
     s = r.OneShape()
@@ -75,7 +78,7 @@ def main(path):
     box = Bnd_Box()
     BRepBndLib.AddOptimal_s(s, box, True, False)
     lo, hi = box.CornerMin(), box.CornerMax()
-    out = {
+    res = {
         "valid": bool(BRepCheck_Analyzer(s).IsValid()),
         "solids": n,
         "distinct": nd,
@@ -86,8 +89,59 @@ def main(path):
         "read_s": round(t_read, 3),
         "secs": round(time.time() - t0, 3),
     }
-    print(json.dumps(out))
+    print(json.dumps(res), file=out)
+
+
+def serve(timeout):
+    """Paths on stdin, one JSON line each on stdout. OCP is imported once; each file is read in a forked child of
+    its own, memory capped, killed past `timeout` seconds."""
+    import select
+    import signal
+
+    import OCP.BRepGProp, OCP.STEPControl, OCP.BRepCheck, OCP.BRepBndLib  # noqa: F401 (loaded before forking)
+
+    for line in sys.stdin:
+        path = line.strip()
+        r, w = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            os.close(r)
+            f = os.fdopen(w, "w")
+            try:
+                main(path, f)
+            except MemoryError:
+                print(json.dumps({"err": "memory"}), file=f)
+            except Exception as e:  # a reader's exception is an answer, not the server's end
+                print(json.dumps({"err": "exception " + str(e)[:80]}), file=f)
+            f.flush()
+            os._exit(0)
+        os.close(w)
+        buf, t0, res = b"", time.time(), None
+        while True:
+            left = timeout - (time.time() - t0)
+            if left <= 0:
+                os.kill(pid, signal.SIGKILL)
+                res = {"crash": "timeout"}
+                break
+            ready, _, _ = select.select([r], [], [], left)
+            if ready:
+                chunk = os.read(r, 1 << 16)
+                if not chunk:
+                    break
+                buf += chunk
+        os.close(r)
+        _, st = os.waitpid(pid, 0)
+        if res is None:
+            try:
+                res = json.loads(buf.decode().strip().splitlines()[-1])
+            except (IndexError, json.JSONDecodeError):
+                res = {"crash": f"exit {st}"}
+        sys.stdout.write(json.dumps(res) + "\n")
+        sys.stdout.flush()
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    if sys.argv[1] == "--serve":
+        serve(float(sys.argv[2]))
+    else:
+        main(sys.argv[1])
