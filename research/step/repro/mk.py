@@ -75,7 +75,7 @@ class Step:
         )
 
 
-def tube(name, top, r_in=4.0, r_out=10.0, h=10.0, outer_both=False, cyl_in=None):
+def tube(name, top, r_in=4.0, r_out=10.0, h=10.0):
     """A tube r_in..r_out, z from 0 to its top, whose top face stands on the surface `top(st)` makes, which returns
     (surface, z at r_in, z at r_out, face sense)."""
     st = Step()
@@ -84,14 +84,13 @@ def tube(name, top, r_in=4.0, r_out=10.0, h=10.0, outer_both=False, cyl_in=None)
     t_out, t_in = st.circle(z_out, r_out), st.circle(z_in, r_in)
     plane = st.add(f"PLANE('',{st.ax((0, 0, 0))})")
     cyl_o = st.add(f"CYLINDRICAL_SURFACE('',{st.ax((0, 0, 0))},{r_out!r})")
-    # cyl_in: the inner cylinder's radius, a little off its circles' where a file's edges meet only within tolerance
-    cyl_i = st.add(f"CYLINDRICAL_SURFACE('',{st.ax((0, 0, 0))},{float(cyl_in or r_in)!r})")
+    cyl_i = st.add(f"CYLINDRICAL_SURFACE('',{st.ax((0, 0, 0))},{r_in!r})")
     # circles run counter-clockwise seen from +z; a face's outer loop runs counter-clockwise about its normal
     faces = [
         st.face([st.loop(b_out, False, True), st.loop(b_in, True)], plane, False),
         st.face([st.loop(b_out, True, True), st.loop(t_out, False)], cyl_o, True),
         st.face([st.loop(b_in, False, True), st.loop(t_in, True)], cyl_i, False),
-        st.face([st.loop(t_out, True, True), st.loop(t_in, False, outer_both)], surf, sense),
+        st.face([st.loop(t_out, True, True), st.loop(t_in, False)], surf, sense),
     ]
     return st.text(st.solid(faces), name)
 
@@ -114,14 +113,6 @@ def offset_plane(st):
     return surf, 10.0, 10.0, True
 
 
-def fillet_band(st, R=12.0, r=5.0, zc=12.0):
-    """The top face on the inner side of a torus below its centre circle: a concave fillet's band between two
-    parallels, as ABC 00011984 has it (R 0.0308, r 0.0050 m, both loops FACE_OUTER_BOUND there)."""
-    surf = st.add(f"TOROIDAL_SURFACE('',{st.ax((0, 0, zc), (0, 0, -1), (-1, 0, 0))},{R!r},{r!r})")
-    z = lambda rho: zc - math.sqrt(r * r - (rho - R) ** 2)
-    return surf, z(8.0), z(10.0), False
-
-
 def whole_torus():
     """A torus whose one face has no loops: a ring, closed both ways (CADFS 00000550 and others)."""
     st = Step()
@@ -138,42 +129,6 @@ def lemon_ring(st):
     # the lemon: points at distance r from the circle of radius R, on the far side of the axis: rho = r cos v - R
     z = lambda rho: math.sqrt(r * r - (rho + R) ** 2)
     return surf, z(4.0), z(10.0), True
-
-
-def elbow(name="elbow", turn=90.0, R=63.5, r=27.94, inner=None, rim=None):
-    """A pipe elbow: a torus face between two of its meridian circles, `turn` degrees apart, capped by discs
-    (a ring if `inner`, then also the inner torus). As CADFS 00022673's bent tube (R 0.0635, r 0.02794 m)."""
-    st = Step()
-    a = math.radians(turn)
-
-    def meridian(u, rr):
-        c, s_ = math.cos(u), math.sin(u)
-        centre = (R * c, R * s_, 0.0)
-        # the circle's plane holds z and the radial direction; its normal is the torus's direction of travel
-        ax = st.ax(centre, (-s_, c, 0.0), (c, s_, 0.0))
-        circ = st.add(f"CIRCLE('',{ax},{rr!r})")
-        v = st.add(f"VERTEX_POINT('',{st.pt((centre[0] + rr * c, centre[1] + rr * s_, 0.0))})")
-        return st.add(f"EDGE_CURVE('',{v},{v},{circ},.T.)")
-
-    def cap(u, edges_senses, flip):
-        c, s_ = math.cos(u), math.sin(u)
-        n = (-s_, c, 0.0) if not flip else (s_, -c, 0.0)
-        pl = st.add(f"PLANE('',{st.ax((R * c, R * s_, 0.0), n, (c, s_, 0.0))})")
-        bounds = [st.loop(e, sg, i == 0) for i, (e, sg) in enumerate(edges_senses)]
-        return st.face(bounds, pl, True)
-
-    # rim: the end circles' radius, a little off the torus's where a file's edges meet it only within tolerance
-    e0, e1 = meridian(0.0, rim or r), meridian(a, rim or r)
-    tor = st.add(f"TOROIDAL_SURFACE('',{st.ax((0, 0, 0))},{R!r},{r!r})")
-    faces = [st.face([st.loop(e0, True, True), st.loop(e1, False)], tor, True)]
-    if inner:
-        i0, i1 = meridian(0.0, inner), meridian(a, inner)
-        tor_i = st.add(f"TOROIDAL_SURFACE('',{st.ax((0, 0, 0))},{R!r},{inner!r})")
-        faces.append(st.face([st.loop(i0, False, True), st.loop(i1, True)], tor_i, False))
-        faces += [cap(0.0, [(e0, False), (i0, True)], True), cap(a, [(e1, True), (i1, False)], False)]
-    else:
-        faces += [cap(0.0, [(e0, False)], True), cap(a, [(e1, True)], False)]
-    return st.text(st.solid(faces), name)
 
 
 def seamed_cylinder(name, seam="bspline", r=10.0, h=20.0, far=0.0):
@@ -270,21 +225,20 @@ def spool(name="spool", R=224.958991521041, r=220.958991521041, half=29.66):
 def main(out):
     os.makedirs(out, exist_ok=True)
     made = {
-        "near_flat_cone": tube("near_flat_cone", near_flat_cone),
-        "whole_torus": whole_torus(),
-        "offset_plane": tube("offset_plane", offset_plane),
-        "fillet_band": tube("fillet_band", fillet_band, r_in=8.0),
-        "lemon_ring": tube("lemon_ring", lemon_ring),
-        "elbow": elbow(),
-        "spool": spool(),
-        "elbow_tube": elbow("elbow_tube", inner=19.05),
-        "seamed_cylinder": seamed_cylinder("seamed_cylinder"),
-        "seamed_cylinder_line": seamed_cylinder("seamed_cylinder_line", "line"),
-        "far_line_origin": seamed_cylinder("far_line_origin", "line", far=168738.0 * 25.4),
-        "split_rim_circle_t": split_rim_cylinder("split_rim_circle_t", "circle", True),
-        "split_rim_circle_f": split_rim_cylinder("split_rim_circle_f", "circle", False),
+        # refused or wrong, each a cause of scale.md
         "split_rim_bspline_t": split_rim_cylinder("split_rim_bspline_t", "bspline", True),
         "split_rim_bspline_f": split_rim_cylinder("split_rim_bspline_f", "bspline", False),
+        "spool": spool(),
+        "offset_plane": tube("offset_plane", offset_plane),
+        "far_line_origin": seamed_cylinder("far_line_origin", "line", far=168738.0 * 25.4),
+        "whole_torus": whole_torus(),
+        "near_flat_cone": tube("near_flat_cone", near_flat_cone),
+        # the judge: OCCT's measure is wrong here, ours is the closed form
+        "lemon_ring": tube("lemon_ring", lemon_ring),
+        # controls that read right, one step from a repro
+        "seamed_cylinder": seamed_cylinder("seamed_cylinder"),
+        "split_rim_circle_t": split_rim_cylinder("split_rim_circle_t", "circle", True),
+        "split_rim_circle_f": split_rim_cylinder("split_rim_circle_f", "circle", False),
     }
     for k, v in made.items():
         with open(os.path.join(out, k + ".step"), "w") as f:
