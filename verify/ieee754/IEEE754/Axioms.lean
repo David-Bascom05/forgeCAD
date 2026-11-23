@@ -5,7 +5,7 @@ import Lean
 import IEEE754.Binary64
 import IEEE754.Compare
 import IEEE754.Computed
-import IEEE754.Nearest
+import IEEE754.TwoSum
 
 /-!
 # Only the standard axioms
@@ -57,3 +57,4 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.round_err_abs IEEE754.mul_err_abs
   -- nearest
   IEEE754.rne_nearest IEEE754.round_nearest
+  IEEE754.add_err_representable IEEE754.fast2sum IEEE754.fast_two_sum_exact IEEE754.two_sum_exact_of_le
