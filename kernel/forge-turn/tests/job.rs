@@ -57,8 +57,11 @@ fn the_shaft_job_certifies() {
             r.op, r.step, r.body, r.rule, r.verdict, r.at
         );
     }
-    for l in &rep.leftover {
-        eprintln!("leftover {l:?}");
+    for (l, why) in rep.leftover.iter().zip(&rep.leftover_reasons) {
+        eprintln!("leftover ({why}) {l:?}");
     }
     assert!(rep.ok());
+    // the one leftover: the shoulder's sharp inside corner, under the finishing nose's radius
+    assert_eq!(rep.leftover.len(), 1);
+    assert!(rep.leftover_reasons[0].starts_with("nose radius 0.4"), "{:?}", rep.leftover_reasons);
 }

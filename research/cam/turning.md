@@ -13,16 +13,17 @@ part-off, drill on centre; insert and holder libraries (ISO insert codes). All 2
 | tool model | insert.rs | every body is K ⊕ B_r (K a convex core); below the centre height the outline shrinks by the clearance angle; holder head (a seat inset 0.5 under the insert, relieved like it) and shank. |
 | certified checker | check.rs | 2D, exact in kind: the swept core (a zonotope K ⊕ [0, e]·x̂ ⊕ [a, b]) against the obstacle's pieces by slab::dist (proven) and a separating-axis bound; containment by `clear_of_frontier`; the full section H ∪ mirror(H); arcs as chords with the sagitta; witnesses (Hit) only at real points of the tool. |
 | ops | ops.rs | face (to the centre line), rough (axial passes, G71-like, expanded, at every ap and every cylinder of the grown part), finish (the exact offset H ⊕ B_{r_ε + leave}: nose-radius compensation, posted as the imaginary tip with G40), groove (plunges, walls exact), part-off (past the centre), thread (ISO metric 60°, radial infeed of equal chip area, a declared removal Δ), drill on the centre line (pecking). |
-| in-process stock | ops.rs | the bar less what each cut provably cleared (the hull of outline points along each cut, inside the swept outline), by exact booleans; a removal that would not round to a valid region is left out (the stock stays a superset) and counted. |
+| in-process stock | ops.rs | the bar less what each cut provably cleared (the hull of outline points along each cut, inside the swept outline; a finishing cut's corners sampled to within 5e-4 of their disc), by exact booleans; a removal that would not round to a valid region is left out (the stock stays a superset) and counted. |
 | certify | ops.rs | G1 (cutter from P ⊕ B_leave, P ∖ Δ for a thread), G2 (every body from the chuck's envelope by the fixture clearance), G3 (every body on a rapid, the non-cutting ones on every cut, from the stock; trailing bodies piece by piece where needed), G5 (the tip within the travel when given), G4 (leftover = final stock less P ⊕ B_tol, less Δ, listed). |
 | posts | post.rs, data/lathe-*.toml | fanuc-lathe, haas-lathe, linuxcnc-lathe: G18, diameter X, G96/G50 (or D), G99/G95, G02/G03 with I (radius) K, G32/G33; exact quantisation (forge_post::quant), a reader of our own output, the round trip (G6 as for milling), and the posted path certified (the moves the text means). |
 
 ## The example
 
 A stepped shaft from a 32 mm bar (tests/job.rs): face, rough (CNMG 120408 in PCLNR), finish
-(DNMG 150404 in PDJNR), thread M20 x 1.5, part off: 624 checks, certified, 0.28 s release;
+(DNMG 150404 in PDJNR), thread M20 x 1.5, part off: 624 checks, certified, 0.36 s release;
 posted in all three dialects, read back exactly, the posted path certified again. The leftover
-lists one region: the 0.4 mm nose radius cannot reach the sharp inside corner at the shoulder.
+lists one region, classified exactly: it lies within the finishing nose's 0.4 mm of the part
+(the sharp inside corner at the shoulder no nose of that radius reaches).
 
 What the checks caught while the examples were written (each now a test, tests/refuse.rs):
 - a 55° DNMG finishing a 45° V-groove gouges its falling flank with its trailing edge (G1, Hit);
@@ -79,7 +80,8 @@ What the checks caught while the examples were written (each now a test, tests/r
    `forgecad cam` replies for lathe programs (needs the seam with forge-cam-lang, CAM-CORE's).
 4. The machine: a lathe in CAM-MACHINE's format (travel, turret, spindle limits, the dialect
    link); today `Setup.travel` is a local stand-in.
-5. G4 reasons: the leftover is listed, not yet classified (nose radius, reach, undercut).
+5. G4 reasons: "nose radius r" (inside the part grown by the smallest finishing nose, decided by
+   exact booleans) or "uncut"; reach and undercut are not told apart yet.
 6. Speed: certification is dominated by the in-process stock's exact booleans (~73%); next, a
    local window for the boolean or a coarser stock for the trailing bodies.
 7. Canned cycles (G71/G70/G76) as posted text (today the cycles are expanded into moves, which

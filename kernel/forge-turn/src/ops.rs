@@ -733,6 +733,10 @@ pub struct Report {
     pub refusals: Vec<Refusal>,
     /// The leftover (G4): regions of the final stock outside the part grown by tol.
     pub leftover: Vec<Region>,
+    /// Why each leftover region is there: "nose radius r" (it lies within the finishing tool's
+    /// nose radius of the part: a sharp inside corner no nose of that radius reaches) or "uncut"
+    /// (no op reached it).
+    pub leftover_reasons: Vec<String>,
     /// Declared removals (threads), by op.
     pub removals: Vec<(usize, Region)>,
     /// Stock removals left out because their boolean would not round to a valid region (the
@@ -834,7 +838,7 @@ fn region_union(a: &Region, b: &Region) -> Result<Region, String> {
 /// hull lies inside the outline (it is convex). r' is r less the margin `less`, and less a
 /// relative 1e-6 (far more than the f64 rounding of the sums), so the points are strictly
 /// inside.
-fn outline_points(b: &Body, p: [f64; 2], less: f64, out: &mut Vec<[f64; 2]>) {
+fn outline_points(b: &Body, p: [f64; 2], less: f64, dense: bool, out: &mut Vec<[f64; 2]>) {
     let k = &b.core;
     let n = k.len();
     let rr = (b.r - less).max(0.0) * (1.0 - 1e-6);
@@ -842,6 +846,7 @@ fn outline_points(b: &Body, p: [f64; 2], less: f64, out: &mut Vec<[f64; 2]>) {
         k.iter().map(|v| v[0]).sum::<f64>() / n as f64,
         k.iter().map(|v| v[1]).sum::<f64>() / n as f64,
     ];
+    let xmin = k.iter().map(|v| v[0]).fold(f64::INFINITY, f64::min);
     for i in 0..n {
         // the vertex, pulled a relative 1e-9 toward the centroid (inside under rounding)
         let v = [
@@ -859,13 +864,26 @@ fn outline_points(b: &Body, p: [f64; 2], less: f64, out: &mut Vec<[f64; 2]>) {
             while t2 < t1 {
                 t2 += std::f64::consts::TAU;
             }
-            for j in 0..3 {
-                let t = t1 + (t2 - t1) * j as f64 / 2.0;
+            // for a finishing cut (leave 0), the cutting corners (the core's least x) densely
+            // enough that the polygon falls short of the disc by under SAMPLE_GAP, so the stock
+            // model leaves no sliver on the finished surface; elsewhere three directions
+            let m = if dense && k[i][0] == xmin {
+                let step = 2.0 * dmath::acos_clamped(1.0 - SAMPLE_GAP / rr.max(SAMPLE_GAP));
+                (((t2 - t1) / step).ceil() as usize).clamp(2, 64)
+            } else {
+                2
+            };
+            for j in 0..=m {
+                let t = t1 + (t2 - t1) * j as f64 / m as f64;
                 out.push([p[0] + v[0] + rr * dmath::cos(t), p[1] + v[1] + rr * dmath::sin(t)]);
             }
         }
     }
 }
+
+/// How far the cleared polygon may fall short of a cutting corner's disc (mm): under the usual
+/// tolerance, so the stock model leaves no sliver the G4 leftover would list.
+const SAMPLE_GAP: f64 = 5e-4;
 
 /// The convex hull (counter-clockwise) of points.
 fn hull2(mut p: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
@@ -900,10 +918,10 @@ fn hull2(mut p: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
 /// it stands for lies within `sag` of the chord (0 for a straight move): the hull of the outline
 /// points shrunk by sag at both ends. The hull of two translates of a convex set K' is K' ⊕
 /// [a, b]; each chord point lies within sag of a path point, and K' = K ⊕ B_{r − sag}.
-fn swept_inner(b: &Body, a: [f64; 2], e: [f64; 2], sag: f64) -> Vec<[f64; 2]> {
+fn swept_inner(b: &Body, a: [f64; 2], e: [f64; 2], sag: f64, dense: bool) -> Vec<[f64; 2]> {
     let mut pts = Vec::new();
-    outline_points(b, a, sag, &mut pts);
-    outline_points(b, e, sag, &mut pts);
+    outline_points(b, a, sag, dense, &mut pts);
+    outline_points(b, e, sag, dense, &mut pts);
     hull2(pts)
 }
 
@@ -1137,7 +1155,7 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                         Move::Arc { .. } => pieces(mv),
                     } {
                         for b in &cutters {
-                            let q = swept_inner(b, pa, pb, sag);
+                            let q = swept_inner(b, pa, pb, sag, op.leave == 0.0);
                             remove(&mut stock_region, &mut stock, &q, &mut rep);
                         }
                     }
@@ -1150,7 +1168,7 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                 }
                 if clears {
                     for b in &cutters {
-                        let q = swept_inner(b, pa, pb, sag);
+                        let q = swept_inner(b, pa, pb, sag, op.leave == 0.0);
                         remove(&mut stock_region, &mut stock, &q, &mut rep);
                     }
                 }
@@ -1178,8 +1196,31 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
         )],
     };
     let left = region_diff(&region_diff(&stock_region, &keep)?, &behind)?;
+    // the smallest nose radius of a finishing op (leave 0): a region inside the part grown by it
+    // (plus tol) is a corner no finishing nose reaches, decided exactly
+    let re_fin = ops
+        .iter()
+        .filter(|o| o.tool.kind == Kind::Turn && o.leave == 0.0)
+        .map(|o| o.tool.re)
+        .fold(f64::INFINITY, f64::min);
+    let re_fin = if re_fin.is_finite() { re_fin } else { 0.0 };
+    let near = if re_fin > 0.0 {
+        offset(&s.part.region, -(re_fin + s.tol))
+            .ok()
+            .map(|(l, _)| boolean::region_of(&l))
+    } else {
+        None
+    };
     for l in left.loops {
-        rep.leftover.push(Region { loops: vec![l] });
+        let rg = Region { loops: vec![l] };
+        let reason = match &near {
+            Some(n) if region_diff(&rg, n).is_ok_and(|d| d.loops.is_empty()) => {
+                format!("nose radius {re_fin}: an inside corner the finishing nose cannot reach")
+            }
+            _ => "uncut".to_string(),
+        };
+        rep.leftover.push(rg);
+        rep.leftover_reasons.push(reason);
     }
     Ok(rep)
 }
