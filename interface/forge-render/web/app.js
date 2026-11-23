@@ -5,6 +5,8 @@
 //   ?project=NAME    the browser-kept project (default "default")
 //   ?token=T         `forgecad web`'s token, when it was started with one (kept for the tab)
 //   ?storage=memory  nothing kept (tests)
+//   ?offscreen=WxH  frames drawn to a texture, not the canvas (a headless browser's software
+//                    WebGPU can't show a canvas); forgecad.pixels() reads them
 //   ?noapp           no canvas: the kernel and files only (the parity test)
 
 import init, * as fc from "./forge_render.js";
@@ -155,7 +157,7 @@ window.forgecad = {
 };
 const first = q.get("open") ?? files().filter((p) => p.endsWith(".fg")).sort()[0];
 // ?noapp: the files and the kernel only, no canvas (the parity test)
-if (!q.has("noapp")) fc.start_app(first ? `${MOUNT}/${cleanPath(first)}` : undefined);
+if (!q.has("noapp")) fc.start_app(first ? `${MOUNT}/${cleanPath(first)}` : undefined, q.get("offscreen") ?? undefined);
 say("started");
 // the app's next frame as {width, height, rgba} (a headless browser can't capture the canvas)
 window.forgecad.pixels = () => new Promise((ok) => fc.app_pixels(ok));

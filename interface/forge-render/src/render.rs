@@ -716,7 +716,13 @@ fn geometry(device: &wgpu::Device, queue: &wgpu::Queue, parts: &[PartMesh]) -> G
         .collect();
     let vertices = filled((device, queue), "vertices", vbytes, wgpu::BufferUsages::VERTEX, v);
     let indices = filled((device, queue), "indices", ibytes, wgpu::BufferUsages::INDEX, i);
-    let segments = filled((device, queue), "segments", sbytes, wgpu::BufferUsages::STORAGE, s);
+    let segments = filled(
+        (device, queue),
+        "segments",
+        sbytes,
+        wgpu::BufferUsages::STORAGE,
+        s,
+    );
     Geometry {
         lods,
         edge_lengths,

@@ -31,13 +31,19 @@ round = fillet(edges(of: boss, crease: "convex"), r)
   const { url, proc } = await t.serve(dir, app);
   const b = await t.browser();
   try {
-    const p = await t.page(b, `${url}?open=plate.fg`);
+    // offscreen: a headless browser's software WebGPU can't show a canvas (docs/web.md)
+    const p = await t.page(b, `${url}?open=plate.fg&offscreen=1280x800`);
     // opened and built: the panel's word is the native build's
     let st = await t.until(p, (s) => s.built?.checked, "the first build");
     assert.equal(st.path, "/project/plate.fg");
     const n0 = t.native([path.join(dir, "plate.fg")])[path.join(dir, "plate.fg")];
     assert.deepEqual(t.differs(n0, st.built), [], `first build: native ${JSON.stringify(n0)} page ${JSON.stringify(st.built)}`);
     console.log(`ok - opened plate.fg: volume ${st.built.volume}, ${st.built.faces} faces, as native`);
+    // drawn: the chrome and the part, not a blank frame
+    const f0 = await t.pixels(p);
+    assert.equal(f0.width, 1280);
+    assert.ok(f0.colours > 40, `a frame of ${f0.colours} colours: blank?`);
+    console.log(`ok - drawn: ${f0.colours} colours (${t.shot("e2e-opened.png", f0)})`);
 
     // a parameter edited as the panel edits it: one undo step, rebuilt live
     const seq = st.seq;
@@ -48,6 +54,10 @@ round = fillet(edges(of: boss, crease: "convex"), r)
     const v1 = st.built.volume;
     assert.ok(v1 > n0.volume, `thicker is more: ${v1} > ${n0.volume}`);
     console.log(`ok - t = 9 rebuilt: volume ${v1}`);
+    const f1 = await t.pixels(p);
+    const changed = f1.rgba.reduce((n, v, i) => n + (v !== f0.rgba[i] ? 1 : 0), 0);
+    assert.ok(changed > 1000, `the thicker part drawn differently: ${changed} bytes changed`);
+    console.log(`ok - drawn again, ${changed} bytes changed (${t.shot("e2e-edited.png", f1)})`);
 
     // saved: the machine's file holds the edit, and it builds natively to the same bits
     await p.evaluate(() => window.forgecad.fc.app_save());

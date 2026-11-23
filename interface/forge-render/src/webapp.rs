@@ -76,14 +76,18 @@ enum Msg {
     Wake,
 }
 
-/// The canvas, its surface and the app on it.
+/// The canvas, its surface and the app on it. Offscreen (`?offscreen=WxH`: where a WebGPU canvas
+/// can't show, a headless browser's software adapter) there is no surface: frames are drawn to a
+/// texture, and the canvas only takes the input.
 struct Host {
     /// Kept for the page's life: the browser ends a dropped instance's callbacks (a buffer's
     /// mapping among them).
     _instance: wgpu::Instance,
     window: Arc<Window>,
-    surface: wgpu::Surface<'static>,
+    surface: Option<wgpu::Surface<'static>>,
     config: wgpu::SurfaceConfiguration,
+    /// Offscreen, what the frames are drawn to.
+    target: Option<wgpu::Texture>,
     gui: Gui,
     input: Input,
     frames: u64,
@@ -96,30 +100,63 @@ struct App {
     host: Option<Box<Host>>,
     started: bool,
     first: Option<String>,
+    offscreen: Option<(u32, u32)>,
 }
 
-async fn open_host(window: Arc<Window>, first: Option<String>) -> Result<Host, String> {
+async fn open_host(
+    window: Arc<Window>,
+    first: Option<String>,
+    offscreen: Option<(u32, u32)>,
+) -> Result<Host, String> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::BROWSER_WEBGPU,
         ..wgpu::InstanceDescriptor::new_without_display_handle()
     });
-    let surface = instance
-        .create_surface(window.clone())
-        .map_err(|e| e.to_string())?;
-    let (device, queue, adapter) = open_device(&instance, Some(&surface)).await?;
+    let surface = match offscreen {
+        Some(_) => None,
+        None => Some(
+            instance
+                .create_surface(window.clone())
+                .map_err(|e| e.to_string())?,
+        ),
+    };
+    let (device, queue, adapter) = open_device(&instance, surface.as_ref()).await?;
     let info = adapter.get_info();
     say(&format!(
         "forge-app: {} {:?} {}",
         info.name, info.device_type, info.backend
     ));
     let size = window.inner_size();
-    let mut config = surface
-        .get_default_config(&adapter, size.width.max(320), size.height.max(240))
-        .ok_or("no surface format")?;
-    // the chrome blends in sRGB, as on the desktop
-    config.format = config.format.remove_srgb_suffix();
-    surface.configure(&device, &config);
-    device.set_device_lost_callback(|why, msg| say(&format!("forge-app: the GPU device was lost ({why:?}): {msg}")));
+    let (config, target) = match (&surface, offscreen) {
+        (Some(surface), _) => {
+            let mut config = surface
+                .get_default_config(&adapter, size.width.max(320), size.height.max(240))
+                .ok_or("no surface format")?;
+            // the chrome blends in sRGB, as on the desktop
+            config.format = config.format.remove_srgb_suffix();
+            surface.configure(&device, &config);
+            (config, None)
+        }
+        (None, size) => {
+            let (width, height) = size.unwrap_or((1280, 800));
+            let config = wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                width,
+                height,
+                present_mode: wgpu::PresentMode::Fifo,
+                desired_maximum_frame_latency: 2,
+                alpha_mode: wgpu::CompositeAlphaMode::Auto,
+                color_space: wgpu::SurfaceColorSpace::Auto,
+                view_formats: vec![],
+            };
+            let target = offscreen_texture(&device, &config);
+            (config, Some(target))
+        }
+    };
+    device.set_device_lost_callback(|why, msg| {
+        say(&format!("forge-app: the GPU device was lost ({why:?}): {msg}"))
+    });
     let scale = window.scale_factor() as f32;
     let mut gui = Gui::new(device, queue, info, config.format, Arc::new(wake), scale);
     gui.load_settings();
@@ -131,6 +168,7 @@ async fn open_host(window: Arc<Window>, first: Option<String>) -> Result<Host, S
         window,
         surface,
         config,
+        target,
         gui,
         input: Input::default(),
         frames: 0,
@@ -138,25 +176,53 @@ async fn open_host(window: Arc<Window>, first: Option<String>) -> Result<Host, S
     })
 }
 
+fn offscreen_texture(device: &wgpu::Device, c: &wgpu::SurfaceConfiguration) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("offscreen window"),
+        size: wgpu::Extent3d {
+            width: c.width,
+            height: c.height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: c.format,
+        usage: c.usage,
+        view_formats: &[],
+    })
+}
+
 impl Host {
     fn draw(&mut self) {
         use wgpu::CurrentSurfaceTexture as T;
-        let frame = match self.surface.get_current_texture() {
-            T::Success(f) | T::Suboptimal(f) => f,
-            T::Outdated | T::Lost => {
-                self.surface.configure(&self.gui.device(), &self.config);
-                self.window.request_redraw();
-                return;
-            }
-            _ => return,
-        };
-        let view = frame.texture.create_view(&Default::default());
         let ppp = self.window.scale_factor() as f32;
         let size = (self.config.width, self.config.height);
-        let raw = self.input.raw(size, ppp, now_ms() / 1000.0);
-        let out = self.gui.frame(raw, &view, size);
-        self.window.pre_present_notify();
-        self.gui.queue().present(frame);
+        let out = match (&self.surface, &self.target) {
+            (Some(surface), _) => {
+                let frame = match surface.get_current_texture() {
+                    T::Success(f) | T::Suboptimal(f) => f,
+                    T::Outdated | T::Lost => {
+                        surface.configure(&self.gui.device(), &self.config);
+                        self.window.request_redraw();
+                        return;
+                    }
+                    _ => return,
+                };
+                let view = frame.texture.create_view(&Default::default());
+                let raw = self.input.raw(size, ppp, now_ms() / 1000.0);
+                let out = self.gui.frame(raw, &view, size);
+                self.window.pre_present_notify();
+                self.gui.queue().present(frame);
+                out
+            }
+            (None, Some(t)) => {
+                let view = t.create_view(&Default::default());
+                let raw = self.input.raw(size, ppp, now_ms() / 1000.0);
+                self.gui.frame(raw, &view, size)
+            }
+            (None, None) => return,
+        };
         self.frames += 1;
         if self.frames == 2 {
             say("forge-app: drawn in the canvas");
@@ -345,9 +411,9 @@ impl ApplicationHandler<Msg> for App {
             .with_append(true);
         let window = Arc::new(on_loop.create_window(attrs).expect("a canvas"));
         let proxy = self.proxy.clone();
-        let first = self.first.take();
+        let (first, offscreen) = (self.first.take(), self.offscreen);
         wasm_bindgen_futures::spawn_local(async move {
-            match open_host(window, first).await {
+            match open_host(window, first, offscreen).await {
                 Ok(h) => {
                     let _ = proxy.send_event(Msg::Ready(Box::new(h)));
                 }
@@ -375,9 +441,11 @@ impl ApplicationHandler<Msg> for App {
                 return;
             }
             WindowEvent::Resized(s) if s.width > 0 && s.height > 0 => {
-                h.config.width = s.width;
-                h.config.height = s.height;
-                h.surface.configure(&h.gui.device(), &h.config);
+                if let Some(surface) = &h.surface {
+                    h.config.width = s.width;
+                    h.config.height = s.height;
+                    surface.configure(&h.gui.device(), &h.config);
+                }
                 h.window.request_redraw();
                 return;
             }
@@ -471,7 +539,12 @@ pub fn app_init() {
 
 /// Starts the app on a canvas appended to the page, with `path` open if given.
 #[wasm_bindgen]
-pub fn start_app(path: Option<String>) -> Result<(), JsValue> {
+/// `offscreen`: "WxH", no WebGPU canvas (see `Host`).
+pub fn start_app(path: Option<String>, offscreen: Option<String>) -> Result<(), JsValue> {
+    let offscreen = offscreen.and_then(|s| {
+        let (w, h) = s.split_once('x')?;
+        Some((w.parse().ok()?, h.parse().ok()?))
+    });
     app_init();
     let on_loop = EventLoop::with_user_event().build().map_err(|e| e.to_string())?;
     let proxy = on_loop.create_proxy();
@@ -481,6 +554,7 @@ pub fn start_app(path: Option<String>) -> Result<(), JsValue> {
         host: None,
         started: false,
         first: path,
+        offscreen,
     });
     Ok(())
 }
