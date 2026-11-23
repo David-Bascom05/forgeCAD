@@ -883,6 +883,12 @@ def apexDecide (A : Arr) (solids : Array QSolid) : Array String × Array String 
       let isNappe := fun (m : Nat) => (A.qs[m]!).qnorm == 0 && (((A.qs[m]!).grad p).cross f.z).isZero
       let J := through.filter fun m => !isNappe m
       if J.isEmpty then continue
+      -- the nappe's plane, if another solid bounds itself by it too, varies off C: not covered
+      let shared := through.any fun m => isNappe m &&
+        (Array.range A.solids.size).any fun si => si != f.solid && (A.solids[si]!).2.any (·.idx == m)
+      if shared then
+        und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: its nappe's plane bounds another solid"
+        continue
       -- every tangent plane must separate C
       let s2 := f.s * f.s
       let k2 := f.s * f.s + f.c * f.c
@@ -895,7 +901,24 @@ def apexDecide (A : Arr) (solids : Array QSolid) : Array String × Array String 
         if ga * ga * k2 > s2 * g.norm2 * ax.norm2 && ga != 0 then sides := sides.push (m, ga > 0)
         else sideOk := false; break
       if !sideOk then
-        und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: a surface through it cuts its tangent cone"
+        -- one smooth surface whose tangent plane cuts the tangent cone transversally: the link
+        -- is a 4-cycle of cells (cap₊, cap₋, out₋, out₊), also their order round both crossing
+        -- vertices; the kept cells must be one proper run of it (§3, Theorem 3.5)
+        let g := if J.size == 1 then (A.qs[J[0]!]!).grad p else ⟨0, 0, 0⟩
+        let ga := g.dot ax
+        if J.size == 1 && !g.isZero && ga * ga * k2 < s2 * g.norm2 * ax.norm2 then
+          let j := J[0]!
+          let inSign := decide ((A.qs[k]!).quad ax > 0)
+          let other : Nat → Bool := fun m =>
+            if through.contains m then decide (((A.qs[m]!).grad p).dot ax > 0) else decide ((A.qs[m]!).eval p > 0)
+          let cell := fun (inCone sj : Bool) => A.keptOn fun m =>
+            if m == k then (if inCone then inSign else !inSign) else if m == j then sj else other m
+          let cyc := #[cell true true, cell true false, cell false false, cell false true]
+          let changes := (List.range 4).foldl (fun n i => if cyc[i]! != cyc[(i + 1) % 4]! then n + 1 else n) 0
+          if changes > 2 then
+            bad := bad.push s!"the apex {fmt p} of face {f.solid}.{f.index}: opposite cells of its cut tangent cone kept"
+        else
+          und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: a surface through it cuts its tangent cone"
         continue
       if J.size > 3 then
         und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: more than three surfaces through it"

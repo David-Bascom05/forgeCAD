@@ -266,8 +266,30 @@ the other solids, judged by the other contacts.
   Otherwise the kept sectors' link has nonempty boundary, and removing an interior cap leaves a
   non-disc (an annulus when it was a disc): non-manifold. ∎
 
+**Hypothesis on the nappe.** The nappe's own plane passes through `p`. The analysis fixes its
+sign as the cone's. If another solid also bounds itself by that plane (a cone standing on a cap,
+its nappe plane the cap), the plane's sign varies off `C` and matters there. The apex is then
+undecided.
+
+**Theorem 3.5 (one surface cutting `C`).** Suppose `J = {j}` and `j`'s tangent plane cuts `C`
+transversally: `(g·a)²(s² + c²) < s²|g|²|a|²`. Then the result is non-manifold at `p` iff
+exactly two opposite cells of the cycle `cap₊, cap₋, out₋, out₊` are kept. These are the cone
+region and its outside, on either side of the plane.
+
+*Proof.*
+- **The link.** The link of the arrangement at `p` (in the linear model, by the implicit function
+  theorem, both crossings being transversal) is the sphere. A great circle crosses a small circle
+  (the cap of `C`) at two points.
+- **Cells and arcs.** Four cells: the cap's two halves, and the rest of the two hemispheres, each
+  connected. Each consecutive pair in the cycle shares an arc: the chord in the cap, the
+  small-circle arcs, and the great-circle arc outside the cap.
+- **Vertices.** Round each crossing point the four cells appear in this cyclic order.
+- **The disc criterion.** A union of cells is a disc iff it is nonempty, proper, connected, its
+  complement is connected, and it has no pinch at a vertex. On this cycle that is exactly one
+  contiguous run. Two opposite cells form two pieces meeting at the two vertices. ∎
+
 Anything outside the lemmas' hypotheses is reported undecided, so the verdict is ambiguous:
-- a surface through `p` whose tangent plane cuts `C`;
+- a surface through `p` whose tangent plane cuts `C` when there are several, or tangentially;
 - a singular second surface;
 - more than three surfaces, or dependent normals.
 
