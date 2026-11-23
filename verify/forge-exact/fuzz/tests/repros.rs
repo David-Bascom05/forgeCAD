@@ -433,3 +433,64 @@ fn balls_touching_at_a_point_are_non_manifold() {
 fn ball_centred_on_a_rim_builds() {
     agrees_curved(&degenerate_curved("cylinder_sphere/centre_on_rim/Add"));
 }
+
+/// A degenerate pair with its tool moved by `delta` LINEARs along axis `axis` (0, 1, 2): the
+/// curved band (exact-curved's `band` source).
+fn band_curved(name: &str, axis: usize, delta: f64) -> Part {
+    let d = [forge_math::Vec3::X, forge_math::Vec3::Y, forge_math::Vec3::Z][axis] * (delta * forge_math::tol::LINEAR);
+    forge_exact_fuzz::curved::tool_moved(&degenerate_curved(name), d).expect("a movable tool")
+}
+
+/// A ball inside the base cylinder, tangent to its wall along the equator, its tool moved
+/// 3 LINEAR along x and cut (cylinder_sphere/tangent_wall_equator/Cut, x 3). The reference finds
+/// the ball's pole touching the base's bottom cap at (3e-5, 0, −20) (non-manifold); both regens
+/// build a body whose volume is NaN.
+#[test]
+#[ignore = "exact curved reference: a body of volume NaN is built"]
+fn band_ball_on_wall_cut_has_a_volume() {
+    agrees_curved(&band_curved("cylinder_sphere/tangent_wall_equator/Cut", 0, 3.0));
+}
+
+/// The same ball kept (Keep, x 3): the intersection is the ball less a sliver, 4 188.79 mm³ by the
+/// reference's estimate; both regens build 4 190.78 mm³, more than the whole ball.
+#[test]
+#[ignore = "exact curved reference: the kept volume exceeds the ball's"]
+fn band_ball_on_wall_keep_volume() {
+    agrees_curved(&band_curved("cylinder_sphere/tangent_wall_equator/Keep", 0, 3.0));
+}
+
+/// Two identical cylinders, the tool moved 3 LINEAR up (cylinder_cylinder/identical/Add, z 3):
+/// one solid 3e-5 taller. Both regens refuse NotClosed: the rim edge at (10, 0, 0) is on one
+/// face.
+#[test]
+#[ignore = "exact curved reference: NotClosed on a rim moved within the band"]
+fn band_identical_cylinders_moved_close() {
+    agrees_curved(&band_curved("cylinder_cylinder/identical/Add", 2, 3.0));
+}
+
+/// Two identical cones, the tool moved 3 LINEAR along x (cone_cone/identical/Add, x 3): both
+/// regens build an invalid body (VertexTolerance 3e-5).
+#[test]
+#[ignore = "exact curved reference: an invalid body (VertexTolerance) from nearly identical cones"]
+fn band_identical_cones_valid() {
+    agrees_curved(&band_curved("cone_cone/identical/Add", 0, 3.0));
+}
+
+/// A ball centred on the base box's top edge, moved 0.9 LINEAR along x
+/// (plane_sphere/centre_on_edge/Add, x 0.9): an ordinary union. The kernel refuses
+/// Internal(SplitCrossed) on the sphere face (all three ops, ±0.9 and 3; centre_on_vertex and
+/// centre_on_wall_tangent_top alike).
+#[test]
+#[ignore = "exact curved reference: SplitCrossed on a sphere centred on a box edge, nudged"]
+fn band_ball_on_an_edge_splits() {
+    agrees_curved(&band_curved("plane_sphere/centre_on_edge/Add", 0, 0.9));
+}
+
+/// A cylinder tangent to the base cylinder's wall from inside, moved 0.9 LINEAR along −y
+/// (cylinder_cylinder/perpendicular_tangent_inside/Add, y −0.9): the kernel refuses
+/// Internal(HoleOutside) on the cylinder face (Add, Cut and Keep).
+#[test]
+#[ignore = "exact curved reference: HoleOutside on a cylinder nudged off an inside tangency"]
+fn band_tangent_inside_cylinder_holes() {
+    agrees_curved(&band_curved("cylinder_cylinder/perpendicular_tangent_inside/Add", 1, -0.9));
+}
