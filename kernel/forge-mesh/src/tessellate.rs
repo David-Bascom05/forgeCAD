@@ -839,7 +839,8 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
     // each face's boundary drawn flat, its crossing chords split first (on their edges, so the
     // faces on both sides take the new samples), until no face's chords cross
     let nf = body.faces.len();
-    let mut preps: Vec<Option<Prep>> = (0..nf).map(|_| None).collect();
+    // (boxed: a prep holds a procedural face's 9 x 9 nodes, and moves)
+    let mut preps: Vec<Option<Box<Prep>>> = (0..nf).map(|_| None).collect();
     let mut splits = 0usize;
     // (the first face not drawn: faces before it stay drawn until a cut moves it back)
     let mut i = 0;
@@ -1277,7 +1278,7 @@ fn prepare_face(
     edge_samples: &[Vec<(f64, u32)>],
     q: &Quality,
     mesh: &TriMesh,
-) -> Result<Prep, CdtError> {
+) -> Result<Box<Prep>, CdtError> {
     let face = body.face(f);
     let surface = &face.surface;
     let (su, sv) = match surface {
@@ -1318,8 +1319,12 @@ fn prepare_face(
             walk.pop();
             walk.remove(0);
         }
-        let mut samples = Vec::new();
-        let mut ids = Vec::new();
+        let len: usize = walk
+            .iter()
+            .map(|&c| edge_samples[body.coedge(c).edge.index()].len() - 1)
+            .sum();
+        let mut samples = Vec::with_capacity(len);
+        let mut ids = Vec::with_capacity(len);
         for c in walk {
             let co = body.coedge(c);
             let s = &edge_samples[co.edge.index()];
@@ -1407,6 +1412,9 @@ fn prepare_face(
     // where each such point went (id and parameters), looked up rather than searched for: a
     // seam's samples are all met twice, and a linear search for each was quadratic in them
     let mut placed: std::collections::HashMap<(u32, u64, u64), u32> = std::collections::HashMap::new();
+    let total: usize = rings.iter().map(|r| r.len()).sum();
+    uv.reserve(total);
+    global.reserve(total);
     for (pts, ids) in rings.into_iter().zip(ring_globals) {
         // a loop through one vertex twice (a face pinched where a curve touches its boundary):
         // one point, met twice
@@ -1437,7 +1445,7 @@ fn prepare_face(
         loops.retain(|l| l.len() >= 3);
     }
     let scaled = uv.iter().map(|&p| layout.put(p)).collect();
-    Ok(Prep {
+    Ok(Box::new(Prep {
         su,
         sv,
         uv,
@@ -1450,13 +1458,13 @@ fn prepare_face(
         cells,
         nodes,
         layout,
-    })
+    }))
 }
 
 fn mesh_face(
     body: &Body,
     f: FaceId,
-    prep: Prep,
+    prep: Box<Prep>,
     segments: &Segments,
     q: &Quality,
     mend: bool,
@@ -1477,12 +1485,14 @@ fn mesh_face(
         cells,
         nodes,
         layout,
-    } = prep;
+    } = *prep;
 
     if loops.len() == 1
         && !matches!(surface, Surface::Procedural(_))
         && let Some(tris) = strips(surface, &uv, &global, q, mesh)
     {
+        mesh.triangles.reserve(tris.len());
+        mesh.face_of.reserve(tris.len());
         for [a, b, c] in tris {
             if a == b || b == c || c == a {
                 continue;
@@ -1501,6 +1511,8 @@ fn mesh_face(
     {
         let off = |x, y, p| strays_from(surface, x, y, p, q.chord);
         if let Some(tris) = proc_strips(pr, &uv, &global, &n.want(surface, q, true), q.chord, &off, mesh) {
+            mesh.triangles.reserve(tris.len());
+            mesh.face_of.reserve(tris.len());
             for [a, b, c] in tris {
                 mesh.triangles
                     .push(if face.same_sense { [a, b, c] } else { [a, c, b] });
@@ -1591,6 +1603,7 @@ fn mesh_face(
                 );
                 let stairs = if g.any && exact { g.staircase() } else { None };
                 g.settle(stairs.is_some());
+                interior.reserve((nu - 1) * (nv - 1));
                 for i in 1..nu {
                     for j in 1..nv {
                         if !g.covered(i, j) {
@@ -1804,6 +1817,8 @@ fn mesh_face(
         }
     }
 
+    mesh.triangles.reserve(tri.triangles.len());
+    mesh.face_of.reserve(tri.triangles.len());
     for t in &tri.triangles {
         let [a, b, c] = t.map(|k| index[k as usize]);
         // two corners on one pole: the triangle collapses to the pole and is dropped
@@ -2275,8 +2290,9 @@ fn proc_strips(
     }
     // per point: parameters, position, the boundary's index (u32::MAX inside); the boundary's
     // first, each with its place round the rectangle (one per side, counter-clockwise from (u0, v0))
-    let mut pts: Vec<(Point2, forge_math::Point3, u32)> = Vec::new();
-    let mut outer: Vec<(f64, usize)> = Vec::new();
+    let ring = bottom.len() + right.len() + top.len() + left.len();
+    let mut pts: Vec<(Point2, forge_math::Point3, u32)> = Vec::with_capacity(ring + mu * nv);
+    let mut outer: Vec<(f64, usize)> = Vec::with_capacity(ring);
     let place = |p: Point2, side: usize| match side {
         0 => (p.x - u0) / w,
         1 => 1.0 + (p.y - v0) / h,
