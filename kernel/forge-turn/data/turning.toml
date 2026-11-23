@@ -1,0 +1,63 @@
+# The built-in lathe tools: generic, restated from common catalogue practice (ISO 1832 insert
+# codes, ISO 5608 holder codes). Holder heads are generic supersets; cutting data are starting
+# points for steel. Verify every figure with the vendor before cutting.
+[[lathe_tool]]
+id = "od-rough-cnmg"
+kind = "turn"
+insert = "CNMG120408"
+holder = "PCLNR2525M12"
+vc = 220.0
+f = 0.25
+ap = 2.0
+
+[[lathe_tool]]
+id = "od-finish-dnmg"
+kind = "turn"
+insert = "DNMG150404"
+holder = "PDJNR2525M15"
+vc = 260.0
+f = 0.1
+ap = 0.5
+
+[[lathe_tool]]
+id = "od-profile-vbmt"
+kind = "turn"
+insert = "VBMT160404"
+holder = "SVJBR2525M16"
+vc = 250.0
+f = 0.08
+ap = 0.5
+
+[[lathe_tool]]
+id = "groove-3"
+kind = "groove"
+width = 3.0
+corner = 0.2
+reach = 12.0
+vc = 120.0
+f = 0.06
+
+[[lathe_tool]]
+id = "part-3"
+kind = "part"
+width = 3.0
+corner = 0.2
+reach = 25.0
+vc = 100.0
+f = 0.05
+
+[[lathe_tool]]
+id = "thread-60"
+kind = "thread"
+tip_radius = 0.05
+pitch = [0.5, 3.0]
+vc = 100.0
+
+[[lathe_tool]]
+id = "drill-8"
+kind = "drill"
+diameter = 8.0
+point = 118.0
+flute = 50.0
+vc = 25.0
+f = 0.12

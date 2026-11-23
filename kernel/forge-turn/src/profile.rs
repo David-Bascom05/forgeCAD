@@ -416,3 +416,21 @@ fn inside_f64(l: &Loop, p: P2) -> bool {
     }
     inside
 }
+
+/// A closed polygon as a loop of lines (in the order given).
+pub fn poly(pts: &[[f64; 2]]) -> Loop {
+    let n = pts.len();
+    Loop {
+        segs: (0..n)
+            .map(|i| Seg::Line {
+                a: p2(pts[i][0], pts[i][1]),
+                b: p2(pts[(i + 1) % n][0], pts[(i + 1) % n][1]),
+            })
+            .collect(),
+    }
+}
+
+/// The rectangle [x0, x1] × [y0, y1], counter-clockwise.
+pub fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Loop {
+    poly(&[[x0, y0], [x1, y0], [x1, y1], [x0, y1]])
+}
