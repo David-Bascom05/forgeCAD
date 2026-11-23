@@ -3066,6 +3066,26 @@ impl Gui {
         if self.fg_asm.is_some() && self.asm_tools_frame() {
             return;
         }
+        // a sketch goes on a planar face: a click that caught one of its edges or corners (a slot's
+        // rim, an emboss's letters) means the planar face it was on, the one turned to the eye
+        if self.shell.sketch_pick
+            && self.fg_asm.is_none()
+            && let Some(v) = &self.view
+            && v.nav.clicks != v.clicks
+            && let Some(&(pl, e)) = v.nav.selected.last()
+            && !matches!(e, Entity::Face(_))
+            && let Some(a) = self.fg_anchors.as_deref()
+            && let Some(f) = self.face_at(pl, e, v.nav.last_click_at, |f| {
+                a.faces
+                    .get(f as usize)
+                    .and_then(|n| n.as_ref())
+                    .is_some_and(|n| a.planes.contains_key(&format!("{n}.plane")))
+            })
+            && let Some(v) = &mut self.view
+            && let Some(s) = v.nav.selected.last_mut()
+        {
+            s.1 = f;
+        }
         let Some(v) = &mut self.view else { return };
         if v.nav.clicks == v.clicks {
             return;
