@@ -478,12 +478,12 @@ theorem edge_pass_spec {S : Type} (SI : topo.Sink S) (P : S → List Problem) (h
           intro e1 h; rw [h]; exact succ_val e ne hlt'
         split
         · rename_i hok
-          step as ⟨e1, he1⟩
+          step with usize_add_wspec e 1#usize (by scalar_tac) as ⟨e1, he1⟩
           refine ⟨by rw [hw e1 he1]; omega, ?_, by rw [hw e1 he1]; omega⟩
           rw [hw e1 he1]; apply hacc; rw [← hok2', hok]; simp
         · rename_i hok
           step with hS o 1#u8 e as ⟨o1, ho1⟩
-          step as ⟨e1, he1⟩
+          step with usize_add_wspec e 1#usize (by scalar_tac) as ⟨e1, he1⟩
           refine ⟨by rw [hw e1 he1]; omega, ?_, by rw [hw e1 he1]; omega⟩
           rw [hw e1 he1]; apply hacc; rw [ho1, ← hok2']; simp at hok; simp [hok]
       · rename_i hav
@@ -499,12 +499,12 @@ theorem edge_pass_spec {S : Type} (SI : topo.Sink S) (P : S → List Problem) (h
           intro e1 h; rw [h]; exact succ_val e ne hlt'
         split
         · rename_i hok
-          step as ⟨e1, he1⟩
+          step with usize_add_wspec e 1#usize (by scalar_tac) as ⟨e1, he1⟩
           refine ⟨by rw [hw e1 he1]; omega, ?_, by rw [hw e1 he1]; omega⟩
           rw [hw e1 he1]; apply hacc; rw [← hok2', hok]; simp
         · rename_i hok
           step with hS o 1#u8 e as ⟨o1, ho1⟩
-          step as ⟨e1, he1⟩
+          step with usize_add_wspec e 1#usize (by scalar_tac) as ⟨e1, he1⟩
           refine ⟨by rw [hw e1 he1]; omega, ?_, by rw [hw e1 he1]; omega⟩
           rw [hw e1 he1]; apply hacc; rw [ho1, ← hok2']; simp at hok; simp [hok]
     · rename_i hlt
@@ -610,7 +610,11 @@ theorem loop_coedges_spec (R : Reads TI t b) (ne l first len : Usize) (hne : ne.
         have hci : (b.loopCoedges l.val)[i.val]! = first.val + i.val := by
           rw [loopCoedges_getElem b l.val i.val (by omega), hfirst]
         clear hok hok1 hok'
-        step as ⟨c, hc⟩
+        have hfi : first.val + i.val ≤ Usize.max := by
+          obtain ⟨n, hn⟩ := WP.spec_exists R.nc
+          have := n.hBounds
+          scalar_tac
+        step with usize_add_wspec first i hfi as ⟨c, hc⟩
         have hcv : c.val = first.val + i.val := by
           rw [hc]; apply add_val
           obtain ⟨n, hn⟩ := WP.spec_exists R.nc
@@ -679,12 +683,12 @@ macro "finish_loop" v:term : tactic => `(tactic| (
   step with loop_coedges_spec TI t b R ne l first len hne hl hfirst hlen $v hfit as ⟨ok2, hok2⟩
   split
   · rename_i hok2t
-    step as ⟨l1, hl1⟩
+    step with usize_add_wspec l 1#usize (by scalar_tac) as ⟨l1, hl1⟩
     refine ⟨by rw [hw l1 hl1]; omega, ?_, by rw [hw l1 hl1]; omega⟩
     rw [hw l1 hl1]; apply hacc; rw [hskip, ← hval, ← hok2, hok2t]; simp
   · rename_i hok2t
     step with hS o 2#u8 l as ⟨o1, ho1⟩
-    step as ⟨l1, hl1⟩
+    step with usize_add_wspec l 1#usize (by scalar_tac) as ⟨l1, hl1⟩
     refine ⟨by rw [hw l1 hl1]; omega, ?_, by rw [hw l1 hl1]; omega⟩
     rw [hw l1 hl1]; apply hacc; rw [ho1, hskip, ← hval, ← hok2]
     simp only [Bool.not_eq_true] at hok2t; simp [hok2t]))
@@ -729,7 +733,7 @@ theorem loop_pass_spec {S : Type} (SI : topo.Sink S) (P : S → List Problem) (h
         · rename_i hx0
           have h0 : b.listed l.val = 0 := by
             rw [← kept_zero b listed hk l.val hl, ← hx']; simp at hx0; rw [hx0]; rfl
-          step as ⟨l1, hl1⟩
+          step with usize_add_wspec l 1#usize (by scalar_tac) as ⟨l1, hl1⟩
           refine ⟨by rw [hw l1 hl1]; omega, ?_, by rw [hw l1 hl1]; omega⟩
           rw [hw l1 hl1]; apply hacc
           have : b.loopSkip l.val = true := by simp [Body.loopSkip, hfl, h0]

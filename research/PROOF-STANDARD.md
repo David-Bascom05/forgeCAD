@@ -45,6 +45,25 @@ A feature meets the standard when it has all six.
 - Runtime work remains where the result depends on the particular input and can't be decided ahead of time: the exact fallback behind a proven float filter, and certifying a traced intersection curve. That is computing the answer, not re-proving it, and it is held to the speed rule like any other code.
 - A runtime check is removed only once the proof covers the shipped code (L4 by Aeneas, or the interim differential test named), not just the algorithm.
 
+## The speed rule (the owner, 2026-11-23)
+
+"Fight to get speed back if we are noticeably worse." Every change keeps instructions the same or
+better, measured by the exact callgrind gate (tools/speed/gate.sh, `GATE_COUNTER=callgrind`).
+Main and the branch are counted with the same valgrind, in exact mode.
+
+- A change that adds no executed work still moves each line by about ±0.03%, from code layout.
+  That is the band.
+- **Each strict line** may be at most **+0.03%** over main's count. The strict lines are the
+  synthetic regen1 parts (torture, plate, shaft, housing, coplanar, patterns, mixed, hole-grid,
+  tour, upto, upto-flat) and each bench part's app, edit and cli lines.
+- **The sum of the strict lines** may be at most **+0.03%** over main's sum.
+- The bench parts' seq and nary1 lines are diagnostic. They are reported, and flagged past 0.5%.
+- A line over the band is a real cost, and it is recovered before the change lands. A correctness
+  fix that cannot recover it states the cost in its PR, for the owner to rule on.
+- The check is `python3 tools/speed/band.py BASE NOW` (exit 0 = pass) over the two count files
+  (`gate.sh --save` writes a tree's counts to tools/speed/baseline-valgrind.txt). Its output goes in the
+  PR.
+
 ## Features
 
 Each row says who owns it, which levels it has, and what is next. The levels are counted from what

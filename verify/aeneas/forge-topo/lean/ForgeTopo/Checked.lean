@@ -56,9 +56,9 @@ theorem usize_sub_eq (x y : Usize) (h : y.val ≤ x.val) :
     rw [Result.match.isOk.mp hz, lift]
     congr 1
     apply (UScalar.eq_equiv_bv_eq _ _).mpr
-    rw [hq.2.2]; first | rw [UScalar.wrapping_sub_bv_eq] | simp [UScalar.wrapping_sub_bv_eq]
+    rw [hq.2.2]; first | rw [UScalar.wrapping_sub_bv_eq] | simp
   · exfalso
-    exact hq h
+    omega
   · exact absurd hq (by simp)
 
 theorem usize_add_one (x : Usize) (h : x.val < Usize.max) :
