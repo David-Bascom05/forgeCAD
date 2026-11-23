@@ -100,45 +100,72 @@ impl Interval {
         let c = [self.lo / d.lo, self.lo / d.hi, self.hi / d.lo, self.hi / d.hi];
         Interval::out(min4(c), max4(c))
     }
-    /// dmath::sin is within 1 ulp, so the bounds get two extra ulps of slack.
+    /// sin over the interval: the endpoints' values, and 1 wherever a point (k + 1/2) pi with k even
+    /// may lie inside, -1 where one with k odd may.
     pub fn sin(&self) -> Interval {
-        self.shifted_cos(-dmath::FRAC_PI_2)
+        self.trig(dmath::sin, 0.5)
     }
+    /// cos over the interval: the endpoints' values, and 1 wherever a multiple k pi with k even may
+    /// lie inside, -1 where one with k odd may.
     pub fn cos(&self) -> Interval {
-        self.shifted_cos(0.0)
+        self.trig(dmath::cos, 0.0)
     }
-    /// cos(x + shift) over the interval: extremes at the endpoints or at
-    /// multiples of pi inside it.
-    fn shifted_cos(&self, shift: f64) -> Interval {
-        // also covers non-finite bounds and ones so large that k += 1 stops counting
-        let finite = self.lo.is_finite() && self.hi.is_finite();
-        if !finite || self.width() >= dmath::TAU || self.lo.abs().max(self.hi.abs()) > 1e15 {
-            return Interval { lo: -1.0, hi: 1.0 };
+    /// The range of sin or cos (`f`, its extremes at (k + `half`) pi, the even k maxima).
+    ///
+    /// Each endpoint's value is dmath's, which is within 1 ulp of the true one for |x| <= TRIG_MOST
+    /// (tests::trig_within_an_ulp, against a double-double reference): pushed out `TRIG_ULPS` floats
+    /// it encloses it, near 0 too, where the bound is relative to the value. A point (k + half) pi is
+    /// counted inside when its enclosure [(k + half) PI, (k + half) PI_UP], rounded outward, meets
+    /// the interval: PI < pi < PI_UP, so a point that may be inside is never missed. Past TRIG_MOST,
+    /// or across a whole turn, it is [-1, 1].
+    fn trig(&self, f: fn(f64) -> f64, half: f64) -> Interval {
+        const WHOLE: Interval = Interval { lo: -1.0, hi: 1.0 };
+        let (a, b) = (self.lo, self.hi);
+        if self.is_empty() {
+            return *self;
         }
-        let a = self.lo + shift;
-        let b = self.hi + shift;
-        let (ca, cb) = (dmath::cos(a), dmath::cos(b));
-        let mut lo = ca.min(cb);
-        let mut hi = ca.max(cb);
-        let mut k = (a / dmath::PI).ceil();
-        // width < 2pi, so at most three multiples of pi fall inside
-        for _ in 0..3 {
-            if k * dmath::PI > b {
-                break;
-            }
-            if (k as i64).rem_euclid(2) == 0 {
-                hi = 1.0;
-            } else {
-                lo = -1.0;
+        if !(a.is_finite() && b.is_finite()) || a.abs().max(b.abs()) > TRIG_MOST || b - a >= 6.0 {
+            return WHOLE;
+        }
+        let (fa, fb) = (f(a), f(b));
+        let (mut lo, mut hi) = (fa.min(fb), fa.max(fb));
+        for _ in 0..TRIG_ULPS {
+            lo = lo.next_down();
+            hi = hi.next_up();
+        }
+        // the extremes' indices k with (k + half) pi possibly in [a, b]: |k| <= TRIG_MOST / pi + 1,
+        // exact as floats, and (k + half) exact too; the width < 6 leaves at most three
+        let first = (a / dmath::PI - half).floor() - 1.0;
+        let mut k = first;
+        while k <= first + 4.0 {
+            let m = k + half;
+            // m pi lies in [m PI, m PI_UP] (m >= 0) or [m PI_UP, m PI] (m < 0), each product rounded out
+            let (p, q) = ((m * dmath::PI), (m * PI_UP));
+            let (pl, ph) = (p.min(q).next_down(), p.max(q).next_up());
+            if pl <= b && ph >= a {
+                if (k as i64).rem_euclid(2) == 0 {
+                    hi = 1.0;
+                } else {
+                    lo = -1.0;
+                }
             }
             k += 1.0;
         }
         Interval {
-            lo: (lo.next_down().next_down().next_down()).max(-1.0),
-            hi: (hi.next_up().next_up().next_up()).min(1.0),
+            lo: lo.max(-1.0),
+            hi: hi.min(1.0),
         }
     }
 }
+
+/// The float just above pi (dmath::PI is the one just below).
+const PI_UP: f64 = 3.141_592_653_589_793_6;
+/// dmath::sin and cos are within 1 ulp up to here (their Cody-Waite reduction is exact enough to
+/// about 1e6; tests::trig_within_an_ulp checks up to this).
+const TRIG_MOST: f64 = 65_536.0;
+/// How far each bound is pushed out, in floats: dmath's 1 ulp (measured: 0.76), and two more, the slack
+/// these bounds have always had (so cos bounds, which were sound, are unchanged).
+const TRIG_ULPS: u32 = 3;
 
 fn min4(c: [f64; 4]) -> f64 {
     c[0].min(c[1]).min(c[2]).min(c[3])
@@ -306,6 +333,183 @@ mod tests {
                 assert!(a.div(&b).contains(x / y));
             }
         }
+    }
+
+    /// Double-double arithmetic: a reference for sin and cos to ~1e-30, from IEEE + - * only.
+    mod dd {
+        pub type D = (f64, f64);
+        pub fn two_sum(a: f64, b: f64) -> D {
+            let s = a + b;
+            let v = s - a;
+            (s, (a - (s - v)) + (b - v))
+        }
+        fn split(a: f64) -> (f64, f64) {
+            let c = 134_217_729.0 * a;
+            let h = c - (c - a);
+            (h, a - h)
+        }
+        pub fn two_prod(a: f64, b: f64) -> D {
+            let p = a * b;
+            let ((ah, al), (bh, bl)) = (split(a), split(b));
+            (p, ((ah * bh - p) + ah * bl + al * bh) + al * bl)
+        }
+        pub fn add(a: D, b: D) -> D {
+            let (s, e) = two_sum(a.0, b.0);
+            let e = e + a.1 + b.1;
+            two_sum(s, e)
+        }
+        pub fn mul(a: D, b: D) -> D {
+            let (p, e) = two_prod(a.0, b.0);
+            two_sum(p, e + a.0 * b.1 + a.1 * b.0)
+        }
+        pub fn div_f(a: D, d: f64) -> D {
+            let q = a.0 / d;
+            let (p, e) = two_prod(q, d);
+            let r = ((a.0 - p) - e + a.1) / d;
+            two_sum(q, r)
+        }
+        /// pi/2 in three parts (each the next 53 bits).
+        const P1: f64 = crate::dmath::FRAC_PI_2;
+        const P2: f64 = 6.123_233_995_736_766e-17;
+        const P3: f64 = -1.497_384_904_859_169_8e-33;
+        /// x - k pi/2 for k = round(x 2/pi), as a double-double, and k mod 4.
+        fn reduce(x: f64) -> (D, i64) {
+            let k = (x / P1).round();
+            let mut r = two_sum(x, 0.0);
+            for p in [P1, P2, P3] {
+                let (h, l) = two_prod(k, p);
+                r = add(r, (-h, -l));
+            }
+            (r, (k as i64).rem_euclid(4))
+        }
+        fn series(r: D, odd: bool) -> D {
+            let r2 = mul(r, r);
+            let mut term = if odd { r } else { (1.0, 0.0) };
+            let mut sum = term;
+            let mut n = if odd { 1.0 } else { 0.0 };
+            for _ in 0..30 {
+                term = div_f(mul(term, r2), -(n + 1.0) * (n + 2.0));
+                sum = add(sum, term);
+                n += 2.0;
+            }
+            sum
+        }
+        pub fn sin(x: f64) -> D {
+            let (r, q) = reduce(x);
+            let (s, c) = (series(r, true), series(r, false));
+            match q {
+                0 => s,
+                1 => c,
+                2 => (-s.0, -s.1),
+                _ => (-c.0, -c.1),
+            }
+        }
+        pub fn cos(x: f64) -> D {
+            let (r, q) = reduce(x);
+            let (s, c) = (series(r, true), series(r, false));
+            match q {
+                0 => c,
+                1 => (-s.0, -s.1),
+                2 => (-c.0, -c.1),
+                _ => s,
+            }
+        }
+        /// Whether lo <= v <= hi for the double-double v.
+        pub fn within(v: D, lo: f64, hi: f64) -> bool {
+            (v.0 > lo || (v.0 == lo && v.1 >= 0.0)) && (v.0 < hi || (v.0 == hi && v.1 <= 0.0))
+        }
+        /// |f - v| in ulps of v.
+        pub fn ulps(f: f64, v: D) -> f64 {
+            let e = add((f, 0.0), (-v.0, -v.1)).0.abs();
+            let u = (v.0.abs().next_up() - v.0.abs()).max(f64::from_bits(1));
+            e / u
+        }
+    }
+
+    /// The test points: dense about 0, the multiples of pi/2 up to TRIG_MOST, and spread between.
+    fn trig_points() -> Vec<f64> {
+        let mut xs = Vec::new();
+        let mut r = Rng::new(7);
+        for _ in 0..200_000 {
+            xs.push(r.range(-TRIG_MOST, TRIG_MOST));
+            xs.push(r.range(-10.0, 10.0));
+        }
+        let mut k = -(TRIG_MOST / dmath::FRAC_PI_2).floor();
+        let mut ks = Vec::new();
+        while k * dmath::FRAC_PI_2 <= TRIG_MOST {
+            ks.push(k);
+            k += if k.abs() < 64.0 { 1.0 } else { 37.0 };
+        }
+        for k in ks {
+            let c = k * dmath::FRAC_PI_2;
+            let mut x = c;
+            let mut y = c;
+            for _ in 0..12 {
+                xs.push(x);
+                xs.push(y);
+                x = x.next_up();
+                y = y.next_down();
+            }
+            for e in [1e-15, 1e-12, 1e-9, 1e-6, 1e-3] {
+                xs.push(c + e * c.abs().max(1.0));
+                xs.push(c - e * c.abs().max(1.0));
+            }
+        }
+        for e in [
+            0.0, 5e-324, 1e-300, 1e-20, 1e-17, 6e-17, 1e-10, 1e-8, 7.45e-9, 7.46e-9,
+        ] {
+            xs.push(e);
+            xs.push(-e);
+        }
+        xs
+    }
+
+    #[test]
+    fn trig_within_an_ulp() {
+        // the reference: sin(1) = 0.84147098480789650665250232163030 (0.8414709848078965 + 1.7768450929355360e-18), and sin of the float nearest
+        // pi is pi - PI = 1.2246467991473531772260659322750e-16 to 30 digits
+        let s1 = dd::sin(1.0);
+        assert_eq!(s1.0, 0.841_470_984_807_896_5);
+        assert!((s1.1 - 1.776_845_092_935_536e-18).abs() < 1e-31, "{s1:?}");
+        let sp = dd::sin(dmath::PI);
+        assert!((sp.0 - 1.224_646_799_147_353_2e-16).abs() < 1e-31, "{sp:?}");
+        // the bound TRIG_ULPS rests on, measured against the double-double reference
+        let mut worst: f64 = 0.0;
+        for x in trig_points() {
+            worst = worst.max(dd::ulps(dmath::sin(x), dd::sin(x)));
+            worst = worst.max(dd::ulps(dmath::cos(x), dd::cos(x)));
+        }
+        println!("dmath sin/cos: at most {worst} ulps off");
+        assert!(worst < 1.0, "dmath is {worst} ulps off");
+    }
+
+    #[test]
+    fn trig_encloses_the_true_value() {
+        assert_eq!(PI_UP, dmath::PI.next_up());
+        let xs = trig_points();
+        let mut r = Rng::new(9);
+        for (i, &x) in xs.iter().enumerate() {
+            // the point itself, and an interval about it of a width from nothing to a turn
+            let w = [0.0, 1e-12, 1e-6, 0.1, 1.0, 3.0, 6.5][i % 7] * r.unit();
+            for iv in [
+                Interval::point(x),
+                Interval::new(x - w, x + w),
+                Interval::new(x, x + w),
+            ] {
+                let (s, c) = (iv.sin(), iv.cos());
+                for y in [iv.lo, iv.hi, iv.mid()] {
+                    assert!(dd::within(dd::sin(y), s.lo, s.hi), "sin {iv:?} at {y}: {s:?}");
+                    assert!(dd::within(dd::cos(y), c.lo, c.hi), "cos {iv:?} at {y}: {c:?}");
+                }
+            }
+        }
+        // sin near 0 (the bound that was 6e-17 high), and the extremes inside
+        assert!(Interval::point(0.0).sin().lo <= 0.0);
+        assert!(Interval::new(-1e-300, 1e-300).sin().contains(0.0));
+        assert_eq!(Interval::new(1.5, 1.6).sin().hi, 1.0);
+        assert_eq!(Interval::new(-1.6, -1.5).sin().lo, -1.0);
+        assert_eq!(Interval::new(3.1, 3.2).cos().lo, -1.0);
+        assert_eq!(Interval::point(dmath::PI).cos().lo, -1.0);
     }
 
     #[test]

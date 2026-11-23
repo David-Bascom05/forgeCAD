@@ -271,3 +271,33 @@ OpenCascade's cone runs on through the apex.
 - `forge-lang/tests/drawings.rs`: rack18u `fans/guard_120.fg`'s swept wire (a cylinder) meets its
   revolved loop (a torus of the same tube radius) tangentially along the joint circle. This is the
   pipe–torus crease case of research/fillets/general-method.md, and it needs phase B.
+
+## 7. Phase B, refined by the failing cases
+
+The cases that feature-on refuses fall into three kinds. §3.6 covered only the first.
+
+| kind | cases | what the certificate needs |
+|---|---|---|
+| **isolated singular point** (the surfaces touch at a point, and the branches cross or touch there) | `cylinder_cylinder/perpendicular_tangent_inside`, the hole tangent to a round, the horn torus's centre | the point decided exactly once, then the branches leaving it counted on the faces of a small box Q about it |
+| **surface singular point** (the curve runs through a cone's apex) | `cylinder_cone/apex_on_top_rim`, `cone_cone/perpendicular_apex_to_apex` | the same, with Q about the apex (the apex is exact data, so there is nothing to decide) |
+| **tangential contact curve** (the surfaces share a curve along which they are tangent) | `plane_torus/standing_tangent_top_inside` (the top circle), rack18u guard_120 (the wire's cylinder against the loop's torus, along the joint circle) | the shared curve decided exactly once as a closed-form circle on both surfaces, a tube about it claimed by that curve, and the rest of the pair certified outside the tube |
+
+**Isolated points.** Krawczyk on the 4 × 4 Lagrange system (∇f_a + μ∇f_b = 0, f_b = 0) isolates a
+candidate x* in a box Q. Whether f_a(x*) = 0 exactly (a touch, not a near miss) is a sign that
+intervals can't settle. The exact reference decides it: for quadric and torus pairs, x* is
+algebraic. Given a touch, the branches through x* are the zeros of the pair on ∂Q. Each face is a
+2D problem: Krawczyk for each crossing point, exclusion for the rest of the face. The face
+crossings become ends of the chains outside Q, and Q's interior is claimed by the singular point.
+That gives a certified local picture: k arcs meeting at x*.
+
+**Tangential curves.** For quadric and torus pairs, the shared tangent circles come from
+symmetric positions, so they can be enumerated in closed form (meet.rs's coaxial profiles already
+find some). Inside a tube T about the circle, the claim is that every zero of the pair in T lies on
+the circle. That needs a second-order argument: f_b restricted to the normal disc of f_a vanishes
+to second order on the circle, with a definite Hessian sign (an isolated touch), certified by
+intervals over T. Outside T, the existing certificate runs. Where the Hessian is indefinite, the
+surfaces cross as well as touch, and further branches leave the circle; those are found on ∂T like
+the face crossings above.
+
+**Order of work.** First isolated points (they unblock 5 of the 9 scoreboard parts and the
+round-hole test). Then tangential circles (guard_120, the tangent plane–torus). Then cost.

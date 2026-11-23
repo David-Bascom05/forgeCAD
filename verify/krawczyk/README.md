@@ -11,6 +11,14 @@
 - `nearest_between`, `add_encloses`: the interval side. A bound rounded to nearest and pushed out
   one float on each side (`next_down`, `next_up`) encloses the exact bound.
 
+`Krawczyk/Trig.lean` proves forge_math::Interval's sin/cos range rule over ℝ:
+
+- `sin_le_ends`, `ends_le_sin`: sin on [a, b] stays between its end values, unless a maximum (k + ½)π with k even lies inside (for the upper bound) or a minimum with k odd does (for the lower). The proof uses the extreme value theorem and Fermat's theorem.
+- `cos_le_ends`, `ends_le_cos`: the same for cos at kπ.
+- `crit_enclosed`: the kernel's outward enclosure [m·PI, m·PI_UP] holds m·π, so it never misses an extreme.
+
+The endpoint values are dmath's. Against a double-double reference, their error is at most 0.76 ulp, which is measured, not proven (forge-math `trig_within_an_ulp`).
+
 The kernel's test is stronger than the hypotheses. It checks the sup-norm row sums of the interval
 I − C 𝐉, which bound ‖I − C A‖ for every A in 𝐉. And K is computed in outward-rounded intervals,
 which contain the exact K.
