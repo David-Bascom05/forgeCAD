@@ -16,6 +16,7 @@ import ForgeCam
 #print axioms ForgeCam.leftover_slice
 #print axioms ForgeCam.G5_line_iff
 #print axioms ForgeCam.G5_arc
+#print axioms ForgeCam.G5rt_of_check
 #print axioms ForgeCam.lineOkQ_iff
 #print axioms ForgeCam.Post.round_trip
 #print axioms ForgeCam.Post.G6

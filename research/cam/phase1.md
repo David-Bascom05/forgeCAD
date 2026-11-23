@@ -83,5 +83,9 @@ notch's sharp inside corners (no end mill reaches them).
 4. Declared removals Δ (deburr, chamfer and thread milling where the model lacks the geometry).
 5. Speed: a grid over face boxes and shared distances (−40% instructions); the 10⁵-move line at
    2.7 s is above the 1 s target; next, an f64 filter with a proven error bound.
-6. G5 (axis limits) is not checked yet; G4 uses tol where it should use δ + ε (leave).
+6. G5: the travel is checked on every posted position (`axis_limit`, placed setups; spans when
+   unplaced), and since cam/g5-runtime every posted S and F against the machine's rpm range and
+   max_feed (`machine_limit`; it was unchecked: a feed over the limit, or the S3000 fallback for a
+   group with no cutting data under a spindle's least speed, was released). Lean `G5rt_of_check`.
+   G4 grows by δ + ε (done, 4bfe2a2).
 7. The Manufacture workspace in the app (UI session): the reply above is its data contract.
