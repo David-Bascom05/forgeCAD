@@ -368,7 +368,8 @@ pub struct HardwareRow {
 
 /// The press-brake tooling a vendor runs, for the bend simulator (kernel/forge-brake): a set's
 /// id (`tooling = "std-eu"`), or a table (`[tooling]`: `base`, `punches`, `dies`, `press`,
-/// `clearance`, `self_clearance`, `springback`, as forge-brake names them; mm and degrees). Kept
+/// `clearance`, `self_clearance`, `springback`, as forge-brake names them; lengths in the file's
+/// `units`, angles in degrees). Kept
 /// as written and written back unchanged: forge-brake reads and checks it, not this crate.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Tooling {

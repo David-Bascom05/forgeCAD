@@ -858,6 +858,9 @@ operations = ["laser", "waterjet", "bend", "hem", "punch", "form", "hardware", "
               bend_deduction = [BD at 90deg, one per radius]  not  note  + rules
 [[hardware]]  kind (nut|stud|standoff)  size  code  sheet = [MIN, MAX]  hole  edge
               max_hardness  materials = [..]
+tooling = "std-eu"  or  [tooling] ..   the press brake's, for the bend simulator (forge-brake's
+              keys: base, punches, dies, press, clearance, self_clearance, springback; lengths in
+              the file's units, angles in degrees), kept as written
 ```
 
 Rules: `min_flange` (to the outside, the outer virtual sharp, as fabricators quote it),
