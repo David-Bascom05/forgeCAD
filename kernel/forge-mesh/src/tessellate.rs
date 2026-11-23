@@ -1035,63 +1035,9 @@ fn uncross(
         }
     };
 
-    // the chords cut into monotone chains, in the order of x then y (exactly: comparing their
-    // ends): a chord lies between its ends in that order, so in a chain chords that share no end
-    // lie apart and cannot meet, so only chords of two chains whose
-    // boxes overlap are compared, each pair once, walking both chains in x (Shamos and Hoey's
-    // monotone pieces)
-    // (a chord is its two ends; only a chain keeps a box, and a chord's is worked out when it is
-    // compared: few are)
+    // every pair of chords whose boxes overlap, each once (`forge_topo::chords::near_pairs`:
+    // monotone chains, so two chords of one chain that share no end are never compared)
     type Seg = (u32, u32);
-    struct Chain {
-        x: (f64, f64),
-        y: (f64, f64),
-        from: usize,
-        len: usize,
-        up: bool,
-    }
-    let mut segs: Vec<Seg> = Vec::with_capacity(pts.len());
-    let mut chains: Vec<Chain> = Vec::new();
-    for lp in &prep.loops {
-        let mut dir = 0i8;
-        for k in 0..lp.len() {
-            let (a, b) = (lp[k], lp[(k + 1) % lp.len()]);
-            let (p, r) = (pts[a as usize], pts[b as usize]);
-            if p == r {
-                same(a, b, &mut cuts);
-                continue;
-            }
-            // (by x, then y: never level, p and r being two places)
-            let d = if r.x > p.x || (r.x == p.x && r.y > p.y) {
-                1
-            } else {
-                -1
-            };
-            match chains.last_mut() {
-                Some(c) if d == dir && c.from + c.len == segs.len() => {
-                    // (p is in its box already: the chord before ends there)
-                    c.x = (c.x.0.min(r.x), c.x.1.max(r.x));
-                    c.y = (c.y.0.min(r.y), c.y.1.max(r.y));
-                    c.len += 1;
-                }
-                _ => chains.push(Chain {
-                    x: (p.x.min(r.x), p.x.max(r.x)),
-                    y: (p.y.min(r.y), p.y.max(r.y)),
-                    from: segs.len(),
-                    len: 1,
-                    up: d > 0,
-                }),
-            }
-            dir = d;
-            segs.push((a, b));
-        }
-    }
-    // a chord's ends in the chains' order (x, then y): its low and high
-    let before = |p: Point2, q: Point2| p.x < q.x || (p.x == q.x && p.y < q.y);
-    let ends = |s: Seg| {
-        let (p, q) = (pts[s.0 as usize], pts[s.1 as usize]);
-        if before(p, q) { (p, q) } else { (q, p) }
-    };
     let pair = |s: Seg, t: Seg, cuts: &mut Vec<Cut>| -> Result<(), CdtError> {
         let ((a, b), (c, d)) = (s, t);
         if a == c || a == d || b == c || b == d {
@@ -1143,68 +1089,15 @@ fn uncross(
         }
         Ok(())
     };
-    let key = |x: f64| {
-        let b = x.to_bits();
-        if b >> 63 == 1 { !b } else { b | 1 << 63 }
-    };
-    let mut order: Vec<(u64, u32)> = (0..chains.len())
-        .map(|i| (key(chains[i].x.0), i as u32))
-        .collect();
-    order.sort_unstable();
-    // chord k of a chain in increasing x
-    let at = |c: &Chain, k: usize| segs[if c.up { c.from + k } else { c.from + c.len - 1 - k }];
-    for (n, &(_, i)) in order.iter().enumerate() {
-        let ci = &chains[i as usize];
-        for &(_, j) in &order[n + 1..] {
-            let cj = &chains[j as usize];
-            if cj.x.0 > ci.x.1 {
-                break;
-            }
-            if ci.y.1 < cj.y.0 || cj.y.1 < ci.y.0 {
-                continue;
-            }
-            // from the first chord of each that reaches the other's box, to the last that starts
-            // in it (a chain's chords run on in x: found by halving)
-            let first = |c: &Chain, x: f64| {
-                let (mut l, mut h) = (0, c.len);
-                while l < h {
-                    let m = (l + h) / 2;
-                    if ends(at(c, m)).1.x < x {
-                        l = m + 1;
-                    } else {
-                        h = m;
-                    }
-                }
-                l
-            };
-            let (mut p, mut q) = (first(ci, cj.x.0), first(cj, ci.x.0));
-            while p < ci.len && q < cj.len {
-                let (s, t) = (at(ci, p), at(cj, q));
-                let ((ls, hs), (lt, ht)) = (ends(s), ends(t));
-                if ls.x > cj.x.1 || lt.x > ci.x.1 {
-                    break;
-                }
-                // (boxes apart: x by the chains' order, y here)
-                if ls.x <= ht.x
-                    && lt.x <= hs.x
-                    && ls.y.min(hs.y) <= lt.y.max(ht.y)
-                    && lt.y.min(ht.y) <= ls.y.max(hs.y)
-                {
-                    pair(s, t, &mut cuts)?;
-                }
-                if before(hs, ht) {
-                    p += 1;
-                } else if before(ht, hs) {
-                    q += 1;
-                } else {
-                    // both end at one x: the next of each starts there, and meets the other
-                    if p + 1 < ci.len {
-                        pair(at(ci, p + 1), t, &mut cuts)?;
-                    }
-                    q += 1;
-                }
-            }
-        }
+    let mut zeros: Vec<Seg> = Vec::new();
+    forge_topo::chords::near_pairs(
+        &pts[..],
+        &prep.loops,
+        |a, b| zeros.push((a, b)),
+        |s, t| pair(s, t, &mut cuts),
+    )?;
+    for (a, b) in zeros {
+        same(a, b, &mut cuts);
     }
     Ok(cuts)
 }

@@ -516,40 +516,40 @@ pub fn loops_cross_steeply(loops: &[UvLoop], at: &dyn Fn(Point2) -> Point3, band
 }
 
 fn first_cross(loops: &[UvLoop], counts: &dyn Fn((Point2, Point2), (Point2, Point2)) -> bool) -> bool {
-    // swept along u: only segments whose u spans overlap are compared
-    let mut segs: Vec<(f64, f64, Point2, Point2)> =
-        Vec::with_capacity(loops.iter().map(|l| l.points.len()).sum());
+    // only chords whose boxes overlap are compared (`chords::near_pairs`), each once
+    let mut pts: Vec<Point2> = Vec::with_capacity(loops.iter().map(|l| l.points.len()).sum());
+    let mut idx: Vec<Vec<u32>> = Vec::with_capacity(loops.len());
     for l in loops {
-        let n = l.points.len();
-        for i in 0..n {
-            let (p, q) = (l.points[i], l.points[(i + 1) % n]);
-            if p != q {
-                segs.push((p.x.min(q.x), p.x.max(q.x), p, q));
-            }
-        }
+        let from = pts.len() as u32;
+        pts.extend_from_slice(&l.points);
+        idx.push((from..pts.len() as u32).collect());
     }
-    segs.sort_unstable_by(|p, q| p.0.total_cmp(&q.0));
     let opposite = |p: f64, q: f64| (p < 0.0 && q > 0.0) || (p > 0.0 && q < 0.0);
     let orient = forge_math::predicates::orient2d;
-    for i in 0..segs.len() {
-        let (_, reach, a, b) = segs[i];
-        let (ylo, yhi) = (a.y.min(b.y), a.y.max(b.y));
-        for &(lo, _, c, d) in &segs[i + 1..] {
-            if lo > reach {
-                break;
-            }
-            if yhi < c.y.min(d.y) || d.y.max(c.y) < ylo || a == c || a == d || b == c || b == d {
-                continue;
+    crate::chords::near_pairs(
+        &pts,
+        &idx,
+        |_, _| {},
+        |s, t| {
+            let (a, b, c, d) = (
+                pts[s.0 as usize],
+                pts[s.1 as usize],
+                pts[t.0 as usize],
+                pts[t.1 as usize],
+            );
+            if a == c || a == d || b == c || b == d {
+                return Ok(());
             }
             if opposite(orient(a, b, c), orient(a, b, d))
                 && opposite(orient(c, d, a), orient(c, d, b))
                 && counts((a, b), (c, d))
             {
-                return true;
+                return Err(());
             }
-        }
-    }
-    false
+            Ok(())
+        },
+    )
+    .is_err()
 }
 
 #[cfg(test)]
