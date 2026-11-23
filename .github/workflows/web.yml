@@ -8,8 +8,8 @@
 #            default build and the threaded artifact (THREADS=only) at once, put together after
 #   clippy   the wasm32 build stays warning-free
 #   browser  for the default build and for the threaded artifact (THREADED=1, which adds
-#            responsive.cjs): e2e, and parity on every bench part and example, in three shards
-#            that between them test each file once (PARITY_SHARD in web/tests/parity.cjs)
+#            responsive.cjs): e2e on one runner, and parity on every bench part and example in
+#            three shards that between them test each file once (PARITY_SHARD in parity.cjs)
 # The commands, crates, profiles and flags are ci.sh's. Each Rust job has its own build cache,
 # saved only from main (and manual runs), so a pull request restores main's and never races it.
 name: web
@@ -120,8 +120,9 @@ jobs:
       matrix:
         # the default build, and the threaded artifact (docs/web.md)
         threaded: ["", "1"]
-        shard: [0, 1, 2]
-    name: browser${{ matrix.threaded && ' (threaded)' || '' }} ${{ matrix.shard }}
+        # e2e (and, threaded, responsive.cjs) on one runner; parity's three shards on three
+        test: [e2e, 0, 1, 2]
+    name: browser${{ matrix.threaded && ' (threaded)' || '' }} ${{ matrix.test }}
     env:
       THREADED: ${{ matrix.threaded }}
       FORGECAD: ${{ github.workspace }}/bin/forgecad
@@ -160,17 +161,18 @@ jobs:
           path: target/web/threads
       - run: chmod +x bin/forgecad bin/forge-parity
       - name: end to end
-        if: matrix.shard == 0
+        if: matrix.test == 'e2e'
         working-directory: interface/forge-render
         run: node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
-      - name: parity (shard ${{ matrix.shard }} of 3)
+      - name: parity (shard ${{ matrix.test }} of 3)
+        if: matrix.test != 'e2e'
         working-directory: interface/forge-render
         env:
-          PARITY_SHARD: ${{ matrix.shard }}/3
+          PARITY_SHARD: ${{ matrix.test }}/3
         run: node web/tests/parity.cjs "$GITHUB_WORKSPACE/target/web"
       # the threaded artifact: the page never blocks for a build
       - name: responsive
-        if: matrix.threaded && matrix.shard == 0
+        if: matrix.threaded && matrix.test == 'e2e'
         working-directory: interface/forge-render
         run: node web/tests/responsive.cjs "$GITHUB_WORKSPACE/target/web"
 
