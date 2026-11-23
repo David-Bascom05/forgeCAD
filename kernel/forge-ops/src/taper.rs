@@ -305,9 +305,16 @@ fn wall(s: &Segment, frame: &Frame) -> (Surface, bool, Curve, Interval, bool) {
     }
 }
 
-/// One slab: `p` at its base, offset `d` at height `h`, where some segments are gone. Walls leaning
-/// `angle`; `top` vertices at one place are one vertex, top edges along one another one edge.
-fn slab(p: &Profile, d: f64, h: f64, angle: f64, root: Name) -> Result<Body, TaperError> {
+/// One slab: `p` at its base, its loops offset at height `h` to `moved`, where the segments
+/// `wiped` (`gone_at`) are gone. Walls leaning `angle`; `top` vertices at one place are one vertex,
+/// top edges along one another one edge.
+fn slab(
+    p: &Profile,
+    (moved, wiped): (&[Vec<Moved>], &[Vec<bool>]),
+    h: f64,
+    angle: f64,
+    root: Name,
+) -> Result<Body, TaperError> {
     let invalid = |e| TaperError::Draft(e);
     let mut b = Body::new();
     b.add_shell();
@@ -315,11 +322,6 @@ fn slab(p: &Profile, d: f64, h: f64, angle: f64, root: Name) -> Result<Body, Tap
     let lid = base.with_origin(base.origin + base.z() * h);
     let (start, end) = (crate::roles::start(root), crate::roles::end(root));
     let bottom = b.add_face(ShellId(0), Surface::Plane(Plane::new(base)), false, start);
-    let moved: Vec<Vec<Moved>> = p
-        .loops
-        .iter()
-        .map(|l| offset(&l.segments, d).ok_or(TaperError::Draft(DraftError::BadAngle)))
-        .collect::<Result<_, _>>()?;
     // a top is left where the loops still bound something
     let mut tops: Vec<(VertexId, Point2)> = Vec::new();
     let mut top_edges: Vec<(VertexId, VertexId, EdgeId, bool)> = Vec::new();
@@ -327,8 +329,7 @@ fn slab(p: &Profile, d: f64, h: f64, angle: f64, root: Name) -> Result<Body, Tap
     let mut bottom_loops: Vec<Vec<(EdgeId, bool)>> = Vec::new();
     let mut uprights: Vec<EdgeId> = Vec::new();
     let mut made = false;
-    let wiped = gone_at(p, d, &moved);
-    for (li, (l, m)) in p.loops.iter().zip(&moved).enumerate() {
+    for (li, (l, m)) in p.loops.iter().zip(moved).enumerate() {
         let segs = &l.segments;
         let n = segs.len();
         let names: Vec<Name> = segs.iter().map(|s| crate::roles::side(root, s.1)).collect();
@@ -470,11 +471,12 @@ pub fn tapered(profile: &Profile, distance: f64, angle: f64, feature: u64) -> Re
     } else {
         profile.plane
     };
-    let plain = match draft(&b, &sides, &neutral, angle) {
+    match draft(&b, &sides, &neutral, angle) {
         Ok(d) => return Ok(vec![d]),
         Err(e @ DraftError::BadAngle) => return Err(TaperError::Draft(e)),
-        Err(e) => e,
-    };
+        // the sides wiped out on the way: slabs
+        Err(_) => {}
+    }
     let (sn, cs) = dmath::sin_cos(angle.abs());
     let lean = sn / cs;
     let sign = angle.signum();
@@ -498,20 +500,19 @@ pub fn tapered(profile: &Profile, distance: f64, angle: f64, feature: u64) -> Re
             break;
         };
         let h = d / lean;
-        out.push(slab(&p, d * sign, h, angle, Name::feature(id))?);
+        // each loop offset to the slab's top, and what is gone there: the slab's top and what is
+        // left of the loops up it, decided once
+        let moved: Vec<Vec<Moved>> = p
+            .loops
+            .iter()
+            .map(|l| offset(&l.segments, d * sign).ok_or(TaperError::Draft(DraftError::BadAngle)))
+            .collect::<Result<_, _>>()?;
+        let wiped = gone_at(&p, d * sign, &moved);
+        out.push(slab(&p, (&moved, &wiped), h, angle, Name::feature(id))?);
         left -= h;
         k += 1;
         // what is left of each loop, up a slab
         let mut loops = Vec::new();
-        let Some(moved) = p
-            .loops
-            .iter()
-            .map(|l| offset(&l.segments, d * sign))
-            .collect::<Option<Vec<_>>>()
-        else {
-            return Err(TaperError::Draft(plain));
-        };
-        let wiped = gone_at(&p, d * sign, &moved);
         for ((l, m), w) in p.loops.iter().zip(&moved).zip(&wiped) {
             let kept: Vec<(Segment, u64)> = m
                 .iter()
