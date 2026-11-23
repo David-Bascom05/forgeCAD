@@ -709,6 +709,17 @@ impl<'a> Index<'a> {
     }
 }
 
+/// Whether `point_in_face` places `p` inside face `f` of `body` (no index of the body's boxes is
+/// needed for one face).
+pub(crate) fn inside_own_face(body: &Body, f: FaceId, p: Point3) -> bool {
+    let ix = Index {
+        body,
+        bbox: Box3::EMPTY,
+        boxes: std::sync::OnceLock::new(),
+    };
+    ix.point_in_face(f, p) == Where::Inside
+}
+
 /// The uses of face `f`'s boundary whose edges' boxes meet `bx` (only the bands near it, where
 /// the face keeps bands).
 pub(crate) fn edges_near(body: &Body, f: FaceId, bx: &Box3, out: &mut Vec<forge_topo::CoedgeId>) {

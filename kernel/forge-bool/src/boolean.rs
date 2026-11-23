@@ -5391,7 +5391,9 @@ fn local_split(c: LocalSplit) -> Option<Local> {
     })
 }
 
-/// A point on face `f` a little inside its boundary, beside the middle of its first edge.
+/// A point on face `f` a little inside its boundary, beside the middle of its first edge: one that
+/// `point_in_face` places inside `f`, the step halved until it is (a face narrower than the step
+/// there), else None (G13: verify/forge-bool-proof FlatSites/G13.lean).
 pub(crate) fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
     let face = body.face(f);
     let c = body.lp(*face.loops.first()?).coedges().next()?;
@@ -5406,8 +5408,34 @@ pub(crate) fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
         .eval(edge.range.lo)
         .distance(d.p)
         .max(d.p.distance(edge.curve.eval(edge.range.hi)));
-    let q = d.p + inward * (0.01 * len.max(1e-3)).min(0.05);
-    Some(face.surface.eval(face.surface.project(q)))
+    let step = (0.01 * len.max(1e-3)).min(0.05);
+    let q = face.surface.eval(face.surface.project(d.p + inward * step));
+    if crate::classify::inside_own_face(body, f, q) {
+        return Some(q);
+    }
+    nearer_face_point(body, f, d.p, inward, step)
+}
+
+/// `face_point` with the step halved, up to four times, until the point is inside the face.
+#[cold]
+#[inline(never)]
+fn nearer_face_point(
+    body: &Body,
+    f: FaceId,
+    at: Point3,
+    inward: forge_math::UnitVec3,
+    step: f64,
+) -> Option<Point3> {
+    let surface = &body.face(f).surface;
+    let mut step = step;
+    for _ in 0..4 {
+        step *= 0.5;
+        let q = surface.eval(surface.project(at + inward * step));
+        if crate::classify::inside_own_face(body, f, q) {
+            return Some(q);
+        }
+    }
+    None
 }
 
 /// The pieces chained into one closed loop (in walking order) and its outline in the face's
