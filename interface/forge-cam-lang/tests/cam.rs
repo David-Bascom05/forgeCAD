@@ -289,7 +289,7 @@ fn soft_jaws_hold_the_part_turned_over() {
 fn soft_jaws_follow_the_part() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
     // a wider notch in a copy of the part: the jaws' pocket is cut to the new outline
-    let tmp = std::env::temp_dir().join(format!("forge-cam-jaws-{}", std::process::id()));
+    let tmp = forge_dirs::temp_dir().join(format!("forge-cam-jaws-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&tmp).unwrap();
     let part = std::fs::read_to_string(dir.join("bracket.fg")).unwrap();
     std::fs::write(
@@ -431,7 +431,7 @@ fn engraving_follows_the_sketch_into_the_modelled_groove() {
         .fold(f64::INFINITY, f64::min);
     assert!((low - 4.7).abs() < 1e-9, "{low}");
     // the line to the groove's square ends: the V tool's width at depth cuts the end walls
-    let tmp = std::env::temp_dir().join(format!("forge-cam-mark-{}", std::process::id()));
+    let tmp = forge_dirs::temp_dir().join(format!("forge-cam-mark-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&tmp).unwrap();
     let part = std::fs::read_to_string(dir.join("plate_mark.fg")).unwrap();
     std::fs::write(
@@ -477,7 +477,7 @@ fn a_thread_milled_as_a_declared_cosmetic_thread() {
     cam.json().write(&mut j);
     assert!(j.contains("\"removals\":[\"cosmetic_thread M6x1"), "{j}");
     // a hole that records no thread: nothing to declare, so no thread milling
-    let tmp = std::env::temp_dir().join(format!("forge-cam-m6-{}", std::process::id()));
+    let tmp = forge_dirs::temp_dir().join(format!("forge-cam-m6-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&tmp).unwrap();
     let part = std::fs::read_to_string(dir.join("block_m6.fg")).unwrap();
     std::fs::write(
