@@ -78,6 +78,7 @@ const TRANSFORMS: &[&str] = &[
 /// What a pad's profile can be; only a sketch has rows, the rest a stored shape.
 const FLAT: &[&str] = &["Sketcher::SketchObject", "Part::Part2DObjectPython"];
 const NEEDS: &[&str] = &[
+    "PartDesign::Thickness",
     "PartDesign::Draft",
     "PartDesign::AdditivePipe",
     "PartDesign::SubtractivePipe",
@@ -855,6 +856,44 @@ fn helix_turns(ws: Option<&Vec<Vec<Sampled>>>, o: V3, ax: V3) -> Result<(f64, f6
     }
     let r9 = |x: f64| (x * 1e9).round() / 1e9;
     Ok((r9(pitch), r9(height), turn < 0.0))
+}
+
+/// The plane through points that are flat (within 1e-7 of it): its unit normal and a point.
+fn plane_of(pts: &[V3]) -> Option<(V3, V3)> {
+    if pts.len() < 3 {
+        return None;
+    }
+    let k = pts.len() as f64;
+    let c = pts.iter().fold((0.0, 0.0, 0.0), |s, p| {
+        (s.0 + p.0 / k, s.1 + p.1 / k, s.2 + p.2 / k)
+    });
+    let far = |from: V3| {
+        pts.iter()
+            .copied()
+            .fold((from, -1.0), |best, p| {
+                let d = py::dist3(p, from);
+                if d > best.1 { (p, d) } else { best }
+            })
+            .0
+    };
+    let a = far(c);
+    let b = far(a);
+    let ab = py::unit(add(b, a, -1.0))?;
+    let off = |p: V3| py::dist3(add(a, ab, dot(add(p, a, -1.0), ab)), p);
+    let e = pts
+        .iter()
+        .copied()
+        .fold(
+            (a, -1.0),
+            |best, p| if off(p) > best.1 { (p, off(p)) } else { best },
+        )
+        .0;
+    let n = py::unit(py::cross(add(b, a, -1.0), add(e, a, -1.0)))?;
+    let span = py::dist3(a, b).max(1.0);
+    if pts.iter().any(|&p| dot(add(p, a, -1.0), n).abs() > 1e-7 * span) {
+        return None;
+    }
+    Some((n, a))
 }
 
 /// Does our edge (its samples `ours`) hold every sample of their edge `poly`? Ours are coarse:
@@ -2438,6 +2477,52 @@ impl Tr<'_, '_, '_> {
         }
     }
 
+    /// A hollow: the faces of Base opened, walls Value thick, inward when Reversed (FreeCAD's
+    /// "inwards"), as `shell(t, open: FACES, out:)`. Only the skin mode.
+    fn thickness(&mut self, name: &str, lab: &str) -> Result<Vec<String>, Fail> {
+        let d = self.doc;
+        let mode = d.integer(name, "Mode", 0)?;
+        if mode != 0 {
+            return unsupported(format!("a thickness of mode {mode}"));
+        }
+        let base = d.link(name, "Base")?;
+        let edges = self.state.edges(&self.program())?;
+        let mut want = BTreeSet::new();
+        for sub in d.subs(name, "Base")?.into_iter().filter(|x| !x.is_empty()) {
+            let polys = self
+                .truth
+                .get(&base)
+                .and_then(|s| s.subs.get(&sub))
+                .filter(|_| sub.starts_with("Face"));
+            let Some(polys) = polys.cloned() else {
+                let s: String = sub.chars().take(4).collect();
+                return Err(Fail::Unresolved(format!("a thickness on {s} not sampled")));
+            };
+            want.insert(Self::face_of(&edges, &polys)?);
+        }
+        if want.is_empty() {
+            return unsupported("a thickness with no open face");
+        }
+        let mut feats: Vec<String> = self
+            .labels
+            .values()
+            .flat_map(|l| l.split(' ').map(String::from))
+            .collect();
+        feats.sort();
+        feats.dedup();
+        let sel = self.state.select_faces(&want, &feats)?;
+        let out = if d.boolean(name, "Reversed")? {
+            ""
+        } else {
+            ", out: true"
+        };
+        self.blocks.push(format!(
+            "param {lab}.t = {}\n{lab} = shell(t, open: {sel}{out})\n",
+            num(d.flt(name, "Value", 0.0)?)
+        ));
+        Ok(vec![lab.into()])
+    }
+
     /// Faces tilted about where they cross a neutral plane, the pull along the plane's outward
     /// normal (or a line edge's way), turned by Reversed: FreeCAD's BRepOffsetAPI_DraftAngle.
     fn draft(&mut self, name: &str, lab: &str) -> Result<Vec<String>, Fail> {
@@ -2553,6 +2638,22 @@ impl Tr<'_, '_, '_> {
                 let fr = Frame::new(d.placement(&r)?);
                 Ok((fr.o, fr.n))
             }
+            t if is(SOLID, t) && s.starts_with("Edge") => {
+                // a straight edge of a feature's stored shape: from its first sample to its last
+                let polys = self.truth.get(&r).and_then(|x| x.subs.get(s));
+                let Some([poly]) = polys.map(|p| &p[..]) else {
+                    return unsupported("a pattern axis on an edge not sampled");
+                };
+                let (a, b) = (poly[0], poly[poly.len() - 1]);
+                let Some(u) = py::unit(add(b, a, -1.0)) else {
+                    return unsupported("a pattern axis on an edge of no length");
+                };
+                let off = |q: V3| py::dist3(add(a, u, dot(add(q, a, -1.0), u)), q);
+                if poly.iter().any(|&q| off(q) > 1e-6) {
+                    return unsupported("a pattern axis on a curved edge");
+                }
+                Ok((a, u))
+            }
             t => unsupported(format!("a pattern axis on {}", t.unwrap_or("nothing"))),
         }
     }
@@ -2614,6 +2715,19 @@ impl Tr<'_, '_, '_> {
             Some("PartDesign::Plane") => {
                 let fr = Frame::new(d.placement(&r)?);
                 (fr.n, fr.o)
+            }
+            t if is(SOLID, t) && subs.first().is_some_and(|x| x.starts_with("Face")) => {
+                // a planar face of a feature's stored shape: the plane through its edges' samples
+                let pts: Vec<V3> = self
+                    .truth
+                    .get(&r)
+                    .and_then(|x| x.subs.get(&subs[0]))
+                    .map(|ps| ps.iter().flatten().copied().collect())
+                    .unwrap_or_default();
+                let Some(pl) = plane_of(&pts) else {
+                    return unsupported("a mirror in a face not sampled or not flat");
+                };
+                pl
             }
             t => return unsupported(format!("a mirror in {}", t.unwrap_or("nothing"))),
         };
@@ -2843,6 +2957,7 @@ impl Tr<'_, '_, '_> {
             }
             "PartDesign::Hole" => self.hole(name, &lab)?,
             "PartDesign::Draft" => self.draft(name, &lab)?,
+            "PartDesign::Thickness" => self.thickness(name, &lab)?,
             "PartDesign::AdditivePipe" | "PartDesign::SubtractivePipe" => {
                 self.pipe(name, &lab, t == "PartDesign::SubtractivePipe")?
             }
@@ -3067,6 +3182,32 @@ fn body_of(doc: &Doc, b: &str) -> Body {
             let Some(t) = doc.ty(c) else {
                 return bug("a member of no type");
             };
+            if is(TRANSFORMS, Some(t)) || t == "PartDesign::MultiTransform" {
+                let mut ms = vec![c.clone()];
+                ms.extend(doc.links(c, "Transformations")?);
+                for m in ms {
+                    for k in ["MirrorPlane", "Axis", "Direction"] {
+                        let o = if doc.props.contains_key(&m) {
+                            doc.link(&m, k)?
+                        } else {
+                            String::new()
+                        };
+                        let s: Vec<String> = doc.subs(&m, k)?.into_iter().filter(|x| !x.is_empty()).collect();
+                        if is(SOLID, doc.ty(&o)) && !s.is_empty() {
+                            put(&o, doc.shape_file(&o)?);
+                            subs.entry(o).or_default().extend(s);
+                        }
+                    }
+                }
+            }
+            if t == "PartDesign::Thickness" {
+                let o = doc.link(c, "Base")?;
+                if doc.props.contains_key(&o) {
+                    put(&o, doc.shape_file(&o)?);
+                    let s = doc.subs(c, "Base")?.into_iter().filter(|x| !x.is_empty());
+                    subs.entry(o).or_default().extend(s);
+                }
+            }
             if t == "PartDesign::Draft" {
                 for k in ["Base", "NeutralPlane", "PullDirection"] {
                     let o = doc.link(c, k)?;

@@ -19,14 +19,18 @@ come from `research/import/tally.py`.
 
 | set | parts | untranslated before | after | match (1e-4) before | after |
 |---|---:|---:|---:|---:|---:|
-| FreeCAD library, bodies | 677 | 130 | 64 | 394 | 506 |
-| CADFS, all parts | 1914 | 640 | 627 | 1099 | 1106 |
-| CADFS, parts with a fillet | 476 | 238 | 234 | 164 | 164 |
+| FreeCAD library, bodies | 677 | 130 | 52 | 394 | 512 |
+| CADFS, all parts | 1914 | 640 | 615 | 1099 | 1111 |
+| CADFS, parts with a fillet | 476 | 238 | 228 | 164 | 166 |
 | WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new |
 
 No part got worse on any set: no match was lost, and nothing that built before stopped building.
 
-FreeCAD's matches rise by 112, and only 30 of those are newly translated parts:
+The first pass took on the four biggest FreeCAD causes and CADFS's extrude draft. A second pass took on causes that
+need only importer work: FreeCAD's Thickness, a mirror plane on a feature's face, a pattern axis on a feature's edge,
+CADFS's extrude up to a curved face, and WHUCAD's splines.
+
+In the first pass FreeCAD's matches rose by 112, and only 30 of those were newly translated parts:
 - 30 refused before and match now;
 - 52 matched only at 1e-3 before (a polyline stood in for a spline) and now match at 1e-4.
 
@@ -36,11 +40,11 @@ Both come from writing sketch splines exactly.
 
 | class | before | after |
 |---|---:|---:|
-| match | 394 | 506 |
-| mismatch | 95 | 78 |
-| refused | 53 | 24 |
+| match | 394 | 512 |
+| mismatch | 95 | 79 |
+| refused | 53 | 29 |
 | fail | 5 | 5 |
-| untranslated | 130 | 64 |
+| untranslated | 130 | 52 |
 
 ### The causes this pass took on
 
@@ -104,21 +108,42 @@ marked approx.
   `Reversed` turns it.
 - All 7 that reach it match to 6e-15. The other 3 stop on a Boolean, a Part loft, or a pattern's faces not found.
 
-### What still stops FreeCAD (64 bodies)
+### The second pass: importer work only
+
+| cause (before) | bodies | translated | match | mismatch | refused |
+|---|---:|---:|---:|---:|---:|
+| a mirror in PartDesign::Pocket / Pad | 6 | 6 | 1 | 0 | 5 |
+| a pattern axis on PartDesign::Pad / Pocket | 6 | 4 | 4 | 0 | 0 |
+| feature Thickness | 5 | 2 | 1 | 1 | 0 |
+
+- **A mirror plane, or a pattern's axis, on a feature's face or edge.** Read straight from that feature's stored
+  shape, with no matching on our part:
+  - the plane through the face's edge samples, when they are flat to 1e-7;
+  - the line from a straight edge's first sample to its last.
+  - All 5 that build match to 2.4e-12. The other 5 mirrors (one model's copies) now reach a fillet the kernel
+    refuses (`Overflow`). The sixth axis body stops on a fillet edge it can't find.
+- **Thickness** → `shell(t, open: FACES, out:)`.
+  - The open faces are found as for Draft. `Reversed` (FreeCAD's "inwards", set on all 5) shells inward.
+  - Only the skin mode.
+  - 66344020.Body002 matches to 3e-15. 5e699f88.Body is 6.4e-4 off: a 1-thick shell over fillet faces, not yet
+    explained.
+  - Of the other 3: two stop on a pad up to a face, one on Mode 2 (a Thickness made by intersection).
+- **Pad TaperAngle** was tried and not kept. FreeCAD's sign can't be measured in this set: one of its two bodies
+  stops on a later cut, and the other doesn't translate. So it stays unsupported rather than guessed.
+
+### What still stops FreeCAD (52 bodies)
 
 | cause | bodies | `.fg` feature it maps to, or what is missing |
 |---|---:|---|
 | a profile not from a sketch | 7 | importer: Draft-workbench and binder wires as profiles (they read as stored wires) |
-| a mirror in PartDesign::Pocket / Pad | 6 | `pattern(.., layout: mirror(on: PLANE))` exists; importer: the plane of a feature's face |
-| a pattern axis on PartDesign::Pad / Pocket | 6 | `pattern` exists; importer: a feature's straight edge as the axis |
-| feature Thickness | 5 | `shell(t, open: FACES, out:)` exists; importer: the open faces (`face_of` now finds them) |
 | a chain through PartDesign::FeaturePython | 4 | scripted features: no form, and they are never run |
 | an empty body | 4 | nothing to make |
 | a Part tree through / chain through Part::Loft, Part::Sweep, Part::Fillet, Part::FeaturePython | 7 | `loft`, `sweep` and `fillet` exist; importer: the Part workbench forms |
 | a hole with its thread in the shape | 3 | `thread` exists; importer |
 | sketch curve GeomEllipse / GeomArcOfEllipse | 3 | `ellipse`, `earc` exist; importer |
-| a pad with TaperAngle | 2 | `extrude(.., taper:)` exists; importer |
-| a pad or pocket of type 3 (up to face), a pad with Offset | 3 | `extrude(.., upto(FACES), offset)` exists; importer |
+| a pad with TaperAngle | 2 | `extrude(.., taper:)` exists; importer, once FreeCAD's sign is measured |
+| a pad or pocket of type 3 (up to face), a pad with Offset | 5 | `extrude(.., upto(FACES), offset)` exists; importer |
+| a thickness of mode 2 (intersection) | 1 | importer |
 | feature Boolean | 2 | `combine` exists; importer |
 | a pipe from inside its path | 2 | two sweeps from the profile, as the CADFS reader already does for closed paths |
 | a sketch with no closed region | 2 | importer: older sketches' wiring |
@@ -127,7 +152,7 @@ marked approx.
 | feature AdditiveEllipsoid | 1 | **missing: an ellipsoid (or a scaled ball)** |
 | an unequal chamfer | 1 | `chamfer(.., d2:, face:)` exists; importer |
 | sketch of over 400 curves | 1 | the importer's own cap |
-| other references (an edge no selection names, no face where the base's face lies, a pattern of a feature outside the chain) | 3 | importer |
+| other references (an edge no selection names 2, no edge where the base's edge lies 1, no face where the base's face lies 1, a pattern of a feature outside the chain 1) | 5 | importer |
 
 ## CADFS
 
@@ -135,12 +160,12 @@ All 1914 sampled parts:
 
 | class | before | after |
 |---|---:|---:|
-| match | 1099 | 1106 |
-| mismatch | 81 | 82 |
-| refused | 85 | 88 |
-| fail | 8 | 10 |
+| match | 1099 | 1111 |
+| mismatch | 81 | 84 |
+| refused | 85 | 92 |
+| fail | 8 | 11 |
 | timeout | 1 | 1 |
-| untranslated | 640 | 627 |
+| untranslated | 640 | 615 |
 
 **Draft on an extrude (24 → 0 under that name).** Onshape's extrude draft is Forge's `taper:`, on a depth. Its sign
 was read from the STEP: with the pull-direction flag set, Onshape narrows the extrude as Forge's positive taper does
@@ -158,6 +183,23 @@ was read from the STEP: with the pull-direction flag set, Onshape narrows the ex
 Among the 476 parts with a fillet, 9 had this cause. 4 now reach the kernel, and all 4 are refused or fail: they are
 kernel findings, not matches.
 
+**Up to a curved face (19 → 0 under that name).** An extrude up to a face that isn't planar is now
+`extrude(.., upto(FACES))`, the faces found on the query's carrier and named on the part as built. A depth, a
+second direction or a draft along with it is still unsupported (Forge has no `taper` with `upto`).
+
+| part | after |
+|---|---|
+| 00066533, 00147689, 00152806, 00202714, 00488382 | match (to 5e-13 or better) |
+| 00127497, 00287804 | mismatch: 2.0e-4 and 4.1e-2 in volume |
+| 00171925, 00442938 | refused: `Extent NoFace`, `NoNextFace` |
+| 00680307 | refused: `Fillet Overflow` |
+| 00850232 | refused: `Boolean ZeroThickness` |
+| 00308391 | **fail**: `NotClosed` at the cut |
+| 7 others | another cause (sketch text 2, unequal chamfer, entities that do not meet, no sketch record, a cap at an unknown depth, an add into several bodies) |
+
+Both CADFS changes act only where the importer used to refuse. The merged run's every change of class is one of
+those 43 parts.
+
 ### What still stops CADFS
 
 Ranked for the parts with a fillet (all 1914 parts in brackets):
@@ -169,7 +211,6 @@ Ranked for the parts with a fillet (all 1914 parts in brackets):
 | sketch text | 17 (59) | **missing: text in a sketch** |
 | a reference to an entity the sketch no longer has, imprint edge source / bounds nothing | 29 (110) | importer: queries naming entities the program no longer has |
 | an unequal chamfer | 11 (23) | `chamfer(.., d2: | angle:, face: FACE)` exists. Tried and set aside: 15 of the 23 are single edges, where which face takes `width1` needs Onshape's per-edge rule. Reading it as the one face every edge bounds matched none of the rest. |
-| up to a curved face | 10 (19) | `extrude(.., upto(FACES))` exists; importer: the face selection |
 | a variable or conic fillet | 9 (9) | all 9 are conic: **missing: a conic cross-section fillet** (`vary` covers variable radii) |
 | BLEND_EDGE / BLEND_FACE / OFFSET_* of an unknown feature, no edge or face on the carrier | 24 | importer: queries on blends' and offsets' own faces |
 | feature deleteBodies | 4 (17) | importer (bodies dropped from the part) |

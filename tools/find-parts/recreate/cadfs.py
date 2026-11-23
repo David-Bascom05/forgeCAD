@@ -1104,9 +1104,19 @@ class Tr:
             elif bound == "UP_TO_NEXT":
                 head = ("next", "fwd")
             elif bound == "UP_TO_SURFACE":
-                c = self.carrier(single(a.get("endBoundEntityFace"), env), env)
+                q = single(a.get("endBoundEntityFace"), env)
+                c = self.carrier(q, env)
                 if not isinstance(c, OnPlane):
-                    raise Unsupported("up to a curved face")
+                    # Forge runs up to the faces themselves: `upto(FACES)`, named on the part as built
+                    if second or a.get("hasOffset") is True or taper is not None:
+                        raise Unsupported("up to a curved face, with an offset, a draft or a second direction")
+                    hs = self.faces_for([q], env)
+                    if not hs:
+                        raise Unresolved("no face on the carrier: up-to face")
+                    head = ("upto", self.select("faces", hs))
+                    self.solid[f["id"]] = {"kind": "extrude", "frame": fr, "lo": 0.0, "hi": None}
+                    self.emit_solid("extrude", op, {"ext": head}, frame, {fid: by[fid]}, opp, fid_out=f["id"])
+                    continue
                 w = dot(add(c.o, fr.o, -1), fr.n) * sgn
                 dn = abs(dot(c.n, fr.n))
                 if dn < 1 - 1e-9:

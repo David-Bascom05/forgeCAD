@@ -301,6 +301,8 @@ class Prog:
                 x = {"both": "thru_all"}.get(e[1], "thru")
                 if e[1] != "both" and ((e[1] == "fwd") == cut):
                     more = ", flip: true"
+            elif w == "upto":
+                x = f"upto({e[1]})"
             elif w == "next":
                 x = "next"
                 if (e[1] == "fwd") == cut:

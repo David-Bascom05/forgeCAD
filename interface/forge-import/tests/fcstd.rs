@@ -1260,3 +1260,144 @@ fn a_fillet_outside_a_body_rounds_a_part_extrusion() {
     let m = built(&fg);
     near(m.volume, 24000.0 - (4.0 - PI) * 60.0, "volume", &fg);
 }
+
+/// A pad hollowed by a Thickness 1 thick, inwards, its top face open: a shell whose cavity is the
+/// box less a wall each side and the floor.
+#[test]
+fn a_thickness_inwards_is_a_shell_open_at_its_face() {
+    let top = vec![
+        ((-30.0, -20.0, 10.0), (30.0, -20.0, 10.0)),
+        ((30.0, -20.0, 10.0), (30.0, 20.0, 10.0)),
+        ((30.0, 20.0, 10.0), (-30.0, 20.0, 10.0)),
+        ((-30.0, 20.0, 10.0), (-30.0, -20.0, 10.0)),
+    ];
+    let faces = shapes_brep(&[], &[top]);
+    let d = doc(&[
+        body("Thickness", &["Sketch", "Pad", "Thickness"]),
+        sketch("Sketch", place(0.0), rect()),
+        (
+            "Pad",
+            "PartDesign::Pad",
+            vec![
+                ("BaseFeature", "<Link value=\"\"/>".into()),
+                ("Profile", "<LinkSub value=\"Sketch\"/>".into()),
+                ("Length", "<Float value=\"10\"/>".into()),
+                ("Shape", "<Part file=\"Faces.brp\"/>".into()),
+            ],
+        ),
+        (
+            "Thickness",
+            "PartDesign::Thickness",
+            vec![
+                ("BaseFeature", "<Link value=\"Pad\"/>".into()),
+                (
+                    "Base",
+                    "<LinkSub value=\"Pad\"><Sub value=\"Face1\"/></LinkSub>".into(),
+                ),
+                ("Value", "<Float value=\"1\"/>".into()),
+                ("Reversed", "<Bool value=\"true\"/>".into()),
+                ("Mode", "<Integer value=\"0\"/>".into()),
+                ("Join", "<Integer value=\"0\"/>".into()),
+                ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+            ],
+        ),
+    ]);
+    let b = translate(&with_shapes(&d, &[("Faces.brp", &faces)]))
+        .expect("reads")
+        .remove(0);
+    assert_eq!(b.status(), "translated", "{:?}", b.fail);
+    let fg = b.fg.expect("a part file");
+    assert!(fg.contains("= shell(t, open: "), "{fg}");
+    let m = built(&fg);
+    near(m.volume, 24000.0 - 58.0 * 38.0 * 9.0, "volume", &fg);
+}
+
+/// A boss patterned three times along a straight edge of the base pad (its front bottom edge, run
+/// from its first point to its last), and mirrored in the pad's right face: the edge's direction
+/// and the face's plane, read from the pad's stored shape.
+#[test]
+fn a_pattern_along_an_edge_and_a_mirror_in_a_face() {
+    let square = geo(&[
+        line((-25.0, -5.0), (-15.0, -5.0), 0),
+        line((-15.0, -5.0), (-15.0, 5.0), 0),
+        line((-15.0, 5.0), (-25.0, 5.0), 0),
+        line((-25.0, 5.0), (-25.0, -5.0), 0),
+    ]);
+    let right = vec![
+        ((30.0, -20.0, 0.0), (30.0, 20.0, 0.0)),
+        ((30.0, 20.0, 0.0), (30.0, 20.0, 10.0)),
+        ((30.0, 20.0, 10.0), (30.0, -20.0, 10.0)),
+        ((30.0, -20.0, 10.0), (30.0, -20.0, 0.0)),
+    ];
+    let pad_shape = shapes_brep(&[((-30.0, -20.0, 0.0), (30.0, -20.0, 0.0))], &[right]);
+    let transform =
+        |name: &'static str, ty: &'static str, base: &str, extra: Vec<(&'static str, String)>| -> Obj {
+            let mut p = vec![
+                ("BaseFeature", format!("<Link value=\"{base}\"/>")),
+                (
+                    "Originals",
+                    "<LinkList count=\"1\"><Link value=\"Pad001\"/></LinkList>".into(),
+                ),
+                ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+            ];
+            p.extend(extra);
+            (name, ty, p)
+        };
+    let d = doc(&[
+        body(
+            "Mirrored",
+            &[
+                "Sketch",
+                "Pad",
+                "Sketch001",
+                "Pad001",
+                "LinearPattern",
+                "Mirrored",
+            ],
+        ),
+        sketch("Sketch", place(0.0), rect()),
+        (
+            "Pad",
+            "PartDesign::Pad",
+            vec![
+                ("BaseFeature", "<Link value=\"\"/>".into()),
+                ("Profile", "<LinkSub value=\"Sketch\"/>".into()),
+                ("Length", "<Float value=\"10\"/>".into()),
+                ("Shape", "<Part file=\"Base.brp\"/>".into()),
+            ],
+        ),
+        sketch("Sketch001", place(10.0), square),
+        pad("Pad001", "Pad", "Sketch001", 5.0, &[]),
+        transform(
+            "LinearPattern",
+            "PartDesign::LinearPattern",
+            "Pad001",
+            vec![
+                (
+                    "Direction",
+                    "<LinkSub value=\"Pad\"><Sub value=\"Edge1\"/></LinkSub>".into(),
+                ),
+                ("Length", "<Float value=\"20\"/>".into()),
+                ("Occurrences", "<Integer value=\"3\"/>".into()),
+            ],
+        ),
+        transform(
+            "Mirrored",
+            "PartDesign::Mirrored",
+            "LinearPattern",
+            vec![(
+                "MirrorPlane",
+                "<LinkSub value=\"Pad\"><Sub value=\"Face1\"/></LinkSub>".into(),
+            )],
+        ),
+    ]);
+    let b = translate(&with_shapes(&d, &[("Base.brp", &pad_shape)]))
+        .expect("reads")
+        .remove(0);
+    assert_eq!(b.status(), "translated", "{:?}", b.fail);
+    let fg = b.fg.expect("a part file");
+    let m = built(&fg);
+    // the pad, three bosses at x = -20, -10, 0; the mirror in x = 30 puts the original boss at x = 80,
+    // a body of its own, apart: only its 500 more
+    near(m.volume, 24000.0 + 3.0 * 500.0 + 500.0, "volume", &fg);
+}
