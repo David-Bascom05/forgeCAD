@@ -102,6 +102,72 @@ fn foot_sags(o: forge_math::Point3, r: f64, x: [forge_math::Point3; 3], chord: f
     side(x[0], x[1]) && side(x[1], x[2]) && side(x[2], x[0]) && (foot.distance(o) - r).abs() > chord
 }
 
+/// Whether the chord x–y, its ends on the cone `c`, sags past `chord` anywhere: the signed
+/// distance (ρ − R₀)·cos α − z·sin α is convex along the chord (ρ the norm of an affine map), so
+/// its deepest point is where its slope is zero, ρ′ = tan α·Δz (a root of a quadratic in the
+/// chord's parameter, (q + sp)² = k²(c₀ + 2sq + s²p)), or where the chord passes nearest the axis
+/// (ρ's kink); each candidate inside the chord is judged (cold: only a chord whose middle sags
+/// past half the chord asks).
+#[cold]
+#[inline(never)]
+fn cone_chord_sags(c: &forge_geom::Cone, x: forge_math::Point3, y: forge_math::Point3, chord: f64) -> bool {
+    let (a, b) = (c.frame.point_to_local(x), c.frame.point_to_local(y));
+    let (dx, dy, dz) = (b.x - a.x, b.y - a.y, b.z - a.z);
+    let p = dx * dx + dy * dy;
+    let q = a.x * dx + a.y * dy;
+    let c0 = a.x * a.x + a.y * a.y;
+    let k = c.tan_a() * dz;
+    let sags = |s: f64| s > 0.0 && s < 1.0 && Surface::Cone(*c).implicit(x.lerp(y, s)).abs() > chord;
+    if p <= 0.0 {
+        return false;
+    }
+    // nearest the axis
+    if sags(-q / p) {
+        return true;
+    }
+    // the slope's zeros: p(p − k²)s² + 2q(p − k²)s + (q² − k²c₀) = 0
+    let a2 = p * (p - k * k);
+    if a2 == 0.0 {
+        return false;
+    }
+    let disc = (q / p) * (q / p) - (q * q - k * k * c0) / a2;
+    if disc < 0.0 {
+        return false;
+    }
+    let (m, h) = (-q / p, disc.sqrt());
+    sags(m - h) || sags(m + h)
+}
+
+/// Whether the triangle `x`, its corners on the cone `c`, sags past `chord` where the cone's
+/// axis crosses it (the distance's kink, ρ = 0).
+fn cone_axis_sags(c: &forge_geom::Cone, x: [forge_math::Point3; 3], chord: f64) -> bool {
+    let l = x.map(|p| c.frame.point_to_local(p));
+    // the axis meets the triangle only if the triangle's shadow on the xy plane holds the origin
+    let cross = |a: forge_math::Point3, b: forge_math::Point3| a.x * b.y - a.y * b.x;
+    let (s0, s1, s2) = (cross(l[0], l[1]), cross(l[1], l[2]), cross(l[2], l[0]));
+    if !((s0 >= 0.0 && s1 >= 0.0 && s2 >= 0.0) || (s0 <= 0.0 && s1 <= 0.0 && s2 <= 0.0)) {
+        return false;
+    }
+    cone_axis_point_sags(c, l, chord)
+}
+
+#[cold]
+#[inline(never)]
+fn cone_axis_point_sags(c: &forge_geom::Cone, l: [forge_math::Point3; 3], chord: f64) -> bool {
+    // the axis's point in the triangle's plane: weights from the shadow, the height from them
+    let cross = |a: forge_math::Point3, b: forge_math::Point3| a.x * b.y - a.y * b.x;
+    let w = [cross(l[1], l[2]), cross(l[2], l[0]), cross(l[0], l[1])];
+    let total = w[0] + w[1] + w[2];
+    if total == 0.0 {
+        return false;
+    }
+    let z = (w[0] * l[0].z + w[1] * l[1].z + w[2] * l[2].z) / total;
+    Surface::Cone(*c)
+        .implicit(c.frame.point_to_world(forge_math::Point3::new(0.0, 0.0, z)))
+        .abs()
+        > chord
+}
+
 /// Whether the surface curves both ways, so a triangle on it sags by its sag along each side.
 fn doubly_curved(s: &Surface) -> bool {
     matches!(s, Surface::Sphere(_) | Surface::Torus(_))
@@ -1687,7 +1753,21 @@ fn mesh_face(
         on_edge(ia, ib)
             || (!flat
                 && (shared(ia, ib)
-                    || (!bounded2(a, b, grid) && off(pos(ia, a).lerp(pos(ib, b), 0.5), a.lerp(b, 0.5)))))
+                    || (!bounded2(a, b, grid) && {
+                        let (x, y) = (pos(ia, a), pos(ib, b));
+                        let m = x.lerp(y, 0.5);
+                        off(m, a.lerp(b, 0.5))
+                            || match surface {
+                                // on a cone a chord's deepest point is not its middle: convex
+                                // along it and zero at its ends, its sag is at most twice the
+                                // middle's, so only a middle sagging past half the chord asks
+                                Surface::Cone(c) => {
+                                    surface.implicit(m).abs() > 0.5 * q.chord
+                                        && cone_chord_sags(c, x, y, q.chord)
+                                }
+                                _ => false,
+                            }
+                    })))
     };
     // (a long triangle on a cone, between rulings at its two ends, can sag in its middle past
     // its sides too)
@@ -1716,6 +1796,10 @@ fn mesh_face(
                         let sag = surface.implicit(g).abs();
                         sag + foot_margin > q.chord && foot_sags(sp.frame.origin, sp.radius, x, q.chord)
                     }
+                    // on a cone the distance is convex over the triangle's plane with no zero of
+                    // its slope inside but along a line to its edges: its deepest point is on an
+                    // edge (judged with the edges) or where the axis crosses it
+                    Surface::Cone(c) => cone_axis_sags(c, x, q.chord),
                     _ => false,
                 }
         }
@@ -2580,17 +2664,46 @@ fn strips(
     // a cone's radius changes between rows, so a triangle reaching across can sag past the
     // chord in its middle or along a side: each is checked (cheaply: the distance is exact),
     // and where one strays the Delaunay meshes the face instead
-    if let Surface::Cone(_) = surface {
-        let off = |x: forge_math::Point3| surface.implicit(x).abs() > q.chord;
-        let strays = tris.iter().any(|t| {
-            let p = t.map(|i| mesh.positions[i as usize]);
-            off(p[0].lerp(p[1], 0.5).lerp(p[2], 1.0 / 3.0))
-                || (0..3).any(|k| off(p[k].lerp(p[(k + 1) % 3], 0.5)))
-        });
-        if strays {
-            mesh.positions.truncate(added);
-            return None;
+    // (each at its deepest point, as the refinement judges it: on a cone, its edges' deepest
+    // points and where the axis crosses it; on a sphere, its edges' middles and the centre's foot;
+    // a cylinder's rows are an arc's chords apart, its triangles' deepest points their edges'
+    // middles, each within the chord)
+    let strays = match surface {
+        Surface::Cone(c) => {
+            let off = |x: forge_math::Point3| surface.implicit(x).abs() > q.chord;
+            tris.iter().any(|t| {
+                let p = t.map(|i| mesh.positions[i as usize]);
+                off(p[0].lerp(p[1], 0.5).lerp(p[2], 1.0 / 3.0))
+                    || (0..3).any(|k| {
+                        let m = p[k].lerp(p[(k + 1) % 3], 0.5);
+                        let sag = surface.implicit(m).abs();
+                        sag > q.chord
+                            || (sag > 0.5 * q.chord && cone_chord_sags(c, p[k], p[(k + 1) % 3], q.chord))
+                    })
+                    || cone_axis_sags(c, p, q.chord)
+            })
         }
+        Surface::Sphere(sp) => {
+            let margin = if 8.0 * q.chord < 3.0 * sp.radius {
+                let r = sp.radius;
+                8.0 * r * q.chord / (9.0 * (r * r - 8.0 * r * q.chord / 3.0).sqrt())
+            } else {
+                f64::INFINITY
+            };
+            let sag = |x: forge_math::Point3| surface.implicit(x).abs();
+            tris.iter().any(|t| {
+                let p = t.map(|i| mesh.positions[i as usize]);
+                (0..3).any(|k| sag(p[k].lerp(p[(k + 1) % 3], 0.5)) > q.chord) || {
+                    let g = sag(p[0].lerp(p[1], 0.5).lerp(p[2], 1.0 / 3.0));
+                    g > q.chord || (g + margin > q.chord && foot_sags(sp.frame.origin, sp.radius, p, q.chord))
+                }
+            })
+        }
+        _ => false,
+    };
+    if strays {
+        mesh.positions.truncate(added);
+        return None;
     }
     Some(tris)
 }
@@ -2694,6 +2807,30 @@ mod tests {
         // an obtuse triangle beside the pole: the foot outside, no say
         let obtuse = [at(0.05, 0.0), at(0.05, 0.3), at(0.05, 0.6)];
         assert!(!foot_sags(o, r, obtuse, 1e-9));
+    }
+
+    /// On a cone a chord's deepest point is not its middle: a chord whose middle sags within the
+    /// chord, a point of it past, asks to be split; past its deepest point, it does not.
+    #[test]
+    fn a_cones_chord_is_judged_at_its_deepest_point() {
+        use forge_math::Point3;
+        let cone = forge_geom::Cone::new(Frame::WORLD, 10.0, 0.5).expect("a cone");
+        let s = Surface::Cone(cone);
+        // two points of it, far apart in height and a little apart in angle
+        let at = |z: f64, phi: f64| {
+            let r = cone.radius_at(z);
+            Point3::new(r * forge_math::dmath::cos(phi), r * forge_math::dmath::sin(phi), z)
+        };
+        let (x, y) = (at(0.0, 0.0), at(30.0, 0.35));
+        assert!(s.implicit(x).abs() < 1e-12 && s.implicit(y).abs() < 1e-12);
+        let mid = s.implicit(x.lerp(y, 0.5)).abs();
+        let deepest = (0..=20000)
+            .map(|i| s.implicit(x.lerp(y, i as f64 / 20000.0)).abs())
+            .fold(0.0, f64::max);
+        assert!(deepest > 1.05 * mid, "{mid} {deepest}");
+        let between = 0.5 * (mid + deepest);
+        assert!(cone_chord_sags(&cone, x, y, between));
+        assert!(!cone_chord_sags(&cone, x, y, deepest * 1.0001));
     }
 
     #[test]
