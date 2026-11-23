@@ -1,0 +1,26 @@
+# The inc (A8 v2) core's refinement: the split
+
+Target: `inc.IncCoreSpec` (ForgeBoolCore/IncSpecs.lean). On a well-formed v2 ledger (`LedgerWF2`),
+`inc::core` returns `ok`, and `outLF` of its outcome is `coreI (toLF l)`. With it,
+`endToEndF_of` gives `EndToEndF` at once, through `flat_refines`.
+
+The Lean it refines is verify/forge-exact/ForgeExact/DecideOnce/IncCore.lean (`coreI` and its
+stages). Funs.lean's `inc.*` is about 3.8k lines. The groups below follow the Rust functions, one
+spec each, as v1's SPLIT.md did. Each group states its specs in its own file and proves them with
+standard axioms and no sorry.
+
+| group | Rust fns (Funs.lean `inc.*`) | Lean target (IncCore) | reuse from v1 |
+|---|---|---|---|
+| T, tables | `starts_at_zero`, `csr_ok`, `rows`, `row`, `count_in`, `ledger_wf` | `ledger_wf l = true ↔ LedgerWF2 l`; `row` = `rowL` | RefineCells-style loop specs |
+| S, split | `body_of`, `cls_of`, `split_ok`, `split` (piece_of, rooms, room_pos) | `splitOk`, `rooms` (first-seen dedup), `isPieceOf` | RefineSplitOk's shape, DedupModel |
+| C, classify | `flood`, `witnesses`, `membership`, keep (`apply_rule`) | `memb` (flood head = least position), `classifyOk`, `keep`, `keepTab` | RefineUF, UFModel, RefineMemb, RefineClassify, RefineKeep, RefineRule |
+| K, touch | `around_e`, `around_v`, `fan_rel`, `fans`, `bad_vert`, `core_k` loops | `result`, `orient`, `aroundE`, `aroundV`, `badEdge`, `fanRel`, `badVert`, `coreK` | RefineFan, RefineUF |
+| U, unify | `same_set`, `dedup`, `unify` loops | `unify` (`joinRel`, `heads`, `faceOf`, `faceKey`, `atE`/`atV`, `outV`, `ecs`, `erel`) via `IncLedger.unify_eq` | RefineUnify* (most carries over), RefineUF |
+| E, core | `core` | `coreI`; then `IncCoreSpec` and `EndToEndF` | the coordinator |
+
+Points to agree within each group:
+- **Lists vs sets.** The Rust orders faces by head, edges by erel root, and verts in listed order,
+  as the Lean does. Where an order differs, state the spec up to `List.Perm`, and tell E, which
+  then weakens `IncCoreSpec` to a body correspondence.
+- **Union-find heads are least positions**, which is the Lean's `head … xs`, as in v1's UF proofs.
+- **Size limits** come from `LedgerWF2.small` and the Csr bounds.
