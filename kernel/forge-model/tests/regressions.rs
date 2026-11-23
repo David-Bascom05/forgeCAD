@@ -4059,3 +4059,16 @@ fn identical_balls_a_hair_apart_join_valid() {
         assert!((v - want).abs() <= 1e-6, "{v} where {want}");
     }
 }
+
+/// Fuzz seed 295, feature 69 (a tilted cylinder added through a thin torus ring on a cylinder wall):
+/// the cylinder × torus meet lost one of its two loops, the ring was dropped whole and its edge on
+/// the wall was left on one face, an `Ok` that `check` faults. Both evaluators.
+#[test]
+fn fuzz295_thin_torus_loop_kept() {
+    let part = forge_model::suite::fuzz(295, 70);
+    for body in [part.regenerate(), part.regenerate_nary(1)] {
+        let body = body.expect("regenerates");
+        let problems = forge_topo::check(&body);
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+}

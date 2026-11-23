@@ -1,0 +1,13 @@
+name = "forgeboolfallback"
+version = "0.1.0"
+defaultTargets = ["ForgeBoolFallback"]
+
+[leanOptions]
+relaxedAutoImplicit = false
+autoImplicit = false
+
+# The proofs of the shipped boolean's structural sites and its fallback (the FALLBACK rows of the
+# ledger, verify/forge-bool-proof/LEDGER.md): core Lean only, so it builds in a minute and needs no
+# Mathlib cache.
+[[lean_lib]]
+name = "ForgeBoolFallback"

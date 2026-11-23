@@ -2,6 +2,16 @@
 # one `lake build` on the pinned toolchain. A theorem that no longer checks, a `sorry` or any axiom
 # past propext, Classical.choice and Quot.sound fails the build itself (ForgeExact/Axioms.lean).
 # Kept apart from lean.yml so the two jobs never edit one file. Core Lean only: no Mathlib.
+#
+# Two jobs that run at once: `proofs` (the build, the smoke case, curved_exact's guards) and
+# `kernel` (the same `lake build`, then the kernel's repros and the swept solids against the
+# executables it built). Lake's build directory is restored from main's latest (Lake rebuilds
+# every module whose sources differ) and saved by main's runs (tools/ci/lake-cache.py).
+#
+# A push to main only refreshes that cache: pull requests merge with current main in their head,
+# so every check below already ran on the tree that lands. On push, `proofs` restores, builds
+# with the same commands when the restore was not exact, and saves; nothing else runs. A manual
+# run (workflow_dispatch) runs everything.
 name: forge-exact
 
 on:
@@ -24,11 +34,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: toolchain cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.elan
-          key: elan-${{ runner.os }}-${{ hashFiles('verify/forge-exact/lean-toolchain') }}
       - name: elan and the pinned toolchain
         run: |
           if [ ! -x "$HOME/.elan/bin/elan" ]; then
@@ -37,12 +42,26 @@ jobs:
           fi
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           "$HOME/.elan/bin/elan" toolchain install "$(cat verify/forge-exact/lean-toolchain)"
+      - name: Lake cache key
+        id: lake
+        run: python3 tools/ci/lake-cache.py forge-exact verify/forge-exact
+      - name: Lake build (restored; Lake rebuilds what changed)
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
       - name: the proofs and the reference
+        if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: verify/forge-exact
         run: |
           lake build
           lake build forge-exact
       - name: the reference answers a known case
+        if: ${{ github.event_name != 'push' }}
         working-directory: verify/forge-exact
         run: |
           # two unit cubes sharing an edge: non-manifold; a 2-cube with a corner cube cut: volume 7
@@ -51,8 +70,46 @@ jobs:
           echo "$out" | sed -n 1p | grep -q '"verdict":"nonmanifold"'
           echo "$out" | sed -n 2p | grep -q '"verdict":"solid".*"volume":"7"'
       - name: curved_exact is not vacuous (the representative curved inputs are certified)
+        if: ${{ github.event_name != 'push' }}
         working-directory: verify/forge-exact
         run: .lake/build/bin/curved-guards
+      - name: save the Lake build (main only, even when a check failed)
+        if: ${{ always() && steps.lake.outcome == 'success' && steps.restore.outputs.cache-hit != 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+
+  kernel:
+    # its checks ran on the pull request; its Lake build is the one `proofs` saves
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: elan and the pinned toolchain
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat verify/forge-exact/lean-toolchain)"
+      - name: Lake cache key
+        id: lake
+        run: python3 tools/ci/lake-cache.py forge-exact verify/forge-exact
+      - name: Lake build (restored; Lake rebuilds what changed)
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
+      - name: the reference and sweep-ref (lake build)
+        working-directory: verify/forge-exact
+        run: lake build
       - name: rust (rust-toolchain.toml)
         run: rustup show
       - uses: Swatinem/rust-cache@v2

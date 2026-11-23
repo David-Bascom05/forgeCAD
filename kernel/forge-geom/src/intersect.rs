@@ -97,21 +97,35 @@ fn line_procedural(line: &Line, s: &Surface, pr: &crate::surface::Proc) -> LineS
 }
 
 pub fn line_plane(line: &Line, p: &Plane) -> LineSurface {
+    match line_plane_t(line, p) {
+        PlaneMeet::On => LineSurface::OnSurface,
+        PlaneMeet::Apart => LineSurface::Hits(vec![]),
+        PlaneMeet::At(t) => LineSurface::Hits(vec![LineHit {
+            t,
+            point: line.eval(t),
+            contact: Contact::Crossing,
+        }]),
+    }
+}
+
+/// How a line meets a plane: in it, apart from it, or crossing it once at t.
+enum PlaneMeet {
+    On,
+    Apart,
+    At(f64),
+}
+
+fn line_plane_t(line: &Line, p: &Plane) -> PlaneMeet {
     let denom = p.normal_vec().dot(line.dir);
     let d0 = p.signed_distance(line.origin);
     if denom.abs() <= tol::ANGULAR {
         return if d0.abs() <= tol::LINEAR {
-            LineSurface::OnSurface
+            PlaneMeet::On
         } else {
-            LineSurface::Hits(vec![])
+            PlaneMeet::Apart
         };
     }
-    let t = -d0 / denom;
-    LineSurface::Hits(vec![LineHit {
-        t,
-        point: line.eval(t),
-        contact: Contact::Crossing,
-    }])
+    PlaneMeet::At(-d0 / denom)
 }
 
 /// Line origin and direction in a surface's local frame.
@@ -368,6 +382,18 @@ pub fn curve_surface_in(
 }
 
 fn line_in_range(l: &Line, range: Interval, s: &Surface) -> CurveSurface {
+    // a plane: its one hit made in place (line_plane's values, without its list)
+    if let Surface::Plane(p) = s {
+        return match line_plane_t(l, p) {
+            PlaneMeet::On => CurveSurface::OnSurface,
+            PlaneMeet::At(t) if range.contains(t) => CurveSurface::Hits(vec![CurveHit {
+                t,
+                point: l.eval(t),
+                contact: Contact::Crossing,
+            }]),
+            _ => CurveSurface::Hits(Vec::new()),
+        };
+    }
     match line_surface(l, s) {
         LineSurface::OnSurface => CurveSurface::OnSurface,
         LineSurface::Hits(h) => CurveSurface::Hits(
