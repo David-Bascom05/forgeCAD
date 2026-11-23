@@ -1,0 +1,17 @@
+[package]
+name = "forge-mesh-check"
+description = "forge_mesh::tessellate against its Lean proofs (lean/): watertight, oriented, single-fan, volume within the chord bound"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-model = { path = "../../kernel/forge-model" }
+forge-geom = { path = "../../kernel/forge-geom" }
+
+[lints]
+workspace = true

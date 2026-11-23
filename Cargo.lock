@@ -253,6 +253,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-mesh-check"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-model",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-model"
 version = "0.1.0"
 dependencies = [
