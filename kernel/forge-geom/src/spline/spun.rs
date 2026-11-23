@@ -297,6 +297,18 @@ impl Procedural for Spun {
         s.frame = f.compose(&self.frame);
         Proc(Arc::new(s))
     }
+    // the section's control points scaled in the frame (about its origin, on the axis), the frame's
+    // origin scaled about c: the surface of k C about the same axis is the image; angles are kept
+    fn scaled(&self, c: Point3, k: f64) -> Option<Proc> {
+        let mut s = self.clone();
+        s.id = fresh_id();
+        s.frame = crate::similar::frame(&self.frame, c, k);
+        s.c = Arc::new(self.c.scaled_about(Point3::ORIGIN, k));
+        s.radius = self.radius * k;
+        s.rmax = self.rmax * k;
+        s.speed = self.speed * k;
+        Some(Proc(Arc::new(s)))
+    }
     fn uv_scale(&self) -> (f64, f64) {
         (self.rmax.max(tol::LINEAR), self.speed.max(tol::LINEAR))
     }

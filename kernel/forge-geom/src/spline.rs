@@ -935,6 +935,26 @@ impl Spline {
         Spline::from_pieces(self.degree, self.breaks.clone(), pts).expect("same pieces")
     }
 
+    /// The same curve scaled by `k` about `c`: each homogeneous control point (x w, y w, z w, w)
+    /// goes to ((x w − c w) k + c w, .., w), the weights and breaks kept. A rational Bezier piece of
+    /// the scaled points is the scaled piece (the map is affine), so this is the image exactly.
+    pub fn scaled_about(&self, c: Point3, k: f64) -> Spline {
+        let pts: Vec<H> = self
+            .pts
+            .iter()
+            .map(|h| {
+                let w = h[3];
+                [
+                    (h[0] - c.x * w) * k + c.x * w,
+                    (h[1] - c.y * w) * k + c.y * w,
+                    (h[2] - c.z * w) * k + c.z * w,
+                    w,
+                ]
+            })
+            .collect();
+        Spline::from_pieces(self.degree, self.breaks.clone(), pts).expect("same pieces")
+    }
+
     /// The same points run the other way, over the same range.
     pub fn reversed(&self) -> Spline {
         let (lo, hi) = (self.breaks[0], self.breaks[self.pieces()]);
@@ -1626,6 +1646,12 @@ impl ProceduralCurve for SplineCurve {
             c: Arc::new(self.c.mapped(|p| f.point_to_world(p))),
             dom: self.dom,
         }))
+    }
+    fn scaled(&self, c: Point3, k: f64) -> Option<ProcCurve> {
+        Some(ProcCurve(Arc::new(SplineCurve {
+            c: Arc::new(self.c.scaled_about(c, k)),
+            dom: self.dom,
+        })))
     }
     fn speed_bound(&self, range: Interval) -> f64 {
         self.c.derivative_bounds(range)[0]

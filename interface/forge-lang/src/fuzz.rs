@@ -74,6 +74,9 @@ pub const MAKERS: &[Maker] = makers![
     "copybody" 1 copybody,
     "thread" 1 thread,
     "text" 1 text,
+    // drawn by no weight (so the draw over the others is as it was): a movebody or copybody that
+    // `scaled_here` picks becomes one, counted under this kind
+    "scale" 0 scale,
 ];
 
 /// The seeds the tests run. (Not 0: its last statement, a thread cut into a block of many faces,
@@ -199,6 +202,8 @@ pub struct G<'a> {
     points: BTreeMap<String, Vec<(String, String, String)>>,
     new_labels: Vec<Label>,
     new_params: Vec<(String, f64)>,
+    /// The kind the statements count under, where not their maker's (`scale`).
+    kind: Option<&'static str>,
 }
 
 /// The world axis a direction is, if it is one.
@@ -2148,6 +2153,7 @@ fn movebody(g: &mut G) -> Option<Vec<String>> {
     let bs = bodies(g);
     let b = g.pick(&bs)?;
     let m = motion(g)?;
+    let m = scaled_here(g, m, false);
     let l = g.label();
     g.made(&l, "movebody", false, false);
     Some(vec![format!("{l} = movebody(of: {b}, moves: [{m}])")])
@@ -2157,9 +2163,43 @@ fn copybody(g: &mut G) -> Option<Vec<String>> {
     let bs = bodies(g);
     let b = g.pick(&bs)?;
     let m = motion(g)?;
+    let m = scaled_here(g, m, false);
     let l = g.label();
     g.made(&l, "copybody", false, true);
     Some(vec![format!("{l} = copybody(of: {b}, moves: [{m}])")])
+}
+
+/// A movebody or copybody made a scaled one: about the part box's centre (a sketch point) by a
+/// factor between 3/8 and 3, before, after or in place of the rigid motions. Which statements, and
+/// how, is a hash of the statement's number, not a draw: the program's draws stay as they were.
+/// One in three (or every one, `always`) is scaled.
+fn scaled_here(g: &mut G, m: String, always: bool) -> String {
+    let h = (*g.label as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    let h = h ^ (h >> 29);
+    if !always && h % 3 != 0 {
+        return m;
+    }
+    let k = [0.375, 0.5, 0.8, 1.25, 1.5, 2.0, 3.0][(h >> 8) as usize % 7];
+    let c = g.bx.center();
+    let at = g.pt(c);
+    let s = format!("scale(about: {at}, by: ratio({k}))");
+    g.kind = Some("scale");
+    match (h >> 16) % 3 {
+        0 => s,
+        1 => format!("{m}, {s}"),
+        _ => format!("{s}, {m}"),
+    }
+}
+
+/// A body scaled (as `scaled_here`), moved or copied.
+fn scale(g: &mut G) -> Option<Vec<String>> {
+    let bs = bodies(g);
+    let b = g.pick(&bs)?;
+    let m = motion(g)?;
+    let m = scaled_here(g, m, true);
+    let l = g.label();
+    g.made(&l, "movebody", false, false);
+    Some(vec![format!("{l} = movebody(of: {b}, moves: [{m}])")])
 }
 
 fn thread(g: &mut G) -> Option<Vec<String>> {
@@ -2756,7 +2796,7 @@ pub fn run_kinds(seed: u64, len: usize, kinds: u64) -> Run {
                 hit
             })
             .expect("weights cover the draw");
-        let (lines, new_labels, new_params, helpers) = {
+        let (lines, new_labels, new_params, helpers, kind) = {
             let mut g = G {
                 r: &mut r,
                 st: &st,
@@ -2767,10 +2807,12 @@ pub fn run_kinds(seed: u64, len: usize, kinds: u64) -> Run {
                 points: BTreeMap::new(),
                 new_labels: vec![],
                 new_params: vec![],
+                kind: None,
             };
             let lines = (maker.make)(&mut g).map(|ls| g.emit(ls));
-            (lines, g.new_labels, g.new_params, g.helpers)
+            (lines, g.new_labels, g.new_params, g.helpers, g.kind)
         };
+        let name = kind.unwrap_or(maker.name);
         let Some(lines) = lines else { continue };
         let cand = format!("{src}{}\n", lines.join("\n"));
         // HISTORY_LAST=F: each program tried is written to F first, so one that never ends is there
@@ -2784,15 +2826,12 @@ pub fn run_kinds(seed: u64, len: usize, kinds: u64) -> Run {
         let taken = std::mem::take(&mut cache);
         let (verdict, out) = match catch_unwind(AssertUnwindSafe(|| crate::run(&cand, opts(&labels), taken)))
         {
-            Err(p) => (
-                Verdict::Fail(format!("{}: panic: {}", maker.name, panic_text(p))),
-                None,
-            ),
+            Err(p) => (Verdict::Fail(format!("{}: panic: {}", name, panic_text(p))), None),
             Ok((run, c)) => {
                 let v = match run.errors.first() {
-                    Some(e) => classify(maker.name, e),
+                    Some(e) => classify(name, e),
                     None => match c.stages().last() {
-                        Some(s) if c.stages().count() > before || before == 0 => valid_solids(maker.name, s),
+                        Some(s) if c.stages().count() > before || before == 0 => valid_solids(name, s),
                         _ => Verdict::Ok,
                     },
                 };
@@ -2806,7 +2845,7 @@ pub fn run_kinds(seed: u64, len: usize, kinds: u64) -> Run {
         }
         match verdict {
             Verdict::Ok => {
-                tried.push((maker.name, None));
+                tried.push((name, None));
                 src = cand;
                 built += 1;
                 st.labels = labels;
@@ -2817,11 +2856,11 @@ pub fn run_kinds(seed: u64, len: usize, kinds: u64) -> Run {
                 body = run.body;
             }
             Verdict::Refused(why) => {
-                tried.push((maker.name, Some(why.clone())));
+                tried.push((name, Some(why.clone())));
                 refused.push((why, cand));
             }
             Verdict::Fail(why) => {
-                tried.push((maker.name, Some(why.clone())));
+                tried.push((name, Some(why.clone())));
                 fails.push((why, cand));
             }
         }

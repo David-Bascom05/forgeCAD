@@ -2,7 +2,7 @@
 //! features that combine (`union`, `subtract`, `intersect(.., tools:)`, `combine`), split,
 //! split faces, move and copy bodies. A body is named by the feature that made it.
 
-use crate::builtins::{ANG, Args, LEN, axis_of, dir_of, not_in_sketch, plane_of};
+use crate::builtins::{ANG, Args, LEN, axis_of, dir_of, not_in_sketch, plane_of, point_of};
 use crate::eval::{Eval, R, Value};
 use crate::feat_error::FeatError;
 use crate::syntax::{Arg, Span};
@@ -234,7 +234,7 @@ pub fn move_body(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) ->
             .collect::<Result<Vec<Step>, Ty>>()
             .map_err(|found| crate::error::Error::WrongType {
                 span: a.span("moves"),
-                what: "motions (slide, spin, place)",
+                what: "motions (slide, spin, place, scale)",
                 want: Ty::Motion,
                 found,
             })?,
@@ -245,7 +245,7 @@ pub fn move_body(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) ->
         o => {
             return Err(crate::error::Error::WrongType {
                 span: a.span("moves"),
-                what: "motions (slide, spin, place)",
+                what: "motions (slide, spin, place, scale)",
                 want: Ty::Motion,
                 found: o.ty(),
             });
@@ -259,11 +259,13 @@ pub fn move_body(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) ->
     Ok(feat(id, name, idx, hid, None))
 }
 
-/// `slide(along: DIR, by: L)`, `spin(about: AXIS, by: A)`, `place(PLANE)` (world to its frame).
+/// `slide(along: DIR, by: L)`, `spin(about: AXIS, by: A)`, `place(PLANE)` (world to its frame),
+/// `scale(about: POINT, by: k)` (uniformly, k a finite ratio > 0: a similarity, the body's faces
+/// and names kept).
 pub fn motion(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
     let names: &[&'static str] = match name {
         "slide" => &["along", "by"],
-        "spin" => &["about", "by"],
+        "spin" | "scale" => &["about", "by"],
         _ => &["on"],
     };
     let a = Args::bind(ev, name, names, args, span)?;
@@ -288,6 +290,25 @@ pub fn motion(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<
                 axis: d.get(),
                 angle: by.v,
             }
+        }
+        "scale" => {
+            let about = point_of(ev, a.req("about")?, a.span("about"))?;
+            if !(about.x.is_finite() && about.y.is_finite() && about.z.is_finite()) {
+                return Err(crate::error::Error::BadValue {
+                    span: a.span("about"),
+                    what: "a scale's centre (a finite point)",
+                    value: about.x,
+                });
+            }
+            let k = a.req_num("by", &[crate::values::Dim::Ratio, crate::values::Dim::Count])?;
+            if !(k.v.is_finite() && k.v > 0.0) {
+                return Err(crate::error::Error::BadValue {
+                    span: a.span("by"),
+                    what: "a scale factor (finite and more than 0)",
+                    value: k.v,
+                });
+            }
+            Step::Scale { about, k: k.v }
         }
         _ => Step::Frame(plane_of(ev, a.req("on")?, a.span("on"), "on")?),
     };

@@ -3,6 +3,7 @@ import ForgeExact.Regular
 import ForgeExact.Flat
 import ForgeExact.SnapSym
 import ForgeExact.RefFacts
+import ForgeExact.Similar
 
 /-!
 # Only the standard axioms
@@ -47,3 +48,13 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.Snap.rep_sym
   ForgeExact.RefFacts.step_keeps_sign
   ForgeExact.RefFacts.step_leaves_plane
+  ForgeExact.Similar.Homeo.reg_img
+  ForgeExact.Similar.Homeo.reg_combine_img
+  ForgeExact.Similar.scaleHomeo
+  ForgeExact.Similar.scaled_solid
+  ForgeExact.Similar.vol6_scale
+  ForgeExact.Similar.varea2_scale
+  ForgeExact.Similar.area2_scale
+  ForgeExact.Similar.vol6_shift
+  ForgeExact.Similar.mom24_scale
+  ForgeExact.Similar.centroid_scale

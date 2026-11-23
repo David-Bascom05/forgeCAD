@@ -186,9 +186,16 @@ pub fn placements(features: History<'_>, i: usize, layout: &Layout) -> Result<Ve
         .collect())
 }
 
-/// A body move's steps as the affine map they make (as `placements` gives it).
+/// A body move's steps as the affine map they make (as `placements` gives it); a scale's columns
+/// are k times a rotation's.
 pub fn body_motion(steps: &[crate::Step]) -> [Point3; 4] {
-    columns(&crate::bodies::motion(steps))
+    if let [crate::bodies::Piece::Rigid(f)] = crate::bodies::pieces(steps)[..] {
+        return columns(&Motion::Rigid(f));
+    }
+    let o = Point3::ORIGIN;
+    let at = crate::bodies::step_point(steps, o);
+    let col = |v: Vec3| Point3::ORIGIN + (crate::bodies::step_point(steps, o + v) - at);
+    [col(Vec3::X), col(Vec3::Y), col(Vec3::Z), at]
 }
 
 fn columns(m: &Motion) -> [Point3; 4] {

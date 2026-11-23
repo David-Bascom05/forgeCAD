@@ -80,6 +80,13 @@ pub enum Step {
     },
     /// World to this frame.
     Frame(Frame),
+    /// Uniformly by `k` (finite, > 0) about `about`: p ↦ about + k (p − about), a similarity. The
+    /// body keeps its faces, edges and names; each lies on the image of its surface or curve
+    /// (forge_topo::similar).
+    Scale {
+        about: Point3,
+        k: f64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -105,6 +112,8 @@ pub enum BodyError {
         name: Name,
     },
     Unsupported(&'static str),
+    /// A scale's factor is not finite and > 0, or its centre not finite.
+    Scale(forge_topo::similar::ScaleError),
 }
 
 /// Whether a history makes or works on more than one body.
@@ -180,8 +189,63 @@ pub(crate) fn one(mut solids: Vec<Solid>) -> Result<Body, RegenError> {
     }
 }
 
-/// The rigid motion the steps make, applied in order.
-pub(crate) fn motion(steps: &[Step]) -> Motion {
+/// A run of a body move's steps: the rigid motion consecutive rigid steps make, or one scale.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Piece {
+    Rigid(Frame),
+    Scale { about: Point3, k: f64 },
+}
+
+impl Piece {
+    pub(crate) fn point(&self, p: Point3) -> Point3 {
+        match *self {
+            Piece::Rigid(f) => f.point_to_world(p),
+            Piece::Scale { about, k } => forge_geom::similar::point(p, about, k),
+        }
+    }
+    pub(crate) fn bbox(&self, b: &Box3) -> Box3 {
+        match *self {
+            Piece::Rigid(f) => Motion::Rigid(f).bbox(b),
+            Piece::Scale { about, k } => forge_geom::similar::boxed(*b, about, k),
+        }
+    }
+}
+
+/// The steps as pieces, in order: each run of rigid steps composed as `motion` composes them (a
+/// move with no scale is one piece, the very frame it always was), each scale on its own.
+pub(crate) fn pieces(steps: &[Step]) -> Vec<Piece> {
+    let mut out = vec![];
+    let mut run = 0;
+    for (j, s) in steps.iter().enumerate() {
+        if let Step::Scale { about, k } = *s {
+            if j > run {
+                out.push(Piece::Rigid(rigid(&steps[run..j])));
+            }
+            out.push(Piece::Scale { about, k });
+            run = j + 1;
+        }
+    }
+    if run < steps.len() || steps.is_empty() {
+        out.push(Piece::Rigid(rigid(&steps[run..])));
+    }
+    out
+}
+
+/// The image of a point under the steps.
+pub(crate) fn step_point(steps: &[Step], p: Point3) -> Point3 {
+    pieces(steps).iter().fold(p, |p, m| m.point(p))
+}
+
+/// A box holding the image of `b` under the steps.
+pub(crate) fn step_box(steps: &[Step], b: &Box3) -> Box3 {
+    if b.is_empty() {
+        return *b;
+    }
+    pieces(steps).iter().fold(*b, |b, m| m.bbox(&b))
+}
+
+/// The rigid motion rigid steps make, applied in order.
+fn rigid(steps: &[Step]) -> Frame {
     let mut m = Frame::WORLD;
     for s in steps {
         let f = match *s {
@@ -194,10 +258,38 @@ pub(crate) fn motion(steps: &[Step]) -> Motion {
                 None => Frame::WORLD,
             },
             Step::Frame(f) => f,
+            Step::Scale { .. } => unreachable!("a scale is a piece of its own"),
         };
         m = f.compose(&m);
     }
-    Motion::Rigid(m)
+    m
+}
+
+/// `b` moved by the steps' pieces in order, every name passed through `rename` once.
+fn moved_by(b: &Body, ps: &[Piece], rename: impl Fn(Name) -> Name, i: usize) -> Result<Body, RegenError> {
+    let pe = |error: PatternError| RegenError::Pattern { feature: i, error };
+    let mut out: Option<Body> = None;
+    let mut named = false;
+    for p in ps {
+        let from = out.as_ref().unwrap_or(b);
+        let next = match *p {
+            Piece::Rigid(f) if !named => {
+                named = true;
+                moved(from, &Motion::Rigid(f), &rename).map_err(pe)?
+            }
+            Piece::Rigid(f) => moved(from, &Motion::Rigid(f), |n| n).map_err(pe)?,
+            Piece::Scale { about, k } => {
+                forge_topo::similar::scaled(from, about, k).map_err(|e| bad(i)(BodyError::Scale(e)))?
+            }
+        };
+        out = Some(next);
+    }
+    let out = out.unwrap_or_else(|| b.clone());
+    if named {
+        return Ok(out);
+    }
+    // only scales: the names passed through `rename` by a move that changes nothing else
+    moved(&out, &Motion::Rigid(Frame::WORLD), &rename).map_err(pe)
 }
 
 /// Feature `i` of a history applied to the bodies features `..i` left: `regenerate_solids`
@@ -836,18 +928,32 @@ fn body_feature(
             }
         }
         BodyFeature::Move { steps, copy } => {
-            let m = motion(steps);
+            let ps = pieces(steps);
             let on = targets(&ids(solids), p, i)?;
             let pe = |error: PatternError| RegenError::Pattern { feature: i, error };
-            if *copy {
+            if let [Piece::Rigid(f)] = ps[..] {
+                // no scale: the one rigid motion, as a move always was
+                let m = Motion::Rigid(f);
+                if *copy {
+                    let [k] = on[..] else {
+                        return Err(bad(BodyError::NotOne));
+                    };
+                    let body = moved(&solids[k].body.compact(), &m, |n| salted(n, "copy", me)).map_err(pe)?;
+                    solids.push(Solid { id: i, body });
+                } else {
+                    for k in on {
+                        solids[k].body = moved(&solids[k].body.compact(), &m, |n| n).map_err(pe)?;
+                    }
+                }
+            } else if *copy {
                 let [k] = on[..] else {
                     return Err(bad(BodyError::NotOne));
                 };
-                let body = moved(&solids[k].body.compact(), &m, |n| salted(n, "copy", me)).map_err(pe)?;
+                let body = moved_by(&solids[k].body.compact(), &ps, |n| salted(n, "copy", me), i)?;
                 solids.push(Solid { id: i, body });
             } else {
                 for k in on {
-                    solids[k].body = moved(&solids[k].body.compact(), &m, |n| n).map_err(pe)?;
+                    solids[k].body = moved_by(&solids[k].body.compact(), &ps, |n| n, i)?;
                 }
             }
         }
