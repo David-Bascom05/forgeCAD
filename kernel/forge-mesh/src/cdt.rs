@@ -248,6 +248,8 @@ impl Mesh {
 
     /// None only if the point is outside every triangle, which the enclosing super-triangle rules out.
     fn locate(&mut self, p: Point2) -> Option<Location> {
+        // every point the predicates see is located first, or is a super-triangle corner
+        debug_assert!(in_range(p), "{p:?} is past the predicates' range");
         let mut t = self.last;
         let limit = 4 * self.tris.len() + 64;
         let mut step = 0;
@@ -1343,6 +1345,10 @@ fn within<R: Refine + ?Sized>(
     pts.push(Point2::new(c.x - m, c.y - m));
     pts.push(Point2::new(c.x + m, c.y - m));
     pts.push(Point2::new(c.x, c.y + m));
+    debug_assert!(
+        in_range(pts[0]) && in_range(pts[1]) && in_range(pts[2]),
+        "{lo:?} {hi:?}"
+    );
     let mut mesh = Mesh {
         pts,
         tris: vec![Tri {
@@ -1412,6 +1418,17 @@ fn within<R: Refine + ?Sized>(
         },
         settled,
     ))
+}
+
+/// The largest coordinate the predicates are given: the proofs of orient2d and incircle
+/// (verify/aeneas/forge-math) hold for finite inputs whose products do not overflow, and
+/// incircle multiplies four differences. 2^200 leaves room for the super-triangle (100 times
+/// the points' extent) and every error term. A part in millimetres is some 2^180 inside it.
+pub const RANGE: f64 = 1.606_938_044_258_990_3e60;
+
+/// Whether p is finite and within `RANGE` (a debug check: the predicates' precondition).
+fn in_range(p: Point2) -> bool {
+    p.x.abs() <= RANGE && p.y.abs() <= RANGE
 }
 
 /// f64::min as the native build has it for numbers (here never a NaN): the second of two equals,
@@ -1850,6 +1867,11 @@ mod tests {
     }
 
     /// A boundary's cost counts against a file's budget: past it, a clean error.
+    #[test]
+    fn range_is_two_to_the_two_hundred() {
+        assert_eq!(RANGE, 2f64.powi(200));
+    }
+
     #[test]
     fn a_fault_reads_as_its_text_did() {
         assert_eq!(
