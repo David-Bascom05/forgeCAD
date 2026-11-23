@@ -117,26 +117,27 @@ All of these are in Axioms.lean's standard-axioms check, with no `sorry`.
 
 | source | agree | wrong | refused | ambiguous | out of scope |
 |---|--:|--:|--:|--:|--:|
-| degenerate pairs (279: plane/cylinder/cone/sphere × configs × Add/Cut/Keep) | 251 | 14 | 3 | 11 | 0 |
+| degenerate pairs (279: plane/cylinder/cone/sphere × configs × Add/Cut/Keep) | 248 | 9 | 3 | 19 | 0 |
 | scoreboard families (36 × 4 seeds, convex-quadric sub-histories) | 86 | 4 | 0 | 5 | 21 |
 | forge_lang programs (300, extrude/revolve/ball/hole/pattern, convex-quadric sub-history) | 200 | 0 | 0 | 0 | 100 |
-| curved band (279 pairs × tool moved ±0.9, 3 LINEAR on x, y, z = 2 511) | 2 197 | 61 | 102 | 151 | 0 |
+| curved band (279 pairs × tool moved ±0.9, 3 LINEAR on x, y, z = 2 511) | 2 191 | 50 | 102 | 168 | 0 |
 
-The band row is from the run before the apex rule change, so a few of its "wrong" are apex
-contacts that are now ambiguous. The sequential and n-ary paths agree with each other except in
-the band (n-ary 2 212 / 61 / 87 / 151). Out of scope:
+The sequential and n-ary paths agree with each other except in the band (n-ary 2 206 / 50 / 87 /
+168). The families and lang rows are from the run before the sampled apex check stopped deciding
+verdicts; one family "wrong" (degen_cone_sphere/2, an apex contact) is ambiguous under the final
+rules. Out of scope:
 - 90 cases where the reference took over 30 s (many-carrier family parts; the octree's rational
   arithmetic is the cost);
 - 82 where the history combines before any part exists;
 - 40 with several bodies;
 - 30 with procedural faces.
 
-Under the strict rule, the degenerate pairs are judged alike except that near touches are
-ambiguous.
+Under the strict rule the degenerate pairs give 244 agree / 9 wrong / 3 refused / 23 ambiguous:
+the four extra ambiguous are near touches, which the snap rule calls slivers.
 
 ## Bugs (each a repro at the end of tests/repros.rs)
 
-### Point contacts built instead of ZeroThickness: 14 degenerate pairs and their band variants
+### Point contacts built instead of ZeroThickness: 9 degenerate pairs (14 before the apex rule) and their band variants
 
 The union or difference meets itself at one point. By §6 the result is non-manifold, and the
 kernel must refuse with ZeroThickness, as it must for the flat `cube_on_a_corner_vertex`. It
