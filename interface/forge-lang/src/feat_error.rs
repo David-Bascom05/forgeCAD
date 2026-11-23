@@ -99,6 +99,9 @@ pub enum TextProblem {
     NoLineSpacing,
     /// Nothing of the string is drawn (it is empty, or only spaces).
     Empty,
+    /// The glyphs of these two characters (places in the string) cross or touch: set them apart
+    /// (`spacing:`, or another font or string).
+    GlyphsMeet { a: usize, b: usize },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -208,6 +211,9 @@ impl FeatError {
                 TextProblem::Font(why) => format!("the font: {why}"),
                 TextProblem::NoLineSpacing => "several lines, and the font gives no line spacing".into(),
                 TextProblem::Empty => "nothing of the text is drawn (it is empty, or only spaces)".into(),
+                TextProblem::GlyphsMeet { a, b } => format!(
+                    "the glyphs of characters {a} and {b} of the text cross or touch: set them apart with spacing: (a length added after each character)"
+                ),
             },
             File { file, problem, .. } => match problem {
                 FileProblem::Missing => format!("{file}: not found beside the part file"),
@@ -264,6 +270,13 @@ impl FeatError {
                     TextProblem::Font(why) => vec![p("Font"), ("why", s(why))],
                     TextProblem::NoLineSpacing => vec![p("NoLineSpacing")],
                     TextProblem::Empty => vec![p("Empty")],
+                    TextProblem::GlyphsMeet { a, b } => {
+                        vec![
+                            p("GlyphsMeet"),
+                            ("a", (*a as f64).into()),
+                            ("b", (*b as f64).into()),
+                        ]
+                    }
                 }
             }
             File { file, problem, .. } => vec![

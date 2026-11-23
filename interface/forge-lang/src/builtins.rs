@@ -1664,10 +1664,13 @@ pub(crate) fn profile_of(
 /// A profile argument's sketch, its regions, and the entities they were taken from.
 type Regions = (Rc<RefCell<Sk>>, Vec<forge_ops::Profile>, Vec<EntityId>);
 
-/// The regions a list of loops of one sketch (a sketch text) bound, only they.
+/// The regions a list of loops of one sketch (a sketch text, a loop per character) bound, only
+/// they: each element's regions, the union of its parts' (a composite glyph's components may
+/// overlap); different elements never meet.
 pub(crate) fn profiles_of(xs: &[Value], span: Span) -> R<Regions> {
     let mut sk: Option<Rc<RefCell<Sk>>> = None;
     let mut ids = Vec::new();
+    let mut elements: Vec<&[EntityId]> = Vec::new();
     for x in xs.iter() {
         match x {
             Value::Ent(e) if !e.loop_segs.is_empty() => {
@@ -1682,6 +1685,7 @@ pub(crate) fn profiles_of(xs: &[Value], span: Span) -> R<Regions> {
                 }
                 sk = Some(e.sk.clone());
                 ids.extend(e.loop_segs.iter().copied());
+                elements.push(&e.loop_segs);
             }
             o => {
                 return Err(Error::WrongType {
@@ -1699,7 +1703,7 @@ pub(crate) fn profiles_of(xs: &[Value], span: Span) -> R<Regions> {
         want: Ty::Sketch,
         found: Ty::List,
     })?;
-    let ps = sk.borrow().profiles_among(&ids, span)?;
+    let ps = sk.borrow().profiles_grouped(&elements, span)?;
     Ok((sk, ps, ids))
 }
 

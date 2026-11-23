@@ -29,6 +29,8 @@ pub struct Placed {
     pub occurrence: usize,
     /// Its closed contours, in font units, placed.
     pub contours: Vec<Vec<Seg>>,
+    /// Each contour's part of the glyph (`Font::outline_parts`): a composite's component.
+    pub parts: Vec<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,8 +46,9 @@ pub enum LayoutError {
 }
 
 /// Sets `text` in `font`: the characters with an outline (spaces and other blank glyphs have
-/// none) in string order.
-pub fn lay_out(font: &Font, text: &str, align: Align) -> Result<Vec<Placed>, LayoutError> {
+/// none) in string order. `tracking` (font units) is added after every character but a line's
+/// last.
+pub fn lay_out(font: &Font, text: &str, align: Align, tracking: f64) -> Result<Vec<Placed>, LayoutError> {
     let pitch = font.ascender - font.descender + font.line_gap;
     if text.contains('\n') && pitch <= 0.0 {
         return Err(LayoutError::NoLineSpacing);
@@ -70,9 +73,9 @@ pub fn lay_out(font: &Font, text: &str, align: Align) -> Result<Vec<Placed>, Lay
                 return Err(LayoutError::NoGlyph { index, ch: c });
             }
             if let Some(p) = prev {
-                x += font.kerning(p, g);
+                x += font.kerning(p, g) + tracking;
             }
-            let contours = font.outline(g).map_err(LayoutError::Font)?;
+            let contours = font.outline_parts(g).map_err(LayoutError::Font)?;
             if !contours.is_empty() {
                 line_out.push((index, c, x, contours));
             }
@@ -96,9 +99,10 @@ pub fn lay_out(font: &Font, text: &str, align: Align) -> Result<Vec<Placed>, Lay
                 }
             };
             let mv = |p: Point2| Point2::new(p.x + at + shift, p.y + y);
+            let parts = contours.iter().map(|c| c.0).collect();
             let contours = contours
                 .iter()
-                .map(|c| {
+                .map(|(_, c)| {
                     c.iter()
                         .map(|s| match *s {
                             Seg::Line(a, b) => Seg::Line(mv(a), mv(b)),
@@ -113,6 +117,7 @@ pub fn lay_out(font: &Font, text: &str, align: Align) -> Result<Vec<Placed>, Lay
                 ch,
                 occurrence,
                 contours,
+                parts,
             });
         }
     }

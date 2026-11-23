@@ -123,7 +123,8 @@ mod tests {
                     let _ = f.outline(g);
                     let _ = f.advance(g);
                 }
-                let _ = forge_font::layout::lay_out(&f, "Fuzz 0\nSecond", forge_font::layout::Align::Center);
+                let _ =
+                    forge_font::layout::lay_out(&f, "Fuzz 0\nSecond", forge_font::layout::Align::Center, 7.0);
             }
         });
         assert!(shipped("Source Sans 3", true, false).is_none());

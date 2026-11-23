@@ -169,7 +169,7 @@ Text in a sketch:
 
 ```
 label = text(STRING | [LINE, ..], at: (x, y), size: s, font: "Open Sans", bold: false, italic: false,
-             align: "left"|"center"|"right", angle: A)
+             align: "left"|"center"|"right", angle: A, spacing: 0)
 raised = extrude(top.label, h)        every glyph region; cut(top.label, d) engraves
 raised.side(top.label[k])             the walls of the k-th drawn character (blanks draw nothing)
 raised.end  raised.start              every glyph's cap
@@ -183,10 +183,14 @@ ascender − descender + line gap below the one before (a string holds no line b
 `font:` is a shipped family (Open Sans 1.10: Regular, Bold; Source Sans 3:
 Regular, CFF outlines; SIL OFL 1.1) or a .ttf/.otf file beside the part, which is its one face
 (`bold`/`italic` must be its own). The text's regions are only its own glyphs' (whatever else
-the sketch draws): each outside contour with the counters inside it as holes, which loop lies
-inside which decided exactly. Glyph contours that cross or touch (some fonts' accented
-composites, neighbours kerned into each other) are `SketchProfile`, never joined. A missing
-glyph, family or style, or nothing drawn, is `Text` (`NoGlyph`, `NoFamily`, `NoStyle`, `Empty`).
+the sketch draws): a glyph's region is the union of its parts' (a composite glyph's components:
+Å is A and a ring, Ç is C and a cedilla, overlapping), each part's being its outside contours
+with the counters inside them as holes, which loop lies inside which decided exactly. Contours
+that cross within one part, or are drawn over each other by two characters (crossing or
+touching: neighbours kerned into each other), are refused: within a part `SketchProfile`, between
+characters `Text GlyphsMeet` naming them, which `spacing: d` (a length added after each character)
+sets apart. A missing glyph, family or style, or nothing drawn, is `Text` (`NoGlyph`, `NoFamily`,
+`NoStyle`, `Empty`).
 Names: segment s of contour c of the n-th `ch` of the string is `label.ch#n.c.s`, so a glyph's
 faces keep their names while other characters come and go, and when the text moves, turns or
 resizes; the extrude of several regions names each region's caps by its outline's least

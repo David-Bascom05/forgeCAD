@@ -301,8 +301,35 @@ impl Font {
             &mut Vec::new(),
             &mut budget,
             &mut out,
+            &mut Vec::new(),
         )?;
         Ok(out)
+    }
+
+    /// `outline`, each contour with the part of the glyph it belongs to: a composite glyph's
+    /// top-level component (0, 1, ..), however its components nest; a simple glyph's and a CFF
+    /// glyph's are all part 0.
+    pub fn outline_parts(&self, g: u16) -> Result<Vec<(usize, Vec<Seg>)>, FontError> {
+        if let Outlines::Cff(..) = &self.outlines {
+            return Ok(self.outline(g)?.into_iter().map(|c| (0, c)).collect());
+        }
+        let (mut out, mut marks) = (Vec::new(), Vec::new());
+        let mut budget = BUDGET;
+        self.outline_into(
+            g,
+            [1.0, 0.0, 0.0, 1.0],
+            (0.0, 0.0),
+            &mut Vec::new(),
+            &mut budget,
+            &mut out,
+            &mut marks,
+        )?;
+        // marks: where each top-level component's contours start
+        Ok(out
+            .into_iter()
+            .enumerate()
+            .map(|(k, c)| (marks.iter().filter(|&&m| m <= k).count().saturating_sub(1), c))
+            .collect())
     }
 
     fn glyph_range(&self, g: u16) -> Result<(usize, usize), FontError> {
@@ -333,6 +360,7 @@ impl Font {
     }
 
     /// Appends glyph g's contours, mapped by the matrix m and the offset.
+    #[allow(clippy::too_many_arguments)]
     fn outline_into(
         &self,
         g: u16,
@@ -341,6 +369,7 @@ impl Font {
         path: &mut Vec<u16>,
         budget: &mut usize,
         out: &mut Vec<Vec<Seg>>,
+        marks: &mut Vec<usize>,
     ) -> Result<(), FontError> {
         if path.len() > 8 {
             return Err(FontError::Unsupported("composite glyphs nested too deep"));
@@ -462,7 +491,11 @@ impl Font {
                 m[1] * s[2] + m[3] * s[3],
             ];
             let at = map(dx, dy);
-            self.outline_into(part, mm, (at.x, at.y), path, budget, out)?;
+            // a top-level component's contours start here
+            if path.len() == 1 {
+                marks.push(out.len());
+            }
+            self.outline_into(part, mm, (at.x, at.y), path, budget, out, marks)?;
             if flags & 0x20 == 0 {
                 path.pop();
                 return Ok(());
@@ -818,6 +851,23 @@ mod tests {
         ))
         .expect("parses");
         assert!(f.outline(f.glyph('A')).is_err());
+    }
+
+    #[test]
+    fn composite_parts_are_told_apart() {
+        let f = Font::parse(hostile()).expect("parses");
+        let parts = f.outline_parts(f.glyph('a')).expect("two bars");
+        assert_eq!(parts.iter().map(|p| p.0).collect::<Vec<_>>(), vec![0, 1]);
+        assert_eq!(
+            parts.into_iter().map(|p| p.1).collect::<Vec<_>>(),
+            f.outline(f.glyph('a')).unwrap()
+        );
+        // nested composites: '2' is 64 copies of '1', each 64 bars: 64 top-level parts
+        let two = f.outline_parts(f.glyph('2')).expect("4096 bars");
+        assert_eq!(two.len(), 4096);
+        assert_eq!(two.last().unwrap().0, 63);
+        let simple = f.outline_parts(f.glyph('0')).expect("a bar");
+        assert_eq!(simple.iter().map(|p| p.0).collect::<Vec<_>>(), vec![0]);
     }
 
     /// A font with composites (plain, self-holding, exponentially nested, flattened) and kerning.
