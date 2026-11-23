@@ -6,7 +6,8 @@
 //! Types only, plus `ledger_wf` (`LedgerWF` v2). Written for Aeneas, like the v1 core: while
 //! loops, no closures, no iterators, no maps.
 
-use crate::{BodyId, FaceId, Sgn};
+use crate::union_find::Uf;
+use crate::{BodyId, FaceId, Rule, Sgn, apply_rule};
 
 /// A facet: a component of a near face's relative interior minus its cut set.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -84,14 +85,12 @@ pub struct MetricLedger {
     pub enclosed: Vec<RoomId>,
 }
 
-/// A face of the result (`OutFaceI`).
+/// A face of the result (`OutFaceI`): its facets, carrier and sense. Naming is the write's.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OutFace {
     pub facets: Vec<FacetId>,
     pub plane: u32,
     pub orient: Sgn,
-    /// The input face its first facet lies in (the first in arena order): its name.
-    pub origin: FaceId,
 }
 
 /// An edge of the result (`OutEdgeI`): a run of edges between one pair of faces.
@@ -261,4 +260,532 @@ pub fn ledger_wf(l: &Ledger) -> bool {
         f += 1;
     }
     ok
+}
+
+const NONE: u32 = u32::MAX;
+
+/// A Csr row's bounds.
+fn row(c: &Csr, k: usize) -> (usize, usize) {
+    (c.start[k] as usize, c.start[k + 1] as usize)
+}
+
+/// `IncLedger.bodyOf` (`getD f 0`).
+fn body_of(l: &Ledger, f: FaceId) -> u32 {
+    if (f.0 as usize) < l.face_body.len() {
+        l.face_body[f.0 as usize].0
+    } else {
+        0
+    }
+}
+
+/// `IncLedger.clsOf` (`getD f 0`).
+fn cls_of(l: &Ledger, f: FaceId) -> u32 {
+    if (f.0 as usize) < l.face_class.len() {
+        l.face_class[f.0 as usize]
+    } else {
+        0
+    }
+}
+
+/// `splitOk`: every piece a listed facet, of its face's carrier, in a body that exists, with two
+/// distinct rooms; no facet inside two faces of one body.
+fn split_ok(l: &Ledger) -> bool {
+    let nf = l.facet_class.len();
+    let nb = l.nb as usize;
+    // per (facet, body): the face it is a piece of, first seen
+    let mut first = vec![NONE; nf * nb];
+    let mut ok = l.facet_rooms.len() == nf;
+    let mut k = 0;
+    while ok && k < l.pieces.len() {
+        let (c, f) = l.pieces[k];
+        let b = body_of(l, f);
+        ok = (c.0 as usize) < nf
+            && l.facet_class[c.0 as usize] == cls_of(l, f)
+            && b < l.nb
+            && l.facet_rooms[c.0 as usize].0 != l.facet_rooms[c.0 as usize].1;
+        if ok {
+            let at = c.0 as usize * nb + b as usize;
+            if first[at] == NONE {
+                first[at] = f.0;
+            } else {
+                ok = first[at] == f.0;
+            }
+        }
+        k += 1;
+    }
+    ok
+}
+
+/// Stages 1–3's tables: per facet and body `isPieceOf`, the rooms in first-seen order (`rooms`),
+/// and per room its position there.
+struct Split {
+    piece_of: Vec<bool>,
+    rooms: Vec<u32>,
+    room_pos: Vec<u32>,
+}
+
+fn split(l: &Ledger) -> Split {
+    let nf = l.facet_class.len();
+    let nb = l.nb as usize;
+    let mut piece_of = vec![false; nf * nb];
+    let mut k = 0;
+    while k < l.pieces.len() {
+        let (c, f) = l.pieces[k];
+        let b = body_of(l, f) as usize;
+        if b < nb {
+            piece_of[c.0 as usize * nb + b] = true;
+        }
+        k += 1;
+    }
+    let mut room_pos = vec![NONE; l.n_rooms as usize];
+    let mut rooms = Vec::new();
+    let mut f = 0;
+    while f < nf {
+        let (p, m) = l.facet_rooms[f];
+        if room_pos[p as usize] == NONE {
+            room_pos[p as usize] = rooms.len() as u32;
+            rooms.push(p);
+        }
+        if room_pos[m as usize] == NONE {
+            room_pos[m as usize] = rooms.len() as u32;
+            rooms.push(m);
+        }
+        f += 1;
+    }
+    Split {
+        piece_of,
+        rooms,
+        room_pos,
+    }
+}
+
+/// Body `i`'s flood over the rooms (positions): joined across every facet not a piece of `i`.
+/// `find T` is the Lean's `head (adjOf (crossings i)) rooms T`.
+fn flood(l: &Ledger, s: &Split, i: usize) -> Uf {
+    let nb = l.nb as usize;
+    let mut uf = Uf::new(s.rooms.len());
+    let mut f = 0;
+    while f < l.facet_class.len() {
+        if !s.piece_of[f * nb + i] {
+            let (p, m) = l.facet_rooms[f];
+            uf.union(s.room_pos[p as usize] as usize, s.room_pos[m as usize] as usize);
+        }
+        f += 1;
+    }
+    uf
+}
+
+/// Each flood class's witness, per body: the (room, body) pairs the bridge decides by a ray (its
+/// first member in room order), in body order, then room order.
+pub fn witnesses(l: &Ledger) -> Vec<(RoomId, BodyId)> {
+    let mut out = Vec::new();
+    if split_ok(l) {
+        let s = split(l);
+        let mut i = 0;
+        while i < l.nb as usize {
+            let mut uf = flood(l, &s, i);
+            let mut t = 0;
+            while t < s.rooms.len() {
+                if uf.find(t) == t {
+                    out.push((RoomId(s.rooms[t]), BodyId(i as u32)));
+                }
+                t += 1;
+            }
+            i += 1;
+        }
+    }
+    out
+}
+
+/// `memb i T` per body and room position: the witness answer of its flood head.
+fn membership(l: &Ledger, s: &Split) -> Vec<Vec<bool>> {
+    let nb = l.nb as usize;
+    let nr = l.n_rooms as usize;
+    let mut inside = vec![false; nr * nb];
+    let mut k = 0;
+    while k < l.inside.len() {
+        let (r, b) = l.inside[k];
+        if (b.0 as usize) < nb && (r.0 as usize) < nr {
+            inside[r.0 as usize * nb + b.0 as usize] = true;
+        }
+        k += 1;
+    }
+    let mut memb = Vec::new();
+    let mut i = 0;
+    while i < nb {
+        let mut uf = flood(l, s, i);
+        let mut row = Vec::new();
+        let mut t = 0;
+        while t < s.rooms.len() {
+            let h = uf.find(t);
+            row.push(inside[s.rooms[h] as usize * nb + i]);
+            t += 1;
+        }
+        memb.push(row);
+        i += 1;
+    }
+    memb
+}
+
+/// The work of stages 4–7 over the keep table: the result facets in facet order, each one's
+/// position there (or NONE) and sense.
+struct Assembled {
+    result: Vec<u32>,
+    rpos: Vec<u32>,
+    orient: Vec<Sgn>,
+}
+
+/// **The A8 core** (`coreI`): split check, classify check, keep per room, then the touch rule,
+/// the empty test and unify. One pass, no retries.
+pub fn core(l: &Ledger, rule: &Rule) -> Outcome {
+    if !split_ok(l) {
+        Outcome::Refused(Refusal::SplitCrossed)
+    } else {
+        let s = split(l);
+        let memb = membership(l, &s);
+        let nb = l.nb as usize;
+        let nf = l.facet_class.len();
+        // 3. classify: a piece of body i has i's membership differ across it
+        let mut ok = true;
+        let mut f = 0;
+        while ok && f < nf {
+            let (p, m) = l.facet_rooms[f];
+            let (pp, mp) = (s.room_pos[p as usize] as usize, s.room_pos[m as usize] as usize);
+            let mut i = 0;
+            while ok && i < nb {
+                ok = !s.piece_of[f * nb + i] || memb[i][pp] != memb[i][mp];
+                i += 1;
+            }
+            f += 1;
+        }
+        if !ok {
+            Outcome::Refused(Refusal::InconsistentClassification)
+        } else {
+            // 4. keep, per room position
+            let mut keep = Vec::with_capacity(s.rooms.len());
+            let mut t = 0;
+            while t < s.rooms.len() {
+                let mut mv = Vec::with_capacity(nb);
+                let mut i = 0;
+                while i < nb {
+                    mv.push(memb[i][t]);
+                    i += 1;
+                }
+                keep.push(apply_rule(rule, &mv));
+                t += 1;
+            }
+            core_k(l, &s, &keep)
+        }
+    }
+}
+
+/// 5–7 on a keep table (per room position).
+fn core_k(l: &Ledger, s: &Split, keep: &[bool]) -> Outcome {
+    let nf = l.facet_class.len();
+    // 5. assemble
+    let mut a = Assembled {
+        result: Vec::new(),
+        rpos: vec![NONE; nf],
+        orient: Vec::new(),
+    };
+    let mut f = 0;
+    while f < nf {
+        let (p, m) = l.facet_rooms[f];
+        let kp = keep[s.room_pos[p as usize] as usize];
+        let km = keep[s.room_pos[m as usize] as usize];
+        if kp != km {
+            a.rpos[f] = a.result.len() as u32;
+            a.result.push(f as u32);
+            a.orient.push(if km { Sgn::Pos } else { Sgn::Neg });
+        }
+        f += 1;
+    }
+    // 6. the touch rule: edges (more than two result wings), then verts (sectors in more than
+    // one fan class); the first bad cell refused
+    let ne = rows(&l.edge_facets.start);
+    let nv = rows(&l.vert_edges.start);
+    let mut bad = Outcome::Empty;
+    let mut found = false;
+    let mut e = 0;
+    while !found && e < ne {
+        if around_e(l, &a, e).len() > 2 {
+            bad = Outcome::Refused(Refusal::ZeroThicknessEdge(EdgeId(e as u32)));
+            found = true;
+        }
+        e += 1;
+    }
+    let mut v = 0;
+    while !found && v < nv {
+        if bad_vert(l, &a, v) {
+            bad = Outcome::Refused(Refusal::ZeroThicknessVert(VertId(v as u32)));
+            found = true;
+        }
+        v += 1;
+    }
+    if found {
+        bad
+    } else if a.result.is_empty() {
+        // 7. empty
+        Outcome::Empty
+    } else {
+        Outcome::Ok(unify(l, &a))
+    }
+}
+
+/// `aroundE`: the result wings round edge `e`, as result positions, in row order.
+fn around_e(l: &Ledger, a: &Assembled, e: usize) -> Vec<u32> {
+    let (lo, hi) = row(&l.edge_facets, e);
+    let mut out = Vec::new();
+    let mut k = lo;
+    while k < hi {
+        let p = a.rpos[l.edge_facets.ids[k] as usize];
+        if p != NONE {
+            out.push(p);
+        }
+        k += 1;
+    }
+    out
+}
+
+/// `aroundV`: the result sectors round vert `v`, as indices into `vert_sectors.sec`.
+fn around_v(l: &Ledger, a: &Assembled, v: usize) -> Vec<usize> {
+    let (lo, hi) = (
+        l.vert_sectors.start[v] as usize,
+        l.vert_sectors.start[v + 1] as usize,
+    );
+    let mut out = Vec::new();
+    let mut k = lo;
+    while k < hi {
+        if a.rpos[l.vert_sectors.sec[k].facet as usize] != NONE {
+            out.push(k);
+        }
+        k += 1;
+    }
+    out
+}
+
+/// `fanRel`: two sectors sharing a bounding edge.
+fn fan_rel(s: Sector, t: Sector) -> bool {
+    s.a == t.a || s.a == t.b || s.b == t.a || s.b == t.b
+}
+
+/// The fan classes of a vert's result sectors (positions in `ar`), joined by `fanRel`.
+fn fans(l: &Ledger, ar: &[usize]) -> Uf {
+    let mut uf = Uf::new(ar.len());
+    let mut p = 0;
+    while p < ar.len() {
+        let mut q = p + 1;
+        while q < ar.len() {
+            if fan_rel(l.vert_sectors.sec[ar[p]], l.vert_sectors.sec[ar[q]]) {
+                uf.union(p, q);
+            }
+            q += 1;
+        }
+        p += 1;
+    }
+    uf
+}
+
+/// `badVert`: the result sectors round `v` in more than one fan class.
+fn bad_vert(l: &Ledger, a: &Assembled, v: usize) -> bool {
+    let ar = around_v(l, a, v);
+    let mut uf = fans(l, &ar);
+    let mut bad = false;
+    let mut p = 1;
+    while !bad && p < ar.len() {
+        bad = uf.find(p) != uf.find(0);
+        p += 1;
+    }
+    bad
+}
+
+/// `xs` with repeats dropped, first occurrences in order.
+fn dedup(xs: &[u32]) -> Vec<u32> {
+    let mut out: Vec<u32> = Vec::new();
+    let mut i = 0;
+    while i < xs.len() {
+        let mut seen = false;
+        let mut j = 0;
+        while !seen && j < out.len() {
+            seen = out[j] == xs[i];
+            j += 1;
+        }
+        if !seen {
+            out.push(xs[i]);
+        }
+        i += 1;
+    }
+    out
+}
+
+/// `sameSetI`.
+fn same_set(a: &[u32], b: &[u32]) -> bool {
+    let mut ok = true;
+    let mut i = 0;
+    while ok && i < a.len() {
+        let mut j = 0;
+        let mut hit = false;
+        while !hit && j < b.len() {
+            hit = b[j] == a[i];
+            j += 1;
+        }
+        ok = hit;
+        i += 1;
+    }
+    let mut j = 0;
+    while ok && j < b.len() {
+        let mut i = 0;
+        let mut hit = false;
+        while !hit && i < a.len() {
+            hit = a[i] == b[j];
+            i += 1;
+        }
+        ok = hit;
+        j += 1;
+    }
+    ok
+}
+
+/// Stage 7, unify: result facets of one carrier and sense sharing an edge are one face (the class's
+/// first in result order is its head); an edge run joins edges with one pair of faces
+/// through verts that are not result verts.
+fn unify(l: &Ledger, a: &Assembled) -> Body {
+    let nr = a.result.len();
+    let ne = rows(&l.edge_facets.start);
+    let nv = rows(&l.vert_edges.start);
+    // joinRel, through each edge's result wings
+    let mut join = Uf::new(nr);
+    let mut e = 0;
+    while e < ne {
+        let ar = around_e(l, a, e);
+        let mut p = 0;
+        while p < ar.len() {
+            let mut q = p + 1;
+            while q < ar.len() {
+                let (c, d) = (ar[p] as usize, ar[q] as usize);
+                if l.facet_class[a.result[c] as usize] == l.facet_class[a.result[d] as usize]
+                    && a.orient[c] == a.orient[d]
+                {
+                    join.union(c, d);
+                }
+                q += 1;
+            }
+            p += 1;
+        }
+        e += 1;
+    }
+    // per result position, its face number (heads numbered in result order)
+    let mut face_of = vec![NONE; nr];
+    let mut faces: Vec<OutFace> = Vec::new();
+    let mut head_of = vec![NONE; nr];
+    let mut p = 0;
+    while p < nr {
+        let r = join.find(p);
+        head_of[p] = a.result[r];
+        if r == p {
+            face_of[p] = faces.len() as u32;
+            faces.push(OutFace {
+                facets: Vec::new(),
+                plane: l.facet_class[a.result[p] as usize],
+                orient: a.orient[p],
+            });
+        } else {
+            face_of[p] = face_of[r];
+        }
+        p += 1;
+    }
+    let mut p = 0;
+    while p < nr {
+        faces[face_of[p] as usize].facets.push(FacetId(a.result[p]));
+        p += 1;
+    }
+    // the faces round each edge and vert, by head facet (`facesAt`)
+    let mut at_e: Vec<Vec<u32>> = Vec::with_capacity(ne);
+    let mut e = 0;
+    while e < ne {
+        let ar = around_e(l, a, e);
+        let mut ks = Vec::with_capacity(ar.len());
+        let mut k = 0;
+        while k < ar.len() {
+            ks.push(head_of[ar[k] as usize]);
+            k += 1;
+        }
+        at_e.push(dedup(&ks));
+        e += 1;
+    }
+    let mut is_out_v = vec![false; nv];
+    let mut verts = Vec::new();
+    let mut v = 0;
+    while v < nv {
+        let ar = around_v(l, a, v);
+        let mut ks = Vec::with_capacity(ar.len());
+        let mut k = 0;
+        while k < ar.len() {
+            let f = l.vert_sectors.sec[ar[k]].facet;
+            ks.push(head_of[a.rpos[f as usize] as usize]);
+            k += 1;
+        }
+        if dedup(&ks).len() >= 3 {
+            is_out_v[v] = true;
+            verts.push(VertId(v as u32));
+        }
+        v += 1;
+    }
+    // edges between two faces, in edge order, joined by erel through verts that are not result verts
+    let mut ecs: Vec<u32> = Vec::new();
+    let mut ec_pos = vec![NONE; ne];
+    let mut e = 0;
+    while e < ne {
+        if at_e[e].len() == 2 {
+            ec_pos[e] = ecs.len() as u32;
+            ecs.push(e as u32);
+        }
+        e += 1;
+    }
+    let mut erel = Uf::new(ecs.len());
+    let mut v = 0;
+    while v < nv {
+        if !is_out_v[v] {
+            let (lo, hi) = row(&l.vert_edges, v);
+            let mut i = lo;
+            while i < hi {
+                let e1 = l.vert_edges.ids[i] as usize;
+                let mut j = i + 1;
+                while j < hi {
+                    let e2 = l.vert_edges.ids[j] as usize;
+                    if ec_pos[e1] != NONE && ec_pos[e2] != NONE && same_set(&at_e[e1], &at_e[e2]) {
+                        erel.union(ec_pos[e1] as usize, ec_pos[e2] as usize);
+                    }
+                    j += 1;
+                }
+                i += 1;
+            }
+        }
+        v += 1;
+    }
+    let mut edges: Vec<OutEdge> = Vec::new();
+    let mut edge_of = vec![NONE; ecs.len()];
+    let mut p = 0;
+    while p < ecs.len() {
+        let r = erel.find(p);
+        if r == p {
+            edge_of[p] = edges.len() as u32;
+            let fs = &at_e[ecs[p] as usize];
+            let mut ff = Vec::with_capacity(fs.len());
+            let mut k = 0;
+            while k < fs.len() {
+                ff.push(FacetId(fs[k]));
+                k += 1;
+            }
+            edges.push(OutEdge {
+                cells: Vec::new(),
+                faces: ff,
+            });
+        } else {
+            edge_of[p] = edge_of[r];
+        }
+        edges[edge_of[p] as usize].cells.push(EdgeId(ecs[p]));
+        p += 1;
+    }
+    Body { faces, edges, verts }
 }
