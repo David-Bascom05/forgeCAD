@@ -17,6 +17,7 @@ macro_rules! decided {
 pub const FEATURES: &[(&str, bool)] = &[
     ("decisions", cfg!(feature = "decisions")),
     ("decide_once", cfg!(feature = "decide_once")),
+    ("imprint_column", cfg!(feature = "imprint_column")),
 ];
 
 pub mod boolean;
