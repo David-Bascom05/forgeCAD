@@ -207,20 +207,29 @@ theorem keepVec_room (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l
   change (s.rooms.val.getD (posR s x) 0#u32).val = x at he
   rw [he]
 
-theorem kpF_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (rule : Rule) {f : Nat}
-    (hf : f < nfacets l) :
-    kpF l s (keepVec l s rule) f = keepInI ((toLF l).keepTab (ruleL l.nb.val rule)) ((toLF l).plus (FCell.facet f)) :=
-  keepVec_room l hw s hs rule (facet_rooms_get l hw hf).1 (plusR_mem l hf)
+/-- A keep vector, by room position, agrees with a Lean keep table on the rooms. -/
+def KeepRel (l : Ledger) (s : Split) (kv : List Bool) (kt : KeepTabI FCell) : Prop :=
+  ∀ x, x < l.n_rooms.val → x ∈ seenRooms l.facet_rooms.val (nfacets l) →
+    kv.getD (posR s x) false = keepInI kt (FCell.room x)
 
-theorem kmF_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (rule : Rule) {f : Nat}
+theorem keepVec_rel (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (rule : Rule) :
+    KeepRel l s (keepVec l s rule) ((toLF l).keepTab (ruleL l.nb.val rule)) :=
+  fun _ hx hm => keepVec_room l hw s hs rule hx hm
+
+theorem kpF_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (kv : List Bool) (kt : KeepTabI FCell) (hk : KeepRel l s kv kt) {f : Nat}
     (hf : f < nfacets l) :
-    kmF l s (keepVec l s rule) f = keepInI ((toLF l).keepTab (ruleL l.nb.val rule)) ((toLF l).minus (FCell.facet f)) :=
-  keepVec_room l hw s hs rule (facet_rooms_get l hw hf).2 (minusR_mem l hf)
+    kpF l s (kv) f = keepInI (kt) ((toLF l).plus (FCell.facet f)) :=
+  hk _ (facet_rooms_get l hw hf).1 (plusR_mem l hf)
+
+theorem kmF_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (kv : List Bool) (kt : KeepTabI FCell) (hk : KeepRel l s kv kt) {f : Nat}
+    (hf : f < nfacets l) :
+    kmF l s (kv) f = keepInI (kt) ((toLF l).minus (FCell.facet f)) :=
+  hk _ (facet_rooms_get l hw hf).2 (minusR_mem l hf)
 
 /-- **The assembled facets are the Lean's `result`.** -/
-theorem result_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (rule : Rule) :
-    (toLF l).result ((toLF l).keepTab (ruleL l.nb.val rule)) =
-      (resL l s (keepVec l s rule) (nfacets l)).map FCell.facet := by
+theorem result_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (kv : List Bool) (kt : KeepTabI FCell) (hk : KeepRel l s kv kt) :
+    (toLF l).result (kt) =
+      (resL l s (kv) (nfacets l)).map FCell.facet := by
   unfold IncLedger.result resL
   have hf : (toLF l).facets = (List.range (nfacets l)).map FCell.facet := rfl
   rw [hf, List.filter_map]
@@ -228,15 +237,15 @@ theorem result_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s)
   apply List.filter_congr
   intro f hf'
   have hfl := List.mem_range.mp hf'
-  simp only [Function.comp, inR, kpF_eq l hw s hs rule hfl, kmF_eq l hw s hs rule hfl]
+  simp only [Function.comp, inR, kpF_eq l hw s hs kv kt hk hfl, kmF_eq l hw s hs kv kt hk hfl]
 
 /-- **The senses are the Lean's `orient`.** -/
-theorem orient_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (rule : Rule) {f : Nat}
+theorem orient_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (kv : List Bool) (kt : KeepTabI FCell) (hk : KeepRel l s kv kt) {f : Nat}
     (hf : f < nfacets l) :
-    (toLF l).orient ((toLF l).keepTab (ruleL l.nb.val rule)) (FCell.facet f) = toS (oriR l s (keepVec l s rule) f) := by
+    (toLF l).orient (kt) (FCell.facet f) = toS (oriR l s (kv) f) := by
   unfold IncLedger.orient oriR
-  rw [← kmF_eq l hw s hs rule hf]
-  cases kmF l s (keepVec l s rule) f <;> rfl
+  rw [← kmF_eq l hw s hs kv kt hk hf]
+  cases kmF l s (kv) f <;> rfl
 
 end inc
 

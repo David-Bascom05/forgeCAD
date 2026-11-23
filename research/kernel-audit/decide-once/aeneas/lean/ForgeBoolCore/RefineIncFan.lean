@@ -380,10 +380,10 @@ theorem mem_avL {l : Ledger} {a : Assembled} {lo hi x : Nat} (h : x ∈ avL l a 
   simp only [avL, List.mem_filter, List.mem_range'_1] at h; omega
 
 /-- The Lean's result sectors round a vert are `around_v`'s, read as sectors. -/
-theorem aroundV_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (rule : Rule)
-    (a : Assembled) (h : AInv l s (keepVec l s rule) a.result.val a.rpos.val a.orient.val (nfacets l))
+theorem aroundV_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (kv : List Bool) (kt : KeepTabI FCell) (hk : KeepRel l s kv kt)
+    (a : Assembled) (h : AInv l s (kv) a.result.val a.rpos.val a.orient.val (nfacets l))
     {v : Nat} (hv : v < nrowsL l.vert_edges) :
-    (toLF l).aroundV ((toLF l).keepTab (ruleL l.nb.val rule)) (FCell.vert v) =
+    (toLF l).aroundV (kt) (FCell.vert v) =
       (avL l a (sstAt l v) (sstAt l (v + 1))).map (fun k => toSec (secAt l k)) := by
   have hsr := hw.sectors_rows
   have hvl : v + 1 < l.vert_sectors.start.val.length := by unfold nrowsL at hv; omega
@@ -394,11 +394,11 @@ theorem aroundV_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s
   rw [hV, hrow, List.map_map, List.filter_map, avL]
   congr 1
   apply List.filter_congr
-  intro k hk
-  have hmem : secAt l k ∈ secRowL l.vert_sectors v := by rw [hrow]; exact List.mem_map.mpr ⟨k, hk, rfl⟩
+  intro k hkr
+  have hmem : secAt l k ∈ secRowL l.vert_sectors v := by rw [hrow]; exact List.mem_map.mpr ⟨k, hkr, rfl⟩
   have hfl := (hw.sectors v hv _ hmem).1
   simp only [Function.comp, toSec]
-  rw [rpA_ne l hw s _ a h hfl, result_eq l hw s hs rule, Bool.eq_iff_iff, List.contains_iff_mem, List.mem_map]
+  rw [rpA_ne l hw s _ a h hfl, result_eq l hw s hs kv kt hk, Bool.eq_iff_iff, List.contains_iff_mem, List.mem_map]
   constructor
   · rintro ⟨g, hg, he⟩; cases he; exact (mem_resL l s _ hfl).mp hg
   · intro hi; exact ⟨_, (mem_resL l s _ hfl).mpr hi, rfl⟩
@@ -418,10 +418,10 @@ theorem aroundV_nodup (l : Ledger) (hw : LedgerWF2 l) (a : Assembled) {v : Nat} 
   exact (hnd.filter _).map (fun _ _ h => toSec_inj h)
 
 /-- **`bad_vert` is the Lean's `badVert`.** -/
-theorem bad_vert_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (rule : Rule)
-    (a : Assembled) (h : AInv l s (keepVec l s rule) a.result.val a.rpos.val a.orient.val (nfacets l))
+theorem bad_vert_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (kv : List Bool) (kt : KeepTabI FCell) (hk : KeepRel l s kv kt)
+    (a : Assembled) (h : AInv l s (kv) a.result.val a.rpos.val a.orient.val (nfacets l))
     (v : Usize) (hv : v.val < nrowsL l.vert_edges) :
-    bad_vert l a v ⦃ b => b = (toLF l).badVert ((toLF l).keepTab (ruleL l.nb.val rule)) (FCell.vert v.val) ⦄ := by
+    bad_vert l a v ⦃ b => b = (toLF l).badVert (kt) (FCell.vert v.val) ⦄ := by
   have hsm := hw.small
   have hsl : l.vert_sectors.sec.val.length < U32.max := hsm.2.2.2.2.2.2.2.2
   have hsr := hw.sectors_rows
@@ -449,7 +449,7 @@ theorem bad_vert_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK 
   step with bad_vert_loop_spec ar _ uf hu' as ⟨b, hb⟩
   rw [hb]
   unfold IncLedger.badVert
-  rw [aroundV_eq l hw s hs rule a h hv]
+  rw [aroundV_eq l hw s hs kv kt hk a h hv]
   set L := (avL l a (sstAt l v.val) (sstAt l (v.val + 1))).map (fun k => toSec (secAt l k)) with hL
   have hLl : L.length = ar.val.length := by
     rw [hL, List.length_map, ← har, List.length_map]
@@ -476,27 +476,27 @@ theorem bad_vert_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK 
 
 /-! ### The vert scan -/
 
-def bVL (l : Ledger) (rule : Rule) (v : Nat) : Bool :=
-  (toLF l).badVert ((toLF l).keepTab (ruleL l.nb.val rule)) (FCell.vert v)
+def bVL (l : Ledger) (kt : KeepTabI FCell) (v : Nat) : Bool :=
+  (toLF l).badVert (kt) (FCell.vert v)
 
 /-- What the scan has found over the first `k` verts. -/
-def VScan (l : Ledger) (rule : Rule) (bad0 : Outcome) (k : Nat) (bad : Outcome) (found : Bool) : Prop :=
-  match (List.range k).find? (bVL l rule) with
+def VScan (l : Ledger) (kt : KeepTabI FCell) (bad0 : Outcome) (k : Nat) (bad : Outcome) (found : Bool) : Prop :=
+  match (List.range k).find? (bVL l kt) with
   | some v => found = true ∧ ∃ x : U32, x.val = v ∧ bad = .Refused (.ZeroThicknessVert x)
   | none => found = false ∧ bad = bad0
 
-theorem core_k_loop2_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (rule : Rule)
-    (a : Assembled) (h : AInv l s (keepVec l s rule) a.result.val a.rpos.val a.orient.val (nfacets l))
+theorem core_k_loop2_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (kv : List Bool) (kt : KeepTabI FCell) (hk : KeepRel l s kv kt)
+    (a : Assembled) (h : AInv l s (kv) a.result.val a.rpos.val a.orient.val (nfacets l))
     (nv : Usize) (hnv : nv.val = nrowsL l.vert_edges) (bad0 bad : Outcome) (found : Bool) (v : Usize)
-    (hv : v.val ≤ nv.val) (hI : VScan l rule bad0 v.val bad found) :
+    (hv : v.val ≤ nv.val) (hI : VScan l kt bad0 v.val bad found) :
     core_k_loop2 l.nb l.face_body l.face_class l.n_rooms l.facet_class l.facet_rooms l.pieces l.inside
       l.edge_facets.start l.edge_facets.ids l.vert_edges.start l.vert_edges.ids l.vert_sectors
-      a.result a.rpos a.orient nv bad found v ⦃ r => VScan l rule bad0 (nrowsL l.vert_edges) r.1 r.2 ⦄ := by
+      a.result a.rpos a.orient nv bad found v ⦃ r => VScan l kt bad0 (nrowsL l.vert_edges) r.1 r.2 ⦄ := by
   have hsm := hw.small
   have hnvr : nrowsL l.vert_edges < U32.max := hsm.2.2.2.2.2.2.2.1
   unfold core_k_loop2
   apply loop.spec_decr_nat (fun (q : Outcome × Bool × Usize) => nv.val - q.2.2.val)
-    (fun q => q.2.2.val ≤ nv.val ∧ VScan l rule bad0 q.2.2.val q.1 q.2.1)
+    (fun q => q.2.2.val ≤ nv.val ∧ VScan l kt bad0 q.2.2.val q.1 q.2.1)
   · rintro ⟨b, fd, j⟩ ⟨hj, hE⟩
     unfold core_k_loop2.body
     simp only at hj hE ⊢
@@ -510,7 +510,7 @@ theorem core_k_loop2_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : Spli
       · exfalso; rw [hE.1] at hfd; simp at hfd
     · rename_i hfd
       have hfd' : fd = false := by simpa using hfd
-      have hnone : (List.range j.val).find? (bVL l rule) = none := by
+      have hnone : (List.range j.val).find? (bVL l kt) = none := by
         unfold VScan at hE; split at hE
         · exfalso; rw [hE.1] at hfd'; simp at hfd'
         · assumption
@@ -519,7 +519,7 @@ theorem core_k_loop2_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : Spli
       split
       · rename_i hlt
         have hjl : j.val < nrowsL l.vert_edges := by scalar_tac
-        step with bad_vert_spec l hw s hs rule a h j hjl as ⟨bb, hbb⟩
+        step with bad_vert_spec l hw s hs kv kt hk a h j hjl as ⟨bb, hbb⟩
         split
         · rename_i hgt
           step as ⟨i2, hi2⟩
@@ -527,7 +527,7 @@ theorem core_k_loop2_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : Spli
           have hj1v : j1.val = j.val + 1 := by scalar_tac
           refine ⟨by omega, ?_, by omega⟩
           unfold VScan
-          have hb : bVL l rule j.val = true := by rw [bVL, ← hbb]; exact hgt
+          have hb : bVL l kt j.val = true := by rw [bVL, ← hbb]; exact hgt
           rw [hj1v, find_range_succ, hnone, if_pos hb]
           exact ⟨rfl, i2, by rw [hi2]; scalar_tac, rfl⟩
         · rename_i hgt
@@ -535,7 +535,7 @@ theorem core_k_loop2_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : Spli
           have hj1v : j1.val = j.val + 1 := by scalar_tac
           refine ⟨by omega, ?_, by omega⟩
           unfold VScan
-          have hb : bVL l rule j.val = false := by rw [bVL, ← hbb]; simpa using hgt
+          have hb : bVL l kt j.val = false := by rw [bVL, ← hbb]; simpa using hgt
           rw [hj1v, find_range_succ, hnone, hb]
           exact ⟨hfd', hb0⟩
       · rename_i hge

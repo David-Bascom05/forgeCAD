@@ -1,4 +1,4 @@
-import ForgeBoolCore.RefineIncFan
+import ForgeBoolCore.RefineIncCore
 import ForgeBoolCore.Specs
 import ForgeBoolCore.Refine
 import ForgeBoolCore.RefineUF
@@ -161,3 +161,6 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.bad_vert_spec
 #print axioms forge_bool_core.inc.core_k_loop2_spec
 #print axioms forge_bool_core.inc.coreMI_nil
+#print axioms forge_bool_core.inc.core_k_spec
+#print axioms forge_bool_core.inc.core_spec
+#print axioms forge_bool_core.inc.incCoreSpec_of

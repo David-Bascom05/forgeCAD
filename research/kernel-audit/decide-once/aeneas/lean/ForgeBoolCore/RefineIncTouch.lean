@@ -161,12 +161,12 @@ theorem row_ids_lt (l : Ledger) (hw : LedgerWF2 l) {e : Nat} :
   exact hw.edge_facets.ids x (List.mem_of_mem_drop (List.mem_of_mem_take hx))
 
 /-- The Lean's result wings round an edge, counted. -/
-theorem aroundE_len (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (rule : Rule)
-    (a : Assembled) (h : AInv l s (keepVec l s rule) a.result.val a.rpos.val a.orient.val (nfacets l)) (e : Nat) :
-    ((toLF l).aroundE ((toLF l).keepTab (ruleL l.nb.val rule)) (FCell.edge e)).length =
+theorem aroundE_len (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (kv : List Bool) (kt : KeepTabI FCell) (hk : KeepRel l s kv kt)
+    (a : Assembled) (h : AInv l s (kv) a.result.val a.rpos.val a.orient.val (nfacets l)) (e : Nat) :
+    ((toLF l).aroundE (kt) (FCell.edge e)).length =
       (aroundL a (rowL l.edge_facets e)).length := by
   unfold IncLedger.aroundE aroundL
-  rw [result_eq l hw s hs rule, List.length_map]
+  rw [result_eq l hw s hs kv kt hk, List.length_map]
   have hE : (toLF l).edgeFacets (FCell.edge e) = (rowL l.edge_facets e).map FCell.facet := rfl
   rw [hE, List.filter_map, List.length_map]
   congr 1
@@ -274,14 +274,14 @@ theorem core_k_loop1_spec (l : Ledger) (hw : LedgerWF2 l) (a : Assembled) (hrl :
   · exact ⟨he, hI⟩
 
 /-- **The scan's first bad edge is the Lean's.** -/
-theorem edges_find_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (rule : Rule)
-    (a : Assembled) (h : AInv l s (keepVec l s rule) a.result.val a.rpos.val a.orient.val (nfacets l)) :
-    (toLF l).edges.find? ((toLF l).badEdge ((toLF l).keepTab (ruleL l.nb.val rule))) =
+theorem edges_find_eq (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK l s) (kv : List Bool) (kt : KeepTabI FCell) (hk : KeepRel l s kv kt)
+    (a : Assembled) (h : AInv l s (kv) a.result.val a.rpos.val a.orient.val (nfacets l)) :
+    (toLF l).edges.find? ((toLF l).badEdge (kt)) =
       ((List.range (nrowsL l.edge_facets)).find? (bE l a)).map FCell.edge := by
   rw [find_range_edges]
   congr 2
   funext e
-  simp only [Function.comp, IncLedger.badEdge, bE, aroundE_len l hw s hs rule a h e]
+  simp only [Function.comp, IncLedger.badEdge, bE, aroundE_len l hw s hs kv kt hk a h e]
 
 end inc
 

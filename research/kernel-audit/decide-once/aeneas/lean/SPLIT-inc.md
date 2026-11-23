@@ -36,5 +36,7 @@ Points to agree within each group:
 | T | done: `rows_spec`, `row_spec` (`ledger_wf`'s equivalence is still to do) | RefineIncTables.lean |
 | S | done: `body_of_spec`, `cls_of_spec`, `split_ok_spec` (`= splitOk`), `split_spec` (`SplitOK`: piece table = `isPieceOf`, `rooms` = `(toLF l).rooms`, `room_pos` inverts it) | RefineIncTables, RefineIncSplit, RefineIncRooms |
 | C | done: `flood_spec`; `membership_spec` (row `i`, position `t` = `(toLF l).memb i (room rooms[t])`, via `memb_bridge` and the generic `head_leastI`); `core_loop0_spec` with `cAll_eq` (= `classifyOk`); `core_loop1_spec` with `keep_eq` (= `keep (ruleL nb r)` room by room) | RefineIncFlood, HeadBridgeI, RefineIncMemb, RefineIncClassify |
-| K | done except `core_k`'s assembly, which needs U's `unify`: `core_k_loop0_spec` (AInv) with `result_eq`, `orient_eq`; `around_e_spec`, `aroundE_len`, edge scan `core_k_loop1_spec` with `edges_find_eq`; `around_v_spec`, `fans_spec`, `bad_vert_spec` (= `badVert`, via the generic `fan_bad`), vert scan `core_k_loop2_spec` | RefineIncAssemble, RefineIncTouch, FanBridgeI, RefineIncFan |
-| U, M, E | to do | |
+| K | done: `core_k_loop0_spec` (AInv) with `result_eq`, `orient_eq`; `around_e_spec`, `aroundE_len`, edge scan `core_k_loop1_spec` with `edges_find_eq`; `around_v_spec`, `fans_spec`, `bad_vert_spec` (= `badVert`, via the generic `fan_bad`), vert scan `core_k_loop2_spec` | RefineIncAssemble, RefineIncTouch, FanBridgeI, RefineIncFan |
+| E | done: `core_k_spec` (= `coreK`, given `UnifySpec`), `core_spec` (= `coreMI`, given `UnifySpec` and `CollapseSpec`), `incCoreSpec_of`. The K lemmas now take any keep vector with `KeepRel` to a Lean table, so they serve the collapsed table too | RefineIncCore |
+| U | to do: `UnifySpec` | |
+| M | to do: `CollapseSpec` | |

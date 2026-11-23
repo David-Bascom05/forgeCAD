@@ -57,3 +57,4 @@ import ForgeBoolCore.RefineIncAssemble
 import ForgeBoolCore.RefineIncTouch
 import ForgeBoolCore.FanBridgeI
 import ForgeBoolCore.RefineIncFan
+import ForgeBoolCore.RefineIncCore
