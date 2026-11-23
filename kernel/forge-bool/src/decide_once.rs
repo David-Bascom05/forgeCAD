@@ -2515,6 +2515,38 @@ struct Plan {
     edges: Vec<NewEdge>,
     faces: Vec<NewFace>,
     aliases: Vec<(Name, Name)>,
+    /// (piece, whole): the names of an input face split over several final faces
+    pieces: Vec<(Name, Name)>,
+}
+
+/// Each name's whole, as unify reads it (unify.rs, rename_wholes): the inputs' joins.pieces, a
+/// piece recorded twice taking the lesser whole, a piece recorded as its own whole skipped.
+struct Pieces(Vec<(Name, Name)>);
+
+impl Pieces {
+    fn of(bodies: &[&Body]) -> Pieces {
+        let mut v: Vec<(Name, Name)> = Vec::new();
+        for b in bodies {
+            v.extend(b.joins.pieces.iter().copied().filter(|&(p, w)| p != w));
+        }
+        v.sort_unstable();
+        v.dedup_by_key(|x| x.0);
+        Pieces(v)
+    }
+    fn up(&self, n: Name) -> Option<Name> {
+        self.0.binary_search_by_key(&n, |x| x.0).ok().map(|i| self.0[i].1)
+    }
+    /// The whole's whole, and so on, back to the face no boolean split.
+    fn whole(&self, n: Name) -> Option<Name> {
+        let mut w = self.up(n)?;
+        for _ in 0..self.0.len() {
+            match self.up(w) {
+                Some(x) => w = x,
+                None => break,
+            }
+        }
+        Some(w)
+    }
 }
 
 /// The plan done to `body` (body 0, or its copy); `tools` give their joins.
@@ -2577,6 +2609,7 @@ fn apply(body: &mut Body, plan: Plan, tools: &[&Body]) {
         body.joins.extend(&t.joins);
     }
     body.joins.aliases.extend(plan.aliases);
+    body.joins.pieces.extend(plan.pieces);
     if body.face_ids().next().is_none() {
         *body = Body::default();
         return;
@@ -3025,6 +3058,7 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
         edges: Vec::new(),
         faces: Vec::new(),
         aliases: Vec::new(),
+        pieces: Vec::new(),
     };
     if fins.is_empty() {
         return Some(plan);
@@ -3144,26 +3178,88 @@ fn build_body(w: &Wr, fins: &[Fin], kept: &[Kept], plan: &mut Plan) -> Option<()
             return None;
         }
     }
-    // names: fins come in order of their least input face, so the faces of one input face are
-    // consecutive
-    let mut used: HashMap<Name, ()> = HashMap::default();
-    let mut fnames = Vec::with_capacity(fins.len());
+    // names, by unify's rule (unify.rs, rename_wholes), so a face is named alike on both paths:
+    // - an input face in one final face keeps its name; one split over several gives each a
+    //   piece of its name, recorded as that name's piece (joins.pieces);
+    // - a final face of several input faces (merged) takes the least of their wholes (a name's
+    //   whole: back along joins.pieces to the face no boolean split), else the least of their
+    //   own; where two would take one name, or a live face left alone holds it, each keeps the
+    //   least of its own; every member's own name is an alias of the final one
+    let mut sf: Vec<(usize, u32)> = Vec::new();
+    for (fi, f) in fins.iter().enumerate() {
+        for lp in &f.loops {
+            match lp {
+                Lp::New(segs) => sf.extend(segs.iter().map(|s| (s.src, fi as u32))),
+                Lp::Kept(i) => sf.push((kept[*i].g, fi as u32)),
+            }
+        }
+    }
+    sf.sort_unstable();
+    sf.dedup();
+    // per final face: its members (own name, its whole if it has one)
+    let mut members: Vec<Vec<(Name, Option<Name>)>> = vec![Vec::new(); fins.len()];
+    let pieces = Pieces::of(bodies);
     let mut i = 0;
-    while i < fins.len() {
+    while i < sf.len() {
         let mut j = i;
-        while j < fins.len() && fins[j].src == fins[i].src {
+        while j < sf.len() && sf[j].0 == sf[i].0 {
             j += 1;
         }
-        let base = face_name(fins[i].src);
-        for k in i..j {
-            let name = if j - i == 1 {
-                base
+        let own = face_name(sf[i].0);
+        for (k, &(_, fi)) in sf[i..j].iter().enumerate() {
+            if j - i == 1 {
+                members[fi as usize].push((own, pieces.whole(own)));
             } else {
-                base.piece(Name::NONE.with_name(base).with((k - i + 1) as u64))
-            };
-            fnames.push(unique(&mut used, name));
+                let piece = own.piece(Name::NONE.with_name(own).with(k as u64 + 1));
+                plan.pieces.push((piece, own));
+                members[fi as usize].push((piece, Some(pieces.whole(own).unwrap_or(own))));
+            }
         }
         i = j;
+    }
+    let mut fnames: Vec<Name> = Vec::with_capacity(fins.len());
+    for ms in &members {
+        let own = ms.iter().map(|m| m.0).min().unwrap_or(Name::NONE);
+        fnames.push(if ms.len() < 2 {
+            own
+        } else if ms.iter().any(|m| m.1.is_some()) {
+            ms.iter().map(|m| m.1.unwrap_or(m.0)).min().unwrap_or(own)
+        } else {
+            own
+        });
+    }
+    {
+        // a merged face's name another would take, or one a live face of body 0 holds that is not
+        // among the faces this boolean remakes: each keeps the least of its own
+        let mut taken: Vec<Name> = fnames.clone();
+        taken.sort_unstable();
+        for (fi, ms) in members.iter().enumerate() {
+            if ms.len() < 2 || ms.iter().any(|m| m.0 == fnames[fi]) {
+                continue;
+            }
+            let n = fnames[fi];
+            let twice = taken.partition_point(|&x| x < n) + 1 < taken.partition_point(|&x| x <= n);
+            let held = bodies[0]
+                .face_by_name(n)
+                .is_some_and(|f| !w.fs.iter().enumerate().any(|(g, x)| x.body == 0 && x.face == f && w.reg.near[g]));
+            if twice || held {
+                fnames[fi] = ms.iter().map(|m| m.0).min().unwrap_or(n);
+            }
+        }
+    }
+    let mut used: HashMap<Name, ()> = HashMap::default();
+    for n in fnames.iter_mut() {
+        *n = unique(&mut used, *n);
+    }
+    for (fi, ms) in members.iter().enumerate() {
+        if ms.len() < 2 {
+            continue;
+        }
+        for m in ms {
+            if m.0 != fnames[fi] {
+                plan.aliases.push((m.0, fnames[fi]));
+            }
+        }
     }
     // the points that are vertex cells, by their f64 place along x, to find an input vertex's:
     // candidates within a bound well past the rounding (each coordinate within 4 ulps of the exact
@@ -3370,6 +3466,9 @@ fn build_body(w: &Wr, fins: &[Fin], kept: &[Kept], plan: &mut Plan) -> Option<()
     // an input face whose name no final face has went to the first that holds a segment of it
     // (a far face keeps its own)
     let mut named: HashMap<Name, ()> = fnames.iter().map(|&n| (n, ())).collect();
+    for &(n, _) in &plan.aliases {
+        named.insert(n, ());
+    }
     for (fi, f) in fins.iter().enumerate() {
         for lp in &f.loops {
             match lp {
