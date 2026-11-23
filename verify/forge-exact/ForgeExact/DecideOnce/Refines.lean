@@ -80,6 +80,21 @@ structure Refines (A : IncLedger α) (B : IncLedger β) (σ : α → β) (τ ν 
     ∃ s' ∈ A.vertSectors w, κ w s' = κ w s ∧ ∃ e ∈ s'.bounds, τ e = some E
   vert_edges : ∀ w ∈ A.verts, ∀ V, ν w = some V →
     (((A.vertEdges w).filterMap τ)).Perm (B.vertEdges V)
+  sector_facets_A : ∀ w ∈ A.verts, ∀ s ∈ A.vertSectors w, s.facet ∈ A.facets
+  sectorsA_nodup : ∀ w ∈ A.verts, (A.vertSectors w).Nodup
+  sectorsB_nodup : ∀ V ∈ B.verts, (B.vertSectors V).Nodup
+  vertEdgesB_nodup : ∀ V ∈ B.verts, (B.vertEdges V).Nodup
+  /-- at a fine vert inside a coarse facet or edge: sectors of one coarse facet are joined across
+  edges inside it, and any two coarse facets' sectors there meet at a common edge -/
+  inner_same : ∀ w ∈ A.verts, ν w = none → ∀ s ∈ A.vertSectors w, ∀ t ∈ A.vertSectors w,
+    σ s.facet = σ t.facet →
+    Conn (fun a b => a.bounds.any fun e => b.bounds.contains e && τ e == none) (A.vertSectors w) s t
+  inner_meet : ∀ w ∈ A.verts, ν w = none → ∀ s ∈ A.vertSectors w, ∀ t ∈ A.vertSectors w,
+    ∃ s' ∈ A.vertSectors w, ∃ t' ∈ A.vertSectors w, σ s'.facet = σ s.facet ∧ σ t'.facet = σ t.facet ∧
+      ∃ e ∈ s'.bounds, e ∈ t'.bounds
+  /-- an edge inside a coarse facet has all its fine facets in that facet -/
+  inner_edge_facet : ∀ w ∈ A.verts, ∀ s ∈ A.vertSectors w, ∀ t ∈ A.vertSectors w, ∀ e ∈ s.bounds,
+    e ∈ t.bounds → τ e = none → σ s.facet = σ t.facet
   vert_inner : ∀ w ∈ A.verts, ν w = none →
     (∃ ψ, ∀ s ∈ A.vertSectors w, σ s.facet = ψ) ∨
     (∃ E ∈ B.edges, ∃ e ∈ A.edges, τ e = some E ∧ ∀ s ∈ A.vertSectors w, σ s.facet ∈ B.edgeFacets E)
