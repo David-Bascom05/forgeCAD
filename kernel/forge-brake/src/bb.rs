@@ -50,7 +50,7 @@ pub trait Problem {
     /// distance at its centre less its half-diagonal (the distance is 1-Lipschitz).
     fn lower(&self, e: &[Interval; 3]) -> (f64, f64) {
         let mid = e.map(|i| i.mid());
-        let hd = (e.iter().map(|i| (0.5 * i.width()).powi(2)).sum::<f64>()).sqrt() + SLACK;
+        let hd = ((e.iter().map(|i| (0.5 * i.width()).powi(2)).sum::<f64>()).sqrt() + SLACK).next_up();
         (self.sd_bounds(mid).0 - hd, hd)
     }
     /// How much each coordinate of the image counts when choosing what to split.
@@ -61,12 +61,14 @@ pub trait Problem {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Verdict {
-    /// The distance is at least `lower` everywhere through the motion (`lower` >= limit - res),
-    /// and `upper` is met by a real point (measured: within `res` of `lower`).
+    /// Proven: the distance is at least `lower` >= limit - res at every point of the piece at every
+    /// instant of the motion; `upper` is at least a real point's distance.
     Clear { lower: f64, upper: f64 },
-    /// A proven violation: distance `d` at parameters `q`, the point `at` in the target's frame.
+    /// Proven: a real point of the piece, at a real instant (parameters `q`, image `at`), whose
+    /// distance is at most `d` < limit (the error budget included).
     Hit { d: f64, q: [f64; 4], at: [f64; 3] },
-    /// The budget ran out; `lower` is what was proven.
+    /// Neither proven (the budget ran out, or cells under the resolution held no witness below the
+    /// limit); `lower` is what was proven. A caller refuses it.
     Undecided { lower: f64 },
 }
 
@@ -100,8 +102,23 @@ pub static CELLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsiz
 /// Float rounding in the coefficients (rigid motions with double entries), widened past.
 pub const SLACK: f64 = 1e-9;
 
+/// The error budget of a double signed distance evaluated at a point of magnitude `m` (a few
+/// dozen roundings, each within half an ulp of numbers no larger than the model): the bounds
+/// below are widened by it, outward. An assumption to discharge (L5: proven predicates).
+pub fn sd_err(m: f64) -> f64 {
+    1e-9 + 64.0 * f64::EPSILON * (1.0 + m)
+}
+
+fn magnitude(e: &[Interval; 3]) -> f64 {
+    e.iter().map(|i| i.lo.abs().max(i.hi.abs())).fold(0.0, f64::max)
+}
+
+/// The cell's certified lower bound (rounded down past the distance's error budget) and the size
+/// it rests on.
 fn bound<P: Problem>(pb: &P, c: &Cell) -> (f64, f64) {
-    pb.lower(&pb.enclose(c))
+    let e = pb.enclose(c);
+    let (lb, size) = pb.lower(&e);
+    ((lb - sd_err(magnitude(&e))).next_down(), size)
 }
 
 /// Searches `roots` for the least distance to the problem's target against `limit`, to
@@ -184,7 +201,9 @@ fn search<P: Problem>(
         }
         if let Some(q) = pb.witness(&cell) {
             let at = pb.image(q);
-            let d = pb.sd_bounds(at).1;
+            // at most this, past the error budget: a hit only if that is under the limit
+            let m = at.iter().map(|x| x.abs()).fold(0.0, f64::max);
+            let d = (pb.sd_bounds(at).1 + sd_err(m)).next_up();
             if d < limit {
                 return Verdict::Hit { d, q, at };
             }
@@ -206,9 +225,15 @@ fn search<P: Problem>(
             }
         }
     }
-    Verdict::Clear {
-        lower: lower.min(upper),
-        upper,
+    // every cell is settled: clear only if each was proven to within the resolution, else
+    // undecided (a leaf under it with no witness below the limit decides nothing)
+    if lower >= limit - res {
+        Verdict::Clear {
+            lower,
+            upper: upper.max(lower),
+        }
+    } else {
+        Verdict::Undecided { lower }
     }
 }
 
@@ -297,6 +322,57 @@ mod tests {
             Verdict::Hit { d, .. } => assert!(d < 0.6),
             v => panic!("{v:?}"),
         }
+    }
+
+    #[test]
+    fn just_inside_and_just_outside_the_limit() {
+        // the true least distance is 1 - s1: limit 0.5, resolution 1e-4
+        match certify(&Seg1, &[root(0.498)], 0.5, 1e-4, 1_000_000, false) {
+            Verdict::Clear { lower, .. } => assert!(lower >= 0.5 - 1e-4 && lower <= 0.502, "{lower}"),
+            v => panic!("{v:?}"),
+        }
+        match certify(&Seg1, &[root(0.502)], 0.5, 1e-4, 1_000_000, false) {
+            Verdict::Hit { d, .. } => assert!(d < 0.5 && d >= 0.498 - 1e-6, "{d}"),
+            v => panic!("{v:?}"),
+        }
+    }
+
+    /// The same, with no point ever named: nothing can be proven against it.
+    struct Blind;
+    impl Problem for Blind {
+        fn may_hold(&self, _: &Cell) -> bool {
+            true
+        }
+        fn enclose(&self, c: &Cell) -> [Interval; 3] {
+            Seg1.enclose(c)
+        }
+        fn witness(&self, _: &Cell) -> Option<[f64; 4]> {
+            None
+        }
+        fn image(&self, q: [f64; 4]) -> [f64; 3] {
+            Seg1.image(q)
+        }
+        fn sd(&self, p: [f64; 3]) -> f64 {
+            Seg1.sd(p)
+        }
+    }
+
+    #[test]
+    fn unproven_is_undecided_never_clear() {
+        // too near to clear, and no witness: undecided, at the end of the search and at the budget
+        assert!(matches!(
+            certify(&Blind, &[root(0.502)], 0.5, 1e-3, 1_000_000, false),
+            Verdict::Undecided { .. }
+        ));
+        assert!(matches!(
+            certify(&Blind, &[root(0.502)], 0.5, 1e-6, 50, false),
+            Verdict::Undecided { .. }
+        ));
+        // far enough, it still clears
+        assert!(matches!(
+            certify(&Blind, &[root(0.3)], 0.5, 1e-3, 1_000_000, false),
+            Verdict::Clear { .. }
+        ));
     }
 
     #[test]

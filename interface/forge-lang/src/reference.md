@@ -28,7 +28,7 @@ expect volume = 11966 +- 0.1%
 `#` starts a comment. A comment line `# units in` (or `cm`, `m`, `ft`, `mm`) is the part's
 own unit for people: the app shows lengths and takes bare numbers typed in it, converting to mm as
 it writes them; the text's numbers stay mm and nothing builds from the line. `#~ID ` starts a line
-`Suppress {id}` took out of the build (`#~ID< `, `#~ID> `: one it put on a line of its own). Numbers: `12`, `0.5`, `1e3`, with a unit `mm` or `deg`. A minus sign
+`Suppress {id}` took out of the build (`#~ID< `, `#~ID> `: one it put on a line of its own). Numbers: `12`, `0.5`, `1e3`, with a unit `mm`, `in` or `deg` written right after the digits. `in` is inches, a length, 25.4 mm exactly (`0.063in` is 1.6002 mm). A unit is the letters glued to the number, so `5in` is always a number in inches; `5 in OCC`, with a space, is a number and the keyword `in` (proved: LexUnits.lean). A minus sign
 directly before a digit, where no value precedes it, is part of the number (`-1`, `(-1, 2)`);
 `a -1` and `a - 1` subtract. Strings: `"M6"`. Names: letters, digits, `_`. Keywords: `shared param
 fn for in if else return expect and or not true false sketch path at component` (`at:` is still a keyword
@@ -531,7 +531,7 @@ FACES - FACES   EDGES - EDGES       the first set less the second's (one piece o
 `verts` finds the part's vertices: `of` a feature, those on a face it made (lineage, as for
 edges); `of` faces or edges, their corners and ends; `between: (A, B)` where faces of both meet;
 `body` in those bodies. One vertex is a reference the kernel follows through every edit above
-it (by its maker's own name for it, as `.fc`'s `(verts ..)`): a work feature's point, a fillet's
+it (by its maker's own name for it): a work feature's point, a fillet's
 `from` or setback corner, a place of `places(at:)` (each vertex of a set one place); where a
 plain point is wanted it is where the vertex is. Several where one is wanted is `NotOne`; a
 vertex no earlier solid feature made is `NoOwner`.
@@ -578,11 +578,12 @@ blank = unfold(base, on: offset(base.bottom, gap))
 
 ```
 sheet(PROFILE, t: T, r: R, bend: RULE, shop: SHOP, corner: CORNER, material: "NAME",
-      finish: "raw"|"powder_coat")
+      finish: "raw"|"powder_coat", vendor: "ID")
     the base wall: PROFILE's outline and holes. r and bend may come from the shop's stock of
     thickness t instead, and so does the default relief. corner: what corners get (default
     circular_relief(), just clear of both bends). material: the stock's name for the DXF's
-    part note. Its own dims: thickness, radius, k.
+    part note. vendor: a vendor profile's shop, material: then one of its materials (Vendor
+    profiles). Its own dims: thickness, radius, k.
 flange(EDGE, height: H, angle: A = 90deg, side: "up"|"down" = "up",
        measure: "inner"|"outer" = "outer", r: R, relief: RELIEF,
        position: "inside"|"outside"|"bend_outside" = "inside")
@@ -716,6 +717,7 @@ relief_rule(shape: "rect"|"obround"|"tear", width: Z, depth: Z,
       it is taken (the relief widened past the edge). A relief asked for smaller than the rule's
       is the violation ReliefUndersized, with SetArg fixes to the rule's size.
 shop([STOCK, ..], kerf: K)
+vendor("ID", material: "NAME")    a vendor profile's shop for one of its materials (Vendor profiles)
 ```
 
 ```
@@ -791,6 +793,102 @@ folded body as STEP AP214 in OUT (any flat pattern left out) and each unfold's f
 OUT-<unfold>.step; for an assembly, its structure (one product per part, one use per instance,
 placed by the solve). `fg run --json` lists each sheet: thickness, radius, rule, and each bend's flange, angle, radius,
 allowance and setback.
+
+## Vendor profiles
+
+A vendor profile is a fabricator's sheet-metal capabilities as a saved file: the materials it
+offers, each stocked thickness with the inside radii it tools, its bend rule (K, a K table, or the
+deduction at 90deg) and its minimum distances, its process limits, the operations it does, the
+hardware it presses in, and the tolerances it quotes, with where the data came from and when.
+Every field is optional: a rule a profile leaves out is not checked.
+
+```
+sheet(PROFILE, t: 0.063in, vendor: "sendcutsend", material: "5052-H32 aluminum")
+shared fab = vendor("fabworks", material: "304")     # a shop, for sheet(.., shop: fab)
+```
+
+With `vendor:`, `material:` names one of the vendor's materials (name or alias, case and
+punctuation ignored); its `library` name (forge-material) gives the mass, and the drawing's note
+the vendor's own name. `r:` and `bend:` default from the vendor's stock of thickness `t`, so the
+flat develops by the vendor's K and radius. Precedence: an `r:` or `bend:` written on the sheet
+wins over the vendor's stock (a radius it does not tool is then RadiusNotTooled in the report), and
+`shop:` with `vendor:` on one sheet is refused (BadValue: one or the other); a stock is `t` to within 0.005 mm (0.063 in is
+1.6002 mm, written 1.6mm). Refused, with the options listed and fixes: `UnknownVendor` (SetArg to the
+nearest ids), `VendorMaterial` (the materials offered; SetArg), `VendorThickness` (the stocked
+thicknesses in mm and inches with gauges; SetParam on `t` to the nearest). A vendor that states no
+bend rule for a stock it bends (a partial profile) leaves `r:` and `bend:` to the sheet
+(MissingArg). `0.063in` is 1.6002 mm exactly.
+
+Built in, each restated from the vendor's public design pages, read 2026-11-22 (jlc 2026-11-23), its sources in the
+file and in research/sheet-metal/vendors/. Not the vendors' own, not endorsed by them: verify with
+the vendor before ordering.
+
+```
+sendcutsend   per stock: radius, K, deduction, die width (hole and edge to bend: half of it,
+              from the bend's centre), minimum flange, relief depth; limits; PEM nuts. 6061 cut only
+fabworks      per stock: measured K and radius, minimum flange, distortion zone, angle and bend
+              length limits, minimum feature. 6061, 7075 cut only
+oshcut        partial: per-stock minimum hole, channel and wall; no bend data published as text
+xometry       partial: rules as multiples of t; thicknesses; no bend data published as text
+jlc           partial (JLCCNC, read 2026-11-23): minimum bending edge and hole to bending edge per
+              thickness, minimum hole max(0.5t, 1), hole spacing, tolerances, press-in hardware;
+              no K or inside radius published
+```
+
+Profiles are searched in the project's `vendors/*.toml` beside the file, then the user's
+`<config>/forgecad/vendors/*.toml` (Linux `~/.config/forgecad/vendors`), then the built-in ones;
+an id found first wins. `forgecad vendor new myshop --from sendcutsend` copies one to edit;
+`import F` saves a file into the user's folder, `export ID -o F` writes one out.
+
+The file (format 1), a TOML subset; lengths in its `units` ("in" or "mm"), angles in degrees:
+
+```
+format = 1
+id = "acme"   name = "Acme"   source = "https://.."   taken = "2026-11-22"   units = "in"
+note = ".."   kerf = 0.006
+operations = ["laser", "waterjet", "bend", "hem", "punch", "form", "hardware", "countersink",
+              "tap", "powder_coat", "deburr"]          # left out: not stated, not checked
+[limits]      max_flat = [44, 68]  max_flat_bent = [30, 44]  max_flat_coated = [30, 36]
+              min_flat = [0.25, 0.375]  min_flat_bent = [0.375, 1.5]  max_bend_length = 44
+              max_box_flange = 3  box_flange_when = "hardware"  bend_angles = [0, 130]
+[tolerance]   cut = "+/-0.005"  bend_angle = "+/-1 deg"   # quoted, shown in the report
+[rules]       LEN rules for every stock; a material's and then a stock's own override them
+[[material]]  name  aliases  library  hardness (HRB)  not = ["bend"]  note  + rules
+[[material.stock]]  t  gauge  radius = [R, ..]  k | ktable = [[r/t, K], ..] |
+              bend_deduction = [BD at 90deg, one per radius]  not  note  + rules
+[[hardware]]  kind (nut|stud|standoff)  size  code  sheet = [MIN, MAX]  hole  edge
+              max_hardness  materials = [..]
+```
+
+Rules: `min_flange` (to the outside, the outer virtual sharp, as fabricators quote it),
+`hole_to_bend`, `hole_to_edge`, `bend_to_edge`, `min_hole`, `min_slot`, `min_web`, `bend_from`
+("tangent" line, default, or "centre" line of the bend zone), `bend_angles`, `max_bend_length`,
+`relief = { shape, width, depth, corner_gap }`. A LEN is a number or text: `"2.5t + r + 0.02"`,
+`"min(2t, 0.125)"`, `"max(1t, 0.030)"` (t the thickness, r the bend's radius). A key the format
+does not have is refused (a misspelt rule is never silently unchecked), and so is a format other
+than 1.
+
+`fg query F dfm` (and the `query` tool with `sel: "dfm"`) checks each sheet against its vendor or
+its shop: the shop rules above (FlangeTooShort, HoleNearBend, HoleNearEdge, HoleTooSmall,
+SlotTooNarrow, RadiusNotTooled, ThicknessNotStocked, FlatTooLarge, PartTooSmall, BendTooLong,
+BendAngleOutOfRange, BoxFlangeTooTall, ReliefUndersized, CutCrossesBend, the hardware rules) and
+
+```
+BendNearEdge          an edge of the blank in front of a bend (a notch's side, an outline jog)
+                      nearer than bend_to_edge; the flange's own far edge is min_flange's
+WebTooNarrow          material narrower than min_web: between two holes, or a neck of the
+                      outline (two edges facing each other square across material)
+OperationNotOffered   a bend, hem, turret hit, form or pressed-in part the vendor does not do
+                      (or does not do in this stock)
+```
+
+Each is measured exactly on the flat's lines and arcs and the B-rep. The report gives, per sheet,
+the vendor (id, name, material, source, taken, tolerances, "Verify with the vendor before
+ordering."), the rules and limits its stock is held to, the operations offered, and each
+violation: `rule`, `severity`, `text`, `feature` and `line`, `measured` against `limit` (`sense`
+min or max; mm, degrees for an angle), `location` (`anchor` and the `faces` it names as handles,
+`flat` points in the flat pattern's coordinates, `at` on the folded part), its `data` and `fixes`.
+Refusals that kept the part from building (VendorThickness, ..) are listed under `refused`.
 
 ## iProperties and materials
 
@@ -1312,6 +1410,8 @@ bendsim [tooling T] [vendor V] [sequence S] [sheet NAME] [uts MPA]
                                minimum flange, V, angles, radius, stroke, open height, bed,
                                segments, force), each failure's rule, value, limit, part anchor,
                                tool and place; infeasible: each bend's blocking checks; fixes
+dfm                            each sheet against its vendor or shop: every violation with its
+                               rule, measured value, limit and location (Vendor profiles)
 ```
 
 `bendsim`: T is a standard tooling set (`std-eu`, `std-us`) or a `.json` tooling file; V a vendor
@@ -1337,4 +1437,6 @@ fg serve                    JSON lines {"cmd":"run","file":F}: stages kept, so a
                             only from the first feature that changed
 fg reference
 fg query FILE QUERY.. [--json]
+forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] [--name N] |
+                check F [--json]      sheet-metal vendor profiles (Vendor profiles)
 ```

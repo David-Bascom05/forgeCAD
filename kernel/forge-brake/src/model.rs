@@ -81,7 +81,7 @@ pub struct BendM {
 impl BendM {
     /// A zone point (u, y, w) at turn φ, in zone coordinates.
     pub fn fold<T: Sc>(&self, u: T, y: T, w: T, phi: T) -> V3<T> {
-        let psi = u * phi * (1.0 / self.ba);
+        let psi = (u * phi).div_c(self.ba);
         let x = u * psi.sinc() + (w * (-self.sigma) + self.c0) * psi.sin();
         let z = (u * psi.vsc() + psi.vers() * self.c0) * self.sigma + w * psi.cos();
         V3::new(x, y, z)

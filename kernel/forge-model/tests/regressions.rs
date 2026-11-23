@@ -3605,11 +3605,9 @@ fn self_intersecting_profile_is_rejected() {
     );
 }
 
-/// A wall flush with a rounded base's back edge, ending where the corner arcs start. As a part
-/// file:
-///     extrude 8 rrect -40 -25 80 50 6
-///     extrude 8 xz at 0 25 0 rect -40 0 80 45
-/// The corner arcs leave the wall's edge along it: the split once took the wrong way there.
+/// A wall flush with a rounded base's back edge, ending where the corner arcs start: an 80 x 50
+/// base 8 thick with corners rounded 6, and an 80 x 45 wall 8 thick on xz at its back. The corner
+/// arcs leave the wall's edge along it: the split once took the wrong way there.
 #[test]
 fn wall_flush_with_rounded_base_edge() {
     let block = |plane, l: ProfileLoop| Feature::Extrude {

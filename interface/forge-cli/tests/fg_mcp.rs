@@ -255,7 +255,7 @@ fn an_agent_reads_a_lint_sends_its_fix_back_and_the_file_is_the_ops_edit() {
     let (err, r, _) = m.tool("query", vec![("file", f.into()), ("sel", "section z=1".into())]);
     assert!(!err, "{r}");
 
-    // a part changes by edit alone: no act, no tool for a retired format
+    // a part changes by edit alone: there is no `act` tool
     let names: Vec<String> = arr(&tools, "tools").iter().map(|t| s(t, "name")).collect();
     assert!(!names.iter().any(|n| n == "act" || n == "diff"), "{names:?}");
     let (err, r, _) = m.tool("act", vec![("file", f.into()), ("lines", "x".into())]);

@@ -17,7 +17,7 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 13] = [
+const TOOLS: [Tool; 14] = [
     (
         "query",
         "selector -> @handles; or stat, file, check, params, features; holes, section z=V, gap A B, ..",
@@ -76,6 +76,12 @@ const TOOLS: [Tool; 13] = [
                 "the version a reply gave; refused (StaleBase) if the file has moved on",
             ),
         ],
+    ),
+    (
+        "vendors",
+        "Sheet-metal vendor profiles (stocks, radii, K, rules, limits, sources): none, the list; an id, its profile. Check a part with query sel dfm",
+        0,
+        &[("id", "a vendor's id")],
     ),
     (
         "help",
@@ -320,6 +326,27 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
         return version_tool(name, p);
     }
     let a = args(p);
+    if name == "vendors" {
+        let mut v = vec![];
+        match p.get("id").and_then(Json::str) {
+            Some(id) => v.extend(["show".to_string(), id.to_string()]),
+            None => v.push("list".to_string()),
+        }
+        return match forge_lang::vendor::tool(&v, Some(std::path::Path::new("."))) {
+            Ok((json, text)) => Reply {
+                ok: true,
+                json,
+                text,
+                png: None,
+            },
+            Err(e) => Reply {
+                ok: false,
+                json: Json::obj(vec![("ok", false.into()), ("error", e.as_str().into())]),
+                text: e,
+                png: None,
+            },
+        };
+    }
     if name == "help" {
         let text = forge_lang::help(&a.file);
         return Reply {

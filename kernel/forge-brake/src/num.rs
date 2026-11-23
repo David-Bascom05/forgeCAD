@@ -19,6 +19,8 @@ pub trait Sc:
     fn sqr(self) -> Self;
     /// 1 / x (x away from 0).
     fn recip(self) -> Self;
+    /// x / c for a double c, outward-rounded for an interval.
+    fn div_c(self, c: f64) -> Self;
     /// sin x / x (1 at 0).
     fn sinc(self) -> Self;
     /// (1 - cos x) / x (0 at 0), as x/2 sinc(x/2)^2 so it is exact near 0.
@@ -59,6 +61,9 @@ impl Sc for f64 {
     fn recip(self) -> f64 {
         1.0 / self
     }
+    fn div_c(self, c: f64) -> f64 {
+        self / c
+    }
     fn sinc(self) -> f64 {
         sinc(self)
     }
@@ -94,6 +99,9 @@ impl Sc for Interval {
     }
     fn recip(self) -> Interval {
         Interval::point(1.0).div(&self)
+    }
+    fn div_c(self, c: f64) -> Interval {
+        self.div(&Interval::point(c))
     }
     fn sinc(self) -> Interval {
         // even, and decreasing in |x| on [0, pi]

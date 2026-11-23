@@ -47,6 +47,9 @@ pub enum Unit {
     None,
     Mm,
     Deg,
+    /// Inches, written right after the digits (`0.063in`): a length, 25.4 mm exactly. `5 in OCC`,
+    /// with a space, is a number and the keyword (Lex.lean, LexUnits.lean).
+    In,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -371,6 +374,7 @@ fn lex_into<const KEEP: bool>(
                 "" => Unit::None,
                 "mm" => Unit::Mm,
                 "deg" => Unit::Deg,
+                "in" => Unit::In,
                 _ => {
                     return Err(Error::Syntax(SyntaxError::UnknownUnit {
                         span: Span::new(u0, i),

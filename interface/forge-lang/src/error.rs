@@ -191,7 +191,7 @@ pub enum Op {
     /// statement made, where missing), or with no text is taken out.
     SetProperty { key: String, text: Option<String> },
     /// The statement making `id`, its params, and every statement reading it out of the build,
-    /// their lines kept as comments `#~ID ..` (`.fc`'s suppress).
+    /// their lines kept as comments `#~ID ..`.
     Suppress { id: String },
     /// The lines `Suppress {id}` kept as comments put back.
     Unsuppress { id: String },
@@ -1059,12 +1059,12 @@ impl Error {
             ],
             // what reads the entity goes too, or the edit keeps it
             EntityStillRead { reader, .. } => vec![Op::DeleteFeature { id: reader.clone() }],
-            // a size too big for where it goes: as large as builds (.fc's `try:`)
+            // a size too big for where it goes: as large as builds
             Build { fit: Some(fit), .. } => vec![Op::SetParam {
                 param: fit.0.clone(),
                 value: fit.1,
             }],
-            // a misspelt name: the nearest in reach (.fc's `try:`)
+            // a misspelt name: the nearest in reach
             UnknownName {
                 span, near: Some(n), ..
             } if span.hi > span.lo => vec![Op::Respell {
@@ -1091,7 +1091,7 @@ impl Error {
         match self {
             Syntax(s) => match s {
                 SyntaxError::BadNumber { .. } => "a malformed number".into(),
-                SyntaxError::UnknownUnit { .. } => "unknown unit (mm, deg)".into(),
+                SyntaxError::UnknownUnit { .. } => "unknown unit (mm, in, deg)".into(),
                 SyntaxError::OpenString { .. } => "a string not closed".into(),
                 SyntaxError::BadChar { .. } => "a character Forge does not use".into(),
                 SyntaxError::Expected { what, .. } => format!("expected {what}"),

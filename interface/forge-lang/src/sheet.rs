@@ -55,6 +55,7 @@ pub const BUILTINS: &[&str] = &[
     "hardware",
     "pem",
     "relief_rule",
+    "vendor",
 ];
 
 /// Sheet constants: the relief kinds and corner treatments that take no size.
@@ -226,6 +227,8 @@ pub struct ShopV {
     pub stocks: Vec<Rc<StockV>>,
     /// Its hems: closed hems' allowances and gap (`shop(closed_hems:, hem_gap:)`).
     pub hems: fs::HemTable,
+    /// The vendor profile it was made from (`vendor(..)`, `sheet(vendor: ..)`).
+    pub vendor: Option<Rc<crate::vendor::VendorTag>>,
 }
 
 impl SheetVal {
@@ -274,6 +277,7 @@ impl SheetVal {
                 shop: s.shop.clone(),
                 stocks: s.stocks.iter().map(|x| Rc::new(stock(x))).collect(),
                 hems: s.hems.clone(),
+                vendor: s.vendor.clone(),
             })),
             o => o.clone(),
         }
@@ -381,6 +385,9 @@ pub struct SheetOut {
     pub material: Option<String>,
     /// Each flange's wall, its feature and its height as written (for fixes that lengthen it).
     pub heights: Vec<(WallId, String, Num)>,
+    /// The shop it is checked against (none: unchecked), and the vendor profile it came from.
+    pub shop: Option<fs::ShopProfile>,
+    pub vendor: Option<crate::vendor::VendorTag>,
 }
 
 impl SheetOut {
@@ -477,6 +484,15 @@ impl Names {
             .find(|x| x.0 == j)
             .map_or_else(|| format!("joint {}", j.0), |x| x.1.clone())
     }
+    fn op_on(&self, on: fs::OpOn) -> String {
+        match on {
+            fs::OpOn::Joint(j) => self.joint(j),
+            fs::OpOn::Cut(c) => self.cut(c),
+            fs::OpOn::Punch(k) => format!("punch[{k}]"),
+            fs::OpOn::Form(k) => self.form(k),
+        }
+    }
+
     fn cut(&self, c: CutId) -> String {
         self.cuts
             .iter()
@@ -586,6 +602,33 @@ pub enum SheetErr {
     TableRow { span: Span, row: usize, want: usize },
     /// The newer features' own refusals (`sheet_feat.rs`).
     Feat(FeatErr),
+    /// No vendor profile of this id or name (`ids`: those there are). `sheet`: the sheet naming
+    /// it, whose fixes SetArg it.
+    UnknownVendor {
+        span: Span,
+        name: String,
+        ids: Vec<String>,
+        near: Vec<String>,
+        sheet: Option<String>,
+    },
+    /// A material the vendor does not offer (None: none named).
+    VendorMaterial {
+        span: Span,
+        vendor: String,
+        name: Option<String>,
+        offered: Vec<String>,
+        near: Vec<String>,
+        sheet: Option<String>,
+    },
+    /// A thickness the vendor does not stock in this material; `offered` in mm, with gauges.
+    VendorThickness {
+        span: Span,
+        vendor: String,
+        material: String,
+        thickness: f64,
+        offered: Vec<(f64, Option<String>)>,
+        fixes: Vec<Op>,
+    },
 }
 
 impl SheetErr {
@@ -605,6 +648,9 @@ impl SheetErr {
             | PatternOfSheet { span, .. }
             | PatternOffWall { span, .. }
             | NotACorner { span, .. }
+            | UnknownVendor { span, .. }
+            | VendorMaterial { span, .. }
+            | VendorThickness { span, .. }
             | NoSuchHardware { span, .. } => Some(*span),
             Feat(e) => Some(e.span()),
         }
@@ -628,6 +674,9 @@ impl SheetErr {
             Feat(e) => e.kind(),
             NotACorner { .. } => "NotACorner",
             NoSuchHardware { .. } => "NoSuchHardware",
+            UnknownVendor { .. } => "UnknownVendor",
+            VendorMaterial { .. } => "VendorMaterial",
+            VendorThickness { .. } => "VendorThickness",
         }
     }
 
@@ -642,6 +691,31 @@ impl SheetErr {
                 id: unfold.clone(),
                 before: None,
             }],
+            UnknownVendor {
+                near,
+                sheet: Some(id),
+                ..
+            } => near
+                .iter()
+                .map(|n| Op::SetArg {
+                    id: id.clone(),
+                    arg: "vendor".into(),
+                    text: crate::props::quote(n),
+                })
+                .collect(),
+            VendorMaterial {
+                near,
+                sheet: Some(id),
+                ..
+            } => near
+                .iter()
+                .map(|n| Op::SetArg {
+                    id: id.clone(),
+                    arg: "material".into(),
+                    text: crate::props::quote(n),
+                })
+                .collect(),
+            VendorThickness { fixes, .. } => fixes.clone(),
             _ => vec![],
         }
     }
@@ -694,6 +768,45 @@ impl SheetErr {
             } => {
                 format!("no {kind} {size} in the catalogue; it has {}", sizes.join(", "))
             }
+            UnknownVendor { name, ids, .. } => {
+                format!("no vendor profile '{name}'; there are {}", ids.join(", "))
+            }
+            VendorMaterial {
+                vendor,
+                name: Some(name),
+                offered,
+                ..
+            } => format!(
+                "{vendor} does not offer '{name}'; it offers {}",
+                offered.join(", ")
+            ),
+            VendorMaterial { vendor, offered, .. } => {
+                format!(
+                    "a vendor needs a material: {vendor} offers {}",
+                    offered.join(", ")
+                )
+            }
+            VendorThickness {
+                vendor,
+                material,
+                thickness,
+                offered,
+                ..
+            } => format!(
+                "{vendor} does not stock {material} {} mm thick; it stocks {}",
+                crate::values::fmt(*thickness),
+                offered
+                    .iter()
+                    .map(|(t, g)| {
+                        let inch = crate::values::fmt(t / 25.4);
+                        match g {
+                            Some(g) => format!("{} mm ({inch} in, {g})", crate::values::fmt(*t)),
+                            None => format!("{} mm ({inch} in)", crate::values::fmt(*t)),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         }
     }
 
@@ -738,6 +851,49 @@ impl SheetErr {
                 ("hardware_kind", s(kind)),
                 ("size", s(size)),
                 ("sizes", Json::Arr(sizes.iter().map(|x| s(x)).collect())),
+            ],
+            UnknownVendor { name, ids, near, .. } => vec![
+                ("name", s(name)),
+                ("vendors", Json::Arr(ids.iter().map(|x| s(x)).collect())),
+                ("near", Json::Arr(near.iter().map(|x| s(x)).collect())),
+            ],
+            VendorMaterial {
+                vendor,
+                name,
+                offered,
+                near,
+                ..
+            } => vec![
+                ("vendor", s(vendor)),
+                ("name", name.as_deref().map_or(Json::Null, s)),
+                ("offered", Json::Arr(offered.iter().map(|x| s(x)).collect())),
+                ("near", Json::Arr(near.iter().map(|x| s(x)).collect())),
+            ],
+            VendorThickness {
+                vendor,
+                material,
+                thickness,
+                offered,
+                ..
+            } => vec![
+                ("vendor", s(vendor)),
+                ("material", s(material)),
+                ("thickness", (*thickness).into()),
+                (
+                    "offered",
+                    Json::Arr(
+                        offered
+                            .iter()
+                            .map(|(t, g)| {
+                                Json::obj(vec![
+                                    ("thickness", (*t).into()),
+                                    ("inch", (t / 25.4).into()),
+                                    ("gauge", g.as_deref().map_or(Json::Null, s)),
+                                ])
+                            })
+                            .collect(),
+                    ),
+                ),
             ],
         }
     }
@@ -796,6 +952,9 @@ impl SheetNote {
                 V::ReliefUndersized { .. } => "ReliefUndersized",
                 V::CutCrossesBend { .. } => "CutCrossesBend",
                 V::LipTooShort { .. } => "LipTooShort",
+                V::BendNearEdge { .. } => "BendNearEdge",
+                V::WebTooNarrow { .. } => "WebTooNarrow",
+                V::OperationNotOffered { .. } => "OperationNotOffered",
                 V::Punch { why, .. } => feat::punch_kind(why),
                 V::Form { why, .. } => feat::form_kind(why),
             },
@@ -1128,6 +1287,30 @@ impl SheetNote {
                     ("width", f(width)),
                     ("need", f(need)),
                 ]),
+                V::BendNearEdge {
+                    joint,
+                    distance,
+                    limit,
+                    at,
+                    ..
+                } => v.extend([
+                    ("joint", n.joint(joint).into()),
+                    ("distance", f(distance)),
+                    ("limit", f(limit)),
+                    ("flat_at", p2(at)),
+                ]),
+                V::WebTooNarrow {
+                    width, limit, at, to, ..
+                } => v.extend([
+                    ("width", f(width)),
+                    ("limit", f(limit)),
+                    ("flat_at", p2(at)),
+                    ("flat_to", p2(to)),
+                ]),
+                V::OperationNotOffered { operation, on, .. } => {
+                    v.push(("operation", operation.name().into()));
+                    v.push(("on", n.op_on(on).into()));
+                }
             },
         }
         v
@@ -1139,6 +1322,32 @@ impl SheetNote {
         let fm = crate::values::fmt;
         let n = &self.names;
         match &self.note {
+            Note::Violation(V::BendNearEdge {
+                joint,
+                distance,
+                limit,
+                ..
+            }) => format!(
+                "an edge of the blank {} from the bend of {}; the shop needs {}",
+                fm(*distance),
+                n.joint(*joint),
+                fm(*limit)
+            ),
+            Note::Violation(V::WebTooNarrow { width, limit, .. }) => format!(
+                "a web of material {} wide; the shop needs {}",
+                fm(*width),
+                fm(*limit)
+            ),
+            Note::Violation(V::OperationNotOffered { operation, on, .. }) => format!(
+                "{} needs {}, which the shop does not offer{}",
+                n.op_on(*on),
+                operation.name(),
+                if matches!(operation, fs::Operation::Bend) {
+                    " for this stock"
+                } else {
+                    ""
+                }
+            ),
             Note::Warning(W::FlatOverlap { a, b, total, .. }) => format!(
                 "{} and {} overlap in the flat pattern ({} mm2 in all): the folded part builds, no blank can be cut",
                 n.strip_name(*a),
@@ -1853,6 +2062,11 @@ fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
 }
 
 /// SetParam on the param that drives `n`, if one does.
+pub(crate) fn set_param(n: &Num, value: f64) -> Option<Op> {
+    set(n, value)
+}
+
+/// SetParam on the param that drives `n`, if one does.
 fn set(n: &Num, value: f64) -> Option<Op> {
     let Src::Driving(p) = &n.src else { return None };
     let value = if n.dim == Dim::Angle {
@@ -2521,6 +2735,8 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                     == Some("hardware"),
                 angles: pair("bend_angles", ANG, "bend_angles (least, greatest)")?,
                 part_min: pair("min_part", LEN, "min_part (width, length)")?,
+                bent_max: None,
+                bent_min: None,
             };
             let Value::List(xs) = a.req("stock")? else {
                 return Err(wrong(a.span("stock"), "shop's stock", Ty::List, &a.req("stock")?));
@@ -2562,9 +2778,11 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                     punch_rules: feat::punch_rules_of(&a)?,
                     forms: feat::form_tools_of(&a)?,
                     form_rules: feat::form_rules_of(&a)?,
+                    operations: None,
                 },
                 stocks,
                 hems,
+                vendor: None,
             }))))
         }
         "sheet" => base(ev, args, span),
@@ -2684,6 +2902,27 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         }
         "pem" => pem(ev, args, span),
         "relief_rule" => relief_rule(ev, args, span),
+        "vendor" => {
+            let a = Args::bind(ev, name, &["id", "material"], args, span)?;
+            let id = match a.req("id")? {
+                Value::Str(x) => x.to_string(),
+                o => return Err(wrong(a.span("id"), "a vendor's id", Ty::Str, &o)),
+            };
+            let material = match a.opt("material") {
+                None => None,
+                Some(Value::Str(x)) => Some(x.to_string()),
+                Some(o) => return Err(wrong(a.span("material"), "material", Ty::Str, &o)),
+            };
+            let shop = crate::vendor::shop(
+                ev,
+                &id,
+                a.span("id"),
+                material.as_deref(),
+                a.span("material"),
+                None,
+            )?;
+            Ok(sv(SheetVal::Shop(shop)))
+        }
         _ => unreachable!("only sheet built-ins"),
     }
 }
@@ -2814,10 +3053,17 @@ fn stock(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         rule: rule.rule.clone(),
         radii: radii.iter().map(|r| r.v).collect(),
         min_flange: scaled_of(&a, "min_flange")?,
+        flange_outside: false,
         hole_to_bend: scaled_of(&a, "hole_to_bend")?,
         hole_to_edge: scaled_of(&a, "hole_to_edge")?,
         min_slot: scaled_of(&a, "min_slot")?,
         min_hole: scaled_of(&a, "min_hole")?,
+        bend_to_edge: scaled_of(&a, "bend_to_edge")?,
+        min_web: scaled_of(&a, "min_web")?,
+        angles: None,
+        bend_ref: fs::BendRef::Tangent,
+        bend_length_max: None,
+        not: vec![],
         relief: match a.opt("relief") {
             None => fs::ReliefRule::default(),
             Some(Value::Sheet(v)) if matches!(*v, SheetVal::Rule2(_)) => {
@@ -2923,7 +3169,7 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         ev,
         "sheet",
         &[
-            "profile", "t", "r", "bend", "shop", "corner", "material", "finish",
+            "profile", "t", "r", "bend", "shop", "corner", "material", "finish", "vendor",
         ],
         args,
         span,
@@ -2931,8 +3177,32 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
+    // a vendor's material: its shop, and the library material it names for density
+    let vendor_shop = match a.opt("vendor") {
+        None => None,
+        Some(Value::Str(v)) => {
+            let m = match a.opt("material") {
+                None => None,
+                Some(Value::Str(m)) => Some(m.to_string()),
+                Some(o) => return Err(wrong(a.span("material"), "material", Ty::Str, &o)),
+            };
+            Some(crate::vendor::shop(
+                ev,
+                &v,
+                a.span("vendor"),
+                m.as_deref(),
+                a.span("material"),
+                Some(&id),
+            )?)
+        }
+        Some(o) => return Err(wrong(a.span("vendor"), "a vendor's id", Ty::Str, &o)),
+    };
     // what the drawing's part note names the stock as, and its density: a library material
     let material = match a.opt("material") {
+        _ if vendor_shop.is_some() => vendor_shop
+            .as_ref()
+            .and_then(|s| s.vendor.as_ref())
+            .and_then(|v| v.library.clone()),
         None => None,
         Some(Value::Str(m)) => {
             let at = crate::props::MaterialAt::Sheet { id: id.clone() };
@@ -2967,16 +3237,34 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         }
         Some(o) => return Err(wrong(a.span("shop"), "shop", Ty::Shop, &o)),
     };
+    let shop = match (shop, vendor_shop) {
+        (Some(_), Some(_)) => {
+            return Err(Error::BadValue {
+                span: a.span("vendor"),
+                what: "vendor: with shop: (one or the other)",
+                value: 0.0,
+            });
+        }
+        (s, v) => s.or(v),
+    };
+    // a vendor's thickness not stocked: refused, with the ones it stocks
+    if let Some(s) = &shop {
+        crate::vendor::stock_of(s, &t, a.span("t"))?;
+    }
     let stock = shop.as_ref().and_then(|s| {
+        let found = s.shop.stock(t.v)?;
         s.stocks
             .iter()
-            .find(|x| (x.stock.thickness - t.v).abs() <= 1e-9 * t.v.abs().max(1.0))
+            .find(|x| x.stock.thickness == found.thickness)
             .cloned()
     });
     let r = match (a.num("r", LEN)?, &stock) {
         (Some(r), _) => r,
-        (None, Some(s)) => s.radii[0].clone(),
-        (None, None) => {
+        (None, Some(s)) if !s.radii.is_empty() => s.radii[0].clone(),
+        // a stock the shop only cuts: no bend is made of it (each one is OperationNotOffered),
+        // so t stands for the radius the sheet must carry
+        (None, Some(s)) if s.stock.not.contains(&fs::Operation::Bend) => Num::konst(t.v, Dim::Length),
+        (None, _) => {
             return Err(Error::MissingArg {
                 span,
                 func: "sheet",
@@ -2986,8 +3274,9 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     };
     let rule = match (rule_of(&a, "bend")?, &stock) {
         (Some(r), _) => r,
-        (None, Some(s)) => s.rule.clone(),
-        (None, None) => {
+        // a vendor that states no bend rule for the stock: none is made up for it
+        (None, Some(s)) if shop.as_ref().is_none_or(|x| crate::vendor::states_rule(x, t.v)) => s.rule.clone(),
+        (None, _) => {
             return Err(Error::MissingArg {
                 span,
                 func: "sheet",
@@ -4394,7 +4683,28 @@ pub fn finish_with(ev: &mut Eval, shop: bool) {
                 | fs::Violation::HardwareNearHole { cut, .. }
                 | fs::Violation::SheetTooHard { cut, .. }
                 | fs::Violation::HardnessUnknown { cut, .. } => cut_owner(cut),
+                fs::Violation::BendNearEdge { joint, .. } => st
+                    .joints
+                    .iter()
+                    .find(|j| j.0 == joint)
+                    .map(|j| (j.1.clone(), j.2)),
+                fs::Violation::OperationNotOffered { on, .. } => match on {
+                    fs::OpOn::Joint(joint) => st
+                        .joints
+                        .iter()
+                        .find(|j| j.0 == joint)
+                        .map(|j| (j.1.clone(), j.2)),
+                    fs::OpOn::Cut(cut) => cut_owner(cut),
+                    fs::OpOn::Form(form) => st.forms.get(form).map(|f| (f.0.clone(), f.1)),
+                    fs::OpOn::Punch(punch) => st
+                        .sheet
+                        .punches
+                        .get(punch)
+                        .and_then(|p| p.cuts.first())
+                        .and_then(|c| cut_owner(*c)),
+                },
                 fs::Violation::ThicknessNotStocked { .. }
+                | fs::Violation::WebTooNarrow { .. }
                 | fs::Violation::FlatTooLarge { .. }
                 | fs::Violation::PartTooSmall { .. } => None,
                 fs::Violation::BendTooLong { joint, .. }
@@ -4634,6 +4944,8 @@ pub fn outputs(ev: &Eval) -> Vec<SheetOut> {
                 .iter()
                 .map(|f| (f.wall, f.id.clone(), f.height.clone()))
                 .collect(),
+            shop: st.shop.as_ref().map(|s| s.shop.clone()),
+            vendor: st.shop.as_ref().and_then(|s| s.vendor.as_deref().cloned()),
             unfolds: st
                 .unfolds
                 .iter()
@@ -4686,7 +4998,12 @@ impl SheetOut {
         format!(
             "{}  MATERIAL {}  T {:.2}  {rule}",
             self.id.to_uppercase(),
-            self.material.as_deref().unwrap_or("UNSPECIFIED").to_uppercase(),
+            self.vendor
+                .as_ref()
+                .map(|v| v.material.as_str())
+                .or(self.material.as_deref())
+                .unwrap_or("UNSPECIFIED")
+                .to_uppercase(),
             g.thickness
         )
     }
@@ -4724,6 +5041,10 @@ impl SheetOut {
             ("thickness", g.thickness.into()),
             ("radius", g.radius.into()),
             ("rule", rule),
+            (
+                "vendor",
+                self.vendor.as_ref().map_or(Json::Null, crate::dfm::vendor_json),
+            ),
             ("walls", self.walls.len().into()),
             ("bends", Json::Arr(bends)),
             (

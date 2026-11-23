@@ -156,7 +156,13 @@ pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &As
         },
         None => &r.sheets[0],
     };
-    let tooling = tooling(ask, dir.as_deref())?;
+    simulate_sheet(sh, dir.as_deref(), ask)
+}
+
+/// One built sheet simulated (for a caller that has run the part already, as `query F dfm`
+/// does): its vendor's tooling unless `ask` names other.
+pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Sim, Answer> {
+    let (tooling, tsource) = tooling(ask, dir, sh.vendor.as_ref().map(|v| v.id.as_str()))?;
     let model = match fb::Model::new(&sh.sheet) {
         Ok(m) => m,
         Err(e) => return Err(model_err(sh, &e)),
@@ -179,7 +185,10 @@ pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &As
         ..fb::Options::default()
     };
     let plan = fb::plan(&model, &tooling, &opts);
-    let answer = answer(sh, &model, &tooling, &plan, &bend_names);
+    let mut answer = answer(sh, &model, &tooling, &plan, &bend_names);
+    if let Json::Obj(f) = &mut answer.json {
+        f.insert(4, ("tooling_source".into(), tsource));
+    }
     Ok(Sim {
         model,
         tooling,
@@ -187,6 +196,102 @@ pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &As
         names: bend_names,
         answer,
     })
+}
+
+/// The simulation's findings in `query F dfm`'s Item shape: one per failing check of each step
+/// (severity "violation", or "warning" for withdraw), and one "refused" item per blocked bend;
+/// `rule` is the simulator's rule word.
+pub fn items(sh: &SheetOut, sim: &Sim) -> Vec<Json> {
+    let mut out = Vec::new();
+    let mut item = |c: &Check, step: Option<(usize, &fb::Step)>, bend: usize, severity: &str| {
+        let a = angular(c.rule);
+        let v = |x: f64| if a { rdeg(x) } else { r6(x) };
+        let anchor = c.part.as_ref().map(|p| part(sh, p));
+        let mut data = vec![("tool", c.tool.as_deref().map_or(Json::Null, Json::from))];
+        if let Some((n, st)) = step {
+            data.push(("step", ((n + 1) as f64).into()));
+            data.push(("punch", st.punch.as_str().into()));
+            data.push(("die", st.die.as_str().into()));
+        }
+        data.push(("phase", c.phase.map_or(Json::Null, |p| p.word().into())));
+        data.push(("phi_deg", c.phi.map_or(Json::Null, rdeg)));
+        // the place in the press frame (the folded part's is not named: location.at is null)
+        data.push((
+            "at_press",
+            c.at.map_or(Json::Null, |a| Json::Arr(a.iter().map(|x| r6(*x)).collect())),
+        ));
+        let mut fixes = Vec::new();
+        if c.rule == Rule::MinFlange
+            && let Some(PartRef {
+                strip: Strip::Wall(w),
+                ..
+            }) = c.part
+        {
+            let by = ((c.limit - c.value) * 10.0).ceil() / 10.0 + 0.1;
+            if let Some(op) = sh.lengthen(w, by) {
+                fixes.push(op.json());
+            }
+        }
+        out.push(Json::obj(vec![
+            ("rule", c.rule.word().into()),
+            ("severity", severity.into()),
+            (
+                "text",
+                format!(
+                    "{}: {} {} {} {}",
+                    sim.names[bend],
+                    c.rule.word(),
+                    r6s(if a { c.value.to_degrees() } else { c.value }),
+                    if c.at_most { "over" } else { "under" },
+                    r6s(if a { c.limit.to_degrees() } else { c.limit })
+                )
+                .as_str()
+                .into(),
+            ),
+            ("feature", sim.names[bend].as_str().into()),
+            ("line", Json::Null),
+            ("measured", v(c.value)),
+            ("limit", v(c.limit)),
+            ("sense", (if c.at_most { "max" } else { "min" }).into()),
+            ("unit", (if a { "deg" } else { "mm" }).into()),
+            (
+                "location",
+                Json::obj(vec![
+                    (
+                        "anchor",
+                        anchor
+                            .as_ref()
+                            .and_then(|j| j.get("anchor").cloned())
+                            .unwrap_or(Json::Null),
+                    ),
+                    ("faces", Json::Arr(vec![])),
+                    ("flat", Json::Null),
+                    (
+                        "at",
+                        c.at.map_or(Json::Null, |a| Json::Arr(a.iter().map(|x| r6(*x)).collect())),
+                    ),
+                ]),
+            ),
+            ("data", Json::obj(data)),
+            ("fixes", Json::Arr(fixes)),
+        ]));
+    };
+    for (n, st) in sim.plan.steps.iter().enumerate() {
+        for c in st.checks.iter().filter(|c| !c.pass) {
+            let sev = if c.severity == Severity::Warning {
+                "warning"
+            } else {
+                "violation"
+            };
+            item(c, Some((n, st)), st.bend, sev);
+        }
+    }
+    for b in &sim.plan.blocking {
+        for c in &b.checks {
+            item(c, None, b.bend, "refused");
+        }
+    }
+    out
 }
 
 fn model_err(sh: &SheetOut, e: &fb::ModelError) -> Answer {
@@ -293,7 +398,76 @@ fn sequence(s: &str, names: &[String]) -> Result<Vec<usize>, Answer> {
 }
 
 /// The tooling asked for: a file, a vendor's, or a standard set (std-eu by default).
-fn tooling(ask: &Ask, dir: Option<&Path>) -> Result<fb::Tooling, Answer> {
+/// A vendor profile's `[tooling]` (TOML, mm and degrees) as the JSON a tooling file holds.
+fn toml_json(i: &forge_vendor::toml::Item) -> Json {
+    use forge_vendor::toml::Item;
+    match i {
+        Item::Str(s) => Json::from(s.as_str()),
+        Item::Num(n) => Json::from(*n),
+        Item::Bool(b) => Json::Bool(*b),
+        Item::Arr(v) => Json::Arr(v.iter().map(toml_json).collect()),
+        Item::Table(t) => table_json(t),
+        Item::Tables(ts) => Json::Arr(ts.iter().map(table_json).collect()),
+    }
+}
+
+fn table_json(t: &forge_vendor::toml::Table) -> Json {
+    Json::Obj(t.0.iter().map(|(k, v)| (k.clone(), toml_json(v))).collect())
+}
+
+/// The keys whose numbers are lengths (a vendor file's lengths are in its `units`); angles,
+/// counts, loads and the V rule (in thicknesses) are not.
+const LENGTHS: [&str; 22] = [
+    "height",
+    "tip_radius",
+    "tip_height",
+    "width",
+    "depth",
+    "z0",
+    "z1",
+    "v",
+    "shoulder_radius",
+    "length",
+    "open_height",
+    "stroke",
+    "bed_length",
+    "housing_gap",
+    "front",
+    "back",
+    "x",
+    "r",
+    "retract",
+    "clearance",
+    "self_clearance",
+    "short_end",
+];
+
+/// `j` with every length scaled by `s` (inches to mm: 25.4).
+fn scaled(j: &Json, s: f64, key: Option<&str>) -> Json {
+    let length = key.is_some_and(|k| LENGTHS.contains(&k));
+    match j {
+        Json::Num(n) if length => Json::from(n * s),
+        Json::Arr(v) => Json::Arr(v.iter().map(|x| scaled(x, s, key)).collect()),
+        Json::Obj(f) => Json::Obj(
+            f.iter()
+                .map(|(k, v)| (k.clone(), scaled(v, s, Some(k))))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// Where the tooling came from, for the reply: a standard set, a vendor's profile, or a file.
+fn source(kind: &str, id: &str, extra: Vec<(&str, Json)>) -> Json {
+    let mut f = vec![("kind", Json::from(kind)), ("id", Json::from(id))];
+    f.extend(extra);
+    Json::obj(f)
+}
+
+/// The tooling asked for, and where it came from: `--vendor` (a vendor id, or a JSON file with a
+/// `tooling` field), `--tooling` (a set id or a JSON file), else the sheet's own vendor's, else
+/// the standard set std-eu.
+fn tooling(ask: &Ask, dir: Option<&Path>, sheet_vendor: Option<&str>) -> Result<(fb::Tooling, Json), Answer> {
     let read = |p: &str| -> Result<Json, Answer> {
         let path = dir.map_or_else(|| PathBuf::from(p), |d| d.join(p));
         let text = std::fs::read_to_string(&path).map_err(|e| {
@@ -305,18 +479,75 @@ fn tooling(ask: &Ask, dir: Option<&Path>) -> Result<fb::Tooling, Answer> {
         })?;
         Json::parse(&text).map_err(|e| err("BadTooling", format!("{}: {e}", path.display()), vec![]))
     };
-    if let Some(v) = &ask.vendor {
-        let j = read(v)?;
-        let t = j
-            .get("tooling")
-            .ok_or_else(|| err("BadTooling", format!("vendor file {v} has no `tooling`"), vec![]))?;
-        return tooling_of(t);
+    let standard = |why: &str| {
+        (
+            fb::library::std_eu(),
+            source("standard", "std-eu", vec![("why", why.into())]),
+        )
+    };
+    let vendor = ask
+        .vendor
+        .as_deref()
+        .or(if ask.tooling.is_none() { sheet_vendor } else { None });
+    if let Some(v) = vendor {
+        if v.ends_with(".json") {
+            let j = read(v)?;
+            let t = j
+                .get("tooling")
+                .ok_or_else(|| err("BadTooling", format!("vendor file {v} has no `tooling`"), vec![]))?;
+            return Ok((tooling_of(t)?, source("file", v, vec![])));
+        }
+        let profiles = forge_vendor::Profiles::cached(dir);
+        let Some(e) = profiles.find(v) else {
+            return Err(err("NoSuchVendor", format!("no vendor profile `{v}`"), vec![]));
+        };
+        let ven = &e.vendor;
+        let mut extra = vec![
+            ("vendor", Json::from(ven.name.as_str())),
+            ("source", ven.source.as_deref().map_or(Json::Null, Json::from)),
+            ("taken", ven.taken.as_deref().map_or(Json::Null, Json::from)),
+            (
+                "verify",
+                "restated from public guidelines, not official: verify with the vendor before ordering"
+                    .into(),
+            ),
+        ];
+        let t = match &ven.tooling {
+            None => {
+                // nothing published: the standard set, said so
+                let (t, _) = standard("the vendor publishes no press-brake tooling");
+                extra.push((
+                    "why",
+                    "the vendor publishes no press-brake tooling: the standard set std-eu".into(),
+                ));
+                return Ok((t, source("vendor", &ven.id, extra)));
+            }
+            Some(forge_vendor::Tooling::Set(id)) => fb::library::set(id).ok_or_else(|| {
+                err(
+                    "NoSuchTooling",
+                    format!("vendor {v} names tooling set `{id}`"),
+                    vec![("ids", strs(&fb::library::IDS))],
+                )
+            })?,
+            Some(forge_vendor::Tooling::Table(t)) => {
+                // lengths in the file's units, angles in degrees
+                let j = match ven.units {
+                    forge_vendor::Units::In => scaled(&table_json(t), 25.4, None),
+                    forge_vendor::Units::Mm => table_json(t),
+                };
+                if let Some(n) = j.get("note").and_then(Json::str) {
+                    extra.push(("note", n.into()));
+                }
+                tooling_of(&j)?
+            }
+        };
+        return Ok((t, source("vendor", &ven.id, extra)));
     }
     match &ask.tooling {
-        None => Ok(fb::library::std_eu()),
+        None => Ok(standard("no vendor or tooling given: the standard set")),
         Some(t) => match fb::library::set(t) {
-            Some(s) => Ok(s),
-            None if t.ends_with(".json") => tooling_of(&read(t)?),
+            Some(s) => Ok((s, source("standard", t, vec![("why", "asked for".into())]))),
+            None if t.ends_with(".json") => Ok((tooling_of(&read(t)?)?, source("file", t, vec![]))),
             None => Err(err(
                 "NoSuchTooling",
                 format!("no tooling set `{t}`: a standard set or a .json file"),
@@ -528,9 +759,12 @@ pub fn tooling_of(j: &Json) -> Result<fb::Tooling, Answer> {
             vec![("ids", strs(&fb::library::IDS))],
         )
     })?;
-    let whole = j.get("base").is_none() && j.get("punches").is_some() && j.get("dies").is_some();
-    if whole {
+    // a list given is all there is (a vendor's tooling narrows the set); one left out is the
+    // base set's
+    if j.get("punches").is_some() {
         t.punches.clear();
+    }
+    if j.get("dies").is_some() {
         t.dies.clear();
     }
     if let Some(id) = j.get("id").and_then(Json::str) {
@@ -655,6 +889,17 @@ fn check(sh: &SheetOut, c: &Check) -> Json {
         ("value", v(c.value)),
         ("limit", v(c.limit)),
         ("compare", (if c.at_most { "<=" } else { ">=" }).into()),
+        (
+            "verdict",
+            (if c.pass {
+                "pass"
+            } else if c.undecided {
+                "undecided"
+            } else {
+                "fail"
+            })
+            .into(),
+        ),
         ("certified", c.certified.into()),
         ("unit", (if a { "deg" } else { "mm" }).into()),
     ];
@@ -683,6 +928,70 @@ fn check(sh: &SheetOut, c: &Check) -> Json {
         f.push(("phase", p.word().into()));
     }
     Json::obj(f)
+}
+
+/// Why the step's tools: the die by the set's V rule, the punch the first in order (straight,
+/// gooseneck, acute) that passes, and the setups tried before it with the rule each failed.
+fn choice(m: &fb::Model, tl: &fb::Tooling, st: &fb::Step) -> Json {
+    let t = m.t;
+    let die = tl.die(&st.die);
+    let punch = tl.punch(&st.punch);
+    let want = tl.v_rule * t;
+    let die_why = match die {
+        Some(d) if st.rejected.is_empty() => format!(
+            "V {} nearest the rule V = {} t = {}; the first die tried",
+            r6s(d.v),
+            r6s(tl.v_rule),
+            r6s(want)
+        ),
+        Some(d) => format!(
+            "V {} (the rule asks V = {} t = {}): the first that passes",
+            r6s(d.v),
+            r6s(tl.v_rule),
+            r6s(want)
+        ),
+        None => String::new(),
+    };
+    let straight_failed: Vec<&(String, String, bool, Rule)> = st
+        .rejected
+        .iter()
+        .filter(|r| tl.punch(&r.0).is_some_and(|p| p.kind == fb::PunchKind::Straight))
+        .collect();
+    let punch_why = match punch.map(|p| p.kind) {
+        Some(fb::PunchKind::Straight) => "a straight punch: the first choice".to_string(),
+        Some(k) => format!("a {} punch: every straight punch failed ({})", k.word(), {
+            let mut rules: Vec<&str> = straight_failed.iter().map(|r| r.3.word()).collect();
+            rules.sort_unstable();
+            rules.dedup();
+            rules.join(", ")
+        }),
+        None => String::new(),
+    };
+    let rejected: Vec<Json> = st
+        .rejected
+        .iter()
+        .take(24)
+        .map(|r| {
+            Json::obj(vec![
+                ("punch", r.0.as_str().into()),
+                ("die", r.1.as_str().into()),
+                ("rotate", r.2.into()),
+                ("rule", r.3.word().into()),
+            ])
+        })
+        .collect();
+    Json::obj(vec![
+        ("die", die_why.as_str().into()),
+        ("punch", punch_why.as_str().into()),
+        ("v_rule", r6(tl.v_rule)),
+        ("tried", ((st.rejected.len() + 1) as f64).into()),
+        ("rejected", Json::Arr(rejected)),
+    ])
+}
+
+fn r6s(x: f64) -> String {
+    let v = (x * 1e3).round() / 1e3;
+    format!("{v}")
 }
 
 fn answer(sh: &SheetOut, m: &fb::Model, tl: &fb::Tooling, plan: &fb::Plan, names: &[String]) -> Answer {
@@ -776,6 +1085,7 @@ fn answer(sh: &SheetOut, m: &fb::Model, tl: &fb::Tooling, plan: &fb::Plan, names
                 ("travel", r6(st.travel)),
                 ("force", st.force.map_or(Json::Null, r6)),
                 ("pass", st.pass().into()),
+                ("choice", choice(m, tl, st)),
                 (
                     "checks",
                     Json::Arr(st.checks.iter().map(|c| check(sh, c)).collect()),

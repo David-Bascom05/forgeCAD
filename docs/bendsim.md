@@ -9,10 +9,23 @@ forgecad query F bendsim [--tooling T] [--vendor V] [--sequence S] [--sheet NAME
 MCP: query {file: F, sel: "bendsim", tooling?, vendor?, sequence?}   (or all of it in sel's words)
 ```
 
+- Default, with no `--vendor` and no `--tooling`: the sheet's own vendor's tooling if its vendor
+  profile has a `[tooling]` section, else standard tooling (`std-eu`). For each bend the planner
+  takes the die whose V is nearest the set's rule (`v_rule`, 8 t; acute dies last) and a straight
+  punch, a gooseneck only where every straight punch fails, then acute; each step's `choice` says
+  which and why, with the setups tried before it and the rule each failed.
 - `T`: a standard set (`std-eu`, Promecam-style; `std-us`, American) or a tooling file (`.json`,
-  beside the part). Default `std-eu`.
-- `V`: a vendor file (`.json`) whose `tooling` field is a set id, a tooling object, or
-  `{"base": "std-eu", ...}`: the set with tools added or replaced by id and its rules overridden.
+  beside the part).
+- `V`: a vendor id (`sendcutsend`, `jlc`, .., as forge-vendor's profiles name them: built in,
+  the user's, the project's) whose `[tooling]` is used; or a `.json` file with a `tooling` field.
+  A vendor's tooling only narrows the choice to what it has: a list it gives (`dies`, `punches`)
+  is all there is; what it leaves out is the standard set's, and the reply's `tooling_source`
+  says which (`kind` standard | vendor | file, `id`, `why`, and for a vendor its `source`, `taken`,
+  `note` and `verify`).
+- Presets restated from public pages (not official, verify with the vendor before ordering):
+  `sendcutsend` (its four published V widths and 44 in maximum bend length; the rest std-us),
+  `jlc` (publishes no press-brake tooling: std-eu). Sources and dates in each profile's
+  `[tooling]`.
 - `S`: the bends in order, comma separated, by name (the flange's feature name) or number (1 is the
   sheet's first bend, as `bends` lists them). Left out, the order is searched.
 - `--uts`: tensile strength for the force check; else the part's material's, if the material
@@ -42,18 +55,22 @@ Lengths mm, angles degrees. Every field but `id` has a default from the base set
 
 - `profile`: a punch's or a die's section as `[[x, z], ..]`, in place of the generated one.
   A punch has its tip at the origin; a die has its V centred on x = 0 and its top on z = 0.
-- A file with `punches` and `dies` and no `base` is a whole set.
+- A list given (`punches`, `dies`) replaces the base set's; a list left out is the base's.
+- In a vendor profile (TOML) the same keys sit under `[tooling]` (`[[tooling.dies]]`, ..), lengths in the
+  file's `units` (mm or in), angles in degrees.
 
 ## The reply, schema `forgecad.bendsim/1`
 
 ```
-ok, schema, sheet, tooling, press, material, clearance,
+ok, schema, sheet, tooling, tooling_source, press, material, clearance,
 feasible            every bend passes in `sequence`
 sequence            bend names in order (as searched, or as given)
 bends[]             n, bend, angle (deg), direction (up|down), radius, length
 steps[]             n, bend, angle, overbend (deg), punch, die, punch_length, die_length,
                     orientation {flip, rotate, y}, backgauge {x, r, fingers[], stop} | null,
-                    travel (ram, mm), force (kN) | null, pass, checks[]
+                    travel (ram, mm), force (kN) | null, pass,
+                    choice {die, punch (why, in words), v_rule, tried, rejected[{punch, die, rotate,
+                    rule}]}, checks[]
 blocking[]          (infeasible) bend, after[], punch, die, checks[] (the failing ones)
 fixes[]             typed edit ops (SetParam on a flange height's param, else SetArg)
 suggestions[]       {kind: LengthenFlange, bend, wall, by} | {kind: NeedTool, bend, rule, what}
@@ -61,7 +78,8 @@ explored, exhausted the setups simulated; whether the search hit its budget
 ```
 
 A check: `rule`, `pass`, `severity` (error|warning), `value`, `limit`, `compare` (`>=` or `<=`:
-how the value is held to the limit), `limit_lo` (two-sided rules), `unit` (mm|deg), `certified`,
+how the value is held to the limit), `verdict` (pass | fail | undecided: neither proven clear nor
+proven violated, refused as a failure), `limit_lo` (two-sided rules), `unit` (mm|deg), `certified`,
 and where it applies: `bound` (a distance's proven lower bound; `value` is met by a real point),
 `part` and `other` (`{anchor, strip, name, surface, segment}`), `tool`
 (`punch:ID/tip`, `punch:ID/body`, `die:ID`, `ram`, `bed`, `backgauge:fingerN`), `at` (press frame,
@@ -99,7 +117,10 @@ z up from the die's top.
 Fold states are the exact partial refolds of the folded part (the neutral layer kept). Distances
 are certified, not sampled: each piece is enclosed over boxes of its parameters and of the motion
 by outward-rounded interval arithmetic and branch and bound, so a pass holds at every instant of
-the bend, and a fail names a real point. Contacts the bend is made by (the punch tip on the zone,
+the bend (to the stated resolution: distance >= limit - res), and a fail names a real point whose
+distance, its error budget added, is under the limit. Anything else is `undecided`, never a pass.
+The double signed distances carry a stated error budget (`forge_brake::bb::sd_err`), an
+assumption still to be proven. Contacts the bend is made by (the punch tip on the zone,
 the legs on the die's shoulders) are decided by the closed-form rules. The search is deterministic.
 
 ### Errors
@@ -108,3 +129,10 @@ the legs on the die's shoulders) are decided by the closed-form rules. The searc
 and fixes, as `cause`), `NoSheet`, `NoSuchSheet` (`sheets`), `NoSuchTooling` (`ids`), `BadTooling`,
 `NoSuchBend` / `BadSequence` (`item`, `bends`), `HemNotSimulated` (`bend`), `NotBend`,
 `SplineOutline`, `SheetNotBuilt`.
+
+### In `query F dfm`
+
+`forge_lang::bendsim::simulate_sheet(&SheetOut, dir, &Ask)` and `items(&SheetOut, &Sim)` give the
+findings in the DFM report's Item shape: `rule` (the words above), `severity` (violation, warning,
+refused for a blocked bend), `feature` (the flange), `measured`, `limit`, `sense`, `unit`,
+`location {anchor, at: null}`, `data {step, punch, die, tool, phase, phi_deg, at_press}`, `fixes`.

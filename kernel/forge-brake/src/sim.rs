@@ -157,6 +157,9 @@ pub struct Check {
     pub bound: Option<f64>,
     /// Proven: an exact closed form, or a certified bound / witness.
     pub certified: bool,
+    /// Neither proven clear nor proven violated (the search's budget, or a margin under its
+    /// resolution with no witness): refused, as a failure.
+    pub undecided: bool,
     pub part: Option<PartRef>,
     /// The other part piece, for a self collision.
     pub other: Option<PartRef>,
@@ -181,6 +184,7 @@ impl Check {
             lo: None,
             bound: None,
             certified: true,
+            undecided: false,
             part: None,
             other: None,
             tool: None,
@@ -232,6 +236,9 @@ pub struct Step {
     /// Air-bending force, kN (with the material's strength).
     pub force: Option<f64>,
     pub checks: Vec<Check>,
+    /// The setups tried before this one, in the planner's order, each with the first rule it
+    /// failed (punch id, die id, rotated, rule): why these tools were chosen.
+    pub rejected: Vec<(String, String, bool, Rule)>,
 }
 
 impl Step {
@@ -944,6 +951,7 @@ impl<'a> StepCtx<'a> {
                     let mut c = Check::rule(rule, value, limit, false);
                     c.pass = false;
                     c.certified = hit;
+                    c.undecided = !hit;
                     c.severity = if rule == Rule::Withdraw {
                         Severity::Warning
                     } else {
@@ -1075,6 +1083,7 @@ impl<'a> StepCtx<'a> {
                             Verdict::Undecided { lower } => {
                                 c.value = lower;
                                 c.certified = false;
+                                c.undecided = true;
                                 c.other = Some(self.part_ref(st, [0.0; 4]));
                             }
                             Verdict::Clear { .. } => unreachable!(),

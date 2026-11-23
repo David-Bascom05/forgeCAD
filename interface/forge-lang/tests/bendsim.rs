@@ -283,3 +283,147 @@ fn a_short_flange_gets_a_fix_that_clears_the_die() {
     let a = ask_src(&ell(h), Some(dir), None, &ask);
     assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
 }
+
+#[test]
+fn standard_tooling_by_default_and_why() {
+    let a = ask_src(&channel(), None, None, &Ask::default());
+    let src = a.json.get("tooling_source").unwrap();
+    assert_eq!(src.get("kind").and_then(Json::str), Some("standard"));
+    assert_eq!(src.get("id").and_then(Json::str), Some("std-eu"));
+    let st = &arr(&a.json, "steps")[0];
+    let c = st.get("choice").unwrap();
+    has(c, &["die", "punch", "v_rule", "tried", "rejected"]);
+    assert!(
+        c.get("punch").and_then(Json::str).unwrap().contains("straight"),
+        "{c}"
+    );
+    // a gooseneck is chosen only where the straight punches fail, and the reply says so
+    let narrow = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
+        sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (40, 200))\n}\n\
+        base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+        right = flange(base.edge(plan.outline[1]), height: 60)\n\
+        left = flange(base.edge(plan.outline[3]), height: 60)\n";
+    let a = ask_src(narrow, None, None, &Ask::default());
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    let st = &arr(&a.json, "steps")[1];
+    let why = st
+        .get("choice")
+        .and_then(|c| c.get("punch"))
+        .and_then(Json::str)
+        .unwrap()
+        .to_string();
+    assert!(
+        why.contains("gooseneck") && why.contains("closes_on_punch"),
+        "{why}"
+    );
+}
+
+#[test]
+fn a_vendors_tooling_narrows_the_choice() {
+    // SendCutSend publishes four V widths: a 2 mm channel bends on its 0.630 in die
+    let a = ask_src(
+        &channel(),
+        None,
+        None,
+        &Ask {
+            vendor: Some("sendcutsend".into()),
+            ..Ask::default()
+        },
+    );
+    assert!(a.ok, "{}", a.text);
+    let src = a.json.get("tooling_source").unwrap();
+    assert_eq!(src.get("kind").and_then(Json::str), Some("vendor"));
+    assert!(
+        src.get("verify")
+            .and_then(Json::str)
+            .unwrap()
+            .contains("verify with the vendor")
+    );
+    for st in arr(&a.json, "steps") {
+        assert!(
+            st.get("die")
+                .and_then(Json::str)
+                .unwrap()
+                .starts_with("sendcutsend/V"),
+            "{st}"
+        );
+    }
+    // JLC publishes no tooling: the standard set, and the reply says why
+    let a = ask_src(
+        &channel(),
+        None,
+        None,
+        &Ask {
+            vendor: Some("jlc".into()),
+            ..Ask::default()
+        },
+    );
+    assert!(a.ok, "{}", a.text);
+    let src = a.json.get("tooling_source").unwrap();
+    assert_eq!(src.get("kind").and_then(Json::str), Some("vendor"));
+    assert!(
+        src.get("note")
+            .and_then(Json::str)
+            .unwrap()
+            .contains("publishes no press-brake tooling")
+    );
+    assert_eq!(a.json.get("tooling").and_then(Json::str), Some("jlc"));
+    let a = ask_src(
+        &channel(),
+        None,
+        None,
+        &Ask {
+            vendor: Some("acme".into()),
+            ..Ask::default()
+        },
+    );
+    assert_eq!(
+        a.json
+            .get("error")
+            .and_then(|e| e.get("kind"))
+            .and_then(Json::str),
+        Some("NoSuchVendor")
+    );
+}
+
+#[test]
+fn findings_in_the_dfm_item_shape() {
+    use forge_lang::bendsim::{items, simulate_sheet};
+    let (r, _) = forge_lang::run(&ell(12.0), forge_lang::Options::default(), Default::default());
+    let dir = std::env::temp_dir().join(format!("forgecad-bendsim-items-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("wide.json"),
+        r#"{"punches": [{"id": "p", "kind": "straight", "height": 100, "tip_radius": 0.8, "tip_angle": 88, "width": 26, "segments": [{"length": 200, "count": 1}]}],
+            "dies": [{"id": "v32", "v": 32, "angle": 88, "shoulder_radius": 4, "height": 80, "width": 80, "segments": [{"length": 200, "count": 1}]}]}"#,
+    )
+    .unwrap();
+    let sim = simulate_sheet(
+        &r.sheets[0],
+        Some(&dir),
+        &Ask {
+            tooling: Some("wide.json".into()),
+            ..Ask::default()
+        },
+    )
+    .unwrap_or_else(|a| panic!("{}", a.text));
+    let it = items(&r.sheets[0], &sim);
+    assert!(!it.is_empty());
+    for i in &it {
+        has(
+            i,
+            &[
+                "rule", "severity", "text", "feature", "line", "measured", "limit", "sense", "unit",
+                "location", "data", "fixes",
+            ],
+        );
+        has(i.get("location").unwrap(), &["anchor", "faces", "flat", "at"]);
+    }
+    let mf = it
+        .iter()
+        .find(|i| i.get("rule").and_then(Json::str) == Some("min_flange"))
+        .unwrap();
+    assert_eq!(mf.get("severity").and_then(Json::str), Some("refused"));
+    assert_eq!(mf.get("sense").and_then(Json::str), Some("min"));
+    assert_eq!(arr(mf, "fixes").len(), 1);
+}

@@ -1170,6 +1170,7 @@ dependencies = [
  "forge-thermo",
  "forge-topo",
  "forge-units",
+ "forge-vendor",
 ]
 
 [[package]]
@@ -1246,6 +1247,7 @@ dependencies = [
  "forge-step",
  "forge-thermo",
  "forge-topo",
+ "forge-vendor",
  "js-sys",
  "keyring-core",
  "png",
@@ -1315,6 +1317,15 @@ dependencies = [
 [[package]]
 name = "forge-units"
 version = "0.1.0"
+
+[[package]]
+name = "forge-vendor"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-material",
+ "forge-sheet",
+]
 
 [[package]]
 name = "futures-core"

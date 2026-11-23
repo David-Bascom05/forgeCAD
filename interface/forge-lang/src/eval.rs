@@ -1593,6 +1593,7 @@ impl<'s> Eval<'s> {
             ExprKind::Num(v, u) => Ok(Value::Num(match u {
                 Unit::Deg => Num::konst(v.to_radians(), Dim::Angle),
                 Unit::Mm => Num::konst(*v, Dim::Length),
+                Unit::In => Num::konst(*v * 25.4, Dim::Length),
                 // in a param too: a bare number takes the other operand's dimension, so `W / 2`
                 // is a Length; what is still bare when the param is made settles to Length
                 Unit::None => Num::konst(*v, Dim::Any),
@@ -2642,7 +2643,7 @@ pub fn arith(op: BinOp, x: &Value, y: &Value, span: Span, sa: Span, sb: Span) ->
         (Value::Verts(a), Value::Verts(b)) if op == BinOp::Sub => Ok(Value::Verts(Rc::new(
             a.iter().copied().filter(|n| !b.contains(n)).collect(),
         ))),
-        // the first set less what the second holds (`.fc` picked one of several by place)
+        // the first set less what the second holds
         (Value::Faces(a), Value::Faces(b)) if op == BinOp::Sub => Ok(Value::Faces(Rc::new(Faces {
             names: a.names.iter().copied().filter(|n| !b.names.contains(n)).collect(),
             owner: a.owner.clone(),

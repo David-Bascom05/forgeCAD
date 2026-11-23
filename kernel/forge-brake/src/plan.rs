@@ -188,6 +188,7 @@ impl<'a> Search<'a> {
             travel,
             force,
             checks: Vec::new(),
+            rejected: Vec::new(),
         };
         let failed = |c: &[Check]| c.iter().any(|c| !c.pass && c.severity == Severity::Error);
         if quick && failed(&checks) {
@@ -298,6 +299,7 @@ impl<'a> Search<'a> {
         }
         let n_done = done.iter().filter(|d| **d).count();
         let mut found = None;
+        let mut rejected = Vec::new();
         for s in self.setups.clone() {
             if self.explored >= self.budget {
                 self.exhausted = true;
@@ -317,8 +319,13 @@ impl<'a> Search<'a> {
                 );
             }
             if step.pass() {
-                found = Some(self.run(done, j, s, false));
+                let mut full = self.run(done, j, s, false);
+                full.rejected = std::mem::take(&mut rejected);
+                found = Some(full);
                 break;
+            }
+            if let Some(c) = step.failures().first() {
+                rejected.push((step.punch.clone(), step.die.clone(), s.rotate, c.rule));
             }
             let nf = step.failures().len();
             let better = match &self.best[j] {
