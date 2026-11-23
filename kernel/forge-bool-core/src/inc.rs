@@ -451,9 +451,10 @@ struct Assembled {
     orient: Vec<Sgn>,
 }
 
-/// **The A8 core** (`coreI`): split check, classify check, keep per room, then the touch rule,
-/// the empty test and unify. One pass, no retries.
-pub fn core(l: &Ledger, rule: &Rule) -> Outcome {
+/// **The A8 core with the metric ledger** (`coreMI`): split check, classify check, keep per
+/// room, the collapse of the thin rooms (`collapse`; the identity when `m.thin` is empty), then
+/// the touch rule, the empty test and unify. One pass, no retries.
+pub fn core(l: &Ledger, rule: &Rule, m: &MetricLedger) -> Outcome {
     if !split_ok(l) {
         Outcome::Refused(Refusal::SplitCrossed)
     } else {
@@ -490,9 +491,149 @@ pub fn core(l: &Ledger, rule: &Rule) -> Outcome {
                 keep.push(apply_rule(rule, &mv));
                 t += 1;
             }
-            core_k(l, &s, &keep)
+            // 4b. collapse the sub-LINEAR features
+            let bad = collapse(l, &s, &mut keep, m);
+            if bad != NONE {
+                Outcome::Refused(Refusal::ZeroThicknessRoom(RoomId(bad)))
+            } else {
+                core_k(l, &s, &keep)
+            }
         }
     }
+}
+
+/// Stage 4b (`IncLedger.collapse`): the thin rooms fall into features (classes under "the two
+/// sides of a facet", `comp`); a feature's rim is the rooms that are not thin beside it (`rim`,
+/// in room order). If every feature's rim is kept alike (`uniform`) and every room of it is
+/// enclosed (`collapsible`), each thin room takes its rim's first room's keep, its own if the rim
+/// is empty (`fill`), in `keep`; and NONE is returned. Else the first thin room, in room order,
+/// whose feature is not so (its id).
+fn collapse(l: &Ledger, s: &Split, keep: &mut [bool], mt: &MetricLedger) -> u32 {
+    let nt = s.rooms.len();
+    let nr = l.n_rooms as usize;
+    let mut is_thin = vec![false; nt];
+    let mut is_enc = vec![false; nt];
+    let mut any = false;
+    let mut k = 0;
+    while k < mt.thin.len() {
+        let r = mt.thin[k].0 as usize;
+        if r < nr && s.room_pos[r] != NONE {
+            is_thin[s.room_pos[r] as usize] = true;
+            any = true;
+        }
+        k += 1;
+    }
+    let mut bad = NONE;
+    if any {
+        let mut k = 0;
+        while k < mt.enclosed.len() {
+            let r = mt.enclosed[k].0 as usize;
+            if r < nr && s.room_pos[r] != NONE {
+                is_enc[s.room_pos[r] as usize] = true;
+            }
+            k += 1;
+        }
+        let nf = l.facet_class.len();
+        // the features: thin rooms joined across a facet
+        let mut uf = Uf::new(nt);
+        let mut f = 0;
+        while f < nf {
+            let (p, m) = l.facet_rooms[f];
+            let (pp, mp) = (s.room_pos[p as usize] as usize, s.room_pos[m as usize] as usize);
+            if is_thin[pp] && is_thin[mp] {
+                uf.union(pp, mp);
+            }
+            f += 1;
+        }
+        // each feature's rim (by root), and whether every room of it is enclosed
+        let mut rim: Vec<Vec<u32>> = vec![Vec::new(); nt];
+        let mut all_enc = vec![true; nt];
+        let mut t = 0;
+        while t < nt {
+            if is_thin[t] && !is_enc[t] {
+                let r = uf.find(t);
+                all_enc[r] = false;
+            }
+            t += 1;
+        }
+        let mut f = 0;
+        while f < nf {
+            let (p, m) = l.facet_rooms[f];
+            let (pp, mp) = (s.room_pos[p as usize] as usize, s.room_pos[m as usize] as usize);
+            if is_thin[pp] && !is_thin[mp] {
+                let r = uf.find(pp);
+                rim[r].push(mp as u32);
+            }
+            if is_thin[mp] && !is_thin[pp] {
+                let r = uf.find(mp);
+                rim[r].push(pp as u32);
+            }
+            f += 1;
+        }
+        let mut t = 0;
+        while t < nt {
+            if rim[t].len() > 1 {
+                crate::sort::sort_u32(&mut rim[t]);
+                let mut d: Vec<u32> = Vec::new();
+                let mut j = 0;
+                while j < rim[t].len() {
+                    if d.is_empty() || d[d.len() - 1] != rim[t][j] {
+                        d.push(rim[t][j]);
+                    }
+                    j += 1;
+                }
+                rim[t] = d;
+            }
+            t += 1;
+        }
+        // the first thin room whose feature cannot be collapsed
+        let mut t = 0;
+        while bad == NONE && t < nt {
+            if is_thin[t] {
+                let r = uf.find(t);
+                let rm = &rim[r];
+                let first = if rm.is_empty() {
+                    keep[t]
+                } else {
+                    keep[rm[0] as usize]
+                };
+                let mut uniform = true;
+                let mut j = 0;
+                while uniform && j < rm.len() {
+                    uniform = keep[rm[j] as usize] == first;
+                    j += 1;
+                }
+                if !(uniform && all_enc[r]) {
+                    bad = s.rooms[t];
+                }
+            }
+            t += 1;
+        }
+        // fill: every thin room takes its rim's first keep (its own if none)
+        if bad == NONE {
+            let mut fill = vec![false; nt];
+            let mut t = 0;
+            while t < nt {
+                if is_thin[t] {
+                    let r = uf.find(t);
+                    fill[t] = if rim[r].is_empty() {
+                        keep[t]
+                    } else {
+                        keep[rim[r][0] as usize]
+                    };
+                }
+                t += 1;
+            }
+            let mut t = 0;
+            while t < nt {
+                if is_thin[t] {
+                    keep[t] = fill[t];
+                }
+                t += 1;
+            }
+        }
+    }
+    bad
 }
 
 /// 5–7 on a keep table (per room position).

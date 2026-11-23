@@ -23,6 +23,8 @@
 use crate::boolean::{BoolError, Op};
 #[cfg(debug_assertions)]
 mod face_builder;
+#[cfg(any(debug_assertions, feature = "a8_builder"))]
+mod face_fast;
 use crate::decide_once_row as row;
 use forge_bool_core::{self as core, BodyId, CellId, FaceId as CFace, Ledger, Outcome, Refusal, Rule, Sgn};
 use forge_geom::{Curve, Line, Surface};
@@ -473,12 +475,13 @@ fn vertices(
     let mut out = Vec::new();
     for (k, (start, faces)) in tabs.into_iter().enumerate() {
         let nv = start.len().saturating_sub(1);
-        let pts = Pts {
+        let mut pts = Pts {
             exact: RefCell::new(vec![None; nv]),
             f: RefCell::new(vec![None; nv]),
             spf: spf.clone(),
             start,
             faces,
+            held: vec![false; nv],
         };
         // the near faces' vertices in the region now, each checked (§6.1's ambiguity is decided
         // there); the others when a parity test or a ray first needs them
@@ -496,6 +499,7 @@ fn vertices(
             ))?;
             pts.f.borrow_mut()[v as usize] = Some(p.to_f64());
             pts.exact.borrow_mut()[v as usize] = Some(p);
+            pts.held[v as usize] = true;
         }
         out.push(pts);
     }
@@ -1378,6 +1382,8 @@ pub(crate) struct Pts {
     /// the faces round vertex `v`: `faces[start[v]..start[v + 1]]`, in arena order
     start: Vec<u32>,
     faces: Vec<u32>,
+    /// per vertex: checked by `vertex_at` (so every plane round it holds its exact point)
+    held: Vec<bool>,
 }
 
 impl Pts {
@@ -2177,7 +2183,7 @@ mod v2check {
         let (il, facets, ev) = inc(l);
         assert!(inc::ledger_wf(&il), "inc L is well formed");
         let ne = l.edges.len();
-        let o2 = inc::core(&il, rule);
+        let o2 = inc::core(&il, rule, &inc::MetricLedger::default());
         match (out, &o2) {
             (Outcome::Ok(b), inc::Outcome::Ok(b2)) => {
                 assert_eq!(b.faces.len(), b2.faces.len(), "faces");
@@ -2557,6 +2563,14 @@ fn plan_of(bodies: &[&Body], rule: &Rule) -> Result<Option<Plan>, BoolError> {
             return Ok(None);
         }
     };
+    #[cfg(feature = "a8_builder")]
+    {
+        // (measurement only: the fast builder's screen tallies per flat boolean)
+        let r = std::hint::black_box(face_fast::counts(bodies, &fs, &cls, &pts, &snapped));
+        if let Some((_, t)) = r {
+            eprintln!("a8fast tally {t:?}");
+        }
+    }
     let outcome = core::core(&built.ledger, rule, &core::MetricLedger::default());
     // (debug: the A8 core on the plane ledger's incidence form answers alike, CoreInc.lean)
     #[cfg(debug_assertions)]
@@ -2565,6 +2579,16 @@ fn plan_of(bodies: &[&Body], rule: &Rule) -> Result<Option<Plan>, BoolError> {
     if std::env::var_os("FORGE_A8_STATS").is_some() {
         let (f, e, v) = v2check::coarse_counts(&built.ledger);
         let (bs, bv, bf) = face_builder::counts(bodies, &fs, &cls, &pts, &snapped);
+        // the fast builder makes the same facets (its segments and vertices may differ: a stretch
+        // along one of C's boundary segments it leaves out, and with it the degree-two vertices
+        // where that stretch was cut)
+        if let Some(((_, _, ff), _)) = face_fast::counts(bodies, &fs, &cls, &pts, &snapped) {
+            assert_eq!(ff, bf, "face_fast's facets agree with face_builder's");
+            assert_eq!(
+                ff, f,
+                "face_fast's facets agree with the plane ledger's coarsening"
+            );
+        }
         eprintln!(
             "a8: fine pieces {} edges {} verts {}; coarse facets {f} edges {e} verts {v}; built segs {bs} verts {bv} facets {bf}",
             built.ledger.pieces.len(),
