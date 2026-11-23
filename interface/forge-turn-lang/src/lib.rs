@@ -21,8 +21,10 @@
 //! ```
 //!
 //! Also `bore_rough(op, tool:, leave:, step:, to:, from: D)` (D the drilled hole's diameter; then
-//! `turn_finish` with a boring tool finishes the bore), `turn_groove(op, tool:, from:, to:, r:)`, `turn_thread(op, tool:, d:, pitch:, from:,
-//! to:, passes:)`, `part_off(op, tool:, at:)`, `turn_drill(op, tool:, to:, peck:)`. Every op is
+//! `turn_finish` with a boring tool finishes the bore), `turn_groove(op, tool:, from:, to:, r:)`
+//! (with an ID grooving bar, also `bore:` the bore's diameter on the way in), `turn_thread(op,
+//! tool:, d:, pitch:, from:, to:, passes:)` (an ID thread insert cuts an internal thread),
+//! `part_off(op, tool:, at:)`, `turn_drill(op, tool:, to:, peck:)`. Every op is
 //! posted, read back (the round trip), and the path the text means is what is certified
 //! (forge_turn::ops::certify). The reply is `forgecad.cam/1` with `"process": "turning"`.
 use forge_agent::json::Json;
@@ -342,20 +344,28 @@ impl TurnCam {
             "turn_groove" => {
                 let si = self.setup_of(a)?;
                 let (t, st) = self.tool_of(a)?;
-                let r = ops::groove(
+                let (s, z0, z1, rho) = (
                     &self.setups[si].1,
-                    &t,
-                    st,
                     num(a, "from", None)?,
                     num(a, "to", None)?,
                     num(a, "r", None)?,
                 );
+                let r = if t.kind == insert::Kind::IdGroove {
+                    ops::id_groove(s, &t, st, z0, z1, rho, 0.5 * num(a, "bore", None)?)
+                } else {
+                    ops::groove(s, &t, st, z0, z1, rho)
+                };
                 op(self, "groove", r, si)
             }
             "turn_thread" => {
                 let si = self.setup_of(a)?;
                 let (t, st) = self.tool_of(a)?;
-                let r = ops::thread(
+                let thread = if t.kind == insert::Kind::IdThread {
+                    ops::id_thread
+                } else {
+                    ops::thread
+                };
+                let r = thread(
                     &self.setups[si].1,
                     &t,
                     st,

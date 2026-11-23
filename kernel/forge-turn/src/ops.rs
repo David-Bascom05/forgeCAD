@@ -796,6 +796,136 @@ pub fn thread(
     })
 }
 
+/// An internal groove between z0 and z1 out to radius rho, in a bore of radius r_in on the way in
+/// (the smallest radius between the bar's front and the groove): the blade enters along the
+/// axis at r_in less the approach, then plunges +ρ no wider apart than 0.8 of the blade, the
+/// first and last at the walls, each out of its own groove at feed.
+pub fn id_groove(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    z0: f64,
+    z1: f64,
+    rho: f64,
+    r_in: f64,
+) -> Result<OpPath, OpError> {
+    if tool.kind != Kind::IdGroove {
+        return Err(OpError::Tool(format!(
+            "internal grooving needs an ID grooving bar, not `{}`",
+            tool.id
+        )));
+    }
+    let (w, rc) = (tool.width, tool.re);
+    if z1 - z0 < w {
+        return Err(OpError::Geometry(format!(
+            "the groove ({}) is narrower than the blade ({w})",
+            z1 - z0
+        )));
+    }
+    if !(rho > r_in) {
+        return Err(OpError::Geometry(format!(
+            "an internal groove to radius {rho} in a bore of radius {r_in}: it must lie outside the bore"
+        )));
+    }
+    let x_in = r_in - APPROACH - rc;
+    let z_entry = s.bar_front + APPROACH + rc;
+    let (zr0, zr1) = (z0 + rc, z1 - (w - rc));
+    let n = ((zr1 - zr0) / (0.8 * w)).ceil() as usize;
+    let mut zs: Vec<f64> = (0..=n)
+        .map(|i| {
+            if n == 0 {
+                zr0
+            } else {
+                zr0 + (zr1 - zr0) * i as f64 / n as f64
+            }
+        })
+        .collect();
+    zs.dedup();
+    let start = [x_in, z_entry];
+    let mut steps = vec![Step::Rapid(start)];
+    for z in zs {
+        steps.push(Step::Rapid([x_in, z]));
+        steps.push(Step::Feed([rho - rc, z]));
+        steps.push(Step::Feed([x_in, z]));
+    }
+    steps.push(Step::Rapid(start));
+    Ok(OpPath {
+        name: format!("ID groove z {z0}..{z1} to radius {rho}"),
+        tool: tool.clone(),
+        t,
+        spindle: css(tool),
+        f: tool.f,
+        leave: 0.0,
+        start,
+        steps,
+        removal: None,
+    })
+}
+
+/// An internal ISO metric thread (60°): nominal (major) diameter d, pitch p, from z_start (ahead
+/// of the part) to z_end, in `passes` radial infeeds of equal chip area out from the minor radius
+/// r1 = d/2 − 5H/8 (H = p·√3/2) to d/2. The part as modelled shows the minor diameter: the thread
+/// is a declared removal Δ, the band [r1, d/2] over the thread's length and the insert's half
+/// width past its end, and G1 holds the tool from P ∖ Δ (as for the external thread).
+pub fn id_thread(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    d: f64,
+    p: f64,
+    z_start: f64,
+    z_end: f64,
+    passes: usize,
+) -> Result<OpPath, OpError> {
+    if tool.kind != Kind::IdThread {
+        return Err(OpError::Tool(format!(
+            "internal threading needs an ID thread insert, not `{}`",
+            tool.id
+        )));
+    }
+    if !(p >= tool.pitch[0] && p <= tool.pitch[1]) {
+        return Err(OpError::Tool(format!(
+            "pitch {p} is outside the insert's range {:?}",
+            tool.pitch
+        )));
+    }
+    let h = 0.625 * p * 0.75f64.sqrt();
+    let rt = tool.re;
+    let rmaj = 0.5 * d;
+    let r1 = rmaj - h;
+    let x_in = r1 - APPROACH - rt;
+    let n = passes.max(1);
+    let start = [x_in, z_start];
+    let mut steps = vec![Step::Rapid(start)];
+    for k in 1..=n {
+        let depth = h * (k as f64 / n as f64).sqrt();
+        let x = r1 + depth - rt;
+        steps.push(Step::Rapid([x, z_start]));
+        steps.push(Step::Thread {
+            to: [x, z_end],
+            pitch: p,
+        });
+        // the pull-out at the thread's end cuts: a feed
+        steps.push(Step::Feed([x_in, z_end]));
+        steps.push(Step::Rapid([x_in, z_start]));
+    }
+    let half = (h + 0.2) * tan(30f64.to_radians()) + rt;
+    let band = Region {
+        loops: vec![rect(r1, z_end - half, rmaj, s.part.bbox[3] + 1.0)],
+    };
+    Ok(OpPath {
+        name: format!("ID thread M{d} x {p}"),
+        tool: tool.clone(),
+        t,
+        spindle: Spindle::Rpm((1000.0 * tool.vc / (std::f64::consts::PI * d)).floor()),
+        f: p,
+        leave: 0.0,
+        start,
+        steps,
+        removal: Some(band),
+    })
+}
+
 /// A drill on the centre line to depth z_end (its tip), pecking by `peck` (0: one feed).
 pub fn drill(s: &Setup, tool: &TurnTool, t: u32, z_end: f64, peck: f64) -> Result<OpPath, OpError> {
     if tool.kind != Kind::Drill {
@@ -1399,7 +1529,7 @@ fn certify_with(
             // piece by piece against the stock as the pieces before left it. Then the cut's
             // removal (none for a thread pass: the teeth stay, so the stock of revolution keeps
             // them).
-            let clears = op.tool.kind != Kind::Thread;
+            let clears = !matches!(op.tool.kind, Kind::Thread | Kind::IdThread);
             let cutters: Vec<&Body> = op
                 .tool
                 .bodies
@@ -1488,29 +1618,38 @@ fn certify_with(
         )],
     };
     let left = region_diff(&region_diff(&stock_region, &keep)?, &behind)?;
-    // the smallest nose radius of a finishing op (leave 0): a region inside the part grown by it
-    // (plus tol) is a corner no finishing nose reaches, decided exactly
-    let re_fin = ops
+    // the corner radii of the finishing ops (leave 0: turning and boring noses, grooving blades),
+    // decided exactly per region
+    let mut radii: Vec<f64> = ops
         .iter()
-        .filter(|o| matches!(o.tool.kind, Kind::Turn | Kind::Bore) && o.leave == 0.0)
+        .filter(|o| {
+            matches!(
+                o.tool.kind,
+                Kind::Turn | Kind::Bore | Kind::Groove | Kind::IdGroove
+            ) && o.leave == 0.0
+        })
         .map(|o| o.tool.re)
-        .fold(f64::INFINITY, f64::min);
-    let re_fin = if re_fin.is_finite() { re_fin } else { 0.0 };
-    let near = if re_fin > 0.0 {
-        offset(&s.part.region, -(re_fin + s.tol))
-            .ok()
-            .map(|(l, _)| boolean::region_of(&l))
-    } else {
-        None
-    };
+        .filter(|r| *r > 0.0)
+        .collect();
+    radii.sort_by(|a, b| a.total_cmp(b));
+    radii.dedup();
+    // the part grown by each finishing corner's radius (plus tol): a region inside the smallest
+    // that holds it is a corner no corner of that radius reaches
+    let near: Vec<(f64, Region)> = radii
+        .iter()
+        .filter_map(|&r| {
+            offset(&s.part.region, -(r + s.tol))
+                .ok()
+                .map(|(l, _)| (r, boolean::region_of(&l)))
+        })
+        .collect();
     for l in left.loops {
         let rg = Region { loops: vec![l] };
-        let reason = match &near {
-            Some(n) if region_diff(&rg, n).is_ok_and(|d| d.loops.is_empty()) => {
-                format!("nose radius {re_fin}: an inside corner the finishing nose cannot reach")
-            }
-            _ => "uncut".to_string(),
-        };
+        let reason = near
+            .iter()
+            .find(|(_, n)| region_diff(&rg, n).is_ok_and(|d| d.loops.is_empty()))
+            .map(|(r, _)| format!("nose radius {r}: an inside corner the finishing nose cannot reach"))
+            .unwrap_or_else(|| "uncut".to_string());
         rep.leftover.push(rg);
         rep.leftover_reasons.push(reason);
     }

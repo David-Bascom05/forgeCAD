@@ -63,6 +63,24 @@ pitch = [0.5, 3.0]
 vc = 100.0
 
 [[lathe_tool]]
+id = "id-groove-2"
+kind = "id_groove"
+width = 2.0
+corner = 0.1
+reach = 3.0
+bar_diameter = 16.0
+vc = 100.0
+f = 0.04
+
+[[lathe_tool]]
+id = "id-thread-60"
+kind = "id_thread"
+tip_radius = 0.05
+pitch = [0.5, 2.0]
+bar_diameter = 16.0
+vc = 80.0
+
+[[lathe_tool]]
 id = "drill-8"
 kind = "drill"
 diameter = 8.0
