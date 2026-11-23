@@ -458,26 +458,14 @@ impl ProfileLoop {
     /// Whether the loop crosses or touches itself, as a profile refuses it: a knife edge, its
     /// sides running within tolerance of each other into the cusp, does not.
     pub fn crosses_itself(&self) -> bool {
-        self.simplicity() != crate::simple::Simplicity::Simple
-    }
-    /// Whether the loop is simple: with a free curve in it, decided on its exact pieces
-    /// (crate::simple); of lines and arcs alone, on its outline, a knife edge (sides running
-    /// within tolerance of each other into the cusp) allowed.
-    pub fn simplicity(&self) -> crate::simple::Simplicity {
-        use crate::simple::Simplicity;
-        // a lone circle cannot cross itself
-        if matches!(self.segments[..], [(Segment::Circle { .. }, _)]) {
-            return Simplicity::Simple;
-        }
+        // with a free curve in it, decided on its exact pieces (crate::simple)
         if self.segments.iter().any(|(s, _)| matches!(s, Segment::Spline(_))) {
-            return crate::simple::simplicity(self);
+            return crate::simple::simplicity(self) != crate::simple::Simplicity::Simple;
         }
+        // a lone circle is drawn as a convex polygon: it cannot cross itself
+        let circle = matches!(self.segments[..], [(Segment::Circle { .. }, _)]);
         // (a knife edge's sides, samples of them, cross within tolerance)
-        if crosses_itself(&self.outline()) && crosses_itself(&blunt_cusps(self).outline()) {
-            Simplicity::Meets(self.segments[0].0.start())
-        } else {
-            Simplicity::Simple
-        }
+        !circle && crosses_itself(&self.outline()) && crosses_itself(&blunt_cusps(self).outline())
     }
     /// Curves with corners cut there, each arc a face of its own (as Inventor shows them), and one
     /// closing on itself cut in two. The first piece keeps the segment's id.
@@ -797,17 +785,17 @@ impl Profile {
             }
         }
         for (i, l) in self.loops.iter().enumerate() {
-            match l.simplicity() {
-                crate::simple::Simplicity::Simple => {}
-                crate::simple::Simplicity::Meets(_) => {
-                    return Err(ProfileError::SelfIntersecting { loop_index: i });
-                }
-                crate::simple::Simplicity::Undecided(at) => {
+            if l.crosses_itself() {
+                // a free curve's search may have stopped short: refused there, undecided
+                if l.segments.iter().any(|(s, _)| matches!(s, Segment::Spline(_)))
+                    && let crate::simple::Simplicity::Undecided(at) = crate::simple::simplicity(l)
+                {
                     return Err(ProfileError::SelfIntersectionUndecided {
                         loop_index: i,
                         at: self.plane.plane_point(at),
                     });
                 }
+                return Err(ProfileError::SelfIntersecting { loop_index: i });
             }
         }
         let mut loops = Vec::with_capacity(self.loops.len());

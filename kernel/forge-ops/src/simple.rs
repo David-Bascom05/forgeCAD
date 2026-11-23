@@ -393,6 +393,8 @@ impl Search {
 }
 
 /// Whether a loop is simple (see the module's head).
+#[cold]
+#[inline(never)]
 pub fn simplicity(l: &ProfileLoop) -> Simplicity {
     let ps = pieces(l);
     let n = ps.len();
