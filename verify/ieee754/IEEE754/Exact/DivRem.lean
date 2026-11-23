@@ -416,7 +416,7 @@ lemma abStep_spec {u v : ℕ → ℕ} {j n : ℕ} (hu : ∀ i ≤ n, u (j + i) <
 
 /-- Step `j` of algorithm D: the estimate, its correction, multiply-subtract, and the add-back
 if that borrowed. Returns the window and the digit `q[j]`. -/
-def dStep (u v : ℕ → ℕ) (n j : ℕ) : (ℕ → ℕ) × ℕ :=
+irreducible_def dStep (u v : ℕ → ℕ) (n j : ℕ) : (ℕ → ℕ) × ℕ :=
   let num := u (j + n) * B + u (j + n - 1)
   let qr := corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) (num / v (n - 1)) (num % v (n - 1))
   let ms := msStep u v j n qr.1
@@ -424,7 +424,8 @@ def dStep (u v : ℕ → ℕ) (n j : ℕ) : (ℕ → ℕ) × ℕ :=
 
 lemma dStep_eq (u v : ℕ → ℕ) (n j : ℕ) : dStep u v n j =
     if (msStep u v j n (corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1)) ((u (j + n) * B + u (j + n - 1)) % v (n - 1))).1).2 ≠ 0 then (abStep (msStep u v j n (corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1)) ((u (j + n) * B + u (j + n - 1)) % v (n - 1))).1).1 v j n, (corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1)) ((u (j + n) * B + u (j + n - 1)) % v (n - 1))).1 - 1)
-    else ((msStep u v j n (corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1)) ((u (j + n) * B + u (j + n - 1)) % v (n - 1))).1).1, (corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1)) ((u (j + n) * B + u (j + n - 1)) % v (n - 1))).1) := rfl
+    else ((msStep u v j n (corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1)) ((u (j + n) * B + u (j + n - 1)) % v (n - 1))).1).1, (corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1)) ((u (j + n) * B + u (j + n - 1)) % v (n - 1))).1) := by
+  rw [dStep_def]
 
 /-- The two top limbs and the rest. -/
 lemma valF_top2 (w : ℕ → ℕ) (n : ℕ) (hn : 2 ≤ n) :
@@ -515,5 +516,100 @@ theorem dStep_spec {u v : ℕ → ℕ} {n j : ℕ} (hn : 2 ≤ n) (hv : Limbs v 
     have hq : qr.1 = q := le_antisymm hle cq
     rw [hq] at me ⊢
     refine ⟨by dsimp only; omega, by dsimp only; omega, by dsimp only; omega, mlim, mkeep⟩
+
+/-! ## Knuth D: the outer loop -/
+
+lemma alg4 {X1 X2 P q V Q A : ℕ} (key : X1 + P * (q * V) = X2) (e : X2 + V * Q = A) :
+    X1 + V * (Q + q * P) = A := by
+  rw [← e, ← key]; ring
+
+lemma valF_split (w : ℕ → ℕ) (a b : ℕ) : valF w (a + b) = valF w a + B ^ a * win w a b := by
+  unfold win valF
+  rw [sum_range_add, mul_sum]
+  congr 1
+  exact sum_congr rfl (fun i _ => by rw [pow_add]; ring)
+
+/-- Changing only the window `[j, j+n]` changes the value by `B^j` times the window's change. -/
+lemma valF_window {w w' : ℕ → ℕ} {j n N : ℕ} (hN : j + n + 1 ≤ N)
+    (h : ∀ m, m < j ∨ j + n < m → w' m = w m) :
+    valF w' N + B ^ j * win w j (n + 1) = valF w N + B ^ j * win w' j (n + 1) := by
+  obtain ⟨r, rfl⟩ : ∃ r, N = j + (n + 1) + r := ⟨N - (j + n + 1), by omega⟩
+  rw [valF_split w' (j + (n + 1)) r, valF_split w (j + (n + 1)) r, valF_split w' j (n + 1), valF_split w j (n + 1)]
+  have e1 : valF w' j = valF w j := valF_congr (fun i hi => h i (Or.inl hi))
+  have e2 : win w' (j + (n + 1)) r = win w (j + (n + 1)) r := valF_congr (fun i hi => h _ (Or.inr (by omega)))
+  rw [e1, e2]; ring
+
+/-- One pass of the outer loop at `j`: the digit step, and `q[j]` stored. -/
+def kstep (v : ℕ → ℕ) (n j : ℕ) (p : (ℕ → ℕ) × (ℕ → ℕ)) : (ℕ → ℕ) × (ℕ → ℕ) :=
+  ((dStep p.1 v n j).1, Function.update p.2 j (dStep p.1 v n j).2)
+
+/-- The outer loop, its first `k` steps (`j = m − 1` down to `m − k`). -/
+def knuthRun (u v : ℕ → ℕ) (n m : ℕ) : ℕ → (ℕ → ℕ) × (ℕ → ℕ)
+  | 0 => (u, fun _ => 0)
+  | k + 1 => kstep v n (m - (k + 1)) (knuthRun u v n m k)
+
+lemma win_succ_low (w : ℕ → ℕ) (j n : ℕ) : win w j (n + 1) = w j + B * win w (j + 1) n := by
+  unfold win
+  rw [show n + 1 = 1 + n by ring, valF_split (fun i => w (j + i)) 1 n]
+  have h1 : valF (fun i => w (j + i)) 1 = w j := by simp only [valF, sum_range_one, pow_zero, mul_one, add_zero]
+  have h2 : win (fun i => w (j + i)) 1 n = valF (fun i => w (j + 1 + i)) n :=
+    valF_congr (fun i _ => by simp only [show j + (1 + i) = j + 1 + i by ring])
+  rw [h1, h2, pow_one]
+
+set_option maxHeartbeats 1000000 in
+/-- One pass of the outer loop, on plain arrays. -/
+theorem knuth_step {r1 r2 v A : ℕ → ℕ} {n m j : ℕ} (hn : 2 ≤ n) (hv : Limbs v n) (hv1 : B ≤ 2 * v (n - 1))
+    (hjm : j < m) (Aval : ℕ)
+    (e : valF r1 (m + n) + valF v n * valF r2 m = Aval)
+    (z : ∀ i ≥ j + 1 + n, r1 i = 0) (top : win r1 (j + 1) n < valF v n)
+    (lim : Limbs r1 (m + n)) (qlim : Limbs r2 m) (qz : ∀ i, i < j + 1 ∨ m ≤ i → r2 i = 0) :
+    valF (dStep r1 v n j).1 (m + n) + valF v n * valF (Function.update r2 j (dStep r1 v n j).2) m = Aval ∧
+      (∀ i ≥ j + n, (dStep r1 v n j).1 i = 0) ∧ win (dStep r1 v n j).1 j n < valF v n ∧
+      Limbs (dStep r1 v n j).1 (m + n) ∧ Limbs (Function.update r2 j (dStep r1 v n j).2) m ∧
+      (∀ i, i < j ∨ m ≤ i → Function.update r2 j (dStep r1 v n j).2 i = 0) := by
+  have hwin := win_succ_low r1 j n
+  have hUV : win r1 j (n + 1) < B * valF v n := by
+    rw [hwin]
+    have : r1 j < B := lim j (by omega)
+    have : B * (win r1 (j + 1) n + 1) ≤ B * valF v n := Nat.mul_le_mul_left _ top
+    rw [Nat.mul_add, mul_one] at this
+    omega
+  have hwl : ∀ i ≤ n, r1 (j + i) < B := fun i hi => by
+    by_cases h : j + i < m + n
+    · exact lim _ h
+    · rw [z (j + i) (by omega)]; norm_num
+  obtain ⟨de, dlt, dqB, dlim, dkeep⟩ := dStep_spec hn hv hv1 hwl hUV
+  generalize hd : dStep r1 v n j = d at de dlt dqB dlim dkeep
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+  · have hw := valF_window (w := r1) (w' := d.1) (N := m + n) (show j + n + 1 ≤ m + n by omega) dkeep
+    have hq := valF_update_lt (w := r2) (v := d.2) (show j < m by omega)
+    rw [qz j (Or.inl (by omega)), zero_mul, add_zero] at hq
+    rw [de] at hw
+    rw [hq]
+    have key : valF d.1 (m + n) + B ^ j * (d.2 * valF v n) = valF r1 (m + n) := by
+      rw [Nat.mul_add, ← add_assoc] at hw; exact Nat.add_right_cancel hw
+    exact alg4 key e
+  · intro i hi
+    by_cases h : j + n < i
+    · rw [dkeep i (Or.inr h)]; exact z i (by omega)
+    · have hi' : i = j + n := by omega
+      subst hi'
+      have h1 : win d.1 j (n + 1) = win d.1 j n + d.1 (j + n) * B ^ n := valF_succ _ _
+      have h2 : valF v n < B ^ n := valF_lt hv
+      by_contra hc
+      have : B ^ n ≤ d.1 (j + n) * B ^ n := Nat.le_mul_of_pos_left _ (Nat.pos_of_ne_zero hc)
+      omega
+  · have h1 : win d.1 j (n + 1) = win d.1 j n + d.1 (j + n) * B ^ n := valF_succ _ _
+    omega
+  · intro i hi
+    by_cases h : i < j ∨ j + n < i
+    · rw [dkeep i h]; exact lim i hi
+    · push Not at h; have := dlim (i - j) (by omega); rwa [show j + (i - j) = i by omega] at this
+  · intro i hi
+    by_cases h : i = j
+    · subst h; rw [Function.update_self]; exact dqB
+    · rw [Function.update_of_ne h]; exact qlim i hi
+  · intro i hi
+    rw [Function.update_of_ne (by omega)]; exact qz i (by omega)
 
 end IEEE754.Exact
