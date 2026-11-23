@@ -18,6 +18,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod exact;
 pub mod fold;
 pub mod place;
 mod union_find;
