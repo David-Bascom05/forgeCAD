@@ -42,3 +42,5 @@ import ForgeCurved
 #print axioms ForgeCurved.modelCell_preconnected
 #print axioms ForgeCurved.conicalAt_of_model
 #print axioms ForgeCurved.cellsConnected_of_diagonal
+#print axioms ForgeCurved.plate_faithful
+#print axioms ForgeCurved.plate1_not_faithful
