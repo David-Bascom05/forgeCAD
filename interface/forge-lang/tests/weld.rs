@@ -403,3 +403,63 @@ fn examples_build_valid() {
     }
     assert!(n >= 3);
 }
+
+/// The weldment built-ins are those `research/forge-lang/lean/ForgeLang/Builtins.lean` (`weld`)
+/// proves adding conservative for any document binding none of them; and no `.fg` file in the
+/// repository binds one (every use is a call), so every part means what it meant before.
+#[test]
+fn builtins_bound_nowhere() {
+    assert_eq!(
+        forge_lang::weld::BUILTINS,
+        ["members", "end_trim", "end_cap", "corner_plate"]
+    );
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut stack = vec![root];
+    let mut files = 0;
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).expect("a directory") {
+            let p = e.expect("an entry").path();
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if p.is_dir() {
+                if !name.starts_with('.') && name != "target" {
+                    stack.push(p);
+                }
+            } else if name.ends_with(".fg") {
+                files += 1;
+                let src = std::fs::read_to_string(&p).unwrap_or_default();
+                for (n, line) in src.lines().enumerate() {
+                    // the code of the line, its comment and strings left out
+                    let code: String = line
+                        .split('#')
+                        .next()
+                        .unwrap_or("")
+                        .split('"')
+                        .step_by(2)
+                        .collect();
+                    for b in forge_lang::weld::BUILTINS {
+                        let mut at = 0;
+                        while let Some(i) = code[at..].find(b) {
+                            let s = at + i;
+                            let e = s + b.len();
+                            let before = code[..s].chars().next_back();
+                            let after = code[e..].trim_start().chars().next();
+                            let word = !before.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.')
+                                && !code[e..]
+                                    .chars()
+                                    .next()
+                                    .is_some_and(|c| c.is_alphanumeric() || c == '_');
+                            assert!(
+                                !word || after == Some('('),
+                                "{}:{}: {b} used other than as a call",
+                                p.display(),
+                                n + 1
+                            );
+                            at = e;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(files > 100, "found {files} .fg files");
+}

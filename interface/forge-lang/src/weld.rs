@@ -1320,75 +1320,51 @@ pub struct CutRow {
     pub copes: [Vec<String>; 2],
 }
 
-/// An angle in degrees in [0, 360), a hair under 360 taken as 0.
-fn turn360(t: f64) -> f64 {
-    let a = t.rem_euclid(360.0);
-    if a > 360.0 - 1e-6 { 0.0 } else { a }
-}
-
-fn key(c: &forge_weld::Cutting, section: &str, copes: &[Vec<String>; 2]) -> String {
-    let r = |x: f64| format!("{:.6}", x);
-    let end = |e: &[forge_weld::EndCut], cp: &[String]| -> String {
-        let mut parts: Vec<String> = e
-            .iter()
-            .map(|x| {
-                format!(
-                    "{}@{}",
-                    r(x.angle),
-                    x.toward.map_or("-".into(), |t| r(turn360(t)))
-                )
-            })
-            .collect();
-        parts.sort();
-        if !cp.is_empty() {
-            parts.push("cope".into());
-        }
-        parts.join("+")
-    };
-    let mut ends = [end(&c.ends[0], &copes[0]), end(&c.ends[1], &copes[1])];
-    ends.sort();
-    format!(
-        "{section}|{}|{}|{}|{}",
-        r(c.length),
-        c.overall.map_or("-".into(), r),
-        c.arc.map_or("-".into(), |a| format!("{}/{}", r(a.0), r(a.1))),
-        ends.join("|")
-    )
-}
-
 /// The cut list of every member of the part, identical members on one row (by section, lengths
 /// and end cuts, either way round), in the order each first appears.
 pub fn cutlist(w: &Welds) -> Vec<CutRow> {
-    let mut rows: Vec<(String, CutRow)> = vec![];
+    let mut rows: Vec<CutRow> = vec![];
     for fr in &w.frames {
         for m in &fr.members {
             let c = forge_weld::cutting(&m.spec, &m.cuts);
-            let k = key(&c, &m.spec.section.name, &m.copes);
-            match rows.iter_mut().find(|r| r.0 == k) {
+            let coped = [!m.copes[0].is_empty(), !m.copes[1].is_empty()];
+            let radius = m.spec.section.radius();
+            // alike its row's first member, by the tolerance rule (forge_weld::alike), copes at
+            // the same ends either way round
+            let found = rows.iter_mut().find(|r| {
+                let rc = [!r.copes[0].is_empty(), !r.copes[1].is_empty()];
+                r.section == m.spec.section.name
+                    && (rc == coped || rc == [coped[1], coped[0]])
+                    && forge_weld::frame::alike(&r.cut, &c, radius)
+            });
+            match found {
                 Some(r) => {
-                    r.1.members.push(m.id.clone());
+                    r.members.push(m.id.clone());
                     for s in 0..2 {
                         for c in &m.copes[s] {
-                            if !r.1.copes[s].contains(c) {
-                                r.1.copes[s].push(c.clone());
+                            if !r.copes[s].contains(c) {
+                                r.copes[s].push(c.clone());
                             }
                         }
                     }
                 }
-                None => rows.push((
-                    k,
-                    CutRow {
-                        section: m.spec.section.name.clone(),
-                        kind: m.spec.section.kind.word(),
-                        members: vec![m.id.clone()],
-                        cut: c,
-                        copes: m.copes.clone(),
-                    },
-                )),
+                None => rows.push(CutRow {
+                    section: m.spec.section.name.clone(),
+                    kind: m.spec.section.kind.word(),
+                    members: vec![m.id.clone()],
+                    cut: c,
+                    copes: m.copes.clone(),
+                }),
             }
         }
     }
-    rows.into_iter().map(|r| r.1).collect()
+    rows
+}
+
+/// An angle in degrees in [0, 360), a hair under 360 taken as 0.
+fn turn360(t: f64) -> f64 {
+    let a = t.rem_euclid(360.0);
+    if a > 360.0 - 1e-6 { 0.0 } else { a }
 }
 
 fn round(x: f64, places: i32) -> Json {

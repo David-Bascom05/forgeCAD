@@ -579,6 +579,45 @@ fn deg(a: f64) -> f64 {
     a * 180.0 / dmath::PI
 }
 
+/// Whether two members cut alike, by the one tolerance rule: every length within
+/// `tol::LINEAR`, every angle within the angle that moves the section's farthest point (`radius`
+/// from the path) by `tol::LINEAR`; their ends matched either way round. Each end's cuts are
+/// compared in order of angle.
+pub fn alike(a: &Cutting, b: &Cutting, radius: f64) -> bool {
+    let len = |x: f64, y: f64| (x - y).abs() <= tol::LINEAR;
+    let ang = tol::LINEAR / radius.max(tol::LINEAR) * 180.0 / dmath::PI;
+    let turn = |x: f64, y: f64| {
+        let d = (x - y).rem_euclid(360.0);
+        d.min(360.0 - d) <= ang
+    };
+    let opt = |x: Option<f64>, y: Option<f64>, f: &dyn Fn(f64, f64) -> bool| match (x, y) {
+        (Some(x), Some(y)) => f(x, y),
+        (None, None) => true,
+        _ => false,
+    };
+    let sorted = |e: &[EndCut]| {
+        let mut v = e.to_vec();
+        v.sort_by(|p, q| p.angle.total_cmp(&q.angle));
+        v
+    };
+    let end = |x: &[EndCut], y: &[EndCut]| {
+        let (x, y) = (sorted(x), sorted(y));
+        x.len() == y.len()
+            && x.iter()
+                .zip(&y)
+                .all(|(p, q)| (p.angle - q.angle).abs() <= ang && opt(p.toward, q.toward, &turn))
+    };
+    len(a.length, b.length)
+        && opt(a.overall, b.overall, &len)
+        && match (a.arc, b.arc) {
+            (Some((ra, ta)), Some((rb, tb))) => len(ra, rb) && (ta - tb).abs() <= ang,
+            (None, None) => true,
+            _ => false,
+        }
+        && ((end(&a.ends[0], &b.ends[0]) && end(&a.ends[1], &b.ends[1]))
+            || (end(&a.ends[0], &b.ends[1]) && end(&a.ends[1], &b.ends[0])))
+}
+
 /// The member's cut-list line, exact from its path, section and cuts.
 pub fn cutting(m: &MemberSpec, cuts: &[Vec<Cut>; 2]) -> Cutting {
     let end_t = m.path.end_t();
@@ -586,9 +625,11 @@ pub fn cutting(m: &MemberSpec, cuts: &[Vec<Cut>; 2]) -> Cutting {
         let t = if s == 0 { 0.0 } else { end_t };
         let (x, y, z) = m.axes(t);
         // one plane given twice (a butt against two members' coplanar faces) is one cut
+        // (the tolerance rule: the planes within `tol::LINEAR` of each other over the section)
+        let rho = m.section.radius().max(tol::LINEAR);
         let same = |a: &Cut, b: &Cut| {
             let (na, nb): (Vec3, Vec3) = (a.normal.into(), b.normal.into());
-            na.dot(nb) > 1.0 - 1e-12 && na.dot(b.point - a.point).abs() <= 1e-9
+            (na - nb).length() * rho <= tol::LINEAR && na.dot(b.point - a.point).abs() <= tol::LINEAR
         };
         cuts[s]
             .iter()
@@ -804,4 +845,51 @@ fn line_meets(s: &Section, a0: f64, au: f64, av: f64) -> Vec<(f64, f64)> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cut(length: f64, a: f64, toward: Option<f64>) -> Cutting {
+        Cutting {
+            length,
+            overall: Some(length + 40.0),
+            arc: None,
+            ends: [
+                vec![EndCut { angle: a, toward }],
+                vec![EndCut {
+                    angle: 0.0,
+                    toward: None,
+                }],
+            ],
+        }
+    }
+
+    #[test]
+    fn alike_by_the_tolerance_rule() {
+        let a = cut(600.0, 45.0, Some(180.0));
+        // within LINEAR in length, either way round, toward across 0/360
+        assert!(alike(
+            &a,
+            &cut(600.0 + 0.5 * tol::LINEAR, 45.0, Some(180.0)),
+            30.0
+        ));
+        let mut b = cut(600.0, 45.0, Some(180.0));
+        b.ends.swap(0, 1);
+        assert!(alike(&a, &b, 30.0));
+        assert!(alike(
+            &cut(1.0, 10.0, Some(359.9999999999)),
+            &cut(1.0, 10.0, Some(0.0)),
+            30.0
+        ));
+        // past it: a length, an angle, a side
+        assert!(!alike(
+            &a,
+            &cut(600.0 + 2.0 * tol::LINEAR, 45.0, Some(180.0)),
+            30.0
+        ));
+        assert!(!alike(&a, &cut(600.0, 45.001, Some(180.0)), 30.0));
+        assert!(!alike(&a, &cut(600.0, 45.0, Some(0.0)), 30.0));
+    }
 }
