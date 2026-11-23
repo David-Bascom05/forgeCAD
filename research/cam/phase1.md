@@ -42,9 +42,17 @@ and bolt-hole rapids into stock nobody had cleared (both now test cases with typ
 
 ## Levels (PROOF-STANDARD.md)
 
-- L1: **not yet**. G1–G6 are stated in prose (design.md §5.2, the module docs); the Lean files
-  wait for a Lean toolchain here. The one new lemma the 2.5D checker rests on: the signed distance
-  of a body {ρ ≤ w(z)} is non-decreasing in ρ at fixed z (proof sketch in tool.rs / slab.rs).
+- L1: **verify/forge-cam** (CI forge-cam.yml): Lean 4.36 and Mathlib, standard axioms, no sorry.
+  It has 72 theorems; verify/forge-cam/README.md maps them and RESUME.md gives the state.
+  - `sd_hyp_mono`, the lemma the 2.5D checker rests on.
+  - The closed form's verdicts imply G1–G3 for prism faces and planar, vertical or helical
+    moves, the corrected G2 (open form) included, with faces lowered within μ.
+  - G4 (with P' = P ∖ Δ and the held bands), G5 (3-axis), and G6 (modal round trip, arcs'
+    full-circle semantics).
+  - Soft-jaw seating and pocket coverage.
+  - slab::dist's candidates, sound for segment–segment, segment–arc, arc–arc and flat regions
+    (the point-in-trim test, the radial end pieces, the 2·gap lowering).
+  - Assumed: the trim's even-odd rule (a Jordan-curve fact), and L5 (the interval arithmetic).
 - L2: the offset and boolean decisions are exact (exact reals to the BFMSS bound).
 - L3: not claimed.
 - L4: forge-cam-geom is in the Aeneas style (no dependencies, loops) but not translated.
@@ -60,7 +68,13 @@ notch's sharp inside corners (no end mill reaches them).
 
 ## Gaps, in order
 
-1. Lean L1 for G1–G6 and the monotonicity lemma (needs the toolchain).
+1. The Lean L1 found and closed four soundness issues. Each is fixed here, and the Lean is
+   matched to the fix:
+   - the null-move printer (b6ec16c);
+   - the vanishing helical arc (4bfe2a2);
+   - the soft jaws' grip (4bfe2a2);
+   - the trim arcs' stored-end gap (3a388e5, bfa4a72).
+   Open: L5 for the checker's intervals.
 2. G4 (leftover) is checked: per z band, the final stock less the part's section grown by tol,
    exactly (booleans); the flange has none, a facing-only program lists its regions. The
    reasons (tool radius, reach) are not yet classified: every region says "uncut".
