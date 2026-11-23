@@ -20,6 +20,4 @@ With a vertical axis (the contact at a pole) the kernel refuses correctly. So th
 misses sphere contacts away from the poles, as well as cone apexes.
 
 Check one: `forgecad build F.fg`, which should fail with ZeroThickness. Against the reference:
-`cargo run --release -p forge-exact-fuzz --bin exact-curved -- fg:F.fg`. On the sequential path
-the two files with a work plane read as NoEntity: the harness's convex sub-history drops the
-work plane. The n-ary path and `forgecad build` are unaffected.
+`cargo run --release -p forge-exact-fuzz --bin exact-curved -- fg:F.fg`.

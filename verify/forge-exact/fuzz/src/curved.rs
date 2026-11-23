@@ -136,6 +136,26 @@ fn face_of(body: &Body, f: forge_topo::FaceId) -> Result<Face, String> {
     }
 }
 
+
+thread_local! {
+    /// The feature ids of the part being judged (a forge_lang program's; `None`: positions).
+    /// Names in a part refer to faces by these ids, so its regens and tools must use them.
+    static IDS: std::cell::RefCell<Option<Vec<u64>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` with the part's feature ids set (see `IDS`).
+pub fn with_ids<T>(ids: Option<Vec<u64>>, f: impl FnOnce() -> T) -> T {
+    let old = IDS.with(|c| c.replace(ids));
+    let out = f();
+    IDS.with(|c| *c.borrow_mut() = old);
+    out
+}
+
+/// The ids for the first `n` features.
+fn ids_for(n: usize) -> Option<Vec<u64>> {
+    IDS.with(|c| c.borrow().as_ref().map(|v| v[..n.min(v.len())].to_vec()))
+}
+
 /// Deterministic sample points.
 struct Lcg(u64);
 impl Lcg {
@@ -204,7 +224,8 @@ pub fn curved_tools(part: &Part) -> Result<(Vec<String>, Vec<Point3>, forge_math
     if forge_model::bodies::multi(&part.features) {
         return Err("several bodies".into());
     }
-    let h = History::new(&part.features, None);
+    let ids = ids_for(part.features.len());
+    let h = History::new(&part.features, ids.as_deref());
     let mut solids = Vec::new();
     let mut probes = Vec::new();
     let mut bbox: Option<forge_math::Box3> = None;
@@ -452,9 +473,18 @@ pub fn classify_curved(r: &CAnswer, k: &Kernel, body: Option<&Body>, probes: &[P
 
 /// The kernel's body for a path, and how it is judged.
 pub fn kernel_path(part: &Part, path: &str) -> (Kernel, Option<Body>) {
-    let r = guarded(|| match path {
-        "nary" => part.regenerate_nary(1).map_err(|e| format!("{e:?}")),
-        _ => part.regenerate().map_err(|e| format!("{e:?}")),
+    let ids = ids_for(part.features.len());
+    let r = guarded(|| match (path, &ids) {
+        ("nary", None) => part.regenerate_nary(1).map_err(|e| format!("{e:?}")),
+        // with ids: the regen forge_lang runs, so the names are its names
+        ("nary", Some(ids)) => part
+            .regenerate_nary_solids_ids(1, Some(ids))
+            .map_err(|e| format!("{e:?}"))
+            .and_then(|mut s| match s.len() {
+                1 => Ok(s.remove(0).body),
+                n => Err(format!("{n} bodies")),
+            }),
+        (_, ids) => part.regenerate_ids(ids.as_deref()).map_err(|e| format!("{e:?}")),
     });
     let body = r.as_ref().ok().cloned();
     (judge_body(r), body)
@@ -536,20 +566,31 @@ pub fn judge_curved_path(reference: &mut Reference, part: &Part, rule: &str, pat
 /// The part with every feature whose tools are not quadric solids the reference takes dropped
 /// (its convex-quadric sub-history); features that make nothing are kept.
 pub fn curved_part(part: &Part) -> Part {
+    curved_part_ids(part, None).0
+}
+
+/// `curved_part`, with the features' ids (a forge_lang program's) dropped alongside.
+pub fn curved_part_ids(part: &Part, ids: Option<&[u64]>) -> (Part, Option<Vec<u64>>) {
     let mut p = part.clone();
+    let mut ids = ids.map(|v| v.to_vec());
     let mut i = 1;
     while i < p.features.len() {
         let f = &p.features[i];
         let ok = inert(f)
-            || guarded(|| forge_model::feature_tools(History::new(&p.features, None), i).map_err(|e| format!("{e:?}")))
-                .is_ok_and(|ts| ts.iter().all(|(b, op)| dump_curved(b, *op).is_ok()));
+            || guarded(|| {
+                forge_model::feature_tools(History::new(&p.features, ids.as_deref()), i).map_err(|e| format!("{e:?}"))
+            })
+            .is_ok_and(|ts| ts.iter().all(|(b, op)| dump_curved(b, *op).is_ok()));
         if ok {
             i += 1;
         } else {
             p.features.remove(i);
+            if let Some(v) = ids.as_mut() {
+                v.remove(i);
+            }
         }
     }
-    p
+    (p, ids)
 }
 
 /// The tool (the last feature) moved by `d`.

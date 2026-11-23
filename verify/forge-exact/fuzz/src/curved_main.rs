@@ -22,6 +22,8 @@ struct Case {
     name: String,
     source: String,
     part: Part,
+    /// a forge_lang program's feature ids (its names refer to faces by them)
+    ids: Option<Vec<u64>>,
 }
 
 fn quadric_pair(name: &str) -> bool {
@@ -40,9 +42,11 @@ fn lang_kinds() -> u64 {
 fn lang_case(seed: u64, len: usize) -> Option<Case> {
     let run = forge_exact_fuzz::guarded(|| Ok(forge_lang::fuzz::run_kinds(seed, len, lang_kinds()))).ok()?;
     let built = forge_exact_fuzz::guarded(|| Ok(forge_lang::fuzz::build(&run.src))).ok()?;
+    let (part, ids) = forge_exact_fuzz::curved::curved_part_ids(&built.part(), Some(&built.ids));
     Some(Case {
         name: format!("lang/{seed}"),
-        part: forge_exact_fuzz::curved::curved_part(&built.part()),
+        part,
+        ids,
         source: run.src,
     })
 }
@@ -53,6 +57,7 @@ fn adv(name: String, part: Part) -> Case {
         source: forge_model::adversarial::literal(&part),
         name,
         part,
+        ids: None,
     }
 }
 
@@ -101,11 +106,15 @@ fn cases(sources: &[String], seeds: u64, lang: u64) -> Vec<Case> {
     for src in sources.iter().filter_map(|s| s.strip_prefix("fg:")) {
         let text = std::fs::read_to_string(src).unwrap_or_else(|e| panic!("{src}: {e}"));
         match forge_exact_fuzz::guarded(|| Ok(forge_lang::fuzz::build(&text))) {
-            Ok(built) => out.push(Case {
-                name: format!("fg/{src}"),
-                part: forge_exact_fuzz::curved::curved_part(&built.part()),
-                source: text,
-            }),
+            Ok(built) => {
+                let (part, ids) = forge_exact_fuzz::curved::curved_part_ids(&built.part(), Some(&built.ids));
+                out.push(Case {
+                    name: format!("fg/{src}"),
+                    part,
+                    ids,
+                    source: text,
+                })
+            }
             Err(e) => eprintln!("{src}: {e}"),
         }
     }
@@ -190,7 +199,8 @@ fn main() {
                 }
                 let c = &cs[i];
                 let t = std::time::Instant::now();
-                for (path, class, ans) in judge_curved(&mut reference, &c.part, &rule) {
+                let judged = forge_exact_fuzz::curved::with_ids(c.ids.clone(), || judge_curved(&mut reference, &c.part, &rule));
+                for (path, class, ans) in judged {
                     let note = ans.and_then(|a| a.notes.first().cloned()).unwrap_or_default();
                     tx.send(Judged { name: c.name.clone(), path, class, case: i, note }).expect("send");
                 }
