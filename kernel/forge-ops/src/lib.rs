@@ -19,6 +19,7 @@ mod skin;
 pub mod strip;
 pub mod sweep;
 pub mod taper;
+mod taper_events;
 pub mod thicken;
 mod wavefront;
 
@@ -40,5 +41,5 @@ pub use sweep::{
     CoilError, Handed, PathSeg, Stretch, SweepError, Winding, Wound, coil, coil_motion, sweep,
     sweep_stretches,
 };
-pub use taper::{TaperError, tapered};
+pub use taper::{TaperError, closes_at, tapered};
 pub use thicken::{ThickenError, thicken};
