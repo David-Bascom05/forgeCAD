@@ -526,7 +526,11 @@ fn band_ball_on_an_edge_splits() {
 #[test]
 #[ignore = "curved decide-once: a point touch within LINEAR of a third solid's edge (tolerant-edge rule)"]
 fn band_ball_touching_the_top_beside_its_edge_is_non_manifold() {
-    agrees_curved(&band_curved("plane_sphere/centre_on_wall_tangent_top/Cut", 0, -0.9));
+    agrees_curved(&band_curved(
+        "plane_sphere/centre_on_wall_tangent_top/Cut",
+        0,
+        -0.9,
+    ));
 }
 
 /// A cylinder tangent to the base cylinder's wall from inside, moved 0.9 LINEAR along −y
