@@ -6,6 +6,7 @@ import ForgeMath.Refine
 import ForgeMath.Predicates
 import ForgeMath.Estimate
 import ForgeMath.Dmath
+import ForgeMath.Atan
 
 /-!
 # Only the standard axioms
@@ -39,3 +40,5 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeMath.Dmath.k_sin_eq ForgeMath.Dmath.k_cos_eq ForgeMath.Dmath.exponent_spec
   ForgeMath.Dmath.rem_pio2_spec ForgeMath.Dmath.sin_cos_spec ForgeMath.Dmath.sin_spec
   ForgeMath.Dmath.cos_spec ForgeMath.Dmath.sin_err ForgeMath.Dmath.cos_err ForgeMath.Dmath.sin_cos_err
+  ForgeMath.Dmath.atan_eq ForgeMath.Dmath.atan2_spec ForgeMath.Dmath.asin_spec ForgeMath.Dmath.acos_spec
+  ForgeMath.Dmath.atan_err ForgeMath.Dmath.atan2_err50 ForgeMath.Dmath.asin_err ForgeMath.Dmath.acos_err

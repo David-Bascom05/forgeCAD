@@ -6,4 +6,5 @@ import ForgeMath.Refine
 import ForgeMath.Predicates
 import ForgeMath.Estimate
 import ForgeMath.Dmath
+import ForgeMath.Atan
 import ForgeMath.Axioms

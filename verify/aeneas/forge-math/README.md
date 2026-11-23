@@ -26,6 +26,21 @@ code respelled for Aeneas. `*_of_fast` shows that the real function returns the 
 the copy whenever the fast test passes, so their conclusions hold for the shipped code. The copy
 is no longer needed for these two.
 
+## Proven: `dmath` (`lean/ForgeMath/Dmath.lean`, `Atan.lean`)
+
+Each translated function returns `ok` and equals the ieee session's model, written operation
+for operation from the same Rust (verify/ieee754/IEEE754/Dmath). The models' contracts then hold
+for the shipped code.
+
+| Rust | equals the model (`*_eq`, `*_spec`) | contract, for the shipped code |
+|---|---|---|
+| `k_sin`, `k_cos` | `ksin`, `kcos` | (the models' `ksin_eval`, `kcos_eval`) |
+| `exponent`, `rem_pio2` | the exponent field `expo`, `remPio2` | |
+| `sin_cos`, `sin`, `cos` | `sinCos`, `sin`, `cos` | C1 `sin_cos_err`, `sin_err`, `cos_err`: for finite `\|x\| ≤ 2^20`, within `2^-52` |
+| `atan` | `atan` (for every input: NaN, `±∞`, all branches) | `atan_err`: finite `x`, within `3·10^-16` of `arctan x` |
+| `atan2` | `atan2` (every special case, then the exponent gap) | C2 `atan2_err50`: within `2^-50` of the angle |
+| `asin`, `acos` | `asin`, `acos` (`RangeInclusive::contains` through f64's `PartialOrd`) | C3 `asin_err`, `acos_err`: on `[−1, 1]`, within `2^-50` |
+
 ## Opaque
 
 `research/aeneas/proposals/predicates.md` applied six Aeneas-friendly rewrites to `predicates.rs`.
