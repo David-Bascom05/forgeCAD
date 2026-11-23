@@ -1,0 +1,11 @@
+{
+ "corpus": "automate",
+ "source": "https://zenodo.org/api/records/7776208/files/step.zip/content",
+ "licence": "CC0-1.0",
+ "files": 447442,
+ "bytes": 74088040746,
+ "shard": 500,
+ "order": "ids sorted as strings",
+ "ids_sha256": "96bc86bdd8e7b4eb11d7299cb1c517fc310a878c9618676923a041b1803ab305",
+ "indexed": "2026-11-23"
+}

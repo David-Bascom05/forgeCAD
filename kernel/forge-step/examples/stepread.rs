@@ -171,15 +171,38 @@ fn main() {
             }
         };
         let mut bx = "null".to_string();
-        if !flag("--no-box")
-            && let Ok(m) = tessellate(
-                &s.body,
-                &Quality {
-                    chord: (2e-4 * s.body.faces_box().diagonal()).min(0.05),
-                    ..Quality::default()
-                },
-            )
-        {
+        // the strict mesh (our own parts' rule), else the tolerant one the viewers and `fg check` use
+        let mut mesh = String::new();
+        let q = Quality {
+            chord: (2e-4 * s.body.faces_box().diagonal()).min(0.05),
+            ..Quality::default()
+        };
+        let tri = if flag("--no-box") {
+            None
+        } else {
+            match tessellate(&s.body, &q) {
+                Ok(m) => {
+                    mesh = "ok".into();
+                    Some(m)
+                }
+                Err(e) => {
+                    let k = format!("{e:?}");
+                    let k = esc(k.split([' ', '{', '(']).next().unwrap_or(""));
+                    match forge_mesh::tessellate::tessellate_tolerant(&s.body, &q) {
+                        Ok(m) => {
+                            mesh = format!("tolerant:{k}");
+                            Some(m)
+                        }
+                        Err(e2) => {
+                            let k2 = format!("{e2:?}");
+                            mesh = format!("err:{k}:{}", esc(k2.split([' ', '{', '(']).next().unwrap_or("")));
+                            None
+                        }
+                    }
+                }
+            }
+        };
+        if let Some(m) = tri {
             let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
             for p in &m.positions {
                 for (k, c) in [p.x, p.y, p.z].into_iter().enumerate() {
@@ -195,7 +218,7 @@ fn main() {
             ed = edits(&s.body, vol);
         }
         solids.push(format!(
-            "{{\"edit\":{{{ed}}},\"warn\":\"{}\",\"id\":{},\"faces\":{},\"edges\":{},\"problems\":{{{}}},\"first\":\"{}\",\"vol\":{},\"area\":{},\"merr\":\"{}\",\"box\":{}}}",
+            "{{\"edit\":{{{ed}}},\"mesh\":\"{mesh}\",\"warn\":\"{}\",\"id\":{},\"faces\":{},\"edges\":{},\"problems\":{{{}}},\"first\":\"{}\",\"vol\":{},\"area\":{},\"merr\":\"{}\",\"box\":{}}}",
             esc(s.body.unverified.as_deref().unwrap_or("")).chars().take(120).collect::<String>(), s.entity, s.body.faces.len(), s.body.edges.len(), kj.join(","), esc(&first).chars().take(120).collect::<String>(), num(vol), num(area), esc(&merr), bx
         ));
     }

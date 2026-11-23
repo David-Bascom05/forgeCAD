@@ -1,0 +1,11 @@
+{
+ "corpus": "nist",
+ "source": "https://www.nist.gov/system/files/documents/noindex/2024/06/19/NIST-PMI-STEP-Files.zip",
+ "licence": "NIST: no restrictions",
+ "files": 33,
+ "bytes": 54275118,
+ "shard": 500,
+ "order": "ids sorted as strings",
+ "ids_sha256": "ba35521c36ac524e0fd012ecd14a36c9ddcbf41ef4901b52ed6327abd6b7b816",
+ "indexed": "2026-11-23"
+}

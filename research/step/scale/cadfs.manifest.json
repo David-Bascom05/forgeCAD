@@ -1,0 +1,11 @@
+{
+ "corpus": "cadfs",
+ "source": "https://huggingface.co/datasets/VladPyatov/CADFS/resolve/main/cadfs/dataset/step.zip",
+ "licence": "CC-BY-4.0",
+ "files": 450306,
+ "bytes": 39148251055,
+ "shard": 500,
+ "order": "ids sorted as strings",
+ "ids_sha256": "0f791bbec07e66203f175f5cc7cf0b31a3c16ae2a5b1d36968ed4fde407614c6",
+ "indexed": "2026-11-23"
+}

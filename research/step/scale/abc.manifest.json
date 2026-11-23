@@ -1,0 +1,11 @@
+{
+ "corpus": "abc",
+ "source": "https://huggingface.co/datasets/VladPyatov/CADFS/resolve/main/cadfs/raw/step_abc.zip",
+ "licence": "Onshape Terms of Use 1.g.ii (ABC); mirror CC-BY-4.0",
+ "files": 450307,
+ "bytes": 59324247242,
+ "shard": 500,
+ "order": "ids sorted as strings",
+ "ids_sha256": "6bff57e05d59d1347fb68395a74335e6c6504f1af2cea04a134d86a7df595e9f",
+ "indexed": "2026-11-23"
+}
