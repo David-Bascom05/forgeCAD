@@ -150,3 +150,32 @@ fn saves_and_imports() {
     assert_eq!(p.ids()[0], "my-shop");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn tooling_is_kept_as_written() {
+    let text = r#"format = 1
+id = "t"
+[tooling]
+base = "std-eu"
+clearance = 2
+[[tooling.punches]]
+id = "P1"
+kind = "gooseneck"
+tip_radius = 1
+relief = { depth = 30, z0 = 20, z1 = 60 }
+segments = [{ length = 100, count = 2 }]
+[tooling.press]
+id = "brake"
+backgauge = { x = [0, 600], fingers = [{ y = 0 }] }
+"#;
+    let v = Vendor::parse(text).unwrap();
+    let Some(Tooling::Table(t)) = &v.tooling else {
+        panic!("{:?}", v.tooling)
+    };
+    assert_eq!(t.get("base"), Some(&toml::Item::Str("std-eu".into())));
+    assert_eq!(Vendor::parse(&v.to_text()).unwrap(), v);
+    let set = Vendor::parse("format = 1\nid = \"t\"\ntooling = \"std-us\"\n").unwrap();
+    assert_eq!(set.tooling, Some(Tooling::Set("std-us".into())));
+    assert_eq!(Vendor::parse(&set.to_text()).unwrap(), set);
+    assert!(Vendor::parse("format = 1\nid = \"t\"\ntooling = 3\n").is_err());
+}

@@ -53,6 +53,9 @@
 //! kind = "nut"  size = "M3"  code = "S-M3-0"  sheet = [0.031, 0.5]  hole = 0.168  edge = 0.25
 //! ```
 //!
+//! `tooling`: the press brake's, for the bend simulator: `tooling = "std-eu"`, or a `[tooling]`
+//! table forge-brake reads (see `Tooling`).
+//!
 //! Rule keys: `min_flange`, `hole_to_bend`, `hole_to_edge`, `bend_to_edge`, `min_hole`,
 //! `min_slot`, `min_web`, `bend_from` ("tangent" | "centre"), `bend_angles`, `max_bend_length`,
 //! `relief = { shape, width, depth, corner_gap }`.
@@ -362,6 +365,16 @@ pub struct HardwareRow {
     pub materials: Vec<String>,
 }
 
+/// The press-brake tooling a vendor runs, for the bend simulator (kernel/forge-brake): a set's
+/// id (`tooling = "std-eu"`), or a table (`[tooling]`: `base`, `punches`, `dies`, `press`,
+/// `clearance`, `self_clearance`, `springback`, as forge-brake names them; mm and degrees). Kept
+/// as written and written back unchanged: forge-brake reads and checks it, not this crate.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Tooling {
+    Set(String),
+    Table(Table),
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Vendor {
     pub id: String,
@@ -378,6 +391,7 @@ pub struct Vendor {
     pub rules: Rules,
     pub materials: Vec<MaterialRow>,
     pub hardware: Vec<HardwareRow>,
+    pub tooling: Option<Tooling>,
 }
 
 /// Why a profile does not read.
@@ -667,6 +681,12 @@ impl Vendor {
             rules: Rules::default(),
             materials: vec![],
             hardware: vec![],
+            tooling: match r.get("tooling") {
+                None => None,
+                Some(Item::Str(id)) => Some(Tooling::Set(id.clone())),
+                Some(Item::Table(t)) => Some(Tooling::Table(t.clone())),
+                Some(_) => return Err(bad("`tooling` takes a set's id or a [tooling] table")),
+            },
         };
         if let Some(l) = r.table("limits")? {
             let mut q = Reader::new(l, "limits");
@@ -961,6 +981,11 @@ impl Vendor {
             .collect();
         if !hw.is_empty() {
             t.set("hardware", Item::Tables(hw));
+        }
+        match &self.tooling {
+            None => {}
+            Some(Tooling::Set(id)) => t.set("tooling", Item::Str(id.clone())),
+            Some(Tooling::Table(x)) => t.set("tooling", Item::Table(x.clone())),
         }
         format!(
             "# ForgeCAD sheet-metal vendor profile (forge-vendor format {FORMAT})\n{}",
