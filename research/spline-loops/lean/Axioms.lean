@@ -48,3 +48,8 @@ open SplineSpec
 -- The kernel's tridiagonal solve, in exact arithmetic: nonzero pivots, every row satisfied.
 #print axioms pivot_ne
 #print axioms thomas_solves
+-- The kernel's cyclic (Sherman-Morrison) solve and its two-unknown case.
+#print axioms cyc_split
+#print axioms sm_den_ne
+#print axioms cyclic_solves
+#print axioms two_solves
