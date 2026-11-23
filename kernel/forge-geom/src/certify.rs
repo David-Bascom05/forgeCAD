@@ -560,6 +560,9 @@ impl Pair {
     }
 }
 
+/// The most of the march's steps one proven step may span.
+const LONG: usize = 16;
+
 /// Half the sides tried for a singular site's box, least first. Near a touch the surfaces stay
 /// within about k d^2 of each other at a distance d from it, so the exclusion walk needs boxes of
 /// about that size there: the box must reach out to where that is affordable.
@@ -733,6 +736,30 @@ impl Cert<'_> {
         None
     }
 
+    /// One step from (p0, t0) to (p1, t1) proven at once, away from every site and inside the
+    /// region's reach: None if not.
+    fn one_step(&self, p0: Point3, t0: Vec3, p1: Point3, t1: Vec3) -> Option<Seg> {
+        let h = p0.distance(p1);
+        let reach = grown(p0, p1, 0.5 * h);
+        if meets(&reach, &self.region).is_none() || self.sites.iter().any(|(q, _)| meets(q, &reach).is_some())
+        {
+            return None;
+        }
+        [0.25, 0.375].into_iter().find_map(|f| {
+            let s = Seg {
+                p0,
+                t0,
+                p1,
+                t1,
+                x: grown(p0, p1, f * h + 4.0 * f64::EPSILON * p0.to_vec().length().max(1.0)),
+                lo: -SIGMA,
+                hi: 1.0 + SIGMA,
+                site: false,
+            };
+            self.pair.step(&s).then_some(s)
+        })
+    }
+
     /// Certified steps from (p0, t0) to (p1, t1), split at the curve's midpoint where they fail.
     fn steps(
         &self,
@@ -831,11 +858,38 @@ impl Cert<'_> {
         let n = pts.len();
         let segs = if c.closed { n } else { n - 1 };
         let mut out = Vec::new();
-        for i in 0..segs {
+        let mut i = 0;
+        while i < segs {
+            // the longest step over up to LONG of the march's nodes that is proven at once, every
+            // node it passes lying in its claim (where every zero is the step's arc): fewer, wider
+            // claims for the coverage walk to fit
+            let long = [LONG, LONG / 2, LONG / 4, 2]
+                .into_iter()
+                .filter(|&k| k >= 2 && i + k <= segs)
+                .find_map(|k| {
+                    let j = (i + k) % n;
+                    let (p0, p1) = (pts[i], pts[j]);
+                    let (t0, t1) = (tans[i], tans[j]);
+                    let (t0, t1) = (
+                        if t0.dot(p1 - p0) < 0.0 { -t0 } else { t0 },
+                        if t1.dot(p1 - p0) < 0.0 { -t1 } else { t1 },
+                    );
+                    if t0.dot(t1) < 0.5 {
+                        return None;
+                    }
+                    let s = self.one_step(p0, t0, p1, t1)?;
+                    ((i + 1..i + k).all(|m| s.claims(&pt(pts[m % n])))).then_some((s, k))
+                });
+            if let Some((s, k)) = long {
+                out.push(s);
+                i += k;
+                continue;
+            }
             let j = (i + 1) % n;
             let (p0, p1) = (pts[i], pts[j]);
             let orient = |t: Vec3| if t.dot(p1 - p0) < 0.0 { -t } else { t };
             self.steps(p0, orient(tans[i]), p1, orient(tans[j]), &mut out, 0)?;
+            i += 1;
         }
         // a short loop could be run round twice by steps all neighbours of each other
         if c.closed && out.len() < 10 {
@@ -1334,7 +1388,8 @@ pub fn in_scope(a: &Surface, b: &Surface) -> bool {
 
 /// The traced pairs this thread certified last, with their answers: a regen asks the same pair in
 /// the same region from more than one place (the sequential and n-ary paths both). An answer is a
-/// function of its key alone (the two surfaces and the region, compared exactly).
+/// function of its key alone (the two surfaces in order, and the region, compared exactly; the
+/// curves keep their surfaces in the order asked).
 type Traced = Vec<(Surface, Surface, Box3, Option<Vec<IntCurve>>)>;
 const TRACED_MOST: usize = 32;
 

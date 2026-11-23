@@ -400,3 +400,27 @@ curve is the zero set of g(u, v) = f_b(P(u, v)), a curve in the plane. The march
 (u, v). The steps become 2 × 2 Krawczyk on pencils of lines, and the claims become thin 2D
 parallelograms that domain boxes fit without the 3D detour. The chain's 3D points are then shown
 to lie in P of the 2D tube. That should cut the per-pair cost several-fold, toward the march's own.
+
+### 10.1 Long steps
+
+A proven step may now span up to 16 of the march's nodes: the longest that Krawczyk proves at once,
+with each node it passes lying in its claim. In a claim every zero is the step's arc, so the chain
+still provably runs on one branch. The claims are fewer and wider, so the coverage walk fits them
+with fewer boxes. Cold-build cost, feature on (off in brackets):
+- guard: 354M (57M), was 388M;
+- quadarm: 117M (50M), was 189M;
+- manifold: 356M (249M), was 569M;
+- frame: 1176M (440M), was 1196M.
+
+The 300-pair sweep's certificate time is 1.4 s (4.2 s at first), and the last budget refusal is
+gone: all 300 certify. The scoreboard is 0 worse on, and every test passes on.
+
+**Assessment.** What is left is the completeness walk itself: about 16k instructions per box,
+15k boxes for guard's 32 pairs, so ~240M against the march's 39M. Box walks can't be tuned down by
+the 6–10× still needed. Default-viable needs a cheaper completeness argument. For quadric and torus
+pairs, meet.rs's host form already gives one: F(u, s) is a polynomial (or trigonometric
+polynomial) of degree ≤ 4 in s, so a certified count of its real roots in s over each u-interval
+counts the branches. That count can come from Sturm or Descartes sign variations with interval
+coefficients, refined only where the count is unsure. It is a 1D walk in u with a few hundred
+intervals, not a 2D or 3D box walk. Compared with the march's chains, it proves completeness, and
+the Krawczyk steps stay as they are for the branch-following part.
