@@ -3768,6 +3768,40 @@ impl Builder {
 
     /// A lone blend at `v`: it runs out across the faces between its two sides.
     fn run_out(&mut self, v: VertexId, ring: &[Corner], hot: usize) -> R<()> {
+        // an edge with one face on both sides at either side of the blend (the cut a merge of flush
+        // faces leaves from a seam's end to the face's rim): no boundary to the spring, so its two
+        // corners are one, and the cut is cut back to where the spring's end lands on it
+        let n = ring.len();
+        let at = |j: usize| ring[(hot + j) % n];
+        let cut = |j: usize| {
+            at(j).face == at(j - 1).face && {
+                let e = self.body.edge(self.body.coedge(at(j).cin).edge);
+                e.coedges.len() == 2
+                    && self.body.coedge_face(e.coedges[0]) == self.body.coedge_face(e.coedges[1])
+            }
+        };
+        let (first, last) = (n > 3 && cut(1), n > 3 && cut(n - 1));
+        if !first && !last {
+            return self.run_out_past(v, ring, hot, &[]);
+        }
+        let mut merged: Vec<Corner> = (0..n).map(at).collect();
+        let mut cuts = Vec::new();
+        if last {
+            cuts.push((merged[n - 1].cin, false));
+            merged[n - 2].cout = merged[n - 1].cout;
+            merged.pop();
+        }
+        if first && merged.len() > 3 {
+            cuts.push((merged[1].cin, true));
+            merged[0].cout = merged[1].cout;
+            merged.remove(1);
+        }
+        self.run_out_past(v, &merged, 0, &cuts)
+    }
+
+    /// `run_out`, and each cut of `cuts` (its coedge arriving at `v`, and whether on the first
+    /// side) cut back to the spring's end on that side.
+    fn run_out_past(&mut self, v: VertexId, ring: &[Corner], hot: usize, cuts: &[(CoedgeId, bool)]) -> R<()> {
         let k = ring.len();
         // corner j of the rotated ring: corner 0 has the blend's edge arriving
         let at = |j: usize| ring[(hot + j) % k];
@@ -3836,6 +3870,10 @@ impl Builder {
                 _ => None,
             };
             self.trim(at(j).cin, p, x, edge, extend)?;
+        }
+        for &(c, first) in cuts {
+            let (p, x) = if first { xs[1] } else { xs[k - 1] };
+            self.trim(c, p, x, edge, None)?;
         }
         // cross curves on the faces in between, each from X[j] to X[j+1]
         let mut back: Vec<(EdgeId, bool)> = Vec::new();

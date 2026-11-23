@@ -1,0 +1,28 @@
+# A disc (radius 16, 2 thick) with a boss on it of the same radius, flats at y = +-15.6 and four
+# notches of radius 2.75 centred 17.6 out on the diagonals: the boss's walls are flush with the
+# disc's, one face. A round of 0.05 on the two upright edges where that face meets the notch at
+# (+x, +y) is refused as Overflow; the same round at its mirror twin (+x, -y) builds
+# (fillet_flush_notch_twin.fg). Restating a FreeCAD library part (1833f02f.Body009), which
+# FreeCAD rounds at 2.2, and whose round builds or is refused as the importers write its numbers.
+shared r = 0.05
+sketch plan(on: xy) {
+  outer = circle((0, 0), 16.0)
+}
+ring = extrude(plan, 2)
+sketch top(on: ring.end) {
+  l0 = line((-3.5552777669262374, -15.6), (3.5552777669262374, -15.6))
+  a1 = arc(center: (0.0, 0.0), from: (3.5552777669262374, -15.6), to: (9.70863560722546, -12.717798341148278))
+  notch0 = arc(center: (12.445079348883237, -12.445079348883237), from: (9.70863560722546, -12.717798341148278), to: (12.717798341148278, -9.70863560722546), cw: true)
+  a3 = arc(center: (0.0, 0.0), from: (12.717798341148278, -9.70863560722546), to: (12.717798341148278, 9.70863560722546))
+  notch1 = arc(center: (12.445079348883237, 12.445079348883237), from: (12.717798341148278, 9.70863560722546), to: (9.70863560722546, 12.717798341148278), cw: true)
+  a5 = arc(center: (0.0, 0.0), from: (9.70863560722546, 12.717798341148278), to: (3.5552777669262374, 15.6))
+  l6 = line((3.5552777669262374, 15.6), (-3.5552777669262374, 15.6))
+  a7 = arc(center: (0.0, 0.0), from: (-3.5552777669262374, 15.6), to: (-9.70863560722546, 12.717798341148278))
+  a8 = arc(center: (-12.445079348883237, 12.445079348883237), from: (-9.70863560722546, 12.717798341148278), to: (-12.717798341148278, 9.70863560722546), cw: true)
+  a9 = arc(center: (0.0, 0.0), from: (-12.717798341148278, 9.70863560722546), to: (-12.717798341148278, -9.70863560722546))
+  a10 = arc(center: (-12.445079348883237, -12.445079348883237), from: (-12.717798341148278, -9.70863560722546), to: (-9.70863560722546, -12.717798341148278), cw: true)
+  a11 = arc(center: (0.0, 0.0), from: (-9.70863560722546, -12.717798341148278), to: (-3.5552777669262374, -15.6))
+}
+boss = extrude(top, 2)
+round = fillet(edges(between: (ring.side(plan.outer), boss.side(top.notch1))), r)
+

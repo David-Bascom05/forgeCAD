@@ -1059,3 +1059,31 @@ fn a_taper_that_collapses_is_refused_cleanly() {
     let (v, _) = judge_built(include_str!("kernel_parts/taper_collapses.fg"));
     assert!(matches!(v, Verdict::Refused(_)), "{v:?}");
 }
+
+/// A round of 0.05 at a notch in a boss whose wall is flush with the disc under it (FreeCAD
+/// 1833f02f restated, the importer's repro): it was refused as Overflow at one notch while its mirror
+/// twin built. The merged wall keeps a cut along the old rim from its seam's end to one notch, and
+/// the round's run-out at that notch met its own face across the cut. Mirror images get one verdict
+/// and one volume.
+#[test]
+fn a_round_at_a_notch_in_a_flush_wall_builds_like_its_twin() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, one) = judge_built(include_str!("kernel_parts/fillet_flush_notch.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+    let (w, twin) = judge_built(include_str!("kernel_parts/fillet_flush_notch_twin.fg"));
+    assert!(matches!(w, Verdict::Ok), "{w:?}");
+    let volume = |b: Option<forge_lang::fuzz::Built>| {
+        let body = b.and_then(|b| b.run.body).expect("a part");
+        forge_topo::mass::mass(&body.compact()).expect("a mass").volume
+    };
+    let (a, b) = (volume(one), volume(twin));
+    assert!((a - b).abs() <= 1e-9 * a, "{a} against {b}");
+}
+
+/// The mirror twin of fillet_flush_notch.fg, which builds: kept so the pair stays a pair.
+#[test]
+fn the_flush_notch_twin_rounds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_flush_notch_twin.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
