@@ -39,7 +39,7 @@ What the checks caught while the examples were written (each now a test, tests/r
 
 | gate | result |
 |---|---|
-| tests | 16 (profile 2, check 4, job 2, refuse 7, bits 1) |
+| tests | forge-turn 29, forge-turn-lang 5; all pass native and wasm32-wasip1 |
 | native = wasm32 | tests/bits.rs: one digest over the profile, the paths, the verdicts, the leftover and the three dialects' text, equal on x86-64 and wasm32-wasip1 |
 | clippy | clean; transcendental functions through forge_math::dmath |
 | no third-party crates in kernel/ | none |
@@ -79,15 +79,21 @@ What the checks caught while the examples were written (each now a test, tests/r
    oracle for `axis_gap` (L6).
 2. ID work: boring is built (ISO 6261 bars decoded; the bar a cylinder whose σ-image is an
    exact rectangle per move; `bore_rough`, `finish` inside; a bush bored from a Ø26 drilled hole
-   with an S20 bar certifies, a hole too small for the bar is refused). Left: internal grooving
-   and threading, left-hand tools (refused by name today).
+   with an S20 bar certifies, a hole too small for the bar is refused). Internal grooving and
+   threading are built (ID blades and 60° inserts on bars, each bar checked as its cylinder;
+   `id_groove` enters along the axis and plunges outward, `id_thread` feeds out from the minor
+   diameter with Δ = [r1, d/2] declared; examples/machined/nut_turn.fg certifies in full, 58 ms;
+   caught: finishing the bore on through the relief groove, the boring insert's trailing edge
+   runs up through the groove's top wall; an M31 in an M30's bore, G1; an Ø16 bar in an M12's
+   bore, refused). Left: left-hand tools (refused by name today).
 3. Done: the .fg surface (interface/forge-turn-lang, docs/cam-turning.md; forge-cli sends a
    turning document there by one branch on `is_turning`, no change to forge-cam-lang), and the
    machine in CAM-MACHINE's format (machine.rs reads it; data/machines-lathe.toml is a copy of
    its generic-lathe until forge-machine is on main). Left: the setup sheet for turning, more
    than one setup per document.
-5. G4 reasons: "nose radius r" (inside the part grown by the smallest finishing nose, decided by
-   exact booleans) or "uncut"; reach and undercut are not told apart yet.
+5. G4 reasons: "nose radius r" (inside the part grown by r, the smallest finishing corner, a
+   nose or a grooving blade's, that holds the region; decided by exact booleans) or "uncut";
+   reach and undercut are not told apart yet.
 6. Speed (David: prove a check unneeded rather than pay for it). Measured on the shaft job:
    generate 11 ms, post and round trip 0.13 ms, certify 267 ms, of which ~73% the in-process
    stock's exact booleans. Done: the normal path keeps the stock as columns (stair.rs: it loses

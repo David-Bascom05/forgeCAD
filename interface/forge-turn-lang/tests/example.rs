@@ -63,3 +63,25 @@ fn a_negative_leave_is_refused() {
         cam.errors
     );
 }
+
+#[test]
+fn the_nut_is_bored_grooved_and_threaded_inside() {
+    let d = dir();
+    let src = std::fs::read_to_string(d.join("nut_turn.fg")).unwrap();
+    let cam = forge_turn_lang::run(&src, &d);
+    assert!(cam.ok, "{:?} {:?}", cam.errors, cam.ops);
+    assert_eq!(cam.certification(), "full");
+    assert_eq!(cam.ops.len(), 6);
+    let text = cam.program_text().unwrap();
+    // the relief groove to Ø32 and the thread's last pass at the major diameter, on the
+    // imaginary tip
+    assert!(
+        text.contains("X32. F0.04") && text.contains("G32 X30. Z-20.5 F1.5"),
+        "{text}"
+    );
+    // finishing the bore on through the relief groove: the boring insert's trailing edge would
+    // run up through the groove's top wall
+    let through = src.replace("to: -18.5", "to: -30");
+    let cam = forge_turn_lang::run(&through, &d);
+    assert!(!cam.ok && cam.ops.iter().any(|o| o.name == "fin" && o.status == "refused"));
+}
