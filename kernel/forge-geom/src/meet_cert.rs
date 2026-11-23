@@ -23,6 +23,8 @@ use forge_math::{Interval, Vec3, dmath};
 
 /// Below this u-width a box that excludes neither F nor ∂F/∂s is an event's.
 const W_EVENT: f64 = 1e-6;
+/// Below this u-width a box is tried by Krawczyk's test: one certified event in it is enough.
+const W_KRAWCZYK: f64 = 1e-2;
 /// Boxes examined before giving up.
 const BUDGET: usize = 200_000;
 
@@ -65,9 +67,10 @@ impl IV3 {
 pub(crate) enum Verdict {
     /// Every event lies within `W_EVENT` of a found one.
     Certified { boxes: usize },
-    /// Events the search missed, at these u (the middle of each cluster).
+    /// Events proven to exist (Krawczyk) that the search missed, at these u.
     Missed { at: Vec<f64>, boxes: usize },
-    /// The budget ran out (a pair near tangent over a stretch): not decided.
+    /// The budget ran out (a pair near tangent over a stretch), or a cluster of event boxes holds
+    /// more possible events than found ones without a proof either way: not decided.
     Undecided { boxes: usize },
     /// Not a torus on a cylinder.
     NotCovered,
@@ -142,6 +145,61 @@ fn enclose(d: &Data, u: Interval, s: Interval) -> (Interval, Interval) {
     (f, g.dot(d.cz))
 }
 
+/// The Jacobian of G = (F, ∂F/∂s) over U × S: [[F_u, F_s], [F_us, F_ss]], enclosed.
+fn jacobian(d: &Data, u: Interval, s: Interval) -> [[Interval; 2]; 2] {
+    let (su, cu) = (u.sin(), u.cos());
+    let rad = d.cx.scale(cu).add(d.cy.scale(su));
+    let q = d.c0.add(rad.scale(d.rho)).add(d.cz.scale(s));
+    // dq/du = rho (−cx sin u + cy cos u), dq/ds = cz; both second derivatives in s vanish
+    let qu = d.cx.scale(-su).add(d.cy.scale(cu)).scale(d.rho);
+    let qs = d.cz;
+    let w = q.dot(q) + d.k;
+    let b8 = d.big2 * 8.0;
+    let grad = IV3 {
+        x: w * q.x * 4.0 - b8 * q.x,
+        y: w * q.y * 4.0 - b8 * q.y,
+        z: w * q.z * 4.0,
+    };
+    // H = 4 w I + 8 q qᵀ − 8 R² diag(1, 1, 0): xᵀ H y
+    let hess = |x: IV3, y: IV3| x.dot(y) * w * 4.0 + x.dot(q) * y.dot(q) * 8.0 - b8 * (x.x * y.x + x.y * y.y);
+    [[grad.dot(qu), grad.dot(qs)], [hess(qu, qs), hess(qs, qs)]]
+}
+
+/// Krawczyk's test on G = (F, ∂F/∂s) over U × S: `true` proves exactly one zero of G (one event)
+/// in the box; `false` says nothing.
+fn krawczyk(d: &Data, u: Interval, s: Interval) -> bool {
+    let (um, sm) = (u.mid(), s.mid());
+    let j = jacobian(d, u, s);
+    // Y: the inverse of the Jacobian at the middle, in floats (any matrix makes the test sound)
+    let jm = jacobian(d, Interval::point(um), Interval::point(sm));
+    let m = |x: Interval| x.mid();
+    let (a, b, c, e) = (m(jm[0][0]), m(jm[0][1]), m(jm[1][0]), m(jm[1][1]));
+    let det = a * e - b * c;
+    if det == 0.0 || !det.is_finite() {
+        return false;
+    }
+    let y = [[e / det, -b / det], [-c / det, a / det]];
+    let (g0, g1) = enclose(d, Interval::point(um), Interval::point(sm));
+    let p = |x: f64| Interval::point(x);
+    // K = x̃ − Y G(x̃) + (I − Y J)(X − x̃)
+    let yg = [
+        p(y[0][0]) * g0 + p(y[0][1]) * g1,
+        p(y[1][0]) * g0 + p(y[1][1]) * g1,
+    ];
+    let mut r = [[Interval::point(0.0); 2]; 2];
+    for i in 0..2 {
+        for k in 0..2 {
+            let id = if i == k { 1.0 } else { 0.0 };
+            r[i][k] = p(id) - (p(y[i][0]) * j[0][k] + p(y[i][1]) * j[1][k]);
+        }
+    }
+    let du = u - p(um);
+    let ds = s - p(sm);
+    let ku = p(um) - yg[0] + r[0][0] * du + r[0][1] * ds;
+    let ks = p(sm) - yg[1] + r[1][0] * du + r[1][1] * ds;
+    ku.lo > u.lo && ku.hi < u.hi && ks.lo > s.lo && ks.hi < s.hi
+}
+
 /// The events of F(u, .) on a torus–cylinder pair against `found` (u in [0, 2π)).
 pub(crate) fn certify(eq: &Eqn, found: &[(f64, bool)]) -> Verdict {
     let Some(d) = data(eq) else {
@@ -159,7 +217,8 @@ pub(crate) fn certify(eq: &Eqn, found: &[(f64, bool)]) -> Verdict {
         }
     }
     let mut boxes = 0;
-    let mut events: Vec<Interval> = Vec::new();
+    // event boxes: (u, one event proven by Krawczyk)
+    let mut events: Vec<(Interval, bool)> = Vec::new();
     while let Some((u, s)) = stack.pop() {
         boxes += 1;
         if boxes > BUDGET {
@@ -169,12 +228,16 @@ pub(crate) fn certify(eq: &Eqn, found: &[(f64, bool)]) -> Verdict {
         if !f.contains_zero() || !fs.contains_zero() {
             continue;
         }
-        if u.width() < W_EVENT {
-            events.push(u);
+        if u.width() < W_KRAWCZYK && krawczyk(&d, u, s) {
+            events.push((u, true));
             continue;
         }
-        // split the wider side, measured against the other's scale
-        if s.width() > 32.0 * u.width() * (1.0 + d.s_bound) {
+        if u.width() < W_EVENT {
+            events.push((u, false));
+            continue;
+        }
+        // split the wider side, u measured as arc length on the cylinder
+        if s.width() > 2.0 * u.width() * d.rho.hi {
             let (a, b) = s.split();
             stack.push((u, a));
             stack.push((u, b));
@@ -184,28 +247,49 @@ pub(crate) fn certify(eq: &Eqn, found: &[(f64, bool)]) -> Verdict {
             stack.push((b, s));
         }
     }
-    // the event boxes' u, merged into clusters
-    events.sort_by(|a, b| a.lo.total_cmp(&b.lo));
-    let mut clusters: Vec<Interval> = Vec::new();
-    for e in events {
+    // the event boxes' u, merged into clusters; each Krawczyk box holds exactly one event (a box
+    // on another's edge may hold the same one again), the small ones at least one between them
+    events.sort_by(|a, b| a.0.lo.total_cmp(&b.0.lo));
+    let mut clusters: Vec<(Interval, usize, bool)> = Vec::new();
+    for (e, unique) in events {
         match clusters.last_mut() {
-            Some(c) if e.lo <= c.hi + W_EVENT => c.hi = c.hi.max(e.hi),
-            _ => clusters.push(e),
+            Some(c) if e.lo <= c.0.hi + W_EVENT => {
+                c.0.hi = c.0.hi.max(e.hi);
+                c.1 += unique as usize;
+                c.2 |= !unique;
+            }
+            _ => clusters.push((e, unique as usize, !unique)),
         }
     }
-    let near = |c: &Interval| {
-        found.iter().any(|&(x, _)| {
-            let x = x.rem_euclid(tau);
-            [x - tau, x, x + tau]
-                .iter()
-                .any(|&y| y >= c.lo - 4.0 * W_EVENT && y <= c.hi + 4.0 * W_EVENT)
-        })
+    let found_in = |c: &Interval| {
+        found
+            .iter()
+            .filter(|&&(x, _)| {
+                let x = x.rem_euclid(tau);
+                [x - tau, x, x + tau]
+                    .iter()
+                    .any(|&y| y >= c.lo - 4.0 * W_EVENT && y <= c.hi + 4.0 * W_EVENT)
+            })
+            .count()
     };
-    let missed: Vec<f64> = clusters.iter().filter(|c| !near(c)).map(|c| c.mid()).collect();
-    if missed.is_empty() {
-        Verdict::Certified { boxes }
-    } else {
+    let mut missed = Vec::new();
+    let mut ambiguous = false;
+    for (c, unique, small) in &clusters {
+        let n = found_in(c);
+        let need = unique + *small as usize;
+        if n == 0 && *unique > 0 {
+            // an event proven to exist (Krawczyk) that the search did not find
+            missed.push(c.mid());
+        } else if n < need {
+            ambiguous = true;
+        }
+    }
+    if !missed.is_empty() {
         Verdict::Missed { at: missed, boxes }
+    } else if ambiguous {
+        Verdict::Undecided { boxes }
+    } else {
+        Verdict::Certified { boxes }
     }
 }
 
