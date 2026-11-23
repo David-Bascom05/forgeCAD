@@ -96,5 +96,9 @@ notch's sharp inside corners (no end mill reaches them).
    interval; else the B&B as before). flange 1.31 → 0.64 s, bracket 3.41 → 2.20 s, slot_plate
    7.56 → 1.38 s; programs byte-identical, verdicts identical. Next: the exact offset's ties
    (tangent joints decided structurally instead of at the BFMSS bound), Nat::mul (schoolbook).
-6. G5 (axis limits) is not checked yet; G4 uses tol where it should use δ + ε (leave).
+6. G5: the travel is checked on every posted position (`axis_limit`, placed setups; spans when
+   unplaced), and since cam/g5-runtime every posted S and F against the machine's rpm range and
+   max_feed (`machine_limit`; it was unchecked: a feed over the limit, or the S3000 fallback for a
+   group with no cutting data under a spindle's least speed, was released). Lean `G5rt_of_check`.
+   G4 grows by δ + ε (done, 4bfe2a2).
 7. The Manufacture workspace in the app (UI session): the reply above is its data contract.

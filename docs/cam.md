@@ -12,6 +12,10 @@ text, read back, and the path the text means is **certified** against the exact 
   spindle's Z is the tip's plus the tool's length: stick-out and holder gauge), for a setup placed
   with `at:` (the work offset in machine coordinates); an unplaced setup has each axis's span
   checked against its travel, and the reply's warnings say the positions were not.
+- **machine_limit** (G5, runtime): every spindle speed (S) the posted text commands within the
+  machine's `rpm` range, and every feed (F) at most its `max_feed`, as read back from the text
+  (decided exactly: the posted integers against the limits scaled in outward-rounded arithmetic).
+  Placed or not.
 
 An operation whose checks are not all proven is **refused**, with the check that failed, where,
 and a fix. A program is written only when every operation in it is certified.

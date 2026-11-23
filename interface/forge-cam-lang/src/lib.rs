@@ -2807,6 +2807,68 @@ impl Cam {
         None
     }
 
+    /// G5's runtime limits for one op's posted records, as the control reads them back: every
+    /// spindle speed (S, a whole number) within the machine's range, and every feed (F, at
+    /// `feed_decimals`, so F = q / 10^k exactly) at most its feed limit. Decided exactly: q and
+    /// the limits are compared as integers and f64 values scaled in outward-rounded arithmetic
+    /// (a limit's scaled lower end), so a pass is never a rounding. The first violation.
+    fn runtime_limits(&self, oi: usize, ms: &[forge_post::Motion], feed_decimals: u32) -> Option<CheckOut> {
+        use forge_cam_geom::ival::Ival;
+        let s = &self.setups[self.ops[oi].setup];
+        let m = self.lib.machine(&s.machine).ok()?;
+        let fail = |value: f64, limit: f64, what: String, i: usize| CheckOut {
+            rule: "machine_limit",
+            verdict: "fail",
+            value,
+            limit,
+            at: [f64::NAN; 3],
+            tool_part: "machine",
+            other: what,
+            phase: "path",
+            move_index: i,
+        };
+        // 10^k exactly (k ≤ 22, so the power is an exact f64), then the limit times it
+        let k = feed_decimals.min(22) as i32;
+        let fs = 10f64.powi(k);
+        let fmax = Ival::pt(m.max_feed).mul(Ival::pt(fs)).lo;
+        for (i, mo) in ms.iter().enumerate() {
+            match *mo {
+                // |q| < 2^53: the integer is the f64
+                forge_post::Motion::Spindle(q, _)
+                    if q.unsigned_abs() >= 1 << 53
+                        || (q as f64) < m.rpm[0]
+                        || (q as f64) > m.rpm[1]
+                        || m.rpm[0].is_nan()
+                        || m.rpm[1].is_nan() =>
+                {
+                    let n = q as f64;
+                    return Some(fail(
+                        n,
+                        if n < m.rpm[0] { m.rpm[0] } else { m.rpm[1] },
+                        format!(
+                            "spindle S{q}: outside the machine's range {} to {} rpm",
+                            m.rpm[0], m.rpm[1]
+                        ),
+                        i,
+                    ));
+                }
+                forge_post::Motion::Feed(_, q) | forge_post::Motion::Arc { f: q, .. }
+                    if q.unsigned_abs() >= 1 << 53 || (q as f64) > fmax || fmax.is_nan() =>
+                {
+                    let v = q as f64 / fs;
+                    return Some(fail(
+                        v,
+                        m.max_feed,
+                        format!("feed F{v}: over the machine's feed limit {} mm/min", m.max_feed),
+                        i,
+                    ));
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
     /// Posts the setups' ops, reads the text back, and certifies the path the text means.
     fn post(&mut self, name: &str, setups: &[usize], post: &str, number: u32) -> ProgramOut {
         let mut po = ProgramOut {
@@ -2953,6 +3015,8 @@ impl Cam {
                 feed_decimals: d.feed_decimals,
             };
             let ms = forge_post::motions(&sub);
+            // G5's runtime half: what the text commands the spindle and the feed, as read back
+            let runtime = self.runtime_limits(oi, &ms, d.feed_decimals);
             let back = |p: [i64; 3]| {
                 [
                     p[0] as f64 / scale + o[0],
@@ -3154,6 +3218,10 @@ impl Cam {
                 sum.clear = false;
                 sum.checks.insert(0, c);
             }
+            if let Some(c) = runtime {
+                sum.clear = false;
+                sum.checks.insert(0, c);
+            }
             // the lowest the tool's tip goes in a move that met the fixture
             let ends: Vec<[f64; 3]> = std::iter::once(posted.start)
                 .chain(posted.moves.iter().scan(posted.start, |at, m| {
@@ -3187,6 +3255,7 @@ impl Cam {
                     c.rule, c.verdict, c.move_index, c.phase, c.value, c.limit, c.other
                 ));
                 op.fix = Some(match c.rule {
+                    "machine_limit" => "a tool or feeds the machine can run (its spindle range and feed limit are in the machine's record), or another machine".into(),
                     "axis_limit" => "SetArg at: a work offset that keeps the program within travel, or the part placed elsewhere on the table (or a shorter tool for Z)".into(),
                     "fixture_collision" => {
                         let f = s.fixture.as_ref().expect("a fixture check has a fixture");
@@ -3514,7 +3583,7 @@ impl Cam {
             ),
             (
                 "scope",
-                Json::Str("Proven: the cutter, shank and holder clear the exact part (within tol for the cutter on cuts), rapids clear part and stock, and every body of the tool keeps the fixture's clearance from the fixture as modelled (a placed vise's boxes), on the posted path. Not claimed: cutting physics, the machine's fidelity, the true in-process stock beyond the proven-cleared voids.".into()),
+                Json::Str("Proven: the cutter, shank and holder clear the exact part (within tol for the cutter on cuts), rapids clear part and stock, and every body of the tool keeps the fixture's clearance from the fixture as modelled (a placed vise's boxes), on the posted path; every posted spindle speed and feed is within the machine's record (G5, runtime). Not claimed: cutting physics, the machine's fidelity, the true in-process stock beyond the proven-cleared voids.".into()),
             ),
         ])
     }

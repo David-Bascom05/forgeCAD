@@ -682,4 +682,65 @@ fn slots_follow_their_centrelines() {
         "{:?}",
         op.refusal
     );
+
+/// G5's runtime half: the posted S and F, as read back, within the machine's spindle range and
+/// feed limit (a machine of the project's own library, slower than the generic one).
+#[test]
+fn posted_speeds_and_feeds_are_within_the_machine() {
+    let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let dir = std::env::temp_dir().join(format!("forge-cam-g5rt-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("cam")).unwrap();
+    std::fs::copy(src_dir.join("flange.fg"), dir.join("flange.fg")).unwrap();
+    let machine = |rpm: &str, feed: &str| {
+        let m = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kernel/forge-tooling/data/machines.toml"),
+        )
+        .unwrap();
+        // the generic VMC's record, renamed, with its spindle range and feed limit replaced
+        let vmc = m.split("[[machine]]").nth(1).unwrap();
+        let rec = vmc
+            .replace("\"generic-vmc3\"", "\"slow-vmc\"")
+            .replace("rpm = [100, 12000]", &format!("rpm = {rpm}"))
+            .replace("max_feed = 10000", &format!("max_feed = {feed}"));
+        std::fs::write(dir.join("cam/slow.toml"), format!("[[machine]]{rec}")).unwrap();
+    };
+    let src = std::fs::read_to_string(src_dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace("generic-vmc3", "slow-vmc");
+    // the same limits as the generic VMC: released
+    machine("[100, 12000]", "10000");
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    // a feed limit under the profile's feed: refused by the posted F, with the limit
+    machine("[100, 12000]", "1000");
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(!cam.ok && cam.program_text().is_none());
+    let c = cam
+        .ops
+        .iter()
+        .flat_map(|o| o.checks.iter())
+        .find(|c| c.rule == "machine_limit")
+        .expect("a feed over the limit");
+    assert!(c.value > 1000.0 && c.limit == 1000.0, "{c:?}");
+    // a material group with no cutting data: the ops fall back to S3000, under this
+    // spindle's least speed: refused by the posted S
+    machine("[5000, 24000]", "10000");
+    let cam = forge_cam_lang::run(&src.replace("group: \"N\"", "group: \"X\""), &dir);
+    assert!(!cam.ok && cam.program_text().is_none());
+    let c = cam
+        .ops
+        .iter()
+        .flat_map(|o| o.checks.iter())
+        .find(|c| c.rule == "machine_limit")
+        .expect("a spindle speed under the range");
+    assert!(
+        c.value == 3000.0 && c.limit == 5000.0 && c.other.starts_with("spindle"),
+        "{c:?}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
 }
