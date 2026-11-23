@@ -416,3 +416,54 @@ fn a_hairpin_whose_setback_is_not_known_to_the_tolerance_is_refused() {
     assert!(limit > dmath::PI - 0.01 && limit < dmath::PI - 0.005, "{limit}");
     assert_eq!(at(limit - 1e-5), Ok(()), "the limit holds: {limit}");
 }
+
+#[test]
+#[ignore = "pinned repro: touch against bend zones is not judged yet (step 5's new pairs)"]
+fn a_flange_tip_resting_on_a_bends_outer_skin_is_a_touch() {
+    // the base's right flange bends down about the axis x = 96, z = -4 (inside radius 2, outer
+    // skin radius 4, t = 2); a chain from the base's narrower left tongue (y in [10, 30]) climbs,
+    // runs right and drops a flange at x in [97, 99] whose tip comes down onto that outer skin,
+    // inside the zone's width (y in [0, 40]): its corner (97, y, -4 + sqrt 15) is on the skin. A
+    // tip on a face with no gap is no valid solid: FoldedTouch. 0.5 higher it builds.
+    let at = |h5: f64| {
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            gauge(),
+            Frame::WORLD,
+            &[poly(&[
+                (10.0, 0.0),
+                (100.0, 0.0),
+                (100.0, 40.0),
+                (10.0, 40.0),
+                (10.0, 30.0),
+                (0.0, 30.0),
+                (0.0, 10.0),
+                (10.0, 10.0),
+            ])],
+        )
+        .unwrap();
+        let down = -dmath::FRAC_PI_2;
+        s.flange(base, 1, down, 30.0).unwrap();
+        let (f3, _) = s.flange(base, 5, -down, 40.0).unwrap();
+        let (f4, _) = s.flange(f3, 1, -down, 97.0).unwrap();
+        let (f5, _) = s.flange(f4, 1, -down, h5).unwrap();
+        (build_with(&s, Map::Folded).map(|_| ()), f5)
+    };
+    let on = 44.0 - 15f64.sqrt();
+    let (r, f5) = at(on);
+    match r {
+        Err(forge_sheet::SheetError::FoldedTouch { a, b, at, .. }) => {
+            let strips = [a, b];
+            assert!(strips.contains(&forge_sheet::Strip::Wall(f5)), "{a:?} {b:?}");
+            assert!(
+                strips.iter().any(|s| matches!(s, forge_sheet::Strip::Bend(_))),
+                "{a:?} {b:?}"
+            );
+            // on the skin, inside the zone's width
+            let d = ((at.x - 96.0).powi(2) + (at.z + 4.0).powi(2)).sqrt();
+            assert!((d - 4.0).abs() < 1e-4 && at.y > 9.0 && at.y < 31.0, "{at:?}");
+        }
+        r => panic!("a tip on the bend's skin: {r:?}"),
+    }
+    assert_eq!(at(on - 0.5).0, Ok(()));
+}
