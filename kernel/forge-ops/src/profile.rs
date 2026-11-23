@@ -739,6 +739,14 @@ fn blunt_cusps(l: &ProfileLoop) -> ProfileLoop {
 }
 
 impl Profile {
+    /// Whether the region holds `p` (in its plane's coordinates): inside the outer loop and in no
+    /// hole, by the exact crossing parity of each loop (lines and arcs exact, splines by their
+    /// roots).
+    pub fn holds(&self, p: Point2) -> bool {
+        let mut loops = self.loops.iter();
+        loops.next().is_some_and(|outer| loop_holds(outer, p)) && loops.all(|h| !loop_holds(h, p))
+    }
+
     /// Checks the profile and returns it with the outer loop counter-clockwise
     /// and every hole clockwise; a loop that crosses or touches itself is refused.
     pub fn normalized(&self) -> Result<Profile, ProfileError> {
@@ -971,6 +979,21 @@ impl Profile {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn holds_is_the_region() {
+        let mut hole = Profile::circle(Point2::new(5.0, 5.0), 2.0, 10);
+        hole.segments.iter_mut().for_each(|(s, _)| *s = s.reversed());
+        let p = Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 10.0, 10.0, 0), hole],
+        };
+        assert!(p.holds(Point2::new(1.0, 1.0)));
+        assert!(!p.holds(Point2::new(5.0, 5.0)), "in the hole");
+        assert!(p.holds(Point2::new(5.0, 7.5)), "between the hole and the rim");
+        assert!(!p.holds(Point2::new(11.0, 5.0)), "outside");
+        assert!(!p.holds(Point2::new(5.0, -1e-3)), "a hair outside");
+    }
+
     use super::*;
 
     #[test]
