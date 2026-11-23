@@ -192,33 +192,59 @@ The reason: within a slab, two sectors can carry the same signs. A plane wall ca
 only along d. Two branches of one curve can swap the order of roots along a fibre and swap it
 back, so the sectors before the first swap and after the second agree on every sign.
 
-**Tier 1 (proposed, 2026-11-23; to be agreed with the LemmaD session): a cylindrical algebraic
-decomposition with Thom closure.** It is used only if the Tier-0 check fails. Fix rational
-directions: `u` (the fibres), `w` (the base's fibres), and `d` (level 1), mutually orthogonal and
-generic (the first triple in a fixed list for which every leading coefficient below is a nonzero
-constant). The separators are polynomial carriers that carry no face:
-1. **Fibre closure (level 3).** For every quadric carrier `q`, its polar plane `∂_u q = 0` (a plane,
-   since `q` is quadratic; `∂²_u q` is a constant). Every carrier's restriction to a `u`-line is
-   then in a family closed under `d/ds`. By **Thom's lemma**, every sign condition on such a
-   family is an interval or a point of the line.
-2. **Projection (level 2).** For the family `F` = carriers ∪ polar planes, as polynomials in the
-   `u`-coordinate `s` with coefficients in `ℚ[t, r]` (`t = d·x`, `r = w·x`): every `Disc_s(f)` and
-   `Res_s(f, g)`. These are cylinders along `u`, of degree ≤ 4 in `(t, r)`. Add their closure
-   under `∂_r`.
-3. **Sections (level 1).** The roots in `t` of `Disc_r(b)`, `Res_r(b, b′)` and the leading
-   coefficients, over the level-2 family `B`: algebraic event values `e_k`. The walls are the
-   planes `t = e_k` **at the events**, not between them. They have algebraic constants, and
-   their sign at a sample is `Alg.Num.cmp` (`cmp_spec`).
+**Tier 1 (agreed with the LemmaD session, 2026-11-23): a cylindrical algebraic decomposition
+with Thom closure.** It is used only if the Tier-0 check fails. Since A8 (§7), it lives in the
+proof-only reference; no runtime builds it.
 
-**Lemma D (restated).**
-- **R1, a theorem.** Every nonempty sign class of carriers ∪ separators is connected. Over an
-  event-free slab `e_k < t < e_{k+1}`, `B` is delineable along `r`, and by induction `F` is
-  delineable along `u` over each base cell. The fibre sign conditions are intervals (Thom), so each
-  sign class is a section or sector over a connected base cell, hence connected. The cells inside
-  the event planes `t = e_k` are the same construction one dimension down.
-- **R2–R5 are not automatic in a CAD** (the frontier condition can fail). Tier 1 therefore runs the
-  Tier-0 graph check on its own arrangement. If it passes, `Faithful`; if not, `Skip::Tier1`, to
-  the old path, counted. That is still one decided rule (D3): seams; if their check fails, the
+**Directions.** `u` (the fibres), `w` (the base's fibres) and `d` (level 1): rational, mutually
+orthogonal, and the first triple in a fixed list such that every member of `F` below has a nonzero
+**constant** `u`-leading coefficient. This excludes planes containing `u`, and quadrics with a
+ruling along `u`.
+
+**Separators.** Polynomial carriers that carry no face.
+1. **Fibre family `F` (level 3).** `F` holds:
+   - the input carriers, the input planes and the Tier-0 seams;
+   - for every quadric `q`, its polar plane `∂_u q = 0`. This is a plane: write `q = a s² + b s + c`
+     in the `u`-coordinate `s`; then `a` is constant and `b = ∂_u q` is linear.
+
+   `F` is closed under `d/ds`, so by **Thom's lemma** every sign condition on it is an interval
+   or a point of a `u`-line.
+2. **Base family `B` (level 2).** Polynomials in `(t, r) = (d·x, w·x)`, constant along `u`, so
+   cylinders:
+   - every `Disc_s(f)` and `Res_s(f, g)` for `f, g ∈ F`;
+   - **C1**: every `psc₁(f, g) = a·b′ − a′·b`, the principal subresultant coefficient: a plane,
+     the polar plane of the pencil member `a′q − aq′`. It is needed because `Res ≡ 0` on a base cell
+     does not fix the order of the roots (`f ∝ g` at a point swaps which roots coincide). For a
+     pair containing a plane it is a nonzero constant, and nothing is added;
+   - their closure under `∂_r`;
+   - **C3**: then replace all of it by a **squarefree basis** (pairwise coprime squarefree
+     factors). A discriminant can be a perfect square, and a resultant can have repeated factors;
+     without the basis, `Disc_r ≡ 0` and the level-1 events miss them.
+3. **Walls (level 1).** The planes `t = e_k` at every root of `Disc_r(b)`, `Res_r(b, b′)` and
+   the leading coefficients, over the basis `B`. They have algebraic constants, and their sign at
+   a sample is `Alg.Num.cmp`.
+
+Walls and level-2 cylinders are not in `F`, since they are constant along `u` (**C4**).
+
+**Lemma D (agreed).**
+- **R1, `cad_R1 : CADSpec … → ∀ X, RealisedK cs X → Connected (covCellK cs X)`.** `CADSpec`
+  states the semantic hypotheses:
+  - `F` closed under `∂_u` with constant nonzero leading coefficients;
+  - `B` sign-invariant on base cells implies `F` delineable and order-invariant over them (proved
+    for degree ≤ 2 from the Disc/Res/psc₁ formulas);
+  - `B` closed under `∂_r`;
+  - walls at all level-1 roots.
+
+  Delineability is parametric over any topological parameter space and any preconnected `C`
+  (event points and sections are not open).
+
+  **C2**: on a base cell where `Disc_s(f) ≡ 0`, `f = a(s − ρ)²` with `ρ = −b/2a` continuous (the
+  polar's root). No textbook "simple roots" hypothesis is needed for degree 2.
+
+  The executable side establishes `CADSpec` for its separator list.
+- **R2–R5**: Tier 1 reruns the graph check on its own arrangement. If it passes, `Faithful` (one
+  check-soundness theorem, generic in the arrangement and taking R1 as a hypothesis, shared with
+  Tier 0). If not, `Skip::Tier1`, counted. One decided rule (D3): seams; if their check fails, the
   CAD; if its check fails, skip.
 
 Cost: degree-4 cylinders and level-1 polynomials of degree up to 16 make Tier 1 expensive. It runs
