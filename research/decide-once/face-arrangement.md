@@ -501,6 +501,37 @@ worth doing for curved: the same cells, and the Tier-1 separators move into the 
      floats or threads). Code outside it is proven through what it hands the core;
   3. send the step's statement and commit for review before it is relied on.
 
+## 3c. The builder's speed steps as built (face_fast.rs), each with its correctness statement
+
+The builder is `kernel/forge-bool/src/decide_once/face_fast.rs`, outside forge-bool-core. It is
+proven through what it hands the core. In debug builds, its facets are asserted equal to
+face_builder's and to the plane ledger's coarsening on all 75 flat booleans (coplanar, upto,
+housing). Each step below is a statement for R3 to cover. f64 screens are proven in
+`verify/ieee754/IEEE754/Screen/Face.lean` (62120f5) unless marked "contract pending".
+
+| step | statement |
+|---|---|
+| keys | A vertex is `In(body, v)` or `M(a < b < c)`, the meet of three class planes. Equal keys are one point. A point is on every class in its `on` mask: an `M` point on its three classes; an input vertex on its round faces' classes when `Pts.held` (checked by `vertex_at` at input, so every plane round it holds its exact point). |
+| merge | Vertex = exact point. Points no axis keeps apart (`axis_sound`) are compared exactly. Two points of the current plane C that both lie on classes a and b, with C, a, b independent (the meets table holds their meet), are one point. |
+| line identity | Two points of line L = C∩K, both on a class h that crosses L (`crosses_line_sound`, else the exact d·n_h ≠ 0), are one point, so their order along L is 0. |
+| crossing | Edge (a, b) of a face on plane P meets plane K strictly between its ends iff side_K(a)·side_K(b) < 0, and the point is meet(C, K, across). An edge with an end on K adds that end. No other edge meets K. |
+| dependence | Three normals, each along one axis (one nonzero f64 component, so the exact Dy has one nonzero), are dependent iff two share an axis. Otherwise the exact det n_a·(n_b×n_c) decides. |
+| touch | A face whose box, grown by 4·LINEAR, misses plane K (`touches`, contract pending) has no vertex on K and no edge across K. So it adds no point to line C∩K and contains no point of it. This rests on the bridge's "a face's exact polygon is within a few LINEAR of its kernel box" (as in_face_q already does). |
+| bodies | Faces of one solid meet only along their common edges (the inputs are valid solids). So a stretch of C∩K inside a C face and a K face of the same body lies on that C face's boundary, which is a boundary segment already. Only different-body pairs need cutting. |
+| whole plane | A plane whose faces are all of one body, each strictly inside the box (boxes grown by 4·LINEAR plus 1e-9 relative), with no near face of another body whose box meets both the plane and its faces' box, has its faces as its facets: one facet per face, holders {that face}. |
+| covered | A window of C∩K lying on one of C's boundary segments on the same line repeats that segment, so it is not added. |
+| inside cache | Face F's inside answer is constant on a run of windows that touch none of F's points (endpoints, crossings, ends on the line), because F's boundary meets the line only there. A face with an unlisted crossing (`always`: across far, across K, or a dependent meet) is retested every window. |
+| parity ray | For a point not on F's boundary, parity along any axis ray decides inside. The ray runs across the window's line. Results on F's boundary may differ from face_builder's, which changes segments only, never facets (asserted). |
+| edge index | An edge whose span on axis a (its points' shadows ± their bounds) misses [x − tol, x + tol] has both ends strictly on one side of the plane x_a = x (plane exact within tol), so it is skipped by `crossing`. In mid_in it is crosses_f's `false`. |
+| area | A face cycle of the planar graph is a bounded face's outer walk iff its signed area is > 0. Screened (contract pending), with the exact least-vertex turn as fallback. |
+| angle | Half-edges sorted by angle, on to_f64 of the exact line direction with an 8ε bound (fix (a), efd1d6f). The half-plane comes from the exact signs. |
+
+**D7, the ledger-outcome memo: tried and rejected (2026-11-23).**
+- What was tried: `core::core` memoized on the canonical ledger (only the faces the pieces name, renumbered monotonically, origin mapped back), with a full-equality check.
+- Coplanar seq: 70 booleans give 52 distinct ledgers, so at most 18 hits, and those are small ones.
+- Result: the core goes from 79.0M to 72.6M, saving 6.4M, while the memo costs 9.7M. Net: 3.3M worse. Not kept.
+- Many same-size ledgers differ, so "repeats" holds only up to relabelling, which needs a canonical form. Not pursued.
+
 ## 4. Order of work and gates
 
 Step 0 is the sign-off of this design: the §1 interface, `Refines` (§2.2 and §2.2a), the
