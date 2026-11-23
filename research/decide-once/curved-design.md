@@ -621,8 +621,11 @@ fine facets round the edge map to one face facet. Two remedies:
   reaches the cell from), with (e)/(v) a bijection onto wings. `around` then counts sheets, and the
   tangent-cylinder union shows 4 and is refused.
 
-**Settled with the coordinator (face-arrangement.md at ad97832a): W2 with sectors.** This
-supersedes the W1 reply of 9453b06f. Plain W2 fails at vertices: a pinched facet, reaching a vertex
+**Settled, final (face-arrangement.md at ad97832a; confirmed by the master): W2 with sectors;
+cutting allowed.** This supersedes the W1 reply of 9453b06f. A builder that cuts along seams just
+produces rows of multiplicity 1 and one sector per facet, which is a valid W2 ledger. So curved
+chooses per case: cut along a Tier-0 seam piece where one is natural, emit two wings or several
+sectors where not (tangent cylinders). Plain W2 fails at vertices: a pinched facet, reaching a vertex
 in two sectors but listed once, can merge fan classes and hide a non-manifold vertex. So:
 - `edge_facets[e]` lists a facet once per wing, at most twice (`LedgerWF` checks it);
 - `vert_sectors[v]` lists `(facet, bounding edge a, bounding edge b)` per sector, replacing
