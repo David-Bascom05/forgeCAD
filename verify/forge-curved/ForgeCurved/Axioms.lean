@@ -120,3 +120,4 @@ import ForgeCurved
 #print axioms ForgeCurved.spherePlane_localConn
 #print axioms ForgeCurved.spherePlane_vertLocal
 #print axioms ForgeCurved.spherePlane_bad_iff
+#print axioms ForgeCurved.wallND_q

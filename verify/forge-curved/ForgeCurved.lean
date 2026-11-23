@@ -38,3 +38,4 @@ import ForgeCurved.CoaxialContact
 import ForgeCurved.Bridge1Core
 import ForgeCurved.Bridge2
 import ForgeCurved.SpherePlane
+import ForgeCurved.QWall
