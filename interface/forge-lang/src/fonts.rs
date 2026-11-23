@@ -131,3 +131,228 @@ mod tests {
         assert!(shipped("Open Sans", false, true).is_none());
     }
 }
+
+/// Every contour of the shipped faces over Latin-1 is simple in winding2d's sense
+/// (verify/forge-text, `winding_is_topological`): no two pieces that are not neighbours meet,
+/// and neighbours meet only at their shared end. Pieces are split at their middle until their
+/// control boxes are apart by more than the splits' rounding; at a shared end the two end pieces'
+/// control points must lie in cones from that end that share no direction (exact orient2d), the
+/// curves lying in their hulls. Any contour that does not come apart within the splits allowed is
+/// named.
+#[cfg(test)]
+mod simple {
+    use super::*;
+    use forge_font::Seg;
+    use forge_math::Point2;
+    use forge_math::predicates::orient2d;
+
+    const DEPTH: usize = 28;
+
+    fn split(p: &[Point2]) -> (Vec<Point2>, Vec<Point2>) {
+        let mut rows = p.to_vec();
+        let n = p.len();
+        let (mut l, mut r) = (vec![rows[0]], vec![rows[n - 1]]);
+        for k in 1..n {
+            for i in 0..n - k {
+                rows[i] = Point2::new(
+                    (rows[i].x + rows[i + 1].x) / 2.0,
+                    (rows[i].y + rows[i + 1].y) / 2.0,
+                );
+            }
+            l.push(rows[0]);
+            r.push(rows[n - 1 - k]);
+        }
+        r.reverse();
+        (l, r)
+    }
+
+    fn bbox(p: &[Point2]) -> (Point2, Point2) {
+        p.iter().fold(
+            (
+                Point2::new(f64::INFINITY, f64::INFINITY),
+                Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+            ),
+            |(lo, hi), q| {
+                (
+                    Point2::new(lo.x.min(q.x), lo.y.min(q.y)),
+                    Point2::new(hi.x.max(q.x), hi.y.max(q.y)),
+                )
+            },
+        )
+    }
+
+    /// The two boxes are apart by more than `m`.
+    fn apart(a: &[Point2], b: &[Point2], m: f64) -> bool {
+        let ((al, ah), (bl, bh)) = (bbox(a), bbox(b));
+        ah.x + m < bl.x || bh.x + m < al.x || ah.y + m < bl.y || bh.y + m < al.y
+    }
+
+    /// The control points of `a` and of `b` (all but `j`, their shared end) lie in cones from `j`
+    /// sharing no direction: a line through `j` along one of the rays has all of one strictly on
+    /// one side (or on that ray), all of the other strictly on the other.
+    fn cones_apart(j: Point2, a: &[Point2], b: &[Point2]) -> bool {
+        let (ua, ub): (Vec<Point2>, Vec<Point2>) = (
+            a.iter().copied().filter(|&p| p != j).collect(),
+            b.iter().copied().filter(|&p| p != j).collect(),
+        );
+        if ua.is_empty() || ub.is_empty() {
+            return false;
+        }
+        let side = |r: Point2, p: Point2| orient2d(j, r, p);
+        for (mine, other) in [(&ua, &ub), (&ub, &ua)] {
+            for &r in mine.iter() {
+                // the ray j -> r: one cone on it or left (or right), the other strictly the other way
+                for s in [1.0, -1.0] {
+                    let mine_ok = mine
+                        .iter()
+                        .all(|&p| s * side(r, p) >= 0.0 && (side(r, p) != 0.0 || (p - j).dot(r - j) > 0.0));
+                    // strictly the other side, or on the opposite ray (a straight continuation)
+                    let other_ok = other
+                        .iter()
+                        .all(|&p| s * side(r, p) < 0.0 || (side(r, p) == 0.0 && (p - j).dot(r - j) < 0.0));
+                    if mine_ok && other_ok {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Whether pieces `a` and `b` (control points) meet only at the shared ends `joints`.
+    fn only_at(a: &[Point2], b: &[Point2], joints: &[Point2], m: f64, depth: usize) -> bool {
+        let ja: Vec<Point2> = joints
+            .iter()
+            .copied()
+            .filter(|j| a.first() == Some(j) || a.last() == Some(j))
+            .collect();
+        let shared: Vec<Point2> = ja
+            .iter()
+            .copied()
+            .filter(|j| b.first() == Some(j) || b.last() == Some(j))
+            .collect();
+        if shared.is_empty() && apart(a, b, m) {
+            return true;
+        }
+        if let [j] = shared[..]
+            && cones_apart(j, a, b)
+        {
+            return true;
+        }
+        if depth == 0 {
+            return false;
+        }
+        let ((a0, a1), (b0, b1)) = (split(a), split(b));
+        [(&a0, &b0), (&a0, &b1), (&a1, &b0), (&a1, &b1)]
+            .iter()
+            .all(|(x, y)| only_at(x, y, joints, m, depth - 1))
+    }
+
+    fn pts(s: &Seg) -> Vec<Point2> {
+        s.points()
+    }
+
+    /// One contour: at least three pieces, none a point, non-neighbours apart, neighbours meeting
+    /// only at their shared end.
+    fn simple_contour(contour: &[Seg]) -> bool {
+        let n = contour.len();
+        let ps: Vec<Vec<Point2>> = contour.iter().map(pts).collect();
+        let big = ps
+            .iter()
+            .flatten()
+            .fold(1.0f64, |m, p| m.max(p.x.abs()).max(p.y.abs()));
+        // the splits' rounding: a few units in the last place of the largest coordinate
+        let m = 64.0 * f64::EPSILON * big;
+        n >= 3
+            && (0..n).all(|i| ps[i].first() != ps[i].last())
+            && (0..n).all(|i| {
+                (i + 1..n).all(|j| {
+                    let mut joints = Vec::new();
+                    if j == i + 1 {
+                        joints.push(contour[i].end());
+                    }
+                    if i == 0 && j == n - 1 {
+                        joints.push(contour[0].start());
+                    }
+                    only_at(&ps[i], &ps[j], &joints, m, DEPTH)
+                })
+            })
+    }
+
+    /// The check fails where it should: a contour pinched at a point two non-neighbouring sides
+    /// share, one with a side touching another's interior, one doubling back on itself.
+    #[test]
+    fn the_check_finds_touches() {
+        let p = Point2::new;
+        let poly = |v: &[(f64, f64)]| -> Vec<Seg> {
+            (0..v.len())
+                .map(|k| {
+                    Seg::Line(
+                        p(v[k].0, v[k].1),
+                        p(v[(k + 1) % v.len()].0, v[(k + 1) % v.len()].1),
+                    )
+                })
+                .collect()
+        };
+        assert!(simple_contour(&poly(&[
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0)
+        ])));
+        assert!(simple_contour(&poly(&[
+            (0.0, 0.0),
+            (2.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0)
+        ])));
+        assert!(!simple_contour(&poly(&[
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (2.0, 2.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (2.0, 2.0)
+        ])));
+        assert!(!simple_contour(&poly(&[
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (2.0, 0.0),
+            (0.0, 4.0)
+        ])));
+        assert!(!simple_contour(&poly(&[
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (2.0, 0.0),
+            (2.0, 4.0)
+        ])));
+        // a quadratic touching a side
+        let q = vec![
+            Seg::Line(p(0.0, 0.0), p(4.0, 0.0)),
+            Seg::Quad(p(4.0, 0.0), p(2.0, -4.0), p(0.0, 4.0)),
+            Seg::Line(p(0.0, 4.0), p(0.0, 0.0)),
+        ];
+        assert!(!simple_contour(&q));
+    }
+
+    #[test]
+    fn shipped_contours_are_simple() {
+        let mut bad = Vec::new();
+        for (family, style) in faces() {
+            let f = shipped(family, style.contains("Bold"), false).expect("shipped");
+            for c in (0x21u32..0x7f).chain(0xa1..0x100).filter_map(char::from_u32) {
+                if c == '\u{ad}' {
+                    continue;
+                }
+                for (k, contour) in f.outline(f.glyph(c)).expect("outline").iter().enumerate() {
+                    if !simple_contour(contour) {
+                        bad.push(format!("{family} {style} {c:?} contour {k}"));
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "contours not simple: {bad:?}");
+    }
+}

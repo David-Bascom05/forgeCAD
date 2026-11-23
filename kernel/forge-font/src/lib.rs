@@ -5,6 +5,8 @@
 //! (version 1, Type 2 charstrings: `cff`), hmtx, kern and name tables. CFF2 (variable) is refused.
 
 mod cff;
+pub mod cff_core;
+pub mod glyf_core;
 pub mod layout;
 pub mod testing;
 
@@ -258,6 +260,31 @@ impl Font {
         u16_at(&self.data, self.hmtx.0 + 4 * k).map_or(0.0, |a| a as f64)
     }
 
+    /// How far a glyf outline moves to sit where the font's metrics put it: hmtx's left side
+    /// bearing less the glyph's own xMin, as FreeType's phantom points (and fontTools) place it.
+    /// Zero for an empty glyph, or where either number is missing.
+    fn lsb_shift(&self, g: u16) -> f64 {
+        let Ok((a, b)) = self.glyph_range(g) else {
+            return 0.0;
+        };
+        if b < a + 10 {
+            return 0.0;
+        }
+        let k = g as usize;
+        let at = if k < self.metrics {
+            self.hmtx.0 + 4 * k + 2
+        } else {
+            self.hmtx.0 + 4 * self.metrics + 2 * (k - self.metrics)
+        };
+        if at + 2 > self.hmtx.0 + self.hmtx.1 {
+            return 0.0;
+        }
+        match (i16_at(&self.data, at), i16_at(&self.data, a + 2)) {
+            (Ok(lsb), Ok(xmin)) => lsb as f64 - xmin as f64,
+            _ => 0.0,
+        }
+    }
+
     /// The kerning between two glyphs set side by side, in font units.
     pub fn kerning(&self, left: u16, right: u16) -> f64 {
         self.kern
@@ -297,7 +324,7 @@ impl Font {
         self.outline_into(
             g,
             [1.0, 0.0, 0.0, 1.0],
-            (0.0, 0.0),
+            (self.lsb_shift(g), 0.0),
             &mut Vec::new(),
             &mut budget,
             &mut out,
@@ -318,7 +345,7 @@ impl Font {
         self.outline_into(
             g,
             [1.0, 0.0, 0.0, 1.0],
-            (0.0, 0.0),
+            (self.lsb_shift(g), 0.0),
             &mut Vec::new(),
             &mut budget,
             &mut out,
@@ -386,53 +413,23 @@ impl Font {
         let map = |x: f64, y: f64| Point2::new(m[0] * x + m[2] * y + off.0, m[1] * x + m[3] * y + off.1);
         if contours >= 0 {
             let n = contours as usize;
-            let mut ends = Vec::with_capacity(n);
-            for k in 0..n {
-                ends.push(u16_at(d, a + 10 + 2 * k)? as usize);
-            }
-            let points = ends.last().map_or(0, |e| e + 1);
-            spend(budget, points + 1)?;
-            let ins = u16_at(d, a + 10 + 2 * n)? as usize;
-            let mut o = a + 12 + 2 * n + ins;
-            let mut flags = Vec::with_capacity(points);
-            while flags.len() < points {
-                let f = *d.get(o).ok_or(FontError::Truncated)?;
-                o += 1;
-                flags.push(f);
-                if f & 8 != 0 {
-                    let r = *d.get(o).ok_or(FontError::Truncated)?;
-                    o += 1;
-                    flags.extend(std::iter::repeat_n(f, r as usize));
-                }
-            }
-            flags.truncate(points);
-            let mut coords = |short: u8, same: u8| -> Result<Vec<f64>, FontError> {
-                let mut v = 0i32;
-                let mut out = Vec::with_capacity(points);
-                for &f in &flags {
-                    if f & short != 0 {
-                        let dv = *d.get(o).ok_or(FontError::Truncated)? as i32;
-                        o += 1;
-                        v += if f & same != 0 { dv } else { -dv };
-                    } else if f & same == 0 {
-                        v += i16_at(d, o)? as i32;
-                        o += 2;
-                    }
-                    out.push(v as f64);
-                }
-                Ok(out)
-            };
-            let xs = coords(2, 16)?;
-            let ys = coords(4, 32)?;
+            // the integers (glyf_core), then each contour mapped: an implied point is made once,
+            // on the doubled grid, before any rounding
+            let g = glyf_core::read_simple(d, a, n, *budget)?;
+            spend(budget, g.ends.last().map_or(0, |e| e + 1) + 1)?;
+            let h = |q: glyf_core::Pi| map(q.x as f64 / 2.0, q.y as f64 / 2.0);
             let mut first = 0;
-            for &e in &ends {
-                if e < first || e >= points {
+            for &e in &g.ends {
+                if e < first || e >= g.on.len() {
                     return Err(FontError::Truncated);
                 }
-                let pts: Vec<(Point2, bool)> = (first..=e)
-                    .map(|k| (map(xs[k], ys[k]), flags[k] & 1 != 0))
+                let c: Vec<Seg> = glyf_core::contour(&g, first, e)
+                    .into_iter()
+                    .map(|s| match s {
+                        glyf_core::SegI::Line(a, b) => Seg::Line(h(a), h(b)),
+                        glyf_core::SegI::Quad(a, c, b) => Seg::Quad(h(a), h(c), h(b)),
+                    })
                     .collect();
-                let c = contour(&pts);
                 if !c.is_empty() {
                     out.push(c);
                 }
@@ -516,6 +513,7 @@ fn spend(budget: &mut usize, n: usize) -> Result<(), FontError> {
 
 /// A closed contour from TrueType points (on or off the curve): an off point between two others
 /// is a quadratic's control, two off points in a row have an on point implied midway.
+#[cfg(test)]
 fn contour(pts: &[(Point2, bool)]) -> Vec<Seg> {
     let n = pts.len();
     if n < 2 {
@@ -929,6 +927,21 @@ mod tests {
 
     /// A CFF font with subroutines, hints, flex and every short operator, truncated at every
     /// thirteenth byte and scrambled 400 ways: refused or read, never a panic, never long.
+    #[test]
+    fn placed_by_lsb_less_xmin() {
+        // a square at x 100..200 whose header says xMin 100, and hmtx's lsb 0: FreeType and
+        // fontTools draw it at 0..100 (the phantom point), and so must we
+        let mut rec = testing::simple(&testing::TestGlyph::bar(100.0, 0.0, 200.0, 100.0, 300.0));
+        rec[2..4].copy_from_slice(&100i16.to_be_bytes());
+        let font = Font::parse(testing::build_raw(1000, &[('A', rec, 300)], None)).unwrap();
+        let g = font.glyph('A');
+        let xs: Vec<f64> = font.outline(g).unwrap().iter().flatten().flat_map(|s| s.points()).map(|p| p.x).collect();
+        let (lo, hi) = xs.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &x| (a.min(x), b.max(x)));
+        assert_eq!((lo, hi), (0.0, 100.0));
+        let parts = font.outline_parts(g).unwrap();
+        assert!(parts.iter().flat_map(|(_, c)| c).flat_map(|s| s.points()).all(|p| p.x >= 0.0 && p.x <= 100.0));
+    }
+
     #[test]
     fn corrupted_cff_never_panics() {
         use crate::testing::{build_cff_raw, charstring};

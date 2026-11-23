@@ -7,10 +7,10 @@ name: lean-forge-text
 on:
   push:
     branches: [main]
-    paths: ["verify/forge-text/**", "kernel/forge-font/src/**", "kernel/forge-sketch/src/winding.rs",
+    paths: ["verify/forge-text/**", "verify/winding2d/**", "kernel/forge-font/src/**", "kernel/forge-sketch/src/winding.rs",
             ".github/workflows/lean-forge-text.yml"]
   pull_request:
-    paths: ["verify/forge-text/**", "kernel/forge-font/src/**", "kernel/forge-sketch/src/winding.rs",
+    paths: ["verify/forge-text/**", "verify/winding2d/**", "kernel/forge-font/src/**", "kernel/forge-sketch/src/winding.rs",
             ".github/workflows/lean-forge-text.yml"]
   workflow_dispatch:
 
