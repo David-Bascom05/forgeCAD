@@ -298,7 +298,12 @@ fn the_flanges_posted_program_on_its_machine() {
         let want = m.tip(&s.at(0.37), s.tool.unwrap()).unwrap();
         let got = g.at(0.37);
         let d = (0..3).map(|i| (want[i] - got[i]).powi(2)).sum::<f64>().sqrt();
-        assert!(d < 1e-6, "piece {k} ({:?}, arc {:?}) off the machine's by {d}: {got:?} vs {want:?}", g.kind, g.arc);
+        assert!(
+            d < 1e-6,
+            "piece {k} ({:?}, arc {:?}) off the machine's by {d}: {got:?} vs {want:?}",
+            g.kind,
+            g.arc
+        );
     }
     // every op of the program found by its comment
     for (k, sp) in mv.tl.ops.iter().enumerate() {
@@ -308,7 +313,10 @@ fn the_flanges_posted_program_on_its_machine() {
     // the cutter enters the table, and the machine run says so
     assert!(sim.setups[0].stock.min[2].abs() < 1e-9);
     assert!(
-        m.contacts.contacts.iter().any(|c| c.a == "table" && c.b.contains("cutter")),
+        m.contacts
+            .contacts
+            .iter()
+            .any(|c| c.a == "table" && c.b.contains("cutter")),
         "{:?}",
         m.contacts.contacts.first()
     );
@@ -333,7 +341,12 @@ fn the_flanges_posted_program_on_its_machine() {
     assert!((sim.tl.total - sim.machines[0].as_ref().unwrap().run.tl.t_stop).abs() < 1e-6);
     let total = sim.tl.total;
     let end_m = sim.stock_at(total).unwrap().0.clone();
-    let diff = end_m.hi.iter().zip(&end_tp.hi).filter(|(a, b)| (**a - **b).abs() > 1e-3).count();
+    let diff = end_m
+        .hi
+        .iter()
+        .zip(&end_tp.hi)
+        .filter(|(a, b)| (**a - **b).abs() > 1e-3)
+        .count();
     // the same but where that rapid went through the boss
     assert!(diff * 20 < end_tp.hi.len(), "{diff} columns differ");
     // and back

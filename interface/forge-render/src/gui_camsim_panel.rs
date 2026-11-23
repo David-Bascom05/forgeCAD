@@ -206,7 +206,11 @@ impl CamSimUi {
             && let Some(i) = op_of(&l.op)
         {
             // the witness is in the setup's WCS: the part's frame less the origin
-            let o = self.sim.setups.get(self.sim.tl.ops[i].setup).map_or([0.0; 3], |s| s.origin);
+            let o = self
+                .sim
+                .setups
+                .get(self.sim.tl.ops[i].setup)
+                .map_or([0.0; 3], |s| s.origin);
             let at = [l.at[0] + o[0], l.at[1] + o[1], l.at[2] + o[2]];
             let paths = self.sim.cam.sim_paths(i).len();
             let best = (0..paths)
@@ -279,8 +283,13 @@ impl Shell {
         let t = self.theme;
         // the timeline: across the view's bottom, short of the panel
         let panel_w = if st.folded { 36.0 } else { PANEL_W };
+        let extra = if st.sim.machine().is_some_and(|m| !m.run.wcs_given) {
+            18.0
+        } else {
+            0.0
+        };
         let bar = Rect::from_min_max(
-            pos2(v.left() + 8.0, v.bottom() - TIMELINE_H - 8.0),
+            pos2(v.left() + 8.0, v.bottom() - TIMELINE_H - extra - 8.0),
             pos2(v.right() - panel_w - 16.0, v.bottom() - 8.0),
         );
         let r = egui::Area::new(egui::Id::unique("camsim:timeline"))
@@ -443,6 +452,19 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
             );
         }
     });
+    // a machine run's placement, while the document gives none
+    if let Some(mv) = st.sim.machine()
+        && !mv.run.wcs_given
+    {
+        ui.label(
+            egui::RichText::new(format!(
+                "Posted code on {}: stock placement assumed (centred on the table datum; the setup gives no `at:`)",
+                mv.run.def.name
+            ))
+            .small()
+            .color(t.warn),
+        );
+    }
     // the bands
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 34.0), Sense::click_and_drag());
     let painter = ui.painter_at(rect);
@@ -620,7 +642,10 @@ fn source(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
             match m {
                 Ok(mv) => {
                     ui.radio_value(&mut want, Some(k), format!("Posted code on {}", mv.run.def.name))
-                        .on_hover_text(format!("{} ({}): the text interpreted on the machine's kinematics, every body checked", mv.run.program, mv.run.dialect));
+                        .on_hover_text(format!(
+                            "{} ({}): the text interpreted on the machine's kinematics, every body checked",
+                            mv.run.program, mv.run.dialect
+                        ));
                 }
                 Err(e) => {
                     ui.add_enabled(false, egui::RadioButton::new(false, "Machine"))
@@ -672,7 +697,11 @@ fn source(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
         let joints = mv.joints_at(st.t);
         ui.label(
             egui::RichText::new(
-                joints.iter().map(|(n, v)| format!("{n} {v:.3}")).collect::<Vec<_>>().join("  "),
+                joints
+                    .iter()
+                    .map(|(n, v)| format!("{n} {v:.3}"))
+                    .collect::<Vec<_>>()
+                    .join("  "),
             )
             .monospace()
             .small()

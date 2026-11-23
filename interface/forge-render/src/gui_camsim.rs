@@ -40,7 +40,11 @@ impl Gui {
                 ui.jump(old.t);
             } else {
                 // the workspace shows the part itself
-                ui.part = if self.fg.is_some() { PartShow::Hidden } else { PartShow::Ghost };
+                ui.part = if self.fg.is_some() {
+                    PartShow::Hidden
+                } else {
+                    PartShow::Ghost
+                };
             }
             let first = self.shell.camsim.is_none();
             self.shell.camsim = Some(Box::new(ui));
@@ -114,7 +118,9 @@ impl Gui {
 
     /// The view fitted to what the setups' stocks hold.
     fn camsim_fit(&mut self) {
-        let Some(st) = self.shell.camsim.as_deref() else { return };
+        let Some(st) = self.shell.camsim.as_deref() else {
+            return;
+        };
         let (mut lo, mut hi) = ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]);
         for s in &st.sim.setups {
             for k in 0..3 {
@@ -126,7 +132,8 @@ impl Gui {
             && let Some(v) = &mut self.view
         {
             let c = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
-            let r = 0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
+            let r =
+                0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
             v.nav.camera = super::view_camera(c, r * 1.25, self.shell.view.parallel, v.size);
             v.nav.home_view = Some(v.nav.camera);
             v.dirty = true;
@@ -212,10 +219,11 @@ pub fn geometry(
             let t = st.t;
             let mut mesh = std::mem::take(&mut st.stock_mesh);
             mesh.clear();
-            if let Some((z, s)) = st.sim.stock_at(t) {
-                let z = z.clone();
+            if st.sim.stock_at(t).is_some()
+                && let Some((z, s)) = st.sim.stock_shown()
+            {
                 draw::stock(
-                    &z,
+                    z,
                     st.sim.part_maps.get(s).and_then(|m| m.as_ref()),
                     colour,
                     tol,
@@ -360,15 +368,15 @@ impl Gui {
                 "source" => {
                     let want = match v {
                         "toolpath" => None,
-                        "machine" => Some(
-                            st.sim
-                                .machines
-                                .iter()
-                                .position(|m| m.is_ok())
-                                .ok_or_else(|| {
-                                    st.sim.machines.iter().find_map(|m| m.as_ref().err().cloned()).unwrap_or_else(|| "no machine run".into())
-                                })?,
-                        ),
+                        "machine" => {
+                            Some(st.sim.machines.iter().position(|m| m.is_ok()).ok_or_else(|| {
+                                st.sim
+                                    .machines
+                                    .iter()
+                                    .find_map(|m| m.as_ref().err().cloned())
+                                    .unwrap_or_else(|| "no machine run".into())
+                            })?)
+                        }
                         _ => return Err(format!("`{cmd}`: toolpath or machine")),
                     };
                     let f = st.t / st.total().max(1e-9);
@@ -402,7 +410,9 @@ impl Gui {
                         && lo[0].is_finite()
                     {
                         let c = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
-                        let r = 0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
+                        let r = 0.5
+                            * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2))
+                                .sqrt();
                         view.nav.camera = super::view_camera(c, r, self.shell.view.parallel, view.size);
                     }
                 }
@@ -468,10 +478,21 @@ impl Gui {
             ("refused", n(refused as f64)),
             ("ok", st.sim.cam.ok.into()),
             ("certification", st.sim.cam.certification().into()),
-            ("source", st.sim.machine().map_or(Json::from("toolpath"), |m| Json::from(m.run.def.name.clone()))),
+            (
+                "source",
+                st.sim
+                    .machine()
+                    .map_or(Json::from("toolpath"), |m| Json::from(m.run.def.name.clone())),
+            ),
             (
                 "machine_errors",
-                Json::Arr(st.sim.machines.iter().filter_map(|m| m.as_ref().err().map(|e| Json::from(e.clone()))).collect()),
+                Json::Arr(
+                    st.sim
+                        .machines
+                        .iter()
+                        .filter_map(|m| m.as_ref().err().map(|e| Json::from(e.clone())))
+                        .collect(),
+                ),
             ),
         ]))
     }

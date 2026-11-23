@@ -172,10 +172,19 @@ impl Sim {
                 if let Some(o) = m.op
                     && let (Some(a), Some(b)) = (self.tl.ops.get(o), tl.ops.get(o))
                 {
-                    let f = if a.t1 > a.t0 { (m.t - a.t0) / (a.t1 - a.t0) } else { 0.0 };
+                    let f = if a.t1 > a.t0 {
+                        (m.t - a.t0) / (a.t1 - a.t0)
+                    } else {
+                        0.0
+                    };
                     m.t = b.t0 + f * (b.t1 - b.t0);
                 } else if m.op.is_none() {
-                    m.t = tl.ops.iter().filter(|o| o.setup == m.setup).map(|o| o.t1).fold(0.0, f64::max);
+                    m.t = tl
+                        .ops
+                        .iter()
+                        .filter(|o| o.setup == m.setup)
+                        .map(|o| o.t1)
+                        .fold(0.0, f64::max);
                 }
                 mk.push(m);
             }
@@ -299,6 +308,11 @@ impl Sim {
         self.shown = Some((t, s, z));
         let (_, s, z) = self.shown.as_ref()?;
         Some((z, *s))
+    }
+
+    /// The stock last made by `stock_at`, and its setup.
+    pub fn stock_shown(&self) -> Option<(&ZMap, usize)> {
+        self.shown.as_ref().map(|(_, s, z)| (z, *s))
     }
 
     /// The certified checks that did not pass, and G4's leftover regions, as markers.

@@ -50,8 +50,17 @@ impl MachineView {
         let tools = cam.sim_tools();
         // the program's comments name its ops: each op's lines start at its comment
         // (a post may drop the parentheses inside a comment: compare the words)
-        let words = |s: &str| s.replace(['(', ')'], " ").split_whitespace().collect::<Vec<_>>().join(" ");
-        let names: Vec<String> = cam.ops.iter().map(|o| words(&format!("{} ({})", o.name, o.kind))).collect();
+        let words = |s: &str| {
+            s.replace(['(', ')'], " ")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let names: Vec<String> = cam
+            .ops
+            .iter()
+            .map(|o| words(&format!("{} ({})", o.name, o.kind)))
+            .collect();
         let mut starts: Vec<(usize, usize)> = vec![];
         for m in &run.tl.marks {
             if let Happening::Comment(c) = &m.what
@@ -65,14 +74,22 @@ impl MachineView {
         let mut seg_of = vec![];
         let mut count = vec![0usize; cam.ops.len()];
         for (k, s) in run.tl.segments.iter().enumerate() {
-            let (Some(t), Some(op)) = (s.tool, op_of_line(s.line)) else { continue };
-            let Some(ti) = tools.iter().position(|u| u.t == t) else { continue };
-            let (Some(a), Some(b)) = (run.tip(&s.q0, t), run.tip(&s.q1, t)) else { continue };
+            let (Some(t), Some(op)) = (s.tool, op_of_line(s.line)) else {
+                continue;
+            };
+            let Some(ti) = tools.iter().position(|u| u.t == t) else {
+                continue;
+            };
+            let (Some(a), Some(b)) = (run.tip(&s.q0, t), run.tip(&s.q1, t)) else {
+                continue;
+            };
             let arc = match &s.path {
                 Path::Arc { .. } => (|| {
                     // three distinct points (a whole turn starts and ends at one), then the
                     // sweep by unwrapping the angle along it, a quarter of the way at a time
-                    let p: Vec<[f64; 3]> = (0..=8).map(|k| run.tip(&s.at(k as f64 / 8.0), t)).collect::<Option<_>>()?;
+                    let p: Vec<[f64; 3]> = (0..=8)
+                        .map(|k| run.tip(&s.at(k as f64 / 8.0), t))
+                        .collect::<Option<_>>()?;
                     let (c, r) = circle3(p[2], p[4], p[6])?;
                     let ang = |q: [f64; 3]| dmath::atan2(q[1] - c[1], q[0] - c[0]);
                     let a0 = ang(p[0]);
@@ -177,10 +194,19 @@ impl MachineView {
         if segs.is_empty() {
             return None;
         }
-        let i = segs.partition_point(|s| s.t0 + s.t_stop.max(s.t_min) <= t).min(segs.len() - 1);
+        let i = segs
+            .partition_point(|s| s.t0 + s.t_stop.max(s.t_min) <= t)
+            .min(segs.len() - 1);
         let s = &segs[i];
         let dt = s.t_stop.max(s.t_min);
-        Some((i, if dt > 0.0 { ((t - s.t0) / dt).clamp(0.0, 1.0) } else { 1.0 }))
+        Some((
+            i,
+            if dt > 0.0 {
+                ((t - s.t0) / dt).clamp(0.0, 1.0)
+            } else {
+                1.0
+            },
+        ))
     }
 
     /// The joint values at time t.
@@ -242,26 +268,52 @@ impl MachineView {
                 op: op_at(t),
                 setup: self.setup,
                 rule: "machine_collision".into(),
-                verdict: if matches!(c.verdict, Verdict::Hit { .. }) { "fail".into() } else { "near".into() },
+                verdict: if matches!(c.verdict, Verdict::Hit { .. }) {
+                    "fail".into()
+                } else {
+                    "near".into()
+                },
                 at: tip_at(c.segment, s),
                 t,
-                text: format!("line {}: {} {word} {} (posted program on {})", c.line, c.b, c.a, self.run.def.name),
+                text: format!(
+                    "line {}: {} {word} {} (posted program on {})",
+                    c.line, c.b, c.a, self.run.def.name
+                ),
                 region: None,
             });
         }
         for v in &self.run.tl.violations {
             let (line, text) = match v {
-                Violation::Overtravel { line, joint, value, range } => {
-                    (*line, format!("line {line}: {joint} overtravel {value:.3} outside {:.1}..{:.1}", range[0], range[1]))
-                }
-                Violation::FeedClamped { line, joint, asked, max } => {
-                    (*line, format!("line {line}: feed clamped on {joint}: {asked:.0} asked, {max:.0} max"))
-                }
+                Violation::Overtravel {
+                    line,
+                    joint,
+                    value,
+                    range,
+                } => (
+                    *line,
+                    format!(
+                        "line {line}: {joint} overtravel {value:.3} outside {:.1}..{:.1}",
+                        range[0], range[1]
+                    ),
+                ),
+                Violation::FeedClamped {
+                    line,
+                    joint,
+                    asked,
+                    max,
+                } => (
+                    *line,
+                    format!("line {line}: feed clamped on {joint}: {asked:.0} asked, {max:.0} max"),
+                ),
                 Violation::NoTool { line, t } => (*line, format!("line {line}: T{t} is not in the machine")),
-                Violation::Rpm { line, rpm, range } => {
-                    (*line, format!("line {line}: S{rpm} outside {:.0}..{:.0} rpm", range[0], range[1]))
-                }
-                Violation::Pocket { line, t, max } => (*line, format!("line {line}: T{t} beyond the changer's {max} pockets")),
+                Violation::Rpm { line, rpm, range } => (
+                    *line,
+                    format!("line {line}: S{rpm} outside {:.0}..{:.0} rpm", range[0], range[1]),
+                ),
+                Violation::Pocket { line, t, max } => (
+                    *line,
+                    format!("line {line}: T{t} beyond the changer's {max} pockets"),
+                ),
             };
             let Some(i) = at_line(line) else { continue };
             let t = segs[i].t0;
@@ -322,42 +374,133 @@ fn prim(m: &Rigid, p: &Prim, c: [f32; 3], out: &mut Vec<WorldVert>) {
         let col = super::draw::shade_pub(c, f3(m.dir(n)));
         let v = q.map(|x| f3(m.apply(x)));
         for k in [0, 1, 2, 0, 2, 3] {
-            out.push(WorldVert { at: v[k], colour: col });
+            out.push(WorldVert {
+                at: v[k],
+                colour: col,
+            });
         }
     };
     match *p {
         Prim::Box { min: a, max: b } => {
             let v = |x: bool, y: bool, z: bool| {
-                [if x { b[0] } else { a[0] }, if y { b[1] } else { a[1] }, if z { b[2] } else { a[2] }]
+                [
+                    if x { b[0] } else { a[0] },
+                    if y { b[1] } else { a[1] },
+                    if z { b[2] } else { a[2] },
+                ]
             };
-            quad([v(false, false, true), v(true, false, true), v(true, true, true), v(false, true, true)], [0.0, 0.0, 1.0], out);
-            quad([v(false, false, false), v(false, true, false), v(true, true, false), v(true, false, false)], [0.0, 0.0, -1.0], out);
-            quad([v(true, false, false), v(true, true, false), v(true, true, true), v(true, false, true)], [1.0, 0.0, 0.0], out);
-            quad([v(false, false, false), v(false, false, true), v(false, true, true), v(false, true, false)], [-1.0, 0.0, 0.0], out);
-            quad([v(false, true, false), v(false, true, true), v(true, true, true), v(true, true, false)], [0.0, 1.0, 0.0], out);
-            quad([v(false, false, false), v(true, false, false), v(true, false, true), v(false, false, true)], [0.0, -1.0, 0.0], out);
+            quad(
+                [
+                    v(false, false, true),
+                    v(true, false, true),
+                    v(true, true, true),
+                    v(false, true, true),
+                ],
+                [0.0, 0.0, 1.0],
+                out,
+            );
+            quad(
+                [
+                    v(false, false, false),
+                    v(false, true, false),
+                    v(true, true, false),
+                    v(true, false, false),
+                ],
+                [0.0, 0.0, -1.0],
+                out,
+            );
+            quad(
+                [
+                    v(true, false, false),
+                    v(true, true, false),
+                    v(true, true, true),
+                    v(true, false, true),
+                ],
+                [1.0, 0.0, 0.0],
+                out,
+            );
+            quad(
+                [
+                    v(false, false, false),
+                    v(false, false, true),
+                    v(false, true, true),
+                    v(false, true, false),
+                ],
+                [-1.0, 0.0, 0.0],
+                out,
+            );
+            quad(
+                [
+                    v(false, true, false),
+                    v(false, true, true),
+                    v(true, true, true),
+                    v(true, true, false),
+                ],
+                [0.0, 1.0, 0.0],
+                out,
+            );
+            quad(
+                [
+                    v(false, false, false),
+                    v(true, false, false),
+                    v(true, false, true),
+                    v(false, false, true),
+                ],
+                [0.0, -1.0, 0.0],
+                out,
+            );
         }
         Prim::Cyl { base, axis, r, h } => {
             // a frame about the axis
-            let u = if axis[2].abs() < 0.9 { [0.0, 0.0, 1.0] } else { [1.0, 0.0, 0.0] };
-            let cr = |a: [f64; 3], b: [f64; 3]| [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+            let u = if axis[2].abs() < 0.9 {
+                [0.0, 0.0, 1.0]
+            } else {
+                [1.0, 0.0, 0.0]
+            };
+            let cr = |a: [f64; 3], b: [f64; 3]| {
+                [
+                    a[1] * b[2] - a[2] * b[1],
+                    a[2] * b[0] - a[0] * b[2],
+                    a[0] * b[1] - a[1] * b[0],
+                ]
+            };
             let e1 = cr(axis, u);
             let l = (e1[0] * e1[0] + e1[1] * e1[1] + e1[2] * e1[2]).sqrt();
             let e1 = [e1[0] / l, e1[1] / l, e1[2] / l];
             let e2 = cr(axis, e1);
-            let top = [base[0] + axis[0] * h, base[1] + axis[1] * h, base[2] + axis[2] * h];
+            let top = [
+                base[0] + axis[0] * h,
+                base[1] + axis[1] * h,
+                base[2] + axis[2] * h,
+            ];
             let n = 32;
             let at = |o: [f64; 3], k: usize| {
                 let (s, c) = dmath::sin_cos(std::f64::consts::TAU * k as f64 / n as f64);
-                [o[0] + r * (c * e1[0] + s * e2[0]), o[1] + r * (c * e1[1] + s * e2[1]), o[2] + r * (c * e1[2] + s * e2[2])]
+                [
+                    o[0] + r * (c * e1[0] + s * e2[0]),
+                    o[1] + r * (c * e1[1] + s * e2[1]),
+                    o[2] + r * (c * e1[2] + s * e2[2]),
+                ]
             };
             for k in 0..n {
                 let (s, c) = dmath::sin_cos(std::f64::consts::TAU * (k as f64 + 0.5) / n as f64);
-                let nn = [c * e1[0] + s * e2[0], c * e1[1] + s * e2[1], c * e1[2] + s * e2[2]];
-                quad([at(base, k), at(base, k + 1), at(top, k + 1), at(top, k)], nn, out);
+                let nn = [
+                    c * e1[0] + s * e2[0],
+                    c * e1[1] + s * e2[1],
+                    c * e1[2] + s * e2[2],
+                ];
+                quad(
+                    [at(base, k), at(base, k + 1), at(top, k + 1), at(top, k)],
+                    nn,
+                    out,
+                );
                 // the caps as thin fans (two triangles per step, the second degenerate)
                 quad([top, top, at(top, k), at(top, k + 1)], axis, out);
-                quad([base, base, at(base, k + 1), at(base, k)], [-axis[0], -axis[1], -axis[2]], out);
+                quad(
+                    [base, base, at(base, k + 1), at(base, k)],
+                    [-axis[0], -axis[1], -axis[2]],
+                    out,
+                );
             }
         }
     }

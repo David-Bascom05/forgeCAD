@@ -294,15 +294,19 @@ pub fn stock(g: &ZMap, part: Option<&PartMap>, mode: StockColour, tol: f32, out:
             let k = j * nx + i;
             // +x side: this column's part not in the neighbour's, facing +x; and the neighbour's
             // part not in this one, facing −x
-            let right = (i + 1 < nx).then_some(k + 1);
-            wall(
-                out,
-                k,
-                right,
-                [x(i + 1), y(j)],
-                [x(i + 1), y(j + 1)],
-                [1.0, 0.0, 0.0],
-            );
+            let same = |o: usize| g.lo[o] == g.lo[k] && g.hi[o] == g.hi[k];
+            let right = (i + 1 < nx).then_some(k + 1).filter(|&r| !same(r));
+            let edge_x = i + 1 == nx;
+            if right.is_some() || edge_x {
+                wall(
+                    out,
+                    k,
+                    right,
+                    [x(i + 1), y(j)],
+                    [x(i + 1), y(j + 1)],
+                    [1.0, 0.0, 0.0],
+                );
+            }
             if let Some(r) = right {
                 wall(
                     out,
@@ -316,15 +320,17 @@ pub fn stock(g: &ZMap, part: Option<&PartMap>, mode: StockColour, tol: f32, out:
             if i == 0 {
                 wall(out, k, None, [x(0), y(j + 1)], [x(0), y(j)], [-1.0, 0.0, 0.0]);
             }
-            let up = (j + 1 < ny).then_some(k + nx);
-            wall(
-                out,
-                k,
-                up,
-                [x(i + 1), y(j + 1)],
-                [x(i), y(j + 1)],
-                [0.0, 1.0, 0.0],
-            );
+            let up = (j + 1 < ny).then_some(k + nx).filter(|&u| !same(u));
+            if up.is_some() || j + 1 == ny {
+                wall(
+                    out,
+                    k,
+                    up,
+                    [x(i + 1), y(j + 1)],
+                    [x(i), y(j + 1)],
+                    [0.0, 1.0, 0.0],
+                );
+            }
             if let Some(u) = up {
                 wall(
                     out,

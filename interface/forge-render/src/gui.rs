@@ -24,10 +24,10 @@ pub mod gui_apptools;
 mod gui_asm;
 #[path = "gui_asmdrag.rs"]
 mod gui_asmdrag;
-#[path = "gui_camsim.rs"]
-pub mod gui_camsim;
 #[path = "gui_cam.rs"]
 mod gui_cam;
+#[path = "gui_camsim.rs"]
+pub mod gui_camsim;
 #[path = "gui_docs.rs"]
 pub mod gui_docs;
 #[path = "gui_explode.rs"]
