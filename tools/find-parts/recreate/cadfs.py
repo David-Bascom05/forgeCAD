@@ -467,13 +467,25 @@ class Tr:
                 for rs in self.raw.get("sketches", []):
                     for r in rs.get("entities", []):
                         c = r.get("lowerLeftCornerPosition2d")
-                        if r.get("textString") == e.get("text") and c and math.hypot(c["x"] - g[0], c["y"] - g[1]) < 5e-5:
+                        if r.get("textString") == text_of(e) and c and math.hypot(c["x"] - g[0], c["y"] - g[1]) < 5e-5:
                             near.append((c["x"], c["y"]))
             fr = self.frame_of(f, a, near)
         self.sk[f["id"]] = (a, fr)
         self.sketch_ents[f["id"]] = f["ents"]
         if texts:
-            self.texts[f["id"]] = (self.text_rows(texts, self.last_record), bool(a.pieces))
+            # points across each text's box (its record's lower left corner, its baseline vector as long as the text,
+            # its height; in mm): what a region holding the text would lose
+            corners = []
+            for e in texts:
+                for r in self.last_record.get("entities", []):
+                    c, d, h = r.get("lowerLeftCornerPosition2d"), r.get("baselineDirection2d"), r.get("height")
+                    if r.get("sketchEntityType") == "skText" and r.get("textString") == text_of(e) and c and d and h:
+                        l = math.hypot(d["x"], d["y"]) or 1.0
+                        up = (-d["y"] / l * h, d["x"] / l * h)
+                        for t in (0.1, 0.3, 0.5, 0.7, 0.9):
+                            for u in (0.25, 0.5, 0.75):
+                                corners.append(((c["x"] + t * d["x"] + u * up[0]) * 1000, (c["y"] + t * d["y"] + u * up[1]) * 1000))
+            self.texts[f["id"]] = (self.text_rows(texts, self.last_record), bool(a.pieces), corners)
         if a.approx:
             self.notes.add("approx")
 
@@ -515,13 +527,13 @@ class Tr:
         raw = [e for e in record.get("entities", []) if e.get("sketchEntityType") == "skText" and not e.get("isConstruction")]
         rows = []
         for e in texts:
-            same = [r for r in raw if r.get("textString") == e.get("text")]
+            same = [r for r in raw if r.get("textString") == text_of(e)]
             if len(same) != 1:
                 rows.append(Unresolved("sketch text not in the sketch's record" if not same else "sketch texts alike"))
                 continue
             r = same[0]
             font = TEXT_FONTS.get(e.get("fontName"))
-            txt = e["text"].rstrip("\n")
+            txt = text_of(e).rstrip("\n")
             if font is None:
                 rows.append(Unsupported("sketch text in font " + str(e.get("fontName"))))
             elif "\n" in txt:
@@ -875,7 +887,7 @@ class Tr:
                 if fid not in self.sk:
                     raise Unresolved("a region of an unread sketch")
                 if fid in self.texts:
-                    rows, mixed = self.texts[fid]
+                    rows, mixed, _ = self.texts[fid]
                     if mixed:
                         raise Unsupported("sketch text beside other curves")
                     if not (len(q[1]) > 1 and q[1][1] is True):
@@ -901,6 +913,11 @@ class Tr:
             elif isinstance(q, fs.Call) and q[0] == "makeQuery" and q[1][1] == "IMPRINT" and q[1][2] == ("name", "FACE"):
                 self.gone = False
                 fid, r = self.imprint(q, env)
+                if r is not None and fid in self.texts:
+                    # Onshape's region leaves out a text drawn inside it; ours, drawn without the text, would not
+                    a = self.sk[fid][0]
+                    if any(a.holds(r, c) for c in self.texts[fid][2]):
+                        raise Unsupported("sketch text inside a region")
                 if r is not None:
                     by.setdefault(fid, []).append(r)
             elif isinstance(q, fs.Call) and q[0] == "makeQuery" and q[1][2] == ("name", "FACE"):
@@ -2101,6 +2118,23 @@ class Tr:
                 getattr(self, f["op"])(f)
         if not self.lines:
             raise Unsupported("no solid feature")
+
+
+def text_of(e):
+    """A sketch text's string as the sketch record holds it: the program writes it as a FeatureScript literal, with
+    its newlines, tabs, quotes and backslashes escaped (00239261's "SAM\\n" is the record's "SAM" and a newline)."""
+    t = e.get("text")
+    if not isinstance(t, str):
+        return t
+    out, i = [], 0
+    while i < len(t):
+        if t[i] == "\\" and i + 1 < len(t) and t[i + 1] in 'nt"\\':
+            out.append({"n": "\n", "t": "\t"}.get(t[i + 1], t[i + 1]))
+            i += 2
+        else:
+            out.append(t[i])
+            i += 1
+    return "".join(out)
 
 
 def earc_of(x):
