@@ -15,4 +15,6 @@ import ForgeBoolCore.RefineLedger
 import ForgeBoolCore.RefineMemb
 import ForgeBoolCore.RefineClassify
 import ForgeBoolCore.RefineKeep
+import ForgeBoolCore.RefineZeros
+import ForgeBoolCore.RefineSortU32
 import ForgeBoolCore.Axioms
