@@ -1,8 +1,7 @@
-# Road bicycle frame, 56 cm, as one part: hollow tubes mitred by the booleans, a tapered head
-# tube with headset seats, stays to flat dropouts with a derailleur hanger, bridges, bottle
-# bosses, a slotted seat clamp, cable ports. Hand port of tools/bench-parts/frame.fc. Every plane
-# comes from the side sketch: tube planes from its points and directions, the stays' from points
-# on planes offset from it.
+# Road bicycle frame, 56 cm, as one part: hollow tubes mitred by the booleans, a tapered head tube
+# with headset seats, stays to flat dropouts with a derailleur hanger, bridges, bottle bosses, a
+# slotted seat clamp, cable ports. Every plane comes from the side sketch: tube planes from its
+# points and directions, the stays' from points on planes offset from it.
 
 shared reach = 385
 shared stack = 575

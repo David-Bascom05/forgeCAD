@@ -332,7 +332,9 @@ class Prog:
             if getattr(st, "along", None):
                 # the walls slanted along it, each end square to the normal
                 more += f", along: {self.dir(st.along)}"
-            self.out.append(f"{i} = {call}({sk}, {x}{more}{new}{self.opts(st, made)})")
+            # a row's own regions (a text's glyphs: `sk.r0`), or the sketch's one
+            prof = f"{sk}.{st.member}" if getattr(st, "member", None) else sk
+            self.out.append(f"{i} = {call}({prof}, {x}{more}{new}{self.opts(st, made)})")
             if made:
                 self.cur = i
         elif k == "revolve":
@@ -349,6 +351,27 @@ class Prog:
             self.out.append(f"{i} = revolve({sk}, axis: {sk}.ax{ang}{op}{new}{self.opts(st, made)})")
             if made:
                 self.cur = i
+        elif k == "sheet":
+            # a sheet: its chain's entities, end to end, in a sketch of their own, extruded or revolved as a
+            # surface (a body of its own, never the part's current one)
+            rows = rows_of(st.loops)
+            names = [r.split(" = ")[0] for r in rows]
+            if st.how == "revolve":
+                ox, oy, dx, dy = st.axis
+                bx, by = exact(float(ox) + float(dx)), exact(float(oy) + float(dy))
+                rows = rows + [f"ax = line(({ox}, {oy}), ({bx}, {by}), construction: true)"]
+            sk = self.sketch(f"{i}_sk", st.frame, rows)
+            chain = f"{sk}.{names[0]}" if len(names) == 1 else "[" + ", ".join(f"{sk}.{n}" for n in names) + "]"
+            if st.how == "extrude":
+                e = st.ext
+                x = e[1] if e[0] == "d" else f"sym({e[1]})"
+                self.out.append(f"{i} = extrude({chain}, {x}, surface: true)")
+            else:
+                t = st.turn
+                ang = ""
+                if t is not None:
+                    ang = {"a": lambda: f", angle: {t[1]}deg", "sym": lambda: f", angle: sym({t[1]}deg)", "two": lambda: f", angle: two({t[1]}deg, {t[2]}deg)"}[t[0]]()
+                self.out.append(f"{i} = revolve({chain}, axis: {sk}.ax{ang}, surface: true)")
         elif k == "coil":
             # wound about a line of its sketch, rising along it: pitch and height
             ox, oy, dx, dy = st.axis
@@ -421,6 +444,8 @@ class Prog:
             more = ""
             if k == "chamfer" and getattr(st, "corner", None):
                 more = f', corner: "{st.corner}"'
+            if k == "fillet" and getattr(st, "conic", None) is not None:
+                more = f", conic: ratio({st.conic})"
             self.out.append(f"{i} = {k}({st.sel}, {st.size}{more})")
         elif k == "draft":
             self.out.append(f"{i} = draft({st.sel}, angle: {st.angle}deg, neutral: {self.plane(st.plane)})")

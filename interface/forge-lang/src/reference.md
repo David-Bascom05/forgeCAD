@@ -165,6 +165,37 @@ outside the part builds). A loop that crosses or touches itself, or two loops cr
 overlapping, is `SketchProfile` naming the two entities; a knife edge (a line leaving tangent
 along the arc it came on) is not a crossing.
 
+Text in a sketch:
+
+```
+label = text(STRING | [LINE, ..], at: (x, y), size: s, font: "Open Sans", bold: false, italic: false,
+             align: "left"|"center"|"right", angle: A, spacing: 0)
+raised = extrude(top.label, h)        every glyph region; cut(top.label, d) engraves
+raised.side(top.label[k])             the walls of the k-th drawn character (blanks draw nothing)
+raised.end  raised.start              every glyph's cap
+```
+
+The glyphs are drawn exactly as the font holds them, fixed in the sketch: a line stays a line, a
+TrueType quadratic is a degree-2 control spline on its three points, a CFF cubic a degree-3 one on
+its four. `size` is the em; the baseline starts at `at` (aligned by the line's advance), turned by
+`angle`; a list of strings, `text(["FIRST", "SECOND"], ..)`, sets each line the font's
+ascender − descender + line gap below the one before (a string holds no line break).
+`font:` is a shipped family (Open Sans 1.10: Regular, Bold; Source Sans 3:
+Regular, CFF outlines; SIL OFL 1.1) or a .ttf/.otf file beside the part, which is its one face
+(`bold`/`italic` must be its own). The text's regions are only its own glyphs' (whatever else
+the sketch draws): a glyph's region is the union of its parts' (a composite glyph's components:
+Å is A and a ring, Ç is C and a cedilla, overlapping), each part's being its outside contours
+with the counters inside them as holes, which loop lies inside which decided exactly. Contours
+that cross within one part, or are drawn over each other by two characters (crossing or
+touching: neighbours kerned into each other), are refused: within a part `SketchProfile`, between
+characters `Text GlyphsMeet` naming them, which `spacing: d` (a length added after each character)
+sets apart. A missing glyph, family or style, or nothing drawn, is `Text` (`NoGlyph`, `NoFamily`,
+`NoStyle`, `Empty`).
+Names: segment s of contour c of the n-th `ch` of the string is `label.ch#n.c.s`, so a glyph's
+faces keep their names while other characters come and go, and when the text moves, turns or
+resizes; the extrude of several regions names each region's caps by its outline's least
+segment. `next` and `upto` do not take several regions (`NotWith`).
+
 A loop value (rect, slot, hull, poly, path) indexes its segments: `o[2]`, `o.segs`. Entity
 members: points `x y`; lines `a b dir`; arcs `center a b`; circles `center`; arcs and circles `axis` (through
 the centre, square to the sketch).
@@ -210,14 +241,15 @@ revolve(PROFILE, axis: LINE, angle: A | sym(A) | two(A, B) | upto(FACES | WORKPL
                                     axis, `axis(E.start, E.end)` of a straight edge, `F.axis`,
                                     or the origin's `X`, `Y`, `Z` (else `BadValue`)
 hole(..), thread(..)                see Holes and threads
-fillet(EDGES, R, from: POINT, setbacks: [(POINT, d) | (POINT, EDGES, d)], only: false)
-fillet(groups: [(EDGES, R) | (EDGES, R, POINT), ..], setbacks: .., only: false)
+fillet(EDGES, R, from: POINT, setbacks: [(POINT, d) | (POINT, EDGES, d)], only: false, conic: RHO)
+fillet(groups: [(EDGES, R) | (EDGES, R, POINT), ..], setbacks: .., only: false, conic: RHO)
                                     R: r | vary(a, b) (linear along each edge) |
                                     vary([(t, r), ..]) (radii at fractions t of the way, 0 to 1,
                                     increasing; a smooth law through them). from: the vertex at
                                     POINT each edge's law starts from; setbacks: how far along
                                     the edges from the corner at POINT (one edge, or all) the
-                                    blends stop; only: the edges named, not their tangent chains
+                                    blends stop; only: the edges named, not their tangent chains;
+                                    conic: a conic section in place of the ball's arc (below)
 chamfer(EDGES, d, d2: D | angle: A, face: FACE, corner: "patch"|"point")
                                     d back along both faces; with d2, d along FACE and d2
                                     along the other face of each edge; with angle, d along
@@ -226,6 +258,25 @@ chamfer(EDGES, d, d2: D | angle: A, face: FACE, corner: "patch"|"point")
                                     corner get a flat triangle (patch) or run on to a point
 shell(t, open: FACES, out: false) hollow to walls t thick (out: outside the skin), FACES open
 ```
+
+A conic fillet (`conic: ratio(RHO)`, 0 < RHO < 1, one for the whole fillet) touches each face
+where the circular fillet of the same R does, r tan(phi/2) from the edge for faces turning by phi,
+so R is the setback's measure, not a radius of the result. Between those two feet its section is
+the conic tangent to both faces there: the rational quadratic through foot, apex and foot, the
+apex where the faces' tangent planes meet in the section's plane, with middle weight
+RHO / (1 - RHO). RHO is the shoulder ratio: the section crosses the line from the chord's middle
+to the apex RHO of the way along it. 0.5 is a parabola, below it an ellipse, above it a
+hyperbola; the circle is RHO = cos(phi/2) / (1 + cos(phi/2)), 0.4142 at a right angle. This is
+Onshape's conic fillet: its `radius` and `rho` are R and RHO. The surface is exact: on a
+straight edge the conic swept straight, on a circular edge between surfaces turned about one
+axis the conic turned, on any other edge (a post's root on a round bar) the conic carried along
+the ball's path in its section plane. Tangent chains meet in a shared conic section, two blends
+beside a sharp edge mitre (in the plane between them where one is the other's mirror image), and
+a blend runs out into the faces across its end. Refused, typed, at the place, where no exact
+conic stands: `ConicVertex` where the circular fillet would close a vertex with its ball (three
+blends at a corner, a pivot, a ball rolled on over the next face) or a setback is asked;
+`ConicEdge` for a varying R, a ball resting on a rim, beyond a smooth edge or across a face, or
+faces folding back to within a degree of each other; `BadValue` for RHO outside (0, 1).
 
 PROFILE: a sketch with one region, or one of its loops or closed entities (`S.outline`, `S.c`).
 A negative depth runs the other way. `upto(SKETCH)` ends on the sketch's plane (an edit
@@ -237,6 +288,58 @@ square to the sketch's normal, the depths measured along it); with `next` or `up
 `NotWith`. `flip: true` runs `thru` or `next` the other way (an extrude backwards, a cut out
 along the normal); on other extents it is `NotApplicable`. `bodies:` (as on holes) makes the
 extrude, cut or revolve act on those bodies, not the last made.
+
+### Sheets
+
+```
+extrude(PATH | PROFILE, d | sym(d) | two(f, b), surface: true)
+revolve(PATH | PROFILE, axis: LINE | AXIS, angle: A | sym(A) | two(A, B), surface: true)
+```
+
+- `surface: true` makes a sheet: a surface with no material, one face per piece of the chain, always
+  a body of its own named by the feature. PATH is what a sweep takes (a sketch line, arc, spline or
+  circle, a `path` block, or a list of them end to end, all of one sketch). A closed loop gives a tube
+  with no caps.
+- A sketch with an open chain has no regions, so draw sheet chains in a sketch of their own.
+- The sheet's front (its faces' outward side) is the right of the chain walked with the sketch's
+  normal toward you. That is outside a loop, which is turned counter-clockwise first.
+- A sheet is never the body a solid feature acts on: an extrude, cut or hole goes to the last
+  solid. Naming a sheet's faces or edges in a fillet, chamfer, shell, draft or face edit, or naming
+  a sheet as a target or tool of `combine`, is the kernel's `OnSheet`. Bodies can be moved and
+  copied, and `upto(FACES)` ends on a sheet's face as on any face.
+- With `surface`, these are `NotWith`: `taper`, `along`, `flip`, `new` and `bodies`; on revolve,
+  `cut`, `keep` and an `upto` turn; a cut or intersect.
+- The part's volume, area and moments are its solids'. The build reports `sheet_area`, the sheets'
+  area, apart. A part of sheets alone measures volume 0 and area 0; its centroid is undefined and
+  reads as the origin.
+- `thicken(SHEET.faces, t, side:)` makes a slab from a sheet's faces. It adds to the current
+  solid, or cuts or keeps, or with `new: true` is a body of its own. The sheet stays.
+- STEP writes each sheet shell as an OPEN_SHELL (a CLOSED_SHELL where it has no boundary) in a
+  SHELL_BASED_SURFACE_MODEL.
+
+```
+sketch walls(on: plan.plane) {
+  path wall(start: (0, 40)) { line(to: (40, 40))  tarc(to: (50, 50)) }
+}
+skin = extrude(walls.wall, 20, surface: true)
+```
+
+```
+extrude(PATH | PROFILE, d | sym(d) | two(f, b), thin: t, side: "out"|"in"|"both", new: true, bodies: ..)
+cut(PATH | PROFILE, d | .., thin: t, side: ..)
+```
+
+A thin wall is that sheet thickened t, as `thicken` does it. "out" (the default) goes to the
+sheet's front, "in" to its back, and "both" t/2 to each side. Where the chain turns a corner, the
+wall's outer faces run on until they meet (a sharp mitre) and its inner faces stop where they
+cross. Lines offset to lines, arcs to concentric arcs, and a spline's wall to its exact offset
+surface. A wall whose offset reaches an arc's centre is the kernel's `Collapses`. A corner whose
+walls cannot meet in one face is `Crease`. With `thin`, these are `NotWith`: `taper`, `along`,
+`flip` and `surface`. `side` without `thin` is `NotWith` too.
+
+```
+fence = extrude(plan.wall, h, thin: t, side: "out")
+```
 
 ### Swept, wound and lofted shapes
 
@@ -531,7 +634,7 @@ FACES - FACES   EDGES - EDGES       the first set less the second's (one piece o
 `verts` finds the part's vertices: `of` a feature, those on a face it made (lineage, as for
 edges); `of` faces or edges, their corners and ends; `between: (A, B)` where faces of both meet;
 `body` in those bodies. One vertex is a reference the kernel follows through every edit above
-it (by its maker's own name for it, as `.fc`'s `(verts ..)`): a work feature's point, a fillet's
+it (by its maker's own name for it): a work feature's point, a fillet's
 `from` or setback corner, a place of `places(at:)` (each vertex of a set one place); where a
 plain point is wanted it is where the vertex is. Several where one is wanted is `NotOne`; a
 vertex no earlier solid feature made is `NoOwner`.

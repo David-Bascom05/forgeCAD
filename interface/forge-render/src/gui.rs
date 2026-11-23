@@ -1022,7 +1022,7 @@ impl Gui {
                         self.fg_finish_sketch();
                         continue;
                     }
-                    // the part's own unit, kept in its text (`# units in`) as `.fc` kept it: one
+                    // the part's own unit, kept in its text (`# units in`): one
                     // undo step, nothing it builds changed
                     Action::SetUnits(u) if !self.shell.fg.as_ref().is_some_and(|p| p.assembly) => {
                         if s.set_units(u) {

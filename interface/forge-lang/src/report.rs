@@ -244,35 +244,45 @@ pub fn json(run: &Run, src: &str) -> Json {
     if let Some(m) = &run.measure {
         f.push((
             "part",
-            Json::obj(vec![
-                ("volume", m.volume.into()),
-                ("area", m.area.into()),
-                (
-                    "centroid",
-                    Json::Arr(m.centroid.iter().map(|x| Json::Num(*x)).collect()),
-                ),
-                ("faces", m.faces.into()),
-                ("edges", m.edges.into()),
-                ("bodies", m.bodies.into()),
-                ("valid", (m.problems == 0).into()),
-                (
-                    "problems",
-                    Json::Arr(
-                        m.invalid
-                            .iter()
-                            .map(|p| {
-                                Json::obj(vec![
-                                    ("kind", p.kind.into()),
-                                    ("body", p.body.as_str().into()),
-                                    ("reason", p.reason.as_str().into()),
-                                    ("at", Json::Arr(p.at.iter().map(|a| a.as_str().into()).collect())),
-                                ])
-                            })
-                            .collect(),
+            Json::obj(
+                vec![
+                    ("volume", m.volume.into()),
+                    ("area", m.area.into()),
+                    (
+                        "centroid",
+                        Json::Arr(m.centroid.iter().map(|x| Json::Num(*x)).collect()),
                     ),
-                ),
-                ("bbox", Json::Arr(m.bbox.iter().map(|x| Json::Num(*x)).collect())),
-            ]),
+                    ("faces", m.faces.into()),
+                    ("edges", m.edges.into()),
+                    ("bodies", m.bodies.into()),
+                    ("valid", (m.problems == 0).into()),
+                ]
+                .into_iter()
+                // the sheets' area apart, where the part has sheets: volume and area are the solids'
+                .chain(sheet_area(run).map(|a| ("sheet_area", a.into())))
+                // the bodies that are sheets, by the features that made them
+                .chain(sheet_bodies(run).map(|ids| ("sheets", ids)))
+                .chain([
+                    (
+                        "problems",
+                        Json::Arr(
+                            m.invalid
+                                .iter()
+                                .map(|p| {
+                                    Json::obj(vec![
+                                        ("kind", p.kind.into()),
+                                        ("body", p.body.as_str().into()),
+                                        ("reason", p.reason.as_str().into()),
+                                        ("at", Json::Arr(p.at.iter().map(|a| a.as_str().into()).collect())),
+                                    ])
+                                })
+                                .collect(),
+                        ),
+                    ),
+                    ("bbox", Json::Arr(m.bbox.iter().map(|x| Json::Num(*x)).collect())),
+                ])
+                .collect::<Vec<_>>(),
+            ),
         ));
     }
     // the document's drawing blocks, listed, not drawn (`fg run F.fg --drawing ID` draws one)
@@ -280,6 +290,24 @@ pub fn json(run: &Run, src: &str) -> Json {
         f.push(("drawings", crate::drawing::block::summary(src, "")));
     }
     Json::obj(f)
+}
+
+/// The features whose bodies are sheets, where the part has any.
+fn sheet_bodies(run: &Run) -> Option<Json> {
+    let ids: Vec<Json> = run
+        .solids
+        .iter()
+        .filter(|s| s.sheet)
+        .filter_map(|s| run.feats.iter().find(|f| f.idx == s.solid))
+        .map(|f| f.id.as_str().into())
+        .collect();
+    (!ids.is_empty()).then_some(Json::Arr(ids))
+}
+
+/// The area of the part's sheets, where it has any.
+pub fn sheet_area(run: &Run) -> Option<f64> {
+    let b = run.body.as_ref().filter(|b| b.has_sheet())?;
+    forge_topo::mass::sheet_area(b).ok().map(|x| x.0)
 }
 
 pub fn text(run: &Run, src: &str) -> String {
@@ -354,6 +382,11 @@ pub fn text(run: &Run, src: &str) -> String {
             m.edges,
             if m.problems == 0 { "valid" } else { "INVALID" }
         ));
+        if let Some(a) = sheet_area(run) {
+            // the part's volume and area are its solids'
+            let at = out.len() - 1;
+            out.insert_str(at, &format!(", sheet area {} mm2", milli(a)));
+        }
         for p in &m.invalid {
             out.push_str(&format!("invalid {} {}: {}", p.body, p.kind, p.reason));
             if !p.at.is_empty() {

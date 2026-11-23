@@ -1,0 +1,16 @@
+name = "forgetext"
+version = "0.1.0"
+defaultTargets = ["ForgeText"]
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+[[lean_lib]]
+name = "ForgeText"
+
+# The shared signed 2D winding number and its Jordan theorem (verify/winding2d): one proof that
+# sketch text, sheet metal and the boolean's region rules import.
+[[require]]
+name = "winding2d"
+path = "../../winding2d"

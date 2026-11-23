@@ -724,6 +724,7 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
         Edit { feature, error } => (format!("Edit({error:?})"), *feature),
         Thread { feature, error } => (format!("Thread({error:?})"), *feature),
         Text { feature, error } => (format!("Text({error:?})"), *feature),
+        Regions { feature, error } => (format!("Regions({error:?})"), *feature),
         Import { feature, .. } => ("Import".to_string(), *feature),
         Work { feature, error } => (format!("Work({error:?})"), *feature),
         Body { feature, error } => (format!("Body({error:?})"), *feature),
@@ -835,8 +836,10 @@ fn rounded_feature(f: &Feature, digits: i32) -> Feature {
             starts,
             setbacks,
             only,
+            conic,
         } => Feature::Fillet {
             only: *only,
+            conic: *conic,
             starts: starts.clone(),
             setbacks: setbacks.iter().map(|&(v, e, d)| (v, e, rd(d))).collect(),
             edges: edges
@@ -1055,8 +1058,9 @@ pub fn literal(part: &Part) -> String {
                 starts,
                 setbacks,
                 only,
+                conic,
             } => format!(
-                "        Feature::Fillet {{ only: {only}, edges: vec![{}], starts: vec![{}], setbacks: vec![{}] }},",
+                "        Feature::Fillet {{ only: {only}, edges: vec![{}], starts: vec![{}], setbacks: vec![{}], conic: {conic:?} }},",
                 edges
                     .iter()
                     .map(|(n, r)| format!("(Name({}), Radius::{r:?})", n.0))

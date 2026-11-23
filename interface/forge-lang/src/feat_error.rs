@@ -57,6 +57,8 @@ pub enum FeatError {
     NeedsApprox { span: Span },
     /// Geometry with no image a sketch can hold (an axis not seen end-on ..): the reason.
     NoImage { span: Span, why: String },
+    /// Sketch text that cannot be set as asked.
+    Text { span: Span, problem: TextProblem },
     /// A file a feature reads (a font, a STEP file).
     File {
         span: Span,
@@ -80,6 +82,26 @@ pub enum Because {
     HoleGivesSize,
     /// The file names no solid this op can take.
     NotSolid,
+}
+
+/// Why a text cannot be set.
+#[derive(Clone, Debug, PartialEq)]
+pub enum TextProblem {
+    /// The font has no glyph for the character at this place in the string (counted in chars).
+    NoGlyph { index: usize, ch: char },
+    /// No shipped family by this name, and it names no font file (.ttf, .otf).
+    NoFamily(String),
+    /// The family, or the font file, has no face in this style.
+    NoStyle { family: String, style: &'static str },
+    /// The font refused the outline: the reader's reason.
+    Font(String),
+    /// Several lines, and the font gives no line spacing.
+    NoLineSpacing,
+    /// Nothing of the string is drawn (it is empty, or only spaces).
+    Empty,
+    /// The glyphs of these two characters (places in the string) cross or touch: set them apart
+    /// (`spacing:`, or another font or string).
+    GlyphsMeet { a: usize, b: usize },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -110,6 +132,7 @@ impl FeatError {
             | NotABody { span, .. }
             | NeedsApprox { span }
             | NoImage { span, .. }
+            | Text { span, .. }
             | File { span, .. } => *span,
         }
     }
@@ -129,6 +152,7 @@ impl FeatError {
             NotABody { .. } => "NotABody",
             NeedsApprox { .. } => "NeedsApprox",
             NoImage { .. } => "NoImage",
+            Text { .. } => "Text",
             File { .. } => "File",
         }
     }
@@ -170,6 +194,27 @@ impl FeatError {
                 "a general curve has no exact image in a sketch: give approx: (a tolerance) to fit a spline within it".into()
             }
             NoImage { why, .. } => why.clone(),
+            Text { problem, .. } => match problem {
+                TextProblem::NoGlyph { index, ch } => {
+                    format!("the font has no glyph for {ch:?} (character {index} of the text)")
+                }
+                TextProblem::NoFamily(f) => format!(
+                    "\"{f}\": no font shipped by that name ({}), and no font file (.ttf, .otf)",
+                    crate::fonts::faces().map(|f| f.0).fold(Vec::new(), |mut v: Vec<&str>, f| {
+                        if !v.contains(&f) {
+                            v.push(f);
+                        }
+                        v
+                    }).join(", ")
+                ),
+                TextProblem::NoStyle { family, style } => format!("{family} has no {style} face"),
+                TextProblem::Font(why) => format!("the font: {why}"),
+                TextProblem::NoLineSpacing => "several lines, and the font gives no line spacing".into(),
+                TextProblem::Empty => "nothing of the text is drawn (it is empty, or only spaces)".into(),
+                TextProblem::GlyphsMeet { a, b } => format!(
+                    "the glyphs of characters {a} and {b} of the text cross or touch: set them apart with spacing: (a length added after each character)"
+                ),
+            },
             File { file, problem, .. } => match problem {
                 FileProblem::Missing => format!("{file}: not found beside the part file"),
                 FileProblem::WrongKind => format!("{file}: not a kind of file this reads"),
@@ -210,6 +255,30 @@ impl FeatError {
             NotABody { id, .. } => vec![("id", s(id))],
             NeedsApprox { .. } => vec![],
             NoImage { why, .. } => vec![("why", s(why))],
+            Text { problem, .. } => {
+                let p = |k: &str| ("problem", s(k));
+                match problem {
+                    TextProblem::NoGlyph { index, ch } => vec![
+                        p("NoGlyph"),
+                        ("index", (*index as f64).into()),
+                        ("char", s(&ch.to_string())),
+                    ],
+                    TextProblem::NoFamily(f) => vec![p("NoFamily"), ("family", s(f))],
+                    TextProblem::NoStyle { family, style } => {
+                        vec![p("NoStyle"), ("family", s(family)), ("style", s(style))]
+                    }
+                    TextProblem::Font(why) => vec![p("Font"), ("why", s(why))],
+                    TextProblem::NoLineSpacing => vec![p("NoLineSpacing")],
+                    TextProblem::Empty => vec![p("Empty")],
+                    TextProblem::GlyphsMeet { a, b } => {
+                        vec![
+                            p("GlyphsMeet"),
+                            ("a", (*a as f64).into()),
+                            ("b", (*b as f64).into()),
+                        ]
+                    }
+                }
+            }
             File { file, problem, .. } => vec![
                 ("file", s(file)),
                 (

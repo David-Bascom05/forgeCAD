@@ -1,7 +1,7 @@
 //! Vertex selections: `verts(of:, between:, body:, extreme:)`, the part's vertices found as its
 //! edges and faces are (by what made the faces round them, through later booleans), so a work
 //! feature, a fillet's start or setback, or a pattern's place names a vertex the kernel follows
-//! through every edit above it (`.fc`'s `(verts ..)`), never a point frozen where it once was.
+//! through every edit above it, never a point frozen where it once was.
 
 use crate::builtins::{Args, dir_of, feats_of, not_in_sketch};
 use crate::error::Error;

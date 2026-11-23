@@ -1,6 +1,5 @@
 //! Vertex references (`verts(..)`), a work point at a circle's centre, and sweeps and coils ended
-//! on a work plane: forms `.fc` had. Each part's numbers are the ones the `.fc` form of it built
-//! to on the retired engine (volume, area, faces, edges), recorded here.
+//! on a work plane. Each part is held to its recorded numbers (volume, area, faces, edges).
 use forge_model::{Feature, History};
 
 fn build(src: &str) -> forge_lang::fuzz::Built {

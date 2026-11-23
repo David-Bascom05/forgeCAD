@@ -107,13 +107,7 @@ pub fn font_bytes() -> Vec<u8> {
     };
     let mut hole = d(1.5, 150.0);
     hole.reverse();
-    let hole: Vec<Seg> = hole
-        .into_iter()
-        .map(|s| match s {
-            Seg::Line(a, b) => Seg::Line(b, a),
-            Seg::Quad(a, c, b) => Seg::Quad(b, c, a),
-        })
-        .collect();
+    let hole: Vec<Seg> = hole.into_iter().map(|s| s.reversed()).collect();
     let glyphs = [
         ('I', TestGlyph::bar(100.0, 0.0, 200.0, 700.0, 300.0)),
         ('O', square_ring()),
@@ -2440,6 +2434,11 @@ fn finish(features: &[Feature], ids: &[u64], seq: &[Solid]) -> Verdict {
                 "{path} mesh: {}",
                 kind_of_msg(&format!("{e:?}"))
             ))),
+            // a sheet: open only along its boundary, and no volume
+            Ok(Ok(t)) if b.is_sheet() => match t.open_edges_of(&b).is_empty() {
+                true => Ok((0.0, 0.0)),
+                false => Err(Verdict::Fail(format!("{path} mesh: open edges"))),
+            },
             Ok(Ok(t)) if !t.open_edges().is_empty() => Err(Verdict::Fail(format!("{path} mesh: open edges"))),
             Ok(Ok(t)) if t.volume() <= 0.0 => Err(Verdict::Fail(format!("{path} mesh: volume <= 0"))),
             Ok(Ok(t)) => Ok((t.volume(), t.area())),
@@ -2653,8 +2652,10 @@ pub fn feature_kind(f: &Feature) -> &'static str {
         Feature::Edit(_) => "edit",
         Feature::Thread(_) => "thread",
         Feature::Text(_) => "text",
+        Feature::Regions(_) => "extrude",
         Feature::Import(_) => "import",
         Feature::Body(_) => "body",
+        Feature::Sheet(_) => "sheet",
     }
 }
 

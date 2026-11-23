@@ -1,0 +1,20 @@
+# Built INVALID, circular: a top edge's spring on the top face runs tangent to a through hole's rim
+# (the hole's centre R + D/2 from the edge). Builds valid with the hole clear of the spring. With
+# the plate as thick as the radius (T = R = D = 5) the same fillet is refused (Overflow) instead.
+# From CADFS 00092585 (its plate edge beside a 5 mm hole whose rim is r from the edge), restated
+# in our own numbers.
+shared L = 40
+shared T = 8
+shared R = 4
+shared D = 6
+param round.r = R
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, L))
+}
+plate = extrude(plan, T)
+sketch spot(on: plate.end) {
+  c = circle((L - R - D / 2, L / 2), D / 2)
+}
+drill = cut(spot.c, thru)
+round = fillet(edges(between: (plate.end, plate.side(plan.outline[1]))), r)

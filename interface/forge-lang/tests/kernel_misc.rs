@@ -563,8 +563,7 @@ arch = extrude(s, 5)
     assert!((v - 5.0 * (2.0 / 3.0) * 10.0 * 4.0).abs() < 1e-9, "{v}");
 }
 
-/// Half an ellipse closed by its major axis. The .fc part:
-///   extrude 3 loop ell 0 0 6 2 0 0 180 line -6 0 6 0
+/// Half an ellipse (semi-axes 6 and 2) closed by its major axis, 3 thick: 3 x pi x 6 x 2 / 2.
 #[test]
 fn half_an_ellipse() {
     let v = volume(
@@ -578,8 +577,7 @@ half = extrude(s, 3)
     assert!((v - 3.0 * 0.5 * dmath::PI * 12.0).abs() < 1e-6);
 }
 
-/// A degree-1 B-spline on knots: a square 4 across, as one curve. The .fc part:
-///   extrude 2 loop spline 1 0 0 4 0 4 4 0 4 0 0 knots 0 0 1 2 3 4 4
+/// A degree-1 B-spline on knots: a square 4 across, as one curve, 2 thick: 32.
 #[test]
 fn a_degree_one_spline_on_knots() {
     let v = volume(
@@ -592,16 +590,12 @@ square = extrude(s, 2)
     assert!((v - 32.0).abs() < 1e-9, "{v}");
 }
 
-/// Every free curve a .fc loop wrote, the same solid in Forge (each volume the .fc part's):
-///   extrude 2 loop spline 2 0 0 5 8 10 0 weights 1 3 1 line 10 0 0 0                       71.303242796
-///   extrude 2 loop spline 2 0 0 3 6 7 6 10 0 knots 0 0 0 1 3 3 3 weights 1 2 0.5 1 line 10 0 0 0   70.997473014
-///   extrude 2 loop thru 0 0 5 4 10 0 from 1 2 to 1 -2 line 10 0 0 0                          58.575207876
-///   extrude 2 loop thru 0 0 5 4 10 0 from 3 0 line 10 0 0 0                                  27.851074305
-///   extrude 3 loop ell 0 0 6 2 30 0 -180 line -5.196152422706632 -3 5.196152422706632 3      56.548667765
-///   extrude 5 rrect -20 -10 40 20 4                                                         3931.327412287
-/// each 4 faces and 6 edges but the rounded rectangle's 10 and 24.
+/// Every free curve a loop can hold, each closed by a line and extruded, against its known volume:
+/// a rational spline, a rational spline on knots, a curve through points with end tangents, one
+/// with a start tangent alone, a tilted half ellipse, and a rounded rectangle; each 4 faces and 6
+/// edges but the rounded rectangle's 10 and 24.
 #[test]
-fn every_fc_loop_curve() {
+fn every_free_loop_curve() {
     let arch = |curve: &str| {
         format!("sketch s(on: xy) {{\n  c = {curve}\n  l = line((10, 0), (0, 0))\n}}\narch = extrude(s, 2)\n")
     };
@@ -655,7 +649,7 @@ e = extrude(s, 5)
         let b = built(&src);
         assert!(forge_topo::check(&b.body).is_empty(), "{src}");
         let v = b.volume();
-        assert!((v - want).abs() < 1e-6 * want, "{src}: {v}, .fc {want}");
+        assert!((v - want).abs() < 1e-6 * want, "{src}: {v}, want {want}");
         assert_eq!(b.body.compact().faces.len(), faces, "{src}");
     }
 }
@@ -707,10 +701,10 @@ fn spline_forms_refused() {
     }
 }
 
-/// Loops that cross are refused at the sketch (the .fc part
-/// `extrude 5 circle 0 0 40 circle 20 0 30` was the kernel's HoleOutside); loops that touch at a
-/// corner go on to the kernel, which says where the solid pinches (as the .fc part
-/// `extrude 5 rect 0 0 20 20 poly 10 0 15 10 5 10` did: ZeroThickness at (10, 0)).
+/// Loops that cross are refused at the sketch (a circle r 40 and one r 30 at (20, 0): a
+/// SketchProfile self intersection); loops that touch at a corner go on to the kernel, which says
+/// where the solid pinches (a 20 square with a triangle touching its edge at (10, 0): ZeroThickness
+/// there).
 #[test]
 fn crossing_loops_refused_touching_judged() {
     let msg = common::refused(
@@ -879,6 +873,7 @@ rod = extrude(s, 10)
         starts: vec![],
         setbacks: vec![],
         only: false,
+        conic: None,
     });
     let mut ids = b.ids.clone();
     ids.push(9999);
@@ -893,6 +888,7 @@ rod = extrude(s, 10)
         starts: vec![],
         setbacks: vec![],
         only: false,
+        conic: None,
     });
     let single = part
         .regenerate_solids_ids(Some(&ids))

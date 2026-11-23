@@ -1287,6 +1287,9 @@ def build(features, opts, trace=None):
                 tools = [(solid(t["shape"]), t["op"]) for t in f["tools"]]
             elif k == "text":
                 tools = [(t, f["op"]) for t in text(f)]
+            elif k == "regions":
+                # several regions of one sketch, each its own extrude, combined alike
+                tools = [(extrude(dict(f, **p), current()), f["op"]) for p in f["profiles"]]
             elif k == "pattern":
                 base = [t for s in f["src"] for t in made.get(s, [])]
                 tools = [(moved(t, m), "add" if op == "new" else op) for m in f["m"] for t, op in base]

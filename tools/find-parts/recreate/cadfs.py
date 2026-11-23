@@ -21,11 +21,17 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fs
 import sketch2d
-from fgw import NoName, Prog, St, Stop, Topo, loop_segs
+from fgw import NoName, Prog, St, Stop, Topo, loop_segs, neg
 from sketch2d import Arrangement, Unsupported, carrier_dist, curve_dist, meets
 
 TOL = 2e-4  # mm: a sample this close lies on its carrier
 SIDE = 1  # TD weight +1: the region on this side of the entity (+1 left)
+TEXT = "text"  # a text sketch's regions: every glyph of each of its texts
+# Onshape's sketch text fonts (fontName) the shipped ones set exactly: family, bold, italic
+TEXT_FONTS = {
+    "OpenSans-Regular.ttf": ("Open Sans", False, False),
+    "OpenSans-Bold.ttf": ("Open Sans", True, False),
+}
 SUPPORTED = {"sweep", "loft", "sketch", "extrude", "revolve", "fillet", "chamfer", "shell", "cPlane", "cPoint", "assignVariable", "hole", "mirror", "circularPattern", "transform", "booleanBodies"}
 PLANES = {"Front": ((0.0, -1.0, 0.0), (1.0, 0.0, 0.0)), "Top": ((0.0, 0.0, 1.0), (1.0, 0.0, 0.0)), "Right": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))}
 
@@ -361,6 +367,8 @@ class Tr:
         self.used = set()
         self.blends = {}  # fillet feature id: what its rounded edges parted and the faces it made (blend_carrier)
         self.sketch_ents = {}
+        self.texts = {}  # sketch id: (each text's row, or why it can't be one; whether other curves are drawn too)
+        self.last_record = {}
         self.plain = {}
         self.imprint_off = set()
         self.copies = {}
@@ -434,18 +442,38 @@ class Tr:
         return Blended(faces, edges)
 
     def sketch(self, f):
+        # sketch text is set by the kernel (a `text` row), not drawn here: the arrangement holds the rest
+        texts = [e for e in f["ents"] if e["kind"] == "skText" and not e.get("construction")]
         if any(e["kind"] == "skEllipticalArc" for e in f["ents"]):
             # the program's record of an elliptical arc holds no geometry: the solved curve is the sketch record's
             k, ents = self.arcs_from_record(f["ents"])
-            a = Arrangement(ents)
+            a = Arrangement([e for e in ents if e["kind"] != "skText"])
             self.used.add(k)
+            self.last_record = self.raw["sketches"][k]
             fr = Frame(self.raw["sketches"][k]["sketchMatrix"])
             f = dict(f, ents=ents)
         else:
-            a = Arrangement(f["ents"])
-            fr = self.frame_of(f, a)
+            a = Arrangement([e for e in f["ents"] if e["kind"] != "skText"])
+            guess = {}
+            for k, v in f["env"].items():
+                if k.startswith("initialGuess") and isinstance(v, dict):
+                    guess.update(v)
+            # a text's place: the records' texts of its string whose corner its initial guess (rounded) is beside
+            near = []
+            for e in texts:
+                g = guess.get(e["id"])
+                if not (isinstance(g, list) and len(g) >= 2 and all(isinstance(x, float) for x in g[:2])):
+                    continue
+                for rs in self.raw.get("sketches", []):
+                    for r in rs.get("entities", []):
+                        c = r.get("lowerLeftCornerPosition2d")
+                        if r.get("textString") == e.get("text") and c and math.hypot(c["x"] - g[0], c["y"] - g[1]) < 5e-5:
+                            near.append((c["x"], c["y"]))
+            fr = self.frame_of(f, a, near)
         self.sk[f["id"]] = (a, fr)
         self.sketch_ents[f["id"]] = f["ents"]
+        if texts:
+            self.texts[f["id"]] = (self.text_rows(texts, self.last_record), bool(a.pieces))
         if a.approx:
             self.notes.add("approx")
 
@@ -481,9 +509,41 @@ class Tr:
                 out.append(e)
         return k, out
 
-    def frame_of(self, f, a):
+    def text_rows(self, texts, record):
+        """Each sketch text as a `text` row: Onshape's solved box (its lower left the pen's start on the baseline, its
+        height 0.72 of the em, along its baseline's direction) and its font by name, or why it can't be one."""
+        raw = [e for e in record.get("entities", []) if e.get("sketchEntityType") == "skText" and not e.get("isConstruction")]
+        rows = []
+        for e in texts:
+            same = [r for r in raw if r.get("textString") == e.get("text")]
+            if len(same) != 1:
+                rows.append(Unresolved("sketch text not in the sketch's record" if not same else "sketch texts alike"))
+                continue
+            r = same[0]
+            font = TEXT_FONTS.get(e.get("fontName"))
+            txt = e["text"].rstrip("\n")
+            if font is None:
+                rows.append(Unsupported("sketch text in font " + str(e.get("fontName"))))
+            elif "\n" in txt:
+                rows.append(Unsupported("sketch text of several lines"))
+            elif '"' in txt:
+                rows.append(Unsupported("sketch text holding a quote mark"))
+            elif not txt.strip():
+                rows.append(None)
+            else:
+                d, c = r["baselineDirection2d"], r["lowerLeftCornerPosition2d"]
+                ang = math.degrees(math.atan2(d["y"], d["x"]))
+                fam, bold, italic = font
+                row = f'text("{txt}", at: ({num(c["x"] * 1000)}, {num(c["y"] * 1000)}), size: {num(r["height"] * 1000 / 0.72)}, font: "{fam}"'
+                row += ", bold: true" if bold else ""
+                row += ", italic: true" if italic else ""
+                row += f", angle: {num(ang)}deg" if abs(ang) > 1e-12 else ""
+                rows.append(row + ")")
+        return rows
+
+    def frame_of(self, f, a, extra=()):
         # the dataset's record: the unused sketch sharing most of these points and radii, the first if tied
-        ours = set()
+        ours = {(round(p[0] * 1000, 3), round(p[1] * 1000, 3)) for p in extra}
         for e in a.every.values():
             for q in (e.a, e.b, e.c):
                 if q is not None:
@@ -527,6 +587,7 @@ class Tr:
         if best is None or "sketchMatrix" not in self.raw["sketches"][best]:
             raise Unresolved("no sketch record")
         self.used.add(best)
+        self.last_record = self.raw["sketches"][best]
         return Frame(self.raw["sketches"][best]["sketchMatrix"])
 
     # queries as carriers
@@ -813,6 +874,17 @@ class Tr:
                 fid = q[1][0][1]
                 if fid not in self.sk:
                     raise Unresolved("a region of an unread sketch")
+                if fid in self.texts:
+                    rows, mixed = self.texts[fid]
+                    if mixed:
+                        raise Unsupported("sketch text beside other curves")
+                    if not (len(q[1]) > 1 and q[1][1] is True):
+                        raise Unsupported("sketch text's regions with its counters filled")
+                    for r in rows:
+                        if isinstance(r, Exception):
+                            raise r
+                    by.setdefault(fid, []).append(TEXT)
+                    continue
                 a = self.sk[fid][0]
                 # a spline in no region: the sampled curves may have missed a crossing, and the regions are then not the
                 # sketch's (00409237 cut a third of what it should)
@@ -1101,6 +1173,9 @@ class Tr:
     def emit_solid(self, kind, op, make, frame, by, flip, fid_out=None):
         """Each region a statement of `kind` on `frame` (origin, normal, x), `make` its own fields."""
         for fid, regs in by.items():
+            if TEXT in regs:
+                self.emit_text(kind, op, make, frame, fid, flip, fid_out)
+                continue
             a = self.sk[fid][0]
             for pi, prof in enumerate(a.merged(sorted(set(regs)))):
                 loops = [self.loop_segs(a, lp, flip) for lp in prof]
@@ -1124,6 +1199,37 @@ class Tr:
                     self.lines.append(St("combine", word="add", target=self.current, tools=joined, keep=False))
                     self.alias.update((b, self.current) for b in joined)
                     self.bodies -= len(joined)
+
+    def emit_text(self, kind, op, make, frame, fid, flip, fid_out):
+        """A text sketch's texts, each an extrude of all its glyphs' regions (`sk.r0`). The text is never mirrored: a
+        sketch the extrude turns over (flip) keeps its frame and runs the other way."""
+        if kind != "extrude":
+            raise Unsupported("sketch text in a " + kind)
+        if flip:
+            o, n, x = frame
+            frame = (o, tuple(neg(t) for t in n), x)
+            e = make["ext"]
+            other = {"fwd": "back", "back": "fwd", "both": "both"}
+            if e[0] == "d":
+                e = ("d", neg(e[1]))
+            elif e[0] == "two":
+                e = ("two", e[2], e[1])
+            elif e[0] in ("thru", "next"):
+                e = (e[0], other[e[1]])
+            make = dict(make, ext=e)
+        for row in self.texts[fid][0]:
+            if row is None:
+                continue
+            st = St(kind, frame=frame, loops=[[row]], member="r0", **make)
+            joined = self.run_into(st) if op == "add" and self.bodies > 1 else []
+            label, this, scope = self.solid_line("new" if op == "add" and self.bodies > 1 else op, set(), fid_out)
+            st.label, st.op, st.scope = label or None, this, scope
+            self.lines.append(st)
+            self.notes.add("text")
+            if joined:
+                self.lines.append(St("combine", word="add", target=self.current, tools=joined, keep=False))
+                self.alias.update((b, self.current) for b in joined)
+                self.bodies -= len(joined)
 
     def mass_of(self, lines):
         """Volume and area of these statements as a part, summed over its bodies; None if they don't build."""
@@ -1161,10 +1267,14 @@ class Tr:
             # Forge's taper narrows the extrude for a positive angle, as Onshape's does with its pull direction flag set,
             # and widens it without (measured on the pilot: both ways match the STEP to 1e-12). The value is in degrees
             taper = num(self.val(a["draftAngle"]) * (1 if a.get("draftPullDirection") is True else -1))
+        # Onshape reads surfaceEntities only for a SURFACE body: on a solid one it is the UI's leftover list of the
+        # sketch's edges (71 of the 1914 sampled parts carry one), and the solid is made from entities alone
         b = a.get("bodyType")
+        if isinstance(b, tuple) and "SURFACE" in b[1]:
+            return self.sheet(f, "extrude")
         if isinstance(b, tuple) and "SOLID" not in b[1]:
             raise Unsupported("a thin or surface extrude")
-        if "surfaceEntities" in a or "entities" not in a:
+        if "entities" not in a:
             raise Unsupported("a surface extrude")
         if a.get("hasOffset") is True:
             raise Unsupported("extrude start offset")
@@ -1245,13 +1355,141 @@ class Tr:
                 make["taper"] = taper
             self.emit_solid("extrude", op, make, frame, {fid: by[fid]}, opp, fid_out=f["id"])
 
+    def sheet_chains(self, v, env):
+        """A surface feature's edges (sketch entities of one sketch) as chains end to end: the sketch, and each
+        chain's entities in order, each with whether it runs its own way."""
+        ents = []
+        for q0 in qunion(v):
+            q = self.deref(q0, env)
+            if not (isinstance(q, fs.Call) and q[0] == "sQuery"):
+                raise Unsupported("a surface of a part's edges")
+            fid = q[1][0][1].split(".")[0]
+            if fid not in self.sk:
+                raise Unresolved("entity of an unread sketch")
+            if (fid, q[1][2]) not in ents:
+                ents.append((fid, q[1][2]))
+        if not ents:
+            raise Unresolved("a surface of nothing")
+        if len({e[0] for e in ents}) > 1:
+            raise Unsupported("a surface of several sketches")
+        fid = ents[0][0]
+        arr, fr = self.sk[fid]
+        left = []
+        for _, name in ents:
+            e = arr.every.get(name)
+            if e is None:
+                raise Unresolved("unknown sketch entity")
+            if e.kind not in ("line", "arc", "circle"):
+                raise Unsupported("a surface along a spline")
+            left.append((name, e))
+        chains = []
+        while left:
+            name, e = left.pop(0)
+            run = [(name, e, True)]
+            ends = lambda r: (r[1].a if r[2] else r[1].b, r[1].b if r[2] else r[1].a)
+            grew = e.kind != "circle"
+            while grew and left:
+                grew = False
+                for i, (n2, e2) in enumerate(left):
+                    if e2.kind == "circle":
+                        continue
+                    head, tail = ends(run[0])[0], ends(run[-1])[1]
+                    for fwd in (True, False):
+                        a2, b2 = (e2.a, e2.b) if fwd else (e2.b, e2.a)
+                        if sketch2d.dist(tail, a2) <= 1e-7:
+                            run.append((n2, e2, fwd))
+                        elif sketch2d.dist(head, b2) <= 1e-7:
+                            run.insert(0, (n2, e2, fwd))
+                        else:
+                            continue
+                        del left[i]
+                        grew = True
+                        break
+                    if grew:
+                        break
+            chains.append(run)
+        return fid, fr, chains
+
+    def sheet(self, f, how):
+        """A SURFACE extrude or revolve: a sheet, a body of its own, each chain of its edges one. The part's
+        volume and area are its solids' (as the STEP truth measures them)."""
+        a, env = f["args"], f["env"]
+        if "surfaceEntities" not in a:
+            raise Unsupported("a surface of a sketch's regions")
+        if a.get("hasOffset") is True:
+            raise Unsupported("extrude start offset")
+        fid, fr, chains = self.sheet_chains(a["surfaceEntities"], env)
+        q = lambda p: (num(p[0]), num(p[1]))
+        rows_of_chain = []
+        for run in chains:
+            segs = []
+            for _, e, fwd in run:
+                s, t = (e.a, e.b) if fwd else (e.b, e.a)
+                if e.kind == "line":
+                    segs.append(("line", q(s), q(t)))
+                elif e.kind == "circle":
+                    segs.append(("circle", q(e.c), num(e.r)))
+                else:
+                    segs.append(("arc", q(e.c), q(s), q(t), e.ccw == fwd))
+            rows_of_chain.append(segs)
+        frame = (vt(fr.o), vt(fr.n), vt(fr.x))
+        if how == "extrude":
+            bound = a.get("endBound")
+            bound = bound[1].split(".")[-1] if isinstance(bound, tuple) else "BLIND"
+            if a.get("symmetric") is True and bound == "BLIND":
+                bound = "SYMMETRIC"
+            opp = a.get("oppositeDirection") is True
+            if a.get("hasSecondDirection") is True:
+                raise Unsupported("a surface's second direction")
+            if bound == "BLIND":
+                d = self.val(a["depth"])
+                ext = ("d", num(-d if opp else d))
+            elif bound == "SYMMETRIC":
+                ext = ("sym", num(self.val(a["depth"])))
+            else:
+                raise Unsupported("a surface extrude bound " + bound)
+            make = {"ext": ext}
+        else:
+            ax = self.deref(single(a["axis"], env), env)
+            if not (isinstance(ax, fs.Call) and ax[0] == "sQuery"):
+                raise Unsupported("revolve about a solid's edge")
+            _, _, afr, e = self.ent(ax)
+            if e.kind != "line":
+                raise Unresolved("axis not a line")
+            p0, p1 = afr.world(*e.a), afr.world(*e.b)
+            u0, v0, w0 = fr.uvw(p0)
+            u1, v1, w1 = fr.uvw(p1)
+            if abs(w0) > 1e-6 or abs(w1) > 1e-6:
+                raise Unsupported("axis out of the sketch's plane")
+            l = math.hypot(u1 - u0, v1 - v0)
+            d2 = ((u1 - u0) / l, (v1 - v0) / l)
+            if a.get("oppositeDirection") is True:
+                d2 = (-d2[0], -d2[1])
+            t = a.get("revolveType")
+            t = t[1].split(".")[-1] if isinstance(t, tuple) else "FULL"
+            if t == "FULL":
+                turn = None
+            elif t == "ONE_DIRECTION":
+                turn = ("a", num(self.val(a["angle"])))
+            elif t == "SYMMETRIC":
+                turn = ("sym", num(self.val(a["angle"])))
+            elif t == "TWO_DIRECTIONS":
+                turn = ("two", num(self.val(a["angle"])), num(self.val(a["angleBack"])))
+            else:
+                raise Unsupported("revolve type " + t)
+            make = {"turn": turn, "axis": (num(u0), num(v0), num(d2[0]), num(d2[1]))}
+        for segs in rows_of_chain:
+            self.lines.append(St("sheet", how=how, frame=frame, loops=[segs], **make))
+
     def revolve(self, f):
         a, env = f["args"], f["env"]
-        if "surfaceEntities" in a or "entities" not in a:
-            raise Unsupported("a surface revolve")
         b = a.get("bodyType")
+        if isinstance(b, tuple) and "SURFACE" in b[1]:
+            return self.sheet(f, "revolve")
         if isinstance(b, tuple) and "SOLID" not in b[1]:
             raise Unsupported("a thin or surface revolve")
+        if "entities" not in a:  # surfaceEntities on a solid revolve: as on an extrude
+            raise Unsupported("a surface revolve")
         by = self.regions(a["entities"], env)
         op = self.op_of(a)
         if op is None or len(by) != 1:
@@ -1544,11 +1782,20 @@ class Tr:
 
     def fillet(self, f):
         a, env = f["args"], f["env"]
-        if a.get("isVariable") is True or "vertexSettings" in a or "crossSection" in a or "filletType" in a:
-            raise Unsupported("a variable or conic fillet")
+        # an empty vertexSettings is the form's default, no setting at any vertex
+        if a.get("isVariable") is True or a.get("vertexSettings") not in (None, []) or "filletType" in a:
+            raise Unsupported("a variable fillet")
+        # Onshape's conic: the circular fillet's feet for `radius`, a conic of shoulder ratio rho
+        # between them (measured on the source's STEP: setbacks r tan(phi/2), rho as given)
+        conic = None
+        cs = a.get("crossSection")
+        if cs is not None and not str(cs[1]).endswith("CIRCULAR"):
+            if not str(cs[1]).endswith("CONIC"):
+                raise Unsupported("a curvature fillet")
+            conic = num(self.val(a["rho"]))
         hs = self.edges_for(qunion(a["entities"]), env, a.get("tangentPropagation") is True)
         before = self.state()
-        self.lines.append(St("fillet", size=num(self.val(a["radius"])), sel=self.select("edges", hs)))
+        self.lines.append(St("fillet", size=num(self.val(a["radius"])), sel=self.select("edges", hs), conic=conic))
         # what later queries on the fillet's own faces and edges are read against: the faces it made, and the faces
         # each rounded edge parted, with that edge's samples
         old = {g["h"] for g in before.get("faces", [])}

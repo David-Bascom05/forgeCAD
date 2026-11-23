@@ -509,6 +509,53 @@ fn rounds(
     Ok((format!("[{}]", out.join(",")), smooth, odd))
 }
 
+/// An extrude's extent as the oracle's JSON.
+fn extent_json(features: History<'_>, i: usize, extent: Extent) -> String {
+    match extent {
+        Extent::Distance(d) => format!("{{\"d\":{}}}", num(d)),
+        Extent::Tapered { distance, angle } => {
+            format!("{{\"d\":{},\"taper\":{}}}", num(distance), num(angle))
+        }
+        Extent::Along { forward, back, dir } => format!(
+            "{{\"two\":[{},{}],\"along\":[{},{},{}]}}",
+            num(forward),
+            num(back),
+            num(dir.x),
+            num(dir.y),
+            num(dir.z)
+        ),
+        Extent::Symmetric(d) => format!("{{\"sym\":{}}}", num(d)),
+        Extent::TwoSided { forward, back } => format!("{{\"two\":[{},{}]}}", num(forward), num(back)),
+        Extent::ThroughAlong { toward, dir } => format!(
+            "{{\"through\":\"{}\",\"along\":[{},{},{}]}}",
+            match toward {
+                Toward::Forward => "forward",
+                Toward::Back => "back",
+                Toward::Both => "both",
+            },
+            num(dir.x),
+            num(dir.y),
+            num(dir.z)
+        ),
+        Extent::Through(t) => format!(
+            "{{\"through\":\"{}\"}}",
+            match t {
+                Toward::Forward => "forward",
+                Toward::Back => "back",
+                Toward::Both => "both",
+            }
+        ),
+        Extent::To { target: t, offset } => {
+            format!(
+                "{{\"to\":{},\"offset\":{}}}",
+                target(features, i, &t),
+                num(offset)
+            )
+        }
+        Extent::ToNext { reverse } => format!("{{\"next\":{reverse}}}"),
+    }
+}
+
 /// One feature as OCCT replays it.
 enum Step {
     /// Its JSON, with why OCCT builds it its own way if it does.
@@ -528,53 +575,20 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             extent,
             op: c,
         } => {
-            let e = match *extent {
-                Extent::Distance(d) => format!("{{\"d\":{}}}", num(d)),
-                Extent::Tapered { distance, angle } => {
-                    format!("{{\"d\":{},\"taper\":{}}}", num(distance), num(angle))
-                }
-                Extent::Along { forward, back, dir } => format!(
-                    "{{\"two\":[{},{}],\"along\":[{},{},{}]}}",
-                    num(forward),
-                    num(back),
-                    num(dir.x),
-                    num(dir.y),
-                    num(dir.z)
-                ),
-                Extent::Symmetric(d) => format!("{{\"sym\":{}}}", num(d)),
-                Extent::TwoSided { forward, back } => format!("{{\"two\":[{},{}]}}", num(forward), num(back)),
-                Extent::ThroughAlong { toward, dir } => format!(
-                    "{{\"through\":\"{}\",\"along\":[{},{},{}]}}",
-                    match toward {
-                        Toward::Forward => "forward",
-                        Toward::Back => "back",
-                        Toward::Both => "both",
-                    },
-                    num(dir.x),
-                    num(dir.y),
-                    num(dir.z)
-                ),
-                Extent::Through(t) => format!(
-                    "{{\"through\":\"{}\"}}",
-                    match t {
-                        Toward::Forward => "forward",
-                        Toward::Back => "back",
-                        Toward::Both => "both",
-                    }
-                ),
-                Extent::To { target: t, offset } => {
-                    format!(
-                        "{{\"to\":{},\"offset\":{}}}",
-                        target(features, i, &t),
-                        num(offset)
-                    )
-                }
-                Extent::ToNext { reverse } => format!("{{\"next\":{reverse}}}"),
-            };
+            let e = extent_json(features, i, *extent);
             json(format!(
                 "{{\"kind\":\"extrude\",\"op\":\"{}\",{},\"extent\":{e}}}",
                 op(*c),
                 profile(p)
+            ))
+        }
+        Feature::Regions(r) => {
+            let e = extent_json(features, i, r.extent);
+            let ps: Vec<String> = r.profiles.iter().map(|p| format!("{{{}}}", profile(p))).collect();
+            json(format!(
+                "{{\"kind\":\"regions\",\"op\":\"{}\",\"profiles\":[{}],\"extent\":{e}}}",
+                op(r.op),
+                ps.join(",")
             ))
         }
         Feature::Revolve {
@@ -922,6 +936,7 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             Edit::Move { .. } => Err("move faces: OCCT has no operation that moves faces"),
         },
         Feature::Import(_) => Err("import: a body read from a file, no operation to rebuild it by"),
+        Feature::Sheet(_) => Err("sheet: the oracle measures solids (sheets: tools/occt/sheets.py)"),
         Feature::Text(t) => {
             // the outlines as our layout sets them (OCCT's own text builder needs a font file
             // and lays text out its own way); the solids are OCCT's
@@ -1552,6 +1567,7 @@ mod tests {
             Feature::Sweep(_) => "sweep",
             Feature::Coil(_) => "coil",
             Feature::Loft(_) => "loft",
+            Feature::Sheet(_) => "sheet",
             Feature::Edit(e) => match e {
                 Edit::Rib(_) => "rib",
                 Edit::Offset { .. } => "offset",
@@ -1564,6 +1580,7 @@ mod tests {
             Feature::Sketch(_) => "sketch",
             Feature::Thread(_) => "thread",
             Feature::Text(_) => "text",
+            Feature::Regions(_) => "regions",
             Feature::Import(_) => "import",
             Feature::Work(_) => "work",
             Feature::Body(b) => match &**b {

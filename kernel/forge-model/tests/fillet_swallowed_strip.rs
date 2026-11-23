@@ -17,6 +17,7 @@ fn fillet(names: Vec<Name>, r: f64) -> Feature {
         starts: Vec::new(),
         setbacks: Vec::new(),
         only: false,
+        conic: None,
     }
 }
 

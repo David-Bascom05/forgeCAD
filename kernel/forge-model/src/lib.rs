@@ -13,7 +13,9 @@ pub mod names;
 pub mod params;
 mod path;
 pub mod pattern;
+pub mod regions;
 mod rib;
+pub mod sheets;
 pub mod splinefam;
 mod splitface;
 pub mod standard;
@@ -76,6 +78,7 @@ impl<'a> History<'a> {
     }
 
     /// The id feature `i`'s names derive from.
+    #[inline]
     pub fn id(&self, i: usize) -> u64 {
         self.ids.map_or(i as u64 + 1, |ids| ids[i])
     }
@@ -132,6 +135,9 @@ pub enum Feature {
         setbacks: Vec<(Name, Option<Name>, f64)>,
         /// Only the edges named, not the tangent chains they lie on.
         only: bool,
+        /// A conic section of this shoulder ratio rho in (0, 1) in place of the ball's arc
+        /// (`forge_ops::FilletOptions::conic`): the same feet, middle weight rho / (1 - rho).
+        conic: Option<f64>,
     },
     /// Round between two sets of faces: the edges where they meet, or the band of strip faces
     /// joining them, taken away.
@@ -182,12 +188,16 @@ pub enum Feature {
     Thread(Box<ScrewThread>),
     /// Text embossed on or engraved into a plane or a cylinder.
     Text(Box<Text>),
+    /// Several regions of a sketch extruded alike (regions.rs).
+    Regions(Box<regions::Regions>),
     /// A solid read from another system's file.
     Import(Box<Import>),
     /// A work plane, axis, point or UCS defined by references; it makes nothing.
     Work(Work),
     /// A feature on chosen bodies, or one that combines, splits or moves bodies (bodies.rs).
     Body(Box<BodyFeature>),
+    /// A sheet: a sketch's chains extruded or revolved into a surface body of its own (sheets.rs).
+    Sheet(Box<sheets::Sheet>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -283,6 +293,10 @@ pub enum RegenError {
     Text {
         feature: usize,
         error: TextError,
+    },
+    Regions {
+        feature: usize,
+        error: regions::RegionsError,
     },
     Work {
         feature: usize,
@@ -951,9 +965,15 @@ pub fn tool_shapes(features: History<'_>, i: usize) -> Result<Vec<(Shape, Combin
 /// pass never sees the part in between, where the feature-by-feature regen refuses an empty
 /// one however later tools add to it; such histories are rebuilt feature by feature instead.
 fn may_empty(first: &Body, tools: &[Tool]) -> bool {
+    // (each live face's box, in id order: a loop over the faces, not their ids' iterator)
     let bx = |b: &Body| {
-        b.face_ids()
-            .fold(forge_math::Box3::EMPTY, |a, f| a.hull(&b.face_box(f)))
+        let mut a = forge_math::Box3::EMPTY;
+        for (k, f) in b.faces.iter().enumerate() {
+            if f.alive {
+                a = a.hull(&b.face_box(forge_topo::FaceId(k as u32)));
+            }
+        }
+        a
     };
     let holds = |a: &forge_math::Box3, b: &forge_math::Box3| {
         let h = a.grow(forge_math::tol::LINEAR);
@@ -1004,13 +1024,17 @@ pub(crate) fn not_empty(b: Body, i: usize) -> Result<Body, RegenError> {
 
 /// Whether a feature makes a new body.
 fn starts(f: &Feature) -> bool {
-    matches!(
-        f,
-        Feature::Extrude { op: Combine::New, .. }
-            | Feature::Revolve { op: Combine::New, .. }
-            | Feature::Ball { op: Combine::New, .. }
-    ) || swept::op(f) == Some(Combine::New)
-        || matches!(f, Feature::Import(t) if t.op == Combine::New)
+    // one match: an extrude, revolve, ball or import says by its own op, a sheet by its (a new body
+    // unless it is a thin wall); the rest as `swept::op` says
+    match f {
+        Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => {
+            *op == Combine::New
+        }
+        Feature::Import(t) => t.op == Combine::New,
+        Feature::Sheet(s) => sheets::op(s) == Combine::New,
+        Feature::Regions(r) => r.op == Combine::New,
+        _ => swept::op(f) == Some(Combine::New),
+    }
 }
 
 /// Whether a feature changes the part as a whole, rather than making tools to combine with it.
@@ -1161,7 +1185,11 @@ fn short(features: History<'_>, from: usize) -> bool {
     let mut n = 0;
     for f in features.iter().skip(from) {
         match f {
-            Feature::Pattern { .. } | Feature::Thread(_) | Feature::Text(_) | Feature::Import(_) => {
+            Feature::Pattern { .. }
+            | Feature::Thread(_)
+            | Feature::Text(_)
+            | Feature::Regions(_)
+            | Feature::Import(_) => {
                 return false;
             }
             Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_) | Feature::Work(_) => {}
@@ -1559,7 +1587,8 @@ fn modify(
             starts,
             setbacks,
             only,
-        } => apply_fillet(i, id, body, edges, starts, setbacks, *only),
+            conic,
+        } => apply_fillet(i, id, body, edges, starts, setbacks, (*only, *conic)),
         Feature::FaceFillet {
             first,
             second,
@@ -1661,7 +1690,7 @@ fn apply_fillet(
     edges: &[(Name, Radius)],
     starts: &[(Name, Name)],
     setbacks: &[(Name, Option<Name>, f64)],
-    only: bool,
+    (only, conic): (bool, Option<f64>),
 ) -> Result<Body, RegenError> {
     let body = if body.dead > 0 {
         body.compact()
@@ -1701,6 +1730,7 @@ fn apply_fillet(
             .map(|&(v, e, d)| Ok((vertex(v)?, e.map(edge).transpose()?, d)))
             .collect::<Result<_, RegenError>>()?,
         only,
+        conic,
         ..FilletOptions::default()
     };
     let first =
@@ -2066,7 +2096,9 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
         }
         Feature::Thread(_) => thread::tools(features, i, build),
         Feature::Text(_) => text::tools(features, i),
+        Feature::Regions(_) => regions::tools(features, i, build),
         Feature::Import(_) => import::tools(features, i),
+        Feature::Sheet(s) => Ok(vec![sheets::tool(i, features.id(i), s, build)?]),
         f => Ok(vec![tool(i, features.id(i), f, build)?]),
     }
 }

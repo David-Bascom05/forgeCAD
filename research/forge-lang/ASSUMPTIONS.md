@@ -630,7 +630,7 @@ check-local and drag-speed proofs the same way.
   with one kept goes on a line of its own, the break put in marked in its tag (`#~b<` before it,
   `#~b>` after it), and Unsuppress takes the break out; where a break borders another feature's
   suppressed line, Unsuppress keeps it and moves the mark onto that line, so the two put back in
-  either order give the text back (`tests/fc_parity.rs`, `suppress_takes_one_statement_of_a_line`;
+  either order give the text back (`tests/recorded_parity.rs`, `suppress_takes_one_statement_of_a_line`;
   the moved mark is not in the Lean model, which has one tag).
 
 - **Respell.** `respell_read_binders`: respelling reads keeps every binder, so every name id (P5);
