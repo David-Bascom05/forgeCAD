@@ -110,6 +110,30 @@ def TransversalAt (cs : List (Carrier E ℝ)) (x : E) : Prop :=
 /-- Transversal everywhere. -/
 def Transversal (cs : List (Carrier E ℝ)) : Prop := ∀ x, TransversalAt cs x
 
+/-- **Independent gradients give transversality**: the certificate form (a nonzero gradient, a
+nonzero cross product, a nonzero determinant, for one, two or three carriers through `x`). -/
+theorem transversalAt_of_linearIndependent {cs : List (Carrier E ℝ)} {x : E}
+    (h : LinearIndependent ℝ fun i : Through cs x => fderiv ℝ cs[i.1] x) : TransversalAt cs x := by
+  classical
+  unfold TransversalAt
+  have key := (LinearMap.dualMap_injective_iff
+    (f := ((throughDeriv cs x : E →L[ℝ] (Through cs x → ℝ)) : E →ₗ[ℝ] (Through cs x → ℝ)))).mp
+  refine key ?_
+  rw [← LinearMap.ker_eq_bot, LinearMap.ker_eq_bot']
+  intro φ hφ
+  have hsum : ∑ i : Through cs x, φ (fun j => if i = j then 1 else 0) • fderiv ℝ cs[i.1] x = 0 := by
+    ext v
+    have := LinearMap.congr_fun hφ v
+    simp only [LinearMap.dualMap_apply, LinearMap.zero_apply] at this
+    rw [LinearMap.pi_apply_eq_sum_univ] at this
+    simpa [throughDeriv, mul_comm] using this
+  have hz := Fintype.linearIndependent_iff.mp h _ hsum
+  ext w
+  simp only [LinearMap.comp_apply, LinearMap.zero_apply]
+  convert hz w using 2
+  ext j
+  simp [Pi.single_apply, eq_comm]
+
 /-- **The chart at a transversal point**: small neighbourhoods `U` of `x` meet every cell above
 `x`'s in a nonempty preconnected set. -/
 theorem transversal_chart {cs : List (Carrier E ℝ)} (hd : ∀ c ∈ cs, ContDiff ℝ 1 c) {x : E}

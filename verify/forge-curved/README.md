@@ -28,6 +28,12 @@ for `EndToEndCurved`. That project builds in about 2 minutes on the shared Mathl
 | Transversal | `TransversalAt`, `transversal_chart`, `localGood'_of_transversal`, **`faithfulAll_of_transversal`** | at a point where the gradients of the `C¹` carriers through it are jointly onto, the inverse function theorem makes the cells near it convex orthant faces; so for transversal carriers `FaithfulAll` is R1 alone |
 | Tier0 | `Tier0Spec`, `tier0Sound_of_spec`, **`qRule_tier0Sound`** | a Tier-0 check is sound once it certifies transversality and R1 of the seamed arrangement; for Q1 nothing else is needed |
 | FaceLocal | `frontier_of_bd`, `bd_of_frontier`, `edge_iff`, `vert_iff`, **`xNonManifoldF_iff_top`** | **route B**: over the face ledger (A8, W2 wings and sectors), the core's refusal (a row with three boundary wings, or boundary sectors in two fan classes) is the result's topological non-manifoldness, given the builder's local obligations `Obligations` (F5 `SideLocal`; F1–F4 `EdgeLocal`, `VertLocal`). No carriers, no `Faithful`, no R1 |
+| Homogeneous | `HomogeneousAt`, `coneCell`, **`localGood_of_homogeneous`**, `ConicalAt`, **`faithfulAll_of_mixed`** | at a point where the carriers through it keep their sign along rays (a cone apex with its axial seams and nappe plane), cells near it are cones, and a radial map onto a small ball shows the local picture holds when the apex's own cone cells are connected; so with every point transversal or conical, `FaithfulAll` is R1 |
+| ConeModel | **`modelCell_preconnected`**, **`conicalAt_of_model`** | the seamed cone model `a u₁²+b u₂²−c u₃²`, `u₁`, `u₂`, `u₃` (two axial seams and the nappe plane) has connected sign classes (squares turn each into a convex set); a point modelled on it through a homogeneous homeomorphism is conical. With one axial seam the cells are not connected |
+| Faces | `FacesLinked`, `NoClosedPiece`, **`connected_of_faces`**, **`cellsConnected_of_faces`**, `noClosedPiece_full` | R1 without a Jordan theorem: only "at most one component" is needed, since the sides of a curve have different covectors. A cell whose proper faces are connected and linked by incidence, and which has no closed piece, is connected (local connectivity carries one component along every face). Induction on the zeros gives R1. Full cells of ℝ³ have no closed piece |
+| Strata | `zeroLocus`, **`noClosedPiece_of_locus`** | a closed piece of a cell is clopen in its zero locus, so it suffices that every component of the locus meets another carrier |
+| Linked | `linkedB`, **`facesLinked_of_linkedB`** | `FacesLinked` decided by graph search on the enumerator's list of realised covectors |
+| Tier0 | `Tier0Spec`, `qRule_tier0Sound`, `Tier0Data`, `tier0B`, **`qRule_tier0Sound_of_data`** | a Tier-0 check is sound once it certifies transversality and R1; R1 follows from `tier0B` (every realised cell is a point or has linked faces) on `Tier0Data`: the realised list with its covering theorem, every point transversal or conical, the cells certified connected outright, and the locus condition |
 
 **R5, the vertex wing condition** (`Faithful.vwing`, added to Curved.lean by dol-curved at 1abc5b0
 for this theorem): R4 at vertices. Without it, a facet whose boundary walk passes a vertex
@@ -75,3 +81,20 @@ covector count is wrong.
 - `EndToEndCurved` quantifies over every curved target ledger. Instantiating it needs two things:
   - `curved_exact : CurvedTarget (curvedLedger …)` (L2, dol-curved);
   - `LFits` for its encoding.
+- **`Tier0Sound`**: reduced to the combinatorial check `tier0B` on `Tier0Data`
+  (`qRule_tier0Sound_of_data`). What is left is the enumerator's facts: covering of the realised
+  list, transversality (algebraic), single-point vertex cells, and that every curve or surface
+  component of a lower cell's zero locus meets another carrier. Non-transversal points (cone apex, tangent contact lines) need a local model
+  (`LocalGood`) in place of the chart; until then a check requiring transversality sends them to
+  Tier 1.
+- **`Tier0Sound`** (R1) and **`LemmaD`**, i.e. R1, R2, R4 and R5 for the seamed (or walled) quadric
+  arrangements. These are the L–XL proofs of design §4 Q1 L3: 2D Jordan–Schoenflies for
+  piecewise-conic curves on simply connected quadric pieces, and the slab Morse argument. They
+  need the executable side's seams, check and walls (dol-curved's `curvedLedger`) to be stated
+  concretely; `SepRule` takes them as parameters. R3 is done for both tiers (`quadric_sides`).
+- **The refusal half of `sep_invariant`.** `TopNonManifold` reads the carriers' strata (which
+  points are on one carrier, which cells are edges or vertices), so it is not yet carrier-free.
+  The half closes once `TopNonManifold cs R ↔ TopNonManifold (cs ++ seps) R` is proven for
+  faithful `cs` and `cs ++ seps`.
+- `EndToEndCurved` quantifies over every curved target ledger. Instantiating it needs
+  `curved_exact : CurvedTarget (curvedLedger …)` (L2, dol-curved) and `LFits` for its encoding.

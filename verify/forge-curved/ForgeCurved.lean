@@ -6,3 +6,6 @@ import ForgeCurved.WallsCounter
 import ForgeCurved.DelineablePoly
 import ForgeCurved.Tier0
 import ForgeCurved.FaceLocal
+import ForgeCurved.Strata
+import ForgeCurved.Linked
+import ForgeCurved.ConeModel

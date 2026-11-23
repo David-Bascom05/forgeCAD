@@ -38,3 +38,16 @@ import ForgeCurved
 #print axioms ForgeCurved.FaceLocal.edge_iff
 #print axioms ForgeCurved.FaceLocal.vert_iff
 #print axioms ForgeCurved.FaceLocal.xNonManifoldF_iff_top
+#print axioms ForgeCurved.connected_of_faces
+#print axioms ForgeCurved.cellsConnected_of_faces
+#print axioms ForgeCurved.noClosedPiece_full
+#print axioms ForgeCurved.noClosedPiece_of_locus
+#print axioms ForgeCurved.tier0Spec_of_faces
+#print axioms ForgeCurved.facesLinked_of_linkedB
+#print axioms ForgeCurved.cellsConnected_of_check
+#print axioms ForgeCurved.localGood_of_homogeneous
+#print axioms ForgeCurved.faithfulAll_of_mixed
+#print axioms ForgeCurved.qRule_tier0Sound_of_data
+#print axioms ForgeCurved.transversalAt_of_linearIndependent
+#print axioms ForgeCurved.modelCell_preconnected
+#print axioms ForgeCurved.conicalAt_of_model
