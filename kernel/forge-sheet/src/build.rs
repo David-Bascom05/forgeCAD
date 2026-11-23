@@ -4602,7 +4602,8 @@ fn piece_box(geo: Geo, p: &Piece, w: f64, u: Interval) -> forge_math::Box3 {
             rho0,
             sigma,
             rn,
-            ..
+            theta,
+            ba,
         } => match flat_in_bend(&sub, sub.at(0.0), sub.at(1.0), sigma) {
             Some(flat) => Wrap {
                 axis,
@@ -4611,11 +4612,26 @@ fn piece_box(geo: Geo, p: &Piece, w: f64, u: Interval) -> forge_math::Box3 {
                 flat,
             }
             .bbox(Interval::new(0.0, 1.0)),
-            // past cubic is refused before this; a box that holds everything never prunes
-            None => forge_math::Box3::from_points([
-                Point3::new(-1e300, -1e300, -1e300),
-                Point3::new(1e300, 1e300, 1e300),
-            ]),
+            // no flat form (past cubic, refused before this): the sector the piece wraps onto,
+            // its angles phi = u / rn over the piece's own box (the far tangent line's theta
+            // included where it reaches it), at radius rho0 + sigma w, its heights -sigma y:
+            // rigorous, outward-rounded
+            None => {
+                let b = sub.bbox();
+                let pt = Interval::point;
+                let mut phi = Interval::new(b.x0, b.x1).div(&pt(rn));
+                if b.x1 >= ba {
+                    phi = phi.hull(&pt(theta));
+                }
+                let r = pt(rho0) + pt(sigma) * pt(w);
+                let (x, y) = (r * phi.cos(), r * phi.sin());
+                let z = pt(-sigma) * Interval::new(b.y0, b.y1);
+                forge_math::Box3::from_points((0..8).map(|k| {
+                    let pick = |i: Interval, bit: usize| if k & bit == 0 { i.lo } else { i.hi };
+                    axis.point_to_world(Point3::new(pick(x, 1), pick(y, 2), pick(z, 4)))
+                }))
+                .grow(TOL)
+            }
         },
     }
 }
@@ -4711,5 +4727,44 @@ mod twin_tests {
         assert_eq!(untwinned(&loops, &twin), Some((0, 1)));
         twin.insert((0, 1), (1, 0));
         assert_eq!(untwinned(&loops, &twin), None);
+    }
+}
+
+#[cfg(test)]
+mod piece_box_tests {
+    use super::*;
+
+    #[test]
+    fn a_zone_piece_with_no_flat_form_still_gets_a_box_that_holds_it() {
+        // a quartic spline piece (no Bezier form `flat_in_bend` carries): its box in a zone is the
+        // wrapped sector's, finite and holding every point of the piece
+        let pts: Vec<Point3> = [(0.0, 0.0), (1.0, 2.0), (2.0, -1.0), (3.0, 1.5), (4.0, 0.5)]
+            .iter()
+            .map(|&(x, y)| Point3::new(x, y, 0.0))
+            .collect();
+        let s =
+            Spline::from_nurbs(4, &[0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0], &pts, None).unwrap();
+        let piece = Piece::Spline {
+            s: std::sync::Arc::new(s),
+            t0: 0.0,
+            t1: 1.0,
+        };
+        let geo = Geo::Round {
+            axis: Frame::WORLD,
+            rho0: 2.0,
+            sigma: 1.0,
+            rn: 2.8,
+            theta: 1.5,
+            ba: 4.2,
+        };
+        let b = piece_box(geo, &piece, 0.5, Interval::new(0.0, 1.0));
+        assert!(
+            b.x.width() < 100.0 && b.y.width() < 100.0 && b.z.width() < 100.0,
+            "{b:?}"
+        );
+        for k in 0..=64 {
+            let p = geo.point(piece.at(k as f64 / 64.0), 0.5);
+            assert!(b.contains(p), "{p:?} {b:?}");
+        }
     }
 }
