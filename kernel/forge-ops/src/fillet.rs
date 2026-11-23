@@ -1202,38 +1202,10 @@ fn pivot_of(body: &Body, e: EdgeId, r: f64, root: Name) -> Option<Pivot> {
     })
 }
 
-/// Runs `f` over 0..n on the machine's threads, results in order.
+/// Runs `f` over 0..n on the threads `forge_math::par` gives, joining only where the work pays
+/// for them; results in order.
 fn par_map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
-    let threads = forge_math::par::threads().min(n);
-    if threads <= 1 {
-        return (0..n).map(f).collect();
-    }
-    let next = std::sync::atomic::AtomicUsize::new(0);
-    let parts: Vec<Vec<(usize, T)>> = forge_math::par::scope(|s| {
-        let workers: Vec<_> = (0..threads)
-            .map(|_| {
-                s.spawn(|| {
-                    let mut got = Vec::new();
-                    loop {
-                        let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        if i >= n {
-                            break got;
-                        }
-                        got.push((i, f(i)));
-                    }
-                })
-            })
-            .collect();
-        workers
-            .into_iter()
-            .map(|w| w.join().expect("fillet worker"))
-            .collect()
-    });
-    let mut out: Vec<Option<T>> = (0..n).map(|_| None).collect();
-    for (i, t) in parts.into_iter().flatten() {
-        out[i] = Some(t);
-    }
-    out.into_iter().map(|t| t.expect("every edge done")).collect()
+    forge_math::par::map(n, f)
 }
 
 /// The edges with every tangent continuation of each added, each with the largest

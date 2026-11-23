@@ -52,6 +52,18 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
     forge_math::par::map_adaptive(n, threads, per, f)
 }
 
+/// The pair loop's work left below which it stays on one thread: its searched curves are kept per
+/// thread (`ssi::MET`), so a helper starts cold and searches again what this thread already
+/// knows. Measured: at 2 ms (the default) jack's n-ary ran 14% slower on 4 threads than on one;
+/// at 5 ms it ran 7% faster, and shaft and mixed kept most of their win
+/// (research/booleans/speedups.md, "Fastest wins").
+const PAIR_HELPERS_FOR: std::time::Duration = std::time::Duration::from_millis(5);
+
+/// `par_map` for the pair loop, with its own threshold of work left ([`PAIR_HELPERS_FOR`]).
+fn pair_map<T: Send>(n: usize, threads: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    forge_math::par::map_adaptive_for(n, threads, 2, PAIR_HELPERS_FOR, f)
+}
+
 /// How far clear of a tool's boundary a point must be for its analytic solid to answer.
 const SHAPE_MARGIN: f64 = tol::LINEAR;
 
@@ -871,7 +883,7 @@ fn nary_body(
             }
         }
     }
-    let outs = par_map(pairs.len(), threads, 2, |pi| -> R<PairOut> {
+    let outs = pair_map(pairs.len(), threads, |pi| -> R<PairOut> {
         let (i, j) = pairs[pi];
         let (a, b) = (tools[i], tools[j]);
         let (ia, ib) = (&index[i], &index[j]);
@@ -1820,8 +1832,10 @@ fn nary_body(
                 }
             }
         }
-        // on one thread, straight into the list
-        if threads.min(order.len() / 32) <= 1 {
+        // on one thread, straight into the list: below about 512 edges a list per edge, copied
+        // after, costs more than threads save (hole-grid's n-ary ran 9% slower on 4 threads than
+        // on one; research/booleans/speedups.md, "Fastest wins")
+        if threads.min(order.len() / 512) <= 1 {
             for (sd, e) in order {
                 pieces.ensure(sd, e);
             }
