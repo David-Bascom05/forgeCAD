@@ -407,6 +407,7 @@ impl Segment {
         }
     }
     /// Points telling which side of a line the segment lies on: a line's ends do.
+    #[inline]
     pub fn side_samples(&self) -> Vec<Point2> {
         match *self {
             Segment::Line { a, b } => vec![a, b],

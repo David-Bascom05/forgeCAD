@@ -2305,6 +2305,10 @@ fn tool(i: usize, id: u64, f: &Feature, build: bool) -> Result<Tool, RegenError>
                 feature: i,
                 error: forge_ops::DraftError::WallsCross { at },
             },
+            forge_ops::TaperError::SplineEvent => RegenError::Draft {
+                feature: i,
+                error: forge_ops::DraftError::SplineEvent,
+            },
         })?;
         let mut b = Body::new();
         for (k, s) in slabs.into_iter().enumerate() {

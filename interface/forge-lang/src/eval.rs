@@ -2270,77 +2270,12 @@ impl<'s> Eval<'s> {
             last.fingerprint = Some(h.finish());
         }
         r?;
-        if status == Status::Ok
-            && let Some(w) = self.taper_closes(idx, span, id)
-        {
-            self.warnings.push(w);
-        }
         // a check (it joins each stage's faces to compare them): a run without checks shows the
         // shape first, and the run with them, every stage reused, says what changed nothing
         if status == Status::Ok && idx > 0 && self.checks && self.no_effect(idx) {
             self.warnings.push(Warning::NoEffect { span, id: id.into() });
         }
         Ok((idx, hid))
-    }
-
-    /// A tapered extrude whose outline closes before its depth (the kernel's `closes_at`): a lint
-    /// with the depth's param set to where it closes, or the taper's to the largest angle that
-    /// reaches the depth, where params drive them.
-    fn taper_closes(&self, idx: usize, span: Span, id: &str) -> Option<Warning> {
-        let forge_model::Feature::Extrude {
-            profile,
-            extent: forge_model::Extent::Tapered { distance, angle },
-            ..
-        } = &self.b.features[idx]
-        else {
-            return None;
-        };
-        let at = forge_ops::taper::closes_at(profile, *distance, *angle)?;
-        let depth = distance.abs();
-        let dims = &self.feats.last()?.dims;
-        let driven = |what: &str| {
-            dims.iter()
-                .find(|d| d.what == what)
-                .and_then(|d| match &d.num.src {
-                    values::Src::Driving(key) => Some(((**key).clone(), d.num.v)),
-                    _ => None,
-                })
-        };
-        // three figures, rounded towards 0 so the walls meet at the depth or past it (a lesser
-        // depth, or a shallower taper): the fixed part has no lint
-        let down = |x: f64| {
-            let p = 10f64.powi(2 - x.abs().log10().floor() as i32);
-            (x.abs() * p).floor() / p * x.signum()
-        };
-        let depth_fix = driven("depth").map(|(key, v)| {
-            Box::new((
-                key,
-                crate::error::Literal {
-                    value: down(at) * v.signum(),
-                    dim: values::Dim::Length,
-                },
-            ))
-        });
-        // the walls close at the same offset whatever the angle: at tan a = depth tan a'
-        let angle_fix = driven("taper").map(|(key, v)| {
-            let (s, c) = forge_math::dmath::sin_cos(v.abs());
-            let a = forge_math::dmath::atan2(at * s / c, depth);
-            Box::new((
-                key,
-                crate::error::Literal {
-                    value: down(a.to_degrees()) * v.signum(),
-                    dim: values::Dim::Angle,
-                },
-            ))
-        });
-        Some(Warning::Lint(Error::TaperCloses {
-            span,
-            id: id.into(),
-            at,
-            depth,
-            depth_fix,
-            angle_fix,
-        }))
     }
 
     fn no_effect(&self, idx: usize) -> bool {
