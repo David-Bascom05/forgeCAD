@@ -257,7 +257,7 @@ impl VendorUi {
                     if self.chosen.is_some_and(|(s, i)| {
                         self.report
                             .as_ref()
-                            .is_none_or(|r| r.sheets.get(s).is_none_or(|x| x.items.get(i).is_none()))
+                            .is_none_or(|r| r.sheets.get(s).is_none_or(|x| x.all().get(i).is_none()))
                     }) {
                         self.chosen = None;
                     }
@@ -295,7 +295,7 @@ impl VendorUi {
         let Some(r) = &self.report else { return vec![] };
         let mut out = vec![];
         for (si, s) in r.sheets.iter().enumerate().filter(|(_, s)| s.sheet == id) {
-            for (ii, it) in s.items.iter().enumerate() {
+            for (ii, it) in s.all().into_iter().enumerate() {
                 if it.flat.is_empty() || it.severity != "violation" {
                     continue;
                 }
@@ -314,7 +314,7 @@ impl VendorUi {
         let (s, i) = self.chosen?;
         let r = self.report.as_ref()?;
         let sheet = r.sheets.get(s)?;
-        let it = sheet.items.get(i)?;
+        let it = *sheet.all().get(i)?;
         Some((it.anchor.as_deref().unwrap_or(""), &it.flat, &sheet.sheet))
     }
 }
@@ -694,7 +694,21 @@ impl Shell {
                                     .color(t.focus),
                             );
                         }
-                        let count = s.items.iter().filter(|i| i.severity == "violation").count();
+                        let count = s
+                            .all()
+                            .iter()
+                            .filter(|i| i.severity == "violation" || i.severity == "refused")
+                            .count();
+                        if let Some(b) = &s.brake {
+                            ui.label(small(
+                                &t,
+                                if b.feasible {
+                                    format!("Press brake: bends in order {}", b.sequence.join(", "))
+                                } else {
+                                    "Press brake: no bend order works with this tooling".to_string()
+                                },
+                            ));
+                        }
                         ui.label(small(
                             &t,
                             if count == 0 {
@@ -711,7 +725,7 @@ impl Shell {
                                     ui.label(egui::RichText::new(h).font(medium(11.0)).color(t.ink2));
                                 }
                                 ui.end_row();
-                                for (ii, it) in s.items.iter().enumerate() {
+                                for (ii, it) in s.all().into_iter().enumerate() {
                                     let on = u.chosen == Some((si, ii));
                                     let colour = if it.severity == "violation" {
                                         t.error
@@ -749,7 +763,7 @@ impl Shell {
                             });
                         if let Some((cs, ci)) = u.chosen
                             && cs == si
-                            && let Some(it) = s.items.get(ci)
+                            && let Some(it) = s.all().get(ci).copied()
                         {
                             ui.add(
                                 egui::Label::new(egui::RichText::new(&it.text).font(sans(12.0)).color(t.ink))

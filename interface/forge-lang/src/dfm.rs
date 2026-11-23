@@ -64,6 +64,31 @@ pub struct SheetReport {
     /// The shop's offered operations (None: not stated).
     pub operations: Option<Vec<&'static str>>,
     pub items: Vec<Item>,
+    /// The press brake's findings (bendsim.rs): the sheet bent with its vendor's tooling, or the
+    /// standard set; none for a sheet with no bends.
+    pub brake: Option<Brake>,
+}
+
+impl SheetReport {
+    /// Every finding: the shop's rules', then the press brake's.
+    pub fn all(&self) -> Vec<&Item> {
+        self.items
+            .iter()
+            .chain(self.brake.iter().flat_map(|b| &b.items))
+            .collect()
+    }
+}
+
+/// A sheet bent on the press brake (kernel/forge-brake), as one report with the shop's rules.
+#[derive(Clone, Debug)]
+pub struct Brake {
+    /// Where the tooling came from (the vendor's, a standard set), as bendsim says it.
+    pub tooling: Json,
+    pub feasible: bool,
+    /// The bends in the order found, by their flanges' names.
+    pub sequence: Vec<String>,
+    /// Each failing check and blocked bend, in the Item shape (`rule` the simulator's word).
+    pub items: Vec<Item>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -81,8 +106,8 @@ impl Report {
             + self
                 .sheets
                 .iter()
-                .flat_map(|s| &s.items)
-                .filter(|i| i.severity == "violation")
+                .flat_map(|s| s.items.iter().chain(s.brake.iter().flat_map(|b| &b.items)))
+                .filter(|i| i.severity == "violation" || i.severity == "refused")
                 .count()
     }
 }
@@ -451,7 +476,7 @@ fn rules(sh: &SheetOut) -> Vec<(&'static str, Option<f64>)> {
 /// The DFM report of a part's source.
 pub fn report(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>) -> Report {
     let opts = Options {
-        dir,
+        dir: dir.clone(),
         root,
         anchors: true,
         ..Options::default()
@@ -479,6 +504,7 @@ pub fn report(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>) -> Report 
                 items.push(item_of(src, n, &run, Some(&places), &sh.id));
             }
         }
+        let brake = brake(src, sh, &run, dir.as_deref());
         out.sheets.push(SheetReport {
             sheet: sh.id.clone(),
             thickness: sh.sheet.gauge.thickness,
@@ -491,9 +517,127 @@ pub fn report(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>) -> Report 
                 .and_then(|s| s.operations.as_ref())
                 .map(|ops| ops.iter().map(|o| o.name()).collect()),
             items,
+            brake,
         });
     }
     out
+}
+
+/// The sheet on the press brake, its findings as Items: the press-frame point the simulator gives
+/// as `location.at` is moved to `data.at_press` (the app draws `at` on the folded part), the faces
+/// are its anchor's, the line its feature's. A sheet with no bends is not simulated.
+fn brake(src: &str, sh: &SheetOut, run: &Run, dir: Option<&std::path::Path>) -> Option<Brake> {
+    let bends = sh
+        .sheet
+        .joints
+        .iter()
+        .any(|j| matches!(j.kind, fs::JointKind::Bend { .. }));
+    if !bends {
+        return None;
+    }
+    let sim = match crate::bendsim::simulate_sheet(sh, dir, &crate::bendsim::Ask::default()) {
+        Ok(sim) => sim,
+        Err(a) => {
+            // the simulation could not be set up: one refused item with its typed error
+            let e = a.json.get("error").cloned().unwrap_or(Json::Null);
+            let kind = e
+                .get("kind")
+                .and_then(Json::str)
+                .unwrap_or("BendSimError")
+                .to_string();
+            let text = e.get("text").and_then(Json::str).unwrap_or(&a.text).to_string();
+            return Some(Brake {
+                tooling: Json::Null,
+                feasible: false,
+                sequence: vec![],
+                items: vec![Item {
+                    rule: kind,
+                    severity: "refused".into(),
+                    text,
+                    feature: sh.id.clone(),
+                    span: Span::default(),
+                    line: 0,
+                    measured: None,
+                    limit: None,
+                    sense: None,
+                    unit: "mm",
+                    data: e,
+                    fixes: vec![],
+                    faces: vec![],
+                    anchor: None,
+                    flat: vec![],
+                    at: None,
+                }],
+            });
+        }
+    };
+    let feat_span = |id: &str| run.feats.iter().find(|f| f.id == id).map(|f| f.span);
+    let items = crate::bendsim::items(sh, &sim)
+        .into_iter()
+        .map(|j| {
+            let st = |k: &str| j.get(k).and_then(Json::str).unwrap_or("").to_string();
+            let num = |k: &str| j.get(k).and_then(Json::num);
+            let loc = j.get("location").cloned().unwrap_or(Json::Null);
+            let anchor = loc.get("anchor").and_then(Json::str).map(String::from);
+            let mut data = j.get("data").cloned().unwrap_or(Json::Obj(vec![]));
+            if let (Json::Obj(f), Some(p)) = (&mut data, loc.get("at").filter(|x| **x != Json::Null)) {
+                f.push(("at_press".into(), p.clone()));
+            }
+            let feature = st("feature");
+            let span = feat_span(&feature).unwrap_or_default();
+            let faces = anchor
+                .as_ref()
+                .and_then(|a| run.anchors.as_ref().and_then(|x| x.role_faces.get(a)))
+                .cloned()
+                .unwrap_or_default();
+            Item {
+                rule: st("rule"),
+                severity: st("severity"),
+                text: st("text"),
+                line: line_of(src, span),
+                span,
+                feature,
+                measured: num("measured"),
+                limit: num("limit"),
+                sense: match j.get("sense").and_then(Json::str) {
+                    Some("min") => Some("min"),
+                    Some("max") => Some("max"),
+                    _ => None,
+                },
+                unit: match j.get("unit").and_then(Json::str) {
+                    Some("deg") => "deg",
+                    Some("kN") => "kN",
+                    Some("") | None => "",
+                    _ => "mm",
+                },
+                data,
+                fixes: match j.get("fixes") {
+                    Some(Json::Arr(xs)) => xs.clone(),
+                    _ => vec![],
+                },
+                anchor: (!faces.is_empty()).then_some(anchor).flatten(),
+                faces,
+                flat: vec![],
+                at: None,
+            }
+        })
+        .collect();
+    Some(Brake {
+        tooling: sim
+            .answer
+            .json
+            .get("tooling_source")
+            .cloned()
+            .unwrap_or(Json::Null),
+        feasible: sim.plan.feasible,
+        sequence: sim
+            .plan
+            .sequence
+            .iter()
+            .filter_map(|&k| sim.names.get(k).cloned())
+            .collect(),
+        items,
+    })
 }
 
 fn violation_feature(v: &Violation) -> fs::FeatureId {
@@ -628,6 +772,23 @@ impl Report {
                         "violations",
                         Json::Arr(s.items.iter().map(|i| i.json(&self.handles)).collect()),
                     ),
+                    (
+                        "brake",
+                        s.brake.as_ref().map_or(Json::Null, |b| {
+                            Json::obj(vec![
+                                ("tooling", b.tooling.clone()),
+                                ("feasible", b.feasible.into()),
+                                (
+                                    "sequence",
+                                    Json::Arr(b.sequence.iter().map(|x| x.as_str().into()).collect()),
+                                ),
+                                (
+                                    "findings",
+                                    Json::Arr(b.items.iter().map(|i| i.json(&self.handles)).collect()),
+                                ),
+                            ])
+                        }),
+                    ),
                 ])
             })
             .collect();
@@ -701,6 +862,23 @@ impl Report {
                     "  {:<9} line {:<4} {:<20} {}: {}{nums}{at}\n",
                     i.severity, i.line, i.rule, i.feature, i.text
                 ));
+            }
+            if let Some(b) = &s.brake {
+                t.push_str(&format!(
+                    "  press brake: {}{}\n",
+                    if b.feasible {
+                        "bends in order "
+                    } else {
+                        "no order bends it"
+                    },
+                    b.sequence.join(", ")
+                ));
+                for i in &b.items {
+                    t.push_str(&format!(
+                        "  {:<9} line {:<4} {:<20} {}: {}\n",
+                        i.severity, i.line, i.rule, i.feature, i.text
+                    ));
+                }
             }
         }
         t.push_str(&format!("{} to fix\n", self.count()));

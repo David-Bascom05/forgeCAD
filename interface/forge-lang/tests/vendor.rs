@@ -252,7 +252,12 @@ fn dfm_reports_refusals_and_parts_without_a_shop() {
     );
     // the JSON of a clean part: the vendor's provenance and the rules it was held to
     let r = dfm(&part("sendcutsend", "5052", "0.063in", 40.0));
-    assert_eq!(r.count(), 0, "{}", r.text());
+    // clean by the vendor's rules (the press brake's findings are its own: brake below)
+    assert!(
+        r.refused.is_empty() && r.sheets[0].items.is_empty(),
+        "{}",
+        r.text()
+    );
     let mut s = String::new();
     r.json().write(&mut s);
     assert!(s.contains("\"verify\":\"Verify with the vendor before ordering.\""));
@@ -285,4 +290,60 @@ fn a_partial_vendor_makes_up_no_bend_data() {
     // and its own rules hold: OSH Cut's minimum hole for 0.063 in 5052 is 0.01575 in
     let d = dfm(&own.replace("param hs.r = 2", "param hs.r = 0.19"));
     assert_eq!(rule(&d, "HoleTooSmall").len(), 1, "{}", d.text());
+}
+
+/// A 6 mm plate with a flange `h` tall, on the standard tooling (no vendor).
+fn thick(h: f64) -> String {
+    format!(
+        r#"shared t = 6
+shared r = 6
+shared k = ratio(0.44)
+param plan.L = 80
+param plan.W = 50
+param up.h = {h}
+sketch plan(on: xy) {{
+  outline = rect(corner: (0, 0), size: (L, W))
+}}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+up = flange(base.edge(plan.outline[1]), height: h)
+"#
+    )
+}
+
+#[test]
+fn dfm_carries_the_press_brakes_findings() {
+    // 20 tall: the standard set bends it
+    let r = dfm(&thick(20.0));
+    let b = r.sheets[0].brake.as_ref().expect("bends are simulated");
+    assert!(b.feasible, "{}", r.text());
+    assert_eq!(b.sequence, ["up"]);
+    assert!(
+        b.items
+            .iter()
+            .all(|i| i.severity != "violation" && i.severity != "refused"),
+        "{}",
+        r.text()
+    );
+    // 14 tall: no die holds it; the simulator's own rule word, on the flange, counted to fix
+    let r = dfm(&thick(14.0));
+    let b = r.sheets[0].brake.as_ref().unwrap();
+    assert!(!b.feasible);
+    let short: Vec<_> = b.items.iter().filter(|i| i.rule == "min_flange").collect();
+    assert!(!short.is_empty(), "{}", r.text());
+    assert_eq!((short[0].feature.as_str(), short[0].line), ("up", 11));
+    assert!(short[0].limit.unwrap() > short[0].measured.unwrap());
+    // the press-frame point kept as data, never drawn on the folded part
+    assert!(short.iter().all(|i| i.at.is_none()));
+    assert!(r.count() >= 1);
+    let mut s = String::new();
+    r.json().write(&mut s);
+    assert!(
+        s.contains("\"brake\":{") && s.contains("\"rule\":\"min_flange\""),
+        "{s}"
+    );
+    // a flat plate is not put on the brake
+    let flat = dfm(&thick(20.0)
+        .replace("up = flange(base.edge(plan.outline[1]), height: h)\n", "")
+        .replace("param up.h = 20\n", ""));
+    assert!(flat.sheets[0].brake.is_none());
 }
