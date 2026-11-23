@@ -155,6 +155,11 @@ fn main() {
         println!("  {k}: {v}");
     }
     println!("march {t_march:.2} s, certificate {t_cert:.2} s");
+    let c = forge_geom::certify::counts();
+    println!(
+        "certificates proven in the charts alone {}, by 3D steps {}",
+        c[4], c[5]
+    );
 }
 
 /// One line per surface, one per chain, then a blank line: for tools/occt/certify_check.py.

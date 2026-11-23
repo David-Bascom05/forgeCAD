@@ -482,3 +482,96 @@ Cold build, feature on (off in brackets): guard 166M (57M), quadarm 87M (50M), m
 Feature on: the scoreboard is 0 worse and every test passes. What remains on guard is about 109M
 of certificate against the march's 39M, spread over the walk's boxes and the Krawczyk steps, with
 no single hot spot left.
+
+## 11. The counted match in parameter space
+
+The master's ruling: nothing ships slower; certify once where a domain can be stated, and count the
+runtime cases. This is the plan for the structural change. The Bernstein bivariate root count
+waits for curved decide-once's torus phase; this step is what the Bernstein charts give at once.
+
+On a host chart (t, s), with F the other form's polynomial:
+1. **Nodes in the chart.** Each chain node maps to (t, s) by closed forms: tan(u/2) = l_y/(ρ + l_x),
+   and the half turn's -l_y/(ρ - l_x) where l_x < 0. The same for the tube angle of a sphere or
+   torus. Only floats are needed: the node is located, not certified.
+2. **A step as a graph box.** For consecutive nodes i, i + 1 in one chart, take
+   T = [t_i, t_{i+1}] (with σ margin) and S, the hull of their s values grown. The box is a
+   **graph box** when ∂F/∂s's Bernstein coefficients on it are one-signed (F monotone in s, at most
+   one zero per t), and F on the two s-sides is one-signed with opposite signs (exactly one zero per
+   t). The zeros in it are then a single graph s = φ(t) over T: one connected arc. The nodes lie on
+   it when the root at t_i (and at t_{i+1}) lies in S, with the node's s inside the root's
+   enclosure. The same holds with t and s swapped.
+3. **Joins.** Consecutive steps share node i + 1. The root of F(t_{i+1}, ·) is unique on the hull
+   of the two boxes' S (F monotone there), so the two graphs meet in one point.
+4. **Claims are parameter boxes.** The completeness walk, already in the same chart, checks
+   `box ⊂ graph box` directly: no images, no pencils.
+5. **Fallback.** A segment whose graph box fails either way (a turning point in both t and s, a
+   touch, or a node near a chart's edge) keeps the 3D Krawczyk step and its 3D claim. The certificate
+   counts how many steps fell back.
+
+Each graph box is sound by the Bernstein convex hull property, with the intermediate value theorem
+for existence. Its Lean statement: a polynomial whose Bernstein coefficients on a box are
+one-signed has no zero there; monotone with opposite ends means exactly one zero.
+
+### 11.1 Built (behind the feature, tried before the 3D certificate)
+
+`certify_param` does all five steps above in the host's charts, with no 3D step, wherever no
+singular site is near. Otherwise it returns None and the 3D certificate decides; it never gives a
+wrong yes. Its pieces:
+- **Chains of graph boxes** (`param_chain`). Nodes are located in the charts. Spans adapt, with two
+  box shapes for turning points, and up to 64 midpoints are added where a span fails.
+- **Trimming in the graph variable.** Each box is trimmed, by min(1/8 of its own range, 0.4 × its
+  neighbour's), so consecutive boxes overlap only near their shared node. Trimming in that variable
+  keeps the graph property.
+- **Joins.** A join is either the meet of two boxes, or boxes about the node shaped by the
+  gradient. Failing those, a's or b's box is moved to the other's chart, or b is cut to the node's
+  side.
+- **Reversal check.** a's first node lies clearly outside b, and b's last node clearly outside a.
+- **No-twice check.** For non-neighbour boxes: first the 3D images must be disjoint. Otherwise h is
+  moved into g's chart, split around a flip's 0 when needed, and the overlap must be zero-free in
+  Bernstein form.
+- **Completeness.** Per chart, every box with a zero must lie inside a parameter claim.
+
+**Halving** runs the lo and the hi chains in plain floats and widens each output once by
+E = len (2^-52 M + 2^-1074), with a 2^-40 margin, where M is the inputs' largest magnitude. Every
+intermediate of de Casteljau's chain is an average, so errors do not grow (proof in `halve`'s
+comment). For M not finite or ≥ 1e300 the outward chain decides instead. The test
+`halving_encloses_the_exact_halves` checks it against exact i128 de Casteljau on inputs near 2^60,
+whose float sums round; it fails with E = 0.
+
+**The split direction** in the completeness walk matters most. A box that meets a claim is split
+along the side that is larger relative to that claim's side. Otherwise it is split by the region's
+rates, as before. The rates alone cut t to 2^-10 while v stayed 2^-3, wider than the claims' s,
+so boxes never fitted and the walk ran about 375 halvings per certificate on guard. Testing
+containment in a union of claims instead was a wash and is not kept.
+
+### 11.2 Measured
+
+Sweep (300 pairs, seed 1): 457 certificates in the charts alone and 70 by 3D steps. Every pair
+certifies; the certificate takes 0.57 s (it was 0.84 s before the split rule). Native = wasm on 150
+pairs (seed 3, `BITS=1`).
+
+Feature on: scoreboard 0 worse (978/985, 3 better). Release tests pass: forge-geom 141,
+forge-bool 42, forge-model 204, forge-lang 814.
+
+Cold build (`benchparts resolve`, callgrind Ir, one process each way, same build flags):
+
+| part     | off  | on, fa705fbd | on, now | now / off |
+|----------|------|--------------|---------|-----------|
+| guard    | 52M  | 166M         | 79M     | 1.50×     |
+| quadarm  | 46M  | 87M          | 60M     | 1.29×     |
+| manifold | 221M | 305M         | 279M    | 1.27×     |
+| frame    | 387M | 764M         | 567M    | 1.47×     |
+
+The fa705fbd column is from §10, measured then. The off column is measured now, the same way as
+"now".
+
+Two causes remain, and both are structural.
+1. **The march runs first.** On guard it is 35M of the 79M, and the certificate is 34M; of that,
+   the power-to-Bernstein conversion is 18M and halving 4M. A certificate that comes after the
+   march costs more than feature-off by construction. Reaching ≤ off needs the chain built from
+   the certified walk itself, with graph boxes in place of march nodes, so that the march is not
+   run where the param path applies.
+2. **Pipe joints.** On frame, 3 certificates fall back to the 3D steps at about 43M each, out of
+   130M of 3D work. They are equal-radius cylinders with crossing axes, the mitre: the curve
+   crosses itself at the singular points, so the param path declines and the 3D path, with its
+   Lagrange sites, is needed. Handling a crossing site in the charts is the "pipes" step.

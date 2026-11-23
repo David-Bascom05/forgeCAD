@@ -1241,11 +1241,22 @@ impl Bp {
 /// v = v0 + (v1 - v0) b, each direction shifted, scaled and turned into Bernstein form.
 fn bernstein(p: &Bp, t: I, v: I) -> Coeffs {
     let (n, m) = (p.dt, p.dv);
-    // univariate power-to-Bernstein on [lo, hi] of coefficients a (ascending)
-    let uni = |a: &[I], lo: f64, hi: f64| -> Vec<I> {
-        let d = a.len() - 1;
+    debug_assert!(n <= 8 && m <= 8);
+    // C(k, i) / C(d, i) for d = n and d = m, each enclosed once
+    let binom =
+        |n: usize, k: usize| -> f64 { (0..k).fold(1.0, |acc, i| acc * (n - i) as f64 / (i + 1) as f64) };
+    let ratios = |d: usize| {
+        let mut r = [[I::point(0.0); 9]; 9];
+        for (k, row) in r.iter_mut().enumerate().take(d + 1) {
+            for (i, x) in row.iter_mut().enumerate().take(k + 1) {
+                *x = I::point(binom(k, i)).div(&I::point(binom(d, i)));
+            }
+        }
+        r
+    };
+    // univariate power-to-Bernstein on [lo, hi] of coefficients c[..=d] (ascending), in place
+    let uni = |c: &mut [I; 9], d: usize, lo: f64, hi: f64, r: &[[I; 9]; 9]| {
         // shift: p(lo + h x), Horner-like Taylor shift
-        let mut c = a.to_vec();
         for k in 0..d {
             for i in (k..d).rev() {
                 c[i] = c[i] + c[i + 1] * lo;
@@ -1253,37 +1264,37 @@ fn bernstein(p: &Bp, t: I, v: I) -> Coeffs {
         }
         let h = I::point(hi) - I::point(lo);
         let mut hp = I::point(1.0);
-        for ci in c.iter_mut() {
+        for ci in c.iter_mut().take(d + 1) {
             *ci = *ci * hp;
             hp = hp * h;
         }
         // power to Bernstein: b_k = sum_{i <= k} C(k, i) / C(d, i) a_i
-        let binom =
-            |n: usize, k: usize| -> f64 { (0..k).fold(1.0, |acc, i| acc * (n - i) as f64 / (i + 1) as f64) };
-        (0..=d)
-            .map(|k| {
-                (0..=k).fold(I::point(0.0), |acc, i| {
-                    acc + c[i] * I::point(binom(k, i)).div(&I::point(binom(d, i)))
-                })
-            })
-            .collect()
+        let a = *c;
+        for k in 0..=d {
+            c[k] = (0..=k).fold(I::point(0.0), |acc, i| acc + a[i] * r[k][i]);
+        }
     };
-    let mut rows = vec![I::point(0.0); (n + 1) * (m + 1)];
+    let (rn, rm) = (ratios(n), if m == n { ratios(n) } else { ratios(m) });
+    let mut rows = [I::point(0.0); BERN];
     // along v for each power of t
     for i in 0..=n {
-        let a: Vec<I> = (0..=m).map(|j| p.at(i, j)).collect();
-        let b = uni(&a, v.lo, v.hi);
-        for j in 0..=m {
-            rows[i * (m + 1) + j] = b[j];
+        let mut a = [I::point(0.0); 9];
+        for (j, x) in a.iter_mut().enumerate().take(m + 1) {
+            *x = p.at(i, j);
         }
+        uni(&mut a, m, v.lo, v.hi, &rm);
+        rows[i * (m + 1)..i * (m + 1) + m + 1].copy_from_slice(&a[..=m]);
     }
     // then along t for each Bernstein index of v
     let mut out = [I::point(0.0); BERN];
     for j in 0..=m {
-        let a: Vec<I> = (0..=n).map(|i| rows[i * (m + 1) + j]).collect();
-        let b = uni(&a, t.lo, t.hi);
+        let mut a = [I::point(0.0); 9];
+        for (i, x) in a.iter_mut().enumerate().take(n + 1) {
+            *x = rows[i * (m + 1) + j];
+        }
+        uni(&mut a, n, t.lo, t.hi, &rn);
         for i in 0..=n {
-            out[i * (m + 1) + j] = b[i];
+            out[i * (m + 1) + j] = a[i];
         }
     }
     out
@@ -1302,7 +1313,77 @@ fn avg(a: I, b: I) -> I {
 }
 
 /// De Casteljau at the middle, along t (`along_t`) or v: the two halves' coefficients.
+///
+/// The lo ends and the hi ends each run in plain floats, then every output is widened once. The
+/// exact chain's values are averages of the inputs, so |x| <= M (the inputs' largest magnitude).
+/// One average, (a + b) * 0.5, is off by at most 2^-53 |a + b| <= 2^-52 M from rounding the sum,
+/// plus 2^-1075 where the halving lands below the normal range. An average of two values that are
+/// each off by at most e is off by at most e plus that new error, so after `len` levels every
+/// output is within E = len (2^-52 M + 2^-1074) of the exact chain on the same ends. The exact
+/// chain on the lo ends is a convex combination of them, so it is at most the true coefficient,
+/// and lo - E (rounded down) is a lower bound. The same holds for hi. E itself is computed with
+/// a 2^-40 margin. Where M is not a modest finite number, the outward chain decides instead.
 fn halve(c: &Coeffs, n: usize, m: usize, along_t: bool) -> (Coeffs, Coeffs) {
+    debug_assert!(n <= 8 && m <= 8);
+    let count = (n + 1) * (m + 1);
+    let big = c[..count]
+        .iter()
+        .fold(0.0f64, |a, x| a.max(x.lo.abs()).max(x.hi.abs()));
+    let finite = c[..count].iter().all(|x| x.lo.is_finite() && x.hi.is_finite());
+    if !finite || big >= 1e300 {
+        return halve_outward(c, n, m, along_t);
+    }
+    let (len, lines) = if along_t { (n, m + 1) } else { (m, n + 1) };
+    let idx = |k: usize, line: usize| {
+        if along_t {
+            k * (m + 1) + line
+        } else {
+            line * (m + 1) + k
+        }
+    };
+    let e = len as f64 * (big * f64::EPSILON + f64::from_bits(1)) * (1.0 + 1.0 / (1u64 << 40) as f64);
+    let (mut l, mut r) = (*c, *c);
+    let (mut lo, mut hi) = ([0.0f64; 9], [0.0f64; 9]);
+    let (mut llo, mut lhi, mut rlo, mut rhi) = ([0.0f64; 9], [0.0f64; 9], [0.0f64; 9], [0.0f64; 9]);
+    for line in 0..lines {
+        for k in 0..=len {
+            let x = c[idx(k, line)];
+            lo[k] = x.lo;
+            hi[k] = x.hi;
+        }
+        llo[0] = lo[0];
+        lhi[0] = hi[0];
+        rlo[len] = lo[len];
+        rhi[len] = hi[len];
+        for step in 1..=len {
+            for k in 0..=len - step {
+                lo[k] = (lo[k] + lo[k + 1]) * 0.5;
+                hi[k] = (hi[k] + hi[k + 1]) * 0.5;
+            }
+            llo[step] = lo[0];
+            lhi[step] = hi[0];
+            rlo[len - step] = lo[len - step];
+            rhi[len - step] = hi[len - step];
+        }
+        // the ends of the chain (k = 0 on the left, len on the right) are inputs, exact
+        l[idx(0, line)] = c[idx(0, line)];
+        r[idx(len, line)] = c[idx(len, line)];
+        for k in 1..=len {
+            l[idx(k, line)] = I {
+                lo: (llo[k] - e).next_down(),
+                hi: (lhi[k] + e).next_up(),
+            };
+            r[idx(len - k, line)] = I {
+                lo: (rlo[len - k] - e).next_down(),
+                hi: (rhi[len - k] + e).next_up(),
+            };
+        }
+    }
+    (l, r)
+}
+
+/// `halve` with every average rounded outward: for inputs too large for its one error bound.
+fn halve_outward(c: &Coeffs, n: usize, m: usize, along_t: bool) -> (Coeffs, Coeffs) {
     let (mut l, mut r) = (*c, *c);
     let (len, lines) = if along_t { (n, m + 1) } else { (m, n + 1) };
     let idx = |k: usize, line: usize| {
@@ -1313,7 +1394,6 @@ fn halve(c: &Coeffs, n: usize, m: usize, along_t: bool) -> (Coeffs, Coeffs) {
         }
     };
     let mut b = [I::point(0.0); 9];
-    debug_assert!(n <= 8 && m <= 8);
     for line in 0..lines {
         for (k, bk) in b.iter_mut().enumerate().take(len + 1) {
             *bk = c[idx(k, line)];
@@ -1643,8 +1723,657 @@ fn walk_bernstein(
     Ok(())
 }
 
+/// A step proven in a chart: the zeros of the chart's polynomial in [t] x [s] are one graph (over t
+/// or over s), so one connected arc of one branch, holding the step's nodes.
+#[derive(Clone, Copy, Debug)]
+struct GBox {
+    chart: usize,
+    t: I,
+    s: I,
+    /// A graph over t (else over s).
+    over_t: bool,
+}
+
+/// Whether the zeros of the polynomial in the box form one graph: over t when F is monotone in s
+/// (dF/ds's Bernstein coefficients one-signed) with F one-signed and of opposite signs on the two
+/// s-sides (exactly one zero on every t-line, by the intermediate value theorem), or the same with t
+/// and s swapped.
+fn graph_box(f: &Bp, t: I, s: I) -> bool {
+    graph_way(f, t, s).is_some()
+}
+
+/// `graph_box`, with the variable the graph is over: Some(true) for t, Some(false) for s.
+fn graph_way(f: &Bp, t: I, s: I) -> Option<bool> {
+    let (n, m) = (f.dt, f.dv);
+    if n == 0 || m == 0 || (n + 1) * (m + 1) > BERN {
+        return None;
+    }
+    let c = bernstein(f, t, s);
+    let at = |i: usize, j: usize| c[i * (m + 1) + j];
+    let sign = |it: &mut dyn Iterator<Item = I>| -> i8 {
+        let (mut pos, mut neg) = (true, true);
+        for x in it {
+            pos &= x.lo > 0.0;
+            neg &= x.hi < 0.0;
+        }
+        if pos {
+            1
+        } else if neg {
+            -1
+        } else {
+            0
+        }
+    };
+    let over_t = {
+        let d = sign(
+            &mut (0..=n)
+                .flat_map(|i| (0..m).map(move |j| (i, j)))
+                .map(|(i, j)| at(i, j + 1) - at(i, j)),
+        );
+        let lo = sign(&mut (0..=n).map(|i| at(i, 0)));
+        let hi = sign(&mut (0..=n).map(|i| at(i, m)));
+        d != 0 && lo != 0 && hi != 0 && lo != hi
+    };
+    if over_t {
+        return Some(true);
+    }
+    let d = sign(
+        &mut (0..n)
+            .flat_map(|i| (0..=m).map(move |j| (i, j)))
+            .map(|(i, j)| at(i + 1, j) - at(i, j)),
+    );
+    let lo = sign(&mut (0..=m).map(|j| at(0, j)));
+    let hi = sign(&mut (0..=m).map(|j| at(n, j)));
+    (d != 0 && lo != 0 && hi != 0 && lo != hi).then_some(false)
+}
+
+/// -1/x over an interval clear of 0 (the half turn between two half-angle charts), rounded out:
+/// it holds the true image.
+fn flip(x: I) -> Option<I> {
+    (!x.contains_zero() && x.lo.is_finite() && x.hi.is_finite()).then(|| I::point(-1.0).div(&x))
+}
+
+/// -1/x rounded in: it lies inside the true image (-1/x rises on either side of 0, and each bound,
+/// rounded to nearest, is pushed a float inward), for claims and joins, which must not reach past
+/// the box they stand for.
+fn flip_in(x: I) -> Option<I> {
+    if x.contains_zero() || !(x.lo.is_finite() && x.hi.is_finite()) {
+        return None;
+    }
+    let r = I {
+        lo: (-1.0 / x.lo).next_up(),
+        hi: (-1.0 / x.hi).next_down(),
+    };
+    (r.lo <= r.hi).then_some(r)
+}
+
+impl Host {
+    /// A point's chart and (t, s) there (floats: the point is located, not proven).
+    fn locate(&self, p: Point3) -> Option<(usize, f64, f64)> {
+        let rel = |o: Point3| p - o;
+        // tan(a/2) of the angle with cosine c / r and sine y / r, in the chart with |t| <= 1
+        let half = |c: f64, y: f64, r: f64| -> (bool, f64) {
+            if c >= 0.0 {
+                (false, y / (r + c))
+            } else {
+                (true, -y / (r - c))
+            }
+        };
+        match self.form {
+            Form::Plane { o, z } => {
+                let x = if z.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
+                let x = (x - z * z.dot(x)).normalize()?.get();
+                let y = z.cross(x);
+                let q = rel(o);
+                Some((0, x.dot(q), y.dot(q)))
+            }
+            Form::Cylinder { o, x, y, .. } => {
+                let q = rel(o);
+                let (lx, ly) = (x.dot(q), y.dot(q));
+                let rho = (lx * lx + ly * ly).sqrt();
+                let (flip, t) = half(lx, ly, rho);
+                Some((flip as usize, t, x.cross(y).dot(q)))
+            }
+            Form::Cone { o, x, y, z, .. } => {
+                let q = rel(o);
+                let (lx, ly) = (x.dot(q), y.dot(q));
+                let rho = (lx * lx + ly * ly).sqrt();
+                let (flip, t) = half(lx, ly, rho);
+                Some((flip as usize, t, z.dot(q)))
+            }
+            Form::Sphere { o, r } | Form::Torus { o, r, .. } => {
+                let q = rel(o);
+                let (lx, ly, lz) = match self.form {
+                    Form::Torus { x, y, z, .. } => (x.dot(q), y.dot(q), z.dot(q)),
+                    _ => (q.x, q.y, q.z),
+                };
+                let big = match self.form {
+                    Form::Torus { big, .. } => big,
+                    _ => 0.0,
+                };
+                let rho = (lx * lx + ly * ly).sqrt();
+                let (fu, t) = half(lx, ly, rho);
+                let (fv, s) = half(rho - big, lz, r);
+                Some((2 * fu as usize + fv as usize, t, s))
+            }
+        }
+    }
+
+    /// Whether flipping u (t to -1/t) and v (s to -1/s) takes chart `from` to chart `to`.
+    fn flips(&self, from: usize, to: usize) -> (bool, bool) {
+        match self.form {
+            Form::Plane { .. } => (false, false),
+            Form::Cylinder { .. } | Form::Cone { .. } => (from != to, false),
+            _ => ((from ^ to) & 2 != 0, (from ^ to) & 1 != 0),
+        }
+    }
+
+    /// A chart's (t, s) point in chart `to`, if it is finite there.
+    fn move_point(&self, from: usize, to: usize, t: f64, s: f64) -> Option<(f64, f64)> {
+        let (fu, fv) = self.flips(from, to);
+        let t = if fu {
+            if t == 0.0 { return None } else { -1.0 / t }
+        } else {
+            t
+        };
+        let s = if fv {
+            if s == 0.0 { return None } else { -1.0 / s }
+        } else {
+            s
+        };
+        Some((t, s))
+    }
+
+    /// A chart box in chart `to`, if the flip keeps it a box: holding its points (`outer`), or held
+    /// by them.
+    fn move_box(&self, g: &GBox, to: usize, outer: bool) -> Option<GBox> {
+        let (fu, fv) = self.flips(g.chart, to);
+        let f = |x: I| if outer { flip(x) } else { flip_in(x) };
+        Some(GBox {
+            chart: to,
+            t: if fu { f(g.t)? } else { g.t },
+            s: if fv { f(g.s)? } else { g.s },
+            over_t: g.over_t,
+        })
+    }
+}
+
+/// A chain's steps as graph boxes in the host's charts, each over as many of its nodes as one box
+/// holds as a graph, consecutive boxes joined by a graph box in their meet. None if any step or
+/// join fails (the chain then takes the 3D certificate).
+fn param_chain(host: &Host, charts: &[Chart], c: &IntCurve, sa: &Surface, sb: &Surface) -> Option<Vec<GBox>> {
+    // the certificate's nodes: the chain's, with refined midpoints put in where one step fails
+    let mut pts = c.pts.clone();
+    let mut nodes: Vec<(usize, f64, f64)> = pts.iter().map(|&p| host.locate(p)).collect::<Option<_>>()?;
+    let angular = !matches!(host.form, Form::Plane { .. });
+    let mut segs = if c.closed { pts.len() } else { pts.len() - 1 };
+    let mut added = 0;
+    let mut out: Vec<GBox> = Vec::new();
+    let mut ends: Vec<usize> = Vec::new();
+    let mut firsts: Vec<usize> = Vec::new();
+    let mut i = 0;
+    let mut span = LONG;
+    while i < segs {
+        let n = pts.len();
+        let mut got = None;
+        let mut k = span.min(segs - i);
+        while k >= 1 {
+            let chart = nodes[i].0;
+            let pts: Option<Vec<(f64, f64)>> = (0..=k)
+                .map(|d| {
+                    let (ch, t, s) = nodes[(i + d) % n];
+                    host.move_point(ch, chart, t, s)
+                })
+                .collect();
+            if let Some(pts) = pts
+                && pts
+                    .iter()
+                    .all(|(t, s)| (!angular || t.abs() <= 4.0) && t.is_finite() && s.is_finite())
+            {
+                let tl = pts.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+                let th = pts.iter().map(|p| p.0).fold(f64::NEG_INFINITY, f64::max);
+                let sl = pts.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
+                let sh = pts.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max);
+                let (wt, ws) = (th - tl, sh - sl);
+                // a graph over t wants the box narrow in t and generous in s; over s, the reverse
+                let shapes = [
+                    (0.125 * wt + 1e-12, 0.5 * (wt + ws) + 1e-9),
+                    (0.5 * (wt + ws) + 1e-9, 0.125 * ws + 1e-12),
+                ];
+                let mut g = GBox {
+                    chart,
+                    t: I::new(tl, th),
+                    s: I::new(sl, sh),
+                    over_t: true,
+                };
+                let found = shapes.iter().any(|&(gt, gs)| {
+                    let (t, s) = (I::new(tl - gt, th + gt), I::new(sl - gs, sh + gs));
+                    // the chain runs along the arc once: its nodes strictly monotone in the graph's variable
+                    let monotone = |over_t: bool| {
+                        let v: Vec<f64> = pts.iter().map(|p| if over_t { p.0 } else { p.1 }).collect();
+                        v.windows(2).all(|w| w[1] > w[0]) || v.windows(2).all(|w| w[1] < w[0])
+                    };
+                    match graph_way(&charts[chart].f, t, s) {
+                        Some(over_t) if monotone(over_t) => {
+                            g = GBox { chart, t, s, over_t };
+                            true
+                        }
+                        _ => false,
+                    }
+                });
+                if found {
+                    got = Some((g, k));
+                    break;
+                }
+            }
+            k /= 2;
+        }
+        if let Some((_, k)) = got {
+            firsts.push(i);
+            let _ = k;
+        }
+        let Some((g, k)) = got else {
+            // one step that no box holds: a refined midpoint node, then try again (as the 3D steps do)
+            if added >= 64 {
+                return None;
+            }
+            let j = (i + 1) % n;
+            let m = crate::intcurve::refine(sa, sb, pts[i].lerp(pts[j], 0.5))?;
+            let h = pts[i].distance(pts[j]);
+            if m.distance(pts[i]) >= h || m.distance(pts[j]) >= h || h <= LEAST {
+                return None;
+            }
+            pts.insert(i + 1, m);
+            nodes.insert(i + 1, host.locate(m)?);
+            segs += 1;
+            added += 1;
+            span = 1;
+            continue;
+        };
+        out.push(g);
+        i += k;
+        ends.push(i);
+        span = (2 * k).min(LONG);
+    }
+    // trimmed in each box's graph variable to its nodes and a margin: a box narrowed in the variable
+    // it is a graph over is still one, so its claim stands, and the arcs of steps two apart no longer
+    // reach each other
+    let n = pts.len();
+    let mb = out.len();
+    // the range of nodes f0..=f1 in a box's graph variable
+    let range = |g: &GBox, f0: usize, f1: usize| -> Option<(f64, f64)> {
+        let mut lo = f64::INFINITY;
+        let mut hi = f64::NEG_INFINITY;
+        for j in f0..=f1 {
+            let (ch, t, s) = nodes[j % n];
+            let (t, s) = host.move_point(ch, g.chart, t, s)?;
+            let v = if g.over_t { t } else { s };
+            lo = lo.min(v);
+            hi = hi.max(v);
+        }
+        (lo <= hi).then_some((lo, hi))
+    };
+    let mut trimmed = out.clone();
+    for (b, g) in trimmed.iter_mut().enumerate() {
+        let (lo, hi) = range(&out[b], firsts[b], ends[b])?;
+        // past each end by an eighth of the box, and by less than half its neighbour there (in this
+        // box's variable), so that only neighbours' claims meet
+        let next = |k: usize| -> f64 { range(&out[b], firsts[k], ends[k]).map_or(0.0, |(a, b)| b - a) };
+        let mut margin = 0.125 * (hi - lo);
+        if b + 1 < mb || c.closed {
+            margin = margin.min(0.4 * next((b + 1) % mb));
+        }
+        if b > 0 || c.closed {
+            margin = margin.min(0.4 * next((b + mb - 1) % mb));
+        }
+        let x = I::new(lo - margin - 1e-12, hi + margin + 1e-12);
+        if g.over_t {
+            g.t = meet(g.t, x);
+        } else {
+            g.s = meet(g.s, x);
+        }
+    }
+    let out = trimmed;
+    // joins: a graph box inside the meet of consecutive boxes, about their shared node: its arc is
+    // a connected set of zeros in both, so their arcs are one
+    let m = out.len();
+    let n = pts.len();
+    let joins = if c.closed { m } else { m.saturating_sub(1) };
+    for (i, &end) in ends.iter().enumerate().take(joins) {
+        let (a, b) = (out[i], out[(i + 1) % m]);
+        // in a's chart, or b's where b's box is not a box in a's
+        // (or b cut to the node's side of its flip's 0, which is all a join needs: the join box
+        // lies in the cut, so in b)
+        let node_b = nodes[end % n];
+        let cut = |b: &GBox| -> Option<GBox> {
+            let (t, s) = host.move_point(node_b.0, b.chart, node_b.1, node_b.2)?;
+            let (fu, fv) = host.flips(b.chart, a.chart);
+            let side = |x: I, at: f64| -> I {
+                if at > 0.0 {
+                    meet(x, I::new(0.5 * at, f64::INFINITY))
+                } else {
+                    meet(x, I::new(f64::NEG_INFINITY, 0.5 * at))
+                }
+            };
+            Some(GBox {
+                t: if fu && b.t.contains_zero() {
+                    side(b.t, t)
+                } else {
+                    b.t
+                },
+                s: if fv && b.s.contains_zero() {
+                    side(b.s, s)
+                } else {
+                    b.s
+                },
+                ..*b
+            })
+        };
+        let (a, b) = match host.move_box(&b, a.chart, false) {
+            Some(b) => (a, b),
+            None => match host.move_box(&a, b.chart, false) {
+                Some(a) => (a, b),
+                None => match cut(&b).and_then(|b| host.move_box(&b, a.chart, false)) {
+                    Some(b) => (a, b),
+                    None => {
+                        return None;
+                    }
+                },
+            },
+        };
+        let q = GBox {
+            chart: a.chart,
+            t: meet(a.t, b.t),
+            s: meet(a.s, b.s),
+            over_t: a.over_t,
+        };
+        // (not a sliver: the arc, which crosses it, then has points inside both)
+        let thin = |x: I| x.width() <= 1e-12 * (1.0 + mag(x));
+        if q.t.is_empty() || q.s.is_empty() || thin(q.t) || thin(q.s) {
+            return None;
+        }
+        let (ch, t, s) = nodes[end % n];
+        let (t, s) = host.move_point(ch, a.chart, t, s)?;
+        // boxes about the node shaped by the arc's way there (across F's gradient): narrow along the
+        // variable the arc is a graph over, enough across for the arc's slope; inside the meet
+        let f = &charts[a.chart].f;
+        let (mut ft, mut fs) = (0.0, 0.0);
+        for i in 0..=f.dt {
+            for j in 0..=f.dv {
+                let c = f.at(i, j).mid();
+                if i > 0 {
+                    ft += c * i as f64 * pow(t, i - 1) * pow(s, j);
+                }
+                if j > 0 {
+                    fs += c * j as f64 * pow(t, i) * pow(s, j - 1);
+                }
+            }
+        }
+        let e0 = 0.25 * q.t.width().min(q.s.width());
+        let mut tries = vec![(q.t, q.s)];
+        for k in [1.0, 0.25, 1.0 / 16.0, 1.0 / 64.0] {
+            let e = e0 * k;
+            let (et, es) = if fs.abs() >= ft.abs() {
+                (e, 2.0 * e * (ft / fs).abs() + e)
+            } else {
+                (2.0 * e * (fs / ft).abs() + e, e)
+            };
+            tries.push((
+                meet(q.t, I::new(t - et, t + et)),
+                meet(q.s, I::new(s - es, s + es)),
+            ));
+        }
+        if !tries.iter().any(|&(bt, bs)| {
+            !bt.is_empty()
+                && !bs.is_empty()
+                && !thin(bt)
+                && !thin(bs)
+                && graph_box(&charts[a.chart].f, bt, bs)
+        }) {
+            return None;
+        }
+        // no turning back at the node: a's first node clearly outside b, and b's last outside a (b's
+        // arc, connected and holding both its ends, would otherwise run back along a's)
+        let clear_out = |g: &GBox, node: (usize, f64, f64)| -> Option<bool> {
+            // (a node at a flip's 0 is at infinity in the other chart: outside every box there)
+            let Some((t, s)) = host.move_point(node.0, g.chart, node.1, node.2) else {
+                return Some(true);
+            };
+            let e = |x: I| 1e-9 * (1.0 + mag(x));
+            Some(t < g.t.lo - e(g.t) || t > g.t.hi + e(g.t) || s < g.s.lo - e(g.s) || s > g.s.hi + e(g.s))
+        };
+        let (a0, b1) = (out[i], out[(i + 1) % m]);
+        let first_a = nodes[firsts[i] % n];
+        let last_b = nodes[ends[(i + 1) % m] % n];
+        if clear_out(&b1, first_a) != Some(true) || clear_out(&a0, last_b) != Some(true) {
+            return None;
+        }
+    }
+    Some(out)
+}
+
+/// Whether the polynomial has no zero in the box: Bernstein coefficients one-signed, halving to
+/// `depth` levels.
+fn zero_free(f: &Bp, t: I, s: I, depth: u32, budget: &mut usize) -> bool {
+    let (n, m) = (f.dt, f.dv);
+    let mut stack = vec![(t, s, bernstein(f, t, s), 0u32)];
+    while let Some((t, s, c, d)) = stack.pop() {
+        if *budget == 0 {
+            return false;
+        }
+        *budget -= 1;
+        if one_sign(&c[..(n + 1) * (m + 1)]) {
+            continue;
+        }
+        if d >= depth {
+            return false;
+        }
+        let along_t = t.width() >= s.width();
+        let (l, r) = halve(&c, n, m, along_t);
+        if along_t {
+            let (a, b) = t.split();
+            stack.push((a, s, l, d + 1));
+            stack.push((b, s, r, d + 1));
+        } else {
+            let (a, b) = s.split();
+            stack.push((t, a, l, d + 1));
+            stack.push((t, b, r, d + 1));
+        }
+    }
+    true
+}
+
+/// x^n by n multiplications (IEEE ops only, the same bits everywhere; no powi).
+fn pow(x: f64, n: usize) -> f64 {
+    let mut p = 1.0;
+    for _ in 0..n {
+        p *= x;
+    }
+    p
+}
+
+/// The certificate in the host's charts, when every chain's steps are graph boxes and no singular
+/// site is near: steps, joins, no-twice and completeness all in (t, s), with no 3D step at all.
+/// None where it does not apply (the 3D certificate then decides); never a wrong Some.
+fn certify_param(a: &Surface, b: &Surface, region: Box3, curves: &[IntCurve]) -> Option<()> {
+    let (fa, fb) = (Form::of(a)?, Form::of(b)?);
+    let cert = Cert {
+        pair: Pair { a: fa, b: fb },
+        sa: a,
+        sb: b,
+        sites: Vec::new(),
+        site: SITES[0],
+        region: of_box(&region.grow(tol::LINEAR)),
+    };
+    let Ok(sites) = cert.find_sites(curves, &region) else {
+        return None;
+    };
+    if !sites.is_empty() {
+        return None;
+    }
+    let (host, other) = host_of(fa, fb)?;
+    let reg = of_box(&region);
+    let charts = host.charts(&other, &reg)?;
+    let mut boxes: Vec<(usize, usize, usize, GBox)> = Vec::new(); // (chain, index, chain's count, box)
+    for (ci, c) in curves.iter().enumerate() {
+        if c.pts.len() < 2 {
+            return None;
+        }
+        let gs = param_chain(&host, &charts, c, a, b)?;
+        let k = gs.len();
+        if c.closed && k < 3 {
+            return None;
+        }
+        for (i, g) in gs.into_iter().enumerate() {
+            boxes.push((ci, i, k, g));
+        }
+    }
+    let mut budget = BUDGET;
+    // no zero twice: boxes not neighbours in one chain meet in no zero
+    for x in 0..boxes.len() {
+        for y in x + 1..boxes.len() {
+            let ((ci, i, k, g), (cj, j, _, h)) = (boxes[x], boxes[y]);
+            if ci == cj && (i.abs_diff(j) <= 1 || (curves[ci].closed && i.abs_diff(j) == k - 1)) {
+                continue;
+            }
+            // boxes whose points lie apart in space share no zero
+            if meets(
+                &host.chart_box(&charts[g.chart], g.t, g.s),
+                &host.chart_box(&charts[h.chart], h.t, h.s),
+            )
+            .is_none()
+            {
+                continue;
+            }
+            // h in g's chart: whole, or in pieces clear of its flip's 0 (the points near that 0 lie
+            // past |x| = 1 / delta in g's chart, beyond g)
+            let pieces: Vec<GBox> = match host.move_box(&h, g.chart, true) {
+                Some(h) => vec![h],
+                None => {
+                    let (fu, fv) = host.flips(h.chart, g.chart);
+                    let split = |x: I, flipped: bool, bound: f64| -> Vec<I> {
+                        if !flipped || !x.contains_zero() {
+                            return vec![x];
+                        }
+                        let d = 0.5 / (bound + 1.0);
+                        [I::new(x.lo, -d), I::new(d, x.hi)]
+                            .into_iter()
+                            .filter(|p| p.lo <= p.hi)
+                            .collect()
+                    };
+                    let mut out = Vec::new();
+                    for t in split(h.t, fu, mag(g.t)) {
+                        for s in split(h.s, fv, mag(g.s)) {
+                            match host.move_box(&GBox { t, s, ..h }, g.chart, true) {
+                                Some(p) => out.push(p),
+                                None => {
+                                    return None;
+                                }
+                            }
+                        }
+                    }
+                    out
+                }
+            };
+            for h in pieces {
+                let (t, s) = (meet(g.t, h.t), meet(g.s, h.s));
+                if t.is_empty() || s.is_empty() {
+                    continue;
+                }
+                if !zero_free(&charts[g.chart].f, t, s, 30, &mut budget) {
+                    return None;
+                }
+            }
+        }
+    }
+    // completeness: every zero of every chart in the region in some box
+    let mut claims: Vec<Vec<GBox>> = vec![Vec::new(); charts.len()];
+    for &(_, _, _, g) in &boxes {
+        for (to, list) in claims.iter_mut().enumerate() {
+            if let Some(h) = host.move_box(&g, to, false) {
+                list.push(h);
+            }
+        }
+    }
+    for (k, ch) in charts.iter().enumerate() {
+        let (n, m) = (ch.f.dt, ch.f.dv);
+        if (n + 1) * (m + 1) > BERN {
+            return None;
+        }
+        let first = bernstein(&ch.f, ch.t, ch.v);
+        let mut stack = vec![(ch.t, ch.v, first)];
+        while let Some((t, v, c)) = stack.pop() {
+            if budget == 0 {
+                return None;
+            }
+            budget -= 1;
+            if one_sign(&c[..(n + 1) * (m + 1)]) {
+                continue;
+            }
+            let inside = |g: &GBox| t.lo >= g.t.lo && t.hi <= g.t.hi && v.lo >= g.s.lo && v.hi <= g.s.hi;
+            if claims[k].iter().any(inside) {
+                continue;
+            }
+            let p = host.chart_box(ch, t, v);
+            if meets(&p, &reg).is_none() || other.off_cheap(&p) {
+                continue;
+            }
+            let (rt, rv) = host.chart_rates(&reg);
+            let (lt, lv) = (rt * t.width(), rv * v.width());
+            if lt.max(lv) <= LEAST {
+                return None;
+            }
+            // where the box meets a claim, split the side that keeps it from fitting the claim
+            let meet = claims[k]
+                .iter()
+                .find(|g| t.lo < g.t.hi && g.t.lo < t.hi && v.lo < g.s.hi && g.s.lo < v.hi);
+            let along_t = match meet {
+                Some(g) if g.t.width() > 0.0 && g.s.width() > 0.0 => {
+                    t.width() / g.t.width() >= v.width() / g.s.width()
+                }
+                _ => lt >= lv,
+            };
+            let (cl, cr) = halve(&c, n, m, along_t);
+            if along_t {
+                let (a, b) = t.split();
+                stack.push((a, v, cl));
+                stack.push((b, v, cr));
+            } else {
+                let (a, b) = v.split();
+                stack.push((t, a, cl));
+                stack.push((t, b, cr));
+            }
+        }
+    }
+    Some(())
+}
+
+/// The cheaper host of the pair to walk, and the other form.
+fn host_of(fa: Form, fb: Form) -> Option<(Host, Form)> {
+    let rank = |f: &Form| match f {
+        Form::Plane { .. } => 0,
+        Form::Cylinder { .. } => 1,
+        Form::Cone { .. } => 2,
+        Form::Sphere { .. } => 3,
+        Form::Torus { .. } => 4,
+    };
+    let (h, o) = if rank(&fa) <= rank(&fb) {
+        (fa, fb)
+    } else {
+        (fb, fa)
+    };
+    Host::of(h)
+        .map(|host| (host, o))
+        .or_else(|| Host::of(o).map(|host| (host, h)))
+}
+
 /// Certifies the chains `curves` of the pair `a`, `b` as every branch inside `region`, each once.
 pub fn certify(a: &Surface, b: &Surface, region: Box3, curves: &[IntCurve]) -> Result<(), Refusal> {
+    if certify_param(a, b, region, curves).is_some() {
+        count(4);
+        return Ok(());
+    }
+    count(5);
     let mut last = None;
     for (k, &site) in SITES.iter().enumerate() {
         let scale = region.diagonal();
@@ -1776,7 +2505,7 @@ const TRACED_MOST: usize = 32;
 thread_local! {
     static TRACED: std::cell::RefCell<Traced> = const { std::cell::RefCell::new(Vec::new()) };
     static LAST: std::cell::Cell<Option<Refusal>> = const { std::cell::Cell::new(None) };
-    static COUNTS: std::cell::Cell<[usize; 4]> = const { std::cell::Cell::new([0; 4]) };
+    static COUNTS: std::cell::Cell<[usize; 6]> = const { std::cell::Cell::new([0; 6]) };
 }
 
 /// The last refusal on this thread, taken.
@@ -1785,8 +2514,8 @@ pub fn last_refusal() -> Option<Refusal> {
 }
 
 /// On this thread so far: [certified first time, certified after a finer trace, refused, out of
-/// scope].
-pub fn counts() -> [usize; 4] {
+/// scope, certificates proven in the charts alone, certificates that took the 3D steps].
+pub fn counts() -> [usize; 6] {
     COUNTS.with(|c| c.get())
 }
 
@@ -2089,6 +2818,56 @@ mod tests {
             assert_eq!(chains.as_ref().map(Vec::len), Some(marched.len()), "({x}, {y})");
             assert_eq!(k, Some(Ok(())), "the closed form at ({x}, {y})");
             assert!(m.is_ok(), "the march at ({x}, {y}): {m:?}");
+        }
+    }
+
+    /// halve's one-widening against exact de Casteljau: integers near 2^60, whose float sums round,
+    /// halved in i128 scaled by 2^8 (every average of them is then an integer).
+    #[test]
+    fn halving_encloses_the_exact_halves() {
+        let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for case in 0..200 {
+            let (n, m) = (1 + case % 8, 1 + (case / 8) % 8);
+            let mut c = [I::point(0.0); BERN];
+            let mut q = [0i128; BERN];
+            for k in 0..(n + 1) * (m + 1) {
+                let x = ((1u64 << 59) + (next() >> 5)) as f64;
+                c[k] = I::point(x);
+                q[k] = (x as i128) << 8;
+            }
+            for along_t in [true, false] {
+                let (l, r) = halve(&c, n, m, along_t);
+                let (len, lines) = if along_t { (n, m + 1) } else { (m, n + 1) };
+                let idx = |k: usize, line: usize| {
+                    if along_t {
+                        k * (m + 1) + line
+                    } else {
+                        line * (m + 1) + k
+                    }
+                };
+                for line in 0..lines {
+                    let mut b: Vec<i128> = (0..=len).map(|k| q[idx(k, line)]).collect();
+                    let inside =
+                        |x: I, v: i128| ((x.lo * 256.0) as i128) <= v && v <= ((x.hi * 256.0) as i128);
+                    assert!(inside(l[idx(0, line)], b[0]) && inside(r[idx(len, line)], b[len]));
+                    for step in 1..=len {
+                        for k in 0..=len - step {
+                            b[k] = (b[k] + b[k + 1]) / 2;
+                        }
+                        assert!(inside(l[idx(step, line)], b[0]), "left {case} {step}");
+                        assert!(
+                            inside(r[idx(len - step, line)], b[len - step]),
+                            "right {case} {step}"
+                        );
+                    }
+                }
+            }
         }
     }
 
