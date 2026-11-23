@@ -664,7 +664,11 @@ impl ApplicationHandler<Msg> for App {
 
     fn about_to_wait(&mut self, _: &ActiveEventLoop) {
         let Some(h) = &mut self.host else { return };
-        if h.gui.pick_busy() || h.gui.picks() || h.next.is_some_and(|n| now_ms() >= n) {
+        // a pick in flight is not drawn for: its read back wakes the loop when it is in (the
+        // renderer's pick waker), and is taken here. Drawn for, as it was, a headless page's
+        // loop spun at 60 fps, the software adapter's read back starved behind the frames,
+        // and an answer that came after the loop went idle was never taken: it drew for ever
+        if h.gui.picks() || h.next.is_some_and(|n| now_ms() >= n) {
             h.next = None;
             h.window.request_redraw();
         }

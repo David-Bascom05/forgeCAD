@@ -443,6 +443,8 @@ impl Gui {
         let camera = view_camera(center, fit, self.shell.view.parallel, size);
         renderer.resize(size);
         self.theme_view(&mut renderer);
+        let waker = self.waker.clone();
+        renderer.set_pick_wake(Arc::new(move || waker()));
         let target = Offscreen::new(&self.device, size);
         let raw = raw_view(&target);
         let tex = self
