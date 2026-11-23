@@ -16,30 +16,32 @@ pub trait Topo {
     fn edge_ends(&self, e: usize) -> (usize, usize);
 }
 
+/// Where the tests put what they find (`check`'s problem list).
+pub trait Sink {
+    fn stray(&mut self, v: usize);
+}
+
 /// `check_strays`: the vertices no edge (live or left over) starts or ends at, in order.
-#[inline]
-pub fn strays<T: Topo>(t: &T) -> Vec<usize> {
+pub fn strays<T: Topo, S: Sink>(t: &T, out: &mut S) {
     let nv = t.n_vertices();
     let mut used: Vec<bool> = vec![false; nv];
     let ne = t.n_edges();
     let mut e = 0;
     while e < ne {
         let (a, b) = t.edge_ends(e);
-        if a < used.len() {
+        if a < nv {
             used[a] = true;
         }
-        if b < used.len() {
+        if b < nv {
             used[b] = true;
         }
         e += 1;
     }
-    let mut out = Vec::new();
     let mut v = 0;
-    while v < used.len() {
+    while v < nv {
         if !used[v] {
-            out.push(v);
+            out.stray(v);
         }
         v += 1;
     }
-    out
 }

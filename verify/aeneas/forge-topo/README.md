@@ -1,7 +1,8 @@
 # verify/aeneas/forge-topo: `check`'s topology, as shipped, refines the model
 
 `kernel/forge-topo/src/topo.rs` holds the float-free tests `check` makes of a body's topology,
-written over a read-only view `Topo` that `Body` implements (`check.rs`). Charon and Aeneas
+written over a read-only view `Topo` (implemented by `check.rs`'s `View`, a body's arrays as
+slices) and an output `Sink` (implemented by `Vec<Problem>`). Charon and Aeneas
 translate that file — the real code, built `--release` — to `lean/ForgeTopo/{Types,Funs}.lean`
 (`tools/aeneas/translate.sh forge-topo`; `--check` fails if the committed translation is stale).
 The proofs in `lean/ForgeTopo/` show the translation computes exactly what
@@ -12,11 +13,12 @@ shipped code for each test moved here.
 |---|---|---|---|
 | stray vertices (`check_strays`) | `topo::strays` | `forge_topo.strays_refines` | L4 |
 
-`strays_refines`: for any `Topo` instance whose counts and edge ends are the model body's, the
-translated `strays` returns (no panic, no overflow: Aeneas's `Result` is `ok`) a list that, as
-problems, is `Body.checkStrays` of the model. The hypotheses are the encoding
-(`verify/forge-topo-check/src/lib.rs`, checked on 1159 kernel bodies by `tests/diff.rs`): `Body`'s
-`Topo` methods read the same arrays the encoding writes.
+`strays_refines`: for any `Topo` instance whose counts and edge ends are the model body's, and
+any `Sink` that appends the problem it is handed, the translated `strays` returns (no panic, no
+overflow: Aeneas's `Result` is `ok`) having appended exactly `Body.checkStrays` of the model. The
+hypotheses are the two instances: `View`'s methods read the arrays the encoding
+(`verify/forge-topo-check/src/lib.rs`, checked on 1159 kernel bodies by `tests/diff.rs`) writes,
+and `Vec<Problem>`'s `stray` is one `push`.
 
 `lean/ForgeTopo/Axioms.lean` fails the build if a theorem uses more than `propext`,
 `Classical.choice` and `Quot.sound`.

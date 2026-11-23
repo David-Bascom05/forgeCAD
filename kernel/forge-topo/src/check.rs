@@ -642,15 +642,33 @@ fn check_shell_faces(body: &Body, out: &mut Vec<Problem>) {
 /// Every vertex is an end of an edge (a dead edge's ends are left over from an in-place edit,
 /// for `compact` to drop with it): `topo::strays`, the part Aeneas translates.
 fn check_strays(body: &Body, out: &mut Vec<Problem>) {
-    for v in crate::topo::strays(body) {
-        out.push(Problem::StrayVertex { vertex: VertexId(v as u32) });
+    crate::topo::strays(&View::of(body), out);
+}
+
+impl crate::topo::Sink for Vec<Problem> {
+    #[inline]
+    fn stray(&mut self, v: usize) {
+        self.push(Problem::StrayVertex { vertex: VertexId(v as u32) });
     }
 }
 
-impl crate::topo::Topo for Body {
+/// What `topo`'s tests read of a body: its arrays as slices, whose lengths the compiler keeps in
+/// registers (a `Body` holds cells, so through `&Body` it reloads them on every access).
+pub struct View<'a> {
+    nv: usize,
+    edges: &'a [crate::body::Edge],
+}
+
+impl<'a> View<'a> {
+    pub fn of(body: &'a Body) -> View<'a> {
+        View { nv: body.vertices.len(), edges: &body.edges }
+    }
+}
+
+impl crate::topo::Topo for View<'_> {
     #[inline]
     fn n_vertices(&self) -> usize {
-        self.vertices.len()
+        self.nv
     }
     #[inline]
     fn n_edges(&self) -> usize {

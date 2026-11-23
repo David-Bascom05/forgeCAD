@@ -20,20 +20,19 @@ set_option maxRecDepth 2048
 namespace forge_topo
 
 /-- [forge_topo::topo::strays]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 26:4-35:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 30:4-39:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.strays_loop0.body
-  {T : Type _} (TopoInst : topo.Topo T) (t : T) (ne : Std.Usize)
-  (used : alloc.vec.Vec Bool) (e : Std.Usize) :
+  {T : Type _} (TopoInst : topo.Topo T) (t : T) (nv : Std.Usize)
+  (ne : Std.Usize) (used : alloc.vec.Vec Bool) (e : Std.Usize) :
   Result (ControlFlow ((alloc.vec.Vec Bool) × Std.Usize) (alloc.vec.Vec Bool))
   := do
   if e < ne
   then
     let (a, b) ← TopoInst.edge_ends t e
-    let i := alloc.vec.Vec.len used
     let used1 ←
-      if a < i
+      if a < nv
       then
         do
         let (_, index_mut_back) ←
@@ -41,9 +40,8 @@ def topo.strays_loop0.body
             used a
         ok (index_mut_back true)
       else ok used
-    let i1 := alloc.vec.Vec.len used1
     let used2 ←
-      if b < i1
+      if b < nv
       then
         do
         let (_, index_mut_back) ←
@@ -56,62 +54,63 @@ def topo.strays_loop0.body
   else ok (done used)
 
 /-- [forge_topo::topo::strays]: loop 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 26:4-35:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 30:4-39:5
     Visibility: public -/
 @[rust_loop]
 def topo.strays_loop0
-  {T : Type _} (TopoInst : topo.Topo T) (t : T) (used : alloc.vec.Vec Bool)
-  (ne : Std.Usize) (e : Std.Usize) :
+  {T : Type _} (TopoInst : topo.Topo T) (t : T) (nv : Std.Usize)
+  (used : alloc.vec.Vec Bool) (ne : Std.Usize) (e : Std.Usize) :
   Result (alloc.vec.Vec Bool)
   := do
   loop
-    (fun (used1, e1) => topo.strays_loop0.body TopoInst t ne used1 e1)
+    (fun (used1, e1) => topo.strays_loop0.body TopoInst t nv ne used1 e1)
     (used, e)
 
 /-- [forge_topo::topo::strays]: loop body 1:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 38:4-43:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 41:4-46:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.strays_loop1.body
-  (used : alloc.vec.Vec Bool) (out : alloc.vec.Vec Std.Usize) (v : Std.Usize) :
-  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × Std.Usize) (alloc.vec.Vec
-    Std.Usize))
+  {S : Type _} (SinkInst : topo.Sink S) (nv : Std.Usize)
+  (used : alloc.vec.Vec Bool) (out : S) (v : Std.Usize) :
+  Result (ControlFlow (S × Std.Usize) S)
   := do
-  let i := alloc.vec.Vec.len used
-  if v < i
+  if v < nv
   then
     let b ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) used v
     let out1 ← if b
                  then ok out
-                 else alloc.vec.Vec.push out v
+                 else SinkInst.stray out v
     let v1 ← lift (Std.Usize.wrapping_add v 1#usize)
     ok (cont (out1, v1))
   else ok (done out)
 
 /-- [forge_topo::topo::strays]: loop 1:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 38:4-43:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 41:4-46:5
     Visibility: public -/
 @[rust_loop]
 def topo.strays_loop1
-  (used : alloc.vec.Vec Bool) (out : alloc.vec.Vec Std.Usize) (v : Std.Usize) :
-  Result (alloc.vec.Vec Std.Usize)
+  {S : Type _} (SinkInst : topo.Sink S) (out : S) (nv : Std.Usize)
+  (used : alloc.vec.Vec Bool) (v : Std.Usize) :
+  Result S
   := do
   loop
-    (fun (out1, v1) => topo.strays_loop1.body used out1 v1)
+    (fun (out1, v1) => topo.strays_loop1.body SinkInst nv used out1 v1)
     (out, v)
 
 /-- [forge_topo::topo::strays]:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 21:0-45:1
+    Source: 'kernel/forge-topo/src/topo.rs', lines 25:0-47:1
     Visibility: public -/
 def topo.strays
-  {T : Type _} (TopoInst : topo.Topo T) (t : T) :
-  Result (alloc.vec.Vec Std.Usize)
+  {T : Type _} {S : Type _} (TopoInst : topo.Topo T) (SinkInst : topo.Sink S)
+  (t : T) (out : S) :
+  Result S
   := do
   let nv ← TopoInst.n_vertices t
   let used ← alloc.vec.from_elem core.clone.CloneBool false nv
   let ne ← TopoInst.n_edges t
-  let used1 ← topo.strays_loop0 TopoInst t used ne 0#usize
-  topo.strays_loop1 used1 (alloc.vec.Vec.new Std.Usize) 0#usize
+  let used1 ← topo.strays_loop0 TopoInst t nv used ne 0#usize
+  topo.strays_loop1 SinkInst out nv used1 0#usize
 
 end forge_topo

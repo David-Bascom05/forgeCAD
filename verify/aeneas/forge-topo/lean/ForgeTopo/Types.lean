@@ -28,4 +28,10 @@ structure topo.Topo (Self : Type _) where
   edge_alive : Self → Std.Usize → Result Bool
   edge_ends : Self → Std.Usize → Result (Std.Usize × Std.Usize)
 
+/-- Trait declaration: [forge_topo::topo::Sink]
+    Source: 'kernel/forge-topo/src/topo.rs', lines 20:0-22:1
+    Visibility: public -/
+structure topo.Sink (Self : Type _) where
+  stray : Self → Std.Usize → Result Self
+
 end forge_topo
