@@ -44,7 +44,9 @@ proof splits on the branch:
 assume, as `LedgerWF2.small` did for the core:
 - coordinates and plane distances ≤ about 9e9 at LINEAR (Screen/Coincide `plane_dist_sound`);
 - cylinder measures ≤ 1e8 (`offp_margin`);
-- all values finite (< about 1e150).
+- all values finite (< about 1e150);
+- a floor: every nonzero stored surface component ≥ INPUT_FLOOR (about 2^-480), so Dekker's
+  TwoProduct, used by the exact-sign keys (a84f308), never underflows.
 
 Binding today: offp_margin's S ≤ 1e8, which gives max |coord| ≤ about 1.6e7 (16 km in mm). Today's
 code has no size check, so one `#[cold]` check at the four boolean entries (vertex max |coord|
