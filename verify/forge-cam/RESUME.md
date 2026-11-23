@@ -135,6 +135,9 @@ are covered.
    - CAM's regression test is 5b97845 (slab::gap_tests): ends 1e-3 off the circle, 2000 points; it
      fails without the 2·gap and passes with it. Commit b2195f5's message names the fix 0b56c1e;
      it is 3a388e5.
+   - `Piece.ok` is enforced in release since CAM bfa4a72 (`arc_ok`: r > 0, ends off the centre,
+     interval-proven cross > 0 in the arc's sense; the gap bound is `arc_gap`'s, outward-rounded).
+     A failing piece gives lo = 0. Checked against Trim.lean.
 2. An executable ℚ(√d) form of the arc candidates, if the L6 tests want one.
 3. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
    expansion in the G6 model, L5 for the checker's intervals, and L4 (Aeneas).
