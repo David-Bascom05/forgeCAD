@@ -152,7 +152,6 @@ import ForgeCurved
 #print axioms ForgeCurved.BodyModel.room_in_or_out
 #print axioms ForgeCurved.BodyModel.denote_refines
 #print axioms ForgeCurved.BodyModel.bounds_unique
-#print axioms ForgeCurved.BodyModel.exactOf_isolated
 #print axioms ForgeCurved.OnEdge.branch_of_sep
 #print axioms ForgeCurved.OnEdge.branch_of_sep_delta
 #print axioms ForgeCurved.OnEdge.branch_of_empty

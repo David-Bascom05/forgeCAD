@@ -36,12 +36,14 @@ jobs:
       - name: the proofs
         working-directory: verify/forge-bool-proof
         run: |
+          set -o pipefail
           lake exe cache get
           lake build 2>&1 | tee build.log
           grep -q "Build completed successfully" build.log
       - name: the axiom report
         working-directory: verify/forge-bool-proof
         run: |
+          set -o pipefail
           lake env lean ForgeBoolProof/Axioms.lean 2>&1 | tee axioms.log
           if grep -q "sorryAx\|declaration uses 'sorry'" build.log axioms.log; then echo "::error::sorry"; exit 1; fi
           bad=$(grep "depends on axioms" axioms.log | grep -v -E "\[(propext(, Classical\.choice)?(, Quot\.sound)?|propext, Quot\.sound|)\]" || true)
