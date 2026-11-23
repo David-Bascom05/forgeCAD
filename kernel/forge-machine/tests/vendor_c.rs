@@ -134,3 +134,58 @@ fn datron_neo_plunge_through_the_stock_is_caught() {
     let (_, c) = run("datron-neo", NEO_SETUP, &prog);
     assert!(!c.is_empty(), "the plunge into the bed was not caught");
 }
+
+// A fixed bridge over a moving Y table (X and Z on the bridge): Roland SRM-20. The table centre is
+// at X = -101.6, Y = -76.2; the collet tip (gauge) is 130.75 above the table at Z = 0. No changer
+// (manual change): the job starts with the tool in.
+const SRM_SETUP: &str = r#"
+[setup]
+machine = "roland-srm-20"
+dialect = "fanuc"
+program = "x.nc"
+step = 1
+start_tool = 1
+
+[[setup.wcs]]
+n = 54
+x = -101.6
+y = -76.2
+z = -100.75          # Z0 at part z = 30 (the stock top)
+
+[[setup.tool]]
+t = 1
+name = "flat 3"
+tip = [0, 0, -50]
+body = [1.5, 0, 10, 3, 10, 50]
+mill = [1.5, 0]
+h = 50
+
+[[setup.stock]]
+min = [-50, -40, 0]
+max = [50, 40, 30]
+"#;
+
+#[test]
+fn roland_srm20_slot_runs_clear() {
+    let prog = SLOT.replace("T1 M06\n", "").replace("S8000", "S6000");
+    let (v, c) = run("roland-srm-20", SRM_SETUP, &prog);
+    assert!(v.is_empty(), "{v:?}");
+    assert!(c.is_empty(), "{c:?}");
+}
+
+#[test]
+fn roland_srm20_m6_is_refused_without_a_changer() {
+    // manual change is not in the format yet (FORMAT-GAPS row 8): M6 is an error
+    let m = builtin_named("roland-srm-20").unwrap();
+    let spec = SetupSpec::parse(SRM_SETUP).unwrap();
+    let s = spec.build(&m, FANUC).unwrap();
+    assert!(sim::simulate(&SLOT.replace("S8000", "S6000"), &s).is_err());
+}
+
+#[test]
+fn roland_srm20_head_below_the_reach_is_caught() {
+    // Z-35 from the stock top (part z 30): the tool goes 5 mm into the table
+    let prog = SLOT.replace("T1 M06\n", "").replace("S8000", "S6000").replace("Z-2.", "Z-35.");
+    let (_, c) = run("roland-srm-20", SRM_SETUP, &prog);
+    assert!(!c.is_empty(), "the tool into the table was not caught");
+}

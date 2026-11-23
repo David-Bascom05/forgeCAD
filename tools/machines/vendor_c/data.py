@@ -262,3 +262,108 @@ for nm, page, x, y, z, rapid, feed, iface, chg in (
            NOTE + "; " + SBC + ("" if chg else "; manual tool change (no changer)"),
            x, y, z, rapid=rapid, feed=feed, passage=None, rpm=[10000, 18000], iface=iface, cites=cites,
            changer=(chg, 0.1, 0.5) if chg else None)
+
+# ================================================================ batch 3
+# ---- Onefinity Elite Gen 2 (moving gantry: manual REV 02.12.24 pp.27-42 shows Y rails on the table,
+# the X rail riding them, the Z slider on the X block; that manual is Gen 1, the layout is the same family)
+OF = "https://www.onefinitycnc.com/compare-product"
+OFM = "https://www.onefinitycnc.com/_files/ugd/1cee9f_11486493866543b388bd72ccac5c5b95.pdf"
+OFP = "https://www.onefinitycnc.com/post/introducingtheallnewgen2eliteseriesbyonefinitycnc"
+for nm, x_in, y_in in (("onefinity-elite-woodworker", 33, 33), ("onefinity-elite-journeyman", 49, 33),
+                       ("onefinity-elite-foreman", 49, 49.175)):
+    x, y = round(x_in * 25.4, 1), round(y_in * 25.4, 1)
+    rap = {"X": 15240, "Y": 15240, "Z": 5715}
+    rc = pub(OF, "rapid XY up to 600 in/min (15,240 mm/min), Z 225 in/min (5,715 mm/min)")
+    fc = unk("cutting feed unpublished; held at the rapid")
+    cites = {f"joint.{a}.rapid": [rc] for a in "XYZ"}
+    for a in "XY":
+        cites[f"joint.{a}.rapid"].append(dict(status="conflict", source=OFP,
+                                              note="the Gen 2 launch post says pre-set rapids of 300 in/min; the "
+                                                   "compare page's 600 in/min is held"))
+    cites.update({f"joint.{a}.max_feed": fc for a in "XYZ"})
+    cites.update({
+        "joint.X.range": pub(OF, f"cutting area {x_in} x {y_in} in"),
+        "machine.layout": pub(OFM, "Y rails fixed to the table, the X rail (gantry) rides them, the Z slider on "
+                                   "the X block (Gen 1 assembly steps, pp.27-42)"),
+        "spindle.S1.rpm": unk(RPM_BAND_UNK.format(lo=10000, hi=24000) + " (no spindle included; 65/80 mm mount)"),
+        "spindle.S1.interface": pub("https://www.onefinitycnc.com/product-page/gen2eliteseries",
+                                    "spindle not included; 65 or 80 mm mount"),
+        "spindle.S1.max": unk("tool limits unpublished; 80 x 13 mm ours"),
+        "machine.control": pub("https://www.onefinitycnc.com/product-page/gen2eliteseries",
+                               "Redline CNC controller with RealTime CNC RTS-2"),
+    })
+    MACHINES.append(gantry(
+        "onefinity", nm, "onefinity-redline", OF,
+        NOTE + "; Gen 2 Elite; Redline controller (RTS-2): no dialect yet; manual tool change (no changer)",
+        tx=x, ty=y, tz=163, passage=177.8, rapid=rap, feed=rap, rpm=[10000, 24000], iface="65/80 mm mount",
+        tmax=(80, 13), changer=None, cites=cites, coolants=("air",), spindle_r=40))
+    MACHINES[-1].cite("joint.Z.range", **pub(OF, "Z travel 6.4 in (163 mm), cutting area Z 7 in"))
+    MACHINES[-1].cites = [c for c in MACHINES[-1].cites if not (c["path"] == "body.gantry")]
+    MACHINES[-1].cite("body.gantry", **pub(OFP, "7 in of gantry clearance"),
+                      basis="beam underside at the published 7 in (177.8 mm); beam and uprights ours")
+
+# ---- fixed bridge, moving Y table
+N3G = "https://my.carbide3d.com/pdf/Nomad3_Getting_Started_Guide_12_22_2020_v1_smaller.pdf"
+N3 = "https://shop.carbide3d.com/products/nomad-3"
+MACHINES.append(bridge(
+    "carbide3d", "nomad-3", "carbide-motion", N3,
+    NOTE + "; Carbide Motion: no carbide-motion dialect yet; manual tool change (no changer); enclosed",
+    tx=203.2, ty=203.2, tz=76.2, nose=81.2, table=(203.2, 203.2), rapid=2540, feed=2540, rpm=[9000, 24000],
+    iface="ER11", tmax=(60, 7), changer=None,
+    nose_cite=dict(status="estimate", basis="true value unpublished; nose put 5 mm above the table at Z's "
+                   "bottom: the least value consistent with the self-collision test, not data"),
+    cites={**{f"joint.{a}.{f}": unk("speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low")
+              for a in "XYZ" for f in ("rapid", "max_feed")},
+           "machine.layout": pub(N3G, "the Y axis is the table; X and Z move the spindle (p.31)"),
+           "spindle.S1.rpm": pub(N3, "130 W brushless, 9,000-24,000 rpm"),
+           "spindle.S1.interface": pub(N3, "ER-11, cutters up to 7 mm"),
+           "spindle.S1.max": pub(N3, "cutters up to 7 mm (length ours: 60 mm)"),
+           "machine.control": pub(N3, "Carbide Motion")}))
+MACHINES[-1].cite("body.table", "estimate", basis="table size unpublished; the 8 x 8 in cutting area used")
+
+R50 = "https://www.rolanddg.com/products/milling-machines/mdx-50-benchtop-cnc-mill/specifications"
+R50M = "https://downloadcenter.rolanddg.com/contents/manuals/MDX-50_USE_EN_R6.pdf"
+MACHINES.append(bridge(
+    "roland", "roland-mdx-50", "roland-nc", R50,
+    NOTE + "; RML-1 or NC code over USB: no Roland dialect yet; resins only (metal not supported per Roland)",
+    tx=400, ty=305, tz=135, nose=140, table=(400, 305), rapid={"X": 3600, "Y": 3600, "Z": 3000},
+    feed={"X": 3600, "Y": 3600, "Z": 3000}, rpm=[4500, 15000], iface="collet (6.35 / 3.175 mm shanks)",
+    tmax=(60, 6.35), changer=(5, 0.1, 0.2), spindle_r=40,
+    nose_cite=dict(status="estimate", source=R50M, value="figure p.18: 130 mm spindle-head bottom to table; Z position not stated",
+                   basis="with 135 mm Z travel the 130 mm figure cannot be at Z's top; nose put 5 mm above the "
+                         "table at Z's bottom, the least value consistent with the self-collision test, not data"),
+    cites={**{f"joint.{a}.{f}": pub(R50, "feed XY 7-3,600 mm/min, Z 7-3,000 mm/min")
+              for a in "XYZ" for f in ("max_feed",)},
+           **{f"joint.{a}.rapid": est("rapid unpublished; held at the published max feed (a lower bound "
+                                      "for speed, so t_min may be long)", source=R50, value="max feed only")
+              for a in "XYZ"},
+           "machine.layout": pub(R50M, "the table moves in Y, the spindle head in X (pp.33-34); Z on the head "
+                                       "(p.18 figure)"),
+           "spindle.S1.rpm": pub(R50, "4,500-15,000 rpm"),
+           "spindle.S1.interface": pub(R50, "collet chuck, 6.35 or 3.175 mm shanks"),
+           "spindle.S1.max": unk("tool length unpublished; 60 mm ours, shank 6.35 mm published"),
+           "changer.pockets": pub(R50, "ATC: 5 tools plus a detection pin"),
+           "changer.change_s": unk("change time unpublished; 0.1 s held (the format needs > 0) so t_min stays a "
+                                   "lower bound"),
+           "changer.max_tool_kg": unk("max tool weight unpublished; 0.2 kg held (small collet tools)"),
+           "machine.control": pub(R50, "RML-1 and NC code, USB")},
+    unmodelled="enclosure, door, ATC magazine and frame"))
+
+SRM = "https://www.rolanddg.com/products/milling-machines/srm-20-compact-milling-machine/specifications"
+SRMM = "https://downloadcenter.rolanddg.com/contents/manuals/SRM-20_USE_EN_R4.pdf"
+MACHINES.append(bridge(
+    "roland", "roland-srm-20", "roland-nc", SRM,
+    NOTE + "; RML-1 or NC code: no Roland dialect yet; manual tool change (no changer)",
+    tx=203.2, ty=152.4, tz=60.5, nose=130.75, table=(232.2, 156.6), rapid=1800, feed=1800, rpm=[3000, 7000],
+    iface="collet (6 mm included)", tmax=(50, 6), changer=None, spindle_r=30,
+    nose_cite=dict(status="published", source=SRM, value="collet tip to table 130.75 mm max",
+                   basis="the collet tip taken as the gauge point, at Z's top"),
+    cites={**{f"joint.{a}.max_feed": pub(SRM, "operating speed 6-1,800 mm/min") for a in "XYZ"},
+           **{f"joint.{a}.rapid": est("rapid unpublished; held at the published max feed", source=SRM,
+                                      value="max 1,800 mm/min") for a in "XYZ"},
+           "machine.layout": pub(SRMM, "the table moves in Y (p.15); the spindle head in X and Z (p.14)"),
+           "spindle.S1.rpm": pub(SRM, "3,000-7,000 rpm (DC motor type 380)"),
+           "spindle.S1.interface": pub(SRM, "collet; 6 mm collet included"),
+           "spindle.S1.max": unk("tool limits unpublished; 50 x 6 mm ours"),
+           "machine.control": pub(SRM, "RML-1 and NC code")}))
+MACHINES[-1].cite("body.table", "published", SRM, value="table 232.2 x 156.6 mm")

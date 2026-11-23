@@ -1569,3 +1569,269 @@ status = "published"
 source = "https://carbide3d.com/shapeoko/shapeoko5pro-specs/"
 taken = "2026-11-23"
 value = "Z travel 155 mm (140 mm with Sweepy Pro)"
+
+
+[[machine]]
+name = "nomad-3"
+kind = "vmc3"
+control = "carbide-motion"
+length_joint = "Z"
+coolants = []
+clearance = 1
+source = "https://shop.carbide3d.com/products/nomad-3"
+taken = "2026-11-23"
+note = "real model, published numbers cited per value; bodies are conservative boxes, not the maker's CAD; verify against your machine before trusting a collision verdict; Carbide Motion: no carbide-motion dialect yet; manual tool change (no changer); enclosed"
+real = true
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-203.2, 0]
+rapid = 2540
+max_feed = 2540
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-203.2, 0]
+rapid = 2540
+max_feed = 2540
+
+[[machine.joint]]
+name = "Z"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-76.2, 0]
+rapid = 2540
+max_feed = 2540
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 81.2]
+rpm = [9000, 24000]
+max = [60, 7]
+interface = "ER11"
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 81.2]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "Y"
+at = [-101.6, -101.6, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "table"
+link = "Y"
+part = "parts/carbide3d/nomad-3/table.fg"
+ignore = ["bed"]
+[[machine.body.box]]
+min = [-203.2, -203.2, -20]
+max = [0, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/carbide3d/nomad-3/bed.fg"
+ignore = ["table", "bridge"]
+[[machine.body.box]]
+min = [-203.2, -304.8, -80]
+max = [0, 223.2, -20]
+
+[[machine.body]]
+name = "bridge"
+link = "base"
+part = "parts/carbide3d/nomad-3/bridge.fg"
+ignore = ["bed", "carriage"]
+[[machine.body.box]]
+min = [-293.2, 223.2, -20]
+max = [90, 283.2, 277.4]
+
+[[machine.body]]
+name = "carriage"
+link = "X"
+part = "parts/carbide3d/nomad-3/carriage.fg"
+ignore = ["bridge", "head"]
+[[machine.body.box]]
+min = [-50, 35, 141.2]
+max = [50, 223.2, 257.4]
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/carbide3d/nomad-3/head.fg"
+ignore = ["carriage"]
+[[machine.body.cyl]]
+base = [0, 0, 81.2]
+axis = [0, 0, 1]
+r = 30
+h = 100
+
+[[machine.cite]]
+path = "machine.unmodelled"
+status = "unknown"
+basis = "enclosure, door and frame are not bodies: their geometry is unpublished; a crash into them is not checked"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://shop.carbide3d.com/products/nomad-3"
+taken = "2026-11-23"
+value = "X 203.2 mm"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "estimate"
+basis = "travel length published; where the control's machine zero sits in it is not; we put zero at the + end (range [-travel, 0]); a setup's WCS absorbs the choice"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://shop.carbide3d.com/products/nomad-3"
+taken = "2026-11-23"
+value = "Y 203.2 mm"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "estimate"
+basis = "travel length published; where the control's machine zero sits in it is not; we put zero at the + end (range [-travel, 0]); a setup's WCS absorbs the choice"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://shop.carbide3d.com/products/nomad-3"
+taken = "2026-11-23"
+value = "Z 76.2 mm"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "estimate"
+basis = "travel length published; where the control's machine zero sits in it is not; we put zero at the + end (range [-travel, 0]); a setup's WCS absorbs the choice"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "unknown"
+basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "unknown"
+basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "unknown"
+basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"
+
+[[machine.cite]]
+path = "machine.layout"
+status = "published"
+source = "https://my.carbide3d.com/pdf/Nomad3_Getting_Started_Guide_12_22_2020_v1_smaller.pdf"
+taken = "2026-11-23"
+value = "the Y axis is the table; X and Z move the spindle (p.31)"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "published"
+source = "https://shop.carbide3d.com/products/nomad-3"
+taken = "2026-11-23"
+value = "130 W brushless, 9,000-24,000 rpm"
+
+[[machine.cite]]
+path = "spindle.S1.interface"
+status = "published"
+source = "https://shop.carbide3d.com/products/nomad-3"
+taken = "2026-11-23"
+value = "ER-11, cutters up to 7 mm"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://shop.carbide3d.com/products/nomad-3"
+taken = "2026-11-23"
+value = "cutters up to 7 mm (length ours: 60 mm)"
+
+[[machine.cite]]
+path = "machine.control"
+status = "published"
+source = "https://shop.carbide3d.com/products/nomad-3"
+taken = "2026-11-23"
+value = "Carbide Motion"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+basis = "true value unpublished; nose put 5 mm above the table at Z's bottom: the least value consistent with the self-collision test, not data"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+basis = "gauge point at the spindle nose (see spindle.S1.nose)"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "table top centre at the travel's centre"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "a 203.2 x 203.2 mm plate (20 mm thick, ours) under the travel's centre"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "unpublished; a slab under the table's travel, size ours"
+
+[[machine.cite]]
+path = "body.bridge"
+status = "estimate"
+basis = "unpublished; a wall behind the table's furthest reach, size ours"
+
+[[machine.cite]]
+path = "body.carriage"
+status = "estimate"
+basis = "unpublished; a block between the spindle and the bridge, ours"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "unpublished; spindle cylinder r 30 mm ours; the real head may be larger"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "table size unpublished; the 8 x 8 in cutting area used"

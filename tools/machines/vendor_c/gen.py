@@ -201,12 +201,13 @@ def gantry(vendor, name, control, src, note, *, tx, ty, tz, passage, rapid, feed
     """Moving-gantry router: Y gantry on the static bed, X carriage on the beam, Z on the carriage; the
     part on the bed. Origin: the spindle axis at the table-top plane, home pose (joints at + ends)."""
     m = M(vendor, name, "vmc3", control, src, note, list(coolants))
+    ax = lambda v, a: v[a] if isinstance(v, dict) else v
     m.joints.append(dict(name="Y", parent="base", side="head", type="linear", axis=[0, 1, 0], range=[-ty, 0],
-                         rapid=rapid, max_feed=feed))
+                         rapid=ax(rapid, "Y"), max_feed=ax(feed, "Y")))
     m.joints.append(dict(name="X", parent="Y", side="head", type="linear", axis=[1, 0, 0], range=[-tx, 0],
-                         rapid=rapid, max_feed=feed))
+                         rapid=ax(rapid, "X"), max_feed=ax(feed, "X")))
     m.joints.append(dict(name="Z", parent="X", side="head", type="linear", axis=[0, 0, 1], range=[-tz, 0],
-                         rapid=rapid, max_feed=feed))
+                         rapid=ax(rapid, "Z"), max_feed=ax(feed, "Z")))
     m.spindles.append(dict(name="S1", link="Z", kind="milling", axis=[0, 0, 1], nose=[0, 0, tz + 5], rpm=rpm,
                            max=list(tmax), interface=iface))
     if changer:
@@ -248,6 +249,56 @@ def gantry(vendor, name, control, src, note, *, tx, ty, tz, passage, rapid, feed
     m.cite("body.carriage", "estimate", basis=f"unpublished; a {cw} mm block between spindle and beam, ours")
     m.cite("body.spindle", "estimate",
            basis=f"unpublished; spindle cylinder r {spindle_r} mm ours; the real motor housing may differ")
+    return m
+
+
+def bridge(vendor, name, control, src, note, *, tx, ty, tz, nose, nose_cite, table, rapid, feed, rpm, iface,
+           tmax, changer, cites, coolants=(), spindle_r=30, unmodelled="enclosure, door and frame"):
+    """Fixed bridge, moving table: the table carries Y (part side), X runs on the bridge and Z on X
+    (head side). Origin: the spindle axis at the table-top plane, home pose (joints at + ends)."""
+    m = M(vendor, name, "vmc3", control, src, note, list(coolants))
+    ax = lambda v, a: v[a] if isinstance(v, dict) else v
+    m.joints.append(dict(name="Y", parent="base", side="table", type="linear", axis=[0, -1, 0], range=[-ty, 0],
+                         rapid=ax(rapid, "Y"), max_feed=ax(feed, "Y")))
+    m.joints.append(dict(name="X", parent="base", side="head", type="linear", axis=[1, 0, 0], range=[-tx, 0],
+                         rapid=ax(rapid, "X"), max_feed=ax(feed, "X")))
+    m.joints.append(dict(name="Z", parent="X", side="head", type="linear", axis=[0, 0, 1], range=[-tz, 0],
+                         rapid=ax(rapid, "Z"), max_feed=ax(feed, "Z")))
+    m.spindles.append(dict(name="S1", link="Z", kind="milling", axis=[0, 0, 1], nose=[0, 0, nose], rpm=rpm,
+                           max=list(tmax), interface=iface))
+    if changer:
+        m.changer = dict(pockets=changer[0], change_s=changer[1], max_tool_kg=changer[2])
+    m.mounts.append(dict(name="spindle", kind="tool", link="Z", at=[0, 0, nose], dir=[0, 0, -1]))
+    L, W = table
+    m.mounts.append(dict(name="table", kind="part", link="Y", at=[-tx / 2, -ty / 2, 0], dir=[0, 0, 1],
+                         xdir=[1, 0, 0]))
+    D = ty / 2 + W / 2 + 20
+    tt = 20
+    m.body("table", "Y", boxes=[([-tx / 2 - L / 2, -ty / 2 - W / 2, -tt], [-tx / 2 + L / 2, -ty / 2 + W / 2, 0])],
+           ignore=["bed"])
+    m.body("bed", "base", boxes=[([-tx / 2 - L / 2, -ty - W / 2, -tt - 60], [-tx / 2 + L / 2, D, -tt])],
+           ignore=["table", "bridge"])
+    xl, xr = -tx - spindle_r - 60, spindle_r + 60
+    m.body("bridge", "base", boxes=[([xl, D, -tt], [xr, D + 60, nose + tz + 120])], ignore=["bed", "carriage"])
+    m.body("carriage", "X", boxes=[([-spindle_r - 20, spindle_r + 5, nose + 60], [spindle_r + 20, D, nose + tz + 100])],
+           ignore=["bridge", "head"])
+    m.body("head", "Z", cyls=[([0, 0, nose], spindle_r, 100)], ignore=["carriage"])
+    m.cite("machine.unmodelled", "unknown", basis=f"{unmodelled} are not bodies: their geometry is unpublished; "
+           "a crash into them is not checked")
+    for n, rng in (("X", tx), ("Y", ty), ("Z", tz)):
+        m.cite(f"joint.{n}.range", "published", src, value=f"{n} {rng} mm")
+        m.cite(f"joint.{n}.range", "estimate", basis=ZERO_BASIS)
+    for path, c in cites.items():
+        for x in (c if isinstance(c, list) else [c]):
+            m.cite(path, **x)
+    m.cite("spindle.S1.nose", **nose_cite)
+    m.cite("mount.spindle.at", "estimate", basis="gauge point at the spindle nose (see spindle.S1.nose)")
+    m.cite("mount.table.at", "estimate", basis="table top centre at the travel's centre")
+    m.cite("body.table", "estimate", basis=f"a {L} x {W} mm plate ({tt} mm thick, ours) under the travel's centre")
+    m.cite("body.bed", "estimate", basis="unpublished; a slab under the table's travel, size ours")
+    m.cite("body.bridge", "estimate", basis="unpublished; a wall behind the table's furthest reach, size ours")
+    m.cite("body.carriage", "estimate", basis="unpublished; a block between the spindle and the bridge, ours")
+    m.cite("body.head", "estimate", basis=f"unpublished; spindle cylinder r {spindle_r} mm ours; the real head may be larger")
     return m
 
 
