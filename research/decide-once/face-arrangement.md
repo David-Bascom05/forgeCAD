@@ -165,6 +165,56 @@ exact away from thin cells. They are restated over `IncLedger` and proven there,
 line. `core_refines` is stated for the keep stage and for `core_k` with any room keep table, so it
 composes with collapse. "Exact away from thin" holds for facets neither of whose rooms is thin.
 
+### 2.2a What the unify simulation needs (the risky part)
+
+The fine core's unify does three things:
+- **faces** are the classes of `joinRel` over the result facets: same plane, same orient, sharing
+  an edge;
+- **verts** are the vertex cells with three or more faces round them;
+- **edges** are the edge cells with exactly two faces, grouped by `erel`: the same pair of faces,
+  joined through vertex cells that are not verts.
+
+The simulation needs seven things.
+
+1. **A generic classes-under-a-map lemma**, `cls_map`, in Closure.lean. Let `f : xs → ys` be
+   onto, with relations `r` on `xs` and `r'` on `ys`. Suppose:
+   - (i) `r a b → f a = f b ∨ r' (f a) (f b)`;
+   - (ii) `r' c d → ∃ a ∈ f⁻¹c, b ∈ f⁻¹d, r a b`;
+   - (iii) each fibre is `r`-connected.
+
+   Then `f` maps `cls r xs a` onto `cls r' ys (f a)`, and two elements are in one class iff
+   their images are. This is the heart, about 300 lines. It is used twice: for faces (σ, joinRel)
+   and for edges (τ, erel).
+2. **Fibre connectivity, now explicit in `Refines`.**
+   - (s) The fine facets of one F-facet are `joinRel`-connected through fine edges with τ = none.
+     They share the plane, and the orient too, since they have the same rooms and so the same
+     keep.
+   - (e′), new. The fine edges of one F-edge are connected through fine verts with ν = none. Such
+     a vert has the two faces of that edge round it, so it is never an output vert and `erel`
+     passes through it.
+3. **Star bijections** ((e), (v)). These give (i) and (ii) of `cls_map` for `joinRel` and `erel`,
+   and they give `facesAt x ↔ facesAt (τ x / ν x)`.
+4. **No phantom edges or verts.**
+   - A fine edge with τ = none has at most one face round it, so it is not in `ecs`.
+   - A fine vert with ν = none has at most two faces round it, so it is not in `outV`.
+
+   Both follow from (e) and (v)'s "constant" clauses.
+5. **Order.** The output lists correspond as sets (up to permutation), not as lists. Today's
+   conclusions about `b₀` (Valid, faces = XBoundary, reg) are all set-level, so nothing is lost.
+6. **Naming (`origin`): a rule change.** Today a face is named by the first piece of its *head*
+   facet, and the head depends on the facet order. That order is not preserved by coarsening. So
+   v2 names a face by the **least input-face id over all pieces of all its facets**. This is
+   order-free and equal under σ, and v2 states it directly as a naming theorem, not through `b₀`.
+   It also makes the write's naming of merged faces a function of the face itself, which is the
+   fuzz seed 29 issue. Bool-speed and the write must adopt the same rule.
+7. **Collapse** composes as in §2.2, with the room keep table lifted to topes.
+
+Estimate: `cls_map` 300 lines, faces 250, edges and erel 350, verts and facesAt 150, naming 100.
+That is about 1.1k lines, the largest single piece of the Lean side. Its one real risk is a gap in
+`Refines`. If a case appears that the conditions do not cover (a fine edge whose star crosses two
+F-facets of one class, say), `Refines` gains a condition and the builder has to meet it. So
+`Refines` is fixed before the Rust builder is written: step L2 below goes first.
+
 ### 2.3 L1/L3: what the builder must establish, and the one new geometric lemma
 
 `Refines` is the builder's obligation. It replaces today's open hypothesis
@@ -219,19 +269,32 @@ sorts covectors.
 
 ## 4. Order of work and gates
 
-1. **Sign-off of this design.** That covers the interface in §1, `Refines` in §2.2, and the
-   statement of `EndToEndF`.
-2. **In parallel:**
-   - Lean: IncCore + `core_inc`, then `Refines` + the simulation theorem;
-   - Rust: core v2 in Aeneas style, behind the switch as `forge_bool_core::v2` (v1 untouched),
-     with the same rules as before: while loops, no iterators or closures, no count_ones;
-   - Rust: the face-arrangement builder plus the debug "coarsens" check against v1's ledger on
-     the gate corpus.
-3. **Aeneas proof of v2.** It splits into groups as before: tables/split, classify/keep,
-   around/fan, unify, collapse. Then `end_to_end_f_proof`.
-4. **CI.** forge-bool-core-proof.yml gains the v2 translation and proof. Both `end_to_end_proof`
-   and `end_to_end_f_proof` must stay green. The switch flips to v2 only when v2 is proven, is
-   faster on the callgrind gate, and the coarsens check passes on the corpus.
+Step 0 is the sign-off of this design: the §1 interface, `Refines` (§2.2 and §2.2a), the
+statement of `EndToEndF`, and the naming rule.
+
+Then the Lean and Rust tracks run in parallel. Each arrow is a dependency.
+
+| track | step | needs | size |
+|---|---|---|---|
+| Lean | **L1** `IncLedger`, `coreI`, and the `EndToEndF` statement in Specs.lean (so the Aeneas groups have a target) | 0 | S |
+| Lean | **L2** `Refines` fixed, with `cls_map` and the unify simulation proven first (the risky part) | L1 | L |
+| Lean | **L3** `core_inc` (old core = `coreI ∘ inc`) and the rest of `core_refines` | L1 | M |
+| Lean | **L4** `room_const` from `contains_const_local` | — | S |
+| Lean | **L5** the Metric.lean port to rooms | L1 | M |
+| Rust | **R1** v2 types plus a `LedgerWF` v2 debug check, as `forge_bool_core::v2`, v1 untouched | 0 | S |
+| Rust | **R2** the v2 core in Aeneas style, then translate.sh: `Funs` v2 | R1 | M |
+| Rust | **R3** the face-arrangement builder plus a debug "coarsens" check against v1's ledger (`Refines`' counts and sides) on the gate corpus | R1, L2 (`Refines` fixed) | L |
+| Rust | **R4** callgrind on coplanar, upto and housing against the old path | R2, R3 | S |
+| Aeneas | **G1–G5** groups as before: tables/split_ok, classify/keep/rule/UF, around/fan, unify, collapse | R2, L1 | M each |
+| Aeneas | **E** `end_to_end_f_proof` = the groups + `core_refines` + `EndToEnd` | G*, L2, L3 | S |
+| CI | forge-bool-core-proof.yml gains the v2 translation and proof. Both end-to-end theorems must stay green. | R2 | S |
+
+Critical path: L2 → R3 → R4 for speed, and R2 → G* → E for the proof.
+
+The switch flips to v2 only when all of the following hold:
+- E is green;
+- R4 beats the old path on all three benches;
+- the coarsens check passes on the corpus.
 
 ## 5. Open questions for review
 
