@@ -27,4 +27,10 @@ import ForgeExact.DecideOnce.SampleLocal
 import ForgeExact.JordanLocal
 import ForgeExact.DecideOnce.LocalJordan
 import ForgeExact.DecideOnce.LocalFinal
+import ForgeExact.Alg.Sum
+import ForgeExact.Alg.Examples
+import ForgeExact.Quad.Cert
+import ForgeExact.QRef.Poly
+import ForgeExact.QRef.Octree
+import ForgeExact.Poly3.Octree
 import ForgeExact.Axioms

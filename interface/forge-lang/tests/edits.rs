@@ -216,7 +216,7 @@ fn a_shared_param_moves_what_reads_it_and_what_sits_on_it() {
     let reads: BTreeSet<String> = r0
         .feats
         .iter()
-        .filter(|f| f.reads.iter().any(|p| linked.contains(p)))
+        .filter(|f| f.reads.iter().any(|p| linked.contains(&**p)))
         .map(|f| f.id.clone())
         .collect();
     let moved = moved(&r0, &r1);
