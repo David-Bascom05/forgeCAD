@@ -52,3 +52,4 @@ import ForgeBoolCore.RefineIncRooms
 import ForgeBoolCore.RefineIncFlood
 import ForgeBoolCore.HeadBridgeI
 import ForgeBoolCore.RefineIncMemb
+import ForgeBoolCore.RefineIncClassify

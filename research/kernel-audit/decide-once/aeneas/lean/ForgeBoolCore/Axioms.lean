@@ -1,4 +1,4 @@
-import ForgeBoolCore.RefineIncMemb
+import ForgeBoolCore.RefineIncClassify
 import ForgeBoolCore.Specs
 import ForgeBoolCore.Refine
 import ForgeBoolCore.RefineUF
@@ -144,3 +144,7 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.membership_loop0_spec
 #print axioms forge_bool_core.inc.memb_bridge
 #print axioms forge_bool_core.inc.membership_spec
+#print axioms forge_bool_core.inc.core_loop0_spec
+#print axioms forge_bool_core.inc.cAll_eq
+#print axioms forge_bool_core.inc.core_loop1_spec
+#print axioms forge_bool_core.inc.keep_eq
