@@ -34,8 +34,9 @@ holding a borrow, no `break` or `return` inside a loop, no `Ordering`.
    built: a curve of surfaces j and k, a Krawczyk-certified vertex, a seam through an axis. Its
    other signs are interval-filtered evaluations with an exact algebraic fallback. A sign is never
    decided to be zero by evaluating it.
-5. **Phases** (§4): Q0, the generalised `Exact` (Lean, small); Q1, quadrics (Lean L1–L3 and a Rust
-   bridge); Q2, tori; Q3, offsets; Q4, splines. The owner has seven decisions to make (§5).
+5. **Phases** (§4): Q0, the generalised `Exact` (Lean, small; mostly done, §5.2); Q1, quadrics
+   (Lean L1–L3 and a Rust bridge); Q2, tori; Q3, offsets; Q4, splines. The seven decisions are made
+   (§5).
 
 ## 1. Audit of the flat proof
 
@@ -386,6 +387,7 @@ proof session on verify/forge-exact; "Rust" means a bridge session in the kernel
 - `qform_compat` (Nef.lean generalised to literals on any carriers).
 - `sep_invariant` (§2.3).
 - Deliverable: L1/L3 statements for any carriers, with the flat theorems re-derived as an instance.
+- Status: §5.2 (`correct_k`, `zeroThickness_iff_k`, `qform_compat`, `sep_invariant_reg` done).
 
 ### Q1. Quadrics (planes, cylinders, cones, spheres)
 
@@ -427,38 +429,48 @@ proof session on verify/forge-exact; "Rust" means a bridge session in the kernel
 | L3 | Lemma D for patches within the reach | Lean | L |
 | L4–L6 | as before; the FENCES rung's case (`a_rounded_blade_stands_on_a_spline_hub`) | Rust | L |
 
-## 5. Decisions for the owner
+## 5. Decisions (made by the master, 2026-11-23)
 
-- **D1. Mathlib for the curved spec.** forge-exact is core Lean over `Model K` because Mathlib's
-  cache used to be unreachable. It is reachable now (`lake exe cache get`). verify/krawczyk and
-  verify/ieee754 already use Mathlib over ℝ. R1–R4 and Lemma D need real topology
-  (connectedness, implicit functions, Schoenflies-type facts).
-  - *Recommendation:* the curved L1/L3 over ℝ in a Mathlib package that imports forge-exact's
-    definitions. The executable reference stays core Lean over `Alg`, proven against any `Model`,
-    of which ℝ is one.
-- **D2. Bodies carry sign formulas.** This is the formula route of §2.5a. It changes the body
-  representation, adding a formula sidecar per body that survives between features.
-  - *Recommendation:* yes for Q1. It removes the curved Jordan–Brouwer entirely and also
-    discharges flat's open `LocalCompat`. The B-rep route (§2.5b) is for imports and pre-L1
-    features.
-- **D3. Tier 1 as a decided rule.** "Walls iff the Tier-0 check fails" is one deterministic rule,
-  with both tiers proven and the answer independent of the tier (`sep_invariant`). Confirm that
-  this counts as a decided rule and not a forbidden fallback.
-- **D4. Domain at switch-on.** Quadric carriers on formula-carrying bodies first. Everything else
-  stays on the old path, counted, until its phase lands. Confirm.
-- **D5. What "nothing slower" means.** Per gate line of tools/speed/gate.sh (the flat precedent),
-  or per boolean? Tier 1 inputs may cost 2–4× in cells. They are inputs where the old path
-  typically retries, but not always.
-- **D6. Numeric L4.** Aeneas cannot yet take bignum arithmetic. Accept the Rust `Alg`/RUR numerics
-  as interim (a differential test against the Lean L2 with a digest), with the blocker named, while
-  the combinatorial bridge goes through Aeneas?
-- **D7. Non-algebraic carriers (Q3, Q4).** "Zeros constructed, never decided" makes their L2 a
-  certified enclosure, not an exact real-algebraic computation. Accept that as L2 for offsets and
-  splines?
+| | Decision | Consequence |
+|---|---|---|
+| D1 | **Mathlib over ℝ for the curved L1/L3**; the executable reference stays core Lean over `Alg` | R1–R4, Lemma D and `xNonManifold_iff_top` are proven in a Mathlib package importing forge-exact's definitions; the reference is proven against any `Model`, ℝ among them |
+| D2 | **A sign-formula sidecar for Q1** | the formula route (§2.5a); `qform_compat` (QForm.lean) is `compat` |
+| D3 | **"Tier 1 iff the Tier-0 check fails" is one decided rule** | **The rule, as spec:** the separators of a boolean are the Tier-0 seams of §2.3's table for its near carriers; if and only if the Tier-0 check on the resulting arrangement fails, the Tier-1 walls (direction, events, midpoints as in §2.3) are added to them. Both are functions of the near carriers alone; no other separator is ever added, and nothing is retried |
+| D4 | **Switch-on domain: quadric carriers on formula-carrying bodies**; everything else counted and sent to the old path | `Skip::OutOfDomain` beside `Uncertified` and `Ambiguous` |
+| D5 | **"Nothing slower" is per gate line**: no user-facing or synthetic line of tools/speed/gate.sh regresses before the switch goes on | switch-on condition 5 of §3 |
+| D6 | **Numeric L4 is interim only, with the blocker named** (Aeneas and bignums); the bignum/RUR is written in the Aeneas style (inline limbs, as decide-once is doing for `Big`) so it can reach L4 later | §4 Q1 L4 |
+| D7 | **Certified enclosures count as L2 for non-algebraic carriers**, stated as such in PROOF-STANDARD.md | Q3, Q4 |
+
+### 5.1 `qform_compat` against the coordinator's `LocalCompat` (dfe79a63)
+
+The coordinator proved flat's `LocalCompat` for closed flat B-reps classified by ray parity
+(`contains_const_local`, JordanLocal.lean, 1395 lines; `local_compat`, `localCompat_of`,
+LocalJordan.lean and LocalFinal.lean). `qform_localCompat` (QForm.lean, a few lines over
+`qform_compat` and `covCellK_flat`) proves it for bodies given by sign formulas over the carrier
+planes, for every region. The two are not interchangeable:
+- the formula route is far shorter, and it is the right one where a body carries its formula
+  (the curved Q1 domain, D2);
+- it does not cover a B-rep that has no formula: computing that formula is the same
+  classification Jordan justifies. So the coordinator's proof stays the one for flat B-rep inputs,
+  and for the curved B-rep route (§2.5b).
+
+### 5.2 Q0 status
+
+Done, standard axioms only (Axioms.lean):
+- `Curved.lean`: the definitions, and `covCellK_flat`;
+- `CorrectK.lean`: `ExactK.consistent`, `result_iff_k`, `correct_k`, `correct_ok_k`,
+  `badEdge_iff_k`, `badVert_iff_k`, `zeroThickness_iff_k` (Correct.lean for any carriers;
+  `topeDecompK` over any nowhere-dense wall);
+- `QForm.lean`: `SForm`, `den_iff`, `den_cell`, `qform_compat`, `qform_localCompat`, `den_append`,
+  `den_sep`, and `sep_invariant_reg` (the set half of `sep_invariant`).
+
+Open in Q0: `ExactInK` (Local.lean's theorems over `ExactK`), and re-deriving `flat_correct` as an
+instance of `correct_k`. The refusal half of `sep_invariant` needs Q1's `xNonManifold_iff_top`:
+both refusals are then the same topological statement.
 
 ## 6. Files and references
 
-New on this branch:
+New on this branch (also `CorrectK.lean` and `QForm.lean`, §5.2):
 - `verify/forge-exact/ForgeExact/DecideOnce/Curved.lean`: `Carrier`, `sgnK`, `covOfK`, `covCellK`,
   `RealisedK`, `IsVertK`, `IsEdgeK`, `covCell_iff_covOf`, **`covCellK_flat`**, `Connected`,
   `Faithful` (R1 `connected`, R2 `incidence`, R3 `sides`, R4 `wing`), `memTK`, `FlipK`, `FullK`,

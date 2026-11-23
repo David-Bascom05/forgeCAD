@@ -46,6 +46,9 @@ def covOfK (cs : List (Carrier P K)) (x : P) : Cov := cs.map fun c => sgnK (c x)
 /-- The cell with covector `X`. -/
 def covCellK (cs : List (Carrier P K)) (X : Cov) : Pred P := fun x => covOfK cs x = X
 
+/-- The wall: the points on some carrier. -/
+def wallK (cs : List (Carrier P K)) : Pred P := fun x => ∃ c ∈ cs, sgnK (c x) = .zero
+
 /-- A cell with a point. -/
 def RealisedK (cs : List (Carrier P K)) (X : Cov) : Prop := ∃ x, covCellK cs X x
 
@@ -119,7 +122,7 @@ def FullK (cs : List (Carrier P K)) (T : Cov) : Prop := RealisedK cs T ∧ Sgn.z
 (input surfaces, then separators), with `wallND` in place of nonzero normals. -/
 structure ExactK [Topology P] (L : Ledger) (cs : List (Carrier P K)) (A : Nat → Pred P) : Prop where
   /-- the wall (the carriers' zero sets) is nowhere dense: no carrier vanishes on an open set -/
-  wallND : NowhereDense fun x => ∃ c ∈ cs, c x = 0
+  wallND : NowhereDense (wallK cs)
   compat : ∀ T, FullK cs T → ∀ i, (covCellK cs T).Sub (A i) ∨ ∀ x, covCellK cs T x → ¬A i x
   pieceFacet : ∀ p ∈ L.pieces, p.1.isFacet = true ∧ p.1.zeroIdx = L.clsOf p.2 ∧ L.bodyOf p.2 < L.nb
   oneFace : ∀ p ∈ L.pieces, ∀ q ∈ L.pieces, q.1 = p.1 → L.bodyOf q.2 = L.bodyOf p.2 → q.2 = p.2
