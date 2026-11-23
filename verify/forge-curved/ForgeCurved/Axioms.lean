@@ -169,3 +169,6 @@ import ForgeCurved
 #print axioms ForgeCurved.G14.kept_iff
 #print axioms ForgeCurved.G14.extra_not_end
 #print axioms ForgeCurved.G14.edge_cut_not_kept
+#print axioms ForgeCurved.MctSample.critical_of_radial
+#print axioms ForgeCurved.MctSample.hasDerivAt_distSq_axis
+#print axioms ForgeCurved.MctSample.foot_eq_of_radial
