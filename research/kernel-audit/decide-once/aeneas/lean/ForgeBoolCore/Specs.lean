@@ -239,11 +239,16 @@ def EndToEnd : Prop :=
       ((∃ x, outcomeL l ext o = .refused (.zeroThickness x)) ↔
         XNonManifold (sampleLedger ps ss (sampler ps)) ps (brepA ss) (ruleL l.nb.val r)) ⦄
 
-/-- A Lean ledger small enough for `u32` ids (with room for two sides per piece below `NONE`). -/
-def LFits (L : ForgeExact.DecideOnce.Ledger) : Prop :=
-  L.nb < U32.max ∧ (∀ b ∈ L.faceBody, b < U32.max) ∧ (∀ c ∈ L.faceCls, c < U32.max) ∧
-  (∀ p ∈ L.pieces, p.2 < U32.max) ∧ (∀ q ∈ L.inside, q.2 < U32.max) ∧
-  4 * (L.pieces.length + L.inside.length + L.edges.length + L.verts.length) + 1 < U32.max
+/-- A Lean ledger small enough for `u32` ids: a target body, every id and covector width below
+`u32::MAX`, and the lists small enough that the cells (pieces, their sides, inside, edges, verts)
+plus two new sides per piece, and the sorts' `3·n` scratch, stay below `u32::MAX`. -/
+structure LFits (L : ForgeExact.DecideOnce.Ledger) : Prop where
+  nb : 0 < L.nb ∧ L.nb < U32.max
+  faces : L.faceBody.length < U32.max ∧ L.faceCls.length < U32.max ∧
+    (∀ b ∈ L.faceBody, b < U32.max) ∧ (∀ c ∈ L.faceCls, c < U32.max)
+  ids : (∀ p ∈ L.pieces, p.2 < U32.max) ∧ (∀ q ∈ L.inside, q.2 < U32.max)
+  width : ∀ X ∈ L.pieces.map Prod.fst ++ L.inside.map Prod.fst ++ L.edges ++ L.verts, X.length < U32.max
+  size : 32 * (L.pieces.length + L.inside.length + L.edges.length + L.verts.length + 1) < U32.max
 
 /-- A Lean ledger within the limits, every facet's sides among its cells, has a Rust ledger reading
 as it. (Its cells: the distinct covectors of pieces, sides, inside, edges and verts.) -/

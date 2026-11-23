@@ -25,4 +25,5 @@ import ForgeBoolCore.RefineFan
 import ForgeBoolCore.Axioms
 import ForgeBoolCore.Specs
 import ForgeBoolCore.RefineCore
+import ForgeBoolCore.Encode
 import ForgeBoolCore.EndToEnd

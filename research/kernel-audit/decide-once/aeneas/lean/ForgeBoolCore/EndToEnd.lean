@@ -1,4 +1,5 @@
 import ForgeBoolCore.RefineCore
+import ForgeBoolCore.Encode
 
 /-!
 # End to end
@@ -46,5 +47,33 @@ boolean on every flat input the sampler describes. -/
 theorem end_to_end (hS : SplitOkSpec) (hK : CollapseSpec) (hU : UnifySpec)
     (hR : ResultBridge) (hE : BadEdgeBridge) (hV : BadVertBridge) : EndToEnd :=
   end_to_end_of (core_spec_of hS (classify_on_spec_of hK (core_k_spec_of hR hE hV hU)))
+
+open ForgeExact ForgeExact.DecideOnce ForgeExact.DecideOnce.Sample ForgeExact.DecideOnce.Sampler ForgeExact.Ref in
+/-- **The sampler's ledger, encoded, through the Rust core.** For every flat input whose sampler
+ledger fits `u32` ids (`LFits`), the Rust ledger `encode` builds from it reads back as it, and
+`forge_bool_core::core` on it answers the exact regularised boolean. -/
+theorem end_to_end_encode (hS : SplitOkSpec) (hK : CollapseSpec) (hU : UnifySpec)
+    (hR : ResultBridge) (hE : BadEdgeBridge) (hV : BadVertBridge)
+    (ps : List Plane) (ss : List Solid) (hnz : ∀ p ∈ ps, p.n ≠ ⟨0, 0, 0⟩) (hi : FlatInput ps ss)
+    (hfit : LFits (sampleLedger ps ss (sampler ps))) (r : forge_bool_core.Rule) :
+    core (encode (sampleLedger ps ss (sampler ps))) r ⟨alloc.vec.Vec.new CellId, alloc.vec.Vec.new CellId⟩ ⦃ o =>
+      ∃ ext,
+      (∀ b, outcomeL (encode (sampleLedger ps ss (sampler ps))) ext o = .ok b →
+        ForgeExact.DecideOnce.Valid (sampleLedger ps ss (sampler ps))
+          ((sampleLedger ps ss (sampler ps)).keepTab (ruleL (sampleLedger ps ss (sampler ps)).nb r)) b ∧
+        (∀ φ, (∃ F ∈ b.faces, φ ∈ F.facets) ↔
+          XBoundary (sampleLedger ps ss (sampler ps)) ps (brepA ss) (ruleL (sampleLedger ps ss (sampler ps)).nb r) φ) ∧
+        reg ((decomp (flat_exact hnz hi)).kept fun T =>
+            xkeep (sampleLedger ps ss (sampler ps)) ps (brepA ss) (ruleL (sampleLedger ps ss (sampler ps)).nb r) T = true) =
+          reg (combine (ruleOp (ruleL (sampleLedger ps ss (sampler ps)).nb r))
+            (opnds (sampleLedger ps ss (sampler ps)) (brepA ss)))) ∧
+      ((∃ x, outcomeL (encode (sampleLedger ps ss (sampler ps))) ext o = .refused (.zeroThickness x)) ↔
+        XNonManifold (sampleLedger ps ss (sampler ps)) ps (brepA ss) (ruleL (sampleLedger ps ss (sampler ps)).nb r)) ⦄ := by
+  have hL := toL_encode hfit
+  have hnb : (encode (sampleLedger ps ss (sampler ps))).nb.val = (sampleLedger ps ss (sampler ps)).nb := by
+    have := congrArg ForgeExact.DecideOnce.Ledger.nb hL; simpa [toL] using this
+  have := end_to_end hS hK hU hR hE hV ps ss hnz hi _ r hL (encode_wf hfit)
+  rw [hnb] at this
+  exact this
 
 end forge_bool_core

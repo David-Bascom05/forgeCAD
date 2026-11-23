@@ -67,12 +67,13 @@ edges_between) are **done**, and so is `bad_vert` from D. The remaining work reg
 | **K** collapse | `CollapseSpec` | `SplitOK`, the union–find specs (`union_spec`, `find_spec`, `new_spec`, the `Least` model in `UFModel.lean`), `sort_u32_spec`, `ncells_spec` | `RefineCollapse.lean` |
 | **U** unify | `UnifySpec` (with `faces_at`, `same_set`, `has`) | `edges_between_spec`, `zeros_spec`, `zero_idx_spec`, `cov_spec`, the union–find specs; **and** `ResultBridge`, `AroundBridge`, `BadEdgeBridge`, `BadVertBridge` as hypotheses (take them as arguments) | `RefineUnify.lean` |
 | **R** bridges | `ResultBridge`, `AroundBridge`, `BadEdgeBridge`, `BadVertBridge` (pure Lean: positions and ids to the Lean's covectors, no `step`) | everything proven, especially `keep_res_spec`, `topes_toL`, `facets_toL`, `side_plus`/`side_minus`, `covE_inj`, `cls_spec`, `around_nodup`, `badVert_iff` | `BridgeResult.lean`, `BridgeTouch.lean` |
-| **E** core (coordinator) | `NewExtSpec`, `CoreKSpec`, `ClassifyOnSpec`, `CoreSpec`, `EndToEnd`: **done**, conditional on S, K, U and R; `EncodeSpec`, `NoExtraSpec` open | all the above | `RefineCore.lean`, `EndToEnd.lean` |
+| **E** core (coordinator) | `NewExtSpec`, `CoreKSpec`, `ClassifyOnSpec`, `CoreSpec`, `EndToEnd`, `EncodeSpec`: **done** (EndToEnd conditional on S, K, U, R); `NoExtraSpec` optional, open | all the above | `RefineCore.lean`, `EndToEnd.lean` |
 
 **Status of E.** All proven, no `sorry`, standard axioms only:
 - `end_to_end (hS : SplitOkSpec) (hK : CollapseSpec) (hU : UnifySpec) (hR : ResultBridge) (hE : BadEdgeBridge) (hV : BadVertBridge) : EndToEnd`;
 - `core_spec_of`, `classify_on_spec_of`, `core_k_spec_of`, `keep_on_lemma`, `new_ext_spec_proof`;
-- `coreM_nil` (no thin cells: `coreM` is `core`).
+- `coreM_nil` (no thin cells: `coreM` is `core`);
+- `encode_spec_proof` and `end_to_end_encode`: for every flat input whose sampler ledger fits `u32` ids (`LFits`), the encoded Rust ledger reads back as it, and `core` on it answers the exact regularised boolean, given the groups' Props.
 
 So the groups' Props are exactly what remains. `AroundBridge` isn't used by E; it is there for U if U wants it.
 

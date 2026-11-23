@@ -83,3 +83,5 @@ import ForgeBoolCore.EndToEnd
 #print axioms forge_bool_core.classify_on_spec_of
 #print axioms forge_bool_core.core_spec_of
 #print axioms forge_bool_core.end_to_end
+#print axioms forge_bool_core.encode_spec_proof
+#print axioms forge_bool_core.end_to_end_encode
