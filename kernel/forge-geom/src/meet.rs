@@ -1101,6 +1101,24 @@ fn setup(a: &Surface, b: &Surface) -> Option<(Surface, Surface, Form)> {
     }
 }
 
+/// How many samples round the host a root count is taken at, to find events the discriminant
+/// missed: 64, and for a torus on a cylinder enough that every arc of the host half the torus's
+/// minor radius long holds one, so a loop of the meet round the tube (at least the tube's width of
+/// the host's angle) cannot fall between two samples.
+fn count_samples(host: &Surface, other: &Surface) -> usize {
+    match (host, other) {
+        (Surface::Cylinder(c), Surface::Torus(t)) if t.minor > 0.0 => {
+            let n = (dmath::TAU * c.radius / (0.5 * t.minor)).ceil();
+            if n.is_finite() {
+                (n as usize).clamp(64, 1024)
+            } else {
+                64
+            }
+        }
+        _ => 64,
+    }
+}
+
 /// One root of F(u, .) over an interval between events.
 struct Track {
     interval: usize,
@@ -1204,11 +1222,16 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
         }
         _ => false,
     };
-    if matches!(form, Form::Poly4 | Form::Trig2) && axes_meet {
-        let at = |k: usize| dmath::TAU * k as f64 / 64.0;
+    // a small loop round a thin tube on a wide host (a torus's minor radius a fraction of the
+    // cylinder's) is found by its root count too: the discriminant there is too poorly scaled to
+    // see it (fuzz seed 295, feature 69: one of two loops lost, and the boolean kept an edge on one
+    // face)
+    let scan = count_samples(&eq.host, &other);
+    if matches!(form, Form::Poly4 | Form::Trig2) && (axes_meet || scan > 64) {
+        let at = |k: usize| dmath::TAU * k as f64 / scan as f64;
         let mut found = Vec::new();
         let mut ch = eq.count(at(0));
-        for k in 0..64 {
+        for k in 0..scan {
             let (mut lo, mut hi) = (at(k), at(k + 1));
             let cl = ch;
             ch = eq.count(hi);
