@@ -249,9 +249,14 @@ revolve(PATH | PROFILE, axis: LINE | AXIS, angle: A | sym(A) | two(A, B), surfac
   a body of its own named by the feature. PATH is what a sweep takes (a sketch line, arc, spline or
   circle, a `path` block, or a list of them end to end, all of one sketch). A closed loop gives a tube
   with no caps.
-- A sketch with an open chain has no regions, so draw sheet chains in a sketch of their own.
+- PROFILE is a closed loop (a `rect`, `circle`, polygon or closed `path`), a list of loops, or a
+  whole sketch. Each loop is a tube of its own, whatever else the sketch draws: a list of loops is
+  not one path end to end. A whole sketch gives the loops of its one region, and a sketch with an
+  open chain has none (`SketchProfile`), so name its loops instead.
 - The sheet's front (its faces' outward side) is the right of the chain walked with the sketch's
-  normal toward you. That is outside a loop, which is turned counter-clockwise first.
+  normal toward you. That is outside a loop, which is turned counter-clockwise first: each loop's
+  own outside, a hole's too, so `thin: t, side: "out"` on a plate and its bore thickens the bore
+  into the plate.
 - A sheet is never the body a solid feature acts on: an extrude, cut or hole goes to the last
   solid. Naming a sheet's faces or edges in a fillet, chamfer, shell, draft or face edit, or naming
   a sheet as a target or tool of `combine`, is the kernel's `OnSheet`. Bodies can be moved and

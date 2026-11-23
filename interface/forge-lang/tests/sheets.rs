@@ -52,3 +52,30 @@ fn refusals() {
         assert!(e.contains(word), "{tail}: {e}");
     }
 }
+
+#[test]
+fn a_list_of_loops_is_a_tube_each_whatever_else_the_sketch_draws() {
+    // the rect and the circle are tubes of their own, each thickened to its outside; the open
+    // lines beside them leave them be
+    let r = run(r#"shared t = 1
+shared h = 5
+sketch s(on: xy) {
+  plate = rect(corner: (0, 0), size: (40, 30))
+  bore = circle((20, 15), 6)
+  l = line((50, 0), (60, 10))
+  ax = line((-10, 0), (-10, 10))
+}
+a = extrude(s.plate, h, surface: true)
+b = extrude([s.plate, s.bore], h, thin: t, side: "out")
+c = revolve(s.bore, axis: s.ax, angle: 90deg, surface: true)
+"#);
+    assert!(r.errors.is_empty(), "{:?}", r.errors);
+    let m = r.measure.as_ref().expect("measured");
+    assert_eq!(m.problems, 0);
+    let pi = std::f64::consts::PI;
+    let want = 5.0 * (42.0 * 32.0 - 40.0 * 30.0 + pi * (49.0 - 36.0));
+    assert!((m.volume - want).abs() < 1e-9 * want, "{} {want}", m.volume);
+    let want = 140.0 * 5.0 + 2.0 * pi * 6.0 * 30.0 * pi / 2.0;
+    let got = forge_lang::report::sheet_area(&r).expect("sheets");
+    assert!((got - want).abs() < 1e-9 * want, "{got} {want}");
+}
