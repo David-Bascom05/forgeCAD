@@ -15,7 +15,7 @@ on boundary facets (`BadEdgeW`), or two boundary sectors not joined by `ReflTran
 
 * **`badEdgeW_iff`**: `BadEdgeW G keep l ↔ 2 < (l.filter p).length` when `Bd` is `p` on the row;
 * **`badVertS_iff`**: `BadVertS G keep (ss.map enc) ↔ ∃ c d` result sectors not `Conn`, for a
-  nodup sector list with two bounding edges each.
+  nodup sector list.
 
 Both are stated over plain lists (the sector type is any `S` with `facet` and `bounds`), so this
 branch does not need IncCore. With `S := Sector Nat`, `p := (result kt).contains` and
@@ -85,37 +85,35 @@ section Vert
 
 variable {S : Type} [DecidableEq S] (facet : S → Nat) (bounds : S → List Nat)
 
-/-- A sector, as FaceLocal's `Sec`: its facet and its two bounding edges. -/
-def enc (s : S) : Sec := (facet s, (bounds s).getD 0 0, (bounds s).getD 1 0)
+/-- A sector, as FaceLocal's `Sec`: its facet and its bounding edges. -/
+def enc (s : S) : Sec := (facet s, bounds s)
 
 /-- The core's `fanRel`: two sectors sharing a bounding edge. -/
 def fanRelS (s t : S) : Bool := (bounds s).any fun e => (bounds t).contains e
 
 variable {facet bounds}
 
-theorem bounds_enc {s : S} (h2 : (bounds s).length = 2) (a : Nat) :
-    Sec.bounds (enc facet bounds s) a ↔ a ∈ bounds s := by
-  match hb : bounds s, h2 with
-  | [b0, b1], _ => simp [Sec.bounds, enc, hb]
+theorem bounds_enc (s : S) (a : Nat) : Sec.bounds (enc facet bounds s) a ↔ a ∈ bounds s :=
+  Iff.rfl
 
 theorem getD_map_enc {ss : List S} {i : Nat} (hi : i < ss.length) :
-    (ss.map (enc facet bounds)).getD i (0, 0, 0) = enc facet bounds ss[i] := by
+    (ss.map (enc facet bounds)).getD i (0, []) = enc facet bounds ss[i] := by
   rw [List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_eq_getElem hi]; rfl
 
-theorem fanRelS_iff {s t : S} (hs : (bounds s).length = 2) (ht : (bounds t).length = 2) :
+theorem fanRelS_iff (s t : S) :
     fanRelS bounds s t = true ↔
       ∃ a, Sec.bounds (enc facet bounds s) a ∧ Sec.bounds (enc facet bounds t) a := by
-  simp only [fanRelS, List.any_eq_true, List.contains_iff_mem, bounds_enc hs, bounds_enc ht]
+  simp only [fanRelS, List.any_eq_true, List.contains_iff_mem, bounds_enc]
 
 /-- **Verts**: two boundary sectors in different fan classes iff two result sectors not `Conn`. -/
 theorem badVertS_iff {keep : Nat → Bool} {p : Nat → Bool} {ss : List S} (hnd : ss.Nodup)
-    (hb2 : ∀ s ∈ ss, (bounds s).length = 2) (hp : ∀ s ∈ ss, (Bd G keep (facet s) ↔ p (facet s) = true)) :
+    (hp : ∀ s ∈ ss, (Bd G keep (facet s) ↔ p (facet s) = true)) :
     BadVertS G keep (ss.map (enc facet bounds)) ↔
       ∃ c ∈ ss.filter (fun s => p (facet s)), ∃ d ∈ ss.filter (fun s => p (facet s)),
         ¬Conn (fanRelS bounds) (ss.filter fun s => p (facet s)) c d := by
   set A := ss.filter fun s => p (facet s)
   have hlen : (ss.map (enc facet bounds)).length = ss.length := List.length_map _
-  have hBd : ∀ i (hi : i < ss.length), (Bd G keep ((ss.map (enc facet bounds)).getD i (0, 0, 0)).1 ↔
+  have hBd : ∀ i (hi : i < ss.length), (Bd G keep ((ss.map (enc facet bounds)).getD i (0, [])).1 ↔
       ss[i] ∈ A) := by
     intro i hi
     rw [getD_map_enc hi]
@@ -130,13 +128,13 @@ theorem badVertS_iff {keep : Nat → Bool} {p : Nat → Bool} {ss : List S} (hnd
     · rintro ⟨hi, hj, bi, bj, hab⟩
       rw [hlen] at hi hj
       refine ⟨hi, hj, (hBd i hi).mp bi, (hBd j hj).mp bj, ?_⟩
-      rw [fanRelS_iff (hb2 _ (List.getElem_mem hi)) (hb2 _ (List.getElem_mem hj))]
+      rw [fanRelS_iff]
       rw [getD_map_enc hi, getD_map_enc hj] at hab
       exact hab
     · rintro ⟨hi, hj, ai, aj, hr⟩
       refine ⟨hlen ▸ hi, hlen ▸ hj, (hBd i hi).mpr ai, (hBd j hj).mpr aj, ?_⟩
       rw [getD_map_enc hi, getD_map_enc hj]
-      exact (fanRelS_iff (hb2 _ (List.getElem_mem hi)) (hb2 _ (List.getElem_mem hj))).mp hr
+      exact (fanRelS_iff _ _).mp hr
   -- ReflTransGen on positions gives Conn on sectors
   have h1 : ∀ i j (hi : i < ss.length), ss[i] ∈ A → Relation.ReflTransGen (FanRel G keep
       (ss.map (enc facet bounds))) i j → ∃ hj : j < ss.length, Conn (fanRelS bounds) A ss[i] ss[j] := by
@@ -175,13 +173,13 @@ theorem badVertS_iff {keep : Nat → Bool} {p : Nat → Bool} {ss : List S} (hnd
 
 /-- **Bridge (1)**: the touch rule as `coreI_zeroThickness_iff` states it (more than two result
 wings at an edge, or two result sectors at a vert not `Conn`) is `XNonManifoldF`, for rows whose
-vert rows are the core's sectors encoded (`enc`), nodup, with two bounding edges each, and with
+vert rows are the core's sectors encoded (`enc`), nodup, and with
 `Bd` the core's result test `p` on every row facet. -/
 theorem touch_iff_xNonManifoldF {keep p : Nat → Bool} (L : Rows (P := P)) (sec : Nat → List S)
     (hsec : ∀ v, L.vsec v = (sec v).map (enc facet bounds))
     (hpe : ∀ e ∈ L.es, ∀ φ ∈ L.erow e, (Bd G keep φ ↔ p φ = true))
     (hpv : ∀ v ∈ L.vs, ∀ s ∈ sec v, (Bd G keep (facet s) ↔ p (facet s) = true))
-    (hnd : ∀ v ∈ L.vs, (sec v).Nodup) (hb2 : ∀ v ∈ L.vs, ∀ s ∈ sec v, (bounds s).length = 2) :
+    (hnd : ∀ v ∈ L.vs, (sec v).Nodup) :
     ((∃ e ∈ L.es, 2 < ((L.erow e).filter p).length) ∨
       (∃ v ∈ L.vs, ∃ c ∈ (sec v).filter (fun s => p (facet s)),
         ∃ d ∈ (sec v).filter (fun s => p (facet s)),
@@ -192,7 +190,7 @@ theorem touch_iff_xNonManifoldF {keep p : Nat → Bool} (L : Rows (P := P)) (sec
   · exact exists_congr fun e => and_congr_right fun he => (badEdgeW_iff (hpe e he)).symm
   · refine exists_congr fun v => and_congr_right fun hv => ?_
     rw [hsec v]
-    exact (badVertS_iff (hnd v hv) (hb2 v hv) (hpv v hv)).symm
+    exact (badVertS_iff (hnd v hv) (hpv v hv)).symm
 
 end Vert
 

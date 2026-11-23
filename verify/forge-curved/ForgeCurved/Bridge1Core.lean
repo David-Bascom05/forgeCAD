@@ -34,8 +34,7 @@ theorem coreI_refuses_iff_xNonManifoldF (L : IncLedger Nat) (hs : L.splitOk = tr
     (hc : L.classifyOk = true) (rule : Rule) (hnd : ∀ v ∈ L.verts, (L.vertSectors v).Nodup)
     (G : FaceGeo P) (hrp : G.rp = L.plus) (hrm : G.rm = L.minus) (vpt : Nat → P)
     (hrow : ∀ e ∈ L.edges, ∀ φ ∈ L.edgeFacets e, φ ∈ L.facets)
-    (hsec : ∀ v ∈ L.verts, ∀ s ∈ L.vertSectors v, s.facet ∈ L.facets)
-    (hb2 : ∀ v ∈ L.verts, ∀ s ∈ L.vertSectors v, s.bounds.length = 2) :
+    (hsec : ∀ v ∈ L.verts, ∀ s ∈ L.vertSectors v, s.facet ∈ L.facets) :
     (∃ x, coreI L rule = .refused (.zeroThickness x)) ↔
       XNonManifoldF G (keepInI (L.keepTab rule)) (rowsOf L vpt) := by
   rw [coreI_zeroThickness_iff L hs hc rule hnd]
@@ -48,7 +47,7 @@ theorem coreI_refuses_iff_xNonManifoldF (L : IncLedger Nat) (hs : L.splitOk = tr
   exact touch_iff_xNonManifoldF (facet := Sector.facet) (bounds := Sector.bounds)
     (rowsOf L vpt) L.vertSectors (fun _ => rfl)
     (fun e he φ hφ => hBd φ (hrow e he φ hφ))
-    (fun v hv s hs' => hBd _ (hsec v hv s hs')) hnd hb2
+    (fun v hv s hs' => hBd _ (hsec v hv s hs')) hnd
 
 /-- **The core refuses iff the result is not a manifold**, given route B's obligations. -/
 theorem coreI_refuses_iff_top (L : IncLedger Nat) (hs : L.splitOk = true)
@@ -56,11 +55,10 @@ theorem coreI_refuses_iff_top (L : IncLedger Nat) (hs : L.splitOk = true)
     (G : FaceGeo P) (hrp : G.rp = L.plus) (hrm : G.rm = L.minus) (vpt : Nat → P)
     (hrow : ∀ e ∈ L.edges, ∀ φ ∈ L.edgeFacets e, φ ∈ L.facets)
     (hsec : ∀ v ∈ L.verts, ∀ s ∈ L.vertSectors v, s.facet ∈ L.facets)
-    (hb2 : ∀ v ∈ L.verts, ∀ s ∈ L.vertSectors v, s.bounds.length = 2)
     (hob : Obligations G (keepInI (L.keepTab rule)) (rowsOf L vpt)) :
     (∃ x, coreI L rule = .refused (.zeroThickness x)) ↔
       TopNonManifoldF G (Res G (keepInI (L.keepTab rule))) (rowsOf L vpt) :=
-  (coreI_refuses_iff_xNonManifoldF L hs hc rule hnd G hrp hrm vpt hrow hsec hb2).trans
+  (coreI_refuses_iff_xNonManifoldF L hs hc rule hnd G hrp hrm vpt hrow hsec).trans
     (xNonManifoldF_iff_top hob)
 
 end ForgeCurved.FaceLocal

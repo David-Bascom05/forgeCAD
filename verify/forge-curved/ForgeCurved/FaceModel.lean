@@ -154,7 +154,7 @@ structure VertModel (G : FaceGeo P) (cs : List (Carrier P ℝ)) (ss : List Sec) 
   facet : ∀ φ ∈ Φ, φ.count .zero = 1
   above : ∀ φ ∈ Φ, Cov.le (covOfK cs v) φ = true
   near : ∀ φ ∈ Φ, v ∈ closure (cell cs φ)
-  sub : ∀ i (h : i < Φ.length), cell cs Φ[i] ∩ W ⊆ G.facet (ss.getD i (0, 0, 0)).1
+  sub : ∀ i (h : i < Φ.length), cell cs Φ[i] ∩ W ⊆ G.facet (ss.getD i (0, [])).1
   complete : ∀ y ∈ W, y ∈ FacetPts G → covOfK cs y ∈ Φ
   E : List Cov
   ea : Nat → Nat
@@ -167,9 +167,9 @@ structure VertModel (G : FaceGeo P) (cs : List (Carrier P ℝ)) (ss : List Sec) 
   ea_inj : ∀ j k, j < E.length → k < E.length → ea j = ea k → j = k
   /-- an edge below a sector bounds it -/
   bounds_of_le : ∀ i (hi : i < Φ.length) j (hj : j < E.length), Cov.le E[j] Φ[i] = true →
-    Sec.bounds (ss.getD i (0, 0, 0)) (ea j)
+    Sec.bounds (ss.getD i (0, [])) (ea j)
   /-- a sector's bounding edges are listed edges below it -/
-  le_of_bounds : ∀ i (hi : i < Φ.length) a, Sec.bounds (ss.getD i (0, 0, 0)) a →
+  le_of_bounds : ∀ i (hi : i < Φ.length) a, Sec.bounds (ss.getD i (0, [])) a →
     ∃ j, ∃ hj : j < E.length, ea j = a ∧ Cov.le E[j] Φ[i] = true
   /-- local connectivity at `v` -/
   conn : LocalConn cs v
@@ -180,7 +180,7 @@ structure VertModel (G : FaceGeo P) (cs : List (Carrier P ℝ)) (ss : List Sec) 
 
 /-- The sector pieces are the sectors' cells near the vert. -/
 theorem vpiece_eq {ss : List Sec} {v : P} (m : VertModel G cs ss v) (i : Nat) (hi : i < m.Φ.length) :
-    {y | y ∈ m.W ∧ y ∈ G.facet (ss.getD i (0, 0, 0)).1 ∧ m.Φ.idxOf (covOfK cs y) = i} =
+    {y | y ∈ m.W ∧ y ∈ G.facet (ss.getD i (0, [])).1 ∧ m.Φ.idxOf (covOfK cs y) = i} =
       cell cs m.Φ[i] ∩ m.W := by
   ext y
   constructor
@@ -256,7 +256,7 @@ theorem vertLocal_of_model (hc : ∀ c ∈ cs, Continuous c) {ss : List Sec} {v 
       exact hz.1
   · intro i hi
     have hi' : i < m.Φ.length := m.len ▸ hi
-    show v ∈ closure {y | y ∈ m.W ∧ y ∈ G.facet (ss.getD i (0, 0, 0)).1 ∧
+    show v ∈ closure {y | y ∈ m.W ∧ y ∈ G.facet (ss.getD i (0, [])).1 ∧
       m.Φ.idxOf (covOfK cs y) = i}
     rw [hpiece i hi']
     exact mem_closure_inter_open (m.near _ (List.getElem_mem hi')) m.hWo m.hvW
@@ -265,7 +265,7 @@ theorem vertLocal_of_model (hc : ∀ c ∈ cs, Continuous c) {ss : List Sec} {v 
     obtain ⟨O, hOU, hOo, hxO⟩ := mem_nhds_iff.mp (Filter.inter_mem hU (m.hWo.mem_nhds m.hvW))
     obtain ⟨U'', hU''o, hU''O, hxU'', hcon⟩ := m.conn O hOo hxO
     refine ⟨U'', hU''o.mem_nhds hxU'', fun y hy => (hOU (hU''O hy)).1, ?_⟩
-    show IsPreconnected ({y | y ∈ m.W ∧ y ∈ G.facet (ss.getD i (0, 0, 0)).1 ∧
+    show IsPreconnected ({y | y ∈ m.W ∧ y ∈ G.facet (ss.getD i (0, [])).1 ∧
       m.Φ.idxOf (covOfK cs y) = i} ∩ U'')
     rw [hpiece i hi']
     have : cell cs m.Φ[i] ∩ m.W ∩ U'' = cell cs m.Φ[i] ∩ U'' := by
@@ -284,7 +284,7 @@ theorem vertLocal_of_model (hc : ∀ c ∈ cs, Continuous c) {ss : List Sec} {v 
     · obtain ⟨j', hj', e, hea'⟩ := m.esharp y hyW a hya
       have hjj : j' = j := m.ea_inj j' j hj' hj (hea'.trans hea.symm)
       subst hjj
-      show y ∈ closure {y | y ∈ m.W ∧ y ∈ G.facet (ss.getD i (0, 0, 0)).1 ∧
+      show y ∈ closure {y | y ∈ m.W ∧ y ∈ G.facet (ss.getD i (0, [])).1 ∧
         m.Φ.idxOf (covOfK cs y) = i}
       rw [hpiece i hi']
       exact mem_closure_inter_open (m.inc y hyW i hi' j' hj' e hle) m.hWo hyW
