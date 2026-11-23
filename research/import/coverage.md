@@ -25,8 +25,8 @@ measure are given beside them where they differ.
 | set | parts | untranslated before | after | match (1e-4) before | after | uncertain after | match after, old measure |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | FreeCAD library, bodies | 677 | 130 | 39 | 394 | 570 | 20 | 523 |
-| CADFS, all parts | 1914 | 640 | 595 | 1108 | 1136 | 4 | 1122 |
-| CADFS, parts with a fillet | 476 | 238 | 223 | 164 | 167 | 1 | 168 |
+| CADFS, all parts | 1914 | 640 | 522 | 1108 | 1177 | 5 | 1162 |
+| CADFS, parts with a fillet | 476 | 238 | 200 | 164 | 177 | 1 | 178 |
 | WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new | | |
 
 No part got worse on any set through the importers: no match was lost, and nothing that built before stopped
@@ -329,13 +329,14 @@ All 1914 sampled parts:
 
 | class | before | after |
 |---|---:|---:|
-| match | 1108 | 1136 |
-| mismatch | 69 | 69 |
-| uncertain | 3 | 4 |
-| refused | 85 | 98 |
-| fail | 8 | 11 |
+| match | 1108 | 1177 |
+| mismatch | 69 | 79 |
+| uncertain | 3 | 5 |
+| no truth | 0 | 8 |
+| refused | 85 | 109 |
+| fail | 8 | 13 |
 | timeout | 1 | 1 |
-| untranslated | 640 | 595 |
+| untranslated | 640 | 522 |
 
 **Draft on an extrude (24 → 0 under that name).** Onshape's extrude draft is Forge's `taper:`, on a depth. Its sign
 was read from the STEP: with the pull-direction flag set, Onshape narrows the extrude as Forge's positive taper does
@@ -442,6 +443,40 @@ were there before. On a later query:
 
 A full sweep of all 1914 parts moves only these, and no volume.
 
+### Sketch text, surfaces and thin walls, conic fillets (merged from their branches)
+
+Three features `.fg` lacked when this pass began now exist on their own branches, and are merged here:
+- sketch text (claude/repo-review-mbdrlj-sketch-text): `text(..)` in a sketch;
+- surfaces and thin walls (-surfaces): `extrude(.., surface: true | thin: t)` and the revolve's;
+- conic fillets (-conic-fillet): `fillet(.., conic: ratio(rho))`.
+
+Their branches had already wired them into cadfs.py. The merge here keeps both its own sketch reading (elliptical arcs
+from the record) and the text's. Conic fillets are written from Onshape's `crossSection CONIC` and `rho`.
+
+One importer fix came with them. A fillet whose `vertexSettings` is an empty list is not a variable fillet: the list is
+the form's default. 3 parts stopped on it, and 2 now match.
+
+The merge also needed one kernel fix of its own. The surfaces branch rewrote `forge_model::bodies::multi` as one match
+over each feature's op, and a text's extrude was not in it, so a text extruded as a new body lost the body beside it.
+sketch_text.rs's `text_as_a_new_body` holds it.
+
+A full sweep on the merged kernel, against the one before the merge, moves only untranslated parts:
+
+| cause before | match | mismatch | refused | fail | uncertain | no truth |
+|---|---:|---:|---:|---:|---:|---:|
+| a surface extrude | 19 | 4 | 6 | | | |
+| a thin or surface extrude | 6 | | 1 | | | 6 |
+| a surface revolve | 1 | | | 1 | | 2 |
+| sketch text | 12 | 6 | 3 | 1 | 1 | |
+| a variable or conic fillet (conic, or an empty vertexSettings) | 3 | | 1 | | | |
+
+- **No truth (8):** parts whose result is a sheet alone. The STEP truth measures solids, and these hold none.
+- **The 10 mismatches:** 8 are within 1.1e-2. Two sketch texts are off by 1.1e-1 and 2.1e-1 (00245556, 00239261), not yet looked at.
+
+CADFS goes from 1136 to 1177 matches, and the fillet subset from 167 to 177. The FreeCAD library has no sketch text,
+surfaces or conic fillets among its causes, so neither FreeCAD reader had anything to wire. Its sweep on the merged
+kernel moves no body and no volume.
+
 ### What still stops CADFS
 
 Ranked for the parts with a fillet (all 1914 parts in brackets):
@@ -449,11 +484,10 @@ Ranked for the parts with a fillet (all 1914 parts in brackets):
 | cause | fillet parts (all) | `.fg` feature it maps to, or what is missing |
 |---|---:|---|
 | a region the query does not settle | 51 (119) | importer: the meaning of Onshape's `TD` weight on an imprint edge is not known (README: reading it as "the piece beside the vertex" gave 1 match and 16 wrong) |
-| a surface extrude / a thin or surface extrude / a surface revolve | 19 (73) | **missing: surface bodies, and a thin-walled extrude** |
-| sketch text | 17 (59) | **missing: text in a sketch** |
+| a surface sweep, loft, along a spline, of a part's edges | 0 (6) | the merged sheets: importer |
+| sketch text beside other curves 5 (9), not in the record 3 (5), in a font not shipped 3 (13 parts, 7 fonts), alike 0 (1) | 11 (28) | the merged `text`: importer and fonts |
 | a reference to an entity the sketch no longer has, imprint edge source / bounds nothing | 29 (110) | importer: queries naming entities the program no longer has |
 | an unequal chamfer | 11 (23) | `chamfer(.., d2: | angle:, face: FACE)` exists. Tried and set aside: 15 of the 23 are single edges, where which face takes `width1` needs Onshape's per-edge rule. Reading it as the one face every edge bounds matched none of the rest. |
-| a variable or conic fillet | 9 (9) | all 9 are conic: **missing: a conic cross-section fillet** (`vary` covers variable radii) |
 | BLEND_EDGE / BLEND_FACE / OFFSET_* of an unknown feature, no edge or face on the carrier | 24 | importer: queries on blends' and offsets' own faces |
 | feature deleteBodies | 4 (17) | importer (bodies dropped from the part) |
 | sketch curve skEllipticalArc | 1 (2) | read from the dataset's sketch record where one record has the program's entities (above); in these 2, none does |

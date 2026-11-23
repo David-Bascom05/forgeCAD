@@ -1782,7 +1782,8 @@ class Tr:
 
     def fillet(self, f):
         a, env = f["args"], f["env"]
-        if a.get("isVariable") is True or "vertexSettings" in a or "filletType" in a:
+        # an empty vertexSettings is the form's default, no setting at any vertex
+        if a.get("isVariable") is True or a.get("vertexSettings") not in (None, []) or "filletType" in a:
             raise Unsupported("a variable fillet")
         # Onshape's conic: the circular fillet's feet for `radius`, a conic of shoulder ratio rho
         # between them (measured on the source's STEP: setbacks r tan(phi/2), rho as given)
