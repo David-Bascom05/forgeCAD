@@ -40,9 +40,9 @@ variable {V : Type} [NormedAddCommGroup V] [NormedSpace ℝ V]
 /-- The open slab between two sweep levels. -/
 def Slab (ℓ : V →L[ℝ] ℝ) (a b : ℝ) : Set V := {x | a < ℓ x ∧ ℓ x < b}
 
-/-- Transversality to the sweep at `x`: `v ↦ (ℓ v, (Dc v)_{c ∈ ks})` is onto. -/
+/-- Transversality to the sweep at `x`: `v ↦ (ℓ v, (Dc v)_{c ∈ ks})` is onto `ℝ × ℝ^ks`. -/
 def Transverse (ℓ : V →L[ℝ] ℝ) (ks : List (V → ℝ)) (x : V) : Prop :=
-  Function.Surjective fun v : V => (ℓ v, ks.map fun c => fderiv ℝ c x v)
+  Function.Surjective fun v : V => (ℓ v, fun i : Fin ks.length => fderiv ℝ ks[i] x v)
 
 /-- The common zeros of `ks` in the slab are finitely many disjoint continuous graphs over the
 sweep. -/
