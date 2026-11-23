@@ -582,3 +582,75 @@ fn walk_passes_over_a_short_blend() {
     assert!(mesh.open_edges().is_empty());
     assert!((mesh.volume() - volume(&b)).abs() < 1e-4 * volume(&b));
 }
+
+/// `wall_falling_below_the_ball` on the union unified, as the regen hands a fillet the part (the
+/// wall's ends and the plate's, flush, one face each side; fix-tidy's repro). It added 58.6, more
+/// than a full section along the whole 30 could (57.9): the round's ends were overbuilt. Right since
+/// the ball rests on the wall's top edge as a cliff of its own stretch of spine.
+#[test]
+fn wall_falling_below_the_ball_unified() {
+    use forge_ops::{ProfileLoop, Segment};
+    let at = Frame::from_zx(Point3::new(0.0, 0.0, -5.0), UnitVec3::Z, Vec3::X).expect("frame");
+    let plate = extrude(
+        &Profile {
+            plane: at,
+            loops: vec![Profile::rectangle(Point2::new(0.0, -40.0), 30.0, 60.0, 0)],
+        },
+        5.0,
+        1,
+    )
+    .expect("plate");
+    let plane = Frame::from_zx(Point3::ORIGIN, -UnitVec3::Y, Vec3::X).expect("frame");
+    let line = |a: (f64, f64), b: (f64, f64), id| {
+        (
+            Segment::Line {
+                a: Point2::new(a.0, a.1),
+                b: Point2::new(b.0, b.1),
+            },
+            id,
+        )
+    };
+    let (h0, h1, r) = (10.0, 1.0, 3.0);
+    let wedge = extrude(
+        &Profile {
+            plane,
+            loops: vec![ProfileLoop::new(vec![
+                line((0.0, -1.0), (30.0, -1.0), 0),
+                line((30.0, -1.0), (30.0, h1), 1),
+                line((30.0, h1), (0.0, h0), 2),
+                line((0.0, h0), (0.0, -1.0), 3),
+            ])],
+        },
+        10.0,
+        2,
+    )
+    .expect("wedge");
+    let mut body = boolean(&plate, &wedge, Op::Union, 3).expect("union");
+    forge_bool::unify(&mut body);
+    let body = body.into_compact();
+    let foot: Vec<FilletEdge> = body
+        .edge_ids()
+        .filter(|&e| {
+            let x = body.edge(e);
+            let (p, q) = (x.curve.eval(x.range.lo), x.curve.eval(x.range.hi));
+            p.z.abs() < 1e-9 && q.z.abs() < 1e-9 && p.y.abs() < 1e-9 && q.y.abs() < 1e-9
+        })
+        .map(|edge| FilletEdge {
+            edge,
+            radius: Radius::Constant(r),
+        })
+        .collect();
+    assert_eq!(foot.len(), 1);
+    let b = fillet(&body, &foot, 9).expect("rounds");
+    assert!(forge_topo::check(&b).is_empty());
+    let volume = |x: &forge_topo::Body| forge_topo::mass::mass(x).expect("mass").volume;
+    let added = volume(&b) - volume(&body);
+    assert!((added / 54.785 - 1.0).abs() < 0.01, "added {added}");
+    let fine = Quality {
+        chord: 0.001,
+        ..Default::default()
+    };
+    let mesh = tessellate(&b, &fine).expect("meshes");
+    assert!(mesh.open_edges().is_empty());
+    assert!((mesh.volume() - volume(&b)).abs() < 1e-4 * volume(&b));
+}
