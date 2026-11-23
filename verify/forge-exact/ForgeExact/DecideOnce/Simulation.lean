@@ -154,6 +154,17 @@ theorem dedup_length_map {G : γ → δ} {l₁ : List γ} {l₂ : List δ}
     simp only [mem_dedup]
   rw [hp.length_eq, List.length_map]
 
+/-- Chains through `some`. -/
+theorem conn_some {r : δ → δ → Bool} {ys : List δ} {X Y : δ} (hX : X ∈ ys) (hY : Y ∈ ys) :
+    Conn (fun x y : Option δ => match x, y with | some a, some b => r a b | _, _ => false) (ys.map some) (some X) (some Y)
+      ↔ Conn r ys X Y := by
+  refine (conn_map (f := some) (fun a ha => List.mem_map_of_mem ha) (fun a _ b _ hr => Or.inr hr) ?_
+    (fun a _ b _ e => by cases e; exact Conn.refl) hX hY).symm
+  intro c hc d hd hr
+  obtain ⟨a, ha, rfl⟩ := List.mem_map.mp hc
+  obtain ⟨b, hb, rfl⟩ := List.mem_map.mp hd
+  exact ⟨a, ha, b, hb, rfl, rfl, hr⟩
+
 end ConnMap
 
 namespace IncLedger
@@ -921,6 +932,74 @@ theorem outV_iff (h : Refines A B σ τ ν κ) (rule : Rule) (hE : ∀ E ∈ B.e
     exact ⟨w, (outV_some h rule hw hν).mp hV, hν⟩
   · rintro ⟨w, hw, hν⟩
     exact (outV_some h rule (List.mem_filter.mp hw).1 hν).mpr hw
+
+theorem vertEdges_some (h : Refines A B σ τ ν κ) {w : α} (hw : w ∈ A.verts) {V : β} (hν : ν w = some V) {E : β} :
+    E ∈ B.vertEdges V ↔ ∃ e ∈ A.vertEdges w, τ e = some E := by
+  rw [← (h.vert_edges w hw V hν).mem_iff, List.mem_filterMap]
+
+/-- The edge classes of unify correspond. -/
+theorem erel_conn (h : Refines A B σ τ ν κ) (rule : Rule) (hE : ∀ E ∈ B.edges, B.badEdge (B.keepTab rule) E = false)
+    {e e' : α} (he : e ∈ A.ecsk (A.keepTab rule)) (he' : e' ∈ A.ecsk (A.keepTab rule)) {E E' : β}
+    (hτ : τ e = some E) (hτ' : τ e' = some E') :
+    Conn (A.erelk (A.keepTab rule)) (A.ecsk (A.keepTab rule)) e e' ↔
+    Conn (B.erelk (B.keepTab rule)) (B.ecsk (B.keepTab rule)) E E' := by
+  have edgeA : ∀ x ∈ A.ecsk (A.keepTab rule), x ∈ A.edges := fun x hx => (List.mem_filter.mp hx).1
+  have hEm := (ecs_iff h rule (edgeA e he) hτ).mpr he
+  have hEm' := (ecs_iff h rule (edgeA e' he') hτ').mpr he'
+  rw [← conn_some hEm hEm', ← hτ, ← hτ']
+  refine conn_map (f := τ) ?_ ?_ ?_ ?_ he he'
+  · intro x hx
+    obtain ⟨X, hX, hXm⟩ := ecs_some h rule hx
+    rw [hX]; exact List.mem_map_of_mem hXm
+  · intro x hx y hy hr
+    obtain ⟨X, hX, _⟩ := ecs_some h rule hx
+    obtain ⟨Y, hY, _⟩ := ecs_some h rule hy
+    simp only [IncLedger.erelk, Bool.and_eq_true, List.any_eq_true, List.contains_iff_mem, Bool.not_eq_true',
+      Bool.eq_false_iff, ne_eq] at hr
+    obtain ⟨hss, w, hw, ⟨hxw, hyw⟩, hout⟩ := hr
+    cases hν : ν w with
+    | none => left; rw [hX, hY, h.inner_edges w hw hν x hxw y hyw X Y hX hY]
+    | some V =>
+      right
+      rw [hX, hY]
+      simp only [IncLedger.erelk, Bool.and_eq_true, List.any_eq_true, List.contains_iff_mem, Bool.not_eq_true',
+        Bool.eq_false_iff, ne_eq]
+      refine ⟨by rw [sameSet_corr h rule (edgeA x hx) (edgeA y hy) hX hY]; exact hss, V, h.vert_mem w hw V hν,
+        ⟨(vertEdges_some h hw hν).mpr ⟨x, hxw, hX⟩, (vertEdges_some h hw hν).mpr ⟨y, hyw, hY⟩⟩, ?_⟩
+      rw [outV_some h rule hw hν]; exact hout
+  · intro c hc d hd hr
+    obtain ⟨X, hX, rfl⟩ := List.mem_map.mp hc
+    obtain ⟨Y, hY, rfl⟩ := List.mem_map.mp hd
+    simp only [IncLedger.erelk, Bool.and_eq_true, List.any_eq_true, List.contains_iff_mem, Bool.not_eq_true',
+      Bool.eq_false_iff, ne_eq] at hr
+    obtain ⟨hss, V, hV, ⟨hXV, hYV⟩, hout⟩ := hr
+    obtain ⟨w, hw, hν⟩ := h.vert_onto V hV
+    obtain ⟨x, hxw, hx⟩ := (vertEdges_some h hw hν).mp hXV
+    obtain ⟨y, hyw, hy⟩ := (vertEdges_some h hw hν).mp hYV
+    have hxe := h.vert_edges_A w hw x hxw
+    have hye := h.vert_edges_A w hw y hyw
+    refine ⟨x, (ecs_iff h rule hxe hx).mp hX, y, (ecs_iff h rule hye hy).mp hY, hx, hy, ?_⟩
+    simp only [IncLedger.erelk, Bool.and_eq_true, List.any_eq_true, List.contains_iff_mem, Bool.not_eq_true',
+      Bool.eq_false_iff, ne_eq]
+    refine ⟨by rw [← sameSet_corr h rule hxe hye hx hy]; exact hss, w, hw, ⟨hxw, hyw⟩, ?_⟩
+    rw [← outV_some h rule hw hν]; exact hout
+  · intro x hx y hy exy
+    obtain ⟨X, hX, hXm⟩ := ecs_some h rule hx
+    have hY : τ y = some X := exy ▸ hX
+    have hc := h.edge_fibre x (edgeA x hx) y (edgeA y hy) X hX hY
+    refine conn_restrict2 (P := fun z => z ∈ A.edges ∧ τ z = some X) hc ⟨edgeA x hx, hX⟩ ?_ ?_ ?_
+    · intro z u _ hu _
+      simp only [List.mem_filter, beq_iff_eq] at hu; exact hu
+    · intro z _ ⟨hz, hzX⟩; exact (ecs_iff h rule hz hzX).mp hXm
+    · intro z u ⟨hz, hzX⟩ ⟨hu, huX⟩ hr
+      simp only [List.any_eq_true, Bool.and_eq_true, beq_iff_eq, List.contains_iff_mem] at hr
+      obtain ⟨w, hw, ⟨hνw, hzw⟩, huw⟩ := hr
+      simp only [IncLedger.erelk, Bool.and_eq_true, List.any_eq_true, List.contains_iff_mem, Bool.not_eq_true',
+        Bool.eq_false_iff, ne_eq]
+      refine ⟨?_, w, hw, ⟨hzw, huw⟩, ?_⟩
+      · rw [← sameSet_corr h rule hz hu hzX huX, IncLedger.sameSetI_iff]; exact fun _ => Iff.rfl
+      · have := outV_none h rule hw hνw hE
+        simpa using this
 
 end Refines
 
