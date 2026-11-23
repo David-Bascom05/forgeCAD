@@ -421,7 +421,7 @@ A full sweep of all 1914 parts, against the one before, moves only these six. On
 00035608, a mismatch, comes nearer, from 1.6e-1 to 3.7e-5 in volume (1.5e-4 in area). It too had a stale entity
 there, which had sent its query down a fallback.
 
-**A fillet's own faces and edges (12 → 0 under "of an unknown feature"; 10 still stop on them).** A BLEND_FACE
+**A fillet's own faces and edges (12 → 2 under "of an unknown feature"; 7 more stop on narrower causes).** A BLEND_FACE
 query names the round's face along one rounded edge, and a BLEND_EDGE names where that face meets another
 (`blendedInto`). When the reader writes a fillet, it now keeps the samples of the edges it rounds and the faces that
 were there before. On a later query:
