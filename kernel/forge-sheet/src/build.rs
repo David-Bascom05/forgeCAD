@@ -1694,7 +1694,9 @@ fn build_once(
             warnings.extend(clash.and_then(|e| e.as_warning()));
         }
     }
-    let pattern = (map == Map::Flat).then(|| built.pattern(&strip_dev, &layout));
+    let pattern = (map == Map::Flat)
+        .then(|| built.pattern(&strip_dev, &layout))
+        .transpose()?;
     let (body, roles) = built.body()?;
     Ok(Built {
         body,
@@ -3336,7 +3338,7 @@ impl Strips<'_> {
 
     /// The flat pattern: each boundary followed piece by piece across the strips, in the
     /// developed plane, runs of one line or one circle joined; and the bends' middle lines.
-    fn pattern(&self, strip_dev: &[Rigid], layout: &Layout) -> Pattern {
+    fn pattern(&self, strip_dev: &[Rigid], layout: &Layout) -> Result<Pattern, SheetError> {
         let mut seen: Vec<Vec<bool>> = self.loops.iter().map(|l| vec![false; l.bounds.len()]).collect();
         let mut contours = Vec::new();
         for l0 in 0..self.loops.len() {
@@ -3352,7 +3354,17 @@ impl Strips<'_> {
                     let by = &strip_dev[ld.strip];
                     let bound = &ld.bounds[i];
                     let (a, b) = (bound.start, ld.bounds[(i + 1) % ld.bounds.len()].start);
-                    if let Some(c) = developed(&bound.piece, a, b, by) {
+                    // a piece the developed plane cannot carry (a spline whose stretch fails) is
+                    // refused, never dropped: a contour left open is no blank
+                    let Some(c) = developed(&bound.piece, a, b, by) else {
+                        return Err(SheetError::TrimCurveUnsupported {
+                            feature: self.cx.feature,
+                            strip: self.strips[ld.strip].strip,
+                            trim: self.cx.sources[bound.id as usize],
+                            curve: TrimCurveKind::Spline,
+                        });
+                    };
+                    {
                         let spline = match bound.piece {
                             Piece::Spline { ref s, t0, t1 } => Some((s, t0, t1, by)),
                             _ => None,
@@ -3414,12 +3426,12 @@ impl Strips<'_> {
                 allowance: b.allowance,
             })
             .collect();
-        Pattern {
+        Ok(Pattern {
             contours,
             bends,
             hits: crate::punch::hits(self.cx.sheet, layout),
             forms: crate::form::marks(self.cx.sheet, layout),
-        }
+        })
     }
 
     /// The side piece after (l, i) along the developed boundary, and whether it crossed a tangent line.
@@ -4625,4 +4637,28 @@ fn asked() {
 /// that does not change with the machine's load, for tests that hold the checks to it.
 pub fn check_questions() -> u64 {
     ASKED.get()
+}
+
+#[cfg(test)]
+mod pattern_piece_tests {
+    use super::*;
+
+    #[test]
+    fn a_spline_piece_the_developed_plane_cannot_carry_is_none_so_refused() {
+        // a spline piece over no span (its stretch has no pieces): `developed` has no curve for
+        // it, which `pattern` refuses as TrimCurveUnsupported instead of leaving the contour open
+        let pts = [
+            Point3::new(0.0, 0.0, 0.0),
+            Point3::new(1.0, 2.0, 0.0),
+            Point3::new(3.0, 0.0, 0.0),
+        ];
+        let s = Spline::from_nurbs(2, &[0.0, 0.0, 0.0, 1.0, 1.0, 1.0], &pts, None).unwrap();
+        let piece = Piece::Spline {
+            s: std::sync::Arc::new(s),
+            t0: 0.5,
+            t1: 0.5,
+        };
+        let p = Point2::new(1.0, 1.0);
+        assert!(developed(&piece, p, p, &Rigid::ID).is_none());
+    }
 }
