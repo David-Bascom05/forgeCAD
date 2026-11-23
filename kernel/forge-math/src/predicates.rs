@@ -282,7 +282,7 @@ fn two_sum(a: f64, b: f64) -> (f64, f64) {
     (x, (a - av) + (b - bv))
 }
 
-fn two_diff(a: f64, b: f64) -> (f64, f64) {
+pub fn two_diff(a: f64, b: f64) -> (f64, f64) {
     let x = a - b;
     let bv = a - x;
     let av = x + bv;
@@ -295,7 +295,7 @@ fn split(a: f64) -> (f64, f64) {
     (hi, a - hi)
 }
 
-fn two_product(a: f64, b: f64) -> (f64, f64) {
+pub fn two_product(a: f64, b: f64) -> (f64, f64) {
     #[cfg(debug_assertions)]
     check_two_product(a, b);
     let x = a * b;
@@ -305,8 +305,13 @@ fn two_product(a: f64, b: f64) -> (f64, f64) {
     (x, alo * blo - err)
 }
 
+// The expansion helpers are public for the other exact signs built on them, so one proven set of
+// helpers serves every exact stage (forge-sheet's exact.rs): two_diff, two_product, sum_into,
+// scale_into and estimate. Each assumes what orient2d's exact stage does: no product underflows
+// inexactly, every operation finite.
+
 /// The sign of an expansion is the sign of its largest component.
-fn estimate(e: &[f64]) -> f64 {
+pub fn estimate(e: &[f64]) -> f64 {
     let top = e.last().copied().unwrap_or(0.0);
     let sum: f64 = e.iter().sum();
     if (sum > 0.0) == (top > 0.0) && (sum < 0.0) == (top < 0.0) {
@@ -318,7 +323,7 @@ fn estimate(e: &[f64]) -> f64 {
 
 /// `e + f` into `h`, both inputs nonoverlapping and in increasing magnitude;
 /// zero components dropped. Returns the length used. No allocation.
-fn sum_into(e: &[f64], f: &[f64], h: &mut [f64]) -> usize {
+pub fn sum_into(e: &[f64], f: &[f64], h: &mut [f64]) -> usize {
     let (mut ei, mut fi, mut n) = (0, 0, 0);
     let mut next = || {
         if fi >= f.len() || (ei < e.len() && e[ei].abs() < f[fi].abs()) {
@@ -350,7 +355,7 @@ fn sum_into(e: &[f64], f: &[f64], h: &mut [f64]) -> usize {
 }
 
 /// `e * b` into `h` (needs 2 * e.len() slots). No allocation.
-fn scale_into(e: &[f64], b: f64, h: &mut [f64]) -> usize {
+pub fn scale_into(e: &[f64], b: f64, h: &mut [f64]) -> usize {
     let Some((&first, rest)) = e.split_first() else {
         return 0;
     };

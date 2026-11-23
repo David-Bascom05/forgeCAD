@@ -1,98 +1,68 @@
 //! Exact signs for region.rs's three squared comparisons (verify/sheet's Region.lean: `near`,
 //! `within`, `inDisc`): a float filter where its error bound proves the sign, else the value
-//! recomputed exactly with floating-point expansions (Shewchuk 1997: two-sum, Dekker's
-//! two-product, grow-expansion). Every input is a double, so a dyadic rational, and every
-//! expansion here is exact; the sign of a nonoverlapping expansion is its largest component's.
+//! recomputed exactly with floating-point expansions, built from forge-math predicates.rs's own
+//! helpers, the ones orient2d's exact stage uses (Shewchuk 1997: `two_diff`, `two_product`,
+//! `sum_into`, `scale_into`, `estimate`), so their proofs cover this. Every input is a double, so
+//! a dyadic rational, and every expansion here is exact; the sign of a nonoverlapping expansion
+//! is its largest component's (`estimate` has it).
 //!
 //! The filters: each value is a sum of products of rounded differences of doubles, `v`, with an
 //! absolute error at most `FILTER · m`, `m` the sum of the products' magnitudes (each difference
 //! rounds once, relatively, each product and sum once more: well under 8 ε of `m`; 16 ε is
 //! taken). Where `|v| > FILTER · m` the float sign is the exact one; else the exact path decides.
-//! Like predicates.rs, this assumes no product underflows inexactly (inputs within its windows).
+//! Like predicates.rs, this assumes no product underflows inexactly (inputs within its windows)
+//! and every operation is finite.
+
+use forge_math::predicates::{estimate, scale_into, sum_into, two_diff, two_product};
 
 const EPS: f64 = f64::EPSILON * 0.5;
 /// The filters' relative bound.
 const FILTER: f64 = 16.0 * EPS;
-const SPLITTER: f64 = 134_217_729.0; // 2^27 + 1
 
-fn two_sum(a: f64, b: f64) -> (f64, f64) {
-    let x = a + b;
-    let bv = x - a;
-    let av = x - bv;
-    (x, (a - av) + (b - bv))
+/// `a − b` exactly: one or two components.
+fn diff(a: f64, b: f64) -> Vec<f64> {
+    let (x, y) = two_diff(a, b);
+    if y == 0.0 { vec![x] } else { vec![y, x] }
 }
 
-fn split(a: f64) -> (f64, f64) {
-    let c = SPLITTER * a;
-    let hi = c - (c - a);
-    (hi, a - hi)
+/// `a · b` exactly: one or two components.
+fn product(a: f64, b: f64) -> Vec<f64> {
+    let (x, y) = two_product(a, b);
+    if y == 0.0 { vec![x] } else { vec![y, x] }
 }
 
-fn two_product(a: f64, b: f64) -> (f64, f64) {
-    let x = a * b;
-    let (ah, al) = split(a);
-    let (bh, bl) = split(b);
-    let err = x - ah * bh - al * bh - ah * bl;
-    (x, al * bl - err)
+/// `e + f` exactly.
+fn add(e: &[f64], f: &[f64]) -> Vec<f64> {
+    let mut h = vec![0.0; e.len() + f.len()];
+    let n = sum_into(e, f, &mut h);
+    h.truncate(n);
+    h
 }
 
-/// An exact value: a sum of doubles, nonoverlapping, increasing in magnitude (zeros dropped).
-#[derive(Clone, Debug, Default)]
-struct Exp(Vec<f64>);
+fn neg(e: &[f64]) -> Vec<f64> {
+    e.iter().map(|x| -x).collect()
+}
 
-impl Exp {
-    fn of(x: f64) -> Exp {
-        Exp(if x == 0.0 { vec![] } else { vec![x] })
+/// `e · f` exactly: `e` scaled by each component of `f`, summed.
+fn mul(e: &[f64], f: &[f64]) -> Vec<f64> {
+    let mut out = Vec::new();
+    let mut t = vec![0.0; 2 * e.len()];
+    for &b in f {
+        let n = scale_into(e, b, &mut t);
+        out = add(&out, &t[..n]);
     }
-    /// `a - b` exactly.
-    fn diff(a: f64, b: f64) -> Exp {
-        let mut e = Exp::of(a);
-        e.grow(-b);
-        e
-    }
-    /// Adds `b` exactly (grow-expansion).
-    fn grow(&mut self, b: f64) {
-        let mut q = b;
-        let mut out = Vec::with_capacity(self.0.len() + 1);
-        for &e in &self.0 {
-            let (s, lo) = two_sum(q, e);
-            if lo != 0.0 {
-                out.push(lo);
-            }
-            q = s;
-        }
-        if q != 0.0 {
-            out.push(q);
-        }
-        self.0 = out;
-    }
-    fn add(&mut self, o: &Exp) {
-        for &x in &o.0 {
-            self.grow(x);
-        }
-    }
-    fn neg(&self) -> Exp {
-        Exp(self.0.iter().map(|x| -x).collect())
-    }
-    /// The product exactly: every pair's two-product, grown in.
-    fn mul(&self, o: &Exp) -> Exp {
-        let mut out = Exp::default();
-        for &a in &self.0 {
-            for &b in &o.0 {
-                let (x, y) = two_product(a, b);
-                out.grow(y);
-                out.grow(x);
-            }
-        }
-        out
-    }
-    /// The sign: the largest component's.
-    fn sign(&self) -> f64 {
-        self.0
-            .iter()
-            .rev()
-            .find(|x| **x != 0.0)
-            .map_or(0.0, |x| x.signum())
+    out
+}
+
+/// The sign of an expansion: −1, 0 or 1.
+fn sign(e: &[f64]) -> f64 {
+    let s = estimate(e);
+    if s > 0.0 {
+        1.0
+    } else if s < 0.0 {
+        -1.0
+    } else {
+        0.0
     }
 }
 
@@ -103,11 +73,9 @@ pub fn disc(px: f64, py: f64, cx: f64, cy: f64, r: f64) -> f64 {
     if v.abs() > FILTER * (dx * dx + dy * dy + r * r) {
         return v.signum();
     }
-    let (ex, ey, er) = (Exp::diff(px, cx), Exp::diff(py, cy), Exp::of(r));
-    let mut s = ex.mul(&ex);
-    s.add(&ey.mul(&ey));
-    s.add(&er.mul(&er).neg());
-    s.sign()
+    let (ex, ey) = (diff(px, cx), diff(py, cy));
+    let s = add(&mul(&ex, &ex), &mul(&ey, &ey));
+    sign(&add(&s, &neg(&product(r, r))))
 }
 
 /// The sign of orient(a, b, c)² − l² |b − a|², exactly.
@@ -120,20 +88,11 @@ pub fn line_gap(ax: f64, ay: f64, bx: f64, by: f64, cx: f64, cy: f64, l: f64) ->
     if v.abs() > FILTER * (m * m + l * l * n) {
         return v.signum();
     }
-    let (eux, euy, evx, evy) = (
-        Exp::diff(bx, ax),
-        Exp::diff(by, ay),
-        Exp::diff(cx, ax),
-        Exp::diff(cy, ay),
-    );
-    let mut o = eux.mul(&evy);
-    o.add(&euy.mul(&evx).neg());
-    let mut n = eux.mul(&eux);
-    n.add(&euy.mul(&euy));
-    let el = Exp::of(l);
-    let mut s = o.mul(&o);
-    s.add(&el.mul(&el).mul(&n).neg());
-    s.sign()
+    let (eux, euy, evx, evy) = (diff(bx, ax), diff(by, ay), diff(cx, ax), diff(cy, ay));
+    let o = add(&mul(&eux, &evy), &neg(&mul(&euy, &evx)));
+    let n = add(&mul(&eux, &eux), &mul(&euy, &euy));
+    let ln = mul(&product(l, l), &n);
+    sign(&add(&mul(&o, &o), &neg(&ln)))
 }
 
 #[cfg(test)]
