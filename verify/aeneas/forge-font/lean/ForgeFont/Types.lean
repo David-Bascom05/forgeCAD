@@ -66,7 +66,7 @@ structure cff_core.Stack where
   lo : Std.Usize
 
 /-- [forge_font::cff_core::Frame]
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 388:0-392:1
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 436:0-440:1
     Visibility: public -/
 structure cff_core.Frame where
   s : Std.Usize
@@ -74,7 +74,7 @@ structure cff_core.Frame where
   o : Std.Usize
 
 /-- [forge_font::cff_core::Machine]
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 475:0-482:1
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 534:0-541:1
     Visibility: public -/
 structure cff_core.Machine where
   stems : Std.Usize

@@ -477,7 +477,7 @@ def cff_core.lines
     cff_core.lines_loop1 p s.v s.lo n e (op = 6#u8) 0#usize
 
 /-- [forge_font::cff_core::sixes]: loop body 0:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 229:4-233:5 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 229:4-241:5 -/
 @[rust_loop_body]
 def cff_core.sixes_loop.body
   (s : cff_core.Stack) (k0 : Std.Usize) (n6 : Std.Usize) (p : cff_core.Pen)
@@ -509,7 +509,7 @@ def cff_core.sixes_loop.body
   else ok (done (e, p))
 
 /-- [forge_font::cff_core::sixes]: loop 0:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 229:4-233:5 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 229:4-241:5 -/
 @[rust_loop]
 def cff_core.sixes_loop
   (p : cff_core.Pen) (s : cff_core.Stack) (k0 : Std.Usize) (n6 : Std.Usize)
@@ -521,7 +521,7 @@ def cff_core.sixes_loop
     (p, e, j)
 
 /-- [forge_font::cff_core::sixes]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 226:0-235:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 226:0-243:1 -/
 @[reducible]
 def cff_core.sixes
   (p : cff_core.Pen) (s : cff_core.Stack) (k0 : Std.Usize) (n6 : Std.Usize) :
@@ -530,7 +530,7 @@ def cff_core.sixes
   cff_core.sixes_loop p s k0 n6 cff_core.OK 0#usize
 
 /-- [forge_font::cff_core::curves]: loop body 0:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 260:8-263:9 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 268:8-271:9 -/
 @[rust_loop_body]
 def cff_core.curves_loop.body
   (v : alloc.vec.Vec Std.I64) (i : Std.Usize) (n : Std.Usize)
@@ -553,7 +553,7 @@ def cff_core.curves_loop.body
   else ok (done (p, e))
 
 /-- [forge_font::cff_core::curves]: loop 0:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 260:8-263:9 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 268:8-271:9 -/
 @[rust_loop]
 def cff_core.curves_loop
   (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (i : Std.Usize)
@@ -565,7 +565,7 @@ def cff_core.curves_loop
     (p, e, k)
 
 /-- [forge_font::cff_core::curves]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 238:0-269:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 246:0-277:1 -/
 def cff_core.curves
   (p : cff_core.Pen) (s : cff_core.Stack) (op : Std.U8) :
   Result (Std.U8 × cff_core.Pen)
@@ -618,7 +618,7 @@ def cff_core.curves
                cff_core.sixes p1 s i3 1#usize
 
 /-- [forge_font::cff_core::fours]: loop body 0:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 280:4-285:5 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 288:4-297:5 -/
 @[rust_loop_body]
 def cff_core.fours_loop.body
   (v : alloc.vec.Vec Std.I64) (i : Std.Usize) (op : Std.U8) (n : Std.Usize)
@@ -651,7 +651,7 @@ def cff_core.fours_loop.body
   else ok (done (e, p))
 
 /-- [forge_font::cff_core::fours]: loop 0:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 280:4-285:5 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 288:4-297:5 -/
 @[rust_loop]
 def cff_core.fours_loop
   (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (i : Std.Usize) (op : Std.U8)
@@ -663,7 +663,7 @@ def cff_core.fours_loop
     (p, d1, e, k)
 
 /-- [forge_font::cff_core::fours]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 272:0-287:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 280:0-299:1 -/
 def cff_core.fours
   (p : cff_core.Pen) (s : cff_core.Stack) (op : Std.U8) :
   Result (Std.U8 × cff_core.Pen)
@@ -693,7 +693,7 @@ def cff_core.fours
     else cff_core.fours_loop p s.v s.lo op n d1 cff_core.OK k0
 
 /-- [forge_font::cff_core::alternating]: loop body 0:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 299:4-305:5 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 311:4-330:5 -/
 @[rust_loop_body]
 def cff_core.alternating_loop0.body
   (v : alloc.vec.Vec Std.I64) (i : Std.Usize) (n : Std.Usize) (m : Std.Usize)
@@ -739,7 +739,7 @@ def cff_core.alternating_loop0.body
   else ok (done (e, p))
 
 /-- [forge_font::cff_core::alternating]: loop 0:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 299:4-305:5 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 311:4-330:5 -/
 @[rust_loop]
 def cff_core.alternating_loop0
   (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (i : Std.Usize)
@@ -752,7 +752,7 @@ def cff_core.alternating_loop0
     (p, h, e, k)
 
 /-- [forge_font::cff_core::alternating]: loop body 1:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 299:4-305:5 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 311:4-330:5 -/
 @[rust_loop_body]
 def cff_core.alternating_loop1.body
   (v : alloc.vec.Vec Std.I64) (i : Std.Usize) (n : Std.Usize) (m : Std.Usize)
@@ -798,7 +798,7 @@ def cff_core.alternating_loop1.body
   else ok (done (e, p))
 
 /-- [forge_font::cff_core::alternating]: loop 1:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 299:4-305:5 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 311:4-330:5 -/
 @[rust_loop]
 def cff_core.alternating_loop1
   (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (i : Std.Usize)
@@ -811,7 +811,7 @@ def cff_core.alternating_loop1
     (p, h, e, k)
 
 /-- [forge_font::cff_core::alternating]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 290:0-307:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 302:0-332:1 -/
 def cff_core.alternating
   (p : cff_core.Pen) (s : cff_core.Stack) (op : Std.U8) :
   Result (Std.U8 × cff_core.Pen)
@@ -836,14 +836,14 @@ def cff_core.alternating
       else ok (cff_core.VHCURVETO, p)
 
 /-- [forge_font::cff_core::abs]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 309:0-311:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 334:0-336:1 -/
 def cff_core.abs (v : Std.I64) : Result Std.I64 := do
   if v < 0#i64
   then -. v
   else ok v
 
 /-- [forge_font::cff_core::flex1]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 350:0-359:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 382:0-403:1 -/
 def cff_core.flex1
   (p : cff_core.Pen) (s : cff_core.Stack) :
   Result (Std.U8 × cff_core.Pen)
@@ -884,7 +884,7 @@ def cff_core.flex1
   else cff_core.curve p1 i5 i13 i7 i15 ex ey
 
 /-- [forge_font::cff_core::hflex1]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 339:0-347:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 371:0-379:1 -/
 def cff_core.hflex1
   (p : cff_core.Pen) (s : cff_core.Stack) :
   Result (Std.U8 × cff_core.Pen)
@@ -908,7 +908,7 @@ def cff_core.hflex1
     cff_core.curve p1 dx4 0#i64 dx5 dy5 dx6 i2
 
 /-- [forge_font::cff_core::hflex]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 329:0-337:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 354:0-369:1 -/
 def cff_core.hflex
   (p : cff_core.Pen) (s : cff_core.Stack) :
   Result (Std.U8 × cff_core.Pen)
@@ -927,7 +927,7 @@ def cff_core.hflex
        cff_core.curve p1 dx4 0#i64 dx5 i dx6 0#i64
 
 /-- [forge_font::cff_core::flex]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 314:0-327:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 339:0-352:1 -/
 def cff_core.flex
   (p : cff_core.Pen) (s : cff_core.Stack) (b1 : Std.U8) :
   Result (Std.U8 × cff_core.Pen)
@@ -957,7 +957,7 @@ def cff_core.flex
         else ok (cff_core.DEPRECATED, p)
 
 /-- [forge_font::cff_core::bias]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 362:0-370:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 406:0-414:1 -/
 def cff_core.bias (n : Std.Usize) : Result Std.I64 := do
   if n < 1240#usize
   then ok 107#i64
@@ -966,7 +966,7 @@ def cff_core.bias (n : Std.Usize) : Result Std.I64 := do
        else ok 32768#i64
 
 /-- [forge_font::cff_core::subr]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 374:0-384:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 418:0-432:1 -/
 def cff_core.subr
   (d : Slice Std.U8) (offs : Slice Std.Usize) (k : Std.I64) :
   Result (Option (Std.Usize × Std.Usize))
@@ -997,7 +997,7 @@ def cff_core.subr
       else ok none
 
 /-- [forge_font::cff_core::operand]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 396:0-427:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 444:0-481:1 -/
 def cff_core.operand
   (d : Slice Std.U8) (o : Std.Usize) (e : Std.Usize) (b0 : Std.U8) :
   Result (Option (Std.I64 × Std.Usize))
@@ -1086,7 +1086,7 @@ def cff_core.operand
           else ok none
 
 /-- [forge_font::cff_core::op]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 556:0-628:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 615:0-687:1 -/
 def cff_core.op
   (d : Slice Std.U8) (f : cff_core.Frame) (p : cff_core.Pen)
   (s : cff_core.Stack) (stems : Std.Usize) (width_read : Bool) (done1 : Bool)
@@ -1351,7 +1351,7 @@ def cff_core.op
                                               stems, width_read, done1)
 
 /-- [forge_font::cff_core::one]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 486:0-552:1 -/
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 545:0-611:1 -/
 def cff_core.one
   (d : Slice Std.U8) (gsubrs : Slice Std.Usize) («local» : Slice Std.Usize)
   (f : cff_core.Frame) (frames : alloc.vec.Vec cff_core.Frame)
@@ -1494,7 +1494,7 @@ def cff_core.one
                 { m with stems := i2, width_read := b, steps := i, done := b1 })
 
 /-- [forge_font::cff_core::run]: loop body 0:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 456:4-463:5
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 515:4-522:5
     Visibility: public -/
 @[rust_loop_body]
 def cff_core.run_loop.body
@@ -1542,7 +1542,7 @@ def cff_core.run_loop.body
   else ok (done (p, m, err))
 
 /-- [forge_font::cff_core::run]: loop 0:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 456:4-463:5
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 515:4-522:5
     Visibility: public -/
 @[rust_loop]
 def cff_core.run_loop
@@ -1558,7 +1558,7 @@ def cff_core.run_loop
     (p, s, f, frames, m, err)
 
 /-- [forge_font::cff_core::run]:
-    Source: 'kernel/forge-font/src/cff_core.rs', lines 431:0-472:1
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 485:0-531:1
     Visibility: public -/
 def cff_core.run
   (d : Slice Std.U8) (cs : (Std.Usize × Std.Usize)) (gsubrs : Slice Std.Usize)
