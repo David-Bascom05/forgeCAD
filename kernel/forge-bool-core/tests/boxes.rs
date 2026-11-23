@@ -406,3 +406,46 @@ fn collapse_fills_an_enclosed_void_and_refuses_a_fin() {
         Summary::Zero(cov(3, (3, 1, 3)))
     );
 }
+
+/// The v2 ledger's well-formedness check on a hand-made ledger: two boxes' worth is not needed,
+/// one facet between two rooms, one edge, one vert, is enough to exercise each clause.
+#[test]
+fn v2_ledger_wf() {
+    use forge_bool_core::v2::*;
+    let good = Ledger {
+        nb: 1,
+        face_body: vec![BodyId(0)],
+        face_class: vec![0],
+        n_rooms: 2,
+        facet_class: vec![0],
+        facet_rooms: vec![(0, 1)],
+        pieces: vec![(FacetId(0), FaceId(0))],
+        inside: vec![(RoomId(1), BodyId(0))],
+        edge_facets: Csr {
+            start: vec![0, 2],
+            ids: vec![0, 0],
+        },
+        vert_edges: Csr {
+            start: vec![0, 1],
+            ids: vec![0],
+        },
+        vert_sectors: SecCsr {
+            start: vec![0, 1],
+            sec: vec![Sector { facet: 0, a: 0, b: 0 }],
+        },
+    };
+    assert!(ledger_wf(&good));
+    let mut l = good.clone();
+    l.facet_rooms = vec![(1, 1)];
+    assert!(!ledger_wf(&l), "a facet's sides are distinct rooms");
+    let mut l = good.clone();
+    l.edge_facets.ids = vec![0, 0, 0];
+    l.edge_facets.start = vec![0, 3];
+    assert!(!ledger_wf(&l), "a facet at most twice round an edge");
+    let mut l = good.clone();
+    l.pieces.clear();
+    assert!(!ledger_wf(&l), "every facet a piece");
+    let mut l = good;
+    l.vert_sectors.sec[0].b = 5;
+    assert!(!ledger_wf(&l), "a sector's edges at its vert");
+}

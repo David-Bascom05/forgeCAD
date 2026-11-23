@@ -23,6 +23,7 @@ mod index;
 pub mod row;
 mod sort;
 mod union_find;
+pub mod v2;
 
 pub use index::Index;
 pub use row::Row;

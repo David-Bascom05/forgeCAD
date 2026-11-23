@@ -35,7 +35,7 @@ structure row.Row where
   neg : Std.U64
 
 /-- [forge_bool_core::Sgn]
-    Source: 'src/lib.rs', lines 34:0-38:1
+    Source: 'src/lib.rs', lines 35:0-39:1
     Visibility: public -/
 @[discriminant isize]
 inductive Sgn where
@@ -44,25 +44,25 @@ inductive Sgn where
 | Pos : Sgn
 
 /-- [forge_bool_core::CellId]
-    Source: 'src/lib.rs', lines 42:0-42:27
+    Source: 'src/lib.rs', lines 43:0-43:27
     Visibility: public -/
 @[reducible]
 def CellId := Std.U32
 
 /-- [forge_bool_core::FaceId]
-    Source: 'src/lib.rs', lines 46:0-46:27
+    Source: 'src/lib.rs', lines 47:0-47:27
     Visibility: public -/
 @[reducible]
 def FaceId := Std.U32
 
 /-- [forge_bool_core::BodyId]
-    Source: 'src/lib.rs', lines 50:0-50:27
+    Source: 'src/lib.rs', lines 51:0-51:27
     Visibility: public -/
 @[reducible]
 def BodyId := Std.U32
 
 /-- [forge_bool_core::Ledger]
-    Source: 'src/lib.rs', lines 55:0-77:1
+    Source: 'src/lib.rs', lines 56:0-78:1
     Visibility: public -/
 structure Ledger where
   nb : Std.U32
@@ -76,14 +76,14 @@ structure Ledger where
   verts : alloc.vec.Vec CellId
 
 /-- [forge_bool_core::MetricLedger]
-    Source: 'src/lib.rs', lines 81:0-86:1
+    Source: 'src/lib.rs', lines 82:0-87:1
     Visibility: public -/
 structure MetricLedger where
   thin : alloc.vec.Vec CellId
   enclosed : alloc.vec.Vec CellId
 
 /-- [forge_bool_core::Rule]
-    Source: 'src/lib.rs', lines 90:0-99:1
+    Source: 'src/lib.rs', lines 91:0-100:1
     Visibility: public -/
 @[discriminant isize]
 inductive Rule where
@@ -93,7 +93,7 @@ inductive Rule where
 | Table : alloc.vec.Vec Bool → Rule
 
 /-- [forge_bool_core::OutFace]
-    Source: 'src/lib.rs', lines 103:0-112:1
+    Source: 'src/lib.rs', lines 104:0-113:1
     Visibility: public -/
 structure OutFace where
   facets : alloc.vec.Vec CellId
@@ -102,14 +102,14 @@ structure OutFace where
   origin : FaceId
 
 /-- [forge_bool_core::OutEdge]
-    Source: 'src/lib.rs', lines 116:0-122:1
+    Source: 'src/lib.rs', lines 117:0-123:1
     Visibility: public -/
 structure OutEdge where
   cells : alloc.vec.Vec CellId
   faces : alloc.vec.Vec CellId
 
 /-- [forge_bool_core::Body]
-    Source: 'src/lib.rs', lines 126:0-131:1
+    Source: 'src/lib.rs', lines 127:0-132:1
     Visibility: public -/
 structure Body where
   faces : alloc.vec.Vec OutFace
@@ -117,7 +117,7 @@ structure Body where
   verts : alloc.vec.Vec CellId
 
 /-- [forge_bool_core::Refusal]
-    Source: 'src/lib.rs', lines 135:0-140:1
+    Source: 'src/lib.rs', lines 136:0-141:1
     Visibility: public -/
 @[discriminant isize]
 inductive Refusal where
@@ -126,14 +126,14 @@ inductive Refusal where
 | ZeroThickness : CellId → Refusal
 
 /-- [forge_bool_core::SkipReason]
-    Source: 'src/lib.rs', lines 145:0-148:1
+    Source: 'src/lib.rs', lines 146:0-149:1
     Visibility: public -/
 @[discriminant isize]
 inductive SkipReason where
 | Wide : SkipReason
 
 /-- [forge_bool_core::Outcome]
-    Source: 'src/lib.rs', lines 152:0-157:1
+    Source: 'src/lib.rs', lines 153:0-158:1
     Visibility: public -/
 @[discriminant isize]
 inductive Outcome where
@@ -143,13 +143,13 @@ inductive Outcome where
 | Skip : SkipReason → Outcome
 
 /-- [forge_bool_core::Ext]
-    Source: 'src/lib.rs', lines 219:0-222:1 -/
+    Source: 'src/lib.rs', lines 220:0-223:1 -/
 structure Ext where
   index : index.Index
   extra : alloc.vec.Vec row.Row
 
 /-- [forge_bool_core::Split]
-    Source: 'src/lib.rs', lines 288:0-302:1 -/
+    Source: 'src/lib.rs', lines 289:0-303:1 -/
 structure Split where
   facets : alloc.vec.Vec Std.U32
   plus : alloc.vec.Vec Std.U32
@@ -165,10 +165,123 @@ structure union_find.Uf where
   parent : alloc.vec.Vec Std.U32
 
 /-- [forge_bool_core::Assembled]
-    Source: 'src/lib.rs', lines 508:0-515:1 -/
+    Source: 'src/lib.rs', lines 509:0-516:1 -/
 structure Assembled where
   result : alloc.vec.Vec Std.U32
   orient : alloc.vec.Vec Sgn
   rpos : alloc.vec.Vec Std.U32
+
+/-- [forge_bool_core::v2::FacetId]
+    Source: 'src/v2.rs', lines 13:0-13:28
+    Visibility: public -/
+@[reducible]
+def v2.FacetId := Std.U32
+
+/-- [forge_bool_core::v2::RoomId]
+    Source: 'src/v2.rs', lines 17:0-17:27
+    Visibility: public -/
+@[reducible]
+def v2.RoomId := Std.U32
+
+/-- [forge_bool_core::v2::EdgeId]
+    Source: 'src/v2.rs', lines 21:0-21:27
+    Visibility: public -/
+@[reducible]
+def v2.EdgeId := Std.U32
+
+/-- [forge_bool_core::v2::VertId]
+    Source: 'src/v2.rs', lines 25:0-25:27
+    Visibility: public -/
+@[reducible]
+def v2.VertId := Std.U32
+
+/-- [forge_bool_core::v2::Csr]
+    Source: 'src/v2.rs', lines 29:0-32:1
+    Visibility: public -/
+structure v2.Csr where
+  start : alloc.vec.Vec Std.U32
+  ids : alloc.vec.Vec Std.U32
+
+/-- [forge_bool_core::v2::Sector]
+    Source: 'src/v2.rs', lines 37:0-41:1
+    Visibility: public -/
+structure v2.Sector where
+  facet : Std.U32
+  a : Std.U32
+  b : Std.U32
+
+/-- [forge_bool_core::v2::SecCsr]
+    Source: 'src/v2.rs', lines 45:0-48:1
+    Visibility: public -/
+structure v2.SecCsr where
+  start : alloc.vec.Vec Std.U32
+  sec : alloc.vec.Vec v2.Sector
+
+/-- [forge_bool_core::v2::Ledger]
+    Source: 'src/v2.rs', lines 53:0-76:1
+    Visibility: public -/
+structure v2.Ledger where
+  nb : Std.U32
+  face_body : alloc.vec.Vec BodyId
+  face_class : alloc.vec.Vec Std.U32
+  n_rooms : Std.U32
+  facet_class : alloc.vec.Vec Std.U32
+  facet_rooms : alloc.vec.Vec (Std.U32 × Std.U32)
+  pieces : alloc.vec.Vec (v2.FacetId × FaceId)
+  inside : alloc.vec.Vec (v2.RoomId × BodyId)
+  edge_facets : v2.Csr
+  vert_edges : v2.Csr
+  vert_sectors : v2.SecCsr
+
+/-- [forge_bool_core::v2::MetricLedger]
+    Source: 'src/v2.rs', lines 80:0-85:1
+    Visibility: public -/
+structure v2.MetricLedger where
+  thin : alloc.vec.Vec v2.RoomId
+  enclosed : alloc.vec.Vec v2.RoomId
+
+/-- [forge_bool_core::v2::OutFace]
+    Source: 'src/v2.rs', lines 89:0-95:1
+    Visibility: public -/
+structure v2.OutFace where
+  facets : alloc.vec.Vec v2.FacetId
+  plane : Std.U32
+  orient : Sgn
+  origin : FaceId
+
+/-- [forge_bool_core::v2::OutEdge]
+    Source: 'src/v2.rs', lines 99:0-103:1
+    Visibility: public -/
+structure v2.OutEdge where
+  cells : alloc.vec.Vec v2.EdgeId
+  faces : alloc.vec.Vec v2.FacetId
+
+/-- [forge_bool_core::v2::Body]
+    Source: 'src/v2.rs', lines 107:0-111:1
+    Visibility: public -/
+structure v2.Body where
+  faces : alloc.vec.Vec v2.OutFace
+  edges : alloc.vec.Vec v2.OutEdge
+  verts : alloc.vec.Vec v2.VertId
+
+/-- [forge_bool_core::v2::Refusal]
+    Source: 'src/v2.rs', lines 115:0-124:1
+    Visibility: public -/
+@[discriminant isize]
+inductive v2.Refusal where
+| SplitCrossed : v2.Refusal
+| InconsistentClassification : v2.Refusal
+| ZeroThicknessEdge : v2.EdgeId → v2.Refusal
+| ZeroThicknessVert : v2.VertId → v2.Refusal
+| ZeroThicknessRoom : v2.RoomId → v2.Refusal
+
+/-- [forge_bool_core::v2::Outcome]
+    Source: 'src/v2.rs', lines 128:0-132:1
+    Visibility: public -/
+@[discriminant isize]
+inductive v2.Outcome where
+| Ok : v2.Body → v2.Outcome
+| Empty : v2.Outcome
+| Refused : v2.Refusal → v2.Outcome
 
 end forge_bool_core
