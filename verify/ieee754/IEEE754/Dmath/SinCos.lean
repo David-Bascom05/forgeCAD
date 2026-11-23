@@ -7,7 +7,7 @@ import IEEE754.Dmath.Reduction
 /-!
 # `dmath::sin_cos`, `sin`, `cos`: the contract
 
-`sinCos_err` (contract C1): for finite `|x| ≤ 2048`, `dmath::sin` and `dmath::cos` are finite and
+`sinCos_err` (contract C1): for finite `|x| ≤ 2^20`, `dmath::sin` and `dmath::cos` are finite and
 within `2^-52` of `sin x` and `cos x` (absolute). The budget: `rem_pio2`'s `2^-56`, the
 polynomials' `2^-57`, the evaluations' `1.36e-16` / `1.63e-16`, and the tail `y` against the
 addition formulas.
@@ -146,9 +146,9 @@ lemma rot (θ : ℝ) (n : ℤ) :
 lemma neg_err {s : F64} {t E : ℝ} (h : |(s.val : ℝ) - t| ≤ E) : |((s.neg).val : ℝ) - -t| ≤ E := by
   rw [FP.val_neg]; push_cast; rw [show -(s.val : ℝ) - -t = -((s.val : ℝ) - t) by ring, abs_neg]; exact h
 
-/-- **Contract C1.** For finite `|x| ≤ 2048`, `dmath::sin_cos(x)` is finite and each part is within
+/-- **Contract C1.** For finite `|x| ≤ 2^20`, `dmath::sin_cos(x)` is finite and each part is within
 `2^-52` of `sin x`, `cos x`. -/
-theorem sinCos_err {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
+theorem sinCos_err {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 1048576) :
     (sinCos x).1.isFinite ∧ (sinCos x).2.isFinite ∧
       |((sinCos x).1.val : ℝ) - Real.sin x.val| ≤ 1 / 2 ^ 52 ∧
       |((sinCos x).2.val : ℝ) - Real.cos x.val| ≤ 1 / 2 ^ 52 := by
@@ -214,12 +214,12 @@ theorem sinCos_err {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
     exact ⟨fcn, fs, neg_err hC, hS⟩
 
 /-- `dmath::sin`, contract C1. -/
-theorem sin_err {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
+theorem sin_err {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 1048576) :
     (sin x).isFinite ∧ |((sin x).val : ℝ) - Real.sin x.val| ≤ 1 / 2 ^ 52 :=
   ⟨(sinCos_err hx hb).1, (sinCos_err hx hb).2.2.1⟩
 
 /-- `dmath::cos`, contract C1. -/
-theorem cos_err {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
+theorem cos_err {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 1048576) :
     (cos x).isFinite ∧ |((cos x).val : ℝ) - Real.cos x.val| ≤ 1 / 2 ^ 52 :=
   ⟨(sinCos_err hx hb).2.1, (sinCos_err hx hb).2.2.2⟩
 

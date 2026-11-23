@@ -64,12 +64,18 @@ pub mod threads {
         jobs: VecDeque<Job>,
         idle: usize,
         wakes: usize,
+        /// Workers asked for, and those that took up their life (`worker_run`): a gap that stays
+        /// is a worker that never started.
+        asked: usize,
+        started: usize,
     }
 
     static POOL: Mutex<Pool> = Mutex::new(Pool {
         jobs: VecDeque::new(),
         idle: 0,
         wakes: 0,
+        asked: 0,
+        started: 0,
     });
     static READY: Condvar = Condvar::new();
 
@@ -92,6 +98,7 @@ pub mod threads {
                 READY.notify_one();
                 false
             } else {
+                p.asked += 1;
                 true
             }
         };
@@ -100,10 +107,25 @@ pub mod threads {
         }
     }
 
+    /// The pool as it stands, for a test that timed out: jobs waiting, workers waiting, wakes
+    /// handed out, workers asked for and started. Never waits.
+    pub fn state() -> String {
+        let p = super::lock(&POOL);
+        format!(
+            r#"{{"jobs":{},"idle":{},"wakes":{},"asked":{},"started":{}}}"#,
+            p.jobs.len(),
+            p.idle,
+            p.wakes,
+            p.asked,
+            p.started
+        )
+    }
+
     /// A worker's life: the pool's jobs, one after another, waiting between them (a worker may).
     #[wasm_bindgen]
     pub fn worker_run(_id: u32) {
         let mut p = POOL.lock().unwrap_or_else(|e| e.into_inner());
+        p.started += 1;
         loop {
             if let Some(job) = p.jobs.pop_front() {
                 drop(p);

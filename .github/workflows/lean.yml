@@ -1,7 +1,9 @@
 # The Lean proofs: research/forge-lang (the language's editability and grammar), check-local and
 # drag-speed, each `lake build` on the pinned toolchain, then their axiom checks. A theorem that
 # no longer checks, a `sorry`, `native_decide` or any axiom past propext, Classical.choice and
-# Quot.sound fails the job. The toolchain (~/.elan) and each project's .lake are cached.
+# Quot.sound fails the job. Each project's Lake build directory is restored from main's latest (Lake
+# rebuilds every module whose sources differ) and saved by main's runs (tools/ci/lake-cache.py);
+# Mathlib comes prebuilt from its own server (`lake exe cache get`).
 name: lean
 
 on:
@@ -20,26 +22,29 @@ on:
             ".github/workflows/lean.yml"]
   workflow_dispatch:
 
+# A new push to a pull request cancels that pull request's runs still queued or running for its
+# older commits; pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   proofs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: toolchain cache
-        uses: actions/cache@v4
+      - name: Lake cache key
+        id: lake
+        run: python3 tools/ci/lake-cache.py lean research/forge-lang/lean research/check-local/lean research/drag-speed/lean
+      - name: Lake build (restored; Lake rebuilds what changed)
+        uses: actions/cache/restore@v4
         with:
-          path: ~/.elan
-          key: elan-${{ runner.os }}-${{ hashFiles('research/forge-lang/lean/lean-toolchain', 'research/check-local/lean/lean-toolchain', 'research/drag-speed/lean/lean-toolchain') }}
-      - name: build cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            research/forge-lang/lean/.lake
-            research/check-local/lean/.lake
-            research/drag-speed/lean/.lake
-          key: lake-${{ runner.os }}-${{ hashFiles('research/**/lean-toolchain') }}-${{ hashFiles('research/forge-lang/lean/**/*.lean', 'research/check-local/lean/**/*.lean', 'research/drag-speed/lean/**/*.lean') }}
-          restore-keys: lake-${{ runner.os }}-${{ hashFiles('research/**/lean-toolchain') }}-
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
       - name: elan and the pinned toolchain
         run: |
           if [ ! -x "$HOME/.elan/bin/elan" ]; then
@@ -83,9 +88,15 @@ jobs:
           lake build
           lake env lean Axioms.lean | tee axioms.txt
           ! grep -E "sorryAx|ofReduceBool" axioms.txt
+      - name: save the Lake build (main only, even when a check failed)
+        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
 
-  # research/loft-ssi/derive/proofs and proofs-alt need Mathlib (v4.36.0-rc2), fetched with its
-  # build cache. Not built where this job was written (the Mathlib cache host was not reachable
+  # research/loft-ssi/derive/proofs and proofs-alt need Mathlib (v4.36.0-rc2), fetched prebuilt
+  # (`lake exe cache get`). Not built where this job was written (the Mathlib cache host was not reachable
   # there), so informative until a run shows it green.
   loft-ssi:
     runs-on: ubuntu-latest
@@ -97,16 +108,17 @@ jobs:
         dir: [research/loft-ssi/derive/proofs, research/loft-ssi/derive/proofs-alt]
     steps:
       - uses: actions/checkout@v4
-      - name: toolchain cache
-        uses: actions/cache@v4
+      - name: Lake cache key
+        id: lake
+        run: python3 tools/ci/lake-cache.py "loft-ssi-$(basename ${{ matrix.dir }})" ${{ matrix.dir }}
+      - name: Lake build (restored; Lake rebuilds what changed)
+        uses: actions/cache/restore@v4
         with:
-          path: ~/.elan
-          key: elan-${{ runner.os }}-${{ hashFiles(format('{0}/lean-toolchain', matrix.dir)) }}
-      - name: Mathlib cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ matrix.dir }}/.lake
-          key: lake-mathlib-${{ runner.os }}-${{ hashFiles(format('{0}/lakefile.toml', matrix.dir), format('{0}/lake-manifest.json', matrix.dir)) }}
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
       - name: elan, the toolchain, Mathlib's build
         working-directory: ${{ matrix.dir }}
         run: |
@@ -120,6 +132,12 @@ jobs:
       - name: build
         working-directory: ${{ matrix.dir }}
         run: lake build
+      - name: save the Lake build (main only, even when the build failed)
+        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
 
   # research/spline-loops/lean: the specification of .fg's splines (SplineSpec) and the Bernstein
   # certificates (SplineLoops), on Mathlib v4.36.0-rc2 fetched with its build cache; then the kernel's

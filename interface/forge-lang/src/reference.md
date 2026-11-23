@@ -241,14 +241,15 @@ revolve(PROFILE, axis: LINE, angle: A | sym(A) | two(A, B) | upto(FACES | WORKPL
                                     axis, `axis(E.start, E.end)` of a straight edge, `F.axis`,
                                     or the origin's `X`, `Y`, `Z` (else `BadValue`)
 hole(..), thread(..)                see Holes and threads
-fillet(EDGES, R, from: POINT, setbacks: [(POINT, d) | (POINT, EDGES, d)], only: false)
-fillet(groups: [(EDGES, R) | (EDGES, R, POINT), ..], setbacks: .., only: false)
+fillet(EDGES, R, from: POINT, setbacks: [(POINT, d) | (POINT, EDGES, d)], only: false, conic: RHO)
+fillet(groups: [(EDGES, R) | (EDGES, R, POINT), ..], setbacks: .., only: false, conic: RHO)
                                     R: r | vary(a, b) (linear along each edge) |
                                     vary([(t, r), ..]) (radii at fractions t of the way, 0 to 1,
                                     increasing; a smooth law through them). from: the vertex at
                                     POINT each edge's law starts from; setbacks: how far along
                                     the edges from the corner at POINT (one edge, or all) the
-                                    blends stop; only: the edges named, not their tangent chains
+                                    blends stop; only: the edges named, not their tangent chains;
+                                    conic: a conic section in place of the ball's arc (below)
 chamfer(EDGES, d, d2: D | angle: A, face: FACE, corner: "patch"|"point")
                                     d back along both faces; with d2, d along FACE and d2
                                     along the other face of each edge; with angle, d along
@@ -257,6 +258,25 @@ chamfer(EDGES, d, d2: D | angle: A, face: FACE, corner: "patch"|"point")
                                     corner get a flat triangle (patch) or run on to a point
 shell(t, open: FACES, out: false) hollow to walls t thick (out: outside the skin), FACES open
 ```
+
+A conic fillet (`conic: ratio(RHO)`, 0 < RHO < 1, one for the whole fillet) touches each face
+where the circular fillet of the same R does, r tan(phi/2) from the edge for faces turning by phi,
+so R is the setback's measure, not a radius of the result. Between those two feet its section is
+the conic tangent to both faces there: the rational quadratic through foot, apex and foot, the
+apex where the faces' tangent planes meet in the section's plane, with middle weight
+RHO / (1 - RHO). RHO is the shoulder ratio: the section crosses the line from the chord's middle
+to the apex RHO of the way along it. 0.5 is a parabola, below it an ellipse, above it a
+hyperbola; the circle is RHO = cos(phi/2) / (1 + cos(phi/2)), 0.4142 at a right angle. This is
+Onshape's conic fillet: its `radius` and `rho` are R and RHO. The surface is exact: on a
+straight edge the conic swept straight, on a circular edge between surfaces turned about one
+axis the conic turned, on any other edge (a post's root on a round bar) the conic carried along
+the ball's path in its section plane. Tangent chains meet in a shared conic section, two blends
+beside a sharp edge mitre (in the plane between them where one is the other's mirror image), and
+a blend runs out into the faces across its end. Refused, typed, at the place, where no exact
+conic stands: `ConicVertex` where the circular fillet would close a vertex with its ball (three
+blends at a corner, a pivot, a ball rolled on over the next face) or a setback is asked;
+`ConicEdge` for a varying R, a ball resting on a rim, beyond a smooth edge or across a face, or
+faces folding back to within a degree of each other; `BadValue` for RHO outside (0, 1).
 
 PROFILE: a sketch with one region, or one of its loops or closed entities (`S.outline`, `S.c`).
 A negative depth runs the other way. `upto(SKETCH)` ends on the sketch's plane (an edit

@@ -7,11 +7,13 @@ use crate::curve::{CurveDeriv, Domain1, ProcCurve, ProceduralCurve};
 use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use std::sync::Arc;
 
+mod drafted;
 mod extruded;
 mod fold;
 pub mod meet;
 mod spun;
 pub mod swept;
+pub use drafted::Drafted;
 pub use extruded::Extruded;
 pub use spun::Spun;
 pub use swept::{Spine, Swept};

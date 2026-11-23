@@ -11,12 +11,16 @@ pub enum Curve2 {
         a: Point2,
         b: Point2,
     },
-    /// Counter-clockwise from `start` when `sweep` is positive (radians).
+    /// Counter-clockwise from `start` when `sweep` is positive (radians), from the point `from` to
+    /// `to`: its ends as the contour's vertices, stored (exactly the neighbours' ends), so a
+    /// contour closes in one double at every vertex; within rounding of the angles' points.
     Arc {
         c: Point2,
         r: f64,
         start: f64,
         sweep: f64,
+        from: Point2,
+        to: Point2,
     },
     /// A clamped NURBS: `knots` has `points.len() + degree + 1` values.
     Spline {
@@ -28,16 +32,26 @@ pub enum Curve2 {
 }
 
 impl Curve2 {
+    /// An arc whose ends are its angles' points.
+    pub fn arc(c: Point2, r: f64, start: f64, sweep: f64) -> Curve2 {
+        let at = |t: f64| {
+            let (s, k) = dmath::sin_cos(t);
+            Point2::new(c.x + r * k, c.y + r * s)
+        };
+        Curve2::Arc {
+            c,
+            r,
+            start,
+            sweep,
+            from: at(start),
+            to: at(start + sweep),
+        }
+    }
+
     pub fn ends(&self) -> (Point2, Point2) {
         match self {
             Curve2::Line { a, b } => (*a, *b),
-            Curve2::Arc { c, r, start, sweep } => {
-                let at = |t: f64| {
-                    let (s, k) = dmath::sin_cos(t);
-                    Point2::new(c.x + r * k, c.y + r * s)
-                };
-                (at(*start), at(start + sweep))
-            }
+            Curve2::Arc { from, to, .. } => (*from, *to),
             Curve2::Spline { points, .. } => (points[0], points[points.len() - 1]),
         }
     }
@@ -592,7 +606,9 @@ impl Dxf {
                     self.num(k, v);
                 }
             }
-            Curve2::Arc { c, r, start, sweep } => {
+            Curve2::Arc {
+                c, r, start, sweep, ..
+            } => {
                 let whole = is_whole_turn(*sweep);
                 self.head(if whole { "CIRCLE" } else { "ARC" }, layer, owner);
                 self.pair(100, "AcDbCircle");
@@ -669,7 +685,9 @@ fn bounds(p: &Pattern) -> (Point2, Point2) {
                 add(*a);
                 add(*b);
             }
-            Curve2::Arc { c, r, start, sweep } => {
+            Curve2::Arc {
+                c, r, start, sweep, ..
+            } => {
                 // its ends, and each axis extreme its sweep passes
                 let (a, b) = curve.ends();
                 add(a);
@@ -742,7 +760,9 @@ pub fn dwg_layered(p: &Pattern, part: Option<&str>, l: &DxfLayers) -> Vec<u8> {
     let curve = |c: &Curve2, layer: &str, ents: &mut Vec<Entity>| {
         let shape = match c {
             Curve2::Line { a, b } => Shape::Line { a: pt(*a), b: pt(*b) },
-            Curve2::Arc { c, r, start, sweep } => {
+            Curve2::Arc {
+                c, r, start, sweep, ..
+            } => {
                 if is_whole_turn(*sweep) {
                     Shape::Circle { c: pt(*c), r: *r }
                 } else {
@@ -872,12 +892,7 @@ mod dwg_tests {
                     a: Point2::new(0.0, 0.0),
                     b: Point2::new(100.0, 0.0),
                 },
-                Curve2::Arc {
-                    c: Point2::new(100.0, 10.0),
-                    r: 10.0,
-                    start: -dmath::PI / 2.0,
-                    sweep: dmath::PI,
-                },
+                Curve2::arc(Point2::new(100.0, 10.0), 10.0, -dmath::PI / 2.0, dmath::PI),
                 Curve2::Line {
                     a: Point2::new(100.0, 20.0),
                     b: Point2::new(0.0, 0.0),

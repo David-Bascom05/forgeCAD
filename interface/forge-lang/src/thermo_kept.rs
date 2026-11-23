@@ -377,6 +377,7 @@ fn read_sim(i: &mut In) -> Option<Simulated> {
             triangles,
             face_of,
             edges,
+            unsettled: Vec::new(),
         },
         wall,
         foot,

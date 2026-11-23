@@ -1,0 +1,26 @@
+# Two hinges between a lid and a base, on axes 1e-11 rad apart (the second axis leans d over
+# h): together they fix the lid (rank 6 of the block's 10 rows), but the Jacobian's smallest
+# singular value sits within a gap of 1e3 of its floor, so the rank is not clear
+# (`rank_clear == false`). At d = 0 the second hinge is redundant and the lid turns (rank 5);
+# from 1e-9 rad on, rank 6 is clear.
+shared W = 40
+shared t = 4
+shared h = 30
+shared d = 3e-10
+
+sketch prof(on: xz) {
+  o = rect(corner: (-W / 2, 0), size: (W, t))
+  a = line((0, 0), (0, h), construction: true)
+  b = line((0, h), (d, 2 * h), construction: true)
+}
+base = extrude(prof, t)
+sketch lp(on: base.end) {
+  o = rect(corner: (-W / 2, 0), size: (W, t))
+}
+lid = extrude(lp, t, new: true)
+low = plane(at: prof.a.a, normal: prof.a.dir)
+high = plane(at: prof.b.a, normal: prof.b.dir)
+
+ground(base)
+hinge = revolute(lid.low, base.low)
+twin = revolute(lid.high, base.high)

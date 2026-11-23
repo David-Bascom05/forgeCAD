@@ -42,7 +42,7 @@ axiom alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref
   {T : Type _} (A : Type _) : alloc.sync.Arc T → Result T
 
 /-- [forge_geom::spline::{forge_geom::spline::PlaneSpline}::start]:
-    Source: 'kernel/forge-geom/src/spline.rs', lines 1398:4-1398:33
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1332:4-1332:33
     Name pattern: [forge_geom::spline::{forge_geom::spline::PlaneSpline}::start]
     Visibility: public -/
 @[rust_fun "forge_geom::spline::{forge_geom::spline::PlaneSpline}::start"]
@@ -50,7 +50,7 @@ axiom forge_geom.spline.PlaneSpline.start
   : forge_geom.spline.PlaneSpline → Result forge_math.vec.Point2
 
 /-- [forge_geom::spline::{forge_geom::spline::PlaneSpline}::end]:
-    Source: 'kernel/forge-geom/src/spline.rs', lines 1402:4-1402:31
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1336:4-1336:31
     Name pattern: [forge_geom::spline::{forge_geom::spline::PlaneSpline}::end]
     Visibility: public -/
 @[rust_fun "forge_geom::spline::{forge_geom::spline::PlaneSpline}::end"]
@@ -71,7 +71,7 @@ axiom forge_geom.spline.PlaneSpline.end
 axiom forge_math.dmath.atan2 : F64 → F64 → Result F64
 
 /-- [forge_ops::profile::arc_point]:
-    Source: 'kernel/forge-ops/src/profile.rs', lines 449:0-449:67
+    Source: 'kernel/forge-ops/src/profile.rs', lines 492:0-492:67
     Name pattern: [forge_ops::profile::arc_point]
     Visibility: public -/
 @[rust_fun "forge_ops::profile::arc_point"]

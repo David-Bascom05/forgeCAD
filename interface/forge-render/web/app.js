@@ -137,7 +137,6 @@ let mirror = null;
 const problems = [];
 // the app's own settings and state (`/home`): kept in this browser, whatever serves the files
 const home = store ? new Mirror(await localBackend("_app"), "/home", fc, (e) => console.error(`forge-app: ${e}`)) : null;
-await home?.load();
 window.forge_fs_changed = (path, bytes) => {
   if (mirror?.owns(path)) mirror.changed(path, bytes);
   else if (home?.owns(path)) home.changed(path, bytes);
@@ -148,32 +147,48 @@ if (store) {
     console.error(`forge-app: ${e}`);
     if (e.name === "StaleBase") alert(`${e.message}\nYour edit is kept in this tab; reload to see the other.`);
   });
-  await mirror.load();
-}
-// a new browser project starts with the examples (a machine's folder is never written to unasked)
-if (files().length === 0 && store?.kind !== "server") {
-  for (const p of await examples()) {
-    const bytes = new Uint8Array(await (await fetch(`examples/${p}`)).arrayBuffer());
-    fc.fs_write(`${MOUNT}/examples/${p}`, bytes);
-  }
 }
 window.forge_pick = openDialog;
 window.forge_save_as = (name) => {
   const n = prompt("Save as (a path in the project)", name || "part.fg");
   if (n) fc.app_save_as(`${MOUNT}/${cleanPath(n)}`);
 };
+const asked = q.get("open");
+// the app first, with the part asked for: the project's other files follow behind its first frame
+// (hundreds of them took a round trip each before it showed)
+await Promise.all([home?.load(), asked && mirror?.loadOne(cleanPath(asked))]);
+// ?noapp: the files and the kernel only, no canvas (the parity test)
+if (!q.has("noapp")) fc.start_app(asked ? `${MOUNT}/${cleanPath(asked)}` : undefined, q.get("offscreen") ?? undefined);
+say("started");
+const loaded = (async () => {
+  await mirror?.load();
+  // a new browser project starts with the examples (a machine's folder is never written to unasked)
+  if (files().length === 0 && store?.kind !== "server") {
+    const list = await examples();
+    const got = await Promise.all(
+      list.map(async (p) => [p, new Uint8Array(await (await fetch(`examples/${p}`)).arrayBuffer())]),
+    );
+    for (const [p, bytes] of got) fc.fs_write(`${MOUNT}/examples/${p}`, bytes);
+  }
+  if (q.has("noapp")) return;
+  if (asked) {
+    // what the part reads (an assembly's parts, a font) may have come since its first build
+    fc.app_rebuild();
+  } else {
+    const first = files().filter((p) => p.endsWith(".fg")).sort()[0];
+    if (first) fc.app_open(`${MOUNT}/${first}`);
+  }
+  say("every file in");
+})();
 window.forgecad = {
   fc,
   threaded,
   mirror,
   problems,
+  loaded,
   state: () => JSON.parse(fc.app_state()),
   settled: () => Promise.all([mirror?.settled(), home?.settled()]),
   files,
 };
-const first = q.get("open") ?? files().filter((p) => p.endsWith(".fg")).sort()[0];
-// ?noapp: the files and the kernel only, no canvas (the parity test)
-if (!q.has("noapp")) fc.start_app(first ? `${MOUNT}/${cleanPath(first)}` : undefined, q.get("offscreen") ?? undefined);
-say("started");
 // the app's next frame as {width, height, rgba} (a headless browser can't capture the canvas)
 window.forgecad.pixels = () => new Promise((ok) => fc.app_pixels(ok));

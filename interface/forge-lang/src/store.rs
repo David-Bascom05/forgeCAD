@@ -14,10 +14,33 @@ pub const KERNEL: &str = env!("FORGE_KERNEL_HASH");
 const MAGIC: &[u8; 4] = b"FGC1";
 const HEAD: usize = 4 + 16 + 16 + 8 + 16;
 
-/// A key over the kernel and whatever `f` puts in.
+/// A key over the kernel (its sources and the kernel crates' Cargo features this build has) and
+/// whatever `f` puts in.
 pub fn key(kind: &str, f: impl FnOnce(&mut Hash128)) -> u128 {
+    key_with(KERNEL, &features(), kind, f)
+}
+
+/// The kernel crates' Cargo features, each `crate/feature=0|1`, in a fixed order.
+pub fn features() -> String {
+    let crates: [(&str, &[(&str, bool)]); 4] = [
+        ("forge-bool", forge_bool::FEATURES),
+        ("forge-geom", forge_geom::FEATURES),
+        ("forge-model", forge_model::FEATURES),
+        ("forge-topo", forge_topo::FEATURES),
+    ];
+    let mut s = String::new();
+    for (c, fs) in crates {
+        for (f, on) in fs {
+            s.push_str(&format!("{c}/{f}={} ", *on as u8));
+        }
+    }
+    s
+}
+
+fn key_with(kernel: &str, features: &str, kind: &str, f: impl FnOnce(&mut Hash128)) -> u128 {
     let mut h = Hash128::new();
-    h.str(KERNEL);
+    h.str(kernel);
+    h.str(features);
     h.str(kind);
     f(&mut h);
     h.finish()
@@ -239,6 +262,22 @@ impl<'a> In<'a> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_build_with_other_kernel_features_keys_its_results_apart() {
+        let f = super::features();
+        // every kernel crate's features are named, with this build's state
+        assert!(f.contains("forge-bool/decide_once=") && f.contains("forge-geom/decisions="));
+        let k = |features: &str| super::key_with("kernel", features, "kind", |h| h.str("doc"));
+        let other = f.replacen("forge-bool/decide_once=0", "forge-bool/decide_once=1", 1);
+        let other = if other == f {
+            f.replacen("forge-bool/decide_once=1", "forge-bool/decide_once=0", 1)
+        } else {
+            other
+        };
+        assert_ne!(k(&f), k(&other));
+        assert_eq!(k(&f), k(&f));
+    }
+
     use super::*;
 
     fn scratch(name: &str) -> PathBuf {

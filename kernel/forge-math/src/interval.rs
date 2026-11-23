@@ -103,6 +103,47 @@ impl Interval {
         let c = [self.lo / d.lo, self.lo / d.hi, self.hi / d.lo, self.hi / d.hi];
         Interval::out(min4(c), max4(c))
     }
+    /// atan2 over the box y × x: the angles of the box's points, in (−π, π].
+    ///
+    /// Contract (dmath::atan2's absolute error bound, 2^-50, proven on verify/ieee754's model by
+    /// the IEEE work for finite arguments other than y = −0 with x < 0, which dmath takes to −π):
+    /// −0 is normalised to +0 first (the same point), then for finite ends dmath::atan2 at the
+    /// corners, each widened by an absolute 2^-50 and rounded outward, clamped to [−PI_UP, PI_UP].
+    /// The corners suffice: off the origin and the cut the angle is continuous on the box, which
+    /// is convex and seen from the origin within less than a half turn, so its least and greatest
+    /// angles are at extreme points (an axis crossing inside it is between two corners' angles).
+    /// [−PI_UP, PI_UP] when the box meets the origin or the branch cut (x ≤ 0 with
+    /// y.lo ≤ 0 ≤ y.hi), or an end is not finite: refused. Empty for an empty box.
+    pub fn atan2(y: Interval, x: Interval) -> Interval {
+        /// The float just above pi (dmath::PI is the one just below).
+        const PI_UP: f64 = 3.141_592_653_589_793_6;
+        /// dmath atan2's proven absolute error bound: 2^-50.
+        const ATAN_ERR: f64 = 4.0 * f64::EPSILON;
+        let whole = Interval {
+            lo: -PI_UP,
+            hi: PI_UP,
+        };
+        if y.is_empty() || x.is_empty() {
+            return Interval::EMPTY;
+        }
+        let finite = [y.lo, y.hi, x.lo, x.hi].iter().all(|v| v.is_finite());
+        // the origin and the cut alike: some x <= 0 with y = 0
+        if !finite || (x.lo <= 0.0 && y.lo <= 0.0 && 0.0 <= y.hi) {
+            return whole;
+        }
+        // -0 is +0: dmath's -pi at (-0, x < 0) is outside its contract
+        let z = |v: f64| v + 0.0;
+        let c = [
+            dmath::atan2(z(y.lo), z(x.lo)),
+            dmath::atan2(z(y.lo), z(x.hi)),
+            dmath::atan2(z(y.hi), z(x.lo)),
+            dmath::atan2(z(y.hi), z(x.hi)),
+        ];
+        Interval {
+            lo: (min4(c) - ATAN_ERR).next_down().max(-PI_UP),
+            hi: (max4(c) + ATAN_ERR).next_up().min(PI_UP),
+        }
+    }
     /// dmath::sin is within 1 ulp, so the bounds get two extra ulps of slack.
     pub fn sin(&self) -> Interval {
         self.shifted_cos(-dmath::FRAC_PI_2)
@@ -298,6 +339,60 @@ impl Box2 {
 mod tests {
     use super::*;
     use crate::rng::Rng;
+
+    #[test]
+    // the platform's atan2 as a reference independent of dmath's
+    #[allow(clippy::disallowed_methods)]
+    fn atan2_encloses_the_angle_or_refuses() {
+        let whole = Interval::new(-3.141_592_653_589_793_6, 3.141_592_653_589_793_6);
+        let mut r = Rng::new(21);
+        let mut refused = 0;
+        for _ in 0..50_000 {
+            let y = Interval::new(r.range(-4.0, 4.0), r.range(-4.0, 4.0));
+            let x = Interval::new(r.range(-4.0, 4.0), r.range(-4.0, 4.0));
+            let a = Interval::atan2(y, x);
+            if a == whole {
+                refused += 1;
+                // refused only where the box meets the origin or the cut
+                assert!(x.lo <= 0.0 && y.contains(0.0));
+                continue;
+            }
+            for _ in 0..8 {
+                let (py, px) = (r.range(y.lo, y.hi), r.range(x.lo, x.hi));
+                assert!(a.contains(py.atan2(px)), "{y:?} {x:?} {a:?}");
+            }
+            // the ends at least are the true ones within the contract's width
+            assert!(a.hi - a.lo < 4.0);
+        }
+        assert!(refused > 0 && refused < 50_000);
+        // -0 is +0: right of the origin, the angle 0, not -pi or a refusal
+        let a = Interval::atan2(Interval::new(-0.0, 1.0), Interval::new(1.0, 2.0));
+        assert!(a.contains(0.0) && a.lo > -1e-15, "{a:?}");
+        // touching the cut from above is the cut: refused
+        let a = Interval::atan2(Interval::new(0.0, 1.0), Interval::new(-2.0, -1.0));
+        assert_eq!(a, whole);
+        // across the cut, and round the origin: the whole range
+        assert_eq!(
+            Interval::atan2(Interval::new(-1.0, 1.0), Interval::new(-2.0, -1.0)),
+            whole
+        );
+        assert_eq!(
+            Interval::atan2(Interval::new(-1.0, 1.0), Interval::new(-1.0, 1.0)),
+            whole
+        );
+        assert_eq!(
+            Interval::atan2(Interval::new(-1.0, 0.0), Interval::new(-2.0, -1.0)),
+            whole
+        );
+        // right of the origin, across y = 0: no cut there
+        let a = Interval::atan2(Interval::new(-1.0, 1.0), Interval::new(1.0, 2.0));
+        assert!(
+            a.contains(-core::f64::consts::FRAC_PI_4)
+                && a.contains(core::f64::consts::FRAC_PI_4)
+                && a.hi < 0.8
+        );
+        assert!(Interval::atan2(Interval::EMPTY, Interval::point(1.0)).is_empty());
+    }
 
     #[test]
     fn interval_contains_true_values() {

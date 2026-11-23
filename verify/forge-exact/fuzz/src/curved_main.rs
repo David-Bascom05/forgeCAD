@@ -1,5 +1,5 @@
 //! `cargo run -p forge-exact-fuzz --release --bin exact-curved [-- SOURCE..] [--seeds N]
-//! [--lang N] [--rule strict|snap] [--threads N] [--only NAME] [--shrink]`
+//! [--lang N] [--rule strict|snap] [--threads N] [--only NAME] [--shrink] [--oracle]`
 //!
 //! The kernel's booleans of solids bounded by planes, cylinders, cones and spheres against the
 //! exact curved reference: totals per source and path, every disagreement, and with --shrink one
@@ -9,10 +9,16 @@
 //! planes, cylinders, cones and spheres, with Add, Cut and Keep), `families` (every scoreboard
 //! family, `--seeds` each, where its tools are quadric solids), `lang` (forge_lang::fuzz
 //! programs drawn from extrude, revolve, ball, hole, pattern, workplane, param and sketch),
-//! `band` (each degenerate pair with its tool moved by δ·LINEAR along x, y and z).
+//! `band` (each degenerate pair with its tool moved by δ·LINEAR along x, y and z), `torus` (the
+//! degenerate pairs with a torus, on the polynomial path) and `torusband` (those moved as `band`).
+//!
+//! With `--oracle`, each case also goes to the decide-once oracle (the curved ledger `qledgerB`,
+//! proven exact on certified inputs by `curved_exact` in verify/forge-curved): its probe
+//! memberships against the reference's, in an `== oracle` section. It takes minutes a case
+//! (FORGE_EXACT_ORACLE_TIMEOUT, FORGE_EXACT_ORACLE_CARRIERS).
 
-use forge_exact_fuzz::curved::{judge_curved, judge_curved_path, tool_moved};
-use forge_exact_fuzz::{Class, Reference};
+use forge_exact_fuzz::curved::{OClass, judge_curved, judge_curved_path, oracle_class, tool_moved};
+use forge_exact_fuzz::{Class, Reference, short};
 use forge_math::{Vec3, tol::LINEAR};
 use forge_model::Part;
 use std::collections::BTreeMap;
@@ -68,17 +74,23 @@ fn adv(name: String, part: Part) -> Case {
 const BAND: [f64; 3] = [0.9, -0.9, 3.0];
 
 fn cases(sources: &[String], seeds: u64, lang: u64) -> Vec<Case> {
-    let on = |s: &str| sources.is_empty() && s != "band" || sources.iter().any(|x| x == s);
+    let on =
+        |s: &str| sources.is_empty() && s != "band" && s != "torusband" || sources.iter().any(|x| x == s);
     let mut out = Vec::new();
-    if on("degen") || on("band") {
+    if on("degen") || on("band") || on("torus") || on("torusband") {
         for (name, part) in forge_model::adversarial::degenerate_parts() {
-            if !quadric_pair(&name) {
+            if name.starts_with("plane_plane") {
                 continue;
             }
-            if on("degen") {
+            let (whole, band) = if quadric_pair(&name) {
+                ("degen", "band")
+            } else {
+                ("torus", "torusband")
+            };
+            if on(whole) {
                 out.push(adv(name.clone(), part.clone()));
             }
-            if on("band") {
+            if on(band) {
                 for (ax, axis) in [(0, Vec3::X), (1, Vec3::Y), (2, Vec3::Z)] {
                     for d in BAND {
                         if let Some(p) = tool_moved(&part, axis * (d * LINEAR)) {
@@ -124,6 +136,7 @@ struct Judged {
     class: Class,
     case: usize,
     note: String,
+    oracle: Option<OClass>,
 }
 
 fn main() {
@@ -143,6 +156,7 @@ fn main() {
             "--threads" => threads = args.next().and_then(|s| s.parse().ok()).expect("--threads N"),
             "--only" => only.push(args.next().expect("--only NAME")),
             "--shrink" => shrink = true,
+            "--oracle" => forge_exact_fuzz::curved::ORACLE.store(true, std::sync::atomic::Ordering::Relaxed),
             s => sources.push(s.to_string()),
         }
     }
@@ -170,6 +184,10 @@ fn main() {
                 let c = &cs[i];
                 let t = std::time::Instant::now();
                 for (path, class, ans) in judge_curved(&mut reference, &c.part, &rule) {
+                    let oracle = ans
+                        .as_ref()
+                        .filter(|_| path == "sequential")
+                        .and_then(oracle_class);
                     let note = ans.and_then(|a| a.notes.first().cloned()).unwrap_or_default();
                     tx.send(Judged {
                         name: c.name.clone(),
@@ -177,6 +195,7 @@ fn main() {
                         class,
                         case: i,
                         note,
+                        oracle,
                     })
                     .expect("send");
                 }
@@ -242,6 +261,29 @@ fn main() {
     }
     for (s, n) in scope {
         println!("{n:5} {s}");
+    }
+    if forge_exact_fuzz::curved::oracle_on() {
+        println!("\n== oracle (the decide-once ledger against the reference, at the probes)");
+        let mut tally: BTreeMap<String, usize> = BTreeMap::new();
+        let mut alone = 0;
+        for j in &all {
+            match &j.oracle {
+                Some(OClass::Agree(n)) => {
+                    *tally.entry("agree".into()).or_default() += 1;
+                    alone += n;
+                }
+                Some(OClass::Differ(d)) => {
+                    *tally.entry("differ".into()).or_default() += 1;
+                    println!("{}: {d}", j.name);
+                }
+                Some(OClass::Skip(s)) => *tally.entry(format!("skip: {}", short(s))).or_default() += 1,
+                None => {}
+            }
+        }
+        for (k, n) in &tally {
+            println!("{n:5} {k}");
+        }
+        println!("{alone:5} probes decided by the oracle alone");
     }
     println!("\n== kinds");
     for (k, js) in &kinds {
