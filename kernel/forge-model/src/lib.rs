@@ -694,15 +694,19 @@ fn ahead(h: History<'_>) -> Result<Option<Body>, RegenError> {
     }
     let start = std::time::Instant::now();
     let mut building = std::time::Duration::ZERO;
+    // (tools timed so far: past `AHEAD_LOOK` of them untripped, the rest is plain, the clock unread)
+    let mut timed = 0;
+    let mut tripped = false;
     let mut body = None;
     let mut i = 0;
-    while i < h.len() {
+    while i < h.len() && !tripped && timed < AHEAD_LOOK {
         let made = if tools_apart(h, i) {
-            let t = std::time::Instant::now();
-            let made = tools(h, i, true)?;
             // (a tool that starts the part has no boolean beside it to hide behind)
-            if !starts(&h[i]) {
+            let t = (!starts(&h[i])).then(std::time::Instant::now);
+            let made = tools(h, i, true)?;
+            if let Some(t) = t {
                 building += t.elapsed();
+                timed += 1;
             }
             Some(made)
         } else {
@@ -710,12 +714,10 @@ fn ahead(h: History<'_>) -> Result<Option<Body>, RegenError> {
         };
         body = step_plain_made(h, i, body, None, made)?;
         i += 1;
-        if building >= AHEAD_AFTER && building * 5 >= start.elapsed() {
-            break;
-        }
+        tripped = building >= AHEAD_AFTER && building * 5 >= start.elapsed();
     }
     // (the threads there are asked only now: a part of cheap tools never asks)
-    let apart: Vec<usize> = match i < h.len() && forge_math::par::threads() >= 2 {
+    let apart: Vec<usize> = match tripped && i < h.len() && forge_math::par::threads() >= 2 {
         true => (i..h.len()).filter(|&k| tools_apart(h, k)).collect(),
         false => Vec::new(),
     };
@@ -773,6 +775,9 @@ fn ahead(h: History<'_>) -> Result<Option<Body>, RegenError> {
         r.map(|()| body)
     })
 }
+
+/// The tools `ahead` times before it settles on building the rest plainly.
+const AHEAD_LOOK: usize = 12;
 
 /// The tool building `ahead` waits for before it starts a helper.
 const AHEAD_AFTER: std::time::Duration = std::time::Duration::from_micros(100);
