@@ -49,13 +49,14 @@ pub fn lower(body: &Body) -> Result<Vec<Face>, LowerError> {
     Ok(out)
 }
 
-/// The edges of a face, as (curve, range) pairs.
-fn edges(body: &Body, fid: FaceId) -> Vec<(Curve, forge_math::Interval)> {
+/// The edges of a face, as (curve, range, start point, end point): the ends are the B-rep's
+/// vertices, shared bit for bit by the edges that meet there, so a trim built from them closes.
+fn edges(body: &Body, fid: FaceId) -> Vec<(Curve, forge_math::Interval, V3, V3)> {
     let mut v = Vec::new();
     for &l in body.face(fid).loops.iter() {
         for c in body.lp(l).coedges() {
             let e = body.edge(body.coedge(c).edge);
-            v.push((e.curve.clone(), e.range));
+            v.push((e.curve.clone(), e.range, p3(body.vertex(e.start).point), p3(body.vertex(e.end).point)));
         }
     }
     v
@@ -83,10 +84,10 @@ fn lower_face(body: &Body, fid: FaceId, k: usize, out: &mut Vec<Face>) -> Result
                     hi[i] = hi[i].max(p[i] + r);
                 }
             };
-            for (cv, range) in edges(body, fid) {
+            for (cv, range, vs, ve) in edges(body, fid) {
                 match &cv {
                     Curve::Line(_) => {
-                        let (a, b) = (proj(p3(cv.eval(range.lo))), proj(p3(cv.eval(range.hi))));
+                        let (a, b) = (proj(vs), proj(ve));
                         grow(a, 0.0);
                         grow(b, 0.0);
                         segs.push(TSeg::Line { a, b });
@@ -100,10 +101,10 @@ fn lower_face(body: &Body, fid: FaceId, k: usize, out: &mut Vec<Face>) -> Result
                         let cc = proj(p3(c.frame.origin));
                         let w = range.hi - range.lo;
                         let n = ((w / (0.5 * std::f64::consts::PI)).ceil() as usize).max(1);
-                        let mut prev = proj(p3(cv.eval(range.lo)));
+                        let mut prev = proj(vs);
                         for i in 1..=n {
-                            let t = if i == n { range.hi } else { range.lo + w * i as f64 / n as f64 };
-                            let p = proj(p3(cv.eval(t)));
+                            let t = range.lo + w * i as f64 / n as f64;
+                            let p = if i == n { proj(ve) } else { proj(p3(cv.eval(t))) };
                             segs.push(TSeg::Arc { a: prev, b: p, c: cc, r: c.radius, ccw });
                             prev = p;
                         }
@@ -133,7 +134,7 @@ fn lower_face(body: &Body, fid: FaceId, k: usize, out: &mut Vec<Face>) -> Result
                 let d = sub(p, o);
                 dmath::atan2(dot(d, y), dot(d, x))
             };
-            for (cv, range) in edges(body, fid) {
+            for (cv, range, _, _) in edges(body, fid) {
                 match &cv {
                     Curve::Circle(c) => {
                         let cz = v3(c.frame.z().get());

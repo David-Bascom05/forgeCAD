@@ -25,4 +25,5 @@ pub mod ival;
 pub mod offset;
 pub mod real;
 pub mod region;
+pub mod slab;
 pub mod tool;

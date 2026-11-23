@@ -67,6 +67,28 @@ fn main() {
     let body = run.body.expect("flange builds");
     let faces: Vec<Face> = forge_cam::lower::lower(&body).expect("lowers");
     println!("flange: {} B-rep faces, {} checker faces", body.face_ids().count(), faces.len());
+    if std::env::var("DUMP").is_ok() {
+        for f in &faces {
+            if let Some(forge_cam_geom::slab::Prism::Flat { region, .. }) = &f.prism {
+                let tr = forge_cam_geom::check::Trim { segs: region.clone() };
+                use forge_cam_geom::ival::Ival;
+                println!("classify face {} (7, 0.0196): {} ; (0,0): {}", f.id, tr.classify(Ival::pt(6.99997246585088), Ival::pt(0.01963357658604995)), tr.classify(Ival::pt(0.0), Ival::pt(0.0)));
+                let m = Move::Arc { c: [0.0, 0.0, 1.0], x: [0.9997482349425065, 0.022438064295804937, 0.0], y: [-0.022438064295804937, 0.9997482349425065, 0.0], r: 7.0, t0: -0.011220444605843115, t1: 0.011220444605843115 };
+                if let Some(forge_cam_geom::check::Planar::Arc { c, r, a, b, ccw, .. }) = m.planar() {
+                    let ps = forge_cam_geom::slab::Sec::Arc { c, r, a, b, ccw };
+                    println!("  path {ps:?}");
+                    for sg in region {
+                        let sc = match *sg { forge_cam_geom::check::TSeg::Line { a, b } => forge_cam_geom::slab::Sec::Seg { a, b }, forge_cam_geom::check::TSeg::Arc { a, b, c, r, ccw } => forge_cam_geom::slab::Sec::Arc { c, r, a, b, ccw } };
+                        let d = forge_cam_geom::slab::dist(&ps, &sc);
+                        if d.hi < 1.0 { println!("   ZERO-ish {d:?} vs {sg:?}"); }
+                    }
+                }
+            }
+        }
+        for f in &faces {
+            println!("face {} {:?} p {:?} q {:?} prism {:?}", f.id, f.surf, f.p, f.q, f.prism.as_ref().map(|p| match p { forge_cam_geom::slab::Prism::Flat { z, region, .. } => format!("flat z {z} {} segs", region.len()), w => format!("{w:?}") }));
+        }
+    }
     let holder = Holder { profile: vec![[0.0, 25.0], [20.0, 25.0], [25.0, 40.0], [60.0, 40.0]] };
     let tool = assemble(&Cutter::Flat { d: 6.0 }, 25.0, 6.0, 35.0, Some(&holder)).unwrap();
     let bull = assemble(&Cutter::Bull { d: 6.0, re: 1.0 }, 25.0, 6.0, 35.0, Some(&holder)).unwrap();
@@ -98,6 +120,9 @@ fn main() {
                     }
                     for b in &t.bodies {
                         let lim = if b.part == forge_cam_geom::tool::Part::Cutter { -tol } else { clear };
+                        if apart(&forge_cam_geom::check::swept_box_body(m, b), &f.bbox, lim.max(0.0) + f.mu) {
+                            continue;
+                        }
                         near += 1;
                         let tc = std::time::Instant::now();
                         let (v, c) = certify(b, f, m, lim, tol / 4.0, 200_000);

@@ -56,6 +56,8 @@ pub struct Face {
     pub bbox: [Ival; 3],
     /// The caller's name for it.
     pub id: u32,
+    /// Its form as a prism along z, when it has one (slab.rs).
+    pub prism: Option<crate::slab::Prism>,
 }
 
 /// A planar face's trim: closed polygons and arcs in (p, q), as f64 polylines whose arcs are
@@ -134,7 +136,9 @@ impl Surf {
 impl Face {
     pub fn new(surf: Surf, p: Ival, q: Ival, trim: Option<Trim>, mu: f64, id: u32) -> Face {
         let bbox = surf.eval(p, q);
-        Face { surf, p, q, trim, mu, bbox, id }
+        let mut f = Face { surf, p, q, trim, mu, bbox, id, prism: None };
+        f.prism = crate::slab::Prism::of(&f);
+        f
     }
 
     /// 1: every point of the parameter box is in the face; -1: none is; 0: unknown.
@@ -179,47 +183,84 @@ impl Trim {
         self.point_side(cp, cq)
     }
 
-    /// Ray casting from an f64 point to +p, every decision in intervals: 1 in, -1 out, 0 unknown.
+    /// Ray casting from an f64 point, every decision in intervals: 1 in, -1 out, 0 unknown. The
+    /// ray goes along each of a fixed list of directions (exact Pythagorean unit vectors) until
+    /// one decides: a ray through a vertex leaves its crossing undecided, never miscounted.
     fn point_side(&self, x: f64, y: f64) -> i32 {
+        const DIRS: [[f64; 2]; 5] = [[1.0, 0.0], [0.6, 0.8], [-0.8, 0.6], [0.28, -0.96], [-0.96, -0.28]];
+        let mut k = 0;
+        while k < DIRS.len() {
+            let s = self.ray_side(x, y, DIRS[k]);
+            if s != 0 {
+                return s;
+            }
+            k += 1;
+        }
+        0
+    }
+
+    /// One ray: coordinates turned so the ray is +x' from the point (x' = d·v, y' = d × v).
+    fn ray_side(&self, x: f64, y: f64, d: [f64; 2]) -> i32 {
+        let (dx, dy) = (Ival::pt(d[0]), Ival::pt(d[1]));
+        let rot = |p: [f64; 2]| -> [Ival; 2] {
+            let (vx, vy) = (Ival::pt(p[0]).sub(Ival::pt(x)), Ival::pt(p[1]).sub(Ival::pt(y)));
+            [dx.mul(vx).add(dy.mul(vy)), dx.mul(vy).sub(dy.mul(vx))]
+        };
         let mut odd = false;
+        let axis = d[0] == 1.0 && d[1] == 0.0;
         let mut i = 0;
         while i < self.segs.len() {
+            // along +x: a piece wholly above, below or behind the ray cannot cross it
+            if axis {
+                let bx = crate::slab::tseg_box(&self.segs[i]);
+                if bx[1] > y || bx[3] < y || bx[2] < x {
+                    i += 1;
+                    continue;
+                }
+            }
             match self.segs[i] {
                 TSeg::Line { a, b } => {
-                    let ua = a[1] > y;
-                    let ub = b[1] > y;
-                    if ua != ub {
-                        // cross((b − a), (q − a)) sign, in intervals
-                        let c = Ival::pt(b[0])
-                            .sub(Ival::pt(a[0]))
-                            .mul(Ival::pt(y).sub(Ival::pt(a[1])))
-                            .sub(Ival::pt(b[1]).sub(Ival::pt(a[1])).mul(Ival::pt(x).sub(Ival::pt(a[0]))));
-                        let s = c.sign();
+                    let (ra, rb) = (rot(a), rot(b));
+                    let sa = ra[1].sign();
+                    let sb = rb[1].sign();
+                    if sa == 0 || sb == 0 {
+                        // an end on the ray's line: this direction cannot say
+                        if (ra[1].lo <= 0.0 && ra[1].hi >= 0.0 && ra[0].hi >= 0.0) || (rb[1].lo <= 0.0 && rb[1].hi >= 0.0 && rb[0].hi >= 0.0) {
+                            return 0;
+                        }
+                    } else if sa != sb {
+                        // where it crosses y' = 0: x' = xa − ya (xb − xa)/(yb − ya)
+                        let xc = ra[0].sub(ra[1].mul(rb[0].sub(ra[0])).div(rb[1].sub(ra[1])));
+                        let s = xc.sign();
                         if s == 0 {
                             return 0;
                         }
-                        if (ub && s > 0) || (!ub && s < 0) {
+                        if s > 0 {
                             odd = !odd;
                         }
                     }
                 }
                 TSeg::Arc { a, b, c, r, ccw } => {
-                    // crossings of the horizontal line y with the circle, inside the arc's sector
-                    let dy = Ival::pt(y).sub(Ival::pt(c[1]));
-                    let h2 = Ival::pt(r).sqr().sub(dy.sqr());
+                    let (ra, rb, rc) = (rot(a), rot(b), rot(c));
+                    // the ends on the ray's line: undecided here
+                    if (ra[1].lo <= 0.0 && ra[1].hi >= 0.0 && ra[0].hi >= 0.0) || (rb[1].lo <= 0.0 && rb[1].hi >= 0.0 && rb[0].hi >= 0.0) {
+                        return 0;
+                    }
+                    let h2 = Ival::pt(r).sqr().sub(rc[1].sqr());
                     if h2.hi >= 0.0 {
                         if h2.lo <= 0.0 {
                             return 0;
                         }
                         let h = h2.sqrt();
-                        let xs = [Ival::pt(c[0]).add(h), Ival::pt(c[0]).sub(h)];
+                        let xs = [rc[0].add(h), rc[0].sub(h)];
                         let mut k = 0;
                         while k < 2 {
                             let xk = xs[k];
-                            // in the sector from a to b
-                            let (vx, vy) = (xk.sub(Ival::pt(c[0])), dy);
-                            let c1 = Ival::pt(a[0] - c[0]).mul(vy).sub(Ival::pt(a[1] - c[1]).mul(vx));
-                            let c2 = vx.mul(Ival::pt(b[1] - c[1])).sub(vy.mul(Ival::pt(b[0] - c[0])));
+                            let (vx, vy) = (xk.sub(rc[0]), rc[1].neg());
+                            let ua = [ra[0].sub(rc[0]), ra[1].sub(rc[1])];
+                            let ub = [rb[0].sub(rc[0]), rb[1].sub(rc[1])];
+                            let c1 = ua[0].mul(vy).sub(ua[1].mul(vx));
+                            let c2 = vx.mul(ub[1]).sub(vy.mul(ub[0]));
                             let (c1, c2) = if ccw { (c1, c2) } else { (c1.neg(), c2.neg()) };
                             let ins = c1.lo > 0.0 && c2.lo > 0.0;
                             let out = c1.hi < 0.0 || c2.hi < 0.0;
@@ -227,7 +268,7 @@ impl Trim {
                                 return 0;
                             }
                             if ins {
-                                let right = xk.sub(Ival::pt(x)).sign();
+                                let right = xk.sign();
                                 if right == 0 {
                                     return 0;
                                 }
@@ -576,6 +617,20 @@ fn diam(b: &[Ival; 3]) -> f64 {
 /// Certifies one (body, face, move) against `limit`, to resolution `res` (cells whose image is
 /// smaller are leaves), spending at most `budget` cells.
 pub fn certify(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Verdict, usize) {
+    // a planar move against a face that is a prism along z: closed form (slab.rs)
+    if let (Some(pl), Some(pr)) = (mv.planar(), f.prism.as_ref()) {
+        let (v, n) = crate::slab::certify(body, f, pr, &pl, limit, res, budget);
+        if let Verdict::Hit { d, p, q, .. } = v {
+            let (s, at) = crate::slab::locate(mv, pr);
+            return (Verdict::Hit { d, p, q, s, at }, n);
+        }
+        return (v, n);
+    }
+    certify_bb(body, f, mv, limit, res, budget)
+}
+
+/// The branch and bound itself (any face, any move).
+pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Verdict, usize) {
     let lim_clear = limit + f.mu;
     let lim_hit = limit - f.mu;
     let s0 = if mv.planar().is_some() { Ival::pt(0.5) } else { Ival::new(0.0, 1.0) };
@@ -757,6 +812,16 @@ pub fn swept_box(mv: &Move, rmax: f64, top: f64) -> [Ival; 3] {
         g[0].add(Ival::new(-rmax, rmax)),
         g[1].add(Ival::new(-rmax, rmax)),
         g[2].add(Ival::new(0.0, top)),
+    ]
+}
+
+/// The swept box of one body of the tool along a move.
+pub fn swept_box_body(mv: &Move, b: &Body) -> [Ival; 3] {
+    let g = mv.at(Ival::new(0.0, 1.0));
+    [
+        g[0].add(Ival::new(-b.rmax, b.rmax)),
+        g[1].add(Ival::new(-b.rmax, b.rmax)),
+        g[2].add(Ival::new(b.z0, b.z1)),
     ]
 }
 
