@@ -280,6 +280,7 @@ impl TurnCam {
                     tol: num(a, "tol", Some(0.002))?,
                     machine,
                     place,
+                    fixtures: Vec::new(),
                 };
                 s.check().map_err(|e| format!("{e:?}"))?;
                 self.setups.push((name.to_string(), s));

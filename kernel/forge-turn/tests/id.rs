@@ -24,6 +24,7 @@ fn bush(pts: &[(f64, f64)]) -> Setup {
         tol: 0.002,
         machine: None,
         place: None,
+        fixtures: vec![],
     }
 }
 
