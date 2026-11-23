@@ -301,3 +301,43 @@ the face crossings above.
 
 **Order of work.** First isolated points (they unblock 5 of the 9 scoreboard parts and the
 round-hole test). Then tangential circles (guard_120, the tangent plane–torus). Then cost.
+
+## 8. Phase B, step 1: isolated singular sites (built)
+
+`certify` first finds the sites the chains pass:
+- each surface's own singular point (a cone's apex, a horn torus's centre) wherever the other
+  surface touches it;
+- each touch point: a critical point of f_a on f_b = 0, found by Newton on the Lagrange system
+  ∇f_a + μ∇f_b = 0, f_b = 0 from chain points where the normals are nearly parallel, then certified
+  unique in a box by 4-dimensional Krawczyk (exact interval Hessians for every form).
+
+Whether a site is a touch is **decided once by the kernel's contact rule**: the other surface's
+distance there, as an interval, is within LINEAR. When the enclosure straddles the rule's edge, the
+certificate refuses.
+
+The site claims a cube Q about its point. A step with both ends in Q is not proven. A failed step
+whose box holds the site is cut there, and its parts are refined towards the site, so proven steps
+run up to Q's face. The coverage and no-twice walks count Q as claimed. Open chains that stop short
+of a site are run on into it. Q's half side is tried at 3.2e-4, 2e-3, 2e-2 and 0.1, least first.
+Near a touch the surfaces stay within κd² of each other, so the exclusion walk can only afford Q
+from about 3e-3/Δκ.
+
+Steps wholly outside the region (grown by LINEAR) are not proven either. They claim nothing the
+region needs, and coverage catches any part of their arc that dips in.
+
+Result, feature on:
+- scoreboard: **0 worse** (978/985, the same as off); the 9 parts that were worse now certify;
+- the three tests that failed now pass: the hole tangent to the round, no_feature_dropped, and
+  rack18u guard_120 (same volume as off, but 5.6 s against 0.16 s);
+- one new feature-on failure: forge-lang `kernel_history_repros::slow_histories_finish`. A swept
+  pipe (a cylinder) meets a bend (a torus) of the same 0.76 radius, tangent along the joint circle.
+  That is a tangential contact curve, not an isolated point, and it ran the walk out of budget.
+
+**Next: walk in a surface's own domain.** Near a tangential contact the gap grows like t² (t the
+offset from the shared curve). 3D box exclusion then needs boxes of size κt², about
+32πr/(3κ²w³) of them outside a tube of radius w (6e5 for the pipe joint at w = 0.1). In the (u, v)
+domain of one surface, the gap function f_b∘A has a mean-value enclosure of width about 2ct·δ
+against its value ct², so a box of side t/2 is excluded: about 8πr/w boxes. That is 10³ instead of
+10⁶, and it is also the main cost the certificate has today. Then the shared circles of pipe joints
+(cylinder–torus, sphere–torus, torus–torus with equal tube radii), each decided once, claim a thin
+tube.
