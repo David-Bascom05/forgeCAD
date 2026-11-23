@@ -1,1 +1,2 @@
-import ForgeCurved.Manifold
+import ForgeCurved.Tangent
+import ForgeCurved.EndToEnd

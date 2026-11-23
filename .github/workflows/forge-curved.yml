@@ -1,6 +1,6 @@
 # Decide-once for curved inputs over ℝ (verify/forge-curved, design D1): the Mathlib proofs about
 # forge-exact's curved definitions (faithful cells, `xNonManifold_iff_top`, the tangent-cylinder
-# test, the end-to-end statement). One `lake build` on the pinned toolchain, with Mathlib's
+# test, and `end_to_end_curved` through the aeneas project's proven `CoreSpec`). One `lake build` on the pinned toolchain, with Mathlib's
 # prebuilt cache; then the axiom report: every `#print axioms` line of ForgeCurved/Axioms.lean
 # must show only propext, Classical.choice and Quot.sound (no sorryAx).
 name: forge-curved
@@ -8,9 +8,9 @@ name: forge-curved
 on:
   push:
     branches: [main]
-    paths: ["verify/forge-curved/**", "verify/forge-exact/**", ".github/workflows/forge-curved.yml"]
+    paths: ["verify/forge-curved/**", "verify/forge-exact/**", "research/kernel-audit/decide-once/aeneas/lean/**", ".github/workflows/forge-curved.yml"]
   pull_request:
-    paths: ["verify/forge-curved/**", "verify/forge-exact/**", ".github/workflows/forge-curved.yml"]
+    paths: ["verify/forge-curved/**", "verify/forge-exact/**", "research/kernel-audit/decide-once/aeneas/lean/**", ".github/workflows/forge-curved.yml"]
   workflow_dispatch:
 
 jobs:

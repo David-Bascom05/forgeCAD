@@ -20,3 +20,9 @@ path = "../forge-exact"
 
 [[lean_lib]]
 name = "ForgeCurved"
+
+# The shipped Rust core's refinement proof (Aeneas), for `EndToEndCurved`: `CoreSpec` (proven
+# there) followed by the curved correctness of this package, as `end_to_end_of` does for flat.
+[[require]]
+name = "forgeboolcore"
+path = "../../research/kernel-audit/decide-once/aeneas/lean"

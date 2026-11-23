@@ -9,3 +9,11 @@ import ForgeCurved
 #print axioms ForgeCurved.frontier_iff
 #print axioms ForgeCurved.xNonManifold_iff_top
 #print axioms ForgeCurved.zeroThickness_iff_top
+#print axioms ForgeCurved.Tangent.unseamed_no_refusal
+#print axioms ForgeCurved.Tangent.unseamed_not_faithful
+#print axioms ForgeCurved.Tangent.union_three_sheets
+#print axioms ForgeCurved.Tangent.seamed_refuses
+#print axioms forge_bool_core.core_spec_proof
+#print axioms ForgeCurved.curved_correct
+#print axioms ForgeCurved.curved_correct_top
+#print axioms forge_bool_core.end_to_end_curved
