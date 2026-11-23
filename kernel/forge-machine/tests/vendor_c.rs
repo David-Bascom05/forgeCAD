@@ -77,7 +77,8 @@ fn syil_x7_overtravel_is_reported() {
     let far = SLOT.replace("X60. F800.", "X300. F800.");
     let (v, _) = run("syil-x7-pro", SYIL_SETUP, &far);
     assert!(
-        v.iter().any(|v| matches!(v, sim::Violation::Overtravel { joint, .. } if joint == "X")),
+        v.iter()
+            .any(|v| matches!(v, sim::Violation::Overtravel { joint, .. } if joint == "X")),
         "{v:?}"
     );
 }
@@ -185,7 +186,10 @@ fn roland_srm20_m6_is_refused_without_a_changer() {
 #[test]
 fn roland_srm20_head_below_the_reach_is_caught() {
     // Z-35 from the stock top (part z 30): the tool goes 5 mm into the table
-    let prog = SLOT.replace("T1 M06\n", "").replace("S8000", "S6000").replace("Z-2.", "Z-35.");
+    let prog = SLOT
+        .replace("T1 M06\n", "")
+        .replace("S8000", "S6000")
+        .replace("Z-2.", "Z-35.");
     let (_, c) = run("roland-srm-20", SRM_SETUP, &prog);
     assert!(!c.is_empty(), "the tool into the table was not caught");
 }
