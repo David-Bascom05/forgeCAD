@@ -382,6 +382,100 @@ fn onboth(files: &[String]) {
     );
 }
 
+/// `score F.fg`: the points where the obstacle rules disagree, for the last fillet of a part (whose
+/// truth is the part's STEP). One JSON line per point: where it is, the body before's side (Index,
+/// which has no new faces to misjudge), the nearest picked edge's kind, and the rule-deciding fact:
+/// for a concave pick, whether a free ball of the body before covers the point (then rules (b) and
+/// (d) say air); for a convex pick, whether the ball at the edge's crease pokes out of the body
+/// before (then rule (b) leaves the edge sharp). The OCCT script classifies them against the kernel's
+/// result and the truth.
+fn score(f: &str) {
+    use forge_bool::classify::{Index, Where};
+    let Ok(src) = std::fs::read_to_string(f) else { return };
+    let m = forge_lang::fuzz::build_with(&src, opts());
+    let Some(k) = (0..m.features.len()).rev().find(|&k| matches!(m.features[k], forge_model::Feature::Fillet { .. })) else {
+        return;
+    };
+    let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else { return };
+    let Some(before) = m.body_after(k) else { return };
+    let before = if before.dead > 0 { before.compact() } else { before };
+    let idx = Index::new(&before);
+    let outside = |p: Point3| matches!(idx.classify(p), Where::Outside);
+    let inside = |p: Point3| matches!(idx.classify(p), Where::Inside);
+    // picked edges: (edge, r, convex, pokes)
+    let mut picks = Vec::new();
+    for (name, radius) in edges {
+        let forge_ops::Radius::Constant(r) = radius else { continue };
+        let Some(e) = before.edge_by_name(*name) else { continue };
+        let convex = forge_ops::fillet::fillet_kind(&before, e) == Some(true);
+        let mut pokes = false;
+        if convex && let Ok((b, _, _)) = forge_ops::fillet::edge_blend(&before, e, *r) {
+            let x = before.edge(e);
+            let c = b.spine.eval(spine_closest(&b.spine, x.curve.eval(x.range.mid())));
+            let strict = std::env::var_os("SCORE_STRICT").is_some();
+            let (n, k, need) = if strict { (400, 0.95, 20) } else { (120, 0.99, 1) };
+            pokes = (0..n)
+                .filter(|&j| {
+                    let z = 1.0 - 2.0 * (j as f64 + 0.5) / n as f64;
+                    let a = j as f64 * 2.399_963_229_728_653;
+                    let q = (1.0 - z * z).max(0.0).sqrt();
+                    outside(c + Vec3::new(q * a.cos(), q * a.sin(), z) * (k * r))
+                })
+                .count()
+                >= need;
+        }
+        picks.push((e, *r, convex, pokes));
+    }
+    let mut g = Rng(0x5eed ^ f.len() as u64);
+    let unit = |g: &mut Rng| loop {
+        let v = Vec3::new(
+            g.next() as f64 / u64::MAX as f64 * 2.0 - 1.0,
+            g.next() as f64 / u64::MAX as f64 * 2.0 - 1.0,
+            g.next() as f64 / u64::MAX as f64 * 2.0 - 1.0,
+        );
+        let l = v.length();
+        if l > 0.05 && l <= 1.0 {
+            return v * (1.0 / l);
+        }
+    };
+    // a ball of radius r about c misses the body before (sampled: its centre and 60 sphere points)
+    // SCORE_STRICT: 400 points on the sphere and on shells at 0.5 r and 0.8 r
+    let n: usize = if std::env::var_os("SCORE_STRICT").is_some() { 400 } else { 60 };
+    let shells: &[f64] = if n > 60 { &[1.0, 0.8, 0.5] } else { &[1.0] };
+    let free = |c: Point3, r: f64| {
+        outside(c)
+            && shells.iter().all(|&k| {
+                (0..n).all(|j| {
+                    let z = 1.0 - 2.0 * (j as f64 + 0.5) / n as f64;
+                    let a = j as f64 * 2.399_963_229_728_653;
+                    let q = (1.0 - z * z).max(0.0).sqrt();
+                    outside(c + Vec3::new(q * a.cos(), q * a.sin(), z) * (r * k))
+                })
+            })
+    };
+    for &(e, r, convex, pokes) in &picks {
+        let x = before.edge(e);
+        for _ in 0..60 {
+            let t = x.range.lo + x.range.width() * (g.next() as f64 / u64::MAX as f64);
+            let p = x.curve.eval(t) + unit(&mut g) * (r * (g.next() as f64 / u64::MAX as f64));
+            let (bin, bout) = (inside(p), outside(p));
+            let covered = if !convex && bout {
+                (0..300).any(|_| {
+                    let c = p + unit(&mut g) * (r * (0.3 + 0.69 * (g.next() as f64 / u64::MAX as f64)));
+                    free(c, r)
+                })
+            } else {
+                false
+            };
+            println!(
+                "{{\"x\":{},\"y\":{},\"z\":{},\"before\":\"{}\",\"convex\":{convex},\"pokes\":{pokes},\"covered\":{covered},\"r\":{r}}}",
+                p.x, p.y, p.z,
+                if bin { "in" } else if bout { "out" } else { "on" }
+            );
+        }
+    }
+}
+
 fn parts(files: &[String]) {
     for f in files {
         let Ok(src) = std::fs::read_to_string(f) else {
@@ -481,6 +575,7 @@ fn main() {
         Some("probe") => probe(&args[1..]),
         Some("mids") => mids(&args[1..]),
         Some("onboth") => onboth(&args[1..]),
+        Some("score") => score(&args[1]),
         Some("near") => near(&args[1], &args[2]),
         Some("random") => {
             let n = args.get(1).and_then(|x| x.parse().ok()).unwrap_or(20);

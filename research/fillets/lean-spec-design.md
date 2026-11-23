@@ -505,3 +505,24 @@ user-facing lines −14 093 178 instructions in all. Without the check, LLVM inl
 `meet::intersect`'s `on_nappes` count. It is kept out of line, and `on_nappes` makes two direct checks
 in place of an array per point.
 
+### The obstacle scored on the census (CADFS 1-in-200, 2026-11-23)
+
+Staged from the public Hugging Face set (rev dd76a9b), not committed. Of 1 914 ids, 1 287 translate.
+The 130 translated parts whose last feature is a fillet are judged, since there the STEP truth is
+that fillet's own result. `fillet-spec score` samples points round each picked edge and marks where
+the rules disagree. `research/fillets/spec/score_occ.py` classifies those points with OCCT against
+the kernel's result and against Onshape's STEP. The tests are strict (`SCORE_STRICT`: 400 sphere
+points, and shells at 0.5 r and 0.8 r). A looser first pass had produced five false free balls on
+concave picks, all gone under the strict test.
+
+| decisive class | parts | points | truth air | (a) supports only | ball inside the whole body (the opening) | (d) |
+|---|---|---|---|---|---|---|
+| convex: the ball at the crease pokes out of the body before (the kernel cuts there) | 55 | 1 379 | 1 366 (99.1 %) | 54 agree, 1 split | 1 agrees (00318570) | 54 agree, 1 split |
+| concave: a free ball of the body before covers the kernel's fill | 3 | 183 | 183 (100 %) | 0 agree | 3 agree | 3 agree |
+
+With the pipe set's three OCCT witnesses (concave: (b) and (d) agree, (a) not) and the crescent
+(convex, Onshape rounds it), rule (d) agrees with every witness but the one convex part. Caveat: the
+convex column tests the whole body before as the obstacle, which is stricter than (b) proper
+(supports and their neighbours only). It separates supports-only from the opening; (b) proper
+differs only where the poked face neighbours a support, which this run does not isolate.
+
