@@ -54,12 +54,17 @@ dependencies = [
 name = "forge-bool"
 version = "0.1.0"
 dependencies = [
+ "forge-bool-core",
  "forge-geom",
  "forge-math",
  "forge-mesh",
  "forge-ops",
  "forge-topo",
 ]
+
+[[package]]
+name = "forge-bool-core"
+version = "0.1.0"
 
 [[package]]
 name = "forge-brake"

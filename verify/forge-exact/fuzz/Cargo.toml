@@ -15,6 +15,8 @@ path = "src/main.rs"
 # they run where that has happened (the forge-exact workflow), not in a plain `cargo test --workspace`
 [features]
 reference = []
+# the kernel's flat booleans by the decide-once path (forge-bool's `decide_once`)
+decide_once = ["forge-bool/decide_once"]
 
 [dependencies]
 forge-math = { path = "../../../kernel/forge-math" }

@@ -603,6 +603,11 @@ pub fn nary_with(
     threads: usize,
     root: Name,
 ) -> R<Body> {
+    // flat faces: the whole history as one pointwise rule, one call of the decide-once core
+    #[cfg(feature = "decide_once")]
+    if let Some(r) = crate::decide_once::history(tools, ops)? {
+        return Ok(r);
+    }
     crate::boolean::UNDECIDED.with(|u| u.set(None));
     #[cfg(feature = "decisions")]
     let scope = crate::decisions::scope("n-ary", String::from("plain"));
