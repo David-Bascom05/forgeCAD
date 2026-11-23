@@ -468,6 +468,7 @@ Then the Lean and Rust tracks run in parallel. Each arrow is a dependency.
 | Rust | **R1** v2 types plus a `LedgerWF` v2 debug check, as `forge_bool_core::v2`, v1 untouched | 0 | S |
 | Rust | **R2** the v2 core in Aeneas style, then translate.sh: `Funs` v2 | R1 | M |
 | Rust | **R3** the face-arrangement builder plus a debug "coarsens" check against v1's ledger (`Refines`' counts and sides) on the gate corpus | R1, L2 (`Refines` fixed) | L |
+| Lean | **R3-L3** the builder's proof: the wedge lemma (consecutive facets round an edge joined by a `ClearPath`, so `room_const` gives `Refines`' rooms condition), then `Refines` for the builder. **Owner: the decide-once Lean coordinator** (this session), or a helper it spins up. The Rust session builds the radial order but does not own its proof. | R3's radial order, L4 | M–L |
 | Rust | **R4** callgrind on coplanar, upto and housing against the old path | R2, R3, R5, R6 | S |
 | Rust | **R5** an in-place write: edit body 0's near faces only, as the old path's apply does (0.06M against 0.68M) | — | M |
 | Rust | **R6** exact planes and points for near faces only (`inputs` converts all ~183 faces today) | — | S |
