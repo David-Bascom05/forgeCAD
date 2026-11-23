@@ -1242,7 +1242,7 @@ fn zip_tri<R: Refine + ?Sized>(
         points[t[1] as usize],
         points[t[2] as usize],
     );
-    let side = (a.distance(b)).max(b.distance(c)).max(c.distance(a));
+    let side = most(most(a.distance(b), b.distance(c)), c.distance(a));
     if orient2d(a, b, c) <= 1e-5 * side * side || (refine.triangles() && refine.triangle(t, [a, b, c])) {
         false
     } else {
@@ -1320,11 +1320,11 @@ fn within<R: Refine + ?Sized>(
     let mut k = 0;
     while k < points.len() {
         let p = points[k];
-        lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
-        hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+        lo = Point2::new(least(lo.x, p.x), least(lo.y, p.y));
+        hi = Point2::new(most(hi.x, p.x), most(hi.y, p.y));
         k += 1;
     }
-    let size = (hi.x - lo.x).max(hi.y - lo.y).max(f64::MIN_POSITIVE);
+    let size = most(most(hi.x - lo.x, hi.y - lo.y), f64::MIN_POSITIVE);
     let eps = 1e-12 * size;
     let c = Point2::new(0.5 * (lo.x + hi.x), 0.5 * (lo.y + hi.y));
     let m = 100.0 * size;
@@ -1412,6 +1412,17 @@ fn within<R: Refine + ?Sized>(
         },
         settled,
     ))
+}
+
+/// f64::min as the native build has it for numbers (here never a NaN): the second of two equals,
+/// so of +0 and -0 the second (wasm's min would take -0).
+fn least(a: f64, b: f64) -> f64 {
+    if a < b { a } else { b }
+}
+
+/// f64::max likewise: the second of two equals.
+fn most(a: f64, b: f64) -> f64 {
+    if a > b { a } else { b }
 }
 
 /// The first thing wrong with the input, if anything is: a point not finite, a loop index out of
@@ -1841,7 +1852,10 @@ mod tests {
     /// A boundary's cost counts against a file's budget: past it, a clean error.
     #[test]
     fn a_fault_reads_as_its_text_did() {
-        assert_eq!(format!("{:?}", CdtError::Internal(Fault::BrokenLink)), "Internal(\"broken link\")");
+        assert_eq!(
+            format!("{:?}", CdtError::Internal(Fault::BrokenLink)),
+            "Internal(\"broken link\")"
+        );
         assert_eq!(Fault::BoundaryTooLong.text(), "the boundary would take too long");
     }
 
