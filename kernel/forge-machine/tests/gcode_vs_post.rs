@@ -53,7 +53,11 @@ fn random_program(r: &mut Lcg, dialect: &str) -> Program {
                 let to = if full {
                     [p[0], p[1], p[2] - r.f(0.0, 1.0)]
                 } else {
-                    [c[0] + rad * forge_math::dmath::cos(a), c[1] + rad * forge_math::dmath::sin(a), p[2]]
+                    [
+                        c[0] + rad * forge_math::dmath::cos(a),
+                        c[1] + rad * forge_math::dmath::sin(a),
+                        p[2],
+                    ]
                 };
                 recs.push(Rec::Arc {
                     to,
