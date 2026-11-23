@@ -226,6 +226,9 @@ fn region_f(a: &In, b: &In, l: f64) -> Option<Option<([f64; 3], [f64; 3])>> {
 fn near_f(s: &PlaneF, t: &PlaneF, lo: [f64; 3], hi: [f64; 3], d: f64) -> Option<bool> {
     let dot = |u: [f64; 3], v: [f64; 3]| u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
     let (ns2, nt2, nts) = (dot(s.n, s.n), dot(t.n, t.n), dot(t.n, s.n));
+    // (the abs-dot, not |nts|: nts's rounding is relative to it, and it cancels for normals near
+    // perpendicular)
+    let nts_abs = s.n[0].abs() * t.n[0].abs() + s.n[1].abs() * t.n[1].abs() + s.n[2].abs() * t.n[2].abs();
     let r = d * nt2.sqrt() * ns2;
     let mut all = true;
     for x in [lo[0], hi[0]] {
@@ -237,7 +240,7 @@ fn near_f(s: &PlaneF, t: &PlaneF, lo: [f64; 3], hi: [f64; 3], d: f64) -> Option<
                 let sc = dot(s.n, c) - s.c;
                 let tc = dot(t.n, c) - t.c;
                 let e = tc * ns2 - sc * nts;
-                let m = (dot(na(t.n), ca) + t.c.abs()) * ns2 + (dot(na(s.n), ca) + s.c.abs()) * nts.abs();
+                let m = (dot(na(t.n), ca) + t.c.abs()) * ns2 + (dot(na(s.n), ca) + s.c.abs()) * nts_abs;
                 let err = 1e-12 * m;
                 if e.abs() - err > r * (1.0 + 1e-12) {
                     return Some(false);

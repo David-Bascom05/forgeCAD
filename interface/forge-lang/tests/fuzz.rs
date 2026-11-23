@@ -181,3 +181,19 @@ fn shrinking_keeps_the_verdict() {
         "{small}"
     );
 }
+
+/// Fuzz seed 29's program builds all its features (33). With the decide-once switch on it was
+/// refused at `replace_face` (OneFace): the merged bottom face took another name than unify's rule
+/// gives, so `faces(of: L2, ..)` selected otherwise. Kept as a permanent test of the switch-on
+/// naming (research/kernel-audit/decide-once/repros/fuzz-seed29-replace-face.fg).
+#[test]
+fn seed29_replace_face_builds() {
+    let p = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../research/kernel-audit/decide-once/repros/fuzz-seed29-replace-face.fg"
+    );
+    let src = std::fs::read_to_string(p).expect("the repro");
+    let (v, b) = fuzz::judge_built(&src);
+    let built = b.map_or(0, |b| b.built());
+    assert!(matches!(v, Verdict::Ok) && built == 33, "{v:?}, built {built}");
+}
