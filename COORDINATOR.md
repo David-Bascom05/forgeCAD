@@ -66,6 +66,12 @@ GitHub free-tier concurrent-job limit: don't start CI on many PRs at once.
 ## 3. Bugs found so far
 - **Confirmed**: fuzz seed 295 f69 cylinder×torus loop lost (wrong Ok) → #33 interim (not provably
   complete); forge-git wasm usize overflow (#13, fixed); CAM wasm temp-dir tests (#15, fixed).
+- **Confirmed (cloud, TRANSLATE, exact reference)**: tilted thin wedge, A=box [0,L]x[0,10]x[0,10] vs
+  prism whose top wall goes (0,y0)→(L,y1). B1: plane_plane decides Empty at q.frame.origin with
+  ANGULAR 1e-11/LINEAR 1e-5 → unsound for extents 1e6..1.6e7 (L=1.6e7, y0=-2e-5, y1=6e-5: intersect =
+  Ok with INVALID body (EdgeUses uses:1); union/subtract refuse ZeroThickness falsely; also asymmetric
+  A,B vs B,A). B2 (independent, plane_plane right): gap ±1.2e-5 at L=1e5..2e6 → same wrong Ok; at
+  1e3/1e4 Internal refusals; root cause downstream of D2, UNKNOWN. Repro branch proof/tilt-wrong-ok.
 - **Not bugs**: fuzz24 (certifier artifact), G14 box-only accept (proven harmless).
 - **Open**: G9 cache staleness (two mechanisms found by reading; corpus count pending); fuzz55 f21 G4
   UNDECIDED reachable, exact verdict open; TRANSLATE's possible plane_plane soundness issue beyond ~1e6 from
