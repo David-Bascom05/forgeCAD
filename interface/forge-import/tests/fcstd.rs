@@ -1416,6 +1416,51 @@ fn a_thickness_inwards_is_a_shell_open_at_its_face() {
     near(m.volume, 24000.0 - 58.0 * 38.0 * 9.0, "volume", &fg);
 }
 
+/// A pocket up to a face of its base (the pad's bottom, read from the pad's stored shape), stopped
+/// short of it by an Offset of -3: FreeCAD moves the face along the pocket's way, so it cuts 7 of
+/// the 10.
+#[test]
+fn a_pocket_up_to_a_face_with_an_offset_is_a_depth() {
+    let bottom = vec![
+        ((-30.0, -20.0, 0.0), (30.0, -20.0, 0.0)),
+        ((30.0, -20.0, 0.0), (30.0, 20.0, 0.0)),
+        ((30.0, 20.0, 0.0), (-30.0, 20.0, 0.0)),
+        ((-30.0, 20.0, 0.0), (-30.0, -20.0, 0.0)),
+    ];
+    let faces = shapes_brep(&[], &[bottom]);
+    let mut base = pad("Pad", "", "Sketch", 10.0, &[]);
+    base.2.retain(|(k, _)| *k != "Shape");
+    base.2.push(("Shape", "<Part file=\"Faces.brp\"/>".into()));
+    let d = doc(&[
+        body("Pocket", &["Sketch", "Pad", "Hole", "Pocket"]),
+        sketch("Sketch", place(0.0), rect()),
+        base,
+        square("Hole", 10.0, -2.0, -2.0),
+        (
+            "Pocket",
+            "PartDesign::Pocket",
+            vec![
+                ("BaseFeature", "<Link value=\"Pad\"/>".into()),
+                ("Profile", "<LinkSub value=\"Hole\"/>".into()),
+                ("Type", "<Integer value=\"3\"/>".into()),
+                (
+                    "UpToFace",
+                    "<LinkSub value=\"Pad\"><Sub value=\"Face1\"/></LinkSub>".into(),
+                ),
+                ("Offset", "<Float value=\"-3\"/>".into()),
+                ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+            ],
+        ),
+    ]);
+    let b = translate(&with_shapes(&d, &[("Faces.brp", &faces)]))
+        .expect("reads")
+        .remove(0);
+    assert_eq!(b.status(), "translated", "{:?}", b.fail);
+    let fg = b.fg.expect("a part file");
+    assert!(fg.contains("param t1.d = 7\n"), "{fg}");
+    near(built(&fg).volume, 24000.0 - 4.0 * 4.0 * 7.0, "volume", &fg);
+}
+
 /// A boss patterned three times along a straight edge of the base pad (its front bottom edge, run
 /// from its first point to its last), and mirrored in the pad's right face: the edge's direction
 /// and the face's plane, read from the pad's stored shape.

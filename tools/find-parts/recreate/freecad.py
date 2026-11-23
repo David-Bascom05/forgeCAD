@@ -466,9 +466,11 @@ class Tr:
 
     def pad(self, name, cut):
         d = self.doc
-        for k in ("TaperAngle", "TaperAngle2", "Offset"):
+        for k in ("TaperAngle", "TaperAngle2"):
             if abs(d.flt(name, k)) > 1e-12:
                 raise Unsupported("a pad with " + k)
+        if abs(d.flt(name, "Offset")) > 1e-12 and d.integer(name, "Type") != 3:
+            raise Unsupported("a pad with Offset")
         sk = d.link(name, "Profile")
         if d.types.get(sk) not in FLAT:
             raise Unsupported("a profile not from a sketch")
@@ -511,9 +513,33 @@ class Tr:
             ext = ("thru", "both" if mid else "fwd")
         elif t == 2:
             ext = ("next", "fwd")
+        elif t == 3 and along is None and not mid:
+            ext = self.up_to_face(name, z)
         else:
             raise Unsupported(f"a pad or pocket of type {t}")
         return self.profile(name, "cut" if cut else "add", {"kind": "extrude", "ext": ext, "along": along}, down, z)[0]
+
+    def up_to_face(self, name, z):
+        """A pad or pocket up to a face of its base, found on our part by that face's edges. A plane square to the
+        extrude is a depth, from the sketch's plane along `z` (the way the material goes), moved on by Offset along
+        `z` (the reading 16233ee2 measures: it matches to 8e-16). Any other face is unsupported: `upto(FACES)` would
+        do, but no part here has one to check it by."""
+        d = self.doc
+        o, subs = d.link(name, "UpToFace"), [x for x in d.subs(name, "UpToFace") if x]
+        if len(subs) != 1 or not subs[0].startswith("Face"):
+            raise Unsupported("a pad up to a face of this form")
+        polys = self.truth.get(o, {}).get("subs", {}).get(subs[0])
+        if not polys:
+            raise Unresolved("an up-to face not sampled")
+        f = self.face_of(self.state(), polys)
+        off = d.flt(name, "Offset")
+        if f.get("k") == "plane" and abs(abs(dot(tuple(float(x) for x in f["n"]), z)) - 1) < 1e-9:
+            o3 = Frame(d.placement(d.link(name, "Profile"))).o
+            w = dot(add(tuple(float(x) for x in f["p"][0]), o3, -1), z) + off
+            if w <= 1e-9:
+                raise Unsupported("a pad up to a face behind its sketch")
+            return ("d", num(w))
+        raise Unsupported("a pad up to a face not square to it")
 
     def revolve(self, name, cut):
         d = self.doc
@@ -1410,6 +1436,11 @@ def main():
                             if doc.types.get(o) in SOLID and doc.subs(m, k):
                                 want["shapes"][o] = doc.shape_file(o)
                                 want["subs"].setdefault(o, []).extend(x for x in doc.subs(m, k) if x)
+                if doc.types[c] in ("PartDesign::Pad", "PartDesign::Pocket") and doc.integer(c, "Type") == 3:
+                    o = doc.link(c, "UpToFace")
+                    if o in doc.props:
+                        want["shapes"][o] = doc.shape_file(o)
+                        want["subs"].setdefault(o, []).extend(x for x in doc.subs(c, "UpToFace") if x)
                 if doc.types[c] == "PartDesign::Thickness":
                     o = doc.link(c, "Base")
                     if o in doc.props:

@@ -19,7 +19,7 @@ come from `research/import/tally.py`.
 
 | set | parts | untranslated before | after | match (1e-4) before | after |
 |---|---:|---:|---:|---:|---:|
-| FreeCAD library, bodies | 677 | 130 | 49 | 394 | 515 |
+| FreeCAD library, bodies | 677 | 130 | 44 | 394 | 520 |
 | CADFS, all parts | 1914 | 640 | 612 | 1099 | 1114 |
 | CADFS, parts with a fillet | 476 | 238 | 227 | 164 | 167 |
 | WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new |
@@ -29,7 +29,7 @@ No part got worse on any set: no match was lost, and nothing that built before s
 The first pass took on the four biggest FreeCAD causes and CADFS's extrude draft. A second pass took on causes that
 need only importer work: FreeCAD's Thickness, a mirror plane on a feature's face, a pattern axis on a feature's edge,
 CADFS's extrude up to a curved face, and WHUCAD's splines. A third pass writes sketch ellipses and elliptical arcs
-exactly.
+exactly, and reads FreeCAD's pad or pocket up to a face.
 
 In the first pass FreeCAD's matches rose by 112, and only 30 of those were newly translated parts:
 - 30 refused before and match now;
@@ -41,11 +41,11 @@ Both come from writing sketch splines exactly.
 
 | class | before | after |
 |---|---:|---:|
-| match | 394 | 515 |
+| match | 394 | 520 |
 | mismatch | 95 | 79 |
 | refused | 53 | 29 |
 | fail | 5 | 5 |
-| untranslated | 130 | 49 |
+| untranslated | 130 | 44 |
 
 ### The causes this pass took on
 
@@ -204,7 +204,22 @@ Gauss–Kronrod volume for every truth, and the default and precise areas where 
 whose measures disagree beyond the tolerance is reported as uncertain, not counted either way. It is for the owner to
 adopt.
 
-### What still stops FreeCAD (49 bodies)
+### Up to a face (FreeCAD, 5 → 0)
+
+A pad or pocket of type 3 runs up to a face of an earlier feature. That face is found on our part by its edges, as for
+Draft and Thickness. Where it is a plane square to the extrude, as in all 5 here, it becomes a depth from the
+sketch's plane. `Offset` is read as moving the face along the extrude's way. That reading was measured, not assumed:
+16233ee2's two pockets, each with an Offset of 1, match to 8e-16. A face that is not square to the extrude stays unsupported. `upto(FACES)`
+would take it, but no body here has one to check it by.
+
+| part | after |
+|---|---|
+| 758792f7.Pocket003, 77b19abc.Body, 859a5a2f.Body, b2f17299.Body, 16233ee2.Body | match: 1.9e-12, 2.6e-10, 2.6e-10, 5.2e-11 (area 1.4e-9), 8.3e-16 |
+
+The Rust reader writes 77b19abc's two-sided pocket otherwise (moved to its back end, one depth, as the kernel
+refuses that cut two-sided). It is the same prism, 8e-9 from the Python reader's, and both match.
+
+### What still stops FreeCAD (44 bodies)
 
 | cause | bodies | `.fg` feature it maps to, or what is missing |
 |---|---:|---|
@@ -214,7 +229,6 @@ adopt.
 | a Part tree through / chain through Part::Loft, Part::Sweep, Part::Fillet, Part::FeaturePython | 7 | `loft`, `sweep` and `fillet` exist; importer: the Part workbench forms |
 | a hole with its thread in the shape | 3 | `thread` exists; importer |
 | a pad with TaperAngle | 2 | `extrude(.., taper:)` exists; importer, once FreeCAD's sign is measured |
-| a pad or pocket of type 3 (up to face), a pad with Offset | 5 | `extrude(.., upto(FACES), offset)` exists; importer |
 | a thickness of mode 2 (intersection) | 1 | importer |
 | feature Boolean | 2 | `combine` exists; importer |
 | a pipe from inside its path | 2 | two sweeps from the profile, as the CADFS reader already does for closed paths |
@@ -415,7 +429,8 @@ its parts stay lint-free. New tests in interface/forge-import/tests/fcstd.rs use
 built and its volume worked out by hand: a rational spline side, an edge stored in pieces (both picked; one alone),
 a draft, a helix pipe whose binder holds a different helix from the helix's own properties, a fillet outside a
 body on a `Part::Extrusion`, and a periodic spline (its poles wrapped, its volume checked against the closed uniform
-cubic's own area), and two elliptical arcs of opposite normals around an elliptical hole.
+cubic's own area), two elliptical arcs of opposite normals around an elliptical hole, and a pocket up to a face with
+an Offset.
 
 ## Reproduce
 

@@ -1965,10 +1965,13 @@ impl Tr<'_, '_, '_> {
 
     fn pad(&mut self, name: &str, lab: &str, cut: bool) -> Result<Vec<String>, Fail> {
         let d = self.doc;
-        for k in ["TaperAngle", "TaperAngle2", "Offset"] {
+        for k in ["TaperAngle", "TaperAngle2"] {
             if d.flt(name, k, 0.0)?.abs() > 1e-12 {
                 return unsupported(format!("a pad with {k}"));
             }
+        }
+        if d.flt(name, "Offset", 0.0)?.abs() > 1e-12 && d.integer(name, "Type", 0)? != 3 {
+            return unsupported("a pad with Offset");
         }
         let sk = d.link(name, "Profile")?;
         if !is(FLAT, d.ty(&sk)) {
@@ -2045,9 +2048,47 @@ impl Tr<'_, '_, '_> {
             1 if cut && mid => Ext::ThruAll,
             1 if cut => Ext::Thru,
             2 => Ext::Next,
+            3 if !mid => Ext::D(self.up_to_face(name, &sk, z)?),
             _ => return unsupported(format!("a pad or pocket of type {t}")),
         };
         self.profile(name, lab, Make::Extrude { cut, ext, travel: z }, None)
+    }
+
+    /// A pad or pocket up to a face of its base, found on our part by that face's edges. A plane
+    /// square to the extrude is a depth, from the sketch's plane along `z` (the way the material
+    /// goes), moved on by Offset along `z` (the reading 16233ee2 measures). Any other face is
+    /// unsupported: `upto(FACES)` would do, but no part here has one to check it by.
+    fn up_to_face(&mut self, name: &str, sk: &str, z: V3) -> Result<f64, Fail> {
+        let d = self.doc;
+        let o = d.link(name, "UpToFace")?;
+        let subs: Vec<String> = d
+            .subs(name, "UpToFace")?
+            .into_iter()
+            .filter(|x| !x.is_empty())
+            .collect();
+        let [sub] = &subs[..] else {
+            return unsupported("a pad up to a face of this form");
+        };
+        if !sub.starts_with("Face") {
+            return unsupported("a pad up to a face of this form");
+        }
+        let Some(polys) = self.truth.get(&o).and_then(|s| s.subs.get(sub)).cloned() else {
+            return Err(Fail::Unresolved("an up-to face not sampled".into()));
+        };
+        let edges = self.state.edges(&self.program())?;
+        let f = Self::face_of(&edges, &polys)?;
+        let Some(pl) = self.state.plane(f) else {
+            return unsupported("a pad up to a face not square to it");
+        };
+        if (dot(pl.n, z).abs() - 1.0).abs() >= 1e-9 {
+            return unsupported("a pad up to a face not square to it");
+        }
+        let o3 = Frame::new(d.placement(sk)?).o;
+        let w = dot(add(pl.at, o3, -1.0), z) + d.flt(name, "Offset", 0.0)?;
+        if w <= 1e-9 {
+            return unsupported("a pad up to a face behind its sketch");
+        }
+        Ok(w)
     }
 
     fn axis_tail(&self, fr: &Frame, base: V3, ax: V3) -> Result<(V2, V2), Fail> {
@@ -3322,6 +3363,14 @@ fn body_of(doc: &Doc, b: &str) -> Body {
                             subs.entry(o).or_default().extend(s);
                         }
                     }
+                }
+            }
+            if (t == "PartDesign::Pad" || t == "PartDesign::Pocket") && doc.integer(c, "Type", 0)? == 3 {
+                let o = doc.link(c, "UpToFace")?;
+                if doc.props.contains_key(&o) {
+                    put(&o, doc.shape_file(&o)?);
+                    let s = doc.subs(c, "UpToFace")?.into_iter().filter(|x| !x.is_empty());
+                    subs.entry(o).or_default().extend(s);
                 }
             }
             if t == "PartDesign::Thickness" {
