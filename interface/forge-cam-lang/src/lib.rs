@@ -110,6 +110,8 @@ pub struct OpOut {
     pub plan: Vec<String>,
     /// The stock this op starts from (G2, G3 are checked against it).
     stock_before: Option<forge_cam::stock::InProcess>,
+    /// What the op provably clears: (region, or the whole box; its final floor).
+    voids: Vec<(Option<Region>, f64)>,
 }
 
 pub struct ProgramOut {
@@ -645,6 +647,7 @@ impl Cam {
             least: f64::INFINITY,
             plan: vec![],
             stock_before: Some(s.ip.clone()),
+            voids: vec![],
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
         let paths: Result<Vec<OpPath>, String> = match kind {
@@ -741,6 +744,11 @@ impl Cam {
                             let r = 0.5 * d;
                             if let Ok((c, _)) = forge_cam_geom::offset::offset(&rg, -(r + leave)) {
                                 let cr = forge_cam_geom::boolean::region_of(&c);
+                                if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                                    let o = forge_cam_geom::offset::offset(&cr, -r).map(|x| x.0.len());
+                                    let i = forge_cam_geom::offset::offset(&cr, r).map(|x| x.0.len());
+                                    eprintln!("band: c {} loops; outer {o:?} inner {i:?}", c.len());
+                                }
                                 if let (Ok((outer, _)), Ok((inner, _))) = (
                                     forge_cam_geom::offset::offset(&cr, -r),
                                     forge_cam_geom::offset::offset(&cr, r),
@@ -835,6 +843,7 @@ impl Cam {
             }
         };
         out.paths = paths;
+        out.voids = voids.clone();
         for (v, floor) in voids {
             match v {
                 None => self.setups[su].ip.face_to(floor),
@@ -1298,11 +1307,79 @@ impl Cam {
             };
             let tool = self.tools[path.tool].clone();
             let part = &self.parts[s.part];
-            let stock_faces = match self.ops[oi].stock_before.as_ref().map(|ip| ip.faces()) {
-                Some(Ok(f)) => f,
-                _ => s.stock.faces(),
+            // the stock at each move: the op's start, then after each completed level (a
+            // retract after cutting at depth d), its voids cleared down to d (levels go down)
+            let base = self.ops[oi]
+                .stock_before
+                .clone()
+                .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
+            let faces_of = |ip: &forge_cam::stock::InProcess| {
+                ip.faces().unwrap_or_else(|e| {
+                    if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                        eprintln!("stock faces: {e}");
+                    }
+                    s.stock.faces()
+                })
             };
-            let sum = ops::certify(&posted, &tool, &part.faces, &stock_faces, s.tol, s.clearance);
+            let mut stages = vec![(0usize, faces_of(&base))];
+            let mut deepest = f64::INFINITY;
+            let mut cut_z: Option<f64> = None;
+            for (i, m) in posted.moves.iter().enumerate() {
+                match *m {
+                    // a level's depth: the lowest point it cut (the feed back up is not one)
+                    PMove::Line {
+                        to,
+                        phase: Phase::Cut,
+                        ..
+                    }
+                    | PMove::Arc { to, .. } => cut_z = Some(cut_z.map_or(to[2], |c: f64| c.min(to[2]))),
+                    PMove::Line {
+                        phase: Phase::Link, ..
+                    }
+                    | PMove::Rapid { .. } => {
+                        if let Some(z) = cut_z.take()
+                            && z < deepest
+                            && !self.ops[oi].voids.is_empty()
+                        {
+                            deepest = z;
+                            let mut ip = base.clone();
+                            for (v, floor) in &self.ops[oi].voids {
+                                let f = floor.max(z);
+                                match v {
+                                    None => ip.face_to(f),
+                                    Some(r) => ip.cut(r.clone(), f),
+                                }
+                            }
+                            if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                                let m = ip.material(z + 0.1).map(|m| {
+                                    m.map(|m| {
+                                        (
+                                            m.loops.len(),
+                                            m.loops.iter().map(|l| l.segs.len()).collect::<Vec<_>>(),
+                                        )
+                                    })
+                                });
+                                eprintln!("stage at {z}: levels {:?} material above {m:?}", ip.levels());
+                            }
+                            stages.push((i, faces_of(&ip)));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                eprintln!(
+                    "{}: voids {:?} stages {:?}",
+                    self.ops[oi].name,
+                    self.ops[oi]
+                        .voids
+                        .iter()
+                        .map(|v| (v.0.as_ref().map(|r| r.loops.len()), v.1))
+                        .collect::<Vec<_>>(),
+                    stages.iter().map(|s| (s.0, s.1.len())).collect::<Vec<_>>()
+                );
+            }
+            let sum = ops::certify_staged(&posted, &tool, &part.faces, &stages, s.tol, s.clearance);
             let op = &mut self.ops[oi];
             op.moves += posted.moves.len();
             op.pairs += sum.pairs;

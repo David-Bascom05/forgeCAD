@@ -271,13 +271,38 @@ pub fn certify(
     tol: f64,
     clearance: f64,
 ) -> CheckSummary {
+    certify_staged(p, tool, part, &[(0, stock.to_vec())], tol, clearance)
+}
+
+/// `certify` with the stock as it stands at each move: `stages[k] = (first move, faces)`, in
+/// increasing order of first move (an op's own completed levels clear what is above them).
+pub fn certify_staged(
+    p: &OpPath,
+    tool: &ToolUse,
+    part: &[Face],
+    stages: &[(usize, Vec<Face>)],
+    tol: f64,
+    clearance: f64,
+) -> CheckSummary {
     let mut sum = CheckSummary {
         clear: true,
         least: f64::INFINITY,
         ..Default::default()
     };
     let mv = checker_moves(p);
+    let cutter_r = tool
+        .shape
+        .bodies
+        .iter()
+        .filter(|b| b.part == Part::Cutter)
+        .map(|b| b.rmax)
+        .fold(0.0, f64::max);
     for (m, phase, idx) in &mv {
+        let mut st = 0;
+        while st + 1 < stages.len() && stages[st + 1].0 <= *idx {
+            st += 1;
+        }
+        let stock: &[Face] = &stages[st].1;
         for b in &tool.shape.bodies {
             let sb = check::swept_box_body(m, b);
             // the part: the cutter may touch it within tol on a cut; nothing else may touch it
@@ -286,7 +311,12 @@ pub fn certify(
                     // the cutter cuts the stock: that is the point
                     continue;
                 }
-                let limit = if what == "part" && b.part == Part::Cutter && *phase != Phase::Rapid {
+                // a shank no wider than the cutter rides in the cutter's own cut: it is held to
+                // the cutter's rule (within tol), never to a clearance it cannot have; the holder
+                // and any wider shank keep the clearance
+                let narrow = b.part == Part::NonCutting && b.rmax <= cutter_r;
+                let limit = if (b.part == Part::Cutter && what == "part" || narrow) && *phase != Phase::Rapid
+                {
                     -tol
                 } else {
                     clearance

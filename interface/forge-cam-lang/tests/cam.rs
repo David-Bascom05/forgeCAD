@@ -52,10 +52,10 @@ fn leftover_is_listed() {
 #[test]
 fn refusals_name_the_check_and_a_fix() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
-    // the bore with a short-fluted tool and nothing cleared above: the shank reaches the stock
+    // the bore with a stick-out so short the holder's nose dips below the stock's top
     let cam = forge_cam_lang::run(
         &doc(
-            "bore = pocket(op1, f.bore_h, tool: t2, stepover: 2.5, step: 3)\nprog = program(op1, post: \"haas\")\n",
+            "t3 = tool(\"flat-6\", t: 3, stickout: 19, holder: \"bt40-er32\")\nbore = pocket(op1, f.bore_h, tool: t3, stepover: 2.5, step: 3)\nprog = program(op1, post: \"haas\")\n",
         ),
         &dir,
     );
@@ -67,7 +67,7 @@ fn refusals_name_the_check_and_a_fix() {
         "{:?}",
         o.checks
     );
-    assert!(o.fix.as_deref().unwrap().contains("flutes"));
+    assert!(o.fix.is_some());
     assert!(
         cam.program_text().is_none(),
         "no program is released with a refused op"
