@@ -59,7 +59,8 @@ src=$root/kernel/$crate
 [ -d "$src" ] || { echo "no crate $src" >&2; exit 2; }
 
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+# FORGE_KEEP=DIR keeps the scratch translation (logs, raw Aeneas output) there, for debugging
+trap 'if [ -n "${FORGE_KEEP:-}" ]; then rm -rf "$FORGE_KEEP"; cp -a "$work" "$FORGE_KEEP"; fi; rm -rf "$work"' EXIT
 name=${crate//-/_}
 (
   cd "$src"
