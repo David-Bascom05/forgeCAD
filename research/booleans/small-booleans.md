@@ -9,6 +9,11 @@ The question has three parts:
 3. Or should decide-once be the proven reference and the old path the shipped fast path? If so,
    how would the old path get L4?
 
+> **Correction (2026-11-23, later):** the old path costs **≈1.28M per flat boolean**, not 3.0M.
+> §2's 3.0M divided all of coplanar seq's 209M by the 70 flat booleans. The measurement is in
+> research/decide-once/face-arrangement.md §0. Every comparison below against 3.0M should be read
+> against 1.28M.
+
 ## 0. Answer
 
 1. **Exactness is not what costs at this size, and the literature shows it.** Filtered exact
