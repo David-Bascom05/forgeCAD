@@ -845,6 +845,93 @@ def contactAt (A : Arr) (i j : Nat) (t : Rat) : Option Contact := Id.run do
     return mk none (some s!"surfaces {i}, {j}: a contact along a conic with no rational point found")
   | _ => return mk none none
 
+/-! ## Singular points: cone apexes, decided exactly -/
+
+/-- The result at a cone's apex `p` lying on other surfaces, decided at first order.
+`C` is the cone's tangent cone at `p`: one nappe about its axis `a`, of half-angle
+`atan (s / c)`. For each smooth surface `j` through `p` (gradient `g`), `C` must lie strictly on
+one side of the tangent plane: `σ g · a > 0` and `(g · a)² (s² + c²) > s² |g|² |a|²`. These are
+exact tests; if one fails, the apex is undecided. Then near `p`:
+- on `C`, every quadric has a fixed sign (the axis direction's);
+- off `C`, membership depends only on the sector of the tangent planes, and with at most three
+  independent normals every sector occurs.
+
+The result is non-manifold at `p` iff:
+- the cone region is kept, its own sector is not, and another sector is (two pieces meeting at
+  `p`); or
+- the cone region is dropped, its own sector is kept, and not every sector is (a conical cavity
+  touching the boundary at its apex).
+
+Returns `(bad, undecided)` notes. Hand proof: curved-l2-proofs.md §3. -/
+def apexDecide (A : Arr) (solids : Array QSolid) : Array String × Array String := Id.run do
+  let mut bad : Array String := #[]
+  let mut und : Array String := #[]
+  for s in solids do
+    for f in s.faces do
+      if f.kind != .cone || f.s == 0 || f.c == 0 then continue
+      let qc := f.quadric
+      let (cc, _) := canon qc
+      let some k := A.qs.findIdx? (· == cc) | continue
+      -- the apex: the cone quadric's singular point
+      let ns := nullSpace (Quadric.mat qc)
+      let some v := ns.find? (fun v => v[3]! != 0) | continue
+      let p : V3 := ⟨v[0]! / v[3]!, v[1]! / v[3]!, v[2]! / v[3]!⟩
+      -- the axis into the nappe: r c + s (d · z) grows along s z
+      let ax : V3 := f.s * f.z
+      let through := (Array.range A.qs.size).filter fun m => m != k && (A.qs[m]!).eval p == 0
+      -- the nappe's own plane: through p, normal along the axis
+      let isNappe := fun (m : Nat) => (A.qs[m]!).qnorm == 0 && (((A.qs[m]!).grad p).cross f.z).isZero
+      let J := through.filter fun m => !isNappe m
+      if J.isEmpty then continue
+      -- every tangent plane must separate C
+      let s2 := f.s * f.s
+      let k2 := f.s * f.s + f.c * f.c
+      let mut sideOk := true
+      let mut sides : Array (Nat × Bool) := #[]
+      for m in J do
+        let g := (A.qs[m]!).grad p
+        if g.isZero then sideOk := false; break
+        let ga := g.dot ax
+        if ga * ga * k2 > s2 * g.norm2 * ax.norm2 && ga != 0 then sides := sides.push (m, ga > 0)
+        else sideOk := false; break
+      if !sideOk then
+        und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: a surface through it cuts its tangent cone"
+        continue
+      if J.size > 3 then
+        und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: more than three surfaces through it"
+        continue
+      -- independent normals: every sector occurs
+      let gs := J.map fun m => (A.qs[m]!).grad p
+      let indep := match gs.size with
+        | 1 => true
+        | 2 => !(gs[0]!.cross gs[1]!).isZero
+        | _ => gs[0]!.dot (gs[1]!.cross gs[2]!) != 0
+      if !indep then
+        und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: dependent normals there"
+        continue
+      -- signs: the cone quadric in C is the sign of its quadratic part on the axis
+      let inSign := decide ((A.qs[k]!).quad ax > 0)
+      let base : Nat → Bool := fun m =>
+        if m == k then inSign
+        else if through.contains m then decide (((A.qs[m]!).grad p).dot ax > 0)
+        else decide ((A.qs[m]!).eval p > 0)
+      let kC := A.keptOn base
+      -- off C: the cone quadric outside, the sector τ on J
+      let sector := fun (τ : Nat) => A.keptOn fun m =>
+        if m == k then !inSign
+        else match J.findIdx? (· == m) with
+          | some i => (τ >>> i) % 2 == 1
+          | none => base m
+      let own : Nat := (Array.range J.size).foldl (fun acc i =>
+        if (sides.find? (·.1 == J[i]!)).any (·.2) then acc + 2 ^ i else acc) 0
+      let all := (List.range (2 ^ J.size)).map sector
+      let ownKept := sector own
+      let anyOther := (List.range (2 ^ J.size)).any fun τ => τ != own && sector τ
+      let allKept := all.all id
+      if (kC && !ownKept && anyOther) || (!kC && ownKept && !allKept) then
+        bad := bad.push s!"the apex {fmt p} of face {f.solid}.{f.index} touches the rest of the result there"
+  return (bad, und)
+
 /-! ## Singular points: cone apexes -/
 
 /-- Directions spread over the sphere (Fibonacci), as rationals. -/
