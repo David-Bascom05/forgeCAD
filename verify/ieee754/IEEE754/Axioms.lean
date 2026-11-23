@@ -12,7 +12,7 @@ import IEEE754.Dmath.AtanPoly
 import IEEE754.Dmath.AtanEval
 import IEEE754.Dmath.AtanFacts
 import IEEE754.Dmath.AsinAcos
-import IEEE754.Screen.Meet
+import IEEE754.Screen.Apart
 
 /-!
 # Only the standard axioms
@@ -89,3 +89,4 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Screen.gap_sound IEEE754.Screen.snap_gap_sound IEEE754.Screen.region_sound IEEE754.Screen.wall_sound
   IEEE754.Screen.tr_mul IEEE754.Screen.tr_add IEEE754.Screen.tr_sub IEEE754.Screen.add_rel0 IEEE754.Screen.quot_sound
   IEEE754.Screen.coord_sound IEEE754.Screen.cramer IEEE754.Screen.det_track IEEE754.Screen.meet_sound
+  IEEE754.Screen.two_sided IEEE754.Screen.sqrt_close IEEE754.Screen.dist_sound IEEE754.Screen.apart_sound
