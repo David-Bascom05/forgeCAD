@@ -215,3 +215,79 @@ fn corners_off_square_build_at_every_kind_and_sense() {
     ));
     assert!(bad.is_empty(), "{} failures:\n{}", bad.len(), bad.join("\n"));
 }
+
+#[test]
+fn the_probes_refold() {
+    // §2.0's refold check over the families: wherever both maps build, the flat refolds to the
+    // folded body and every condition holds
+    let mut bad = vec![];
+    let mut checked = 0;
+    for (name, family, angles) in [
+        ("pentagon", pentagon as fn(f64) -> Vec<(f64, f64)>, &ANGLES[..]),
+        ("quad", quad, &[90.0, 100.0, 120.0, 135.0][..]),
+    ] {
+        for &deg in angles {
+            for angle in [dmath::PI / 2.0, -dmath::PI / 2.0, dmath::PI / 3.0] {
+                for shape in KINDS {
+                    for ends in [EndCondition::Normal, EndCondition::Aligned] {
+                        let (mut s, base) =
+                            Sheet::face(FeatureId(1), gauge(), Frame::WORLD, &[poly(&family(deg))]).unwrap();
+                        s.bend_ends = ends;
+                        s.corner_default = match shape {
+                            "tear" => Some(CornerKind::Tear),
+                            "trim" => Some(CornerKind::TrimToBend),
+                            _ => None,
+                        };
+                        if shape != "one1" {
+                            s.flange(base, 0, angle, 20.0).unwrap();
+                        }
+                        if shape != "one0" {
+                            s.flange(base, 1, angle, 20.0).unwrap();
+                        }
+                        match forge_sheet::refold::check(&s) {
+                            Ok(_) => checked += 1,
+                            Err(forge_sheet::refold::RefoldError::Build(..)) => {}
+                            Err(e) => bad.push(format!("{name} {deg} {angle} {shape} {ends:?}: {e:?}")),
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "{}:\n{}",
+        bad.len(),
+        bad[..bad.len().min(5)].join("\n")
+    );
+    assert!(checked > 300, "{checked}");
+}
+
+#[test]
+fn the_refold_check_tells_a_wrong_flat() {
+    // the checker against itself: an L refolds within far under LINEAR; its flat built with
+    // another K (zones of another width) against the first's fold does not
+    let l = |k: f64| {
+        let g = Gauge {
+            thickness: 2.0,
+            radius: 2.0,
+            rule: BendRule::K(k),
+        };
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            g,
+            Frame::WORLD,
+            &[poly(&[(0.0, 0.0), (60.0, 0.0), (60.0, 40.0), (0.0, 40.0)])],
+        )
+        .unwrap();
+        s.flange(base, 1, dmath::PI / 2.0, 30.0).unwrap();
+        s.flange(base, 3, -dmath::PI / 3.0, 20.0).unwrap();
+        s
+    };
+    let r = forge_sheet::refold::check(&l(0.4)).expect("refolds");
+    assert!(r.vertices > 0 && r.bends == 2 && r.worst < 1e-10, "{r:?}");
+    let (a, b) = (l(0.4), l(0.3));
+    let fold = build_with(&a, Map::Folded).unwrap();
+    let flat = build_with(&b, Map::Flat).unwrap();
+    assert!(forge_sheet::refold::judge(&a, &fold, &flat).is_err());
+}

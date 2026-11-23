@@ -1549,3 +1549,51 @@ fn an_ellipse_window_is_exact_nurbs_on_the_flat() {
     // a hole runs clockwise: an ellipse of semi-axes 10 and 4
     assert!((area + PI * 10.0 * 4.0).abs() < 1e-9, "{area}");
 }
+
+#[test]
+fn every_sheet_part_refolds() {
+    // §2.0's refold check (forge_sheet::refold) on every sheet in the repository's parts and
+    // examples: each built sheet's flat refolds to its folded body, every condition holding
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let mut es: Vec<_> = rd.filter_map(Result::ok).map(|e| e.path()).collect();
+        es.sort();
+        for p in es {
+            if p.is_dir() {
+                walk(&p, out);
+            } else if p.extension().is_some_and(|x| x == "fg") {
+                out.push(p);
+            }
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut files = vec![];
+    for d in [
+        "examples",
+        "interface/forge-lang/parts",
+        "interface/forge-lang/tests/sheet_probes",
+    ] {
+        walk(&root.join(d), &mut files);
+    }
+    let (mut sheets, mut bad) = (0, vec![]);
+    for f in &files {
+        let s = std::fs::read_to_string(f).expect("a part");
+        if !s.contains("sheet(") {
+            continue;
+        }
+        let opts = Options {
+            dir: f.parent().map(|p| p.to_path_buf()),
+            ..Options::default()
+        };
+        let r = forge_lang::run(&s, opts, Default::default()).0;
+        for out in &r.sheets {
+            match forge_sheet::refold::check(&out.sheet) {
+                Ok(_) => sheets += 1,
+                Err(forge_sheet::refold::RefoldError::Build(..)) => {}
+                Err(e) => bad.push(format!("{}: {e:?}", f.display())),
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+    assert!(sheets >= 40, "{sheets} sheets refolded");
+}

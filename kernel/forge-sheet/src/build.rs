@@ -1768,16 +1768,18 @@ impl<'a> Strips<'a> {
                         }
                         // cut points along the piece: an arc in a bend turning past half way goes
                         // in pieces, so the ruled side wall along each is regular to its ends; a
-                        // spline in a bend goes at its knots
+                        // spline in a bend goes at its knots. In either map alike: one topology,
+                        // laid out flat or folded (§2.0's refold condition)
+                        let zone = matches!(s.strip, Strip::Bend(_));
                         let mut cuts: Vec<f64> = match b.piece {
-                            Piece::Arc { t0, t1, .. } if round => {
+                            Piece::Arc { t0, t1, .. } if zone => {
                                 let turn = (t1 - t0).abs();
                                 let parts = (turn / (0.99 * dmath::PI)).ceil().max(1.0) as usize;
                                 // sweeps are checked when cuts are made: at most a whole turn
                                 debug_assert!(parts <= 3, "an arc of {turn} rad in a bend");
                                 (1..parts).map(|q| q as f64 / parts as f64).collect()
                             }
-                            Piece::Spline { s: ref c, t0, t1 } if round => c
+                            Piece::Spline { s: ref c, t0, t1 } if zone => c
                                 .knots_in(Interval::new(t0.min(t1), t0.max(t1)))
                                 .into_iter()
                                 .map(|k| (k - t0) / (t1 - t0))
@@ -1787,17 +1789,39 @@ impl<'a> Strips<'a> {
                         };
                         cuts.sort_by(f64::total_cmp);
                         let parts = cuts.len() + 1;
+                        // a spline is cut at its knots themselves (in the order of `cuts`), not
+                        // at fractions of the piece mapped back: to rounding, those take a sliver
+                        // of the next span along
+                        let exact: Vec<f64> = match b.piece {
+                            Piece::Spline { s: ref c, t0, t1 } if zone => {
+                                let mut ks: Vec<(f64, f64)> = c
+                                    .knots_in(Interval::new(t0.min(t1), t0.max(t1)))
+                                    .into_iter()
+                                    .map(|k| ((k - t0) / (t1 - t0), k))
+                                    .filter(|(u, _)| *u > 1e-12 && *u < 1.0 - 1e-12)
+                                    .collect();
+                                ks.sort_by(|x, y| x.0.total_cmp(&y.0));
+                                ks.into_iter().map(|x| x.1).collect()
+                            }
+                            _ => Vec::new(),
+                        };
                         for q in 0..parts {
                             let u0 = if q == 0 { 0.0 } else { cuts[q - 1] };
                             let u1 = if q == parts - 1 { 1.0 } else { cuts[q] };
-                            bounds.push(Bound {
-                                piece: if parts == 1 {
-                                    b.piece.clone()
-                                } else {
-                                    b.piece.sub(u0, u1)
+                            let piece = match b.piece {
+                                _ if parts == 1 => b.piece.clone(),
+                                Piece::Spline { s: ref c, t0, t1 } => Piece::Spline {
+                                    s: c.clone(),
+                                    t0: if q == 0 { t0 } else { exact[q - 1] },
+                                    t1: if q == parts - 1 { t1 } else { exact[q] },
                                 },
+                                _ => b.piece.sub(u0, u1),
+                            };
+                            let start = if q == 0 { b.start } else { piece.at(0.0) };
+                            bounds.push(Bound {
+                                piece,
                                 id: b.id,
-                                start: if q == 0 { b.start } else { b.piece.at(u0) },
+                                start,
                             });
                             kinds.push(k);
                         }

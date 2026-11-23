@@ -13,6 +13,7 @@ pub mod hardware;
 pub mod hem;
 pub mod pattern;
 pub mod punch;
+pub mod refold;
 pub mod region;
 pub mod relief;
 pub mod roles;

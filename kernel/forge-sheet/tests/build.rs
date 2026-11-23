@@ -562,7 +562,7 @@ fn bits_are_the_same_everywhere() {
         h = h.with(volume(&b).0.to_bits());
     }
     println!("digest {:#x}", h.0);
-    assert_eq!(h.0, 0xfd30_10ad_e7ff_90a5);
+    assert_eq!(h.0, 0x593c_d8b3_195e_7c60);
 }
 
 /// The area of the band x0..x1 of the circle (cx, a), by the chord's antiderivative.
