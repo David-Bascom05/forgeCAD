@@ -21,6 +21,8 @@
 //!    rounded once from their exact points, edges as straight runs, loops walked round each face.
 
 use crate::boolean::{BoolError, Op};
+#[cfg(debug_assertions)]
+mod face_builder;
 use crate::decide_once_row as row;
 use forge_bool_core::{self as core, BodyId, CellId, FaceId as CFace, Ledger, Outcome, Refusal, Rule, Sgn};
 use forge_geom::{Curve, Line, Surface};
@@ -2149,6 +2151,15 @@ mod v2check {
             }
         }
         let nf = (0..n).filter(|&i| find(&mut parent, i) == i).count();
+        if std::env::var_os("FORGE_A8_DETAIL").is_some() {
+            let mut per: std::collections::BTreeMap<usize, usize> = Default::default();
+            for (i, &fc) in facets.iter().enumerate().take(n) {
+                if find(&mut parent, i) == i {
+                    *per.entry(zero(&l.cells[fc as usize])).or_default() += 1;
+                }
+            }
+            eprintln!("a8 coarse per class: {per:?}");
+        }
         let ne = kept_e.iter().filter(|&&b| b).count();
         let nv = l
             .verts
@@ -2445,8 +2456,9 @@ pub fn decide(bodies: &[&Body], rule: &Rule) -> Result<Decided, Skip> {
     #[cfg(debug_assertions)]
     if std::env::var_os("FORGE_A8_STATS").is_some() {
         let (f, e, v) = v2check::coarse_counts(&built.ledger);
+        let (bs, bv, bf) = (0, 0, 0);
         eprintln!(
-            "a8: fine pieces {} edges {} verts {}; coarse facets {f} edges {e} verts {v}",
+            "a8: fine pieces {} edges {} verts {}; coarse facets {f} edges {e} verts {v}; built segs {bs} verts {bv} facets {bf}",
             built.ledger.pieces.len(),
             built.ledger.edges.len(),
             built.ledger.verts.len()
@@ -2552,8 +2564,9 @@ fn plan_of(bodies: &[&Body], rule: &Rule) -> Result<Option<Plan>, BoolError> {
     #[cfg(debug_assertions)]
     if std::env::var_os("FORGE_A8_STATS").is_some() {
         let (f, e, v) = v2check::coarse_counts(&built.ledger);
+        let (bs, bv, bf) = face_builder::counts(bodies, &fs, &cls, &pts, &snapped);
         eprintln!(
-            "a8: fine pieces {} edges {} verts {}; coarse facets {f} edges {e} verts {v}",
+            "a8: fine pieces {} edges {} verts {}; coarse facets {f} edges {e} verts {v}; built segs {bs} verts {bv} facets {bf}",
             built.ledger.pieces.len(),
             built.ledger.edges.len(),
             built.ledger.verts.len()
