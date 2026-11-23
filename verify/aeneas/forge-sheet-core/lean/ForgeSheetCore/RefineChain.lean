@@ -1,4 +1,5 @@
-import ForgeSheetCore.RefineUF
+import ForgeSheetCore.RefineClasses
+import ForgeSheetCore.WalkModel
 open Aeneas Aeneas.Std Result
 
 /-!
@@ -543,5 +544,191 @@ theorem loop1_chain_spec (nv : Usize) (hnv : nv.val ≤ U32.max) (no ni fo fi si
       · exact Or.inl ⟨hb, by rw [← this]; exact heq, by rw [← this]; exact hpin⟩
       · exact Or.inr h2
   · exact ⟨by simp, Or.inl ⟨rfl, fun u hu => by simp at hu, by simp [tvals, hp0, pinchList]⟩⟩
+
+/-! ## The successor is a permutation -/
+
+theorem mem_occ (xs : List Nat) (v i : Nat) : i ∈ occ xs v ↔ ∃ h : i < xs.length, xs[i] = v := by
+  simp only [occ, List.mem_filter, List.mem_range, beq_iff_eq]
+  constructor
+  · rintro ⟨h, h2⟩; exact ⟨h, by rw [List.getElem?_eq_getElem h] at h2; simpa using h2⟩
+  · rintro ⟨h, h2⟩; exact ⟨h, by rw [List.getElem?_eq_getElem h, h2]⟩
+
+/-- The successor of a piece: the first piece leaving the vertex it arrives at. -/
+def succ (F T : List Nat) (e : Nat) : Nat := fOut F F.length (T.getD e 0)
+
+theorem take_len (xs : List Nat) : xs.take xs.length = xs := List.take_length
+
+/-- **With the degrees passed, the successor is a permutation** of the pieces, and each piece
+leaves where its predecessor arrives. -/
+theorem succ_perm (F T : List Nat) (nv : Nat) (hlen : F.length ≤ T.length)
+    (hT : ∀ x ∈ T, x < nv)
+    (hdeg : ∀ v < nv, nOut F F.length v = nIn T F.length v ∧ nOut F F.length v ≤ 1) :
+    ForgeSheetCore.Walk.Perm (succ F T) F.length ∧
+      ∀ e < F.length, ∃ h : succ F T e < F.length, F[succ F T e] = T.getD e 0 := by
+  -- the piece leaving `T[e]`
+  have key : ∀ e < F.length, succ F T e ∈ occ F (T.getD e 0) := by
+    intro e he
+    have hel : e < T.length := by omega
+    have hw : T.getD e 0 < nv := by
+      rw [List.getD_eq_getElem _ _ hel]; exact hT _ (List.getElem_mem hel)
+    have hin : e ∈ occ (T.take F.length) (T.getD e 0) := by
+      rw [mem_occ]
+      refine ⟨by simp; omega, ?_⟩
+      rw [List.getElem_take, List.getD_eq_getElem _ _ hel]
+    have h1 : 0 < nOut F F.length (T.getD e 0) := by
+      rw [(hdeg _ hw).1]; simp only [nIn]
+      exact List.length_pos_of_mem hin
+    simp only [nOut, take_len] at h1
+    simp only [succ, fOut, take_len]
+    rw [List.getD_eq_getElem _ _ h1]
+    exact List.getElem_mem h1
+  have meets : ∀ e < F.length, ∃ h : succ F T e < F.length, F[succ F T e] = T.getD e 0 :=
+    fun e he => (mem_occ _ _ _).mp (key e he)
+  refine ⟨⟨fun e he => (meets e he).1, fun e e' he he' hs => ?_⟩, meets⟩
+  -- one piece arrives at each vertex
+  obtain ⟨h1, h2⟩ := meets e he
+  obtain ⟨h1', h2'⟩ := meets e' he'
+  have hw : T.getD e 0 = T.getD e' 0 := by rw [← h2, ← h2']; simp [hs]
+  have hel : e < T.length := by omega
+  have hel' : e' < T.length := by omega
+  have hv : T.getD e 0 < nv := by
+    rw [List.getD_eq_getElem _ _ hel]; exact hT _ (List.getElem_mem hel)
+  have hle : (occ (T.take F.length) (T.getD e 0)).length ≤ 1 := by
+    have := (hdeg _ hv); simp only [nIn] at this; omega
+  have m1 : e ∈ occ (T.take F.length) (T.getD e 0) := by
+    rw [mem_occ]; exact ⟨by simp; omega, by rw [List.getElem_take, List.getD_eq_getElem _ _ hel]⟩
+  have m2 : e' ∈ occ (T.take F.length) (T.getD e 0) := by
+    rw [mem_occ, hw]; exact ⟨by simp; omega, by rw [List.getElem_take, List.getD_eq_getElem _ _ hel']⟩
+  match h : occ (T.take F.length) (T.getD e 0), hle with
+  | [], _ => rw [h] at m1; cases m1
+  | [x], _ => rw [h] at m1 m2; simp at m1 m2; omega
+  | _ :: _ :: _, hl => simp at hl
+
+/-! ## The third loop: walks -/
+
+theorem u32max_le_usize : U32.max ≤ Usize.max := by scalar_tac
+
+open ForgeSheetCore.Walk in
+/-- The marks agree with a list of pieces. -/
+def Marks (used : alloc.vec.Vec Bool) (m : Nat) (P : List Nat) : Prop :=
+  used.val.length = m ∧ ∀ e < m, used.val[e]? = some (decide (e ∈ P))
+
+open ForgeSheetCore.Walk in
+theorem walk_spec (fr dst : Slice U32) (m : Nat) (hm : m = fr.val.length) (hdl : m ≤ dst.val.length)
+    (hmax : m ≤ U32.max) (nv : Nat) (hT : ∀ x ∈ sv dst, x < nv)
+    (fo : alloc.vec.Vec U32) (hfo : Holds fo nv (fOut (sv fr) m))
+    (hp : Perm (succ (sv fr) (sv dst)) m)
+    (P0 : List Nat) (hnd0 : P0.Nodup) (hlt0 : ∀ e ∈ P0, e < m)
+    (hpre : ∀ e < m, succ (sv fr) (sv dst) e ∈ P0 → e ∈ P0)
+    (s : Usize) (hs : s.val < m) (hs0 : s.val ∉ P0)
+    (used : alloc.vec.Vec Bool) (hu : Marks used m P0)
+    (pieces : alloc.vec.Vec U32) (hP : vals pieces = P0) :
+    chain_loop2_loop0 dst fo used pieces s ⦃ r =>
+      ∃ k, 0 < k ∧ vals r.2.1 = P0 ++ path (succ (sv fr) (sv dst)) s.val k ∧
+        (succ (sv fr) (sv dst))^[k] s.val = s.val ∧ r.2.2.val = s.val ∧
+        Marks r.1 m (P0 ++ path (succ (sv fr) (sv dst)) s.val k) ∧
+        (∀ e ∈ path (succ (sv fr) (sv dst)) s.val k, e ∉ P0) ∧
+        (path (succ (sv fr) (sv dst)) s.val k).Nodup ⦄ := by
+  set σ := succ (sv fr) (sv dst) with hσ
+  have hFl : (sv fr).length = m := by simp [sv, hm]
+  unfold chain_loop2_loop0
+  apply loop.spec_decr_nat
+    (fun (q : alloc.vec.Vec Bool × alloc.vec.Vec U32 × Usize) => m + 1 - (vals q.2.1).length)
+    (fun q => ∃ k, vals q.2.1 = P0 ++ path σ s.val k ∧ q.2.2.val = σ^[k] s.val ∧
+      Marks q.1 m (P0 ++ path σ s.val k) ∧ (∀ e ∈ path σ s.val k, e ∉ P0) ∧
+      (path σ s.val k).Nodup)
+  · rintro ⟨u, pc, a⟩ ⟨k, hpc, ha, hmk, hout, hnd⟩
+    unfold chain_loop2_loop0.body
+    simp only at hpc ha hmk hout hnd ⊢
+    have hal : a.val < m := by rw [ha]; exact iter_lt hp hs k
+    have hul : a.val < u.val.length := by rw [hmk.1]; exact hal
+    step with alloc.vec.Vec.index_usize_spec u a (by simpa using hul) as ⟨b, hb⟩
+    have hbv : b = decide (a.val ∈ P0 ++ path σ s.val k) := by
+      have := hmk.2 a.val hal
+      rw [List.getElem?_eq_getElem hul] at this
+      rw [hb]; simpa using this
+    split
+    · rename_i hb1
+      -- met a marked piece: it is the start
+      have hmet : σ^[k] s.val ∈ P0 ∨ σ^[k] s.val ∈ path σ s.val k := by
+        rw [← ha]; rw [hb1] at hbv; simpa using hbv.symm
+      have hk : 0 < k := by
+        rcases Nat.eq_zero_or_pos k with rfl | h
+        · exfalso; simp [path] at hmet; exact hs0 hmet
+        · exact h
+      have hcl := walk_closes hp hpre hs hk hout hnd hmet
+      simp only [WP.spec_ok]
+      exact ⟨k, hk, hpc, hcl, by rw [ha, hcl], hmk, hout, hnd⟩
+    · rename_i hb1
+      have hb0 : b = false := by simpa using hb1
+      have hnot : a.val ∉ P0 ++ path σ s.val k := by rw [hb0] at hbv; simpa using hbv.symm
+      have hnd1 : (P0 ++ path σ s.val (k + 1)).Nodup := by
+        rw [path_succ, ← List.append_assoc, ← ha]
+        apply List.Nodup.append
+        · exact List.Nodup.append hnd0 hnd (fun x h1 h2 => hout x h2 h1)
+        · simp
+        · intro x h1 h2; simp at h2; subst h2; exact hnot h1
+      have hlen1 : (P0 ++ path σ s.val (k + 1)).length ≤ m := by
+        have := List.Nodup.length_le_of_subset (l₂ := List.range m) hnd1 (by
+          intro x hx
+          simp only [List.mem_append] at hx
+          rcases hx with hx | hx
+          · simpa using hlt0 x hx
+          · obtain ⟨i, _, rfl⟩ := mem_path.mp hx; simpa using iter_lt hp hs i)
+        simpa using this
+      have hpcl : (vals pc).length = (P0 ++ path σ s.val k).length := by rw [hpc]
+      step with alloc.vec.Vec.index_mut_usize_spec u a (by simpa using hul) as ⟨w, back, hw, hback⟩
+      step as ⟨i, hi⟩
+      have hiv : i.val = a.val := u32_of_lt' a m hal (by omega) i hi.symm
+      step with alloc.vec.Vec.push_spec pc i (by
+        have : m ≤ Usize.max := le_trans hmax u32max_le_usize
+        rw [← vals_length, hpcl, List.length_append, path_length]
+        rw [List.length_append, path_length] at hlen1; omega) as ⟨pc1, hpc1⟩
+      have hadl : a.val < dst.val.length := by omega
+      step with Slice.index_usize_spec dst a (by simpa using hadl) as ⟨i1, hi1⟩
+      step as ⟨i2, hi2⟩
+      have hTa : (sv dst)[a.val]'(by simp [sv]; omega) < nv := hT _ (List.getElem_mem _)
+      have hi2v : i2.val = (sv dst)[a.val]'(by simp [sv]; omega) := by
+        rw [hi2, U32.cast_Usize_val_eq, hi1]; simp [sv]
+      have hfl : i2.val < fo.val.length := by rw [holds_len hfo, hi2v]; exact hTa
+      step as ⟨i3, hi3⟩
+      have hi3v : i3.val = σ a.val := by
+        rw [hi3, holds_get hfo (by rw [hi2v]; exact hTa) hfl, hi2v]
+        simp only [hσ, succ, hFl]
+        rw [List.getD_eq_getElem _ _ (by simp [sv]; omega)]
+      step as ⟨a1, ha1⟩
+      have ha1v : a1.val = σ^[k + 1] s.val := by
+        rw [ha1, U32.cast_Usize_val_eq, hi3v, Function.iterate_succ_apply', ← ha]
+      refine ⟨⟨k + 1, ?_, ha1v, ?_, ?_, ?_⟩, ?_⟩
+      · rw [vals_push _ _ _ hpc1, hpc, hiv, path_succ, ← ha, List.append_assoc]
+      · refine ⟨by rw [hback]; simp [hmk.1], fun e he => ?_⟩
+        rw [hback]
+        simp only [alloc.vec.Vec.set_val_eq, List.getElem?_set]
+        rw [path_succ, ← ha]
+        by_cases hea : a.val = e
+        · subst hea; simp [hmk.1, hal]
+        · rw [if_neg hea, hmk.2 e he]
+          simp only [List.mem_append, List.mem_singleton]
+          rw [Option.some.injEq, decide_eq_decide]; constructor
+          · rintro (h | h)
+            · exact Or.inl h
+            · exact Or.inr (Or.inl h)
+          · rintro (h | h | h)
+            · exact Or.inl h
+            · exact Or.inr h
+            · exact absurd h.symm hea
+      · intro e he
+        rw [path_succ, ← ha] at he
+        simp only [List.mem_append, List.mem_singleton] at he
+        rcases he with he | rfl
+        · exact hout e he
+        · intro h; exact hnot (List.mem_append_left _ h)
+      · rw [path_succ, ← ha]
+        apply List.Nodup.append hnd (by simp)
+        intro x h1 h2; simp at h2; subst h2; exact hnot (List.mem_append_right _ h1)
+      · rw [vals_push _ _ _ hpc1, List.length_append, hpcl, List.length_append, path_length]
+        rw [List.length_append, path_length] at hlen1
+        simp; omega
+  · exact ⟨0, by simp [hP, path], by simp, by simpa [path] using hu, by simp [path], by simp [path]⟩
 
 end forge_sheet_core
