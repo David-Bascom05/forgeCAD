@@ -291,3 +291,49 @@ fn the_refold_check_tells_a_wrong_flat() {
     let flat = build_with(&b, Map::Flat).unwrap();
     assert!(forge_refold::judge(&a, &fold, &flat).is_err());
 }
+
+#[test]
+fn mold_lines_one_by_the_rule_or_refused() {
+    // band (e): a flange whose mold line is longer than its base edge by d. Within LINEAR the two
+    // far ends are one vertex, the two mold lines one segment (the base's): built, valid, and the
+    // flat refolds; past it, two segments no fold joins: JointLengths
+    use forge_ops::Segment;
+    for (d, ok) in [
+        (0.0, true),
+        (0.9e-5, true),
+        (-0.9e-5, true),
+        (1.1e-5, false),
+        (-1.1e-5, false),
+    ] {
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            gauge(),
+            Frame::WORLD,
+            &[poly(&[(0.0, 0.0), (60.0, 0.0), (60.0, 40.0), (0.0, 40.0)])],
+        )
+        .unwrap();
+        let (fw, j) = s.flange(base, 1, dmath::PI / 2.0, 20.0).unwrap();
+        // the flange's mold-line segment lengthened by d along itself
+        let on_b = s.joints.iter().find(|x| x.id == j).unwrap().on_b;
+        let w = s.walls.iter_mut().find(|w| w.id == fw).unwrap();
+        let segs = &mut w.outline[0].segments;
+        let k = segs.iter().position(|x| x.1 == on_b).unwrap();
+        let n = segs.len();
+        let Segment::Line { a, b } = segs[k].0 else {
+            panic!("a line")
+        };
+        let u = (b - a) * (1.0 / a.distance(b));
+        let b2 = b + u * d;
+        segs[k].0 = Segment::Line { a, b: b2 };
+        if let Segment::Line { b: e, .. } = segs[(k + 1) % n].0 {
+            segs[(k + 1) % n].0 = Segment::Line { a: b2, b: e };
+        }
+        match forge_refold::check(&s) {
+            Ok(_) => assert!(ok, "{d}: built"),
+            Err(forge_refold::RefoldError::Build(_, forge_sheet::SheetError::JointLengths { .. })) => {
+                assert!(!ok, "{d}: refused")
+            }
+            Err(e) => panic!("{d}: {e:?}"),
+        }
+    }
+}

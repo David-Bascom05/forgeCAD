@@ -13,8 +13,9 @@
 //!    BA - 2s apart on the flat, the bend deduction);
 //! 5. continuity: each zone meets its walls at u = 0 and u = BA in position and direction;
 //! 7. physical K: R <= rn <= R + t (the neutral layer inside the material);
-//! 8. export: one contour runs counter-clockwise, the contours close, and their area times t is
-//!    the flat body's volume.
+//! 8. export: one contour runs counter-clockwise, the contours close (consecutive pieces meet in
+//!    one vertex class, within the spread cap 2 LINEAR), and their area times t is the flat
+//!    body's volume.
 //!
 //! A form's own vertices are left out: formed (folded) and pierced (flat) by design.
 //! (6, injectivity, is the builder's own clash and overlap checks, which refuse; it is not
@@ -261,10 +262,15 @@ pub fn judge(sheet: &Sheet, fold: &Built, flat: &Built) -> Result<Refolded, Vec<
                 signed.iter().filter(|a| **a > 0.0).count()
             ));
         }
+        // consecutive pieces meet in one vertex class: each strip writes its own copy of the
+        // class's point, so within the class spread cap, twice LINEAR (to rounding where no class
+        // merges distinct points; past it where the one rule merged two, as a joint's mold-line
+        // ends within LINEAR)
+        let spread = 2.0 * forge_math::tol::LINEAR;
         for c in &pat.contours {
             for (k, x) in c.iter().enumerate() {
                 let gap = x.ends().1.distance(c[(k + 1) % c.len()].ends().0);
-                if gap > tol {
+                if gap > spread {
                     bad.push(format!("a contour opens by {gap}"));
                 }
             }

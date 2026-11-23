@@ -1116,7 +1116,13 @@ fn build_once(
             let (p0, p1) = straight(&sheet.walls[wi], j.on_a).map_err(|e| segment_error(j.a, j.on_a, e))?;
             let (q0, q1) = straight(&sheet.walls[bi], j.on_b).map_err(|e| segment_error(j.b, j.on_b, e))?;
             let (la, lb) = (p0.distance(p1), q0.distance(q1));
-            if (la - lb).abs() > TOL || la <= TOL {
+            // one mold line, by the one rule (research/kernel-audit/README.md §6.1, vertex
+            // classes): the joint lays both walls' mold lines from one start along one line, so
+            // their far ends lie |la - lb| apart, one point (`near`, squared) when within the
+            // tolerance, and the two are one segment, the least-named wall's (a's: la). Further
+            // apart they are two segments, which no fold joins: refused
+            let d = la - lb;
+            if d * d > TOL * TOL || la <= TOL {
                 return Err(SheetError::JointLengths {
                     feature,
                     joint: j.id,
