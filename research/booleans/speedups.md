@@ -101,7 +101,7 @@ reference throughout is the Lean coordinator's design, face-arrangement.md on de
 | D4 | Exact planes and points for near faces only (R6) | EMBER (only polygons in a leaf are touched) | −0.3M (inputs converts all 183 faces) | none | `far_unchanged` (Frontier.lean): far faces need no decision | S |
 | D5 | The in-place write (R5), as the old `apply` (0.05M) | OCCT General Fuse (split only faces with interferences); trueform (reuses untouched links) | −0.5M (0.68M → about 0.15M) | the naming rule; bits gate | `far_unchanged`, plus the write's identity on far faces (a8-review.md §3.2) | S–M |
 | D6 | Witnesses fused into the builder, orientation shortcut first | Lévy (one ray per component); `witness_inside`'s own shortcut | −0.3M | none | `boundary` (the shortcut) plus `room_const` | S |
-| D7 (new) | **A per-regen ledger cache for unchanged tools.** In a pattern, the tool is translated, and the ledger of a translated pair is the translated ledger. On upto's and coplanar's repeated tools, reuse the combinatorial core's outcome when the pair's near ledger is equal after translation. | Manifold's lazy CSG reuse; trueform's build once, query many | coplanar has 70 similar booleans (DOSTATS rows repeat exactly: 169 cells, 36 pieces, 47 edges), so up to −1.6M per repeated boolean on the core | names are relative to faces, so the mapping must carry names | **The core is a function of the ledger:** equal ledgers give equal outcomes (`core` is pure; `end_to_end_proof` is per ledger). Needs only ledger equality, decided exactly. | S |
+| D7 (new) | ~~A per-regen ledger cache for unchanged tools~~ **Measured and rejected** (decide-once Rust, 2026-11-23). The idea: reuse the core's outcome when a pair's near ledger is equal after translation. | Manifold's lazy CSG reuse; trueform's build once, query many | **Measured: a net loss of 3.3M on coplanar.** Coplanar's 70 ledgers have **52 distinct canonical forms**. The memo saves 6.4M and costs 9.7M (canonicalising and comparing ledgers). **Correction:** I wrote that the DOSTATS rows "repeat exactly". What I had seen was equal *counts* in consecutive booleans (169 cells, 36 pieces, 47 edges, 18 verts). Equal counts are not equal ledgers, and I never compared the ledgers themselves. | — | The core is a pure function of the ledger, so the cache would have been correct. It is not worth it. | dropped |
 | D8 (new) | Integer plane coordinates **inside the builder only** (no input change): clear the dyadic exponents per region to fixed-width integers, with a `Big` fallback by an exact width check | Nehring-Wirxel 2021, Table 1; Fortune 1997 | small (exact work is about 2%) | none | `mul_fits`/`add_fits` (research/booleans/lean/Sparse.lean, proven) | M; low priority |
 
 ## Top 4 for prototypes (behind feature flags on bool-speed's branch)
@@ -131,8 +131,8 @@ any proof work.
    - Disagreements are the useful output. Each is a place the old path's tolerant classification
      is inconsistent.
 
-D7 is the fifth candidate, on the A8 branch, once A8's core exists. Measure first how many of
-coplanar's 70 ledgers are equal after translation.
+D7 was the fifth candidate. It was measured (52 distinct ledgers in 70) and dropped as a net loss; see its row. The original plan read: "Measure first how many of
+coplanar's 70 ledgers are equal after translation."
 
 ## Risks to bits and naming
 
@@ -563,3 +563,17 @@ functions, plus S3's whole-line −60.7M summed over all lines.
   `JordanLocal.contains_const_local` on each side of the crossing, plus the single-crossing flip.
 - **Shipping condition:** zero disagreements, from the debug mode that samples every stretch, on
   the gate, fuzz and repros.
+
+### Insert (latency gate, base: edit +7.7%, open +8.8% at tN against t1)
+
+At head `1a25c1a`:
+- **Threads:** insert's `cli` (open), `edit` and `resolve` start **no threads** (strace
+  `clone3`). On base they started 8–16, from fillet's eager `par_map`, which also ignored
+  `FORGECAD_THREADS`: the cause latency-gate measured.
+- **Wall-clock** (paired medians, 21 rounds, tN/t1): cli 1.007, edit 1.038 (A/A 0.992),
+  resolve 1.026 (A/A 0.947).
+- **Instructions** (callgrind, edit): t1 46.68M against tN 47.02M, +0.7%. The extra is about 250k
+  in malloc, free and memcpy (`map_adaptive`'s up-front output `Vec`, and the tool builder's `Vec`
+  per item) and 8k in `getenv`.
+- **Verdict:** level within the measurement. The last 0.7% could go by having the tool builder's
+  items write into one `Vec` (a later, small change).
