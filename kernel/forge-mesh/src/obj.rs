@@ -92,8 +92,8 @@ pub fn read_obj(text: &str) -> Result<Vec<Object>, ObjError> {
     let mut vn: Vec<Vec3> = Vec::new();
     let mut out: Vec<Object> = Vec::new();
     // per object: the file's vertex and normal indices to its own
-    let mut map_v: std::collections::HashMap<usize, u32> = Default::default();
-    let mut map_n: std::collections::HashMap<usize, u32> = Default::default();
+    let mut map_v: std::collections::BTreeMap<usize, u32> = Default::default();
+    let mut map_n: std::collections::BTreeMap<usize, u32> = Default::default();
     let bad = |l: usize, w: &str| ObjError(format!("line {l}: {w}"));
     for (l, line) in text.lines().enumerate() {
         let l = l + 1;

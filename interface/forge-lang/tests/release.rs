@@ -5,6 +5,7 @@
 
 use forge_lang::vtools;
 use std::path::PathBuf;
+#[cfg(not(target_os = "wasi"))]
 use std::process::Command;
 
 const PART: &str = "shared w = 40
@@ -34,6 +35,8 @@ fn call(tool: &str, args: &[&str]) -> forge_agent::json::Json {
         .expect("it answers")
 }
 
+// git itself checks the release, a process: WASI starts none, so native only
+#[cfg(not(target_os = "wasi"))]
 #[test]
 fn a_part_released_twice_and_regenerated() {
     let d = project("rel");

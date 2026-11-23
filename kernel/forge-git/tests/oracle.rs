@@ -1,5 +1,7 @@
 //! git itself as the judge: repos written here pass `git fsck --strict` and read back through
 //! `git`, and repos git wrote (loose, packed, deltified, SHA-1 and SHA-256) read back here.
+// git itself, a process: WASI starts none, so native only
+#![cfg(not(target_os = "wasi"))]
 
 use forge_git::object::{self, Kind};
 use forge_git::{HashKind, Oid, Repo, Sig};

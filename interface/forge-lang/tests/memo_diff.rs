@@ -334,6 +334,8 @@ fn key_part_file_content_same_stamp() {
 
 /// `backend` and thread count: a fresh build is the same on one thread and on all, and with the
 /// batch backend on or off (when it is not, the backend must be in the key: op-memo-proof.md 5).
+// runs `fg` as a process: WASI starts none, so native only
+#[cfg(not(target_os = "wasi"))]
 #[test]
 fn key_part_backend_and_threads() {
     let fg = env!("CARGO_BIN_EXE_fg");

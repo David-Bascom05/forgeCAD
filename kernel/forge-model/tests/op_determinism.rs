@@ -88,10 +88,12 @@ fn nary_is_the_same_on_every_backend() {
     );
 }
 
+#[cfg(not(target_os = "wasi"))]
 type Built = (String, Part, Result<forge_topo::Body, forge_model::RegenError>);
 
 /// Every part built once, each on a thread of its own with nothing spoiled: the fresh side of
 /// both audits below.
+#[cfg(not(target_os = "wasi"))]
 fn fresh() -> &'static [Built] {
     static FRESH: std::sync::OnceLock<Vec<Built>> = std::sync::OnceLock::new();
     FRESH.get_or_init(|| {

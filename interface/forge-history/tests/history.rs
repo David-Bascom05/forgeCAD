@@ -1,4 +1,6 @@
 //! Saves, versions, restore and the saves list on real repositories, with git as the judge.
+// git itself judges, a process: WASI starts none, so native only
+#![cfg(not(target_os = "wasi"))]
 
 use forge_git::Sig;
 use forge_history::{History, Paused, Saved};

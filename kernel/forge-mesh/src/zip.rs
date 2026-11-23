@@ -32,7 +32,7 @@ pub fn crc32(data: &[u8]) -> u32 {
         }
         t
     }
-    static T: [u32; 256] = table();
+    const T: [u32; 256] = table();
     let mut c = !0u32;
     for &b in data {
         c = T[((c ^ b as u32) & 0xff) as usize] ^ (c >> 8);

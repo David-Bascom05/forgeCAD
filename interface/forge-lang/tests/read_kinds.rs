@@ -200,7 +200,13 @@ fn a_drawing_under_a_session_root_reads_nothing_outside_it() {
         let _ = std::fs::remove_file(inside.join("link.fg"));
         std::os::unix::fs::symlink(d.join("out.fg"), inside.join("link.fg")).unwrap();
     }
-    for model in ["../out.fg", "link.fg"] {
+    // the link only where one is made (unix)
+    let models: &[&str] = if cfg!(unix) {
+        &["../out.fg", "link.fg"]
+    } else {
+        &["../out.fg"]
+    };
+    for &model in models {
         let src = format!(
             "drawing\nm = part(\"{model}\")\ns1 = sheet(\"A4\")\ntop = base_view(m, sheet: s1, dir: \"top\", at: (100, 100))\n"
         );

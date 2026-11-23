@@ -194,6 +194,8 @@ fn the_key_holds_the_options_that_change_a_step() {
 
 // 5: the same history built on one thread or on all gives the same output, so the thread count
 // is no input
+// runs `fg` as a process: WASI starts none, so native only
+#[cfg(not(target_os = "wasi"))]
 #[test]
 fn a_step_is_the_same_on_any_number_of_threads() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");

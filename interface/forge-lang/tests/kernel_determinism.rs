@@ -7,6 +7,8 @@
 //!
 //! `after_a_caught_panic_*`: an op run on a thread where an earlier op was cut short by a panic
 //! (audit items 1 and 3: thread-local state left set) gives what a fresh thread gives.
+// every test runs `fg` as a process five ways: WASI starts none, so native only
+#![cfg(not(target_os = "wasi"))]
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

@@ -279,7 +279,7 @@ pub fn body_objects(body: &Body, q: &Quality, by: &Solids, normals: bool) -> Res
         })
         .collect();
     // each object's vertices numbered in the order its triangles first use them
-    let mut local: std::collections::HashMap<(usize, u32), u32> = std::collections::HashMap::new();
+    let mut local: BTreeMap<(usize, u32), u32> = BTreeMap::new();
     let mut nkeys: Vec<BTreeMap<[u64; 3], u32>> = vec![BTreeMap::new(); objects.len()];
     for (t, (&tri, &f)) in mesh.triangles.iter().zip(&mesh.face_of).enumerate() {
         let o = &mut objects[of_tri[t]];

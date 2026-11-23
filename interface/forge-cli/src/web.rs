@@ -709,7 +709,8 @@ fn static_file(c: &Config, path: &str) -> Response {
     }
 }
 
-#[cfg(test)]
+// a TCP server and its clients: WASI listens on nothing, so native only
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use super::*;
 
