@@ -63,7 +63,7 @@ housing (1). Shared code, such as sorts and allocation, also speeds up the rods 
 
 | # | Speed-up | Prior art | Est. win, coplanar seq | Bits / naming risk | Why provable | Proof size |
 |---|---|---|---|---|---|---|
-| **S1** | **A line × line case in `plane_meet`.** A planar face's line edge against the cut line: one 2D solve in the face plane, with the same tolerance tests, and no `across` surface, generic `curve_surface_in`, `crossings_near` or allocation. | EMBER and the octree BSPs (Trettner et al. 2021/22) clip lines against polygon edge planes directly; Cherchi 2020 has per-triangle cached minors | **−15 to −20M (−7 to −10%)**. Of trim's 38.4M flat, `across`, `curve_surface_in`, closure#55 and `crossings_near` are about 22M. A 2D solve costs about 0.2k per edge, against about 2–3k now. | **Real.** The result must equal the general path's hit (`t`, point, contact) to the bit. Do it by evaluating *the same* float expressions in the same order: the `across` plane's normal from the same `cross`, then `line_plane`'s formula, inlined. Not a "nicer" 2D solve. Names are untouched (cuts are named by face pairs). | **Refinement by expression identity.** On `(Line, Line)` in a planar face, the fast path's float term is syntactically the general path's term after inlining `across` and `line_plane`. This is an Aeneas-level equality, with floats as opaque operations. Needs the aeneas session's float bridge to state; no real-number reasoning. | S (~200–300 lines) |
+| **S1** | **Memoise `across` per boolean** (revised, see the correction below). `across(body, f, c)` is a pure function of (side, face, coedge), recomputed for every curve that reaches the edge. Keep it in `Scratch` keyed by (side, coedge), cleared per boolean. Also return `line_in_range`'s hits in an inline small array, not a `Vec<LineHit>` round trip. | EMBER and the octree BSPs (plane per edge stored once); Cherchi 2020 (per-triangle cached minors) | **−6 to −8M (−3 to −4%)**: `across` is 7.5M flat, plus rods; `IntoIter<LineHit>` is 0.7M | **None.** Same values, computed once. | **Memo of a pure function:** `memo_get` and `memo_sound` (Speedups.lean, proven), plus purity of `across` (it reads only `body`, which is immutable during `plan_once_in`) | S (~150 for the Aeneas side) |
 | **S2** | **Allocation reuse in the hot loops.** Extend `Scratch` (boolean.rs:791, already holding `cuts`, `segs`, `pieces`, `specs`) to: trim's `ts`, `along`, `fenced` and `hits`; split_face's `half`, `by_start` and `dirs`; and imprint's `f64` buffers. Clear them; don't drop them. | Manifold's arrays over allocation; EMBER and trueform's per-thread arenas | **−8 to −12M (−4 to −6%)**, flat and rods. malloc is about 31M on the line, and trim's dealloc alone is 3.2M flat. | None. Values are identical; only capacity is kept. | A cleared `Vec` is the empty list in Aeneas's model, so `v.clear(); v.extend(xs)` refines `xs`. A one-line lemma per buffer. | S (~50) |
 | **S3** | **Unstable sorts on packed keys.** `by_start.sort()` (split_face) and `by_ends.sort()` (pieces) become `sort_unstable_by_key` on `VKey::packed()` (u64) and a u128 pair. The second field is a distinct index, so stable and unstable sorts give the same list. | Standard: radix or pattern-defeating unstable sorts on integer keys | **−5 to −7M (−3%)**. The sorts are about 11.4M at their top frames over both kinds. Packed-key unstable sort is about 2–3× cheaper. | None, given distinct keys (asserted in debug). `packed` is order-preserving (boolean.rs:224). | **A sort is unique on a strict order:** two sorted permutations of a duplicate-free list are equal. Plus `packed` is monotone. ForgeBoolCore's `RefineSort` already has this style. | S (~100) |
 | **S4** | **Classify once per region, not once per piece.** Pieces of one face that are joined without crossing the other body's surface share their inside/outside. Classify one piece per group by ray (`point_in_face_past`, `planar_parity`) and propagate the rest by union–find over shared uncut edges. | Cherchi 2022 (one ray per patch); Lévy 2024 (combinatorial propagation, one ray per component); Zhou 2016 (winding numbers over cells); decide-once's own flood | **−6 to −9M (−3 to −4%)**. Classification is about 15M flat inclusive (`point_in_face_past`, `planar_parity`, `Index::classify`). It drops to about one ray per group. | **Medium.** Exactly, the propagated answer equals the ray's. In floats, the old path's tolerant ray could differ on a near-degenerate piece. Such a difference is an inconsistency today, but it would still change bits. Run L6 (fuzz plus the bits gate) and log every piece where a sampled ray disagrees with the propagation. | Exact statement: **`JordanLocal.contains_const_local`** (proven): parity is constant along a segment that meets no face. Two pieces sharing an uncut edge are joined by such a segment. The float path needs the predicate filters' L5 bounds (`orient2d`/`dot3`) to hold at the piece's interior point. | M (~300 for the propagation lemma over the old path's piece graph) |
@@ -73,8 +73,19 @@ housing (1). Shared code, such as sorts and allocation, also speeds up the rods 
 | S8 | Integer or fixed-point plane coordinates for flat parts (EMBER, trueform) | EMBER (26-bit input, 256-bit predicates); trueform (int32/int64 grids) | — | **Changes geometry.** Snapping vertices to a grid changes results that work today. | — | rejected for the shipped path |
 | S9 | BVH or sort-and-sweep candidate pruning | Manifold's BVH; Cherchi's octree | about 0 at our size. The face-pair loop is about 10 near × the tool's faces with a box test, and `trim` already skips edges by box. | — | — | not needed below about 1k faces |
 
-**The first four together: about −35 to −45M on coplanar seq (−17 to −22%).** On a flat boolean,
-1.21M → about 0.75M, if S1–S4 land as estimated.
+**The first four together: about −25 to −33M on coplanar seq (−12 to −16%)** (revised). On a flat
+boolean, 1.21M → about 0.85M, if S1–S4 land as estimated.
+
+**Correction to the first version of S1 (2026-11-23).** A deeper split shows three things:
+- `curve_surface_in` already sends a line straight to `line_in_range` → `line_surface` →
+  `line_plane`. Its 5.4M is volume, not dispatch.
+- `trim::{closure#55}` (7.3M flat) is `point_in_face_past` on each hit, so it belongs to S4's
+  pool. S4's pool is about 22M flat inclusive.
+- A `(Line, Line)` arm in `plane_meet` would **not** be bit-safe. That branch filters hits by
+  `on_edge` plus the other face's box and `point_in_face`, while the general branch uses `near`,
+  the decided logs and `crossings_near`.
+
+S1 is therefore the `across` memo above. Bool-speed was told before implementing.
 
 ## Part II: the decide-once A8 builder (ranked)
 
@@ -98,7 +109,8 @@ reference throughout is the Lean coordinator's design, face-arrangement.md on de
 Each is measured on the exact gate (tools/speed/exact.sh: callgrind plus dhat; bits.txt) before
 any proof work.
 
-1. **S1, feature `flat_line_meet`.** Add the `(Line, Line)` arm to `plane_meet`, inlining exactly
+1. **S1, feature `across_memo`** (revised; the plan below is the superseded `flat_line_meet`, kept
+   for the record and not to be built). Add the `(Line, Line)` arm to `plane_meet`, inlining exactly
    the float operations `across` and `curve_surface_in` perform for a line edge in a planar face.
    - The test: a debug assertion that compares the fast hit with the general path's on every call.
    - Pass: bits identical on the whole gate, coplanar seq −15M or better, no line worse.
@@ -133,3 +145,21 @@ coplanar's 70 ledgers are equal after translation.
 - No item above changes names, except the A8 naming rule, which the design already gates.
 - The gate counts instructions:u. S7 (threads) can only add instructions, so it is excluded from
   the ranking, not merely ranked low.
+
+
+## Proof statements for S1–S3 (ready to prove at L4)
+
+The abstract facts are proven in `research/booleans/lean/Speedups.lean`. That file is core Lean on
+the forge-exact toolchain v4.36.0-rc2. It compiles with no `sorry`, using only `propext` and
+`Quot.sound`. Each change's L4 obligation is its Aeneas translation refining the unchanged function,
+citing these facts.
+
+| | Rust change | Abstract fact (proven) | L4 obligation, for the Aeneas session |
+|---|---|---|---|
+| **S1** `across_memo` | `trim` asks `Scratch.across.get_or(side, coedge, ‖ across(body, f, c))` | `memo_get`: on a sound table the memoised call returns `f k`. `memo_sound`: it keeps the table sound. `memo_nil`: the per-boolean empty table is sound. | (i) `across` is pure: its translation reads only `body`, and `body` is not mutated within `plan_once_in`. (ii) `trim_memo` with a sound table equals `trim`, by `memo_get` at each call. (iii) The table is cleared per boolean (`memo_nil`). The key must include the side: coedge ids of the two bodies collide. |
+| **S2** `scratch_trim` | `let ts = &mut scratch.ts; ts.clear(); …` in place of `let mut ts = Vec::new()` | `cleared_fill`: in Aeneas's model a cleared `Vec` is `[]` (capacity is not modelled), so filling it gives the fresh result | Each buffer is cleared at the start of each use, and no reference to it outlives the use (Aeneas's borrow model checks the second). One lemma per buffer: the state after `clear` is the `Vec::new()` state. |
+| **S3** `packed_sorts` | `by_start.sort_unstable_by_key(\|x\| (x.0.packed() as u128) << 64 \| x.1 as u128)`, and the same for `by_ends` with a 192-bit or two-word key | `sorted_unique`: two sorted permutations of a list are equal (strict order). `packed_mono`: `VKey::packed` is strictly monotone within the widths (side < 2, ids < 2³²). `sort_packed_eq`: a `lt`-sorted list maps to a `<`-sorted packed list. | (i) The pairs are distinct: the second field is the index `j`, which is unique. (ii) `sort_unstable`'s result is sorted and a permutation. That is std's contract; take it as an axiom of the std model, as FunsExternal does for others, or prove it on a translated sort, as `RefineSort` does. (iii) So both sorts give the one sorted order (`sorted_unique`), and the result is bit-identical. Debug builds assert the width bounds of `packed_mono`. |
+
+S4 is not in this table: its fact is `JordanLocal.contains_const_local`, which is already proven.
+Its L4 needs the old path's piece graph modelled. That is M-sized, and waits until S4's prototype
+shows zero disagreements.
