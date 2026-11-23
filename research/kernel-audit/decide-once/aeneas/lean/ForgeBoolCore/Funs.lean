@@ -150,7 +150,7 @@ def sort.cmp_cov (a : Slice Sgn) (b : Slice Sgn) : Result Std.I8 := do
       else ok 0#i8
 
 /-- [forge_bool_core::sort::sort_by_cov]: loop body 2:
-    Source: 'src/sort.rs', lines 118:12-129:13 -/
+    Source: 'src/sort.rs', lines 123:12-134:13 -/
 @[rust_loop_body]
 def sort.sort_by_cov_loop0_loop0_loop0.body
   (cells : Slice (alloc.vec.Vec Sgn)) (src : alloc.vec.Vec Std.U32)
@@ -212,7 +212,7 @@ def sort.sort_by_cov_loop0_loop0_loop0.body
   else ok (done dst)
 
 /-- [forge_bool_core::sort::sort_by_cov]: loop 2:
-    Source: 'src/sort.rs', lines 118:12-129:13 -/
+    Source: 'src/sort.rs', lines 123:12-134:13 -/
 @[rust_loop]
 def sort.sort_by_cov_loop0_loop0_loop0
   (cells : Slice (alloc.vec.Vec Sgn)) (src : alloc.vec.Vec Std.U32)
@@ -226,7 +226,7 @@ def sort.sort_by_cov_loop0_loop0_loop0
     (dst, i, j, k)
 
 /-- [forge_bool_core::sort::sort_by_cov]: loop body 1:
-    Source: 'src/sort.rs', lines 114:8-131:9 -/
+    Source: 'src/sort.rs', lines 119:8-136:9 -/
 @[rust_loop_body]
 def sort.sort_by_cov_loop0_loop0.body
   (cells : Slice (alloc.vec.Vec Sgn)) (n : Std.Usize)
@@ -252,7 +252,7 @@ def sort.sort_by_cov_loop0_loop0.body
   else ok (done dst)
 
 /-- [forge_bool_core::sort::sort_by_cov]: loop 1:
-    Source: 'src/sort.rs', lines 114:8-131:9 -/
+    Source: 'src/sort.rs', lines 119:8-136:9 -/
 @[rust_loop]
 def sort.sort_by_cov_loop0_loop0
   (cells : Slice (alloc.vec.Vec Sgn)) (n : Std.Usize)
@@ -266,7 +266,7 @@ def sort.sort_by_cov_loop0_loop0
     (dst, lo)
 
 /-- [forge_bool_core::sort::sort_by_cov]: loop body 0:
-    Source: 'src/sort.rs', lines 112:4-134:5 -/
+    Source: 'src/sort.rs', lines 117:4-139:5 -/
 @[rust_loop_body]
 def sort.sort_by_cov_loop0.body
   (cells : Slice (alloc.vec.Vec Sgn)) (n : Std.Usize)
@@ -284,7 +284,7 @@ def sort.sort_by_cov_loop0.body
   else ok (done src)
 
 /-- [forge_bool_core::sort::sort_by_cov]: loop 0:
-    Source: 'src/sort.rs', lines 112:4-134:5 -/
+    Source: 'src/sort.rs', lines 117:4-139:5 -/
 @[rust_loop]
 def sort.sort_by_cov_loop0
   (cells : Slice (alloc.vec.Vec Sgn)) (n : Std.Usize)
@@ -298,7 +298,7 @@ def sort.sort_by_cov_loop0
     (src, dst, width)
 
 /-- [forge_bool_core::sort::sort_by_cov]:
-    Source: 'src/sort.rs', lines 104:0-136:1 -/
+    Source: 'src/sort.rs', lines 109:0-141:1 -/
 def sort.sort_by_cov
   (v : alloc.vec.Vec Std.U32) (cells : Slice (alloc.vec.Vec Sgn)) :
   Result (alloc.vec.Vec Std.U32)
@@ -504,10 +504,9 @@ def Sgn.Insts.CoreCmpPartialOrdSgn.partial_cmp
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::PartialOrd<forge_bool_core::Sgn> for forge_bool_core::Sgn}]
     Source: 'src/lib.rs', lines 30:44-30:54 -/
 @[reducible]
-impl_def Sgn.Insts.CoreCmpPartialOrdSgn : core.cmp.PartialOrd Sgn Sgn := {
+def Sgn.Insts.CoreCmpPartialOrdSgn : core.cmp.PartialOrd Sgn Sgn := {
   partialEqInst := Sgn.Insts.CoreCmpPartialEqSgn
   partial_cmp := Sgn.Insts.CoreCmpPartialOrdSgn.partial_cmp
-  le := core.cmp.PartialOrd.le.trait_default Sgn.Insts.CoreCmpPartialOrdSgn
 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::Ord for forge_bool_core::Sgn}]
@@ -631,12 +630,10 @@ def CellId.Insts.CoreCmpPartialOrdCellId.partial_cmp
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::PartialOrd<forge_bool_core::CellId> for forge_bool_core::CellId}]
     Source: 'src/lib.rs', lines 38:44-38:54 -/
 @[reducible]
-impl_def CellId.Insts.CoreCmpPartialOrdCellId : core.cmp.PartialOrd CellId
-  CellId := {
+def CellId.Insts.CoreCmpPartialOrdCellId : core.cmp.PartialOrd CellId CellId
+  := {
   partialEqInst := CellId.Insts.CoreCmpPartialEqCellId
   partial_cmp := CellId.Insts.CoreCmpPartialOrdCellId.partial_cmp
-  le := core.cmp.PartialOrd.le.trait_default
-    CellId.Insts.CoreCmpPartialOrdCellId
 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::Ord for forge_bool_core::CellId}]
@@ -759,12 +756,10 @@ def FaceId.Insts.CoreCmpPartialOrdFaceId.partial_cmp
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::PartialOrd<forge_bool_core::FaceId> for forge_bool_core::FaceId}]
     Source: 'src/lib.rs', lines 42:44-42:54 -/
 @[reducible]
-impl_def FaceId.Insts.CoreCmpPartialOrdFaceId : core.cmp.PartialOrd FaceId
-  FaceId := {
+def FaceId.Insts.CoreCmpPartialOrdFaceId : core.cmp.PartialOrd FaceId FaceId
+  := {
   partialEqInst := FaceId.Insts.CoreCmpPartialEqFaceId
   partial_cmp := FaceId.Insts.CoreCmpPartialOrdFaceId.partial_cmp
-  le := core.cmp.PartialOrd.le.trait_default
-    FaceId.Insts.CoreCmpPartialOrdFaceId
 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::Ord for forge_bool_core::FaceId}]
@@ -887,12 +882,10 @@ def BodyId.Insts.CoreCmpPartialOrdBodyId.partial_cmp
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::PartialOrd<forge_bool_core::BodyId> for forge_bool_core::BodyId}]
     Source: 'src/lib.rs', lines 46:44-46:54 -/
 @[reducible]
-impl_def BodyId.Insts.CoreCmpPartialOrdBodyId : core.cmp.PartialOrd BodyId
-  BodyId := {
+def BodyId.Insts.CoreCmpPartialOrdBodyId : core.cmp.PartialOrd BodyId BodyId
+  := {
   partialEqInst := BodyId.Insts.CoreCmpPartialEqBodyId
   partial_cmp := BodyId.Insts.CoreCmpPartialOrdBodyId.partial_cmp
-  le := core.cmp.PartialOrd.le.trait_default
-    BodyId.Insts.CoreCmpPartialOrdBodyId
 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::Ord for forge_bool_core::BodyId}]
@@ -2005,8 +1998,28 @@ def cls_of (l : Ledger) (f : FaceId) : Result Std.U32 := do
       l.face_class i2
   else ok 0#u32
 
+/-- [forge_bool_core::sort::le3]:
+    Source: 'src/sort.rs', lines 71:0-73:1 -/
+def sort.le3
+  (a : (Std.U32 × Std.U32 × Std.U32)) (b : (Std.U32 × Std.U32 × Std.U32)) :
+  Result Bool
+  := do
+  let (i, i1, i2) := a
+  let (i3, i4, i5) := b
+  if i < i3
+  then ok true
+  else
+    if i = i3
+    then
+      if i1 < i4
+      then ok true
+      else if i1 = i4
+           then ok (i2 <= i5)
+           else ok false
+    else ok false
+
 /-- [forge_bool_core::sort::sort_triples]: loop body 2:
-    Source: 'src/sort.rs', lines 85:12-94:13 -/
+    Source: 'src/sort.rs', lines 90:12-99:13 -/
 @[rust_loop_body]
 def sort.sort_triples_loop0_loop0_loop0.body
   (src : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32)) (mid : Std.Usize)
@@ -2041,9 +2054,7 @@ def sort.sort_triples_loop0_loop0_loop0.body
           let t1 ←
             alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U32
               × Std.U32 × Std.U32)) src j
-          let b ←
-            TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.le core.cmp.PartialOrdU32
-              core.cmp.PartialOrdU32 core.cmp.PartialOrdU32 t t1
+          let b ← sort.le3 t t1
           if b
           then
             let (_, index_mut_back) ←
@@ -2075,7 +2086,7 @@ def sort.sort_triples_loop0_loop0_loop0.body
   else ok (done dst)
 
 /-- [forge_bool_core::sort::sort_triples]: loop 2:
-    Source: 'src/sort.rs', lines 85:12-94:13 -/
+    Source: 'src/sort.rs', lines 90:12-99:13 -/
 @[rust_loop]
 def sort.sort_triples_loop0_loop0_loop0
   (src : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
@@ -2089,7 +2100,7 @@ def sort.sort_triples_loop0_loop0_loop0
     (dst, i, j, k)
 
 /-- [forge_bool_core::sort::sort_triples]: loop body 1:
-    Source: 'src/sort.rs', lines 81:8-96:9 -/
+    Source: 'src/sort.rs', lines 86:8-101:9 -/
 @[rust_loop_body]
 def sort.sort_triples_loop0_loop0.body
   (n : Std.Usize) (src : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
@@ -2114,7 +2125,7 @@ def sort.sort_triples_loop0_loop0.body
   else ok (done dst)
 
 /-- [forge_bool_core::sort::sort_triples]: loop 1:
-    Source: 'src/sort.rs', lines 81:8-96:9 -/
+    Source: 'src/sort.rs', lines 86:8-101:9 -/
 @[rust_loop]
 def sort.sort_triples_loop0_loop0
   (n : Std.Usize) (src : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
@@ -2128,7 +2139,7 @@ def sort.sort_triples_loop0_loop0
     (dst, lo)
 
 /-- [forge_bool_core::sort::sort_triples]: loop body 0:
-    Source: 'src/sort.rs', lines 79:4-99:5 -/
+    Source: 'src/sort.rs', lines 84:4-104:5 -/
 @[rust_loop_body]
 def sort.sort_triples_loop0.body
   (n : Std.Usize) (src : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
@@ -2146,7 +2157,7 @@ def sort.sort_triples_loop0.body
   else ok (done src)
 
 /-- [forge_bool_core::sort::sort_triples]: loop 0:
-    Source: 'src/sort.rs', lines 79:4-99:5 -/
+    Source: 'src/sort.rs', lines 84:4-104:5 -/
 @[rust_loop]
 def sort.sort_triples_loop0
   (n : Std.Usize) (src : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
@@ -2159,7 +2170,7 @@ def sort.sort_triples_loop0
     (src, dst, width)
 
 /-- [forge_bool_core::sort::sort_triples]:
-    Source: 'src/sort.rs', lines 71:0-101:1 -/
+    Source: 'src/sort.rs', lines 76:0-106:1 -/
 def sort.sort_triples
   (v : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32)) :
   Result (alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
