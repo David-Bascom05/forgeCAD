@@ -12,6 +12,12 @@ on:
     paths: ["verify/forge-exact/**", "kernel/**", ".github/workflows/forge-exact.yml"]
   workflow_dispatch:
 
+# A new push to a pull request cancels that pull request's runs still queued or running for its
+# older commits; pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   proofs:
     runs-on: ubuntu-latest
