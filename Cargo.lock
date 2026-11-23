@@ -210,6 +210,7 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-refold",
  "forge-sheet",
  "forge-sketch",
  "forge-step",
@@ -284,6 +285,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-refold"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-ops",
+ "forge-sheet",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-sheet"
 version = "0.1.0"
 dependencies = [
@@ -293,6 +304,7 @@ dependencies = [
  "forge-math",
  "forge-mesh",
  "forge-ops",
+ "forge-refold",
  "forge-topo",
 ]
 

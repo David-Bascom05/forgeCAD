@@ -1587,9 +1587,9 @@ fn every_sheet_part_refolds() {
         };
         let r = forge_lang::run(&s, opts, Default::default()).0;
         for out in &r.sheets {
-            match forge_sheet::refold::check(&out.sheet) {
+            match forge_refold::check(&out.sheet) {
                 Ok(_) => sheets += 1,
-                Err(forge_sheet::refold::RefoldError::Build(..)) => {}
+                Err(forge_refold::RefoldError::Build(..)) => {}
                 Err(e) => bad.push(format!("{}: {e:?}", f.display())),
             }
         }

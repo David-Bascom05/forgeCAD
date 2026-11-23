@@ -1,10 +1,10 @@
-//! The refold checker: an independent reference for "the flat pattern is correct"
+//! forge-sheet's refold checker: an independent reference for "the flat pattern is correct"
 //! (research/kernel-audit/audit2.md §2.0). It builds a sheet both ways and refolds the flat with
 //! its own model of the fold: each wall rigidly, from the folded and flat layouts' frames; each
 //! bend zone round its own axis at the neutral radius rn = BA / θ, from nothing but the layout's
 //! published numbers (inside radius, angle, allowance, setback, the wall's folded frame and the
 //! zone's developed place). It shares no code with the builder's `Geo::Round`, its joint frames or
-//! its topology walk. The conditions it judges, numbered as in §2.0:
+//! its topology walk; it lives here, outside the kernel, used by tests. The conditions it judges, numbered as in §2.0:
 //!
 //! 1. refold: every vertex of the flat body, refolded, is the folded body's vertex of its name;
 //! 2. isometry: the neutral layer's radius is rn, so |∂F/∂u| = 1 there;
@@ -20,11 +20,11 @@
 //! (6, injectivity, is the builder's own clash and overlap checks, which refuse; it is not
 //! re-judged here.) The reference is evaluated in floats: positions agree within `tol` (1e-9 of
 //! the part's size, far under LINEAR), not exactly.
-use crate::build::{Built, Map, Place2, build_with};
-use crate::error::{SheetError, WallId};
-use crate::graph::Sheet;
-use crate::pattern::outer_contour;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
+use forge_ops::Segment;
+use forge_sheet::build::{Built, Map, Place2, build_with};
+use forge_sheet::pattern::outer_contour;
+use forge_sheet::{Sheet, SheetError, Wall, WallId};
 use std::collections::BTreeMap;
 
 /// What the checker measured on a sheet that passed.
@@ -42,6 +42,18 @@ pub struct Refolded {
 pub enum RefoldError {
     Build(Map, SheetError),
     Broken(Vec<String>),
+}
+
+/// A wall's outline segment `seg`, when it is a line: a joint's mold line.
+fn straight(w: &Wall, seg: u64) -> Option<(Point2, Point2)> {
+    w.outline
+        .iter()
+        .flat_map(|l| &l.segments)
+        .find(|s| s.1 == seg)
+        .and_then(|s| match s.0 {
+            Segment::Line { a, b } => Some((a, b)),
+            _ => None,
+        })
 }
 
 fn local(p: &Place2, q: Point2) -> Point2 {
@@ -180,7 +192,7 @@ pub fn judge(sheet: &Sheet, fold: &Built, flat: &Built) -> Result<Refolded, Vec<
             else {
                 continue;
             };
-            if let Ok((p, q)) = crate::graph::straight(w, seg) {
+            if let Some((p, q)) = straight(w, seg) {
                 for e in [p, q] {
                     let u = local(&z.dev, dw.apply(e)).x;
                     if (u - want).abs() > tol {
@@ -283,9 +295,9 @@ pub fn judge(sheet: &Sheet, fold: &Built, flat: &Built) -> Result<Refolded, Vec<
         .forms
         .iter()
         .filter_map(|f| {
-            let p = crate::form::Profile::of(&f.tool.shape, t).ok()?;
+            let r1 = forge_sheet::form::rim_radius(&f.tool.shape, t)?;
             let &(_, _, dw) = walls.get(&f.wall)?;
-            Some((dw.apply(f.at), p.r1 + t))
+            Some((dw.apply(f.at), r1 + t))
         })
         .collect();
     for v in &flat.body.vertices {

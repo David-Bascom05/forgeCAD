@@ -244,9 +244,9 @@ fn the_probes_refold() {
                         if shape != "one0" {
                             s.flange(base, 1, angle, 20.0).unwrap();
                         }
-                        match forge_sheet::refold::check(&s) {
+                        match forge_refold::check(&s) {
                             Ok(_) => checked += 1,
-                            Err(forge_sheet::refold::RefoldError::Build(..)) => {}
+                            Err(forge_refold::RefoldError::Build(..)) => {}
                             Err(e) => bad.push(format!("{name} {deg} {angle} {shape} {ends:?}: {e:?}")),
                         }
                     }
@@ -284,10 +284,10 @@ fn the_refold_check_tells_a_wrong_flat() {
         s.flange(base, 3, -dmath::PI / 3.0, 20.0).unwrap();
         s
     };
-    let r = forge_sheet::refold::check(&l(0.4)).expect("refolds");
+    let r = forge_refold::check(&l(0.4)).expect("refolds");
     assert!(r.vertices > 0 && r.bends == 2 && r.worst < 1e-10, "{r:?}");
     let (a, b) = (l(0.4), l(0.3));
     let fold = build_with(&a, Map::Folded).unwrap();
     let flat = build_with(&b, Map::Flat).unwrap();
-    assert!(forge_sheet::refold::judge(&a, &fold, &flat).is_err());
+    assert!(forge_refold::judge(&a, &fold, &flat).is_err());
 }
