@@ -76,8 +76,12 @@ notch's sharp inside corners (no end mill reaches them).
    - the trim arcs' stored-end gap (3a388e5, bfa4a72).
    Open: L5 for the checker's intervals.
 2. G4 (leftover) is checked: per z band, the final stock less the part's section grown by tol,
-   exactly (booleans); the flange has none, a facing-only program lists its regions. The
-   reasons (tool radius, reach) are not yet classified: every region says "uncut".
+   exactly (booleans); the flange has none, a facing-only program lists its regions. Reasons
+   (cam/g4-classify): "held by fixture", "below every tool tip" (band top ≤ the setup's lowest
+   posted tip), "tool radius" (no disk of the chain's smallest radius in the free section meets
+   it: exact booleans on an opening taken with a 1e-6 mm margin over the offset grid; the
+   margin argument is hyp H.grid in verify/forge-cam/RESUME.md), else "uncut". Observed, not
+   judged: a turned chain has sliver bands (e.g. [14, 14.000000000000004]) from h − z rounding.
 3. Ops: slot, chamfer (deburr), thread milling, engraving, inside contours of pockets with
    islands from the part; helical ramps (the B&B certifies them; generation is missing).
 4. Declared removals Δ (deburr, chamfer and thread milling where the model lacks the geometry).

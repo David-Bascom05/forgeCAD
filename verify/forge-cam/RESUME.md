@@ -46,6 +46,11 @@ Expect about 2 min with the Mathlib cache. Post.lean's `step` takes about 45 s.
 - **The Δ search's bound.** lower ≤ sdRZ(D, h − z) over the cells is the interval extension's
   claim, which is L5 (ival.rs against verify/ieee754).
 
+- **H.grid (G4's tool-radius reason).** An offset's loops lie within ~4·2⁻³² mm of the exact
+  offset's boundary (each vertex and arc centre rounded to offset::GRID), so (F ⊖ B_{r−m}) ⊕
+  B_{r+m} as computed, m = 1e-6, contains the opening (F ⊖ B_r) ⊕ B_r. Not in Lean (hyp). It
+  bears only on the label "tool radius", never on G1–G6.
+
 ## The vise code (3e8a91d, 0a4c189): done
 
 ForgeCam/Vise.lean adds 7 theorems (41 in all).

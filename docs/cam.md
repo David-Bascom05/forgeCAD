@@ -101,8 +101,17 @@ ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|thread_mill), s
 blocking[] {op, why}      fixes[] {op, fix}      suggestions[] {kind: NeedTool, op, why}
 programs[] {name, post, lines, round_trip, certified (full | except G5 (unchecked: no `at:`) | no),
            error | null}
-leftover   {computed, rule, regions[] {setup, z, boxes, why (uncut | held by fixture)}}: decided at the
-           end of each chain of setups (a setup another continues with `from:` hands its stock on)
+leftover   {computed, rule, regions[] {setup, z, boxes, why, r, below}}: decided at the end of each
+           chain of setups (a setup another continues with `from:` hands its stock on). `why`, each
+           decided exactly, else "uncut" (which claims nothing):
+           - "held by fixture": in the jaws' grip, within the fixture's clearance of a piece;
+           - "below every tool tip": the band's top is at or under `below`, the lowest tip of
+             every posted move of the setup (a setup that continues none);
+           - "tool radius": at the band's own section, no disk of radius `r` (the chain's smallest
+             tool) inside the free region reaches it (inside corners, narrow slots). Computed as
+             the opening at r − 1e-6 grown back by r + 1e-6, a superset of the opening by r over
+             the offsets' 2⁻³² mm grid rounding; no claim where the centres' region has a
+             one-dimensional part
 scope      what is proven and what is not
 ```
 

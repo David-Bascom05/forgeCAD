@@ -146,6 +146,8 @@ pub struct OpOut {
     stock_before: Option<forge_cam::stock::InProcess>,
     /// What the op provably clears: (region, or the whole box; its final floor).
     voids: Vec<(Option<Region>, f64)>,
+    /// The lowest tool tip of its posted paths, as the text reads back (∞ until posted).
+    pub deepest: f64,
 }
 
 pub struct ProgramOut {
@@ -167,9 +169,21 @@ pub struct Leftover {
     pub z1: f64,
     /// Each left-over region's box, xmin ymin xmax ymax.
     pub boxes: Vec<[f64; 4]>,
-    /// "held by fixture" (the band is within the jaws' grip: no op of this setup may reach it)
-    /// or "uncut".
+    /// Why, each a fact decided exactly (else "uncut", which claims nothing):
+    /// - "held by fixture": the band is within the jaws' grip, and the region's box within the
+    ///   fixture's clearance of one of its pieces (no op of this setup may reach it);
+    /// - "below every tool tip": the band's top is at or under the lowest tip of every posted
+    ///   move of the setup (`below`), and the setup continues none: no tool body went into it;
+    /// - "tool radius": at the band's own section height, no disk of radius `r` (the smallest
+    ///   tool of the chain) inside the free region (the stock's box grown, less the part's
+    ///   section) meets the region: no tool of that radius or more can reach it there (inside
+    ///   corners, slots narrower than the tool);
+    /// - "uncut".
     pub why: &'static str,
+    /// For "tool radius": the radius.
+    pub r: Option<f64>,
+    /// For "below every tool tip": the lowest tip.
+    pub below: Option<f64>,
 }
 
 pub struct Cam {
@@ -534,6 +548,28 @@ impl Cam {
                 .map(|o| o.leave)
                 .fold(0.0, f64::max);
             let grow = delta + s.tol;
+            // the lowest posted tip of the setup's ops (a setup continuing none: an earlier one,
+            // turned over, could have cut from the other side); none if an op with a path was
+            // not posted
+            let below = if chain.len() == 1 {
+                let mut d = f64::INFINITY;
+                let mut all = true;
+                for o in self.ops.iter().filter(|o| o.setup == si && !o.paths.is_empty()) {
+                    all &= o.deepest.is_finite();
+                    d = d.min(o.deepest);
+                }
+                if all && d.is_finite() { Some(d) } else { None }
+            } else {
+                None
+            };
+            // the smallest tool of the chain: half its cutting diameter
+            let rmin = self
+                .ops
+                .iter()
+                .filter(|o| chain.contains(&o.setup))
+                .flat_map(|o| o.paths.iter().map(|p| 0.5 * self.tools[p.tool].tool.dc))
+                .fold(None, |m: Option<f64>, r| Some(m.map_or(r, |m| m.min(r))))
+                .filter(|r| *r > 0.0);
             let mut zs = s.ip.levels();
             for f in &part.faces {
                 if let Some(forge_cam_geom::slab::Prism::Flat { z, .. }) = &f.prism {
@@ -578,7 +614,7 @@ impl Cam {
                             if std::env::var("FORGE_CAM_DEBUG").is_ok() {
                                 eprintln!("G4 band {w:?}: section at {zp}, grown {g}");
                             }
-                            found = Some((sec, g));
+                            found = Some((sec, g, zp));
                             break;
                         }
                         Err(forge_cam::section::SectionError::Empty) => {}
@@ -590,8 +626,12 @@ impl Cam {
                         }
                     }
                 }
+                // the section at the band's own height, for the tool-radius reason
+                let own = found
+                    .as_ref()
+                    .and_then(|(sec, _, zp)| if *zp == zm { Some(sec.clone()) } else { None });
                 let left = match found {
-                    Some((sec, g)) => match forge_cam_geom::offset::offset(&sec, -g) {
+                    Some((sec, g, _)) => match forge_cam_geom::offset::offset(&sec, -g) {
                         Ok((grown, _)) => forge_cam_geom::boolean::boolean(
                             &mat,
                             &forge_cam_geom::boolean::region_of(&grown),
@@ -617,29 +657,30 @@ impl Cam {
                 }
                 match left {
                     Ok(ls) if !ls.is_empty() => {
-                        let boxes = ls
-                            .iter()
-                            .map(|l| {
-                                let mut b =
-                                    [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
-                                for sg in &l.segs {
-                                    for p in [sg.start(), sg.end()] {
-                                        b = [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)];
+                        let bx = |ls: &[forge_cam_geom::offset::OLoop]| -> Vec<[f64; 4]> {
+                            ls.iter()
+                                .map(|l| {
+                                    let mut b =
+                                        [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+                                    for sg in &l.segs {
+                                        for p in [sg.start(), sg.end()] {
+                                            b = [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)];
+                                        }
+                                        // an arc may bulge past its ends: its circle's box bounds it
+                                        if let Seg::Arc { a, c, .. } = *sg {
+                                            let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                                            b = [
+                                                b[0].min(c.x - r),
+                                                b[1].min(c.y - r),
+                                                b[2].max(c.x + r),
+                                                b[3].max(c.y + r),
+                                            ];
+                                        }
                                     }
-                                    // an arc may bulge past its ends: its circle's box bounds it
-                                    if let Seg::Arc { a, c, .. } = *sg {
-                                        let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
-                                        b = [
-                                            b[0].min(c.x - r),
-                                            b[1].min(c.y - r),
-                                            b[2].max(c.x + r),
-                                            b[3].max(c.y + r),
-                                        ];
-                                    }
-                                }
-                                b
-                            })
-                            .collect();
+                                    b
+                                })
+                                .collect()
+                        };
                         // held by the fixture: under the jaws' top, and within the fixture's
                         // clearance of one of its pieces (where no tool may go)
                         let held = |b: &[f64; 4]| match &s.fixture {
@@ -654,10 +695,29 @@ impl Cam {
                             }),
                             _ => false,
                         };
-                        let boxes: Vec<[f64; 4]> = boxes;
-                        let (hb, ub): (Vec<[f64; 4]>, Vec<[f64; 4]>) =
-                            boxes.into_iter().partition(|b| held(b));
-                        for (boxes, why) in [(hb, "held by fixture"), (ub, "uncut")] {
+                        // held, by each loop's box; the rest classified as a region
+                        let (hl, ul): (Vec<_>, Vec<_>) = ls
+                            .into_iter()
+                            .partition(|l| held(&bx(std::slice::from_ref(l))[0]));
+                        let mut out: Vec<(Vec<[f64; 4]>, &'static str, Option<f64>, Option<f64>)> =
+                            vec![(bx(&hl), "held by fixture", None, None)];
+                        if below.is_some_and(|d| w[1] <= d) {
+                            out.push((bx(&ul), "below every tool tip", None, below));
+                        } else {
+                            match (rmin, &own) {
+                                (Some(r), Some(sec)) if !ul.is_empty() => {
+                                    match tool_radius_split(&s.ip, sec, r, &ul) {
+                                        Some((reach, not)) => {
+                                            out.push((bx(&reach), "uncut", None, None));
+                                            out.push((bx(&not), "tool radius", Some(r), None));
+                                        }
+                                        None => out.push((bx(&ul), "uncut", None, None)),
+                                    }
+                                }
+                                _ => out.push((bx(&ul), "uncut", None, None)),
+                            }
+                        }
+                        for (boxes, why, r, below) in out {
                             if !boxes.is_empty() {
                                 self.leftover.push(Leftover {
                                     setup: si,
@@ -665,6 +725,8 @@ impl Cam {
                                     z1: w[1],
                                     boxes,
                                     why,
+                                    r,
+                                    below,
                                 });
                             }
                         }
@@ -1947,6 +2009,7 @@ impl Cam {
             removals: vec![],
             stock_before: Some(s.ip.clone()),
             voids: vec![],
+            deepest: f64::INFINITY,
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
         let paths: Result<Vec<OpPath>, String> = match kind {
@@ -2455,6 +2518,88 @@ impl Cam {
     }
 }
 
+/// G4's tool-radius reason: the leftover loops `ul` split into what a disk of radius r inside
+/// the free region F (the stock's box grown by 2r + 1, less the part's section `sec`) can meet,
+/// and the rest, which none can. Computed as O = (F ⊖ B_{r−m}) ⊕ B_{r+m}, m = 1e-6 mm, which
+/// contains the opening (F ⊖ B_r) ⊕ B_r: the offsets round their vertices to a 2⁻³² mm grid
+/// (offset::GRID), moving the loops by far less than m, so a centre at depth ≥ r is inside the
+/// first offset, and its disk inside the second. The rest, L ∖ O, then meets no disk of radius r
+/// in F. None (no claim) when an offset fails, or the centres' region has a one-dimensional
+/// part (a there-and-back piece: a slot of width exactly 2(r − m)), which a region cannot hold.
+fn tool_radius_split(
+    ip: &forge_cam::stock::InProcess,
+    sec: &Region,
+    r: f64,
+    ul: &[forge_cam_geom::offset::OLoop],
+) -> Option<(
+    Vec<forge_cam_geom::offset::OLoop>,
+    Vec<forge_cam_geom::offset::OLoop>,
+)> {
+    use forge_cam_geom::boolean::{Op, boolean, region_of};
+    use forge_cam_geom::offset::offset;
+    const M: f64 = 1e-6;
+    if !(r > 2.0 * M) {
+        return None;
+    }
+    let g = 2.0 * r + 1.0;
+    let (x0, y0, x1, y1) = (ip.min[0] - g, ip.min[1] - g, ip.max[0] + g, ip.max[1] + g);
+    let (pa, pb, pc, pd) = (p2(x0, y0), p2(x1, y0), p2(x1, y1), p2(x0, y1));
+    let bx = Region {
+        loops: vec![Loop {
+            segs: vec![
+                Seg::Line { a: pa, b: pb },
+                Seg::Line { a: pb, b: pc },
+                Seg::Line { a: pc, b: pd },
+                Seg::Line { a: pd, b: pa },
+            ],
+        }],
+    };
+    let free = region_of(&boolean(&bx, sec, Op::Diff).ok()?);
+    let (c, _) = offset(&free, r - M).ok()?;
+    // a piece whose reverse is also a piece: a one-dimensional part
+    let segs: Vec<Seg> = c.iter().flat_map(|l| l.segs.iter().copied()).collect();
+    for sg in &segs {
+        let rv = sg.reversed();
+        if segs.iter().any(|t| *t == rv) {
+            return None;
+        }
+    }
+    let (pts, rest): (Vec<_>, Vec<_>) = c
+        .into_iter()
+        .partition(|l| l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b));
+    let mut open: Option<Region> = None;
+    if !rest.is_empty() {
+        let (o, _) = offset(&region_of(&rest), -(r + M)).ok()?;
+        open = Some(region_of(&o));
+    }
+    for l in pts {
+        let c = l.segs[0].start();
+        let a = p2(c.x + r + M, c.y);
+        let disk = Region {
+            loops: vec![Loop {
+                segs: vec![Seg::Arc {
+                    a,
+                    b: a,
+                    c,
+                    ccw: true,
+                }],
+            }],
+        };
+        open = Some(match open {
+            None => disk,
+            Some(o) => region_of(&boolean(&o, &disk, Op::Union).ok()?),
+        });
+    }
+    let lr = region_of(ul);
+    match open {
+        None => Some((vec![], ul.to_vec())),
+        Some(o) => Some((
+            boolean(&lr, &o, Op::Inter).ok()?,
+            boolean(&lr, &o, Op::Diff).ok()?,
+        )),
+    }
+}
+
 /// The opening of a region by a disc of radius r, (R ⊖ B_r) ⊕ B_r: what a pocket with
 /// stepover ≤ r provably clears.
 /// A flat face's trim (its pieces, loop after loop) as a region: each loop closes where a piece
@@ -2824,6 +2969,7 @@ impl Cam {
                 op.length_rapid,
                 op.time_s,
             ) = (0, 0, 0, 0.0, 0.0, 0.0);
+            op.deepest = f64::INFINITY;
         }
         recs.push(Rec::SpindleStop);
         recs.push(Rec::Coolant(forge_post::Coolant::Off));
@@ -2953,6 +3099,14 @@ impl Cam {
                 rpm: path.rpm,
                 coolant: path.coolant,
             };
+            // the lowest tip: moves are lines, arcs and helices, their heights linear between
+            // their ends, so the least end is the least height (cycles are read back as lines)
+            let mut low = posted.start[2];
+            for m in &posted.moves {
+                if let PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } = *m {
+                    low = low.min(to[2]);
+                }
+            }
             let tool = self.tools[path.tool].clone();
             let part = &self.parts[s.part];
             // the stock at each move: the op's start, then after each completed level (a
@@ -3086,6 +3240,7 @@ impl Cam {
                 .filter_map(|c| Some(ends.get(c.move_index)?[2].min(ends.get(c.move_index + 1)?[2])))
                 .fold(f64::INFINITY, f64::min);
             let op = &mut self.ops[oi];
+            op.deepest = op.deepest.min(low);
             op.moves += posted.moves.len();
             op.pairs += sum.pairs;
             op.cells += sum.cells;
@@ -3420,6 +3575,8 @@ impl Cam {
                                         ("z", Json::Arr(vec![Json::Num(l.z0), Json::Num(l.z1)])),
                                         ("boxes", Json::Arr(l.boxes.iter().map(|b| Json::Arr(b.iter().map(|x| Json::Num(*x)).collect())).collect())),
                                         ("why", Json::Str(l.why.into())),
+                                        ("r", l.r.map_or(Json::Null, Json::Num)),
+                                        ("below", l.below.map_or(Json::Null, Json::Num)),
                                     ])
                                 })
                                 .collect(),
