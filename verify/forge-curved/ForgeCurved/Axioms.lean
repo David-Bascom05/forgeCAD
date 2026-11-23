@@ -155,3 +155,4 @@ import ForgeCurved
 #print axioms ForgeCurved.BodyModel.exactOf_refines
 #print axioms ForgeCurved.VertexScreen.localGood_of_screen
 #print axioms ForgeCurved.VertexScreen.det3_independent
+#print axioms ForgeCurved.BodyModel.mem_denote_zone
