@@ -873,6 +873,7 @@ rod = extrude(s, 10)
         starts: vec![],
         setbacks: vec![],
         only: false,
+        conic: None,
     });
     let mut ids = b.ids.clone();
     ids.push(9999);
@@ -887,6 +888,7 @@ rod = extrude(s, 10)
         starts: vec![],
         setbacks: vec![],
         only: false,
+        conic: None,
     });
     let single = part
         .regenerate_solids_ids(Some(&ids))

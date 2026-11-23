@@ -444,6 +444,8 @@ class Prog:
             more = ""
             if k == "chamfer" and getattr(st, "corner", None):
                 more = f', corner: "{st.corner}"'
+            if k == "fillet" and getattr(st, "conic", None) is not None:
+                more = f", conic: ratio({st.conic})"
             self.out.append(f"{i} = {k}({st.sel}, {st.size}{more})")
         elif k == "draft":
             self.out.append(f"{i} = draft({st.sel}, angle: {st.angle}deg, neutral: {self.plane(st.plane)})")

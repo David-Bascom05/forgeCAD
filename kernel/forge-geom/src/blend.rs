@@ -649,7 +649,180 @@ pub struct Blend {
     pub var: Option<Arc<VarBlend>>,
 }
 
+/// A conic fillet's cross-section at one place along a blend: the rational quadratic from the
+/// ball's foot on `a` through the apex to its foot on `b`, middle weight w = rho / (1 - rho).
+/// The apex is where the faces' tangent planes at the feet meet in the ball's section plane:
+/// c + (ua + ub) / (1 + cos phi), ua and ub from the centre to the feet, phi the angle between
+/// them. With w = cos(phi / 2) this is the ball's arc itself.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ConicSection {
+    pub foot_a: Point3,
+    pub apex: Point3,
+    pub foot_b: Point3,
+    pub w: f64,
+}
+
+impl ConicSection {
+    /// From the ball (centre c) and its feet; None where the feet are opposite or coincide (no
+    /// apex: the faces are parallel there, or tangent).
+    pub fn from_ball(c: Point3, foot_a: Point3, foot_b: Point3, w: f64) -> Option<ConicSection> {
+        let (ua, ub) = (foot_a - c, foot_b - c);
+        let rr = ua.length() * ub.length();
+        if rr <= 0.0 {
+            return None;
+        }
+        let cos = ua.dot(ub) / rr;
+        // the faces turn by less than LINEAR over the radius, or nearly fold back
+        if !(cos > -1.0 + 1e-9 && 1.0 - cos > 1e-12) {
+            return None;
+        }
+        let apex = c + (ua + ub) / (1.0 + cos);
+        Some(ConicSection {
+            foot_a,
+            apex,
+            foot_b,
+            w,
+        })
+    }
+    /// The section as one rational quadratic Bezier piece over [0, 1], foot on a at 0.
+    pub fn spline(&self) -> Option<crate::spline::Spline> {
+        let h = |p: Point3, w: f64| [p.x * w, p.y * w, p.z * w, w];
+        crate::spline::Spline::from_pieces(
+            2,
+            vec![0.0, 1.0],
+            vec![h(self.foot_a, 1.0), h(self.apex, self.w), h(self.foot_b, 1.0)],
+        )
+    }
+    /// p's barycentric coordinates in the triangle (foot on a, apex, foot on b), in its plane. A
+    /// point of the conic lies on the section's arc exactly where all three are at least zero.
+    pub fn barycentric(&self, p: Point3) -> [f64; 3] {
+        let (e1, e2, q) = (
+            self.apex - self.foot_a,
+            self.foot_b - self.foot_a,
+            p - self.foot_a,
+        );
+        let (d11, d12, d22) = (e1.dot(e1), e1.dot(e2), e2.dot(e2));
+        let (q1, q2) = (q.dot(e1), q.dot(e2));
+        let det = d11 * d22 - d12 * d12;
+        let l1 = (d22 * q1 - d12 * q2) / det;
+        let l2 = (d11 * q2 - d12 * q1) / det;
+        [1.0 - l1 - l2, l1, l2]
+    }
+}
+
+/// The middle weight of a conic section of shoulder ratio rho (the section's point on the line
+/// from the chord's middle to the apex lies rho of the way): w = rho / (1 - rho). None outside
+/// (0, 1).
+pub fn conic_weight(rho: f64) -> Option<f64> {
+    (rho > 0.0 && rho < 1.0).then(|| rho / (1.0 - rho))
+}
+
 impl Blend {
+    /// A conic blend's middle weight (`Blend::with_conic`), read off its surface: only a conic
+    /// blend's is a spline wall (its section swept or turned) or a `ConicPipe`. None for a ball's.
+    pub fn conic_weight(&self) -> Option<f64> {
+        let Surface::Procedural(p) = &self.surface else {
+            return None;
+        };
+        if !p.spline_wall() {
+            return p.as_any()?.downcast_ref::<ConicPipe>().map(|c| c.w);
+        }
+        {
+            let (_, _, _, w) = crate::spline::meet::extruded(&self.surface)
+                .map(|e| e.section().control_form())
+                .or_else(|| crate::spline::meet::spun(&self.surface).map(|s| s.section().control_form()))?;
+            // all its weights one (rho 0.5, a parabola): stored as no weights at all
+            Some(w.map_or(1.0, |w| w.get(1).copied().unwrap_or(1.0)))
+        }
+    }
+
+    /// The section at spine parameter t of a conic blend (None for a ball's arc).
+    pub fn conic_section(&self, t: f64) -> Option<ConicSection> {
+        let w = self.conic_weight()?;
+        let c = self.spine.eval(t);
+        let (fa, fb) = self.feet(t);
+        ConicSection::from_ball(c, fa, fb, w)
+    }
+
+    /// The same blend with a conic cross-section of weight w between the ball's feet
+    /// (`ConicSection`): springs, spine and radius stay. Exact where the section is the same all
+    /// along: a line spine gives the conic swept straight (over `along`, the spine's stretch it
+    /// must reach), a circle spine the conic turned about the circle's axis, any other spine the
+    /// conic carried in the ball pipe's section frame (`ConicPipe`, bounding `along`). None for a
+    /// variable radius, a pipe resting on a rail, or a section with no apex.
+    pub fn with_conic(&self, w: f64, along: Interval) -> Option<Blend> {
+        if self.var.is_some() || !(w > 0.0 && w.is_finite()) {
+            return None;
+        }
+        let mut out = self.clone();
+        let t0 = match &self.spine {
+            Curve::Line(_) | Curve::Circle(_) => 0.0,
+            // any other spine: the pipe's section frame carries the conic (`ConicPipe`)
+            _ => {
+                let Surface::Procedural(p) = &self.surface else {
+                    return None;
+                };
+                out.surface = Surface::Procedural(Proc(Arc::new(ConicPipe::new(p, w, along)?)));
+                return Some(out);
+            }
+        };
+        let (fa, fb) = self.feet(t0);
+        let sec = ConicSection::from_ball(self.spine.eval(t0), fa, fb, w)?;
+        let c0 = self.spine.eval(t0);
+        let section = sec.spline()?;
+        // the natural normal points away from the spine, as the ball's does: at the section's
+        // middle, away from c0
+        let away = |s: &Surface| {
+            let m = section.point(0.5);
+            let uv = s.project(m);
+            s.normal(uv).is_some_and(|n| n.dot(m - c0) > 0.0)
+        };
+        let surface = match &self.spine {
+            Curve::Line(l) => {
+                let x = sec.foot_a - c0;
+                let frame = Frame::from_zx(c0, l.dir, x)?;
+                let local = Arc::new(section.mapped(|p| frame.point_to_local(p)));
+                let s = crate::spline::Extruded::new(frame, local.clone(), along)?.surface();
+                if away(&s) {
+                    s
+                } else {
+                    let flipped = Arc::new(local.reversed());
+                    crate::spline::Extruded::new(frame, flipped, along)?.surface()
+                }
+            }
+            Curve::Circle(k) => {
+                // the section in the frame's xz half plane at angle 0, as (radius, height)
+                let f = &k.frame;
+                let rh = |p: Point3| {
+                    let l = f.point_to_local(p);
+                    Point3::new(l.x, l.z, 0.0)
+                };
+                let local = Arc::new(section.mapped(rh));
+                let s = crate::spline::Spun::new(*f, local.clone())?.surface();
+                if away(&s) {
+                    s
+                } else {
+                    crate::spline::Spun::new(*f, Arc::new(local.reversed()))?.surface()
+                }
+            }
+            _ => return None,
+        };
+        out.surface = surface;
+        Some(out)
+    }
+
+    /// The cross-section at spine parameter t as an edge's curve and range, from the foot on `a`
+    /// to the foot on `b`: the ball's circle (as `section`) or the conic.
+    pub fn section_curve(&self, t: f64) -> Option<(Curve, Interval)> {
+        if let Some(sec) = self.conic_section(t) {
+            let s = sec.spline()?;
+            let d = s.domain();
+            return Some((crate::spline::SplineCurve::curve(Arc::new(s), d), d));
+        }
+        let (circle, angle) = self.section(t)?;
+        Some((Curve::Circle(circle), Interval::new(0.0, angle)))
+    }
+
     /// The blend whose spine passes nearest `near`, or None where the offsets
     /// do not meet there.
     pub fn new(a: &Surface, b: &Surface, da: f64, db: f64, near: Point3, region: Box3) -> Option<Blend> {
@@ -1842,10 +2015,451 @@ impl Procedural for Pipe {
     }
 }
 
+/// A conic fillet's surface along a spine of no closed form: at each spine point the ball's
+/// section circle (a `Pipe`'s) gives way to the rational quadratic between the same feet,
+/// through the apex where the faces' tangent planes meet in the section's plane. In the pipe's
+/// section frame (e1 towards the first foot, e2 towards the second, theta between them) and in
+/// units of the radius its control points are (1, 0), (1, tan(theta / 2)), (cos theta, sin theta),
+/// middle weight w: the section a function of theta and v alone. u is the spine parameter, v runs
+/// from the first foot (0) to the second (1), as the pipe's.
+#[derive(Debug)]
+pub struct ConicPipe {
+    pipe: Pipe,
+    w: f64,
+    /// A bound on theta over the whole spine, so the apex's distance r / cos(theta / 2) bounds
+    /// every section (`bbox`).
+    theta_max: f64,
+    /// `smooth`'s surface, made on first use: the same conic over the pipe's smooth one.
+    smooth: OnceLock<Option<Surface>>,
+}
+
+/// The section in the (e1, e2) frame, in units of the radius, at angle th and parameter v: the
+/// point, d/dv, d2/dv2, d/dth, d2/dv dth.
+struct ConicAt {
+    q: Vec2,
+    qv: Vec2,
+    qvv: Vec2,
+    qt: Vec2,
+    qvt: Vec2,
+}
+
+/// What the section takes from its angle: sin, cos and tan of half of it.
+#[derive(Clone, Copy)]
+struct Turn {
+    s: f64,
+    k: f64,
+    t: f64,
+}
+
+fn turn(th: f64) -> Turn {
+    let (s, k) = dmath::sin_cos(th);
+    Turn {
+        s,
+        k,
+        t: s / (1.0 + k),
+    }
+}
+
+fn conic_at(w: f64, th: Turn, v: f64) -> ConicAt {
+    let Turn { s, k, t } = th;
+    // homogeneous control points (x w, y w, w)
+    let h = [[1.0, 0.0, 1.0], [w, w * t, w], [k, s, 1.0]];
+    let b = [(1.0 - v) * (1.0 - v), 2.0 * v * (1.0 - v), v * v];
+    let db = [-2.0 * (1.0 - v), 2.0 - 4.0 * v, 2.0 * v];
+    let ddb = [2.0, -4.0, 2.0];
+    let sum = |c: &[f64; 3], i: usize| c[0] * h[0][i] + c[1] * h[1][i] + c[2] * h[2][i];
+    let (n, d) = (Vec2::new(sum(&b, 0), sum(&b, 1)), sum(&b, 2));
+    let (n1, d1) = (Vec2::new(sum(&db, 0), sum(&db, 1)), sum(&db, 2));
+    let (n2, d2) = (Vec2::new(sum(&ddb, 0), sum(&ddb, 1)), sum(&ddb, 2));
+    let q = n / d;
+    let qv = (n1 - q * d1) / d;
+    let qvv = (n2 - qv * (2.0 * d1) - q * d2) / d;
+    // only the middle and last points turn with theta, and no weight does
+    let p1t = Vec2::new(0.0, w * 0.5 * (1.0 + t * t));
+    let p2t = Vec2::new(-s, k);
+    let nt = p1t * b[1] + p2t * b[2];
+    let nvt = p1t * db[1] + p2t * db[2];
+    let qt = nt / d;
+    let qvt = (nvt - qt * d1) / d;
+    ConicAt { q, qv, qvv, qt, qvt }
+}
+
+impl ConicPipe {
+    /// The conic of weight w over `pipe`'s feet; None where the pipe rests on a rail (a rim) or
+    /// its contacts come within a degree of folding back on each other (no apex near enough to
+    /// bound), anywhere along `range` of its spine, sampled with each sample's slope.
+    pub fn new(pipe: &Proc, w: f64, range: Interval) -> Option<ConicPipe> {
+        let p = pipe.as_any()?.downcast_ref::<Pipe>()?;
+        if p.rail_side().is_some() || !(w > 0.0 && w.is_finite()) || !range.width().is_finite() {
+            return None;
+        }
+        let pipe = Pipe {
+            spine: p.spine.clone(),
+            first: p.first.clone(),
+            second: p.second.clone(),
+            d_first: p.d_first,
+            d_second: p.d_second,
+            radius: p.radius,
+            near: p.near,
+            smooth: OnceLock::new(),
+        };
+        let n = 256;
+        let step = range.width() / n as f64;
+        let mut theta_max: f64 = 0.0;
+        for i in 0..=n {
+            let u = range.lo + step * i as f64;
+            let (_, _, _, th) = pipe.cross(u)?;
+            // the next sample's angle, as far as this one's slope takes it, too
+            let (_, _, _, th2) = pipe.cross((u + 1e-6 * step.max(1e-9)).min(range.hi + step))?;
+            let slope = (th2 - th).abs() / (1e-6 * step.max(1e-9));
+            theta_max = theta_max.max(th.abs() + slope * step);
+        }
+        let fold = dmath::PI - dmath::PI / 180.0;
+        (theta_max < fold).then_some(ConicPipe {
+            pipe,
+            w,
+            theta_max,
+            smooth: OnceLock::new(),
+        })
+    }
+
+    /// The same conic over another pipe of these feet (its spine walked another way).
+    fn over(p: &Pipe, w: f64, theta_max: f64) -> ConicPipe {
+        ConicPipe {
+            pipe: Pipe {
+                spine: p.spine.clone(),
+                first: p.first.clone(),
+                second: p.second.clone(),
+                d_first: p.d_first,
+                d_second: p.d_second,
+                radius: p.radius,
+                near: p.near,
+                smooth: OnceLock::new(),
+            },
+            w,
+            theta_max,
+            smooth: OnceLock::new(),
+        }
+    }
+
+    /// The point at (u, v), from the pipe's section frame at u.
+    fn at(&self, (c, e1, e2, th): (Point3, Vec3, Vec3, f64), v: f64) -> Point3 {
+        let q = conic_at(self.w, turn(th), v).q;
+        c + (e1 * q.x + e2 * q.y) * self.pipe.radius
+    }
+
+    /// The point and derivatives at (u, v); `second`: d2/du2 too (two more of the pipe's frames).
+    fn derivs(&self, u: f64, v: f64, second: bool) -> SurfDeriv {
+        let mut out = Vec::with_capacity(1);
+        self.column_at(u, &[v], second, &mut out);
+        out.pop().expect("one derivative")
+    }
+
+    /// The derivatives at u and each of `vs`, the pipe's section frame worked out once for them all.
+    fn column_at(&self, u: f64, vs: &[f64], second: bool, out: &mut Vec<SurfDeriv>) {
+        let r = self.pipe.radius;
+        let Some((c, e1, e2, th)) = self.pipe.cross(u) else {
+            let p = self.pipe.spine.eval(u);
+            out.extend(vs.iter().map(|_| SurfDeriv {
+                p,
+                du: Vec3::ZERO,
+                dv: Vec3::ZERO,
+                duu: Vec3::ZERO,
+                duv: Vec3::ZERO,
+                dvv: Vec3::ZERO,
+            }));
+            return;
+        };
+        // a point's d/du from a moving frame, at v of the conic `a` there
+        let du_of = |m: &Moving, a: &ConicAt| {
+            m.dc + (m.e1[1] * a.q.x + m.e2[1] * a.q.y) * r
+                + (m.e1[0] * a.qt.x + m.e2[0] * a.qt.y) * (r * m.th[1])
+        };
+        // along u: exact from the pipe's moving frame where the spine's derivative is exact, else
+        // differences of the exact point (as the pipe's own)
+        if self.pipe.spine.exact_d1()
+            && let Some(m) = self.pipe.moving(u)
+        {
+            let h = 1e-5 * m.dc.length().max(1e-9).recip().min(1.0);
+            let (mp, mm) = if second {
+                (self.pipe.moving(u + h), self.pipe.moving(u - h))
+            } else {
+                (None, None)
+            };
+            let (tn, tp, tm) = (
+                turn(th),
+                mp.as_ref().map(|m| turn(m.th[0])),
+                mm.as_ref().map(|m| turn(m.th[0])),
+            );
+            for &v in vs {
+                let a = conic_at(self.w, tn, v);
+                let duu = match (&mp, &mm, tp, tm) {
+                    (Some(p), Some(q), Some(tp), Some(tm)) => {
+                        let (ap, aq) = (conic_at(self.w, tp, v), conic_at(self.w, tm, v));
+                        (du_of(p, &ap) - du_of(q, &aq)) / (2.0 * h)
+                    }
+                    _ => Vec3::ZERO,
+                };
+                out.push(SurfDeriv {
+                    p: c + (e1 * a.q.x + e2 * a.q.y) * r,
+                    du: du_of(&m, &a),
+                    dv: (e1 * a.qv.x + e2 * a.qv.y) * r,
+                    duu,
+                    duv: (m.e1[1] * a.qv.x + m.e2[1] * a.qv.y) * r
+                        + (e1 * a.qvt.x + e2 * a.qvt.y) * (r * m.th[1]),
+                    dvv: (e1 * a.qvv.x + e2 * a.qvv.y) * r,
+                });
+            }
+            return;
+        }
+        let h = 1e-4 * self.pipe.spine.deriv(u).d1.length().max(1e-9).recip().min(1.0);
+        let (xp, xm) = (self.pipe.cross(u + h), self.pipe.cross(u - h));
+        let side = |x: Option<(Point3, Vec3, Vec3, f64)>, u: f64, v: f64| match x {
+            Some(x @ (_, e1, e2, th)) => {
+                let a = conic_at(self.w, turn(th), v);
+                (self.at(x, v), (e1 * a.qv.x + e2 * a.qv.y) * r)
+            }
+            None => (self.pipe.spine.eval(u), Vec3::ZERO),
+        };
+        let tn = turn(th);
+        for &v in vs {
+            let a = conic_at(self.w, tn, v);
+            let p = c + (e1 * a.q.x + e2 * a.q.y) * r;
+            let ((pp, vp), (pm, vm)) = (side(xp, u + h, v), side(xm, u - h, v));
+            out.push(SurfDeriv {
+                p,
+                du: (pp - pm) / (2.0 * h),
+                dv: (e1 * a.qv.x + e2 * a.qv.y) * r,
+                duu: (pp + pm.to_vec() - p.to_vec() * 2.0).to_vec() / (h * h),
+                duv: (vp - vm) / (2.0 * h),
+                dvv: (e1 * a.qvv.x + e2 * a.qvv.y) * r,
+            });
+        }
+    }
+
+    /// v of the section's point nearest q (in units of the radius, in the section's frame), by
+    /// Newton from where q's barycentric coordinates put it, kept in [-1, 2] (the domain).
+    fn section_v(&self, th: f64, q: Vec2) -> f64 {
+        let tn = turn(th);
+        let Turn { s, k, t } = tn;
+        let (p0, p1, p2) = (Vec2::new(1.0, 0.0), Vec2::new(1.0, t), Vec2::new(k, s));
+        let (e1, e2, d) = (p1 - p0, p2 - p0, q - p0);
+        let (d11, d12, d22) = (e1.dot(e1), e1.dot(e2), e2.dot(e2));
+        let det = d11 * d22 - d12 * d12;
+        let l1 = (d22 * d.dot(e1) - d12 * d.dot(e2)) / det;
+        let l2 = (d11 * d.dot(e2) - d12 * d.dot(e1)) / det;
+        let l0 = 1.0 - l1 - l2;
+        // on the curve v / (1 - v) = sqrt(l2 / l0)
+        let (a, b) = (l0.max(0.0).sqrt(), l2.max(0.0).sqrt());
+        let mut v = if a + b > 0.0 { b / (a + b) } else { 0.5 };
+        for _ in 0..16 {
+            let c = conic_at(self.w, tn, v);
+            let g = (c.q - q).dot(c.qv);
+            let gg = c.qv.dot(c.qv) + (c.q - q).dot(c.qvv);
+            if gg <= 0.0 || !gg.is_finite() {
+                break;
+            }
+            let step = g / gg;
+            v = (v - step).clamp(-1.0, 2.0);
+            if step.abs() <= 1e-15 {
+                break;
+            }
+        }
+        v
+    }
+
+    /// The parameters of the surface's point nearest p: the spine point whose normal plane holds p
+    /// (every section lies in its spine point's normal plane), the section's nearest v there, then
+    /// Newton on both.
+    fn nearest(&self, p: Point3, u0: f64) -> Point2 {
+        let mut uv = match self.pipe.cross(u0) {
+            Some(x @ (c, e1, e2, th)) => {
+                let d = (p - c) / self.pipe.radius;
+                let v = self.section_v(th, Vec2::new(d.dot(e1), d.dot(e2)));
+                // a point of the surface lies in its spine point's normal plane, on that section:
+                // found already
+                if self.at(x, v).distance(p) <= 1e-3 * tol::LINEAR {
+                    return Point2::new(u0, v);
+                }
+                Point2::new(u0, v)
+            }
+            None => Point2::new(u0, 0.0),
+        };
+        // Gauss-Newton: quadratic for a point of the surface, and the nearest point's condition
+        // (p - S square to du and dv) is what it settles on anywhere
+        for _ in 0..12 {
+            let d = self.derivs(uv.x, uv.y, false);
+            let e = d.p - p;
+            let (gu, gv) = (e.dot(d.du), e.dot(d.dv));
+            let (a, b, c) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
+            let det = a * c - b * b;
+            if det <= 0.0 || !det.is_finite() {
+                break;
+            }
+            let (su, sv) = ((c * gu - b * gv) / det, (a * gv - b * gu) / det);
+            uv = Point2::new(uv.x - su, (uv.y - sv).clamp(-1.0, 2.0));
+            if su.abs() + sv.abs() <= 1e-14 * (1.0 + uv.x.abs()) {
+                break;
+            }
+        }
+        uv
+    }
+
+    fn foot(&self, p: Point3) -> (Point2, SurfDeriv) {
+        let uv = self.nearest(p, spine_closest(&self.pipe.spine, p));
+        (uv, self.derivs(uv.x, uv.y, false))
+    }
+}
+
+impl Procedural for ConicPipe {
+    fn kind(&self) -> &'static str {
+        "conic blend"
+    }
+    fn deriv(&self, uv: Point2) -> SurfDeriv {
+        self.derivs(uv.x, uv.y, true)
+    }
+    fn deriv1(&self, uv: Point2) -> SurfDeriv {
+        self.derivs(uv.x, uv.y, false)
+    }
+    fn swept(&self) -> bool {
+        true
+    }
+    fn column(&self, u: f64, vs: &[f64], out: &mut Vec<Point3>) {
+        match self.pipe.cross(u) {
+            Some((c, e1, e2, th)) => {
+                let (tn, r) = (turn(th), self.pipe.radius);
+                out.extend(vs.iter().map(|&v| {
+                    let q = conic_at(self.w, tn, v).q;
+                    c + (e1 * q.x + e2 * q.y) * r
+                }))
+            }
+            None => out.extend(vs.iter().map(|_| self.pipe.spine.eval(u))),
+        }
+    }
+    fn column_derivs(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
+        self.column_at(u, vs, true, out)
+    }
+    fn column_d1(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
+        self.column_at(u, vs, false, out)
+    }
+    fn point(&self, uv: Point2) -> Point3 {
+        match self.pipe.cross(uv.x) {
+            Some(x) => self.at(x, uv.y),
+            None => self.pipe.spine.eval(uv.x),
+        }
+    }
+    fn exact_d1(&self) -> bool {
+        self.pipe.spine.exact_d1()
+    }
+    fn domain(&self) -> Domain2 {
+        Procedural::domain(&self.pipe)
+    }
+    fn project(&self, p: Point3) -> Point2 {
+        self.foot(p).0
+    }
+    fn project_near(&self, p: Point3, near: Point2) -> Point2 {
+        let u =
+            spine_refine(&self.pipe.spine, p, near.x).unwrap_or_else(|| spine_closest(&self.pipe.spine, p));
+        self.nearest(p, u)
+    }
+    fn bbox(&self, uv: Box2) -> Box3 {
+        // every section lies in the triangle of its feet and apex, the apex r / cos(theta / 2)
+        // from the spine at most
+        let reach = self.pipe.radius / dmath::sin_cos(0.5 * self.theta_max).1;
+        self.pipe.spine.bbox(uv.u).grow(reach)
+    }
+    /// The distance to the nearest point, signed by the natural normal (away from the spine).
+    fn implicit(&self, p: Point3) -> f64 {
+        self.implicit_gradient(p).0
+    }
+    fn gradient(&self, p: Point3) -> Vec3 {
+        self.implicit_gradient(p).1
+    }
+    fn implicit_gradient(&self, p: Point3) -> (f64, Vec3) {
+        let (_, d) = self.foot(p);
+        let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |n| n.get());
+        let e = p - d.p;
+        let dist = e.length();
+        let s = if e.dot(n) < 0.0 { -1.0 } else { 1.0 };
+        (s * dist, n)
+    }
+    fn transformed(&self, f: &Frame) -> Proc {
+        Proc(Arc::new(ConicPipe {
+            pipe: Pipe {
+                spine: self.pipe.spine.transformed(f),
+                first: self.pipe.first.transformed(f),
+                second: self.pipe.second.transformed(f),
+                d_first: self.pipe.d_first,
+                d_second: self.pipe.d_second,
+                radius: self.pipe.radius,
+                near: f.point_to_world(self.pipe.near),
+                smooth: OnceLock::new(),
+            },
+            w: self.w,
+            theta_max: self.theta_max,
+            smooth: OnceLock::new(),
+        }))
+    }
+    /// Round a traced spine: the same conic over the pipe walked by chord distance.
+    fn smooth(&self) -> Option<&Surface> {
+        self.smooth
+            .get_or_init(|| {
+                let Surface::Procedural(sp) = Procedural::smooth(&self.pipe)? else {
+                    return None;
+                };
+                let p = sp.as_any()?.downcast_ref::<Pipe>()?;
+                Some(Surface::Procedural(Proc(Arc::new(ConicPipe::over(
+                    p,
+                    self.w,
+                    self.theta_max,
+                )))))
+            })
+            .as_ref()
+    }
+    fn uv_scale(&self) -> (f64, f64) {
+        Procedural::uv_scale(&self.pipe)
+    }
+    /// The section bends tighter than the ball's arc by about the larger of w and 1 / w (at its
+    /// middle above one, at its feet below): the radius over that, about (not a bound).
+    fn mesh_radius(&self) -> f64 {
+        self.pipe.radius / self.w.max(1.0 / self.w).max(1.0)
+    }
+    fn u_kinks(&self, u: Interval) -> Vec<f64> {
+        self.pipe.spine.kinks(u)
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::surface::{Cone, Sphere};
+
+    #[test]
+    fn conic_section_is_the_arc_at_the_circle_weight_and_its_derivatives_agree() {
+        for th in [0.4, 1.2, dmath::PI / 2.0, 2.6] {
+            // w = cos(th / 2) is the ball's own arc: every point a unit from the centre, at angle v th
+            let w = dmath::cos(0.5 * th);
+            for v in [0.0, 0.3, 0.5, 0.9, 1.0] {
+                let q = conic_at(w, turn(th), v).q;
+                assert!((q.length() - 1.0).abs() <= 1e-14, "{th} {v}");
+            }
+            for w in [0.3, 1.0, 2.5] {
+                let h = 1e-6;
+                for v in [0.1, 0.5, 0.8] {
+                    let a = conic_at(w, turn(th), v);
+                    let (vp, vm) = (conic_at(w, turn(th), v + h), conic_at(w, turn(th), v - h));
+                    let (tp, tm) = (conic_at(w, turn(th + h), v), conic_at(w, turn(th - h), v));
+                    assert!(((vp.q - vm.q) / (2.0 * h) - a.qv).length() <= 1e-8);
+                    assert!(((vp.qv - vm.qv) / (2.0 * h) - a.qvv).length() <= 1e-7);
+                    assert!(((tp.q - tm.q) / (2.0 * h) - a.qt).length() <= 1e-8);
+                    assert!(((tp.qv - tm.qv) / (2.0 * h) - a.qvt).length() <= 1e-7);
+                }
+            }
+        }
+    }
 
     fn plane(o: Point3, n: Vec3) -> Surface {
         Surface::Plane(Plane::new(Frame::from_z(o, n.normalize().unwrap())))

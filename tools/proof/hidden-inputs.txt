@@ -83,9 +83,9 @@ speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|stati
 speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|thread_local|thread_local! {
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|samples: OnceLock::new(),  x 5
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|samples: OnceLock<Vec<(f64, Point3)>>,
-speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock::new(),  x 8
+speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock::new(),  x 14
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock<Option<(Curve, Arc<ChordCurve>)>>,
-speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock<Option<Surface>>,
+speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock<Option<Surface>>,  x 2
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|use std::sync::{Arc, Mutex, OnceLock};
 speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|static|static SEEN: Box<[Seen; 256]> = Box::new(
 speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|static|static SEEN: Box<[Seen]> = (0..1usize << BITS)

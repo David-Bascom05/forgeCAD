@@ -135,6 +135,9 @@ pub enum Feature {
         setbacks: Vec<(Name, Option<Name>, f64)>,
         /// Only the edges named, not the tangent chains they lie on.
         only: bool,
+        /// A conic section of this shoulder ratio rho in (0, 1) in place of the ball's arc
+        /// (`forge_ops::FilletOptions::conic`): the same feet, middle weight rho / (1 - rho).
+        conic: Option<f64>,
     },
     /// Round between two sets of faces: the edges where they meet, or the band of strip faces
     /// joining them, taken away.
@@ -1584,7 +1587,8 @@ fn modify(
             starts,
             setbacks,
             only,
-        } => apply_fillet(i, id, body, edges, starts, setbacks, *only),
+            conic,
+        } => apply_fillet(i, id, body, edges, starts, setbacks, (*only, *conic)),
         Feature::FaceFillet {
             first,
             second,
@@ -1686,7 +1690,7 @@ fn apply_fillet(
     edges: &[(Name, Radius)],
     starts: &[(Name, Name)],
     setbacks: &[(Name, Option<Name>, f64)],
-    only: bool,
+    (only, conic): (bool, Option<f64>),
 ) -> Result<Body, RegenError> {
     let body = if body.dead > 0 {
         body.compact()
@@ -1726,6 +1730,7 @@ fn apply_fillet(
             .map(|&(v, e, d)| Ok((vertex(v)?, e.map(edge).transpose()?, d)))
             .collect::<Result<_, RegenError>>()?,
         only,
+        conic,
         ..FilletOptions::default()
     };
     let first =
