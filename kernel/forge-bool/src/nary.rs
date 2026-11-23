@@ -49,47 +49,7 @@ static PICK: AtomicUsize = AtomicUsize::new(0);
 /// order. The calling thread starts alone and the others join only once the work has run long
 /// enough to pay for starting them (tens of microseconds each).
 fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
-    let threads = threads.min(n / per.max(1));
-    if threads <= 1 || n < 2 {
-        return (0..n).map(f).collect();
-    }
-    let next = AtomicUsize::new(0);
-    let work = || {
-        let mut got = Vec::new();
-        loop {
-            let i = next.fetch_add(1, Ordering::Relaxed);
-            if i >= n {
-                break got;
-            }
-            got.push((i, f(i)));
-        }
-    };
-    let parts: Vec<Vec<(usize, T)>> = std::thread::scope(|s| {
-        let start = std::time::Instant::now();
-        let mut mine = Vec::new();
-        let mut helpers = Vec::new();
-        loop {
-            let i = next.fetch_add(1, Ordering::Relaxed);
-            if i >= n {
-                break;
-            }
-            mine.push((i, f(i)));
-            if helpers.is_empty()
-                && next.load(Ordering::Relaxed) < n
-                && start.elapsed() > std::time::Duration::from_micros(200)
-            {
-                helpers = (1..threads).map(|_| s.spawn(work)).collect();
-            }
-        }
-        let mut parts = vec![mine];
-        parts.extend(helpers.into_iter().map(|w| w.join().expect("worker")));
-        parts
-    });
-    let mut out: Vec<Option<T>> = (0..n).map(|_| None).collect();
-    for (i, t) in parts.into_iter().flatten() {
-        out[i] = Some(t);
-    }
-    out.into_iter().map(|t| t.expect("every item done")).collect()
+    forge_math::par::map_adaptive(n, threads, per, f)
 }
 
 /// How far clear of a tool's boundary a point must be for its analytic solid to answer.

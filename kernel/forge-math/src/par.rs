@@ -13,6 +13,69 @@ pub fn threads() -> usize {
         .max(1)
 }
 
+/// `requested` threads, but no more than [`threads`] gives (the cores there are, or
+/// `FORGECAD_THREADS`), and at least one. Asking for more threads than cores only adds the cost
+/// of starting and switching them: 16 on 4 cores made the n-ary regen of a small part 66% slower
+/// (research/booleans/speedups.md, "Threads").
+pub fn cap(requested: usize) -> usize {
+    requested.min(threads()).max(1)
+}
+
+/// How long the calling thread works alone before [`map_adaptive`] starts helpers: past this,
+/// the work left is likely to pay for starting them (tens of microseconds each).
+pub const HELPERS_AFTER: std::time::Duration = std::time::Duration::from_micros(200);
+
+/// `f` of each of `0..n`, in order, on up to `threads` threads, each given at least `per` items.
+/// The calling thread starts alone, and the others join only once it has worked for
+/// [`HELPERS_AFTER`] with items left, so small batches never pay for threads. The answers are
+/// collected by item index: they are the same, and in the same order, whatever the thread count
+/// or the scheduling (`par_map_eq`, research/booleans/lean/Speedups.lean).
+pub fn map_adaptive<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let threads = threads.min(n / per.max(1));
+    if threads <= 1 || n < 2 {
+        return (0..n).map(f).collect();
+    }
+    let next = AtomicUsize::new(0);
+    let work = || {
+        let mut got = Vec::new();
+        loop {
+            let i = next.fetch_add(1, Ordering::Relaxed);
+            if i >= n {
+                break got;
+            }
+            got.push((i, f(i)));
+        }
+    };
+    let parts: Vec<Vec<(usize, T)>> = std::thread::scope(|s| {
+        let start = std::time::Instant::now();
+        let mut mine = Vec::new();
+        let mut helpers = Vec::new();
+        loop {
+            let i = next.fetch_add(1, Ordering::Relaxed);
+            if i >= n {
+                break;
+            }
+            mine.push((i, f(i)));
+            if helpers.is_empty() && next.load(Ordering::Relaxed) < n && start.elapsed() > HELPERS_AFTER {
+                helpers = (1..threads).map(|_| s.spawn(work)).collect();
+            }
+        }
+        let mut parts = vec![mine];
+        parts.extend(
+            helpers
+                .into_iter()
+                .map(|w| w.join().unwrap_or_else(|p| std::panic::resume_unwind(p))),
+        );
+        parts
+    });
+    let mut out: Vec<Option<T>> = (0..n).map(|_| None).collect();
+    for (i, t) in parts.into_iter().flatten() {
+        out[i] = Some(t);
+    }
+    out.into_iter().map(|t| t.expect("every item done")).collect()
+}
+
 /// `f` of each of `0..n`, in order.
 pub fn map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
     let threads = threads().min(n);

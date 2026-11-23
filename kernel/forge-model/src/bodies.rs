@@ -1048,17 +1048,9 @@ fn build_each(plain: History<'_>, start: usize, threads: usize) -> Result<Vec<Ve
         out.extend(some(start..plain.len())?);
         return Ok(out);
     }
-    let chunk = n.div_ceil(threads);
-    let built: Vec<Result<Vec<Vec<Tool>>, RegenError>> = std::thread::scope(|s| {
-        let hs: Vec<_> = (start..plain.len())
-            .step_by(chunk)
-            .map(|a| {
-                let some = &some;
-                s.spawn(move || some(a..(a + chunk).min(plain.len())))
-            })
-            .collect();
-        hs.into_iter().map(|h| h.join().expect("tool builder")).collect()
-    });
+    // one feature at a time, in order; helpers join only once the work has run long enough to
+    // pay for them (a small part's tools never do)
+    let built = forge_math::par::map_adaptive(n, threads, 1, |k| some(start + k..start + k + 1));
     for b in built {
         out.extend(b?);
     }

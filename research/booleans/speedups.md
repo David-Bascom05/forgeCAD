@@ -267,3 +267,35 @@ The rules for every threaded site:
 threaded path), then S1–S4 (W2), then W3 (it decides upto-like parts), then W4 for large
 booleans. W1 and W3 should be measured first on the latency gate. The figures here are from a
 4-vCPU VM.
+
+### W1 done (2026-11-23, on this branch)
+
+**The change:**
+- `forge_math::par::cap`: the requested threads, capped at `par::threads()` (the cores there are,
+  or `FORGECAD_THREADS`).
+- `forge_math::par::map_adaptive`: nary's `par_map`, moved into forge-math so it can be shared.
+  The caller works alone, and helpers start only after `HELPERS_AFTER` = 200 µs, with items left.
+- The regen's two tool builders (`forge-model` lib.rs `build_each` and bodies.rs `build_each`) use
+  `map_adaptive`. The first spawned at once; the second used fixed chunks. Both now work item by
+  item, in item order.
+- Every n-ary entry point goes through `wasm_one`, which now caps the thread count.
+- nary's `par_map` is a thin call to the shared function.
+
+**Bits:**
+- `bits` (54 kernel lines) and `benchparts bits` (30 lines) are identical to tools/speed/bits.txt
+  at `FORGECAD_THREADS` = 1, 2, 4 and 16.
+- `cargo test --release` passes: forge-math, forge-model (lib), and forge-lang's
+  `kernel_determinism`, which compares one core, threads and the batch.
+
+**Wall-clock** (µs, best of 7; 11 for heatsink; `regen1 PART nary1/nary16`, this 4-vCPU VM):
+
+| Part | Base nary1 | Base nary16 | W1 nary1 | W1 nary16 | nary16 change |
+|---|---|---|---|---|---|
+| coplanar | 24,373 | 32,863 | 24,978 | **22,123** | **−33%**, now faster than nary1 |
+| upto | 6,512 | 7,088 | 6,370 | **5,874** | **−17%** |
+| heatsink | 52,807 | 53,614 | 53,088 | 53,299 | 0% (noise) |
+| shaft | 63,673 | 41,907 | 67,586 | **34,983** | **−17%** |
+| mixed | 207,366 | 95,708 | 212,618 | **88,894** | **−7%** |
+
+nary1 is unchanged within noise: with one thread, `map_adaptive` is the serial map. The
+instruction gate's nary1 lines therefore run the same work.
