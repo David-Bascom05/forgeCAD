@@ -1,6 +1,6 @@
-// The page stays live while a part builds: with the threaded artifact the build runs on a Web
-// Worker, so no task on the page's main thread is as long as the build (Chrome's long-task
-// timing). The single-threaded build is measured too, for contrast: there the build is a task.
+// The page stays live while a part builds: with the threaded artifact the build runs on Web
+// Workers, so the page's main thread never holds a task as long as the single-threaded build's,
+// which is the build (Chrome's long-task timing).
 //   node web/tests/responsive.cjs OUT   (OUT built with THREADS=1)
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -52,7 +52,10 @@ async function measure(b, url) {
     const two = await measure(b, `${url}?open=${PART}.fg&offscreen=1280x800`);
     console.log(`threaded:        rebuild ${two.build_ms.toFixed(0)} ms, longest main-thread task ${two.longest.toFixed(0)} ms`);
     assert.equal(two.threaded, true, "the threaded build isn't the one running");
-    assert.ok(two.longest < two.build_ms, "a main-thread task as long as the build: the page blocked");
+    // the single-threaded page's longest task is the build (and the frame around it); the
+    // threaded one's is only drawing. (Not against the build's own time: with the kernel's
+    // parallel paths on workers too, a rebuild can take less than a frame.)
+    assert.ok(two.longest * 2 < one.longest, "the threaded page held a task as long as the build");
     console.log("ok - the threaded build's page never blocks for a build");
   } finally {
     await b.close();
