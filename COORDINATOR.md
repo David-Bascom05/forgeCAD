@@ -217,5 +217,10 @@ Workers (each its own cloud session, tag `forgecad-worker`; they report via send
 - FALLBACK     session_01WJtawvTfttkoAtbqGu3AmW (first: #33 full workspace tests)
 - CURVED-SITES session_01WJtawyv7xKrBkRdL3dwDcS
 - MERGE        session_01WJtawyh9MKsEbjQPJ9FL4j
-- CAM (4 workers): not started; waits for #15/#16 to merge.
+- CAM-CORE     session_01WJtax12n5PFR2L9uPMb7is (owns shared CAM types)
+- CAM-3AXIS    session_01WJtawx5yEFpe6hUFTao6CQ
+- CAM-TURN     session_01WJtawvePKaogMxErDhFCRF
+- CAM-MACHINE  session_01WJtawzvkvyfqNLd7PgZKGf (owns machine-definition format)
+  CAM workers started early at David's request: they branch from #16's branch
+  (claude/repo-review-mbdrlj-cam-lean) and open PRs only after #15/#16 merge.
 Queue: #31 CI running on 924bc4d0 (contains main db5c0759).
