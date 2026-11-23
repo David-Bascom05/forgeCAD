@@ -43,6 +43,18 @@ pub trait Sink {
     fn shell_faces(&mut self, s: usize);
     /// Shell `s`'s faces are not all joined through edges.
     fn shell_disconnected(&mut self, s: usize);
+    /// Edge `e` has `n` uses, not two.
+    fn edge_uses(&mut self, e: usize, n: usize);
+    /// Edge `e`'s two uses run the same way.
+    fn edge_same_way(&mut self, e: usize);
+    /// Edge `e`'s curve is degenerate.
+    fn edge_degenerate(&mut self, e: usize);
+    /// Face `f` has no loop.
+    fn face_no_loops(&mut self, f: usize);
+    /// Loop `l` has no coedge.
+    fn loop_empty(&mut self, l: usize);
+    /// Loop `l` breaks after coedge `c`.
+    fn loop_broken(&mut self, l: usize, c: usize);
 }
 
 /// `check_strays`: the vertices no edge (live or left over) starts or ends at, in order.

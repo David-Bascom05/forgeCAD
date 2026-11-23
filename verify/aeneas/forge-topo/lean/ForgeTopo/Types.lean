@@ -42,13 +42,27 @@ structure topo.Topo (Self : Type _) where
   face_loop : Self → Std.Usize → Std.Usize → Result Std.Usize
 
 /-- Trait declaration: [forge_topo::topo::Sink]
-    Source: 'kernel/forge-topo/src/topo.rs', lines 37:0-46:1
+    Source: 'kernel/forge-topo/src/topo.rs', lines 37:0-58:1
     Visibility: public -/
 structure topo.Sink (Self : Type _) where
   stray : Self → Std.Usize → Result Self
   back_link : Self → Std.U8 → Std.Usize → Result Self
   shell_faces : Self → Std.Usize → Result Self
   shell_disconnected : Self → Std.Usize → Result Self
+  edge_uses : Self → Std.Usize → Std.Usize → Result Self
+  edge_same_way : Self → Std.Usize → Result Self
+  edge_degenerate : Self → Std.Usize → Result Self
+  face_no_loops : Self → Std.Usize → Result Self
+  loop_empty : Self → Std.Usize → Result Self
+  loop_broken : Self → Std.Usize → Std.Usize → Result Self
+
+/-- Trait declaration: [forge_topo::topo_edges::EdgeTopo]
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 10:0-15:1
+    Visibility: public -/
+structure topo_edges.EdgeTopo (Self : Type _) where
+  topoTopoInst : topo.Topo Self
+  coedge_forward : Self → Std.Usize → Result Bool
+  edge_degenerate : Self → Std.Usize → Result Bool
 
 /-- Trait declaration: [forge_topo::topo_shell::ShellTopo]
     Source: 'kernel/forge-topo/src/topo_shell.rs', lines 8:0-15:1

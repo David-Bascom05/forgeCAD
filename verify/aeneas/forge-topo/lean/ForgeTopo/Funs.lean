@@ -20,7 +20,7 @@ set_option maxRecDepth 2048
 namespace forge_topo
 
 /-- [forge_topo::topo::strays]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 54:4-63:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 66:4-75:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.strays_loop0.body
@@ -54,7 +54,7 @@ def topo.strays_loop0.body
   else ok (done used)
 
 /-- [forge_topo::topo::strays]: loop 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 54:4-63:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 66:4-75:5
     Visibility: public -/
 @[rust_loop]
 def topo.strays_loop0
@@ -67,7 +67,7 @@ def topo.strays_loop0
     (used, e)
 
 /-- [forge_topo::topo::strays]: loop body 1:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 65:4-70:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 77:4-82:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.strays_loop1.body
@@ -87,7 +87,7 @@ def topo.strays_loop1.body
   else ok (done out)
 
 /-- [forge_topo::topo::strays]: loop 1:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 65:4-70:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 77:4-82:5
     Visibility: public -/
 @[rust_loop]
 def topo.strays_loop1
@@ -100,7 +100,7 @@ def topo.strays_loop1
     (out, v)
 
 /-- [forge_topo::topo::strays]:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 49:0-71:1
+    Source: 'kernel/forge-topo/src/topo.rs', lines 61:0-83:1
     Visibility: public -/
 def topo.strays
   {T : Type _} {S : Type _} (TopoInst : topo.Topo T) (SinkInst : topo.Sink S)
@@ -114,7 +114,7 @@ def topo.strays
   topo.strays_loop1 SinkInst out nv used1 0#usize
 
 /-- [forge_topo::topo::uses]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 77:4-84:1 -/
+    Source: 'kernel/forge-topo/src/topo.rs', lines 89:4-96:1 -/
 @[rust_loop_body]
 def topo.uses_loop.body
   {T : Type _} (TopoInst : topo.Topo T) (t : T) (e : Std.Usize) (c : Std.Usize)
@@ -131,7 +131,7 @@ def topo.uses_loop.body
   else ok (done false)
 
 /-- [forge_topo::topo::uses]: loop 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 77:4-84:1 -/
+    Source: 'kernel/forge-topo/src/topo.rs', lines 89:4-96:1 -/
 @[rust_loop]
 def topo.uses_loop
   {T : Type _} (TopoInst : topo.Topo T) (t : T) (e : Std.Usize) (c : Std.Usize)
@@ -143,7 +143,7 @@ def topo.uses_loop
     i
 
 /-- [forge_topo::topo::uses]:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 74:0-84:1 -/
+    Source: 'kernel/forge-topo/src/topo.rs', lines 86:0-96:1 -/
 def topo.uses
   {T : Type _} (TopoInst : topo.Topo T) (t : T) (e : Std.Usize) (c : Std.Usize)
   :
@@ -153,7 +153,7 @@ def topo.uses
   topo.uses_loop TopoInst t e c n 0#usize
 
 /-- [forge_topo::topo::links]: loop body 1:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 105:12-113:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 117:12-125:13
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop0_loop0.body
@@ -194,7 +194,7 @@ def topo.links_loop0_loop0.body
   else ok (done (listed, ok1))
 
 /-- [forge_topo::topo::links]: loop 1:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 105:12-113:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 117:12-125:13
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop0_loop0
@@ -209,7 +209,7 @@ def topo.links_loop0_loop0
     (listed, ok1, i)
 
 /-- [forge_topo::topo::links]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 100:4-119:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 112:4-131:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop0.body
@@ -238,7 +238,7 @@ def topo.links_loop0.body
   else ok (done (out, listed))
 
 /-- [forge_topo::topo::links]: loop 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 100:4-119:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 112:4-131:5
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop0
@@ -253,7 +253,7 @@ def topo.links_loop0
     (out, listed, f)
 
 /-- [forge_topo::topo::links]: loop body 3:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 127:12-137:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 139:12-149:13
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop1_loop0.body
@@ -299,7 +299,7 @@ def topo.links_loop1_loop0.body
   else ok (done ok1)
 
 /-- [forge_topo::topo::links]: loop 3:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 127:12-137:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 139:12-149:13
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop1_loop0
@@ -314,7 +314,7 @@ def topo.links_loop1_loop0
     (ok1, i)
 
 /-- [forge_topo::topo::links]: loop body 2:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 121:4-143:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 133:4-155:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop1.body
@@ -345,7 +345,7 @@ def topo.links_loop1.body
   else ok (done out)
 
 /-- [forge_topo::topo::links]: loop 2:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 121:4-143:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 133:4-155:5
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop1
@@ -360,7 +360,7 @@ def topo.links_loop1
     (out, e)
 
 /-- [forge_topo::topo::links]: loop body 5:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 156:12-163:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 168:12-175:13
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop2_loop0.body
@@ -394,7 +394,7 @@ def topo.links_loop2_loop0.body
   else ok (done ok1)
 
 /-- [forge_topo::topo::links]: loop 5:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 156:12-163:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 168:12-175:13
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop2_loop0
@@ -409,7 +409,7 @@ def topo.links_loop2_loop0
     (ok1, i)
 
 /-- [forge_topo::topo::links]: loop body 4:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 145:4-169:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 157:4-181:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop2.body
@@ -468,7 +468,7 @@ def topo.links_loop2.body
   else ok (done out)
 
 /-- [forge_topo::topo::links]: loop 4:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 145:4-169:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 157:4-181:5
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop2
@@ -483,7 +483,7 @@ def topo.links_loop2
     (out, l)
 
 /-- [forge_topo::topo::links]:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 91:0-170:1
+    Source: 'kernel/forge-topo/src/topo.rs', lines 103:0-182:1
     Visibility: public -/
 def topo.links
   {T : Type _} {S : Type _} (TopoInst : topo.Topo T) (SinkInst : topo.Sink S)
@@ -501,6 +501,246 @@ def topo.links
   let out2 ←
     topo.links_loop1 TopoInst SinkInst t out1 nv ne nc nl listed1 0#usize
   topo.links_loop2 TopoInst SinkInst t out2 ne nc nl nf listed1 0#usize
+
+/-- [forge_topo::topo_edges::edges]: loop body 0:
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 22:4-37:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_edges.edges_loop.body
+  {T : Type _} {S : Type _} (EdgeTopoInst : topo_edges.EdgeTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (ne : Std.Usize) (out : S)
+  (e : Std.Usize) :
+  Result (ControlFlow (S × Std.Usize) S)
+  := do
+  if e < ne
+  then
+    let b ← EdgeTopoInst.topoTopoInst.edge_alive t e
+    let out1 ←
+      if b
+      then
+        do
+        let n ← EdgeTopoInst.topoTopoInst.edge_n_uses t e
+        if n != 2#usize
+        then topoSinkInst.edge_uses out e n
+        else
+          let i ← EdgeTopoInst.topoTopoInst.edge_use t e 0#usize
+          let b1 ← EdgeTopoInst.coedge_forward t i
+          let i1 ← EdgeTopoInst.topoTopoInst.edge_use t e 1#usize
+          let b2 ← EdgeTopoInst.coedge_forward t i1
+          let out2 ←
+            if b1 = b2
+            then topoSinkInst.edge_same_way out e
+            else ok out
+          let b3 ← EdgeTopoInst.edge_degenerate t e
+          if b3
+          then topoSinkInst.edge_degenerate out2 e
+          else ok out2
+      else ok out
+    let e1 ← lift (Std.Usize.wrapping_add e 1#usize)
+    ok (cont (out1, e1))
+  else ok (done out)
+
+/-- [forge_topo::topo_edges::edges]: loop 0:
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 22:4-37:5
+    Visibility: public -/
+@[rust_loop]
+def topo_edges.edges_loop
+  {T : Type _} {S : Type _} (EdgeTopoInst : topo_edges.EdgeTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (out : S) (ne : Std.Usize)
+  (e : Std.Usize) :
+  Result S
+  := do
+  loop
+    (fun (out1, e1) => topo_edges.edges_loop.body EdgeTopoInst topoSinkInst t
+      ne out1 e1)
+    (out, e)
+
+/-- [forge_topo::topo_edges::edges]:
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 19:0-38:1
+    Visibility: public -/
+def topo_edges.edges
+  {T : Type _} {S : Type _} (EdgeTopoInst : topo_edges.EdgeTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (out : S) :
+  Result S
+  := do
+  let ne ← EdgeTopoInst.topoTopoInst.n_edges t
+  topo_edges.edges_loop EdgeTopoInst topoSinkInst t out ne 0#usize
+
+/-- [forge_topo::topo_edges::coedge_start]:
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 42:0-45:1 -/
+def topo_edges.coedge_start
+  {T : Type _} (EdgeTopoInst : topo_edges.EdgeTopo T) (t : T) (c : Std.Usize) :
+  Result Std.Usize
+  := do
+  let i ← EdgeTopoInst.topoTopoInst.coedge_edge t c
+  let (a, b) ← EdgeTopoInst.topoTopoInst.edge_ends t i
+  let b1 ← EdgeTopoInst.coedge_forward t c
+  if b1
+  then ok a
+  else ok b
+
+/-- [forge_topo::topo_edges::coedge_end]:
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 49:0-52:1 -/
+def topo_edges.coedge_end
+  {T : Type _} (EdgeTopoInst : topo_edges.EdgeTopo T) (t : T) (c : Std.Usize) :
+  Result Std.Usize
+  := do
+  let i ← EdgeTopoInst.topoTopoInst.coedge_edge t c
+  let (a, b) ← EdgeTopoInst.topoTopoInst.edge_ends t i
+  let b1 ← EdgeTopoInst.coedge_forward t c
+  if b1
+  then ok b
+  else ok a
+
+/-- [forge_topo::topo_edges::loops]: loop body 0:
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 59:4-64:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_edges.loops_loop0.body
+  {T : Type _} {S : Type _} (EdgeTopoInst : topo_edges.EdgeTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (nf : Std.Usize) (out : S)
+  (f : Std.Usize) :
+  Result (ControlFlow (S × Std.Usize) S)
+  := do
+  if f < nf
+  then
+    let b ← EdgeTopoInst.topoTopoInst.face_alive t f
+    let out1 ←
+      if b
+      then
+        do
+        let i ← EdgeTopoInst.topoTopoInst.face_n_loops t f
+        if i = 0#usize
+        then topoSinkInst.face_no_loops out f
+        else ok out
+      else ok out
+    let f1 ← lift (Std.Usize.wrapping_add f 1#usize)
+    ok (cont (out1, f1))
+  else ok (done out)
+
+/-- [forge_topo::topo_edges::loops]: loop 0:
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 59:4-64:5
+    Visibility: public -/
+@[rust_loop]
+def topo_edges.loops_loop0
+  {T : Type _} {S : Type _} (EdgeTopoInst : topo_edges.EdgeTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (out : S) (nf : Std.Usize)
+  (f : Std.Usize) :
+  Result S
+  := do
+  loop
+    (fun (out1, f1) => topo_edges.loops_loop0.body EdgeTopoInst topoSinkInst t
+      nf out1 f1)
+    (out, f)
+
+/-- [forge_topo::topo_edges::loops]: loop body 2:
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 75:16-82:17
+    Visibility: public -/
+@[rust_loop_body]
+def topo_edges.loops_loop1_loop0.body
+  {T : Type _} {S : Type _} (EdgeTopoInst : topo_edges.EdgeTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (l : Std.Usize) (first : Std.Usize)
+  (n : Std.Usize) (out : S) (i : Std.Usize) :
+  Result (ControlFlow (S × Std.Usize) S)
+  := do
+  if i < n
+  then
+    let i1 ← lift (Std.Usize.wrapping_add i 1#usize)
+    let j ←
+      if i1 < n
+      then ok (Std.Usize.wrapping_add i 1#usize)
+      else ok 0#usize
+    let i2 ← lift (Std.Usize.wrapping_add first i)
+    let i3 ← topo_edges.coedge_end EdgeTopoInst t i2
+    let i4 ← lift (Std.Usize.wrapping_add first j)
+    let i5 ← topo_edges.coedge_start EdgeTopoInst t i4
+    let out1 ←
+      if i3 != i5
+      then
+        do
+        let i6 ← lift (Std.Usize.wrapping_add first i)
+        topoSinkInst.loop_broken out l i6
+      else ok out
+    let i6 ← lift (Std.Usize.wrapping_add i 1#usize)
+    ok (cont (out1, i6))
+  else ok (done out)
+
+/-- [forge_topo::topo_edges::loops]: loop 2:
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 75:16-82:17
+    Visibility: public -/
+@[rust_loop]
+def topo_edges.loops_loop1_loop0
+  {T : Type _} {S : Type _} (EdgeTopoInst : topo_edges.EdgeTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (out : S) (l : Std.Usize)
+  (first : Std.Usize) (n : Std.Usize) (i : Std.Usize) :
+  Result S
+  := do
+  loop
+    (fun (out1, i1) => topo_edges.loops_loop1_loop0.body EdgeTopoInst
+      topoSinkInst t l first n out1 i1)
+    (out, i)
+
+/-- [forge_topo::topo_edges::loops]: loop body 1:
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 67:4-86:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_edges.loops_loop1.body
+  {T : Type _} {S : Type _} (EdgeTopoInst : topo_edges.EdgeTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (nl : Std.Usize) (out : S)
+  (l : Std.Usize) :
+  Result (ControlFlow (S × Std.Usize) S)
+  := do
+  if l < nl
+  then
+    let i ← EdgeTopoInst.topoTopoInst.loop_face t l
+    let b ← EdgeTopoInst.topoTopoInst.face_alive t i
+    if b
+    then
+      let first ← EdgeTopoInst.topoTopoInst.loop_first t l
+      let n ← EdgeTopoInst.topoTopoInst.loop_len t l
+      if n = 0#usize
+      then
+        let out1 ← topoSinkInst.loop_empty out l
+        let l1 ← lift (Std.Usize.wrapping_add l 1#usize)
+        ok (cont (out1, l1))
+      else
+        let out1 ←
+          topo_edges.loops_loop1_loop0 EdgeTopoInst topoSinkInst t out l first
+            n 0#usize
+        let l1 ← lift (Std.Usize.wrapping_add l 1#usize)
+        ok (cont (out1, l1))
+    else let l1 ← lift (Std.Usize.wrapping_add l 1#usize)
+         ok (cont (out, l1))
+  else ok (done out)
+
+/-- [forge_topo::topo_edges::loops]: loop 1:
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 67:4-86:5
+    Visibility: public -/
+@[rust_loop]
+def topo_edges.loops_loop1
+  {T : Type _} {S : Type _} (EdgeTopoInst : topo_edges.EdgeTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (out : S) (nl : Std.Usize)
+  (l : Std.Usize) :
+  Result S
+  := do
+  loop
+    (fun (out1, l1) => topo_edges.loops_loop1.body EdgeTopoInst topoSinkInst t
+      nl out1 l1)
+    (out, l)
+
+/-- [forge_topo::topo_edges::loops]:
+    Source: 'kernel/forge-topo/src/topo_edges.rs', lines 56:0-87:1
+    Visibility: public -/
+def topo_edges.loops
+  {T : Type _} {S : Type _} (EdgeTopoInst : topo_edges.EdgeTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (out : S) :
+  Result S
+  := do
+  let nf ← EdgeTopoInst.topoTopoInst.n_faces t
+  let out1 ←
+    topo_edges.loops_loop0 EdgeTopoInst topoSinkInst t out nf 0#usize
+  let nl ← EdgeTopoInst.topoTopoInst.n_loops t
+  topo_edges.loops_loop1 EdgeTopoInst topoSinkInst t out1 nl 0#usize
 
 /-- [forge_topo::topo_shell::coedge_face]:
     Source: 'kernel/forge-topo/src/topo_shell.rs', lines 19:0-21:1 -/

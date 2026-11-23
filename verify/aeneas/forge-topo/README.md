@@ -14,6 +14,8 @@ shipped code for each test moved here.
 | stray vertices (`check_strays`) | `topo::strays` | `forge_topo.strays_refines` | L4 |
 | back-links (`check_links`) | `topo::links` | `forge_topo.links_refines` | L4 |
 | shells (`check_shell_faces`) | `topo_shell::shell_faces` | `forge_topo.shell_faces_refines` | L4 |
+| edge uses (`check_edges`) | `topo_edges::edges` | `forge_topo.edges_refines` | L4 |
+| loops (`check_loops`) | `topo_edges::loops` | `forge_topo.loops_refines` | L4 |
 
 `strays_refines`: for any `Topo` instance whose counts and edge ends are the model body's, and
 any `Sink` that appends the problem it is handed, the translated `strays` returns (no panic, no
@@ -42,6 +44,13 @@ face off the stack has its neighbours stamped, stack plus unstamped bounded by t
 once the stack is empty, stamped = reachable; the model's flood reaches exactly that too
 (`verify/forge-topo-check/lean/TopoCheck/Flood.lean`, `reached_iff`).
 
+`edges_refines`, `loops_refines` (`lean/ForgeTopo/Edges.lean`): for a body with sound links and an
+instance that `EdgeReads` it (as `Reads`, and each coedge's sense; every loop's coedges and their
+edges in range, those of loops a face no longer lists too), the translated `edges` and `loops`
+append exactly `Body.checkEdges` and `Body.checkLoops`. `check_edges`'s one geometric test (an
+edge's curve degenerate: floats) is the view's `edge_degenerate`, taken as given: the problem it
+adds is not one the model decides.
+
 `lean/ForgeTopo/Axioms.lean` fails the build if a theorem uses more than `propext`,
 `Classical.choice` and `Quot.sound`.
 
@@ -49,5 +58,5 @@ Build: `cd lean && lake build` (shares Mathlib and Aeneas's library with
 `verify/forge-mass/lean/.lake/packages`; the f64 bridge `verify/aeneas/bridge` is required but
 unused, the topology has no floats).
 
-Next: the edge-use and loop-closure tests, the shell Euler counts and the fans move to `topo.rs`
-the same way, until `check`'s whole topological part is translated.
+Next: the shell Euler counts and the fans move the same way, until `check`'s whole topological
+part is translated.

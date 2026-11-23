@@ -510,6 +510,30 @@ impl crate::topo::Sink for Vec<Problem> {
         self.push(Problem::StrayVertex { vertex: VertexId(v as u32) });
     }
     #[inline]
+    fn edge_uses(&mut self, e: usize, n: usize) {
+        self.push(Problem::EdgeUses { edge: EdgeId(e as u32), uses: n });
+    }
+    #[inline]
+    fn edge_same_way(&mut self, e: usize) {
+        self.push(Problem::EdgeUsesSameWay { edge: EdgeId(e as u32) });
+    }
+    #[inline]
+    fn edge_degenerate(&mut self, e: usize) {
+        self.push(Problem::EdgeDegenerate { edge: EdgeId(e as u32) });
+    }
+    #[inline]
+    fn face_no_loops(&mut self, f: usize) {
+        self.push(Problem::FaceNoLoops { face: FaceId(f as u32) });
+    }
+    #[inline]
+    fn loop_empty(&mut self, l: usize) {
+        self.push(Problem::LoopEmpty { lp: LoopId(l as u32) });
+    }
+    #[inline]
+    fn loop_broken(&mut self, l: usize, c: usize) {
+        self.push(Problem::LoopBroken { lp: LoopId(l as u32), after: CoedgeId(c as u32) });
+    }
+    #[inline]
     fn shell_faces(&mut self, s: usize) {
         self.push(Problem::ShellFaces { shell: ShellId(s as u32) });
     }
@@ -619,6 +643,24 @@ impl crate::topo::Topo for View<'_> {
     #[inline]
     fn face_loop(&self, f: usize, i: usize) -> usize {
         self.faces[f].loops[i].index()
+    }
+}
+
+impl crate::topo_edges::EdgeTopo for View<'_> {
+    #[inline]
+    fn coedge_forward(&self, c: usize) -> bool {
+        self.coedges[c].forward
+    }
+    fn edge_degenerate(&self, e: usize) -> bool {
+        let edge = &self.edges[e];
+        if edge.start == edge.end {
+            edge.curve
+                .domain()
+                .period
+                .is_none_or(|p| (edge.range.width() - p).abs() > tol::ANGULAR * 10.0)
+        } else {
+            edge.curve.eval(edge.range.lo).distance(edge.curve.eval(edge.range.hi)) <= tol::LINEAR
+        }
     }
 }
 
@@ -931,57 +973,11 @@ fn check_fans(body: &Body, out: &mut Vec<Problem>) {
 }
 
 fn check_edges(body: &Body, out: &mut Vec<Problem>) {
-    for e in body.edge_ids() {
-        let edge = body.edge(e);
-        if edge.coedges.len() != 2 {
-            out.push(Problem::EdgeUses {
-                edge: e,
-                uses: edge.coedges.len(),
-            });
-            continue;
-        }
-        let (a, b) = (body.coedge(edge.coedges[0]), body.coedge(edge.coedges[1]));
-        if a.forward == b.forward {
-            out.push(Problem::EdgeUsesSameWay { edge: e });
-        }
-        let closed = edge.start == edge.end;
-        let degenerate = if closed {
-            edge.curve
-                .domain()
-                .period
-                .is_none_or(|p| (edge.range.width() - p).abs() > tol::ANGULAR * 10.0)
-        } else {
-            edge.curve
-                .eval(edge.range.lo)
-                .distance(edge.curve.eval(edge.range.hi))
-                <= tol::LINEAR
-        };
-        if degenerate {
-            out.push(Problem::EdgeDegenerate { edge: e });
-        }
-    }
+    crate::topo_edges::edges(&View::of(body), out);
 }
 
 fn check_loops(body: &Body, out: &mut Vec<Problem>) {
-    for f in body.face_ids() {
-        if body.face(f).loops.is_empty() {
-            out.push(Problem::FaceNoLoops { face: f });
-        }
-    }
-    for l in body.loop_ids() {
-        let lp = body.lp(l);
-        let n = lp.coedges().len();
-        if n == 0 {
-            out.push(Problem::LoopEmpty { lp: l });
-            continue;
-        }
-        for (i, c) in lp.coedges().enumerate() {
-            let next = lp.coedge((i + 1) % n);
-            if body.coedge_end(c) != body.coedge_start(next) {
-                out.push(Problem::LoopBroken { lp: l, after: c });
-            }
-        }
-    }
+    crate::topo_edges::loops(&View::of(body), out);
 }
 
 fn check_geometry(body: &Body, known: &Known, out: &mut Vec<Problem>) {
