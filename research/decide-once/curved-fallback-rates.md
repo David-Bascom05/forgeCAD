@@ -189,3 +189,38 @@ measure each step with tools/speed/fndiff.py and watch `on_edge`.
 
 Their fix is the exact point on the exact curve (or the foot, for probes), then `point_in_face_at`,
 else a refusal. Each is to be listed with the exact reference's verdict.
+
+## Re-measured (CURVED-SITES, 2026-11-23)
+
+Same method (FORGE_DECISIONS_DUMP, now on main), on all 11 gate parts seq and nary1 (22 runs) and
+fuzz 1–40 seq, at main cb8edf27 and again with fix-curved, fix-touch and exact-curved 4f38bad
+absorbed (branch proof/curved-sites-absorb).
+
+| run | in band | exactly 0 | ≤1e-12 | 1e-12…1e-9 | 1e-9…limit | plans | plans with a near-miss |
+|---|---|---|---|---|---|---|---|
+| gate, main | 430,073 | 322,364 | 103,087 | 1,896 | **46** | 3,002 | 10 |
+| fuzz 1–40, main | 121,272 | 44,968 | 75,492 | 477 | **58** | 6,440 | 16 |
+| gate, fix-curved absorbed | 510,074 | 368,416 | 136,094 | 2,778 | **46** | 3,002 | 10 |
+| fuzz 1–40, fix-curved absorbed | 208,077 | 76,658 | 130,326 | 742 | **53** | 6,440 | 15 |
+
+(The absorbed rows count fewer near-misses once edge_screen's own calls of on_edge, 44 gate and
+9 fuzz, are left out; the totals in band include them.)
+
+The near-misses by site (fix-curved absorbed), each **UNKNOWN**: the exact reference judged none of
+them, every stage being out of its scope ("not the intersection of its faces' inner sides", or
+over 120 s on mixed). The margins below are measurements, not verdicts.
+
+| site | near-misses | \|d\| | what the log shows |
+|---|---|---|---|
+| `on_edge` B:2830, trim's curve ∩ across | 53 (mixed 44; fuzz 19, 20, 27, 2, 35) | 1e-9 – 2e-7 | all "on"; the hit's own branch at the float error of torus hits; the nearest other branch of S_f ∩ A ≥ 1.76 mm, or none within 10 mm |
+| B:2910, a traced branch's end on a rim | 14 (fuzz 3, 9, 11, 15) | 4e-8 – 9e-7 | |
+| `place_cuts`, two cuts one vertex | 12 (mixed 1; fuzz 2, 11, 25, 27) | 2.3e-9 – 1.9e-7 | |
+| `point_in_face` nearest edge, curved callers | 9 (shaft 1; fuzz 20, 30, 40) | 1.9e-6 – 9e-6 | 0.2–0.9 LINEAR: the only ones at a sizeable fraction of the limit |
+| B:2819, `slid` (grazing roots) | 7 (fuzz 3, 9, 11, 27) | 1.3e-7 – 8.4e-7 | tangent roots |
+| fuzz27's one fact at trim shallow ×2, dedupe, B:2798 | 4 | 1.9e-7 | |
+
+Proven in place (no behaviour change): the branch decision of B:2830 given a separation and the
+hits' error bound (OnEdge.lean); 37 of its 53 near-misses are torus–plane pairs with a separation
+theorem, 16 are not (torus–torus 6, plane–torus oblique 6, torus–sphere 2, torus–cylinder 2).
+Coincidences: 6,864 of 6,900 `true`s keyed exactly (CarrierKey.lean, carrier_key.rs); the 36
+unkeyed are patterns seq's one-ulp pattern copies. The ledger rows are G11c, C.*, M.cert.
