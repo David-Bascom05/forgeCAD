@@ -229,6 +229,52 @@ fn ramps_closed_form_never_contradicts_the_branch_and_bound() {
     assert_eq!(both, clear);
 }
 
+/// A helix is checked as its arc swept over its heights, a superset: a Hit there is not a
+/// point the helix reaches, so it is never reported as one (undecided instead); Clear stands.
+#[test]
+fn helices_never_report_a_witness_from_their_superset() {
+    let mut g = Rng(11);
+    let t = assemble(&Cutter::Flat { d: 6.0 }, 15.0, 6.0, 30.0, None).unwrap();
+    let body = &t.bodies[0];
+    let f = Face::new(
+        Surf::Plane {
+            o: [0.0, 0.0, 0.0],
+            u: [1.0, 0.0, 0.0],
+            v: [0.0, 0.0, 1.0],
+        },
+        Ival::new(-10.0, 10.0),
+        Ival::new(-5.0, 5.0),
+        None,
+        0.0,
+        0,
+    );
+    let (mut clear, mut undecided) = (0, 0);
+    for _ in 0..200 {
+        let th = g.r(0.0, std::f64::consts::TAU);
+        let (c0, s0) = (forge_math_free_cos(th), forge_math_free_sin(th));
+        let z = g.r(-4.0, 4.0);
+        let mv = Move::Helix {
+            c: [g.r(-6.0, 6.0), g.r(-8.0, 8.0), 0.0],
+            x: [c0, s0, 0.0],
+            y: [-s0, c0, 0.0],
+            r: g.r(1.0, 5.0),
+            t0: -g.r(0.05, 0.4),
+            t1: g.r(0.05, 0.4),
+            z0: z,
+            z1: z + g.r(0.1, 1.0),
+        };
+        match certify(body, &f, &mv, -0.01, 0.0025, 100_000).0 {
+            Verdict::Hit { .. } => panic!("a helix reported a witness: {mv:?}"),
+            Verdict::Clear { .. } => clear += 1,
+            Verdict::Undecided { .. } => undecided += 1,
+        }
+    }
+    assert!(
+        clear > 20 && undecided > 20,
+        "{clear} clear, {undecided} undecided"
+    );
+}
+
 // cos and sin by series (the test's own, deterministic)
 fn forge_math_free_sin(x: f64) -> f64 {
     let x = x - std::f64::consts::PI;

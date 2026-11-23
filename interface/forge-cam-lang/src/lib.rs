@@ -2916,6 +2916,7 @@ impl Cam {
                 other: what,
                 phase: "path",
                 move_index: 0,
+                path: 0,
             };
             match s.at {
                 Some(o) => {
@@ -2973,6 +2974,7 @@ impl Cam {
             other: what,
             phase: "path",
             move_index: i,
+            path: 0,
         };
         // 10^k exactly (k ≤ 22, so the power is an exact f64), then the limit times it
         let k = feed_decimals.min(22) as i32;
@@ -3181,15 +3183,32 @@ impl Cam {
                 let (to, ph, f) = match m {
                     forge_post::Motion::Rapid(p) => (back(*p), Phase::Rapid, 0.0),
                     forge_post::Motion::Feed(p, f) => (back(*p), Phase::Cut, *f as f64 / fscale),
-                    forge_post::Motion::Arc { to, c, cw, f, .. } => {
+                    forge_post::Motion::Arc { to, c, cw, f, full } => {
                         let t = back(*to);
                         if start.is_none() {
                             start = Some(t);
                         }
-                        let r = ((at[0] - (c[0] as f64 / scale + o[0])).powi(2)
-                            + (at[1] - (c[1] as f64 / scale + o[1])).powi(2))
-                        .sqrt();
-                        lc += r * 0.5 * std::f64::consts::PI;
+                        let cc = [c[0] as f64 / scale + o[0], c[1] as f64 / scale + o[1]];
+                        let r = ((at[0] - cc[0]).powi(2) + (at[1] - cc[1]).powi(2)).sqrt();
+                        // its length: the turn it sweeps (as the control reads it: a whole turn
+                        // when `full`), with the height it climbs; its time at its feed
+                        let tau = std::f64::consts::TAU;
+                        let a0 = forge_math::dmath::atan2(at[1] - cc[1], at[0] - cc[0]);
+                        let a1 = forge_math::dmath::atan2(t[1] - cc[1], t[0] - cc[0]);
+                        let mut sweep = if *cw { a0 - a1 } else { a1 - a0 };
+                        while sweep < 0.0 {
+                            sweep += tau;
+                        }
+                        while sweep >= tau {
+                            sweep -= tau;
+                        }
+                        if *full {
+                            sweep = tau;
+                        }
+                        let l = ((r * sweep).powi(2) + (t[2] - at[2]).powi(2)).sqrt();
+                        lc += l;
+                        let fa = *f as f64 / fscale;
+                        time += if fa > 0.0 { l / fa * 60.0 } else { 0.0 };
                         moves.push(PMove::Arc {
                             to: t,
                             c: [c[0] as f64 / scale + o[0], c[1] as f64 / scale + o[1]],
@@ -3377,6 +3396,10 @@ impl Cam {
             if let Some(c) = runtime {
                 sum.clear = false;
                 sum.checks.insert(0, c);
+            }
+            // every check names this path (a hole plan posts one per tool)
+            for c in &mut sum.checks {
+                c.path = pi;
             }
             // the lowest the tool's tip goes in a move that met the fixture
             let ends: Vec<[f64; 3]> = std::iter::once(posted.start)
@@ -3578,6 +3601,7 @@ impl Cam {
                             ("other", Json::Str(c.other.clone())),
                             ("phase", Json::Str(c.phase.into())),
                             ("move", n(c.move_index as f64)),
+                            ("path", n(c.path as f64)),
                         ])
                     })
                     .collect();

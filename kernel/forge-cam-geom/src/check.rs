@@ -1021,6 +1021,18 @@ pub fn certify_shared(
     // a planar move against a face that is a prism along z: closed form (slab.rs)
     if let (Some(pl), Some(pr)) = (mv.planar(), f.prism.as_ref()) {
         let (v, n) = crate::slab::certify_shared(body, f, pr, &pl, limit, res, budget, shared, mv.path_gap());
+        // a helix is taken as its arc swept over every height it passes, a superset of the
+        // move: a Hit there need not be a point the helix reaches, so it is no witness (no
+        // lower bound either): undecided, refused without a witness
+        if matches!(mv, Move::Helix { .. }) && matches!(v, Verdict::Hit { .. }) {
+            return (
+                Verdict::Undecided {
+                    lower: f64::NEG_INFINITY,
+                    cells: n,
+                },
+                n,
+            );
+        }
         if let Verdict::Hit { d, p, q, .. } = v {
             let (s, at) = crate::slab::locate(mv, pr);
             return (Verdict::Hit { d, p, q, s, at }, n);

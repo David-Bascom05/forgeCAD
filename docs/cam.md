@@ -101,7 +101,7 @@ ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|slot|thread_mil
            path {moves, length_cut, length_rapid, time_s},
            certificate {verdict (pass|fail), certified, pairs, cells, least_cutter_distance, against},
            checks[] (failures only) {rule, verdict (fail|undecided), certified, value, limit, unit,
-                    at, tool_part (cutter|shank/holder), other, phase (cut|plunge|link|rapid), move},
+                    at, tool_part (cutter|shank/holder), other, phase (cut|plunge|link|rapid), move, path (which of a hole plan's paths `move` counts in)},
            removals[] (declared Δ, e.g. cosmetic threads), leftover {status}, refusal | null
 blocking[] {op, why}      fixes[] {op, fix}      suggestions[] {kind: NeedTool, op, why}
 programs[] {name, post, lines, round_trip, certified (full | except G5 (unchecked: no `at:`) | no),

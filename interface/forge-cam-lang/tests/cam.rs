@@ -812,3 +812,70 @@ fn posted_speeds_and_feeds_are_within_the_machine() {
     );
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// Cycle time counts arcs: each op's time is its moves' lengths at their feeds (rapids at
+/// 10 000 mm/min), arcs by the turn they sweep. Worked out here from the planned path, its own
+/// way; the posted path differs only by the dialect's rounding.
+#[test]
+fn cycle_time_counts_arcs() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(cam.ok);
+    let mut arcs_seen = 0;
+    for op in cam.ops.iter().filter(|o| o.kind != "drill") {
+        let (mut t, mut len) = (0.0, 0.0);
+        for p in &op.paths {
+            let mut at = p.start;
+            for m in &p.moves {
+                match *m {
+                    forge_cam::ops::PMove::Rapid { to } => {
+                        let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2))
+                            .sqrt();
+                        t += l / 10_000.0 * 60.0;
+                        at = to;
+                    }
+                    forge_cam::ops::PMove::Line { to, f, .. } => {
+                        let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2))
+                            .sqrt();
+                        t += l / f * 60.0;
+                        len += l;
+                        at = to;
+                    }
+                    forge_cam::ops::PMove::Arc { to, c, cw, f } => {
+                        arcs_seen += 1;
+                        let (u, v) = ([at[0] - c[0], at[1] - c[1]], [to[0] - c[0], to[1] - c[1]]);
+                        let r = (u[0] * u[0] + u[1] * u[1]).sqrt();
+                        // the turn from u to v in the arc's sense (a whole one if they agree)
+                        let mut a =
+                            forge_math::dmath::atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1]);
+                        if cw {
+                            a = -a;
+                        }
+                        if a <= 1e-12 {
+                            a += std::f64::consts::TAU;
+                        }
+                        let l = ((r * a).powi(2) + (to[2] - at[2]).powi(2)).sqrt();
+                        t += l / f * 60.0;
+                        len += l;
+                        at = to;
+                    }
+                    forge_cam::ops::PMove::Cycle { .. } => {}
+                }
+            }
+        }
+        assert!(
+            (op.time_s - t).abs() <= 0.01 * t + 0.05,
+            "{}: {} vs {t}",
+            op.name,
+            op.time_s
+        );
+        assert!(
+            (op.length_cut - len).abs() <= 0.01 * len + 0.05,
+            "{}: {} vs {len}",
+            op.name,
+            op.length_cut
+        );
+    }
+    assert!(arcs_seen > 0);
+}
