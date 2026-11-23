@@ -217,6 +217,21 @@ A file is **uncertain**, counted neither way, in two cases (research/step/truth.
 | crash / timeout | 0 / 0 | 0 / 0 |
 | problems (files) | LoopBroken 55, Euler 43, FaceWrongSide 33, LoopsCross 9 | FaceWrongSide 37, LoopsCross 13, VertexTolerance 7, ShellsOverlap 5 |
 
+**Later on this branch, under the full rules.** The merged readers of scale-step and fix-mesh-asm
+(3a60489) and the seam fix for holes (082e129) were judged against the Gauss–Kronrod truth of all
+3146 files, with both uncertainty rules. Uncertain: 72 files, 7 where the truth's measures disagree
+and 65 within their own gaps.
+
+| | before (3a60489's base) | now |
+|---|---|---|
+| valid | 3082 (98.0%) | 3088 (98.2%) |
+| matching | 2945 (93.6%) | 2950 (93.8%) |
+| matching where the truth is certain | 2945 of 3073 (95.8%) | 2950 of 3074 (96.0%) |
+| FaceWrongSide (files) | 37 | 32 |
+
+The Gauss–Kronrod truth moves almost nothing against OCCT's default measure. The CATIA mismatches
+of 1e-3 to 5e-3 that have no tolerant edge are real disagreements, not the truth's imprecision.
+
 By system (this branch): CATIA 1610 files, 1594 valid; Onshape 1525, 1488 valid.
 
 ### The failures, by cause (this branch, 207 files)
