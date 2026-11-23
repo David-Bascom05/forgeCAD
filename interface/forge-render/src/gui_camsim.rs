@@ -62,16 +62,19 @@ impl Gui {
         let Some(w) = &self.shell.cam else { return };
         // the workspace has a run of text the simulation is not of: simulate it
         if let Some(run) = &w.run {
+            // keyed by the text and what its run came to: the same text run again with the
+            // files it reads now there (a browser page's arrive after it opens) is simulated again
+            let key = format!("{}\u{1}{}\u{1}{}", run.text, run.certification, run.ops.len());
             let have = self.shell.camsim.as_deref().map(|s| s.src.as_str());
             let job = &mut self.shell.camsim_job;
-            if have != Some(run.text.as_str()) && job.running.as_deref() != Some(run.text.as_str()) {
+            if have != Some(key.as_str()) && job.running.as_deref() != Some(key.as_str()) {
                 let (text, dir) = (run.text.clone(), w.dir.clone());
-                job.running = Some(text.clone());
+                job.running = Some(key.clone());
                 let slot = job.slot.clone();
                 let waker = self.waker.clone();
                 crate::plat::spawn("forge-camsim", move || {
                     let sim = Sim::open(&text, &dir);
-                    *crate::plat::lock(&slot) = Some((text, sim));
+                    *crate::plat::lock(&slot) = Some((key, sim));
                     waker();
                 });
             }
