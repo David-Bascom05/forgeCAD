@@ -1064,6 +1064,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-brake"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-ops",
+ "forge-sheet",
+]
+
+[[package]]
 name = "forge-dirs"
 version = "0.1.0"
 
@@ -1142,6 +1151,7 @@ dependencies = [
  "forge-agent",
  "forge-asm",
  "forge-bool",
+ "forge-brake",
  "forge-dirs",
  "forge-draw",
  "forge-font",
@@ -1217,6 +1227,7 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "forge-agent",
+ "forge-brake",
  "forge-dirs",
  "forge-draw",
  "forge-dwg",

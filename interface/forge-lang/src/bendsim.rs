@@ -93,6 +93,24 @@ pub fn ask_file(path: &Path, root: Option<PathBuf>, ask: &Ask) -> Answer {
 }
 
 pub fn ask_src(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask) -> Answer {
+    match simulate(src, dir, root, ask) {
+        Ok(s) => s.answer,
+        Err(a) => a,
+    }
+}
+
+/// A simulation as the app shows it: the model, the tooling, the plan, the bends' names, and the
+/// reply the query gives.
+pub struct Sim {
+    pub model: fb::Model,
+    pub tooling: fb::Tooling,
+    pub plan: fb::Plan,
+    pub names: Vec<String>,
+    pub answer: Answer,
+}
+
+/// The part's sheet simulated: Err is the typed error reply.
+pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask) -> Result<Sim, Answer> {
     let opts = Options {
         dir: dir.clone(),
         root,
@@ -100,7 +118,7 @@ pub fn ask_src(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask
     };
     let (r, _) = run(src, opts, Default::default());
     if r.sheets.is_empty() {
-        return match r.errors.first() {
+        return Err(match r.errors.first() {
             Some(e) => {
                 // the build's own typed error, with its span and fixes
                 let j = e.json(src);
@@ -122,37 +140,31 @@ pub fn ask_src(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask
                 }
             }
             None => err("NoSheet", "the part has no sheet metal", vec![]),
-        };
+        });
     }
     let names: Vec<&str> = r.sheets.iter().map(|s| s.id.as_str()).collect();
     let sh = match &ask.sheet {
         Some(n) => match r.sheets.iter().find(|s| &s.id == n) {
             Some(s) => s,
             None => {
-                return err(
+                return Err(err(
                     "NoSuchSheet",
                     format!("no sheet `{n}`"),
                     vec![("sheets", strs(&names))],
-                );
+                ));
             }
         },
         None => &r.sheets[0],
     };
-    let tooling = match tooling(ask, dir.as_deref()) {
-        Ok(t) => t,
-        Err(a) => return a,
-    };
+    let tooling = tooling(ask, dir.as_deref())?;
     let model = match fb::Model::new(&sh.sheet) {
         Ok(m) => m,
-        Err(e) => return model_err(sh, &e),
+        Err(e) => return Err(model_err(sh, &e)),
     };
     let bend_names: Vec<String> = model.bends.iter().map(|b| joint_name(sh, b.joint)).collect();
     let sequence = match &ask.sequence {
         None => None,
-        Some(s) => match sequence(s, &bend_names) {
-            Ok(v) => Some(v),
-            Err(a) => return a,
-        },
+        Some(s) => Some(sequence(s, &bend_names)?),
     };
     let uts = ask.uts.or_else(|| {
         sh.material
@@ -167,7 +179,14 @@ pub fn ask_src(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask
         ..fb::Options::default()
     };
     let plan = fb::plan(&model, &tooling, &opts);
-    answer(sh, &model, &tooling, &plan, &bend_names)
+    let answer = answer(sh, &model, &tooling, &plan, &bend_names);
+    Ok(Sim {
+        model,
+        tooling,
+        plan,
+        names: bend_names,
+        answer,
+    })
 }
 
 fn model_err(sh: &SheetOut, e: &fb::ModelError) -> Answer {

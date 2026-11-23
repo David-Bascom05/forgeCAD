@@ -15,6 +15,7 @@ pub mod num;
 pub mod plan;
 pub mod sim;
 pub mod tooling;
+pub mod view;
 
 pub use model::{Model, ModelError};
 pub use plan::{Blocking, Options, Plan, Suggestion, plan, simulate};

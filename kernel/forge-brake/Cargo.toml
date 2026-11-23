@@ -15,4 +15,5 @@ forge-sheet = { path = "../forge-sheet" }
 workspace = true
 
 [dev-dependencies]
+forge-sheet = { path = "../forge-sheet" }
 forge-math = { path = "../forge-math" }
