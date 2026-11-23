@@ -1,0 +1,23 @@
+import ForgeCam
+-- Each theorem's axioms: standard ones only (propext, Classical.choice, Quot.sound).
+#print axioms ForgeCam.sd_hyp_mono
+#print axioms ForgeCam.sd_hyp_eq_sdRZ
+#print axioms ForgeCam.clear_of_frontier
+#print axioms ForgeCam.clearFace_sound
+#print axioms ForgeCam.hyp_preconnected
+#print axioms ForgeCam.closedForm_clear
+#print axioms ForgeCam.G1_of_closedForm
+#print axioms ForgeCam.G2_of_closedForm
+#print axioms ForgeCam.G3_of_closedForm
+#print axioms ForgeCam.G4_lower
+#print axioms ForgeCam.G4_part
+#print axioms ForgeCam.G4_upper
+#print axioms ForgeCam.leftover_slice
+#print axioms ForgeCam.G5_line_iff
+#print axioms ForgeCam.G5_arc
+#print axioms ForgeCam.lineOkQ_iff
+#print axioms ForgeCam.Post.round_trip
+#print axioms ForgeCam.Post.G6
+#print axioms ForgeCam.Post.faulty_counterexample
+#print axioms ForgeCam.Post.fixed_on_counterexample
+#print axioms ForgeCam.Post.roundEven_isQuant

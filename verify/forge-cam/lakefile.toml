@@ -1,0 +1,17 @@
+name = "forgecam"
+version = "0.1.0"
+defaultTargets = ["ForgeCam"]
+
+[leanOptions]
+relaxedAutoImplicit = false
+autoImplicit = false
+
+# CAM's L1 (research/cam/design.md §5.2, G1–G6) and the 2.5D checker's soundness, over ℝ with
+# Mathlib; the executable specs run over ℚ.
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.36.0"
+
+[[lean_lib]]
+name = "ForgeCam"
