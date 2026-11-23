@@ -37,7 +37,9 @@
 
 use forge_bool_core::Sgn;
 use forge_math::Interval;
-use forge_math::exact::alg::{Num, Poly, Q, eqv, is_zero_p, padd, pdiv, pmul, pneg, pscale, psub, roots_of};
+use forge_math::exact::alg::{
+    Coef, Num, Poly, Q, eqv, gcd, is_zero_p, padd, pdiv, pmul, pneg, pscale, psub, roots_of,
+};
 
 /// Why a boolean is not decided here, and goes to the old path, counted.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -813,31 +815,64 @@ pub fn elim(qj: &Quadric, qk: &Quadric, c: &Q) -> Elim {
 /// `elim` on two restrictions `f = a₀ + a₁t + a₂t²`, `g = b₀ + b₁t + b₂t²` with coefficients in
 /// `ℚ[s]`: the resultant in `t`, the subresultant `D t + N`, and the cofactors `U f + V g = R`.
 pub fn elim_of(a: &(Poly, Poly, Poly), b: &(Poly, Poly, Poly)) -> Elim {
-    let (a0, a1, a2) = (a.0.clone(), a.1.clone(), a.2.clone());
-    let (b0, b1, b2) = (b.0.clone(), b.1.clone(), b.2.clone());
-    let x = psub(&pmul(&a2, &b0), &pmul(&a0, &b2));
-    let y = psub(&pmul(&a2, &b1), &pmul(&a1, &b2));
-    let z = psub(&pmul(&a1, &b0), &pmul(&a0, &b1));
-    let u0 = padd(
-        &psub(
-            &psub(&pmul(&a0, &pmul(&b2, &b2)), &pmul(&a1, &pmul(&b1, &b2))),
-            &pmul(&a2, &pmul(&b0, &b2)),
-        ),
-        &pmul(&a2, &pmul(&b1, &b1)),
-    );
-    let u1 = padd(&pneg(&pmul(&a1, &pmul(&b2, &b2))), &pmul(&a2, &pmul(&b1, &b2)));
-    let v0 = padd(
-        &psub(
-            &padd(&pneg(&pmul(&a0, &pmul(&a2, &b2))), &pmul(&a1, &pmul(&a1, &b2))),
-            &pmul(&a1, &pmul(&a2, &b1)),
-        ),
-        &pmul(&a2, &pmul(&a2, &b0)),
-    );
-    let v1 = psub(&pmul(&a1, &pmul(&a2, &b2)), &pmul(&a2, &pmul(&a2, &b1)));
+    let e = elim_gen(a, b);
     Elim {
-        r: psub(&pmul(&x, &x), &pmul(&y, &z)),
-        n: psub(&pmul(&b2, &a0), &pmul(&a2, &b0)),
-        d: psub(&pmul(&b2, &a1), &pmul(&a2, &b1)),
+        r: e.r,
+        n: e.n,
+        d: e.d,
+        u: e.u,
+        v: e.v,
+    }
+}
+
+/// `elim` over any coefficient ring (`Poly` for samples on a plane, `BPoly` = `ℚ[x][y]` for the
+/// three-quadric vertex): the resultant in `t`, `D t + N`, and `U f + V g = R`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ElimG<T> {
+    pub r: T,
+    pub n: T,
+    pub d: T,
+    pub u: Vec<T>,
+    pub v: Vec<T>,
+}
+
+fn cm<T: Coef>(p: &T, q: &T) -> T {
+    p.c_mul(q)
+}
+fn cs<T: Coef>(p: &T, q: &T) -> T {
+    p.c_add(&q.c_neg())
+}
+fn ca<T: Coef>(p: &T, q: &T) -> T {
+    p.c_add(q)
+}
+
+/// The closed forms of QPropose's `elim`, over `T`.
+pub fn elim_gen<T: Coef>(a: &(T, T, T), b: &(T, T, T)) -> ElimG<T> {
+    let (a0, a1, a2) = (&a.0, &a.1, &a.2);
+    let (b0, b1, b2) = (&b.0, &b.1, &b.2);
+    let x = cs(&cm(a2, b0), &cm(a0, b2));
+    let y = cs(&cm(a2, b1), &cm(a1, b2));
+    let z = cs(&cm(a1, b0), &cm(a0, b1));
+    let u0 = ca(
+        &cs(
+            &cs(&cm(a0, &cm(b2, b2)), &cm(a1, &cm(b1, b2))),
+            &cm(a2, &cm(b0, b2)),
+        ),
+        &cm(a2, &cm(b1, b1)),
+    );
+    let u1 = ca(&cm(a1, &cm(b2, b2)).c_neg(), &cm(a2, &cm(b1, b2)));
+    let v0 = ca(
+        &cs(
+            &ca(&cm(a0, &cm(a2, b2)).c_neg(), &cm(a1, &cm(a1, b2))),
+            &cm(a1, &cm(a2, b1)),
+        ),
+        &cm(a2, &cm(a2, b0)),
+    );
+    let v1 = cs(&cm(a1, &cm(a2, b2)), &cm(a2, &cm(a2, b1)));
+    ElimG {
+        r: cs(&cm(&x, &x), &cm(&y, &z)),
+        n: cs(&cm(b2, a0), &cm(a2, b0)),
+        d: cs(&cm(b2, a1), &cm(a2, b1)),
         u: vec![u0, u1],
         v: vec![v0, v1],
     }
@@ -1352,6 +1387,254 @@ pub fn propose_vert(pl: &Plane, qa: &Quadric, qb: &Quadric, fuel: usize) -> Opti
 }
 
 // =============================================================================================
+// The vertex proposer, three quadrics (untrusted; checked by `bezout3` twice, a gcd identity,
+// `roots_of`, `on_vert`, `d_ok`). Drafted here for dol-curved's Lean mirror.
+// =============================================================================================
+
+/// `q` as a quadratic in `z` over `ℚ[x][y]`.
+fn ztriple(q: &Quadric) -> (BPoly, BPoly, BPoly) {
+    let t = restr_t(q);
+    (t[0].clone(), t[1].clone(), t[2].clone())
+}
+
+/// The `y`-polynomial `y^k p`.
+fn yshift(k: usize, p: &[Poly]) -> BPoly {
+    let mut out: BPoly = Vec::with_capacity(k + p.len());
+    let mut i = 0;
+    while i < k {
+        out.push(Vec::new());
+        i += 1;
+    }
+    let mut j = 0;
+    while j < p.len() {
+        out.push(p[j].clone());
+        j += 1;
+    }
+    out
+}
+
+/// Every coefficient divided by `c` (exact by construction; anything else fails a later check).
+fn bdiv(p: &[Poly], c: &[Q]) -> BPoly {
+    let mut out: BPoly = Vec::with_capacity(p.len());
+    let mut i = 0;
+    while i < p.len() {
+        out.push(pdiv(&p[i], c));
+        i += 1;
+    }
+    out
+}
+
+/// The gcd (in `ℚ[x]`) of every coefficient of `ps`.
+fn content(ps: &[&BPoly]) -> Poly {
+    let mut g: Poly = Vec::new();
+    let mut i = 0;
+    while i < ps.len() {
+        let mut j = 0;
+        while j < ps[i].len() {
+            if !is_zero_p(&ps[i][j]) {
+                g = if g.is_empty() {
+                    ps[i][j].clone()
+                } else {
+                    gcd(&g, &ps[i][j])
+                };
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+    g
+}
+
+/// One projection: `R(x)` with the cofactors of `A q_a + B q_b + C q_c = R`, and the last
+/// remainder of `y`-degree 1, `p₁ y + p₀`, when the sequence has one.
+#[derive(Clone, Debug)]
+pub struct Chain {
+    pub r: Poly,
+    pub a: TPoly,
+    pub b: TPoly,
+    pub c: TPoly,
+    pub lin: Option<(Poly, Poly)>,
+    /// `D z + N` from the elimination of `z` between `q_a` and `q_b`, over `ℚ[x][y]`
+    pub dz: BPoly,
+    pub nz: BPoly,
+}
+
+/// Steps the remainder sequence may take (the `y`-degree is at most 4, so 8 is ample).
+pub const CHAIN_STEPS: usize = 8;
+
+/// **The chain**: `R₁ = Res_z(q_a, q_b) = U₁q_a + V₁q_b` and `R₂ = Res_z(q_a, q_c) = U₂q_a + V₂q_c`
+/// over `ℚ[x][y]` (`elim_gen`), then a pseudo-remainder sequence in `y` that tracks cofactors,
+/// `f = s R₁ + t R₂` (each step `f ← lc(g) f − lc(f) yᵏ g`, the common content in `ℚ[x]` divided
+/// out), down to `R = S R₁ + T R₂` free of `y`. So `A = S U₁ + T U₂`, `B = S V₁`, `C = T V₂`.
+/// `None` if a remainder vanishes (`R₁`, `R₂` share a factor: a common curve).
+pub fn chain(qa: &Quadric, qb: &Quadric, qc: &Quadric) -> Option<Chain> {
+    let ea = elim_gen(&ztriple(qa), &ztriple(qb));
+    let eb = elim_gen(&ztriple(qa), &ztriple(qc));
+    let r1 = btrim(&ea.r);
+    let r2 = btrim(&eb.r);
+    if r1.is_empty() || r2.is_empty() {
+        return None;
+    }
+    let one: BPoly = vec![vec![Q::one()]];
+    let (mut f, mut sf, mut tf, mut g, mut sg, mut tg) = if r1.len() >= r2.len() {
+        (r1, one.clone(), Vec::new(), r2, Vec::new(), one)
+    } else {
+        (r2, Vec::new(), one.clone(), r1, one, Vec::new())
+    };
+    let mut ok = true;
+    let mut it = 0;
+    while ok && g.len() > 1 && it < CHAIN_STEPS {
+        // reduce f by g
+        let mut k2 = 0;
+        while !f.is_empty() && f.len() >= g.len() && k2 < 16 {
+            let k = f.len() - g.len();
+            let lf = f[f.len() - 1].clone();
+            let lg = g[g.len() - 1].clone();
+            f = btrim(&psub(&pscale(&lg, &f), &pscale(&lf, &yshift(k, &g))));
+            sf = psub(&pscale(&lg, &sf), &pscale(&lf, &yshift(k, &sg)));
+            tf = psub(&pscale(&lg, &tf), &pscale(&lf, &yshift(k, &tg)));
+            k2 += 1;
+        }
+        let c = content(&[&f, &sf, &tf]);
+        if deg_p(&c) > 0 {
+            f = bdiv(&f, &c);
+            sf = bdiv(&sf, &c);
+            tf = bdiv(&tf, &c);
+        }
+        if f.is_empty() {
+            ok = false;
+        } else {
+            let (f0, s0, t0) = (g, sg, tg);
+            g = f;
+            sg = sf;
+            tg = tf;
+            f = f0;
+            sf = s0;
+            tf = t0;
+        }
+        it += 1;
+    }
+    if !ok || g.len() != 1 {
+        None
+    } else {
+        let lin = if f.len() == 2 {
+            Some((f[0].clone(), f[1].clone()))
+        } else {
+            None
+        };
+        let s1: TPoly = vec![sg];
+        let t1: TPoly = vec![tg];
+        Some(Chain {
+            r: g[0].clone(),
+            a: padd(&pmul(&s1, &ea.u), &pmul(&t1, &eb.u)),
+            b: pmul(&s1, &ea.v),
+            c: pmul(&t1, &eb.v),
+            lin,
+            dz: btrim(&ea.d),
+            nz: btrim(&ea.n),
+        })
+    }
+}
+
+/// `deg` over ℚ (local name, to keep the import list short).
+fn deg_p(p: &[Q]) -> usize {
+    forge_math::exact::alg::deg(p)
+}
+
+/// `F(x, −p₀/p₁) p₁^m` for a `y`-polynomial `F` of degree `≤ m`.
+fn hom_y(f: &[Poly], p0: &[Q], p1: &[Q], m: usize) -> Poly {
+    let mp0 = pneg(p0);
+    let mut acc: Poly = Vec::new();
+    let mut i = 0;
+    while i < f.len() {
+        let mut t = f[i].clone();
+        let mut k = 0;
+        while k < i {
+            t = pmul(&t, &mp0);
+            k += 1;
+        }
+        while k < m {
+            t = pmul(&t, p1);
+            k += 1;
+        }
+        acc = padd(&acc, &t);
+        i += 1;
+    }
+    acc
+}
+
+/// **`proposeVert3`**: every common point of three quadrics, each certified, or `None`.
+/// - Projection A on the quadrics as given, projection B after the first shear `λ ≠ 0` of
+///   `shears()` whose chain exists. A shear keeps `x`, so a vertex's `x` is a root of both `R_A`
+///   and `R_B` (`bezout3` on each; B's on the sheared quadrics, by `shear_ev`).
+/// - `G = gcd(R_A, R_B)`, checked as `G = u R_A + v R_B`: every vertex's `x` is a root of `G`.
+/// - Samples on `roots_of(sqfree G)`: `y = −p₀/p₁` from A's linear remainder, `z = −N(x, y)/D(x, y)`
+///   from A's `z`-elimination, homogenised; each checked by `on_vert` and `d_ok`.
+pub fn propose_vert3(qa: &Quadric, qb: &Quadric, qc: &Quadric, fuel: usize) -> Option<Vec<VSample>> {
+    let ca_ = chain(qa, qb, qc)?;
+    if !bezout3(qa, qb, qc, &ca_.a, &ca_.b, &ca_.c, &ca_.r) {
+        return None;
+    }
+    let ls = shears();
+    let mut cb: Option<Chain> = None;
+    let mut i = 1;
+    while cb.is_none() && i < ls.len() {
+        let (sa, sb, sc) = (qa.shear(&ls[i]), qb.shear(&ls[i]), qc.shear(&ls[i]));
+        if let Some(c) = chain(&sa, &sb, &sc)
+            && bezout3(&sa, &sb, &sc, &c.a, &c.b, &c.c, &c.r)
+        {
+            cb = Some(c);
+        }
+        i += 1;
+    }
+    let cb = cb?;
+    let (g, u, v) = forge_math::exact::alg::xgcd(&ca_.r, &cb.r);
+    if !eqv(&g, &padd(&pmul(&u, &ca_.r), &pmul(&v, &cb.r))) {
+        return None;
+    }
+    if is_zero_p(&g) {
+        return None;
+    }
+    if deg_p(&g) == 0 {
+        return Some(Vec::new());
+    }
+    let (p0, p1) = ca_.lin.clone()?;
+    let sp = forge_math::exact::alg::propose_sqfree(&g)?;
+    let ns = roots_of(&sp, fuel)?;
+    let m = if ca_.dz.len() >= ca_.nz.len() {
+        ca_.dz.len()
+    } else {
+        ca_.nz.len()
+    };
+    let m = if m == 0 { 0 } else { m - 1 };
+    let nz = hom_y(&ca_.nz, &p0, &p1, m);
+    let dz = hom_y(&ca_.dz, &p0, &p1, m);
+    let wa = pdiv(&homog3(qa, &p0, &p1, &nz, &dz), &sp);
+    let wb = pdiv(&homog3(qb, &p0, &p1, &nz, &dz), &sp);
+    let wc = pdiv(&homog3(qc, &p0, &p1, &nz, &dz), &sp);
+    let mut vs: Vec<VSample> = Vec::with_capacity(ns.len());
+    let mut ok = true;
+    let mut k = 0;
+    while k < ns.len() {
+        let v = VSample {
+            r: sp.clone(),
+            ny: p0.clone(),
+            dy: p1.clone(),
+            nz: nz.clone(),
+            dz: dz.clone(),
+            x: ns[k].clone(),
+            qa: wa.clone(),
+            qb: wb.clone(),
+            qc: wc.clone(),
+        };
+        ok = ok && v.on_vert(qa, qb, qc) && v.d_ok(SIGN_FUEL);
+        vs.push(v);
+        k += 1;
+    }
+    if ok { Some(vs) } else { None }
+}
+
+// =============================================================================================
 // QForm.lean: a body's sign formula
 // =============================================================================================
 
@@ -1629,6 +1912,55 @@ mod tests {
             c: qi(0),
         };
         assert!(propose_vert(&px, &sphere1(), &plane_z(), 30).is_none());
+    }
+
+    /// The three-quadric vertex proposer: two spheres and a cylinder.
+    #[test]
+    fn propose_vert_three() {
+        let sph = |o: V3, r: Q| {
+            QFace {
+                solid: 0,
+                index: 0,
+                kind: Kind::Sphere,
+                o,
+                z: V3::default(),
+                r,
+                s: qi(0),
+                c: qi(0),
+            }
+            .quadric()
+        };
+        let s0 = sphere1();
+        let s1 = sph(V3::new(q(1, 2), q(1, 3), q(1, 5)), qi(1));
+        let cyl = QFace {
+            solid: 0,
+            index: 0,
+            kind: Kind::Cyl,
+            o: V3::new(q(1, 4), q(1, 8), qi(0)),
+            z: V3::new(qi(0), qi(0), qi(1)),
+            r: q(3, 4),
+            s: qi(0),
+            c: qi(0),
+        }
+        .quadric();
+        let t0 = std::time::Instant::now();
+        let vs = propose_vert3(&s0, &s1, &cyl, 60);
+        if std::env::var("VDBG").is_ok() {
+            println!("{:?} in {:?}", vs.as_ref().map(|v| v.len()), t0.elapsed());
+            if let Some(c) = chain(&s0, &s1, &cyl) {
+                println!("R_A degree {}", forge_math::exact::alg::deg(&c.r));
+            }
+        }
+        let vs = vs.unwrap();
+        assert!(!vs.is_empty());
+        let mut i = 0;
+        while i < vs.len() {
+            assert_eq!(
+                vert_cov(&[s0.clone(), s1.clone(), cyl.clone()], &vs[i], SIGN_FUEL),
+                Some(vec![Sgn::Zero, Sgn::Zero, Sgn::Zero])
+            );
+            i += 1;
+        }
     }
 
     /// QLine: the covector along a line through the unit sphere.

@@ -214,3 +214,30 @@ For a plane `P = n·p − c` with `n.z ≠ 0`, and quadrics `q_a`, `q_b`:
   quadrics;
 - `n = (n_x, 0, 0)` (a plane `x = const`), or `D ≡ 0` (two vertices with one `x`): `None`. The
   decided shear or rotation rule takes these.
+
+**Milestone 1e: the vertex proposer, three quadrics** (drafted in Rust for dol-curved's Lean
+mirror; untrusted, checked by `bezout3` twice, a gcd identity, `roots_of`, `on_vert` and `d_ok`).
+- `elim_gen` is QPropose's `elim` over any coefficient ring (`elim_of` is its `Poly` instance,
+  unchanged; the digest holds). Over `ℚ[x][y]` it gives `R₁ = Res_z(q_a, q_b) = U₁q_a + V₁q_b`
+  and `R₂ = Res_z(q_a, q_c) = U₂q_a + V₂q_c`, along with `D z + N` for `(q_a, q_b)`.
+- **The chain** (`chain`): a pseudo-remainder sequence in `y` that tracks cofactors, `f = sR₁ + tR₂`.
+  Each step is `f ← lc(g) f − lc(f) yᵏ g`, the same for `s` and `t`. Then the common content in
+  `ℚ[x]` of `f`, `s` and `t` is divided out (exactly; anything else fails `bezout3`). It ends at
+  `R(x) = S R₁ + T R₂`, free of `y`. So `A = S U₁ + T U₂`, `B = S V₁`, `C = T V₂`. The last
+  remainder of `y`-degree 1, `p₁y + p₀`, gives `y = −p₀/p₁`. A vanishing remainder (a common
+  factor: a shared curve) answers `None`. At most `CHAIN_STEPS = 8` steps.
+- **Two projections.** A on the quadrics as given, and B on the quadrics sheared by the first
+  `λ ≠ 0` of `shears()` whose chain exists and checks. The shear keeps `x`, so every vertex's `x`
+  is a root of `R_A` and of `R_B` (`bezout3` on each, B's on the sheared quadrics, by `shear_ev`).
+- **The narrowing**: `G = gcd(R_A, R_B)`, checked as `G = u R_A + v R_B` (`eqv`), so every
+  vertex's `x` is a root of `G`. `deg G = 0` gives no vertices.
+- **The samples**, on `roots_of(sp)` with `sp = propose_sqfree(G)`:
+  - `N_y = p₀`, `D_y = p₁`;
+  - `N_z = N(x, −p₀/p₁)·p₁^m` and `D_z = D(x, −p₀/p₁)·p₁^m`, homogenised (`hom_y`), with `m`
+    the larger `y`-degree of `N` and `D`;
+  - `Q_a = pdiv(homog3 q_a, sp)` and likewise for `b`, `c`;
+  - every sample must pass `on_vert` and `d_ok`, or `None`. An extraneous root common to both
+    projections is `None`, never wrong.
+- Two unit spheres (centres 0 and (1/2, 1/3, 1/5)) and the z-cylinder of radius 3/4 at
+  (1/4, 1/8): `R_A` of degree 8, 4 vertices, every covector `(0, 0, 0)`. It takes 352 ms in
+  release, through `Big`'s public API.
