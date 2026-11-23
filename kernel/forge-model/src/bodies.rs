@@ -347,22 +347,32 @@ fn step_unchecked(
 pub(crate) fn sequential(features: History<'_>) -> Result<Vec<Solid>, RegenError> {
     let (plain, picks) = strip(&features);
     let plain = features.on(&plain);
-    let mut solids = Vec::new();
-    for i in 0..plain.len() {
-        solids = match apply_once(plain, &picks, i, solids) {
-            Err(e) if crate::lost_its_way(&e) => {
-                return match careful(plain, &picks, 0, plain.len(), Vec::new()) {
-                    Ok(s) => finish(s),
-                    Err(_) => match all_blunted(features, features.len() - 1, features.len()) {
-                        Some(Ok(s)) => finish(s),
-                        _ => Err(e),
-                    },
-                };
-            }
-            r => r?,
-        };
+    // (each feature in turn; the tools of those ahead built by a helper, `crate::ahead`)
+    let apart = |i: usize| {
+        let f = &plain[i];
+        !modifies(f)
+            && !matches!(
+                f,
+                Feature::Plane(_)
+                    | Feature::Work(_)
+                    | Feature::Body(_)
+                    | Feature::Param(_)
+                    | Feature::Sketch(_)
+            )
+    };
+    let solids = crate::ahead(plain, &apart, Vec::new(), &mut |i, solids, made| {
+        apply_once_made(plain, &picks, i, solids, made)
+    });
+    match solids {
+        Err(e) if crate::lost_its_way(&e) => match careful(plain, &picks, 0, plain.len(), Vec::new()) {
+            Ok(s) => finish(s),
+            Err(_) => match all_blunted(features, features.len() - 1, features.len()) {
+                Some(Ok(s)) => finish(s),
+                _ => Err(e),
+            },
+        },
+        r => finish(r?),
     }
-    finish(solids)
 }
 
 fn finish(mut solids: Vec<Solid>) -> Result<Vec<Solid>, RegenError> {
@@ -415,7 +425,18 @@ fn apply_once(
     plain: History<'_>,
     picks: &[Option<&Pick>],
     i: usize,
+    solids: Vec<Solid>,
+) -> Result<Vec<Solid>, RegenError> {
+    apply_once_made(plain, picks, i, solids, None)
+}
+
+/// `apply_once` with feature `i`'s tools made already (`tools(plain, i, true)`, exactly), if `made`.
+fn apply_once_made(
+    plain: History<'_>,
+    picks: &[Option<&Pick>],
+    i: usize,
     mut solids: Vec<Solid>,
+    made: Option<Vec<Tool>>,
 ) -> Result<Vec<Solid>, RegenError> {
     let f = &plain[i];
     let p = pick(picks, i);
@@ -435,7 +456,10 @@ fn apply_once(
         }
         _ => {}
     }
-    let ts = tools(plain, i, true)?;
+    let ts = match made {
+        Some(ts) => ts,
+        None => tools(plain, i, true)?,
+    };
     // parameters and sketches make nothing
     if ts.is_empty() {
         return Ok(solids);

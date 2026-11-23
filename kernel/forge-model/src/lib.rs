@@ -664,7 +664,7 @@ fn careful(
 /// knife edges: nothing nests.
 fn in_turn(features: History<'_>) -> Result<Option<Body>, RegenError> {
     let plain = |h: History<'_>| (0..h.len()).try_fold(None, |b, i| step_plain(h, i, b));
-    match ahead(features) {
+    match in_turn_ahead(features) {
         Err(e) if lost_its_way(&e) => {
             let Some(all) = all_blunted(features, features.len().saturating_sub(1)) else {
                 return Err(e);
@@ -688,31 +688,54 @@ fn in_turn(features: History<'_>) -> Result<Option<Body>, RegenError> {
 fn tools_apart(features: History<'_>, i: usize) -> bool {
     let f = &features[i];
     !modifies(f)
-        && !matches!(f, Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_) | Feature::Work(_))
+        && !matches!(
+            f,
+            Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_) | Feature::Work(_)
+        )
         && unlinked(features, i).is_none()
 }
 
 /// Every feature in turn, as `step_plain` makes them, with a helper building the tools of the
-/// features ahead while the part takes each boolean in turn, once tools have shown they are worth
-/// it (at least `AHEAD_AFTER` of building them, and a fifth of the time so far: a part of cheap
-/// tools stays on one thread). A tool is a function of the history alone (`tools` reads no part),
-/// so where it is built changes nothing: the steps take them in order, each as the step would
-/// have made it, an error met at the step that met it before; the clock decides only which
-/// thread builds a tool. One thread (wasm, `FORGECAD_THREADS=1`, one core): plainly, after the
-/// clock trips.
-fn ahead(h: History<'_>) -> Result<Option<Body>, RegenError> {
+/// features ahead (`ahead`).
+fn in_turn_ahead(h: History<'_>) -> Result<Option<Body>, RegenError> {
+    ahead(h, &|i| tools_apart(h, i), None, &mut |i, b, made| {
+        step_plain_made(h, i, b, None, made)
+    })
+}
+
+/// A step of a regen in turn: feature `i` applied to what the steps before made, given its tools
+/// made already (`tools(h, i, true)`, exactly) where `ahead` made them.
+pub(crate) type StepWith<'s, S> = dyn FnMut(usize, S, Option<Vec<Tool>>) -> Result<S, RegenError> + 's;
+
+/// Every feature of `h` in turn by `step`, with a helper building the tools of the features
+/// ahead (those `apart` says the step builds apart from the part) while the part takes each
+/// boolean in turn, once tools have shown they are worth it (at least `AHEAD_AFTER` of building
+/// them, and a fifth of the time so far, within the first `AHEAD_LOOK` timed: a part of cheap
+/// tools stays on one thread and stops reading the clock). A tool is a function of the history
+/// alone (`tools` reads no part), so where it is built changes nothing: the steps take them in
+/// order, each as the step would have made it, an error met at the step that met it before, a
+/// helper's panic resumed here; the clock decides only which thread builds a tool. One thread
+/// (wasm, `FORGECAD_THREADS=1`, one core): plainly.
+pub(crate) fn ahead<S>(
+    h: History<'_>,
+    apart: &(dyn Fn(usize) -> bool + Sync),
+    mut state: S,
+    step: &mut StepWith<'_, S>,
+) -> Result<S, RegenError> {
     if cfg!(target_family = "wasm") || trace::on() {
-        return (0..h.len()).try_fold(None, |b, i| step_plain(h, i, b));
+        for i in 0..h.len() {
+            state = step(i, state, None)?;
+        }
+        return Ok(state);
     }
     let start = std::time::Instant::now();
     let mut building = std::time::Duration::ZERO;
     // (tools timed so far: past `AHEAD_LOOK` of them untripped, the rest is plain, the clock unread)
     let mut timed = 0;
     let mut tripped = false;
-    let mut body = None;
     let mut i = 0;
     while i < h.len() && !tripped && timed < AHEAD_LOOK {
-        let made = if tools_apart(h, i) {
+        let made = if apart(i) {
             // (a tool that starts the part has no boolean beside it to hide behind)
             let t = (!starts(&h[i])).then(std::time::Instant::now);
             let made = tools(h, i, true)?;
@@ -724,29 +747,29 @@ fn ahead(h: History<'_>) -> Result<Option<Body>, RegenError> {
         } else {
             None
         };
-        body = step_plain_made(h, i, body, None, made)?;
+        state = step(i, state, made)?;
         i += 1;
         tripped = building >= AHEAD_AFTER && building * 5 >= start.elapsed();
     }
     // (the threads there are asked only now: a part of cheap tools never asks)
-    let apart: Vec<usize> = match tripped && i < h.len() && forge_math::par::threads() >= 2 {
-        true => (i..h.len()).filter(|&k| tools_apart(h, k)).collect(),
+    let ahead: Vec<usize> = match tripped && i < h.len() && forge_math::par::threads() >= 2 {
+        true => (i..h.len()).filter(|&k| apart(k)).collect(),
         false => Vec::new(),
     };
-    if apart.len() < 2 {
+    if ahead.len() < 2 {
         for k in i..h.len() {
-            body = step_plain(h, k, body)?;
+            state = step(k, state, None)?;
         }
-        return Ok(body);
+        return Ok(state);
     }
     let stop = std::sync::atomic::AtomicBool::new(false);
     std::thread::scope(|s| {
         let (tx, rx) = std::sync::mpsc::channel::<Result<Vec<Tool>, RegenError>>();
-        let (apart, stop) = (&apart, &stop);
+        let (list, stop) = (&ahead, &stop);
         let kept = swept::take_kept();
         let helper = s.spawn(move || {
             swept::put_kept(kept);
-            for &k in apart {
+            for &k in list {
                 if stop.load(std::sync::atomic::Ordering::Relaxed) {
                     break;
                 }
@@ -756,7 +779,8 @@ fn ahead(h: History<'_>) -> Result<Option<Body>, RegenError> {
             }
             swept::take_kept()
         });
-        let mut next = apart.iter().peekable();
+        let mut next = ahead.iter().peekable();
+        let mut state = Some(state);
         let mut r = Ok(());
         for k in i..h.len() {
             let made = if next.next_if(|&&a| a == k).is_some() {
@@ -772,8 +796,9 @@ fn ahead(h: History<'_>) -> Result<Option<Body>, RegenError> {
             } else {
                 None
             };
-            match step_plain_made(h, k, body.take(), None, made) {
-                Ok(b) => body = b,
+            let Some(st) = state.take() else { break };
+            match step(k, st, made) {
+                Ok(st) => state = Some(st),
                 Err(e) => {
                     r = Err(e);
                     break;
@@ -784,7 +809,7 @@ fn ahead(h: History<'_>) -> Result<Option<Body>, RegenError> {
         drop(rx);
         let kept = helper.join().unwrap_or_else(|p| std::panic::resume_unwind(p));
         swept::put_kept(kept);
-        r.map(|()| body)
+        r.map(|()| state.expect("each step hands its state on"))
     })
 }
 
