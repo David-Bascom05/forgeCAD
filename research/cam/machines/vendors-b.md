@@ -1,6 +1,6 @@
 # Machine library, worker B (industrial vendors), 2026-11-23
 
-56 machines in kernel/forge-machine/data/machines/<vendor>.toml (14 vendor files), each body a
+88 machines (56 in round 1, 32 in round 2: openly published models only, no sign-ups) in kernel/forge-machine/data/machines/<vendor>.toml (14 vendor files), each body a
 conservative stand-in part under kernel/forge-machine/parts/<vendor>/<model>/. Every number is
 from the maker's page or PDF named in the record's `source` (taken 2026-11-23), restated; where only a
 dealer/importer page had it, the note says so. The research restatements (one JSON per machine,
@@ -39,6 +39,16 @@ cutting edge in the stock).
 | Romi | D 800, DCM 620-5X, GL 250 | vmc3, table-table, lathe |
 | Bridgeport (Hardinge) | V480 APC, V710 | vmc3 |
 | Spinner | U5-630, TC600 | table-table, lathe |
+
+## Round 2 (added)
+Brother SPEEDIO S300Xd2, S500Xd2, S700Xd2, W1000Xd2, F600X1, R450Xd1, R650Xd1 (two-face turn table:
+APC gap), M200Xd1, M300Xd1, U500Xd1 (A/C), H550Xd1 (horizontal BT30); Hermle C 250, C 400, C 650;
+Mazak VCN-460, VCN-500, VCN-600, VCN-535C, VARIAXIS C-600 (B/C), HCN-4000, HCN-6000, QUICK TURN 250;
+DN Solutions DNM 4000, NHP 6300 (and 2nd gen), Lynx 2600, PUMA GT3100, PUMA 3100LY (as 2-axis);
+Okuma GENOS M660-V, GENOS M460-VE, MA-500HII, MA-600HIII.
+Not added from round 2 (unpublished defining numbers): DN DVF 4000/6500, Okuma GENOS M460V-5AX,
+M560V-5AX, MU-4000V (no tilt range); Okuma LB2000 EX II, GENOS L2000-e (no travels); Mazak INTEGREX
+i-200S (sub-spindle: next, with the twin-spindle machines).
 
 ## Left out (defining numbers unpublished on reachable pages; specs in b/specs/)
 DMG MORI CMX 600 V / 1100 V (no spindle rpm), DMU 65 monoBLOCK and DN DVF 5000 2nd gen, Okuma

@@ -229,7 +229,7 @@ def hmc(slug, name, header, extra=(), **ov):
     t = d["travel_mm"]
     X, Y, Z = (num(t.get(k)) for k in "XYZ")
     est = []
-    P = num((d.get("pallet") or {}).get("size_mm", [None])[0])
+    P = num(((d.get("pallet") or {}).get("size_mm") or d.get("table_mm") or [None])[0])
     cy = d.get("spindle_center_to_pallet_top_mm")
     if not cy or None in cy:
         cy = [100.0, 100.0 + Y]; est.append("spindle centre above the pallet UNKNOWN: 100 to 100 + Y (estimate)")

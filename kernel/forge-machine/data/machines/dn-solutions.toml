@@ -2742,3 +2742,1426 @@ basis = "the published chuck size plus jaw stand-out (estimate); length an estim
 path = "body.turret"
 status = "estimate"
 basis = "the turret disc (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# DN Solutions DNM 4000: DNM.
+# X 520 Y 400 Z 480; 12000 rpm.
+[[machine]]
+name = "dn-solutions-dnm-4000"
+kind = "vmc3"
+control = "unknown"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.dn-solutions.com/us/product/machining-center/vertical/dnm-4000.do"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle nose to table UNKNOWN: 150 to 150 + Z (estimate); spindle power as published: torque max 117 N.m (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); overall 1650 x 2858 x 2753; machine 3300 kg; tool changer UNKNOWN (not published): none declared; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; control UNKNOWN (not published)."
+real = true
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-200, 200]
+rapid = 48000
+max_feed = 48000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-260, 260]
+rapid = 48000
+max_feed = 48000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-480, 0]
+rapid = 48000
+max_feed = 48000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 630]
+rpm = [1, 12000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [1000, 500]
+interface = "UNKNOWN"
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 630]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/dn-solutions/dn-solutions-dnm-4000/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-325, -500, -700]
+max = [325, 910, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/dn-solutions/dn-solutions-dnm-4000/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-300, 460, -400]
+max = [300, 910, 1280]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/dn-solutions/dn-solutions-dnm-4000/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-260, -200, -250]
+max = [260, 200, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/dn-solutions/dn-solutions-dnm-4000/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-325, -200, -100]
+max = [325, 200, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/dn-solutions/dn-solutions-dnm-4000/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 630]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/dn-solutions/dn-solutions-dnm-4000/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-140, -140, 780]
+max = [140, 460, 1230]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/vertical/dnm-4000.do"
+taken = "2026-11-23"
+value = "Y stroke 400 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/vertical/dnm-4000.do"
+taken = "2026-11-23"
+value = "48000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/vertical/dnm-4000.do"
+taken = "2026-11-23"
+value = "X stroke 520 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/vertical/dnm-4000.do"
+taken = "2026-11-23"
+value = "48000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/vertical/dnm-4000.do"
+taken = "2026-11-23"
+value = "Z stroke 480 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/vertical/dnm-4000.do"
+taken = "2026-11-23"
+value = "48000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 12000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table UNKNOWN: 150 at the bottom of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "unknown"
+value = "max tool length and diameter"
+basis = "max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check)"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table UNKNOWN: 150 at the bottom of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# DN Solutions NHP 6300: NHP.
+# X 1050 Y 900 Z 1000; 10000 rpm ISO #50; 40 tools.
+[[machine]]
+name = "dn-solutions-nhp-6300"
+kind = "vmc4"
+control = "unknown"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300.do"
+taken = "2026-11-23"
+note = "pallets: count UNKNOWN, 630 square, change time UNKNOWN, load 1500 kg; the APC is not in the format (FORMAT-GAPS B1): the pallet at the spindle is the part mount, kind vmc4; spindle nose to pallet centre UNKNOWN: 100 to 100 + Z (estimate); Z modelled on the head (X column, Y head, Z ram) because the format needs the length joint on the head side (FORMAT-GAPS B10); the tool-to-part motion is the same either way; spindle centre above the pallet UNKNOWN: 100 to 100 + Y (estimate); spindle power as published: peak/other: 30 kW (rating not stated); torque max 600 N.m (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); overall 3930 x 6520 x 3495; machine 18000 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid X, Y 0 = spindle lowest (home at the top), Z 0 = spindle farthest from the pallet; machine zero UNKNOWN; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; control UNKNOWN (not published)."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-525, 525]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [0, 900]
+home = 900
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-1000, 0]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 100, 1100]
+rpm = [1, 10000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [1000, 500]
+interface = "ISO #50"
+
+[[machine.changer]]
+pockets = 40
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 99   # UNKNOWN (unpublished): no weight check
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 100, 1100]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "pallet"
+kind = "part"
+link = "B"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "pallet"
+link = "B"
+part = "parts/dn-solutions/dn-solutions-nhp-6300/pallet.fg"
+ignore = ["table"]
+[[machine.body.box]]
+min = [-315, -120, -315]
+max = [315, 0, 315]
+
+[[machine.body]]
+name = "table"
+link = "base"
+part = "parts/dn-solutions/dn-solutions-nhp-6300/table.fg"
+ignore = ["pallet", "bed"]
+[[machine.body.cyl]]
+base = [0, -370, 0]
+axis = [0, 1, 0]
+r = 447.3
+h = 249
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/dn-solutions/dn-solutions-nhp-6300/bed.fg"
+ignore = ["table", "column"]
+[[machine.body.box]]
+min = [-925, -770, -747.3]
+max = [925, -371, 3380]
+
+[[machine.body]]
+name = "column"
+link = "X"
+part = "parts/dn-solutions/dn-solutions-nhp-6300/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-310, -370, 2790]
+max = [310, 1560, 3280]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/dn-solutions/dn-solutions-nhp-6300/nose.fg"
+[[machine.body.cyl]]
+base = [0, 100, 1100]
+axis = [0, 0, 1]
+r = 120
+h = 180
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/dn-solutions/dn-solutions-nhp-6300/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-160, -60, 1280]
+max = [160, 260, 1780]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300.do"
+taken = "2026-11-23"
+value = "X stroke 1050 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300.do"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300.do"
+taken = "2026-11-23"
+value = "Y stroke 900 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300.do"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300.do"
+taken = "2026-11-23"
+value = "Z stroke 1000 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300.do"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 10000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "unknown"
+value = "max tool length and diameter"
+basis = "max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check)"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300.do"
+taken = "2026-11-23"
+value = "40"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "unknown"
+basis = "UNKNOWN (unpublished): no weight check"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.pallet.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.pallet"
+status = "estimate"
+basis = "the published pallet; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the B index table under the pallet, a disc covering the pallet's corners (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the bed (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "the moving column behind the head's Z stroke (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head / ram (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# DN Solutions NHP 6300 (2nd generation): NHP.
+# X 1050 Y 900 Z 1000; 12000 rpm ISO #50; 40 tools.
+[[machine]]
+name = "dn-solutions-nhp-6300-2nd"
+kind = "vmc4"
+control = "unknown"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300-2nd.do"
+taken = "2026-11-23"
+note = "pallets: count UNKNOWN, 630 square, change time UNKNOWN, load 1500 kg; the APC is not in the format (FORMAT-GAPS B1): the pallet at the spindle is the part mount, kind vmc4; spindle nose to pallet centre UNKNOWN: 100 to 100 + Z (estimate); Z modelled on the head (X column, Y head, Z ram) because the format needs the length joint on the head side (FORMAT-GAPS B10); the tool-to-part motion is the same either way; spindle centre above the pallet UNKNOWN: 100 to 100 + Y (estimate); spindle power as published: peak/other: 45 kW (rating not stated); torque max 600 N.m (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); overall 3775 x 6850 x 3540; machine 18000 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid X, Y 0 = spindle lowest (home at the top), Z 0 = spindle farthest from the pallet; machine zero UNKNOWN; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; control UNKNOWN (not published)."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-525, 525]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [0, 900]
+home = 900
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-1000, 0]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 100, 1100]
+rpm = [1, 12000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [1000, 500]
+interface = "ISO #50"
+
+[[machine.changer]]
+pockets = 40
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 99   # UNKNOWN (unpublished): no weight check
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 100, 1100]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "pallet"
+kind = "part"
+link = "B"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "pallet"
+link = "B"
+part = "parts/dn-solutions/dn-solutions-nhp-6300-2nd/pallet.fg"
+ignore = ["table"]
+[[machine.body.box]]
+min = [-315, -120, -315]
+max = [315, 0, 315]
+
+[[machine.body]]
+name = "table"
+link = "base"
+part = "parts/dn-solutions/dn-solutions-nhp-6300-2nd/table.fg"
+ignore = ["pallet", "bed"]
+[[machine.body.cyl]]
+base = [0, -370, 0]
+axis = [0, 1, 0]
+r = 447.3
+h = 249
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/dn-solutions/dn-solutions-nhp-6300-2nd/bed.fg"
+ignore = ["table", "column"]
+[[machine.body.box]]
+min = [-925, -770, -747.3]
+max = [925, -371, 3380]
+
+[[machine.body]]
+name = "column"
+link = "X"
+part = "parts/dn-solutions/dn-solutions-nhp-6300-2nd/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-310, -370, 2790]
+max = [310, 1560, 3280]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/dn-solutions/dn-solutions-nhp-6300-2nd/nose.fg"
+[[machine.body.cyl]]
+base = [0, 100, 1100]
+axis = [0, 0, 1]
+r = 120
+h = 180
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/dn-solutions/dn-solutions-nhp-6300-2nd/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-160, -60, 1280]
+max = [160, 260, 1780]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300-2nd.do"
+taken = "2026-11-23"
+value = "X stroke 1050 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300-2nd.do"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300-2nd.do"
+taken = "2026-11-23"
+value = "Y stroke 900 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300-2nd.do"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300-2nd.do"
+taken = "2026-11-23"
+value = "Z stroke 1000 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300-2nd.do"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 12000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "unknown"
+value = "max tool length and diameter"
+basis = "max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check)"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-6300-2nd.do"
+taken = "2026-11-23"
+value = "40"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "unknown"
+basis = "UNKNOWN (unpublished): no weight check"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.pallet.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.pallet"
+status = "estimate"
+basis = "the published pallet; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the B index table under the pallet, a disc covering the pallet's corners (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the bed (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "the moving column behind the head's Z stroke (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head / ram (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# DN Solutions Lynx 2600: Lynx 2100/2600.
+# X 255 Z 680; 3500 rpm.
+[[machine]]
+name = "dn-solutions-lynx-2600"
+kind = "lathe"
+control = "unknown"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/lynx-2600.do"
+taken = "2026-11-23"
+note = "swing over bed UNKNOWN: the max turning diameter used; spindle power as published: peak/other: 18.5 kW (max, rating not stated); torque max 403 N.m (no curve: no power check); overall 1778 x 3290 x 1790; machine 4750 kg; where each stroke sits relative to the spindle centreline and chuck face is UNKNOWN: X's top end is put at the max turning radius and Z's at the max turning length + 50 mm (estimates); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the base frame is turned so x is the slide's X (a slant bed's angle is not modelled); the tailstock is not modelled; control UNKNOWN (not published)."
+real = true
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [28, 708]
+home = 708
+rapid = 30000
+max_feed = 30000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-25, 230]   # radius; the program's X word is twice it
+home = 230
+rapid = 30000
+max_feed = 30000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+diameter = true
+
+[[machine.spindle]]
+name = "main"
+link = "base"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [1, 3500]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [460, 658]
+interface = "UNKNOWN"
+
+[[machine.turret]]
+name = "T1"
+link = "X"
+stations = 10
+index_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0)
+center = [342, 0, 0]
+index_axis = [0, 0, 1]
+
+[[machine.mount]]
+name = "turret"
+kind = "tool"
+link = "X"
+at = [182, 0, 0]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "chuck"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/dn-solutions/dn-solutions-lynx-2600/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-222, -222, -610]
+max = [222, 222, -110]
+
+[[machine.body]]
+name = "chuck"
+link = "base"
+part = "parts/dn-solutions/dn-solutions-lynx-2600/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -110]
+axis = [0, 0, 1]
+r = 142
+h = 110
+
+[[machine.body]]
+name = "turret"
+link = "X"
+part = "parts/dn-solutions/dn-solutions-lynx-2600/turret.fg"
+[[machine.body.cyl]]
+base = [342, 0, -45]
+axis = [0, 0, 1]
+r = 160
+h = 90
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/lynx-2600.do"
+taken = "2026-11-23"
+value = "Z stroke 680 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/lynx-2600.do"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/lynx-2600.do"
+taken = "2026-11-23"
+value = "X stroke 255 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/lynx-2600.do"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.main.rpm"
+status = "unknown"
+basis = "max 3500 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.main.nose"
+status = "estimate"
+basis = "the chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.main.max"
+status = "estimate"
+value = "swing and max turning length"
+basis = "swing over bed UNKNOWN: the max turning diameter used"
+
+[[machine.cite]]
+path = "turret.T1.stations"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/lynx-2600.do"
+taken = "2026-11-23"
+value = "10"
+
+[[machine.cite]]
+path = "turret.T1.index_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0)"
+
+[[machine.cite]]
+path = "turret.T1.center"
+status = "estimate"
+basis = "turret size and position not published: placed so the disc clears the chuck (note)"
+
+[[machine.cite]]
+path = "mount.turret.at"
+status = "estimate"
+basis = "the tool gauge point on the turret/head: not published, placed as the note says"
+
+[[machine.cite]]
+path = "mount.chuck.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.headstock"
+status = "estimate"
+basis = "the headstock behind the chuck (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.chuck"
+status = "estimate"
+basis = "the published chuck size plus jaw stand-out (estimate); length an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.turret"
+status = "estimate"
+basis = "the turret disc (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# DN Solutions PUMA GT3100: PUMA GT.
+# X 260 Z 830; 2800 rpm.
+[[machine]]
+name = "dn-solutions-puma-gt3100"
+kind = "lathe"
+control = "unknown"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/puma-gt-3100.do"
+taken = "2026-11-23"
+note = "swing over bed UNKNOWN: the max turning diameter used; spindle power as published: peak/other: 35 kW (max, rating not stated); torque max 1613 N.m (no curve: no power check); overall 2102 x 4068 x 1915; machine 5500 kg; where each stroke sits relative to the spindle centreline and chuck face is UNKNOWN: X's top end is put at the max turning radius and Z's at the max turning length + 50 mm (estimates); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the base frame is turned so x is the slide's X (a slant bed's angle is not modelled); the tailstock is not modelled; control UNKNOWN (not published)."
+real = true
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-25, 805]
+home = 805
+rapid = 30000
+max_feed = 30000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-19.5, 240.5]   # radius; the program's X word is twice it
+home = 240.5
+rapid = 24000
+max_feed = 24000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+diameter = true
+
+[[machine.spindle]]
+name = "main"
+link = "base"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [1, 2800]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [481, 755]
+interface = "UNKNOWN"
+
+[[machine.turret]]
+name = "T1"
+link = "X"
+stations = 10
+index_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0)
+center = [367.4, 0, 0]
+index_axis = [0, 0, 1]
+
+[[machine.mount]]
+name = "turret"
+kind = "tool"
+link = "X"
+at = [207.4, 0, 0]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "chuck"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/dn-solutions/dn-solutions-puma-gt3100/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-247.4, -247.4, -610]
+max = [247.4, 247.4, -110]
+
+[[machine.body]]
+name = "chuck"
+link = "base"
+part = "parts/dn-solutions/dn-solutions-puma-gt3100/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -110]
+axis = [0, 0, 1]
+r = 167.4
+h = 110
+
+[[machine.body]]
+name = "turret"
+link = "X"
+part = "parts/dn-solutions/dn-solutions-puma-gt3100/turret.fg"
+[[machine.body.cyl]]
+base = [367.4, 0, -45]
+axis = [0, 0, 1]
+r = 160
+h = 90
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/puma-gt-3100.do"
+taken = "2026-11-23"
+value = "Z stroke 830 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/puma-gt-3100.do"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/puma-gt-3100.do"
+taken = "2026-11-23"
+value = "X stroke 260 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/puma-gt-3100.do"
+taken = "2026-11-23"
+value = "24000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.main.rpm"
+status = "unknown"
+basis = "max 2800 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.main.nose"
+status = "estimate"
+basis = "the chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.main.max"
+status = "estimate"
+value = "swing and max turning length"
+basis = "swing over bed UNKNOWN: the max turning diameter used"
+
+[[machine.cite]]
+path = "turret.T1.stations"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/puma-gt-3100.do"
+taken = "2026-11-23"
+value = "10"
+
+[[machine.cite]]
+path = "turret.T1.index_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0)"
+
+[[machine.cite]]
+path = "turret.T1.center"
+status = "estimate"
+basis = "turret size and position not published: placed so the disc clears the chuck (note)"
+
+[[machine.cite]]
+path = "mount.turret.at"
+status = "estimate"
+basis = "the tool gauge point on the turret/head: not published, placed as the note says"
+
+[[machine.cite]]
+path = "mount.chuck.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.headstock"
+status = "estimate"
+basis = "the headstock behind the chuck (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.chuck"
+status = "estimate"
+basis = "the published chuck size plus jaw stand-out (estimate); length an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.turret"
+status = "estimate"
+basis = "the turret disc (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# DN Solutions PUMA 3100LY: PUMA 2100/2600/3100.
+# X 293 Y 130 Z 1350; 2800 rpm.
+[[machine]]
+name = "dn-solutions-puma-3100ly"
+kind = "lathe"
+control = "unknown"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.dn-solutions.com/us/product/turning-center/y-axis-horizontal/puma-3100-y.do"
+taken = "2026-11-23"
+note = "modelled as its 2-axis lathe: the Y axis, C axis and live tools are not modelled (FORMAT-GAPS B12); swing over bed UNKNOWN: the max turning diameter used; spindle power as published: peak/other: 26 kW (max, rating not stated); torque max 1123 N.m (no curve: no power check); overall 2067 x 4530 x 2315; machine 8000 kg; where each stroke sits relative to the spindle centreline and chuck face is UNKNOWN: X's top end is put at the max turning radius and Z's at the max turning length + 50 mm (estimates); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the base frame is turned so x is the slide's X (a slant bed's angle is not modelled); the tailstock is not modelled; control UNKNOWN (not published)."
+real = true
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-15, 1335]
+home = 1335
+rapid = 30000
+max_feed = 30000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-83, 210]   # radius; the program's X word is twice it
+home = 210
+rapid = 30000
+max_feed = 30000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+diameter = true
+
+[[machine.spindle]]
+name = "main"
+link = "base"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [1, 2800]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [420, 1285]
+interface = "UNKNOWN"
+
+[[machine.turret]]
+name = "T1"
+link = "X"
+stations = 12
+index_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0)
+center = [415.4, 0, 0]
+index_axis = [0, 0, 1]
+
+[[machine.mount]]
+name = "turret"
+kind = "tool"
+link = "X"
+at = [255.4, 0, 0]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "chuck"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/dn-solutions/dn-solutions-puma-3100ly/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-247.4, -247.4, -610]
+max = [247.4, 247.4, -110]
+
+[[machine.body]]
+name = "chuck"
+link = "base"
+part = "parts/dn-solutions/dn-solutions-puma-3100ly/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -110]
+axis = [0, 0, 1]
+r = 167.4
+h = 110
+
+[[machine.body]]
+name = "turret"
+link = "X"
+part = "parts/dn-solutions/dn-solutions-puma-3100ly/turret.fg"
+[[machine.body.cyl]]
+base = [415.4, 0, -45]
+axis = [0, 0, 1]
+r = 160
+h = 90
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/y-axis-horizontal/puma-3100-y.do"
+taken = "2026-11-23"
+value = "Z stroke 1350 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/y-axis-horizontal/puma-3100-y.do"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/y-axis-horizontal/puma-3100-y.do"
+taken = "2026-11-23"
+value = "X stroke 293 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/y-axis-horizontal/puma-3100-y.do"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.main.rpm"
+status = "unknown"
+basis = "max 2800 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.main.nose"
+status = "estimate"
+basis = "the chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.main.max"
+status = "estimate"
+value = "swing and max turning length"
+basis = "swing over bed UNKNOWN: the max turning diameter used"
+
+[[machine.cite]]
+path = "turret.T1.stations"
+status = "published"
+source = "https://www.dn-solutions.com/us/product/turning-center/y-axis-horizontal/puma-3100-y.do"
+taken = "2026-11-23"
+value = "12"
+
+[[machine.cite]]
+path = "turret.T1.index_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0)"
+
+[[machine.cite]]
+path = "turret.T1.center"
+status = "estimate"
+basis = "turret size and position not published: placed so the disc clears the chuck (note)"
+
+[[machine.cite]]
+path = "mount.turret.at"
+status = "estimate"
+basis = "the tool gauge point on the turret/head: not published, placed as the note says"
+
+[[machine.cite]]
+path = "mount.chuck.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.headstock"
+status = "estimate"
+basis = "the headstock behind the chuck (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.chuck"
+status = "estimate"
+basis = "the published chuck size plus jaw stand-out (estimate); length an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.turret"
+status = "estimate"
+basis = "the turret disc (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
