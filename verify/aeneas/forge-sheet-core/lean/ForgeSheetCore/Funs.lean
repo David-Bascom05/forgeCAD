@@ -687,7 +687,7 @@ def place.then
   ok { ox, oy, xx, xy }
 
 /-- [forge_sheet_core::place::inverse]:
-    Source: 'kernel/forge-sheet-core/src/place.rs', lines 42:0-45:1
+    Source: 'kernel/forge-sheet-core/src/place.rs', lines 42:0-50:1
     Visibility: public -/
 def place.inverse (m : place.Place) : Result place.Place := do
   let (ox, oy) ← place.local m (F64.Ops.ofBits 0) (F64.Ops.ofBits 0)
