@@ -36,6 +36,10 @@
 #     build disturbs the other;
 #   - every run under `env -i` (PATH, HOME, FORGECAD_CACHE=off: a cold open is cold, no disk
 #     cache between processes), from `/`, with the bench parts copied to one folder;
+#   - the process's layout held (LAT_LAYOUT=fixed, the default; `random` leaves it as a user's):
+#     `setarch -R` (no address randomisation) and getrandom from seedrandom.c with LAT_SEED the
+#     round's number, so std's HashMap keys are the same for base and head in a round, and
+#     differ from round to round (the rounds average over seeds; a pair differs by code alone);
 #   - t1: FORGECAD_THREADS=1 and `taskset -c $LAT_CORE`; tN: every core, FORGECAD_THREADS unset;
 #   - one discarded pass of every part on both sides first (page cache, CPU clocks), then rounds
 #     interleaved base/head back to back, the order flipped each round (AB BA AB ..), so drift
@@ -113,6 +117,7 @@ else
 fi
 mkdir -p "$work/parts"
 cp interface/forge-lang/parts/bench/*.fg "$work/parts/"
+cc -O2 -shared -fPIC -o "$work/seedrandom.so" "$dir/seedrandom.c"
 
 # run SIDE THREADS CMD..: one process under the run conditions
 run() {
@@ -125,9 +130,15 @@ run() {
     tN) pin="taskset -c 0-$((ncpu - 1))" tenv= ;;
     t*) pin="taskset -c 0-$((ncpu - 1))" tenv=FORGECAD_THREADS=${thr#t} ;;
   esac
+  if [ "${LAT_LAYOUT:-fixed}" = fixed ]; then
+    lay="LD_PRELOAD=$work/seedrandom.so LAT_SEED=${seed:-0}"
+    norand="setarch -R"
+  else
+    lay= norand=
+  fi
   # shellcheck disable=SC2086
   (cd / && env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp FORGECAD_CACHE=off \
-    FORGE_BENCH_PARTS="$work/parts" $tenv $extra $pin "$work/$side/latbench" "$@")
+    FORGE_BENCH_PARTS="$work/parts" $tenv $lay $extra $pin $norand "$work/$side/latbench" "$@")
 }
 
 if [ "$mode" = bits ]; then
@@ -166,6 +177,7 @@ for s in $sides; do [ -f "$work/$s/cam_gonogo" ] || cam=; done
 samples=${raw:-$work/raw}
 : > "$samples"
 one() { # one SIDE ROUND PART THREADS: one round's samples, labelled
+  seed=$2
   sk=$skipops
   if [ -z "$heavy" ] && ! echo " $draw_parts " | grep -q " $3 "; then sk="$sk,draw"; fi
   skipenv=${sk:+LATBENCH_SKIP=$sk}
