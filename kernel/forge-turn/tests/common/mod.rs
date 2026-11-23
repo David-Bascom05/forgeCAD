@@ -105,7 +105,8 @@ pub fn setup() -> Setup {
         holder_clearance: 0.25,
         rapid_clearance: 0.2,
         tol: 0.002,
-        travel: None,
+        machine: None,
+        place: None,
     }
 }
 

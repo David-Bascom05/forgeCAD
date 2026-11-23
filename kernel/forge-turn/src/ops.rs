@@ -18,8 +18,10 @@
 //! each region listed.
 use crate::check::{self, Move, Obstacle, Verdict};
 use crate::insert::{Body, Kind, TurnTool, tan};
+use crate::machine::{Lathe, Place};
 use crate::profile::{HalfProfile, poly, rect};
 use forge_cam_geom::boolean::{self, Op};
+use forge_cam_geom::ival::Ival;
 use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, Region, Seg};
 use forge_math::dmath;
@@ -51,8 +53,10 @@ pub struct Setup {
     pub holder_clearance: f64,
     pub rapid_clearance: f64,
     pub tol: f64,
-    /// The machine's travel for the imaginary tip, in radius and z ([lo, hi] each), when known.
-    pub travel: Option<[[f64; 2]; 2]>,
+    /// The lathe (CAM-MACHINE's definition, machine.rs) and where the work and the tools sit on
+    /// it: G5 is checked in full when both are given, by spans only when the place is not.
+    pub machine: Option<Lathe>,
+    pub place: Option<Place>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -742,6 +746,9 @@ pub struct Report {
     /// Stock removals left out because their boolean would not round to a valid region (the
     /// stock model is then larger than it could be: sound, and the G4 leftover may list more).
     pub stock_skipped: usize,
+    /// "full" (every joint position checked), "except G5" (a machine but no placement: the
+    /// spans only), or "no machine".
+    pub g5: String,
 }
 
 impl Report {
@@ -1037,6 +1044,31 @@ fn remove(stock: &mut Region, obs: &mut Obstacle, q: &[[f64; 2]], rep: &mut Repo
     rep.stock_skipped += 1;
 }
 
+/// The box of a move's path: a line's ends; an arc's circle box (a superset).
+fn move_box(mv: &Move) -> ([f64; 2], [f64; 2]) {
+    match *mv {
+        Move::Line { a, b } => ([a[0].min(b[0]), a[1].min(b[1])], [a[0].max(b[0]), a[1].max(b[1])]),
+        Move::Arc { a, c, .. } => {
+            let r = Ival::pt(a[0])
+                .sub(Ival::pt(c[0]))
+                .sqr()
+                .add(Ival::pt(a[1]).sub(Ival::pt(c[1])).sqr())
+                .sqrt()
+                .hi;
+            (
+                [
+                    Ival::pt(c[0]).sub(Ival::pt(r)).lo,
+                    Ival::pt(c[1]).sub(Ival::pt(r)).lo,
+                ],
+                [
+                    Ival::pt(c[0]).add(Ival::pt(r)).hi,
+                    Ival::pt(c[1]).add(Ival::pt(r)).hi,
+                ],
+            )
+        }
+    }
+}
+
 /// Certifies the ops in order on the setup (see the module doc). `posted`: each op's moves as
 /// the posted program states them, read back (post.rs); None certifies the ops' own paths.
 pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Result<Report, String> {
@@ -1053,6 +1085,41 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
             Some(p) => p[oi].clone(),
             None => steps_to_moves(op),
         };
+        // the machine: the station on the turret, the spindle within its range (CSS under the
+        // G50 clamp), and the station's offsets when the setup is placed
+        let mut span = [f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY];
+        let mut offsets: Option<[f64; 2]> = None;
+        if let Some(m) = &s.machine {
+            let mut refuse = |why: String| {
+                rep.refusals.push(Refusal {
+                    op: oi,
+                    step: 0,
+                    body: "machine".into(),
+                    rule: "machine".into(),
+                    verdict: why,
+                    at: op.start,
+                })
+            };
+            if op.t == 0 || op.t > m.stations {
+                refuse(format!("station {} on a turret of {}", op.t, m.stations));
+            }
+            match op.spindle {
+                Spindle::Css { max_rpm, .. } if max_rpm > m.rpm[1] => refuse(format!(
+                    "a top speed of {max_rpm} rpm over the spindle's {}",
+                    m.rpm[1]
+                )),
+                Spindle::Rpm(r) if r < m.rpm[0] || r > m.rpm[1] => {
+                    refuse(format!("{r} rpm outside the spindle's {:?}", m.rpm))
+                }
+                _ => {}
+            }
+            if let Some(p) = &s.place {
+                offsets = p.tools.iter().find(|(t, _)| *t == op.t).map(|x| x.1);
+                if offsets.is_none() {
+                    refuse(format!("no offsets for station {} in the placement", op.t));
+                }
+            }
+        }
         let mut stock = Obstacle::of("stock", &stock_region, 0.0).map_err(|e| format!("stock: {e:?}"))?;
         let mut target = match &op.removal {
             Some(d) => {
@@ -1066,17 +1133,40 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
             None => None,
         };
         for (si, (mv, cut, rapid, _step)) in moves.iter().enumerate() {
-            if let Some([[x0, x1], [z0, z1]]) = s.travel {
-                for p in [mv.start(), mv.end()] {
-                    let q = [p[0] + op.tool.tip[0], p[1] + op.tool.tip[1]];
-                    if q[0] < x0 || q[0] > x1 || q[1] < z0 || q[1] > z1 {
+            // G5: the joints through the move (a line by its ends, an arc by its circle's box)
+            if let Some(m) = &s.machine {
+                let tip = op.tool.tip;
+                let (lo, hi) = move_box(mv);
+                let tlo = [
+                    Ival::pt(lo[0]).add(Ival::pt(tip[0])),
+                    Ival::pt(lo[1]).add(Ival::pt(tip[1])),
+                ];
+                let thi = [
+                    Ival::pt(hi[0]).add(Ival::pt(tip[0])),
+                    Ival::pt(hi[1]).add(Ival::pt(tip[1])),
+                ];
+                span[0] = span[0].min(tlo[0].lo);
+                span[1] = span[1].max(thi[0].hi);
+                span[2] = span[2].min(tlo[1].lo);
+                span[3] = span[3].max(thi[1].hi);
+                if let Some(off) = offsets {
+                    let jx = [tlo[0].add(Ival::pt(off[0])).lo, thi[0].add(Ival::pt(off[0])).hi];
+                    let z0 = s.place.as_ref().map_or(0.0, |p| p.z0);
+                    let jz = [
+                        tlo[1].add(Ival::pt(z0)).add(Ival::pt(off[1])).lo,
+                        thi[1].add(Ival::pt(z0)).add(Ival::pt(off[1])).hi,
+                    ];
+                    if jx[0] < m.x[0] || jx[1] > m.x[1] || jz[0] < m.z[0] || jz[1] > m.z[1] {
                         rep.refusals.push(Refusal {
                             op: oi,
                             step: si,
-                            body: "tip".into(),
+                            body: "joints".into(),
                             rule: "travel".into(),
-                            verdict: format!("the tip at {q:?} is outside the travel"),
-                            at: q,
+                            verdict: format!(
+                                "the joints reach X {jx:?} Z {jz:?}; the travel is X {:?} Z {:?}",
+                                m.x, m.z
+                            ),
+                            at: mv.start(),
                         });
                     }
                 }
@@ -1174,11 +1264,33 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                 }
             }
         }
+        if let (Some(m), None) = (&s.machine, offsets)
+            && span[0] <= span[1]
+            && (span[1] - span[0] > m.x[1] - m.x[0] || span[3] - span[2] > m.z[1] - m.z[0])
+        {
+            rep.refusals.push(Refusal {
+                op: oi,
+                step: 0,
+                body: "joints".into(),
+                rule: "travel".into(),
+                verdict: format!(
+                    "the tip spans X {:?} Z {:?}, wider than the travel",
+                    [span[0], span[1]],
+                    [span[2], span[3]]
+                ),
+                at: op.start,
+            });
+        }
         // a part-off ends the chain: the bar behind it is no longer the part's
         if op.tool.kind == Kind::Part {
             break;
         }
     }
+    rep.g5 = match (&s.machine, &s.place) {
+        (Some(_), Some(_)) => "full".into(),
+        (Some(_), None) => "except G5 (no placement: the spans only)".into(),
+        (None, _) => "no machine".into(),
+    };
     // G4: the final stock less the part grown by tol (and less the declared removals)
     let (grown, _) = offset(&s.part.region, -s.tol).map_err(|e| format!("{e:?}"))?;
     let mut keep = boolean::region_of(&grown);

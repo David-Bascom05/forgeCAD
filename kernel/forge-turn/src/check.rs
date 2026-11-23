@@ -389,7 +389,15 @@ fn round_allow(m: f64, k: f64) -> f64 {
 /// moved by p₀ and the parallelogram's four corners. `cut`: pieces whose box gap is at least
 /// this are skipped (their distance is at least the box gap). A piece whose bound stays at 0
 /// gives 0 (its distance not proven positive).
-fn sat_lower(core: &[[f64; 2]], p0: [f64; 2], g1: [f64; 2], g2: [f64; 2], obs: &Obstacle, cut: f64, zbox: &[f64; 4]) -> f64 {
+fn sat_lower(
+    core: &[[f64; 2]],
+    p0: [f64; 2],
+    g1: [f64; 2],
+    g2: [f64; 2],
+    obs: &Obstacle,
+    cut: f64,
+    zbox: &[f64; 4],
+) -> f64 {
     let n = core.len();
     let corners = [[0.0, 0.0], g1, g2, [g1[0] + g2[0], g1[1] + g2[1]]];
     let mut pts: Vec<[f64; 2]> = Vec::with_capacity(4 * n);
@@ -448,8 +456,18 @@ fn sat_lower(core: &[[f64; 2]], p0: [f64; 2], g1: [f64; 2], g2: [f64; 2], obs: &
                         let t = t0 + (t1 - t0) * i as f64 / k as f64;
                         [c[0] + r * dmath::cos(t), c[1] + r * dmath::sin(t)]
                     };
-                    let g = len2(sub(prev, c)).sub(ip(r)).abs().hi.max(len2(sub(p, c)).sub(ip(r)).abs().hi);
-                    let sec = Sec::Arc { c, r, a: prev, b: p, ccw };
+                    let g = len2(sub(prev, c))
+                        .sub(ip(r))
+                        .abs()
+                        .hi
+                        .max(len2(sub(p, c)).sub(ip(r)).abs().hi);
+                    let sec = Sec::Arc {
+                        c,
+                        r,
+                        a: prev,
+                        b: p,
+                        ccw,
+                    };
                     sub_min = sub_min.min(piece_gap(&pts, &axes, &sec, f.gap.max(g), cut));
                     prev = p;
                     if sub_min <= piece_best {
@@ -540,7 +558,11 @@ fn approx_nearest(s: &Sec, p: [f64; 2]) -> [f64; 2] {
 fn sector(c: [f64; 2], a: [f64; 2], b: [f64; 2], ccw: bool, d: [Ival; 2]) -> i32 {
     let (ua, ub) = (sub(a, c), sub(b, c));
     let cr = |u: [Ival; 2], v: [Ival; 2]| u[0].mul(v[1]).sub(u[1].mul(v[0]));
-    let (c1, c2) = if ccw { (cr(ua, d), cr(d, ub)) } else { (cr(d, ua), cr(ub, d)) };
+    let (c1, c2) = if ccw {
+        (cr(ua, d), cr(d, ub))
+    } else {
+        (cr(d, ua), cr(ub, d))
+    };
     if c1.lo >= 0.0 && c2.lo >= 0.0 {
         1
     } else if c1.hi < 0.0 || c2.hi < 0.0 {

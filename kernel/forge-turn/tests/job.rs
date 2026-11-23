@@ -63,5 +63,9 @@ fn the_shaft_job_certifies() {
     assert!(rep.ok());
     // the one leftover: the shoulder's sharp inside corner, under the finishing nose's radius
     assert_eq!(rep.leftover.len(), 1);
-    assert!(rep.leftover_reasons[0].starts_with("nose radius 0.4"), "{:?}", rep.leftover_reasons);
+    assert!(
+        rep.leftover_reasons[0].starts_with("nose radius 0.4"),
+        "{:?}",
+        rep.leftover_reasons
+    );
 }
