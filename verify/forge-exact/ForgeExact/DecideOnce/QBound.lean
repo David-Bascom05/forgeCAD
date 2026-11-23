@@ -4,7 +4,7 @@ import ForgeExact.DecideOnce.QLedger
 # Q1 L2: the bounding sphere, certified
 
 LemmaD's sweep lemmas need compactness, and a plane, cylinder or cone carrier gives none. The cure:
-a rational bounding sphere `B : |p|² − R² = 0` is appended to the carriers, and every body is
+a rational bounding sphere `B : |p − c|² − R² = 0` (`c = bCentre`) is appended to the carriers, and every body is
 certified to lie strictly inside it. Every cell the ledger reads then lies in the closed ball.
 
 **The certificate** (`BCert`, checked by `certOk`): terms `τ_t`, each negative on the body, built
@@ -12,9 +12,9 @@ from the body's top-level conjuncts. A term is a literal (`q_j` where `q_j < 0` 
 `−q_j` where `q_j > 0` is one), or `−τ_j τ_k` for two plane literals (a slab: `x > a` and `x < b`).
 There are weights `w_t ≥ 0`, not all zero, and a sum of squares `Σ dᵢ ℓᵢ²` (`dᵢ ≥ 0`, `ℓᵢ` affine) with
 
-    Σ w_t τ_t − (|p|² − R²) = Σ dᵢ ℓᵢ²        (coefficient by coefficient)
+    Σ w_t τ_t − (|p − c|² − R²) = Σ dᵢ ℓᵢ²    (coefficient by coefficient)
 
-Then on the body `|p|² − R² ≤ Σ w_t τ_t < 0`.
+Then on the body `|p − c|² − R² ≤ Σ w_t τ_t < 0`.
 
 * **`certOk_inside`**: a checked certificate puts every point of the body strictly inside `B`, in
   every model of the reals;
@@ -42,8 +42,14 @@ def qeqB (p q : Quadric) : Bool :=
   p.xx == q.xx && p.yy == q.yy && p.zz == q.zz && p.xy == q.xy && p.xz == q.xz && p.yz == q.yz &&
     p.lx == q.lx && p.ly == q.ly && p.lz == q.lz && p.c == q.c
 
-/-- The bounding sphere `|p|² − R²` (`R2 = R²`). -/
-def sphereR (R2 : Rat) : Quadric := ⟨1, 1, 1, 0, 0, 0, 0, 0, 0, -R2⟩
+/-- The bounding sphere's centre: generic, so that it is concentric with no input sphere (two
+concentric spheres have parallel gradients everywhere, and their turning-point quadric vanishes). -/
+def bCentre : Rat × Rat × Rat := (1/7, 1/11, 1/13)
+
+/-- The bounding sphere `|p − c|² − R²` (`R2 = R²`, `c = bCentre`). -/
+def sphereR (R2 : Rat) : Quadric :=
+  ⟨1, 1, 1, 0, 0, 0, -2 * bCentre.1, -2 * bCentre.2.1, -2 * bCentre.2.2,
+   bCentre.1 * bCentre.1 + bCentre.2.1 * bCentre.2.1 + bCentre.2.2 * bCentre.2.2 - R2⟩
 
 /-- The top-level conjuncts of a formula. -/
 def conjs : SForm → List SForm
@@ -331,21 +337,23 @@ def bodyTerms (qs : List Quadric) (F : SForm) : List BTerm :=
 
 def proposeCert (qs : List Quadric) (F : SForm) (R2 : Rat) : Option BCert :=
   let ts := bodyTerms qs F
-  [1, 2, 4, 8, 16, 32].findSome? fun (w : Rat) => do
-    let terms := ts.map fun t => (w, t)
+  let grid : List (Rat × Rat) :=
+    ([1, 5/4, 3/2, 2, 3, 4, 8].flatMap fun a => [1, 3/2, 2, 4, 8, 16, 32].map (a, ·))
+  grid.findSome? fun (wa, wb) => do
+    let terms := ts.map fun t => (match t with | .one .. => wa | .two .. => wb, t)
     let qts ← terms.mapM fun t => (t.2.quad qs).map (qscale t.1)
     let N := qsub (qsumL qts) (sphereR R2)
     let sos ← ldl (qmat N)
     let c : BCert := ⟨terms, sos⟩
     if certOk qs F R2 c then some c else none
 
--- the unit box is inside |p|² < 4; the unit sphere's ball inside |p|² < 2
+-- the unit box is inside |p − c|² < 4; the unit sphere's ball inside |p − c|² < 2
 #guard (proposeCert unitBox unitBoxF 4).isSome
 #guard (proposeCert [sphere1] (.lit 0 .neg) 2).isSome
--- and the unit box is not certified inside |p|² < 1 (its corner (1,1,1) is outside)
+-- and the unit box is not certified inside |p − c|² < 1 (its corner (1, 1, 1) is outside)
 #guard (proposeCert unitBox unitBoxF 1).isNone
 
--- a capped cylinder x² + y² < 1/4, −1 < z < 1 is inside |p|² < 4
+-- a capped cylinder x² + y² < 1/4, −1 < z < 1 is inside |p − c|² < 4
 #guard (proposeCert [⟨1, 1, 0, 0, 0, 0, 0, 0, 0, -1/4⟩, planeQ 0 0 1 1, planeQ 0 0 1 (-1)]
   (.and (.lit 0 .neg) (.and (.lit 1 .pos) (.lit 2 .neg))) 4).isSome
 
@@ -448,5 +456,42 @@ theorem qledgerB_parts {qs : List Quadric} {forms : List SForm} {R2 : Rat} {L : 
 -- the unit box, bounded: still 6 faces, 12 edges, 8 vertices (B adds none round them)
 #guard (qledgerB unitBox [unitBoxF] 4).map (fun L => (L.facets.length, L.edges.length,
   L.verts.length)) = some (6, 12, 8)
+
+end ForgeExact.DecideOnce.Curved
+
+namespace ForgeExact.DecideOnce.Curved
+
+open ForgeExact ForgeExact.Quad ForgeExact.DecideOnce
+
+/-- Some coefficient is nonzero. -/
+def nzQ (q : Quadric) : Bool :=
+  !(q.xx == 0 && q.yy == 0 && q.zz == 0 && q.xy == 0 && q.xz == 0 && q.yz == 0 && q.lx == 0 &&
+    q.ly == 0 && q.lz == 0 && q.c == 0)
+
+/-- `SForm.Below`, decided. -/
+def belowB (n : Nat) : SForm → Bool
+  | .lit j _ => decide (j < n)
+  | .tt => true
+  | .ff => true
+  | .and a b => belowB n a && belowB n b
+  | .or a b => belowB n a && belowB n b
+  | .not a => belowB n a
+
+theorem belowB_spec {n : Nat} (F : SForm) (h : belowB n F = true) : F.Below n := by
+  induction F with
+  | lit j _ => simpa [belowB, SForm.Below] using h
+  | tt => trivial
+  | ff => trivial
+  | and a b iha ihb =>
+    simp only [belowB, Bool.and_eq_true] at h; exact ⟨iha h.1, ihb h.2⟩
+  | or a b iha ihb =>
+    simp only [belowB, Bool.and_eq_true] at h; exact ⟨iha h.1, ihb h.2⟩
+  | not a ih => simp only [belowB] at h; exact ih h
+
+/-- **A certified curved input**: the bounded ledger builds (sampling, sides, split and the
+bodies' bounding certificates all checked), every carrier is a nonzero quadric, and every body
+reads only the input carriers. `curved_exact` (forge-curved) holds for every certified input. -/
+def certified (qs : List Quadric) (forms : List SForm) (R2 : Rat) : Bool :=
+  (qledgerB qs forms R2).isSome && (qs ++ [sphereR R2]).all nzQ && forms.all (belowB qs.length)
 
 end ForgeExact.DecideOnce.Curved

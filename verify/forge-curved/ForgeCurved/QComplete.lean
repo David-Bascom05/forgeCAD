@@ -66,6 +66,36 @@ theorem sgn_at {cs : List (Carrier R3 ℝ)} {X : Cov} {x : R3} (hx : covCellK cs
   simp only [List.getElem?_eq_getElem hk, Option.map_some, Option.some.injEq] at hs
   exact hs
 
+theorem sq_le_abs {t : ℝ} {R : ℝ} (ht : t * t ≤ R) : |t| ≤ max 1 R := by
+  rcases le_or_gt |t| 1 with h | h
+  · exact _root_.le_trans h (le_max_left _ _)
+  · have : |t| ≤ |t| * |t| := by nlinarith
+    rw [← abs_mul_abs_self t] at ht
+    exact _root_.le_trans (_root_.le_trans this ht) (le_max_right _ _)
+
+/-- The bounding sphere's inside is bounded. -/
+theorem bounded_sphereR (R2 : ℚ) : Bornology.IsBounded {z : R3 | qR (sphereR R2) z ≤ 0} := by
+  refine (Metric.isBounded_iff_subset_closedBall 0).mpr ⟨max 1 (R2 : ℝ) + 1, fun z hz => ?_⟩
+  have e : qR (sphereR R2) z = (z.1 - 1/7) * (z.1 - 1/7) + (z.2.1 - 1/11) * (z.2.1 - 1/11) +
+      (z.2.2 - 1/13) * (z.2.2 - 1/13) - R2 := by
+    simp only [qR, sphereR, bCentre]; push_cast; ring
+  simp only [mem_ofPred_eq] at hz
+  rw [e] at hz
+  have h1 := sq_le_abs (t := z.1 - 1/7) (R := R2)
+    (by nlinarith [mul_self_nonneg (z.2.1 - 1/11), mul_self_nonneg (z.2.2 - 1/13)])
+  have h2 := sq_le_abs (t := z.2.1 - 1/11) (R := R2)
+    (by nlinarith [mul_self_nonneg (z.1 - 1/7), mul_self_nonneg (z.2.2 - 1/13)])
+  have h3 := sq_le_abs (t := z.2.2 - 1/13) (R := R2)
+    (by nlinarith [mul_self_nonneg (z.1 - 1/7), mul_self_nonneg (z.2.1 - 1/11)])
+  simp only [Metric.mem_closedBall, dist_zero_right, Prod.norm_def, Real.norm_eq_abs, max_le_iff]
+  refine ⟨?_, ?_, ?_⟩
+  · have := abs_sub_abs_le_abs_sub z.1 (1/7); rw [abs_of_pos (by norm_num : (0:ℝ) < 1/7)] at this
+    linarith
+  · have := abs_sub_abs_le_abs_sub z.2.1 (1/11)
+    rw [abs_of_pos (by norm_num : (0:ℝ) < 1/11)] at this; linarith
+  · have := abs_sub_abs_le_abs_sub z.2.2 (1/13)
+    rw [abs_of_pos (by norm_num : (0:ℝ) < 1/13)] at this; linarith
+
 /-- **`ExactK.complete`, for the bounded curved ledger.** -/
 theorem qledgerB_complete {qs : List Quad.Quadric} {forms : List SForm} {R2 : ℚ} {L : Ledger}
     (h : qledgerB qs forms R2 = some L) (hb : ∀ F ∈ forms, F.Below qs.length) :
@@ -163,24 +193,7 @@ theorem qledgerB_complete {qs : List Quad.Quadric} {forms : List SForm} {R2 : �
         (by
           have : {z | (Q.map qR)[n] z ≤ 0} = {z | qR (sphereR R2) z ≤ 0} := by
             simp [Q, n, List.getElem_append_right]
-          rw [this]
-          refine (Metric.isBounded_iff_subset_closedBall 0).mpr ⟨max 1 R2, fun z hz => ?_⟩
-          simp only [mem_ofPred_eq, qR, sphereR] at hz
-          push_cast at hz
-          simp only [Metric.mem_closedBall, dist_zero_right, Prod.norm_def, Real.norm_eq_abs,
-            max_le_iff]
-          have h1 : z.1 * z.1 ≤ R2 := by nlinarith [mul_self_nonneg z.2.1, mul_self_nonneg z.2.2]
-          have h2 : z.2.1 * z.2.1 ≤ R2 := by nlinarith [mul_self_nonneg z.1, mul_self_nonneg z.2.2]
-          have h3 : z.2.2 * z.2.2 ≤ R2 := by nlinarith [mul_self_nonneg z.1, mul_self_nonneg z.2.1]
-          have key : ∀ t : ℝ, t * t ≤ R2 → |t| ≤ max 1 (R2 : ℝ) := fun t ht => by
-            rcases le_or_gt |t| 1 with h | h
-            · exact _root_.le_trans h (le_max_left _ _)
-            · have : |t| ≤ |t| * |t| := by nlinarith
-              rw [← abs_mul_abs_self t] at ht
-              push_cast at ht ⊢
-              exact _root_.le_trans (_root_.le_trans this ht) (le_max_right _ _)
-          push_cast
-          exact ⟨key _ h1, key _ h2, key _ h3⟩)
+          rw [this]; exact bounded_sphereR R2)
         φ hσ (j := j) hjq hjz (facet_unique hfac) hφ
       -- both sides realised, through the frame
       obtain ⟨f, -, -, hsing, -⟩ := samplesOf_frame hss

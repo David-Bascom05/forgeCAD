@@ -266,7 +266,7 @@ def sepOk : List Num → Bool
 
 def spreadE : List Num → List Num
   | [] => []
-  | u :: rest => separate 400 u rest
+  | u :: rest => separate (400 * (rest.length + 1)) u rest
 
 /-- The certificate check: every raw event equals a listed one, every listed one is a checked
 isolation, and consecutive ones are separated. -/

@@ -123,3 +123,5 @@ import ForgeCurved
 #print axioms ForgeCurved.wallND_q
 #print axioms ForgeCurved.facet_sides
 #print axioms ForgeCurved.qledgerB_complete
+#print axioms ForgeCurved.bounded_sphereR
+#print axioms ForgeCurved.curved_exact_facets
