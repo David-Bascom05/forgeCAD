@@ -62,8 +62,9 @@ the reference.
 | 11 | 3MF | A member past the 256 MB cap is refused with "not a zip package (or one whose members would inflate past the caps)". The cap is by design; the message hides which applies | P_*_0909_04/06 (a 380 MB model) | (by size: none made) | low (message) |
 | 12 | OBJ | A line continued with `\` is refused ("\\" is not a vertex index). The format allows it, and trimesh and assimp read it | trimesh's wallhole.obj | `continuation.obj` | low |
 | 13 | TTF | cmap format 13 and Mac-only cmaps: "no Unicode cmap of format 4 or 12" | TestCMAP13, TestCMAPMacTurkish | — | low |
-| 14 | STEP write | A solid of OCCT's Motor-c.brep (solid 13) exports a B-spline face OCCT finds invalid (area -1.56, the solid's volume 1.9e89); every other of the 178 solids read valid comes back right | OCCT data/occ/Motor-c.brep (public, LGPL) | not reduced yet: the face is one the writer fits | medium |
+| 14 | STEP write | A solid of OCCT's Motor-c.brep (solid 13) exports a B-spline face OCCT finds invalid (area -1.56, the solid's volume 1.9e89); every other of the 178 solids read valid comes back right. The solid has four degree 7×8 rational Bézier patches, read as procedural surfaces, which the writer fits as cubic B-splines (18×18 poles); one fit is invalid to OCCT, though our reader takes the export back at the right volume. Writing such a patch exactly, as the NURBS it is, would avoid the fit | OCCT data/occ/Motor-c.brep (public, LGPL) | not reduced yet (RESUME.md) | medium |
 | 15 | STL | A binary STL one triangle short of its count is refused (numpy-stl and trimesh read the triangles there are) | Thingi10K 1 of 10 000 | (truncate any binary STL by 50 bytes) | low |
+| 16 | OBJ | One face of fewer than three corners refuses the whole file (trimesh skips the face) | ABC chunk 0000: 5 of 565 meshes; trimesh's notenoughindices.obj | `printf 'v 0 0 0\\nv 1 0 0\\nv 0 1 0\\nf 1 2 3\\nf 1 2\\n'` | low–medium |
 
 The STEP and .brep problems that robustness.md already ranks are not repeated as new bugs. They
 are FaceWrongSide/LoopsCross on periodic faces (OCCT's Axis_of_bearing, Ball, screw.step,
@@ -95,6 +96,16 @@ sketch-text), one commit each, each with its repro as a committed test. Each pas
 A whole horn torus is pinched at its centre. Its volume and area read right, but the kernel's
 topology has no such vertex, and the check says so.
 
+## Dropped by owner priority
+
+- **IGES**: dropped. Only 4 public files were found (all trimmed surfaces, no solid on either side).
+- **The Google Fonts scale run**: dropped (sketch text is frozen as a feature). It had already
+  finished, so its results are kept.
+- **The DWG fix for LibreCAD's files (bug 7)**: dropped, after ec20825 had landed; its remaining
+  part (the objects left raw) is not pursued.
+- **Mass corpus runs of other kernels' files**: paused. The ABC chunk 0000 STEP run stopped at
+  205 of 10 000, the ABC OBJ run at 565 of 7168; their partial results are in results/.
+
 ## At scale
 
 At the owner's direction: thousands of files, not hundreds. These runs stream and resume
@@ -106,8 +117,8 @@ verdict with its hash, and delete the batch. Large STEP is scale-step's.
 | Thingi10K, all | 10 000 | 9992 | 1 (a binary STL one triangle short) | 0 / 0 | 2 OFF/PLY (not ours), 2 both refuse, 2 the reference refuses, 1 judge artefact (volumes of 1e-12) |
 | Google Fonts, all | 3924 (5.07 M code points) | 3822 | 0 | 0 / 0 | 102 differ only by zero-area contours ours drops (same area and box) |
 | Slicers and lib3mf's own files | 844 (216 3MF, 115 OBJ, 513 STL) | 784 | 28 3MF (25 ZIP64, 3 p:path) | 0 / 0 | 26 both refuse, 6 lib3mf refuses |
-| ABC chunk 0000 OBJ meshes | 7168 | ABC_OBJ | | | |
-| ABC chunk 0000 STEP, all, after the fixes | 10 000 | ABC_FULL | | | |
+| ABC chunk 0000 OBJ meshes (stopped by owner priority at 565) | 565 | 535 | 5 (a face of fewer than three corners: bug 16) | 0 / 0 | 25 both refuse (23 with no faces) |
+| ABC chunk 0000 STEP after the fixes (stopped by owner priority at 205) | 205 | 165 (140 to 1e-6): 80.5% | 4 | 0 / 0 ours; OCCT timed out on 8 | 19 invalid, 6 mismatch, 2 uncertain; results/abc-0000-step-partial.jsonl keeps OCCT's truth per file |
 
 ## 1. Meshes: STL, OBJ, 3MF
 
