@@ -2825,24 +2825,25 @@ fn pockets_of(sec: &Region) -> Result<Vec<Region>, String> {
     let mut cx = forge_cam_geom::real::Ctx::new();
     let ex = region::validate(&mut cx, sec).map_err(|e| format!("{e:?}"))?;
     let n = sec.loops.len();
-    let mut ccw = vec![false; n];
-    let mut rep = Vec::with_capacity(n);
-    for l in 0..n {
-        ccw[l] = region::loop_ccw(&mut cx, &ex, l);
-        let e = ex.elems[ex.loops[l].0];
-        rep.push(forge_cam_geom::arr::rep_point(
-            &mut cx, &e.piece, e.piece.s, e.piece.e,
-        ));
-    }
+    let ccw: Vec<bool> = (0..n).map(|l| region::loop_ccw(&mut cx, &ex, l)).collect();
+    let rep: Vec<_> = ex
+        .loops
+        .iter()
+        .map(|&(first, _)| {
+            let e = ex.elems[first];
+            forge_cam_geom::arr::rep_point(&mut cx, &e.piece, e.piece.s, e.piece.e)
+        })
+        .collect();
     // within[k][l]: loop k lies inside loop l
-    let mut within = vec![vec![false; n]; n];
-    for k in 0..n {
-        for l in 0..n {
-            if k != l {
-                within[k][l] = region::inside_loop(&mut cx, &ex, l, rep[k]);
-            }
-        }
-    }
+    let within: Vec<Vec<bool>> = rep
+        .iter()
+        .enumerate()
+        .map(|(k, q)| {
+            (0..n)
+                .map(|l| k != l && region::inside_loop(&mut cx, &ex, l, *q))
+                .collect()
+        })
+        .collect();
     let mut out = vec![];
     for h in (0..n).filter(|&h| !ccw[h]) {
         let mut loops = vec![sec.loops[h].reversed()];
