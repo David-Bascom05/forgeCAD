@@ -651,7 +651,6 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
                     "entry order" => "G9 stale query: entry order",
                     "entries" => "G9 stale query: entries",
                     "boxes" => "G9 stale query: boxes",
-                    "reach above fresh" => "G9 stale query: reach above fresh",
                     _ => "G9 stale query: reach below fresh",
                 },
                 1,
@@ -2232,7 +2231,10 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
     for &(k, t) in grown {
         if let VKey::Old(0, v) = k {
             let x = &mut a.vertices[v.index()];
-            x.tol = x.tol.max(t);
+            if t > x.tol {
+                x.tol = t;
+                crate::classify::grow_query_reach(a, v, t);
+            }
         }
     }
     // B kept where no new edge joins it to A: a lump apart (a union of disjoint solids) or a

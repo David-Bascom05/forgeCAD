@@ -18,8 +18,11 @@ pub enum Where {
 pub struct FaceInfo {
     /// Each boundary use with its edge's box.
     edges: Vec<(forge_topo::CoedgeId, Box3)>,
-    /// The largest sag bound among the face's edges: an edge farther than
-    /// this can never decide a point, so it is skipped without solving.
+    /// At least the largest sag bound among the face's edges and tolerance among their ends (and
+    /// `LINEAR`): an edge farther than this can never decide a point, so it is skipped without
+    /// solving. Any value at least that answers alike (CacheOK, G9): an edge within it of the
+    /// point is a candidate either way, so the nearest is the same when one is that near; when
+    /// none is, the nearest found is past every ball and sag band, and decides nothing.
     reach: f64,
     /// The loops drawn in parameter space, only when a query needs them
     /// (planar faces are decided exactly without them).
@@ -222,10 +225,17 @@ struct Bands {
 
 /// A boundary use's sag bound and its edge's box (with margin: an edge in a coordinate plane
 /// has a box a few ulps thin).
+#[inline(always)]
 fn edge_entry(body: &Body, c: forge_topo::CoedgeId) -> (f64, Box3) {
-    let id = body.coedge(c).edge;
+    let co = body.coedge(c);
+    let id = co.edge;
+    let e = body.edge(id);
+    // (the balls of the loops' vertices too: a point within one is on the boundary, so the reach
+    // must take in every edge that can be nearest there (CacheOK, G9). Each vertex of a loop is
+    // the start of one of its uses: that one's start alone covers them all)
+    let start = if co.forward { e.start } else { e.end };
     (
-        sag_bound(&body.edge(id).curve),
+        sag_bound(&e.curve).max(body.vertex(start).tol),
         body.edge_box(id).grow(tol::LINEAR),
     )
 }
@@ -238,27 +248,6 @@ const GONE: forge_topo::CoedgeId = forge_topo::CoedgeId(u32::MAX);
 pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId]) {
     let mut cs: Vec<forge_topo::CoedgeId> = gone.iter().flat_map(|&l| body.lp(l).coedges()).collect();
     cs.sort_unstable();
-    // the reach a fresh index of what is left would have (CacheOK, G9): only where a going edge is
-    // the widest does it change, and then the kept entries say what it becomes
-    let reach = {
-        let Some(info) = body
-            .face(f)
-            .query
-            .get()
-            .and_then(|q| q.downcast_ref::<FaceInfo>())
-        else {
-            return;
-        };
-        let sag = |c: forge_topo::CoedgeId| sag_bound(&body.edge(body.coedge(c).edge).curve);
-        if cs.iter().all(|&c| sag(c) < info.reach) {
-            info.reach
-        } else {
-            info.edges
-                .iter()
-                .filter(|e| e.0 != GONE && cs.binary_search(&e.0).is_err())
-                .fold(tol::LINEAR, |r, e| r.max(sag(e.0)))
-        }
-    };
     let face = &mut body.faces[f.index()];
     let Some(q) = face.query.get_mut() else { return };
     let Some(info) = std::sync::Arc::get_mut(q).and_then(|a| a.downcast_mut::<FaceInfo>()) else {
@@ -272,7 +261,7 @@ pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId])
         }
         dead += usize::from(e.0 == GONE);
     }
-    info.reach = reach;
+    // (the reach stays: a reach above a fresh index's answers as it does, CacheOK, G9)
     info.drawn = std::sync::OnceLock::new();
     info.simple = std::sync::OnceLock::new();
     if 2 * dead > info.edges.len() {
@@ -311,14 +300,31 @@ pub(crate) fn cache_ok(body: &Body, f: FaceId) -> Result<(), &'static str> {
     if live.iter().zip(&fresh).any(|(a, b)| a.1 != b.1) {
         return Err("boxes");
     }
-    if info.reach != reach {
-        return Err(if info.reach > reach {
-            "reach above fresh"
-        } else {
-            "reach below fresh"
-        });
+    // (a reach above the fresh one only prunes less, and answers as it: see `FaceInfo::reach`)
+    if info.reach < reach {
+        return Err("reach below fresh");
     }
     Ok(())
+}
+
+/// Vertex `v`'s tolerance grew in place to `tol`: each face round it whose kept index reaches less
+/// reaches that far (CacheOK, G9: a kept reach takes in its edges' ends' balls).
+pub fn grow_query_reach(body: &mut Body, v: forge_topo::VertexId, tol: f64) {
+    let faces: Vec<FaceId> = body
+        .edges
+        .iter()
+        .filter(|e| e.alive && (e.start == v || e.end == v))
+        .flat_map(|e| e.coedges.iter().map(|&c| body.coedge_face(c)))
+        .collect();
+    for f in faces {
+        let face = &mut body.faces[f.index()];
+        let Some(q) = face.query.get_mut() else { continue };
+        match std::sync::Arc::get_mut(q).and_then(|a| a.downcast_mut::<FaceInfo>()) {
+            Some(info) => info.reach = info.reach.max(tol),
+            // shared with a copy of the body: built afresh when next asked
+            None => face.query.clear(),
+        }
+    }
 }
 
 /// Face `f` gained the loop `lp` in place: its kept index (if any) takes the loop's edges.
