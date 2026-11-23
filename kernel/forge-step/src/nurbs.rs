@@ -480,35 +480,37 @@ impl Nurbs {
             let (b, l, r, leaf) = &t.nodes[n as usize];
             let _ = b;
             if *l == 0 && *r == 0 {
-                // Newton from the span's middle; where that ends further than the nearest of a
-                // grid of degree + 2 points each way, from that point too (a polynomial piece of
-                // degree p turns at most p - 1 times along a line, so its nearest basin holds one
-                // of them; from the middle alone, a point opposite a closed span's middle sat on
-                // the far side, the distance stationary there)
+                // Newton from the span's middle. Where that ends further than the span's box
+                // (a bound below on the distance to it) by more than LINEAR, also from the nearest
+                // of a grid of degree + 2 points each way: a polynomial piece of degree p turns at
+                // most p - 1 times along a line, so its nearest basin holds one of them (from the
+                // middle alone, a point opposite a closed span's middle sat on the far side, the
+                // distance stationary there). The grid's answer is kept only if nearer by more
+                // than LINEAR: a tie, as at a closed span's two ends, keeps the middle's.
                 let (i, j) = (leaf.0 as usize, leaf.1 as usize);
                 let ((u0, u1), (v0, v1)) = ((t.us[i].0, t.us[i].1), (t.vs[j].0, t.vs[j].1));
                 let mut found = self.newton(p, Point2::new(0.5 * (u0 + u1), 0.5 * (v0 + v1)));
-                let (nu, nv) = (self.p + 1, self.q + 1);
-                let mut start = (found.0, found.1);
-                for a in 0..=nu {
-                    for c in 0..=nv {
-                        let uv = Point2::new(
-                            u0 + (u1 - u0) * (a as f64 / nu as f64),
-                            v0 + (v1 - v0) * (c as f64 / nv as f64),
-                        );
-                        let d = self.point_at(uv).distance_sq(p);
-                        if d < start.1 {
-                            start = (uv, d);
+                let lin = forge_math::tol::LINEAR;
+                if found.1.sqrt() > g.sqrt() + lin {
+                    let (nu, nv) = (self.p + 1, self.q + 1);
+                    let mut start = (found.0, found.1);
+                    for a in 0..=nu {
+                        for c in 0..=nv {
+                            let uv = Point2::new(
+                                u0 + (u1 - u0) * (a as f64 / nu as f64),
+                                v0 + (v1 - v0) * (c as f64 / nv as f64),
+                            );
+                            let d = self.point_at(uv).distance_sq(p);
+                            if d < start.1 {
+                                start = (uv, d);
+                            }
                         }
                     }
-                }
-                // (nearer by more than LINEAR: a tie, as at a closed span's two ends, keeps the
-                // middle's answer)
-                let lin = forge_math::tol::LINEAR;
-                if start.1.sqrt() + lin < found.1.sqrt() {
-                    let again = self.newton(p, start.0);
-                    if again.1.sqrt() + lin < found.1.sqrt() {
-                        found = again;
+                    if start.1.sqrt() + lin < found.1.sqrt() {
+                        let again = self.newton(p, start.0);
+                        if again.1.sqrt() + lin < found.1.sqrt() {
+                            found = again;
+                        }
                     }
                 }
                 tries += 1;
