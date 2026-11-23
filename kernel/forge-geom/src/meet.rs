@@ -1581,12 +1581,16 @@ fn sheeted(s: &Surface) -> bool {
 }
 
 fn on_nappes(host: &Surface, other: &Surface, p: Point3) -> bool {
-    [host, other].iter().all(|s| match s {
+    on_nappe(host, p) && on_nappe(other, p)
+}
+
+fn on_nappe(s: &Surface, p: Point3) -> bool {
+    match s {
         Surface::Cone(c) => c.frame.point_to_local(p).z >= c.apex_v() - tol::LINEAR,
         // a spindle's quartic holds its other sheet too
         Surface::Torus(t) if t.is_spindle() => crate::sheet::side(t, p) > 0.0,
         _ => true,
-    })
+    }
 }
 
 /// A surface's meridian profile in (distance from the axis, height along it).
