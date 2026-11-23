@@ -22,6 +22,7 @@ forge-font = { path = "../forge-font" }
 decisions = ["forge-bool/decisions"]
 
 [dev-dependencies]
+forge-dirs = { path = "../forge-dirs" }
 forge-lang = { path = "../../interface/forge-lang" }
 forge-mesh = { path = "../forge-mesh" }
 

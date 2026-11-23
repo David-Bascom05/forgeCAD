@@ -16,7 +16,7 @@ fn font_dir() -> std::path::PathBuf {
                 .expect("clock");
             std::path::PathBuf::from("/tmp").join(format!("forge-lang-bench-{}", t.as_nanos()))
         } else {
-            std::env::temp_dir().join(format!("forge-lang-bench-{}", std::process::id()))
+            forge_dirs::temp_dir().join(format!("forge-lang-bench-{}", forge_dirs::process_id()))
         };
         std::fs::create_dir_all(&d).expect("temp dir");
         std::fs::write(d.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
