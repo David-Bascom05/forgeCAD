@@ -680,4 +680,49 @@ theorem hole_spec (c : Cyc) (cur back pc lift f x y : Std.I64) (out : alloc.vec.
 
 end hole
 
+/-! ## word, at, and step's two loops -/
+
+theorem word_spec (s : Slice (Option Std.I64)) (k : Usize) : word s k ⦃ r => r = s.val.getD k.val none ⦄ := by
+  unfold word
+  simp only
+  split
+  · step with Slice.index_usize_spec s k (by scalar_tac) as ⟨w, hw⟩
+    rw [hw, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem]; rfl
+  · simp only [WP.spec_ok]
+    rw [List.getD_eq_getElem?_getD, List.getElem?_eq_none (by scalar_tac)]; rfl
+
+theorem at_spec (s : Slice (Option Std.I64)) (k : Usize) : «at» s k ⦃ r => r = s.val.getD k.val none ⦄ := by
+  unfold «at»
+  simp only
+  split
+  · step with Slice.index_usize_spec s k (by scalar_tac) as ⟨w, hw⟩
+    rw [hw, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem]; rfl
+  · simp only [WP.spec_ok]
+    rw [List.getD_eq_getElem?_getD, List.getElem?_eq_none (by scalar_tac)]; rfl
+
+theorem step_loop0_spec (v : alloc.vec.Vec (Option Std.I64)) :
+    step_loop0 v false 0#usize ⦃ r => r = v.val.any (·.isSome) ⦄ := by
+  unfold step_loop0
+  apply loop.spec_decr_nat
+    (fun (q : Bool × Usize) => v.val.length - q.2.val)
+    (fun q => q.2.val ≤ v.val.length ∧ q.1 = (v.val.take q.2.val).any (·.isSome))
+  · rintro ⟨any, k⟩ ⟨hk, ha⟩
+    unfold step_loop0.body
+    simp only at hk ha ⊢
+    split
+    · rename_i h
+      have hkl : k.val < v.val.length := by scalar_tac
+      step with alloc.vec.Vec.index_usize_spec v k (by scalar_tac) as ⟨o, ho⟩
+      have hw : any_word any o = ok (o.isSome || any) := by
+        unfold any_word; cases o <;> rfl
+      rw [hw, bind_ok]
+      step as ⟨k1, hk1⟩
+      refine ⟨by scalar_tac, ?_, by scalar_tac⟩
+      rw [hk1, List.take_add_one, List.getElem?_eq_getElem hkl, Option.toList_some, List.any_append, ← ha, ← ho]
+      cases o <;> cases any <;> rfl
+    · simp only [WP.spec_ok]
+      have : k.val = v.val.length := by scalar_tac
+      rw [ha, this, List.take_length]
+  · simp
+
 end forge_machine_core

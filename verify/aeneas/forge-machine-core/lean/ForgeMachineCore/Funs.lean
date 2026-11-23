@@ -330,8 +330,29 @@ def hole
     let v3 ← put a base x y back
     alloc.vec.Vec.push out5 (Ev.Rapid v3)
 
+/-- [forge_machine_core::has]:
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 273:0-278:1 -/
+def has (w : Option Std.I64) : Result Bool := do
+  match w with
+  | none => ok false
+  | some _ => ok true
+
+/-- [forge_machine_core::has_g]:
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 281:0-286:1 -/
+def has_g (g : Option Std.U32) : Result Bool := do
+  match g with
+  | none => ok false
+  | some _ => ok true
+
+/-- [forge_machine_core::any_word]:
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 289:0-294:1 -/
+def any_word (any : Bool) (w : Option Std.I64) : Result Bool := do
+  match w with
+  | none => ok any
+  | some _ => ok true
+
 /-- [forge_machine_core::word]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 272:0-274:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 296:0-298:1 -/
 def word
   (ax : Slice (Option Std.I64)) (k : Std.Usize) : Result (Option Std.I64) := do
   let i := Slice.len ax
@@ -340,7 +361,7 @@ def word
   else ok none
 
 /-- [forge_machine_core::at]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 276:0-278:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 300:0-302:1 -/
 def «at»
   (p : Slice (Option Std.I64)) (k : Std.Usize) : Result (Option Std.I64) := do
   let i := Slice.len p
@@ -349,7 +370,7 @@ def «at»
   else ok none
 
 /-- [forge_machine_core::motion_code]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 281:0-342:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 305:0-366:1 -/
 def motion_code
   (a : Axes) (st : State) (b : Block) (s1 : State) :
   Result (core.result.Result State Refuse)
@@ -414,7 +435,7 @@ def motion_code
         else ok (core.result.Result.Err Refuse.UnknownMotion)
 
 /-- [forge_machine_core::plane_axes]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 345:0-353:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 369:0-377:1 -/
 def plane_axes
   (a : Axes) (plane : Std.U32) (b : Block) :
   Result (Std.Usize × Std.Usize × (Option Std.I64) × (Option Std.I64))
@@ -427,7 +448,7 @@ def plane_axes
     else ok (a.y, a.z, b.j, b.k)
 
 /-- [forge_machine_core::arc]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 355:0-403:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 379:0-427:1 -/
 def arc
   (a : Axes) (st : State) (b : Block) (s2 : State)
   (dst : alloc.vec.Vec (Option Std.I64)) (g : Std.U32) :
@@ -507,7 +528,7 @@ def arc
                 residual
 
 /-- [forge_machine_core::step]: loop body 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 434:4-439:5
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 458:4-461:5
     Visibility: public -/
 @[rust_loop_body]
 def step_loop0.body
@@ -520,16 +541,13 @@ def step_loop0.body
     let o ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Option
         Std.I64)) v k
-    let b := core.option.Option.is_some o
-    let any1 ← if b
-                 then ok true
-                 else ok any
+    let any1 ← any_word any o
     let k1 ← k + 1#usize
     ok (cont (any1, k1))
   else ok (done any)
 
 /-- [forge_machine_core::step]: loop 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 434:4-439:5
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 458:4-461:5
     Visibility: public -/
 @[rust_loop]
 def step_loop0
@@ -541,7 +559,7 @@ def step_loop0
     (any, k)
 
 /-- [forge_machine_core::step]: loop body 1:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 445:8-453:9
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 467:8-475:9
     Visibility: public -/
 @[rust_loop_body]
 def step_loop1.body
@@ -557,7 +575,7 @@ def step_loop1.body
   then
     let s := alloc.vec.Vec.deref v
     let o ← word s k
-    let b := core.option.Option.is_some o
+    let b ← has o
     let (axes1, pos1) ←
       if b
       then
@@ -577,7 +595,7 @@ def step_loop1.body
   else ok (done (axes, pos))
 
 /-- [forge_machine_core::step]: loop 1:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 445:8-453:9
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 467:8-475:9
     Visibility: public -/
 @[rust_loop]
 def step_loop1
@@ -591,7 +609,7 @@ def step_loop1
     (axes, pos, k)
 
 /-- [forge_machine_core::step]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 406:0-494:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 430:0-516:1
     Visibility: public -/
 def step
   (a : Axes) (pc : Std.I64) (lift : Std.I64) (st : State) (b : Block) :
@@ -628,8 +646,8 @@ def step
       let pos := alloc.vec.Vec.with_capacity (Option Std.I64) i
       let (axes, pos1) ←
         step_loop1 b.ax val (alloc.vec.Vec.new Std.Usize) pos 0#usize
-      let b1 ← alloc.vec.Vec.is_empty axes
-      if b1
+      let i1 := alloc.vec.Vec.len axes
+      if i1 = 0#usize
       then ok (core.result.Result.Err Refuse.HomeNoAxis)
       else
         let v1 ← one (Ev.Home val axes)
@@ -693,13 +711,12 @@ def step
               | 80#uscalar =>
                 let s3 := alloc.vec.Vec.deref b.ax
                 let o4 ← word s3 a.z
-                let b1 := core.option.Option.is_some o4
+                let b1 ← has o4
                 if b1
                 then
-                  let b2 := core.option.Option.is_none b.g
+                  let b2 ← has_g b.g
                   if b2
-                  then ok (core.result.Result.Err Refuse.CycleZRepeat)
-                  else
+                  then
                     let s4 := alloc.vec.Vec.deref val1
                     let o5 ← «at» s4 a.x
                     let s5 := alloc.vec.Vec.deref val1
@@ -730,6 +747,7 @@ def step
                             let s8 := alloc.vec.Vec.deref val1
                             let pos ← put a s8 x y back
                             ok (core.result.Result.Ok (out, { val with pos }))
+                  else ok (core.result.Result.Err Refuse.CycleZRepeat)
                 else
                   let s4 := alloc.vec.Vec.deref val1
                   let o5 ← «at» s4 a.x

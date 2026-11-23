@@ -9,6 +9,8 @@
 //! A refusal is `Err` with its reason; the spec's `none`.
 
 #![forbid(unsafe_code)]
+// The Aeneas style (research/aeneas/STYLE.md) writes some things the long way.
+#![allow(clippy::vec_init_then_push, clippy::redundant_pattern_matching, clippy::len_zero, clippy::manual_unwrap_or_default)]
 
 /// Which axis (index into a position) is X, Y and Z.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -269,6 +271,30 @@ pub fn hole(
     out.push(Ev::Rapid(put(a, base, x, y, back)));
 }
 
+/// Whether a word is there.
+fn has(w: Option<i64>) -> bool {
+    match w {
+        Some(_) => true,
+        None => false,
+    }
+}
+
+/// Whether a motion code is there.
+fn has_g(g: Option<u32>) -> bool {
+    match g {
+        Some(_) => true,
+        None => false,
+    }
+}
+
+/// `any` or a word there.
+fn any_word(any: bool, w: Option<i64>) -> bool {
+    match w {
+        Some(_) => true,
+        None => any,
+    }
+}
+
 fn word(ax: &[Option<i64>], k: usize) -> Option<i64> {
     if k < ax.len() { ax[k] } else { None }
 }
@@ -432,9 +458,7 @@ pub fn step(a: &Axes, pc: i64, lift: i64, st: &State, b: &Block) -> Result<(Vec<
     let mut any = false;
     let mut k = 0;
     while k < b.ax.len() {
-        if b.ax[k].is_some() {
-            any = true;
-        }
+        any = any_word(any, b.ax[k]);
         k += 1;
     }
     if b.home {
@@ -443,7 +467,7 @@ pub fn step(a: &Axes, pc: i64, lift: i64, st: &State, b: &Block) -> Result<(Vec<
         let mut pos: Vec<Option<i64>> = Vec::with_capacity(via.len());
         let mut k = 0;
         while k < via.len() {
-            if word(&b.ax, k).is_some() {
+            if has(word(&b.ax, k)) {
                 axes.push(k);
                 pos.push(None);
             } else {
@@ -451,7 +475,7 @@ pub fn step(a: &Axes, pc: i64, lift: i64, st: &State, b: &Block) -> Result<(Vec<
             }
             k += 1;
         }
-        if axes.is_empty() {
+        if axes.len() == 0 {
             return Err(Refuse::HomeNoAxis);
         }
         return Ok((one(Ev::Home(via, axes)), State { pos, ..s1 }));
@@ -463,7 +487,7 @@ pub fn step(a: &Axes, pc: i64, lift: i64, st: &State, b: &Block) -> Result<(Vec<
     let dst = target(absolute, &st.pos, &b.ax)?;
     match (s2.mode, s2.cyc) {
         (Some(80), Some(c)) => {
-            if word(&b.ax, a.z).is_some() && b.g.is_none() {
+            if has(word(&b.ax, a.z)) && !has_g(b.g) {
                 return Err(Refuse::CycleZRepeat);
             }
             match (at(&dst, a.x), at(&dst, a.y), at(&st.pos, a.z), feed) {
