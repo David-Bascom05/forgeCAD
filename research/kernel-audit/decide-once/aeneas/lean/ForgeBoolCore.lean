@@ -4,4 +4,6 @@ import ForgeBoolCore.UFModel
 import ForgeBoolCore.RefineUF
 import ForgeBoolCore.HeadBridge
 import ForgeBoolCore.RefineRule
+import ForgeBoolCore.RefineCells
+import ForgeBoolCore.RefineIndex
 import ForgeBoolCore.Axioms
