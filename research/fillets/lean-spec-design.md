@@ -549,3 +549,19 @@ local ball, so the closing theorems of §8 hold for (d).
   (b) proper and (d) differ), or the kernel's corner there is wrong. To settle with the fillet-kernel
   session.
 
+**Open: a convex round wider than its support's remaining face, beside an earlier round** (the
+scale-programs repro, raised by the fillet-fix worker). A 50 × 20 × 20 block; f1 rounds one top
+edge at r 11, then f2 rounds the opposite top edge at r 12, on a top face now 9 wide and tangent at
+y 11 to f1's cylinder.
+- By `cutD` as written: NoSeed. The ball tangent to both carried planes (centre (8, 8)) has its top
+  foot at y 8, off the face. Rolling onto f1's cylinder is focal (12 > 11). The ball resting on the
+  smooth edge reaches above the top plane, so it is not free, and a smooth edge is no rim.
+- OCCT (OCP 8.0.1.1) on the same body: it builds valid rounds at r 5, 8 and 8.9, and refuses from
+  r 9 on. That is (a), as the kernel does (it builds r ≤ 9).
+- The candidate (c): the convex cut is the ball tangent to the two *carried* supports, intersected
+  with S. It removes 1540.2 mm³ at r 12 here (exact in section, × 50), consuming the rest of the top
+  face and cutting into f1's round.
+- Reported: "Onshape builds all 41 such CADFS parts". Unverified here; the list of 41 is not
+  recorded anywhere reachable. The spec stays (a) until Onshape's STEP truth on some of them is
+  scored.
+
