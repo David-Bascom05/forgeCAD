@@ -12,6 +12,8 @@ import ForgeExact.DecideOnce.Witness
 import ForgeExact.DecideOnce.BoxesExact
 import ForgeExact.DecideOnce.Sample
 import ForgeExact.DecideOnce.Sampler
+import ForgeExact.Alg.Sum
+import ForgeExact.Quad.Cert
 
 /-!
 # Only the standard axioms
@@ -134,3 +136,29 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Sampler.sampler_covers
   ForgeExact.DecideOnce.Sampler.flat_exact
   ForgeExact.DecideOnce.Sampler.flat_correct
+  ForgeExact.Alg.noPosRoot_spec
+  ForgeExact.Alg.onePosRoot_spec
+  ForgeExact.Alg.moebius_unique
+  ForgeExact.Alg.moebius_none
+  ForgeExact.Alg.Iso.denotes_of_ok
+  ForgeExact.Alg.Denotes.unique
+  ForgeExact.Alg.cmpRat_spec
+  ForgeExact.Alg.bisect_spec
+  ForgeExact.Alg.sign_spec
+  ForgeExact.Alg.cmp_spec
+  ForgeExact.Alg.neg_spec
+  ForgeExact.Alg.addRat_spec
+  ForgeExact.Alg.mulPos_spec
+  ForgeExact.Alg.ev_redCert
+  ForgeExact.Alg.add_spec
+  ForgeExact.Alg.mul_spec
+  ForgeExact.Quad.box_bound
+  ForgeExact.Quad.sign_nbhd
+  ForgeExact.Quad.escape
+  ForgeExact.Quad.wall_nowhereDense
+  ForgeExact.Quad.QForm.den_iff_onSigns
+  ForgeExact.Quad.quad_boolean
+  ForgeExact.Quad.member_off_wall
+  ForgeExact.Quad.member_box
+  ForgeExact.Quad.pairCheck_spec
+  ForgeExact.Quad.empty_of_patterns

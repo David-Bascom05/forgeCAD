@@ -15,5 +15,9 @@ import ForgeExact.DecideOnce.Witness
 import ForgeExact.DecideOnce.BoxesExact
 import ForgeExact.DecideOnce.Sample
 import ForgeExact.DecideOnce.Sampler
+import ForgeExact.Alg.Sum
+import ForgeExact.Alg.Examples
+import ForgeExact.Quad.Cert
+import ForgeExact.QRef.Run
 import ForgeExact.Axioms
 import ForgeExact.Fillet
