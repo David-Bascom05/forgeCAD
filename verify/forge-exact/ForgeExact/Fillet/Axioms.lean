@@ -1,5 +1,6 @@
 import ForgeExact.Axioms
 import ForgeExact.Fillet.RevCorner
+import ForgeExact.Fillet.Conic
 
 /-!
 # The fillet spec: only the standard axioms
@@ -27,3 +28,5 @@ the build fails on `sorryAx` or any axiom past `propext`, `Classical.choice` and
   ForgeExact.Fillet.hole_closing
   ForgeExact.Fillet.pivot_sphere
   ForgeExact.Fillet.hole_too_large
+  ForgeExact.Fillet.Conic.conic_circle
+  ForgeExact.Fillet.Conic.conic_tangent
