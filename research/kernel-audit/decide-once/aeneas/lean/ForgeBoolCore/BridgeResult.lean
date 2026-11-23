@@ -166,11 +166,10 @@ theorem R_orient_eq (h : AfterSplit l e0 s ext) {keep : List Bool} (hkl : keep.l
   simp only [Function.comp, orientOf, ForgeExact.DecideOnce.Ledger.orient, e2]
   split <;> rfl
 
-/-- The result read `around` needs: `ResOK`, given that every piece is a facet (`splitOk`) and the
-facets have one width. -/
+/-- The result read `around` needs: `ResOK` (every piece is a facet, by `splitOk`). -/
 theorem R_resOK_of (h : AfterSplit l e0 s ext) {keep : List Bool} {a : Assembled} (hA : AsmOf l ext s keep a)
-    (hsok : (toL l).splitOk = true) {W : Nat} (hW : ∀ φ ∈ (toL l).facets, φ.length = W) :
-    ResOK l ext a W := by
+    (W : Nat) : ResOK l ext a W := by
+  have hsok := h.ok
   have hRv := R_res_vals h hA
   have hT := hA.1
   have hd : dedup (resIds s keep s.facets.val.length) = a.result.val.map (·.val) := by
@@ -191,7 +190,7 @@ theorem R_resOK_of (h : AfterSplit l e0 s ext) {keep : List Bool} {a : Assembled
     rw [R_fk, ← e, cellL_covAt l ext (by rw [e, at32_getD hk]; exact hc)]
   have hfkF : ∀ k, k < s.facets.val.length → R_fk l s k ∈ (toL l).facets := by
     intro k hk; rw [R_facets_range h]; exact List.mem_map.mpr ⟨k, List.mem_range.mpr hk, rfl⟩
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
   · rw [hRv]; exact resIds_nodup s keep (R_facets_nodup h) _ (Nat.le_refl _)
   · intro r hr
     have : r.val ∈ a.result.val.map (·.val) := List.mem_map_of_mem hr
@@ -213,11 +212,6 @@ theorem R_resOK_of (h : AfterSplit l e0 s ext) {keep : List Bool} {a : Assembled
     · rw [if_neg (fun h' => hm (this.mp h')), if_neg hm]
   · intro r hr
     obtain ⟨k, hk, e⟩ := hcovr r hr
-    have := congrArg List.length e
-    rw [List.length_map] at this
-    rw [this]; exact hW _ (hfkF k hk)
-  · intro r hr
-    obtain ⟨k, hk, e⟩ := hcovr r hr
     obtain ⟨p, hp⟩ := ForgeExact.DecideOnce.Ledger.mem_facets.mp (hfkF k hk)
     unfold ForgeExact.DecideOnce.Ledger.splitOk at hsok
     have := List.all_eq_true.mp hsok _ hp
@@ -229,14 +223,10 @@ theorem R_resOK_of (h : AfterSplit l e0 s ext) {keep : List Bool} {a : Assembled
 
 end
 
-/-- **The result table is the Lean's result**, given `splitOk` and one width (see `R_resOK_of`). -/
-theorem R_result_bridge (l : Ledger) (e0 : Ext) (s : Split) (ext : Ext) (keep : List Bool) (a : Assembled)
-    (h : AfterSplit l e0 s ext) (hkl : keep.length = s.topes.val.length) (hA : AsmOf l ext s keep a)
-    (hsok : (toL l).splitOk = true) (W : Nat) (hW : ∀ φ ∈ (toL l).facets, φ.length = W) :
-    a.result.val.map (fun r => covE l ext r.val) = (toL l).result (ktOf l keep) ∧
-    a.orient.val.map toS = ((toL l).result (ktOf l keep)).map (ForgeExact.DecideOnce.Ledger.orient (ktOf l keep)) ∧
-    ∃ W, ResOK l ext a W :=
-  ⟨R_result_eq h hkl hA, R_orient_eq h hkl hA, W, R_resOK_of h hA hsok hW⟩
+/-- **The result table is the Lean's result**, oriented, and `around` may read it. -/
+theorem result_bridge_proof : ResultBridge := by
+  intro l e0 s ext keep a h hkl hA
+  exact ⟨R_result_eq h hkl hA, R_orient_eq h hkl hA, 0, R_resOK_of h hA 0⟩
 
 /-- **`around` on positions, read as covectors, is the Lean's `around`.** -/
 theorem around_bridge_proof : AroundBridge := by

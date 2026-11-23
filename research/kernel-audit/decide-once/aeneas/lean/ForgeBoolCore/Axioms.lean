@@ -17,6 +17,7 @@ import ForgeBoolCore.RefineTouch
 import ForgeBoolCore.RefineBetween
 import ForgeBoolCore.RefineFan
 import ForgeBoolCore.BridgeTouch
+import ForgeBoolCore.EndToEnd
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -82,7 +83,14 @@ import ForgeBoolCore.BridgeTouch
 #print axioms forge_bool_core.R_result_eq
 #print axioms forge_bool_core.R_orient_eq
 #print axioms forge_bool_core.R_resOK_of
-#print axioms forge_bool_core.R_result_bridge
+#print axioms forge_bool_core.result_bridge_proof
 #print axioms forge_bool_core.around_bridge_proof
 #print axioms forge_bool_core.bad_edge_bridge_proof
 #print axioms forge_bool_core.bad_vert_bridge_proof
+#print axioms forge_bool_core.new_ext_spec_proof
+#print axioms forge_bool_core.core_k_spec_of
+#print axioms forge_bool_core.classify_on_spec_of
+#print axioms forge_bool_core.core_spec_of
+#print axioms forge_bool_core.end_to_end
+#print axioms forge_bool_core.encode_spec_proof
+#print axioms forge_bool_core.end_to_end_encode
