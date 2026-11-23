@@ -577,3 +577,14 @@ At head `1a25c1a`:
   per item) and 8k in `getenv`.
 - **Verdict:** level within the measurement. The last 0.7% could go by having the tool builder's
   items write into one `Vec` (a later, small change).
+
+## Open items (2026-11-23, at the end of this session's queue)
+
+| Item | Owner | State |
+|---|---|---|
+| S4′ (stretch parity in trim and imprint, feature `piece_flood`) | bool-speed | scoped, with the five conditions above. It ships only at zero disagreements on gate, fuzz and repros. |
+| The tool builder writing into one `Vec` (insert's last +0.7% of instructions at tN) | bool-research | **only if** latency-gate flags insert on head |
+| A THREADS HURT line from latency-gate on head (1a25c1a) | bool-research, restarted by the master | waiting on latency-gate's confirmed list |
+| W3 (tools ahead of the boolean chain), W4 (face-pair batches) | bool-speed | queued |
+| S5 (per-body caches across booleans) | unassigned | ranked, not started |
+| A8 (face arrangement) | Lean coordinator, decide-once Rust | signed off; budget and rules in a8-review.md §6 |
