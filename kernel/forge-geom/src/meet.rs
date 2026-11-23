@@ -214,23 +214,13 @@ impl Eqn {
         }
     }
 
-    /// Whether the curve rounds a tip between two of its points close together, a tip being where the
-    /// surfaces all but touch: na x nb runs on round it, so a link clean over one has the curve running
-    /// backwards at its far end. (A tight curve where they cross well is the walk's spacing to judge.)
-    fn turns(&self, p: Point3, q: Point3) -> bool {
-        let grads = |x: Point3| (self.host.gradient(x), self.alg.grad(x).1);
-        let ((a, b), (c, d)) = (grads(p), grads(q));
-        let near = crate::intcurve::all_but_touch(a, b) || crate::intcurve::all_but_touch(c, d);
-        let (u, v) = (a.cross(b), c.cross(d));
-        let (lu, lv) = (u.length(), v.length());
-        if !near || u.dot(v) >= crate::intcurve::TURN_COS * lu * lv {
-            return false;
-        }
-        // (a link in line with the curve at both ends runs through a point where branches cross)
-        let c = q - p;
-        let lc = c.length();
-        u.dot(c).abs() < crate::intcurve::TURN_COS * lu * lc
-            || v.dot(c).abs() < crate::intcurve::TURN_COS * lv * lc
+    /// The curve's own tangent at (u, s): (F_s, -F_u) in the host's parameters, carried onto the host.
+    /// It runs on round a turning point (where F_s vanishes) and keeps one sense along a branch, so the
+    /// angle between two of its values is how far the curve turns between them, whichever way the chain
+    /// runs; it vanishes only where F's gradient does (where branches cross).
+    fn tangent(&self, u: f64, s: f64) -> Vec3 {
+        let (d, f) = self.partials(u, s);
+        d.du * f[1] - d.dv * f[0]
     }
 
     fn periodic(&self) -> bool {
@@ -965,6 +955,9 @@ struct Piece {
     du: f64,
     /// Whether each end is a turning point (u stops and reverses there).
     turns: [bool; 2],
+    /// Whether each end is a multiple event (branches cross there): the curve's tangent has no
+    /// direction at it.
+    crossing: [bool; 2],
 }
 
 impl Piece {
@@ -991,7 +984,7 @@ impl Piece {
         step: f64,
         span: (f64, f64),
         region: &Box3,
-    ) -> Option<Vec<Point3>> {
+    ) -> Option<(Vec<Point3>, Vec<Option<Vec3>>)> {
         // away from the region the links stretch: half the way to it at most
         let near = region.grow(2.0 * step);
         let away = |p: Point3| {
@@ -1004,6 +997,8 @@ impl Piece {
         let u0 = self.u(0.0);
         let s0 = eq.pick(u0, s0, t.sign, t.count).0;
         let mut pts = vec![point(u0, s0)];
+        // the curve's tangent at each point, none at a crossing
+        let mut taus = vec![(!self.crossing[0]).then(|| eq.tangent(u0, s0))];
         let (mut sig, mut s, mut ds, mut last): (f64, f64, f64, f64) = (0.0, s0, 0.0, 1.0);
         let mut dsig = 1.0 / 64.0;
         let mut k = 0;
@@ -1033,18 +1028,22 @@ impl Piece {
             let chord = p.distance(back);
             // a link turns at most about 20 degrees from the one before (unless it is
             // already much the shorter: a long link's chord leaves the tangent itself)
-            let (bent, short) = if pts.len() > 1 {
+            let bent = pts.len() > 1 && {
                 let (d0, d1) = (back - pts[pts.len() - 2], p - back);
                 let l0 = d0.length();
-                let off = d0.dot(d1) < 0.94 * l0 * chord;
-                (off && chord > 0.5 * l0, off && chord <= 0.5 * l0)
-            } else {
-                (false, false)
+                d0.dot(d1) < 0.94 * l0 * chord && chord > 0.5 * l0
             };
             let reach = away(back).min(away(p));
-            // a link much the shorter may turn further, but not round a tip (a hair of the step excepted)
-            let turned = short && chord > step * crate::intcurve::TURN_LEAST && eq.turns(back, p);
-            if chord > 1.5 * reach || bent || turned {
+            // no link turns past TURN_COS by the curve's own tangent (a hair of the step excepted): the
+            // first out of a turning point included, where the root moves like the square root of u and
+            // a hairpin whose arms are a hair apart is rounded inside one link
+            let tau = (!(next == 1.0 && self.crossing[1])).then(|| eq.tangent(u, x));
+            let turned = chord > step * crate::intcurve::TURN_LEAST
+                && matches!((taus[taus.len() - 1], tau), (Some(a), Some(b))
+                    if a.dot(b) < crate::intcurve::TURN_COS * a.length() * b.length());
+            let jumped = chord > 1.5 * reach || bent;
+            // (a link that turns at the least step stands, as the walk's does: the turn is the curve's)
+            if jumped || (turned && dsig > 1e-9) {
                 if dsig <= 1e-9 {
                     return None; // the root jumps: something the events did not see
                 }
@@ -1060,11 +1059,12 @@ impl Piece {
             (sig, s) = (next, x);
             dsig *= grow;
             pts.push(p);
+            taus.push(tau);
             if pts.len() > 100_000 {
                 return None;
             }
         }
-        Some(pts)
+        Some((pts, taus))
     }
 }
 
@@ -1415,6 +1415,7 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
             continue;
         }
         let mut chain: Vec<Point3> = Vec::new();
+        let mut taus: Vec<Option<Vec3>> = Vec::new();
         let mut joins: Vec<usize> = Vec::new();
         let (mut cur, mut fwd) = (start, true);
         loop {
@@ -1431,15 +1432,19 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
             };
             let turn = |end: usize| link[end].expect("every end linked").1;
             let (u0, du) = if fwd { (lo, hi - lo) } else { (hi, lo - hi) };
+            let multiple = |e: usize| us[e % m].1;
+            let (at_lo, at_hi) = (multiple(t.interval), multiple(t.interval + 1));
             let piece = Piece {
                 u0,
                 du,
                 turns: [turn(entry), turn(exit)],
+                crossing: if fwd { [at_lo, at_hi] } else { [at_hi, at_lo] },
             };
-            let pts = piece.march(&eq, t, t.ends[if fwd { 0 } else { 1 }], step, (lo, hi), &region)?;
+            let (pts, ts) = piece.march(&eq, t, t.ends[if fwd { 0 } else { 1 }], step, (lo, hi), &region)?;
             // each piece starts where the last one ended
             joins.push(chain.len());
             chain.extend(&pts[..pts.len() - 1]);
+            taus.extend(&ts[..ts.len() - 1]);
             let (next, _) = link[exit].expect("every end linked");
             cur = next / 2;
             fwd = next % 2 == 0;
@@ -1463,6 +1468,7 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
                 let cd = chain[(i + 2) % n] - c;
                 if bc.dot(cd) < 0.0 && ab.dot(cd) > 0.0 {
                     chain.swap(i % n, (i + 1) % n);
+                    taus.swap(i % n, (i + 1) % n);
                 }
             }
         }
@@ -1478,19 +1484,31 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
             return None;
         }
         // links much shorter than the step (where u eases into a turn) would only make
-        // slivers: such a point goes when its neighbours stay within reach of each other
+        // slivers: such a point goes when its neighbours stay within reach of each other, and the
+        // link it leaves turns no further than the march's do (a tip stays)
         let mut kept: Vec<Point3> = Vec::with_capacity(chain.len());
+        let mut kept_tau: Option<Vec3> = None;
         for i in 0..chain.len() {
             let p = chain[i];
-            let next = chain[(i + 1) % chain.len()];
+            let j = (i + 1) % chain.len();
+            let next = chain[j];
+            let turns = matches!((kept_tau, taus[j]), (Some(a), Some(b))
+                if a.dot(b) < crate::intcurve::TURN_COS * a.length() * b.length());
             match kept.last() {
-                Some(&q)
-                    if q.distance(p) < 0.2 * step && q.distance(next) <= 1.5 * step && !eq.turns(q, next) => {
+                Some(&q) if q.distance(p) < 0.2 * step && q.distance(next) <= 1.5 * step && !turns => {}
+                _ => {
+                    kept.push(p);
+                    kept_tau = taus[i];
                 }
-                _ => kept.push(p),
             }
         }
         let chain = kept;
+        // a loop all within tolerance is a point, on whichever nappe its points fall
+        let n = chain.len();
+        if (0..n).map(|i| chain[i].distance(chain[(i + 1) % n])).sum::<f64>() <= 10.0 * tol::LINEAR {
+            acnodes.push(chain[0]);
+            continue;
+        }
         let keep = if sheeted {
             chain.iter().filter(|&&q| on_nappes(&eq.host, &other, q)).count()
         } else {
@@ -1500,11 +1518,6 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
             if keep > 0 {
                 return None; // a loop through a cone's apex, or a spindle's
             }
-            continue;
-        }
-        let n = chain.len();
-        if (0..n).map(|i| chain[i].distance(chain[(i + 1) % n])).sum::<f64>() <= 10.0 * tol::LINEAR {
-            acnodes.push(chain[0]);
             continue;
         }
         // next to a turning point a root is only as good as its u: pulled onto both surfaces

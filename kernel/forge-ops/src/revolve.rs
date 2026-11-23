@@ -1,6 +1,8 @@
 use crate::profile::{Profile, ProfileError, Segment};
 use forge_geom::spline::{SplineCurve, Spun};
-use forge_geom::{Circle, Cone, Curve, Cylinder, Line, Plane, Sphere, Surface, SurfaceGeom, Torus};
+use forge_geom::{
+    Circle, Cone, Curve, CurveGeom, Cylinder, Line, Plane, Sphere, Surface, SurfaceGeom, Torus,
+};
 use forge_math::{Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, ShellId, VertexId};
 
@@ -166,6 +168,31 @@ struct SegInfo {
     end: usize,
     /// Profile direction runs with the edge curve's parameter.
     forward: bool,
+}
+
+/// A pole's tolerance: as far as its edges' ends and its faces' surfaces lie from it, at least
+/// LINEAR. A profile's arc may end a little short of the axis point the line gives, and the
+/// surfaces of revolution have their poles on the axis itself; nothing else needs more, and a
+/// wider ball would hide geometry once a boolean leaves only a stub of an edge ending there (a
+/// cone's apex 3·LINEAR through a face: its last ruling 3.4e-5 long).
+fn pole_tolerances(body: &mut Body, poles: &[VertexId]) {
+    for &v in poles {
+        let at = body.vertex(v).point;
+        let mut need = 0.0f64;
+        for e in body.edge_ids() {
+            let edge = body.edge(e);
+            for (end, t) in [(edge.start, edge.range.lo), (edge.end, edge.range.hi)] {
+                if end != v {
+                    continue;
+                }
+                need = need.max(at.distance(edge.curve.eval(t)));
+                for &c in &edge.coedges {
+                    need = need.max(body.face(body.coedge_face(c)).surface.distance(at));
+                }
+            }
+        }
+        body.vertices[v.0 as usize].tol = need.max(tol::LINEAR);
+    }
 }
 
 impl Revolver<'_> {
@@ -380,6 +407,7 @@ impl Revolver<'_> {
         }
         // on a whole turn a segment on the axis makes nothing, so a point between two such is on nothing
         let mut made = vec![0u8; pverts.len()];
+        let mut poles: Vec<VertexId> = Vec::new();
         for s in &segs {
             if !matches!(self.surface_of(&s.seg), Ok(None)) {
                 made[s.start] += 1;
@@ -401,12 +429,11 @@ impl Revolver<'_> {
                 // a whole-turn disc has no seam to end there: nothing uses the vertex
                 vid[0].push(VertexId(u32::MAX));
             } else if self.on_axis(p) {
-                // (a profile's arc may end a little short of the axis point the line gives)
-                let v = self.body.add_tolerant_vertex(
-                    self.point3(p),
-                    3.0 * tol::LINEAR,
-                    self.root.with_str("pole").with(pvert_name[i]),
-                );
+                // (its tolerance is what its edges and faces need: `pole_tolerances`)
+                let v = self
+                    .body
+                    .add_vertex(self.point3(p), self.root.with_str("pole").with(pvert_name[i]));
+                poles.push(v);
                 for c in vid.iter_mut() {
                     c.push(v);
                 }
@@ -518,6 +545,7 @@ impl Revolver<'_> {
             self.add_cap(shell, 0, &segs, &eid, &loop_ranges);
             self.add_cap(shell, 1, &segs, &eid, &loop_ranges);
         }
+        pole_tolerances(&mut self.body, &poles);
         if copies == 1 {
             // what the second half-turn was named finds the whole
             let root = self.root;

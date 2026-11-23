@@ -6475,17 +6475,16 @@ fn debug_conflict(
 enum Inner {
     /// A step off an edge no other piece of the region comes nearer than: clear of the boundary.
     Clear(Point3),
-    /// On a plane, where no step clears: the point a scanline of the region's own boundary finds
-    /// farthest from it, and that clearance (the region is about twice it wide there).
+    /// Where no step clears: on a plane, the point a scanline of the region's own boundary finds
+    /// farthest from it; off one, the point a step off an edge as far from it as from the rest of
+    /// the boundary. And that clearance (the region is about twice it wide there).
     Narrow(Point3, f64),
-    /// Off a plane, where no step clears: the default step off an edge.
-    Stepped(Point3),
 }
 
 impl Inner {
     fn point(self) -> Point3 {
         match self {
-            Inner::Clear(p) | Inner::Narrow(p, _) | Inner::Stepped(p) => p,
+            Inner::Clear(p) | Inner::Narrow(p, _) => p,
         }
     }
 }
@@ -6519,8 +6518,39 @@ fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Inner> {
     }
     match &body.face(s.from).surface {
         Surface::Plane(plane) => planar_inner(plane, s, pieces).map(|(q, c)| Inner::Narrow(q, c)),
-        _ => probe(body, s.from, h, pieces).map(Inner::Stepped),
+        _ => medial_step(body, s, pieces, h).map(|(q, c)| Inner::Narrow(q, c)),
     }
+}
+
+/// Off half-edge `h` of a region no step clears (narrower than four tolerances that way), the step
+/// as far from `h` as from the rest of the region's boundary, and that clearance: the middle of the
+/// region across. (A default step would land past the far side of a strip, on what bounds it.)
+fn medial_step(body: &Body, s: &Spec, pieces: &[Piece], h: (usize, bool)) -> Option<(Point3, f64)> {
+    let rest = |q: Point3| {
+        s.loops
+            .iter()
+            .flatten()
+            .filter(|&&(o, _)| o != h.0)
+            .map(|&(o, _)| {
+                let pc = &pieces[o];
+                pc.curve.eval(pc.curve.closest(q, pc.range)).distance(q)
+            })
+            .fold(f64::INFINITY, f64::min)
+    };
+    // the clearance less the step falls as the step grows: from the far side's distance at no step
+    // to below zero by four tolerances (no step of two cleared)
+    let (mut lo, mut hi) = (0.0, 4.0 * tol::LINEAR);
+    for _ in 0..48 {
+        let m = 0.5 * (lo + hi);
+        let q = probe_at(body, s.from, h, pieces, Some(m))?;
+        if rest(q) >= m {
+            lo = m;
+        } else {
+            hi = m;
+        }
+    }
+    let q = probe_at(body, s.from, h, pieces, Some(lo))?;
+    Some((q, lo.min(rest(q))))
 }
 
 /// Where a region lies against its coplanar partner face, from an edge of the partner bounding it.
@@ -6731,13 +6761,8 @@ fn spare_probes<'a>(body: &'a Body, s: &'a Spec, pieces: &'a [Piece]) -> impl It
     })
 }
 
-/// A point inside face `f` a small step off the middle of half-edge `(p, fwd)` of one of its
-/// loops, on the face's side.
-pub(crate) fn probe(body: &Body, f: FaceId, h: (usize, bool), pieces: &[Piece]) -> Option<Point3> {
-    probe_at(body, f, h, pieces, None)
-}
-
-/// `probe`, a given distance off the half-edge (by default 1% of its half chord, at most 0.05).
+/// A point inside face `f` a step off the middle of half-edge `(p, fwd)` of one of its loops, on the
+/// face's side: a given distance off the half-edge (by default 1% of its half chord, at most 0.05).
 pub(crate) fn probe_at(
     body: &Body,
     f: FaceId,

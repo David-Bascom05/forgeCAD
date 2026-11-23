@@ -433,3 +433,57 @@ fn balls_touching_at_a_point_are_non_manifold() {
 fn ball_centred_on_a_rim_builds() {
     agrees_curved(&degenerate_curved("cylinder_sphere/centre_on_rim/Add"));
 }
+
+/// The band's worst: the ball of cylinder_sphere/tangent_wall_equator moved 3·LINEAR along x
+/// pokes through the wall in a lens with hairpin tips a radius 3·LINEAR round. The closed form's
+/// chain dropped one tip, so the common part built 4190.78 mm³ (4188.79 exact) and the cut's
+/// volume did not settle (NaN). Fixed in forge-geom meet: no link turns past 30 degrees. (The cut
+/// now measures 2094.395120, the exact volume; the reference calls it non-manifold, the ball's
+/// poles touching both caps at a point: a point contact, judged with those.)
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn ball_a_hair_through_the_wall_measures_exactly() {
+    for op in ["Keep", "Add"] {
+        let part = degenerate_curved(&format!("cylinder_sphere/tangent_wall_equator/{op}"));
+        let moved = forge_exact_fuzz::curved::tool_moved(
+            &part,
+            forge_math::Vec3::X * (3.0 * forge_math::tol::LINEAR),
+        )
+        .expect("a moved ball");
+        agrees_curved(&forge_model::adversarial::canonical(&moved));
+    }
+}
+
+/// The band's invalid bodies and refusals fixed alongside: a cone's apex 3·LINEAR through a face
+/// (VertexTolerance: a revolve's poles had a blanket 3·LINEAR ball), two identical cylinders
+/// 3·LINEAR apart joined (NotClosed: a strip no probe step clears was probed past its far side),
+/// and a ball 3·LINEAR off a cylinder's cap (NotClosed, SplitCrossed and InconsistentClassification
+/// from the closed form's dropped tips). Each agrees with the reference, on both paths.
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn band_hairs_through_faces_agree() {
+    let (x, y, z) = (forge_math::Vec3::X, forge_math::Vec3::Y, forge_math::Vec3::Z);
+    for (name, d) in [
+        ("cylinder_cone/apex_on_cap_centre/Add", z),
+        ("plane_cone/apex_on_top_from_inside/Add", z),
+        ("cone_cone/identical/Add", x),
+        ("cone_cone/tip_shares_surface/Cut", x),
+        ("cylinder_sphere/centre_on_rim/Add", x),
+        ("cylinder_cylinder/identical/Add", z),
+        ("cylinder_cylinder/identical_revolved/Add", z),
+        ("cylinder_sphere/dome_on_cap/Keep", x),
+        ("cylinder_sphere/dome_on_cap/Cut", y),
+        ("cone_sphere/inscribed_tangent_circle/Keep", x),
+    ] {
+        let part = degenerate_curved(name);
+        let moved = forge_exact_fuzz::curved::tool_moved(&part, d * (3.0 * forge_math::tol::LINEAR))
+            .expect("a moved tool");
+        agrees_curved(&forge_model::adversarial::canonical(&moved));
+    }
+}
