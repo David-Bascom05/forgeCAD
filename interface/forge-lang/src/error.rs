@@ -714,6 +714,18 @@ pub enum Error {
         /// The largest value of the param driving a refused size that builds (`Options::fit_sizes`).
         fit: Option<Box<(ParamKey, Literal)>>,
     },
+    /// A tapered extrude whose outline closes up before its depth (a lint): built to where it
+    /// closes, the pyramid or ridge its walls make, `at` from its sketch where `depth` was asked.
+    /// The fixes: the param driving the depth set to `at`, or the one driving the taper set to the
+    /// largest angle that reaches the depth.
+    TaperCloses {
+        span: Span,
+        id: String,
+        at: f64,
+        depth: f64,
+        depth_fix: Option<Box<(ParamKey, Literal)>>,
+        angle_fix: Option<Box<(ParamKey, Literal)>>,
+    },
     /// A role anchor whose faces the part no longer has.
     NoFace {
         span: Span,
@@ -909,6 +921,7 @@ impl Error {
             | SketchKernel { span, .. }
             | SketchProfile { span, .. }
             | Build { span, .. }
+            | TaperCloses { span, .. }
             | NoFace { span, .. }
             | NotPlanar { span, .. }
             | EmptySelection { span }
@@ -984,6 +997,7 @@ impl Error {
             SketchKernel { .. } => "SketchKernel",
             SketchProfile { .. } => "SketchProfile",
             Build { .. } => "Build",
+            TaperCloses { .. } => "TaperCloses",
             NoFace { .. } => "NoFace",
             NotPlanar { .. } => "NotPlanar",
             EmptySelection { .. } => "EmptySelection",
@@ -1064,6 +1078,17 @@ impl Error {
                 param: fit.0.clone(),
                 value: fit.1,
             }],
+            // as deep as it closes, or as steep as reaches the depth
+            TaperCloses {
+                depth_fix, angle_fix, ..
+            } => [depth_fix, angle_fix]
+                .into_iter()
+                .flatten()
+                .map(|f| Op::SetParam {
+                    param: f.0.clone(),
+                    value: f.1,
+                })
+                .collect(),
             // a misspelt name: the nearest in reach
             UnknownName {
                 span, near: Some(n), ..
@@ -1107,6 +1132,11 @@ impl Error {
                     format!("`{word}` is a keyword now and cannot be a name: rename it")
                 }
             },
+            TaperCloses { id, at, depth, .. } => format!(
+                "{id}: the taper closes at depth {} before {}: built to where its walls meet",
+                crate::values::fmt(*at),
+                crate::values::fmt(*depth)
+            ),
             LooseLiteral { value, rule, .. } => format!(
                 "loose number {}: numbers live in shared/param definitions [{}]",
                 crate::values::fmt(*value),
@@ -1292,6 +1322,9 @@ impl Error {
         use Error::*;
         let s = |x: &str| Json::Str(x.into());
         match self {
+            TaperCloses { id, at, depth, .. } => {
+                vec![("id", s(id)), ("at", (*at).into()), ("depth", (*depth).into())]
+            }
             LooseLiteral { value, rule, .. } => vec![("value", (*value).into()), ("rule", s(rule.name()))],
             WorldAfterFirst { first, rule, .. } => vec![("first", s(first)), ("rule", s(rule.name()))],
             Recursion { func, rule, .. } => vec![("func", s(func)), ("rule", s(rule.name()))],

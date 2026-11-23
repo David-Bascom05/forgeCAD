@@ -9,6 +9,7 @@
 //!   nothing, as in other CAD: a square tapered too far is a pyramid. A hole that closes ends;
 //! - a corner reaching a side it does not end, two loops touching, or neighbours whose carriers no
 //!   longer meet: `WallsCross`, refused, as no solid is the taper past it.
+//!
 //! Loops with an arc meeting a neighbour at an angle still find wiped-out segments by search
 //! (`next_event`).
 use crate::draft::{DraftError, draft, drafted};
@@ -768,6 +769,74 @@ fn slab(
     Ok(b)
 }
 
+/// What is left of `p`'s loops up a slab `h` high, offset to `moved` where `wiped` are gone: the
+/// profile the next slab starts from, or None where the outline has closed up (a loop no wider
+/// than what counts as gone, or no loop left). A hole that closes is dropped.
+fn left_up(p: &Profile, moved: &[Vec<Moved>], wiped: &[Vec<bool>], h: f64) -> Option<Profile> {
+    let mut loops = Vec::new();
+    for ((l, m), w) in p.loops.iter().zip(moved).zip(wiped) {
+        let kept: Vec<(Segment, u64)> = m
+            .iter()
+            .zip(&l.segments)
+            .zip(w)
+            .filter(|(_, w)| !**w)
+            .map(|((x, s), _)| (x.seg.clone(), s.1))
+            .collect();
+        if kept.is_empty() {
+            continue;
+        }
+        // (closed up: a loop no wider than what counts as gone)
+        let around: f64 = kept.iter().map(|(x, _)| x.start().distance(x.end())).sum();
+        let lp = ProfileLoop::new(kept);
+        if lp.signed_area().abs() > 8.0 * GONE * around {
+            loops.push(lp);
+        } else if loops.is_empty() {
+            return None;
+        }
+    }
+    (!loops.is_empty()).then(|| Profile {
+        plane: p.plane.with_origin(p.plane.origin + p.plane.z() * h),
+        loops,
+    })
+}
+
+/// Where a tapered extrude's outline closes up short of its depth: the height from the sketch at
+/// which `tapered` stops with the pyramid or ridge its walls make (sweep-spec 2.2, rule 3), or None
+/// where it reaches the depth, is drafted whole, or is refused. Nothing is built.
+pub fn closes_at(profile: &Profile, distance: f64, angle: f64) -> Option<f64> {
+    if !(angle.abs() > tol::ANGULAR && angle.abs() < dmath::FRAC_PI_2 - 1e-6) {
+        return None;
+    }
+    let (sn, cs) = dmath::sin_cos(angle.abs());
+    let lean = sn / cs;
+    let sign = angle.signum();
+    let mut p = prepared(profile, distance).ok()?;
+    let mut left = distance.abs();
+    while left > tol::LINEAR {
+        let d = match first_event(&p, sign, left * lean) {
+            Some(Some((d, Event::Edge))) => d,
+            Some(_) => return None,
+            None => next_event(&p, sign, left * lean)?,
+        };
+        if d / lean <= tol::LINEAR {
+            return None;
+        }
+        let h = d / lean;
+        let moved: Vec<Vec<Moved>> = p
+            .loops
+            .iter()
+            .map(|l| offset(&l.segments, d * sign))
+            .collect::<Option<_>>()?;
+        let wiped = gone_at(&p, d * sign, &moved);
+        left -= h;
+        match left_up(&p, &moved, &wiped, h) {
+            Some(next) => p = next,
+            None => return (left > tol::LINEAR).then_some(distance.abs() - left),
+        }
+    }
+    None
+}
+
 /// The solids of a tapered extrude, to be joined: `angle` leans the sides in going up (negative:
 /// out), the profile as drawn at the sketch.
 pub fn tapered(profile: &Profile, distance: f64, angle: f64, feature: u64) -> Result<Vec<Body>, TaperError> {
@@ -857,35 +926,11 @@ pub fn tapered(profile: &Profile, distance: f64, angle: f64, feature: u64) -> Re
         left -= h;
         k += 1;
         // what is left of each loop, up a slab
-        let mut loops = Vec::new();
-        for ((l, m), w) in p.loops.iter().zip(&moved).zip(&wiped) {
-            let kept: Vec<(Segment, u64)> = m
-                .iter()
-                .zip(&l.segments)
-                .zip(w)
-                .filter(|(_, w)| !**w)
-                .map(|((x, s), _)| (x.seg.clone(), s.1))
-                .collect();
-            if kept.is_empty() {
-                continue;
-            }
-            // (closed up: a loop no wider than what counts as gone)
-            let around: f64 = kept.iter().map(|(x, _)| x.start().distance(x.end())).sum();
-            let lp = ProfileLoop::new(kept);
-            if lp.signed_area().abs() > 8.0 * GONE * around {
-                loops.push(lp);
-            } else if loops.is_empty() {
-                // the outline has closed up: nothing further
-                return Ok(out);
-            }
-        }
-        if loops.is_empty() {
+        let Some(next) = left_up(&p, &moved, &wiped, h) else {
+            // the outline has closed up: nothing further
             return Ok(out);
-        }
-        p = Profile {
-            plane: p.plane.with_origin(p.plane.origin + p.plane.z() * h),
-            loops,
         };
+        p = next;
     }
     Ok(out)
 }
@@ -970,6 +1015,10 @@ mod tests {
         )]);
         let v = volume(tapered(&odd, 0.5, 80f64.to_radians(), 7));
         assert!(v > 0.0 && v < 6.0 * s * 0.5);
+        // where it closes: what forge-lang's lint says
+        close(closes_at(&hex, 0.5, 80f64.to_radians()).expect("closes"), h);
+        assert_eq!(closes_at(&hex, 0.5, 70f64.to_radians()), None);
+        assert_eq!(closes_at(&hex, 0.25, 80f64.to_radians()), None);
     }
 
     /// A rectangle with a notch in its top: its floor and the bottom meet at offset 1 (an S event),

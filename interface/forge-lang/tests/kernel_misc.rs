@@ -1060,3 +1060,48 @@ fn a_taper_whose_walls_meet_is_the_pyramid_they_make() {
         assert!((vol - exact).abs() <= 1e-9 * exact, "volume {vol}, exact {exact}");
     }
 }
+
+/// The same pit says so (a lint, the part still built): its walls close at sqrt 3 / tan 80 deg,
+/// short of its depth. The fixes set the depth to where they close, or the taper to the largest
+/// angle that reaches the depth (three figures, towards 0), and each leaves no lint.
+#[test]
+fn a_taper_that_closes_short_of_its_depth_says_so() {
+    use forge_lang::error::{Error, Op, Warning};
+    let src = include_str!("kernel_parts/taper_collapses.fg");
+    let lints = |src: &str| -> Vec<Error> {
+        let r = forge_lang::run(src, forge_lang::Options::default(), Default::default()).0;
+        assert!(r.errors.is_empty(), "{:?}", r.errors);
+        r.warnings
+            .into_iter()
+            .filter_map(|w| match w {
+                Warning::Lint(e @ Error::TaperCloses { .. }) => Some(e),
+                _ => None,
+            })
+            .collect()
+    };
+    let found = lints(src);
+    let [Error::TaperCloses { at, depth, .. }] = &found[..] else {
+        panic!("{found:?}")
+    };
+    let (s, c) = dmath::sin_cos(80f64.to_radians());
+    let h = 3f64.sqrt() / (s / c);
+    assert!((at - h).abs() < 1e-9 && *depth == 0.5, "{at} {depth}");
+    let fixes = found[0].fixes();
+    let values: Vec<(String, f64)> = fixes
+        .iter()
+        .map(|f| match f {
+            Op::SetParam { param, value } => (param.to_string(), value.value),
+            o => panic!("{o:?}"),
+        })
+        .collect();
+    assert_eq!(
+        values,
+        vec![("pit.d".to_string(), 0.305), ("pit.a".to_string(), 73.8)]
+    );
+    for f in &fixes {
+        let fixed = forge_lang::edit::apply(src, f).expect("applies");
+        assert!(lints(&fixed).is_empty(), "{f:?}");
+    }
+    // at 70 deg the walls do not meet: no lint
+    assert!(lints(&src.replace("80deg", "70deg")).is_empty());
+}
