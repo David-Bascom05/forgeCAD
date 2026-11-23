@@ -223,3 +223,59 @@ fn the_table_frame_example_lists_its_members_and_plates() {
     assert!(h.gui.shell.place("weld:cutlist:row:0").is_some());
     shot(&mut h, "weld-0-table-frame");
 }
+
+/// Clicks where this place in the world is on screen, once the view knows what's under it.
+fn point_at(h: &mut Headless, world: [f32; 3]) {
+    assert!(h.until(|g| g.view.as_ref().is_some_and(|v| !v.nav.moving())));
+    let (cam, size) = h.gui.shell.camera.unwrap();
+    let on = cam.pixel_of(world, size.0, size.1).unwrap();
+    let r = h.gui.shell.view_rect;
+    h.move_to(r.min.x + on.0, r.min.y + on.1);
+    assert!(h.settle_hover(), "no pick: {}", h.gui.shell.status);
+    h.button(true);
+    h.step();
+    h.button(false);
+    for _ in 0..10 {
+        h.step();
+    }
+}
+
+#[test]
+fn a_member_is_picked_by_a_click_on_it_and_a_section_by_family_then_size() {
+    let text = format!("{LAYOUT}fr = members(lay.r, section: \"SHS 40x40x3\")\n");
+    let Some((mut h, _)) = open(&text, "viewpick") else {
+        return;
+    };
+    assert!(h.click("tab:Weldments"));
+    h.step();
+    assert!(h.click("tool:End Cap"));
+    assert!(h.until(|g| g.shell.fg.as_ref().is_some_and(|p| p.tool.is_some())));
+    settle(&mut h);
+    // the outer side of the first rail, half way along: fr[0]
+    point_at(&mut h, [300.0, -20.0, 0.0]);
+    let t = h.gui.shell.fg.as_ref().unwrap().tool.as_ref().unwrap();
+    let a = h.gui.fg_anchors.as_ref().unwrap();
+    let named: Vec<&String> = a.faces.iter().flatten().take(6).collect();
+    assert_eq!(
+        t.slots[0].picks,
+        vec!["fr[0]".to_string()],
+        "{:?} hover {:?} faces named {}/{} e.g. {named:?}",
+        t.error,
+        h.gui.shell.status,
+        a.faces.iter().flatten().count(),
+        a.faces.len()
+    );
+    h.key(egui::Key::Escape);
+    for _ in 0..3 {
+        h.step();
+    }
+    // Members: its section chosen by family, then size
+    assert!(h.click("tool:Members"));
+    assert!(h.until(|g| g.shell.fg.as_ref().is_some_and(|p| p.tool.is_some())));
+    for _ in 0..4 {
+        h.step();
+    }
+    assert!(h.gui.shell.place("fg:tool:word:section:family").is_some());
+    assert!(h.gui.shell.place("fg:tool:word:section").is_some());
+    shot(&mut h, "weld-4-section-picker");
+}

@@ -720,6 +720,53 @@ impl Shell {
         let hide = shown_only_with_picks(tool);
         for (w, text) in tool.words.iter_mut().filter(|w| !hide.contains(&w.0)) {
             match options.iter().find(|o| o.0 == *w) {
+                // a weldment's section: its family, then its size in that family (a list of
+                // two hundred is no list to choose from)
+                Some((_, items)) if *w == "section" && !items.is_empty() => {
+                    let fam_of = |d: &str| d.split(' ').next().unwrap_or("").to_string();
+                    let mut families: Vec<String> = vec![];
+                    for i in items {
+                        let f = fam_of(i);
+                        if !families.contains(&f) {
+                            families.push(f);
+                        }
+                    }
+                    let fam = fam_of(text);
+                    let before = ui.min_rect().bottom();
+                    let rows: Vec<(String, String, bool)> =
+                        families.iter().map(|f| (f.clone(), f.clone(), false)).collect();
+                    if let Some(f) = dropdown(ui, t, "Family", &fam, &rows)
+                        && f != fam
+                        && let Some(first) = items.iter().find(|i| fam_of(i) == f)
+                    {
+                        *text = first.clone();
+                    }
+                    let mid = ui.min_rect().bottom();
+                    places.push((
+                        "fg:tool:word:section:family".into(),
+                        Rect::from_min_max(
+                            pos2(ui.min_rect().left() + FIELD_AT, before),
+                            pos2(ui.min_rect().left() + DIALOG_W, mid),
+                        ),
+                    ));
+                    let fam = fam_of(text);
+                    let rows: Vec<(String, String, bool)> = items
+                        .iter()
+                        .filter(|i| fam_of(i) == fam)
+                        .map(|i| (i.clone(), i[fam.len()..].trim().to_string(), false))
+                        .collect();
+                    let shown = text[fam.len().min(text.len())..].trim().to_string();
+                    if let Some(v) = dropdown(ui, t, "Size", &shown, &rows) {
+                        *text = v;
+                    }
+                    places.push((
+                        format!("fg:tool:word:{w}"),
+                        Rect::from_min_max(
+                            pos2(ui.min_rect().left() + FIELD_AT, mid),
+                            pos2(ui.min_rect().left() + DIALOG_W, ui.min_rect().bottom()),
+                        ),
+                    ));
+                }
                 Some((_, items)) if !items.is_empty() => {
                     let rows: Vec<(String, String, bool)> =
                         items.iter().map(|i| (i.clone(), i.clone(), false)).collect();

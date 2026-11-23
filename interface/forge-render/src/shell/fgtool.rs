@@ -86,6 +86,8 @@ impl SlotKind {
                 | SlotKind::RevAxis
                 | SlotKind::UpTo
                 | SlotKind::TrimTo
+                | SlotKind::Member
+                | SlotKind::Members
         )
     }
 
@@ -131,8 +133,8 @@ impl SlotKind {
                 "Select a sketch line, a straight edge, a cylindrical face, a work axis or an origin axis"
             }
             SlotKind::UpTo => "Select the faces, a work plane or a sketch to end at",
-            SlotKind::Member => "Select a member in the browser",
-            SlotKind::Members => "Select members in the browser",
+            SlotKind::Member => "Select a member, in the view or the browser",
+            SlotKind::Members => "Select members, in the view or the browser",
             SlotKind::TrimTo => "Select a face, a work plane, a sketch, a member or a body to trim to",
         }
     }

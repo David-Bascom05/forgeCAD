@@ -1665,6 +1665,21 @@ fn posed_name(
     name.ok_or(unnamed)
 }
 
+/// The name of a face along part edge `e` (its first coedge's), where the part has one.
+fn edge_face_name(
+    data: Option<&crate::gui::gui_inspect::InspectData>,
+    anchors: Option<&crate::fg::AnchorView>,
+    e: u32,
+) -> Option<String> {
+    let b = data?.bodies.first()?;
+    if (e as usize) >= b.edges.len() {
+        return None;
+    }
+    let edge = b.edge(forge_topo::EdgeId(e));
+    let f = b.coedge_face(*edge.coedges.first()?);
+    anchors?.faces.get(f.0 as usize).cloned().flatten()
+}
+
 /// A picture read back from the target.
 pub struct Pixels {
     width: usize,
@@ -3104,6 +3119,13 @@ impl Gui {
             return;
         }
         let ent = v.nav.selected.last().map(|x| x.1);
+        // an edge's face, by name: what a member slot reads an unnamed edge as
+        let edge_face = match ent {
+            Some(Entity::Edge(e)) => {
+                edge_face_name(self.inspector.data.as_deref(), self.fg_anchors.as_deref(), e)
+            }
+            _ => None,
+        };
         let a = self.fg_anchors.clone();
         let named = |list: Option<&Vec<Option<String>>>, k: u32, what: &'static str| {
             list.and_then(|l| l.get(k as usize).cloned().flatten())
@@ -3221,6 +3243,20 @@ impl Gui {
             (K::RevAxis, "origin axis") => text,
             (K::UpTo, "face" | "origin plane") => text,
             (K::TrimTo, "face" | "origin plane") => text,
+            // a weldment member by any face of it: the member its anchor names (`fr[0].top`)
+            (K::Member | K::Members, "face" | "edge") => {
+                text.or_else(|e| edge_face.clone().ok_or(e)).and_then(|t| {
+                    let head = t.split(['.', '(']).next().unwrap_or("").to_string();
+                    if p.feats.iter().any(|f| f.id == head && f.kind == "member") {
+                        Ok(head)
+                    } else {
+                        Err(ToolError::WrongPick {
+                            slot: label,
+                            what: "face of no member",
+                        })
+                    }
+                })
+            }
             (K::SheetEdge, "edge") => {
                 let k = edge.expect("an edge") as usize;
                 a.as_ref()
