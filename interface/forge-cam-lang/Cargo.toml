@@ -17,5 +17,8 @@ forge-model = { path = "../../kernel/forge-model" }
 forge-math = { path = "../../kernel/forge-math" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
 
+[dev-dependencies]
+forge-dirs = { path = "../../kernel/forge-dirs" }
+
 [lints]
 workspace = true
