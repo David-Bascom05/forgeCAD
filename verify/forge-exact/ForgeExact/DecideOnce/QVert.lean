@@ -169,6 +169,77 @@ theorem vertCov_spec [DecidableRel (α := K) (· < ·)] {v : VSample} {fuel : Na
     simp only [covOfK, List.map_cons, List.map_map] at ih ⊢
     rw [sgnK_of_signIs hq', ih]
 
+
+/-! ## Completeness: every common point of the three is a root of `R`
+
+Polynomials in `z` with coefficients in `ℚ[x][y]` (`ZC`, over `Alg.Sum`'s `BPoly`, whose inner
+variable is here `x` and outer `y`). A **Bezout certificate** `A·q_a + B·q_b + C·q_c = R(x)`,
+an identity of coefficient lists, makes `R(x) = 0` at every common zero (`bezout3_spec`): isolating
+`R`'s real roots finds every vertex's `x`. -/
+
+/-- A coefficient of a polynomial in `z`: a polynomial in `y` over `ℚ[x]`. -/
+structure ZC where
+  b : BPoly
+  deriving Inhabited
+
+instance : Add ZC := ⟨fun a b => ⟨padd a.b b.b⟩⟩
+instance : Mul ZC := ⟨fun a b => ⟨pmul a.b b.b⟩⟩
+instance : Neg ZC := ⟨fun a => ⟨pneg a.b⟩⟩
+instance : Zero ZC := ⟨⟨[]⟩⟩
+instance : One ZC := ⟨⟨[1]⟩⟩
+
+/-- A polynomial in `x`, `y` and `z`. -/
+abbrev TPoly := List ZC
+
+/-- Evaluation of the coefficients at `(x, y)`. -/
+def zHom (x y : K) : Hom ZC K where
+  f r := evalWith (yHom M x) r.b y
+  map_add a b := eval_padd (yHom M x) a.b b.b y
+  map_mul a b := eval_pmul (yHom M x) a.b b.b y
+  map_neg a := eval_pneg (yHom M x) a.b y
+  map_zero := rfl
+  map_one := by
+    show (yHom M x).f 1 + y * 0 = 1
+    rw [(yHom M x).map_one]; grind
+
+/-- `q` as a polynomial in `z` over `ℚ[x][y]`. -/
+def restrT (q : Quadric) : TPoly :=
+  [⟨[⟨[q.c, q.lx, q.xx]⟩, ⟨[q.ly, q.xy]⟩, ⟨[q.yy]⟩]⟩, ⟨[⟨[q.lz, q.xz]⟩, ⟨[q.yz]⟩]⟩, ⟨[⟨[q.zz]⟩]⟩]
+
+theorem restrT_ev (q : Quadric) (x y z : K) :
+    evalWith (zHom M x y) (restrT q) z = Quadric.evK M q (x, y, z) := by
+  simp only [restrT, evalWith_cons, evalWith_nil, zHom, yHom, Model.ev, Quadric.evK]
+  grind
+
+/-- A rational polynomial in `x`, as a trivariate constant. -/
+def liftR (R : Poly) : TPoly := [⟨[⟨R⟩]⟩]
+
+theorem liftR_ev (R : Poly) (x y z : K) : evalWith (zHom M x y) (liftR R) z = M.ev R x := by
+  simp only [liftR, evalWith_cons, evalWith_nil, zHom, yHom]; grind
+
+/-- Every coefficient is zero. -/
+def tzero (t : TPoly) : Bool := t.all fun c => bzero c.b
+
+theorem ev_tzero (t : TPoly) (h : tzero t = true) (x y z : K) : evalWith (zHom M x y) t z = 0 := by
+  apply eval_of_all_zero
+  intro c hc
+  simp only [tzero, List.all_eq_true] at h
+  exact ev_bzero M c.b (h c hc) y x
+
+/-- The Bezout certificate `A·q_a + B·q_b + C·q_c = R(x)`. -/
+def bezout3 (qa qb qc : Quadric) (A B C : TPoly) (R : Poly) : Bool :=
+  tzero (psub (padd (padd (pmul A (restrT qa)) (pmul B (restrT qb))) (pmul C (restrT qc))) (liftR R))
+
+/-- **Every vertex is a root of `R`.** -/
+theorem bezout3_spec {qa qb qc : Quadric} {A B C : TPoly} {R : Poly}
+    (h : bezout3 qa qb qc A B C R = true) {x y z : K}
+    (ha : Quadric.evK M qa (x, y, z) = 0) (hb : Quadric.evK M qb (x, y, z) = 0)
+    (hc : Quadric.evK M qc (x, y, z) = 0) : M.ev R x = 0 := by
+  have e := ev_tzero M _ h x y z
+  rw [eval_psub, eval_padd, eval_padd, eval_pmul, eval_pmul, eval_pmul, restrT_ev, restrT_ev,
+    restrT_ev, liftR_ev, ha, hb, hc] at e
+  grind
+
 /-! ## A check that runs: three coordinate planes and the unit sphere at (1, 0, 0) -/
 
 def planeX1 : Quadric := ⟨0, 0, 0, 0, 0, 0, 1, 0, 0, -1⟩
@@ -180,5 +251,7 @@ def vAt100 : VSample := ⟨[-1, 1], [0], [1], [0], [1], .rat 1, [1, 1], [0], [0]
 #guard vAt100.dOk signFuel
 #guard vertCov [sphere1, planeY0, planeZ, planeX1, planeYh] vAt100 signFuel =
   some [.zero, .zero, .zero, .zero, .neg]
+-- x² − 1 = 1·(x² + y² + z² − 1) + (−y)·(y) + (−z)·(z)
+#guard bezout3 sphere1 planeY0 planeZ [⟨[⟨[1]⟩]⟩] [⟨[⟨[]⟩, ⟨[-1]⟩]⟩] [⟨[]⟩, ⟨[⟨[-1]⟩]⟩] [-1, 0, 1]
 
 end ForgeExact.DecideOnce.Curved
