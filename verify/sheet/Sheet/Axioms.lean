@@ -61,7 +61,8 @@ elab "#standard_axioms " ids:ident* : command => do
   Sheet.Build.accepted_bend Sheet.Build.build_refold
   -- L5: the float filter of the vertex-class predicate
   Sheet.Float.sub_bound Sheet.Float.sq_sum_bounds Sheet.Float.filter_sound
-  Sheet.Float.near_filter_sound
+  Sheet.Float.near_filter_sound Sheet.Float.prod_bound Sheet.Float.orient_err
+  Sheet.Float.within_filter_sound
   -- enclosures and the checker
   Sheet.Trig.mem_add Sheet.Trig.mem_sub Sheet.Trig.mem_mul Sheet.Trig.mem_coarsen Sheet.Trig.taylor
   Sheet.Trig.taylorI_mem Sheet.Trig.double_mem Sheet.Trig.sinCos_mem Sheet.Trig.sc_mem

@@ -225,4 +225,135 @@ theorem near_filter_sound {px py qx qy : F64}
   simp only [Region.near, Region.norm2, Region.sub]
   congr
 
+/-! ## The line-carrier predicate `within`: `orient(a, b, c)² ≤ L² |b − a|²`
+
+Shipped form, with `dx1 = bx ⊖ ax`, `dy1 = by ⊖ ay`, `dx2 = cx ⊖ ax`, `dy2 = cy ⊖ ay`,
+`p = dx1 ⊗ dy2`, `q = dy1 ⊗ dx2`, `o = p ⊖ q`, `n = dx1 ⊗ dx1 ⊕ dy1 ⊗ dy1`, and
+`E = γ (|p| + |q|)` with `γ = u + ((1 + u)³ − 1) / (1 − u)³`:
+
+```
+(|o| + E)² (1 + u)⁴ ≤ L² n            → within
+|o| > E ∧ (|o| − E)² (1 − u)⁴ > L² n  → not within
+else                                  → the exact rule
+```
+
+The thresholds are compared exactly on the doubles' values (or with outward rounding). Under the
+same preconditions as `near` (every difference, product and the final difference is zero or
+normal), `orient_err`: `|o − orient| ≤ E`, and `within_filter_sound`: whatever the filter decides
+is Region.lean's `within`. The orientation's sign itself (the crossing rule) is the shipped
+`forge_math::predicates::orient2d`, proven against verify/ieee754 by the aeneas session
+(verify/aeneas/forge-math, `orient2d`): no filter is needed there.
+-/
+
+noncomputable def γ : ℚ := u + ((1 + u) ^ 3 - 1) / (1 - u) ^ 3
+
+/-- A product of two rounded factors, rounded: within `(1 + u)³ − 1` of the exact product, and at
+least `(1 − u)³` of it in magnitude. -/
+theorem prod_bound {X Y x y p : ℚ} (hx : |x - X| ≤ u * |X|) (hy : |y - Y| ≤ u * |Y|)
+    (hp : |p - x * y| ≤ u * |x * y|) :
+    (1 - u) ^ 3 * |X * Y| ≤ |p| ∧ |p - X * Y| ≤ ((1 + u) ^ 3 - 1) * |X * Y| := by
+  have hu := u_lt
+  have hu0 := u_pos
+  obtain ⟨x1, x2⟩ := rel_form hx
+  obtain ⟨y1, y2⟩ := rel_form hy
+  obtain ⟨p1, p2⟩ := rel_form hp
+  rw [abs_mul] at p1 p2 ⊢
+  rw [abs_mul x y] at hp
+  have hX := abs_nonneg X
+  have hY := abs_nonneg Y
+  have hxa := abs_nonneg x
+  have hya := abs_nonneg y
+  constructor
+  · have : (1 - u) * |X| * ((1 - u) * |Y|) ≤ |x| * |y| :=
+      mul_le_mul x1 y1 (mul_nonneg (by linarith) hY) hxa
+    nlinarith
+  · -- |x y − X Y| ≤ |x| |y − Y| + |x − X| |Y|
+    have e1 : |x * y - X * Y| ≤ |x| * |y - Y| + |x - X| * |Y| := by
+      have : x * y - X * Y = x * (y - Y) + (x - X) * Y := by ring
+      rw [this]
+      calc |x * (y - Y) + (x - X) * Y| ≤ |x * (y - Y)| + |(x - X) * Y| := abs_add_le _ _
+        _ = |x| * |y - Y| + |x - X| * |Y| := by rw [abs_mul, abs_mul]
+    have e2 : |x * y - X * Y| ≤ ((1 + u) ^ 2 - 1) * (|X| * |Y|) := by
+      have a1 : |x| * |y - Y| ≤ (1 + u) * |X| * (u * |Y|) :=
+        mul_le_mul x2 hy (abs_nonneg _) (by nlinarith)
+      have a2 : |x - X| * |Y| ≤ u * |X| * |Y| := mul_le_mul_of_nonneg_right hx hY
+      nlinarith
+    have e3 : |p - X * Y| ≤ |p - x * y| + |x * y - X * Y| := by
+      have := abs_sub_le p (x * y) (X * Y); linarith
+    have e4 : |x| * |y| ≤ (1 + u) ^ 2 * (|X| * |Y|) := by
+      have := mul_le_mul x2 y2 hya (by nlinarith); nlinarith
+    nlinarith
+
+/-- **The computed orientation is within `E = γ (|p| + |q|)` of the exact one.** -/
+theorem orient_err {X Y Z W x y z w p q o : ℚ}
+    (hx : |x - X| ≤ u * |X|) (hy : |y - Y| ≤ u * |Y|) (hz : |z - Z| ≤ u * |Z|)
+    (hw : |w - W| ≤ u * |W|) (hp : |p - x * y| ≤ u * |x * y|) (hq : |q - z * w| ≤ u * |z * w|)
+    (ho : |o - (p - q)| ≤ u * |p - q|) :
+    |o - (X * Y - Z * W)| ≤ γ * (|p| + |q|) := by
+  have hu := u_lt
+  have hu0 := u_pos
+  obtain ⟨P1, P2⟩ := prod_bound hx hy hp
+  obtain ⟨Q1, Q2⟩ := prod_bound hz hw hq
+  have c3 : 0 < (1 - u) ^ 3 := by have : 0 < 1 - u := by linarith
+                                  positivity
+  have hP : |p - X * Y| ≤ ((1 + u) ^ 3 - 1) / (1 - u) ^ 3 * |p| := by
+    rw [div_mul_eq_mul_div, le_div_iff₀ c3]
+    have h3 : 0 ≤ (1 + u) ^ 3 - 1 := by nlinarith
+    nlinarith [mul_le_mul_of_nonneg_left P1 h3]
+  have hQ : |q - Z * W| ≤ ((1 + u) ^ 3 - 1) / (1 - u) ^ 3 * |q| := by
+    rw [div_mul_eq_mul_div, le_div_iff₀ c3]
+    have h3 : 0 ≤ (1 + u) ^ 3 - 1 := by nlinarith
+    nlinarith [mul_le_mul_of_nonneg_left Q1 h3]
+  have hpq : |p - q| ≤ |p| + |q| := abs_sub _ _
+  have t : |o - (X * Y - Z * W)| ≤ |o - (p - q)| + |p - X * Y| + |q - Z * W| := by
+    have : o - (X * Y - Z * W) = (o - (p - q)) + (p - X * Y) - (q - Z * W) := by ring
+    rw [this]
+    calc |(o - (p - q)) + (p - X * Y) - (q - Z * W)|
+        ≤ |(o - (p - q)) + (p - X * Y)| + |q - Z * W| := abs_sub _ _
+      _ ≤ |o - (p - q)| + |p - X * Y| + |q - Z * W| := by
+          have := abs_add_le (o - (p - q)) (p - X * Y); linarith
+  simp only [γ]
+  have hu1 : u * |p - q| ≤ u * (|p| + |q|) := mul_le_mul_of_nonneg_left hpq hu0.le
+  nlinarith [abs_nonneg p, abs_nonneg q]
+
+/-- **The `within` filter is the exact rule**: given the computed orientation within `E` of the
+exact `O`, and the computed `n` within `(1 ± u)⁴` of the exact `N`, a `within` verdict means
+`O² ≤ L² N` and a `not within` one means `O² > L² N`. -/
+theorem within_filter_sound {O N o n E L : ℚ} (hoe : |o - O| ≤ E) (hE : 0 ≤ E)
+    (hn1 : (1 - u) ^ 4 * N ≤ n) (hn2 : n ≤ (1 + u) ^ 4 * N) (hN : 0 ≤ N) :
+    ((|o| + E) ^ 2 * (1 + u) ^ 4 ≤ L * L * n → O * O ≤ L * L * N) ∧
+    (E < |o| → L * L * n < (|o| - E) ^ 2 * (1 - u) ^ 4 → L * L * N < O * O) := by
+  have hu := u_lt
+  have hu0 := u_pos
+  have hO1 : |O| ≤ |o| + E := by have := abs_sub_abs_le_abs_sub o O; have := abs_sub_comm o O
+                                 have := abs_sub_abs_le_abs_sub O o; linarith
+  have hO2 : |o| - E ≤ |O| := by have := abs_sub_abs_le_abs_sub o O; linarith
+  have hL : 0 ≤ L * L := mul_self_nonneg L
+  have q4 : 0 < (1 + u) ^ 4 := by positivity
+  have r4 : 0 < (1 - u) ^ 4 := by have : 0 < 1 - u := by linarith
+                                  positivity
+  constructor
+  · intro h
+    have hsq : O * O ≤ (|o| + E) ^ 2 := by
+      rw [← abs_mul_abs_self O]; nlinarith [abs_nonneg O]
+    have : (|o| + E) ^ 2 * (1 + u) ^ 4 ≤ L * L * ((1 + u) ^ 4 * N) :=
+      le_trans h (mul_le_mul_of_nonneg_left hn2 hL)
+    have : (|o| + E) ^ 2 ≤ L * L * N := by
+      have e : L * L * ((1 + u) ^ 4 * N) = (L * L * N) * (1 + u) ^ 4 := by ring
+      rw [e] at this
+      exact le_of_mul_le_mul_right this q4
+    linarith
+  · intro h1 h2
+    have hsq : (|o| - E) ^ 2 ≤ O * O := by
+      rw [← abs_mul_abs_self O]
+      have : 0 ≤ |o| - E := by linarith
+      nlinarith
+    have : L * L * ((1 - u) ^ 4 * N) < (|o| - E) ^ 2 * (1 - u) ^ 4 :=
+      lt_of_le_of_lt (mul_le_mul_of_nonneg_left hn1 hL) h2
+    have : L * L * N < (|o| - E) ^ 2 := by
+      have e : L * L * ((1 - u) ^ 4 * N) = (L * L * N) * (1 - u) ^ 4 := by ring
+      rw [e] at this
+      exact lt_of_mul_lt_mul_right this r4.le
+    linarith
+
 end Sheet.Float
