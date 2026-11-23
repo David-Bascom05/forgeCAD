@@ -1,0 +1,29 @@
+# A lobe pocket tapered 1 deg (an arc of radius 3 and two lines), then a bore of radius 3 whose
+# wall runs within 0.15 of the lobe's cone: the boolean stops on InconsistentClassification
+# (cone against plane). Restated in round numbers from a CADFS part (00981084) that fails the
+# same way; a smaller bore, or the lobe untapered, builds.
+param block.d = 18
+param base.w = 40
+sketch base(on: xy) {
+  r = rect(center: (0, 0), size: (w, w))
+}
+block = extrude(base, d)
+param lobe.r = 3
+param lobe.a0 = 164deg
+param lobe.a1 = 225deg
+param lobe.p = (1.2, -5.6)
+sketch lobe(on: block.end) {
+  c = arc(center: (0, 0), from: (r * cos(a0), r * sin(a0)), to: (r * cos(a1), r * sin(a1)))
+  l1 = line((r * cos(a1), r * sin(a1)), p)
+  l2 = line(p, (r * cos(a0), r * sin(a0)))
+}
+param wedge.d = 13
+param wedge.a = 1deg
+wedge = cut(lobe, d, taper: a)
+param bore.c = (0.12, -0.07)
+param bore.r = 3
+sketch bore(on: block.end) {
+  o = circle(c, r)
+}
+param plug.d = 4
+plug = cut(bore, d)

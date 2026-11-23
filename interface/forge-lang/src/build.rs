@@ -2,6 +2,7 @@
 //! anchors and selections read the part as it stands. Stages are kept, and a session reuses
 //! the stages of a run whose features (and ids) are the same up to that point.
 
+use forge_math::clock::Instant;
 use forge_model::{Feature, History, RegenError, Solid, step_solids_plain};
 use forge_topo::{Body, FaceId, Name};
 use std::any::Any;
@@ -9,7 +10,6 @@ use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Instant;
 
 pub struct Stage {
     pub solids: Vec<Solid>,

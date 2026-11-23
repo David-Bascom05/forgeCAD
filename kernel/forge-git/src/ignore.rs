@@ -70,11 +70,11 @@ impl Ignore {
                 .map(|x| x.join("git/ignore"))
         });
         if let Some(g) = global
-            && let Ok(t) = std::fs::read_to_string(g)
+            && let Ok(t) = forge_dirs::fs::read_to_string(g)
         {
             base.push((String::new(), parse(&t)));
         }
-        if let Ok(t) = std::fs::read_to_string(git_dir.join("info/exclude")) {
+        if let Ok(t) = forge_dirs::fs::read_to_string(git_dir.join("info/exclude")) {
             base.push((String::new(), parse(&t)));
         }
         Ignore {
@@ -93,7 +93,9 @@ impl Ignore {
         } else {
             self.root.join(dir).join(".gitignore")
         };
-        let r = std::fs::read_to_string(p).map(|t| parse(&t)).unwrap_or_default();
+        let r = forge_dirs::fs::read_to_string(p)
+            .map(|t| parse(&t))
+            .unwrap_or_default();
         self.cache.insert(dir.to_string(), r.clone());
         r
     }

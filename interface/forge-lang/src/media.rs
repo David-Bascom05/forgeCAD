@@ -68,11 +68,11 @@ fn find_in(dir: &Path, root: Option<&Path>, file: &str, span: Span) -> R<PathBuf
     if crate::outside(Some(dir), root, file) {
         return Err(err(FileProblem::Outside));
     }
-    let p = std::fs::canonicalize(dir.join(file)).map_err(|_| err(FileProblem::Missing))?;
+    let p = forge_dirs::fs::canonicalize(dir.join(file)).map_err(|_| err(FileProblem::Missing))?;
     if root.is_some_and(|r| !p.starts_with(r)) {
         return Err(err(FileProblem::Outside));
     }
-    let meta = std::fs::metadata(&p).map_err(|_| err(FileProblem::Missing))?;
+    let meta = forge_dirs::fs::metadata(&p).map_err(|_| err(FileProblem::Missing))?;
     // a device, a fifo, a socket, a folder: no file of its kind, never opened
     if !meta.is_file() {
         return Err(err(FileProblem::WrongKind));

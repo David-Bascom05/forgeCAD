@@ -649,6 +649,25 @@ This rule is deterministic and independent of evaluation order. It is invariant 
 symmetries, which settles the M1 mirror failure by definition. Under inexact motions it can flip
 only at the snap threshold, and then both sides are valid answers.
 
+**G5b merge rule vs Snap tolEq over extent (a known divergence).** The G5b fix (branch
+claude/repo-review-mbdrlj-fix-draft, `ssi::turned_flush`) merges two planes turned past NEAR
+when, over the faces' boxes grown by LINEAR once and overlapped (wider than 4·LINEAR on two axes),
+each plane is within LINEAR of the other at the projection of every corner. That is the rule as the
+first reference specified it, region plus `wide`, not Snap `tolEq` as it now stands, which compares
+the planes over `extent` (the hull of both grown boxes). Under `extent` the drafted lid's end and
+the block's side would not merge: across the block's whole side the end lies about 10·θ off. The
+answers still agree. Asked directly (the lid and block as polyhedra, all three ops), the reference
+under `snap` gives a solid at the exact volume for the lid at 0.006°, 0.05°, 0.1° and 0.2°, and the
+kernel builds that volume each time (the merged result is 50·d under exact, at most 3.3e-7
+relative: the block's side keeps the dipped corner, d off its plane, as a vertex). Under `strict`
+the reference calls the G5b band ambiguous. They part at a knife edge just under d = LINEAR,
+d ∈ (LINEAR·(1 − θ), LINEAR]: the drafted lid at 0.08099°–0.08103°, `cap` at θ from 1.998e-3 to
+2e-3. There the region reaches LINEAR past the dipped corner, where the gap is d + θ·LINEAR >
+LINEAR, so the pair is kept apart, while the corner itself is decided on the other face's edge. The
+kernel refuses (UntouchedOnOther, or ZeroThickness at d = LINEAR) where the reference answers solid.
+verify/forge-coverage/tests/g5.rs `g5_knife_edge_at_linear` pins it. The decide-once rewrite takes
+`extent` as its definition.
+
 ### 6.2 Staging and the exact-arithmetic pieces each stage needs
 
 | stage | surfaces | pieces | Lean difficulty |

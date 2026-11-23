@@ -147,3 +147,13 @@ open ForgeLang ForgeLang.Counter
 #print axioms ForgeLang.LL1.Driver.rd_accepts_parse
 #print axioms ForgeLang.LL1.Impl.impl_rd_eq_run
 #print axioms ForgeLang.SheetArgs.sheet_args_not_keywords
+#print axioms ForgeLang.LL1.Lex.reparse_lex
+#print axioms ForgeLang.LL1.Lex.lx_prefix
+#print axioms ForgeLang.LL1.Lex.step_res
+#print axioms ForgeLang.LL1.Lex.lx_trivline
+#print axioms ForgeLang.LL1.Reparse.reparse_tokens
+#print axioms ForgeLang.LL1.Impl.reparse_parse
+#print axioms ForgeLang.LL1.ImplUnifiedDoc.reparse_parse
+#print axioms ForgeLang.LL1.Reparse.reparse_correct
+#print axioms ForgeLang.LL1.Impl.reparse_number_correct
+#print axioms ForgeLang.LL1.ImplUnifiedDoc.reparse_number_correct

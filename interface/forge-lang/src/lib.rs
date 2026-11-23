@@ -58,7 +58,7 @@ pub mod work;
 use build::Cache;
 use error::{Error, Metric, Warning};
 use eval::{Eval, FeatInfo, ParamInfo, Rules, Value};
-use std::time::Instant;
+use forge_math::clock::Instant;
 use syntax::{Cmp, ExprKind, StmtKind};
 
 pub const REFERENCE: &str = include_str!("reference.md");
@@ -693,7 +693,7 @@ pub fn fence_for(
     _dir: Option<&std::path::Path>,
     root: Option<&std::path::Path>,
 ) -> Option<std::path::PathBuf> {
-    std::fs::canonicalize(root?).ok()
+    forge_dirs::fs::canonicalize(root?).ok()
 }
 
 /// Whether `file` beside `dir` is outside the fence: as written (whether or not it is there, so
@@ -702,7 +702,7 @@ pub(crate) fn outside(dir: Option<&std::path::Path>, fence: Option<&std::path::P
     let (Some(d), Some(f)) = (dir, fence) else {
         return false;
     };
-    let Ok(d) = std::fs::canonicalize(d) else {
+    let Ok(d) = forge_dirs::fs::canonicalize(d) else {
         return false;
     };
     let mut lexical = std::path::PathBuf::new();
@@ -715,7 +715,7 @@ pub(crate) fn outside(dir: Option<&std::path::Path>, fence: Option<&std::path::P
             c => lexical.push(c),
         }
     }
-    !lexical.starts_with(f) || std::fs::canonicalize(d.join(file)).is_ok_and(|p| !p.starts_with(f))
+    !lexical.starts_with(f) || forge_dirs::fs::canonicalize(d.join(file)).is_ok_and(|p| !p.starts_with(f))
 }
 
 /// A sketch as evaluation left it, for an editor reading the block back.
