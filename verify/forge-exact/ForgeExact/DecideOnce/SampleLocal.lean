@@ -1,5 +1,6 @@
 import ForgeExact.DecideOnce.Sample
 import ForgeExact.DecideOnce.Local
+import ForgeExact.DecideOnce.Sampler
 
 /-!
 # The local ledger is a sampler ledger, and is `ExactIn`
@@ -278,5 +279,16 @@ def local_correct_walls (hnz : ∀ p ∈ ps, p.n ≠ ⟨0, 0, 0⟩) (ws : List N
     (hc : LocalCompat ps (brepA ss) (wallIn ws)) (hX : SamplesIn ps (brepA ss) ss.length X (wallIn ws))
     (rule : Rule) :=
   local_correct hnz hc (wallU_open ps ws) (wall_region ps ws hws) (wall_up ws) hX rule
+
+/-- Global samples are region samples. -/
+theorem samplesIn_of {A : Nat → Pred V3} {nb : Nat} (h : Samples ps A nb X) : SamplesIn ps A nb X In :=
+  fun x _ hx => h x hx
+
+/-- **(c′) for the local ledger the sampler builds**: the region's samples of the local arrangement's
+sampler. Everything is proven but the named obligation `LocalCompat`. -/
+def local_correct_sampler (hnz : ∀ p ∈ ps, p.n ≠ ⟨0, 0, 0⟩) (ws : List Nat) (hws : ∀ k ∈ ws, k < ps.length)
+    (hc : LocalCompat ps (brepA ss) (wallIn ws)) (rule : Rule) :=
+  local_correct_walls (X := Sampler.sampler ps) hnz ws hws hc
+    (samplesIn_of (samples_of_covers (Sampler.sampler_covers hnz))) rule
 
 end ForgeExact.DecideOnce.Sample

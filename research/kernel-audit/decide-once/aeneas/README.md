@@ -79,5 +79,6 @@ None for the core itself. What remains is the frontier optimisation:
    - (proven) the region's facts for the six walls: `wall_region` (each cell wholly in or out of R°),
      `wall_up` (closed upward), and R° open (`allPos` of the inward walls). `local_correct_walls` is
      `local_correct` with these discharged.
-   - `SamplesIn`: the bridge's samples hit every region cell the boundary needs. This is the local
-     form of `Samples`, which the global sampler (`sampler_covers`) discharges.
+   - (proven) `SamplesIn` for the local arrangement's sampler (`samplesIn_of` from
+     `sampler_covers`). `local_correct_sampler` is (c′) for the local ledger the sampler builds, with
+     **`LocalCompat` its only hypothesis**.
