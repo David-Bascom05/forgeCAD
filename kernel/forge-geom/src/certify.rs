@@ -61,22 +61,40 @@ fn to_box(v: &V) -> Box3 {
     }
 }
 
+/// a + b, rounded outward: forge_math's `+`, inlined here (it is the hot path of every test).
+#[inline]
+fn ia(a: I, b: I) -> I {
+    I {
+        lo: (a.lo + b.lo).next_down(),
+        hi: (a.hi + b.hi).next_up(),
+    }
+}
+
+/// a - x for a float x, rounded outward.
+#[inline]
+fn isf(a: I, x: f64) -> I {
+    I {
+        lo: (a.lo - x).next_down(),
+        hi: (a.hi - x).next_up(),
+    }
+}
+
 fn sub_p(v: &V, o: Point3) -> V {
-    [v[0] - I::point(o.x), v[1] - I::point(o.y), v[2] - I::point(o.z)]
+    [isf(v[0], o.x), isf(v[1], o.y), isf(v[2], o.z)]
 }
 
 /// d . q, d a float vector.
 fn dot(d: Vec3, q: &V) -> I {
-    q[0] * d.x + q[1] * d.y + q[2] * d.z
+    ia(ia(mf(q[0], d.x), mf(q[1], d.y)), mf(q[2], d.z))
 }
 
 /// a d (interval times a float vector).
 fn scale(a: I, d: Vec3) -> V {
-    [a * d.x, a * d.y, a * d.z]
+    [mf(a, d.x), mf(a, d.y), mf(a, d.z)]
 }
 
 fn add(u: V, v: V) -> V {
-    [u[0] + v[0], u[1] + v[1], u[2] + v[2]]
+    [ia(u[0], v[0]), ia(u[1], v[1]), ia(u[2], v[2])]
 }
 
 fn meet(a: I, b: I) -> I {
@@ -745,7 +763,7 @@ impl Cert<'_> {
         {
             return None;
         }
-        [0.25, 0.375].into_iter().find_map(|f| {
+        [0.3].into_iter().find_map(|f| {
             let s = Seg {
                 p0,
                 t0,
@@ -859,32 +877,38 @@ impl Cert<'_> {
         let segs = if c.closed { n } else { n - 1 };
         let mut out = Vec::new();
         let mut i = 0;
+        // the span tried first: the last that was proven, doubled (a curve's bends change slowly)
+        let mut span = LONG;
         while i < segs {
             // the longest step over up to LONG of the march's nodes that is proven at once, every
             // node it passes lying in its claim (where every zero is the step's arc): fewer, wider
             // claims for the coverage walk to fit
-            let long = [LONG, LONG / 2, LONG / 4, 2]
-                .into_iter()
-                .filter(|&k| k >= 2 && i + k <= segs)
-                .find_map(|k| {
-                    let j = (i + k) % n;
-                    let (p0, p1) = (pts[i], pts[j]);
-                    let (t0, t1) = (tans[i], tans[j]);
-                    let (t0, t1) = (
-                        if t0.dot(p1 - p0) < 0.0 { -t0 } else { t0 },
-                        if t1.dot(p1 - p0) < 0.0 { -t1 } else { t1 },
-                    );
-                    if t0.dot(t1) < 0.5 {
-                        return None;
-                    }
-                    let s = self.one_step(p0, t0, p1, t1)?;
-                    ((i + 1..i + k).all(|m| s.claims(&pt(pts[m % n])))).then_some((s, k))
-                });
+            let mut long = None;
+            let mut k = span.min(segs - i);
+            while k >= 2 {
+                let j = (i + k) % n;
+                let (p0, p1) = (pts[i], pts[j]);
+                let (t0, t1) = (tans[i], tans[j]);
+                let (t0, t1) = (
+                    if t0.dot(p1 - p0) < 0.0 { -t0 } else { t0 },
+                    if t1.dot(p1 - p0) < 0.0 { -t1 } else { t1 },
+                );
+                if t0.dot(t1) >= 0.5
+                    && let Some(s) = self.one_step(p0, t0, p1, t1)
+                    && (i + 1..i + k).all(|m| s.claims(&pt(pts[m % n])))
+                {
+                    long = Some((s, k));
+                    break;
+                }
+                k /= 2;
+            }
             if let Some((s, k)) = long {
                 out.push(s);
                 i += k;
+                span = (2 * k).min(LONG);
                 continue;
             }
+            span = 2;
             let j = (i + 1) % n;
             let (p0, p1) = (pts[i], pts[j]);
             let orient = |t: Vec3| if t.dot(p1 - p0) < 0.0 { -t } else { t };
@@ -1056,6 +1080,7 @@ impl Comps for Vec3 {
 }
 
 /// a s, a float: two products, rounded outward (forge_math's `*` takes four).
+#[inline]
 fn mf(a: I, s: f64) -> I {
     let (p, q) = (a.lo * s, a.hi * s);
     I {
@@ -1072,7 +1097,7 @@ fn mat_v(m: &[[f64; 3]; 3], e: f64, l: &V) -> V {
         (I::point(mag(l[0])) + I::point(mag(l[1])) + I::point(mag(l[2]))).hi * e
     };
     std::array::from_fn(|i| {
-        let v = mf(l[0], m[i][0]) + mf(l[1], m[i][1]) + mf(l[2], m[i][2]);
+        let v = ia(ia(mf(l[0], m[i][0]), mf(l[1], m[i][1])), mf(l[2], m[i][2]));
         I {
             lo: (v.lo - spread).next_down(),
             hi: (v.hi + spread).next_up(),

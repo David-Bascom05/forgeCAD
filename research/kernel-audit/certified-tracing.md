@@ -469,3 +469,16 @@ The 300-pair sweep certifies all 300 (certificate 1.17 s), and native = wasm on 
 on: the scoreboard is 0 worse, and every forge-geom, forge-bool, forge-model and forge-lang test
 passes. guard's remaining cost is now about equal parts walk, Krawczyk steps (43M) and the march
 itself (39M).
+
+### 10.4 Steps: adaptive spans
+
+Long steps now start from the last span proven, doubled up to 16, and halve on a failure, with one
+box radius tried per attempt. That replaces trying 16, 8, 4 and 2 at two radii each time. The
+certificate's own interval add, multiply by a float and subtract are inlined locally (forge-math's
+are not inlined across crates, and inlining them there moved feature-off counts).
+
+Cold build, feature on (off in brackets): guard 166M (57M), quadarm 87M (50M), manifold 305M
+(249M), frame 764M (440M). That is 2.9×, 1.7×, 1.2× and 1.7×. The sweep still certifies all 300.
+Feature on: the scoreboard is 0 worse and every test passes. What remains on guard is about 109M
+of certificate against the march's 39M, spread over the walk's boxes and the Krawczyk steps, with
+no single hot spot left.
