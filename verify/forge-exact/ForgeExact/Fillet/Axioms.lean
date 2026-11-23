@@ -20,6 +20,7 @@ the build fails on `sorryAx` or any axiom past `propext`, `Classical.choice` and
   ForgeExact.Fillet.PlanePair.q_eq_cyl
   ForgeExact.Fillet.PlanePair.spring₁
   ForgeExact.Fillet.PlanePair.g1_spring₁
+  ForgeExact.Fillet.PlanePair.near_crease
   ForgeExact.Fillet.free_rev
   ForgeExact.Fillet.closing_rev
   ForgeExact.Fillet.boss_closing

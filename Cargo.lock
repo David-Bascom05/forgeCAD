@@ -3,6 +3,18 @@
 version = 4
 
 [[package]]
+name = "fillet-spec"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-lang",
+ "forge-math",
+ "forge-model",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-agent"
 version = "0.1.0"
 dependencies = [

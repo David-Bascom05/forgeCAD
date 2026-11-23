@@ -633,6 +633,23 @@ fn spine_refine(spine: &Curve, p: Point3, mut t: f64) -> Option<f64> {
 /// trusted to stay on the side it starts on.
 const RAIL_STEP: f64 = 2.0;
 
+/// Whether the ball's section arc about circle spine `k`, between its feet on `a` and `b`, misses the
+/// point of the section nearest the axis: then a spindle torus's used sheet (the tube on the centre
+/// circle's side of the axis) holds the whole blend.
+#[allow(clippy::too_many_arguments)]
+fn off_axis_arc(k: &Circle, a: &Surface, b: &Surface, da: f64, db: f64, r: f64, spine: &Curve, near: Point3) -> bool {
+    let c = spine.eval(spine_closest(spine, near));
+    let z = k.frame.z().get();
+    let w = c - k.frame.origin;
+    let Some(out) = (w - z * z.dot(w)).normalize() else {
+        return false;
+    };
+    let (wa, wb) = (foot(a, da, c) - c, foot(b, db, c) - c);
+    let m = wa + wb;
+    // the innermost point c - r out lies on the short arc iff it is as far along the bisector as the feet
+    m.length() > tol::LINEAR && (out * -r).dot(m) < wa.dot(m)
+}
+
 /// A rolling-ball blend between surfaces `a` and `b`: the ball centre runs on
 /// `a` offset by `da` and `b` offset by `db` (each +-radius along its natural normal).
 #[derive(Clone, Debug)]
@@ -665,11 +682,18 @@ impl Blend {
                     radius,
                 })
             }
-            Curve::Circle(k) if k.radius > radius + tol::LINEAR => Surface::Torus(Torus {
-                frame: k.frame,
-                major: k.radius,
-                minor: radius,
-            }),
+            // a circle spine of any radius past MIN_LENGTH gives a torus (the fillet spec's
+            // hole_closing): a spindle one too, when the section arc keeps to its used sheet
+            Curve::Circle(k)
+                if k.radius > radius + tol::LINEAR
+                    || (k.radius > tol::MIN_LENGTH && off_axis_arc(k, a, b, da, db, radius, &spine, near)) =>
+            {
+                Surface::Torus(Torus {
+                    frame: k.frame,
+                    major: k.radius,
+                    minor: radius,
+                })
+            }
             _ => Surface::Procedural(Pipe::build(spine.clone(), a.clone(), b.clone(), da, db, near)?),
         };
         Some(Blend {

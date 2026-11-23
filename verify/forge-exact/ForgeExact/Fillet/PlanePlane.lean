@@ -326,3 +326,68 @@ theorem g1_spring₁ {r : K} (c₀ : V K) (l : K) :
 end PlanePair
 
 end ForgeExact.Fillet
+
+namespace ForgeExact.Fillet.PlanePair
+
+open Lean.Grind
+
+variable {K : Type} [Field K] [LE K] [LT K] [Std.IsLinearOrder K] [Std.LawfulOrderLT K]
+  [OrderedRing K]
+
+variable (P : PlanePair K)
+
+/-- **The differential test's bound.** A centre within `δ` of both offset planes (what
+`fillet-check` decides exactly) is within `2δ / sin θ` of the spec's crease line, `θ` the angle
+between the normals (`sin² θ = 1 − c²`): there is a point `c⋆` of the crease with
+`|c − c⋆|² (1 − c²) ≤ 4 δ²`. -/
+theorem near_crease {r δ : K} (x : V K) (h₁ : -δ ≤ P.a₁ x - r ∧ P.a₁ x - r ≤ δ)
+    (h₂ : -δ ≤ P.a₂ x - r ∧ P.a₂ x - r ≤ δ) :
+    ∃ cs : V K, P.a₁ cs = r ∧ P.a₂ cs = r ∧ V.d2 x cs * (1 - P.c * P.c) ≤ 4 * (δ * δ) := by
+  have pos := P.one_sub_pos
+  have cb := abs_lt_one_of_sq (show P.c * P.c < 1 from P.skew)
+  let D := 1 - P.c * P.c
+  let b₁ := r - P.a₁ x
+  let b₂ := r - P.a₂ x
+  let α := (b₁ - P.c * b₂) / D
+  let β := (b₂ - P.c * b₁) / D
+  have eα : α = (b₁ - P.c * b₂) / D := rfl
+  have eβ : β = (b₂ - P.c * b₁) / D := rfl
+  have eD : D = 1 - P.c * P.c := rfl
+  have hD : D ≠ 0 := by grind
+  let cs := V.add x (V.add (V.smul α P.n₁) (V.smul β P.n₂))
+  have u₁ := P.unit₁; have u₂ := P.unit₂
+  simp only [V.dot_def] at u₁ u₂
+  have m₁ : P.a₁ cs = P.a₁ x + α + P.c * β := by
+    simp only [cs, a₁, c, V.dot_def, V.add_x, V.add_y, V.add_z, V.smul_x, V.smul_y, V.smul_z]
+    grind
+  have m₂ : P.a₂ cs = P.a₂ x + P.c * α + β := by
+    simp only [cs, a₂, c, V.dot_def, V.add_x, V.add_y, V.add_z, V.smul_x, V.smul_y, V.smul_z]
+    grind
+  have md : V.d2 x cs = α * α + 2 * P.c * α * β + β * β := by
+    simp only [cs, c, V.d2_def, V.add_x, V.add_y, V.add_z, V.smul_x, V.smul_y, V.smul_z,
+      V.dot_def]
+    grind
+  have e₁ : α + P.c * β = b₁ := by rw [eα, eβ]; grind
+  have e₂ : P.c * α + β = b₂ := by rw [eα, eβ]; grind
+  have ed : (α * α + 2 * P.c * α * β + β * β) * D = P.q b₁ b₂ := by
+    rw [eα, eβ, eD]; simp only [q]; grind
+  refine ⟨cs, by grind, by grind, ?_⟩
+  rw [md]
+  -- q b ≤ b₁² + 2|c||b₁b₂| + b₂² ≤ 4δ²
+  have s₁ := mul_self_le_mul_self_abs (a := b₁) (δ := δ) (by grind) (by grind)
+  have s₂ := mul_self_le_mul_self_abs (a := b₂) (δ := δ) (by grind) (by grind)
+  have cross : -(2 * P.c * b₁ * b₂) ≤ 2 * (δ * δ) := by
+    have h3 := sq_nonneg' (b₁ + P.c * b₂)
+    have h4 := sq_nonneg' (b₁ - P.c * b₂)
+    have h5 := mul_le_mul_of_nonneg_left' (a := P.c * P.c) (b := 1) (c := b₂ * b₂) (by grind)
+      (sq_nonneg' b₂)
+    grind
+  simp only [q] at ed
+  grind
+where
+  mul_self_le_mul_self_abs {a δ : K} (h1 : -δ ≤ a) (h2 : a ≤ δ) : a * a ≤ δ * δ := by
+    rcases le_or_lt' 0 a with h | h
+    · exact mul_self_le_mul_self' h h2
+    · have := mul_self_le_mul_self' (a := -a) (b := δ) (by grind) (by grind); grind
+
+end ForgeExact.Fillet.PlanePair

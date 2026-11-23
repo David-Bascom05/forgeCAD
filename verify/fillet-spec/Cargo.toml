@@ -1,0 +1,18 @@
+[package]
+name = "fillet-spec"
+description = "The fillet spec's differential test: the kernel's rolled blends dumped exactly, for the Lean model (verify/forge-exact/ForgeExact/Fillet) to judge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-geom = { path = "../../kernel/forge-geom" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-ops = { path = "../../kernel/forge-ops" }
+forge-model = { path = "../../kernel/forge-model" }
+forge-lang = { path = "../../interface/forge-lang" }
+
+[lints]
+workspace = true

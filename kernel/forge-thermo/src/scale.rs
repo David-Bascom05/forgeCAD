@@ -39,7 +39,16 @@ fn surface(s: &Surface, c: Point3, k: f64) -> Option<Surface> {
             frame: frame(&s.frame, c, k),
             radius: s.radius * k,
         }),
-        Surface::Torus(t) => Surface::Torus(Torus::new(frame(&t.frame, c, k), t.major * k, t.minor * k)?),
+        Surface::Torus(t) => {
+            let f = frame(&t.frame, c, k);
+            // a spindle torus scales to a spindle torus (a revolved arc reaching the axis, a round)
+            let scaled = if t.is_spindle() {
+                Torus::spindle(f, t.major * k, t.minor * k)
+            } else {
+                Torus::new(f, t.major * k, t.minor * k)
+            };
+            Surface::Torus(scaled?)
+        }
         Surface::Procedural(p) => Surface::Procedural(Proc(Arc::new(Scaled {
             inner: p.clone(),
             c,
