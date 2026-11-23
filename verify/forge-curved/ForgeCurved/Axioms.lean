@@ -41,3 +41,4 @@ import ForgeCurved
 #print axioms ForgeCurved.transversalAt_of_linearIndependent
 #print axioms ForgeCurved.modelCell_preconnected
 #print axioms ForgeCurved.conicalAt_of_model
+#print axioms ForgeCurved.cellsConnected_of_diagonal

@@ -6,3 +6,4 @@ import ForgeCurved.Tier0
 import ForgeCurved.Strata
 import ForgeCurved.Linked
 import ForgeCurved.ConeModel
+import ForgeCurved.Diagonal
