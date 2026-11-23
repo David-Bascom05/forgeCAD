@@ -274,7 +274,7 @@ fn snap(fs: &[In]) -> Result<(Vec<DyPlane>, Vec<usize>), Skip> {
 
 /// §6.1 step 2 (`Snap.vertexAt`): every vertex of every body from the snapped planes of the faces
 /// round it, the first independent three, which every one of them must hold.
-fn vertices(bodies: &[&Body], fs: &[In], planes: &[DyPlane]) -> Result<Vec<HashMap<VertexId, HPoint>>, Skip> {
+fn vertices(bodies: &[&Body], fs: &[In], planes: &[DyPlane]) -> Result<Vec<Pts>, Skip> {
     let mut round: Vec<HashMap<VertexId, Vec<usize>>> = vec![HashMap::new(); bodies.len()];
     for (i, f) in fs.iter().enumerate() {
         for lp in &f.loops {
@@ -316,7 +316,8 @@ fn vertices(bodies: &[&Body], fs: &[In], planes: &[DyPlane]) -> Result<Vec<HashM
             }
             m.insert(v, p);
         }
-        out.push(m);
+        let f = m.iter().map(|(&v, h)| (v, h.to_f64())).collect();
+        out.push(Pts { exact: m, f });
     }
     Ok(out)
 }
@@ -540,11 +541,7 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
     let mut by_pair: HashMap<(Pl, Pl), u32> = HashMap::new();
     let mut by_cov: HashMap<Vec<Sgn>, u32> = HashMap::new();
     let mut vertex = |x: Pl, y: Pl, vx: &mut Vec<Vx>| -> u32 {
-        let key = if format!("{x:?}") <= format!("{y:?}") {
-            (x, y)
-        } else {
-            (y, x)
-        };
+        let key = if x <= y { (x, y) } else { (y, x) };
         if let Some(&i) = by_pair.get(&key) {
             return i;
         }
@@ -675,12 +672,18 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
 
 /// Is the exact point inside face `f`'s polygon (its loops, with exact vertices), by the parity
 /// of the perturbed ray toward +s in the plane's projection `(s, t)`.
-fn in_face(q: &HPoint, f: &In, pts: &HashMap<VertexId, HPoint>, s: usize, t: usize) -> bool {
+fn in_face(q: &HPoint, f: &In, pts: &Pts, s: usize, t: usize) -> bool {
+    let qf = q.to_f64();
     let mut k = 0;
     for lp in &f.loops {
         let n = lp.len();
         for i in 0..n {
-            if crosses(q, &pts[&lp[i]], &pts[&lp[(i + 1) % n]], s, t) {
+            let (a, b) = (lp[i], lp[(i + 1) % n]);
+            let c = match crosses_f(qf, pts.f[&a], pts.f[&b], s, t) {
+                Some(c) => c,
+                None => crosses(q, &pts.exact[&a], &pts.exact[&b], s, t),
+            };
+            if c {
                 k += 1;
             }
         }
@@ -688,14 +691,56 @@ fn in_face(q: &HPoint, f: &In, pts: &HashMap<VertexId, HPoint>, s: usize, t: usi
     k % 2 == 1
 }
 
+/// The exact vertices of one body, and their f64 shadows (for screening only).
+pub(crate) struct Pts {
+    exact: HashMap<VertexId, HPoint>,
+    f: HashMap<VertexId, [f64; 3]>,
+}
+
+/// `crosses`, screened in f64: the answer where every sign it takes is plainly away from zero, else
+/// `None` (the exact test decides). The f64 points are within a few ulps of the exact ones.
+fn crosses_f(q: [f64; 3], a: [f64; 3], b: [f64; 3], s: usize, t: usize) -> Option<bool> {
+    const E: f64 = 1e-12;
+    let scale = 1.0
+        + q[s]
+            .abs()
+            .max(q[t].abs())
+            .max(a[s].abs())
+            .max(a[t].abs())
+            .max(b[s].abs())
+            .max(b[t].abs());
+    let above = |x: f64| -> Option<bool> {
+        let d = x - q[t];
+        if d.abs() > E * scale { Some(d > 0.0) } else { None }
+    };
+    let aa = above(a[t])?;
+    let ab = above(b[t])?;
+    if aa == ab {
+        return Some(false);
+    }
+    // b above and a not: dz > 0; and the other way round
+    let dz_pos = ab;
+    let d0 = (b[s] - a[s]) * (q[t] - a[t]) - (q[s] - a[s]) * (b[t] - a[t]);
+    let mag = ((b[s] - a[s]).abs() + (q[s] - a[s]).abs() + (q[t] - a[t]).abs() + (b[t] - a[t]).abs()) * scale;
+    if d0.abs() <= E * mag {
+        return None;
+    }
+    Some((d0 > 0.0) == dz_pos)
+}
+
 /// `Ref.Face.pierced`: does the ray from `p` along +x (origin perturbed) pierce face `f`?
-fn pierced(f: &In, plane: &DyPlane, pts: &HashMap<VertexId, HPoint>, p: &HPoint) -> bool {
+fn pierced(f: &In, plane: &DyPlane, pts: &Pts, p: &HPoint) -> bool {
     let nx = plane.n.x.signum();
     if nx == 0 {
         return false;
     }
     // sgn (c − n·p) · sgn nx > 0: the face ahead along +x
-    if -plane.side(p) * nx <= 0 {
+    let side = match side_at(plane, &p.to_f64(), &plane_f(plane), p) {
+        Sgn::Pos => 1,
+        Sgn::Neg => -1,
+        Sgn::Zero => 0,
+    };
+    if -side * nx <= 0 {
         return false;
     }
     in_face(p, f, pts, 1, 2)
@@ -720,6 +765,10 @@ struct Built {
     ends: HashMap<u32, (u32, u32)>,
     /// per side cell: a facet it is a side of and which side
     side_of: HashMap<u32, (u32, i32)>,
+    /// per side cell: every (facet, side) it is a side of
+    sides: HashMap<u32, Vec<(u32, i32)>>,
+    /// per facet: the input faces it is a piece of
+    holders: HashMap<u32, Vec<usize>>,
     /// cell ids by covector
     by: HashMap<Vec<Sgn>, u32>,
 }
@@ -755,13 +804,15 @@ fn join(covs: &[&Vec<Sgn>]) -> Vec<Sgn> {
         .collect()
 }
 
-fn build_ledger(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[HashMap<VertexId, HPoint>]) -> Built {
+fn build_ledger(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[Pts]) -> Built {
     let pf: Vec<PlaneF> = cls.planes.iter().map(plane_f).collect();
     let mut tab = CellTab::default();
     let mut facet = HashMap::new();
     let mut point = HashMap::new();
     let mut ends = HashMap::new();
     let mut side_of = HashMap::new();
+    let mut sides: HashMap<u32, Vec<(u32, i32)>> = HashMap::new();
+    let mut holders_of: HashMap<u32, Vec<usize>> = HashMap::new();
     let mut pieces: Vec<(u32, u32)> = Vec::new(); // (face, cell)
     let mut edges: Vec<u32> = Vec::new();
     let mut verts: Vec<u32> = Vec::new();
@@ -782,7 +833,7 @@ fn build_ledger(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[HashMap<Verte
         for &i in faces {
             for lp in &fs[i].loops {
                 for v in lp {
-                    let p = pts[fs[i].body][v].to_f64();
+                    let p = pts[fs[i].body].f[v];
                     for k in 0..3 {
                         lo[k] = lo[k].min(p[k]);
                         hi[k] = hi[k].max(p[k]);
@@ -812,10 +863,17 @@ fn build_ledger(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[HashMap<Verte
                 &pl.vx[cell[1].0 as usize].p,
                 &pl.vx[cell[2].0 as usize].p,
             ]);
+            let midf = mid.to_f64();
             let holders: Vec<usize> = faces
                 .iter()
                 .copied()
-                .filter(|&i| in_face(&mid, &fs[i], &pts[fs[i].body], s, t))
+                .filter(|&i| {
+                    // (a face's snapped polygon is within a few LINEAR of its kernel box)
+                    let g = 4.0 * lin() + 1e-9 * (1.0 + midf[0].abs() + midf[1].abs() + midf[2].abs());
+                    let f = &fs[i];
+                    (0..3).all(|k| f.lo[k] - g <= midf[k] && midf[k] <= f.hi[k] + g)
+                        && in_face(&mid, f, &pts[f.body], s, t)
+                })
                 .collect();
             if holders.is_empty() {
                 continue;
@@ -846,6 +904,10 @@ fn build_ledger(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[HashMap<Verte
             }
             for &i in &holders {
                 per_face[i].push(id);
+                let h = holders_of.entry(id).or_default();
+                if !h.contains(&i) {
+                    h.push(i);
+                }
             }
             facet.entry(id).or_insert(Facet {
                 class: c as u32,
@@ -891,6 +953,7 @@ fn build_ledger(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[HashMap<Verte
             cv[c] = sg;
             let t = tab.id(cv);
             side_of.entry(t).or_insert((id, s));
+            sides.entry(t).or_default().push((id, s));
         }
     }
     let nb = bodies.len() as u32;
@@ -910,6 +973,8 @@ fn build_ledger(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[HashMap<Verte
         point,
         ends,
         side_of,
+        sides,
+        holders: holders_of,
         by: tab.by,
     }
 }
@@ -925,16 +990,12 @@ fn witness_point(b: &Built, cls: &Classes, t: u32) -> HPoint {
     loop {
         let d = Dy::from_i64(s as i64).scale2(-k);
         let p = fc.mid.offset(n, &d);
+        let pfl = p.to_f64();
         let ok = cls.planes.iter().enumerate().all(|(j, pl)| {
             if j == c {
                 return true;
             }
-            let want = match cov[j] {
-                Sgn::Pos => 1,
-                Sgn::Neg => -1,
-                Sgn::Zero => 0,
-            };
-            pl.side(&p) == want
+            side_at(pl, &pfl, &plane_f(pl), &p) == cov[j]
         });
         if ok && cls.planes[c].side(&p) == s {
             return p;
@@ -960,13 +1021,7 @@ pub struct Decided {
 }
 
 /// What `fill` keeps: the faces, their snapped planes, the classes, the exact vertices, the ledger.
-type Filled = (
-    Vec<In>,
-    Vec<DyPlane>,
-    Classes,
-    Vec<HashMap<VertexId, HPoint>>,
-    Built,
-);
+type Filled = (Vec<In>, Vec<DyPlane>, Classes, Vec<Pts>, Built);
 
 /// The ledger of `bodies`, filled, with the witnesses answered; and what the bridge kept.
 fn fill(bodies: &[&Body]) -> Result<Filled, Skip> {
@@ -982,16 +1037,32 @@ fn fill(bodies: &[&Body]) -> Result<Filled, Skip> {
         return Err(Skip::Ambiguous("an operand's own faces overlap"));
     }
     let ws = core::witnesses(&built.ledger);
+    // per face: its outward normal along its class plane's (+1) or against it (-1)
+    let out_sign: Vec<i32> = fs
+        .iter()
+        .enumerate()
+        .map(|(g, f)| {
+            let along = f.plane.n.dot(&cls.planes[cls.of_face[g] as usize].n).signum();
+            if bodies[f.body].face(f.face).same_sense {
+                along
+            } else {
+                -along
+            }
+        })
+        .collect();
+    // per body: the box of its faces, grown
+    let g = 4.0 * lin();
+    let mut bbox = vec![([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]); bodies.len()];
+    for f in &fs {
+        for k in 0..3 {
+            bbox[f.body].0[k] = bbox[f.body].0[k].min(f.lo[k] - g);
+            bbox[f.body].1[k] = bbox[f.body].1[k].max(f.hi[k] + g);
+        }
+    }
     let mut inside = Vec::new();
     for (t, i) in ws {
-        let p = witness_point(&built, &cls, t.0);
         let body = i.0 as usize;
-        let k = fs
-            .iter()
-            .enumerate()
-            .filter(|(fi, f)| f.body == body && pierced(f, &snapped[*fi], &pts[body], &p))
-            .count();
-        if k % 2 == 1 {
+        if witness_inside(&built, &cls, &fs, &snapped, &pts, &out_sign, &bbox, t.0, body) {
             inside.push((t, i));
         }
     }
@@ -1005,7 +1076,7 @@ fn fill(bodies: &[&Body]) -> Result<Filled, Skip> {
 /// surface (on the face's class plane, exactly), for every vertex within the band of another body's
 /// face.
 #[cfg(feature = "decisions")]
-fn log(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[HashMap<VertexId, HPoint>]) {
+fn log(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[Pts]) {
     use crate::decisions::{BAND, Ent, Kind, Site, decide, key2, pair};
     let l = lin();
     let grown = |f: &In, g: f64, p: [f64; 3]| (0..3).all(|k| f.lo[k] - g <= p[k] && p[k] <= f.hi[k] + g);
@@ -1029,6 +1100,7 @@ fn log(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[HashMap<VertexId, HPoi
         }
     }
     for (k, vs) in pts.iter().enumerate() {
+        let vs = &vs.exact;
         let mut ids: Vec<_> = vs.keys().copied().collect();
         ids.sort();
         for v in ids {
@@ -1061,6 +1133,54 @@ fn log(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[HashMap<VertexId, HPoi
             }
         }
     }
+}
+
+/// Whether side cell `t` is inside body `body` (a witness answer), decided by the first of:
+/// - outside the body's box (grown) is outside;
+/// - beside one of the body's own faces, it is inside iff on that face's inner side (the oriented
+///   face of a closed, valid body says exactly what the ray parity says);
+/// - otherwise one ray (`Ref.Face.pierced`), from a point strictly inside the cell.
+#[allow(clippy::too_many_arguments)]
+fn witness_inside(
+    b: &Built,
+    cls: &Classes,
+    fs: &[In],
+    snapped: &[DyPlane],
+    pts: &[Pts],
+    out_sign: &[i32],
+    bbox: &[([f64; 3], [f64; 3])],
+    t: u32,
+    body: usize,
+) -> bool {
+    let (f0, _) = b.side_of[&t];
+    let m = b.facet[&f0].mid.to_f64();
+    let (lo, hi) = &bbox[body];
+    if (0..3).any(|k| m[k] < lo[k] || m[k] > hi[k]) {
+        return false;
+    }
+    for &(f, s) in &b.sides[&t] {
+        if let Some(hs) = b.holders.get(&f) {
+            for &g in hs {
+                if fs[g].body == body {
+                    return s != out_sign[g];
+                }
+            }
+        }
+    }
+    let p = witness_point(b, cls, t);
+    let pf = p.to_f64();
+    let gr = 4.0 * lin();
+    let k = fs
+        .iter()
+        .enumerate()
+        .filter(|(fi, f)| {
+            f.body == body
+                && f.hi[0] + gr >= pf[0]
+                && (1..3).all(|a| f.lo[a] - gr <= pf[a] && pf[a] <= f.hi[a] + gr)
+                && pierced(f, &snapped[*fi], &pts[body], &p)
+        })
+        .count();
+    k % 2 == 1
 }
 
 /// The ledger and the core's answer for a boolean of flat bodies (for tests and the comparison).
@@ -1118,6 +1238,19 @@ pub fn nary(bodies: &[&Body], rule: &Rule) -> Result<Option<Body>, BoolError> {
         Err(_) => return Ok(None),
     };
     let outcome = core::core(&built.ledger, rule);
+    if std::env::var_os("FORGE_DECIDE_STATS").is_some() {
+        eprintln!(
+            "decide-once: {} bodies, {} faces, {} classes, {} cells, {} pieces, {} edges, {} verts, {} witnesses",
+            bodies.len(),
+            fs.len(),
+            cls.planes.len(),
+            built.ledger.cells.len(),
+            built.ledger.pieces.len(),
+            built.ledger.edges.len(),
+            built.ledger.verts.len(),
+            built.ledger.inside.len()
+        );
+    }
     match outcome {
         Outcome::Empty => Ok(Some(Body::default())),
         Outcome::Refused(Refusal::ZeroThickness(c)) => Err(BoolError::ZeroThickness {
