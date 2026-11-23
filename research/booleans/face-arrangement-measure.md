@@ -1,4 +1,8 @@
-# Decide-once on a face arrangement (A8): design draft (2026-11-23)
+# A8 face arrangement: bool-research's first draft and measurements (2026-11-23)
+
+> Superseded as the design by the Lean coordinator's research/decide-once/face-arrangement.md
+> (decide-once-lean, 2ff687bd). This file is kept for the measurements in §0 and §5 and the cost
+> table in §6. The review of the coordinator's design is research/booleans/a8-review.md.
 
 The master decided on 2026-11-23 to move decide-once from the plane arrangement to a face
 arrangement (A8 in research/booleans/small-booleans.md §5).
