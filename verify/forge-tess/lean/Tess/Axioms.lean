@@ -2,6 +2,7 @@ import Tess.Sag
 import Tess.Cone
 import Tess.Interp
 import Tess.Torus
+import Tess.Spec
 
 /-- info: 'Sag.mid_nearest' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Sag.mid_nearest
@@ -43,3 +44,7 @@ import Tess.Torus
 #guard_msgs in #print axioms Sag.stray_bound
 /-- info: 'Sag.cone_candidates' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Sag.cone_candidates
+/-- info: 'Tess.sphere_within' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Tess.sphere_within
+/-- info: 'Tess.pinch_is_not_one_fan' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Tess.pinch_is_not_one_fan
