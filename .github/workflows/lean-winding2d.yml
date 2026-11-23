@@ -1,0 +1,34 @@
+# The signed winding number of a rational polygon (verify/winding2d): rotation and reversal,
+# constancy along a segment that misses the polygon, the half-open rule and the SoS side rule.
+# `lake build` on the pinned toolchain (core Lean only, no Mathlib), then the axiom check: a
+# `sorry`, `native_decide` or any axiom past propext, Classical.choice and Quot.sound fails the job.
+name: lean-winding2d
+
+on:
+  push:
+    branches: [main]
+    paths: ["verify/winding2d/**", ".github/workflows/lean-winding2d.yml"]
+  pull_request:
+    paths: ["verify/winding2d/**", ".github/workflows/lean-winding2d.yml"]
+  workflow_dispatch:
+
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: verify/winding2d
+    steps:
+      - uses: actions/checkout@v4
+      - name: elan and the pinned toolchain
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
+      - name: build and axioms
+        run: |
+          lake build
+          lake env lean Axioms.lean | tee axioms.txt
+          ! grep -E "sorryAx|ofReduceBool" axioms.txt
