@@ -18,8 +18,15 @@
 //! under a half turn, ends off the circle by a gap counted twice, Trim.lean). ∂H misses Z when
 //! that minimum is positive and no loop of ∂H lies inside Z (its box is not inside Z's box); then
 //! Z is inside H or outside it whole, and one point of it decides which, exactly
-//! (region::inside_loop). A core that reaches x < 0 is checked mirrored as well (its image is
-//! there). A drill on the centre line is its own image: no smear, no mirror.
+//! (region::inside_loop).
+//!
+//! The half-profile's segment on the axis is no boundary of the part (the part goes on across
+//! the axis), so the checks are made in the full section: Hf = H ∪ mirror(H). With σ(x, y, z) =
+//! (sign(x)·√(x² + y²), z), π = |σ|, and dist(π(B), H) ≥ dist(σ(B), Hf) (a folded point's
+//! distance to H is its own or its mirror's). σ moves a point of the section outward from the
+//! axis by at most e, on its own side: σ(B) ⊆ (Z₊ ∪ Z₋) ⊕ B_r', Z± = K ⊕ [0, ±e]·x̂ ⊕ [g(0), g(1)],
+//! Z₋ needed only when the outline reaches x < 0. A drill on the centre line (a solid of
+//! revolution about the axis) is its own σ-image: no smear.
 //!
 //! An arc move is cut into chords; the path lies within the chord's sagitta, plus its ends' gap
 //! off the circle, plus the difference of the radii at its two ends (a control's arc between
@@ -52,6 +59,8 @@ pub struct Obstacle {
     ex: Exact,
     pub mu: f64,
     pub bbox: [f64; 4],
+    /// The region is a half-plane one standing for its full section (see `of`).
+    fold: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -129,8 +138,119 @@ fn arc_pieces(a: [f64; 2], b: [f64; 2], c: [f64; 2], ccw: bool, out: &mut Vec<OP
     }
 }
 
+/// The region reflected in the axis (x → −x), its loops reversed so it stays on their left.
+pub fn mirror(r: &Region) -> Region {
+    let m = |p: region::P2| region::p2(-p.x, p.y);
+    Region {
+        loops: r
+            .loops
+            .iter()
+            .map(|l| {
+                region::Loop {
+                    segs: l
+                        .segs
+                        .iter()
+                        .map(|sg| match *sg {
+                            Seg::Line { a, b } => Seg::Line { a: m(a), b: m(b) },
+                            Seg::Arc { a, b, c, ccw } => Seg::Arc {
+                                a: m(a),
+                                b: m(b),
+                                c: m(c),
+                                ccw: !ccw,
+                            },
+                        })
+                        .collect(),
+                }
+                .reversed()
+            })
+            .collect(),
+    }
+}
+
 impl Obstacle {
-    pub fn of(name: &str, region: &Region, mu: f64) -> Result<Obstacle, ObstacleError> {
+    /// The obstacle of a half-plane region (x ≥ 0) as its full section Hf = H ∪ mirror(H): the
+    /// boundary pieces of H off the axis and their mirror images (the segments on the axis are
+    /// no boundary of Hf: H and its mirror meet there), and inside(q) ⇔ (|q.x|, q.z) ∈ H.
+    pub fn of(name: &str, half: &Region, mu: f64) -> Result<Obstacle, ObstacleError> {
+        let mut o = Obstacle::of_full(name, half, mu)?;
+        let mut pieces = Vec::new();
+        let mut loop_boxes = Vec::new();
+        let mut bbox = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+        let mut start = 0;
+        for l in &half.loops {
+            // the pieces of this loop in o.pieces: as many as of_full made for it
+            let mut n = 0;
+            for sg in &l.segs {
+                n += match *sg {
+                    Seg::Line { .. } => 1,
+                    Seg::Arc { .. } => {
+                        let mut v = Vec::new();
+                        if let Seg::Arc { a, b, c, ccw } = *sg {
+                            arc_pieces([a.x, a.y], [b.x, b.y], [c.x, c.y], ccw, &mut v);
+                        }
+                        v.len()
+                    }
+                };
+            }
+            let mine = &o.pieces[start..start + n];
+            start += n;
+            let mut on_axis = false;
+            let mut lb = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+            for p in mine {
+                if let Sec::Seg { a, b } = p.sec
+                    && a[0] == 0.0
+                    && b[0] == 0.0
+                {
+                    on_axis = true;
+                    continue;
+                }
+                if p.bx[0] <= 0.0 {
+                    on_axis = true;
+                }
+                merge(&mut lb, p.bx);
+                pieces.push(p.clone());
+                let m = |q: [f64; 2]| [-q[0], q[1]];
+                let sec = match p.sec {
+                    Sec::Seg { a, b } => Sec::Seg { a: m(a), b: m(b) },
+                    Sec::Arc { c, r, a, b, ccw } => Sec::Arc {
+                        c: m(c),
+                        r,
+                        a: m(a),
+                        b: m(b),
+                        ccw: !ccw,
+                    },
+                };
+                pieces.push(OPiece {
+                    sec,
+                    gap: p.gap,
+                    bx: [-p.bx[2], p.bx[1], -p.bx[0], p.bx[3]],
+                });
+            }
+            if lb[0] > lb[2] {
+                continue;
+            }
+            let mb = [-lb[2], lb[1], -lb[0], lb[3]];
+            if on_axis {
+                // one boundary with its mirror (joined across the axis, or touching it)
+                let mut u = lb;
+                merge(&mut u, mb);
+                loop_boxes.push(u);
+            } else {
+                loop_boxes.push(lb);
+                loop_boxes.push(mb);
+            }
+            merge(&mut bbox, lb);
+            merge(&mut bbox, mb);
+        }
+        o.pieces = pieces;
+        o.loop_boxes = loop_boxes;
+        o.bbox = bbox;
+        o.fold = true;
+        Ok(o)
+    }
+
+    /// The obstacle of a region of the whole plane as it is.
+    pub fn of_full(name: &str, region: &Region, mu: f64) -> Result<Obstacle, ObstacleError> {
         let mut cx = Ctx::new();
         let ex = region::validate(&mut cx, region).map_err(|e| ObstacleError::Region(format!("{e:?}")))?;
         let mut pieces = Vec::new();
@@ -167,11 +287,22 @@ impl Obstacle {
             ex,
             mu,
             bbox,
+            fold: false,
         })
     }
 
-    /// Whether q is inside the region (exact; q must not be on its boundary).
+    /// Whether q is inside the obstacle (exact; q must not be on its boundary). For a folded
+    /// obstacle, q on the axis is moved off it by `off` (less than its distance to the boundary).
     pub fn inside(&mut self, q: [f64; 2]) -> bool {
+        self.inside_off(q, 0.0)
+    }
+
+    fn inside_off(&mut self, q: [f64; 2], off: f64) -> bool {
+        let q = if self.fold {
+            [if q[0] == 0.0 { off } else { q[0].abs() }, q[1]]
+        } else {
+            q
+        };
         let m = self.cx.mark();
         let p = forge_cam_geom::arr::pt(&mut self.cx, q[0], q[1]);
         let mut odd = false;
@@ -343,24 +474,16 @@ fn body_line(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f6
     for p in [a, b] {
         coords = coords.max(p[0].abs()).max(p[1].abs());
     }
-    let mut mirrors = vec![false];
-    if !body.on_axis {
-        let xmin_core = body.core.iter().map(|k| k[0]).fold(f64::INFINITY, f64::min);
-        if a[0] + xmin_core < 0.0 || b[0] + xmin_core < 0.0 {
-            mirrors.push(true);
-        }
-    }
+    // the sides the outline reaches: +x always, −x when some of it is at x < 0 at either end
+    let xmin_core = body.core.iter().map(|k| k[0]).fold(f64::INFINITY, f64::min);
+    let reach_neg = ip(a[0].min(b[0])).add(ip(xmin_core)).sub(ip(body.r)).lo < 0.0;
+    let sides: &[f64] = if body.on_axis || !reach_neg { &[1.0] } else { &[1.0, -1.0] };
     let mut lower = f64::INFINITY;
     let mut checked_point = false;
     let n = if body.on_axis || body.depth[1] == 0.0 { 1 } else { slabs.max(1) };
-    for &mirror in &mirrors {
-        let core: Vec<[f64; 2]> = if mirror {
-            body.core.iter().rev().map(|k| [-k[0], k[1]]).collect()
-        } else {
-            body.core.clone()
-        };
-        let (pa, pb) = if mirror { ([-a[0], a[1]], [-b[0], b[1]]) } else { (a, b) };
-        let mg = [pb[0] - pa[0], pb[1] - pa[1]];
+    let core = &body.core;
+    let mg = [b[0] - a[0], b[1] - a[1]];
+    for &side in sides {
         for j in 0..n {
             let (d0, d1) = (body.depth[0], body.depth[1]);
             let top = d0 + (d1 - d0) * j as f64 / n as f64;
@@ -371,40 +494,44 @@ fn body_line(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f6
             } else {
                 body.r
             };
-            // the smear: √(xm² + bot²) − xm at the least x of the slab's section
+            // the smear: √(xm² + bot²) − xm at the least |x| of the slab's section (0 when it
+            // reaches the axis)
             let e = if body.on_axis || bot == 0.0 {
                 0.0
             } else {
-                let xc = core.iter().map(|k| k[0]).fold(f64::INFINITY, f64::min);
-                let xm = ip(pa[0].min(pb[0])).add(ip(xc)).sub(ip(rj)).lo.max(0.0);
+                let xm = if reach_neg { 0.0 } else { ip(a[0].min(b[0])).add(ip(xmin_core)).sub(ip(rj)).lo.max(0.0) };
                 ip(xm).sqr().add(ip(bot).sqr()).sqrt().sub(ip(xm)).hi
             };
-            let g1 = [e, 0.0];
-            let mut zbox = core_box(&core, pa);
-            merge(&mut zbox, core_box(&core, pb));
-            zbox[2] = ip(zbox[2]).add(ip(e)).hi;
+            let g1 = [side * e, 0.0];
+            let mut zbox = core_box(core, a);
+            merge(&mut zbox, core_box(core, b));
+            if side > 0.0 {
+                zbox[2] = ip(zbox[2]).add(ip(e)).hi;
+            } else {
+                zbox[0] = ip(zbox[0]).sub(ip(e)).lo;
+            }
             let need_core = need + rj;
             let cut = ip(need_core).add(ip(obs.mu)).add(ip(1.0)).hi;
-            let raw = zono_lower(&core, pa, g1, mg, obs, cut, &zbox);
+            let raw = zono_lower(core, a, g1, mg, obs, cut, &zbox);
             let allow = round_allow(coords + e, 3.0);
             let zl = ip(raw).sub(ip(allow)).sub(ip(obs.mu)).lo;
             if zl <= 0.0 {
                 return Verdict::Undecided { lower: zl - rj };
             }
-            // ∂H misses Z: no loop of ∂H inside Z
+            // ∂Hf misses Z: no loop of ∂Hf inside Z
             for lb in &obs.loop_boxes {
                 if lb[0] >= zbox[0] && lb[1] >= zbox[1] && lb[2] <= zbox[2] && lb[3] <= zbox[3] {
                     return Verdict::Undecided { lower: 0.0 };
                 }
             }
-            // and Z is outside H: one point of it (the core's first vertex at the start: in every
-            // slab's Z, and at least zl from ∂H)
+            // and Z is outside Hf: one point of it (the core's first vertex at the start: in
+            // every slab's Z on both sides, and at least zl from ∂Hf)
             if !checked_point {
-                let q = [pa[0] + core[0][0], pa[1] + core[0][1]];
-                if obs.inside(q) {
+                let q = [a[0] + core[0][0], a[1] + core[0][1]];
+                if obs.inside_off(q, 0.5 * zl) {
                     // inside by at least zl: a real point of the tool when it is at depth 0 on
-                    // the x ≥ 0 side (π is the identity there)
-                    if !mirror && body.depth[0] == 0.0 && q[0] >= 0.0 && -zl < need {
+                    // the x ≥ 0 side (σ is the identity there, and dist to Hf is dist to H)
+                    if body.depth[0] == 0.0 && q[0] >= 0.0 && -zl < need {
                         return Verdict::Hit { d: -zl, at: q };
                     }
                     return Verdict::Undecided { lower: -zl };
@@ -417,27 +544,41 @@ fn body_line(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f6
                 return Verdict::Undecided { lower };
             }
         }
-        checked_point = false;
     }
     Verdict::Clear { lower }
 }
 
-/// A real witness that the body comes nearer than `need`: at either end of the move, the core's
-/// first vertex q at depth 0 with its disc in x ≥ 0 (where π is the identity at y = 0), outside
-/// the obstacle, with an upper bound on dist(q, H) − r below need.
+/// A real witness that the body comes nearer than `need`: at either end of the move, a core
+/// vertex q at depth 0 with its disc in x ≥ 0 (where π is the identity at y = 0), either outside
+/// the obstacle with an upper bound on dist(q, H) − r below need, or inside it by a proven
+/// positive depth.
 fn witness(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f64) -> Option<Verdict> {
     if body.depth[0] != 0.0 || body.core.is_empty() {
         return None;
     }
-    for p in [a, b] {
-        let q = [p[0] + body.core[0][0], p[1] + body.core[0][1]];
+    let pts: Vec<[f64; 2]> = [a, b]
+        .iter()
+        .flat_map(|p| body.core.iter().map(move |k| [p[0] + k[0], p[1] + k[1]]))
+        .collect();
+    for q in pts {
         if q[0] - body.r < 0.0 {
             continue;
         }
         let mut up = f64::INFINITY;
+        let mut lo = f64::INFINITY;
         for f in &obs.pieces {
             let d = forge_cam_geom::slab::pt_sec(q, &f.sec);
             up = up.min(ip(d.hi).add(ip(2.0 * f.gap)).hi);
+            lo = lo.min(ip(d.lo).sub(ip(2.0 * f.gap)).lo);
+        }
+        let lo = ip(lo).sub(ip(obs.mu)).lo;
+        if lo > 0.0 && obs.inside_off(q, 0.5 * lo) {
+            // a real point of the tool (depth 0, x ≥ 0) at least lo inside the obstacle
+            let d = ip(-lo).sub(ip(body.r)).hi;
+            if d < need {
+                return Some(Verdict::Hit { d, at: q });
+            }
+            continue;
         }
         let d = ip(up).add(ip(obs.mu)).sub(ip(body.r)).hi;
         if d < need && !obs.inside(q) {

@@ -65,6 +65,13 @@ fn off_axis(f: &Frame, size: f64) -> Option<f64> {
     Some(off)
 }
 
+/// Whether a circle lies in a plane through the axis (a meridian arc: a seam).
+fn meridian_circle(c: &forge_geom::curve::Circle, size: f64) -> bool {
+    let n = c.frame.z().get();
+    let o = c.frame.origin;
+    n.z.abs() <= 1e-12 && (n.x * o.x + n.y * o.y).abs() <= tol::LINEAR * (1.0 + size)
+}
+
 /// The (ρ, z) of a circle edge about the axis, and its distance off it.
 fn circle_rz(c: &forge_geom::curve::Circle, size: f64) -> Option<(P2, f64)> {
     let off = off_axis(&c.frame, size)?;
@@ -85,6 +92,9 @@ fn face_ends(body: &Body, fid: FaceId, size: f64, k: usize, kind: &str) -> Resul
         for c in body.lp(l).coedges() {
             let e = body.edge(body.coedge(c).edge);
             match &e.curve {
+                Curve::Circle(ci) if meridian_circle(ci, size) => {
+                    // a seam of a sphere or torus: an arc in a plane through the axis
+                }
                 Curve::Circle(ci) => {
                     let (q, o) = circle_rz(ci, size).ok_or_else(|| bad("a circle edge not about the axis"))?;
                     off = off.max(o);
@@ -184,26 +194,46 @@ fn meridian(body: &Body, fid: FaceId, k: usize, size: f64) -> Result<(Option<Mer
 }
 
 /// The arc from a to b about c that the face covers: of the two arcs between the ends, the one
-/// whose height range fits the face's box (both fitting: the one whose ρ range does too).
+/// through the face's middle meridian point (the surface at the middle of the v range its uv
+/// loops span: a torus's tube angle, a sphere's latitude).
 fn arc_on_face(body: &Body, fid: FaceId, a: P2, b: P2, c: P2) -> Result<Seg, ProfileError> {
-    let bb = body.face_box(fid);
-    let rho_hi = (bb.x.hi.abs().max(bb.x.lo.abs()).powi(2) + bb.y.hi.abs().max(bb.y.lo.abs()).powi(2)).sqrt();
-    let slack = 1e-6 * (1.0 + rho_hi + bb.z.hi.abs() + bb.z.lo.abs());
-    let fits = |ccw: bool| -> (bool, bool) {
-        let (zl, zh, rh) = arc_range(a, b, c, ccw);
-        (zl >= bb.z.lo - slack && zh <= bb.z.hi + slack, rh <= rho_hi + slack)
+    let undecided = || ProfileError::Invalid {
+        why: "a meridian arc whose side cannot be told from the face".into(),
     };
-    let (z1, r1) = fits(true);
-    let (z2, r2) = fits(false);
-    let ccw = match (z1 && r1, z2 && r2) {
-        (true, false) => true,
-        (false, true) => false,
-        _ => {
-            return Err(ProfileError::Invalid {
-                why: "a meridian arc whose side cannot be told from the face's box".into(),
-            });
+    let mut vlo = f64::INFINITY;
+    let mut vhi = f64::NEG_INFINITY;
+    for l in forge_topo::uv::face_uv_loops(body, fid) {
+        for p in &l.points {
+            vlo = vlo.min(p.y);
+            vhi = vhi.max(p.y);
         }
+    }
+    if !(vlo < vhi) {
+        return Err(undecided());
+    }
+    let v = 0.5 * (vlo + vhi);
+    let m = match &body.face(fid).surface {
+        Surface::Torus(t) => {
+            let sz = t.frame.z().get().z.signum();
+            p2(t.major + t.minor * v.cos(), t.frame.origin.z + sz * t.minor * v.sin())
+        }
+        Surface::Sphere(sp) => {
+            let sz = sp.frame.z().get().z.signum();
+            p2(sp.radius * v.cos(), sp.frame.origin.z + sz * sp.radius * v.sin())
+        }
+        _ => return Err(undecided()),
     };
+    // the side of the chord ab the middle point is on picks the arc
+    let side = (b.x - a.x) * (m.y - a.y) - (b.y - a.y) * (m.x - a.x);
+    let cside = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+    if side.abs() <= 1e-9 * (1.0 + r) {
+        return Err(undecided());
+    }
+    // walking a → b, an arc bulging to the left (side > 0) is clockwise about a centre... the
+    // arc on m's side: counter-clockwise when m lies to the right of a → b
+    let ccw = side < 0.0;
+    let _ = cside;
     Ok(Seg::Arc { a, b, c, ccw })
 }
 

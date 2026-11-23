@@ -602,12 +602,14 @@ pub fn drill(s: &Setup, tool: &TurnTool, t: u32, z_end: f64, peck: f64) -> Resul
         let zn = (z - step).max(z_end);
         steps.push(Step::Feed([0.0, zn]));
         if zn > z_end {
-            steps.push(Step::Rapid([0.0, z0]));
-            steps.push(Step::Rapid([0.0, zn + 0.5]));
+            // out of the hole and back in at feed: the drill's margins ride its own wall, where
+            // a rapid's clearance cannot be proven
+            steps.push(Step::Feed([0.0, z0]));
+            steps.push(Step::Feed([0.0, zn + 0.5]));
         }
         z = zn;
     }
-    steps.push(Step::Rapid(start));
+    steps.push(Step::Feed(start));
     Ok(OpPath {
         name: format!("drill to z = {z_end}"),
         tool: tool.clone(),
