@@ -486,11 +486,43 @@ pub(crate) fn sized_through(features: crate::History<'_>, i: usize) -> bool {
     }
 }
 
-/// A box holding the body: what the regen hands a through tool as the part's extent.
-// TODO(exact extent): forge_topo's exact_box (fix-mesh-asm) when it lands; faces_box hulls the
-// edges' boxes, the sphere's and torus's, and procedural faces' (uv::procedural_box)
+/// A box holding the body: what the regen hands a through tool as the part's extent. Any box that
+/// holds the part sizes a through tool to the same cut (research/ops-spec, H1), so this one is
+/// sound and cheap rather than tight: the hull of the edges' boxes (kept ones, else a line's ends
+/// and a circle's or ellipse's whole box, else `Curve::bbox` over the range), which holds every plane, cylinder, cone and ruled face (a straight line through any of
+/// their points meets the boundary on both sides), with a sphere's or torus's whole box for the
+/// faces that can bulge past their edges, and the face's own box for any other procedural face.
 pub(crate) fn body_box(b: &forge_topo::Body) -> Box3 {
-    b.faces_box()
+    use forge_geom::{Curve, Surface};
+    let mut bx = Box3::EMPTY;
+    for e in b.edge_ids() {
+        let edge = b.edge(e);
+        // the edge's box if it is kept already, else one as cheap as sound: a line's ends, a
+        // circle's or ellipse's whole box (no arc extremes worked out)
+        let eb = match (edge.bbox.get(), &edge.curve) {
+            (Some(k), _) => *k,
+            (None, Curve::Line(l)) => Box3::from_points([
+                l.origin + l.dir.get() * edge.range.lo,
+                l.origin + l.dir.get() * edge.range.hi,
+            ]),
+            (None, Curve::Circle(c)) => Box3::from_point(c.frame.origin).grow(c.radius.abs()),
+            (None, Curve::Ellipse(el)) => {
+                Box3::from_point(el.frame.origin).grow(el.major.abs().max(el.minor.abs()))
+            }
+            (None, _) => b.edge_box(e),
+        };
+        bx = bx.hull(&eb);
+    }
+    for f in b.face_ids() {
+        match &b.face(f).surface {
+            Surface::Sphere(s) => bx = bx.hull(&Box3::from_point(s.frame.origin).grow(s.radius)),
+            Surface::Torus(t) => bx = bx.hull(&Box3::from_point(t.frame.origin).grow(t.major + t.minor)),
+            Surface::Procedural(pr) if pr.v_degree() == Some(1) => {}
+            Surface::Procedural(_) => bx = bx.hull(&b.face_box(f)),
+            _ => {}
+        }
+    }
+    bx.grow(forge_math::tol::LINEAR)
 }
 
 /// A box holding the part after rib `r` is added to a part inside `b`.

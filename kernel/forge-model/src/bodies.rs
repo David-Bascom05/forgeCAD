@@ -417,10 +417,19 @@ fn apply_once(
         _ => {}
     }
     // a through tool past faces the history does not bound is sized by the bodies as they stand
-    let given = (i > 0 && crate::hole::needs_base(plain, i)).then(|| crate::Given {
-        base: Some((i - 1, solids_box(&solids))),
-        reach: None,
-    });
+    // (it cuts only the bodies it picks: their box is enough, H1)
+    let given = if i > 0 && crate::hole::needs_base(plain, i) {
+        let on = targets(&ids(&solids), p, i)?;
+        let b = on.iter().fold(forge_math::Box3::EMPTY, |b, &k| {
+            b.hull(&crate::hole::body_box(&solids[k].body))
+        });
+        Some(crate::Given {
+            base: Some((i - 1, b)),
+            reach: None,
+        })
+    } else {
+        None
+    };
     let ts = crate::tools_given(plain, i, true, given.as_ref())?;
     // parameters and sketches make nothing
     if ts.is_empty() {
