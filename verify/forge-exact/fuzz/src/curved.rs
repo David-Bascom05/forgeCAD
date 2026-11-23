@@ -362,10 +362,7 @@ fn probe_check(body: &Body, probes: &[Point3], ans: &[i64]) -> Option<String> {
             continue;
         }
         let w = idx.classify(*p);
-        let ok = match (a, w) {
-            (1, Where::Inside) | (-1, Where::Outside) => true,
-            _ => false,
-        };
+        let ok = matches!((a, w), (1, Where::Inside) | (-1, Where::Outside));
         if !ok {
             return Some(format!(
                 "probe ({:.6}, {:.6}, {:.6}) is {} where the kernel's classifier says {:?}",

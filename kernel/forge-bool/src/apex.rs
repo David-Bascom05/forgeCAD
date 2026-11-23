@@ -221,10 +221,9 @@ pub(crate) fn where_sheet(other: &Body, index: &Index, p: Point3, sheet: &Sheet)
         let t = match other.face_normal_at(g, p) {
             Some(n) => turn(sheet, n.get()),
             // another cone's apex: inside it where the generator is within its half angle
-            None if through.len() == 1 => match apex_sheet(other, g, p)? {
-                Some(s2) => in_cone(sheet, &s2, other.face(g).same_sense),
-                None => return None,
-            },
+            None if through.len() == 1 => {
+                in_cone(sheet, &apex_sheet(other, g, p)??, other.face(g).same_sense)
+            }
             None => return None,
         };
         turns.push(t);

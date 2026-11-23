@@ -1164,7 +1164,7 @@ fn nary_body(
         // every other tool; one that cannot be read there is refused at the point, never guessed
         let mut sheets = [None; 2];
         if t.dir.is_none() {
-            for k in 0..2 {
+            for (k, slot) in sheets.iter_mut().enumerate() {
                 let (sd, f) = (t.sides[k], t.faces[k]);
                 let Some(sheet) = crate::apex::apex_sheet(tools[sd], f, t.at) else {
                     continue;
@@ -1182,8 +1182,7 @@ fn nary_body(
                 }
                 let mut outer = inner.clone();
                 outer[sd] = false;
-                sheets[k] =
-                    Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect));
+                *slot = Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect));
             }
         }
         let kept = [0, 1].map(|k| {
