@@ -96,7 +96,7 @@ impl Offset {
         let base = match base
             .as_any()
             .and_then(|a| a.downcast_ref::<crate::spline::Extruded>())
-            .and_then(|e| e.carried_whole())
+            .and_then(carried_whole)
         {
             Some(e) => Proc(Arc::new(e)),
             None => base.clone(),
@@ -2031,6 +2031,34 @@ impl Procedural for Pipe {
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         Some(self)
     }
+}
+
+/// A spline wall carried past its section's ends up to the whole end piece, for an offset of it:
+/// the same surface over the domain, with more of its end pieces' polynomials past it (as the
+/// spline spec's `spanOf` continues them). The largest of the whole, a half, a quarter, .. of the
+/// end piece's width that stays regular; an offset's mitre at a sharp corner of two sections lies
+/// past their ends, as far as the offset over the tangent of half the corner's angle. (Every
+/// other surface on a section is carried up to a quarter of it: `spline::extruded::carried`.)
+#[inline(never)]
+fn carried_whole(e: &crate::spline::Extruded) -> Option<crate::spline::Extruded> {
+    let c = e.section();
+    let d = c.domain();
+    if !c.regular_over(d) {
+        return None;
+    }
+    let b = c.breaks();
+    let n = c.pieces();
+    let (h0, h1) = (b[1] - b[0], b[n] - b[n - 1]);
+    let ext = [1.0, 0.5, 0.25, 0.125, 0.0625, 0.03125]
+        .into_iter()
+        .map(|k| Interval::new(d.lo - k * h0, d.hi + k * h1))
+        .find(|x| c.regular_over(*x))
+        .unwrap_or(Interval::new(d.lo, d.hi));
+    let mut s = e.clone();
+    s.id = fresh_id();
+    s.ext = ext;
+    s.whole = c.bbox(ext);
+    Some(s)
 }
 
 #[cfg(test)]
