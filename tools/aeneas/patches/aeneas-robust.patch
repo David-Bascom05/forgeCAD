@@ -1,3 +1,199 @@
+diff --git a/src/PrePasses.ml b/src/PrePasses.ml
+index ebe7ae67..0ec3de10 100644
+--- a/src/PrePasses.ml
++++ b/src/PrePasses.ml
+@@ -2372,6 +2372,183 @@ let fix_anon_const_initializers (crate : crate) (f : fun_decl) : fun_decl =
+     }
+   else f
+ 
++(** forge: lower Charon's breakable blocks to structured code, linearly.
++
++    With [--no-code-duplication], Charon does not copy a block that several branches reach:
++    it wraps the region in a [loop] that never continues to itself (a breakable block), and
++    the branches leave it with [break]s (and reach enclosing loops with [break i] / [continue i],
++    [i > 0]). Aeneas's loops take only [break 0] / [continue 0]. This pass removes every
++    breakable block: an exit code (a fresh [usize] local) is set where a branch leaves the block,
++    the statements after a possible exit run only while the code is 0, and after the block a
++    switch on the code performs the [break] / [continue] that went past it. The program's
++    behaviour is unchanged, and its size grows linearly (no duplication). *)
++let lower_breakable_blocks (_crate : crate) (f : fun_decl) : fun_decl =
++  match f.body with
++  | StructuredBody body ->
++      let locals = ref body.locals.locals in
++      let next = ref (List.length !locals) in
++      let fresh span : local_id =
++        let id = LocalId.of_int !next in
++        incr next;
++        locals :=
++          !locals
++          @ [
++              {
++                index = id;
++                name = Some "exit";
++                span;
++                local_ty = TypesUtils.mk_usize_ty;
++                is_mutable = true;
++                borrowck_constraints = [];
++                drop_flag_for = None;
++              };
++            ];
++        id
++      in
++      let place id : place = { kind = PlaceLocal id; ty = TypesUtils.mk_usize_ty } in
++      let cst (n : int) : constant_expr =
++        {
++          kind = CInteger (UnsignedInteger (Usize, Z.of_int n));
++          ty = TypesUtils.mk_usize_ty;
++        }
++      in
++      let mk span kind : statement =
++        { span; statement_id = StatementId.zero; kind; comments_before = [] }
++      in
++      let mkb span statements : block =
++        { span; block_id = BlockId.zero; statements }
++      in
++      let assign span x n = mk span (Assign (place x, Use (Constant (cst n), NoRetag))) in
++      (* an exit: tagged so that the symbolic execution treats it as leaving the block (it does not
++         join the branches after a switch one of whose branches exits; see
++         [LlbcAstUtils.block_has_break_continue_return]) *)
++      let exit span x n = { (assign span x n) with comments_before = [ "forge:exit" ] } in
++      let switch span x (cases : (int * block) list) (default : block) : statement =
++        let data : switch_data =
++          {
++            scrutinee = SwitchValue (Read (place x));
++            branches = List.mapi (fun i (n, _) -> (cst n, BranchId.of_int i)) cases;
++            fallback = Some (BranchId.of_int (List.length cases));
++          }
++        in
++        mk span (Switch (data, List.map snd cases @ [ default ]))
++      in
++      (* Does the loop [b] (its body) continue to itself? *)
++      let continues_to_self (b : block) : bool =
++        let found = ref false in
++        let visitor =
++          object
++            inherit [_] iter_statement as super
++            method! visit_Loop depth b = super#visit_Loop (depth + 1) b
++            method! visit_Continue depth i = if i = depth then found := true
++          end
++        in
++        visitor#visit_block 0 b;
++        !found
++      in
++      (* Lower the breakable block with body [b] (whose inner blocks are lowered already):
++         the statements to put in its place *)
++      let lower_block span (b : block) : statement list =
++        let x = fresh span in
++        let codes : (int * statement_kind) list ref = ref [] in
++        let code_of (k : statement_kind) : int =
++          match List.find_opt (fun (_, k') -> k' = k) !codes with
++          | Some (n, _) -> n
++          | None ->
++              let n = 2 + List.length !codes in
++              codes := !codes @ [ (n, k) ];
++              n
++        in
++        (* [depth]: real loops entered inside the block. Returns the statements and whether
++           they may set the exit code. *)
++        let rec tr_stmts depth (sts : statement list) : statement list * bool =
++          match sts with
++          | [] -> ([], false)
++          | st :: rest ->
++              let st', ex, uncond = tr_stmt depth st in
++              if uncond then (st', true)
++              else
++                let rest', ex' = tr_stmts depth rest in
++                if ex && depth = 0 && rest' <> [] then
++                  (st' @ [ switch st.span x [ (0, mkb st.span rest') ] (mkb st.span []) ], true)
++                else (st' @ rest', ex || ex')
++        and tr_block depth (b : block) : block * bool =
++          let sts, ex = tr_stmts depth b.statements in
++          ({ b with statements = sts }, ex)
++        and tr_stmt depth (st : statement) : statement list * bool * bool =
++          match st.kind with
++          | Break i when i < depth -> ([ st ], false, false)
++          | Continue i when i < depth -> ([ st ], false, false)
++          | Continue i when i = depth ->
++              [%craise] st.span "Continue to a breakable block"
++          | (Break i | Continue i) when depth <= 1 ->
++              (* The exit leaves the block ([i = depth]) or goes past it to an enclosing loop
++                 ([i > depth]); the jump past it is the code's to perform, after the block.
++                 From inside one real loop of the block ([depth = 1]) it also leaves that loop. *)
++              let n =
++                if i = depth then 1
++                else
++                  match st.kind with
++                  | Break _ -> code_of (Break (i - depth - 1))
++                  | _ -> code_of (Continue (i - depth - 1))
++              in
++              let leave = if depth = 1 then [ { st with kind = Break 0 } ] else [] in
++              (exit st.span x n :: leave, true, true)
++          | Break i ->
++              (* from two or more real loops deep: not lowered (Aeneas takes no break past a
++                 loop); its index loses the removed block *)
++              if i = depth then
++                [%craise] st.span "Break out of two loops into an enclosing breakable block"
++              else ([ { st with kind = Break (i - 1) } ], false, false)
++          | Continue i -> ([ { st with kind = Continue (i - 1) } ], false, false)
++          | Switch (data, branches) ->
++              let bs = List.map (tr_block depth) branches in
++              ( [ { st with kind = Switch (data, List.map fst bs) } ],
++                List.exists snd bs,
++                false )
++          | Loop lb ->
++              (* an exit from inside the loop (one deep) leaves it with the code set *)
++              let lb', ex = tr_block (depth + 1) lb in
++              ([ { st with kind = Loop lb' } ], ex && depth = 0, false)
++          | _ -> ([ st ], false, false)
++        in
++        let body, _ = tr_stmts 0 b.statements in
++        let dispatch =
++          match !codes with
++          | [] -> []
++          | cs ->
++              [
++                switch span x
++                  (List.map (fun (n, k) -> (n, mkb span [ mk span k ])) cs)
++                  (mkb span []);
++              ]
++        in
++        (assign span x 0 :: body) @ dispatch
++      in
++      let rec lower_stmts (sts : statement list) : statement list =
++        List.concat_map
++          (fun (st : statement) ->
++            match st.kind with
++            | Loop b ->
++                let b = lower_blk b in
++                if continues_to_self b then [ { st with kind = Loop b } ]
++                else lower_block st.span b
++            | Switch (data, branches) ->
++                [ { st with kind = Switch (data, List.map lower_blk branches) } ]
++            | _ -> [ st ])
++          sts
++      and lower_blk (b : block) : block = { b with statements = lower_stmts b.statements } in
++      let new_body = lower_blk body.body in
++      if !next = List.length body.locals.locals then f
++      else
++        {
++          f with
++          body =
++            StructuredBody
++              { body with body = new_body; locals = { body.locals with locals = !locals } };
++        }
++  | _ -> f
++
+ let apply_passes (crate : crate) : crate =
+   (* Passes that apply to the whole crate *)
+   let crate = update_array_default crate in
+@@ -2384,6 +2561,7 @@ let apply_passes (crate : crate) : crate =
+       ("fix_anon_const_initializers", fix_anon_const_initializers);
+       ("erase_body_regions", erase_body_regions);
+       ("remove_unreachable", remove_unreachable);
++      ("lower_breakable_blocks", lower_breakable_blocks);
+       ("update_loop", update_loops);
+       ("remove_useless_joins", remove_useless_joins);
+       ( "remove_shallow_borrows_storage_live_dead",
 diff --git a/src/Translate.ml b/src/Translate.ml
 index 52e846ba..7dddd073 100644
 --- a/src/Translate.ml
@@ -101,6 +297,28 @@ index 6bdfabb7..f1477826 100644
              | _ -> None)
          | _ -> None
        in
+diff --git a/src/llbc/LlbcAstUtils.ml b/src/llbc/LlbcAstUtils.ml
+index 8e45fbc2..e13bb8bc 100644
+--- a/src/llbc/LlbcAstUtils.ml
++++ b/src/llbc/LlbcAstUtils.ml
+@@ -194,10 +194,16 @@ let statement_has_break_continue_return (st : statement) : bool =
+ let block_has_break_continue_return (st : block) : bool =
+   let visitor =
+     object
+-      inherit [_] iter_statement
++      inherit [_] iter_statement as super
+       method! visit_Break _ _ = raise Utils.Found
+       method! visit_Continue _ _ = raise Utils.Found
+       method! visit_Return _ = raise Utils.Found
++
++      (* forge: setting the exit code of a lowered breakable block
++         (PrePasses.lower_breakable_blocks) leaves the block, as a break does *)
++      method! visit_statement env st =
++        if List.mem "forge:exit" st.comments_before then raise Utils.Found
++        else super#visit_statement env st
+     end
+   in
+   try
 diff --git a/src/pure/PureMicroPassesAnnots.ml b/src/pure/PureMicroPassesAnnots.ml
 index 8c63687e..b3db2c5d 100644
 --- a/src/pure/PureMicroPassesAnnots.ml
