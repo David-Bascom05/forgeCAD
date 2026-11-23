@@ -336,6 +336,19 @@ impl Form {
         }
     }
 
+    /// The origin and the radii that bound `Surface::implicit`'s rounding (its formulas are
+    /// `distance`'s): at c, the float value is within 32 u (|c - o|_1 + k) of the exact one. Each dot
+    /// product is off by at most 3u |c - o|_1, each square, sum, root and subtraction by a few u of
+    /// its operands, and a norm passes its inputs' absolute errors on unchanged at most (the
+    /// triangle inequality), so the constant is generous.
+    fn rounding(&self) -> (Point3, f64) {
+        match *self {
+            Form::Plane { o, .. } => (o, 0.0),
+            Form::Sphere { o, r } | Form::Cylinder { o, r, .. } | Form::Cone { o, r, .. } => (o, r),
+            Form::Torus { o, big, r, .. } => (o, big + r),
+        }
+    }
+
     /// The surface's own singular point, where its polynomial's gradient vanishes on it: a cone's
     /// apex, a horn torus's centre. A point within rounding of it.
     fn singular(&self) -> Option<Point3> {
@@ -2634,25 +2647,106 @@ fn root_along(f: &Bp, solve_s: bool, x: f64, range: I, up: f64, guess: Option<f6
     y
 }
 
-/// Whether every cell of the box, halved along each axis down to `depth` levels where needed, is
-/// clear of one of the two forms (their Lipschitz and nappe tests): then neither meets the other
-/// in it.
-fn clear_of_one(fa: Form, fb: Form, b: &V, depth: u32) -> bool {
-    if fa.off_cheap(b) || fb.off_cheap(b) {
-        return true;
-    }
-    if depth == 0 {
-        return false;
-    }
-    let halves = |x: I| {
-        let (p, q) = x.split();
-        [p, q]
+/// Whether no curve of the pair meets `grown`, by the march's own octree (`trace_marched`: the same
+/// root cube, cells, leaf size, touch test and `Surface::implicit`), each cell cleared soundly: a
+/// surface's float implicit at its centre, less its rounding bound (`Form::rounding`), past the
+/// cell's radius (the implicits are `Form::distance`, 1-Lipschitz to a factor within 1e-12 of 1). False at the first cell that reaches the leaf size uncleared: the
+/// charts then decide.
+#[allow(clippy::too_many_arguments)]
+fn octree_empty(
+    a: &Surface,
+    b: &Surface,
+    fa: Form,
+    fb: Form,
+    region: &Box3,
+    grown: &Box3,
+    leaf: f64,
+    most: usize,
+) -> bool {
+    let half = 0.5
+        * region
+            .x
+            .width()
+            .max(region.y.width())
+            .max(region.z.width())
+            .max(1e-6);
+    let touches = |c: Point3, r: f64| {
+        let d = |i: forge_math::Interval, x: f64| (i.lo - x).max(x - i.hi).max(0.0);
+        let (dx, dy, dz) = (d(grown.x, c.x), d(grown.y, c.y), d(grown.z, c.z));
+        dx * dx + dy * dy + dz * dz <= r * r
     };
-    let (xs, ys, zs) = (halves(b[0]), halves(b[1]), halves(b[2]));
-    xs.iter().all(|&x| {
-        ys.iter()
-            .all(|&y| zs.iter().all(|&z| clear_of_one(fa, fb, &[x, y, z], depth - 1)))
-    })
+    // each surface's rounding bound over the whole root cube (every cell centre lies in it): at
+    // most 32 u (|c - o|_1 + k), |c - o|_1 at most the cube's farthest corner's
+    let bound = |f: Form| {
+        let (o, k) = f.rounding();
+        let c = region.center();
+        let far = |x: f64, oc: f64| (x - oc).abs() + half;
+        16.0 * f64::EPSILON * (far(c.x, o.x) + far(c.y, o.y) + far(c.z, o.z) + k) * (1.0 + 1e-12) + 1e-300
+    };
+    let (ea, eb) = (bound(fa), bound(fb));
+    let clear = |s: &Surface, e: f64, c: Point3, r: f64| s.implicit(c).abs() - e > r * (1.0 + 1e-12);
+    let mut stack = vec![(region.center(), half * 3f64.sqrt())];
+    let mut looked = 0;
+    while let Some((c, r)) = stack.pop() {
+        looked += 1;
+        if looked > most {
+            return false;
+        }
+        if !touches(c, r) || clear(a, ea, c, r) || clear(b, eb, c, r) {
+            continue;
+        }
+        if 2.0 * r <= leaf {
+            return false;
+        }
+        let h = r * 0.5;
+        let o = h / 3f64.sqrt();
+        for dx in [-o, o] {
+            for dy in [-o, o] {
+                for dz in [-o, o] {
+                    stack.push((c + Vec3::new(dx, dy, dz), h));
+                }
+            }
+        }
+    }
+    true
+}
+
+/// Whether the pair has no curve in the region, by the march's octree (`octree_empty`), tried before
+/// anything else: an empty trace then costs what the march's search does.
+fn quickly_empty(a: &Surface, b: &Surface, region: Box3) -> bool {
+    let (Some(fa), Some(fb)) = (Form::of(a), Form::of(b)) else {
+        return false;
+    };
+    let size = region.diagonal().max(1e-6);
+    let step = 0.5 * (size / 64.0).max(10.0 * tol::LINEAR);
+    let grown = region.grow(step);
+    // no curve meets `grown` when the march's octree clears every cell (empty traces then cost
+    // what the march's search does)
+    // (a torus makes the charts' polynomials of high degree: there the octree is the cheaper way
+    // to an empty answer, whatever its depth; else the charts are, past a few cells)
+    let torus = matches!(fa, Form::Torus { .. }) || matches!(fb, Form::Torus { .. });
+    let axis = |f: &Form| match *f {
+        Form::Cylinder { x, y, .. } | Form::Cone { x, y, .. } => Some(x.cross(y)),
+        Form::Torus { z, .. } | Form::Plane { z, .. } => Some(z),
+        Form::Sphere { .. } => None,
+    };
+    // (two round surfaces on parallel axes with a wide gap between them: the octree clears it in
+    // a few layers; a narrow one it clears only near its leaves, and the charts are cheaper)
+    let round = |f: &Form| match *f {
+        Form::Cylinder { o, r, .. } | Form::Cone { o, r, .. } => Some((o, r)),
+        _ => None,
+    };
+    let wide = match (axis(&fa), axis(&fb), round(&fa), round(&fb)) {
+        (Some(p), Some(q), Some((oa, ra)), Some((ob, rb))) if p.cross(q).length() < 1e-9 => {
+            let d = (ob - oa) - p * p.dot(ob - oa);
+            let d = d.length();
+            let gap = (d - (ra + rb)).abs().min((d - (ra - rb).abs()).abs());
+            gap >= size / 16.0
+        }
+        _ => false,
+    };
+    let most = if torus || wide { usize::MAX } else { 64 };
+    octree_empty(a, b, fa, fb, &region, &grown, 2.0 * step, most)
 }
 
 /// The trace in the host's charts, with no march: one Bernstein subdivision of each chart into
@@ -2676,11 +2770,6 @@ fn param_trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> 
         }
     }
     let reg = of_box(&walked);
-    // no curve in the walked region when each of its cells, to two levels of halving, is clear
-    // of one of the surfaces
-    if clear_of_one(fa, fb, &reg, 2) {
-        return Some(Vec::new());
-    }
     let (host, other) = host_of(fa, fb)?;
     let all = host.charts_in(&other, &reg, true)?;
     let sphere = matches!(host.form, Form::Sphere { .. });
@@ -3255,7 +3344,13 @@ pub(crate) fn traced(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCu
     if let Some(answer) = known {
         return answer;
     }
-    let answer = crate::intcurve::not_noting(|| traced_fresh(a, b, region));
+    // (an empty answer, by the march's octree, needs no noting)
+    let answer = if quickly_empty(a, b, region) {
+        count(6);
+        Some(Vec::new())
+    } else {
+        crate::intcurve::not_noting(|| traced_fresh(a, b, region))
+    };
     TRACED.with(|t| {
         let mut t = t.borrow_mut();
         if t.len() >= TRACED_MOST {

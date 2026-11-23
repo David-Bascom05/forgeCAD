@@ -667,3 +667,65 @@ A note for the result cache (interface/forge-lang/src/store.rs): its key hashes 
 and the build profile, but not Cargo features. A feature-on binary and a feature-off one built from
 the same sources share entries. Each reads results the other made, though the two can differ in
 their curves (not in the parts measured here, which agree to the bit in their CLI output).
+
+### 12.1 Empty traces by the march's own octree
+
+Most of the remaining cost was in traces that turn out empty: both surfaces cross the region
+without meeting. There the charts' polynomials and conversion cost more than the march's octree,
+which rejects in a few float tests. `quickly_empty` now runs that octree first, with the same
+root cube, cells, leaf size, touch test and `Surface::implicit` as the march, and it has to be
+sound:
+- **Sound clearing.** A cell is cleared only when |implicit(centre)| - E exceeds the cell's
+  radius × (1 + 1e-12). Here E = 32u(|c - o|_1 + k) bounds the float implicit's rounding
+  (`Form::rounding`; each dot product within 3u|q|_1, a norm passing absolute errors on by the
+  triangle inequality). E is taken once per octree at the root cube's farthest corner, since every
+  cell centre lies in that cube. The implicits are `Form::distance`, which is 1-Lipschitz to
+  within the frame's rounding.
+- **When it is decisive.** "Empty" is returned only when every cell is cleared. A cell reaching
+  leaf size uncleared hands the pair to the charts. The octree runs without a cell limit when a
+  torus is involved (the charts' polynomials are of high degree), or when two round surfaces on
+  parallel axes have a gap of at least size/16 between them. Otherwise it stops after 64 cells,
+  since a narrow gap is cheaper for the charts.
+- **Where it sits.** It runs after the memo lookup and is memoised, but outside the stall-noting
+  wrapper.
+- **Checked.** Wherever the octree said empty on the bench parts, the chart walk found no curve
+  in the region. The march found none there either.
+
+**Out-of-scope pairs** (procedural surfaces) now note their stalls under the feature too,
+exactly as off does (`trace_past_stalls`). Feature-off code and bits are unchanged: `bits`
+identical, and the exact counts of the off build equal those before this change.
+
+**Exact counts**, the gate's way: x86-64-v2, `env -i`, fixedrandom.so, `setarch -R`,
+`taskset -c 0`, so `available_parallelism` is 1. Cold build (`benchparts resolve`),
+FORGECAD_CACHE=off, binaries in same-length directories. Repeat runs give the same count.
+
+| part     | off           | on            | on - off    | on / off |
+|----------|---------------|---------------|-------------|----------|
+| gearbox  | 258,452,272   | 258,254,175   | -198,097    | 0.9992   |
+| volute   | 1,112,450,977 | 1,113,197,058 | +746,081    | 1.0007   |
+| crank    | 287,205,279   | 288,101,739   | +896,460    | 1.0031   |
+| valve    | 129,021,462   | 129,022,957   | +1,495      | 1.0000   |
+| heatsink | 94,517,795    | 94,519,302    | +1,507      | 1.0000   |
+| quadarm  | 50,095,129    | 48,904,679    | -1,190,450  | 0.9762   |
+| conrod   | 60,252,641    | 60,255,964    | +3,323      | 1.0001   |
+| jack     | 376,360,302   | 376,371,575   | +11,273     | 1.0000   |
+| frame    | 439,291,640   | 402,592,118   | -36,699,522 | 0.9165   |
+| manifold | 248,454,929   | 244,971,546   | -3,483,383  | 0.9860   |
+| bracket  | 10,378,201    | 10,386,799    | +8,598      | 1.0008   |
+| insert   | 27,418,884    | 27,422,615    | +3,731      | 1.0001   |
+| clamp    | 11,793,992    | 11,798,717    | +4,725      | 1.0004   |
+| hub      | 24,124,071    | 23,878,161    | -245,910    | 0.9898   |
+| guard    | 56,748,734    | 38,990,132    | -17,758,602 | 0.6871   |
+
+The earlier tables (§10 to §12) were taken without `taskset` and `env -i`. They had the fillet
+threads, crank at 3.6M against 287M here, and about ±0.2% noise. This table supersedes them.
+
+**What is left over.**
+- **crank and volute.** They make the same calls with the same inputs: 18 traces, all out of
+  scope and marched. The difference is codegen. The release profile is fat LTO with one codegen
+  unit, so the certificate's code in forge-geom moves inlining in hot code elsewhere: screw's
+  `remembered` cache accessor (`SEEN::{K#1}`) is a call in the on build, inlined in the off build.
+  That accounts for +0.3M of crank's procedural evaluation and march.
+- **bracket.** Its octree clears exactly the march's cells (equal `implicit` counts). The extra is
+  the memo, about 1.5k, the wrapper, about 1k, and layout.
+- **The parts with no traces** (+1.5k to 11k) move by layout alone.

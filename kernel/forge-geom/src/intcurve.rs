@@ -965,13 +965,14 @@ fn stalled(pts: Vec<Point3>, p: Point3) -> Option<(Vec<Point3>, bool)> {
 /// stretches are seeded and traced by themselves.
 pub fn trace_past_stalls(a: &Surface, b: &Surface, region: Box3) -> Option<(Vec<IntCurve>, Vec<Point3>)> {
     // certified, a trace is the whole intersection or refused: no stalls to judge
+    // (a certified trace notes no stalls; a pair out of the certificate's scope is traced as
+    // before, its stalls noted)
     #[cfg(feature = "certified_trace")]
-    return Some((trace(a, b, region)?, Vec::new()));
-    #[cfg(not(feature = "certified_trace"))]
-    {
-        let (curves, stalls) = noting(|| trace(a, b, region));
-        Some((curves?, stalls))
+    if crate::certify::in_scope(a, b) {
+        return Some((trace(a, b, region)?, Vec::new()));
     }
+    let (curves, stalls) = noting(|| trace(a, b, region));
+    Some((curves?, stalls))
 }
 
 /// `f` with no stalls noted, whatever the caller was noting (restored after, unwinding too): a
@@ -991,7 +992,6 @@ pub(crate) fn not_noting<T>(f: impl FnOnce() -> T) -> T {
 
 /// `f`, with the stalls of the branches it traces noted: only while it runs, unwinding too, so a
 /// trace that panics leaves the next one as it found it.
-#[cfg_attr(feature = "certified_trace", allow(dead_code))]
 fn noting<T>(f: impl FnOnce() -> T) -> (T, Vec<Point3>) {
     struct Noting(Option<Vec<Point3>>);
     impl Drop for Noting {
