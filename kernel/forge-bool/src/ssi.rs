@@ -250,10 +250,16 @@ fn search(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
 pub fn coincident(a: &Surface, b: &Surface) -> bool {
     // A `false` is proven by the tests below: each threshold (ANGULAR, LINEAR) lies far above
     // their rounding, so a measure past it is nonzero in exact terms. A `true` is proven where
-    // the exact key holds (`same_carrier`: every `true` on plate, patterns and housing but 36
-    // one-ulp pattern copies in patterns seq, which stay the tolerance's until provenance keys,
-    // curved-fallback-rates.md); the decision log records the others.
-    let r = coincident_tol(a, b);
+    // the exact key holds (`same_carrier`: measured, every `true` on plate, patterns and housing
+    // but 36 one-ulp pattern copies in patterns seq, which stay the tolerance's until provenance
+    // keys); the decision log records the others.
+    let r = match (a, b) {
+        (Surface::Plane(p), Surface::Plane(q)) => forge_geom::intersect::planes_coincident(p, q),
+        (Surface::Plane(p), s) | (s, Surface::Plane(p)) => plane_surface(p, s) == SurfaceSurface::Coincident,
+        (Surface::Cylinder(c), Surface::Cylinder(d)) => cylinder_cylinder(c, d) == SurfaceSurface::Coincident,
+        (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t) == SurfaceSurface::Coincident,
+        _ => forge_geom::meet::coaxial(a, b) == Some(SurfaceSurface::Coincident),
+    };
     #[cfg(feature = "decisions")]
     if r && !same_carrier(a, b) {
         log_unkeyed();
@@ -278,18 +284,9 @@ fn log_unkeyed() {
     );
 }
 
-fn coincident_tol(a: &Surface, b: &Surface) -> bool {
-    match (a, b) {
-        (Surface::Plane(p), Surface::Plane(q)) => forge_geom::intersect::planes_coincident(p, q),
-        (Surface::Plane(p), s) | (s, Surface::Plane(p)) => plane_surface(p, s) == SurfaceSurface::Coincident,
-        (Surface::Cylinder(c), Surface::Cylinder(d)) => cylinder_cylinder(c, d) == SurfaceSurface::Coincident,
-        (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t) == SurfaceSurface::Coincident,
-        _ => forge_geom::meet::coaxial(a, b) == Some(SurfaceSurface::Coincident),
-    }
-}
-
 /// The coordinate axis a unit vector lies exactly along (two components exactly zero, the third
 /// exactly ±1), or `None`.
+#[cfg(any(test, feature = "decisions"))]
 fn axis_of(v: forge_math::UnitVec3) -> Option<usize> {
     let w = v.get();
     if w.y == 0.0 && w.z == 0.0 && w.x.abs() == 1.0 {
@@ -304,10 +301,12 @@ fn axis_of(v: forge_math::UnitVec3) -> Option<usize> {
 }
 
 /// Every coordinate finite (where one is not, the toleranced tests see NaN and say no).
+#[cfg(any(test, feature = "decisions"))]
 fn finite(p: forge_math::Point3) -> bool {
     p.x.is_finite() && p.y.is_finite() && p.z.is_finite()
 }
 
+#[cfg(any(test, feature = "decisions"))]
 fn coord(p: forge_math::Point3, k: usize) -> f64 {
     if k == 0 {
         p.x
@@ -318,7 +317,7 @@ fn coord(p: forge_math::Point3, k: usize) -> f64 {
     }
 }
 
-/// **One surface, by exact keys** (curved-builder-mapping.md, S0): the stored data name the same
+/// **One surface, by exact keys** (a keyed identity, S0): the stored data name the same
 /// point set exactly, with no tolerance and no rounding:
 /// * two planes square to one coordinate axis `k` (normals exactly `±e_k`) at the same
 ///   coordinate: both are `{x_k = o_k}`;
@@ -326,8 +325,12 @@ fn coord(p: forge_math::Point3, k: usize) -> f64 {
 ///   two coordinates: both are the points at that radius from one line;
 /// * two spheres with equal centres and radii.
 ///
+/// (Compiled for tests and the decision log, and read by the proof: `coincident` itself never
+/// needs it, its answer being the same.)
+///
 /// `false` says nothing: the pair goes to the toleranced tests. Where it says `true` those tests
 /// say so too (each of their measures is exactly zero there), so the answer never changes.
+#[cfg(any(test, feature = "decisions"))]
 pub fn same_carrier(a: &Surface, b: &Surface) -> bool {
     match (a, b) {
         (Surface::Plane(p), Surface::Plane(q)) => match (axis_of(p.frame.z()), axis_of(q.frame.z())) {
