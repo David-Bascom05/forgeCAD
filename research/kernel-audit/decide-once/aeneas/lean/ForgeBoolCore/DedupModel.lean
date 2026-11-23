@@ -89,4 +89,20 @@ theorem idxOf_dedup_snoc_new {xs : List α} {x : α} (hx : x ∉ xs) :
   rw [dedup_snoc, if_neg hx, List.idxOf_append, if_neg (fun h => hx ((mem_dedup _ _).mp h))]
   simp
 
+theorem dedupAux_of_nodup : ∀ (xs s : List α), xs.Nodup → (∀ x ∈ xs, x ∉ s) → dedupAux xs s = xs
+  | [], _, _, _ => rfl
+  | x :: xs, s, hnd, hs => by
+    simp only [dedupAux]
+    rw [if_neg (hs x (List.mem_cons_self ..))]
+    congr 1
+    have hnd' := List.nodup_cons.mp hnd
+    apply dedupAux_of_nodup xs (x :: s) hnd'.2
+    intro y hy h
+    rcases List.mem_cons.mp h with rfl | h
+    · exact hnd'.1 hy
+    · exact hs y (List.mem_cons_of_mem _ hy) h
+
+theorem dedup_of_nodup {xs : List α} (h : xs.Nodup) : dedup xs = xs :=
+  dedupAux_of_nodup xs [] h (fun _ _ h => by simp at h)
+
 end ForgeBoolCore.Dedup
