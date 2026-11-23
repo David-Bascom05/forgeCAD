@@ -409,13 +409,23 @@ fn the_wire_list_goes_out_and_back_in_unchanged_and_a_change_is_a_diff() {
 #[test]
 fn the_example_rebuilds_in_milliseconds() {
     let d = dir("speed");
-    let _ = run_in(&d, ROBOT);
+    let opts = Options {
+        dir: Some(d.to_path_buf()),
+        ..Options::default()
+    };
+    let (cold, cache) = forge_lang::run(ROBOT, opts.clone(), Default::default());
+    assert!(cold.errors.is_empty(), "{:?}", errors(&cold));
     let t = std::time::Instant::now();
-    let r = run_in(&d, ROBOT);
+    let (warm, _) = forge_lang::run(ROBOT, opts, cache);
     let ms = t.elapsed().as_secs_f64() * 1e3;
-    assert!(r.errors.is_empty());
-    // the whole document: parts loaded, solved, the harness routed
-    assert!(ms < 1500.0, "{ms} ms");
+    assert!(warm.errors.is_empty(), "{:?}", errors(&warm));
+    // the work, not the clock (a loaded machine moves the time, printed for a person): the whole
+    // document again, parts loaded, solved, the harness routed, from the last run's cache, so no
+    // part file is built again
+    let (c, w) = (&cold.asm.as_ref().unwrap().timings, &warm.asm.as_ref().unwrap().timings);
+    eprintln!("robot: warm rebuild {ms:.1} ms; part files built cold {}, warm {}", c.built, w.built);
+    assert!(c.built > 0, "{c:?}");
+    assert_eq!(w.built, 0, "{w:?}");
 }
 
 #[test]

@@ -600,6 +600,7 @@ pub(crate) fn step_plain_finished(
     body: Option<Body>,
     finished: Option<&Body>,
 ) -> Result<Option<Body>, RegenError> {
+    stepped();
     let b = step_on(features, i, body, finished)?;
     if let Some(b) = &b {
         no_pinch(features, i, b)?;
@@ -1299,6 +1300,18 @@ fn nary_regen_on(
     };
     not_empty(r.map(unified)?, features.len() - 1)
 }
+
+/// A feature stepped, any path (one body or bodies, plain or blunted, first try or retry),
+/// counted as a rung under the decision log: the work a test holds linear in the features, where
+/// a clock would hold nothing on a loaded machine. Off, nothing is compiled.
+#[cfg(feature = "decisions")]
+pub(crate) fn stepped() {
+    forge_bool::decisions::rung("feature stepped", forge_bool::decisions::Outcome::Unknown);
+}
+
+#[cfg(not(feature = "decisions"))]
+#[inline(always)]
+pub(crate) fn stepped() {}
 
 /// A fallback of the n-ary regen to the sequential one, counted as a rung under the decision log.
 #[cfg(feature = "decisions")]

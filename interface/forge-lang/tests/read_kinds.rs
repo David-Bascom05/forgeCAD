@@ -7,10 +7,27 @@ use std::path::{Path, PathBuf};
 
 const CANARY: &str = "CANARY-7f3a9e";
 
-fn dir(name: &str) -> PathBuf {
+/// A scratch directory, removed when the test ends (each run planted a huge file there and left it:
+/// 22 MB a run).
+struct Scratch(PathBuf);
+
+impl std::ops::Deref for Scratch {
+    type Target = Path;
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn dir(name: &str) -> Scratch {
     let d = std::env::temp_dir().join(format!("fg-read-kinds-{}-{name}", std::process::id()));
     std::fs::create_dir_all(&d).unwrap();
-    d
+    Scratch(d)
 }
 
 fn run_in(d: &Path, src: &str) -> Run {
@@ -93,10 +110,33 @@ fn no_loader_reads_another_kind_and_nothing_read_is_said() {
     cases.push(("x = part(\"id_rsa\", ground: true)\n".into(), "PartFile"));
     cases.push(("x = part(\"/dev/zero\", ground: true)\n".into(), "PartFile"));
     cases.push(("x = part(\"/etc/passwd\", ground: true)\n".into(), "PartFile"));
+    // what a loader reads is bounded by the read itself, not by a clock (a loaded machine moves the
+    // time, printed for a person): every loader reads through deps::read_plain, which refuses a
+    // device, a fifo and a file past its cap before reading a byte, and reads any other no
+    // further than the cap
+    const CAP: u64 = 64 << 20;
+    for n in &names {
+        for ext in ["fg", "ttf", "step"] {
+            let p = d.join(format!("{n}.{ext}"));
+            let read = forge_lang::deps::read_plain(&p, CAP);
+            match *n {
+                "zero" | "pipe" => assert!(
+                    matches!(read, Err(forge_lang::deps::Refused::NotPlain)),
+                    "{p:?}: {read:?}"
+                ),
+                "huge" => assert!(
+                    matches!(read, Err(forge_lang::deps::Refused::TooBig(b)) if b > CAP),
+                    "{p:?}: {:?}",
+                    read.as_ref().map(|v| v.len())
+                ),
+                _ => assert!(read.as_ref().is_ok_and(|v| v.len() as u64 <= CAP), "{p:?}"),
+            }
+        }
+    }
     for (src, kind) in &cases {
         let t = std::time::Instant::now();
         let r = run_in(&d, src);
-        assert!(t.elapsed().as_secs() < 30, "{src}: {:?}", t.elapsed());
+        eprintln!("{:>8.1} ms  {}", t.elapsed().as_secs_f64() * 1e3, src.lines().last().unwrap_or(""));
         let all = said(&r, src);
         assert!(!all.contains(CANARY), "{src}: {all}");
         assert!(
@@ -140,7 +180,7 @@ fn the_rack_outside_git_loads() {
     let status = std::process::Command::new("cp")
         .arg("-r")
         .arg(src_dir)
-        .arg(&d)
+        .arg(&*d)
         .status()
         .unwrap();
     assert!(status.success());

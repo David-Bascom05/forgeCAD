@@ -527,8 +527,15 @@ fn a_fan_out_of_components_runs_out_of_fuel() {
     src.push_str("top = part(l0)\n");
     let t = std::time::Instant::now();
     let r = forge_lang::run(&src, Options::default(), Default::default()).0;
-    assert!(r.errors.iter().any(|e| e.kind() == "Fuel"), "{:?}", kinds(&r));
-    assert!(t.elapsed().as_secs() < 60, "{:?}", t.elapsed());
+    eprintln!("fan-out: {:?}", t.elapsed());
+    // the work, not the clock (a loaded machine moves the time, printed for a person): of the
+    // 10^7 components the tree asks for, the run made the budget's and stopped there
+    assert!(
+        r.errors.iter().any(|e| matches!(e, forge_lang::error::Error::Fuel { budget, .. }
+            if *budget == forge_lang::eval::TOTAL_COMPONENTS)),
+        "{:?}",
+        kinds(&r)
+    );
 }
 
 /// X1 (reach): after Extract, a SetParam on a param the file part reads reaches its values.

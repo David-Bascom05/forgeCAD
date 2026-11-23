@@ -1312,7 +1312,7 @@ f2 = revolve(r.c, axis: r.ax)
 #[test]
 fn slow_thread_after_a_moved_body() {
     let t = std::time::Instant::now();
-    let v = judge(
+    let (v, built) = forge_lang::fuzz::judge_built(
         r#"sketch S0(on: xy) {
   o = rect(corner: (0, 0), size: (72.78, 100.81))
 }
@@ -1416,7 +1416,26 @@ L10 = thread(on: plane(at: H15.p0, normal: axis(H14.p0, H14.p1)), at: H15.p0, sp
 "#,
     );
     assert!(matches!(v, Verdict::Ok), "{v:?}");
-    assert!(t.elapsed().as_secs() < 60, "{:.0} s", t.elapsed().as_secs_f64());
+    // the work, not the clock (a loaded machine moves the time, printed for a person): the trace
+    // ran on from turn to turn into one chain of 114404 points; now no stage's traced curve is
+    // longer than 20000 (4554 today). Stages share curves, so the count of points is per chain.
+    let built = built.expect("built");
+    let (mut chains, mut longest) = (0, 0);
+    for stage in &built.stages {
+        for s in &stage.solids {
+            for e in s.body.edge_ids() {
+                if let forge_geom::curve::Curve::Intersection(ic) = &s.body.edge(e).curve {
+                    chains += 1;
+                    longest = longest.max(ic.pts.len());
+                }
+            }
+        }
+    }
+    eprintln!(
+        "slow thread: {:.1} s; {chains} traced curves in the stages, the longest {longest} points",
+        t.elapsed().as_secs_f64()
+    );
+    assert!(longest <= 20_000, "a traced curve of {longest} points");
 }
 
 /// `slow_thread_after_a_moved_body` cut down to the block, the move and the thread: refused (an

@@ -136,6 +136,10 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked -p forge-lang --test parse_diff
+      - name: knife edges stay linear, the features stepped counted under the decision log
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: cargo test --locked -p forge-model --features decisions --test knife_linear
 
   # the kernel's results bit for bit on another CPU and OS: informative until it holds
   bits:

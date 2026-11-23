@@ -398,6 +398,7 @@ fn apply_once(
     i: usize,
     mut solids: Vec<Solid>,
 ) -> Result<Vec<Solid>, RegenError> {
+    crate::stepped();
     let f = &plain[i];
     let p = pick(picks, i);
     match f {
