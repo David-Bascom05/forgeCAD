@@ -1286,6 +1286,14 @@ def build(features, opts, trace=None):
     def current():
         return bodies[-1][1] if bodies else None
 
+    def acted_on(f):
+        """The part a tool is sized and cut against: the bodies its `in` names (`bodies:`), else
+        the current one (as the kernel's extent and hole read the bodies they act on)."""
+        if "in" in f and bodies:
+            on = [bodies[k][1] for k in picked_bodies(f)]
+            return on[0] if len(on) == 1 else compound(on)
+        return current()
+
     def part():
         return bodies[0][1] if len(bodies) == 1 else compound([b[1] for b in bodies]) if bodies else None
 
@@ -1294,13 +1302,13 @@ def build(features, opts, trace=None):
             k = f["kind"]
             tools = None
             if k == "extrude":
-                tools = [(extrude(f, current()), f["op"])]
+                tools = [(extrude(f, acted_on(f)), f["op"])]
             elif k == "revolve":
                 tools = [(revolve(f), f["op"])]
             elif k == "ball":
                 tools = [(BRepPrimAPI_MakeSphere(gp_Pnt(*f["center"]), f["radius"]).Shape(), f["op"])]
             elif k == "hole":
-                tools = [(hole(f, current()), "cut")]
+                tools = [(hole(f, acted_on(f)), "cut")]
             elif k == "sweep":
                 tools = [(sweep(f), f["op"])]
             elif k == "loft":
