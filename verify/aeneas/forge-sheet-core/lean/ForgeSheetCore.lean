@@ -17,4 +17,5 @@ import ForgeSheetCore.RefineExact
 import ForgeSheetCore.ExactModel
 import ForgeSheetCore.RefineDisc
 import ForgeSheetCore.ExpansionInst
+import ForgeSheetCore.RefineLineGap
 import ForgeSheetCore.Axioms

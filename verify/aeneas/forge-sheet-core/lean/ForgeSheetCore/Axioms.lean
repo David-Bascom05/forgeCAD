@@ -14,6 +14,7 @@ import ForgeSheetCore.RefineExact
 import ForgeSheetCore.ExactModel
 import ForgeSheetCore.RefineDisc
 import ForgeSheetCore.ExpansionInst
+import ForgeSheetCore.RefineLineGap
 
 /-! Only the standard axioms: each listed theorem about the translated Rust rests on `propext`,
 `Classical.choice` and `Quot.sound` alone (a `sorry` or `native_decide` fails the build). -/
@@ -64,3 +65,4 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.grow_chain_NO IEEE754.grow_chain_sum IEEE754.grow_nonoverlapping
   forge_sheet_core.growL_eq forge_sheet_core.chain_ok forge_sheet_core.signL_exp
   forge_sheet_core.grow_exp forge_sheet_core.disc_exact
+  forge_sheet_core.line_gap_filter
