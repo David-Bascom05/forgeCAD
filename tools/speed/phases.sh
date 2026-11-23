@@ -1,6 +1,7 @@
 #!/bin/sh
 # The boolean's instructions per phase, on every speed-gate line, under the gate's exact counter
-# (callgrind on the x86-64-v2 build, as `GATE_COUNTER=callgrind tools/speed/gate.sh`), with the
+# (callgrind on the x86-64-v2 build under tools/speed/exact.sh, as `GATE_EXACT=1
+# tools/speed/gate.sh`), with the
 # decide-once switch on and off, and a flame profile per line. From a checkout root:
 #   tools/speed/phases.sh [OUT] [LINE..]   OUT (default target/phases) gets, per line and switch,
 #                                          NAME.cg (callgrind out), NAME.folded (flamegraph.pl's
@@ -16,8 +17,9 @@
 #                        (witness_inside)
 #   ledger               build_ledger less its arrange and in_face, and forge_bool_core::witnesses
 #   core                 forge_bool_core::core and the sliver check
-#   write                write (the result body, build_body inside it)
-#   rest                 decide-once's nary less the five
+#   write                write (the plan of the result, build_body inside it) and apply (the plan
+#                        done to body 0 in place, or to its copy)
+#   rest                 decide-once's plan_of and apply less the five
 # The phases are #[inline(never)] functions of kernel/forge-bool/src/decide_once.rs (each marked
 # `a phase of the profile`), so they are the same in every build. Both sessions measure this way.
 set -e
@@ -28,6 +30,7 @@ mkdir -p "$out"
 export RUSTFLAGS="-C target-cpu=x86-64-v2"
 base="${CARGO_TARGET_DIR:-$PWD/target}"
 sw=${PHASES_SWITCH:-both}
+exact_dir=$base/callgrind; . "$dir/exact.sh"
 build() { # $1 target dir, $2 features
   CARGO_TARGET_DIR="$1" cargo build -q --release -p forge-model --example regen1 $2
   CARGO_TARGET_DIR="$1" cargo build -q --release -p forge-lang --example benchparts $2
@@ -57,7 +60,7 @@ fi
 synthetic=" torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat "
 cg() { # $1 out file, rest: the command; prints the Ir
   o=$1; shift
-  valgrind --tool=callgrind --cache-sim=no --callgrind-out-file="$o" "$@" 2>&1 >/dev/null |
+  exact_run valgrind --tool=callgrind --cache-sim=no --callgrind-out-file="$o" "$@" 2>&1 >/dev/null |
     awk '/Collected :/{n=$NF}/Process terminating/{bad=1}END{if(!bad&&n!="")print n}'
 }
 fold="python3 $dir/cgfold.py"
@@ -82,8 +85,9 @@ for lm in $lines; do
     samp=$(( $(inc "$name.cg" "$d::in_face") + $(inc "$name.cg" "$d::witness_inside") ))
     led=$(( $(inc "$name.cg" "$d::build_ledger") - $(inc "$name.cg" "$d::arrange") - $(inc "$name.cg" "$d::in_face") + $(inc "$name.cg" forge_bool_core::witnesses) ))
     cor=$(( $(inc "$name.cg" forge_bool_core::core) + $(inc "$name.cg" "$d::sliver") ))
-    wr=$(inc "$name.cg" "$d::write")
-    nary=$(inc "$name.cg" "$d::nary")
+    ap=$(inc "$name.cg" "$d::apply")
+    wr=$(( $(inc "$name.cg" "$d::write") + ap ))
+    nary=$(( $(inc "$name.cg" "$d::plan_of") + ap ))
     rest=$((nary - arr - samp - led - cor - wr))
     [ "$nary" -gt 0 ] || rest=0
     printf "%-9s %-5s %-3s %13s %13s %12s %12s %12s %12s %12s %12s\n" "$p" "$m" "$s" "$total" "$bool" "$arr" "$samp" "$led" "$cor" "$wr" "$rest"

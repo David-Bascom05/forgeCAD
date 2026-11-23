@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Reads a callgrind out file (valgrind --tool=callgrind, any --compress-* setting) and prints:
 
-  cgfold.py OUT incl NAME..     the inclusive Ir of each function whose name contains NAME (summed
-                                over the matches that are not called from another match, so a
-                                function and its own helpers are not counted twice), one per line
+  cgfold.py OUT incl NAME..     the inclusive Ir of each function NAME (with its generic
+                                instances, NAME::<..>, summed over those not called from another),
+                                one per line
   cgfold.py OUT sum NAME..      the inclusive Ir of the union of every function whose name contains
                                 any NAME, a match called from another match counted once
   cgfold.py OUT fold [ROOT]     folded stacks (`a;b;c IR`, flamegraph.pl's input) of the call
@@ -144,7 +144,7 @@ def main():
     selfc, calls, incl = parse(path)
     if mode == "incl":
         for want in sys.argv[3:]:
-            ms = [f for f in incl if want in f]
+            ms = [f for f in incl if f == want or f.startswith(want + "::<")]
             ms_set = set(ms)
             # drop a match reached from another match (its cost is already in the caller's)
             inner = reached(calls, ms_set)

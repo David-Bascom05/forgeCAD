@@ -457,8 +457,8 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// is named by what meets there, as the n-ary boolean names it.
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
     #[cfg(feature = "decide_once")]
-    if let Some(r) = crate::decide_once::boolean(target, b, op)? {
-        *target = r;
+    if crate::decide_once::boolean_in(target, b, op)? {
+        // (edited in place: outside the tools' region nothing is read or written)
         return Ok(());
     }
     // (uncompacted, so the faces a boolean leaves alone keep what was worked out of them, as the
@@ -569,8 +569,8 @@ pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R
     #[cfg(feature = "decide_once")]
     if crate::decide_once::flat(target) {
         let tool = b.clone().into_body();
-        if let Some(r) = crate::decide_once::boolean(target, &tool, op)? {
-            *target = r;
+        if crate::decide_once::boolean_in(target, &tool, op)? {
+            // (edited in place, as boolean_into)
             return Ok(());
         }
     }

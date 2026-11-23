@@ -18,7 +18,9 @@
 #                           after ~2M instructions), so this mode builds the same source for
 #                           x86-64-v2 (RUSTFLAGS, its own target dir: target/callgrind), which
 #                           valgrind runs whole. The normal build is untouched; the counts measure
-#                           the same kernel code, compiled without AVX.
+#                           the same kernel code, compiled without AVX. The count is exact
+#                           (tools/speed/exact.sh: fixed HashMap seeds, one core, forge-lang's
+#                           kernel hash pinned), so any line that moves moved for a reason.
 # Unset, perf is used when it counts instructions:u and callgrind otherwise. The callgrind gate
 # takes ~20 min on 4 busy cores. GATE_REPS=3 keeps the least of 3 counts, for a line near 0.5%.
 # GATE_EXACT=1 is GATE_COUNTER=callgrind (the deterministic count). GATE_FEATURES=f,.. builds with
@@ -50,14 +52,14 @@ case $counter in
     target="$target/callgrind"
     export RUSTFLAGS="-C target-cpu=x86-64-v2"
     count1() {
-      valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@" 2>&1 >/dev/null |
+      exact_run valgrind --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null "$@" 2>&1 >/dev/null |
         awk '/Collected :/{n=$NF}/Process terminating/{bad=1}END{if(!bad&&n!="")print n}'
     }
     ;;
   *) echo "GATE_COUNTER: perf or callgrind, not $counter" >&2; exit 64 ;;
 esac
-# the least of GATE_REPS counts (default 1): the bench parts' counts move by up to ~0.4% from run
-# to run (std HashMaps' random seeds, thread order), the synthetic parts' by a few instructions
+# the least of GATE_REPS counts (default 1): under perf the bench parts' counts move by up to ~0.4%
+# from run to run (std HashMaps' random seeds, thread order); under callgrind not at all
 count() {
   best=
   for _ in $(seq "${GATE_REPS:-1}"); do
@@ -78,6 +80,8 @@ else
   fflag=
 fi
 export CARGO_TARGET_DIR="$target"
+# callgrind's count is exact (tools/speed/exact.sh): the same code counts the same
+if [ "$counter" = callgrind ]; then exact_dir=$target; . "$dir/exact.sh"; fi
 cargo build -q --release -p forge-model --example regen1 --example bits $fflag
 cargo build -q --release -p forge-lang --example benchparts $fflag
 bin="$target/release/examples"
