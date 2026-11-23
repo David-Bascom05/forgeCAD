@@ -21,4 +21,5 @@ import ForgeBoolCore.EnumModel
 import ForgeBoolCore.RefineAround
 import ForgeBoolCore.RefineTouch
 import ForgeBoolCore.RefineBetween
+import ForgeBoolCore.RefineFan
 import ForgeBoolCore.Axioms
