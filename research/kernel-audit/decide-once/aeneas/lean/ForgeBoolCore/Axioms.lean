@@ -19,6 +19,7 @@ import ForgeBoolCore.RefineFan
 import ForgeBoolCore.BridgeTouch
 import ForgeBoolCore.EndToEnd
 import ForgeBoolCore.Integrate
+import ForgeBoolCore.RefineSplitOk
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -96,3 +97,10 @@ import ForgeBoolCore.Integrate
 #print axioms forge_bool_core.encode_spec_proof
 #print axioms forge_bool_core.end_to_end_encode
 #print axioms forge_bool_core.end_to_end_SKU
+-- group S: split_ok
+#print axioms forge_bool_core.s_le3_spec
+#print axioms forge_bool_core.s_sort_triples_spec
+#print axioms forge_bool_core.s_adj_iff
+#print axioms forge_bool_core.s_loop0_spec
+#print axioms forge_bool_core.s_loop1_spec
+#print axioms forge_bool_core.split_ok_spec_proof
