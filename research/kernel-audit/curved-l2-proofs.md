@@ -487,10 +487,9 @@ floating point: float roots, then the convergents of their continued fractions.
 - **`rationalRoots`** gives every rational root of `p`, or `none`.
   - Clear `p`'s denominators. A rational root `u/v` in lowest terms then has `v | L`, the
     cleared leading coefficient.
-  - Two distinct rationals with denominators dividing `L` differ by at least `1/L²`.
-  - Each isolating interval is halved (exact sign bisection) below width `1/L²`. It then holds
-    at most one such rational. That candidate is its simplest rational, the one of least
-    denominator, and it is tested exactly.
+  - Every candidate lies on the grid `(1/L)ℤ` (with `L` taken after dividing by the content). Each
+    isolating interval is halved (exact sign bisection) below width `1/L`. It then holds
+    at most one grid point, which is tested exactly.
 
 The decisions that need completeness, and what an incomplete cover now gives:
 

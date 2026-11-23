@@ -1239,18 +1239,20 @@ def nearTouch (A : Arr) (boxes : Array Box) (l : Float) (i j : Nat) : Option Str
       return some s!"surfaces {i}, {j} come within LINEAR of touching near ({px}, {py}, {pz})"
   return none
 
-/-- Every rational root of `p`, or `none` if the roots could not all be isolated. A rational
-root `u/v` of `p` cleared to integers has `v | L`, `L` the cleared leading coefficient, and two
-such are at least `1/L²` apart: each isolating interval is halved below that width, and then
-its simplest rational (the least denominator) is the only candidate, tested exactly. -/
+/-- Every rational root of `p`, or `none` if the roots could not all be isolated. Clear `p` to
+a primitive integer polynomial: a rational root `u/v` in lowest terms has `v | L`, its leading
+coefficient, so every candidate lies on the grid `(1/L)ℤ`. Each isolating interval is halved
+below width `1/L`; then at most one grid point lies in it, and it is tested exactly. -/
 def rationalRoots (p : Poly) : Option (Array Rat) := Id.run do
   let p := Poly.trim (Poly.sqfree (Poly.trim p))
   if Poly.isZero p then return none
   if Poly.deg p == 0 then return some #[]
   let some rs := realRoots p | return none
   let den := p.foldl (fun m c => Nat.lcm m c.den) 1
-  let L : Rat := qabs (p.getLast! * (den : Rat))
-  let w : Rat := 1 / (L * L)
+  let ints : List Int := p.map fun c => (c * (den : Rat)).num
+  let content := ints.foldl (fun g c => Nat.gcd g c.natAbs) 0
+  let L : Int := (ints.getLast!.natAbs / (max content 1) : Nat)
+  let Lq : Rat := (L : Rat)
   let mut out : Array Rat := #[]
   for r in rs do
     match r with
@@ -1260,15 +1262,21 @@ def rationalRoots (p : Poly) : Option (Array Rat) := Id.run do
       let mut a := iso.a
       let mut b := iso.b
       let sa0 := Poly.ev q a
+      let mut hit : Option Rat := none
       for _ in [0:4000] do
-        if b - a < w then break
+        if (b - a) * Lq < 1 then break
         let m := (a + b) / 2
         let sm := Poly.ev q m
-        if sm == 0 then a := m; b := m; break
+        if sm == 0 then hit := some m; break
         if (sm > 0) == (sa0 > 0) then a := m else b := m
-      if b - a ≥ w && a != b then return none
-      let c := if a == b then a else simplest a b
-      if Poly.ev p c == 0 then out := out.push c
+      match hit with
+      | some m => if Poly.ev p m == 0 then out := out.push m
+      | none =>
+        if (b - a) * Lq ≥ 1 then return none
+        -- the grid point in [a, b], if any
+        let k := (a * Lq).ceil
+        let c : Rat := (k : Rat) / Lq
+        if a ≤ c && c ≤ b && Poly.ev p c == 0 then out := out.push c
   return some out
 
 /-- Every contact between two of the arrangement's quadrics: for each rational root `t` of the
