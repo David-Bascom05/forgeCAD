@@ -1,0 +1,17 @@
+name = "forgesheet"
+version = "0.1.0"
+defaultTargets = ["ForgeSheet"]
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+# The fold of a bend zone and its proofs (research/kernel-audit/audit2.md §2.0): Mathlib's real
+# analysis, fetched prebuilt (`lake exe cache get`, from cache.mathlib.org).
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4"
+rev = "v4.36.0"
+
+[[lean_lib]]
+name = "ForgeSheet"
