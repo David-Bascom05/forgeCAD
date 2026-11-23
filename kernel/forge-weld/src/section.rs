@@ -490,19 +490,10 @@ impl Section {
     /// How far the outline reaches along `w`: the largest p . w over the section (exact: the
     /// loops' ends, and each arc's farthest point where `w` points into its sweep).
     pub fn support(&self, w: Vec2) -> f64 {
-        let mut best = f64::NEG_INFINITY;
-        let wl = w.length();
-        let wa = dmath::atan2(w.y, w.x);
-        for s in self.loops.first().into_iter().flatten() {
-            best = best.max(s.start().to_vec().dot(w)).max(s.end().to_vec().dot(w));
-            if let Some((c, r, st, sw)) = arc_of(s)
-                && wl > 0.0
-                && on_arc(wa, st, sw)
-            {
-                best = best.max(c.to_vec().dot(w) + r * wl);
-            }
+        match self.loops.first() {
+            Some(l) => support_loop(l, w),
+            None => f64::NEG_INFINITY,
         }
-        best
     }
 
     /// The largest distance of the section from its origin (its bounding radius).
@@ -606,8 +597,48 @@ fn moments(s: &Segment) -> (f64, f64, f64) {
         let my = 0.5 * (-r * c.y * c.y * (c1 - c0) + 2.0 * r * r * c.y * isin2 + r * r * r * isin3);
         return (a, mx, my);
     }
-    let (p, q) = (s.start(), s.end());
-    // along the line: 1/2 \int x^2 dy = dy (px^2 + px qx + qx^2) / 6, and alike for y
+    line_moments(s.start(), s.end())
+}
+
+/// The larger of two values, by comparison (`best` unless `v` is greater; never NaN from a NaN
+/// `v`). f64::max is not used here: its choice between -0 and +0 is the platform's.
+pub fn top(best: f64, v: f64) -> f64 {
+    if v > best { v } else { best }
+}
+
+/// How far a loop reaches along `w`: the largest p . w over its pieces' ends, and over each arc's
+/// farthest point where `w` points into its sweep. (Plain loops, for the Rust-to-Lean
+/// translation: verify/aeneas/forge-weld.)
+pub fn support_loop(l: &[Segment], w: Vec2) -> f64 {
+    let mut best = f64::NEG_INFINITY;
+    let wl = w.length();
+    // w's angle, found at the first arc (a loop of lines never needs it)
+    let mut wa = 0.0;
+    let mut angled = false;
+    let mut i = 0;
+    while i < l.len() {
+        let s = &l[i];
+        best = top(top(best, s.start().to_vec().dot(w)), s.end().to_vec().dot(w));
+        if wl > 0.0
+            && let Some((c, r, st, sw)) = arc_of(s)
+        {
+            if !angled {
+                wa = dmath::atan2(w.y, w.x);
+                angled = true;
+            }
+            if on_arc(wa, st, sw) {
+                best = top(best, c.to_vec().dot(w) + r * wl);
+            }
+        }
+        i += 1;
+    }
+    best
+}
+
+/// A straight piece's share of the area and first moments (x, y), by Green's theorem: along
+/// the line, 1/2 \oint (x dy - y dx) = (px qy - qx py) / 2, 1/2 \int x^2 dy = dy (px^2 + px qx +
+/// qx^2) / 6, and alike for y.
+pub fn line_moments(p: Point2, q: Point2) -> (f64, f64, f64) {
     let cr = p.x * q.y - q.x * p.y;
     let (dx, dy) = (q.x - p.x, q.y - p.y);
     (

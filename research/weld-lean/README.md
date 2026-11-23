@@ -33,4 +33,11 @@ Classical.choice, Quot.sound).
   direction, Cauchy–Schwarz over any model of the reals), `arcReach_spec` (its reach
   `w·c + r|w|` as an exact algebraic number).
 
-Not yet: arc members and arc sides of sections (ℚ(√·), the L2 step), L2–L6.
+- L4, on the shipped Rust: verify/aeneas/forge-weld. Aeneas translates kernel/forge-weld's
+  `Section::support` (`support_loop`) and `line_moments`; the proofs there show that on a loop of
+  lines the Rust's support is the largest float `p · w` over the corners, within a stated
+  rounding bound of the exact one that `support_of_corners` is about, and that the moments are
+  Green's form (`lineMx`, `lineMy`) evaluated in binary64.
+
+Not yet: arc members and arc sides of sections (ℚ(√·), the L2 step); L4 for arcs and for frame.rs;
+L5, L6.
