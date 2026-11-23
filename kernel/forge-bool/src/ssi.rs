@@ -47,6 +47,21 @@ pub fn closed_form(a: &Surface, b: &Surface) -> SurfaceSurface {
 #[inline]
 pub(crate) fn closed_or_flush(a: &Surface, b: &Surface, region: &Box3) -> SurfaceSurface {
     let r = closed_form(a, b);
+    // two planes `plane_plane` takes as parallel (within ANGULAR) it decides at q's frame origin,
+    // which holds only within LINEAR/ANGULAR = 1e6 of it: unless the normals are parallel to the
+    // bit, decided again over `region`, where the boolean looks (research/kernel-audit/
+    // tilt-wrong-ok.md, B1)
+    let parallel = match (a, b, &r) {
+        (Surface::Plane(p), Surface::Plane(q), SurfaceSurface::Empty)
+        | (Surface::Plane(p), Surface::Plane(q), SurfaceSurface::Coincident) => {
+            let u = p.normal_vec().cross(q.normal_vec());
+            u.x != 0.0 || u.y != 0.0 || u.z != 0.0
+        }
+        _ => false,
+    };
+    if parallel && let (Surface::Plane(p), Surface::Plane(q)) = (a, b) {
+        return parallel_in(p, q, region, r);
+    }
     let near = match (a, b, &r) {
         // a plane all but tangent to a cylinder crosses it in a long thin ellipse
         (Surface::Plane(_), Surface::Cylinder(_), SurfaceSurface::Curves(cs))
@@ -80,6 +95,50 @@ fn spread_apart(p: &Plane, q: &Plane, d: f64, region: &Box3) -> bool {
     // S - 1e-8 sum ext_i past 6 LINEAR
     let w = |g: f64, i: forge_math::Interval| (g.abs() - 1e-8) * (i.hi - i.lo);
     w(g.x, region.x) + w(g.y, region.y) + w(g.z, region.z) > 6.0 * tol::LINEAR
+}
+
+/// Two planes within ANGULAR of parallel, but not parallel to the bit, over `region`. Their gap
+/// p.sd - flip q.sd is affine: Coincident if it is within LINEAR at every corner, Empty if it has
+/// one sign over the box (they do not meet there), and else the line where they cross, from
+/// `region`'s centre (well conditioned: the offsets there are small) and held to p, so it stays
+/// on both planes across the region (the gap changes by |n1 x n2| per unit along it). The same
+/// answer either way round. `r`, `plane_plane`'s, if the direction will not normalize.
+// (index loops, not iterator adaptors and closures: Aeneas, research/aeneas/STYLE.md)
+#[cold]
+#[inline(never)]
+fn parallel_in(p: &Plane, q: &Plane, region: &Box3, r: SurfaceSurface) -> SurfaceSurface {
+    let (n, m) = (p.normal_vec(), q.normal_vec());
+    let flip = if n.dot(m) < 0.0 { -1.0 } else { 1.0 };
+    let ks = corners(region);
+    let (mut within, mut pos, mut neg) = (true, false, false);
+    let mut i = 0;
+    while i < 8 {
+        let g = p.signed_distance(ks[i]) - flip * q.signed_distance(ks[i]);
+        within = within && g.abs() <= tol::LINEAR;
+        pos = pos || g >= 0.0;
+        neg = neg || g <= 0.0;
+        i += 1;
+    }
+    if within {
+        return SurfaceSurface::Coincident;
+    }
+    if !(pos && neg) {
+        return SurfaceSurface::Empty;
+    }
+    let u = n.cross(m);
+    let c = region.center();
+    let (n1, n2) = (n.get(), m.get());
+    let t = (n2.cross(u) * -p.signed_distance(c) + u.cross(n1) * -q.signed_distance(c)) / u.length_sq();
+    let x = c + t;
+    let x = x - n1 * p.signed_distance(x);
+    let d = match u.normalize() {
+        Some(d) => d.get(),
+        None => return r,
+    };
+    match (d - n1 * n1.dot(d)).normalize() {
+        Some(dir) => SurfaceSurface::Curves(vec![(Curve::Line(Line::new(x, dir)), Contact::Crossing)]),
+        None => r,
+    }
 }
 
 /// The eight corners of `region`, in the order the flush rules visit them.
