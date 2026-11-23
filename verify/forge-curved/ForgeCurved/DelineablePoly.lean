@@ -10,8 +10,8 @@ The sweep restricts a carrier to a line or curve, giving a polynomial in `y` who
 are polynomials in the sweep parameter `t`. Here that is `F : ℝ[t][y]` and
 `ev F t y = (F.map (eval t)).eval y`.
 
-**`delineable_poly`**: on an open preconnected `I` where the leading coefficient (in `y`) does
-not vanish and every real root is simple, the real roots over `I` are `n` continuous, strictly
+**`delineable_poly`**: on a preconnected `C` where the leading coefficient (in `y`) does
+not vanish and every real root is simple, the real roots over `C` are `n` continuous, strictly
 ordered graphs. The local bound on the roots is Mathlib's Cauchy bound
 (`Polynomial.IsRoot.norm_lt_cauchyBound`), uniform near each `t₀` because the leading coefficient
 stays away from `0`.
@@ -97,11 +97,12 @@ theorem roots_bdd (F : Polynomial (Polynomial ℝ)) {t₀ : ℝ} (hlc : F.leadin
   linarith
 
 /-- **Delineability of a polynomial family.** -/
-theorem delineable_poly (F : Polynomial (Polynomial ℝ)) {I : Set ℝ} (hIo : IsOpen I)
-    (hIc : IsPreconnected I) (hlc : ∀ t ∈ I, F.leadingCoeff.eval t ≠ 0)
-    (hsimple : ∀ t ∈ I, ∀ y, ev F t y = 0 → ev (derivative F) t y ≠ 0) :
-    ∃ n, ∃ r : Fin n → ℝ → ℝ, (∀ i, ContinuousOn (r i) I) ∧ (∀ t ∈ I, StrictMono fun i => r i t) ∧
-      ∀ t ∈ I, ∀ y, ev F t y = 0 ↔ ∃ i, r i t = y :=
-  delineable (smooth_ev F) hIo hIc hsimple fun t ht => roots_bdd F (hlc t ht)
+theorem delineable_poly (F : Polynomial (Polynomial ℝ)) {C : Set ℝ} (hC : IsPreconnected C)
+    (hlc : ∀ t ∈ C, F.leadingCoeff.eval t ≠ 0)
+    (hsimple : ∀ t ∈ C, ∀ y, ev F t y = 0 → ev (derivative F) t y ≠ 0) :
+    ∃ n, ∃ r : Fin n → ℝ → ℝ, (∀ i, ContinuousOn (r i) C) ∧ (∀ t ∈ C, StrictMono fun i => r i t) ∧
+      ∀ t ∈ C, ∀ y, ev F t y = 0 ↔ ∃ i, r i t = y :=
+  delineable (smooth_ev F) hC hsimple fun t ht =>
+    let ⟨R, hR⟩ := roots_bdd F (hlc t ht); ⟨R, nhdsWithin_le_nhds hR⟩
 
 end ForgeCurved.Delineable

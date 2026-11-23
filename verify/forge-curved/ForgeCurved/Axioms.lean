@@ -26,3 +26,4 @@ import ForgeCurved
 #print axioms ForgeCurved.Delineable.local_graphs
 #print axioms ForgeCurved.Delineable.delineable
 #print axioms ForgeCurved.Delineable.delineable_poly
+#print axioms ForgeCurved.Sweep.crossesAll_edges

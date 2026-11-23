@@ -22,7 +22,8 @@ for `EndToEndCurved`. That project builds in about 2 minutes on the shared Mathl
 | EndToEnd | `core_spec_proof`, `curved_correct`, `curved_correct_top`, **`end_to_end_curved : EndToEndCurved`** | the Rust core on any curved target ledger of quadric carriers and formula bodies: `CoreSpec`, `coreM_nil`, `curved_correct`, as `end_to_end_of` is for flat |
 | Sides | `sides_of_fderiv`, `sides_of_seamed`, `quadric_sides` | **R3 for every facet** of differentiable carriers whose singular zeros lie on another carrier (`SingularSeamed`), so for quadrics with the apex seamed |
 | Separators | `SepRule.separators`, `FaithfulAll.listed`, `faithful_of_rule` | the D3 rule as one function; `Tier0Sound` and `LemmaD` stated; both together give faithful cells whichever tier the rule takes |
-| Delineable, DelineablePoly | `local_graphs`, **`delineable`**, `delineable_poly` | the sweep's delineability (dol-curved's `qsampler_covers` input): on an open preconnected `I` with simple, locally bounded zeros, the zeros of `f t ·` are `n` continuous, strictly ordered graphs; for `F : ℝ[t][y]`, a leading coefficient nonzero on `I` gives the bound (Mathlib's Cauchy bound) |
+| Delineable, DelineablePoly | `local_graphs`, **`delineable`**, `delineable_poly` | the sweep's delineability (dol-curved's `qsampler_covers` input): over any preconnected parameter set `C` (an interval, an event point, a CAD base cell) with simple, locally bounded zeros, the zeros of `f t ·` are `n` continuous, strictly ordered graphs; for `F : ℝ[t][y]`, a leading coefficient nonzero on `I` gives the bound (Mathlib's Cauchy bound) |
+| Sweep | `ZeroGraphs`, `NoCrit`, `Proper`, `CrossesAll`, `GraphLemma`, `FacetCrossing`; **`crossesAll_edges`** | dol-curved's sweep statements for `qsampler_covers`, over any normed space with a linear sweep `ℓ` (ℝ³, or a sweep plane as ℝ²). Proven: the edge half of `CrossesAll` from the curve graphs and no triple point. `Proper` is needed: `xy = 1` against `ℓ = x` has no critical point but is not graphs over a slab containing `x = 0` |
 | WallsCounter | `parallel_walls_not_faithful`, **`lemmaD_parallel_walls_false`** | **`LemmaD` is false for one-direction sweep walls** (design §2.3 Tier 1): see below |
 
 **R5, the vertex wing condition** (`Faithful.vwing`, added to Curved.lean by dol-curved at 1abc5b0
@@ -55,6 +56,10 @@ covector count is wrong.
   The repair is a two-level (cylindrical) Tier 1, restated as a new `LemmaD`, and that is a
   design decision. `delineable` is the 1D step such a proof uses, between consecutive critical
   values of each level.
+- **`GraphLemma` and `FacetCrossing`** (Sweep.lean), the rest of `qsampler_covers`' input. The
+  graph lemma needs the 2D implicit function theorem (Mathlib's `HasStrictFDerivAt.implicitFunction`)
+  plus properness for the covering argument. The facet half needs each facet over the slab to be
+  a product, which is what the CAD's sections and sectors give.
 - **The refusal half of `sep_invariant`.** `TopNonManifold` reads the carriers' strata (which
   points are on one carrier, which cells are edges or vertices), so it is not yet carrier-free.
   The half closes once `TopNonManifold cs R ↔ TopNonManifold (cs ++ seps) R` is proven for

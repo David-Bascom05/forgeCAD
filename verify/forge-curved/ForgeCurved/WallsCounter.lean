@@ -142,16 +142,16 @@ theorem parallel_walls_not_faithful (ws : List ℝ) {cw : ℝ} (hw : cw ∈ ws) 
     ⟨b, hcov, show 3 * ((c - 6) / 2) - 2 * 2 < 0 by linarith⟩
   exact absurd (lt_trans hzV hzU) (lt_irrefl _)
 
-/-- **`LemmaD` is false for parallel walls.** Any separator rule that gives the plate with a hole
-its Tier-0 seam and parallel `d`-walls, one of them strictly between the events `2` and `√13`,
-fails `LemmaD` on every domain containing that input. -/
-theorem lemmaD_parallel_walls_false (r : SepRule P3) (Dom : List (Carrier P3 ℝ) → Prop)
-    (hdom : Dom [plate, cyl]) (hseams : r.seams [plate, cyl] = [seam]) (ws : List ℝ)
-    (hwalls : r.walls [plate, cyl] = ws.map wall) {cw : ℝ} (hw : cw ∈ ws) (h2 : 2 < cw)
+/-- **`LemmaD` is false for parallel walls.** Any separator rule whose input `fs` has the plate
+with a hole as its carriers, its Tier-0 seam as the seams, and parallel `d`-walls with one level
+strictly between the events `2` and `√13`, fails `LemmaD` on every domain containing `fs`. -/
+theorem lemmaD_parallel_walls_false {ι : Type} (r : SepRule ι) (Dom : List ι → Prop) (fs : List ι)
+    (hdom : Dom fs) (hcar : r.carriers fs = [plate, cyl]) (hseams : r.seams fs = [seam])
+    (ws : List ℝ) (hwalls : r.walls fs = ws.map wall) {cw : ℝ} (hw : cw ∈ ws) (h2 : 2 < cw)
     (h13 : cw ^ 2 < 13) : ¬LemmaD r Dom := by
   intro hD
-  have h := hD _ hdom
-  rw [hseams, hwalls] at h
+  have h := hD fs hdom
+  rw [hcar, hseams, hwalls] at h
   exact parallel_walls_not_faithful ws hw h2 h13 (by simpa [arr] using h)
 
 end ForgeCurved.WallsCounter

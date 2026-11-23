@@ -13,20 +13,22 @@ import Mathlib.Data.Finset.Sort
 This is the geometric input of dol-curved's `qsampler_covers` (curved-l2-plan.md, module 5):
 between the critical values of the sweep, the zeros of the restricted carriers are graphs.
 
-The family is `f t y`, jointly continuous, with `∂f/∂y = f' t y` jointly continuous. On an open
-preconnected parameter set `I` (an open interval between consecutive critical values):
+The family is `f t y`, with the parameter `t` in any topological space `T` (an interval of the
+sweep, or a cell of a CAD's base), `f` jointly continuous, and `∂f/∂y = f' t y` jointly continuous.
+On a preconnected parameter set `C` (a slab's interval, an event point, a base cell or section;
+`C` need not be open):
 * every zero is simple, `f t y = 0 → f' t y ≠ 0` (no critical point of the sweep);
 * the zeros are locally bounded in `t` (no zero escapes to infinity; for a polynomial in `y`
   this is a leading coefficient that does not vanish on `I`).
 
 **`delineable`**: then there are `n` and continuous `r 0 < r 1 < … < r (n-1)` on `I` whose
-graphs are exactly the zero set over `I`. In particular the number of zeros is constant on `I`.
+graphs are exactly the zero set over `C`. In particular the number of zeros is constant on `C`.
 
 The proof uses no implicit function theorem: near a simple zero, `f t` is strictly monotone
 uniformly in `t` (`local_pos`, from the mean value theorem). The intermediate value theorem gives
 one zero in a small window, and the tube lemma excludes zeros off the windows (`local_graphs`).
 The sorted zeros are then continuous (`Finset.orderEmbOfFin_unique`), and their number is
-locally constant, so constant on `I` (`IsPreconnected.constant`).
+locally constant, so constant on `C` (`IsPreconnected.constant`).
 -/
 
 namespace ForgeCurved.Delineable
@@ -34,12 +36,12 @@ namespace ForgeCurved.Delineable
 open Filter Topology Set
 
 /-- A `C¹`-in-`y` family: `f` and `∂f/∂y = f'` jointly continuous. -/
-structure Smooth (f f' : ℝ → ℝ → ℝ) : Prop where
+structure Smooth {T : Type*} [TopologicalSpace T] (f f' : T → ℝ → ℝ) : Prop where
   cont : Continuous (Function.uncurry f)
   cont' : Continuous (Function.uncurry f')
   deriv : ∀ t y, HasDerivAt (f t) (f' t y) y
 
-variable {f f' : ℝ → ℝ → ℝ}
+variable {T : Type*} [TopologicalSpace T] {f f' : T → ℝ → ℝ}
 
 theorem Smooth.neg (hs : Smooth f f') : Smooth (fun t y => -f t y) (fun t y => -f' t y) :=
   ⟨hs.cont.neg, hs.cont'.neg, fun t y => (hs.deriv t y).neg⟩
@@ -49,25 +51,27 @@ theorem Smooth.cont_t (hs : Smooth f f') (y : ℝ) : Continuous fun t => f t y :
 
 /-- Near a zero with positive slope: strictly increasing on one window for all nearby `t`, and a
 zero in every smaller window for `t` near enough. -/
-theorem local_pos (hs : Smooth f f') {t₀ y₀ : ℝ} (h0 : f t₀ y₀ = 0) (hp : 0 < f' t₀ y₀) :
+theorem local_pos (hs : Smooth f f') {t₀ : T} {y₀ : ℝ} (h0 : f t₀ y₀ = 0) (hp : 0 < f' t₀ y₀) :
     ∃ ε₀ > 0, (∀ᶠ t in 𝓝 t₀, StrictMonoOn (f t) (Ioo (y₀ - ε₀) (y₀ + ε₀))) ∧
       ∀ ε, 0 < ε → ε ≤ ε₀ → ∀ᶠ t in 𝓝 t₀, ∃ y ∈ Ioo (y₀ - ε) (y₀ + ε), f t y = 0 := by
-  have hev : ∀ᶠ z in 𝓝 (t₀, y₀), 0 < Function.uncurry f' z :=
+  have hev : {z : T × ℝ | 0 < Function.uncurry f' z} ∈ 𝓝 (t₀, y₀) :=
     (hs.cont'.tendsto (t₀, y₀)).eventually (lt_mem_nhds hp)
-  obtain ⟨η, hη, hball⟩ := Metric.eventually_nhds_iff.mp hev
-  have hmono : ∀ t, dist t t₀ < η → StrictMonoOn (f t) (Ioo (y₀ - η) (y₀ + η)) := by
+  obtain ⟨u, hu, v, hv, huv⟩ := mem_nhds_prod_iff.mp hev
+  obtain ⟨η, hη, hball⟩ := Metric.mem_nhds_iff.mp hv
+  have hmono : ∀ t ∈ u, StrictMonoOn (f t) (Ioo (y₀ - η) (y₀ + η)) := by
     intro t ht
     apply strictMonoOn_of_deriv_pos (convex_Ioo _ _)
     · exact fun y _ => (hs.deriv t y).continuousAt.continuousWithinAt
     · intro y hy
       rw [interior_Ioo] at hy
       rw [(hs.deriv t y).deriv]
-      refine @hball (t, y) ?_
-      rw [Prod.dist_eq, max_lt_iff, Real.dist_eq y y₀, abs_sub_lt_iff]
-      exact ⟨ht, by constructor <;> linarith [hy.1, hy.2]⟩
-  refine ⟨η, hη, Metric.eventually_nhds_iff.mpr ⟨η, hη, fun t ht => hmono t ht⟩, ?_⟩
+      have hyv : y ∈ v := hball (by
+        rw [Metric.mem_ball, Real.dist_eq, abs_sub_lt_iff]
+        constructor <;> linarith [hy.1, hy.2])
+      exact huv (show (t, y) ∈ u ×ˢ v from ⟨ht, hyv⟩)
+  refine ⟨η, hη, Filter.mem_of_superset hu fun t ht => hmono t ht, ?_⟩
   intro ε hε hεη
-  have hm0 := hmono t₀ (by simpa using hη)
+  have hm0 := hmono t₀ (mem_of_mem_nhds hu)
   have ha : f t₀ (y₀ - ε / 2) < 0 := by
     rw [← h0]; exact hm0 ⟨by linarith, by linarith⟩ ⟨by linarith, by linarith⟩ (by linarith)
   have hb : 0 < f t₀ (y₀ + ε / 2) := by
@@ -82,7 +86,7 @@ theorem local_pos (hs : Smooth f f') {t₀ y₀ : ℝ} (h0 : f t₀ y₀ = 0) (h
 
 /-- Near a simple zero: injective on one window for all nearby `t`, and a zero in every smaller
 window for `t` near enough. -/
-theorem local_ne (hs : Smooth f f') {t₀ y₀ : ℝ} (h0 : f t₀ y₀ = 0) (hne : f' t₀ y₀ ≠ 0) :
+theorem local_ne (hs : Smooth f f') {t₀ : T} {y₀ : ℝ} (h0 : f t₀ y₀ = 0) (hne : f' t₀ y₀ ≠ 0) :
     ∃ ε₀ > 0, (∀ᶠ t in 𝓝 t₀, InjOn (f t) (Ioo (y₀ - ε₀) (y₀ + ε₀))) ∧
       ∀ ε, 0 < ε → ε ≤ ε₀ → ∀ᶠ t in 𝓝 t₀, ∃ y ∈ Ioo (y₀ - ε) (y₀ + ε), f t y = 0 := by
   rcases hne.lt_or_gt with hn | hp
@@ -94,11 +98,11 @@ theorem local_ne (hs : Smooth f f') {t₀ y₀ : ℝ} (h0 : f t₀ y₀ = 0) (hn
   · obtain ⟨ε₀, hε₀, hm, hex⟩ := local_pos hs h0 hp
     exact ⟨ε₀, hε₀, hm.mono fun t ht => ht.injOn, hex⟩
 
-theorem isClosed_zeros (hs : Smooth f f') (t : ℝ) : IsClosed {y | f t y = 0} :=
+theorem isClosed_zeros (hs : Smooth f f') (t : T) : IsClosed {y | f t y = 0} :=
   isClosed_eq (hs.cont.comp (continuous_const.prodMk continuous_id)) continuous_const
 
 /-- A bounded fibre of simple zeros is finite. -/
-theorem finite_zeros (hs : Smooth f f') {t R : ℝ} (hsimple : ∀ y, f t y = 0 → f' t y ≠ 0)
+theorem finite_zeros (hs : Smooth f f') {t : T} {R : ℝ} (hsimple : ∀ y, f t y = 0 → f' t y ≠ 0)
     (hR : ∀ y, f t y = 0 → |y| ≤ R) : {y | f t y = 0}.Finite := by
   by_contra hinf
   obtain ⟨x, -, hacc⟩ := Set.Infinite.exists_accPt_of_subset_isCompact hinf
@@ -114,11 +118,12 @@ theorem finite_zeros (hs : Smooth f f') {t R : ℝ} (hsimple : ∀ y, f t y = 0 
   exact hyx (hinj.self_of_nhds hyw ⟨by linarith, by linarith⟩ (hy0.trans hx.symm))
 
 /-- **The local picture**: if the zeros at `t₀` are `y 0 < … < y (n-1)`, all simple, then for `t`
-near `t₀` the zeros are `g 0 < … < g (n-1)` with each `g j` within `ε` of `y j`. -/
-theorem local_graphs (hs : Smooth f f') {t₀ : ℝ} {n : ℕ} {y : Fin n → ℝ} (hy : StrictMono y)
+near `t₀` (along any filter `l ≤ 𝓝 t₀`, such as `𝓝[C] t₀`) the zeros are `g 0 < … < g (n-1)` with each `g j` within `ε` of `y j`. -/
+theorem local_graphs (hs : Smooth f f') {t₀ : T} {l : Filter T} (hl : l ≤ 𝓝 t₀) {n : ℕ}
+    {y : Fin n → ℝ} (hy : StrictMono y)
     (hZ : ∀ z, f t₀ z = 0 ↔ ∃ j, y j = z) (hsimple : ∀ j, f' t₀ (y j) ≠ 0)
-    (hb : ∃ R, ∀ᶠ t in 𝓝 t₀, ∀ z, f t z = 0 → |z| ≤ R) (ε : ℝ) (hε : 0 < ε) :
-    ∀ᶠ t in 𝓝 t₀, ∃ g : Fin n → ℝ, StrictMono g ∧ (∀ z, f t z = 0 ↔ ∃ j, g j = z) ∧
+    (hb : ∃ R, ∀ᶠ t in l, ∀ z, f t z = 0 → |z| ≤ R) (ε : ℝ) (hε : 0 < ε) :
+    ∀ᶠ t in l, ∃ g : Fin n → ℝ, StrictMono g ∧ (∀ z, f t z = 0 ↔ ∃ j, g j = z) ∧
       ∀ j, |g j - y j| < ε := by
   choose ε₀ hε₀ hinj hex using fun j => local_ne hs ((hZ _).2 ⟨j, rfl⟩) (hsimple j)
   -- a window width below `ε`, every `ε₀ j`, and half of every gap
@@ -152,7 +157,7 @@ theorem local_graphs (hs : Smooth f f') {t₀ : ℝ} {n : ℕ} {y : Fin n → �
     eventually_all.2 fun j => hex j e he0 (heε₀ j)
   have hI : ∀ᶠ t in 𝓝 t₀, ∀ j, InjOn (f t) (Ioo (y j - ε₀ j) (y j + ε₀ j)) :=
     eventually_all.2 hinj
-  filter_upwards [hR, hK, hE, hI] with t hRt hKt hEt hIt
+  filter_upwards [hR, hl hK, hl hE, hl hI] with t hRt hKt hEt hIt
   choose g hgw hg0 using hEt
   refine ⟨g, fun i j hij => ?_, fun z => ⟨fun hz => ?_, ?_⟩, fun j => ?_⟩
   · have := hsep i j hij
@@ -171,35 +176,33 @@ theorem local_graphs (hs : Smooth f f') {t₀ : ℝ} {n : ℕ} {y : Fin n → �
   · rw [abs_sub_lt_iff]
     constructor <;> linarith [(hgw j).1, (hgw j).2]
 
-/-- **Delineability.** On an open preconnected `I` where every zero is simple and the zeros are
-locally bounded, the zero set over `I` is the union of the graphs of `n` continuous functions,
-strictly ordered at every `t ∈ I`. -/
-theorem delineable (hs : Smooth f f') {I : Set ℝ} (hIo : IsOpen I) (hIc : IsPreconnected I)
-    (hsimple : ∀ t ∈ I, ∀ y, f t y = 0 → f' t y ≠ 0)
-    (hb : ∀ t ∈ I, ∃ R, ∀ᶠ s in 𝓝 t, ∀ y, f s y = 0 → |y| ≤ R) :
-    ∃ n, ∃ r : Fin n → ℝ → ℝ, (∀ i, ContinuousOn (r i) I) ∧ (∀ t ∈ I, StrictMono fun i => r i t) ∧
-      ∀ t ∈ I, ∀ y, f t y = 0 ↔ ∃ i, r i t = y := by
+/-- **Delineability.** On a preconnected `C` where every zero is simple and the zeros are locally
+bounded (within `C`), the zero set over `C` is the union of the graphs of `n` functions,
+continuous on `C` and strictly ordered at every `t ∈ C`. -/
+theorem delineable (hs : Smooth f f') {C : Set T} (hC : IsPreconnected C)
+    (hsimple : ∀ t ∈ C, ∀ y, f t y = 0 → f' t y ≠ 0)
+    (hb : ∀ t ∈ C, ∃ R, ∀ᶠ s in 𝓝[C] t, ∀ y, f s y = 0 → |y| ≤ R) :
+    ∃ n, ∃ r : Fin n → T → ℝ, (∀ i, ContinuousOn (r i) C) ∧ (∀ t ∈ C, StrictMono fun i => r i t) ∧
+      ∀ t ∈ C, ∀ y, f t y = 0 ↔ ∃ i, r i t = y := by
   classical
-  rcases I.eq_empty_or_nonempty with hI0 | ⟨t₁, ht₁⟩
-  · exact ⟨0, fun i => i.elim0, fun i => i.elim0, by simp [hI0], by simp [hI0]⟩
-  have hfin : ∀ t ∈ I, {y | f t y = 0}.Finite := fun t ht => by
+  rcases C.eq_empty_or_nonempty with hC0 | ⟨t₁, ht₁⟩
+  · exact ⟨0, fun i => i.elim0, fun i => i.elim0, by simp [hC0], by simp [hC0]⟩
+  have hfin : ∀ t ∈ C, {y | f t y = 0}.Finite := fun t ht => by
     obtain ⟨R, hR⟩ := hb t ht
-    exact finite_zeros hs (hsimple t ht) hR.self_of_nhds
-  let Z : ℝ → Finset ℝ := fun t => if h : {y | f t y = 0}.Finite then h.toFinset else ∅
-  have hZ : ∀ t ∈ I, ∀ y, f t y = 0 ↔ y ∈ Z t := fun t ht y => by
+    exact finite_zeros hs (hsimple t ht) (hR.self_of_nhdsWithin ht)
+  let Z : T → Finset ℝ := fun t => if h : {y | f t y = 0}.Finite then h.toFinset else ∅
+  have hZ : ∀ t ∈ C, ∀ y, f t y = 0 ↔ y ∈ Z t := fun t ht y => by
     simp [Z, hfin t ht]
-  -- the enumeration at `t` of its own zeros
-  have henum : ∀ t ∈ I, ∀ {k} (h : (Z t).card = k), ∀ z,
+  have henum : ∀ t ∈ C, ∀ {k} (h : (Z t).card = k), ∀ z,
       f t z = 0 ↔ ∃ j, (Z t).orderEmbOfFin h j = z := fun t ht k h z => by
     rw [hZ t ht, ← Finset.mem_coe, ← Finset.range_orderEmbOfFin _ h, mem_range]
-  -- near `t₀`, the zeros are an ordered family of the same size, close to `t₀`'s
-  have hnear : ∀ t₀ ∈ I, ∀ {k} (h : (Z t₀).card = k), ∀ ε > 0, ∀ᶠ t in 𝓝 t₀,
+  have hnear : ∀ t₀ ∈ C, ∀ {k} (h : (Z t₀).card = k), ∀ ε > 0, ∀ᶠ t in 𝓝[C] t₀,
       ∃ hk : (Z t).card = k, ∀ j, |(Z t).orderEmbOfFin hk j - (Z t₀).orderEmbOfFin h j| < ε := by
     intro t₀ ht₀ k h ε hε
     obtain ⟨R, hR⟩ := hb t₀ ht₀
-    have hloc := local_graphs hs ((Z t₀).orderEmbOfFin h).strictMono (henum t₀ ht₀ h)
-      (fun j => hsimple t₀ ht₀ _ ((henum t₀ ht₀ h _).2 ⟨j, rfl⟩)) ⟨R, hR⟩ ε hε
-    filter_upwards [hloc, hIo.mem_nhds ht₀] with t ⟨g, hg, hgZ, hgc⟩ ht
+    have hloc := local_graphs hs nhdsWithin_le_nhds ((Z t₀).orderEmbOfFin h).strictMono
+      (henum t₀ ht₀ h) (fun j => hsimple t₀ ht₀ _ ((henum t₀ ht₀ h _).2 ⟨j, rfl⟩)) ⟨R, hR⟩ ε hε
+    filter_upwards [hloc, self_mem_nhdsWithin] with t ⟨g, hg, hgZ, hgc⟩ ht
     have hcard : (Z t).card = k := by
       have : Z t = Finset.univ.image g := by
         ext z; rw [← hZ t ht, hgZ, Finset.mem_image]; simp
@@ -209,22 +212,21 @@ theorem delineable (hs : Smooth f f') {I : Set ℝ} (hIo : IsOpen I) (hIc : IsPr
       (fun x => (hZ t ht _).1 ((hgZ _).2 ⟨x, rfl⟩)) hg
     rw [← hu]
     exact hgc j
-  -- the number of zeros is locally constant, so constant on `I`
   set n := (Z t₁).card
-  have hconst : ∀ t ∈ I, (Z t).card = n := by
-    have hcont : ContinuousOn (fun t => (Z t).card) I := by
+  have hconst : ∀ t ∈ C, (Z t).card = n := by
+    have hcont : ContinuousOn (fun t => (Z t).card) C := by
       intro t₀ ht₀
-      refine ((continuousAt_const (y := (Z t₀).card)).congr ?_).continuousWithinAt
+      refine (continuousWithinAt_const (b := (Z t₀).card)).congr_of_eventuallyEq ?_ rfl
       filter_upwards [hnear t₀ ht₀ rfl 1 one_pos] with t ⟨hk, _⟩
-      exact hk.symm
-    exact fun t ht => hIc.constant hcont ht ht₁
-  let r : Fin n → ℝ → ℝ := fun i t =>
+      exact hk
+    exact fun t ht => hC.constant hcont ht ht₁
+  let r : Fin n → T → ℝ := fun i t =>
     if h : (Z t).card = n then (Z t).orderEmbOfFin h i else 0
-  have hr : ∀ t (ht : t ∈ I) (i : Fin n), r i t = (Z t).orderEmbOfFin (hconst t ht) i := fun t ht i => by
-    simp [r, hconst t ht]
+  have hr : ∀ t (ht : t ∈ C) (i : Fin n), r i t = (Z t).orderEmbOfFin (hconst t ht) i :=
+    fun t ht i => by simp [r, hconst t ht]
   refine ⟨n, r, fun i t₀ ht₀ => ?_, fun t ht a b hab => ?_, fun t ht y => ?_⟩
-  · refine ContinuousAt.continuousWithinAt (Metric.tendsto_nhds.mpr fun ε hε => ?_)
-    filter_upwards [hnear t₀ ht₀ (hconst t₀ ht₀) ε hε, hIo.mem_nhds ht₀] with t ⟨hk, hc⟩ ht
+  · refine Metric.tendsto_nhds.mpr fun ε hε => ?_
+    filter_upwards [hnear t₀ ht₀ (hconst t₀ ht₀) ε hε, self_mem_nhdsWithin] with t ⟨hk, hc⟩ ht
     rw [Real.dist_eq, hr t ht, hr t₀ ht₀]
     exact hc i
   · simp only [hr t ht]
