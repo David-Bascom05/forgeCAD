@@ -42,3 +42,5 @@ import ForgeBoolCore.RefineMemb
 #print axioms forge_bool_core.memb_loop0_spec
 #print axioms forge_bool_core.memb_row_spec
 #print axioms forge_bool_core.memb_loop1_spec
+#print axioms forge_bool_core.memb_eq
+#print axioms forge_bool_core.membership_spec

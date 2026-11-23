@@ -217,4 +217,108 @@ theorem memb_loop1_spec (s : Split) (nb : Usize) (PO : alloc.vec.Vec (alloc.vec.
       rw [← this]; exact ⟨hml, hmr⟩
   · exact ⟨rfl, hi, hm⟩
 
+/-! ## The row is the Lean's `memb` -/
+
+theorem topes_nodup_toL (l : Ledger) : ((toL l).topes).Nodup := nodup_dedup _
+
+theorem crossings_mem (l : Ledger) (i : Nat) :
+    ∀ p ∈ (toL l).crossings i, p.1 ∈ (toL l).topes ∧ p.2 ∈ (toL l).topes := by
+  intro p hp
+  unfold ForgeExact.DecideOnce.Ledger.crossings at hp
+  obtain ⟨φ, hφ, rfl⟩ := List.mem_map.mp hp
+  have hφ' := (List.mem_filter.mp hφ).1
+  unfold ForgeExact.DecideOnce.Ledger.topes
+  exact ⟨(mem_dedup _ _).mpr (List.mem_flatMap.mpr ⟨φ, hφ', by simp⟩),
+    (mem_dedup _ _).mpr (List.mem_flatMap.mpr ⟨φ, hφ', by simp⟩)⟩
+
+/-- Witness answers name ledger cells. -/
+def InsideWF (l : Ledger) : Prop := ∀ q ∈ ipcs l, q.1 < l.cells.val.length
+
+/-- **Body `b`'s row at tope `t` is the Lean's `memb b T`.** -/
+theorem memb_eq (l : Ledger) (e0 : Ext) (s : Split) (e : Ext) (hok0 : ExtOK l e0) (hs : SplitOK l e0 s e)
+    (hpc : ∀ q ∈ pcs l, q.1 < l.cells.val.length) (hiw : InsideWF l)
+    (PO : List (alloc.vec.Vec Bool))
+    (hPO : ∀ b, b < l.nb.val → ∀ c, c < (allCells l e).length →
+      PAt PO b c = (ipcs l).any (fun q => decide (q.1 = c ∧ q.2 = b)))
+    {b : Nat} (hb : b < l.nb.val) {R : Nat → Nat}
+    (hR : Least (floodEdges s b s.facets.val.length) s.topes.val.length R)
+    {t : Nat} (ht : t < s.topes.val.length) :
+    rowOf s PO b R t = (toL l).memb b ((toL l).topes[t]'(by rw [← topes_toL l e0 s e hok0 hs hpc]; simpa using ht)) := by
+  have hTL := topes_toL l e0 s e hok0 hs hpc
+  have hlen : (toL l).topes.length = s.topes.val.length := by rw [← hTL]; simp
+  rw [floodEdges_eq l e0 s e hok0 hs hpc hb] at hR
+  rw [← hlen] at hR ht
+  unfold ForgeExact.DecideOnce.Ledger.memb
+  simp only
+  rw [head_least (topes_nodup_toL l) (crossings_mem l b) hR ht]
+  simp only
+  obtain ⟨hRl, _, _⟩ := hR t ht
+  have hT := hs.topes
+  have hidl : at32 s.topes (R t) < (allCells l e).length := by
+    rw [at32_getD (by omega)]
+    exact hT.2.2.1 _ ((mem_dedup _ _).mp (by rw [← hT.2.1]; exact List.mem_map.mpr ⟨_, List.getElem_mem _, rfl⟩))
+  have hcov : (toL l).topes[R t]'hRl = covE l e (at32 s.topes (R t)) := by
+    simp only [← hTL, List.getElem_map]; rw [at32_getD (by omega)]
+  rw [hcov, rowOf, hPO b hb _ hidl]
+  unfold toL
+  apply Bool.eq_iff_iff.mpr
+  simp only [List.any_eq_true, decide_eq_true_eq, List.elem_iff, List.mem_map]
+  constructor
+  · rintro ⟨q, hq, h1, h2⟩
+    obtain ⟨q', hq', rfl⟩ := List.mem_map.mp hq
+    refine ⟨q', hq', ?_⟩
+    simp only [Prod.mk.injEq]
+    exact ⟨by rw [← h1, cellL_covAt l e (hiw _ hq)]; rfl, h2⟩
+  · rintro ⟨q', hq', he⟩
+    simp only [Prod.mk.injEq] at he
+    have hq : ((q'.1 : U32).val, (q'.2 : U32).val) ∈ ipcs l := List.mem_map.mpr ⟨q', hq', rfl⟩
+    have hql := hiw _ hq
+    refine ⟨_, hq, ?_, he.2⟩
+    have := he.1
+    rw [cellL_covAt l e hql] at this
+    exact covE_inj l e hs.ext (by rw [allCells_length]; simp at hql; omega) hidl this
+
+/-- **`membership` is the Lean core's `memb`**, for every body and tope. -/
+theorem membership_spec (l : Ledger) (e0 : Ext) (s : Split) (e : Ext) (hok0 : ExtOK l e0)
+    (hs : SplitOK l e0 s e) (hpc : ∀ q ∈ pcs l, q.1 < l.cells.val.length) (hiw : InsideWF l)
+    (hroom : 2 * s.facets.val.length < U32.max) :
+    membership l e s ⦃ m => m.val.length = l.nb.val ∧ ∀ b, b < l.nb.val → ∀ t (ht : t < s.topes.val.length),
+      (m.val.getD b default).val.getD t false =
+        (toL l).memb b ((toL l).topes[t]'(by rw [← topes_toL l e0 s e hok0 hs hpc]; simpa using ht)) ⦄ := by
+  unfold membership
+  have hN : (allCells l e).length ≤ Usize.max := by
+    have := hs.ext.small; have := u32_le_usize; omega
+  step as ⟨nb, hnb⟩
+  have hnbv : nb.val = l.nb.val := by rw [hnb]; scalar_tac
+  step with ncells_spec l e hN as ⟨n, hn⟩
+  step as ⟨v, hv1, hv2⟩
+  step with alloc.vec.from_elem_spec (core.clone.CloneallocvecVec core.clone.CloneBool) v nb
+    (ok_of_spec (clone_vec_bool_spec v)) as ⟨PO, hPO1, hPO2⟩
+  step with memb_loop0_spec l e nb hnbv hN PO 0#usize (by simp)
+    ⟨by rw [hPO1]; simp, fun b hb => by
+        rw [hPO1, List.getD_eq_getElem?_getD, List.getElem?_replicate]; simp [hb, hv1, hn],
+      fun b hb c hc => by
+        have hb' : b < (List.replicate nb.val v).length := by simp; omega
+        simp only [PAt, hPO1, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hb', List.getElem_replicate,
+          Option.getD_some, hv1]
+        simp⟩
+    as ⟨PO1, hPO⟩
+  obtain ⟨hPOl, hPOr, hPOp⟩ := hPO
+  have hpl : (ipcs l).length = l.inside.val.length := by simp [ipcs]
+  rw [← hpl, List.take_length] at hPOp
+  have htn : ∀ t, t < s.topes.val.length → at32 s.topes t < (allCells l e).length := by
+    intro t ht
+    have hT := hs.topes
+    rw [at32_getD ht]
+    exact hT.2.2.1 _ ((mem_dedup _ _).mp (by rw [← hT.2.1]; exact List.mem_map.mpr ⟨_, List.getElem_mem _, rfl⟩))
+  apply WP.spec_mono (memb_loop1_spec s nb PO1 (allCells l e).length (by omega)
+    (fun b hb => hPOr b (by omega)) htn (fun b hb => splitWF_of l e0 s e hs hroom (by omega))
+    (alloc.vec.Vec.new (alloc.vec.Vec Bool)) 0#usize (by simp) ⟨by simp, fun b hb => by simp at hb⟩)
+  rintro m ⟨hml, hmr⟩
+  refine ⟨by omega, fun b hb t ht => ?_⟩
+  obtain ⟨R, hR, hRe⟩ := hmr b (by omega)
+  rw [hRe, List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_range ht]
+  simp only [Option.map_some, Option.getD_some]
+  exact memb_eq l e0 s e hok0 hs hpc hiw PO1 (fun b hb c hc => by rw [← hnbv] at hb; exact hPOp b hb c hc) hb hR ht
+
 end forge_bool_core
