@@ -54,6 +54,9 @@ pub struct MassProps {
     pub err: [f64; 4],
     /// Each face's area.
     pub faces: Vec<(FaceId, f64)>,
+    /// The area of the body's sheet faces (`Face::sheet`), which take no part in the rest: a part's
+    /// volume, area and moments are its solids'.
+    pub sheet_area: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -68,8 +71,31 @@ impl std::fmt::Display for MassError {
     }
 }
 
+/// A body's mass properties: its solids'. A body of sheets alone has none: volume, area and
+/// moments 0, its centroid (undefined) the origin, and `sheet_area` its area.
 pub fn mass(body: &Body) -> Result<MassProps, MassError> {
     mass_rel(body, REL)
+}
+
+/// A sheet's area and its error bound: its faces' areas summed in face order, each as `mass`
+/// integrates it.
+pub fn sheet_area(body: &Body) -> Result<(f64, f64), MassError> {
+    let n = body.vertices.len().max(1) as f64;
+    let c = body
+        .vertices
+        .iter()
+        .fold(Point3::ORIGIN, |a, v| a + (v.point - Point3::ORIGIN) * (1.0 / n));
+    let size = body
+        .face_ids()
+        .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)))
+        .diagonal();
+    let (mut a, mut e) = (0.0, 0.0);
+    for f in body.face_ids() {
+        let (v, err) = face_integrals(body, f, c, size, REL).map_err(|why| MassError { face: f, why })?;
+        a += v[10];
+        e += err[10];
+    }
+    Ok((a, e))
 }
 
 /// The signed volume one shell bounds: negative for a void.
@@ -132,8 +158,15 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
     } else {
         Box::new((0..ids.len()).map(one))
     };
+    let (mut sheet_area, mut sheet_faces) = (0.0, 0);
     for (&f, got) in ids.iter().zip(each) {
         let (v, er) = got.map_err(|why| MassError { face: f, why })?;
+        if body.face(f).sheet {
+            sheet_area += v[10];
+            sheet_faces += 1;
+            faces.push((f, v[10]));
+            continue;
+        }
         for k in 0..NF {
             t[k] += v[k];
             e[k] += er[k];
@@ -149,6 +182,23 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
             });
         }
         faces.push((f, v[10]));
+    }
+    if sheet_faces > 0 && sheet_faces == ids.len() {
+        return Ok(MassProps {
+            volume: 0.0,
+            area: 0.0,
+            centroid: Point3::ORIGIN,
+            inertia: [[0.0; 3]; 3],
+            principal: [0.0; 3],
+            axes: [
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(0.0, 1.0, 0.0),
+                Vec3::new(0.0, 0.0, 1.0),
+            ],
+            err: [0.0; 4],
+            faces,
+            sheet_area,
+        });
     }
     let vol = t[0];
     // shells may overlap (`extrude new`), so their volumes add up past one box round them all: each
@@ -218,6 +268,7 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
             2.0 * (es + 2.0 * gl * em + gl * gl * e[0]),
         ],
         faces,
+        sheet_area,
     })
 }
 

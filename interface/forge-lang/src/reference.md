@@ -265,6 +265,58 @@ square to the sketch's normal, the depths measured along it); with `next` or `up
 along the normal); on other extents it is `NotApplicable`. `bodies:` (as on holes) makes the
 extrude, cut or revolve act on those bodies, not the last made.
 
+### Sheets
+
+```
+extrude(PATH | PROFILE, d | sym(d) | two(f, b), surface: true)
+revolve(PATH | PROFILE, axis: LINE | AXIS, angle: A | sym(A) | two(A, B), surface: true)
+```
+
+- `surface: true` makes a sheet: a surface with no material, one face per piece of the chain, always
+  a body of its own named by the feature. PATH is what a sweep takes (a sketch line, arc, spline or
+  circle, a `path` block, or a list of them end to end, all of one sketch). A closed loop gives a tube
+  with no caps.
+- A sketch with an open chain has no regions, so draw sheet chains in a sketch of their own.
+- The sheet's front (its faces' outward side) is the right of the chain walked with the sketch's
+  normal toward you. That is outside a loop, which is turned counter-clockwise first.
+- A sheet is never the body a solid feature acts on: an extrude, cut or hole goes to the last
+  solid. Naming a sheet's faces or edges in a fillet, chamfer, shell, draft or face edit, or naming
+  a sheet as a target or tool of `combine`, is the kernel's `OnSheet`. Bodies can be moved and
+  copied, and `upto(FACES)` ends on a sheet's face as on any face.
+- With `surface`, these are `NotWith`: `taper`, `along`, `flip`, `new` and `bodies`; on revolve,
+  `cut`, `keep` and an `upto` turn; a cut or intersect.
+- The part's volume, area and moments are its solids'. The build reports `sheet_area`, the sheets'
+  area, apart. A part of sheets alone measures volume 0 and area 0; its centroid is undefined and
+  reads as the origin.
+- `thicken(SHEET.faces, t, side:)` makes a slab from a sheet's faces. It adds to the current
+  solid, or cuts or keeps, or with `new: true` is a body of its own. The sheet stays.
+- STEP writes each sheet shell as an OPEN_SHELL (a CLOSED_SHELL where it has no boundary) in a
+  SHELL_BASED_SURFACE_MODEL.
+
+```
+sketch walls(on: plan.plane) {
+  path wall(start: (0, 40)) { line(to: (40, 40))  tarc(to: (50, 50)) }
+}
+skin = extrude(walls.wall, 20, surface: true)
+```
+
+```
+extrude(PATH | PROFILE, d | sym(d) | two(f, b), thin: t, side: "out"|"in"|"both", new: true, bodies: ..)
+cut(PATH | PROFILE, d | .., thin: t, side: ..)
+```
+
+A thin wall is that sheet thickened t, as `thicken` does it. "out" (the default) goes to the
+sheet's front, "in" to its back, and "both" t/2 to each side. Where the chain turns a corner, the
+wall's outer faces run on until they meet (a sharp mitre) and its inner faces stop where they
+cross. Lines offset to lines, arcs to concentric arcs, and a spline's wall to its exact offset
+surface. A wall whose offset reaches an arc's centre is the kernel's `Collapses`. A corner whose
+walls cannot meet in one face is `Crease`. With `thin`, these are `NotWith`: `taper`, `along`,
+`flip` and `surface`. `side` without `thin` is `NotWith` too.
+
+```
+fence = extrude(plan.wall, h, thin: t, side: "out")
+```
+
 ### Swept, wound and lofted shapes
 
 ```

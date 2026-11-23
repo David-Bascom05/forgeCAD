@@ -15,6 +15,7 @@ mod path;
 pub mod pattern;
 pub mod regions;
 mod rib;
+pub mod sheets;
 pub mod splinefam;
 mod splitface;
 pub mod standard;
@@ -195,6 +196,8 @@ pub enum Feature {
     /// A weldment member: a section along a line or an arc, cut at its ends, a body of its own
     /// (weld.rs).
     Member(Box<weld::Member>),
+    /// A sheet: a sketch's chains extruded or revolved into a surface body of its own (sheets.rs).
+    Sheet(Box<sheets::Sheet>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1024,6 +1027,7 @@ fn starts(f: &Feature) -> bool {
         || matches!(f, Feature::Import(t) if t.op == Combine::New)
         || matches!(f, Feature::Member(_))
         || matches!(f, Feature::Regions(r) if r.op == Combine::New)
+        || matches!(f, Feature::Sheet(s) if sheets::op(s) == Combine::New)
 }
 
 /// Whether a feature changes the part as a whole, rather than making tools to combine with it.
@@ -2086,6 +2090,7 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
         Feature::Regions(_) => regions::tools(features, i, build),
         Feature::Import(_) => import::tools(features, i),
         Feature::Member(m) => Ok(vec![weld::tool(m, i, features.id(i), build)?]),
+        Feature::Sheet(s) => Ok(vec![sheets::tool(i, features.id(i), s, build)?]),
         f => Ok(vec![tool(i, features.id(i), f, build)?]),
     }
 }

@@ -1159,10 +1159,14 @@ class Tr:
             # Forge's taper narrows the extrude for a positive angle, as Onshape's does with its pull direction flag set,
             # and widens it without (measured on the pilot: both ways match the STEP to 1e-12). The value is in degrees
             taper = num(self.val(a["draftAngle"]) * (1 if a.get("draftPullDirection") is True else -1))
+        # Onshape reads surfaceEntities only for a SURFACE body: on a solid one it is the UI's leftover list of the
+        # sketch's edges (71 of the 1914 sampled parts carry one), and the solid is made from entities alone
         b = a.get("bodyType")
+        if isinstance(b, tuple) and "SURFACE" in b[1]:
+            return self.sheet(f, "extrude")
         if isinstance(b, tuple) and "SOLID" not in b[1]:
             raise Unsupported("a thin or surface extrude")
-        if "surfaceEntities" in a or "entities" not in a:
+        if "entities" not in a:
             raise Unsupported("a surface extrude")
         if a.get("hasOffset") is True:
             raise Unsupported("extrude start offset")
@@ -1233,13 +1237,141 @@ class Tr:
                 make["taper"] = taper
             self.emit_solid("extrude", op, make, frame, {fid: by[fid]}, opp, fid_out=f["id"])
 
+    def sheet_chains(self, v, env):
+        """A surface feature's edges (sketch entities of one sketch) as chains end to end: the sketch, and each
+        chain's entities in order, each with whether it runs its own way."""
+        ents = []
+        for q0 in qunion(v):
+            q = self.deref(q0, env)
+            if not (isinstance(q, fs.Call) and q[0] == "sQuery"):
+                raise Unsupported("a surface of a part's edges")
+            fid = q[1][0][1].split(".")[0]
+            if fid not in self.sk:
+                raise Unresolved("entity of an unread sketch")
+            if (fid, q[1][2]) not in ents:
+                ents.append((fid, q[1][2]))
+        if not ents:
+            raise Unresolved("a surface of nothing")
+        if len({e[0] for e in ents}) > 1:
+            raise Unsupported("a surface of several sketches")
+        fid = ents[0][0]
+        arr, fr = self.sk[fid]
+        left = []
+        for _, name in ents:
+            e = arr.every.get(name)
+            if e is None:
+                raise Unresolved("unknown sketch entity")
+            if e.kind not in ("line", "arc", "circle"):
+                raise Unsupported("a surface along a spline")
+            left.append((name, e))
+        chains = []
+        while left:
+            name, e = left.pop(0)
+            run = [(name, e, True)]
+            ends = lambda r: (r[1].a if r[2] else r[1].b, r[1].b if r[2] else r[1].a)
+            grew = e.kind != "circle"
+            while grew and left:
+                grew = False
+                for i, (n2, e2) in enumerate(left):
+                    if e2.kind == "circle":
+                        continue
+                    head, tail = ends(run[0])[0], ends(run[-1])[1]
+                    for fwd in (True, False):
+                        a2, b2 = (e2.a, e2.b) if fwd else (e2.b, e2.a)
+                        if sketch2d.dist(tail, a2) <= 1e-7:
+                            run.append((n2, e2, fwd))
+                        elif sketch2d.dist(head, b2) <= 1e-7:
+                            run.insert(0, (n2, e2, fwd))
+                        else:
+                            continue
+                        del left[i]
+                        grew = True
+                        break
+                    if grew:
+                        break
+            chains.append(run)
+        return fid, fr, chains
+
+    def sheet(self, f, how):
+        """A SURFACE extrude or revolve: a sheet, a body of its own, each chain of its edges one. The part's
+        volume and area are its solids' (as the STEP truth measures them)."""
+        a, env = f["args"], f["env"]
+        if "surfaceEntities" not in a:
+            raise Unsupported("a surface of a sketch's regions")
+        if a.get("hasOffset") is True:
+            raise Unsupported("extrude start offset")
+        fid, fr, chains = self.sheet_chains(a["surfaceEntities"], env)
+        q = lambda p: (num(p[0]), num(p[1]))
+        rows_of_chain = []
+        for run in chains:
+            segs = []
+            for _, e, fwd in run:
+                s, t = (e.a, e.b) if fwd else (e.b, e.a)
+                if e.kind == "line":
+                    segs.append(("line", q(s), q(t)))
+                elif e.kind == "circle":
+                    segs.append(("circle", q(e.c), num(e.r)))
+                else:
+                    segs.append(("arc", q(e.c), q(s), q(t), e.ccw == fwd))
+            rows_of_chain.append(segs)
+        frame = (vt(fr.o), vt(fr.n), vt(fr.x))
+        if how == "extrude":
+            bound = a.get("endBound")
+            bound = bound[1].split(".")[-1] if isinstance(bound, tuple) else "BLIND"
+            if a.get("symmetric") is True and bound == "BLIND":
+                bound = "SYMMETRIC"
+            opp = a.get("oppositeDirection") is True
+            if a.get("hasSecondDirection") is True:
+                raise Unsupported("a surface's second direction")
+            if bound == "BLIND":
+                d = self.val(a["depth"])
+                ext = ("d", num(-d if opp else d))
+            elif bound == "SYMMETRIC":
+                ext = ("sym", num(self.val(a["depth"])))
+            else:
+                raise Unsupported("a surface extrude bound " + bound)
+            make = {"ext": ext}
+        else:
+            ax = self.deref(single(a["axis"], env), env)
+            if not (isinstance(ax, fs.Call) and ax[0] == "sQuery"):
+                raise Unsupported("revolve about a solid's edge")
+            _, _, afr, e = self.ent(ax)
+            if e.kind != "line":
+                raise Unresolved("axis not a line")
+            p0, p1 = afr.world(*e.a), afr.world(*e.b)
+            u0, v0, w0 = fr.uvw(p0)
+            u1, v1, w1 = fr.uvw(p1)
+            if abs(w0) > 1e-6 or abs(w1) > 1e-6:
+                raise Unsupported("axis out of the sketch's plane")
+            l = math.hypot(u1 - u0, v1 - v0)
+            d2 = ((u1 - u0) / l, (v1 - v0) / l)
+            if a.get("oppositeDirection") is True:
+                d2 = (-d2[0], -d2[1])
+            t = a.get("revolveType")
+            t = t[1].split(".")[-1] if isinstance(t, tuple) else "FULL"
+            if t == "FULL":
+                turn = None
+            elif t == "ONE_DIRECTION":
+                turn = ("a", num(self.val(a["angle"])))
+            elif t == "SYMMETRIC":
+                turn = ("sym", num(self.val(a["angle"])))
+            elif t == "TWO_DIRECTIONS":
+                turn = ("two", num(self.val(a["angle"])), num(self.val(a["angleBack"])))
+            else:
+                raise Unsupported("revolve type " + t)
+            make = {"turn": turn, "axis": (num(u0), num(v0), num(d2[0]), num(d2[1]))}
+        for segs in rows_of_chain:
+            self.lines.append(St("sheet", how=how, frame=frame, loops=[segs], **make))
+
     def revolve(self, f):
         a, env = f["args"], f["env"]
-        if "surfaceEntities" in a or "entities" not in a:
-            raise Unsupported("a surface revolve")
         b = a.get("bodyType")
+        if isinstance(b, tuple) and "SURFACE" in b[1]:
+            return self.sheet(f, "revolve")
         if isinstance(b, tuple) and "SOLID" not in b[1]:
             raise Unsupported("a thin or surface revolve")
+        if "entities" not in a:  # surfaceEntities on a solid revolve: as on an extrude
+            raise Unsupported("a surface revolve")
         by = self.regions(a["entities"], env)
         op = self.op_of(a)
         if op is None or len(by) != 1:

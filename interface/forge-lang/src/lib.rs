@@ -437,6 +437,7 @@ fn sum_masses(ms: &[forge_topo::mass::MassProps]) -> forge_topo::mass::MassProps
         axes,
         err,
         faces: vec![],
+        sheet_area: ms.iter().map(|m| m.sheet_area).sum(),
     }
 }
 

@@ -32,8 +32,9 @@ anchors like `base.end`, `base.side(plan.outline[2])`, `hole.bore`; one copy of 
 place of a hole: `edges(of: bolts[1], crease: "convex")`. Features: extrude cut revolve
 sweep loft coil thread hole fillet chamfer shell draft rib pattern, text (in a sketch:
 `label = text("AB-1", at: (x, y), size: s, font: "Open Sans")`, then `extrude(sk.label, h)`), bodies,
-sheet metal, weldments (`members` along a layout's segments with a standard or sketched section,
-`end_trim`, `end_cap`, `corner_plate`), components and assemblies (`help forge`).
+sheets (surfaces: `extrude(S.path, d, surface: true)`), thin walls (`extrude(S.path, d, thin: t,
+side: "both")`), sheet metal, weldments (`members` along a layout's segments with a standard or
+sketched section, `end_trim`, `end_cap`, `corner_plate`), components and assemblies (`help forge`).
 
 Tools (CLI `forgecad TOOL F ..`, or MCP). Replies are typed JSON with `--json` or over MCP:
 ```
