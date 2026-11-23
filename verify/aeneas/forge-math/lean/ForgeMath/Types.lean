@@ -34,4 +34,14 @@ structure vec.Vec3 where
   y : F64
   z : F64
 
+/-- [forge_math::predicates::incircle_exact_diffs::{closure}]
+    Source: 'kernel/forge-math/src/predicates.rs', lines 754:15-761:5 -/
+@[reducible]
+def predicates.incircle_exact_diffs.closure := Unit
+
+/-- [forge_math::predicates::incircle_exact_general::{closure}]
+    Source: 'kernel/forge-math/src/predicates.rs', lines 782:15-799:5 -/
+@[reducible]
+def predicates.incircle_exact_general.closure := Unit
+
 end forge_math

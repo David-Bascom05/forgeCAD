@@ -72,6 +72,15 @@ def predicates.CCW_BOUND : Result F64 := do
   let fl2 ← lift (F64.Ops.add (F64.Ops.ofBits 4613937818241073152) fl1)
   ok (F64.Ops.mul fl2 fl)
 
+/-- [forge_math::predicates::ICC_BOUND]
+    Source: 'kernel/forge-math/src/predicates.rs', lines 31:0-31:49 -/
+@[global_simps, irreducible]
+def predicates.ICC_BOUND : Result F64 := do
+  let fl ← predicates.EPS
+  let fl1 ← lift (F64.Ops.mul (F64.Ops.ofBits 4636455816377925632) fl)
+  let fl2 ← lift (F64.Ops.add (F64.Ops.ofBits 4621819117588971520) fl1)
+  ok (F64.Ops.mul fl2 fl)
+
 /-- [forge_math::predicates::CCW_BOUND_B]
     Source: 'kernel/forge-math/src/predicates.rs', lines 34:0-34:50 -/
 @[global_simps, irreducible]
@@ -79,6 +88,15 @@ def predicates.CCW_BOUND_B : Result F64 := do
   let fl ← predicates.EPS
   let fl1 ← lift (F64.Ops.mul (F64.Ops.ofBits 4622945017495814144) fl)
   let fl2 ← lift (F64.Ops.add (F64.Ops.ofBits 4611686018427387904) fl1)
+  ok (F64.Ops.mul fl2 fl)
+
+/-- [forge_math::predicates::ICC_BOUND_B]
+    Source: 'kernel/forge-math/src/predicates.rs', lines 35:0-35:50 -/
+@[global_simps, irreducible]
+def predicates.ICC_BOUND_B : Result F64 := do
+  let fl ← predicates.EPS
+  let fl1 ← lift (F64.Ops.mul (F64.Ops.ofBits 4631952216750555136) fl)
+  let fl2 ← lift (F64.Ops.add (F64.Ops.ofBits 4616189618054758400) fl1)
   ok (F64.Ops.mul fl2 fl)
 
 /-- [forge_math::predicates::CROSS_BOUND]
@@ -165,8 +183,180 @@ def predicates.estimate (e : Slice F64) : Result F64 := do
     else ok top
   else ok top
 
+/-- [forge_math::predicates::next_component]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 349:0-355:1 -/
+def predicates.next_component
+  (e : Slice F64) (f : Slice F64) (ei : Std.Usize) (fi : Std.Usize) :
+  Result (F64 × Std.Usize × Std.Usize)
+  := do
+  let i := Slice.len f
+  if fi >= i
+  then
+    let fl ← Slice.index_usize e ei
+    let i1 ← ei + 1#usize
+    ok (fl, i1, fi)
+  else
+    let i1 := Slice.len e
+    if ei < i1
+    then
+      let fl ← Slice.index_usize e ei
+      let fl1 ← core.f64.F64.abs fl
+      let fl2 ← Slice.index_usize f fi
+      let fl3 ← core.f64.F64.abs fl2
+      if F64.Ops.lt fl1 fl3
+      then let i2 ← ei + 1#usize
+           ok (fl, i2, fi)
+      else let i2 ← fi + 1#usize
+           ok (fl2, ei, i2)
+    else
+      let fl ← Slice.index_usize f fi
+      let i2 ← fi + 1#usize
+      ok (fl, ei, i2)
+
+/-- [forge_math::predicates::sum_into]: loop body 0:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 328:4-338:5 -/
+@[rust_loop_body]
+def predicates.sum_into_loop.body
+  (e : Slice F64) (f : Slice F64) (total : Std.Usize) (h : Slice F64)
+  (n : Std.Usize) (q : F64) (ei : Std.Usize) (fi : Std.Usize) (k : Std.Usize) :
+  Result (ControlFlow ((Slice F64) × Std.Usize × F64 × Std.Usize ×
+    Std.Usize × Std.Usize) ((Slice F64) × Std.Usize × F64))
+  := do
+  if k < total
+  then
+    let (x, ei2, fi2) ← predicates.next_component e f ei fi
+    let (s, err) ← predicates.two_sum q x
+    let (h1, n1) ←
+      if F64.Ops.ne err (F64.Ops.ofBits 0)
+      then
+        do
+        let s1 ← Slice.update h n err
+        let n2 ← n + 1#usize
+        ok (s1, n2)
+      else ok (h, n)
+    let k1 ← k + 1#usize
+    ok (cont (h1, n1, s, ei2, fi2, k1))
+  else ok (done (h, n, q))
+
+/-- [forge_math::predicates::sum_into]: loop 0:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 328:4-338:5 -/
+@[rust_loop]
+def predicates.sum_into_loop
+  (e : Slice F64) (f : Slice F64) (h : Slice F64) (n : Std.Usize)
+  (total : Std.Usize) (q : F64) (ei : Std.Usize) (fi : Std.Usize)
+  (k : Std.Usize) :
+  Result ((Slice F64) × Std.Usize × F64)
+  := do
+  loop
+    (fun (h1, n1, q1, ei1, fi1, k1) => predicates.sum_into_loop.body e f total
+      h1 n1 q1 ei1 fi1 k1)
+    (h, n, q, ei, fi, k)
+
+/-- [forge_math::predicates::sum_into]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 321:0-344:1 -/
+def predicates.sum_into
+  (e : Slice F64) (f : Slice F64) (h : Slice F64) :
+  Result (Std.Usize × (Slice F64))
+  := do
+  let i := Slice.len e
+  let i1 := Slice.len f
+  let total ← i + i1
+  if total = 0#usize
+  then ok (0#usize, h)
+  else
+    let (q, ei, fi) ← predicates.next_component e f 0#usize 0#usize
+    let (h1, n, q1) ←
+      predicates.sum_into_loop e f h 0#usize total q ei fi 1#usize
+    if F64.Ops.ne q1 (F64.Ops.ofBits 0)
+    then let h2 ← Slice.update h1 n q1
+         let n1 ← n + 1#usize
+         ok (n1, h2)
+    else
+      if n = 0#usize
+      then let h2 ← Slice.update h1 n q1
+           let n1 ← n + 1#usize
+           ok (n1, h2)
+      else ok (n, h1)
+
+/-- [forge_math::predicates::scale_into]: loop body 0:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 369:4-383:5 -/
+@[rust_loop_body]
+def predicates.scale_into_loop.body
+  (e : Slice F64) (b : F64) (h : Slice F64) (n : Std.Usize) (q : F64)
+  (i : Std.Usize) :
+  Result (ControlFlow ((Slice F64) × Std.Usize × F64 × Std.Usize) ((Slice
+    F64) × Std.Usize × F64))
+  := do
+  let i1 := Slice.len e
+  if i < i1
+  then
+    let fl ← Slice.index_usize e i
+    let (p1, p0) ← predicates.two_product fl b
+    let i2 ← i + 1#usize
+    let (s, err) ← predicates.two_sum q p0
+    let (h1, n1) ←
+      if F64.Ops.ne err (F64.Ops.ofBits 0)
+      then
+        do
+        let s1 ← Slice.update h n err
+        let n2 ← n + 1#usize
+        ok (s1, n2)
+      else ok (h, n)
+    let (s2, err2) ← predicates.two_sum p1 s
+    if F64.Ops.ne err2 (F64.Ops.ofBits 0)
+    then
+      let s1 ← Slice.update h1 n1 err2
+      let n2 ← n1 + 1#usize
+      ok (cont (s1, n2, s2, i2))
+    else ok (cont (h1, n1, s2, i2))
+  else ok (done (h, n, q))
+
+/-- [forge_math::predicates::scale_into]: loop 0:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 369:4-383:5 -/
+@[rust_loop]
+def predicates.scale_into_loop
+  (e : Slice F64) (b : F64) (h : Slice F64) (n : Std.Usize) (q : F64)
+  (i : Std.Usize) :
+  Result ((Slice F64) × Std.Usize × F64)
+  := do
+  loop
+    (fun (h1, n1, q1, i1) => predicates.scale_into_loop.body e b h1 n1 q1 i1)
+    (h, n, q, i)
+
+/-- [forge_math::predicates::scale_into]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 358:0-389:1 -/
+def predicates.scale_into
+  (e : Slice F64) (b : F64) (h : Slice F64) :
+  Result (Std.Usize × (Slice F64))
+  := do
+  let b1 ← core.slice.Slice.is_empty e
+  if b1
+  then ok (0#usize, h)
+  else
+    let fl ← Slice.index_usize e 0#usize
+    let (q, lo) ← predicates.two_product fl b
+    let (h1, n) ←
+      if F64.Ops.ne lo (F64.Ops.ofBits 0)
+      then
+        do
+        let s ← Slice.update h 0#usize lo
+        let n1 ← 0#usize + 1#usize
+        ok (s, n1)
+      else ok (h, 0#usize)
+    let (h2, n1, q1) ← predicates.scale_into_loop e b h1 n q 1#usize
+    if F64.Ops.ne q1 (F64.Ops.ofBits 0)
+    then let h3 ← Slice.update h2 n1 q1
+         let n2 ← n1 + 1#usize
+         ok (n2, h3)
+    else
+      if n1 = 0#usize
+      then let h3 ← Slice.update h2 n1 q1
+           let n2 ← n1 + 1#usize
+           ok (n2, h3)
+      else ok (n1, h2)
+
 /-- [forge_math::predicates::cross_exact]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 385:0-389:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 392:0-396:1 -/
 def predicates.cross_exact
   (a : F64) (d : F64) (b : F64) (c : F64) (h : Array F64 4#usize) :
   Result (Std.Usize × (Array F64 4#usize))
@@ -182,8 +372,59 @@ def predicates.cross_exact
   let h1 := to_slice_mut_back s3
   ok (i, h1)
 
+/-- [forge_math::predicates::exact_diffs]: loop body 0:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 401:4-409:5 -/
+@[rust_loop_body]
+def predicates.exact_diffs_loop.body
+  {N : Std.Usize} (pairs : Array (F64 × F64) N) (out : Array F64 N)
+  (exact : Bool) (i : Std.Usize) :
+  Result (ControlFlow ((Array F64 N) × Bool × Std.Usize) ((Array F64 N) ×
+    Bool))
+  := do
+  if exact
+  then
+    if i < N
+    then
+      let (fl, fl1) ← Array.index_usize pairs i
+      let (x, tail) ← predicates.two_diff fl fl1
+      let (out1, exact1) ←
+        if F64.Ops.ne tail (F64.Ops.ofBits 0)
+        then ok (out, false)
+        else do
+             let a ← Array.update out i x
+             ok (a, exact)
+      let i1 ← i + 1#usize
+      ok (cont (out1, exact1, i1))
+    else ok (done (out, exact))
+  else ok (done (out, exact))
+
+/-- [forge_math::predicates::exact_diffs]: loop 0:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 401:4-409:5 -/
+@[rust_loop]
+def predicates.exact_diffs_loop
+  {N : Std.Usize} (pairs : Array (F64 × F64) N) (out : Array F64 N)
+  (exact : Bool) (i : Std.Usize) :
+  Result ((Array F64 N) × Bool)
+  := do
+  loop
+    (fun (out1, exact1, i1) => predicates.exact_diffs_loop.body pairs out1
+      exact1 i1)
+    (out, exact, i)
+
+/-- [forge_math::predicates::exact_diffs]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 398:0-411:1 -/
+def predicates.exact_diffs
+  {N : Std.Usize} (pairs : Array (F64 × F64) N) :
+  Result (Option (Array F64 N))
+  := do
+  let out := Array.repeat N (F64.Ops.ofBits 0)
+  let (out1, exact) ← predicates.exact_diffs_loop pairs out true 0#usize
+  if exact
+  then ok (some out1)
+  else ok none
+
 /-- [forge_math::predicates::mul_small]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 472:0-481:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 482:0-491:1 -/
 def predicates.mul_small
   (e : Slice F64) (f : Slice F64) (h : Array F64 8#usize) :
   Result (Std.Usize × (Array F64 8#usize))
@@ -227,38 +468,34 @@ def predicates.mul_small
     ok (np1, h1)
 
 /-- [forge_math::predicates::cross_two]: loop body 0:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 494:4-496:5 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 505:4-508:5 -/
 @[rust_loop_body]
 def predicates.cross_two_loop.body
-  (iter : core.slice.iter.IterMut F64)
-  (back : core.slice.iter.IterMut F64 → core.slice.iter.IterMut F64) :
-  Result (ControlFlow ((core.slice.iter.IterMut F64) ×
-    (core.slice.iter.IterMut F64 → core.slice.iter.IterMut F64))
-    (core.slice.iter.IterMut F64))
+  (nq : Std.Usize) (q : Array F64 8#usize) (i : Std.Usize) :
+  Result (ControlFlow ((Array F64 8#usize) × Std.Usize) (Array F64 8#usize))
   := do
-  let (o, iter1, next_back) ← core.slice.iter.IteratorIterMut.next iter
-  match o with
-  | none => ok (done (let im := next_back iter1 none
-                      back im))
-  | some v =>
-    let v1 ← lift (F64.Ops.neg v)
-    ok (cont (iter1, fun im => let im1 := next_back im (some v1)
-                               back im1))
+  if i < nq
+  then
+    let fl ← Array.index_usize q i
+    let fl1 ← lift (F64.Ops.neg fl)
+    let a ← Array.update q i fl1
+    let i1 ← i + 1#usize
+    ok (cont (a, i1))
+  else ok (done q)
 
 /-- [forge_math::predicates::cross_two]: loop 0:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 494:4-496:5 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 505:4-508:5 -/
 @[rust_loop]
 def predicates.cross_two_loop
-  (iter : core.slice.iter.IterMut F64)
-  (back : core.slice.iter.IterMut F64 → core.slice.iter.IterMut F64) :
-  Result (core.slice.iter.IterMut F64)
+  (q : Array F64 8#usize) (nq : Std.Usize) (i : Std.Usize) :
+  Result (Array F64 8#usize)
   := do
   loop
-    (fun (iter1, back1) => predicates.cross_two_loop.body iter1 back1)
-    (iter, back)
+    (fun (q1, i1) => predicates.cross_two_loop.body nq q1 i1)
+    (q, i)
 
 /-- [forge_math::predicates::cross_two]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 484:0-498:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 494:0-510:1 -/
 def predicates.cross_two
   (x1 : ((Array F64 2#usize) × Std.Usize))
   (y2 : ((Array F64 2#usize) × Std.Usize))
@@ -286,27 +523,20 @@ def predicates.cross_two
     core.array.Array.index (core.ops.index.IndexSlice
       (core.slice.index.SliceIndexRangeToUsizeSlice F64)) a3 { «end» := i3 }
   let (nq, q1) ← predicates.mul_small s2 s3 q
-  let (s4, index_mut_back) ←
-    core.array.Array.index_mut (core.ops.index.IndexMutSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) q1 { «end» := nq }
-  let (iter, into_iter_back) ←
-    MutASlice.Insts.CoreIterTraitsCollectIntoIteratorMutATIterMut.into_iter s4
-  let back ← predicates.cross_two_loop iter (fun im => im)
-  let s5 ←
+  let q2 ← predicates.cross_two_loop q1 nq 0#usize
+  let s4 ←
     core.array.Array.index (core.ops.index.IndexSlice
       (core.slice.index.SliceIndexRangeToUsizeSlice F64)) p1 { «end» := np }
-  let s6 := into_iter_back back
-  let q2 := index_mut_back s6
-  let s7 ←
+  let s5 ←
     core.array.Array.index (core.ops.index.IndexSlice
       (core.slice.index.SliceIndexRangeToUsizeSlice F64)) q2 { «end» := nq }
-  let (s8, to_slice_mut_back) ← lift (Array.to_slice_mut h)
-  let (i4, s9) ← predicates.sum_into s5 s7 s8
-  let h1 := to_slice_mut_back s9
+  let (s6, to_slice_mut_back) ← lift (Array.to_slice_mut h)
+  let (i4, s7) ← predicates.sum_into s4 s5 s6
+  let h1 := to_slice_mut_back s7
   ok (i4, h1)
 
 /-- [forge_math::predicates::diff2]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 467:0-470:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 477:0-480:1 -/
 def predicates.diff2
   (a : F64) (b : F64) : Result ((Array F64 2#usize) × Std.Usize) := do
   let (x, y) ← predicates.two_diff a b
@@ -315,7 +545,7 @@ def predicates.diff2
   else ok (Array.make 2#usize [ y, x ], 2#usize)
 
 /-- [forge_math::predicates::orient2d_exact]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 439:0-451:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 449:0-461:1 -/
 def predicates.orient2d_exact
   (a : vec.Point2) (b : vec.Point2) (c : vec.Point2) : Result F64 := do
   let o ←
@@ -346,7 +576,7 @@ def predicates.orient2d_exact
     predicates.estimate s
 
 /-- [forge_math::predicates::orient2d_adapt]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 427:0-437:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 437:0-447:1 -/
 def predicates.orient2d_adapt
   (a : vec.Point2) (b : vec.Point2) (c : vec.Point2) (detsum : F64) :
   Result F64
@@ -378,7 +608,7 @@ def predicates.orient2d_adapt
       else ok e
 
 /-- [forge_math::predicates::orient2d]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 405:0-424:1
+    Source: 'kernel/forge-math/src/predicates.rs', lines 415:0-434:1
     Visibility: public -/
 def predicates.orient2d
   (a : vec.Point2) (b : vec.Point2) (c : vec.Point2) : Result F64 := do
@@ -403,7 +633,7 @@ def predicates.orient2d
     else predicates.orient2d_adapt a b c detsum
 
 /-- [forge_math::predicates::cross_sign]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 502:0-514:1
+    Source: 'kernel/forge-math/src/predicates.rs', lines 514:0-526:1
     Visibility: public -/
 def predicates.cross_sign
   (a : F64) (b : F64) (c : F64) (d : F64) : Result F64 := do
@@ -431,7 +661,7 @@ def predicates.cross_sign
     else ok e
 
 /-- [forge_math::predicates::dot3]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 524:0-548:1
+    Source: 'kernel/forge-math/src/predicates.rs', lines 536:0-560:1
     Visibility: public -/
 def predicates.dot3 (u : vec.Vec3) (v : vec.Vec3) : Result F64 := do
   let x ← lift (F64.Ops.mul u.x v.x)
@@ -477,5 +707,403 @@ def predicates.dot3 (u : vec.Vec3) (v : vec.Vec3) : Result F64 := do
     if b
     then predicates.dot3_big u v
     else ok e
+
+/-- [forge_math::predicates::incircle_exact_diffs::{impl core::ops::function::Fn<(f64, f64, &'_0 [f64], &'_1 mut [f64; 32usize]), usize> for forge_math::predicates::incircle_exact_diffs::{closure}}::call]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 754:15-761:5 -/
+def
+  predicates.incircle_exact_diffs.closure.Insts.CoreOpsFunctionFnTupleF64F64Shared0SliceF64Mut1ArrayF6432Usize.call
+  (c : predicates.incircle_exact_diffs.closure)
+  (tupled_args : (F64 × F64 × (Slice F64) × (Array F64 32#usize))) :
+  Result (Std.Usize × (Array F64 32#usize))
+  := do
+  let (x, y, cr, out) := tupled_args
+  let t8 := Array.repeat 8#usize (F64.Ops.ofBits 0)
+  let t16a := Array.repeat 16#usize (F64.Ops.ofBits 0)
+  let t16b := Array.repeat 16#usize (F64.Ops.ofBits 0)
+  let (s, to_slice_mut_back) ← lift (Array.to_slice_mut t8)
+  let (n8, s1) ← predicates.scale_into cr x s
+  let t81 := to_slice_mut_back s1
+  let s2 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) t81 { «end» := n8 }
+  let (s3, to_slice_mut_back1) ← lift (Array.to_slice_mut t16a)
+  let (na, s4) ← predicates.scale_into s2 x s3
+  let (s5, to_slice_mut_back2) ← lift (Array.to_slice_mut t81)
+  let (n81, s6) ← predicates.scale_into cr y s5
+  let t82 := to_slice_mut_back2 s6
+  let s7 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) t82
+      { «end» := n81 }
+  let (s8, to_slice_mut_back3) ← lift (Array.to_slice_mut t16b)
+  let (nb, s9) ← predicates.scale_into s7 y s8
+  let t16a1 := to_slice_mut_back1 s4
+  let s10 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) t16a1
+      { «end» := na }
+  let t16b1 := to_slice_mut_back3 s9
+  let s11 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) t16b1
+      { «end» := nb }
+  let (s12, to_slice_mut_back4) ← lift (Array.to_slice_mut out)
+  let (i, s13) ← predicates.sum_into s10 s11 s12
+  let out1 := to_slice_mut_back4 s13
+  ok (i, out1)
+
+/-- [forge_math::predicates::incircle_exact_diffs]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 753:0-775:1 -/
+def predicates.incircle_exact_diffs (a : Array F64 6#usize) : Result F64 := do
+  let adx ← Array.index_usize a 0#usize
+  let ady ← Array.index_usize a 1#usize
+  let bdx ← Array.index_usize a 2#usize
+  let bdy ← Array.index_usize a 3#usize
+  let cdx ← Array.index_usize a 4#usize
+  let cdy ← Array.index_usize a 5#usize
+  let bc := Array.repeat 4#usize (F64.Ops.ofBits 0)
+  let ca := Array.repeat 4#usize (F64.Ops.ofBits 0)
+  let ab := Array.repeat 4#usize (F64.Ops.ofBits 0)
+  let (nbc, bc1) ← predicates.cross_exact bdx cdy cdx bdy bc
+  let (nca, ca1) ← predicates.cross_exact cdx ady adx cdy ca
+  let (nab, ab1) ← predicates.cross_exact adx bdy bdx ady ab
+  let ta := Array.repeat 32#usize (F64.Ops.ofBits 0)
+  let tb := Array.repeat 32#usize (F64.Ops.ofBits 0)
+  let tc := Array.repeat 32#usize (F64.Ops.ofBits 0)
+  let s ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) bc1
+      { «end» := nbc }
+  let (na, ta1) ←
+    predicates.incircle_exact_diffs.closure.Insts.CoreOpsFunctionFnTupleF64F64Shared0SliceF64Mut1ArrayF6432Usize.call
+      () (adx, ady, s, ta)
+  let s1 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) ca1
+      { «end» := nca }
+  let (nb, tb1) ←
+    predicates.incircle_exact_diffs.closure.Insts.CoreOpsFunctionFnTupleF64F64Shared0SliceF64Mut1ArrayF6432Usize.call
+      () (bdx, bdy, s1, tb)
+  let s2 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) ab1
+      { «end» := nab }
+  let (nc, tc1) ←
+    predicates.incircle_exact_diffs.closure.Insts.CoreOpsFunctionFnTupleF64F64Shared0SliceF64Mut1ArrayF6432Usize.call
+      () (cdx, cdy, s2, tc)
+  let tab := Array.repeat 64#usize (F64.Ops.ofBits 0)
+  let s3 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) ta1 { «end» := na }
+  let s4 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) tb1 { «end» := nb }
+  let (s5, to_slice_mut_back) ← lift (Array.to_slice_mut tab)
+  let (nab2, s6) ← predicates.sum_into s3 s4 s5
+  let fin := Array.repeat 96#usize (F64.Ops.ofBits 0)
+  let tab1 := to_slice_mut_back s6
+  let s7 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) tab1
+      { «end» := nab2 }
+  let s8 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) tc1 { «end» := nc }
+  let (s9, to_slice_mut_back1) ← lift (Array.to_slice_mut fin)
+  let (n, s10) ← predicates.sum_into s7 s8 s9
+  let fin1 := to_slice_mut_back1 s10
+  let s11 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) fin1 { «end» := n }
+  predicates.estimate s11
+
+/-- [forge_math::predicates::incircle_exact_general::{impl core::ops::function::Fn<(&'_0 ([f64; 2usize], usize), &'_1 ([f64; 2usize], usize), &'_2 [f64], &'_3 mut [f64; 512usize]), usize> for forge_math::predicates::incircle_exact_general::{closure}}::call]: loop body 0:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 792:8-797:9 -/
+@[rust_loop_body]
+def
+  predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call_loop.body
+  (cr : Slice F64) (sq : Array F64 16#usize) (nl : Std.Usize)
+  (out : Array F64 512#usize) (acc : Array F64 512#usize) (na : Std.Usize)
+  (part : Array F64 32#usize) (k : Std.Usize) :
+  Result (ControlFlow ((Array F64 512#usize) × (Array F64 512#usize) ×
+    Std.Usize × (Array F64 32#usize) × Std.Usize) (Std.Usize × (Array F64
+    512#usize)))
+  := do
+  let i := Slice.len cr
+  if k < i
+  then
+    let s ←
+      core.array.Array.index (core.ops.index.IndexSlice
+        (core.slice.index.SliceIndexRangeToUsizeSlice F64)) sq
+        { «end» := nl }
+    let fl ← Slice.index_usize cr k
+    let (s1, to_slice_mut_back) ← lift (Array.to_slice_mut part)
+    let (np, s2) ← predicates.scale_into s fl s1
+    let s3 ←
+      core.array.Array.index (core.ops.index.IndexSlice
+        (core.slice.index.SliceIndexRangeToUsizeSlice F64)) acc
+        { «end» := na }
+    let part1 := to_slice_mut_back s2
+    let s4 ←
+      core.array.Array.index (core.ops.index.IndexSlice
+        (core.slice.index.SliceIndexRangeToUsizeSlice F64)) part1
+        { «end» := np }
+    let (s5, to_slice_mut_back1) ← lift (Array.to_slice_mut out)
+    let (na1, s6) ← predicates.sum_into s3 s4 s5
+    let (s7, index_mut_back) ←
+      core.array.Array.index_mut (core.ops.index.IndexMutSlice
+        (core.slice.index.SliceIndexRangeToUsizeSlice F64)) acc
+        { «end» := na1 }
+    let out1 := to_slice_mut_back1 s6
+    let s8 ←
+      core.array.Array.index (core.ops.index.IndexSlice
+        (core.slice.index.SliceIndexRangeToUsizeSlice F64)) out1
+        { «end» := na1 }
+    let s9 ← core.slice.Slice.copy_from_slice F64.Insts.CoreMarkerCopy s7 s8
+    let k1 ← k + 1#usize
+    let acc1 := index_mut_back s9
+    ok (cont (out1, acc1, na1, part1, k1))
+  else ok (done (na, out))
+
+/-- [forge_math::predicates::incircle_exact_general::{impl core::ops::function::Fn<(&'_0 ([f64; 2usize], usize), &'_1 ([f64; 2usize], usize), &'_2 [f64], &'_3 mut [f64; 512usize]), usize> for forge_math::predicates::incircle_exact_general::{closure}}::call]: loop 0:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 792:8-797:9 -/
+@[rust_loop]
+def
+  predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call_loop
+  (cr : Slice F64) (out : Array F64 512#usize) (sq : Array F64 16#usize)
+  (nl : Std.Usize) (acc : Array F64 512#usize) (na : Std.Usize)
+  (part : Array F64 32#usize) (k : Std.Usize) :
+  Result (Std.Usize × (Array F64 512#usize))
+  := do
+  loop
+    (fun (out1, acc1, na1, part1, k1) =>
+      predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call_loop.body
+      cr sq nl out1 acc1 na1 part1 k1)
+    (out, acc, na, part, k)
+
+/-- [forge_math::predicates::incircle_exact_general::{impl core::ops::function::Fn<(&'_0 ([f64; 2usize], usize), &'_1 ([f64; 2usize], usize), &'_2 [f64], &'_3 mut [f64; 512usize]), usize> for forge_math::predicates::incircle_exact_general::{closure}}::call]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 782:15-799:5 -/
+def
+  predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call
+  (c : predicates.incircle_exact_general.closure)
+  (tupled_args : (((Array F64 2#usize) × Std.Usize) × ((Array F64 2#usize) ×
+  Std.Usize) × (Slice F64) × (Array F64 512#usize))) :
+  Result (Std.Usize × (Array F64 512#usize))
+  := do
+  let (x, y, cr, out) := tupled_args
+  let xx := Array.repeat 8#usize (F64.Ops.ofBits 0)
+  let yy := Array.repeat 8#usize (F64.Ops.ofBits 0)
+  let sq := Array.repeat 16#usize (F64.Ops.ofBits 0)
+  let (a, i) := x
+  let s ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) a { «end» := i }
+  let (nx, xx1) ← predicates.mul_small s s xx
+  let (a1, i1) := y
+  let s1 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) a1 { «end» := i1 }
+  let (ny, yy1) ← predicates.mul_small s1 s1 yy
+  let s2 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) xx1 { «end» := nx }
+  let s3 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) yy1 { «end» := ny }
+  let (s4, to_slice_mut_back) ← lift (Array.to_slice_mut sq)
+  let (nl, s5) ← predicates.sum_into s2 s3 s4
+  let acc := Array.repeat 512#usize (F64.Ops.ofBits 0)
+  let part := Array.repeat 32#usize (F64.Ops.ofBits 0)
+  let sq1 := to_slice_mut_back s5
+  predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call_loop
+    cr out sq1 nl acc 0#usize part 0#usize
+
+/-- [forge_math::predicates::incircle_exact_general]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 777:0-813:1 -/
+def predicates.incircle_exact_general
+  (a : vec.Point2) (b : vec.Point2) (c : vec.Point2) (d : vec.Point2) :
+  Result F64
+  := do
+  let adx ← predicates.diff2 a.x d.x
+  let ady ← predicates.diff2 a.y d.y
+  let bdx ← predicates.diff2 b.x d.x
+  let bdy ← predicates.diff2 b.y d.y
+  let cdx ← predicates.diff2 c.x d.x
+  let cdy ← predicates.diff2 c.y d.y
+  let bc := Array.repeat 16#usize (F64.Ops.ofBits 0)
+  let ca := Array.repeat 16#usize (F64.Ops.ofBits 0)
+  let ab := Array.repeat 16#usize (F64.Ops.ofBits 0)
+  let (nbc, bc1) ← predicates.cross_two bdx cdy cdx bdy bc
+  let (nca, ca1) ← predicates.cross_two cdx ady adx cdy ca
+  let (nab, ab1) ← predicates.cross_two adx bdy bdx ady ab
+  let ta := Array.repeat 512#usize (F64.Ops.ofBits 0)
+  let tb := Array.repeat 512#usize (F64.Ops.ofBits 0)
+  let tc := Array.repeat 512#usize (F64.Ops.ofBits 0)
+  let s ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) bc1
+      { «end» := nbc }
+  let (na, ta1) ←
+    predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call
+      () (adx, ady, s, ta)
+  let s1 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) ca1
+      { «end» := nca }
+  let (nb, tb1) ←
+    predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call
+      () (bdx, bdy, s1, tb)
+  let s2 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) ab1
+      { «end» := nab }
+  let (nc, tc1) ←
+    predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call
+      () (cdx, cdy, s2, tc)
+  let tab := Array.repeat 1024#usize (F64.Ops.ofBits 0)
+  let s3 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) ta1 { «end» := na }
+  let s4 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) tb1 { «end» := nb }
+  let (s5, to_slice_mut_back) ← lift (Array.to_slice_mut tab)
+  let (nab2, s6) ← predicates.sum_into s3 s4 s5
+  let fin := Array.repeat 1536#usize (F64.Ops.ofBits 0)
+  let tab1 := to_slice_mut_back s6
+  let s7 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) tab1
+      { «end» := nab2 }
+  let s8 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) tc1 { «end» := nc }
+  let (s9, to_slice_mut_back1) ← lift (Array.to_slice_mut fin)
+  let (n, s10) ← predicates.sum_into s7 s8 s9
+  let fin1 := to_slice_mut_back1 s10
+  let s11 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) fin1 { «end» := n }
+  predicates.estimate s11
+
+/-- [forge_math::predicates::incircle_exact]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 738:0-750:1 -/
+def predicates.incircle_exact
+  (a : vec.Point2) (b : vec.Point2) (c : vec.Point2) (d : vec.Point2) :
+  Result F64
+  := do
+  let o ←
+    predicates.exact_diffs
+      (Array.make 6#usize [
+        (a.x, d.x), (a.y, d.y), (b.x, d.x), (b.y, d.y), (c.x, d.x), (c.y, d.y)
+        ])
+  match o with
+  | none => predicates.incircle_exact_general a b c d
+  | some dx => predicates.incircle_exact_diffs dx
+
+/-- [forge_math::predicates::incircle]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 679:0-714:1
+    Visibility: public -/
+def predicates.incircle
+  (a : vec.Point2) (b : vec.Point2) (c : vec.Point2) (d : vec.Point2) :
+  Result F64
+  := do
+  let adx ← lift (F64.Ops.sub a.x d.x)
+  let ady ← lift (F64.Ops.sub a.y d.y)
+  let bdx ← lift (F64.Ops.sub b.x d.x)
+  let bdy ← lift (F64.Ops.sub b.y d.y)
+  let cdx ← lift (F64.Ops.sub c.x d.x)
+  let cdy ← lift (F64.Ops.sub c.y d.y)
+  let bdxcdy ← lift (F64.Ops.mul bdx cdy)
+  let cdxbdy ← lift (F64.Ops.mul cdx bdy)
+  let cdxady ← lift (F64.Ops.mul cdx ady)
+  let adxcdy ← lift (F64.Ops.mul adx cdy)
+  let adxbdy ← lift (F64.Ops.mul adx bdy)
+  let bdxady ← lift (F64.Ops.mul bdx ady)
+  let fl ← lift (F64.Ops.mul adx adx)
+  let fl1 ← lift (F64.Ops.mul ady ady)
+  let alift ← lift (F64.Ops.add fl fl1)
+  let fl2 ← lift (F64.Ops.mul bdx bdx)
+  let fl3 ← lift (F64.Ops.mul bdy bdy)
+  let blift ← lift (F64.Ops.add fl2 fl3)
+  let fl4 ← lift (F64.Ops.mul cdx cdx)
+  let fl5 ← lift (F64.Ops.mul cdy cdy)
+  let clift ← lift (F64.Ops.add fl4 fl5)
+  let fl6 ← lift (F64.Ops.sub bdxcdy cdxbdy)
+  let fl7 ← lift (F64.Ops.mul alift fl6)
+  let fl8 ← lift (F64.Ops.sub cdxady adxcdy)
+  let fl9 ← lift (F64.Ops.mul blift fl8)
+  let fl10 ← lift (F64.Ops.add fl7 fl9)
+  let fl11 ← lift (F64.Ops.sub adxbdy bdxady)
+  let fl12 ← lift (F64.Ops.mul clift fl11)
+  let det ← lift (F64.Ops.add fl10 fl12)
+  let fl13 ← core.f64.F64.abs bdxcdy
+  let fl14 ← core.f64.F64.abs cdxbdy
+  let fl15 ← lift (F64.Ops.add fl13 fl14)
+  let fl16 ← lift (F64.Ops.mul fl15 alift)
+  let fl17 ← core.f64.F64.abs cdxady
+  let fl18 ← core.f64.F64.abs adxcdy
+  let fl19 ← lift (F64.Ops.add fl17 fl18)
+  let fl20 ← lift (F64.Ops.mul fl19 blift)
+  let fl21 ← lift (F64.Ops.add fl16 fl20)
+  let fl22 ← core.f64.F64.abs adxbdy
+  let fl23 ← core.f64.F64.abs bdxady
+  let fl24 ← lift (F64.Ops.add fl22 fl23)
+  let fl25 ← lift (F64.Ops.mul fl24 clift)
+  let permanent ← lift (F64.Ops.add fl21 fl25)
+  let fl26 ← predicates.ICC_BOUND
+  let bound ← lift (F64.Ops.mul fl26 permanent)
+  if F64.Ops.gt det bound
+  then ok det
+  else
+    let fl27 ← lift (F64.Ops.neg det)
+    if F64.Ops.gt fl27 bound
+    then ok det
+    else
+      let det1 ←
+        predicates.incircle_exact_diffs
+          (Array.make 6#usize [ adx, ady, bdx, bdy, cdx, cdy ])
+      let (_, fl28) ← predicates.two_diff a.x d.x
+      let exact ←
+        if F64.Ops.eq fl28 (F64.Ops.ofBits 0)
+        then
+          do
+          let (_, fl29) ← predicates.two_diff a.y d.y
+          if F64.Ops.eq fl29 (F64.Ops.ofBits 0)
+          then
+            let (_, fl30) ← predicates.two_diff b.x d.x
+            if F64.Ops.eq fl30 (F64.Ops.ofBits 0)
+            then
+              let (_, fl31) ← predicates.two_diff b.y d.y
+              if F64.Ops.eq fl31 (F64.Ops.ofBits 0)
+              then
+                let (_, fl32) ← predicates.two_diff c.x d.x
+                if F64.Ops.eq fl32 (F64.Ops.ofBits 0)
+                then
+                  let (_, fl33) ← predicates.two_diff c.y d.y
+                  ok (F64.Ops.eq fl33 (F64.Ops.ofBits 0))
+                else ok false
+              else ok false
+            else ok false
+          else ok false
+        else ok false
+      if exact
+      then ok det1
+      else
+        let fl29 ← predicates.ICC_BOUND_B
+        let fl30 ← lift (F64.Ops.mul fl29 permanent)
+        if F64.Ops.ge det1 fl30
+        then ok det1
+        else
+          let fl31 ← lift (F64.Ops.neg det1)
+          let fl32 ← lift (F64.Ops.mul fl29 permanent)
+          if F64.Ops.ge fl31 fl32
+          then ok det1
+          else
+            let e ← predicates.incircle_exact a b c d
+            let b1 ← core.f64.F64.is_nan e
+            if b1
+            then predicates.incircle_big a b c d
+            else ok e
 
 end forge_math

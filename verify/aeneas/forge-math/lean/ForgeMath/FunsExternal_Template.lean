@@ -77,17 +77,6 @@ axiom core.option.OptionShared0T.copied
   {T : Type _} (markerCopyInst : core.marker.Copy T) :
   Option T → Result (Option T)
 
-/-- [core::slice::iter::{impl core::iter::traits::collect::IntoIterator<&'a mut T, core::slice::iter::IterMut<'a, T>> for &'a mut [T]}::into_iter]:
-    Source: '/rustc/library/core/src/slice/iter.rs', lines 33:4-33:40
-    Name pattern: [core::slice::iter::{core::iter::traits::collect::IntoIterator<&'a mut [@T], &'a mut @T, core::slice::iter::IterMut<'a, @T>>}::into_iter]
-    Visibility: public -/
-@[rust_fun
-  "core::slice::iter::{core::iter::traits::collect::IntoIterator<&'a mut [@T], &'a mut @T, core::slice::iter::IterMut<'a, @T>>}::into_iter"]
-axiom MutASlice.Insts.CoreIterTraitsCollectIntoIteratorMutATIterMut.into_iter
-  {T : Type _} :
-  Slice T → Result ((core.slice.iter.IterMut T) × (core.slice.iter.IterMut T
-    → Slice T))
-
 /-- [core::slice::{[T]}::last]:
     Source: '/rustc/library/core/src/slice/mod.rs', lines 283:4-283:42
     Name pattern: [core::slice::{[@T]}::last]
@@ -99,33 +88,17 @@ axiom core.slice.Slice.last {T : Type _} : Slice T → Result (Option T)
     Source: 'kernel/forge-math/src/predicates.rs', lines 264:0-270:1 -/
 axiom predicates.cross_big : F64 → F64 → F64 → F64 → Result F64
 
-/-- [forge_math::predicates::sum_into]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 321:0-350:1 -/
-axiom predicates.sum_into
-  : Slice F64 → Slice F64 → Slice F64 → Result (Std.Usize × (Slice F64))
-
-/-- [forge_math::predicates::scale_into]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 353:0-382:1 -/
-axiom predicates.scale_into
-  : Slice F64 → F64 → Slice F64 → Result (Std.Usize × (Slice F64))
-
-/-- [forge_math::predicates::exact_diffs]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 391:0-401:1 -/
-axiom predicates.exact_diffs
-  {N : Std.Usize} : Array (F64 × F64) N → Result (Option (Array F64 N))
-
 /-- [forge_math::predicates::orient2d_big]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 456:0-464:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 466:0-474:1 -/
 axiom predicates.orient2d_big
   : vec.Point2 → vec.Point2 → vec.Point2 → Result F64
 
 /-- [forge_math::predicates::dot3_big]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 552:0-559:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 564:0-571:1 -/
 axiom predicates.dot3_big : vec.Vec3 → vec.Vec3 → Result F64
 
-/-- [forge_math::predicates::incircle]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 667:0-705:1
-    Visibility: public -/
-axiom predicates.incircle
+/-- [forge_math::predicates::incircle_big]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 719:0-736:1 -/
+axiom predicates.incircle_big
   : vec.Point2 → vec.Point2 → vec.Point2 → vec.Point2 → Result F64
 

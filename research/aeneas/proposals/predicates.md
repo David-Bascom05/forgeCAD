@@ -2,9 +2,9 @@
 
 `predicates-slow-paths.patch` changes `kernel/forge-math/src/predicates.rs` (base 820176b) so that
 every slow path of `cross_sign`, `orient2d`, `dot3` and `incircle` translates. Only the cold
-integer fallback (`Big`, `*_big`) stays opaque. It is **not applied** on the branch. By the
-exact gate's per-line rule, some whole-process lines come out above base (below), and that call
-is the owner's.
+integer fallback (`Big`, `*_big`) stays opaque. **Applied**, after the master accepted it as the
+layout-only case below (kernel lines all ≤ base; the whole-process differences are libc
+`memcpy`/`memcmp` alignment, `predicates-function-diff.txt`).
 
 ## The change
 
@@ -54,7 +54,7 @@ gives 41 definitions. Only the four `*_big` remain opaque, and the Lean builds.
 
 So the kernel executes no more instructions anywhere. The whole-process lines move by layout, by
 up to about 2.5 times the base's own run-to-run spread. Under the strict rule ("no line above
-base") the patch does not pass, and it is left for the owner to accept or refuse.
+base") the patch did not pass. The master accepted it as layout only.
 
 ## Applying it
 
