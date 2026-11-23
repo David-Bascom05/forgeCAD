@@ -14,6 +14,7 @@ import IEEE754.Dmath.AtanFacts
 import IEEE754.Dmath.AsinAcos
 import IEEE754.Screen.Apart
 import IEEE754.Screen.First
+import IEEE754.Screen.Near
 
 /-!
 # Only the standard axioms
@@ -92,3 +93,4 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Screen.coord_sound IEEE754.Screen.cramer IEEE754.Screen.det_track IEEE754.Screen.meet_sound
   IEEE754.Screen.two_sided IEEE754.Screen.sqrt_close IEEE754.Screen.dist_sound IEEE754.Screen.apart_sound
   IEEE754.Screen.searchF_sound IEEE754.Screen.meetF_sound IEEE754.Screen.tolF_hi IEEE754.Screen.first_meet_f_sound
+  IEEE754.Screen.e_close IEEE754.Screen.r_close IEEE754.Screen.near_f_past IEEE754.Screen.near_f_within

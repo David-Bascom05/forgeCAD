@@ -22,4 +22,5 @@ import IEEE754.Dmath.AtanFacts
 import IEEE754.Dmath.AsinAcos
 import IEEE754.Screen.Apart
 import IEEE754.Screen.First
+import IEEE754.Screen.Near
 import IEEE754.Axioms
