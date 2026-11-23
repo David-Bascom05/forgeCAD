@@ -456,6 +456,19 @@ core:
 
 Of the plane cells `arrange` makes, only 10–15% become facets.
 
+**Measured face-arrangement sizes** (decide-once Rust, FORGE_A8_STATS: each real v1 ledger
+coarsened, joining fine facets across a fine edge that has exactly two of them round it, with one
+class and one holder set). Per boolean, fine → coarse:
+
+| | pieces → facets | edges | verts |
+|---|---|---|---|
+| coplanar | 46.7 → 17.1 | 72.4 → 40.8 | 30.1 → 26.9 |
+| upto | 54.0 → 16.8 | 103.5 → 53.2 | 53.2 → 41.2 |
+| housing | 19 → 12 | 28 → 20 | 12 → 12 |
+
+The §1a estimates (30/20/15 facets) were high for coplanar. R3's builder must reproduce these counts,
+up to seams: a cut along a carrier line adds one facet and the seam's edges.
+
 Housing and upto have the same phases, with fewer facets (15 and 20). They are 1 and 4 booleans, so
 they move their gate lines only slightly. Coplanar is the line that decides it.
 
