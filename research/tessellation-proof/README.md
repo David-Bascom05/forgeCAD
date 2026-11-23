@@ -100,8 +100,13 @@ candidates hold the minimum (Fermat, and the derivative's algebra), and the tria
   nearest p, so in the triangle's plane (normal n) its slope is zero only where p − c ∥ n: c at
   the angle of n's shadow on the plane square to the axis or the opposite one, p = c + t·n on the
   plane; with the axis's point (ρ's kink), each such point in the triangle is judged exactly.
-- A torus that reaches its axis (R ≤ r + c) is left to the middle's and centroid's tests: outside
-  the domain of this rule.
+- A chord that reaches the axis (ρ's kink, where F is not smooth) is not shown within the chord,
+  and is split: before this, the bound let it through (a torus with R = 2r: the diameter from
+  the outer equator to the inner one opposite has its middle on the torus, and strays r at the
+  axis). When the chord's nearest point to the axis lies inside it, αγ − β² is taken as γ·ρ² there
+  (exactly, without cancellation). The rule needs only the chord's own least ρ > 0 and c < r, so
+  it holds for tori near their axis too; a tube no thicker than the chord stays with the middle's
+  test.
 
 **Procedural.** Accepted by the Cells bounds on its bending (tessellate.rs `Cells::within`), so its
 statement is relative to those bounds.
@@ -114,11 +119,29 @@ statement is relative to those bounds.
 | Cylinder | edge middles | | the projection argument (exact by midpoint) |
 | Sphere | edge middles, the foot (filtered) | `sphere_exact`, `sphere_filter`, `foot_far` | |
 | Cone | exact chord (filtered), the axis point | `chord_convex`, `convex_dip` (the filter) | the candidates hold the chord's minimum; a triangle's deepest point is on its edges or the axis |
-| Torus | chord bound, triangle's stationary points | `stray_bound`, `F_sag`, `interp_remainder` (the chord) | the triangle's candidates are all its interior stationary points; a chord whose shadow lies on a line through the axis (αγ = β²) |
+| Torus | chord bound, triangle's stationary points | `stray_bound`, `F_sag`, `interp_remainder` (the chord) | the triangle's candidates are all its interior stationary points; a chord whose shadow lies on a line through the axis but misses it (αγ = β², ρ affine on it, F a parabola: stray 0, exact, unproven) |
 | Procedural | the Cells bounds | | all |
 
 All of it over ℝ: the code's f64 is L5's (the float bridge, cdt-l4's). Boundary chords' sag:
 MeshCheck's `segments_sag` (to link). The CDT's cover and its settled ⇒ every test passes: cdt-l4.
+
+## To resume (the work stopped here, 2026-11-23, under the owner's rule: proofs follow code
+being changed, and the tessellator's changes are done)
+
+Proven and linked to the spec: the sphere (`sphere_within`). Proven at the chord, not yet linked to
+`Spec.within`: the cone's chord (`cone_candidates`, `convex_dip`, `chord_convex`) and the torus's
+chord (`stray_bound`, `F_sag`). Open:
+- the cone's triangle: its deepest point is on an edge or where the axis crosses it (convexity
+  over the plane, the slope zero inside only along a line parallel to a ruling);
+- the torus's triangle: its interior stationary points are the two `torus_triangle_holds` finds
+  (p − c(p) ∥ n), and the plane square to the axis (F constant round the circle ρ = R);
+- the torus's collinear-shadow chord (above);
+- the cylinder: the projection argument (a chord nearest the axis at its middle);
+- procedural faces: the Cells bounds (tessellate.rs `Cells::within`), nothing proven;
+- boundary chords: MeshCheck's `segments_sag` (verify/forge-mesh-check, fundamentals' branch;
+  restated, not imported, since that crate is not on this branch);
+- the CDT's cover, and "settled ⇒ every test passed": cdt-l4's (M3/M4), the seam agreed;
+- L5: all of this is over ℝ; the f64 code against it is the float bridge's (cdt-l4).
 
 ## Levels next
 

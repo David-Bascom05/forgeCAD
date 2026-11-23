@@ -176,27 +176,21 @@ fn torus_f(t: &forge_geom::Torus, p: forge_math::Point3) -> f64 {
     l.x * l.x + l.y * l.y + l.z * l.z + t.major * t.major - t.minor * t.minor - 2.0 * t.major * rho
 }
 
-/// The least distance from the axis of a point within `chord` of the torus: R − r − chord (a
-/// ring torus that far from its axis), or none.
-fn torus_reach(t: &forge_geom::Torus, chord: f64) -> Option<f64> {
-    let rho = t.major - t.minor - chord;
-    (rho > 0.0 && t.minor > chord).then_some(rho)
-}
-
 /// Whether the chord x–y, its ends on the torus `t`, is shown within `chord` of it. Along the
 /// chord a + s·d (in the torus's frame) F is zero at its ends, and its third derivative is
 /// −2R·ρ''' with ρ''' = −3(αγ − β²)(γs + β)/ρ⁵ (ρ² = α + 2βs + γs², over the shadows on the
 /// plane square to the axis): at most 6R·(αγ − β²)·max(|β|, |β + γ|)/ρ⁵, ρ its least on the
 /// chord. So F strays from the parabola through its ends and middle by at most that over 6·(√3/36);
-/// and a point where |h − r| reached the chord would have |F| ≥ chord·(2r − chord). (A chord that
-/// passes the axis, or a torus within the chord of it, is left to the middle's test.)
+/// and a point where |h − r| reached the chord would have |F| ≥ chord·(2r − chord). A chord that
+/// reaches the axis (ρ's kink) is not shown within it, and is split. (A tube no thicker than the
+/// chord is left to the middle's test.)
 fn torus_chord_holds(
     t: &forge_geom::Torus,
     x: forge_math::Point3,
     y: forge_math::Point3,
     chord: f64,
 ) -> bool {
-    if torus_reach(t, chord).is_none() {
+    if t.minor <= chord {
         return true;
     }
     let (a, b) = (t.frame.point_to_local(x), t.frame.point_to_local(y));
@@ -206,10 +200,16 @@ fn torus_chord_holds(
     let s = if ga > 0.0 { (-be / ga).clamp(0.0, 1.0) } else { 0.0 };
     let rho2 = al + 2.0 * be * s + ga * s * s;
     if rho2 <= 0.0 {
-        return true;
+        return false;
     }
     let rho = rho2.sqrt();
-    let cross2 = (al * ga - be * be).max(0.0);
+    // (αγ − β² = γ·ρ² at the nearest point when it lies inside the chord: exactly, without the
+    // cancellation, so a chord passing near the axis is not shown within the chord by rounding)
+    let cross2 = if s > 0.0 && s < 1.0 {
+        ga * rho2
+    } else {
+        (al * ga - be * be).max(0.0)
+    };
     let third = 6.0 * t.major * cross2 * be.abs().max((be + ga).abs()) / (rho2 * rho2 * rho);
     let stray = third * 3f64.sqrt() / 216.0;
     torus_f(t, x.lerp(y, 0.5)).abs() + stray < chord * (2.0 * t.minor - chord)
@@ -3002,6 +3002,57 @@ mod tests {
         }
         assert!(chords.0 * 10 >= chords.1 * 9, "{chords:?}");
         assert!(tris.1 > 100, "{tris:?}");
+    }
+
+    /// The torus's chord bound certifies no chord that strays: one through the axis (its middle
+    /// on the torus, R = 2r, the diameter from the outer equator to the inner one opposite), and
+    /// random chords on tori near their axis and with their shadows on a line through it.
+    #[test]
+    fn the_toruss_chord_bound_certifies_no_stray() {
+        use forge_math::Point3;
+        let deepest = |s: &Surface, x: Point3, y: Point3| {
+            (0..=2000)
+                .map(|i| s.implicit(x.lerp(y, i as f64 / 2000.0)).abs())
+                .fold(0.0, f64::max)
+        };
+        let t = forge_geom::Torus::new(Frame::WORLD, 10.0, 5.0).expect("a torus");
+        let s = Surface::Torus(t);
+        let (x, y) = (Point3::new(15.0, 0.0, 0.0), Point3::new(-5.0, 0.0, 0.0));
+        assert!(s.implicit(x.lerp(y, 0.5)).abs() < 1e-12);
+        assert!(
+            !torus_chord_holds(&t, x, y, 0.05),
+            "a chord through the axis certified"
+        );
+        let mut r = Rng::new(3);
+        for (major, minor) in [(10.0, 5.0), (5.02, 5.0), (5.2, 5.0), (30.0, 5.0)] {
+            let Some(t) = forge_geom::Torus::new(Frame::WORLD, major, minor) else {
+                continue;
+            };
+            let s = Surface::Torus(t);
+            let at = |u: f64, v: f64| {
+                let (su, cu) = forge_math::dmath::sin_cos(u);
+                let (sv, cv) = forge_math::dmath::sin_cos(v);
+                Point3::new((major + minor * cv) * cu, (major + minor * cv) * su, minor * sv)
+            };
+            for k in 0..20000 {
+                let (u, v) = (
+                    r.range(0.0, forge_math::dmath::TAU),
+                    r.range(0.0, forge_math::dmath::TAU),
+                );
+                // half of them with both ends at one u: shadows on a line through the axis
+                let du = if k % 2 == 0 { 0.0 } else { r.range(-0.3, 0.3) };
+                let (x, y) = (at(u, v), at(u + du, v + r.range(-1.0, 1.0)));
+                for chord in [0.05, 0.5] {
+                    if s.implicit(x.lerp(y, 0.5)).abs() <= chord && torus_chord_holds(&t, x, y, chord) {
+                        let d = deepest(&s, x, y);
+                        assert!(
+                            d <= chord * (1.0 + 1e-6),
+                            "R {major} r {minor}: certified at {d} > {chord}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
