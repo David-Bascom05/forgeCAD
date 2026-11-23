@@ -196,7 +196,7 @@ each refuses at non-manifold, empty or a sliver (above). Their repros are remove
      (`edge_off_face`): the cylinder test bounds axis and radius apart, and a run of faces each
      within tolerance of the next is not within it of the one kept. The same pass joins, at a
      vertex nothing else ends at, pieces of one periodic curve meeting across its start (an
-     ellipse's start moves under a mirror) and two traces of one branch (`IntCurve::spliced`:
+     ellipse's start moves under a mirror) and two traces of one branch (unify's `spliced`:
      the sequential regen traces apart what the n-ary one traces once). Families, boxes, band
      and more: unmerged 10 450 → 0, agree 60 611 → 71 061, nothing else changed; the metamorphic
      `mirror` and `backends: nary 1` redundant-vertex lines are gone.

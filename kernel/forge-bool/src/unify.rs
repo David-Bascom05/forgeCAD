@@ -3,8 +3,9 @@
 //! takes the least of its pieces' names, a piece a boolean split off counting as the face or edge
 //! it came from; the others are kept as aliases (`Body::joins`) so a reference to any piece still
 //! finds it.
+use forge_geom::intcurve::IntCurve;
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
-use forge_math::{Interval, Point2, tol};
+use forge_math::{Interval, Point2, Point3, tol};
 use forge_topo::{Body, CoedgeId, EdgeId, FaceId, LoopId};
 
 /// Joins, all over `body`, faces on one plane or cylinder that meet along an edge (an edge left
@@ -166,7 +167,7 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
         body.faces.len(),
         |f| body.faces[f as usize].name,
         |_| None,
-        |f| body.faces[f as usize].alive,
+        body.faces.iter().map(|f| (f.name, f.alive)),
         &whole,
     );
     apply(body, r, true);
@@ -183,7 +184,7 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
         body.edges.len(),
         |e| body.edges[e as usize].name,
         sides,
-        |e| body.edges[e as usize].alive,
+        body.edges.iter().map(|e| (e.name, e.alive)),
         &whole,
     );
     apply(body, r, false);
@@ -191,19 +192,20 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
 
 /// `rename_wholes`' work for faces or for edges: `pairs` the (gone, went into) pairs, `n` how
 /// many entities there are, `name`, `other` (a name from elsewhere, for a group no piece of which
-/// had a whole) and `alive` read from the body, `whole` a name's whole.
+/// had a whole) read from the body, `all` each entity's name and whether it is alive, in order, and
+/// `whole` a name's whole.
 fn rename<N, O, A>(
     pairs: &[(u32, u32)],
     n: usize,
     name: N,
     other: O,
-    alive: A,
+    all: A,
     whole: &dyn Fn(Name) -> Option<Name>,
 ) -> Renamed
 where
     N: Fn(u32) -> Name,
     O: Fn(u32) -> Option<Name>,
-    A: Fn(u32) -> bool,
+    A: Iterator<Item = (Name, bool)>,
 {
     const NONE: u32 = u32::MAX;
     let mut parent = vec![NONE; n];
@@ -253,12 +255,19 @@ where
     taken.sort_unstable();
     let twice: Vec<Name> = taken.windows(2).filter(|w| w[0] == w[1]).map(|w| w[0]).collect();
     // (a bit of each name taken, asked first: most entities' names are none of them)
-    let bit = |m: Name| 1u64 << (m.0 & 63);
-    let bits = taken.iter().fold(0u64, |b, &m| b | bit(m));
-    let mut held: Vec<Name> = (0..n as u32)
-        .filter(|&x| slot[x as usize] == NONE && bits & bit(name(x)) != 0 && alive(x))
-        .map(&name)
-        .filter(|m| taken.binary_search(m).is_ok())
+    let bit = |m: Name| ((m.0 >> 6) as usize & 15, 1u64 << (m.0 & 63));
+    let mut bits = [0u64; 16];
+    for &m in &taken {
+        let (i, b) = bit(m);
+        bits[i] |= b;
+    }
+    let mut held: Vec<Name> = all
+        .zip(&slot)
+        .filter(|&((m, alive), &k)| {
+            let (i, b) = bit(m);
+            bits[i] & b != 0 && k == NONE && alive && taken.binary_search(&m).is_ok()
+        })
+        .map(|((m, _), _)| m)
         .collect();
     held.sort_unstable();
     for t in &mut to {
@@ -907,9 +916,8 @@ fn join(body: &mut Body, c: CoedgeId, n: CoedgeId) -> bool {
 }
 
 /// `join` for two traced edges `e1` and `e2` meeting at `v`: e1 takes one chain through v
-/// (`IntCurve::spliced`) from its own far end to e2's, if each far end is on it.
+/// (`spliced`) from its own far end to e2's, if each far end is on it.
 fn splice(body: &mut Body, e1: EdgeId, e2: EdgeId, v: forge_topo::VertexId) -> bool {
-    use forge_geom::intcurve::IntCurve;
     use std::borrow::Cow;
     let (x1, x2) = (body.edge(e1), body.edge(e2));
     let (Curve::Intersection(c1), Curve::Intersection(c2)) = (&x1.curve, &x2.curve) else {
@@ -929,7 +937,7 @@ fn splice(body: &mut Body, e1: EdgeId, e2: EdgeId, v: forge_topo::VertexId) -> b
         } else {
             let h = c2.domain_hi();
             (
-                Cow::Owned(c2.reversed()),
+                Cow::Owned(reversed(c2)),
                 Interval::new(h - x2.range.hi, h - x2.range.lo),
             )
         }
@@ -938,11 +946,11 @@ fn splice(body: &mut Body, e1: EdgeId, e2: EdgeId, v: forge_topo::VertexId) -> b
     let spliced = if x1.end == v {
         // along e1 into v, then e2 away from it
         let (b, rb) = run(false);
-        c1.spliced(x1.range, &b, rb, at)
+        spliced(c1, x1.range, &b, rb, at)
     } else {
         // along e2 into v, then e1 away from it
         let (a, ra) = run(true);
-        a.spliced(ra, c1, x1.range, at)
+        spliced(&a, ra, c1, x1.range, at)
     };
     let Some((curve, range)) = spliced else {
         return false;
@@ -968,6 +976,64 @@ fn splice(body: &mut Body, e1: EdgeId, e2: EdgeId, v: forge_topo::VertexId) -> b
     body.edges[e2.index()].alive = false;
     body.dead += 1;
     true
+}
+
+/// `c`'s chain run the other way: t on it is `domain_hi() - t` on `c`.
+fn reversed(c: &IntCurve) -> IntCurve {
+    let pts = c.pts.iter().rev().copied().collect();
+    let tans = c.tans.iter().rev().map(|&t| -t).collect();
+    IntCurve::new(c.a.clone(), c.b.clone(), pts, tans, c.closed, c.sag)
+}
+
+/// One chain through `at` along `first`'s piece `mine` (which ends at `at`, at `mine.hi`) and
+/// then `next`'s piece `theirs` (which starts there, at `theirs.lo`): two traces of one branch of
+/// where the same two surfaces meet, as two booleans split it, made one. `first`'s samples
+/// before `at`, `at`, then `next`'s after it; with the pieces' far ends' parameters on it. None
+/// for a closed chain, another pair of surfaces, or where the surfaces meet tangentially at
+/// `at` (no one branch there).
+fn spliced(
+    first: &IntCurve,
+    mine: Interval,
+    next: &IntCurve,
+    theirs: Interval,
+    at: Point3,
+) -> Option<(IntCurve, Interval)> {
+    let same = (first.a == next.a && first.b == next.b) || (first.a == next.b && first.b == next.a);
+    if first.closed || next.closed || !same {
+        return None;
+    }
+    let near = |q: Point3| q.distance(at) <= tol::LINEAR;
+    // samples strictly before `at` on the first chain, strictly after it on the next
+    let mut i = (mine.hi.ceil() as usize).checked_sub(1)?.min(first.pts.len() - 1);
+    while near(first.pts[i]) {
+        i = i.checked_sub(1)?;
+    }
+    let mut j = (theirs.lo.floor() as usize + 1).min(next.pts.len());
+    while j < next.pts.len() && near(next.pts[j]) {
+        j += 1;
+    }
+    let along = first.tans[i];
+    let d = forge_geom::intcurve::direction(&first.a, &first.b, at)?;
+    let d = if d.dot(along) < 0.0 { -d } else { d };
+    let mut pts = first.pts[..=i].to_vec();
+    let mut tans = first.tans[..=i].to_vec();
+    pts.push(at);
+    tans.push(d);
+    pts.extend_from_slice(&next.pts[j..]);
+    tans.extend_from_slice(&next.tans[j..]);
+    let joined = IntCurve::new(
+        first.a.clone(),
+        first.b.clone(),
+        pts,
+        tans,
+        false,
+        first.sag.max(next.sag),
+    );
+    let k = (i + 1) as f64;
+    // the far ends, on their own sides of `at`
+    let lo = joined.closest(first.eval(mine.lo), Interval::new(0.0, k));
+    let hi = joined.closest(next.eval(theirs.hi), Interval::new(k, joined.domain_hi()));
+    (lo < k && hi > k).then(|| (joined, Interval::new(lo, hi)))
 }
 
 /// The coedge after `c` in its loop, passing uses of edges joined away.

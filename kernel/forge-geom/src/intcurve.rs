@@ -215,64 +215,6 @@ impl IntCurve {
         Some((curve, if at_end { 0 } else { n }))
     }
 
-    /// The chain run the other way: t on it is `domain_hi() - t` on this one.
-    pub fn reversed(&self) -> IntCurve {
-        let pts = self.pts.iter().rev().copied().collect();
-        let tans = self.tans.iter().rev().map(|&t| -t).collect();
-        IntCurve::new(self.a.clone(), self.b.clone(), pts, tans, self.closed, self.sag)
-    }
-
-    /// One chain through `at` along this one's piece `mine` (which ends at `at`, at `mine.hi`)
-    /// and then `next`'s piece `theirs` (which starts there, at `theirs.lo`): two traces of one
-    /// branch of where the same two surfaces meet, as two booleans split it, made one. This
-    /// chain's samples before `at`, `at`, then `next`'s after it; with the pieces' far ends'
-    /// parameters on it. None for a closed chain, another pair of surfaces, or where the
-    /// surfaces meet tangentially at `at` (no one branch there).
-    pub fn spliced(
-        &self,
-        mine: Interval,
-        next: &IntCurve,
-        theirs: Interval,
-        at: Point3,
-    ) -> Option<(IntCurve, Interval)> {
-        let same = (self.a == next.a && self.b == next.b) || (self.a == next.b && self.b == next.a);
-        if self.closed || next.closed || !same {
-            return None;
-        }
-        let near = |q: Point3| q.distance(at) <= tol::LINEAR;
-        // samples strictly before `at` on this chain, strictly after it on the next
-        let mut i = (mine.hi.ceil() as usize).checked_sub(1)?.min(self.pts.len() - 1);
-        while near(self.pts[i]) {
-            i = i.checked_sub(1)?;
-        }
-        let mut j = (theirs.lo.floor() as usize + 1).min(next.pts.len());
-        while j < next.pts.len() && near(next.pts[j]) {
-            j += 1;
-        }
-        let along = self.tans[i];
-        let d = direction(&self.a, &self.b, at)?;
-        let d = if d.dot(along) < 0.0 { -d } else { d };
-        let mut pts = self.pts[..=i].to_vec();
-        let mut tans = self.tans[..=i].to_vec();
-        pts.push(at);
-        tans.push(d);
-        pts.extend_from_slice(&next.pts[j..]);
-        tans.extend_from_slice(&next.tans[j..]);
-        let joined = IntCurve::new(
-            self.a.clone(),
-            self.b.clone(),
-            pts,
-            tans,
-            false,
-            self.sag.max(next.sag),
-        );
-        let k = (i + 1) as f64;
-        // the far ends, on their own sides of `at`
-        let lo = joined.closest(self.eval(mine.lo), Interval::new(0.0, k));
-        let hi = joined.closest(next.eval(theirs.hi), Interval::new(k, joined.domain_hi()));
-        (lo < k && hi > k).then(|| (joined, Interval::new(lo, hi)))
-    }
-
     pub fn segments(&self) -> usize {
         if self.closed {
             self.pts.len()

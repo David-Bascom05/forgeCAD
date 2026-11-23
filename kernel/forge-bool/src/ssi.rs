@@ -251,10 +251,23 @@ pub fn coincident(a: &Surface, b: &Surface) -> bool {
     match (a, b) {
         (Surface::Plane(p), Surface::Plane(q)) => forge_geom::intersect::planes_coincident(p, q),
         (Surface::Plane(p), s) | (s, Surface::Plane(p)) => plane_surface(p, s) == SurfaceSurface::Coincident,
-        (Surface::Cylinder(c), Surface::Cylinder(d)) => cylinder_cylinder(c, d) == SurfaceSurface::Coincident,
+        (Surface::Cylinder(c), Surface::Cylinder(d)) => cylinders_coincident(c, d),
         (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t) == SurfaceSurface::Coincident,
         _ => forge_geom::meet::coaxial(a, b) == Some(SurfaceSurface::Coincident),
     }
+}
+
+/// Whether two cylinders are one: `cylinder_cylinder`'s Coincident (parallel axes, within
+/// `tol::LINEAR` of each other square to `c`'s, radii within it), without making the lines of
+/// two that are not. The same test, term for term: keep the two alike.
+pub(crate) fn cylinders_coincident(c: &Cylinder, d: &Cylinder) -> bool {
+    let a = c.frame.z();
+    if a.cross(d.frame.z()).length() > tol::ANGULAR {
+        return false;
+    }
+    let off = d.frame.origin - c.frame.origin;
+    let off = off - a * a.dot(off);
+    off.length() <= tol::LINEAR && (c.radius - d.radius).abs() <= tol::LINEAR
 }
 
 /// Parallel axes give lines (or the same cylinder), equal ones with crossing axes two
@@ -267,7 +280,7 @@ fn cylinder_cylinder(c: &Cylinder, d: &Cylinder) -> SurfaceSurface {
         }
         return equal_crossing(c, d).unwrap_or(SurfaceSurface::NotAnalytic);
     }
-    // work in c's cross-section plane
+    // work in c's cross-section plane (`cylinders_coincident` is this test of Coincident alone)
     let off = d.frame.origin - c.frame.origin;
     let off = off - a * a.dot(off);
     let dist = off.length();
