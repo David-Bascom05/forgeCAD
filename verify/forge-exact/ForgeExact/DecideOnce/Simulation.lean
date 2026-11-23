@@ -288,6 +288,38 @@ theorem conn_faceKey (L : IncLedger α) {kt : KeepTabI α} (hnd : L.facets.Nodup
   have m := (L.mem_heads).mp hk
   exact Conn.symm (L.joinRel_symm kt) m.1 ((L.mem_faceOf hnd m.1).mp hf).2
 
+/-! ### Unify, by named parts -/
+
+def atEk (L : IncLedger α) (kt : KeepTabI α) (e : α) : List α := L.facesAtE kt (L.faceKey kt) e
+def atVk (L : IncLedger α) (kt : KeepTabI α) (v : α) : List α := L.facesAtV kt (L.faceKey kt) v
+def outVk (L : IncLedger α) (kt : KeepTabI α) : List α := L.verts.filter fun v => decide (3 ≤ (L.atVk kt v).length)
+def ecsk (L : IncLedger α) (kt : KeepTabI α) : List α := L.edges.filter fun e => (L.atEk kt e).length == 2
+def erelk (L : IncLedger α) (kt : KeepTabI α) (e₁ e₂ : α) : Bool :=
+  sameSetI (L.atEk kt e₁) (L.atEk kt e₂) &&
+    L.verts.any fun v => (L.vertEdges v).contains e₁ && (L.vertEdges v).contains e₂ && !(L.outVk kt).contains v
+
+theorem unify_eq (L : IncLedger α) (kt : KeepTabI α) : L.unify kt =
+    { faces := (L.heads kt).map fun h => { facets := L.faceOf kt h, plane := L.carrier h, orient := L.orient kt h }
+      edges := ((L.ecsk kt).filter fun e => head (L.erelk kt) (L.ecsk kt) e == some e).map fun e =>
+        { cells := (L.ecsk kt).filter fun d => (cls (L.erelk kt) (L.ecsk kt) e).contains d, faces := L.atEk kt e }
+      verts := L.outVk kt } := rfl
+
+theorem faceKey_idem (L : IncLedger α) {kt : KeepTabI α} (hnd : L.facets.Nodup) {c : α} (hc : c ∈ L.result kt) :
+    L.faceKey kt (L.faceKey kt c) = L.faceKey kt c :=
+  (L.faceKey_eq_iff hnd (L.faceKey_result hnd hc) hc).mpr
+    (Conn.symm (L.joinRel_symm kt) hc (L.conn_faceKey hnd hc))
+
+theorem mem_atEk (L : IncLedger α) {kt : KeepTabI α} {e k : α} :
+    k ∈ L.atEk kt e ↔ ∃ c ∈ L.aroundE kt e, L.faceKey kt c = k := by
+  simp only [atEk, facesAtE, mem_dedup, List.mem_map]
+
+theorem aroundE_result (L : IncLedger α) {kt : KeepTabI α} {e c : α} (h : c ∈ L.aroundE kt e) : c ∈ L.result kt := by
+  simpa using (List.mem_filter.mp h).2
+
+theorem sameSetI_iff (a b : List α) : sameSetI a b = true ↔ ∀ x, x ∈ a ↔ x ∈ b := by
+  simp only [sameSetI, Bool.and_eq_true, List.all_eq_true, List.contains_iff_mem]
+  exact ⟨fun ⟨h1, h2⟩ x => ⟨h1 x, h2 x⟩, fun h => ⟨fun x hx => (h x).mp hx, fun x hx => (h x).mpr hx⟩⟩
+
 end IncLedger
 
 namespace Refines
@@ -783,6 +815,112 @@ theorem atV_none (h : Refines A B σ τ ν κ) (rule : Rule) {w : α} (hw : w �
     simp only [IncLedger.badEdge, decide_eq_false_iff_not, Nat.not_lt] at h2
     rw [List.length_map] at h1
     omega
+
+/-! ### 4''. Unify: edges -/
+
+theorem atEk_corr (h : Refines A B σ τ ν κ) (rule : Rule) {e : α} (he : e ∈ A.edges) {E : β} (hτ : τ e = some E) :
+    (∀ k ∈ A.atEk (A.keepTab rule) e, B.faceKey (B.keepTab rule) (σ k) ∈ B.atEk (B.keepTab rule) E) ∧
+    (∀ K ∈ B.atEk (B.keepTab rule) E, ∃ k ∈ A.atEk (A.keepTab rule) e, B.faceKey (B.keepTab rule) (σ k) = K) := by
+  have hp := aroundE_perm h rule he hτ
+  constructor
+  · intro k hk
+    obtain ⟨c, hc, rfl⟩ := A.mem_atEk.mp hk
+    rw [key_key h rule (A.aroundE_result hc)]
+    exact B.mem_atEk.mpr ⟨σ c, hp.mem_iff.mp (List.mem_map_of_mem hc), rfl⟩
+  · intro K hK
+    obtain ⟨C, hC, rfl⟩ := B.mem_atEk.mp hK
+    obtain ⟨c, hc, rfl⟩ := List.mem_map.mp (hp.mem_iff.mpr hC)
+    exact ⟨A.faceKey _ c, A.mem_atEk.mpr ⟨c, hc, rfl⟩, key_key h rule (A.aroundE_result hc)⟩
+
+theorem atEk_key (h : Refines A B σ τ ν κ) (rule : Rule) {e k : α} (hk : k ∈ A.atEk (A.keepTab rule) e) :
+    k ∈ A.result (A.keepTab rule) ∧ A.faceKey (A.keepTab rule) k = k := by
+  obtain ⟨c, hc, rfl⟩ := A.mem_atEk.mp hk
+  have hr := A.aroundE_result hc
+  exact ⟨A.faceKey_result h.nodupA hr, A.faceKey_idem h.nodupA hr⟩
+
+theorem sameSet_corr (h : Refines A B σ τ ν κ) (rule : Rule) {e₁ e₂ : α} (he₁ : e₁ ∈ A.edges) (he₂ : e₂ ∈ A.edges)
+    {E₁ E₂ : β} (hτ₁ : τ e₁ = some E₁) (hτ₂ : τ e₂ = some E₂) :
+    IncLedger.sameSetI (B.atEk (B.keepTab rule) E₁) (B.atEk (B.keepTab rule) E₂) =
+    IncLedger.sameSetI (A.atEk (A.keepTab rule) e₁) (A.atEk (A.keepTab rule) e₂) := by
+  obtain ⟨f1, b1⟩ := atEk_corr h rule he₁ hτ₁
+  obtain ⟨f2, b2⟩ := atEk_corr h rule he₂ hτ₂
+  have inj : ∀ k ∈ A.atEk (A.keepTab rule) e₁ ++ A.atEk (A.keepTab rule) e₂,
+      ∀ k' ∈ A.atEk (A.keepTab rule) e₁ ++ A.atEk (A.keepTab rule) e₂,
+      B.faceKey (B.keepTab rule) (σ k) = B.faceKey (B.keepTab rule) (σ k') → k = k' := by
+    intro k hk k' hk' e
+    have a1 := atEk_key h rule (e := if k ∈ A.atEk (A.keepTab rule) e₁ then e₁ else e₂) (by
+      split <;> rename_i hh
+      · exact hh
+      · exact (List.mem_append.mp hk).resolve_left hh)
+    have a2 := atEk_key h rule (e := if k' ∈ A.atEk (A.keepTab rule) e₁ then e₁ else e₂) (by
+      split <;> rename_i hh
+      · exact hh
+      · exact (List.mem_append.mp hk').resolve_left hh)
+    have := (key_iff h rule a1.1 a2.1).mp e
+    rw [a1.2, a2.2] at this; exact this
+  rw [Bool.eq_iff_iff, IncLedger.sameSetI_iff, IncLedger.sameSetI_iff]
+  constructor
+  · intro H k
+    constructor
+    · intro hk
+      obtain ⟨k', hk', e⟩ := b2 _ ((H _).mp (f1 k hk))
+      rw [inj k (List.mem_append_left _ hk) k' (List.mem_append_right _ hk') e.symm]; exact hk'
+    · intro hk
+      obtain ⟨k', hk', e⟩ := b1 _ ((H _).mpr (f2 k hk))
+      rw [inj k (List.mem_append_right _ hk) k' (List.mem_append_left _ hk') e.symm]; exact hk'
+  · intro H K
+    constructor
+    · intro hK
+      obtain ⟨k, hk, rfl⟩ := b1 K hK
+      exact f2 k ((H k).mp hk)
+    · intro hK
+      obtain ⟨k, hk, rfl⟩ := b2 K hK
+      exact f1 k ((H k).mpr hk)
+
+theorem ecs_iff (h : Refines A B σ τ ν κ) (rule : Rule) {e : α} (he : e ∈ A.edges) {E : β} (hτ : τ e = some E) :
+    E ∈ B.ecsk (B.keepTab rule) ↔ e ∈ A.ecsk (A.keepTab rule) := by
+  have ha : (B.atEk (B.keepTab rule) E).length = (A.atEk (A.keepTab rule) e).length := atE_some h rule he hτ
+  simp only [IncLedger.ecsk, List.mem_filter, beq_iff_eq, ha]
+  exact ⟨fun ⟨_, h2⟩ => ⟨he, h2⟩, fun ⟨_, h2⟩ => ⟨h.edge_mem e he E hτ, h2⟩⟩
+
+theorem ecs_some (h : Refines A B σ τ ν κ) (rule : Rule) {e : α} (he : e ∈ A.ecsk (A.keepTab rule)) :
+    ∃ E, τ e = some E ∧ E ∈ B.ecsk (B.keepTab rule) := by
+  have he' := (List.mem_filter.mp he).1
+  cases hτ : τ e with
+  | none =>
+    have h1 : (A.atEk (A.keepTab rule) e).length ≤ 1 := atE_none h rule he' hτ
+    have h2 := (List.mem_filter.mp he).2
+    simp only [beq_iff_eq] at h2
+    omega
+  | some E => exact ⟨E, rfl, (ecs_iff h rule he' hτ).mpr he⟩
+
+theorem ecs_from (h : Refines A B σ τ ν κ) (rule : Rule) {E : β} (hE : E ∈ B.ecsk (B.keepTab rule)) :
+    ∃ e ∈ A.ecsk (A.keepTab rule), τ e = some E := by
+  obtain ⟨e, he, hτ⟩ := h.edge_onto E (List.mem_filter.mp hE).1
+  exact ⟨e, (ecs_iff h rule he hτ).mp hE, hτ⟩
+
+theorem outV_some (h : Refines A B σ τ ν κ) (rule : Rule) {w : α} (hw : w ∈ A.verts) {V : β} (hν : ν w = some V) :
+    V ∈ B.outVk (B.keepTab rule) ↔ w ∈ A.outVk (A.keepTab rule) := by
+  have ha : (B.atVk (B.keepTab rule) V).length = (A.atVk (A.keepTab rule) w).length := atV_some h rule hw hν
+  simp only [IncLedger.outVk, List.mem_filter, decide_eq_true_eq, ha]
+  exact ⟨fun ⟨_, h2⟩ => ⟨hw, h2⟩, fun ⟨_, h2⟩ => ⟨h.vert_mem w hw V hν, h2⟩⟩
+
+theorem outV_none (h : Refines A B σ τ ν κ) (rule : Rule) {w : α} (hw : w ∈ A.verts) (hν : ν w = none)
+    (hE : ∀ E ∈ B.edges, B.badEdge (B.keepTab rule) E = false) : w ∉ A.outVk (A.keepTab rule) := by
+  have ha : (A.atVk (A.keepTab rule) w).length < 3 := atV_none h rule hw hν hE
+  simp only [IncLedger.outVk, List.mem_filter, decide_eq_true_eq, not_and]
+  intro _ h3
+  omega
+
+/-- The output verts correspond. -/
+theorem outV_iff (h : Refines A B σ τ ν κ) (rule : Rule) (hE : ∀ E ∈ B.edges, B.badEdge (B.keepTab rule) E = false)
+    (V : β) : V ∈ B.outVk (B.keepTab rule) ↔ ∃ w ∈ A.outVk (A.keepTab rule), ν w = some V := by
+  constructor
+  · intro hV
+    obtain ⟨w, hw, hν⟩ := h.vert_onto V (List.mem_filter.mp hV).1
+    exact ⟨w, (outV_some h rule hw hν).mp hV, hν⟩
+  · rintro ⟨w, hw, hν⟩
+    exact (outV_some h rule (List.mem_filter.mp hw).1 hν).mpr hw
 
 end Refines
 

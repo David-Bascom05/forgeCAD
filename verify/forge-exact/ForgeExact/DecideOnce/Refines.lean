@@ -95,6 +95,10 @@ structure Refines (A : IncLedger α) (B : IncLedger β) (σ : α → β) (τ ν 
   /-- an edge inside a coarse facet has all its fine facets in that facet -/
   inner_edge_facet : ∀ w ∈ A.verts, ∀ s ∈ A.vertSectors w, ∀ t ∈ A.vertSectors w, ∀ e ∈ s.bounds,
     e ∈ t.bounds → τ e = none → σ s.facet = σ t.facet
+  vert_edges_A : ∀ w ∈ A.verts, ∀ e ∈ A.vertEdges w, e ∈ A.edges
+  /-- at a fine vert inside a coarse edge, the fine edges along it all map to that edge -/
+  inner_edges : ∀ w ∈ A.verts, ν w = none → ∀ e ∈ A.vertEdges w, ∀ e' ∈ A.vertEdges w, ∀ E E',
+    τ e = some E → τ e' = some E' → E = E'
   vert_inner : ∀ w ∈ A.verts, ν w = none →
     (∃ ψ, ∀ s ∈ A.vertSectors w, σ s.facet = ψ) ∨
     (∃ E ∈ B.edges, ∃ e ∈ A.edges, τ e = some E ∧ ∀ s ∈ A.vertSectors w, σ s.facet ∈ B.edgeFacets E)
