@@ -24,6 +24,8 @@ pub mod gui_apptools;
 mod gui_asm;
 #[path = "gui_asmdrag.rs"]
 mod gui_asmdrag;
+#[path = "gui_cam.rs"]
+mod gui_cam;
 #[path = "gui_docs.rs"]
 pub mod gui_docs;
 #[path = "gui_explode.rs"]
@@ -399,6 +401,13 @@ impl Gui {
                 }
             }
             return true;
+        }
+        // a machining document opens in the Manufacture workspace, over its part
+        if path.ends_with(".fg")
+            && let Ok(s) = forge_dirs::fs::read_to_string(path)
+            && forge_cam_lang::is_machining(&s)
+        {
+            return self.open_cam(path, &s);
         }
         if path.ends_with(".fg") {
             return self.open_fg(path);
@@ -1052,6 +1061,12 @@ impl Gui {
                         self.fg_text();
                         continue;
                     }
+                    Action::Cam(c) => {
+                        if let Some(w) = &mut self.shell.cam {
+                            w.command(c.into());
+                        }
+                        continue;
+                    }
                     Action::Fg(c) => {
                         self.shell.fg_command(c);
                         self.apply_fg();
@@ -1234,6 +1249,7 @@ impl Gui {
         }
         self.watch_frame();
         self.take_fg();
+        self.cam_host();
         self.take_agent();
         self.take_speech();
         self.take_extras(false);
@@ -3203,6 +3219,19 @@ impl Gui {
                 (None, Err(e)) => Err(e.text()),
             };
             d.take(got);
+            v.nav.selected.clear();
+            v.clicked.clear();
+            v.dirty = true;
+            return;
+        }
+        // an op dialog of the Manufacture workspace takes the pick as its geometry
+        if let Some(w) = &mut self.shell.cam
+            && w.op_dlg.is_some()
+        {
+            self.shell.status = match &text {
+                Ok(t) => w.pick(t),
+                Err(e) => e.text(),
+            };
             v.nav.selected.clear();
             v.clicked.clear();
             v.dirty = true;

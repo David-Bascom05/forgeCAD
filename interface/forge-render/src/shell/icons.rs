@@ -6,6 +6,7 @@ use std::sync::OnceLock;
 
 const DATA: &str = include_str!("icons.txt");
 const SHEET: &str = include_str!("sheet_icons.txt");
+const CAM: &str = include_str!("cam_icons.txt");
 
 type Lines = Vec<Vec<(f32, f32)>>;
 
@@ -14,6 +15,7 @@ fn all() -> &'static HashMap<&'static str, Lines> {
     ICONS.get_or_init(|| {
         DATA.lines()
             .chain(SHEET.lines())
+            .chain(CAM.lines())
             .filter(|l| !l.starts_with('#'))
             .filter_map(|l| l.split_once(' '))
             .map(|(name, d)| (name, flatten(d)))

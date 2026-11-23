@@ -54,6 +54,11 @@ enum Ask {
     Apply(forge_lang::error::Op),
     /// The next frame's pixels, for the page (`app_pixels`).
     Pixels(js_sys::Function),
+    /// A click on what the shell noted by this name (`app_click`): the tests' hand. The button
+    /// (0 primary, 1 secondary) and whether a double click.
+    Click(String, u8, bool),
+    /// Text typed into what has the focus, then Enter if asked (`app_type`).
+    Type(String, bool),
 }
 
 thread_local! {
@@ -414,6 +419,40 @@ impl Host {
                     }
                 }
                 Ask::Pixels(f) => self.pixels(f),
+                Ask::Click(name, button, double) => match self.gui.shell.place(&name) {
+                    Some(r) => {
+                        let at = r.center();
+                        let b = if button == 1 { egui::PointerButton::Secondary } else { egui::PointerButton::Primary };
+                        let ev = &mut self.input.events;
+                        ev.push(egui::Event::PointerMoved(at));
+                        for _ in 0..if double { 2 } else { 1 } {
+                            for pressed in [true, false] {
+                                ev.push(egui::Event::PointerButton {
+                                    pos: at,
+                                    button: b,
+                                    pressed,
+                                    modifiers: egui::Modifiers::NONE,
+                                });
+                            }
+                        }
+                        self.input.pointer = at;
+                    }
+                    None => console_error(&format!("app_click: nothing noted as `{name}`")),
+                },
+                Ask::Type(text, enter) => {
+                    self.input.events.push(egui::Event::Text(text));
+                    if enter {
+                        for pressed in [true, false] {
+                            self.input.events.push(egui::Event::Key {
+                                key: egui::Key::Enter,
+                                physical_key: None,
+                                pressed,
+                                repeat: false,
+                                modifiers: egui::Modifiers::NONE,
+                            });
+                        }
+                    }
+                }
             }
         }
     }
@@ -640,8 +679,67 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         // the last build's time in the worker, ms
         ("build_ms", doc.map_or(Json::Null, |s| num(s.build_ms))),
         ("built", built.unwrap_or(Json::Null)),
+        ("cam", cam_json(g)),
+        // where the shell's named things are, for the tests' clicks (`app_click`)
+        (
+            "places",
+            Json::Arr(
+                g.shell
+                    .places
+                    .iter()
+                    .filter(|(n, _)| n.starts_with("cam:") || n.starts_with("tab:") || n.starts_with("tool:"))
+                    .map(|(n, r)| {
+                        Json::obj(vec![
+                            ("name", n.clone().into()),
+                            ("rect", Json::Arr(vec![num(r.left().into()), num(r.top().into()), num(r.width().into()), num(r.height().into())])),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
     ])
     .to_string()
+}
+
+/// The Manufacture workspace as the page's tests read it: the document's ops and their states.
+fn cam_json(g: &Gui) -> Json {
+    let Some(w) = &g.shell.cam else { return Json::Null };
+    Json::obj(vec![
+        ("path", w.path.clone().into()),
+        ("generating", (w.running.is_some() || w.want_run).into()),
+        ("generated", w.run.is_some().into()),
+        (
+            "certification",
+            w.run.as_ref().map_or(Json::Null, |r| r.certification.clone().into()),
+        ),
+        ("selected", w.selected.clone().map_or(Json::Null, Json::from)),
+        ("dirty", w.dirty().into()),
+        ("text", w.text.clone().into()),
+        (
+            "ops",
+            Json::Arr(
+                w.stmts
+                    .iter()
+                    .filter(|s| s.is_op())
+                    .map(|s| {
+                        Json::obj(vec![
+                            ("name", s.name.clone().into()),
+                            ("kind", s.func.clone().into()),
+                            ("status", w.status(&s.name).to_string().into()),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+        ("dialogs", Json::Arr(
+            [("op", w.op_dlg.is_some()), ("setup", w.setup_dlg.is_some()), ("post", w.post_dlg.is_some()),
+             ("tools", w.tools_open), ("checks", w.checks_open), ("text", w.text_open)]
+                .into_iter()
+                .filter(|x| x.1)
+                .map(|x| x.0.to_string().into())
+                .collect(),
+        )),
+    ])
 }
 
 /// Says a panic on the console (the page's tests watch for it) before the trap.
@@ -765,6 +863,19 @@ pub fn app_apply(op: &str) -> Result<(), JsValue> {
     let op = forge_lang::error::Op::from_json(&j).ok_or("not an op")?;
     ask(Ask::Apply(op));
     Ok(())
+}
+
+/// A click on what the shell noted as `name` (the tests' hand): `button` 0 primary, 1
+/// secondary; `double` a double click.
+#[wasm_bindgen]
+pub fn app_click(name: String, button: u8, double: bool) {
+    ask(Ask::Click(name, button, double));
+}
+
+/// Text typed into what has the focus; Enter after it if `enter`.
+#[wasm_bindgen]
+pub fn app_type(text: String, enter: bool) {
+    ask(Ask::Type(text, enter));
 }
 
 /// The app's next frame as `{width, height, rgba}`, through a callback (see `Host::pixels`).
