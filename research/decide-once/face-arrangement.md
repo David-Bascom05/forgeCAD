@@ -191,7 +191,9 @@ instances:
 
 with these properties:
 
-- **(r) rooms.** (bool-research's review: rooms are radial side classes, not components, so a
+- **(r) rooms, as a relation.** In effect ρ is a relation, total and onto, between the fine
+  facet-sides and F's rooms: `(φ, ±) ρ R` when `R` is the room on that side of `σ φ`. It is not a
+  function on topes. (bool-research's review: rooms are radial side classes, not components, so a
   map from topes to rooms would be ill-defined when a tope touches two shells. Hence the condition
   is stated per facet-side.) For every fine facet `φ` and body `i`, F's membership of the room on each side
   of `σ φ`, through its flood and `inside`, equals the reference ledger's `memb i φ.plus` (resp.
@@ -289,10 +291,16 @@ The simulation needs seven things.
    conclusions about `b₀` (Valid, faces = XBoundary, reg) are all set-level, so nothing is lost.
 6. **Naming (`origin`): a rule change.** Today a face is named by the first piece of its *head*
    facet, and the head depends on the facet order. That order is not preserved by coarsening. So
-   v2 names a face by the **least input-face id over all pieces of all its facets**. This is
-   order-free and equal under σ, and v2 states it directly as a naming theorem, not through `b₀`.
-   It also makes the write's naming of merged faces a function of the face itself, which is the
-   fuzz seed 29 issue. Bool-speed and the write must adopt the same rule.
+   v2 names a face by an order-free rule: the old path's own, unify's **least of its pieces'
+   wholes**. That is the least `whole` (`joins.pieces`), else the least own name, over the input
+   faces of all pieces of all its facets. It is equal under σ, and v2 states it directly as a
+   naming theorem, not through `b₀`. It also makes the write's naming of merged faces a function of
+   the face itself, which is the fuzz seed 29 issue. Bool-speed and the write must use the same
+   rule.
+
+   **Condition of sign-off:** names identical to today's on every existing part. A test over the
+   suite and the corpus compares names with the switch on and off. If "least input-face id" and
+   "least whole" ever differ on a part, the whole-based rule is the one used.
 7. **Collapse** composes as in §2.2, with the room keep table lifted to topes.
 
 Estimate: `cls_map` 300 lines, faces 250, edges and erel 350, verts and facesAt 150, naming 100.
@@ -373,7 +381,39 @@ Two corrections from bool-research's measurement (callgrind, switch off):
 | rest | 0.42M | 0.25M | exact planes for near faces only |
 | **total** | **8.2M** | **≈1.65M** | old path **1.28M** |
 
-So A8 alone leaves decide-once at **about 1.3× the old path** on coplanar. "Nothing slower"
+So A8 alone, at today's constant factors, leaves decide-once at **about 1.3× the old path** on
+coplanar.
+
+**Budget (signed off): ≤ 1.28M per flat boolean, on every gate line.** bool-research's bottom-up
+estimate, from measured per-op costs and the coplanar counts, is about 0.50M. Their budget per
+boolean (a8-review.md §6, deb531d):
+
+| phase | budget |
+|---|---|
+| inputs, region, snap, near-only | 0.12M |
+| segments | 0.06M |
+| per-face arrangement and seams | 0.10M |
+| radial order and rooms | 0.05M |
+| witnesses, fused into the builder | 0.06M |
+| Csr ledger | 0.04M |
+| core v2 | 0.25M |
+| collapse | 0.04M |
+| write in place | 0.20M |
+| **total** | **0.92M** (28% under 1.28M) |
+
+The gap between 1.65M and 0.92M is constant factors, so they are stated as rules:
+1. R6: no exact plane or point for a far face.
+2. No HashMap in the bridge. Keys are tuples of near-class ids, so use dense tables or sorted
+   arrays.
+3. One reused arena per boolean, cleared rather than freed.
+4. Covector-free vertices: a carrier-triple key plus a filtered f64 point, exact only on filter
+   failure.
+5. Witnesses fused into the builder, with the orientation shortcut first.
+6. R5: the in-place write.
+
+**R4-early.** Callgrind R3's builder phases on the three benches. Any phase more than 1.5× over its
+budget is fixed before the Aeneas groups continue. R5 may land first, on today's v1 path, gated by
+the bits check. "Nothing slower"
 needs three more things, beside A8:
 - the in-place write;
 - near-only `inputs`;
@@ -415,6 +455,8 @@ Critical path: L2 → R3 → R4 for speed, and R2 → G* → E for the proof.
 
 The switch flips to v2 only when all of the following hold:
 - E is green;
+- v2 ≤ the old path on **every** gate line;
+- fuzz seed 29 passes;
 - the naming rule agrees with today's names on the gate, or the owner approves the change of bits;
 - R4 beats the old path on all three benches;
 - the coarsens check passes on the corpus. It costs about a full plane fill (~8M per boolean), so it
