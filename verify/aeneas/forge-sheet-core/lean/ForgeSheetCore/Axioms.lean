@@ -10,6 +10,7 @@ import ForgeSheetCore.SetbackErr
 import ForgeSheetCore.RefineSetback
 import ForgeSheetCore.ZoneErr
 import ForgeSheetCore.RefineZone
+import ForgeSheetCore.RefineExact
 
 /-! Only the standard axioms: each listed theorem about the translated Rust rests on `propext`,
 `Classical.choice` and `Quot.sound` alone (a `sorry` or `native_decide` fails the build). -/
@@ -47,3 +48,6 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeSheetCore.Zone.mul_approx ForgeSheetCore.Zone.add_approx ForgeSheetCore.Zone.trig_approx
   forge_sheet_core.coord_err forge_sheet_core.ptw_spec forge_sheet_core.phi_spec
   forge_sheet_core.round_local_spec forge_sheet_core.zone_spec
+  forge_sheet_core.two_sum_eq forge_sheet_core.grow_spec forge_sheet_core.two_product_eq
+  forge_sheet_core.exp_of_spec forge_sheet_core.exp_diff_spec forge_sheet_core.exp_neg_spec
+  forge_sheet_core.exp_add_spec forge_sheet_core.exp_mul_spec forge_sheet_core.exp_sign_spec
