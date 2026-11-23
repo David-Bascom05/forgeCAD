@@ -1,4 +1,4 @@
-import ForgeBoolCore.RefineIncCollapseLean
+import ForgeBoolCore.RefineIncCollapse
 import ForgeBoolCore.Specs
 import ForgeBoolCore.Refine
 import ForgeBoolCore.RefineUF
@@ -165,3 +165,5 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.core_spec
 #print axioms forge_bool_core.inc.incCoreSpec_of
 #print axioms forge_bool_core.inc.KI.collapse_pos
+#print axioms forge_bool_core.inc.collapse_specI
+#print axioms forge_bool_core.inc.incCoreSpec_of_unify

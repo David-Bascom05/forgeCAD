@@ -116,7 +116,7 @@ structure LedgerWF2 (l : Ledger) : Prop where
   small : nfacets l < U32.max ∧ l.n_rooms.val < U32.max ∧ l.pieces.val.length < U32.max ∧
     l.face_body.val.length < U32.max ∧ nfacets l * l.nb.val ≤ Usize.max ∧
     l.n_rooms.val * l.nb.val ≤ Usize.max ∧ nrowsL l.edge_facets < U32.max ∧ nrowsL l.vert_edges < U32.max ∧
-    l.vert_sectors.sec.val.length < U32.max
+    l.vert_sectors.sec.val.length < U32.max ∧ 3 * nfacets l ≤ Usize.max
 
 /-- The facets of `toLF` are listed once each. -/
 theorem toLF_facets_nodup (l : Ledger) : (toLF l).facets.Nodup := by

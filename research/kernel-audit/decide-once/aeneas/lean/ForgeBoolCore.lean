@@ -59,3 +59,4 @@ import ForgeBoolCore.FanBridgeI
 import ForgeBoolCore.RefineIncFan
 import ForgeBoolCore.RefineIncCore
 import ForgeBoolCore.RefineIncCollapseLean
+import ForgeBoolCore.RefineIncCollapse

@@ -423,7 +423,7 @@ theorem bad_vert_spec (l : Ledger) (hw : LedgerWF2 l) (s : Split) (hs : SplitOK 
     (v : Usize) (hv : v.val < nrowsL l.vert_edges) :
     bad_vert l a v ⦃ b => b = (toLF l).badVert (kt) (FCell.vert v.val) ⦄ := by
   have hsm := hw.small
-  have hsl : l.vert_sectors.sec.val.length < U32.max := hsm.2.2.2.2.2.2.2.2
+  have hsl : l.vert_sectors.sec.val.length < U32.max := hsm.2.2.2.2.2.2.2.2.1
   have hsr := hw.sectors_rows
   have hvl : v.val + 1 < l.vert_sectors.start.val.length := by unfold nrowsL at hv; omega
   have hlen := sec_le_len l hw hvl
