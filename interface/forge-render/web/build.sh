@@ -25,6 +25,8 @@ done < "$out/examples/list.txt"
 # cross-origin isolated (app.js). The same pinned stable toolchain, with its rust-src: std is
 # rebuilt with atomics (-Zbuild-std, which RUSTC_BOOTSTRAP enables on a stable compiler; nothing
 # else here uses it). Its own target dir, so the default build is never touched.
+# (without it, none: a page never loads a stale one)
+rm -rf "$out/threads"
 if [ -n "$THREADS" ]; then
   rustup component add rust-src >/dev/null
   RUSTC_BOOTSTRAP=1 CARGO_TARGET_DIR="$target/threads" \

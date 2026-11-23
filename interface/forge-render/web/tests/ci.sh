@@ -22,3 +22,7 @@ if [ -n "$PARITY_EXAMPLES" ]; then
 else
   node web/tests/parity.cjs "$out"
 fi
+# the threaded artifact: the page never blocks for a build
+if [ -n "$THREADED" ]; then
+  node web/tests/responsive.cjs "$out"
+fi
