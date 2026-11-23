@@ -299,3 +299,24 @@ booleans. W1 and W3 should be measured first on the latency gate. The figures he
 
 nary1 is unchanged within noise: with one thread, `map_adaptive` is the serial map. The
 instruction gate's nary1 lines therefore run the same work.
+
+**Equal-thread comparison**, as the owner rules (µs, best of 15 runs, base and head
+interleaved):
+
+| Part | nary1 base | nary1 head | nary16 base | nary16 head |
+|---|---|---|---|---|
+| coplanar | 23,731 | 23,987 (noise) | 32,863 | 22,123 (−33%) |
+| shaft | 65,158 | 64,974 (noise) | 41,907 | 34,983 (−17%) |
+| mixed | 215,076 | 212,939 (noise) | 95,708 | 88,894 (−7%) |
+
+The nary16 columns are best of 7, from the table above. upto nary16: 7,088 → 5,874 (−17%).
+
+**Correctness gates before handoff** (head 6c20812; base is its parent, 70d6aeb):
+
+| Gate | Result |
+|---|---|
+| reliability scoreboard | against tools/reliability/baseline.txt: **0 worse**, 3 better. Base shows the same 3, so that file is stale. Base and head verdicts are identical (985 lines). |
+| suite with `FUZZ_SEEDS=150` | 150/150 histories of 80 features regenerate valid; every suite part ok |
+| n-ary with `FUZZ_SEEDS=150` | agree **167/167** (same faces, volume within 0.1%), 4 threads |
+| wasm bits | the wasm32-wasip1 `bits` under Node is identical to native (54 lines) |
+| bits at `FORGECAD_THREADS` = 1, 2, 4 and 16 | 84/84 lines identical to tools/speed/bits.txt |
