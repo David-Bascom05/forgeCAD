@@ -19,7 +19,11 @@ fn want(r: &Record, k: Kind) -> Result<(), WhError> {
     if r.kind == k {
         Ok(())
     } else {
-        Err(refuse(&r.name, format!("is a {}", r.kind.name()), format!("name a {}", k.name())))
+        Err(refuse(
+            &r.name,
+            format!("is a {}", r.kind.name()),
+            format!("name a {}", k.name()),
+        ))
     }
 }
 
@@ -84,7 +88,10 @@ pub fn chuck(name: &str, rec: &Record, bar_d: f64, z_face: f64, grip: f64) -> Re
         r + jh
     )];
     if r + jh > 0.5 * bd {
-        notes.push(format!("the jaws stand out {:.2} mm past the chuck body", r + jh - 0.5 * bd));
+        notes.push(format!(
+            "the jaws stand out {:.2} mm past the chuck body",
+            r + jh - 0.5 * bd
+        ));
     }
     Ok(Spin {
         name: name.to_string(),
@@ -112,7 +119,10 @@ pub fn collet(name: &str, rec: &Record, bar_d: f64, z_face: f64) -> Result<Spin,
         kind: Kind::Collet,
         rings: vec![rect("nose", Role::Collet, 0.0, 0.5 * nd, z_face - nl, z_face)],
         held: Some([z_face - rec.opt("collet_len").unwrap_or(0.0), z_face]),
-        notes: vec![format!("collet {}: bar {bar_d:.2}, nose ⌀{nd} ending at z = {z_face:.2}", rec.name)],
+        notes: vec![format!(
+            "collet {}: bar {bar_d:.2}, nose ⌀{nd} ending at z = {z_face:.2}",
+            rec.name
+        )],
     })
 }
 
@@ -131,9 +141,19 @@ pub fn face_driver(name: &str, rec: &Record, work_d: f64, z_face: f64) -> Result
     Ok(Spin {
         name: name.to_string(),
         kind: Kind::FaceDriver,
-        rings: vec![rect("driver", Role::ChuckBody, 0.0, 0.5 * bd, z_face - bl, z_face)],
+        rings: vec![rect(
+            "driver",
+            Role::ChuckBody,
+            0.0,
+            0.5 * bd,
+            z_face - bl,
+            z_face,
+        )],
         held: None,
-        notes: vec![format!("face driver {}: the part is driven on its face at z = {z_face:.2}; a tailstock centre holds the other end", rec.name)],
+        notes: vec![format!(
+            "face driver {}: the part is driven on its face at z = {z_face:.2}; a tailstock centre holds the other end",
+            rec.name
+        )],
     })
 }
 
@@ -152,14 +172,24 @@ pub fn centre(name: &str, rec: &Record, z_end: f64, hole_r: f64, back: f64) -> R
     let ring = Ring {
         name: "centre".into(),
         role: Role::Centre,
-        poly: vec![[0.0, z_end], [hole_r, z_end], [rp, zc], [rb, zc], [rb, zc + back], [0.0, zc + back]],
+        poly: vec![
+            [0.0, z_end],
+            [hole_r, z_end],
+            [rp, zc],
+            [rb, zc],
+            [rb, zc + back],
+            [0.0, zc + back],
+        ],
     };
     Ok(Spin {
         name: name.to_string(),
         kind: Kind::Centre,
         rings: vec![ring],
         held: None,
-        notes: vec![format!("centre {} ({ang}°) in the end at z = {z_end:.2}", rec.name)],
+        notes: vec![format!(
+            "centre {} ({ang}°) in the end at z = {z_end:.2}",
+            rec.name
+        )],
     })
 }
 
@@ -169,14 +199,29 @@ pub fn steady_rest(name: &str, rec: &Record, bar_d: f64, z: f64) -> Result<Spin,
     let (lo, hi) = (rec.get("range_min")?, rec.get("range_max")?);
     let (fr, w) = (rec.get("frame_r")?, rec.get("width")?);
     if !(bar_d >= lo && bar_d <= hi) {
-        return Err(refuse(name, format!("a bar {bar_d:.2}; the rest takes {lo:.2}..{hi:.2} mm"), "another rest"));
+        return Err(refuse(
+            name,
+            format!("a bar {bar_d:.2}; the rest takes {lo:.2}..{hi:.2} mm"),
+            "another rest",
+        ));
     }
     Ok(Spin {
         name: name.to_string(),
         kind: Kind::SteadyRest,
-        rings: vec![rect("rest", Role::Rest, 0.5 * bar_d, fr, z - 0.5 * w, z + 0.5 * w)],
+        rings: vec![rect(
+            "rest",
+            Role::Rest,
+            0.5 * bar_d,
+            fr,
+            z - 0.5 * w,
+            z + 0.5 * w,
+        )],
         held: Some([z - 0.5 * w, z + 0.5 * w]),
-        notes: vec![format!("steady rest {} at z = {z:.2}: no tool passes it at ρ > {:.2}", rec.name, 0.5 * bar_d)],
+        notes: vec![format!(
+            "steady rest {} at z = {z:.2}: no tool passes it at ρ > {:.2}",
+            rec.name,
+            0.5 * bar_d
+        )],
     })
 }
 
@@ -254,6 +299,21 @@ pub fn check_path(devices: &[Spin], path: &[[f64; 2]], nose_r: f64, clearance: f
 /// out of the jaws the path needs, and what the bar has (z_front − z_face).
 pub fn stick_out(z_face: f64, z_front: f64, z_min: f64, nose_r: f64, clearance: f64) -> (f64, f64) {
     (z_front - z_min + nose_r + clearance, z_front - z_face)
+}
+
+/// The overhang guideline, stated (a machine maker's, not a standard; no chuck maker was found
+/// publishing a number): "Workpieces longer than 3 times the chucking diameter must be supported
+/// by the tailstock or a steady rest." (JET GH-1340 manual M-JT1-2708, safety item 33,
+/// https://www.trick-tools.com/common/documentation/gh1340_manual.pdf, read 2026-11-23). A note
+/// when the length out of the jaws exceeds 3 × the gripped diameter with nothing at the far end;
+/// never a refusal.
+pub fn overhang(len_out: f64, grip_d: f64, supported: bool) -> Option<String> {
+    (!supported && len_out > 3.0 * grip_d).then(|| {
+        format!(
+            "{len_out:.1} mm out of the jaws is {:.2} × the gripped ⌀{grip_d:.1}: over the 3 × guideline (JET GH-1340 manual): a tailstock centre or a steady rest",
+            len_out / grip_d
+        )
+    })
 }
 
 /// A ring as a forge-cam-geom region (x = ρ, y = z).

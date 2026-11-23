@@ -32,7 +32,10 @@ fn check(file: &str, env: &[Prim]) {
         .fold(0.0, f64::max);
     assert!(worst <= 0.01, "{file}: a vertex {worst} outside its envelope");
     let ev: f64 = env.iter().map(Prim::volume).sum();
-    assert!(vol > 0.0 && vol <= ev * (1.0 + 1e-9), "{file}: volume {vol}, envelope {ev}");
+    assert!(
+        vol > 0.0 && vol <= ev * (1.0 + 1e-9),
+        "{file}: volume {vol}, envelope {ev}"
+    );
     assert!(vol >= 0.25 * ev, "{file}: volume {vol} of envelope {ev}");
 }
 
@@ -51,7 +54,9 @@ fn builtin_parts_lie_in_their_envelopes() {
         if r.kind.is_lathe() {
             let s = lathe::chuck("c", r, 60.0, 0.0, 10.0).unwrap();
             for ring in &s.rings {
-                let Some(f) = r.parts.get(&ring.name) else { continue };
+                let Some(f) = r.parts.get(&ring.name) else {
+                    continue;
+                };
                 // the ring's outer radius and z span, as a cylinder from z = 0
                 let rr = ring.poly.iter().map(|p| p[0]).fold(0.0, f64::max);
                 let z0 = ring.poly.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min);

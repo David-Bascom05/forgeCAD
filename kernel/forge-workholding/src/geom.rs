@@ -181,10 +181,22 @@ impl Prim {
             Prim::Block { o, axes, size } => {
                 let rect = |w: f64, h: f64| Trim {
                     segs: vec![
-                        TSeg::Line { a: [0.0, 0.0], b: [w, 0.0] },
-                        TSeg::Line { a: [w, 0.0], b: [w, h] },
-                        TSeg::Line { a: [w, h], b: [0.0, h] },
-                        TSeg::Line { a: [0.0, h], b: [0.0, 0.0] },
+                        TSeg::Line {
+                            a: [0.0, 0.0],
+                            b: [w, 0.0],
+                        },
+                        TSeg::Line {
+                            a: [w, 0.0],
+                            b: [w, h],
+                        },
+                        TSeg::Line {
+                            a: [w, h],
+                            b: [0.0, h],
+                        },
+                        TSeg::Line {
+                            a: [0.0, h],
+                            b: [0.0, 0.0],
+                        },
                     ],
                 };
                 let mk = |o: V3, i: usize, j: usize, id: u32| {
@@ -268,7 +280,11 @@ impl Prim {
 /// Two unit vectors completing a unit axis to a right-handed frame (exact for the axis
 /// directions ±x, ±y, ±z).
 pub fn perp(a: V3) -> (V3, V3) {
-    let pick = if a[2].abs() < 0.9 { [0.0, 0.0, 1.0] } else { [1.0, 0.0, 0.0] };
+    let pick = if a[2].abs() < 0.9 {
+        [0.0, 0.0, 1.0]
+    } else {
+        [1.0, 0.0, 0.0]
+    };
     let e2 = cross(a, pick);
     let n = dot(e2, e2).sqrt();
     let e2 = mul(e2, 1.0 / n);
@@ -391,7 +407,11 @@ mod tests {
         let (lo, hi) = c.bounds();
         for x in &f {
             for k in 0..3 {
-                assert!(x.bbox[k].lo >= lo[k] - 1e-6 && x.bbox[k].hi <= hi[k] + 1e-6, "{k} {:?}", x.bbox);
+                assert!(
+                    x.bbox[k].lo >= lo[k] - 1e-6 && x.bbox[k].hi <= hi[k] + 1e-6,
+                    "{k} {:?}",
+                    x.bbox
+                );
             }
         }
         assert_eq!(Prim::aabb([0.0; 3], [1.0; 3]).faces(0, 1e-9).len(), 6);

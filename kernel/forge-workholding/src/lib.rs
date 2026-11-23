@@ -53,23 +53,57 @@ const KINDS: &[(Kind, &str, &[&str], &[&str])] = &[
     (
         Kind::Vise,
         "vise",
-        &["jaw_width", "jaw_height", "jaw_thickness", "max_opening", "body_length", "body_width", "height"],
+        &[
+            "jaw_width",
+            "jaw_height",
+            "jaw_thickness",
+            "max_opening",
+            "body_length",
+            "body_width",
+            "height",
+        ],
         &["clamp_force", "weight", "min_opening"],
     ),
     (
         Kind::SelfCentring,
         "self_centring",
-        &["jaw_width", "jaw_height", "jaw_thickness", "max_opening", "body_length", "body_width", "height"],
+        &[
+            "jaw_width",
+            "jaw_height",
+            "jaw_thickness",
+            "max_opening",
+            "body_length",
+            "body_width",
+            "height",
+        ],
         &["min_opening", "clamp_force", "grip", "repeatability", "weight"],
     ),
     (
         Kind::Dovetail,
         "dovetail",
-        &["body_length", "body_width", "height", "grip", "angle", "min_width", "max_width"],
+        &[
+            "body_length",
+            "body_width",
+            "height",
+            "grip",
+            "angle",
+            "min_width",
+            "max_width",
+        ],
         &["repeatability", "weight", "clamp_force"],
     ),
-    (Kind::SoftJaws, "soft_jaws", &["width", "height", "thickness"], &[]),
-    (Kind::Parallels, "parallels", &["heights", "width", "length"], &["accuracy"]),
+    (
+        Kind::SoftJaws,
+        "soft_jaws",
+        &["width", "height", "thickness"],
+        &[],
+    ),
+    (
+        Kind::Parallels,
+        "parallels",
+        &["heights", "width", "length"],
+        &["accuracy"],
+    ),
     (
         Kind::StrapClamp,
         "strap_clamp",
@@ -82,7 +116,12 @@ const KINDS: &[(Kind, &str, &[&str], &[&str])] = &[
         &["body_length", "body_width", "height"],
         &["range_min", "range_max", "clamp_force", "screw"],
     ),
-    (Kind::StepBlock, "step_block", &["step", "steps", "tread", "width"], &[]),
+    (
+        Kind::StepBlock,
+        "step_block",
+        &["step", "steps", "tread", "width"],
+        &[],
+    ),
     (
         Kind::EdgeClamp,
         "edge_clamp",
@@ -102,7 +141,12 @@ const KINDS: &[(Kind, &str, &[&str], &[&str])] = &[
         &["pull_force", "hold_force", "repeatability"],
     ),
     (Kind::Riser, "riser", &["d", "height"], &[]),
-    (Kind::Tombstone, "tombstone", &["width", "height", "depth"], &["faces"]),
+    (
+        Kind::Tombstone,
+        "tombstone",
+        &["width", "height", "depth"],
+        &["faces"],
+    ),
     (
         Kind::Vacuum,
         "vacuum",
@@ -113,7 +157,15 @@ const KINDS: &[(Kind, &str, &[&str], &[&str])] = &[
     (
         Kind::Chuck,
         "chuck",
-        &["jaws", "body_d", "body_len", "jaw_height", "jaw_len", "grip_min", "grip_max"],
+        &[
+            "jaws",
+            "body_d",
+            "body_len",
+            "jaw_height",
+            "jaw_len",
+            "grip_min",
+            "grip_max",
+        ],
         &["max_rpm", "through_hole", "stroke", "grip_force"],
     ),
     (
@@ -122,9 +174,24 @@ const KINDS: &[(Kind, &str, &[&str], &[&str])] = &[
         &["range_min", "range_max", "nose_d", "nose_len"],
         &["max_rpm", "collet_len", "collet_d"],
     ),
-    (Kind::FaceDriver, "face_driver", &["body_d", "body_len", "range_min", "range_max"], &["pins"]),
-    (Kind::Centre, "centre", &["angle", "body_d", "point_len"], &["quill_d", "max_rpm"]),
-    (Kind::SteadyRest, "steady_rest", &["range_min", "range_max", "frame_r", "width"], &[]),
+    (
+        Kind::FaceDriver,
+        "face_driver",
+        &["body_d", "body_len", "range_min", "range_max"],
+        &["pins"],
+    ),
+    (
+        Kind::Centre,
+        "centre",
+        &["angle", "body_d", "point_len"],
+        &["quill_d", "max_rpm"],
+    ),
+    (
+        Kind::SteadyRest,
+        "steady_rest",
+        &["range_min", "range_max", "frame_r", "width"],
+        &[],
+    ),
 ];
 
 impl Kind {
@@ -249,7 +316,15 @@ pub struct Record {
     pub bodies: Vec<BodySpec>,
 }
 
-const WORDS: &[&str] = &["screw", "system", "mount", "interface", "material", "jaw_kind", "taper"];
+const WORDS: &[&str] = &[
+    "screw",
+    "system",
+    "mount",
+    "interface",
+    "material",
+    "jaw_kind",
+    "taper",
+];
 
 fn bad(rec: &str, field: &str, why: impl Into<String>) -> WhError {
     WhError::Bad {
@@ -337,7 +412,8 @@ impl Record {
                 KINDS.iter().map(|k| k.1).collect::<Vec<_>>().join(", ")
             ),
         })?;
-        let kind = Kind::parse(ks).ok_or_else(|| bad(&rec, "kind", format!("`{ks}` is not a workholding kind")))?;
+        let kind =
+            Kind::parse(ks).ok_or_else(|| bad(&rec, "kind", format!("`{ks}` is not a workholding kind")))?;
         let (need, may) = kind.fields();
         let unknown = toml::texts(t, "unknown").unwrap_or_default();
         let mut vals = BTreeMap::new();
@@ -373,7 +449,11 @@ impl Record {
                     return Err(bad(
                         &rec,
                         k,
-                        format!("is not a field of a {} (fields: {})", kind.name(), [need, may].concat().join(", ")),
+                        format!(
+                            "is not a field of a {} (fields: {})",
+                            kind.name(),
+                            [need, may].concat().join(", ")
+                        ),
                     ));
                 }
             }
@@ -383,7 +463,11 @@ impl Record {
                 return Err(bad(&rec, u, "has a value and is listed as unknown"));
             }
             if !need.contains(&u.as_str()) && !may.contains(&u.as_str()) {
-                return Err(bad(&rec, u, format!("is listed as unknown but is not a field of a {}", kind.name())));
+                return Err(bad(
+                    &rec,
+                    u,
+                    format!("is listed as unknown but is not a field of a {}", kind.name()),
+                ));
             }
         }
         for f in need {
@@ -401,9 +485,17 @@ impl Record {
             let source = text(c, "source").unwrap_or("").to_string();
             let taken = text(c, "taken").unwrap_or("").to_string();
             if fields.is_empty() || source.is_empty() || taken.is_empty() {
-                return Err(bad(&rec, "cite", "each cite gives `fields`, `source` and `taken`"));
+                return Err(bad(
+                    &rec,
+                    "cite",
+                    "each cite gives `fields`, `source` and `taken`",
+                ));
             }
-            cites.push(Cite { fields, source, taken });
+            cites.push(Cite {
+                fields,
+                source,
+                taken,
+            });
         }
         let generic = toml::boolean(t, "generic").unwrap_or(false);
         let source = text(t, "source").unwrap_or("").to_string();
@@ -418,7 +510,11 @@ impl Record {
             // every value of a maker's product is cited
             for f in vals.keys().chain(lists.keys()) {
                 if !cites.iter().any(|c| c.fields.iter().any(|x| x == f)) {
-                    return Err(bad(&rec, f, "has no [[workholding.cite]] (every value of a product is cited)"));
+                    return Err(bad(
+                        &rec,
+                        f,
+                        "has no [[workholding.cite]] (every value of a product is cited)",
+                    ));
                 }
             }
         }
@@ -430,10 +526,14 @@ impl Record {
         }
         let mut bodies = Vec::new();
         for b in tables(t, "body") {
-            let bn = text(b, "name").ok_or_else(|| bad(&rec, "body", "gives `name`"))?.to_string();
+            let bn = text(b, "name")
+                .ok_or_else(|| bad(&rec, "body", "gives `name`"))?
+                .to_string();
             let role = match text(b, "role") {
                 None => Role::Other,
-                Some(r) => Role::parse(r).ok_or_else(|| bad(&rec, "body.role", format!("`{r}` is not a role")))?,
+                Some(r) => {
+                    Role::parse(r).ok_or_else(|| bad(&rec, "body.role", format!("`{r}` is not a role")))?
+                }
             };
             let mut prims = Vec::new();
             for x in tables(b, "box") {
@@ -447,9 +547,13 @@ impl Record {
                 let base = v3(x, &rec, "base")?;
                 let axis = v3(x, &rec, "axis")?;
                 let n = (axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]).sqrt();
-                let r = num(x, "r").filter(|r| *r > 0.0).ok_or_else(|| bad(&rec, "body.cyl", "`r` > 0"))?;
-                let h = num(x, "h").filter(|h| *h > 0.0).ok_or_else(|| bad(&rec, "body.cyl", "`h` > 0"))?;
-                if !(n > 0.0) {
+                let r = num(x, "r")
+                    .filter(|r| *r > 0.0)
+                    .ok_or_else(|| bad(&rec, "body.cyl", "`r` > 0"))?;
+                let h = num(x, "h")
+                    .filter(|h| *h > 0.0)
+                    .ok_or_else(|| bad(&rec, "body.cyl", "`h` > 0"))?;
+                if !n.is_finite() || n <= 0.0 {
                     return Err(bad(&rec, "body.cyl", "`axis` is not zero"));
                 }
                 prims.push(Prim::Cyl {
@@ -534,7 +638,11 @@ impl Record {
     pub fn with(&self, k: &str, v: f64) -> Result<Record, WhError> {
         let (need, may) = self.kind.fields();
         if !need.contains(&k) && !may.contains(&k) {
-            return Err(bad(&self.label(), k, format!("is not a field of a {}", self.kind.name())));
+            return Err(bad(
+                &self.label(),
+                k,
+                format!("is not a field of a {}", self.kind.name()),
+            ));
         }
         if !(v.is_finite() && v > 0.0) {
             return Err(bad(&self.label(), k, format!("must be > 0 (is {v})")));
@@ -570,9 +678,18 @@ pub struct Library {
 }
 
 pub const BUILTIN: [(&str, &str); 3] = [
-    ("builtin/workholding/generic.toml", include_str!("../data/generic.toml")),
-    ("builtin/workholding/products.toml", include_str!("../data/products.toml")),
-    ("builtin/workholding/lathe.toml", include_str!("../data/lathe.toml")),
+    (
+        "builtin/workholding/generic.toml",
+        include_str!("../data/generic.toml"),
+    ),
+    (
+        "builtin/workholding/products.toml",
+        include_str!("../data/products.toml"),
+    ),
+    (
+        "builtin/workholding/lathe.toml",
+        include_str!("../data/lathe.toml"),
+    ),
 ];
 
 /// Records from one file.
@@ -589,8 +706,12 @@ impl Library {
     /// The built-in set alone.
     pub fn builtin() -> Library {
         let mut l = Library::default();
-        let files: Vec<(String, String)> = BUILTIN.iter().map(|(f, s)| (f.to_string(), s.to_string())).collect();
-        l.add_level(&files).expect("the built-in workholding library reads");
+        let files: Vec<(String, String)> = BUILTIN
+            .iter()
+            .map(|(f, s)| (f.to_string(), s.to_string()))
+            .collect();
+        l.add_level(&files)
+            .expect("the built-in workholding library reads");
         l
     }
 
@@ -609,7 +730,8 @@ impl Library {
                 level.push((r, file.clone()));
             }
         }
-        self.records.retain(|(r, _)| !level.iter().any(|(x, _)| x.name == r.name));
+        self.records
+            .retain(|(r, _)| !level.iter().any(|(x, _)| x.name == r.name));
         level.append(&mut self.records);
         self.records = level;
         Ok(())
@@ -638,7 +760,10 @@ impl Library {
 
     /// The built-in set, then the user's `<config>/cam/workholding`, then the project's
     /// `<project>/cam/workholding` on top.
-    pub fn search(user: Option<&std::path::Path>, project: Option<&std::path::Path>) -> Result<Library, WhError> {
+    pub fn search(
+        user: Option<&std::path::Path>,
+        project: Option<&std::path::Path>,
+    ) -> Result<Library, WhError> {
         let mut l = Library::builtin();
         for d in [user, project].into_iter().flatten() {
             l.add_dir(&d.join("cam").join("workholding"))?;
@@ -772,7 +897,10 @@ pub struct Placed {
 impl Placed {
     /// The lowest z of its bodies (what the next device down carries).
     pub fn bottom(&self) -> f64 {
-        self.bodies.iter().map(|b| b.bounds().0[2]).fold(f64::INFINITY, f64::min)
+        self.bodies
+            .iter()
+            .map(|b| b.bounds().0[2])
+            .fold(f64::INFINITY, f64::min)
     }
 }
 
@@ -787,7 +915,9 @@ pub const FACE_ID0: u32 = 3000;
 
 impl Workholding {
     pub fn bodies(&self) -> impl Iterator<Item = (&Placed, &Body)> {
-        self.placed.iter().flat_map(|p| p.bodies.iter().map(move |b| (p, b)))
+        self.placed
+            .iter()
+            .flat_map(|p| p.bodies.iter().map(move |b| (p, b)))
     }
 
     /// Every body's faces for the certified checker (keep-outs applied), and the name of the
@@ -808,7 +938,9 @@ impl Workholding {
     /// The device and body a face id names.
     pub fn body_of(&self, id: u32) -> Option<(&str, &str)> {
         let k = (id.checked_sub(FACE_ID0)? / 1000) as usize;
-        self.bodies().nth(k).map(|(p, b)| (p.name.as_str(), b.name.as_str()))
+        self.bodies()
+            .nth(k)
+            .map(|(p, b)| (p.name.as_str(), b.name.as_str()))
     }
 
     /// Every primitive in the part frame with its device and body name, keep-outs applied (what
@@ -884,9 +1016,18 @@ mod tests {
         for (r, f) in &l.records {
             assert!(!r.name.is_empty(), "{f}");
             if !r.generic {
-                assert!(!r.vendor.is_empty() && !r.cites.is_empty(), "{}: a product names its maker and sources", r.name);
+                assert!(
+                    !r.vendor.is_empty() && !r.cites.is_empty(),
+                    "{}: a product names its maker and sources",
+                    r.name
+                );
                 for c in &r.cites {
-                    assert!(c.source.starts_with("http"), "{}: cite a public source ({})", r.name, c.source);
+                    assert!(
+                        c.source.starts_with("http"),
+                        "{}: cite a public source ({})",
+                        r.name,
+                        c.source
+                    );
                     assert_eq!(c.taken.len(), 10, "{}: the date it was read, YYYY-MM-DD", r.name);
                 }
             }
@@ -906,25 +1047,37 @@ mod tests {
             .add_level(&[("p/a.toml".into(), mine.into()), ("p/b.toml".into(), mine.into())])
             .unwrap_err();
         assert!(matches!(e, WhError::Duplicate { .. }), "{e:?}");
-        assert!(matches!(l.get("generic-vise-15"), Err(WhError::Unknown { near, .. }) if near.contains(&"generic-vise-150".to_string())));
+        assert!(
+            matches!(l.get("generic-vise-15"), Err(WhError::Unknown { near, .. }) if near.contains(&"generic-vise-150".to_string()))
+        );
     }
 
     #[test]
     fn records_refuse_what_they_cannot_hold() {
         let p = |s: &str| parse_file("t.toml", s);
         // a field missing, neither given nor unknown
-        let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\ngeneric = true\nsource = \"s\"\nd = 5\n").unwrap_err();
-        assert!(matches!(&e, WhError::Missing { field, .. } if field == "height"), "{e:?}");
+        let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\ngeneric = true\nsource = \"s\"\nd = 5\n")
+            .unwrap_err();
+        assert!(
+            matches!(&e, WhError::Missing { field, .. } if field == "height"),
+            "{e:?}"
+        );
         // a product's value without a cite
         let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\nvendor = \"v\"\nd = 5\nheight = 9\n[[workholding.cite]]\nfields = [\"d\"]\nsource = \"https://x\"\ntaken = \"2026-11-23\"\n").unwrap_err();
-        assert!(matches!(&e, WhError::Bad { field, .. } if field == "height"), "{e:?}");
+        assert!(
+            matches!(&e, WhError::Bad { field, .. } if field == "height"),
+            "{e:?}"
+        );
         // unknown is not a value: using it is refused, giving it in the job works
         let r = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\nvendor = \"v\"\nunknown = [\"height\"]\nd = 5\n[[workholding.cite]]\nfields = [\"d\"]\nsource = \"https://x\"\ntaken = \"2026-11-23\"\n").unwrap();
         assert!(matches!(r[0].get("height"), Err(WhError::Unpublished { .. })));
         assert_eq!(r[0].with("height", 80.0).unwrap().get("height"), Ok(80.0));
         // a field that is not the kind's
         let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\ngeneric = true\nsource = \"s\"\nd = 5\nheight = 9\njaw_width = 3\n").unwrap_err();
-        assert!(matches!(&e, WhError::Bad { field, .. } if field == "jaw_width"), "{e:?}");
+        assert!(
+            matches!(&e, WhError::Bad { field, .. } if field == "jaw_width"),
+            "{e:?}"
+        );
         let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\ngeneric = true\nsource = \"s\"\nd = -5\nheight = 9\n").unwrap_err();
         assert!(matches!(&e, WhError::Bad { field, .. } if field == "d"), "{e:?}");
     }

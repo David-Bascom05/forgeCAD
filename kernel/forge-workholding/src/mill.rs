@@ -59,7 +59,11 @@ pub fn vise(
 ) -> Result<Placed, WhError> {
     want(rec, &[Kind::Vise, Kind::SelfCentring])?;
     if axis > 1 {
-        return Err(refuse(name, "the jaws close along x or y", "across: \"x\" or \"y\""));
+        return Err(refuse(
+            name,
+            "the jaws close along x or y",
+            "across: \"x\" or \"y\"",
+        ));
     }
     let (a, o) = (axis, 1 - axis);
     let jw = rec.get("jaw_width")?;
@@ -92,7 +96,11 @@ pub fn vise(
             format!(
                 "the stock is {:.2} mm across the jaws{}; the vise opens {max:.2} mm",
                 size[a],
-                if tb > 0.0 { format!(" (+{:.2} of soft jaws)", 2.0 * tb) } else { String::new() }
+                if tb > 0.0 {
+                    format!(" (+{:.2} of soft jaws)", 2.0 * tb)
+                } else {
+                    String::new()
+                }
             ),
             "turn the stock, or a bigger vise",
         ));
@@ -192,7 +200,11 @@ pub fn vise(
                     p.name,
                     hs.iter().map(|h| format!("{h}")).collect::<Vec<_>>().join(", ")
                 ),
-                if fix.is_empty() { "other parallels".to_string() } else { fix.join(" or ") },
+                if fix.is_empty() {
+                    "other parallels".to_string()
+                } else {
+                    fix.join(" or ")
+                },
             ));
         }
         let pw = p.get("width")?;
@@ -216,6 +228,9 @@ pub fn vise(
         }
         notes.push(format!("parallels {} at {need:.2} mm", p.name));
     }
+    for b in &mut bodies {
+        b.part = rec.parts.get(&b.name).cloned();
+    }
     Ok(Placed {
         name: name.to_string(),
         kind: rec.kind,
@@ -231,7 +246,11 @@ pub fn vise(
 pub fn dovetail(name: &str, rec: &Record, stock: &Box3, axis: usize, tenon: f64) -> Result<Placed, WhError> {
     want(rec, &[Kind::Dovetail])?;
     let (a, o) = (axis.min(1), 1 - axis.min(1));
-    let (bl, bw, height) = (rec.get("body_length")?, rec.get("body_width")?, rec.get("height")?);
+    let (bl, bw, height) = (
+        rec.get("body_length")?,
+        rec.get("body_width")?,
+        rec.get("height")?,
+    );
     let (grip, angle) = (rec.get("grip")?, rec.get("angle")?);
     let (wmin, wmax) = (rec.get("min_width")?, rec.get("max_width")?);
     if !(tenon >= wmin && tenon <= wmax) {
@@ -245,12 +264,19 @@ pub fn dovetail(name: &str, rec: &Record, stock: &Box3, axis: usize, tenon: f64)
     if tenon > size[a] || tenon > bl {
         return Err(refuse(
             name,
-            format!("a tenon {tenon:.2} mm wide on stock {:.2} mm, a fixture {bl:.2} mm long", size[a]),
+            format!(
+                "a tenon {tenon:.2} mm wide on stock {:.2} mm, a fixture {bl:.2} mm long",
+                size[a]
+            ),
             "a narrower tenon",
         ));
     }
     if grip >= size[2] {
-        return Err(refuse(name, format!("the grip {grip:.2} mm is the stock's whole height"), "taller stock"));
+        return Err(refuse(
+            name,
+            format!("the grip {grip:.2} mm is the stock's whole height"),
+            "taller stock",
+        ));
     }
     let seat = stock.min[2];
     let top = seat + grip;
@@ -259,7 +285,11 @@ pub fn dovetail(name: &str, rec: &Record, stock: &Box3, axis: usize, tenon: f64)
     let (ma, mo) = (m[a], m[o]);
     let acr = (mo - 0.5 * bw, mo + 0.5 * bw);
     let bodies = vec![
-        Body::new("base", Role::Base, vec![bx(a, (ma - 0.5 * bl, ma + 0.5 * bl), acr, (table, seat))]),
+        Body::new(
+            "base",
+            Role::Base,
+            vec![bx(a, (ma - 0.5 * bl, ma + 0.5 * bl), acr, (table, seat))],
+        ),
         Body::new(
             "jaw",
             Role::Jaw,
@@ -307,9 +337,21 @@ pub fn strap_clamp(
     want(step, &[Kind::StepBlock])?;
     let (l, w, t) = (rec.get("length")?, rec.get("width")?, rec.get("thickness")?);
     let (sd, above) = (rec.get("stud_d")?, rec.get("stud_above")?);
-    let (rise, n, tread, sw) = (step.get("step")?, step.get("steps")?, step.get("tread")?, step.get("width")?);
+    let (rise, n, tread, sw) = (
+        step.get("step")?,
+        step.get("steps")?,
+        step.get("tread")?,
+        step.get("width")?,
+    );
     let nd = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt();
-    if !(nd > 0.0) || !(bite > 0.0 && bite < l) || !(stud > bite && stud < l - tread) {
+    if !nd.is_finite()
+        || nd <= 0.0
+        || !(0.0..l).contains(&bite)
+        || bite == 0.0
+        || stud <= bite
+        || stud >= l - tread
+        || stud.is_nan()
+    {
         return Err(refuse(
             name,
             format!("bite {bite:.2}, stud {stud:.2} on a strap {l:.2} long"),
@@ -328,11 +370,19 @@ pub fn strap_clamp(
     }
     let heel = pt(bite - l);
     if xy_dist(heel, lo, hi) < tread {
-        return Err(refuse(name, "the strap's heel lies on the stock", "a longer strap, or another place"));
+        return Err(refuse(
+            name,
+            "the strap's heel lies on the stock",
+            "a longer strap, or another place",
+        ));
     }
     let ztop = stock.max[2];
     if ztop <= table {
-        return Err(refuse(name, "the stock's top is not above the table", "the table's z"));
+        return Err(refuse(
+            name,
+            "the stock's top is not above the table",
+            "the table's z",
+        ));
     }
     // the step whose top is nearest the stock's top carries the heel
     let steps = n.round() as i64;
@@ -350,18 +400,36 @@ pub fn strap_clamp(
     };
     let zlo = ztop.min(zheel);
     let zhi = ztop.max(zheel) + t;
-    let mut bodies = vec![Body::new("strap", Role::Clamp, vec![blk(bite - l, bite, w, zlo, zhi)])];
+    let mut bodies = vec![Body::new(
+        "strap",
+        Role::Clamp,
+        vec![blk(bite - l, bite, w, zlo, zhi)],
+    )];
     let sp = pt(bite - stud);
     if xy_dist(sp, lo, hi) < 0.5 * sd {
-        return Err(refuse(name, "the stud stands in the stock", "a longer stud distance"));
+        return Err(refuse(
+            name,
+            "the stud stands in the stock",
+            "a longer stud distance",
+        ));
     }
-    bodies.push(Body::new("stud", Role::Stud, vec![Prim::post(sp[0], sp[1], 0.5 * sd, table, zhi + above)]));
+    bodies.push(Body::new(
+        "stud",
+        Role::Stud,
+        vec![Prim::post(sp[0], sp[1], 0.5 * sd, table, zhi + above)],
+    ));
     // the staircase: step j's tread; the heel's last `tread` rests on step k, higher steps behind
     let s_k = bite - l;
     let mut stair = Vec::new();
     for j in 1..=steps {
         let off = (j - k) as f64 * tread;
-        stair.push(blk(s_k - off, s_k - off + tread, sw, table, table + j as f64 * rise));
+        stair.push(blk(
+            s_k - off,
+            s_k - off + tread,
+            sw,
+            table,
+            table + j as f64 * rise,
+        ));
     }
     bodies.push(Body::new("step block", Role::StepBlock, stair));
     let tilt = forge_math::dmath::atan2(zheel - ztop, l - bite - 0.5 * tread).to_degrees();
@@ -371,7 +439,11 @@ pub fn strap_clamp(
         bodies,
         mount: Mount::Table { z: table },
         held: vec![(
-            [pt(0.0)[0].min(pt(bite)[0]), pt(0.0)[1].min(pt(bite)[1]), stock.min[2]],
+            [
+                pt(0.0)[0].min(pt(bite)[0]),
+                pt(0.0)[1].min(pt(bite)[1]),
+                stock.min[2],
+            ],
             [pt(0.0)[0].max(pt(bite)[0]), pt(0.0)[1].max(pt(bite)[1]), ztop],
         )],
         notes: vec![format!(
@@ -383,27 +455,58 @@ pub fn strap_clamp(
 
 /// A toe or edge clamp (Mitee-Bite style) against the stock's side at `at` (on the edge),
 /// pushing along `dir` (unit xy, into the stock), standing on `seat` (the plate or table under it).
-pub fn side_clamp(name: &str, rec: &Record, stock: &Box3, seat: f64, at: [f64; 2], dir: [f64; 2]) -> Result<Placed, WhError> {
+pub fn side_clamp(
+    name: &str,
+    rec: &Record,
+    stock: &Box3,
+    seat: f64,
+    at: [f64; 2],
+    dir: [f64; 2],
+) -> Result<Placed, WhError> {
     want(rec, &[Kind::ToeClamp, Kind::EdgeClamp])?;
-    let (bl, bw, h) = (rec.get("body_length")?, rec.get("body_width")?, rec.get("height")?);
+    let (bl, bw, h) = (
+        rec.get("body_length")?,
+        rec.get("body_width")?,
+        rec.get("height")?,
+    );
     let nd = (dir[0] * dir[0] + dir[1] * dir[1]).sqrt();
     let (lo, hi) = ([stock.min[0], stock.min[1]], [stock.max[0], stock.max[1]]);
-    if !(nd > 0.0) || xy_dist(at, lo, hi) > 1e-6 {
-        return Err(refuse(name, "the clamp does not touch the stock", "`at` on the stock's edge, the direction into it"));
+    if !nd.is_finite() || nd <= 0.0 || xy_dist(at, lo, hi) > 1e-6 {
+        return Err(refuse(
+            name,
+            "the clamp does not touch the stock",
+            "`at` on the stock's edge, the direction into it",
+        ));
     }
     let d = [dir[0] / nd, dir[1] / nd];
     let back = [at[0] - d[0] * 1e-3, at[1] - d[1] * 1e-3];
     if xy_dist(back, lo, hi) == 0.0 {
-        return Err(refuse(name, "the clamp would stand in the stock", "the direction into the stock"));
+        return Err(refuse(
+            name,
+            "the clamp would stand in the stock",
+            "the direction into the stock",
+        ));
     }
     let axes = [[d[0], d[1], 0.0], [-d[1], d[0], 0.0], [0.0, 0.0, 1.0]];
-    let o = [at[0] - d[0] * bl + d[1] * 0.5 * bw, at[1] - d[1] * bl - d[0] * 0.5 * bw, seat];
+    let o = [
+        at[0] - d[0] * bl + d[1] * 0.5 * bw,
+        at[1] - d[1] * bl - d[0] * 0.5 * bw,
+        seat,
+    ];
     let body = Prim::Block {
         o,
         axes,
         size: [bl, bw, h],
     };
-    let mut notes = vec![format!("{} {} at ({:.2}, {:.2}) pushing ({:.3}, {:.3})", rec.kind.name(), rec.name, at[0], at[1], d[0], d[1])];
+    let mut notes = vec![format!(
+        "{} {} at ({:.2}, {:.2}) pushing ({:.3}, {:.3})",
+        rec.kind.name(),
+        rec.name,
+        at[0],
+        at[1],
+        d[0],
+        d[1]
+    )];
     if seat + h > stock.max[2] {
         notes.push(format!(
             "it stands {:.2} mm above the stock's top: the top cannot be faced past it",
@@ -419,33 +522,57 @@ pub fn side_clamp(name: &str, rec: &Record, stock: &Box3, seat: f64, at: [f64; 2
         mount: Mount::Table { z: seat },
         held: vec![(
             [side[0].min(side2[0]), side[1].min(side2[1]), stock.min[2]],
-            [side[0].max(side2[0]), side[1].max(side2[1]), (seat + h).min(stock.max[2])],
+            [
+                side[0].max(side2[0]),
+                side[1].max(side2[1]),
+                (seat + h).min(stock.max[2]),
+            ],
         )],
         notes,
     })
 }
 
 /// A fixture plate under the stock, its corner at `corner` (xy), with dowels in holes (i, j).
-pub fn fixture_plate(name: &str, rec: &Record, stock: &Box3, corner: [f64; 2], dowels: &[(i32, i32)]) -> Result<Placed, WhError> {
+pub fn fixture_plate(
+    name: &str,
+    rec: &Record,
+    stock: &Box3,
+    corner: [f64; 2],
+    dowels: &[(i32, i32)],
+) -> Result<Placed, WhError> {
     want(rec, &[Kind::FixturePlate])?;
     let (l, w, t) = (rec.get("length")?, rec.get("width")?, rec.get("thickness")?);
     let (pitch, off) = (rec.get("pitch")?, rec.get("hole_offset")?);
     let seat = stock.min[2];
     let (lo, hi) = ([stock.min[0], stock.min[1]], [stock.max[0], stock.max[1]]);
     if lo[0] < corner[0] || lo[1] < corner[1] || hi[0] > corner[0] + l || hi[1] > corner[1] + w {
-        return Err(refuse(name, "the stock overhangs the plate", "move the plate, or a bigger one"));
+        return Err(refuse(
+            name,
+            "the stock overhangs the plate",
+            "move the plate, or a bigger one",
+        ));
     }
     let mut bodies = vec![Body::new(
         "plate",
         Role::Plate,
-        vec![Prim::aabb([corner[0], corner[1], seat - t], [corner[0] + l, corner[1] + w, seat])],
+        vec![Prim::aabb(
+            [corner[0], corner[1], seat - t],
+            [corner[0] + l, corner[1] + w, seat],
+        )],
     )];
     let mut notes = vec![format!("plate {}: {pitch} mm grid, top z = {seat:.2}", rec.name)];
     for &(i, j) in dowels {
         let (dd, dh) = (rec.get("dowel_d")?, rec.get("dowel_h")?);
-        let c = [corner[0] + off + i as f64 * pitch, corner[1] + off + j as f64 * pitch];
+        let c = [
+            corner[0] + off + i as f64 * pitch,
+            corner[1] + off + j as f64 * pitch,
+        ];
         if c[0] > corner[0] + l || c[1] > corner[1] + w || i < 0 || j < 0 {
-            return Err(refuse(name, format!("hole ({i}, {j}) is off the plate"), "a hole on the plate"));
+            return Err(refuse(
+                name,
+                format!("hole ({i}, {j}) is off the plate"),
+                "a hole on the plate",
+            ));
         }
         let gap = xy_dist(c, lo, hi);
         if gap < 0.5 * dd - 1e-9 {
@@ -458,7 +585,11 @@ pub fn fixture_plate(name: &str, rec: &Record, stock: &Box3, corner: [f64; 2], d
         if (gap - 0.5 * dd).abs() <= 1e-6 {
             notes.push(format!("the dowel in hole ({i}, {j}) locates the stock"));
         }
-        bodies.push(Body::new(format!("dowel ({i}, {j})"), Role::Dowel, vec![Prim::post(c[0], c[1], 0.5 * dd, seat, seat + dh)]));
+        bodies.push(Body::new(
+            format!("dowel ({i}, {j})"),
+            Role::Dowel,
+            vec![Prim::post(c[0], c[1], 0.5 * dd, seat, seat + dh)],
+        ));
     }
     Ok(Placed {
         name: name.to_string(),
@@ -482,7 +613,11 @@ pub fn zero_point(
 ) -> Result<Placed, WhError> {
     want(rec, &[Kind::ZeroPoint])?;
     if !matches!(on.mount, Mount::Table { .. }) {
-        return Err(refuse(name, format!("{} is already mounted on something", on.name), "mount it once"));
+        return Err(refuse(
+            name,
+            format!("{} is already mounted on something", on.name),
+            "mount it once",
+        ));
     }
     let (pitch, md, mh) = (rec.get("pitch")?, rec.get("module_d")?, rec.get("module_h")?);
     let mut z = on.bottom();
@@ -491,7 +626,11 @@ pub fn zero_point(
     if let Some(r) = riser {
         want(r, &[Kind::Riser])?;
         let (d, h) = (r.get("d")?, r.get("height")?);
-        bodies.push(Body::new(format!("riser ({})", r.name), Role::Riser, vec![Prim::post(at[0], at[1], 0.5 * d, z - h, z)]));
+        bodies.push(Body::new(
+            format!("riser ({})", r.name),
+            Role::Riser,
+            vec![Prim::post(at[0], at[1], 0.5 * d, z - h, z)],
+        ));
         notes.push(format!("riser {}: {h} mm", r.name));
         z -= h;
     }
@@ -500,9 +639,21 @@ pub fn zero_point(
     }
     for &(i, j) in modules {
         let c = [at[0] + i as f64 * pitch, at[1] + j as f64 * pitch];
-        bodies.push(Body::new(format!("module ({i}, {j})"), Role::Module, vec![Prim::post(c[0], c[1], 0.5 * md, z - mh, z)]));
+        bodies.push(Body::new(
+            format!("module ({i}, {j})"),
+            Role::Module,
+            vec![Prim::post(c[0], c[1], 0.5 * md, z - mh, z)],
+        ));
     }
-    notes.insert(0, format!("zero-point {}: {} module(s) on a {pitch} mm grid, the device on top at z = {:.2}", rec.name, modules.len(), on.bottom()));
+    notes.insert(
+        0,
+        format!(
+            "zero-point {}: {} module(s) on a {pitch} mm grid, the device on top at z = {:.2}",
+            rec.name,
+            modules.len(),
+            on.bottom()
+        ),
+    );
     on.mount = Mount::On {
         below: name.to_string(),
         z: on.bottom(),
@@ -526,18 +677,29 @@ pub fn tombstone(name: &str, rec: &Record, stock: &Box3, centre: [f64; 2]) -> Re
     let lo = [centre[0] - 0.5 * w, centre[1] - 0.5 * h];
     let hi = [centre[0] + 0.5 * w, centre[1] + 0.5 * h];
     if stock.min[0] < lo[0] || stock.min[1] < lo[1] || stock.max[0] > hi[0] || stock.max[1] > hi[1] {
-        return Err(refuse(name, "the stock overhangs the face", "move it on the face, or a bigger tombstone"));
+        return Err(refuse(
+            name,
+            "the stock overhangs the face",
+            "move it on the face, or a bigger tombstone",
+        ));
     }
     Ok(Placed {
         name: name.to_string(),
         kind: Kind::Tombstone,
-        bodies: vec![Body::new("column", Role::Column, vec![Prim::aabb([lo[0], lo[1], seat - dp], [hi[0], hi[1], seat])])],
+        bodies: vec![Body::new(
+            "column",
+            Role::Column,
+            vec![Prim::aabb([lo[0], lo[1], seat - dp], [hi[0], hi[1], seat])],
+        )],
         mount: Mount::On {
             below: "the pallet (posed by the machine)".into(),
             z: seat - dp,
         },
         held: vec![],
-        notes: vec![format!("tombstone {}: face {w}×{h}, the column {dp} deep behind the seat", rec.name)],
+        notes: vec![format!(
+            "tombstone {}: face {w}×{h}, the column {dp} deep behind the seat",
+            rec.name
+        )],
     })
 }
 
@@ -547,7 +709,11 @@ pub fn vacuum(name: &str, rec: &Record, stock: &Box3) -> Result<Placed, WhError>
     let (l, w, t) = (rec.get("length")?, rec.get("width")?, rec.get("thickness")?);
     let s = stock.size();
     if s[0] > l || s[1] > w {
-        return Err(refuse(name, "the stock overhangs the vacuum plate", "a bigger plate"));
+        return Err(refuse(
+            name,
+            "the stock overhangs the vacuum plate",
+            "a bigger plate",
+        ));
     }
     let m = stock.mid();
     let seat = stock.min[2];
@@ -557,7 +723,10 @@ pub fn vacuum(name: &str, rec: &Record, stock: &Box3) -> Result<Placed, WhError>
         bodies: vec![Body::new(
             "plate",
             Role::Plate,
-            vec![Prim::aabb([m[0] - 0.5 * l, m[1] - 0.5 * w, seat - t], [m[0] + 0.5 * l, m[1] + 0.5 * w, seat])],
+            vec![Prim::aabb(
+                [m[0] - 0.5 * l, m[1] - 0.5 * w, seat - t],
+                [m[0] + 0.5 * l, m[1] + 0.5 * w, seat],
+            )],
         )],
         mount: Mount::Table { z: seat - t },
         held: vec![],
@@ -578,7 +747,11 @@ pub fn hold_down(rec: &Record, stock: &Box3, mu: f64, sf: f64, f_side: f64) -> R
     let f = dp * 1e-3 * area; // kPa = 1e-3 N/mm²
     let need = sf * f_side;
     if !(mu > 0.0 && sf >= 1.0 && f_side >= 0.0) {
-        return Err(refuse(&rec.name, "μ > 0, a safety factor ≥ 1, a side force ≥ 0", "give them"));
+        return Err(refuse(
+            &rec.name,
+            "μ > 0, a safety factor ≥ 1, a side force ≥ 0",
+            "give them",
+        ));
     }
     if mu * f >= need {
         Ok(if need == 0.0 { f64::INFINITY } else { mu * f / need })
@@ -590,7 +763,9 @@ pub fn hold_down(rec: &Record, stock: &Box3, mu: f64, sf: f64, f_side: f64) -> R
                 "the sealed area {area:.0} mm² at {dp} kPa holds {f:.0} N; with μ = {mu} it resists {:.0} N, less than {sf} × {f_side:.0} N",
                 mu * f
             ),
-            format!("a sealed area of at least {amin:.0} mm² (tabs, a bigger blank), a lighter cut, or a mechanical clamp"),
+            format!(
+                "a sealed area of at least {amin:.0} mm² (tabs, a bigger blank), a lighter cut, or a mechanical clamp"
+            ),
         ))
     }
 }
