@@ -43,7 +43,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | E.size.rs | the `#[cold]` entry check refusing `Unhandled::InputTooLarge` | FLAT-SITES | open | kernel/forge-bool |
 | H.fin | `FaithfulInput δ A`: each stored region and curve within δ of its exact meet | hyp (producing feature) | hyp | Statement.lean `Faithful`, in `Input` |
 | H.abs | `FormulaOfTopology abs`: the Φ_u that `abs` reads equals the stored local cone | TRANSLATE | open | — |
-| H.batch | `Batch` sound when decided (CpuBatch proven; GPU impl a hypothesis) | FALLBACK | open | — |
+| H.batch | `Batch` sound when decided: a code other than 3 is the exact op-fold verdict | FALLBACK | proven for CpuBatch's combinatorics (fold, own tool forced, early 3, grid skipping without an intersect; Csg's three-valued combination); hyp: `MemberSound` at the leaves (Prism/Revolved float screens: IEEE, open), `BoxSound`, the GPU impl | verify/forge-bool-fallback `Batch.cpuCode_sound_all`, `Batch.cpuCode_sound_grid`, `Member.csg_sound` |
 
 ## 0. The body layer
 
@@ -104,15 +104,15 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | id | site | owner | status | file / theorem |
 |---|---|---|---|---|
 | G1 | the output geometry is f64 | SPINE | stated (ruled F1: the reading `exactOf`/`Refines`/`denote` is proven in BodyModel; that the output is within δ, `Faithful δ (abs R)`, is D8's obligation, open) | BodyModel.lean; Contracts.lean `ApplyPost` |
-| G2 | the retry ladder (`plan_retried`, `plan_fenced`, thread-local flags) | FALLBACK | open | — |
-| G3 | `RETRIED` + post-hoc `forge_topo::check` → `Lost::RetryInvalid` | FALLBACK | open | — |
-| G4 | `UNDECIDED` touch + post-hoc `FaceWrongSide` check | FALLBACK | open | — |
-| G5 | `ODD` thread-local between runs | FALLBACK | open | — |
-| G6 | `pinched_new` / `pinched_old` | FALLBACK | open | — |
-| G7 | `refuse_strays` | FALLBACK | open | — |
-| G8 | `FORGE_IMPRINT` env (ruled: a hidden input; out of release) | FALLBACK | open | — |
+| G2 | the retry ladder (`plan_retried`, `plan_fenced`): flags now one explicit `Rung` argument (PR proof/fallback) | FALLBACK | composition proven: an `Ok` is one try's `Ok`, a non-internal refusal is one try's refusal, the ladder is correct where every rung is; the per-rung contract (each rung's near-tangent reading as a screen + exact test) open; fired 0× on suite + fuzz 1–300: UNKNOWN, not safe | verify/forge-bool-fallback `Ladder.plan_ok`, `Ladder.plan_err`, `Ladder.plan_correct` |
+| G3 | `RETRIED` + post-hoc `forge_topo::check` → `Lost::RetryInvalid` (`Tried.retried`, explicit since G2) | FALLBACK | open; it only turns an `Ok` into an `Internal` refusal (never makes an `Ok`); 0× on the corpus: UNKNOWN | — |
+| G4 | `UNDECIDED` touch + post-hoc `FaceWrongSide` check (`Tried.undecided`, explicit since G2) | FALLBACK | open; **reachable**: fuzz55 f21 (a subtracted ball whose pole touches the top face from inside, seq and n-ary), check passed → `Ok`, exact verdict open | — |
+| G5 | `ODD` between runs | FALLBACK | closed: an output of each try (`Tried.odd`, cleared per fenced try, PR proof/fallback); modelled in `Ladder.fenced` | verify/forge-bool-fallback `Ladder` |
+| G6 | `pinched_new` / `pinched_old` (and n-ary's pinch) | FALLBACK | open; 0× on the corpus: UNKNOWN | — |
+| G7 | `refuse_strays` | FALLBACK | open; 0× on the corpus: UNKNOWN | — |
+| G8 | `FORGE_IMPRINT` env | FALLBACK | closed: compile-time feature `imprint_column`, off in every shipped build; release reads no env (PR proof/fallback) | kernel/forge-bool/src/imprint.rs `mode` |
 | G9 | `SCRATCH`, cached `FaceInfo` (`CacheOK b`) | FALLBACK | open | — |
-| G10 | `nary`'s `Batch` and threads | FALLBACK | open | — |
+| G10 | `nary`'s `Batch` and threads; verdict 3 (2,447× on suite + fuzz 1–300 n-ary) goes to the full way (D6, §1a) | FALLBACK | Batch: see H.batch; the full way is D6's | — |
 | G11 | flat `LINEAR`/`RIM` tolerance tests | FLAT-SITES | open | — |
 | G11c | curved `LINEAR`/`RIM` tolerance tests (curved-fallback-rates.md) | CURVED-SITES | open | — |
 | C.coinc | `ssi::coincident`, `same_carrier`: coincident carriers decided exactly | CURVED-SITES | open | — |
@@ -123,6 +123,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | G13 | `face_point`'s unchecked inward step | FLAT-SITES | open | — |
 | G14 | trim_in's box-only accept | FLAT-SITES | open | — |
 | G15 | the stretch whose midpoint is exactly on ∂f_k | FLAT-SITES | open | — |
+| M.ct | forge-geom `meet::intersect`, cylinder × torus (`Form::Poly4`): its events from a sampled discriminant, which lost one of two loops on fuzz295 f69 (a wrong `Ok`) | FALLBACK (fix), CURVED-SITES (#7, certified isolation) | interim fix (PR proof/fix-torus-loops): a root-count scan where the discriminant flags double roots; NOT provably complete (a loop narrower than one sample can be lost): UNKNOWN | kernel/forge-geom/src/meet_tests.rs `thin_torus_on_a_wide_cylinder_both_loops` |
 
 ## A8, the flat fallback
 
