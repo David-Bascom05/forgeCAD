@@ -5,7 +5,8 @@ import ForgeCam
 #print axioms ForgeCam.clear_of_frontier
 #print axioms ForgeCam.clearFace_sound
 #print axioms ForgeCam.hyp_preconnected
-#print axioms ForgeCam.closedForm_clear
+#print axioms ForgeCam.certified_clear
+#print axioms ForgeCam.sd_le_sd_add_dist
 #print axioms ForgeCam.G1_of_closedForm
 #print axioms ForgeCam.G2_of_closedForm
 #print axioms ForgeCam.G3_of_closedForm
@@ -21,3 +22,8 @@ import ForgeCam
 #print axioms ForgeCam.Post.faulty_counterexample
 #print axioms ForgeCam.Post.fixed_on_counterexample
 #print axioms ForgeCam.Post.roundEven_isQuant
+#print axioms ForgeCam.G1_target_iff
+#print axioms ForgeCam.G4_held
+#print axioms ForgeCam.jaw_seat
+#print axioms ForgeCam.jaw_seat_interior
+#print axioms ForgeCam.Pocket.passes_cover

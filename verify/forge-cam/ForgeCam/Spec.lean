@@ -25,10 +25,11 @@ def swept (X : Set E3) (g : ℝ → E3 → E3) : Set E3 := ⋃ s ∈ I01, g s ''
 def G1 (T P : Set E3) (g : ℝ → E3 → E3) (δ εin : ℝ) : Prop :=
   ∀ s ∈ I01, ∀ x ∈ g s '' T, ∀ y ∈ P, δ - εin ≤ dist x y
 
-/-- **G2, no non-cutting contact**: the holder never meets the stock's interior, and nothing
-meets the fixture. -/
-def G2 (N : Set E3) (S F : ℝ → Set E3) (g : ℝ → E3 → E3) : Prop :=
-  ∀ s ∈ I01, Disjoint (g s '' N) (interior (S s)) ∧ Disjoint (g s '' N) (F s)
+/-- **G2 (corrected, design.md §7b)**: on every piece kind, the whole tool T ∪ N misses the
+fixture grown by its clearance c, F(s) ⊕ B_c; and the non-cutting part never meets the stock's
+interior. -/
+def G2 (T N : Set E3) (S F : ℝ → Set E3) (g : ℝ → E3 → E3) (c : ℝ) : Prop :=
+  ∀ s ∈ I01, Disjoint (g s '' (T ∪ N)) (cthickening c (F s)) ∧ Disjoint (g s '' N) (interior (S s))
 
 /-- **G3, no cutting on a non-cutting move** (rapids and links). -/
 def G3 (T : Set E3) (S : ℝ → Set E3) (g : ℝ → E3 → E3) : Prop :=
@@ -85,5 +86,44 @@ result's slice less the grown part's slice, so a per-band exact computation is t
 theorem leftover_slice (Send P : Set E3) (r z : ℝ) :
     {p ∈ leftover Send P r | p 2 = z} = {p ∈ Send | p 2 = z} \ cthickening r P := by
   ext p; simp only [leftover, mem_ofPred_eq, mem_sdiff]; tauto
+
+/-! ### Declared removals and the fixture (design.md §7b) -/
+
+/-- The part less its declared removals Δ (an edge break, a cosmetic thread): G1 and G4 are
+stated for P' = P ∖ Δ, never with a blanket tolerance. -/
+def target (P Δ : Set E3) : Set E3 := P \ Δ
+
+/-- G1 for a smaller part is weaker. So G1 for P implies it for P', and removing Δ relaxes G1
+exactly on Δ: every point of P outside Δ keeps its full clearance. -/
+theorem G1_mono_part {T P P' : Set E3} {g : ℝ → E3 → E3} {δ εin : ℝ} (h : P' ⊆ P)
+    (h1 : G1 T P g δ εin) : G1 T P' g δ εin :=
+  fun s hs x hx y hy => h1 s hs x hx y (h hy)
+
+theorem G1_target_iff {T P Δ : Set E3} {g : ℝ → E3 → E3} {δ εin : ℝ} :
+    G1 T (target P Δ) g δ εin ↔
+      ∀ s ∈ I01, ∀ x ∈ g s '' T, ∀ y ∈ P, y ∉ Δ → δ - εin ≤ dist x y := by
+  simp only [G1, target, Set.mem_sdiff]
+  constructor
+  · intro h s hs x hx y hy hyΔ; exact h s hs x hx y ⟨hy, hyΔ⟩
+  · intro h s hs x hx y ⟨hy, hyΔ⟩; exact h s hs x hx y hy hyΔ
+
+/-- The leftover split by its reason: the region K held in the fixture ("held by fixture"),
+and the rest ("uncut"). -/
+noncomputable def leftoverHeld (Send P : Set E3) (r : ℝ) (K : Set E3) : Set E3 := leftover Send P r ∩ K
+noncomputable def leftoverUncut (Send P : Set E3) (r : ℝ) (K : Set E3) : Set E3 := leftover Send P r \ K
+
+/-- **G4 with the clamped region.** The two lists together are the exact leftover, they do not
+overlap, and the held list is exactly the excess inside the clamped region. -/
+theorem G4_held (Send P : Set E3) (r : ℝ) (K : Set E3) :
+    Send ⊆ cthickening r P ∪ (leftoverHeld Send P r K ∪ leftoverUncut Send P r K) ∧
+    leftoverHeld Send P r K ∪ leftoverUncut Send P r K = leftover Send P r ∧
+    Disjoint (leftoverHeld Send P r K) (leftoverUncut Send P r K) ∧
+    leftoverHeld Send P r K = (Send ∩ K) \ cthickening r P := by
+  have hu : leftoverHeld Send P r K ∪ leftoverUncut Send P r K = leftover Send P r :=
+    Set.inter_union_sdiff _ _
+  refine ⟨?_, hu, ?_, ?_⟩
+  · rw [hu]; exact (G4_upper Send P r).1
+  · exact Set.disjoint_left.mpr fun x h1 h2 => h2.2 h1.2
+  · ext x; simp only [leftoverHeld, leftover, Set.mem_inter_iff, Set.mem_sdiff]; tauto
 
 end ForgeCam

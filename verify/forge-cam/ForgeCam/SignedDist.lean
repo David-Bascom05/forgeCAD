@@ -76,6 +76,52 @@ theorem exists_frontier_le {A : Set V} (hA : IsClosed A) {x y : V} (hx : x ∉ A
     ⟨x, left_mem_segment ℝ x y, hx⟩
   exact hsub (right_mem_segment ℝ x y) hy
 
+
+/-- Between a point of B and a point outside it, the segment meets B's frontier. -/
+theorem exists_frontier_mem_segment {B : Set V} {x y : V} (hy : y ∈ B) (hx : x ∉ B) :
+    ∃ f ∈ frontier B, f ∈ segment ℝ y x := by
+  by_contra hno
+  push Not at hno
+  have hsplit : segment ℝ y x ⊆ interior B ∪ interior Bᶜ := by
+    intro z hz
+    have hzf := hno z
+    by_cases hzi : z ∈ interior B
+    · exact Or.inl hzi
+    · right
+      rw [interior_compl]
+      intro hzc
+      exact (hzf · hz) ⟨hzc, hzi⟩ |>.elim
+  have hsub := (convex_segment y x).isPreconnected.subset_left_of_subset_union
+    isOpen_interior isOpen_interior
+    (Set.disjoint_left.mpr fun _ h1 h2 => (interior_subset h2 : _ ∈ Bᶜ) (interior_subset h1)) hsplit
+    ⟨y, left_mem_segment ℝ y x, by
+      rcases hsplit (left_mem_segment ℝ y x) with h | h
+      · exact h
+      · exact absurd hy (interior_subset h)⟩
+  exact hx (interior_subset (hsub (right_mem_segment ℝ y x)))
+
+/-- **The signed distance is 1-Lipschitz.** (So a face lowered within μ of the true one moves
+a clearance by at most μ.) -/
+theorem sd_le_sd_add_dist (B : Set V) (x y : V) : sd B x ≤ sd B y + dist x y := by
+  by_cases hx : x ∈ B <;> by_cases hy : y ∈ B
+  · rw [sd_of_mem hx, sd_of_mem hy]
+    have := infDist_le_infDist_add_dist (x := y) (y := x) (s := Bᶜ)
+    rw [dist_comm] at this; linarith
+  · rw [sd_of_mem hx, sd_of_not_mem hy]
+    linarith [infDist_nonneg (x := x) (s := Bᶜ), infDist_nonneg (x := y) (s := B),
+      dist_nonneg (x := x) (y := y)]
+  · rw [sd_of_not_mem hx, sd_of_mem hy]
+    obtain ⟨f, hf, hfs⟩ := exists_frontier_mem_segment hy hx
+    rw [frontier_eq_closure_inter_closure] at hf
+    have h1 : infDist x B ≤ dist x f := by
+      rw [← infDist_closure]; exact infDist_le_dist_of_mem hf.1
+    have h2 : infDist y Bᶜ ≤ dist y f := by
+      rw [← infDist_closure]; exact infDist_le_dist_of_mem hf.2
+    have h3 := dist_add_dist_of_mem_segment hfs
+    rw [dist_comm x y]
+    linarith [dist_comm f x]
+  · rw [sd_of_not_mem hx, sd_of_not_mem hy]; exact infDist_le_infDist_add_dist
+
 /-- The clearance theorem. `X` is connected, `A` closed, `F` holds the frontier of `A`. If every
 point of `F` has signed distance at least `c > 0` to `X`, and some point of `X` is outside `A`,
 then every point of `X` is at least `c` from `A`. -/
