@@ -80,7 +80,6 @@ pub fn extrude_sheet(
         loops: Vec::new(),
     };
     let mut body = Body::new();
-    body.sheet = true;
     body.add_shell();
     let mut b = Builder::new(&profile, distance.abs(), Name::feature(feature), body);
     for (segs, closed) in &chains {
@@ -91,6 +90,7 @@ pub fn extrude_sheet(
         }
     }
     let mut body = b.body;
+    body.mark_sheet();
     if chains.len() > 1 {
         body.rebuild_shells();
     }

@@ -54,6 +54,9 @@ pub struct MassProps {
     pub err: [f64; 4],
     /// Each face's area.
     pub faces: Vec<(FaceId, f64)>,
+    /// The area of the body's sheet faces (`Face::sheet`), which take no part in the rest: a part's
+    /// volume, area and moments are its solids'.
+    pub sheet_area: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -134,7 +137,7 @@ pub fn face_area(body: &Body, f: FaceId) -> Result<f64, MassError> {
 }
 
 pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
-    if body.sheet {
+    if body.is_sheet() {
         return Err(MassError {
             face: FaceId(0),
             why: NO_VOLUME,
@@ -163,8 +166,14 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
     } else {
         Box::new((0..ids.len()).map(one))
     };
+    let mut sheet_area = 0.0;
     for (&f, got) in ids.iter().zip(each) {
         let (v, er) = got.map_err(|why| MassError { face: f, why })?;
+        if body.face(f).sheet {
+            sheet_area += v[10];
+            faces.push((f, v[10]));
+            continue;
+        }
         for k in 0..NF {
             t[k] += v[k];
             e[k] += er[k];
@@ -249,6 +258,7 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
             2.0 * (es + 2.0 * gl * em + gl * gl * e[0]),
         ],
         faces,
+        sheet_area,
     })
 }
 

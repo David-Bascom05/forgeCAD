@@ -19,7 +19,7 @@ fn line(a: (f64, f64), b: (f64, f64)) -> Segment {
 fn valid(b: &Body) {
     let p = check(b);
     assert!(p.is_empty(), "{p:?}");
-    assert!(b.sheet);
+    assert!(b.is_sheet());
 }
 
 fn counts(b: &Body) -> (usize, usize, usize, usize) {
@@ -192,7 +192,9 @@ fn a_sheet_has_no_volume_and_check_keeps_solids_closed() {
     let mut b = extrude_sheet(&Frame::WORLD, &[chain], 10.0, 7).unwrap();
     assert!(mass(&b).is_err());
     // the same topology called a solid: its boundary edges are each used once, not twice
-    b.sheet = false;
+    for f in &mut b.faces {
+        f.sheet = false;
+    }
     let p = check(&b);
     assert_eq!(
         p.iter()

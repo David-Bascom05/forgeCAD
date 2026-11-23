@@ -140,10 +140,7 @@ fn build(
         full,
         cutter,
         root: Name::feature(feature),
-        body: Body {
-            sheet: sheet.is_some(),
-            ..Body::new()
-        },
+        body: Body::new(),
         closed: sheet.map(|c| c.to_vec()),
     };
     let mut b = b;
@@ -564,6 +561,9 @@ impl Revolver<'_> {
         if !self.full && self.closed.is_none() {
             self.add_cap(shell, 0, &segs, &eid, &loop_ranges);
             self.add_cap(shell, 1, &segs, &eid, &loop_ranges);
+        }
+        if self.closed.is_some() {
+            self.body.mark_sheet();
         }
         if copies == 1 {
             // what the second half-turn was named finds the whole

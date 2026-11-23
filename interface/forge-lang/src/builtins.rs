@@ -1676,12 +1676,17 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
     let a = Args::bind(
         ev,
         name,
-        &["profile", "d", "taper", "new", "along", "flip", "bodies"],
+        &[
+            "profile", "d", "taper", "new", "along", "flip", "bodies", "surface",
+        ],
         args,
         span,
     )?;
     if a.poisoned() {
         return Ok(Value::Unresolved);
+    }
+    if a.flag("surface")? {
+        return extrude_sheet(ev, name, &a, id, span);
     }
     let (sk, profile, segs) = profile_of(ev, a.req("profile")?, a.span("profile"))?;
     if a.opt("taper").is_some() {
@@ -1902,6 +1907,89 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
     })))
 }
 
+/// `extrude(PATH | PROFILE, d | sym(d) | two(f, b), surface: true)`: a sheet, a body of its own.
+fn extrude_sheet(ev: &mut Eval, name: &'static str, a: &Args, id: String, span: Span) -> R<Value> {
+    for arg in ["taper", "new", "along", "flip", "bodies"] {
+        if a.opt(arg).is_some() {
+            return Err(Error::NotWith {
+                span: a.span(arg),
+                func: name,
+                arg,
+                with: "surface (a sheet is a body of its own, made along the normal)",
+            });
+        }
+    }
+    if name != "extrude" {
+        return Err(Error::NotWith {
+            span: a.span("surface"),
+            func: name,
+            arg: "surface",
+            with: "a cut or intersect (a sheet holds no material to take away)",
+        });
+    }
+    let (sk, chain) = crate::shapes::chain_of(a.req("profile")?, a.span("profile"))?;
+    let len = |n: &Num, what: &'static str| num_of(Value::Num(n.clone()), LEN, a.span("d"), what);
+    let mut dims = vec![];
+    let (lo, hi) = match a.req("d")? {
+        Value::Num(n) => {
+            let d = len(&n, "a depth")?;
+            if d.v == 0.0 {
+                return Err(Error::BadValue {
+                    span: a.span("d"),
+                    what: "a depth",
+                    value: 0.0,
+                });
+            }
+            dims.push(dim("depth", &d));
+            (d.v.min(0.0), d.v.max(0.0))
+        }
+        Value::Extent(ExtentV::Sym(d)) => {
+            let d = len(&d, "a symmetric extent")?;
+            dims.push(dim("depth", &d));
+            (-d.v / 2.0, d.v / 2.0)
+        }
+        Value::Extent(ExtentV::Two(f, b)) => {
+            let (f, b) = (len(&f, "a forward extent")?, len(&b, "a back extent")?);
+            dims.push(dim("forward", &f));
+            dims.push(dim("back", &b));
+            (-b.v, f.v)
+        }
+        Value::Unresolved => (0.0, 1.0),
+        Value::Extent(_) => {
+            return Err(Error::NotWith {
+                span: a.span("d"),
+                func: name,
+                arg: "surface",
+                with: "an extent other than a depth, sym or two (a sheet runs a set distance)",
+            });
+        }
+        o => {
+            return Err(Error::WrongType {
+                span: a.span("d"),
+                what: "a depth or extent",
+                want: Ty::Num,
+                found: o.ty(),
+            });
+        }
+    };
+    let plane = sk.borrow().frame;
+    let f = Feature::Sheet(Box::new(forge_model::sheets::Sheet {
+        plane,
+        chains: vec![chain],
+        how: forge_model::sheets::SheetHow::Extrude { lo, hi },
+    }));
+    let (idx, hid) = ev.push_feature(&id, "sheet", f, span, dims)?;
+    Ok(Value::Feature(Rc::new(Feat {
+        id,
+        kind: "sheet",
+        idx,
+        hid,
+        shape: None,
+        axis: None,
+        prof: Some(sk),
+    })))
+}
+
 fn single_circle_axis(sk: &Rc<RefCell<Sk>>, segs: &[EntityId]) -> Option<(Point3, UnitVec3)> {
     let s = sk.borrow();
     let circles: Vec<EntityId> = segs
@@ -1922,12 +2010,17 @@ fn revolve(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "revolve",
-        &["profile", "axis", "angle", "cut", "keep", "new", "bodies"],
+        &[
+            "profile", "axis", "angle", "cut", "keep", "new", "bodies", "surface",
+        ],
         args,
         span,
     )?;
     if a.poisoned() {
         return Ok(Value::Unresolved);
+    }
+    if a.flag("surface")? {
+        return revolve_sheet(ev, &a, id, span);
     }
     // an axis of the part or the origin (a work axis, `axis(P, Q)`, `E.axis`, X Y Z), not a line
     // of the profile's sketch: where it lies in that sketch's plane
@@ -1981,6 +2074,111 @@ fn revolve(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         (s.pos(a), s.pos(b))
     };
     revolve_on(ev, &a, id, span, sk, profile, (pa, pb))
+}
+
+/// `revolve(PATH | PROFILE, axis: LINE | AXIS, angle: A | sym(A) | two(A, B), surface: true)`: a
+/// sheet, a body of its own.
+fn revolve_sheet(ev: &mut Eval, a: &Args, id: String, span: Span) -> R<Value> {
+    for arg in ["cut", "keep", "new", "bodies"] {
+        if a.opt(arg).is_some() {
+            return Err(Error::NotWith {
+                span: a.span(arg),
+                func: "revolve",
+                arg,
+                with: "surface (a sheet is a body of its own)",
+            });
+        }
+    }
+    let (sk, chain) = crate::shapes::chain_of(a.req("profile")?, a.span("profile"))?;
+    let (pa, pb) = match a.req("axis")? {
+        Value::Ent(ax) => {
+            if !Rc::ptr_eq(&ax.sk, &sk) || ax.kind != EntKind::Line {
+                return Err(Error::WrongEntity {
+                    span: a.span("axis"),
+                    want: EntKind::Line,
+                    found: ax.kind,
+                });
+            }
+            let s = sk.borrow();
+            let Some(forge_sketch::Entity::Line { a, b }) = s.s.entity(ax.id) else {
+                unreachable!("a line")
+            };
+            (s.pos(a), s.pos(b))
+        }
+        axv => {
+            let (o, d) = match axv {
+                Value::WorldDir(d) => (Point3::ORIGIN, crate::eval::unit_or_z(d)),
+                v => axis_of(ev, v, a.span("axis"))?,
+            };
+            let s = sk.borrow();
+            let (p, q) = (s.frame.point_to_local(o), s.frame.point_to_local(o + d.get()));
+            let off = p.z.abs().max(q.z.abs());
+            if off > 1e-6 {
+                return Err(Error::BadValue {
+                    span: a.span("axis"),
+                    what: "an axis out of the profile's plane (its distance)",
+                    value: off,
+                });
+            }
+            (Point2::new(p.x, p.y), Point2::new(q.x, q.y))
+        }
+    };
+    let mut dims = vec![];
+    let ang = |n: &Num, what: &'static str| num_of(Value::Num(n.clone()), ANG, a.span("angle"), what);
+    let (from, angle) = match a.opt("angle") {
+        None => (0.0, std::f64::consts::TAU),
+        Some(Value::Extent(ExtentV::Sym(t))) => {
+            let t = ang(&t, "a symmetric turn")?;
+            dims.push(dim("angle", &t));
+            (-t.v / 2.0, t.v)
+        }
+        Some(Value::Extent(ExtentV::Two(f, b))) => {
+            let (f, b) = (ang(&f, "a forward turn")?, ang(&b, "a back turn")?);
+            dims.push(dim("forward", &f));
+            dims.push(dim("back", &b));
+            (-b.v, f.v + b.v)
+        }
+        Some(Value::Extent(_)) => {
+            return Err(Error::NotWith {
+                span: a.span("angle"),
+                func: "revolve",
+                arg: "surface",
+                with: "a turn up to a face (a sheet turns a set angle)",
+            });
+        }
+        Some(_) => {
+            let t = a.req_num("angle", ANG)?;
+            dims.push(dim("angle", &t));
+            (t.v.min(0.0), t.v.abs())
+        }
+    };
+    let plane = sk.borrow().frame;
+    let f = Feature::Sheet(Box::new(forge_model::sheets::Sheet {
+        plane,
+        chains: vec![chain],
+        how: forge_model::sheets::SheetHow::Revolve {
+            axis: Axis2 {
+                origin: pa,
+                dir: pb - pa,
+            },
+            from,
+            angle,
+        },
+    }));
+    let (idx, hid) = ev.push_feature(&id, "sheet", f, span, dims)?;
+    let (wa, wb) = {
+        let s = sk.borrow();
+        (s.world(pa), s.world(pb))
+    };
+    Ok(Value::Feature(Rc::new(Feat {
+        id,
+        kind: "sheet",
+        idx,
+        hid,
+        shape: None,
+        axis: Some((wa, crate::eval::unit_or_z(wb - wa))),
+        prof: Some(sk),
+    })))
 }
 
 /// A revolve of `profile` (of sketch `sk`) about the line through `pa`, `pb` in its plane.

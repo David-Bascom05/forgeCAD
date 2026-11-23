@@ -244,35 +244,43 @@ pub fn json(run: &Run, src: &str) -> Json {
     if let Some(m) = &run.measure {
         f.push((
             "part",
-            Json::obj(vec![
-                ("volume", m.volume.into()),
-                ("area", m.area.into()),
-                (
-                    "centroid",
-                    Json::Arr(m.centroid.iter().map(|x| Json::Num(*x)).collect()),
-                ),
-                ("faces", m.faces.into()),
-                ("edges", m.edges.into()),
-                ("bodies", m.bodies.into()),
-                ("valid", (m.problems == 0).into()),
-                (
-                    "problems",
-                    Json::Arr(
-                        m.invalid
-                            .iter()
-                            .map(|p| {
-                                Json::obj(vec![
-                                    ("kind", p.kind.into()),
-                                    ("body", p.body.as_str().into()),
-                                    ("reason", p.reason.as_str().into()),
-                                    ("at", Json::Arr(p.at.iter().map(|a| a.as_str().into()).collect())),
-                                ])
-                            })
-                            .collect(),
+            Json::obj(
+                vec![
+                    ("volume", m.volume.into()),
+                    ("area", m.area.into()),
+                    (
+                        "centroid",
+                        Json::Arr(m.centroid.iter().map(|x| Json::Num(*x)).collect()),
                     ),
-                ),
-                ("bbox", Json::Arr(m.bbox.iter().map(|x| Json::Num(*x)).collect())),
-            ]),
+                    ("faces", m.faces.into()),
+                    ("edges", m.edges.into()),
+                    ("bodies", m.bodies.into()),
+                    ("valid", (m.problems == 0).into()),
+                ]
+                .into_iter()
+                // the sheets' area apart, where the part has sheets: volume and area are the solids'
+                .chain(sheet_area(m).map(|a| ("sheet_area", a.into())))
+                .chain([
+                    (
+                        "problems",
+                        Json::Arr(
+                            m.invalid
+                                .iter()
+                                .map(|p| {
+                                    Json::obj(vec![
+                                        ("kind", p.kind.into()),
+                                        ("body", p.body.as_str().into()),
+                                        ("reason", p.reason.as_str().into()),
+                                        ("at", Json::Arr(p.at.iter().map(|a| a.as_str().into()).collect())),
+                                    ])
+                                })
+                                .collect(),
+                        ),
+                    ),
+                    ("bbox", Json::Arr(m.bbox.iter().map(|x| Json::Num(*x)).collect())),
+                ])
+                .collect::<Vec<_>>(),
+            ),
         ));
     }
     // the document's drawing blocks, listed, not drawn (`fg run F.fg --drawing ID` draws one)
@@ -280,6 +288,11 @@ pub fn json(run: &Run, src: &str) -> Json {
         f.push(("drawings", crate::drawing::block::summary(src, "")));
     }
     Json::obj(f)
+}
+
+/// The area of the part's sheets, where it has any.
+fn sheet_area(m: &crate::Measure) -> Option<f64> {
+    m.mass.as_ref().map(|x| x.sheet_area).filter(|&a| a != 0.0)
 }
 
 pub fn text(run: &Run, src: &str) -> String {
@@ -354,6 +367,11 @@ pub fn text(run: &Run, src: &str) -> String {
             m.edges,
             if m.problems == 0 { "valid" } else { "INVALID" }
         ));
+        if let Some(a) = sheet_area(m) {
+            // the part's volume and area are its solids'
+            let at = out.len() - 1;
+            out.insert_str(at, &format!(", sheet area {} mm2", milli(a)));
+        }
         for p in &m.invalid {
             out.push_str(&format!("invalid {} {}: {}", p.body, p.kind, p.reason));
             if !p.at.is_empty() {

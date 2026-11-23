@@ -14,6 +14,7 @@ pub mod params;
 mod path;
 pub mod pattern;
 mod rib;
+pub mod sheets;
 pub mod splinefam;
 mod splitface;
 pub mod standard;
@@ -188,6 +189,8 @@ pub enum Feature {
     Work(Work),
     /// A feature on chosen bodies, or one that combines, splits or moves bodies (bodies.rs).
     Body(Box<BodyFeature>),
+    /// A sheet: a sketch's chains extruded or revolved into a surface body of its own (sheets.rs).
+    Sheet(Box<sheets::Sheet>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1011,6 +1014,7 @@ fn starts(f: &Feature) -> bool {
             | Feature::Ball { op: Combine::New, .. }
     ) || swept::op(f) == Some(Combine::New)
         || matches!(f, Feature::Import(t) if t.op == Combine::New)
+        || matches!(f, Feature::Sheet(_))
 }
 
 /// Whether a feature changes the part as a whole, rather than making tools to combine with it.
@@ -1965,6 +1969,7 @@ fn unlinked(features: History<'_>, i: usize) -> Option<(forge_topo::Unlinked, Co
 /// The tools feature `i` makes: one, or a pattern's copies (each named after its place).
 fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
     match &features[i] {
+        Feature::Sheet(s) => Ok(vec![sheets::tool(i, features.id(i), s, build)?]),
         Feature::Hole(h) => {
             let (h, up, next) = extent::hole_end(features, i, h)?;
             let cut = h

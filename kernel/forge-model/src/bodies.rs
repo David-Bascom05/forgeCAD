@@ -88,6 +88,10 @@ pub enum BodyError {
     NoBody {
         id: usize,
     },
+    /// The body this feature made is a sheet, which holds no material for this one to change.
+    OnSheet {
+        id: usize,
+    },
     /// The feature needs exactly one body (a copy, a split keeping both sides).
     NotOne,
     /// A body combined with itself.
@@ -109,7 +113,9 @@ pub enum BodyError {
 
 /// Whether a history makes or works on more than one body.
 pub fn multi(features: &[Feature]) -> bool {
-    features.iter().any(|f| matches!(f, Feature::Body(_)))
+    features
+        .iter()
+        .any(|f| matches!(f, Feature::Body(_) | Feature::Sheet(_)))
         || features
             .iter()
             .filter(|f| op(f) == Some(Combine::New))
@@ -428,7 +434,10 @@ fn apply_once(
         return Ok(solids);
     }
     let mut gone: Vec<usize> = Vec::new();
-    for (n, k) in targets(&ids(&solids), p, i)?.into_iter().enumerate() {
+    for (n, k) in targets(&ids(&solids), &sheets(&solids), p, i)?
+        .into_iter()
+        .enumerate()
+    {
         let salt = (n > 0).then(|| plain.id(solids[k].id));
         let body = std::mem::take(&mut solids[k].body);
         match add_tools(body, &ts, (i, plain.id(i)), salt) {
@@ -458,20 +467,34 @@ fn ids(solids: &[Solid]) -> Vec<usize> {
     solids.iter().map(|s| s.id).collect()
 }
 
-/// The bodies (positions in `ids`) a feature picks, or the current one: the last made.
-fn targets(ids: &[usize], p: Option<&Pick>, i: usize) -> Result<Vec<usize>, RegenError> {
-    let find = |id: usize| {
-        ids.iter().position(|&x| x == id).ok_or(RegenError::Body {
+/// The bodies (positions in `ids`) a feature picks, or the current one: the last solid made. A
+/// sheet (`sheet[k]`) holds no material to add to or cut: never the current body, left out of
+/// "all", and named is `OnSheet`.
+fn targets(ids: &[usize], sheet: &[bool], p: Option<&Pick>, i: usize) -> Result<Vec<usize>, RegenError> {
+    let find = |id: usize| match ids.iter().position(|&x| x == id) {
+        None => Err(RegenError::Body {
             feature: i,
             error: BodyError::NoBody { id },
-        })
+        }),
+        Some(k) if sheet.get(k) == Some(&true) => Err(RegenError::Body {
+            feature: i,
+            error: BodyError::OnSheet { id },
+        }),
+        Some(k) => Ok(k),
     };
+    let solid = |k: &usize| sheet.get(*k) != Some(&true);
     match p {
-        Some(Pick::All) => Ok((0..ids.len()).collect()),
+        Some(Pick::All) => Ok((0..ids.len()).filter(solid).collect()),
         Some(Pick::Some(want)) => want.iter().map(|&id| find(id)).collect(),
-        None if ids.is_empty() => Err(RegenError::NothingToCombine { feature: i }),
-        None => Ok(vec![ids.len() - 1]),
+        None => match (0..ids.len()).rev().find(solid) {
+            Some(k) => Ok(vec![k]),
+            None => Err(RegenError::NothingToCombine { feature: i }),
+        },
     }
+}
+
+fn sheets(solids: &[Solid]) -> Vec<bool> {
+    solids.iter().map(|s| s.body.is_sheet()).collect()
 }
 
 /// The names a feature works on (edges, faces), which say which bodies it is on.
@@ -521,11 +544,17 @@ fn named_targets(
         let on: Vec<usize> = (0..solids.len())
             .filter(|&k| names.iter().any(|&n| holds(&solids[k].body, n)))
             .collect();
+        if let Some(&k) = on.iter().find(|&&k| solids[k].body.is_sheet()) {
+            return Err(RegenError::Body {
+                feature: i,
+                error: BodyError::OnSheet { id: solids[k].id },
+            });
+        }
         if !on.is_empty() {
             return Ok(on);
         }
     }
-    targets(&ids(solids), p, i)
+    targets(&ids(solids), &sheets(solids), p, i)
 }
 
 /// A fillet, chamfer, shell or draft cut down to the names `b` holds.
@@ -761,6 +790,13 @@ fn body_feature(
             keep,
         } => {
             let t = find(solids, *target, i)?;
+            for &id in std::iter::once(target).chain(tools) {
+                if let Ok(k) = find(solids, id, i)
+                    && solids[k].body.is_sheet()
+                {
+                    return Err(bad(BodyError::OnSheet { id }));
+                }
+            }
             // both bodies finished parts: their arenas in order of name, so nothing the
             // booleans make follows the order they were built in (docs/naming.md, Arena order)
             let mut body = solids[t].body.clone().into_canonical();
@@ -784,7 +820,7 @@ fn body_feature(
         }
         BodyFeature::Split { by, keep } => {
             let surface = cutter(plain, i, by)?;
-            let on = targets(&ids(solids), p, i)?;
+            let on = targets(&ids(solids), &sheets(solids), p, i)?;
             if *keep == Keep::Both && on.len() != 1 {
                 return Err(bad(BodyError::NotOne));
             }
@@ -837,7 +873,8 @@ fn body_feature(
         }
         BodyFeature::Move { steps, copy } => {
             let m = motion(steps);
-            let on = targets(&ids(solids), p, i)?;
+            // a move takes any body, a sheet too
+            let on = targets(&ids(solids), &[], p, i)?;
             let pe = |error: PatternError| RegenError::Pattern { feature: i, error };
             if *copy {
                 let [k] = on[..] else {
@@ -1170,7 +1207,14 @@ fn nary_pass(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenE
             _ if ts.is_empty() => {}
             _ => {
                 let ids: Vec<usize> = runs.iter().map(|r| r.id).collect();
-                let on = targets(&ids, p, i)?;
+                let sheet: Vec<bool> = runs
+                    .iter()
+                    .map(|r| match &r.base {
+                        Ok(b) => b.is_sheet(),
+                        Err(t) => t.0.is_sheet(),
+                    })
+                    .collect();
+                let on = targets(&ids, &sheet, p, i)?;
                 // a cut or an intersect may have emptied a body, and then this add belongs to what
                 // is left, not to it (one run would make the tool a body of its own): `nary` goes
                 // one at a time
