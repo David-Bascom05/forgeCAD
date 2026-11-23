@@ -27,7 +27,7 @@ are each part's contours nested by the winding rule; a glyph's region is the uni
 | L2 | the exact references: the font's own numbers on an integer grid (TrueType integers, halves; CFF 2⁻¹⁶), `orient2d` exact, OpenCascade rebuilding every text part (tools/occt, 11 parts agree) |
 | L3 | proven for every input of the models: `decode_closes`, `winding_from_any_start`, `refuses_meeting`, `winding_is_topological` |
 | L4 | not yet: the Lean models are written from the Rust. Targets for Aeneas: forge-font's glyf and CFF readers (integer-only), the TrueType `contour` walk, the line crossing (`winding::line` on integers) |
-| L5 | the curve pieces' counts rest on rounding bounds (winding.rs: `m` per split); the line test on forge_math's proven orient2d |
+| L5 | the line test on forge_math's proven orient2d; **open**: the curve pieces' counts by hull subdivision (winding.rs, rounding bound `m` per split, and each piece in its control hull) have no proof yet |
 | L6 | differential in CI: OCCT oracle on text parts, text parts' exact bits pinned native = wasm32, font corruption fuzzing (forge-font, forge-lang fonts.rs) |
 
 ## What `winding_is_topological` covers, and what it does not
@@ -39,6 +39,10 @@ are each part's contours nested by the winding rule; a glyph's region is the uni
   rounding bounds), which the Lean model does not cover.
 - winding2d's `Simple` asks more than forge-sketch's check: forge-sketch refuses a loop that crosses
   itself or overlaps itself, but lets one touch itself at a point without crossing, which `Simple`
-  forbids. The shipped faces have no such contour as far as checked: across Latin-1, in Open Sans
-  Regular and Bold and Source Sans 3, no contour repeats a vertex and none has a zero-length side
-  (a touch at the interior of a side is not checked this way).
+  forbids. The shipped faces break no part of `Simple`: interface/forge-lang/src/fonts.rs
+  `shipped_contours_are_simple` checks every contour of Open Sans Regular and Bold and Source Sans
+  3 over Latin-1 (at least three pieces, none a point; pieces that are not neighbours apart;
+  neighbours meeting only at their shared end, straight continuations included), splitting pieces
+  until their control boxes are apart by more than the splits' rounding and deciding the cones at
+  a shared end by exact orient2d (`the_check_finds_touches`: a pinch, a side touching another's
+  interior, a doubling back and a curve crossing its neighbour are all found).
