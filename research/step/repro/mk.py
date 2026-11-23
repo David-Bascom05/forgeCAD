@@ -222,6 +222,40 @@ def spool(name="spool", R=224.958991521041, r=220.958991521041, half=29.66):
     return st.text(st.solid(faces), name)
 
 
+def extruded_periodic(name="extruded_periodic", h=10.0, n=8, r=10.0, clamped_edges=False):
+    """A prism on a closed, periodic cubic B-spline written unclamped (its knots run past the domain, the first
+    three control points repeated at the end), extruded by SURFACE_OF_LINEAR_EXTRUSION and capped by planes, as ABC
+    00111663 is: the integrals right, the mesh 21% short, so the body is warned."""
+    st = Step()
+    poly = [(r * math.cos(2 * math.pi * k / n) * (1.0 + 0.3 * (k % 2)), r * math.sin(2 * math.pi * k / n) * (1.0 + 0.3 * (k % 2)))
+            for k in range(n)]
+    ctrl = poly + poly[:3]
+
+    def curve(z):
+        pts = ",".join(st.pt((x, y, z)) for x, y in ctrl)
+        knots = ",".join(f"{float(k)!r}" for k in range(len(ctrl) + 4))
+        mult = ",".join("1" for _ in range(len(ctrl) + 4))
+        return st.add(f"B_SPLINE_CURVE_WITH_KNOTS('',3,({pts}),.UNSPECIFIED.,.T.,.F.,({mult}),({knots}),.UNSPECIFIED.)")
+
+    def at(t):  # the uniform cubic at a knot: (P[i] + 4 P[i+1] + P[i+2]) / 6
+        i = int(t) - 3
+        return tuple((ctrl[i][k] + 4 * ctrl[i + 1][k] + ctrl[i + 2][k]) / 6 for k in (0, 1))
+
+    def edge(z):
+        x, y = at(3)
+        v = st.add(f"VERTEX_POINT('',{st.pt((x, y, z))})")
+        return st.add(f"EDGE_CURVE('',{v},{v},{curve(z)},.T.)")
+
+    bot, top = edge(0.0), edge(h)
+    ext = st.add(f"SURFACE_OF_LINEAR_EXTRUSION('',{curve(0.0)},{st.add(f'VECTOR({chr(39)}{chr(39)},{st.dir((0, 0, 1))},{h!r})')})")
+    faces = [
+        st.face([st.loop(bot, True, True), st.loop(top, False)], ext, True),
+        st.face([st.loop(bot, False, True)], st.add(f"PLANE('',{st.ax((0, 0, 0))})"), False),
+        st.face([st.loop(top, True, True)], st.add(f"PLANE('',{st.ax((0, 0, h))})"), True),
+    ]
+    return st.text(st.solid(faces), name)
+
+
 def main(out):
     os.makedirs(out, exist_ok=True)
     made = {
@@ -229,6 +263,7 @@ def main(out):
         "split_rim_bspline_t": split_rim_cylinder("split_rim_bspline_t", "bspline", True),
         "split_rim_bspline_f": split_rim_cylinder("split_rim_bspline_f", "bspline", False),
         "spool": spool(),
+        "extruded_periodic": extruded_periodic(),
         "offset_plane": tube("offset_plane", offset_plane),
         "far_line_origin": seamed_cylinder("far_line_origin", "line", far=168738.0 * 25.4),
         "whole_torus": whole_torus(),
