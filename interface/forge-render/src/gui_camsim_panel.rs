@@ -730,12 +730,9 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                     ui.horizontal(|ui| {
                         ui.add_space(12.0);
                         ui.checkbox(&mut st.show_ops[k], "");
-                        let (mark, c) = if op.status == "built" {
-                            ("ok", t.success)
-                        } else {
-                            ("refused", t.error)
-                        };
-                        ui.colored_label(c, mark);
+                        let c = if op.status == "built" { t.success } else { t.error };
+                        let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
+                        ui.painter().circle_filled(r.center(), 4.0, c);
                         let label = egui::RichText::new(format!("{} ({})", op.name, op.kind)).color(if now {
                             t.accent
                         } else {

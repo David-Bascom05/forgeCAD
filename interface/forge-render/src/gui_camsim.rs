@@ -42,8 +42,15 @@ impl Gui {
                 // the workspace shows the part itself
                 ui.part = if self.fg.is_some() { PartShow::Hidden } else { PartShow::Ghost };
             }
+            let first = self.shell.camsim.is_none();
             self.shell.camsim = Some(Box::new(ui));
             self.shell.camsim_job.focus = None;
+            // no view to draw in (the workspace's part isn't open): one of the simulation's own
+            if self.view.is_none() && self.fg.is_none() {
+                self.camsim_view();
+            } else if first && self.fg.is_none() {
+                self.camsim_fit();
+            }
             if let Some(v) = &mut self.view {
                 v.dirty = true;
             }
@@ -78,11 +85,65 @@ impl Gui {
         }
     }
 
+    /// A view with no part in it: the simulation draws everything.
+    fn camsim_view(&mut self) {
+        use crate::render::{self, Renderer, part_info};
+        use crate::scene::{Placement, Scene};
+        let parts = vec![crate::mesh::PartMesh::empty()];
+        let scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+        let renderer = Renderer::new(
+            self.device.clone(),
+            self.queue.clone(),
+            self.adapter.clone(),
+            render::OFFSCREEN,
+            (16, 16),
+            &parts,
+            &scene,
+        );
+        let name = self.shell.name.clone();
+        self.show_loaded(super::Loaded {
+            file: None,
+            name: name.clone(),
+            empty: false,
+            scene,
+            renderer,
+        });
+        self.shell.name = name;
+        self.camsim_fit();
+    }
+
+    /// The view fitted to what the setups' stocks hold.
+    fn camsim_fit(&mut self) {
+        let Some(st) = self.shell.camsim.as_deref() else { return };
+        let (mut lo, mut hi) = ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]);
+        for s in &st.sim.setups {
+            for k in 0..3 {
+                lo[k] = lo[k].min(s.stock.min[k] as f32);
+                hi[k] = hi[k].max(s.stock.max[k] as f32);
+            }
+        }
+        if lo[0].is_finite()
+            && let Some(v) = &mut self.view
+        {
+            let c = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
+            let r = 0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
+            v.nav.camera = super::view_camera(c, r * 1.25, self.shell.view.parallel, v.size);
+            v.nav.home_view = Some(v.nav.camera);
+            v.dirty = true;
+        }
+    }
+
     /// Simulates the document again (its files changed), keeping the time shown.
     pub fn camsim_reload(&mut self) {
         if let Some(st) = self.shell.camsim.as_deref_mut() {
             st.src.clear();
         }
+        // the workspace's run read the files as they were: generate again with what arrived
+        if let Some(w) = &mut self.shell.cam {
+            w.want_run = true;
+        }
+        // and a frame to start it in
+        (self.waker)();
     }
 
     /// Plays the simulation on; true while it moves.
@@ -317,6 +378,34 @@ impl Gui {
                     st.jump(f * total);
                 }
                 "machine" => st.machine = on()?,
+                "fit" => {
+                    // the view on the stock, or on the whole machine about it
+                    let mut tris = vec![];
+                    match v {
+                        "machine" => {
+                            let mv = st.sim.machine().ok_or("`fit=machine`: no machine run plays")?;
+                            mv.draw(st.t, &[], &mut tris);
+                        }
+                        _ => {
+                            let s = st.sim.setups.get(st.setup_now()).ok_or("no setup")?;
+                            draw::solid_box(s.stock.min, s.stock.max, [1.0; 3], &mut tris);
+                        }
+                    }
+                    let (mut lo, mut hi) = ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]);
+                    for w in &tris {
+                        for k in 0..3 {
+                            lo[k] = lo[k].min(w.at[k]);
+                            hi[k] = hi[k].max(w.at[k]);
+                        }
+                    }
+                    if let Some(view) = &mut self.view
+                        && lo[0].is_finite()
+                    {
+                        let c = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
+                        let r = 0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
+                        view.nav.camera = super::view_camera(c, r, self.shell.view.parallel, view.size);
+                    }
+                }
                 "rapids" => st.rapids = on()?,
                 "played" => st.played_only = on()?,
                 "stock" => st.stock = on()?,
