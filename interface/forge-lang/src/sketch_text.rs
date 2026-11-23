@@ -177,3 +177,65 @@ pub fn text(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     }
     Ok(Value::List(Rc::new(out)))
 }
+
+/// A text's glyphs as `text(..)` sets them (the same font lookup and layout), flattened to
+/// closed polylines in ems from the start of its first line's baseline: what an editor draws
+/// before the build does. `dir` is the part's folder (a font file beside it).
+pub fn preview(
+    dir: Option<&std::path::Path>,
+    family: &str,
+    bold: bool,
+    italic: bool,
+    text: &str,
+    align: &str,
+) -> Result<Vec<Vec<(f64, f64)>>, String> {
+    let font =
+        crate::media::font_for(dir, None, family, bold, italic, Span::new(0, 0)).map_err(|e| e.text())?;
+    let align = match align {
+        "center" => Align::Center,
+        "right" => Align::Right,
+        _ => Align::Left,
+    };
+    let placed = lay_out(&font, text, align, 0.0).map_err(|e| format!("{e:?}"))?;
+    let k = 1.0 / font.units_per_em;
+    let at = |p: Point2| (k * p.x, k * p.y);
+    let mut out = vec![];
+    for g in &placed {
+        for contour in &g.contours {
+            let mut line: Vec<(f64, f64)> = vec![];
+            for s in contour {
+                if line.is_empty() {
+                    line.push(at(s.start()));
+                }
+                match s {
+                    Seg::Line(_, b) => line.push(at(*b)),
+                    Seg::Quad(a, c, b) => {
+                        for i in 1..=8 {
+                            let t = i as f64 / 8.0;
+                            let u = 1.0 - t;
+                            line.push(at(Point2::new(
+                                u * u * a.x + 2.0 * u * t * c.x + t * t * b.x,
+                                u * u * a.y + 2.0 * u * t * c.y + t * t * b.y,
+                            )));
+                        }
+                    }
+                    Seg::Cubic(a, c, d, b) => {
+                        for i in 1..=12 {
+                            let t = i as f64 / 12.0;
+                            let u = 1.0 - t;
+                            let (w0, w1, w2, w3) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+                            line.push(at(Point2::new(
+                                w0 * a.x + w1 * c.x + w2 * d.x + w3 * b.x,
+                                w0 * a.y + w1 * c.y + w2 * d.y + w3 * b.y,
+                            )));
+                        }
+                    }
+                }
+            }
+            if line.len() > 2 {
+                out.push(line);
+            }
+        }
+    }
+    Ok(out)
+}

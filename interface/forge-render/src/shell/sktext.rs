@@ -251,6 +251,39 @@ impl SkText {
     }
 }
 
+/// Closed polylines, in ems.
+pub type Outlines = std::sync::Arc<Vec<Vec<(f64, f64)>>>;
+
+/// A text's glyphs in its own font, flattened, in ems (`forge_lang::sketch_text::preview`),
+/// kept by what decides them: laid out once per change, not once a frame.
+pub fn outlines(dir: Option<&std::path::Path>, t: &SkText) -> Result<Outlines, String> {
+    use std::sync::{Arc, Mutex, OnceLock};
+    type Key = (Option<std::path::PathBuf>, String, bool, bool, String, String);
+    type Got = Result<Outlines, String>;
+    static CACHE: OnceLock<Mutex<HashMap<Key, Got>>> = OnceLock::new();
+    let key: Key = (
+        dir.map(|d| d.to_path_buf()),
+        t.font.clone(),
+        t.bold,
+        t.italic,
+        t.align.clone(),
+        t.text.clone(),
+    );
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(got) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
+        return got.clone();
+    }
+    let got: Got =
+        forge_lang::sketch_text::preview(dir, &t.font, t.bold, t.italic, &t.text, &t.align).map(Arc::new);
+    let mut c = cache.lock().unwrap_or_else(|e| e.into_inner());
+    // a bounded cache: typing makes a key a keystroke
+    if c.len() > 256 {
+        c.clear();
+    }
+    c.insert(key, got.clone());
+    got
+}
+
 /// The fonts a sketch text may take: the shipped families, then .ttf and .otf files beside the
 /// part.
 pub fn fonts(dir: Option<&std::path::Path>) -> Vec<String> {
@@ -414,6 +447,10 @@ impl super::Shell {
                 .pixel_of([w.x as f32, w.y as f32, w.z as f32], size.0, size.1)
                 .map(|px| view.min + vec2(px.0, px.1) / ppp)
         };
+        let font_dir = self
+            .fg
+            .as_ref()
+            .and_then(|f| std::path::Path::new(&f.path).parent().map(|d| d.to_path_buf()));
         let painter = ctx
             .layer_painter(egui::LayerId::background())
             .with_clip_rect(view);
@@ -435,6 +472,29 @@ impl super::Shell {
             let font = if s.bold { theme::semi(em) } else { theme::sans(em) };
             let open = m.more.sktext_open == Some(k);
             let ink = if open { t.focus } else { t.sketch };
+            // the glyphs in the chosen font, as the build will set them
+            if let Ok(lines) = outlines(font_dir.as_deref(), s) {
+                let stroke = egui::Stroke::new(1.25, ink);
+                let (sa, ca) = (sin(a), cos(a));
+                for l in lines.iter() {
+                    let pts: Vec<egui::Pos2> = l
+                        .iter()
+                        .filter_map(|&(ex, ey)| {
+                            let (x, y) = (s.size * ex, s.size * ey);
+                            screen((s.x + x * ca - y * sa, s.y + x * sa + y * ca))
+                        })
+                        .collect();
+                    if pts.len() == l.len() {
+                        painter.add(egui::Shape::closed_line(pts, stroke));
+                    }
+                }
+                painter.circle_filled(o, 3.0, ink);
+                self.places.push((
+                    format!("sktext:at:{k}"),
+                    Rect::from_center_size(o, vec2(10.0, 10.0)),
+                ));
+                continue;
+            }
             for (line, words) in s.lines().iter().enumerate() {
                 let g = ctx.fonts_mut(|f| f.layout_no_wrap(words.to_string(), font.clone(), ink));
                 let w = g.size().x;
@@ -554,6 +614,8 @@ impl super::Shell {
                 }
                 if let Err(e) = s.check() {
                     ui.label(egui::RichText::new(e.text()).font(theme::small()).color(t.error));
+                } else if let Err(why) = outlines(dir.as_deref(), s) {
+                    ui.label(egui::RichText::new(why).font(theme::small()).color(t.error));
                 }
                 ui.add_space(S1);
                 ui.horizontal(|ui| {
@@ -679,6 +741,24 @@ mod tests {
         // and taken out
         let (out, _) = write(src, "sk1", &[], &["t1".into()], &HashSet::new()).unwrap();
         assert!(!out.contains("text("), "{out}");
+    }
+
+    #[test]
+    fn the_preview_is_the_chosen_fonts_glyphs() {
+        let mut t = SkText::new(0.0, 0.0, 5.0);
+        t.text = "AB".into();
+        let plain = outlines(None, &t).expect("Open Sans lays out");
+        // A has an outside and a counter; B an outside and two counters
+        assert_eq!(plain.len(), 5, "{}", plain.len());
+        t.bold = true;
+        let bold = outlines(None, &t).unwrap();
+        assert_ne!(plain, bold, "bold is its own face");
+        t.font = "Source Sans 3".into();
+        t.bold = false;
+        let other = outlines(None, &t).unwrap();
+        assert_ne!(plain, other, "another family draws otherwise");
+        t.font = "No Such Font".into();
+        assert!(outlines(None, &t).is_err());
     }
 
     #[test]
