@@ -27,6 +27,7 @@ import ForgeExact.DecideOnce.QVert
 import ForgeExact.DecideOnce.RootCover
 import ForgeExact.DecideOnce.QPropose
 import ForgeExact.DecideOnce.QSweep
+import ForgeExact.DecideOnce.QSample
 import ForgeExact.DecideOnce.QVertPlane
 import ForgeExact.DecideOnce.QVert3
 import ForgeExact.DecideOnce.SampleLocal
@@ -250,6 +251,11 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.eventsOf_complete
   ForgeExact.DecideOnce.Curved.eventsOf_sep
   ForgeExact.DecideOnce.Curved.planes_between
+  ForgeExact.DecideOnce.Curved.lineSamples_realised
+  ForgeExact.DecideOnce.Curved.planeSamples_realised
+  ForgeExact.DecideOnce.Curved.tripleSamples_realised
+  ForgeExact.DecideOnce.Curved.realCov_shear
+  ForgeExact.DecideOnce.Curved.samplesOf_realised
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region
