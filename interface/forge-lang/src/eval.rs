@@ -1533,14 +1533,22 @@ impl<'s> Eval<'s> {
             self.rule(self.rules.scoped_params, err)?;
             return Ok(self.param_num((false, k), span));
         }
+        Err(self.unknown_name(name, span))
+    }
+
+    /// The error of a name bound nowhere in reach (out of the way of `lookup`, which every read
+    /// takes): `Deleted` for a name a `delete` unbound, else UnknownName with the nearest names.
+    #[cold]
+    #[inline(never)]
+    fn unknown_name(&self, name: &str, span: Span) -> Error {
         // a name a `delete` unbound: its body is no longer in the part
         if let Some((Value::Str(by), _)) = self.scopes[0].get(&format!("{DELETED}{name}")) {
-            return Err(crate::feat_error::FeatError::Deleted {
+            return crate::feat_error::FeatError::Deleted {
                 span,
                 id: name.into(),
                 by: by.to_string(),
             }
-            .into());
+            .into();
         }
         // the nearest name in reach: bound, a param, a function, a built-in
         let here = self.ctx.owner.clone();
@@ -1559,11 +1567,11 @@ impl<'s> Eval<'s> {
             .chain(self.fns.keys().map(String::as_str))
             .chain(crate::builtins::BUILTINS.iter().copied())
             .chain(crate::shapes::NAMES.iter().copied());
-        Err(Error::UnknownName {
+        Error::UnknownName {
             span,
             name: name.into(),
             near: crate::edit_ops::nearest(name, names),
-        })
+        }
     }
 
     /// After a `delete`: each top-level name bound to a feature whose body it removed is unbound,

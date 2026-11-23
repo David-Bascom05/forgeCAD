@@ -368,9 +368,10 @@ pub(crate) fn reach(features: crate::History<'_>) -> Box3 {
             }
             Feature::Body(bf) => {
                 if let crate::BodyFeature::Move { steps, .. } = &**bf {
-                    match crate::bodies::motion(steps) {
-                        Some(m) => b = b.hull(&m.bbox(&b)),
-                        None => b = b.hull(&crate::bodies::step_box(steps, &b)),
+                    let m = crate::bodies::motion(steps);
+                    b = b.hull(&m.bbox(&b));
+                    if crate::bodies::scales(steps) {
+                        b = b.hull(&crate::bodies::step_box(steps, &b));
                     }
                 }
             }
