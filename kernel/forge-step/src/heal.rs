@@ -1488,11 +1488,11 @@ mod tests {
         let axis = Frame::from_z(Point3::ORIGIN, z);
         let at = |h: f64| Frame::from_z(Point3::new(0.0, 0.0, h), z);
         let mut p = Proto::default();
-        let mut vert = |p: &mut Proto, q: Point3| {
+        let vert = |p: &mut Proto, q: Point3| {
             p.verts.push((q, Name::feature(1 + p.verts.len() as u64)));
             p.verts.len() - 1
         };
-        let mut edge = |p: &mut Proto, curve: Curve, range: Interval, a: usize, b: usize| {
+        let edge = |p: &mut Proto, curve: Curve, range: Interval, a: usize, b: usize| {
             p.edges.push(PEdge {
                 curve,
                 range,
