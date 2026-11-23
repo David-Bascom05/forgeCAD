@@ -42,6 +42,7 @@ site, recorded here and in the module. An input whose decision runs out of fuel 
 |---|---|---|---|
 | `signFuel` | 200 (`Num.sign` bisections, as exact-curved's contact decisions use) | `covOn`, `edgeCov`, `ESample.dOk` | QEdge.lean |
 | `rootFuel` | 60 (`QRef.realRoots`' default) | root isolation of `R` and of the line restrictions | QEdge.lean |
+| (sizes) | three-quadric test, the curved Rust session (172a608): R_A of degree 8 with coefficients up to 93 bits; A, B, C 569 rationals of at most 84 bits; ~0.4 s in release through `Big`'s public API. No cap needed at this size; re-measure on larger families | `proposeVert3` | — |
 | `shears` | `[0, 1, 2, 3, −1, 1/2, 5, −3, 7, 1/3]` | the generic projection, one `λ` per boolean | QPropose.lean |
 
 **Root isolation is certified, not trusted** (`RootCover.lean`). `QRef.realRoots` is incomplete:
