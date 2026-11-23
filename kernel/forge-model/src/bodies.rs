@@ -127,6 +127,7 @@ pub fn multi(features: &[Feature]) -> bool {
             Feature::Sweep(s) => s.op == Combine::New,
             Feature::Coil(c) => c.op == Combine::New,
             Feature::Loft(l) => l.op == Combine::New,
+            Feature::Regions(r) => r.op == Combine::New,
             _ => false,
         };
         if made {
