@@ -22,7 +22,7 @@ come from `research/import/tally.py`.
 | FreeCAD library, bodies | 677 | 130 | 64 | 394 | 506 |
 | CADFS, all parts | 1914 | 640 | 627 | 1099 | 1106 |
 | CADFS, parts with a fillet | 476 | 238 | 234 | 164 | 164 |
-| WHUCAD, 1 in 7 with a fillet | 319 | 35 | 35 | (1e-3, no STEP staged for the built ones) | |
+| WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new |
 
 No part got worse on any set: no match was lost, and nothing that built before stopped building.
 
@@ -178,12 +178,25 @@ Ranked for the parts with a fillet (all 1914 parts in brackets):
 
 ## WHUCAD
 
-No change. None of its causes were taken on, and its translated parts build exactly as before (no volume moved).
+**A spline in a sketch (6 → 0).** CATIA's sketch spline (a `Spline` row and its `SCP` points) is written as Forge's
+cubic through the same points, `spline([..], closed: false)`. None was taken on before. The other WHUCAD parts build
+exactly as before (no volume moved).
 
-| cause | parts | maps to |
+| part | after (against CATIA's STEP, 1e-3 for the quantised data) |
+|---|---|
+| 100000495 | mismatch: volume 1.1e-3, area 7.3e-4 |
+| 100001494 | mismatch: volume 1.6e-4, area 1.5e-3 |
+| 100001782 | mismatch: volume 8.6e-2 |
+| 100000526 | refused: `Shell Rebuild` |
+| 100001734 | refused: `Fillet Overflow` |
+| 100002274 | **fail**: `Boolean InconsistentClassification` |
+
+None counts: CATIA interpolates its spline its own way, and the values are quantised. The two near ones differ by the
+spline's shape, not by anything else in the part.
+
+| cause still stopping WHUCAD | parts | maps to |
 |---|---:|---|
 | a face of Shell / Chamfer / EdgeFillet | 12 | importer: CATIA's names for blends' and shells' own faces |
-| a spline in a sketch | 6 | `spline([..])` through CATIA's points; blocked by the finding below. CATIA's interpolation is also not known to be Forge's. |
 | nothing selected, no such face, no edge where the faces meet | 7 | importer |
 | an unequal chamfer | 4 | `chamfer(.., d2:)`; importer |
 | a mirror in a curved face | 4 | no form |
@@ -191,12 +204,32 @@ No change. None of its causes were taken on, and its translated parts build exac
 
 ## Kernel and language findings from the newly translated parts
 
-1. **A through-points spline closing a loop with lines is `SketchProfile: open chain`.** The same loop with an
-   exact B-spline (`degree:, knots:`) builds. Repro in my own numbers: lines (0,0)→(40,0)→(40,10), then
-   `spline([(40, 10), (30, 25), (10, 5), (0, 20)])`, then (0,20)→(0,0). `cv: true` fails the same way. This blocks
-   WHUCAD's splines, and CADFS's fit splines in extrude profiles (they stay polylines).
-2. CADFS 00713562: a tapered cut fails as an invalid body (`EdgeDegenerate`); 00981084 fails a boolean
-   (`InconsistentClassification`).
+1. **Not a kernel bug: our writer.** A through-points `spline([..])` is closed unless it says `closed: false` (or has
+   an end slope), as the reference says. fgw wrote open fit splines with neither, so a loop of lines and such a
+   spline was a closed spline beside an open chain of lines: `SketchProfile: open chain`. fgw now writes
+   `closed: false`. Profile chaining (forge-sketch's `chain_loops`) already joins ends within `tol::LINEAR`, and
+   needs no change. The Lean model (research/forge-lang/lean) does not model sketch profile chaining or spline
+   defaults: it models syntax, scope and placements.
+   - That fix unblocks WHUCAD's splines (above).
+   - It also let CADFS's fit splines be written exactly instead of as polylines. Tried on all 1914 parts, and not
+     kept, because it regressed parts:
+     - 00316638 went from match to refused (`Shell Rebuild`);
+     - 00468533 and 00893869 went from off to a mesh failure (`ConstraintThroughPoint`);
+     - 00553987 went from off to refused (a self-intersecting profile);
+     - 4 refused parts became untranslated: the importer finds no edge on the spline faces' carriers.
+   - It would have gained 4 (00261814 and 00527258 from off to match, 00533379 from fail to match, 00359539 from
+     refused to built). So CADFS's fit splines stay polylines, and only WHUCAD's are written exactly. The CADFS rows
+     in the tables above are with polylines.
+2. Two fails, restated in my own numbers as fixtures in interface/forge-lang/tests/kernel_parts, each with an
+   ignored test in kernel_misc.rs that states what is due:
+   - CADFS 00713562 → taper_collapses.fg: a hexagonal pit whose 80° taper meets before its depth builds an invalid
+     body (`EdgeDegenerate`, a judge fail) where a refusal is due. At 70° it builds.
+   - CADFS 00981084 → tapered_lobe_bore.fg: a 1°-tapered lobe pocket (an arc of radius 3 and two lines), and a bore
+     of radius 3 whose wall runs within 0.15 of the lobe's cone. The boolean stops on `InconsistentClassification`
+     (cone against plane). A smaller bore, or the lobe untapered, builds. WHUCAD 100002274 fails the same way.
+   - The tests are `a_bore_beside_a_tapered_lobe_builds` and `a_taper_that_collapses_is_refused_cleanly`.
+   - In a search of my own (a 1°-tapered rounded rectangle under a ball cut), a 30 by 10 pocket of corner radius 4
+     also fails the boolean, as `SplitCrossed` on the sphere: a third internal error, not yet reduced.
 3. Refusals newly reached:
    - CADFS 00277536 (`Fillet NoBlend`), 00515265 (`Sweep TooTight`), 00714299 (`Shell Collapses`);
    - FreeCAD d45d0db3.Body001 (`Extent Ambiguous` at feature 17, after its sweep).

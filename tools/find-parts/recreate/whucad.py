@@ -68,12 +68,24 @@ def curves(rows, scale):
         if not lp:
             i = j
             continue
-        if any(CMD[int(r[0])] in ("Spline", "SCP") for r in lp):
-            raise Unsupported("a spline in a sketch")
         last = lp[-1]
         at = (f(last[1]), f(last[2]))
-        for r in lp:
-            c = CMD[int(r[0])]
+        sp = None  # a spline's points so far: from where the loop was, through each SCP
+        for r in lp + [None]:
+            c = CMD[int(r[0])] if r is not None else None
+            if sp is not None and c != "SCP":
+                # CATIA's sketch spline through its points, written as Forge's cubic through them
+                k += 1
+                ents.append({"kind": "skFitSpline", "id": f"c{k}", "points": [list(q) for q in sp], "exact": True})
+                at, sp = sp[-1], None
+            if c is None:
+                break
+            if c == "Spline":
+                sp = [at]
+                continue
+            if c == "SCP":
+                sp.append((f(r[1]), f(r[2])))
+                continue
             k += 1
             end = (f(r[1]), f(r[2]))
             if c == "Line":

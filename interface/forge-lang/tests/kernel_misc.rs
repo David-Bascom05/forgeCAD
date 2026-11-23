@@ -1043,3 +1043,25 @@ extrude2 = extrude(s4, 2)
         assert!(mesh.open_edges().is_empty());
     }
 }
+
+/// A tapered pocket's cone and a bore's cylinder 0.15 apart: the boolean stops on
+/// InconsistentClassification (a CADFS part fails so; see the fixture). Open: ignored until the
+/// boolean classifies near-coincident cone and cylinder faces alike.
+#[test]
+#[ignore = "open: InconsistentClassification, cone against plane"]
+fn a_bore_beside_a_tapered_lobe_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/tapered_lobe_bore.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A tapered cut whose walls meet before its depth: today an invalid body (EdgeDegenerate), which
+/// the judge calls a fail. Due: a clean refusal. Open: ignored until the draft says the tool
+/// collapses.
+#[test]
+#[ignore = "open: the collapsed taper builds an invalid body"]
+fn a_taper_that_collapses_is_refused_cleanly() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/taper_collapses.fg"));
+    assert!(matches!(v, Verdict::Refused(_)), "{v:?}");
+}

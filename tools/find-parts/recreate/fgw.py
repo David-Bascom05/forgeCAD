@@ -108,6 +108,20 @@ def loop_segs(a, lp, flip, fmt):
             ps[0], ps[-1] = s, e
             ws = None if all(w == 1.0 for w in weights) else [fmt(w) for w in weights]
             out.append(("nurbs", [q(x) for x in ps], deg, [fmt(k) for k in knots], ws))
+        elif p.kind == "poly" and p.src is not None and p.src[0] == "through":
+            # the whole of a fit spline marked exact: its own points (and end slopes), run the loop's way. CADFS's
+            # stay polylines: written exactly they turned a match into a shell refusal and two parts into mesh
+            # failures (research/import/coverage.md)
+            _, pts, d0, d1 = p.src
+            ps = [f(x) for x in (pts if fwd else pts[::-1])]
+            if not fwd:
+                d0, d1 = (None if d1 is None else (-d1[0], -d1[1])), (None if d0 is None else (-d0[0], -d0[1]))
+            ps[0], ps[-1] = s, e
+            # Forge's slope is the rate along the curve: the derivative over the length through the points, as
+            # cadfs.section_of writes a loft's
+            length = sum(math.dist(u, v) for u, v in zip(pts, pts[1:])) or 1.0
+            fl = lambda v: None if v is None else q((v[0] / length, (-v[1] if flip else v[1]) / length))
+            out.append(("spline", [q(x) for x in ps], fl(d0), fl(d1)))
         elif p.kind == "poly":
             ps = [f(x) for x in (p.pts if fwd else p.pts[::-1])]
             ps[0], ps[-1] = s, e
@@ -169,7 +183,9 @@ def rows_of(loops):
                 _, ps, d0, d1 = sg
                 closed = len(ps) > 3 and ps[0] == ps[-1]
                 body = ", ".join(pt2(p) for p in (ps[:-1] if closed else ps))
-                extra = ", closed: true" if closed else ""
+                # a through-points spline is closed unless told otherwise, or given an end slope
+                sloped = d0 is not None or d1 is not None
+                extra = ", closed: true" if closed and not sloped else ("" if closed or sloped else ", closed: false")
                 if d0 is not None:
                     extra += f", start_slope: {pt2(d0)}"
                 if d1 is not None:
