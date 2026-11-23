@@ -842,6 +842,11 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
     // (boxed: a prep holds a procedural face's 9 x 9 nodes, and moves)
     let mut preps: Vec<Option<Box<Prep>>> = (0..nf).map(|_| None).collect();
     let mut splits = 0usize;
+    // a file's face is drawn again for its cuts this many times, then drawn as it is (`mend`):
+    // each drawing projects all its boundary again, and a damaged face's crossings within its
+    // tolerance need not end where a body made here's do (the base gave a file's faces 3 rounds)
+    const FILE_ROUNDS: u32 = 8;
+    let mut drawn = if mend { vec![0u32; nf] } else { Vec::new() };
     // (the first face not drawn: faces before it stay drawn until a cut moves it back)
     let mut i = 0;
     while i < nf {
@@ -852,8 +857,15 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         let f = FaceId(i as u32);
         let prep = prepare_face(body, f, &samples.of, q, &mesh)
             .map_err(|error| TessError::Face { face: f, error })?;
-        let cuts = uncross(body, &prep, &samples, &mesh, mend)
-            .map_err(|error| TessError::Face { face: f, error })?;
+        let tired = mend && {
+            drawn[i] += 1;
+            drawn[i] > FILE_ROUNDS
+        };
+        let cuts = if tired {
+            Vec::new()
+        } else {
+            uncross(body, &prep, &samples, &mesh, mend).map_err(|error| TessError::Face { face: f, error })?
+        };
         if cuts.is_empty() {
             preps[i] = Some(prep);
             continue;
