@@ -1,6 +1,11 @@
 //! A body's box, exact: the least box holding every point of it, along each world axis its
 //! furthest points.
 //!
+//! An inner bound: every point it is the hull of is a point of the body, so it is never larger
+//! than the body's box, and smaller where a searched kind's extreme is missed. What must hold
+//! the body (a tool's reach through it, culling, a clash test's boxes) takes an outer bound,
+//! `Body::faces_box`, not this.
+//!
 //! The furthest point of a face along a direction is on its boundary or inside it, and inside
 //! only where the surface turns square to the direction (a stationary point of the height) or
 //! at a point where the surface has no tangent plane (a cone's apex, a sphere's pole, a spindle
@@ -30,7 +35,7 @@ use crate::{Body, FaceId};
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
 use forge_math::{Box3, Interval, Point2, Point3, Vec3, dmath};
 
-/// The exact box of `b` (see the module).
+/// The exact box of `b` (see the module): an inner bound, never larger than the body's.
 pub fn exact_box(b: &Body) -> Box3 {
     // the closed forms first, then what is searched for, each only where its proven bound
     // (the edge's or face's cached box) reaches past the box so far
