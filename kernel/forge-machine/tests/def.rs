@@ -149,3 +149,27 @@ fn project_level_hides_builtin() {
         Err(library::LookupError::Unknown { .. })
     ));
 }
+
+/// One file per vendor (data/machines/<vendor>.toml), each body's part under
+/// parts/<vendor>/<machine>/, names unique across the files.
+#[test]
+fn builtin_layout_is_per_vendor() {
+    let ms = library::builtin_files();
+    assert_eq!(ms[0].1, "builtin/generic.toml");
+    for (m, file) in &ms {
+        let vendor = file
+            .strip_prefix("builtin/")
+            .and_then(|f| f.strip_suffix(".toml"))
+            .unwrap();
+        for b in &m.bodies {
+            let p = b.part.as_deref().unwrap_or("");
+            assert!(
+                p.starts_with(&format!("parts/{vendor}/{}/", m.name)),
+                "{file} {} body {}: part {p:?} not under parts/{vendor}/{}/",
+                m.name,
+                b.name,
+                m.name
+            );
+        }
+    }
+}

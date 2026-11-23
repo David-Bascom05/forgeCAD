@@ -2,9 +2,11 @@
 
 A machine tool as data: a kinematic tree of joints from the static base, the spindles, turrets
 and tool changer, the mounts where tools and parts attach, and collision bodies. Read by
-`kernel/forge-machine` (`MachineDef::parse_all`); built-in generic machines are in
-`kernel/forge-machine/data/machines.toml`, each body backed by a real part under
-`kernel/forge-machine/parts/`. Search order, as for every CAM library: the project's
+`kernel/forge-machine` (`MachineDef::parse_all`); built-in machines are in
+`kernel/forge-machine/data/machines/<vendor>.toml`, one file per vendor (`generic.toml` holds our
+placeholder machines; build.rs embeds every file in the directory, generic first, then by name;
+a machine name may appear once across them), each body backed by a real part under
+`kernel/forge-machine/parts/<vendor>/<machine>/`. Search order, as for every CAM library: the project's
 `cam/machines/*.toml`, then the user's `~/.config/forgecad/cam/machines/`, then the built-in set; a
 name found earlier hides a later one.
 
