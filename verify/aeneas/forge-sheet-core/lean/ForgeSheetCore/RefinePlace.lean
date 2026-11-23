@@ -220,4 +220,103 @@ theorem then_spec (m inner : place.Place) :
   step with vec_spec m inner.xx inner.xy as ⟨xx, xy, hv1, hv2⟩
   exact ⟨ha1, ha2, hv1, hv2⟩
 
+/-- A rounded difference times a factor at most 2, rounded: within `3 u |D x| + 4 η` of the exact
+`D x`. -/
+theorem diff_prod {D d x t : ℚ} (hd : |d - D| ≤ uu * |D| + η) (hx : |x| ≤ 2)
+    (ht : |t - d * x| ≤ uu * |d * x| + η) : |t - D * x| ≤ 3 * uu * |D * x| + 4 * η := by
+  have hu := uu_pos
+  have hu8 := uu_small
+  have he := η_pos
+  have hD := abs_nonneg D
+  have hxn := abs_nonneg x
+  have md : |d| ≤ (1 + uu) * |D| + η := by have := abs_sub_abs_le_abs_sub d D; nlinarith
+  have e1 : |t - D * x| ≤ |t - d * x| + |d - D| * |x| := by
+    have : t - D * x = (t - d * x) + (d - D) * x := by ring
+    rw [this]
+    calc |(t - d * x) + (d - D) * x| ≤ |t - d * x| + |(d - D) * x| := abs_add_le _ _
+      _ = |t - d * x| + |d - D| * |x| := by rw [abs_mul]
+  have e2 : |d * x| ≤ ((1 + uu) * |D| + η) * |x| := by
+    rw [abs_mul]; exact mul_le_mul_of_nonneg_right md hxn
+  have e3 : |d - D| * |x| ≤ (uu * |D| + η) * |x| := mul_le_mul_of_nonneg_right hd hxn
+  rw [abs_mul]
+  have : uu * |d * x| ≤ uu * (((1 + uu) * |D| + η) * |x|) := mul_le_mul_of_nonneg_left e2 hu.le
+  have hux : uu * |x| ≤ 1 := by nlinarith
+  have k1 : uu * (η * |x|) ≤ η := by
+    calc uu * (η * |x|) = η * (uu * |x|) := by ring
+      _ ≤ η * 1 := mul_le_mul_of_nonneg_left hux he.le
+      _ = η := by ring
+  have k2 : η * |x| ≤ 2 * η := by nlinarith
+  have k3 : uu * ((1 + uu) * |D| * |x|) + uu * |D| * |x| ≤ 3 * uu * (|D| * |x|) := by
+    have : uu * uu * (|D| * |x|) ≤ uu * (|D| * |x|) := by
+      apply mul_le_mul_of_nonneg_right _ (mul_nonneg hD hxn); nlinarith
+    nlinarith
+  nlinarith
+
+/-- Two such products, summed and rounded: within `5 u (|P| + |Q|) + 10 η`. -/
+theorem two_round' {P Q t s r : ℚ} (ht : |t - P| ≤ 3 * uu * |P| + 4 * η)
+    (hs : |s - Q| ≤ 3 * uu * |Q| + 4 * η) (hr : |r - (t + s)| ≤ uu * |t + s| + η) :
+    |r - (P + Q)| ≤ 5 * uu * (|P| + |Q|) + 10 * η := by
+  have hu := uu_pos
+  have hu8 := uu_small
+  have he := η_pos
+  have h1 := abs_nonneg P
+  have h2 := abs_nonneg Q
+  have mt : |t| ≤ (1 + 3 * uu) * |P| + 4 * η := by have := abs_sub_abs_le_abs_sub t P; nlinarith
+  have ms : |s| ≤ (1 + 3 * uu) * |Q| + 4 * η := by have := abs_sub_abs_le_abs_sub s Q; nlinarith
+  have mts : |t + s| ≤ (1 + 3 * uu) * (|P| + |Q|) + 8 * η := by have := abs_add_le t s; linarith
+  have tri : |r - (P + Q)| ≤ |r - (t + s)| + |t - P| + |s - Q| := by
+    have : r - (P + Q) = (r - (t + s)) + (t - P) + (s - Q) := by ring
+    rw [this]
+    have := abs_add_le ((r - (t + s)) + (t - P)) (s - Q)
+    have := abs_add_le (r - (t + s)) (t - P)
+    linarith
+  have e1 : uu * |t + s| ≤ uu * ((1 + 3 * uu) * (|P| + |Q|) + 8 * η) := mul_le_mul_of_nonneg_left mts hu.le
+  have hP : 0 ≤ |P| + |Q| := by linarith
+  have q1 : uu * (3 * uu * (|P| + |Q|)) ≤ uu * (|P| + |Q|) := by
+    apply mul_le_mul_of_nonneg_left _ hu.le; nlinarith
+  have q2 : uu * (8 * η) ≤ η := by nlinarith
+  nlinarith
+
+/-- **`local` refines the exact inverse motion of a point**, for an axis with components at most
+2 (the kernel's are unit): each coordinate, when finite, within `5 u (…) + 10 η` of
+`((p − o)·x, (p − o)·x⊥)` on the doubles' values. -/
+theorem local_spec (m : place.Place) (px py : IEEE754.F64) (hxx : |m.xx.val| ≤ 2)
+    (hxy : |m.xy.val| ≤ 2) :
+    place.local m px py ⦃ r =>
+      (r.1.isFinite → |r.1.val - ((px.val - m.ox.val) * m.xx.val + (py.val - m.oy.val) * m.xy.val)| ≤
+        5 * uu * (|(px.val - m.ox.val) * m.xx.val| + |(py.val - m.oy.val) * m.xy.val|) + 10 * η) ∧
+      (r.2.isFinite → |r.2.val - ((px.val - m.ox.val) * -m.xy.val + (py.val - m.oy.val) * m.xx.val)| ≤
+        5 * uu * (|(px.val - m.ox.val) * -m.xy.val| + |(py.val - m.oy.val) * m.xx.val|) + 10 * η) ⦄ := by
+  unfold place.local
+  simp only [lift, Std.bind_ok]
+  simp only [WP.spec_ok, F64.Ops.add_def, F64.Ops.mul_def, F64.Ops.neg_def, F64.Ops.sub_def]
+  refine ⟨fun h => ?_, fun h => ?_⟩
+  · obtain ⟨h1, h2⟩ := isFinite_of_add h
+    obtain ⟨hdx, _⟩ := isFinite_of_mul h1
+    obtain ⟨hdy, _⟩ := isFinite_of_mul h2
+    exact two_round' (diff_prod (sub_err hdx) hxx (mul_err h1))
+      (diff_prod (sub_err hdy) hxy (mul_err h2)) (add_err h)
+  · obtain ⟨h1, h2⟩ := isFinite_of_add h
+    obtain ⟨hdx, _⟩ := isFinite_of_mul h1
+    obtain ⟨hdy, _⟩ := isFinite_of_mul h2
+    have hn : |(FP.neg m.xy).val| ≤ 2 := by simpa using hxy
+    have := two_round' (diff_prod (sub_err hdx) hn (mul_err h1))
+      (diff_prod (sub_err hdy) hxx (mul_err h2)) (add_err h)
+    simpa using this
+
+/-- **`inverse` refines the exact inverse**: its origin is `local(m, 0)` (within `local_spec`'s
+bound of `(−o·x, −o·x⊥)`), its axis `(x.x, −x.y)` exactly. -/
+theorem inverse_spec (m : place.Place) (hxx : |m.xx.val| ≤ 2) (hxy : |m.xy.val| ≤ 2) :
+    place.inverse m ⦃ r => r.xx = m.xx ∧ r.xy = FP.neg m.xy ∧
+      (r.ox.isFinite → |r.ox.val - ((0 - m.ox.val) * m.xx.val + (0 - m.oy.val) * m.xy.val)| ≤
+        5 * uu * (|(0 - m.ox.val) * m.xx.val| + |(0 - m.oy.val) * m.xy.val|) + 10 * η) ∧
+      (r.oy.isFinite → |r.oy.val - ((0 - m.ox.val) * -m.xy.val + (0 - m.oy.val) * m.xx.val)| ≤
+        5 * uu * (|(0 - m.ox.val) * -m.xy.val| + |(0 - m.oy.val) * m.xx.val|) + 10 * η) ⦄ := by
+  unfold place.inverse
+  have h0 : (F64.Ops.ofBits 0).val = 0 := by decide
+  step with local_spec m (F64.Ops.ofBits 0) (F64.Ops.ofBits 0) hxx hxy as ⟨ox, oy, h1, h2⟩
+  simp only [lift, Std.bind_ok, WP.spec_ok, F64.Ops.neg_def]
+  rw [h0] at h1 h2
+  exact ⟨trivial, trivial, h1, h2⟩
+
 end forge_sheet_core

@@ -27,4 +27,5 @@ elab "#standard_axioms " ids:ident* : command => do
   forge_sheet_core.walk_spec forge_sheet_core.walks_spec forge_sheet_core.chain_spec
   forge_sheet_core.round_le forge_sheet_core.add_err forge_sheet_core.mul_err forge_sheet_core.sub_err
   forge_sheet_core.three_round forge_sheet_core.two_round forge_sheet_core.apply_spec
-  forge_sheet_core.vec_spec forge_sheet_core.then_spec
+  forge_sheet_core.vec_spec forge_sheet_core.then_spec forge_sheet_core.diff_prod
+  forge_sheet_core.two_round' forge_sheet_core.local_spec forge_sheet_core.inverse_spec
