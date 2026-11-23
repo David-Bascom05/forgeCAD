@@ -87,9 +87,13 @@ theorem c_good (i : Nat) :
 theorem nxt_ne {i : Nat} (hi : i < vs.length) : nxt vs.length i ≠ i := by
   have := hs.three; rcases nxt_cases (n := vs.length) hi with ⟨_, b⟩ | ⟨_, b⟩ <;> omega
 
-/-- **Round a vertex.** -/
-theorem vertex {i : Nat} (hi : i < vs.length) {ς : Rat} (hς : Sgn ς) :
-    val vs i ς = val vs (nxt vs.length i) ς := by
+/-- **Round a vertex**: both sides' values on side `ς` are the winding number at the corner point
+`v + s·ς·c`, for every small `s`. -/
+theorem corner {i : Nat} (hi : i < vs.length) {ς : Rat} (hς : Sgn ς) :
+    Ev fun s => val vs i ς = wind vs (addv (vtx vs (i + 1)) s
+        (smul ς (cdir (vtx vs i) (vtx vs (i + 1)) (vtx vs (i + 2))))) ∧
+      val vs (nxt vs.length i) ς = wind vs (addv (vtx vs (i + 1)) s
+        (smul ς (cdir (vtx vs i) (vtx vs (i + 1)) (vtx vs (i + 2))))) := by
   have hn := nxt_lt (n := vs.length) hi
   have e1 := vtx_nxt vs i hi
   have e2 := vtx_nxt_succ vs i hi
@@ -112,8 +116,7 @@ theorem vertex {i : Nat} (hi : i < vs.length) {ς : Rat} (hς : Sgn ς) :
       · have hv' := vertex_off hs hi hj (by grind) (by grind)
         exact ((ev_not_meets_pt (hs.nondeg j) hv' _ _).and (ev_not_meets_pt (hs.nondeg j) hv' _ _)).mono
           fun _ _ h _ _ => h))
-  obtain ⟨s, hs0, hsP⟩ := hsE
-  obtain ⟨hs1, hlegs⟩ := hsP s hs0 (by grind)
+  refine hsE.mono fun s hs0 ⟨hs1, hlegs⟩ => ?_
   have k1 := val_spec hs hi hς (t := 1 - s) (by grind) (by grind)
   have k2 := val_spec hs hn hς (t := s) hs0 hs1
   rw [e1, e2] at k2
@@ -163,7 +166,6 @@ theorem vertex {i : Nat} (hi : i < vs.length) {ς : Rat} (hς : Sgn ς) :
     · exact Ev.true.mono fun _ _ _ h => absurd h ht
   obtain ⟨κ, hκ, hall⟩ := k1.and (k2.and (k3.and k4))
   obtain ⟨w1, w2, w3, w4⟩ := hall κ hκ (by grind)
-  rw [← w1, ← w2]
   -- the signs at the corner point and at the ends
   have oCuv : ς * orient u v C = s * crs u v c := by
     rw [← hC, orient_addv, orient_self_r, crs_smul]; grind
@@ -202,8 +204,14 @@ theorem vertex {i : Nat} (hi : i < vs.length) {ς : Rat} (hς : Sgn ς) :
       · rw [jn, e1, e2]
         exact sep (P := v) (Q := w) (by rw [oCvw]; exact pC2) pB (by rw [z3]; grind) (by rw [z4]; grind)
       · exact (w3 j hj ji jn).2
-  rw [wind_eq_of_seg vs _ _ ((allMiss_iff vs _ _).mpr leg1),
-    wind_eq_of_seg vs _ _ ((allMiss_iff vs _ _).mpr leg2)]
+  exact ⟨by rw [← w1, wind_eq_of_seg vs _ _ ((allMiss_iff vs _ _).mpr leg1)],
+    by rw [← w2, ← wind_eq_of_seg vs _ _ ((allMiss_iff vs _ _).mpr leg2)]⟩
+
+theorem vertex {i : Nat} (hi : i < vs.length) {ς : Rat} (hς : Sgn ς) :
+    val vs i ς = val vs (nxt vs.length i) ς := by
+  obtain ⟨s, hs0, h⟩ := corner hs hi hς
+  obtain ⟨h1, h2⟩ := h s hs0 (by grind)
+  rw [h1, h2]
 
 end simple
 
