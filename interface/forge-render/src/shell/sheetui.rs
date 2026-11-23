@@ -157,6 +157,7 @@ pub(super) fn flat_groups(s: &Shell) -> Vec<Group> {
             "Manage",
             vec![
                 tool("Bend Table", SheetCmd::BendTable, u.bend_table),
+                tool("Bend Simulation", SheetCmd::BendSim, u.bend_sim.is_some()),
                 tool("Check (DFM)", SheetCmd::Dfm, u.vendor.dfm_open),
                 tool("Save Copy As DXF/DWG", SheetCmd::ExportDxf, u.dxf_open.is_some()),
             ],
@@ -236,6 +237,7 @@ impl Shell {
         self.sheet_defaults(ctx);
         self.sheet_rules(ctx);
         self.sheet_bend_table(ctx);
+        self.sheet_bend_sim(ctx);
         self.sheet_dxf(ctx);
         self.vendor_ui(ctx);
     }
@@ -1075,6 +1077,28 @@ impl Shell {
         }
         if !close {
             self.sheet.rules_open = Some(nr);
+        }
+    }
+
+    fn sheet_bend_sim(&mut self, ctx: &egui::Context) {
+        let Some(mut st) = self.sheet.bend_sim.take() else {
+            return;
+        };
+        st.tick(f64::from(ctx.input(|i| i.stable_dt)).min(0.1));
+        if st.playing {
+            ctx.request_repaint();
+        }
+        let v = self.view_rect;
+        let (close, _) = self.sheet_window(
+            ctx,
+            "sheet:bendsim",
+            "bendtable",
+            "Bend Simulation",
+            (pos2(v.right() - 560.0, v.top() + 48.0), 540.0),
+            |ui, _| super::bendsim::body(ui, &mut st),
+        );
+        if !close {
+            self.sheet.bend_sim = Some(st);
         }
     }
 

@@ -1406,9 +1406,22 @@ tabs [of OCC] [t MAX]          thin flat runs (two planar faces facing apart, at
                                thickness, centre, normal, area, their holes
 unfold                         whether each sheet unfolds to one blank, its size, and the
                                warnings (FlatOverlap, FlatTouch, SheetSplit) that would stop it
+bendsim [tooling T] [vendor V] [sequence S] [sheet NAME] [uts MPA]
+                               the sheet bent on a press brake (CLI: --tooling --vendor --sequence):
+                               a bend order, punch, die, orientation and backgauge stop per bend,
+                               every check through each bend's motion (tool and self clearance,
+                               minimum flange, V, angles, radius, stroke, open height, bed,
+                               segments, force), each failure's rule, value, limit, part anchor,
+                               tool and place; infeasible: each bend's blocking checks; fixes
 dfm                            each sheet against its vendor or shop: every violation with its
                                rule, measured value, limit and location (Vendor profiles)
 ```
+
+`bendsim`: T is a standard tooling set (`std-eu`, `std-us`) or a `.json` tooling file; V a vendor
+file whose `tooling` names one; S the bends in order by flange name or number (left out, searched).
+Schema `forgecad.bendsim/1`, the tooling file's fields and every rule: docs/bendsim.md. Errors:
+`NoSheet`, `NoSuchTooling`, `NoSuchBend`, `BadSequence`, `HemNotSimulated` (hems are not
+simulated), `NotBuilt` (with the build's own error as `cause`).
 
 Names are stable: a face's anchor text where the part's anchors name it, else its handle
 (`@f..`); a hole its wall's anchor text (`#k` where that names several), else `hole[k]`; in an

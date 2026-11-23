@@ -9,6 +9,7 @@ pub mod asmdrag;
 pub mod asmglyph;
 pub mod asmpart;
 pub mod asmtools;
+pub mod bendsim;
 pub mod content;
 pub mod dialog;
 pub mod docs;

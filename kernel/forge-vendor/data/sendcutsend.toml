@@ -569,3 +569,57 @@ sheet = [0.06, 0.5]
 hole = 0.344
 edge = 0.375
 materials = ["304 stainless"]
+
+# Press-brake tooling for the bend simulator (forge-brake), restated from SendCutSend's public
+# pages, read 2026-11-23. Not official: verify with the vendor before ordering. Lengths in the
+# file's units (in), angles in degrees. Published: the four V-die widths (bending calculator: 0.472, 0.630,
+# 0.984 and 1.575 in, by material and thickness) and the 44 in maximum bend length (bending
+# guidelines). Not published, so the standard set's (std-us) values stand, marked "default":
+# punches, die angles, shoulder radii, die heights and widths, the press, tonnage, backgauge.
+[tooling]
+base = "std-us"
+id = "sendcutsend"
+note = "Restated from https://sendcutsend.com/bending-calculator/ (die widths) and https://sendcutsend.com/guidelines/bending/ (max bend length 44 in), read 2026-11-23. Punches, die angles, shoulders, heights and the press are the standard set's (std-us): not published. Not official: verify with the vendor before ordering."
+source = "https://sendcutsend.com/bending-calculator/ ; https://sendcutsend.com/guidelines/bending/"
+taken = "2026-11-23"
+defaults = ["punches", "die angle", "shoulder_radius", "die height", "die width", "segments", "press except its bend length"]
+
+[[tooling.dies]]
+id = "sendcutsend/V0.472"
+v = 0.472         # published
+angle = 88        # default
+shoulder_radius = 0.06  # default
+height = 2.5      # default
+width = 1.5       # default
+segments = [{ length = 44, count = 1 }]   # one die the published maximum bend length
+
+[[tooling.dies]]
+id = "sendcutsend/V0.630"
+v = 0.630         # published
+angle = 88
+shoulder_radius = 0.08
+height = 2.5
+width = 2
+segments = [{ length = 44, count = 1 }]
+
+[[tooling.dies]]
+id = "sendcutsend/V0.984"
+v = 0.984         # published
+angle = 88
+shoulder_radius = 0.12
+height = 2.75
+width = 2.75
+segments = [{ length = 44, count = 1 }]
+
+[[tooling.dies]]
+id = "sendcutsend/V1.575"
+v = 1.575         # published
+angle = 88
+shoulder_radius = 0.2
+height = 3.5
+width = 4
+segments = [{ length = 44, count = 1 }]
+
+[tooling.press]
+bed_length = 44         # the published maximum bend length
+housing_gap = 44

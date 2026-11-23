@@ -383,9 +383,27 @@ pub struct SheetOut {
     pub reliefs: Vec<fs::ReliefMade>,
     pub corners: Vec<fs::build::CornerMade>,
     pub material: Option<String>,
+    /// Each flange's wall, its feature and its height as written (for fixes that lengthen it).
+    pub heights: Vec<(WallId, String, Num)>,
     /// The shop it is checked against (none: unchecked), and the vendor profile it came from.
     pub shop: Option<fs::ShopProfile>,
     pub vendor: Option<crate::vendor::VendorTag>,
+}
+
+impl SheetOut {
+    /// A fix lengthening the flange that made `wall` by `by`: SetParam on the param driving its
+    /// height, else SetArg on the flange's height.
+    pub fn lengthen(&self, wall: WallId, by: f64) -> Option<crate::error::Op> {
+        let (_, id, h) = self.heights.iter().find(|x| x.0 == wall)?;
+        let v = (1000.0 * (h.v + by)).ceil() / 1000.0;
+        set(h, v).or_else(|| {
+            Some(crate::error::Op::SetArg {
+                id: id.clone(),
+                arg: "height".into(),
+                text: format!("{v}"),
+            })
+        })
+    }
 }
 
 impl SheetState {
@@ -4920,6 +4938,12 @@ pub fn outputs(ev: &Eval) -> Vec<SheetOut> {
             reliefs: st.folded.as_ref().map_or(vec![], |b| b.reliefs.clone()),
             corners: st.folded.as_ref().map_or(vec![], |b| b.corners.clone()),
             material: st.material.clone(),
+            heights: st
+                .fix
+                .flanges
+                .iter()
+                .map(|f| (f.wall, f.id.clone(), f.height.clone()))
+                .collect(),
             shop: st.shop.as_ref().map(|s| s.shop.clone()),
             vendor: st.shop.as_ref().and_then(|s| s.vendor.as_deref().cloned()),
             unfolds: st

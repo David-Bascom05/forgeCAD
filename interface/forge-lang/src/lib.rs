@@ -7,6 +7,7 @@
 pub mod anchors;
 pub mod asm;
 pub mod bench;
+pub mod bendsim;
 pub mod bodies;
 pub mod build;
 pub mod builtins;

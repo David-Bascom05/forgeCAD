@@ -51,6 +51,7 @@ egui-winit = { version = "=0.37.0", default-features = false, features = ["wayla
 forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-geom = { path = "../../kernel/forge-geom" }
 forge-sheet = { path = "../../kernel/forge-sheet" }
+forge-brake = { path = "../../kernel/forge-brake" }
 forge-vendor = { path = "../../kernel/forge-vendor" }
 forge-step = { path = "../../kernel/forge-step" }
 # the Agent tab's OpenAI-compatible endpoints, and their keys in the Secret Service

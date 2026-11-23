@@ -565,3 +565,22 @@ code = "SO-M8"
 sheet = [1.3, 6]
 hole = 11
 edge = 14
+
+# Press-brake tooling for the bend simulator (forge-brake). JLCCNC publishes no press-brake
+# tooling (no V-dies, punches, tip radii, bend length or press; read 2026-11-23 at
+# https://jlccnc.com/help/article/sheet-metal-fabrication-guidelines and
+# https://jlccnc.com/capabilities/sheet-metal-fabrication): the standard set std-eu stands for
+# all of it. What it does publish near tooling is kept as data: the least width inside a bent
+# U per thickness (its section 2.6), and its outer bend radius per thickness (section 2.4).
+# Not official: verify with the vendor before ordering.
+[tooling]
+base = "std-eu"
+id = "jlc"
+note = "JLCCNC publishes no press-brake tooling: the standard set std-eu (read 2026-11-23, https://jlccnc.com/help/article/sheet-metal-fabrication-guidelines). Not official: verify with the vendor before ordering."
+source = "https://jlccnc.com/help/article/sheet-metal-fabrication-guidelines ; https://jlccnc.com/capabilities/sheet-metal-fabrication"
+taken = "2026-11-23"
+defaults = ["punches", "dies", "press", "backgauge"]
+# thickness, least inside width of a bent U (mm), published
+u_min_width = [[1, 12], [2, 12], [3, 18], [4, 20], [5, 23], [6, 25]]
+# thickness, outer bend radius (mm), published
+outer_radius = [[0.5, 1.2], [1, 1.8], [1.2, 2], [1.5, 2.75], [2, 3.7], [2.5, 5], [3, 6], [4, 8], [5, 10], [6, 12]]

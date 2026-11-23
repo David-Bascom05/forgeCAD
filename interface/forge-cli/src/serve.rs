@@ -26,6 +26,15 @@ const TOOLS: [Tool; 14] = [
             ("file", "path to a .fg part"),
             ("sel", "what to ask"),
             ("at", "a feature id: the part as it stood after it"),
+            (
+                "tooling",
+                "bendsim: a tooling set (std-eu, std-us) or a .json file",
+            ),
+            (
+                "vendor",
+                "bendsim: a vendor file whose `tooling` names the press tools",
+            ),
+            ("sequence", "bendsim: bends in order, e.g. 3,1,2 or right,left"),
         ],
     ),
     (
@@ -165,6 +174,13 @@ fn args(p: &Json) -> Args {
         .unwrap_or_default();
     a.words
         .extend(["what", "to", "view", "other"].iter().filter_map(|k| s(k)));
+    // bendsim's options, as its words
+    for k in ["tooling", "vendor", "sequence"] {
+        if let Some(v) = s(k) {
+            a.words.push(k.into());
+            a.words.push(v);
+        }
+    }
     if let Some(t) = s("topic") {
         a.file = t;
     }
