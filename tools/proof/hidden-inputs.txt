@@ -165,19 +165,21 @@ speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|info.dra
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|info.simple = std::sync::OnceLock::new();  x 2
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|simple: std::sync::OnceLock::new(),
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|simple: std::sync::OnceLock<Option<Simple>>,
+no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|by_cov: HashMap<(u64, u64), u32>,
+speed (lazy field or constant table)  @ forge-bool/src/decide_once.rs|lazy|let mid = std::cell::OnceCell::new();
+speed (lazy field or constant table)  @ forge-bool/src/decide_once.rs|lazy|mid: std::cell::OnceCell<HPoint>,
+speed (a counter of skipped booleans, for the gate's report; never read by an op)  @ forge-bool/src/decide_once.rs|atomic|pub static SKIP_WIDE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+speed (a counter of skipped booleans, for the gate's report; never read by an op)  @ forge-bool/src/decide_once.rs|static|pub static SKIP_WIDE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 no-output (FORGE_DECIDE_STATS, prints only)  @ forge-bool/src/decide_once.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_DECIDE_STATS").is_some())
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|by_cov: HashMap<u64, u32>,
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|by_pair: HashMap<u64, u32>,
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|fn unique(used: &mut HashMap<Name, ()>, name: Name) -> Name {
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut by_key: HashMap<(i64, i64, i64, i64), Vec<u32>> = HashMap::default();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut count: HashMap<u32, u32> = HashMap::default();
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut done: HashMap<u32, ()> = HashMap::default();
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut eused: HashMap<Name, ()> = HashMap::default();
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut is_e: HashMap<u32, ()> = HashMap::default();
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut is_v: HashMap<u32, ()> = HashMap::default();
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut members: HashMap<usize, Vec<usize>> = HashMap::default();
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut named: HashMap<Name, ()> = fnames.iter().map(|&n| (n, ())).collect();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut on: HashMap<u32, ()> = HashMap::default();
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut seen: HashMap<(u32, u32), u32> = HashMap::default();
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut used: HashMap<Name, ()> = HashMap::default();
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut vused: HashMap<Name, ()> = HashMap::default();

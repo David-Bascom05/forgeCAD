@@ -1476,14 +1476,10 @@ impl Pts {
 /// `None` (the exact test decides). The f64 points are within a few ulps of the exact ones.
 fn crosses_f(q: [f64; 3], a: [f64; 3], b: [f64; 3], s: usize, t: usize) -> Option<bool> {
     const E: f64 = 1e-12;
-    let scale = 1.0
-        + q[s]
-            .abs()
-            .max(q[t].abs())
-            .max(a[s].abs())
-            .max(a[t].abs())
-            .max(b[s].abs())
-            .max(b[t].abs());
+    // (every coordinate of the three points, the dropped axis too: `Pts::pf`'s bound is relative
+    // to a point's largest coordinate)
+    let m3 = |p: [f64; 3]| p[0].abs().max(p[1].abs()).max(p[2].abs());
+    let scale = 1.0 + m3(q).max(m3(a)).max(m3(b));
     let above = |x: f64| -> Option<bool> {
         let d = x - q[t];
         if d.abs() > E * scale { Some(d > 0.0) } else { None }
