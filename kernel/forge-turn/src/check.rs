@@ -52,8 +52,9 @@ pub struct Obstacle {
     pieces: Vec<OPiece>,
     loop_boxes: Vec<[f64; 4]>,
     region: Region,
-    cx: Ctx,
-    ex: Exact,
+    /// The exact region, for the inside test (None for a staircase stock: tested on its steps).
+    exact: Option<(Ctx, Exact)>,
+    stair: Option<crate::stair::Stair>,
     pub mu: f64,
     pub bbox: [f64; 4],
     /// The region is a half-plane one standing for its full section (see `of`).
@@ -261,25 +262,48 @@ impl Obstacle {
     /// distinct breakpoints, every top above the bottom: a simple counter-clockwise polygon), made
     /// exact without the validation pass.
     pub fn of_valid(name: &str, half: &Region, mu: f64) -> Result<Obstacle, ObstacleError> {
-        Obstacle::of_inner(name, half, mu, false).map(|mut o| {
+        Obstacle::of_inner(name, half, mu, Some(false)).map(|mut o| {
             o.fold_from_half(half);
             o
         })
     }
 
-    /// The obstacle of a region of the whole plane as it is.
-    pub fn of_full(name: &str, region: &Region, mu: f64) -> Result<Obstacle, ObstacleError> {
-        Obstacle::of_inner(name, region, mu, true)
+    /// The staircase stock as an obstacle: its pieces, and the inside test on its steps (exact
+    /// comparisons of f64 data: no exact region needed).
+    pub fn of_stair(name: &str, st: &crate::stair::Stair) -> Result<Obstacle, ObstacleError> {
+        let half = st.region();
+        let mut o = Obstacle::of_inner(name, &half, 0.0, None)?;
+        o.fold_from_half(&half);
+        o.stair = Some(st.clone());
+        Ok(o)
     }
 
-    fn of_inner(name: &str, region: &Region, mu: f64, validate: bool) -> Result<Obstacle, ObstacleError> {
-        let mut cx = Ctx::new();
-        let ex = if validate {
-            region::validate(&mut cx, region)
-        } else {
-            region::exact(&mut cx, region)
-        }
-        .map_err(|e| ObstacleError::Region(format!("{e:?}")))?;
+    /// The obstacle of a region of the whole plane as it is.
+    pub fn of_full(name: &str, region: &Region, mu: f64) -> Result<Obstacle, ObstacleError> {
+        Obstacle::of_inner(name, region, mu, Some(true))
+    }
+
+    /// `validate`: Some(true) validates the region, Some(false) makes it exact unchecked, None
+    /// keeps no exact region (the caller gives the inside test another way).
+    fn of_inner(
+        name: &str,
+        region: &Region,
+        mu: f64,
+        validate: Option<bool>,
+    ) -> Result<Obstacle, ObstacleError> {
+        let exact = match validate {
+            Some(v) => {
+                let mut cx = Ctx::new();
+                let ex = if v {
+                    region::validate(&mut cx, region)
+                } else {
+                    region::exact(&mut cx, region)
+                }
+                .map_err(|e| ObstacleError::Region(format!("{e:?}")))?;
+                Some((cx, ex))
+            }
+            None => None,
+        };
         let mut pieces = Vec::new();
         let mut loop_boxes = Vec::new();
         let mut bbox = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
@@ -312,8 +336,8 @@ impl Obstacle {
             pieces,
             loop_boxes,
             region: region.clone(),
-            cx,
-            ex,
+            exact,
+            stair: None,
             mu,
             bbox,
             fold: false,
@@ -332,15 +356,28 @@ impl Obstacle {
         } else {
             q
         };
-        let m = self.cx.mark();
-        let p = forge_cam_geom::arr::pt(&mut self.cx, q[0], q[1]);
+        if let Some(st) = &self.stair {
+            // the steps: inside iff under the top of q's column and over the bottom (q is off
+            // the boundary, so no tie)
+            let n = st.xs.len();
+            if !(q[0] > st.xs[0] && q[0] < st.xs[n - 1] && q[1] > st.bottom) {
+                return false;
+            }
+            let i = st.xs.partition_point(|x| *x <= q[0]) - 1;
+            return q[1] < st.h[i.min(st.h.len() - 1)];
+        }
+        let Some((cx, ex)) = self.exact.as_mut() else {
+            return false;
+        };
+        let m = cx.mark();
+        let p = forge_cam_geom::arr::pt(cx, q[0], q[1]);
         let mut odd = false;
-        for l in 0..self.ex.loops.len() {
-            if region::inside_loop(&mut self.cx, &self.ex, l, p) {
+        for l in 0..ex.loops.len() {
+            if region::inside_loop(cx, ex, l, p) {
                 odd = !odd;
             }
         }
-        self.cx.release(m);
+        cx.release(m);
         odd
     }
 
@@ -907,9 +944,59 @@ fn witness(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f64)
     None
 }
 
+/// A lower bound on the distance of the body's image over the move from the obstacle, from
+/// boxes alone (see `clearance`), or None for a cylinder (its own bound is exact anyway).
+fn box_bound(body: &Body, mv: &Move, obs: &Obstacle) -> Option<f64> {
+    if body.cyl.is_some() || body.core.is_empty() {
+        return None;
+    }
+    let (a, b) = (mv.start(), mv.end());
+    let mut lo = [f64::INFINITY; 2];
+    let mut hi = [f64::NEG_INFINITY; 2];
+    let pts: Vec<[f64; 2]> = match *mv {
+        Move::Line { .. } => vec![a, b],
+        Move::Arc { c, .. } => {
+            let r = len2(sub(a, c)).hi.max(len2(sub(b, c)).hi);
+            vec![
+                [ip(c[0]).sub(ip(r)).lo, ip(c[1]).sub(ip(r)).lo],
+                [ip(c[0]).add(ip(r)).hi, ip(c[1]).add(ip(r)).hi],
+            ]
+        }
+    };
+    for p in &pts {
+        for k in &body.core {
+            for i in 0..2 {
+                let v = ip(p[i]).add(ip(k[i]));
+                lo[i] = lo[i].min(v.lo);
+                hi[i] = hi[i].max(v.hi);
+            }
+        }
+    }
+    let gx = body.r + if body.on_axis { 0.0 } else { body.depth[1] };
+    let bx = [
+        ip(lo[0]).sub(ip(gx)).lo,
+        ip(lo[1]).sub(ip(body.r)).lo,
+        ip(hi[0]).add(ip(gx)).hi,
+        ip(hi[1]).add(ip(body.r)).hi,
+    ];
+    Some(ip(box_gap(&bx, &obs.bbox)).sub(ip(obs.mu)).lo)
+}
+
 /// The clearance of a body along a move, at least `need` proven, or why not. An arc move is cut
 /// into up to 64 chords until the chords' allowance is small against the margin.
 pub fn clearance(body: &Body, mv: &Move, obs: &mut Obstacle, need: f64) -> Verdict {
+    // the box first: the body's image over the move lies in its core's box over the move's box,
+    // grown by its radius, and by its depth along x on both sides (the smear never exceeds the
+    // depth, and goes outward on either side of the axis); a box gap from the obstacle's box of
+    // at least need (and mu) settles it
+    // (only a positive gap: a zero gap may hide an overlap, which a need below zero — the
+    // gouge tolerance — must not pass)
+    if let Some(l) = box_bound(body, mv, obs)
+        && l > 0.0
+        && l >= need
+    {
+        return Verdict::Clear { lower: l };
+    }
     match *mv {
         Move::Line { a, b } => {
             let v = body_line(body, a, b, obs, need, SLABS);
