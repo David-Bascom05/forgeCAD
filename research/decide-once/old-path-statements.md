@@ -114,8 +114,15 @@ The parts:
   - `Refines δ` maps each vertex to its cluster, with `ends_on`;
   - `Bounds` is split: `frontier_sub`, and `faces_sub` off the vertex zones;
   - `ValidSolid δ b := ∃ bs, exactOf δ b = some bs ∧ EdgeIsolated ∧ ValidExact bs`.
-  Asked: the local formula Φ_u, with `⟦b⟧ ∩ zone u = {Φ_u on the exact carriers' signs}`. It is the
-  computable form of the exact test near a vertex.
+  **Φ_u, done (53957ebb).**
+  - `BodyModel.formulas`, an `SForm` per vertex; the stored body and its exact counterpart share it
+    (`Refines.formulas_eq`).
+  - `Bounds.local_formula`, and the decision lemma `mem_denote_zone`: for x in u's zone and off u's
+    incident carriers, `x ∈ ⟦b⟧ ↔ Φ_u.den (exact carriers) x`. So the exact test near a vertex is
+    "evaluate Φ_u at x's exact signs".
+  - A point on an incident carrier inside a zone is the residual per-decision refusal.
+  - Named hypothesis on aeneas's abstraction function: **`FormulaOfTopology abs`**. The Φ_u that `abs`
+    reads off a stored body's topology equals the stored local cone at u.
   Done in BodyModel.lean, b66293ec (`exactOf`, `exactOf_refines`, `denote_spec`, `denote_refines`).
   Also asked: `exactOf = none` when a second branch of the meet enters an edge's δ-tube.
   `exactOf_refines` needs `hface` and `hedge` (each stored region and curve within δ of its exact
