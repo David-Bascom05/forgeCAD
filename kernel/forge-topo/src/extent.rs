@@ -15,12 +15,15 @@
 //! - a sphere: its centre out by the radius along each axis, and its poles; a torus: the four
 //!   points of each tube circle square to the axis, and a spindle's poles;
 //! - a constructed surface straight across in v lies between its boundary's points; any other:
-//!   its stationary points, from a grid of samples inside the face, refined to rounding;
+//!   its interior stationary points, from a grid of samples inside the face (its loops drawn
+//!   coarsely, four chords an edge: its points are each solved for), refined by Newton's steps
+//!   to rounding (a climb stopped by the drawn boundary is a boundary point, left to the edges);
 //!
-//! each interior point counted only if it is in the face (in its drawn loops). Every point
-//! counted is a point of the body, so the box is never larger than the body's; the closed
-//! forms make it the exact box to rounding, and the searched kinds too wherever their samples
-//! bracket each extreme.
+//! each interior point counted only if it is in the face (in its drawn loops). The searched
+//! kinds run last, and only where their cached proven bound (the edge's or face's box) reaches
+//! past the box so far. Every point counted is a point of the body, so the box is never larger
+//! than the body's; the closed forms make it the exact box to rounding, and the searched kinds
+//! too wherever their samples bracket each extreme (not proven).
 
 use crate::uv::{UvLoop, default_segments, face_uv_loops, face_uv_loops_with, point_in_loops};
 use crate::{Body, FaceId};
@@ -47,7 +50,7 @@ pub fn exact_box(b: &Body) -> Box3 {
     for e in b.edge_ids() {
         let edge = b.edge(e);
         if searched_curve(&edge.curve) && reaches(&b.edge_box(e), &bb) {
-            curve_into(&edge.curve, edge.range, &mut bb);
+            curve_into(&edge.curve, edge.range, &b.edge_box(e), &mut bb);
         }
     }
     for f in b.face_ids() {
@@ -102,7 +105,7 @@ pub fn curve_box(c: &Curve, range: Interval) -> Box3 {
                 }
             }
         }
-        Curve::Intersection(_) | Curve::Procedural(_) => curve_into(c, range, &mut b),
+        Curve::Intersection(_) | Curve::Procedural(_) => curve_into(c, range, &c.bbox(range), &mut b),
     }
     b
 }
@@ -112,11 +115,28 @@ fn reaches(b: &Box3, bb: &Box3) -> bool {
     bb.is_empty() || bb.hull(b) != *bb
 }
 
-/// Takes into `bb` a searched curve's extremes over `range`: each axis's height sampled, a
-/// sample above both neighbours (in a piece whose proven bound reaches past the box) bracketing
-/// a maximum, found by Newton's steps on the height's slope, kept in the bracket by bisection.
-fn curve_into(c: &Curve, range: Interval, bb: &mut Box3) {
+/// Takes into `bb` a searched curve's extremes over `range`, along each direction its proven
+/// bound `bound` reaches past `bb` on: the height sampled, a sample above both neighbours
+/// bracketing a maximum, found by Newton's steps on the height's slope, kept in the bracket by
+/// bisection.
+fn curve_into(c: &Curve, range: Interval, bound: &Box3, bb: &mut Box3) {
     const N: usize = 32;
+    let mut dirs = [(0usize, 0.0f64); 6];
+    let mut nd = 0;
+    for k in 0..3 {
+        let (x, y) = (axis(bound, k), axis(bb, k));
+        if bb.is_empty() || x.hi > y.hi {
+            dirs[nd] = (k, 1.0);
+            nd += 1;
+        }
+        if bb.is_empty() || x.lo < y.lo {
+            dirs[nd] = (k, -1.0);
+            nd += 1;
+        }
+    }
+    if nd == 0 {
+        return;
+    }
     let t = |i: usize| (range.lo + range.width() * (i as f64 / N as f64)).min(range.hi);
     let mut ps = Vec::with_capacity(N + 1);
     for i in 0..=N {
@@ -125,29 +145,18 @@ fn curve_into(c: &Curve, range: Interval, bb: &mut Box3) {
     for p in &ps {
         bb.include(*p);
     }
-    for (k, a) in AXES.iter().enumerate() {
-        for s in [1.0, -1.0] {
-            let h = |p: Point3| s * p.to_vec().dot(*a);
-            for i in 1..N {
-                if !(h(ps[i]) >= h(ps[i - 1]) && h(ps[i]) >= h(ps[i + 1])) {
-                    continue;
-                }
-                let (lo, hi) = (t(i - 1), t(i + 1));
-                let side = axis(&c.bbox(Interval::new(lo, hi)), k);
-                let now = axis(bb, k);
-                if !(if s > 0.0 {
-                    side.hi > now.hi
-                } else {
-                    side.lo < now.lo
-                }) {
-                    continue;
-                }
-                let x = peak(lo, hi, |u| {
-                    let d = c.deriv(u);
-                    (s * d.d1.dot(*a), s * d.d2.dot(*a))
-                });
-                bb.include(c.eval(x));
+    for &(k, s) in &dirs[..nd] {
+        let a = AXES[k];
+        let h = |p: Point3| s * p.to_vec().dot(a);
+        for i in 1..N {
+            if !(h(ps[i]) >= h(ps[i - 1]) && h(ps[i]) >= h(ps[i + 1])) {
+                continue;
             }
+            let x = peak(t(i - 1), t(i + 1), |u| {
+                let d = c.deriv(u);
+                (s * d.d1.dot(a), s * d.d2.dot(a))
+            });
+            bb.include(c.eval(x));
         }
     }
 }
@@ -185,38 +194,6 @@ fn peak(mut lo: f64, mut hi: f64, g: impl Fn(f64) -> (f64, f64)) -> f64 {
         x = next;
     }
     x
-}
-
-/// Whether the surface's proven bounds over its domain, split where they reach past `bb` along
-/// one of `dirs` (to cells of a 2⁸th of it, 256 of them at most), still reach past it.
-fn bound_reaches(s: &Surface, dirs: &[(Vec3, f64)], bb: &Box3) -> bool {
-    let d = s.domain();
-    let whole = forge_math::Box2::new(d.u.interval(), d.v.interval());
-    if !(whole.u.width().is_finite() && whole.v.width().is_finite()) {
-        return true;
-    }
-    let past = |b: &Box3| {
-        dirs.iter().any(|&(a, sg)| {
-            let k = AXES.iter().position(|x| *x == a).unwrap_or(0);
-            let (x, y) = (axis(b, k), axis(bb, k));
-            if sg > 0.0 { x.hi > y.hi } else { x.lo < y.lo }
-        })
-    };
-    let mut todo = vec![(whole, 0u32)];
-    let mut cells = 0;
-    while let Some((c, depth)) = todo.pop() {
-        if !past(&s.bbox(c)) {
-            continue;
-        }
-        cells += 1;
-        if depth == 8 || cells > 256 {
-            return true;
-        }
-        let (a, b) = c.split();
-        todo.push((a, depth + 1));
-        todo.push((b, depth + 1));
-    }
-    false
 }
 
 /// `b` along axis `k`.
@@ -302,7 +279,7 @@ fn face_extremes(b: &Body, f: FaceId, bb: &mut Box3) {
                     dirs.push((*a, -1.0));
                 }
             }
-            if dirs.is_empty() || !bound_reaches(s, &dirs, bb) {
+            if dirs.is_empty() {
                 return;
             }
             // (drawn coarsely: a constructed surface's points are each solved for)
@@ -416,12 +393,6 @@ fn searched(s: &Surface, loops: &[UvLoop], dirs: &[(Vec3, f64)], bb: &mut Box3) 
     for &(a, sg) in dirs {
         {
             let h = |p: Point3| sg * p.to_vec().dot(a);
-            let k = AXES.iter().position(|x| *x == a).unwrap_or(0);
-            // the box's side along this direction, and whether a bound is past it
-            let beyond = |b: &Box3, now: &Box3| {
-                let (x, y) = (axis(b, k), axis(now, k));
-                now.is_empty() || if sg > 0.0 { x.hi > y.hi } else { x.lo < y.lo }
-            };
             for j in 0..=G {
                 for i in 0..=G {
                     let Some(p) = grid[j * (G + 1) + i] else { continue };
@@ -438,15 +409,6 @@ fn searched(s: &Surface, loops: &[UvLoop], dirs: &[(Vec3, f64)], bb: &mut Box3) 
                         }
                     }
                     if !top {
-                        continue;
-                    }
-                    // the surface's bound over the cells round the sample: not past the box, no
-                    // point there is
-                    let cell = forge_math::Box2::new(
-                        Interval::new(at(i.saturating_sub(1), 0).x, at((i + 1).min(G), 0).x),
-                        Interval::new(at(0, j.saturating_sub(1)).y, at(0, (j + 1).min(G)).y),
-                    );
-                    if !beyond(&s.bbox(cell), bb) {
                         continue;
                     }
                     // Newton's steps on the height's gradient from the sample (a step up the
