@@ -50,6 +50,15 @@ def yTurn (q : Quadric) (c : Rat) : Poly :=
   else if !Poly.isZero r.2.1 then r.2.1
   else r.1
 
+/-- The carrier vanishes on the whole plane `x = c` (a plane `x = c` itself). -/
+def zeroOn (q : Quadric) (c : Rat) : Bool :=
+  let r := restr q c
+  Poly.isZero r.1 && Poly.isZero r.2.1 && Poly.isZero r.2.2
+
+/-- The carriers that do not vanish on the plane: the ones whose roots, turns and crossings there
+are finite. -/
+def activeOn (qs : List Quadric) (c : Rat) : List Quadric := qs.filter fun q => !zeroOn q c
+
 def turnsOn (qs : List Quadric) (c : Rat) : Option (List Num) :=
   (qs.mapM fun q => rootsOf (yTurn q c) rootFuel).map List.flatten
 
@@ -63,22 +72,23 @@ def isoOkB (n : Num) : Bool := isoOkN n
 def lineSamples (qs : List Quadric) (c c' : Rat) : Option (List QS) := do
   let P : V3 := ⟨c, c', 0⟩
   let D : V3 := ⟨0, 0, 1⟩
-  let roots ← (qs.mapM fun q => rootsOf (alongLine q P D) rootFuel).map List.flatten
+  let roots ← ((activeOn qs c).mapM fun q => rootsOf (alongLine q P D) rootFuel).map List.flatten
   let Ez ← pickEvents roots
   let facets ← Ez.mapM fun n => covOn qs P D n signFuel
   let cells ← (planesOf Ez).mapM fun t => covOn qs P D (.rat t) signFuel
   pure ((facets ++ cells).map fun X => ⟨.line, X⟩)
 
-def edgeSample (qs : List Quadric) (e : ESample) : Option QS :=
-  if isoOkN e.y && e.dOk signFuel then (edgeCov qs e signFuel).map fun X => ⟨.edge, X⟩ else none
+def edgeSample (qs : List Quadric) (tg : Tag) (e : ESample) : Option QS :=
+  if isoOkN e.y && e.dOk signFuel then (edgeCov qs e signFuel).map fun X => ⟨tg, X⟩ else none
 
-/-- The samples of the sweep plane `x = c`. -/
-def planeSamples (qs : List Quadric) (c : Rat) : Option (List QS) := do
-  let es ← edgesOn qs c
-  let turns ← turnsOn qs c
+/-- The samples of the sweep plane `x = c`. On a plane carrier `x = c` (`onEvent`), two other
+carriers' traces cross at a point of three carriers, a vertex, and the crossing is tagged so. -/
+def planeSamples (qs : List Quadric) (onEvent : Bool) (c : Rat) : Option (List QS) := do
+  let es ← edgesOn ((activeOn qs c).filter fun q => !isXPlane q) c
+  let turns ← turnsOn (activeOn qs c) c
   let Ey ← pickEvents (turns ++ es.map ESample.y)
   let lines ← (planesOf Ey).mapM (lineSamples qs c)
-  let edges ← es.mapM (edgeSample qs)
+  let edges ← es.mapM (edgeSample qs (if onEvent then .vert else .edge))
   pure (lines.flatten ++ edges)
 
 def numYQ (a b c : Quadric) : Rat :=
@@ -91,9 +101,25 @@ def numZQ (a b c : Quadric) : Rat :=
 def vertSample (qs : List Quadric) (v : VSample) : Option QS :=
   if isoOkN v.x && v.dOk signFuel then (vertCov qs v signFuel).map fun X => ⟨.vert, X⟩ else none
 
+/-- The common points of two planes and `q`, on the planes' line. -/
+def lineVerts (qs : List Quadric) (a b q : Quadric) : Option (List QS) := do
+  let L := lineOf a b
+  if !lineOk a b L then none
+  let ns ← rootsOf (alongLine q L.1 L.2.1) rootFuel
+  if !ns.all isoOkN then none
+  ns.mapM fun n => (covOn qs L.1 L.2.1 n signFuel).map fun X => ⟨.vert, X⟩
+
+def lineTripleS (qs : List Quadric) (a b c : Quadric) : Option (List QS) :=
+  if lineOk a b (lineOf a b) then lineVerts qs a b c
+  else if lineOk a c (lineOf a c) then lineVerts qs a c b
+  else if lineOk b c (lineOf b c) then lineVerts qs b c a
+  else none
+
 /-- The vertex samples of a triple. -/
 def tripleSamples (qs : List Quadric) (a b c : Quadric) : Option (List QS) :=
-  if (isConstQ a && a.c != 0) || (isConstQ b && b.c != 0) || (isConstQ c && c.c != 0) then some []
+  if (isConstQ a && a.c != 0) || (isConstQ b && b.c != 0) || (isConstQ c && c.c != 0) ||
+    parallelApart a b || parallelApart a c || parallelApart b c then some []
+  else if (lineTripleS qs a b c).isSome then lineTripleS qs a b c
   else if isPlaneQ a && isPlaneQ b && isPlaneQ c then
     let d := det3Q a b c
     if d != 0 then
@@ -106,20 +132,55 @@ def vertSamples (qs : List Quadric) : Option (List QS) :=
   ((tri qs).mapM fun (t : Quadric × Quadric × Quadric) => tripleSamples qs t.1 t.2.1 t.2.2).map
     List.flatten
 
+/-- The rational events: the planes `x = e` a plane carrier `x = e` lies in, sampled too, since
+its cells lie in no other sweep plane. -/
+def ratEvents (E : List Num) : List Rat := E.filterMap fun n => match n with
+  | .rat q => some q
+  | .iso _ => none
+
+/-- **The frame certificate**: every carrier is a plane `x = const` (whose cells lie in a rational
+event plane), or meets every line parallel to `z` in finitely many points (a plane with a `z` term,
+or `zz ≠ 0`). Then no carrier's trace on a sweep plane has a vertical line, so the rational lines
+`y = c'` meet every curve of it. -/
+def frameOk (qs : List Quadric) : Bool :=
+  qs.all fun q => isXPlane q || (isPlaneQ q && q.lz != 0) || q.zz != 0
+
 /-- The samples in the frame the carriers are given in. -/
 def samplesAt (qs : List Quadric) : Option (List QS) := do
   let E ← eventsOf qs rootFuel
-  let ps ← (planesOf E).mapM (planeSamples qs)
+  let ps ← (planesOf E).mapM (planeSamples qs false)
+  let es ← ((ratEvents E).filter fun e => qs.any fun q => zeroOn q e).mapM (planeSamples qs true)
   let vs ← vertSamples qs
-  pure (ps.flatten ++ vs)
+  pure (ps.flatten ++ es.flatten ++ vs)
 
-/-- **The samples**: every sweep plane's, and the vertices, in the first sheared frame
-`(x, y + λz, z)` (`shears`, QPropose.lean) where every step succeeds. Two crossings on one sweep
-plane with one `y` need the shear. The shear keeps `x`, so the sweep is the same one. `none`:
+/-- `q(x + μy + νz, y, z)`: tilts the sweep, so that no axis direction (a box's edges, a
+cylinder's rulings) lies in a level plane. -/
+def _root_.ForgeExact.Quad.Quadric.shearX (μ ν : Rat) (q : Quadric) : Quadric :=
+  ⟨q.xx, q.yy + q.xx * μ * μ + q.xy * μ, q.zz + q.xx * ν * ν + q.xz * ν, q.xy + 2 * q.xx * μ,
+   q.xz + 2 * q.xx * ν, q.yz + 2 * q.xx * μ * ν + q.xy * ν + q.xz * μ, q.lx, q.ly + q.lx * μ,
+   q.lz + q.lx * ν, q.c⟩
+
+/-- A frame: the sweep tilt `(μ, ν)` and the projection shear `λ`. -/
+abbrev Frame := Rat × Rat × Rat
+
+/-- The carrier in the frame: `q(x + μ(y + λz) + νz, y + λz, z)`. -/
+def inFrame (f : Frame) (q : Quadric) : Quadric := (q.shearX f.1 f.2.1).shear f.2.2
+
+/-- **The frames tried, in order.** Tilted ones first (no axis direction is level there), then
+the untilted ones (where planes `x = c` are rational events). -/
+def frames : List Frame :=
+  [(1/3, 1/5, 1), (1/3, 1/5, 2), (2/7, 3/11, 1), (2/7, 3/11, 3), (3/13, 5/17, 1), (3/13, 5/17, 2)] ++
+    shears.map (fun l => (0, 0, l))
+
+/-- **The samples**: every sweep plane's, and the vertices, in the first frame of `frames` (a
+tilted sweep and a projection shear) that passes `frameOk` and where every step succeeds. The tilt
+keeps every rational line and curve direction out of the level planes; the projection shear
+separates two crossings of one sweep plane with one `y`. `none`:
 undecided in every frame (fuel, or a degenerate input the proposers do not cover). Never a wrong
 covector. -/
 def samplesOf (qs : List Quadric) : Option (List QS) :=
-  shears.findSome? fun l => samplesAt (qs.map (Quadric.shear l))
+  frames.findSome? fun f =>
+    if frameOk (qs.map (inFrame f)) then samplesAt (qs.map (inFrame f)) else none
 
 /-! ## Every sample is realised -/
 
@@ -168,8 +229,8 @@ theorem lineSamples_realised {qs : List Quadric} {c c' : Rat} {ss : List QS}
   · obtain ⟨t, -, hcov⟩ := mapM_mem' hc X hX
     exact ⟨_, covOn_spec M _ _ (show Denotes M (.rat t) (M.q t) from rfl) _ qs X hcov⟩
 
-theorem edgeSample_realised {qs : List Quadric} {e : ESample} {s : QS}
-    (h : edgeSample qs e = some s) : RealCov M qs s.cov := by
+theorem edgeSample_realised {qs : List Quadric} {tg : Tag} {e : ESample} {s : QS}
+    (h : edgeSample qs tg e = some s) : RealCov M qs s.cov := by
   unfold edgeSample at h
   by_cases hc : (isoOkN e.y && e.dOk signFuel) = true
   · rw [if_pos hc] at h
@@ -180,8 +241,8 @@ theorem edgeSample_realised {qs : List Quadric} {e : ESample} {s : QS}
     exact ⟨_, edgeCov_spec M hα hc.2 qs X hX⟩
   · rw [if_neg hc] at h; cases h
 
-theorem planeSamples_realised {qs : List Quadric} {c : Rat} {ss : List QS}
-    (h : planeSamples qs c = some ss) : ∀ s ∈ ss, RealCov M qs s.cov := by
+theorem planeSamples_realised {qs : List Quadric} {b : Bool} {c : Rat} {ss : List QS}
+    (h : planeSamples qs b c = some ss) : ∀ s ∈ ss, RealCov M qs s.cov := by
   unfold planeSamples at h
   simp only [Option.bind_eq_bind, Option.pure_def, Option.bind_eq_some_iff,
     Option.some.injEq] at h
@@ -206,11 +267,45 @@ theorem vertSample_realised {qs : List Quadric} {v : VSample} {s : QS}
     exact ⟨_, vertCov_spec M hα hc.2 qs X hX⟩
   · rw [if_neg hc] at h; cases h
 
+theorem lineVerts_realised {qs : List Quadric} {a b q : Quadric} {ss : List QS}
+    (h : lineVerts qs a b q = some ss) : ∀ s ∈ ss, RealCov M qs s.cov := by
+  unfold lineVerts at h
+  simp only [Option.bind_eq_bind] at h
+  split at h
+  · cases h
+  cases hr : rootsOf (alongLine q (lineOf a b).1 (lineOf a b).2.1) rootFuel with
+  | none => rw [hr] at h; cases h
+  | some ns =>
+    rw [hr, Option.bind_some] at h
+    split at h
+    · cases h
+    rename_i hok
+    simp only [Bool.not_eq_true', Bool.not_eq_false, List.all_eq_true] at hok
+    intro s hs
+    obtain ⟨n, hn, hX⟩ := mapM_mem' h s hs
+    simp only [Option.map_eq_some_iff] at hX
+    obtain ⟨X, hX, rfl⟩ := hX
+    obtain ⟨t, ht⟩ := denotes_of_isoOkN M (hok n hn)
+    exact ⟨_, covOn_spec M _ _ ht _ qs X hX⟩
+
+theorem lineTripleS_realised {qs : List Quadric} {a b c : Quadric} {ss : List QS}
+    (h : lineTripleS qs a b c = some ss) : ∀ s ∈ ss, RealCov M qs s.cov := by
+  unfold lineTripleS at h
+  split at h
+  · exact lineVerts_realised M h
+  split at h
+  · exact lineVerts_realised M h
+  split at h
+  · exact lineVerts_realised M h
+  · cases h
+
 theorem tripleSamples_realised {qs : List Quadric} {a b c : Quadric} {ss : List QS}
     (h : tripleSamples qs a b c = some ss) : ∀ s ∈ ss, RealCov M qs s.cov := by
   unfold tripleSamples at h
   split at h
   · cases h; intro s hs; nomatch hs
+  split at h
+  · exact lineTripleS_realised M h
   split at h
   · dsimp only at h
     split at h
@@ -232,11 +327,15 @@ theorem samplesAt_realised {qs : List Quadric} {ss : List QS} (h : samplesAt qs 
   unfold samplesAt at h
   simp only [Option.bind_eq_bind, Option.pure_def, Option.bind_eq_some_iff,
     Option.some.injEq] at h
-  obtain ⟨E, -, ps, hps, vs, hvs, rfl⟩ := h
+  obtain ⟨E, -, ps, hps, es, hes, vs, hvs, rfl⟩ := h
   intro s hs
+  rcases List.mem_append.mp hs with hs | hs
   rcases List.mem_append.mp hs with hs | hs
   · obtain ⟨l, hl, hs⟩ := List.mem_flatten.mp hs
     obtain ⟨c, -, hc⟩ := mapM_mem' hps l hl
+    exact planeSamples_realised M hc s hs
+  · obtain ⟨l, hl, hs⟩ := List.mem_flatten.mp hs
+    obtain ⟨c, -, hc⟩ := mapM_mem' hes l hl
     exact planeSamples_realised M hc s hs
   · unfold vertSamples at hvs
     simp only [Option.map_eq_some_iff] at hvs
@@ -246,6 +345,29 @@ theorem samplesAt_realised {qs : List Quadric} {ss : List QS} (h : samplesAt qs 
     exact tripleSamples_realised M ht s hs
 
 /-- A covector realised for the sheared carriers is realised for the carriers. -/
+theorem shearX_ev (μ ν : Rat) (q : Quadric) (x y z : K) :
+    Quadric.evK M (q.shearX μ ν) (x, y, z) =
+      Quadric.evK M q (x + M.q μ * y + M.q ν * z, y, z) := by
+  simp only [Quadric.evK, Quadric.shearX, Model.q, M.ι.map_add, M.ι.map_mul]
+  have h2 : M.ι.f 2 = 1 + 1 := by
+    rw [show (2 : Rat) = 1 + 1 by grind, M.ι.map_add, M.ι.map_one]
+  rw [h2]
+  grind
+
+theorem inFrame_ev (f : Frame) (q : Quadric) (x y z : K) :
+    Quadric.evK M (inFrame f q) (x, y, z) =
+      Quadric.evK M q (x + M.q f.1 * (y + M.q f.2.2 * z) + M.q f.2.1 * z, y + M.q f.2.2 * z, z) := by
+  simp only [inFrame, shear_ev, shearX_ev]
+
+theorem realCov_frame {qs : List Quadric} {f : Frame} {X : Cov}
+    (h : RealCov M (qs.map (inFrame f)) X) : RealCov M qs X := by
+  obtain ⟨⟨x, y, z⟩, rfl⟩ := h
+  refine ⟨(x + M.q f.1 * (y + M.q f.2.2 * z) + M.q f.2.1 * z, y + M.q f.2.2 * z, z), ?_⟩
+  simp only [covOfK, List.map_map]
+  apply List.map_congr_left
+  intro q _
+  simp only [Function.comp, inFrame_ev]
+
 theorem realCov_shear {qs : List Quadric} {l : Rat} {X : Cov}
     (h : RealCov M (qs.map (Quadric.shear l)) X) : RealCov M qs X := by
   obtain ⟨⟨x, y, z⟩, rfl⟩ := h
@@ -260,8 +382,10 @@ theorem samplesOf_realised {qs : List Quadric} {ss : List QS} (h : samplesOf qs 
     ∀ s ∈ ss, RealCov M qs s.cov := by
   unfold samplesOf at h
   obtain ⟨l, -, hl⟩ := List.exists_of_findSome?_eq_some h
+  split at hl
+  case isFalse => cases hl
   intro s hs
-  exact realCov_shear M (samplesAt_realised M hl s hs)
+  exact realCov_frame M (samplesAt_realised M hl s hs)
 
 end Model
 

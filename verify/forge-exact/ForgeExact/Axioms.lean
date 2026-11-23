@@ -253,10 +253,19 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.eventsOf_complete
   ForgeExact.DecideOnce.Curved.eventsOf_sep
   ForgeExact.DecideOnce.Curved.planes_between
+  ForgeExact.DecideOnce.Curved.xplane_x
+  ForgeExact.DecideOnce.Curved.parallelApart_ne
+  ForgeExact.DecideOnce.Curved.span3
+  ForgeExact.DecideOnce.Curved.line_cover
+  ForgeExact.DecideOnce.Curved.lineEvents_complete
+  ForgeExact.DecideOnce.Curved.lineTriple_complete
   ForgeExact.DecideOnce.Curved.lineSamples_realised
   ForgeExact.DecideOnce.Curved.planeSamples_realised
   ForgeExact.DecideOnce.Curved.tripleSamples_realised
   ForgeExact.DecideOnce.Curved.realCov_shear
+  ForgeExact.DecideOnce.Curved.lineVerts_realised
+  ForgeExact.DecideOnce.Curved.shearX_ev
+  ForgeExact.DecideOnce.Curved.realCov_frame
   ForgeExact.DecideOnce.Curved.samplesOf_realised
   ForgeExact.DecideOnce.Curved.qledger_pieceFacet
   ForgeExact.DecideOnce.Curved.qledger_oneFace

@@ -164,6 +164,19 @@ def eventTriples (qs : List Quadric) : List (Quadric × Quadric × Quadric) :=
 /-- A constant (no `x`, `y`, `z` terms at all). -/
 def isConstQ (q : Quadric) : Bool := isPlaneQ q && q.lx == 0 && q.ly == 0 && q.lz == 0
 
+/-- A plane `x = const`: its zeros all have one `x`, an event. -/
+def isXPlane (q : Quadric) : Bool := isPlaneQ q && q.ly == 0 && q.lz == 0 && q.lx != 0
+
+/-- `α a + β b` is a nonzero constant: the planes `a`, `b` have no common point. -/
+def sepWith (a b : Quadric) (p : Rat × Rat) : Bool :=
+  p.1 * a.lx + p.2 * b.lx == 0 && p.1 * a.ly + p.2 * b.ly == 0 && p.1 * a.lz + p.2 * b.lz == 0 &&
+    p.1 * a.c + p.2 * b.c != 0
+
+/-- Two parallel, distinct planes, certified by `sepWith`. -/
+def parallelApart (a b : Quadric) : Bool :=
+  isPlaneQ a && isPlaneQ b &&
+    [(b.lx, -a.lx), (b.ly, -a.ly), (b.lz, -a.lz)].any (sepWith a b)
+
 /-- The determinant of three planes' normals, and Cramer's numerator for `x`. -/
 def det3Q (a b c : Quadric) : Rat :=
   a.lx * (b.ly * c.lz - b.lz * c.ly) - a.ly * (b.lx * c.lz - b.lz * c.lx) +
@@ -172,11 +185,61 @@ def numXQ (a b c : Quadric) : Rat :=
   -(a.c * (b.ly * c.lz - b.lz * c.ly) - a.ly * (b.c * c.lz - b.lz * c.c) +
     a.lz * (b.c * c.ly - b.ly * c.c))
 
+/-! ### Two planes: their line
+
+Two planes with independent normals meet in the rational line `P + s D`. The third carrier's
+zeros on it are the roots of its restriction (`alongLine`). The line is normalised so that
+`D.x = 1` and `P.x = 0` (then `s` is `x`), unless it lies in a level plane (`D.x = 0`: one `x`).
+Everything the proof uses is checked (`lineOk`). -/
+
+def nrm (a : Quadric) : V3 := ⟨a.lx, a.ly, a.lz⟩
+
+/-- The line of two planes, untrusted: a point, a direction and the direction's scale against
+`n_a × n_b`. -/
+def lineOf (a b : Quadric) : V3 × V3 × Rat :=
+  let C := (nrm a).cross (nrm b)
+  let dd := C.dot C
+  let u := (nrm b).cross C
+  let w := C.cross (nrm a)
+  let P : V3 := ⟨(-a.c * u.x - b.c * w.x) / dd, (-a.c * u.y - b.c * w.y) / dd,
+    (-a.c * u.z - b.c * w.z) / dd⟩
+  if C.x != 0 then
+    let μ := -P.x / C.x
+    (⟨P.x + μ * C.x, P.y + μ * C.y, P.z + μ * C.z⟩, ⟨C.x / C.x, C.y / C.x, C.z / C.x⟩, 1 / C.x)
+  else (P, C, 1)
+
+/-- The checks: both planes, `P` on both, `D = κ (n_a × n_b)` with `κ ≠ 0`, `n_a × n_b ≠ 0`. -/
+def lineOk (a b : Quadric) (L : V3 × V3 × Rat) : Bool :=
+  let C := (nrm a).cross (nrm b)
+  isPlaneQ a && isPlaneQ b && C.dot C != 0 && L.2.2 != 0 &&
+    (nrm a).dot L.1 + a.c == 0 && (nrm b).dot L.1 + b.c == 0 &&
+    L.2.1.x == L.2.2 * C.x && L.2.1.y == L.2.2 * C.y && L.2.1.z == L.2.2 * C.z
+
+/-- The `x` of the common zeros of two planes and a carrier `q`, by their line. -/
+def lineEvents (a b q : Quadric) (fuel : Nat) : Option (List Num) :=
+  let L := lineOf a b
+  if !lineOk a b L then none
+  else if L.2.1.x == 0 then some [.rat L.1.x]
+  else if L.2.1.x == 1 && L.1.x == 0 then rootsOf (alongLine q L.1 L.2.1) fuel
+  else none
+
+/-- Two of the three are planes with a line: the line's events. -/
+def lineTriple (a b c : Quadric) (fuel : Nat) : Option (List Num) :=
+  if lineOk a b (lineOf a b) then lineEvents a b c fuel
+  else if lineOk a c (lineOf a c) then lineEvents a c b fuel
+  else if lineOk b c (lineOf b c) then lineEvents b c a fuel
+  else none
+
 /-- The `x` of every common point of a triple, proposed: a nonzero constant has no zeros; three
 planes meet at Cramer's point (if their normals are independent); otherwise the curved
 proposers. `none`: not decided (a singular triple of planes, or fuel spent). -/
 def proposeTripleX (a b c : Quadric) (fuel : Nat) : Option (List Num) :=
   if (isConstQ a && a.c != 0) || (isConstQ b && b.c != 0) || (isConstQ c && c.c != 0) then some []
+  else if parallelApart a b || parallelApart a c || parallelApart b c then some []
+  else if isXPlane a then some [.rat (-a.c / a.lx)]
+  else if isXPlane b then some [.rat (-b.c / b.lx)]
+  else if isXPlane c then some [.rat (-c.c / c.lx)]
+  else if (lineTriple a b c fuel).isSome then lineTriple a b c fuel
   else if isPlaneQ a && isPlaneQ b && isPlaneQ c then
     if det3Q a b c != 0 then some [.rat (numXQ a b c / det3Q a b c)] else none
   else (proposeTriple a b c fuel).map (List.map VSample.x)
@@ -324,6 +387,148 @@ theorem const_ne {q : Quadric} (h : (isConstQ q && q.c != 0) = true) (x y z : K)
   have : M.q q.c = M.q 0 := by rw [Model.q_zero]; grind
   exact hc ((Model.q_eq M).mp this)
 
+theorem parallelApart_ne {a b : Quadric} (h : parallelApart a b = true) {x y z : K}
+    (ea : Quadric.evK M a (x, y, z) = 0) (eb : Quadric.evK M b (x, y, z) = 0) : False := by
+  simp only [parallelApart, Bool.and_eq_true, List.any_eq_true] at h
+  obtain ⟨⟨hpa, hpb⟩, p, -, hp⟩ := h
+  simp only [sepWith, Bool.and_eq_true, beq_iff_eq, bne_iff_ne, ne_eq] at hp
+  obtain ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩ := hp
+  rw [plane_ev M hpa] at ea; rw [plane_ev M hpb] at eb
+  have e1 := congrArg M.q h1; have e2 := congrArg M.q h2; have e3 := congrArg M.q h3
+  simp only [Model.q_add, Model.q_mul, Model.q_zero] at e1 e2 e3
+  apply h4
+  apply (Model.q_eq M).mp
+  simp only [Model.q_add, Model.q_mul, Model.q_zero]
+  have : M.q p.1 * (M.q a.lx * x + M.q a.ly * y + M.q a.lz * z + M.q a.c) +
+      M.q p.2 * (M.q b.lx * x + M.q b.ly * y + M.q b.lz * z + M.q b.c) = 0 := by
+    rw [ea, eb]; grind
+  grind
+
+theorem xplane_x {q : Quadric} (h : isXPlane q = true) {x y z : K}
+    (e : Quadric.evK M q (x, y, z) = 0) : Denotes M (.rat (-q.c / q.lx)) x := by
+  simp only [isXPlane, Bool.and_eq_true, beq_iff_eq, bne_iff_ne, ne_eq] at h
+  obtain ⟨⟨⟨hp, h1⟩, h2⟩, h3⟩ := h
+  rw [plane_ev M hp, h1, h2, Model.q_zero] at e
+  show x = M.q (-q.c / q.lx)
+  have hl : M.q q.lx ≠ 0 := fun h0 => h3 ((Model.q_eq M).mp (by rw [h0, Model.q_zero]))
+  have hq : M.q (-q.c / q.lx) * M.q q.lx = - M.q q.c := by
+    rw [← Model.q_mul, ← Model.q_neg]; congr 1; exact Rat.div_mul_cancel h3
+  grind
+
+/-- A vector orthogonal to two normals is a multiple of their cross product:
+`|C|² v = (C·v) C`, `C = A × B`. -/
+theorem span3 {A1 A2 A3 B1 B2 B3 v1 v2 v3 : K} (va : A1 * v1 + A2 * v2 + A3 * v3 = 0)
+    (vb : B1 * v1 + B2 * v2 + B3 * v3 = 0) :
+    let C1 := A2 * B3 - A3 * B2
+    let C2 := A3 * B1 - A1 * B3
+    let C3 := A1 * B2 - A2 * B1
+    (C1 * C1 + C2 * C2 + C3 * C3) * v1 = (C1 * v1 + C2 * v2 + C3 * v3) * C1 ∧
+    (C1 * C1 + C2 * C2 + C3 * C3) * v2 = (C1 * v1 + C2 * v2 + C3 * v3) * C2 ∧
+    (C1 * C1 + C2 * C2 + C3 * C3) * v3 = (C1 * v1 + C2 * v2 + C3 * v3) * C3 := by
+  intro C1 C2 C3
+  -- (C·C) v − (C·v) C = C × (v × C), and v × C = A (v·B) − B (v·A) = 0
+  have w1 : v2 * C3 - v3 * C2 = A1 * (B1 * v1 + B2 * v2 + B3 * v3) -
+      B1 * (A1 * v1 + A2 * v2 + A3 * v3) := by simp only [C1, C2, C3]; grind
+  have w2 : v3 * C1 - v1 * C3 = A2 * (B1 * v1 + B2 * v2 + B3 * v3) -
+      B2 * (A1 * v1 + A2 * v2 + A3 * v3) := by simp only [C1, C2, C3]; grind
+  have w3 : v1 * C2 - v2 * C1 = A3 * (B1 * v1 + B2 * v2 + B3 * v3) -
+      B3 * (A1 * v1 + A2 * v2 + A3 * v3) := by simp only [C1, C2, C3]; grind
+  rw [va, vb] at w1 w2 w3
+  have u1 : v2 * C3 = v3 * C2 := by grind
+  have u2 : v3 * C1 = v1 * C3 := by grind
+  have u3 : v1 * C2 = v2 * C1 := by grind
+  simp only [C1, C2, C3] at u1 u2 u3 ⊢
+  refine ⟨?_, ?_, ?_⟩ <;> grind
+
+/-- **A common zero of two planes is on their line.** -/
+theorem line_cover {a b : Quadric} {L : V3 × V3 × Rat} (h : lineOk a b L = true) {x y z : K}
+    (ea : Quadric.evK M a (x, y, z) = 0) (eb : Quadric.evK M b (x, y, z) = 0) :
+    ∃ s : K, (x, y, z) = linePt M L.1 L.2.1 s := by
+  obtain ⟨P, D, κ⟩ := L
+  simp only [lineOk, nrm, V3.cross, V3.dot, Bool.and_eq_true, beq_iff_eq, bne_iff_ne,
+    ne_eq] at h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨hpa, hpb⟩, hC⟩, hκ⟩, hPa⟩, hPb⟩, hDx⟩, hDy⟩, hDz⟩ := h
+  rw [plane_ev M hpa] at ea; rw [plane_ev M hpb] at eb
+  have qa := congrArg M.q hPa; have qb := congrArg M.q hPb
+  have qx := congrArg M.q hDx; have qy := congrArg M.q hDy; have qz := congrArg M.q hDz
+  simp only [Model.q_add, Model.q_mul, Model.q_sub, Model.q_zero] at qa qb qx qy qz
+  have hC' : M.q ((a.ly * b.lz - a.lz * b.ly) * (a.ly * b.lz - a.lz * b.ly) +
+      (a.lz * b.lx - a.lx * b.lz) * (a.lz * b.lx - a.lx * b.lz) +
+      (a.lx * b.ly - a.ly * b.lx) * (a.lx * b.ly - a.ly * b.lx)) ≠ 0 :=
+    fun h0 => hC ((Model.q_eq M).mp (by rw [h0, Model.q_zero]))
+  have hκ' : M.q κ ≠ 0 := fun h0 => hκ ((Model.q_eq M).mp (by rw [h0, Model.q_zero]))
+  simp only [Model.q_add, Model.q_mul, Model.q_sub] at hC'
+  simp only [linePt]
+  rw [qx, qy, qz]
+  generalize M.q a.lx = A1 at *; generalize M.q a.ly = A2 at *; generalize M.q a.lz = A3 at *
+  generalize M.q b.lx = B1 at *; generalize M.q b.ly = B2 at *; generalize M.q b.lz = B3 at *
+  generalize M.q a.c = ac at *; generalize M.q b.c = bc at *
+  generalize M.q P.x = p1 at *; generalize M.q P.y = p2 at *; generalize M.q P.z = p3 at *
+  generalize M.q κ = k at *
+  have va : A1 * (x - p1) + A2 * (y - p2) + A3 * (z - p3) = 0 := by grind
+  have vb : B1 * (x - p1) + B2 * (y - p2) + B3 * (z - p3) = 0 := by grind
+  obtain ⟨e1, e2, e3⟩ := span3 va vb
+  generalize hN : (A2 * B3 - A3 * B2) * (A2 * B3 - A3 * B2) + (A3 * B1 - A1 * B3) * (A3 * B1 - A1 * B3) +
+    (A1 * B2 - A2 * B1) * (A1 * B2 - A2 * B1) = N at e1 e2 e3 hC'
+  generalize (A2 * B3 - A3 * B2) * (x - p1) + (A3 * B1 - A1 * B3) * (y - p2) +
+    (A1 * B2 - A2 * B1) * (z - p3) = t at e1 e2 e3
+  refine ⟨t / (N * k), ?_⟩
+  have hNk : N * k ≠ 0 := by grind
+  simp only [Prod.mk.injEq]
+  refine ⟨?_, ?_, ?_⟩
+  · have : x - p1 = t / (N * k) * (k * (A2 * B3 - A3 * B2)) := by grind
+    grind
+  · have : y - p2 = t / (N * k) * (k * (A3 * B1 - A1 * B3)) := by grind
+    grind
+  · have : z - p3 = t / (N * k) * (k * (A1 * B2 - A2 * B1)) := by grind
+    grind
+
+/-- **The line's events are complete.** -/
+theorem lineEvents_complete {a b q : Quadric} {fuel : Nat} {xs : List Num}
+    (h : lineEvents a b q fuel = some xs) {x y z : K} (ea : Quadric.evK M a (x, y, z) = 0)
+    (eb : Quadric.evK M b (x, y, z) = 0) (eq : Quadric.evK M q (x, y, z) = 0) :
+    ∃ n ∈ xs, Denotes M n x := by
+  unfold lineEvents at h
+  dsimp only at h
+  split at h
+  · cases h
+  rename_i hok
+  simp only [Bool.not_eq_true', Bool.not_eq_false] at hok
+  obtain ⟨s, hs⟩ := line_cover M hok ea eb
+  simp only [linePt, Prod.mk.injEq] at hs
+  split at h
+  · rename_i hD
+    cases h
+    refine ⟨_, List.mem_singleton_self _, ?_⟩
+    show x = M.q (lineOf a b).1.x
+    simp only [beq_iff_eq] at hD
+    rw [hs.1, hD, Model.q_zero]; grind
+  split at h
+  · rename_i hD
+    simp only [Bool.and_eq_true, beq_iff_eq] at hD
+    have hx : x = s := by rw [hs.1, hD.1, hD.2, Model.q_zero, Model.q_one]; grind
+    have hr : M.ev (alongLine q (lineOf a b).1 (lineOf a b).2.1) s = 0 := by
+      rw [alongLine_ev]
+      have : linePt M (lineOf a b).1 (lineOf a b).2.1 s = (x, y, z) := by
+        simp only [linePt, Prod.mk.injEq]; exact ⟨hs.1.symm, hs.2.1.symm, hs.2.2.symm⟩
+      rw [this]; exact eq
+    obtain ⟨n, hn, hd⟩ := rootsOf_complete M h hr
+    exact ⟨n, hn, hx ▸ hd⟩
+  · cases h
+
+theorem lineTriple_complete {a b c : Quadric} {fuel : Nat} {xs : List Num}
+    (h : lineTriple a b c fuel = some xs) {x y z : K} (ea : Quadric.evK M a (x, y, z) = 0)
+    (eb : Quadric.evK M b (x, y, z) = 0) (ec : Quadric.evK M c (x, y, z) = 0) :
+    ∃ n ∈ xs, Denotes M n x := by
+  unfold lineTriple at h
+  split at h
+  · exact lineEvents_complete M h ea eb ec
+  split at h
+  · exact lineEvents_complete M h ea ec eb
+  split at h
+  · exact lineEvents_complete M h eb ec ea
+  · cases h
+
 theorem cramer3 {a b c : Quadric} (ha : isPlaneQ a = true) (hb : isPlaneQ b = true)
     (hc : isPlaneQ c = true) (hd : det3Q a b c ≠ 0) {x y z : K}
     (ea : Quadric.evK M a (x, y, z) = 0) (eb : Quadric.evK M b (x, y, z) = 0)
@@ -352,6 +557,26 @@ theorem proposeTripleX_complete {a b c : Quadric} {fuel : Nat} {xs : List Num}
     · exact const_ne M h1 x y z hb
     · exact const_ne M h1 x y z hc
   rw [if_neg h1] at h
+  by_cases hpp : (parallelApart a b || parallelApart a c || parallelApart b c) = true
+  · exfalso
+    simp only [Bool.or_eq_true] at hpp
+    rcases hpp with (hp | hp) | hp
+    · exact parallelApart_ne M hp ha hb
+    · exact parallelApart_ne M hp ha hc
+    · exact parallelApart_ne M hp hb hc
+  rw [if_neg hpp] at h
+  by_cases hxa : isXPlane a = true
+  · rw [if_pos hxa] at h; cases h; exact ⟨_, List.mem_singleton_self _, xplane_x M hxa ha⟩
+  rw [if_neg hxa] at h
+  by_cases hxb : isXPlane b = true
+  · rw [if_pos hxb] at h; cases h; exact ⟨_, List.mem_singleton_self _, xplane_x M hxb hb⟩
+  rw [if_neg hxb] at h
+  by_cases hxc : isXPlane c = true
+  · rw [if_pos hxc] at h; cases h; exact ⟨_, List.mem_singleton_self _, xplane_x M hxc hc⟩
+  rw [if_neg hxc] at h
+  by_cases hl : (lineTriple a b c fuel).isSome = true
+  · rw [if_pos hl] at h; exact lineTriple_complete M h ha hb hc
+  rw [if_neg hl] at h
   by_cases h2 : (isPlaneQ a && isPlaneQ b && isPlaneQ c) = true
   · rw [if_pos h2] at h
     simp only [Bool.and_eq_true] at h2

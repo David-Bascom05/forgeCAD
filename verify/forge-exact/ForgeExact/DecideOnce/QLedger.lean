@@ -299,8 +299,31 @@ theorem qledger_compat (T : Cov) (i : Nat) :
 end Model
 
 -- the unit sphere, cut by y = 0 and z = 0, as one body: "inside the sphere"
-#guard (qledger [sphere1, planeY0, planeZ] [.lit 0 .neg]).map (fun L => L.facets.length) = some 4
-#guard (qledger [sphere1, planeY0, planeZ] [.lit 0 .neg]).map (fun L => L.edges.length) = some 4
-#guard (qledger [sphere1, planeY0, planeZ] [.lit 0 .neg]).map (fun L => L.verts.length) = some 1
+def showCov (X : Cov) : String :=
+  String.ofList (X.map fun s => match s with | .neg => '-' | .zero => '0' | .pos => '+')
+
+-- the unit sphere, cut by y = 0 and z = 0, as one body "inside the sphere": its 4 facets, 4 arcs
+-- and the vertex covector of (±1, 0, 0)
+def sameSet (a b : List String) : Bool := a.length == b.length && a.all (b.contains ·)
+
+#guard (qledger [sphere1, planeY0, planeZ] [.lit 0 .neg]).map
+  (fun L => sameSet (L.facets.map showCov) ["0-+", "0--", "0++", "0+-"] &&
+    sameSet (L.edges.map showCov) ["00+", "00-", "0-0", "0+0"] &&
+    sameSet (L.verts.map showCov) ["000"]) = some true
+
+/-- A plane `a x + b y + c z + d = 0`. -/
+def planeQ (a b c d : Rat) : Quadric := ⟨0, 0, 0, 0, 0, 0, a, b, c, d⟩
+
+/-- The unit box `[0, 1]³`: its planes and its formula. -/
+def unitBox : List Quadric :=
+  [planeQ 1 0 0 0, planeQ 1 0 0 (-1), planeQ 0 1 0 0, planeQ 0 1 0 (-1), planeQ 0 0 1 0,
+   planeQ 0 0 1 (-1)]
+def unitBoxF : SForm :=
+  .and (.lit 0 .pos) (.and (.lit 1 .neg) (.and (.lit 2 .pos) (.and (.lit 3 .neg)
+    (.and (.lit 4 .pos) (.lit 5 .neg)))))
+
+-- the axis-aligned box: 6 faces, 12 edges, 8 vertices
+#guard (qledger unitBox [unitBoxF]).map (fun L => (L.facets.length, L.edges.length,
+  L.verts.length)) = some (6, 12, 8)
 
 end ForgeExact.DecideOnce.Curved
