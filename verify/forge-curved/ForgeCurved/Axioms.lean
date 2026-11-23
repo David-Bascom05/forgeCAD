@@ -34,6 +34,8 @@ import ForgeCurved
 #print axioms ForgeCurved.noClosedPiece_of_locus
 #print axioms ForgeCurved.tier0Spec_of_faces
 #print axioms ForgeCurved.facesLinked_of_linkedB
-#print axioms ForgeCurved.tier0FaceSpec_of_check
+#print axioms ForgeCurved.cellsConnected_of_check
+#print axioms ForgeCurved.localGood_of_homogeneous
+#print axioms ForgeCurved.faithfulAll_of_mixed
 #print axioms ForgeCurved.qRule_tier0Sound_of_data
 #print axioms ForgeCurved.transversalAt_of_linearIndependent

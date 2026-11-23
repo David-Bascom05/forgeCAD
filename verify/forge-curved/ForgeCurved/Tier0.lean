@@ -2,6 +2,7 @@ import ForgeCurved.Transversal
 import ForgeCurved.Faces
 import ForgeCurved.Strata
 import ForgeCurved.Linked
+import ForgeCurved.Homogeneous
 import Mathlib.Analysis.Calculus.ContDiff.Operations
 
 /-!
@@ -53,7 +54,8 @@ structure Tier0Data (cs : List (Carrier R3 ℝ)) where
   /-- the realised covectors -/
   R : List Cov
   covers : ∀ X, RealisedK cs X ↔ X ∈ R
-  trans : Transversal cs
+  /-- every point is transversal, or conical (a cone apex with its seams) -/
+  pts : ∀ x, TransversalAt cs x ∨ ConicalAt cs x
   /-- the cells certified connected outright -/
   direct : Cov → Bool
   direct_spec : ∀ Y ∈ R, direct Y = true → IsPreconnected (cell cs Y)
@@ -68,10 +70,13 @@ def tier0B {cs : List (Carrier R3 ℝ)} (D : Tier0Data cs) : Bool :=
   D.R.all fun Y => D.direct Y || linkedB D.R Y
 
 /-- **The face check is sound**: with the data's facts it gives `Tier0FaceSpec`. -/
-theorem tier0FaceSpec_of_check {cs : List (Carrier R3 ℝ)} (hd : ∀ c ∈ cs, ContDiff ℝ 1 c)
-    (D : Tier0Data cs) (h : tier0B D = true) : Tier0FaceSpec cs := by
+theorem cellsConnected_of_check {cs : List (Carrier R3 ℝ)} (hd : ∀ c ∈ cs, ContDiff ℝ 1 c)
+    (D : Tier0Data cs) (h : tier0B D = true) : CellsConnected cs := by
   have hc : ∀ c ∈ cs, Continuous c := fun c hc => (hd c hc).continuous
-  refine ⟨D.trans, fun Y hY => ?_⟩
+  refine cellsConnected_of_faces hc (fun x => ?_) fun Y hY => ?_
+  · rcases D.pts x with h | h
+    · exact (localGood'_of_transversal hd h).toLocalGood
+    · exact localGood_of_homogeneous hc h.hom h.cone
   have hYR := (D.covers Y).mp hY
   have hlen : Y.length = cs.length := by
     obtain ⟨x, hx⟩ := hY
@@ -119,19 +124,23 @@ theorem qRule_tier0Sound (check : List QFace → Bool) (walls : List QFace → L
       obtain ⟨π, -, rfl⟩ := List.mem_map.mp hc; exact planeR_contDiff π) h
 
 /-- **Tier 0 for Q1, on the enumerator's data**: a check that, when it passes, comes with
-`Tier0Data` for the seamed arrangement on which `tier0B` passes, is sound. -/
+`Tier0Data` for the seamed arrangement on which `tier0B` passes, is sound. Cone apexes are
+allowed, as conical points (Homogeneous.lean). -/
 theorem qRule_tier0Sound_of_data (check : List QFace → Bool)
     (walls : List QFace → List (Carrier R3 ℝ)) (Dom : List QFace → Prop)
     (h : ∀ fs, Dom fs → check fs = true →
       ∃ D : Tier0Data ((qRule check walls).carriers fs ++ (qRule check walls).seams fs),
         tier0B D = true) :
     Tier0Sound (qRule check walls) Dom := by
-  refine qRule_tier0Sound check walls Dom fun fs hfs hc => ?_
+  intro fs hfs hc
   obtain ⟨D, hD⟩ := h fs hfs hc
-  refine tier0Spec_of_faces (fun c hc => ?_) (tier0FaceSpec_of_check (fun c hc => ?_) D hD) <;>
-  · rcases List.mem_append.mp hc with h | h
+  have hd : ∀ c ∈ (qRule check walls).carriers fs ++ (qRule check walls).seams fs,
+      ContDiff ℝ 1 c := by
+    intro c hc
+    rcases List.mem_append.mp hc with h | h
     · obtain ⟨f, -, rfl⟩ := List.mem_map.mp h; exact qR_contDiff f.quadric
     · obtain ⟨π, -, rfl⟩ := List.mem_map.mp h; exact planeR_contDiff π
+  exact faithfulAll_of_mixed hd D.pts (cellsConnected_of_check hd D hD)
 
 /-! The face check on two crossing planes (all nine covectors realised): the quadrant's faces,
 two half-planes and their common line, are linked; a list with the line missing is not. -/
