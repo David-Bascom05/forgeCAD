@@ -1,0 +1,14 @@
+# FAIL cut: Boolean Internal(InconsistentClassification) (3 parts, CADFS). A cylinder r 40 whose end edge is rounded
+# r 40 (the end closes to a point), then a rectangle cut through it. For fix-curved.
+sketch q(on: xy) {
+  p = pt(0, 0)
+}
+sketch s(on: plane(at: q.p, normal: X, x: Y)) {
+  c = circle((0, 0), 40)
+}
+b = extrude(s, 80)
+f = fillet(edges(between: (b.side(s.c), b.start)), 40)
+sketch t(on: plane(at: q.p, normal: X)) {
+  o = rect(corner: (-17, 0), size: (17, 24))
+}
+k = cut(t, -220)
