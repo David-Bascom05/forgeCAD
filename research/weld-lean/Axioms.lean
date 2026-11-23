@@ -24,3 +24,7 @@ open ForgeWeld
 #print axioms Extreme.line_max
 #print axioms Extreme.move
 #print axioms Extreme.cell_max
+#print axioms Extreme.section_max
+#print axioms Extreme.face_sound
+#print axioms Extreme.box_bounded
+#print axioms Extreme.lineCand_of

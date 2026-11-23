@@ -21,7 +21,10 @@ Classical.choice, Quot.sound).
   `line_max` (on an interval the minimum of affine functions is matched at an end or a crossing),
   `move`, and `cell_max`: over a bounded convex cell, the reach is matched at a corner, a ridge on
   an edge or an apex (forge_weld::frame `extreme`'s candidates, with the same determinants).
-  Open: from convex cells to the section's loops (a ridge's meeting with a cell's inner edge is not
-  a loop candidate; that it is dominated needs the move across cells).
+- `ForgeWeld/PolyMax.lean`: a polygonal section in the boolean's terms (membership by the signs
+  against its edge lines; a box round it): `section_max` (every section point is matched by a
+  candidate of its closed face: two lines meeting, a ridge on a line, an apex) and `face_sound`
+  (every such point is a limit of section points). So the long point is the best candidate among
+  the meetings of the edge lines and ridge lines in the section's closure: what `extreme` computes.
 
 Not yet: arc members and arc sides of sections (ℚ(√·), the L2 step), L2–L6.

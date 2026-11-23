@@ -744,14 +744,21 @@ fn extreme(m: &MemberSpec, a: Point3, d: Vec3, cuts: &[Cut], x: Vec3, y: Vec3, h
     };
     let sign = if hi { 1.0 } else { -1.0 };
     let sec = &m.section;
+    // The arrangement (research/weld-lean PolyMax.lean): the lines of the section's straight
+    // sides and the cuts' ridge lines (each `a0 + au u + av v = 0`), and the circles of its arcs.
+    // Over each cell of it the reach is linear, so its optimum over the section is at a cell's
+    // corner (two of these meeting) or, on an arc, at a cut's farthest point; every such point in
+    // the closure of the section is a candidate, and every candidate there is a limit of material
+    // points (`face_sound`): the optimum is the best candidate.
+    let mut lines: Vec<(f64, f64, f64)> = Vec::new();
+    let mut circles: Vec<(forge_math::Point2, f64)> = Vec::new();
     let mut cands: Vec<(f64, f64)> = Vec::new();
     for seg in sec.loops.iter().flatten() {
-        // the loops' corners
         let (p, q) = (seg.start(), seg.end());
         cands.push((p.x, p.y));
         cands.push((q.x, q.y));
-        // on an arc, each cut's farthest point in its own direction
         if let Some((c, r, st, sw)) = arc_params(seg) {
+            circles.push((c, r));
             for l in &lin {
                 let w = Vec2::new(sign * l.1, sign * l.2);
                 let wl = w.length();
@@ -760,31 +767,46 @@ fn extreme(m: &MemberSpec, a: Point3, d: Vec3, cuts: &[Cut], x: Vec3, y: Vec3, h
                     cands.push((t.x, t.y));
                 }
             }
+        } else {
+            // the side's line: (q - p) x (point - p) = 0
+            let (dx, dy) = (q.x - p.x, q.y - p.y);
+            lines.push((dy * p.x - dx * p.y, -dy, dx));
         }
     }
-    // two cuts equal: their ridge line, where it meets any loop
     for i in 0..lin.len() {
         for j in i + 1..lin.len() {
-            let (a0, au, av) = (lin[i].0 - lin[j].0, lin[i].1 - lin[j].1, lin[i].2 - lin[j].2);
-            cands.extend(line_meets(sec, a0, au, av));
+            lines.push((lin[i].0 - lin[j].0, lin[i].1 - lin[j].1, lin[i].2 - lin[j].2));
         }
     }
-    // three cuts equal: their apex, where it is material
-    for i in 0..lin.len() {
-        for j in i + 1..lin.len() {
-            for k in j + 1..lin.len() {
-                let (b1, u1, v1) = (lin[i].0 - lin[j].0, lin[i].1 - lin[j].1, lin[i].2 - lin[j].2);
-                let (b2, u2, v2) = (lin[i].0 - lin[k].0, lin[i].1 - lin[k].1, lin[i].2 - lin[k].2);
-                let det = u1 * v2 - u2 * v1;
-                if det.abs() > 1e-15 {
-                    let (u, v) = ((-b1 * v2 + b2 * v1) / det, (-u1 * b2 + u2 * b1) / det);
-                    if sec.contains(forge_math::Point2::new(u, v)) {
-                        cands.push((u, v));
-                    }
-                }
+    let mut meets: Vec<(f64, f64)> = Vec::new();
+    for i in 0..lines.len() {
+        for j in i + 1..lines.len() {
+            let ((b1, u1, v1), (b2, u2, v2)) = (lines[i], lines[j]);
+            let det = u1 * v2 - u2 * v1;
+            if det.abs()
+                > 1e-15
+                    * ((u1 * u1 + v1 * v1) * (u2 * u2 + v2 * v2))
+                        .sqrt()
+                        .max(f64::MIN_POSITIVE)
+            {
+                meets.push(((-b1 * v2 + b2 * v1) / det, (-u1 * b2 + u2 * b1) / det));
             }
         }
+        for &(c, r) in &circles {
+            meets.extend(line_circle(lines[i], c, r));
+        }
     }
+    for i in 0..circles.len() {
+        for j in i + 1..circles.len() {
+            meets.extend(circle_circle(circles[i], circles[j]));
+        }
+    }
+    let eps = 1e-9 * (1.0 + sec.radius());
+    cands.extend(
+        meets
+            .into_iter()
+            .filter(|&(u, v)| sec.in_closure(forge_math::Point2::new(u, v), eps)),
+    );
     let best = cands
         .into_iter()
         .map(|(u, v)| sign * at(u, v))
@@ -816,48 +838,49 @@ fn on_arc(a: f64, start: f64, sweep: f64) -> bool {
     (a - lo).rem_euclid(dmath::TAU) <= w
 }
 
-/// Where the line a0 + au u + av v = 0 meets any of the section's loops.
-fn line_meets(s: &Section, a0: f64, au: f64, av: f64) -> Vec<(f64, f64)> {
-    let mut out = Vec::new();
-    let g = |p: forge_math::Point2| a0 + au * p.x + av * p.y;
-    for seg in s.loops.iter().flatten() {
-        if let Some((c, r, st, sw)) = arc_params(seg) {
-            // the line's distance from the centre, and the chord it cuts
-            let nl = (au * au + av * av).sqrt();
-            if nl == 0.0 {
-                continue;
-            }
-            let dist = g(c) / nl;
-            if dist.abs() > r {
-                continue;
-            }
-            let nrm = Vec2::new(au, av) / nl;
-            let foot = c - nrm * dist;
-            let half = (r * r - dist * dist).max(0.0).sqrt();
-            for k in [-1.0, 1.0] {
-                let p = foot + nrm.perp() * (k * half);
-                if on_arc(dmath::atan2(p.y - c.y, p.x - c.x), st, sw) {
-                    out.push((p.x, p.y));
-                }
-            }
-        } else {
-            let (p, q) = (seg.start(), seg.end());
-            let (gp, gq) = (g(p), g(q));
-            if gp == gq {
-                if gp == 0.0 {
-                    out.push((p.x, p.y));
-                    out.push((q.x, q.y));
-                }
-                continue;
-            }
-            let t = gp / (gp - gq);
-            if (0.0..=1.0).contains(&t) {
-                let m = p.lerp(q, t);
-                out.push((m.x, m.y));
-            }
-        }
+/// Where the line `a0 + au u + av v = 0` meets the circle about `c` of radius `r`.
+fn line_circle((a0, au, av): (f64, f64, f64), c: forge_math::Point2, r: f64) -> Vec<(f64, f64)> {
+    let nl = (au * au + av * av).sqrt();
+    if nl == 0.0 {
+        return vec![];
     }
-    out
+    let dist = (a0 + au * c.x + av * c.y) / nl;
+    if dist.abs() > r {
+        return vec![];
+    }
+    let n = Vec2::new(au, av) / nl;
+    let foot = c - n * dist;
+    let half = (r * r - dist * dist).max(0.0).sqrt();
+    [-1.0, 1.0]
+        .into_iter()
+        .map(|k| {
+            let p = foot + n.perp() * (k * half);
+            (p.x, p.y)
+        })
+        .collect()
+}
+
+/// Where two circles meet.
+fn circle_circle(
+    (c1, r1): (forge_math::Point2, f64),
+    (c2, r2): (forge_math::Point2, f64),
+) -> Vec<(f64, f64)> {
+    let d = c2 - c1;
+    let dl = d.length();
+    if dl == 0.0 || dl > r1 + r2 || dl < (r1 - r2).abs() {
+        return vec![];
+    }
+    let a = (r1 * r1 - r2 * r2 + dl * dl) / (2.0 * dl);
+    let h = (r1 * r1 - a * a).max(0.0).sqrt();
+    let n = d / dl;
+    let m = c1 + n * a;
+    [-1.0, 1.0]
+        .into_iter()
+        .map(|k| {
+            let p = m + n.perp() * (k * h);
+            (p.x, p.y)
+        })
+        .collect()
 }
 
 #[cfg(test)]

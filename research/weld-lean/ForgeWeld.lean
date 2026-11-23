@@ -5,3 +5,4 @@ import ForgeWeld.CutList
 import ForgeWeld.Section
 import ForgeWeld.Extreme
 import ForgeWeld.Cell
+import ForgeWeld.PolyMax
