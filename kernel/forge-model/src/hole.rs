@@ -453,7 +453,18 @@ pub(crate) fn thru_consumer(f: &Feature) -> bool {
 
 /// Whether feature `i`'s tool needs the part's box as built (`History::with_base`).
 pub(crate) fn needs_base(features: crate::History<'_>, i: usize) -> bool {
-    thru_consumer(&features[i]) && features[..i].iter().any(unbounded)
+    sized_through(features, i) && features[..i].iter().any(unbounded)
+}
+
+/// Feature `i` makes a tool sized by `reach`: a through tool, or a pattern copying one.
+fn sized_through(features: crate::History<'_>, i: usize) -> bool {
+    match &features[i] {
+        Feature::Pattern {
+            of: Source::Features(src),
+            ..
+        } => src.iter().any(|&s| s < i && sized_through(features, s)),
+        f => thru_consumer(f),
+    }
 }
 
 /// A box holding the body: what the regen hands a through tool as the part's extent.
@@ -508,6 +519,9 @@ fn rib_reach(b: &Box3, r: &crate::rib::Rib) -> Box3 {
 
 /// A box holding all the material `features` can make, to size through holes by.
 pub(crate) fn reach(features: crate::History<'_>) -> Box3 {
+    if let Some(b) = features.given_reach() {
+        return b;
+    }
     // past a feature the history does not bound, the part as the regen built it does
     let (from, mut b) = match features.base() {
         Some((at, bx)) if at < features.len() && features[..=at].iter().any(unbounded) => (at + 1, bx),

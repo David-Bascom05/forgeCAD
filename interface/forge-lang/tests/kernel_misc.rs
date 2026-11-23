@@ -1180,3 +1180,88 @@ bore = hole(at: spot.c, d: d, depth: thru, flip: true)
         assert!((v - exact).abs() < 1e-6, "{path}: volume {v}, through {exact}");
     }
 }
+
+/// A pattern's copy of a through hole runs through the part as it stands at the pattern, not as it
+/// stood at the hole it copies: here a boss is added after the hole, and the copy under it ran
+/// the hole's 7 mm (the plate). Exact: the plate and boss less the hole (6) and the copy (30).
+#[test]
+fn thru_hole_copy_goes_through_material_added_after_its_source() {
+    let src = "shared L = 80
+shared W = 30
+shared t = 6
+param bore.d = 5
+param bores.step = 30
+param top.h = 24
+param spot.x = 20
+param top.x = 40
+param top.w = 20
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+sketch spot(on: xy) {
+  c = pt(x, W / 2)
+}
+bore = hole(at: spot.c, d: d, depth: thru, flip: true)
+sketch top(on: base.end) {
+  r = rect(corner: (x, 0), size: (w, W))
+}
+boss = extrude(top.r, h)
+bores = pattern(of: bore, layout: lin(along: plan.outline[0].dir, n: count(2), step: step))
+";
+    let b = built(src);
+    let disc = dmath::PI * 2.5 * 2.5;
+    let exact = 80.0 * 30.0 * 6.0 + 20.0 * 30.0 * 24.0 - disc * 6.0 - disc * 30.0;
+    assert!(
+        (b.volume() - exact).abs() < 1e-6,
+        "volume {}, through {exact}",
+        b.volume()
+    );
+    for (path, solids) in [("seq", b.seq()), ("nary", b.nary(1))] {
+        let body = kernel_util::joined(&solids.expect("regenerates"));
+        let v = forge_topo::mass::mass(&body).expect("a mass").volume;
+        assert!((v - exact).abs() < 1e-6, "{path}: volume {v}, through {exact}");
+    }
+}
+
+/// The same past moved faces: the copy is sized by the part as built (`History::base`). The
+/// copy's column is the whole lifted plate, 26 mm, whatever the move did to its source.
+#[test]
+fn thru_hole_copy_goes_through_moved_faces() {
+    let head = "shared L = 80
+shared W = 30
+shared t = 6
+param lift.d = 20
+param bore.d = 5
+param bores.step = 40
+param spot.x = 20
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+sketch spot(on: xy) {
+  c = pt(x, W / 2)
+}
+bore = hole(at: spot.c, d: d, depth: thru, flip: true)
+lift = move_faces(base.end, along: Z, d: d)
+";
+    let with = format!(
+        "{head}bores = pattern(of: bore, layout: lin(along: plan.outline[0].dir, n: count(2), step: step))\n"
+    );
+    let column = dmath::PI * 2.5 * 2.5 * 26.0;
+    let (b0, b1) = (built(head), built(&with));
+    let cut = b0.volume() - b1.volume();
+    assert!(
+        (cut - column).abs() < 1e-6,
+        "the copy cut {cut}, through {column}"
+    );
+    for (path, solids) in [("seq", b1.seq()), ("nary", b1.nary(1))] {
+        let body = kernel_util::joined(&solids.expect("regenerates"));
+        let v = forge_topo::mass::mass(&body).expect("a mass").volume;
+        assert!(
+            (v - b1.volume()).abs() < 1e-6,
+            "{path}: volume {v}, built {}",
+            b1.volume()
+        );
+    }
+}

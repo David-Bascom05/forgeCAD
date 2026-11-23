@@ -68,6 +68,9 @@ pub struct History<'a> {
     /// bounds the part no longer (faces moved, offset or drafted: `hole::reach`), a through tool
     /// after it is sized from this.
     base: Option<(usize, forge_math::Box3)>,
+    /// The box through tools are sized by, given: a pattern's copy of a through hole is sized by
+    /// the part as it stands at the pattern, not at the hole it copies (`hole::reach`).
+    reach: Option<forge_math::Box3>,
 }
 
 impl<'a> History<'a> {
@@ -80,6 +83,7 @@ impl<'a> History<'a> {
             features,
             ids,
             base: None,
+            reach: None,
         }
     }
 
@@ -94,7 +98,21 @@ impl<'a> History<'a> {
             features: &self.features[..n],
             ids: self.ids.map(|ids| &ids[..n]),
             base: self.base.filter(|b| b.0 < n),
+            reach: self.reach,
         }
+    }
+
+    /// The same history with through tools sized by `b`.
+    pub(crate) fn with_reach(&self, b: forge_math::Box3) -> History<'a> {
+        History {
+            reach: Some(b),
+            ..*self
+        }
+    }
+
+    /// The box through tools are sized by, if given.
+    pub(crate) fn given_reach(&self) -> Option<forge_math::Box3> {
+        self.reach
     }
 
     /// The same history with the part's box after feature `at` (as built).
@@ -119,6 +137,7 @@ impl<'a> History<'a> {
             features,
             ids: self.ids,
             base: self.base,
+            reach: self.reach,
         }
     }
 }
@@ -601,6 +620,7 @@ pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Optio
                     features: &fs,
                     ids: features.ids,
                     base: None,
+                    reach: None,
                 },
                 i,
                 so_far,
@@ -651,6 +671,7 @@ fn careful(
                         features: &fs,
                         ids: features.ids,
                         base: None,
+                        reach: None,
                     },
                     i,
                     body,
@@ -679,6 +700,7 @@ fn in_turn(features: History<'_>) -> Result<Option<Body>, RegenError> {
                         features: &all,
                         ids: features.ids,
                         base: None,
+                        reach: None,
                     })
                 })
                 .map_err(|_| e)
@@ -694,6 +716,7 @@ pub(crate) fn rebuilt_blunted(features: History<'_>, i: usize) -> Option<Result<
         features: &all,
         ids: features.ids,
         base: None,
+        reach: None,
     };
     Some((0..=i).try_fold(None, |b, k| step_plain(h, k, b)))
 }
@@ -2049,8 +2072,18 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
                 sources_of(features, s, &mut reached);
             }
             let mut base = Vec::new();
+            // a copy of a through tool runs through the part as it stands here, not where its
+            // source was made: sized by this feature's reach
+            let here = reached
+                .iter()
+                .any(|&s| hole::thru_consumer(&features[s]))
+                .then(|| hole::reach(features.upto(i)));
             for s in reached {
-                base.extend(tools(features, s, build)?);
+                let h = match here {
+                    Some(r) if hole::thru_consumer(&features[s]) => features.with_reach(r),
+                    _ => features,
+                };
+                base.extend(tools(h, s, build)?);
             }
             // a sketch or a parameter makes nothing to copy: refused, not a pattern left out
             if base.is_empty() {
