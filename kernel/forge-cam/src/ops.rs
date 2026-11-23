@@ -326,7 +326,16 @@ pub fn certify_fixtured(
         .filter(|b| b.part == Part::Cutter)
         .map(|b| b.rmax)
         .fold(0.0, f64::max);
+    // each move's distance to each face's section, shared by the tool's bodies (one per face
+    // set and face, reset after the move)
+    let nstock = stages.iter().map(|s| s.1.len()).max().unwrap_or(0);
+    let mut shared: [Vec<Option<(forge_cam_geom::ival::Ival, f64)>>; 3] =
+        [vec![None; part.len()], vec![None; nstock], vec![None; fixture.len()]];
+    let mut touched: Vec<(usize, usize)> = Vec::new();
     for (m, phase, idx) in &mv {
+        for (k, i) in touched.drain(..) {
+            shared[k][i] = None;
+        }
         let tip_lo = m.at(forge_cam_geom::ival::Ival::new(0.0, 1.0))[2].lo;
         if !(forge_cam_geom::ival::Ival::pt(tip_lo).add(forge_cam_geom::ival::Ival::pt(top)).lo > zmax) {
             sum.clear = false;
@@ -352,7 +361,10 @@ pub fn certify_fixtured(
         for b in &tool.shape.bodies {
             let sb = check::swept_box_body(m, b);
             // the part: the cutter may touch it within tol on a cut; nothing else may touch it
-            for (faces, what, grid) in [(part, "part", &pgrid), (stock, "stock", sgrid), (fixture, "fixture", &fgrid)] {
+            for (set, (faces, what, grid)) in [(part, "part", &pgrid), (stock, "stock", sgrid), (fixture, "fixture", &fgrid)]
+                .into_iter()
+                .enumerate()
+            {
                 if faces.is_empty() {
                     continue;
                 }
@@ -379,7 +391,11 @@ pub fn certify_fixtured(
                         continue;
                     }
                     sum.pairs += 1;
-                    let (v, n) = check::certify(b, f, m, limit, tol / 4.0, 200_000);
+                    let slot = &mut shared[set][fi as usize];
+                    if slot.is_none() {
+                        touched.push((set, fi as usize));
+                    }
+                    let (v, n) = check::certify_shared(b, f, m, limit, tol / 4.0, 200_000, slot);
                     sum.cells += n;
                     let rule = match (b.part, *phase, what) {
                         (_, _, "fixture") => "fixture_collision",

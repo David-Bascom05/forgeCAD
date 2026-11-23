@@ -795,9 +795,25 @@ fn diam(b: &[Ival; 3]) -> f64 {
 /// Certifies one (body, face, move) against `limit`, to resolution `res` (cells whose image is
 /// smaller are leaves), spending at most `budget` cells.
 pub fn certify(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Verdict, usize) {
+    certify_shared(body, f, mv, limit, res, budget, &mut None)
+}
+
+/// `certify` for several bodies of one tool on the same move and face: `shared` carries the
+/// move's distance to the face's section from one body's call to the next (start it at None
+/// for each move and face).
+#[allow(clippy::too_many_arguments)]
+pub fn certify_shared(
+    body: &Body,
+    f: &Face,
+    mv: &Move,
+    limit: f64,
+    res: f64,
+    budget: usize,
+    shared: &mut Option<(Ival, f64)>,
+) -> (Verdict, usize) {
     // a planar move against a face that is a prism along z: closed form (slab.rs)
     if let (Some(pl), Some(pr)) = (mv.planar(), f.prism.as_ref()) {
-        let (v, n) = crate::slab::certify(body, f, pr, &pl, limit, res, budget);
+        let (v, n) = crate::slab::certify_shared(body, f, pr, &pl, limit, res, budget, shared);
         if let Verdict::Hit { d, p, q, .. } = v {
             let (s, at) = crate::slab::locate(mv, pr);
             return (Verdict::Hit { d, p, q, s, at }, n);

@@ -192,6 +192,12 @@ impl Body {
         let mut hi = f64::INFINITY;
         let mut i = 0;
         while i < self.chain.len() {
+            // a segment whose box is at least `hi` away changes neither end of the minimum
+            // (its interval lies at or above hi ≥ lo): skipped, the result is the same
+            if hi.is_finite() && box_gap(&self.chain[i], rho, z) >= hi {
+                i += 1;
+                continue;
+            }
             let d = seg_dist(&self.chain[i], rho, z);
             if d.lo < lo {
                 lo = d.lo;
@@ -254,6 +260,26 @@ impl Body {
     }
 }
 
+/// A lower bound on the distance from the box (ρ, z) to the segment: the larger axis gap to a
+/// box holding the segment (rounded down).
+fn box_gap(s: &PSeg, rho: Ival, z: Ival) -> f64 {
+    let (x0, y0, x1, y1) = match *s {
+        PSeg::Line { a, b } => (a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])),
+        PSeg::Arc { c, r, .. } => (
+            Ival::pt(c[0]).sub(Ival::pt(r)).lo,
+            Ival::pt(c[1]).sub(Ival::pt(r)).lo,
+            Ival::pt(c[0]).add(Ival::pt(r)).hi,
+            Ival::pt(c[1]).add(Ival::pt(r)).hi,
+        ),
+    };
+    let gx = Ival::pt(x0)
+        .sub(Ival::pt(rho.hi))
+        .lo
+        .max(Ival::pt(rho.lo).sub(Ival::pt(x1)).lo);
+    let gy = Ival::pt(y0).sub(Ival::pt(z.hi)).lo.max(Ival::pt(z.lo).sub(Ival::pt(y1)).lo);
+    gx.max(gy).max(0.0)
+}
+
 fn len2(x: Ival, y: Ival) -> Ival {
     x.sqr().add(y.sqr()).sqrt()
 }
@@ -269,18 +295,19 @@ pub fn seg_dist(s: &PSeg, rho: Ival, z: Ival) -> Ival {
             let (px, py) = (rho.sub(Ival::pt(a[0])), z.sub(Ival::pt(a[1])));
             let dd = dx.sqr().add(dy.sqr());
             let t = px.mul(dx).add(py.mul(dy)).div(dd);
-            let da = len2(px, py);
-            let db = len2(rho.sub(Ival::pt(b[0])), z.sub(Ival::pt(b[1])));
+            // only what the answer needs
             if t.hi <= 0.0 {
-                return da;
+                return len2(px, py);
             }
             if t.lo >= 1.0 {
-                return db;
+                return len2(rho.sub(Ival::pt(b[0])), z.sub(Ival::pt(b[1])));
             }
             let perp = px.mul(dy).sub(py.mul(dx)).abs().div(dd.sqrt());
             if t.lo >= 0.0 && t.hi <= 1.0 {
                 return perp;
             }
+            let da = len2(px, py);
+            let db = len2(rho.sub(Ival::pt(b[0])), z.sub(Ival::pt(b[1])));
             Ival {
                 lo: perp.lo,
                 hi: da.hi.min(db.hi),
@@ -296,15 +323,15 @@ pub fn seg_dist(s: &PSeg, rho: Ival, z: Ival) -> Ival {
             let c2 = vx.mul(Ival::pt(by)).sub(vy.mul(Ival::pt(bx)));
             let (c1, c2) = if ccw { (c1, c2) } else { (c1.neg(), c2.neg()) };
             let circ = len2(vx, vy).sub(Ival::pt(r)).abs();
+            if c1.lo >= 0.0 && c2.lo >= 0.0 {
+                return circ;
+            }
             let da = len2(rho.sub(Ival::pt(a[0])), z.sub(Ival::pt(a[1])));
             let db = len2(rho.sub(Ival::pt(b[0])), z.sub(Ival::pt(b[1])));
             let ends = Ival {
                 lo: da.lo.min(db.lo),
                 hi: da.hi.min(db.hi),
             };
-            if c1.lo >= 0.0 && c2.lo >= 0.0 {
-                return circ;
-            }
             if c1.hi < 0.0 || c2.hi < 0.0 {
                 return ends;
             }

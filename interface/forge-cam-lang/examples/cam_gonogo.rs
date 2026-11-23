@@ -6,7 +6,7 @@
 //! offset (the plate's outline outside, the boss outside, the bore inside), every move subdivided
 //! until the op has N moves; each move certified for the cutter (limit −tol) and the shank and
 //! holder (limit +clearance) against every face whose box is near.
-use forge_cam_geom::check::{Face, Move, Verdict, apart, certify, swept_box};
+use forge_cam_geom::check::{Face, Move, Verdict, apart, swept_box};
 use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, Region, Seg, p2};
 use forge_cam_geom::tool::{Cutter, Holder, assemble};
@@ -209,6 +209,7 @@ fn main() {
                     if apart(&sb, &f.bbox, clear.max(0.0) + f.mu) {
                         continue;
                     }
+                    let mut shared = None;
                     for b in &t.bodies {
                         let lim = if b.part == forge_cam_geom::tool::Part::Cutter {
                             -tol
@@ -224,7 +225,7 @@ fn main() {
                         }
                         near += 1;
                         let tc = std::time::Instant::now();
-                        let (v, c) = certify(b, f, m, lim, tol / 4.0, 200_000);
+                        let (v, c) = forge_cam_geom::check::certify_shared(b, f, m, lim, tol / 4.0, 200_000, &mut shared);
                         cells += c;
                         if tc.elapsed().as_millis() > 20 && slow < 5 {
                             slow += 1;

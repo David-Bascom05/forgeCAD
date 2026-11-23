@@ -69,6 +69,35 @@ struct Cand {
     sure: bool,
 }
 
+/// The candidates of one distance, on the stack (at most 4 ends, then a curve pair's own).
+struct Cands {
+    v: [Cand; 12],
+    n: usize,
+}
+
+impl Cands {
+    fn new() -> Cands {
+        Cands {
+            v: [Cand {
+                d: Ival::pt(0.0),
+                sure: false,
+            }; 12],
+            n: 0,
+        }
+    }
+    fn push(&mut self, c: Cand) {
+        self.v[self.n] = c;
+        self.n += 1;
+    }
+}
+
+impl std::ops::Deref for Cands {
+    type Target = [Cand];
+    fn deref(&self) -> &[Cand] {
+        &self.v[..self.n]
+    }
+}
+
 /// The least of the candidates: [min of all lows, min of the sure ones' highs].
 fn least(cs: &[Cand]) -> Ival {
     let mut lo = f64::INFINITY;
@@ -112,17 +141,18 @@ pub fn pt_sec(q: [f64; 2], s: &Sec) -> Ival {
             let w = sub2(q, a);
             let dd = dot(d, d);
             let t = dot(w, d).div(dd);
-            let (da, db) = (len(w), len(sub2(q, b)));
+            // only what the answer needs
             if t.hi <= 0.0 {
-                return da;
+                return len(w);
             }
             if t.lo >= 1.0 {
-                return db;
+                return len(sub2(q, b));
             }
             let perp = cross(d, w).abs().div(dd.sqrt());
             if t.lo >= 0.0 && t.hi <= 1.0 {
                 return perp;
             }
+            let (da, db) = (len(w), len(sub2(q, b)));
             Ival {
                 lo: perp.lo,
                 hi: da.hi.min(db.hi),
@@ -130,19 +160,22 @@ pub fn pt_sec(q: [f64; 2], s: &Sec) -> Ival {
         }
         Sec::Arc { c, r, a, b, ccw } => {
             let v = sub2(q, c);
-            let circ = len(v).sub(p(r)).abs();
+            let side = in_sector(c, a, b, ccw, v);
+            if side == 1 {
+                return len(v).sub(p(r)).abs();
+            }
             let (da, db) = (len(sub2(q, a)), len(sub2(q, b)));
             let ends = Ival {
                 lo: da.lo.min(db.lo),
                 hi: da.hi.min(db.hi),
             };
-            match in_sector(c, a, b, ccw, v) {
-                1 => circ,
-                -1 => ends,
-                _ => Ival {
-                    lo: circ.lo.min(ends.lo),
-                    hi: ends.hi,
-                },
+            if side == -1 {
+                return ends;
+            }
+            let circ = len(v).sub(p(r)).abs();
+            Ival {
+                lo: circ.lo.min(ends.lo),
+                hi: ends.hi,
             }
         }
     }
@@ -195,7 +228,7 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
     if let Some(q) = degenerate(t) {
         return pt_sec(q, s);
     }
-    let mut cs: Vec<Cand> = Vec::new();
+    let mut cs = Cands::new();
     let (sa, sb) = ends(s);
     let (ta, tb) = ends(t);
     cs.push(Cand {
@@ -442,13 +475,22 @@ fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], cutoff: f64) -> 
     let mut lo = f64::INFINITY;
     let mut hi = f64::INFINITY;
     let pb = sec_box(path);
+    // the region's box (its pieces' boxes hold it)
+    let mut rb = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
     let mut i = 0;
     while i < region.len() {
+        let b = &boxes[i];
+        rb = [rb[0].min(b[0]), rb[1].min(b[1]), rb[2].max(b[2]), rb[3].max(b[3])];
         let g = box_gap(&pb, &boxes[i]);
         if g > cutoff {
             if g < lo {
                 lo = g;
             }
+            i += 1;
+            continue;
+        }
+        // its distance is at least g ≥ hi ≥ lo: it changes neither end
+        if g >= hi {
             i += 1;
             continue;
         }
@@ -465,8 +507,12 @@ fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], cutoff: f64) -> 
         }
         i += 1;
     }
-    // inside: the path's start is a face point at distance 0
+    // inside: the path's start is a face point at distance 0 (outside the region's box it is
+    // outside the region, and the ray cast is not needed)
     let (a, _) = ends(path);
+    if a[0] < rb[0] || a[0] > rb[2] || a[1] < rb[1] || a[1] > rb[3] {
+        return Ival { lo, hi };
+    }
     let tr = crate::check::Trim {
         segs: region.to_vec(),
     };
@@ -653,6 +699,24 @@ pub fn certify(
     res: f64,
     budget: usize,
 ) -> (Verdict, usize) {
+    certify_shared(body, f, pr, pl, limit, res, budget, &mut None)
+}
+
+/// `certify`, the move's distance to the face's section shared between calls for the same move
+/// and face (the bodies of one tool): `shared` holds it once computed, with the cutoff it was
+/// computed to (segments beyond it count only by their box gap); a body that needs a larger
+/// cutoff computes it again.
+#[allow(clippy::too_many_arguments)]
+pub fn certify_shared(
+    body: &Body,
+    f: &Face,
+    pr: &Prism,
+    pl: &Planar,
+    limit: f64,
+    res: f64,
+    budget: usize,
+    shared: &mut Option<(Ival, f64)>,
+) -> (Verdict, usize) {
     let (path, zt) = path_sec(pl);
     let (lim_clear, lim_hit) = (limit + f.mu, limit - f.mu);
     let (d, dz) = match pr {
@@ -668,12 +732,27 @@ pub fn certify(
                 .add(Ival::pt(limit.abs()))
                 .add(Ival::pt(f.mu))
                 .hi;
-            (dist_region(&path, region, boxes, cutoff), dz)
+            let d = match *shared {
+                Some((d, cut)) if cut >= cutoff => d,
+                _ => {
+                    let d = dist_region(&path, region, boxes, cutoff);
+                    *shared = Some((d, cutoff));
+                    d
+                }
+            };
+            (d, dz)
         }
-        Prism::Wall { sec, z0, z1 } => (
-            dist(&path, sec),
-            Ival::new(Ival::pt(*z0).sub(zt).lo, Ival::pt(*z1).sub(zt).hi),
-        ),
+        Prism::Wall { sec, z0, z1 } => {
+            let d = match *shared {
+                Some((d, _)) => d,
+                None => {
+                    let d = dist(&path, sec);
+                    *shared = Some((d, f64::INFINITY));
+                    d
+                }
+            };
+            (d, Ival::new(Ival::pt(*z0).sub(zt).lo, Ival::pt(*z1).sub(zt).hi))
+        }
     };
     // the one-dimensional search over the height offset Δ
     let lo_rho = Ival::pt(d.lo);
