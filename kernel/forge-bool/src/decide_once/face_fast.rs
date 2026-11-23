@@ -685,10 +685,7 @@ pub(crate) fn counts(
                 }
             })
             .collect(),
-        fscale: fs
-            .iter()
-            .map(|f| (0..3).fold(0.0f64, |m, k| m.max(f.lo[k].abs()).max(f.hi[k].abs())) + 1.0)
-            .collect(),
+        fscale: vec![0.0; fs.len()],
         lines: (0..cls.planes.len()).map(|_| None).collect(),
         lset: Vec::new(),
         ax_start: Vec::with_capacity(3 * fs.len() + 1),
@@ -706,6 +703,15 @@ pub(crate) fn counts(
         }
     }
     cx.fe_start = fe_start.clone();
+    // per face, 1 + the largest coordinate of its vertices' shadows (mid_in's prefilter scale)
+    for g in 0..fs.len() {
+        let mut m = 0.0f64;
+        for j in fe_start[g] as usize..fe_start[g + 1] as usize {
+            let (ia, ib) = cx.fe_pt[j];
+            m = m.max(m3(&cx.p[ia as usize].f)).max(m3(&cx.p[ib as usize].f));
+        }
+        cx.fscale[g] = 1.0 + m;
+    }
     cx.ax_start.push(0);
     for g in 0..fs.len() {
         let (lo, hi) = (fe_start[g] as usize, fe_start[g + 1] as usize);
@@ -1234,7 +1240,9 @@ fn plane(cx: &Ctx, c: u32, segs: &[Seg], xs: &[(u32, u32, u32)]) -> (usize, usiz
         .iter()
         .map(|l| {
             let (x, mut y) = (l.d.get(s).clone(), l.d.get(t).clone());
-            let (fx, mut fy) = (l.f[s], l.f[t]);
+            // (the exact direction rounded, not the f64 normals' cross product: that loses its
+            // relative accuracy for nearly parallel normals)
+            let (fx, mut fy) = (x.to_f64(), y.to_f64());
             if flip {
                 y = y.neg();
                 fy = -fy;
@@ -1258,7 +1266,7 @@ fn plane(cx: &Ctx, c: u32, segs: &[Seg], xs: &[(u32, u32, u32)]) -> (usize, usiz
         let sg = if ra == rb { 1 } else { -1 };
         let (da, db) = (&dirs[ka], &dirs[kb]);
         let v = da.2 * db.3 - da.3 * db.2;
-        let bound = 4.0 * f64::EPSILON * ((da.2 * db.3).abs() + (da.3 * db.2).abs());
+        let bound = 8.0 * f64::EPSILON * ((da.2 * db.3).abs() + (da.3 * db.2).abs());
         let cr = if v.abs() > bound {
             tick(&cx.t, 8, 1);
             if v > 0.0 { 1 } else { -1 }

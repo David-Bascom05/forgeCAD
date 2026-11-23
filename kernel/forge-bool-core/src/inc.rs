@@ -187,8 +187,8 @@ fn count_sec(secs: &[Sector], lo: usize, hi: usize, x: Sector) -> usize {
 }
 
 /// `LedgerWF` v2: the Csrs well formed; a facet at most twice per edge row; no repeat in a
-/// vert's edges or in its sectors; face ids and sectors below `u32::MAX`, and the facet-body
-/// table's size within `usize`; each sector's facet in range, its two edges in its vert's row and
+/// vert's edges or in its sectors; face ids, sectors and pieces below `u32::MAX`, and the
+/// facet-body and room-body tables' sizes and three times the facets within `usize`; each sector's facet in range, its two edges in its vert's row and
 /// the facet round both; ids and counts in range; a facet's two sides distinct rooms; and every
 /// facet a piece of some face of its own class.
 pub fn ledger_wf(l: &Ledger) -> bool {
@@ -204,6 +204,9 @@ pub fn ledger_wf(l: &Ledger) -> bool {
         && (l.face_body.len() as u64) < u32::MAX as u64
         && (nf as u128) * (l.nb as u128) <= usize::MAX as u128
         && (l.vert_sectors.sec.len() as u64) < u32::MAX as u64
+        && (l.pieces.len() as u64) < u32::MAX as u64
+        && (l.n_rooms as u128) * (l.nb as u128) <= usize::MAX as u128
+        && 3 * (nf as u128) <= usize::MAX as u128
         && l.n_rooms < u32::MAX
         && csr_ok(&l.edge_facets, nf as u32)
         && csr_ok(&l.vert_edges, ne as u32)
