@@ -46,6 +46,7 @@ def speedio_m(model, src, c_motor_kw, kg_machine, tt, cc, W, D, H):
              changer=dict(pockets=22, change_s=cc, kg=3.0, c_change_s=f"chip to chip, published (tool to tool {tt})"),
              nose_r=80.0, head_h=400.0, table_t=60.0, cradle_t=80.0, cradle_side=40.0)
     m = arch.trunnion(p)
+    nose_estimate(m, "spindle nose to table at A = 0 not published: 80..385 (estimate, note)")
     m.update(
         name=p["name"], control="brother", coolants=["flood", "through"], source=src, taken=TAKEN,
         header=[f"Brother SPEEDIO {model.upper()}: BT30 mill-turn (discontinued). A tilts the trunnion about X",

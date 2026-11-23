@@ -16,6 +16,7 @@ clearance = 1
 source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/ | https://www.hermle.de/fileadmin/website/5_NEWS-UND-MEDIA/5_2_Mediathek/Technische_Daten/Englisch/HERMLE_Technical-Data_C22-GEN2_2025_EN.pdf"
 taken = "2026-11-23"
 note = "A tilts the cradle about X (-135..135 deg, published) and carries C; the sense of +A (which way the table tips) is UNKNOWN: modelled right-handed about +x; A's pivot below the table top UNKNOWN: 150 mm (estimate); which unit carries X/Y/Z: see the header (where not published, all on the head here); the tool-to-part motion is the same either way; spindle nose to table: the published maximum less the Z stroke; spindle power as published: peak/other 31 kW; torque max 98 N.m (no curve: no power check); max tool diameter 80 with the neighbouring pockets full, 125 with them empty; magazine options: HSK-A50/E40: 65 pockets, ZM 50 / ZM 88k / ZM 216 / ZM 528 additional magazines; machine 9000 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+real = true
 
 [[machine.joint]]
 name = "X"
@@ -106,7 +107,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/hermle/c-22-u/bed.fg"
+part = "parts/hermle/hermle-c-22-u/bed.fg"
 ignore = ["support-l", "support-r"]
 [[machine.body.box]]
 min = [-525, -600, -824.30749]
@@ -115,7 +116,7 @@ max = [525, 600, -424.30749]
 [[machine.body]]
 name = "support-l"
 link = "base"
-part = "parts/hermle/c-22-u/support-l.fg"
+part = "parts/hermle/hermle-c-22-u/support-l.fg"
 ignore = ["bed", "cradle"]
 [[machine.body.box]]
 min = [-400, -220, -550]
@@ -124,7 +125,7 @@ max = [-260, 220, 0]
 [[machine.body]]
 name = "support-r"
 link = "base"
-part = "parts/hermle/c-22-u/support-r.fg"
+part = "parts/hermle/hermle-c-22-u/support-r.fg"
 ignore = ["bed", "cradle"]
 [[machine.body.box]]
 min = [260, -220, -550]
@@ -133,7 +134,7 @@ max = [400, 220, 0]
 [[machine.body]]
 name = "cradle"
 link = "A"
-part = "parts/hermle/c-22-u/cradle.fg"
+part = "parts/hermle/hermle-c-22-u/cradle.fg"
 ignore = ["rotary", "support-l", "support-r"]
 [[machine.body.box]]
 min = [-240, -180, -200]
@@ -142,7 +143,7 @@ max = [240, 180, -80]
 [[machine.body]]
 name = "rotary"
 link = "C"
-part = "parts/hermle/c-22-u/rotary.fg"
+part = "parts/hermle/hermle-c-22-u/rotary.fg"
 ignore = ["cradle"]
 [[machine.body.cyl]]
 base = [0, 0, -80]
@@ -153,7 +154,7 @@ h = 80
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/hermle/c-22-u/nose.fg"
+part = "parts/hermle/hermle-c-22-u/nose.fg"
 [[machine.body.cyl]]
 base = [0, 0, 515]
 axis = [0, 0, 1]
@@ -163,10 +164,198 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/hermle/c-22-u/head.fg"
+part = "parts/hermle/hermle-c-22-u/head.fg"
 [[machine.body.box]]
 min = [-150, -150, 665]
 max = [150, 150, 1115]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "X stroke 450 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "Y stroke 600 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "Z stroke 330 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.range"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "-135..135 deg"
+
+[[machine.cite]]
+path = "joint.A.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "9000 deg/min"
+
+[[machine.cite]]
+path = "joint.A.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "14400 deg/min"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 16000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table: the published maximum less the Z stroke"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "55"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "4.5 s (chip to chip, published)"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/"
+taken = "2026-11-23"
+value = "8 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table: the published maximum less the Z stroke"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the published rotary table diameter; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # Hermle C 32 U: C GEN2 (High-Performance Line), HEIDENHAIN TNC7.
@@ -181,6 +370,7 @@ clearance = 1
 source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/ | https://www.hermle.de/fileadmin/website/5_NEWS-UND-MEDIA/5_2_Mediathek/Technische_Daten/Englisch/HERMLE_Technical_Data_C32_GEN2_EN.pdf"
 taken = "2026-11-23"
 note = "A tilts the cradle about X (-130..130 deg, published) and carries C; the sense of +A (which way the table tips) is UNKNOWN: modelled right-handed about +x; A's pivot below the table top UNKNOWN: 150 mm (estimate); which unit carries X/Y/Z: see the header (where not published, all on the head here); the tool-to-part motion is the same either way; spindle nose to table: the published maximum less the Z stroke; spindle power as published: peak/other 20 kW; torque max 173 N.m (no curve: no power check); max tool diameter 80 with the neighbouring pockets full, 125 with them empty; magazine options: ZM 30 / ZM 50 / ZM 88k / ZM 216 / ZM 528 additional magazines; machine 11000 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+real = true
 
 [[machine.joint]]
 name = "X"
@@ -271,7 +461,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/hermle/c-32-u/bed.fg"
+part = "parts/hermle/hermle-c-32-u/bed.fg"
 ignore = ["support-l", "support-r"]
 [[machine.body.box]]
 min = [-625, -625, -966.198086]
@@ -280,7 +470,7 @@ max = [625, 625, -566.198086]
 [[machine.body]]
 name = "support-l"
 link = "base"
-part = "parts/hermle/c-32-u/support-l.fg"
+part = "parts/hermle/hermle-c-32-u/support-l.fg"
 ignore = ["bed", "cradle"]
 [[machine.body.box]]
 min = [-565, -385, -550]
@@ -289,7 +479,7 @@ max = [-425, 385, 0]
 [[machine.body]]
 name = "support-r"
 link = "base"
-part = "parts/hermle/c-32-u/support-r.fg"
+part = "parts/hermle/hermle-c-32-u/support-r.fg"
 ignore = ["bed", "cradle"]
 [[machine.body.box]]
 min = [425, -385, -550]
@@ -298,7 +488,7 @@ max = [565, 385, 0]
 [[machine.body]]
 name = "cradle"
 link = "A"
-part = "parts/hermle/c-32-u/cradle.fg"
+part = "parts/hermle/hermle-c-32-u/cradle.fg"
 ignore = ["rotary", "support-l", "support-r"]
 [[machine.body.box]]
 min = [-405, -345, -200]
@@ -307,7 +497,7 @@ max = [405, 345, -80]
 [[machine.body]]
 name = "rotary"
 link = "C"
-part = "parts/hermle/c-32-u/rotary.fg"
+part = "parts/hermle/hermle-c-32-u/rotary.fg"
 ignore = ["cradle"]
 [[machine.body.cyl]]
 base = [0, 0, -80]
@@ -318,7 +508,7 @@ h = 80
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/hermle/c-32-u/nose.fg"
+part = "parts/hermle/hermle-c-32-u/nose.fg"
 [[machine.body.cyl]]
 base = [0, 0, 635]
 axis = [0, 0, 1]
@@ -328,10 +518,198 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/hermle/c-32-u/head.fg"
+part = "parts/hermle/hermle-c-32-u/head.fg"
 [[machine.body.box]]
 min = [-150, -150, 785]
 max = [150, 150, 1235]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "X stroke 650 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "45000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "Y stroke 650 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "45000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "Z stroke 500 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "40000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.range"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "-130..130 deg"
+
+[[machine.cite]]
+path = "joint.A.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "9000 deg/min"
+
+[[machine.cite]]
+path = "joint.A.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "23400 deg/min"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 16000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table: the published maximum less the Z stroke"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "36"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "4.5 s (chip to chip, published)"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-32-gen2/"
+taken = "2026-11-23"
+value = "8 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table: the published maximum less the Z stroke"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the published rotary table diameter; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # Hermle C 42 U: C GEN2 (High-Performance Line), HEIDENHAIN TNC7.
@@ -346,6 +724,7 @@ clearance = 1
 source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/ | https://www.hermle.de/fileadmin/website/5_NEWS-UND-MEDIA/5_2_Mediathek/Technische_Daten/Englisch/HERMLE_Technical_Data_C42_GEN2_EN.pdf"
 taken = "2026-11-23"
 note = "A tilts the cradle about X (-130..130 deg, published) and carries C; the sense of +A (which way the table tips) is UNKNOWN: modelled right-handed about +x; A's pivot below the table top UNKNOWN: 150 mm (estimate); which unit carries X/Y/Z: see the header (where not published, all on the head here); the tool-to-part motion is the same either way; spindle nose to table: the published maximum less the Z stroke; spindle power as published: peak/other 20 kW; torque max 173 N.m (no curve: no power check); max tool diameter 80 with the neighbouring pockets full, 125 with them empty; magazine options: ZM 30 / ZM 50 / ZM 88k / ZM 216 / ZM 528 additional magazines; machine 13500 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+real = true
 
 [[machine.joint]]
 name = "X"
@@ -436,7 +815,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/hermle/c-42-u/bed.fg"
+part = "parts/hermle/hermle-c-42-u/bed.fg"
 ignore = ["support-l", "support-r"]
 [[machine.body.box]]
 min = [-700, -700, -1035.982062]
@@ -445,7 +824,7 @@ max = [700, 700, -635.982062]
 [[machine.body]]
 name = "support-l"
 link = "base"
-part = "parts/hermle/c-42-u/support-l.fg"
+part = "parts/hermle/hermle-c-42-u/support-l.fg"
 ignore = ["bed", "cradle"]
 [[machine.body.box]]
 min = [-640, -460, -550]
@@ -454,7 +833,7 @@ max = [-500, 460, 0]
 [[machine.body]]
 name = "support-r"
 link = "base"
-part = "parts/hermle/c-42-u/support-r.fg"
+part = "parts/hermle/hermle-c-42-u/support-r.fg"
 ignore = ["bed", "cradle"]
 [[machine.body.box]]
 min = [500, -460, -550]
@@ -463,7 +842,7 @@ max = [640, 460, 0]
 [[machine.body]]
 name = "cradle"
 link = "A"
-part = "parts/hermle/c-42-u/cradle.fg"
+part = "parts/hermle/hermle-c-42-u/cradle.fg"
 ignore = ["rotary", "support-l", "support-r"]
 [[machine.body.box]]
 min = [-480, -420, -200]
@@ -472,7 +851,7 @@ max = [480, 420, -80]
 [[machine.body]]
 name = "rotary"
 link = "C"
-part = "parts/hermle/c-42-u/rotary.fg"
+part = "parts/hermle/hermle-c-42-u/rotary.fg"
 ignore = ["cradle"]
 [[machine.body.cyl]]
 base = [0, 0, -80]
@@ -483,7 +862,7 @@ h = 80
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/hermle/c-42-u/nose.fg"
+part = "parts/hermle/hermle-c-42-u/nose.fg"
 [[machine.body.cyl]]
 base = [0, 0, 700]
 axis = [0, 0, 1]
@@ -493,7 +872,195 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/hermle/c-42-u/head.fg"
+part = "parts/hermle/hermle-c-42-u/head.fg"
 [[machine.body.box]]
 min = [-150, -150, 850]
 max = [150, 150, 1300]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "X stroke 800 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "45000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "Y stroke 800 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "45000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "Z stroke 550 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "40000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.range"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "-130..130 deg"
+
+[[machine.cite]]
+path = "joint.A.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "9000 deg/min"
+
+[[machine.cite]]
+path = "joint.A.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "23400 deg/min"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 16000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table: the published maximum less the Z stroke"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "42"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "4.5 s (chip to chip, published)"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-42-gen2/"
+taken = "2026-11-23"
+value = "8 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table: the published maximum less the Z stroke"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the published rotary table diameter; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"

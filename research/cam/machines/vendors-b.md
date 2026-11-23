@@ -7,6 +7,13 @@ dealer/importer page had it, the note says so. The research restatements (one JS
 with every UNKNOWN listed) are in b/specs/; the generator that turns them into records is in b/gen/
 (conv.py: published -> field, unpublished geometry -> named estimate, unpublished check value ->
 vacuous value named UNKNOWN; a machine whose travels, rpm or tilt range are unpublished is left out).
+Every record is `real = true` with one `[[machine.cite]]` per value `cite_paths` lists (published:
+source + taken + value; estimate/unknown: basis). Bodies, pivots, turret centres and part datums are
+estimates by construction; the rest is published unless its cite says otherwise.
+
+Policy note: for an unpublished rapid this library holds a HIGH value (errs so `t_min` stays a lower
+bound), and max feed = rapid (no false clamp). docs/cam-machine.md's Provenance says "a lower rate";
+a lower stand-in rapid would make `t_min` overstate. Raised with the coordinator.
 
 Tests: interface/forge-machine-lang/tests/vendors.rs (every file parses and validates, every part
 builds and lies inside its envelope, every machine is clear at home and with each joint at each end

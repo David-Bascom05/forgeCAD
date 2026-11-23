@@ -72,6 +72,7 @@ def hcn5000():
              spindle=dict(rpm_max=12000, iface="CAT40"), maxtool=(508, 101.6), changer=ch(40, 11.8),
              nose_r=120.0)
     m = arch.hmc(p)
+    nose_estimate(m, "spindle nose to pallet centre not published: 100 at the end of Z (estimate)")
     for a in "XYZ":
         mark(m, a, "max_feed", UNK_FEED)
     mark(m, "B", "rapid", UNK_RAPID)

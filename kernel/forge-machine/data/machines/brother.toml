@@ -17,6 +17,7 @@ clearance = 1
 source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
 taken = "2026-11-23"
 note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (Brother's page does not say which unit carries which axis: UNKNOWN); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (460, estimate); spindle power published as ratings only (10-min 10.1 kW, continuous 7.1 kW, 40 N.m max), no curve: no power check; accel published for Z only (2.2 G); X/Y UNKNOWN; max cutting feed 30 m/min only in high accuracy mode B; through-spindle coolant optional; overall W x D = required floor space 1080 x 2463, H 2497; machine 2200 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the control's dialect (brother) is not in forge-post yet."
+real = true
 
 [[machine.joint]]
 name = "Y"
@@ -82,7 +83,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/brother/speedio-s300x2/bed.fg"
+part = "parts/brother/brother-speedio-s300x2/bed.fg"
 ignore = ["saddle", "column"]
 [[machine.body.box]]
 min = [-300, -500, -700]
@@ -91,7 +92,7 @@ max = [300, 860, -400]
 [[machine.body]]
 name = "column"
 link = "base"
-part = "parts/brother/speedio-s300x2/column.fg"
+part = "parts/brother/brother-speedio-s300x2/column.fg"
 ignore = ["bed", "head"]
 [[machine.body.box]]
 min = [-300, 460, -400]
@@ -100,7 +101,7 @@ max = [300, 860, 1080]
 [[machine.body]]
 name = "saddle"
 link = "Y"
-part = "parts/brother/speedio-s300x2/saddle.fg"
+part = "parts/brother/brother-speedio-s300x2/saddle.fg"
 ignore = ["bed", "table"]
 [[machine.body.box]]
 min = [-240, -200, -250]
@@ -109,7 +110,7 @@ max = [240, 200, -100]
 [[machine.body]]
 name = "table"
 link = "X"
-part = "parts/brother/speedio-s300x2/table.fg"
+part = "parts/brother/brother-speedio-s300x2/table.fg"
 ignore = ["saddle"]
 [[machine.body.box]]
 min = [-300, -200, -100]
@@ -118,7 +119,7 @@ max = [300, 200, 0]
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/brother/speedio-s300x2/nose.fg"
+part = "parts/brother/brother-speedio-s300x2/nose.fg"
 ignore = ["column"]
 [[machine.body.cyl]]
 base = [0, 0, 480]
@@ -129,11 +130,165 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/brother/speedio-s300x2/head.fg"
+part = "parts/brother/brother-speedio-s300x2/head.fg"
 ignore = ["column"]
 [[machine.body.box]]
 min = [-110, -110, 630]
 max = [110, 460, 1030]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "Y stroke 400 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "X stroke 300 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "Z stroke 300 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "56000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.accel"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "21574.6 mm/s^2"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "10..10000 rpm"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "14"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "1.3 s (chip to chip, published (tool to tool 0.7))"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "3.0 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # Brother SPEEDIO S500X2: BT30 compact drill/tap/mill centre (CNC-C00). Discontinued; successor
@@ -149,6 +304,7 @@ clearance = 1
 source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
 taken = "2026-11-23"
 note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (Brother's page does not say which unit carries which axis: UNKNOWN); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (460, estimate); spindle power published as ratings only (10-min 10.1 kW, continuous 7.1 kW, 40 N.m max), no curve: no power check; accel published for Z only (2.2 G); X/Y UNKNOWN; max cutting feed 30 m/min only in high accuracy mode B; through-spindle coolant optional; overall W x D = required floor space 1560 x 2223, H 2497; machine 2250 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the control's dialect (brother) is not in forge-post yet."
+real = true
 
 [[machine.joint]]
 name = "Y"
@@ -214,7 +370,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/brother/speedio-s500x2/bed.fg"
+part = "parts/brother/brother-speedio-s500x2/bed.fg"
 ignore = ["saddle", "column"]
 [[machine.body.box]]
 min = [-300, -500, -700]
@@ -223,7 +379,7 @@ max = [300, 860, -400]
 [[machine.body]]
 name = "column"
 link = "base"
-part = "parts/brother/speedio-s500x2/column.fg"
+part = "parts/brother/brother-speedio-s500x2/column.fg"
 ignore = ["bed", "head"]
 [[machine.body.box]]
 min = [-300, 460, -400]
@@ -232,7 +388,7 @@ max = [300, 860, 1080]
 [[machine.body]]
 name = "saddle"
 link = "Y"
-part = "parts/brother/speedio-s500x2/saddle.fg"
+part = "parts/brother/brother-speedio-s500x2/saddle.fg"
 ignore = ["bed", "table"]
 [[machine.body.box]]
 min = [-240, -200, -250]
@@ -241,7 +397,7 @@ max = [240, 200, -100]
 [[machine.body]]
 name = "table"
 link = "X"
-part = "parts/brother/speedio-s500x2/table.fg"
+part = "parts/brother/brother-speedio-s500x2/table.fg"
 ignore = ["saddle"]
 [[machine.body.box]]
 min = [-300, -200, -100]
@@ -250,7 +406,7 @@ max = [300, 200, 0]
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/brother/speedio-s500x2/nose.fg"
+part = "parts/brother/brother-speedio-s500x2/nose.fg"
 ignore = ["column"]
 [[machine.body.cyl]]
 base = [0, 0, 480]
@@ -261,11 +417,165 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/brother/speedio-s500x2/head.fg"
+part = "parts/brother/brother-speedio-s500x2/head.fg"
 ignore = ["column"]
 [[machine.body.box]]
 min = [-110, -110, 630]
 max = [110, 460, 1030]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "Y stroke 400 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "X stroke 500 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "Z stroke 300 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "56000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.accel"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "21574.6 mm/s^2"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "10..10000 rpm"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "14"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "1.3 s (chip to chip, published (tool to tool 0.7))"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "3.0 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # Brother SPEEDIO S700X2: BT30 compact drill/tap/mill centre (CNC-C00). Discontinued; successor
@@ -281,6 +591,7 @@ clearance = 1
 source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
 taken = "2026-11-23"
 note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (Brother's page does not say which unit carries which axis: UNKNOWN); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (460, estimate); spindle power published as ratings only (10-min 10.1 kW, continuous 7.1 kW, 40 N.m max), no curve: no power check; accel published for Z only (2.2 G); X/Y UNKNOWN; max cutting feed 30 m/min only in high accuracy mode B; through-spindle coolant optional; overall W x D = required floor space 2050 x 2223, H 2497; machine 2400 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the control's dialect (brother) is not in forge-post yet."
+real = true
 
 [[machine.joint]]
 name = "Y"
@@ -346,7 +657,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/brother/speedio-s700x2/bed.fg"
+part = "parts/brother/brother-speedio-s700x2/bed.fg"
 ignore = ["saddle", "column"]
 [[machine.body.box]]
 min = [-400, -500, -700]
@@ -355,7 +666,7 @@ max = [400, 860, -400]
 [[machine.body]]
 name = "column"
 link = "base"
-part = "parts/brother/speedio-s700x2/column.fg"
+part = "parts/brother/brother-speedio-s700x2/column.fg"
 ignore = ["bed", "head"]
 [[machine.body.box]]
 min = [-300, 460, -400]
@@ -364,7 +675,7 @@ max = [300, 860, 1080]
 [[machine.body]]
 name = "saddle"
 link = "Y"
-part = "parts/brother/speedio-s700x2/saddle.fg"
+part = "parts/brother/brother-speedio-s700x2/saddle.fg"
 ignore = ["bed", "table"]
 [[machine.body.box]]
 min = [-320, -200, -250]
@@ -373,7 +684,7 @@ max = [320, 200, -100]
 [[machine.body]]
 name = "table"
 link = "X"
-part = "parts/brother/speedio-s700x2/table.fg"
+part = "parts/brother/brother-speedio-s700x2/table.fg"
 ignore = ["saddle"]
 [[machine.body.box]]
 min = [-400, -200, -100]
@@ -382,7 +693,7 @@ max = [400, 200, 0]
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/brother/speedio-s700x2/nose.fg"
+part = "parts/brother/brother-speedio-s700x2/nose.fg"
 ignore = ["column"]
 [[machine.body.cyl]]
 base = [0, 0, 480]
@@ -393,11 +704,165 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/brother/speedio-s700x2/head.fg"
+part = "parts/brother/brother-speedio-s700x2/head.fg"
 ignore = ["column"]
 [[machine.body.box]]
 min = [-110, -110, 630]
 max = [110, 460, 1030]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "Y stroke 400 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "X stroke 700 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "Z stroke 300 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "56000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.accel"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "21574.6 mm/s^2"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "10..10000 rpm"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "14"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "1.3 s (chip to chip, published (tool to tool 0.7))"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "3.0 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # Brother SPEEDIO M140X2: BT30 mill-turn (discontinued). A tilts the trunnion about X
@@ -413,6 +878,7 @@ clearance = 1
 source = "https://machinetool.global.brother/en-us/all-products/m140x2"
 taken = "2026-11-23"
 note = "C is modelled as a rotary joint only: its turning (2,000 rpm, 55 N.m, 8.7 kW max) is a format gap (a turning spindle on a table rotary of a milling machine; mill-turn requires a diameter X), FORMAT-GAPS.md; spindle nose to table top at A = 0 UNKNOWN: put at 80-385 (estimate); A's pivot 50 mm below the table top (estimate); architecture of X/Y/Z UNKNOWN (Brother does not say which unit carries which); the tool-to-part motion is the same either way; spindle power published as ratings (10-min 10.1 kW, 40 N.m max): no curve, no power check; table side load 40 kg, tail side 11 kg; max cutting feed 30 m/min only in high accuracy mode B; overall W x D = required floor space 1280 x 3829, H 2603; machine 2712 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the control's dialect (brother) is not in forge-post yet."
+real = true
 
 [[machine.joint]]
 name = "X"
@@ -503,7 +969,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/brother/speedio-m140x2/bed.fg"
+part = "parts/brother/brother-speedio-m140x2/bed.fg"
 ignore = ["support-l", "support-r"]
 [[machine.body.box]]
 min = [-400, -520, -617.279221]
@@ -512,7 +978,7 @@ max = [400, 520, -217.279221]
 [[machine.body]]
 name = "support-l"
 link = "base"
-part = "parts/brother/speedio-m140x2/support-l.fg"
+part = "parts/brother/brother-speedio-m140x2/support-l.fg"
 ignore = ["bed", "cradle"]
 [[machine.body.box]]
 min = [-270, -130, -450]
@@ -521,7 +987,7 @@ max = [-130, 130, 100]
 [[machine.body]]
 name = "support-r"
 link = "base"
-part = "parts/brother/speedio-m140x2/support-r.fg"
+part = "parts/brother/brother-speedio-m140x2/support-r.fg"
 ignore = ["bed", "cradle"]
 [[machine.body.box]]
 min = [130, -130, -450]
@@ -530,7 +996,7 @@ max = [270, 130, 100]
 [[machine.body]]
 name = "cradle"
 link = "A"
-part = "parts/brother/speedio-m140x2/cradle.fg"
+part = "parts/brother/brother-speedio-m140x2/cradle.fg"
 ignore = ["rotary", "support-l", "support-r"]
 [[machine.body.box]]
 min = [-110, -90, -140]
@@ -539,7 +1005,7 @@ max = [110, 90, -60]
 [[machine.body]]
 name = "rotary"
 link = "C"
-part = "parts/brother/speedio-m140x2/rotary.fg"
+part = "parts/brother/brother-speedio-m140x2/rotary.fg"
 ignore = ["cradle"]
 [[machine.body.cyl]]
 base = [0, 0, -60]
@@ -550,7 +1016,7 @@ h = 60
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/brother/speedio-m140x2/nose.fg"
+part = "parts/brother/brother-speedio-m140x2/nose.fg"
 [[machine.body.cyl]]
 base = [0, 0, 385]
 axis = [0, 0, 1]
@@ -560,10 +1026,206 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/brother/speedio-m140x2/head.fg"
+part = "parts/brother/brother-speedio-m140x2/head.fg"
 [[machine.body.box]]
 min = [-120, -120, 535]
 max = [120, 120, 935]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "X stroke 200 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "Y stroke 440 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "Z stroke 305 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.A.range"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "-30..120 deg"
+
+[[machine.cite]]
+path = "joint.A.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "21600 deg/min"
+
+[[machine.cite]]
+path = "joint.A.max_feed"
+status = "unknown"
+basis = "rotary max cutting feed UNKNOWN (unpublished): = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "72000 deg/min"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max cutting feed UNKNOWN (unpublished): = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "10..10000 rpm"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table at A = 0 not published: 80..385 (estimate, note)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "22"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "1.4 s (chip to chip, published (tool to tool 0.9))"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+value = "3.0 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table at A = 0 not published: 80..385 (estimate, note)"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the published rotary table diameter; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # Brother SPEEDIO M200X3: BT30 mill-turn (discontinued). A tilts the trunnion about X
@@ -579,6 +1241,7 @@ clearance = 1
 source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
 taken = "2026-11-23"
 note = "C is modelled as a rotary joint only: its turning (2,000 rpm, 55 N.m, 8.7 kW max) is a format gap (a turning spindle on a table rotary of a milling machine; mill-turn requires a diameter X), FORMAT-GAPS.md; spindle nose to table top at A = 0 UNKNOWN: put at 80-385 (estimate); A's pivot 50 mm below the table top (estimate); architecture of X/Y/Z UNKNOWN (Brother does not say which unit carries which); the tool-to-part motion is the same either way; spindle power published as ratings (10-min 10.1 kW, 40 N.m max): no curve, no power check; table side load 40 kg, tail side 11 kg; max cutting feed 30 m/min only in high accuracy mode B; overall W x D = required floor space 1280 x 3862, H 2603; machine 2750 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the control's dialect (brother) is not in forge-post yet."
+real = true
 
 [[machine.joint]]
 name = "X"
@@ -669,7 +1332,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/brother/speedio-m200x3/bed.fg"
+part = "parts/brother/brother-speedio-m200x3/bed.fg"
 ignore = ["support-l", "support-r"]
 [[machine.body.box]]
 min = [-400, -520, -617.279221]
@@ -678,7 +1341,7 @@ max = [400, 520, -217.279221]
 [[machine.body]]
 name = "support-l"
 link = "base"
-part = "parts/brother/speedio-m200x3/support-l.fg"
+part = "parts/brother/brother-speedio-m200x3/support-l.fg"
 ignore = ["bed", "cradle"]
 [[machine.body.box]]
 min = [-270, -130, -450]
@@ -687,7 +1350,7 @@ max = [-130, 130, 100]
 [[machine.body]]
 name = "support-r"
 link = "base"
-part = "parts/brother/speedio-m200x3/support-r.fg"
+part = "parts/brother/brother-speedio-m200x3/support-r.fg"
 ignore = ["bed", "cradle"]
 [[machine.body.box]]
 min = [130, -130, -450]
@@ -696,7 +1359,7 @@ max = [270, 130, 100]
 [[machine.body]]
 name = "cradle"
 link = "A"
-part = "parts/brother/speedio-m200x3/cradle.fg"
+part = "parts/brother/brother-speedio-m200x3/cradle.fg"
 ignore = ["rotary", "support-l", "support-r"]
 [[machine.body.box]]
 min = [-110, -90, -140]
@@ -705,7 +1368,7 @@ max = [110, 90, -60]
 [[machine.body]]
 name = "rotary"
 link = "C"
-part = "parts/brother/speedio-m200x3/rotary.fg"
+part = "parts/brother/brother-speedio-m200x3/rotary.fg"
 ignore = ["cradle"]
 [[machine.body.cyl]]
 base = [0, 0, -60]
@@ -716,7 +1379,7 @@ h = 60
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/brother/speedio-m200x3/nose.fg"
+part = "parts/brother/brother-speedio-m200x3/nose.fg"
 [[machine.body.cyl]]
 base = [0, 0, 385]
 axis = [0, 0, 1]
@@ -726,7 +1389,203 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/brother/speedio-m200x3/head.fg"
+part = "parts/brother/brother-speedio-m200x3/head.fg"
 [[machine.body.box]]
 min = [-120, -120, 535]
 max = [120, 120, 935]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "X stroke 200 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "Y stroke 440 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "Z stroke 305 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.A.range"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "-30..120 deg"
+
+[[machine.cite]]
+path = "joint.A.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "21600 deg/min"
+
+[[machine.cite]]
+path = "joint.A.max_feed"
+status = "unknown"
+basis = "rotary max cutting feed UNKNOWN (unpublished): = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "72000 deg/min"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max cutting feed UNKNOWN (unpublished): = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "10..10000 rpm"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table at A = 0 not published: 80..385 (estimate, note)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "22"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "1.5 s (chip to chip, published (tool to tool 0.8))"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+value = "3.0 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table at A = 0 not published: 80..385 (estimate, note)"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the published rotary table diameter; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"

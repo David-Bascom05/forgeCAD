@@ -6,18 +6,9 @@ use forge_machine::def::{MachineDef, Prim};
 use forge_machine::gcode::Control;
 use forge_machine::kin;
 use forge_machine::sim::{self, Cut, Setup, SimTool};
-use std::path::Path;
 
-fn machine(vendor: &str, name: &str) -> MachineDef {
-    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../kernel/forge-machine/data/machines")
-        .join(format!("{vendor}.toml"));
-    let src = std::fs::read_to_string(&p).unwrap();
-    MachineDef::parse_all(&src)
-        .unwrap()
-        .into_iter()
-        .find(|m| m.name == name)
-        .unwrap_or_else(|| panic!("no {name} in {}", p.display()))
+fn machine(name: &str) -> MachineDef {
+    forge_machine::library::builtin_named(name).unwrap_or_else(|| panic!("no built-in {name}"))
 }
 
 fn end_mill(t: u32, l: f64, r: f64) -> SimTool {
@@ -56,7 +47,7 @@ fn assert_clear(s: &Setup, tl: &sim::Timeline, stock: Prim, fixture: Prim) {
 /// the spindle and that face cut 1 mm deep.
 #[test]
 fn ac_trunnion_3_plus_2_on_brother_m200x3() {
-    let m = machine("brother", "brother-speedio-m200x3");
+    let m = machine("brother-speedio-m200x3");
     let c = Control::for_dialect(&m, "fanuc", 1).unwrap();
     assert_eq!(c.letters, vec!['X', 'Y', 'Z', 'A', 'C']);
     let gauge = m.mount("spindle").unwrap().at[2];
@@ -103,7 +94,7 @@ fn ac_trunnion_3_plus_2_on_brother_m200x3() {
 /// 1 mm deep.
 #[test]
 fn hmc_index_and_face_on_makino_a51nx() {
-    let m = machine("makino", "makino-a51nx");
+    let m = machine("makino-a51nx");
     let c = Control::for_dialect(&m, "fanuc", 1).unwrap();
     assert_eq!(c.letters, vec!['X', 'Y', 'Z', 'B']);
     let nose = m.mount("spindle").unwrap().at;

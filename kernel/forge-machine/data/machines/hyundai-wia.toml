@@ -16,6 +16,7 @@ clearance = 1
 source = "https://www.komachine.com/en/companies/hyundai-wia/products/38038"
 taken = "2026-11-23"
 note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle nose to table UNKNOWN: 150 to 150 + Z (estimate); spindle power as published: cont 11 kW; peak/other 15 kW; torque cont 143 N.m; torque max 286 N.m (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); numbers from a page hosted by a dealer/importer/marketplace (https://www.komachine.com/en/companies/hyundai-wia/products/38038), not the maker's own site; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; control UNKNOWN (not published)."
+real = true
 
 [[machine.joint]]
 name = "Y"
@@ -80,7 +81,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/hyundai-wia/wia-kf5600/bed.fg"
+part = "parts/hyundai-wia/hyundai-wia-kf5600/bed.fg"
 ignore = ["saddle", "column"]
 [[machine.body.box]]
 min = [-625, -660, -700]
@@ -89,7 +90,7 @@ max = [625, 1070, -400]
 [[machine.body]]
 name = "column"
 link = "base"
-part = "parts/hyundai-wia/wia-kf5600/column.fg"
+part = "parts/hyundai-wia/hyundai-wia-kf5600/column.fg"
 ignore = ["bed", "head"]
 [[machine.body.box]]
 min = [-375, 620, -400]
@@ -98,7 +99,7 @@ max = [375, 1070, 1320]
 [[machine.body]]
 name = "saddle"
 link = "Y"
-part = "parts/hyundai-wia/wia-kf5600/saddle.fg"
+part = "parts/hyundai-wia/hyundai-wia-kf5600/saddle.fg"
 ignore = ["bed", "table"]
 [[machine.body.box]]
 min = [-500, -280, -250]
@@ -107,7 +108,7 @@ max = [500, 280, -100]
 [[machine.body]]
 name = "table"
 link = "X"
-part = "parts/hyundai-wia/wia-kf5600/table.fg"
+part = "parts/hyundai-wia/hyundai-wia-kf5600/table.fg"
 ignore = ["saddle"]
 [[machine.body.box]]
 min = [-625, -280, -100]
@@ -116,7 +117,7 @@ max = [625, 280, 0]
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/hyundai-wia/wia-kf5600/nose.fg"
+part = "parts/hyundai-wia/hyundai-wia-kf5600/nose.fg"
 ignore = ["column"]
 [[machine.body.cyl]]
 base = [0, 0, 670]
@@ -127,11 +128,145 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/hyundai-wia/wia-kf5600/head.fg"
+part = "parts/hyundai-wia/hyundai-wia-kf5600/head.fg"
 ignore = ["column"]
 [[machine.body.box]]
 min = [-140, -140, 820]
 max = [140, 620, 1270]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/38038"
+taken = "2026-11-23"
+value = "Y stroke 560 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/38038"
+taken = "2026-11-23"
+value = "40000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/38038"
+taken = "2026-11-23"
+value = "X stroke 1100 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/38038"
+taken = "2026-11-23"
+value = "40000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/38038"
+taken = "2026-11-23"
+value = "Z stroke 520 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/38038"
+taken = "2026-11-23"
+value = "36000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 8000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table UNKNOWN: 150 at the bottom of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "unknown"
+value = "max tool length and diameter"
+basis = "max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check)"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/38038"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/38038"
+taken = "2026-11-23"
+value = "3.2 s (chip to chip, published)"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "unknown"
+basis = "UNKNOWN (unpublished): no weight check"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table UNKNOWN: 150 at the bottom of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # Hyundai WIA F500PLUS: F400/F500/F650 series, FANUC i (H/W FANUC i).
@@ -146,6 +281,7 @@ clearance = 1
 source = "https://www.komachine.com/en/companies/hyundai-wia/products/13879"
 taken = "2026-11-23"
 note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle nose to table UNKNOWN: 150 to 150 + Z (estimate); spindle power as published: cont 11 kW; peak/other 15 kW; torque cont 143 N.m; torque max 286 N.m (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); numbers from a page hosted by a dealer/importer/marketplace (https://www.komachine.com/en/companies/hyundai-wia/products/13879), not the maker's own site; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+real = true
 
 [[machine.joint]]
 name = "Y"
@@ -210,7 +346,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/hyundai-wia/wia-f500plus/bed.fg"
+part = "parts/hyundai-wia/hyundai-wia-f500plus/bed.fg"
 ignore = ["saddle", "column"]
 [[machine.body.box]]
 min = [-600, -605, -700]
@@ -219,7 +355,7 @@ max = [600, 1015, -400]
 [[machine.body]]
 name = "column"
 link = "base"
-part = "parts/hyundai-wia/wia-f500plus/column.fg"
+part = "parts/hyundai-wia/hyundai-wia-f500plus/column.fg"
 ignore = ["bed", "head"]
 [[machine.body.box]]
 min = [-360, 565, -400]
@@ -228,7 +364,7 @@ max = [360, 1015, 1435]
 [[machine.body]]
 name = "saddle"
 link = "Y"
-part = "parts/hyundai-wia/wia-f500plus/saddle.fg"
+part = "parts/hyundai-wia/hyundai-wia-f500plus/saddle.fg"
 ignore = ["bed", "table"]
 [[machine.body.box]]
 min = [-480, -250, -250]
@@ -237,7 +373,7 @@ max = [480, 250, -100]
 [[machine.body]]
 name = "table"
 link = "X"
-part = "parts/hyundai-wia/wia-f500plus/table.fg"
+part = "parts/hyundai-wia/hyundai-wia-f500plus/table.fg"
 ignore = ["saddle"]
 [[machine.body.box]]
 min = [-600, -250, -100]
@@ -246,7 +382,7 @@ max = [600, 250, 0]
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/hyundai-wia/wia-f500plus/nose.fg"
+part = "parts/hyundai-wia/hyundai-wia-f500plus/nose.fg"
 ignore = ["column"]
 [[machine.body.cyl]]
 base = [0, 0, 785]
@@ -257,11 +393,145 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/hyundai-wia/wia-f500plus/head.fg"
+part = "parts/hyundai-wia/hyundai-wia-f500plus/head.fg"
 ignore = ["column"]
 [[machine.body.box]]
 min = [-140, -140, 935]
 max = [140, 565, 1385]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/13879"
+taken = "2026-11-23"
+value = "Y stroke 510 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/13879"
+taken = "2026-11-23"
+value = "36000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/13879"
+taken = "2026-11-23"
+value = "X stroke 1060 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/13879"
+taken = "2026-11-23"
+value = "36000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/13879"
+taken = "2026-11-23"
+value = "Z stroke 635 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/13879"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 8000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table UNKNOWN: 150 at the bottom of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "unknown"
+value = "max tool length and diameter"
+basis = "max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check)"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/13879"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://www.komachine.com/en/companies/hyundai-wia/products/13879"
+taken = "2026-11-23"
+value = "3.7 s (chip to chip, published)"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "unknown"
+basis = "UNKNOWN (unpublished): no weight check"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table UNKNOWN: 150 at the bottom of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # Hyundai WIA KF5: KF4/5/6 series, FANUC (latest, model not named).
@@ -276,6 +546,7 @@ clearance = 1
 source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=3&productType=MC | https://www.wiamachine.com/api/public/series/detail"
 taken = "2026-11-23"
 note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle nose to table UNKNOWN: 150 to 150 + Z (estimate); spindle power as published: peak/other 18.5 kW; torque max 118 N.m (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); magazine options: 40, 60; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+real = true
 
 [[machine.joint]]
 name = "Y"
@@ -340,7 +611,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/hyundai-wia/wia-kf5/bed.fg"
+part = "parts/hyundai-wia/hyundai-wia-kf5/bed.fg"
 ignore = ["saddle", "column"]
 [[machine.body.box]]
 min = [-650, -660, -700]
@@ -349,7 +620,7 @@ max = [650, 1070, -400]
 [[machine.body]]
 name = "column"
 link = "base"
-part = "parts/hyundai-wia/wia-kf5/column.fg"
+part = "parts/hyundai-wia/hyundai-wia-kf5/column.fg"
 ignore = ["bed", "head"]
 [[machine.body.box]]
 min = [-390, 620, -400]
@@ -358,7 +629,7 @@ max = [390, 1070, 1310]
 [[machine.body]]
 name = "saddle"
 link = "Y"
-part = "parts/hyundai-wia/wia-kf5/saddle.fg"
+part = "parts/hyundai-wia/hyundai-wia-kf5/saddle.fg"
 ignore = ["bed", "table"]
 [[machine.body.box]]
 min = [-520, -280, -250]
@@ -367,7 +638,7 @@ max = [520, 280, -100]
 [[machine.body]]
 name = "table"
 link = "X"
-part = "parts/hyundai-wia/wia-kf5/table.fg"
+part = "parts/hyundai-wia/hyundai-wia-kf5/table.fg"
 ignore = ["saddle"]
 [[machine.body.box]]
 min = [-650, -280, -100]
@@ -376,7 +647,7 @@ max = [650, 280, 0]
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/hyundai-wia/wia-kf5/nose.fg"
+part = "parts/hyundai-wia/hyundai-wia-kf5/nose.fg"
 ignore = ["column"]
 [[machine.body.cyl]]
 base = [0, 0, 660]
@@ -387,11 +658,143 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/hyundai-wia/wia-kf5/head.fg"
+part = "parts/hyundai-wia/hyundai-wia-kf5/head.fg"
 ignore = ["column"]
 [[machine.body.box]]
 min = [-140, -140, 810]
 max = [140, 620, 1260]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=3&productType=MC"
+taken = "2026-11-23"
+value = "Y stroke 560 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=3&productType=MC"
+taken = "2026-11-23"
+value = "36000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=3&productType=MC"
+taken = "2026-11-23"
+value = "X stroke 1050 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=3&productType=MC"
+taken = "2026-11-23"
+value = "36000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=3&productType=MC"
+taken = "2026-11-23"
+value = "Z stroke 510 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=3&productType=MC"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 8000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table UNKNOWN: 150 at the bottom of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "unknown"
+value = "max tool length and diameter"
+basis = "max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check)"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=3&productType=MC"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "unknown"
+basis = "UNKNOWN (unpublished): no weight check"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table UNKNOWN: 150 at the bottom of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # Hyundai WIA HS4000 II: HS4000/5000 II Series.
@@ -406,6 +809,7 @@ clearance = 1
 source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC | https://www.wiamachine.com/api/public/series/detail"
 taken = "2026-11-23"
 note = "pallets: 2, 400 square, change time UNKNOWN, load 400 kg; the APC is not in the format (FORMAT-GAPS B1): the pallet at the spindle is the part mount, kind vmc4; spindle nose to pallet centre UNKNOWN: 100 to 100 + Z (estimate); Z modelled on the head (X column, Y head, Z ram) because the format needs the length joint on the head side (FORMAT-GAPS B10); the tool-to-part motion is the same either way; spindle centre above the pallet UNKNOWN: 100 to 100 + Y (estimate); spindle power as published: peak/other 30 kW; torque max 230 N.m (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); magazine options: 60, 90, 120; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid X, Y 0 = spindle lowest (home at the top), Z 0 = spindle farthest from the pallet; machine zero UNKNOWN; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; control UNKNOWN (not published)."
+real = true
 
 [[machine.joint]]
 name = "X"
@@ -483,7 +887,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "pallet"
 link = "B"
-part = "parts/hyundai-wia/wia-hs4000-ii/pallet.fg"
+part = "parts/hyundai-wia/hyundai-wia-hs4000-ii/pallet.fg"
 ignore = ["table"]
 [[machine.body.box]]
 min = [-200, -120, -200]
@@ -492,7 +896,7 @@ max = [200, 0, 200]
 [[machine.body]]
 name = "table"
 link = "base"
-part = "parts/hyundai-wia/wia-hs4000-ii/table.fg"
+part = "parts/hyundai-wia/hyundai-wia-hs4000-ii/table.fg"
 ignore = ["pallet", "bed"]
 [[machine.body.cyl]]
 base = [0, -370, 0]
@@ -503,7 +907,7 @@ h = 249
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/hyundai-wia/wia-hs4000-ii/bed.fg"
+part = "parts/hyundai-wia/hyundai-wia-hs4000-ii/bed.fg"
 ignore = ["table", "column"]
 [[machine.body.box]]
 min = [-680, -770, -584]
@@ -512,7 +916,7 @@ max = [680, -371, 2700]
 [[machine.body]]
 name = "column"
 link = "X"
-part = "parts/hyundai-wia/wia-hs4000-ii/column.fg"
+part = "parts/hyundai-wia/hyundai-wia-hs4000-ii/column.fg"
 ignore = ["bed", "head"]
 [[machine.body.box]]
 min = [-310, -370, 2110]
@@ -521,7 +925,7 @@ max = [310, 1300, 2600]
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/hyundai-wia/wia-hs4000-ii/nose.fg"
+part = "parts/hyundai-wia/hyundai-wia-hs4000-ii/nose.fg"
 [[machine.body.cyl]]
 base = [0, 100, 760]
 axis = [0, 0, 1]
@@ -531,11 +935,165 @@ h = 180
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/hyundai-wia/wia-hs4000-ii/head.fg"
+part = "parts/hyundai-wia/hyundai-wia-hs4000-ii/head.fg"
 ignore = ["column"]
 [[machine.body.box]]
 min = [-160, -60, 940]
 max = [160, 260, 1440]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "X stroke 560 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "Y stroke 640 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "Z stroke 660 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 15000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "unknown"
+value = "max tool length and diameter"
+basis = "max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check)"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "40"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "2.6 s (chip to chip, published)"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "unknown"
+basis = "UNKNOWN (unpublished): no weight check"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.pallet.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.pallet"
+status = "estimate"
+basis = "the published pallet; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the B index table under the pallet, a disc covering the pallet's corners (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the bed (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "the moving column behind the head's Z stroke (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head / ram (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # Hyundai WIA HS5000 II: HS4000/5000 II Series.
@@ -550,6 +1108,7 @@ clearance = 1
 source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC | https://www.wiamachine.com/api/public/series/detail"
 taken = "2026-11-23"
 note = "pallets: 2, 500 square, change time UNKNOWN, load 500 kg; the APC is not in the format (FORMAT-GAPS B1): the pallet at the spindle is the part mount, kind vmc4; spindle nose to pallet centre UNKNOWN: 100 to 100 + Z (estimate); Z modelled on the head (X column, Y head, Z ram) because the format needs the length joint on the head side (FORMAT-GAPS B10); the tool-to-part motion is the same either way; spindle centre above the pallet UNKNOWN: 100 to 100 + Y (estimate); spindle power as published: peak/other 30 kW; torque max 230 N.m (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); magazine options: 60, 90, 120; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid X, Y 0 = spindle lowest (home at the top), Z 0 = spindle farthest from the pallet; machine zero UNKNOWN; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; control UNKNOWN (not published)."
+real = true
 
 [[machine.joint]]
 name = "X"
@@ -627,7 +1186,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "pallet"
 link = "B"
-part = "parts/hyundai-wia/wia-hs5000-ii/pallet.fg"
+part = "parts/hyundai-wia/hyundai-wia-hs5000-ii/pallet.fg"
 ignore = ["table"]
 [[machine.body.box]]
 min = [-250, -120, -250]
@@ -636,7 +1195,7 @@ max = [250, 0, 250]
 [[machine.body]]
 name = "table"
 link = "base"
-part = "parts/hyundai-wia/wia-hs5000-ii/table.fg"
+part = "parts/hyundai-wia/hyundai-wia-hs5000-ii/table.fg"
 ignore = ["pallet", "bed"]
 [[machine.body.cyl]]
 base = [0, -370, 0]
@@ -647,7 +1206,7 @@ h = 249
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/hyundai-wia/wia-hs5000-ii/bed.fg"
+part = "parts/hyundai-wia/hyundai-wia-hs5000-ii/bed.fg"
 ignore = ["table", "column"]
 [[machine.body.box]]
 min = [-765, -770, -655]
@@ -656,7 +1215,7 @@ max = [765, -371, 3140]
 [[machine.body]]
 name = "column"
 link = "X"
-part = "parts/hyundai-wia/wia-hs5000-ii/column.fg"
+part = "parts/hyundai-wia/hyundai-wia-hs5000-ii/column.fg"
 ignore = ["bed", "head"]
 [[machine.body.box]]
 min = [-310, -370, 2550]
@@ -665,7 +1224,7 @@ max = [310, 1390, 3040]
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/hyundai-wia/wia-hs5000-ii/nose.fg"
+part = "parts/hyundai-wia/hyundai-wia-hs5000-ii/nose.fg"
 [[machine.body.cyl]]
 base = [0, 100, 980]
 axis = [0, 0, 1]
@@ -675,11 +1234,165 @@ h = 180
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/hyundai-wia/wia-hs5000-ii/head.fg"
+part = "parts/hyundai-wia/hyundai-wia-hs5000-ii/head.fg"
 ignore = ["column"]
 [[machine.body.box]]
 min = [-160, -60, 1160]
 max = [160, 260, 1660]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "X stroke 730 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "Y stroke 730 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "Z stroke 880 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 15000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "unknown"
+value = "max tool length and diameter"
+basis = "max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check)"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "40"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=4&productType=MC"
+taken = "2026-11-23"
+value = "2.6 s (chip to chip, published)"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "unknown"
+basis = "UNKNOWN (unpublished): no weight check"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.pallet.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.pallet"
+status = "estimate"
+basis = "the published pallet; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the B index table under the pallet, a disc covering the pallet's corners (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the bed (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "the moving column behind the head's Z stroke (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head / ram (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # Hyundai WIA SE2200: SE2200 Series (SE series), FANUC (latest, model not named).
@@ -693,6 +1406,7 @@ clearance = 1
 source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=71&productType=TC | https://www.wiamachine.com/api/public/series/detail"
 taken = "2026-11-23"
 note = "swing over bed UNKNOWN: the max turning diameter used; spindle power as published: peak/other 15 kW; torque max 167 N.m (no curve: no power check); where each stroke sits relative to the spindle centreline and chuck face is UNKNOWN: X's top end is put at the max turning radius and Z's at the max turning length + 50 mm (estimates); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the base frame is turned so x is the slide's X (a slant bed's angle is not modelled); the tailstock is not modelled."
+real = true
 
 [[machine.joint]]
 name = "Z"
@@ -753,7 +1467,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "headstock"
 link = "base"
-part = "parts/hyundai-wia/wia-se2200/headstock.fg"
+part = "parts/hyundai-wia/hyundai-wia-se2200/headstock.fg"
 ignore = ["chuck"]
 [[machine.body.box]]
 min = [-196.6, -196.6, -610]
@@ -762,7 +1476,7 @@ max = [196.6, 196.6, -110]
 [[machine.body]]
 name = "chuck"
 link = "base"
-part = "parts/hyundai-wia/wia-se2200/chuck.fg"
+part = "parts/hyundai-wia/hyundai-wia-se2200/chuck.fg"
 ignore = ["headstock"]
 [[machine.body.cyl]]
 base = [0, 0, -110]
@@ -773,12 +1487,108 @@ h = 110
 [[machine.body]]
 name = "turret"
 link = "X"
-part = "parts/hyundai-wia/wia-se2200/turret.fg"
+part = "parts/hyundai-wia/hyundai-wia-se2200/turret.fg"
 [[machine.body.cyl]]
 base = [316.6, 0, -45]
 axis = [0, 0, 1]
 r = 160
 h = 90
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=71&productType=TC"
+taken = "2026-11-23"
+value = "Z stroke 340 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=71&productType=TC"
+taken = "2026-11-23"
+value = "36000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=71&productType=TC"
+taken = "2026-11-23"
+value = "X stroke 210 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=71&productType=TC"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.main.rpm"
+status = "unknown"
+basis = "max 4500 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.main.nose"
+status = "estimate"
+basis = "the chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.main.max"
+status = "estimate"
+value = "swing and max turning length"
+basis = "swing over bed UNKNOWN: the max turning diameter used"
+
+[[machine.cite]]
+path = "turret.T1.stations"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=71&productType=TC"
+taken = "2026-11-23"
+value = "12"
+
+[[machine.cite]]
+path = "turret.T1.index_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0)"
+
+[[machine.cite]]
+path = "turret.T1.center"
+status = "estimate"
+basis = "turret size and position not published: placed so the disc clears the chuck (note)"
+
+[[machine.cite]]
+path = "mount.turret.at"
+status = "estimate"
+basis = "the tool gauge point on the turret/head: not published, placed as the note says"
+
+[[machine.cite]]
+path = "mount.chuck.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.headstock"
+status = "estimate"
+basis = "the headstock behind the chuck (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.chuck"
+status = "estimate"
+basis = "the published chuck size plus jaw stand-out (estimate); length an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.turret"
+status = "estimate"
+basis = "the turret disc (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # Hyundai WIA SE2600: SE2600 Series (SE series), FANUC (latest, model not named).
@@ -792,6 +1602,7 @@ clearance = 1
 source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=72&productType=TC | https://www.wiamachine.com/api/public/series/detail"
 taken = "2026-11-23"
 note = "swing over bed UNKNOWN: the max turning diameter used; spindle power as published: peak/other 18.5 kW; torque max 470.9 N.m (no curve: no power check); where each stroke sits relative to the spindle centreline and chuck face is UNKNOWN: X's top end is put at the max turning radius and Z's at the max turning length + 50 mm (estimates); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the base frame is turned so x is the slide's X (a slant bed's angle is not modelled); the tailstock is not modelled."
+real = true
 
 [[machine.joint]]
 name = "Z"
@@ -852,7 +1663,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "headstock"
 link = "base"
-part = "parts/hyundai-wia/wia-se2600/headstock.fg"
+part = "parts/hyundai-wia/hyundai-wia-se2600/headstock.fg"
 ignore = ["chuck"]
 [[machine.body.box]]
 min = [-222, -222, -610]
@@ -861,7 +1672,7 @@ max = [222, 222, -110]
 [[machine.body]]
 name = "chuck"
 link = "base"
-part = "parts/hyundai-wia/wia-se2600/chuck.fg"
+part = "parts/hyundai-wia/hyundai-wia-se2600/chuck.fg"
 ignore = ["headstock"]
 [[machine.body.cyl]]
 base = [0, 0, -110]
@@ -872,9 +1683,105 @@ h = 110
 [[machine.body]]
 name = "turret"
 link = "X"
-part = "parts/hyundai-wia/wia-se2600/turret.fg"
+part = "parts/hyundai-wia/hyundai-wia-se2600/turret.fg"
 [[machine.body.cyl]]
 base = [342, 0, -45]
 axis = [0, 0, 1]
 r = 160
 h = 90
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=72&productType=TC"
+taken = "2026-11-23"
+value = "Z stroke 680 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=72&productType=TC"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=72&productType=TC"
+taken = "2026-11-23"
+value = "X stroke 265 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=72&productType=TC"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.main.rpm"
+status = "unknown"
+basis = "max 3500 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.main.nose"
+status = "estimate"
+basis = "the chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.main.max"
+status = "estimate"
+value = "swing and max turning length"
+basis = "swing over bed UNKNOWN: the max turning diameter used"
+
+[[machine.cite]]
+path = "turret.T1.stations"
+status = "published"
+source = "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=72&productType=TC"
+taken = "2026-11-23"
+value = "10"
+
+[[machine.cite]]
+path = "turret.T1.index_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0)"
+
+[[machine.cite]]
+path = "turret.T1.center"
+status = "estimate"
+basis = "turret size and position not published: placed so the disc clears the chuck (note)"
+
+[[machine.cite]]
+path = "mount.turret.at"
+status = "estimate"
+basis = "the tool gauge point on the turret/head: not published, placed as the note says"
+
+[[machine.cite]]
+path = "mount.chuck.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.headstock"
+status = "estimate"
+basis = "the headstock behind the chuck (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.chuck"
+status = "estimate"
+basis = "the published chuck size plus jaw stand-out (estimate); length an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.turret"
+status = "estimate"
+basis = "the turret disc (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"

@@ -78,6 +78,7 @@ def emit_machine(m, partdir_rel):
     o.append(f"source = {fmt(m['source'])}")
     o.append(f"taken = {fmt(m['taken'])}")
     o.append(f"note = {fmt(m['note'])}")
+    o.append("real = true")
     for j in m["joints"]:
         o.append("")
         o.append("[[machine.joint]]")
@@ -131,7 +132,7 @@ def emit_machine(m, partdir_rel):
             o.append(f"axis = {fmt(p[2])}")
             o.append(f"r = {fmt(p[3])}")
             o.append(f"h = {fmt(p[4])}")
-    return "\n".join(o) + "\n"
+    return "\n".join(o) + "\n" + emit_cites(m)
 
 def write_vendor(root, vendor, title, machines):
     tdir = os.path.join(root, "kernel/forge-machine/data/machines")
@@ -141,8 +142,7 @@ def write_vendor(root, vendor, title, machines):
            "# each record's `note` and beside the field. Bodies are conservative envelopes from published",
            "# overall dimensions, not the maker's CAD. Format: docs/cam-machine.md.", ""]
     for m in machines:
-        model = m["name"].split("-", 1)[1] if m["name"].startswith(vendor + "-") else m["name"]
-        prel = f"parts/{vendor}/{model}"
+        prel = f"parts/{vendor}/{m['name']}"
         pdir = os.path.join(root, "kernel/forge-machine", prel)
         os.makedirs(pdir, exist_ok=True)
         for b in m["bodies"]:
@@ -151,3 +151,113 @@ def write_vendor(root, vendor, title, machines):
         out.append(emit_machine(m, prel))
     with open(os.path.join(tdir, vendor + ".toml"), "w") as f:
         f.write("\n".join(out))
+
+# ---------------------------------------------------------------------------------------------
+# provenance: one [[machine.cite]] per value MachineDef::cite_paths lists
+
+def _status_of(comment):
+    if not comment:
+        return None
+    c = comment.lower()
+    if "unknown" in c:
+        return "unknown"
+    if "estimate" in c:
+        return "estimate"
+    return None
+
+def build_cites(m):
+    src = m["source"].split(" | ")[0]
+    taken = m["taken"]
+    over = m.get("cite_over", {})
+    out = []
+    def cite(path, status="published", value=None, basis=None, note=None, source=None):
+        if path in over:
+            o = over[path]
+            status, basis = o["status"], o.get("basis")
+            value = o.get("value", value)
+        c = dict(path=path, status=status)
+        if status in ("published", "conflict"):
+            c["source"] = source or src
+            c["taken"] = taken
+        if value:
+            c["value"] = value
+        if status in ("estimate", "unknown"):
+            c["basis"] = basis or "not published"
+        if note:
+            c["note"] = note
+        out.append(c)
+    lathe = m["kind"] in ("lathe", "mill-turn")
+    for j in m["joints"]:
+        n = j["name"]
+        lo, hi = j["range"]
+        if j["type"] == "linear":
+            cite(f"joint.{n}.range", value=f"{n} stroke {hi - lo:g} mm; where it sits is this record's convention (note)")
+        elif j.get("cyclic"):
+            cite(f"joint.{n}.range", "estimate", basis="a continuous rotary: the format's cyclic output range, not a travel limit")
+        else:
+            cite(f"joint.{n}.range", value=f"{lo:g}..{hi:g} deg")
+        for f in ("rapid", "max_feed"):
+            st = _status_of(j.get("c_" + f))
+            if not st and f == "max_feed" and j["type"] == "rotary":
+                st, j["c_max_feed"] = "unknown", "rotary max cutting feed UNKNOWN (unpublished): = rapid"
+            if st:
+                cite(f"joint.{n}.{f}", st, basis=j["c_" + f] + ("; errs high so t_min stays a lower bound" if f == "rapid" else "; no false feed clamp"))
+            else:
+                cite(f"joint.{n}.{f}", value=f"{j[f]:g} {'deg' if j['type'] == 'rotary' else 'mm'}/min")
+        if j.get("accel"):
+            cite(f"joint.{n}.accel", value=f"{j['accel']:g} mm/s^2")
+        if j["type"] == "rotary":
+            if n == "C" or (n == "B" and m["kind"] == "vmc4"):
+                cite(f"joint.{n}.pivot", "estimate", basis="through the table/pallet (or spindle) centre: this record's origin, by construction")
+            else:
+                cite(f"joint.{n}.pivot", "estimate", basis="the tilt axis's height (or the head pivot's offset) is not published; placed as the note says")
+    for s in m["spindles"]:
+        n = s["name"]
+        st = _status_of(s.get("c_rpm"))
+        if st:
+            cite(f"spindle.{n}.rpm", "unknown", basis=f"max {s['rpm'][1]} rpm published; " + s["c_rpm"])
+        else:
+            cite(f"spindle.{n}.rpm", value=f"{s['rpm'][0]}..{s['rpm'][1]} rpm")
+        if s["kind"] == "turning":
+            cite(f"spindle.{n}.nose", "estimate", basis="the chuck face centre: this record's origin, by construction")
+        else:
+            cite(f"spindle.{n}.nose", value="from the published spindle-nose-to-table distance at the top of Z")
+        cite(f"spindle.{n}.max", value=("swing and max turning length" if s["kind"] == "turning" else "max tool length and diameter"))
+    for t in m.get("turrets", []):
+        n = t["name"]
+        for f in ("stations", "index_s"):
+            st = _status_of(t.get("c_" + f))
+            if st:
+                cite(f"turret.{n}.{f}", st, basis=t["c_" + f])
+            else:
+                cite(f"turret.{n}.{f}", value=str(t[f]))
+        cite(f"turret.{n}.center", "estimate", basis="turret size and position not published: placed so the disc clears the chuck (note)")
+    c = m.get("changer")
+    if c:
+        for f in ("pockets", "change_s", "max_tool_kg"):
+            st = _status_of(c.get("c_" + f))
+            if st:
+                cite(f"changer.{f}", st, basis=c["c_" + f])
+            else:
+                cite(f"changer.{f}", value=str(c[f]) + ("" if f == "pockets" else (" s" if f == "change_s" else " kg")) +
+                     (" (" + c["c_" + f] + ")" if c.get("c_" + f) else ""))
+    for mt in m["mounts"]:
+        if mt["kind"] == "part":
+            cite(f"mount.{mt['name']}.at", "estimate", basis="the table / pallet top centre or chuck face centre: this record's origin, by construction")
+        elif lathe:
+            cite(f"mount.{mt['name']}.at", "estimate", basis="the tool gauge point on the turret/head: not published, placed as the note says")
+        else:
+            cite(f"mount.{mt['name']}.at", value="the spindle nose, from the published spindle-nose-to-table distance at the top of Z")
+    for b in m["bodies"]:
+        cite(f"body.{b['name']}", "estimate", basis=(b["why"] or "envelope") + "; one box/cylinder from published overall sizes, kept large where the tool and part move")
+    return out
+
+def emit_cites(m):
+    o = []
+    for c in build_cites(m):
+        o.append("")
+        o.append("[[machine.cite]]")
+        for k in ("path", "status", "source", "taken", "value", "basis", "note"):
+            if k in c:
+                o.append(f"{k} = {fmt(c[k])}")
+    return "\n".join(o) + "\n"

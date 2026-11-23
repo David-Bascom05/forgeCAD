@@ -134,7 +134,7 @@ def linear_rates(d, letters="XYZ"):
     return rap, known, f
 
 # ---------------------------------------------------------------------------------------------
-def vmc(slug, name, header, extra=(), **over):
+def vmc(slug, name, header, extra=(), **ov):
     d = load(slug)
     t = d["travel_mm"]
     X, Y, Z = (num(t.get(k)) for k in "XYZ")
@@ -159,13 +159,17 @@ def vmc(slug, name, header, extra=(), **over):
     overall = tuple(num(ov.get(k)) for k in "WDH")
     p = dict(name=name, travel=(X, Y, Z), table=tuple(tb), nose=tuple(nose), col=col, rapid=tuple(rap), feed=fr,
              spindle=sp, maxtool=mt, changer=ch, overall=overall if all(overall) else None)
-    p.update(over)
+    p.update(ov)
     m = arch.vmc_cframe(p)
     mark_unknowns(m, known, f is not None)
+    if any(e.startswith("spindle nose") for e in est):
+        nose_estimate(m, "spindle nose to table UNKNOWN: 150 at the bottom of Z (estimate)")
+    if mtc and "UNKNOWN" in " ".join(mtc):
+        over(m, "spindle.S1.max", "unknown", "; ".join(mtc))
     if ch is None:
         m["changer"] = None
     src, sn = sources(d)
-    ctl = over.get("control") or dialect(d, False)
+    ctl = ov.get("control") or dialect(d, False)
     m.update(name=name, control=ctl or "unknown", coolants=["flood"], source=src, taken=d.get("taken", TAKEN), header=header,
              note=note(*extra, "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above)",
                        colc, *est, ptxt, *mtc, *chn, *sn, *common_notes(d),
@@ -175,7 +179,7 @@ def vmc(slug, name, header, extra=(), **over):
                        "control UNKNOWN (not published)" if not ctl else None))
     return m
 
-def trunnion(slug, name, header, tilt_letter, tilt_range, extra=(), **over):
+def trunnion(slug, name, header, tilt_letter, tilt_range, extra=(), **ov):
     d = load(slug)
     t = d["travel_mm"]
     X, Y, Z = (num(t.get(k)) for k in "XYZ")
@@ -197,14 +201,18 @@ def trunnion(slug, name, header, tilt_letter, tilt_range, extra=(), **over):
     sp, ptxt = spindle(d)
     mt, mtc = maxtool(d)
     ch, chn = changer(d)
-    p = dict(name=name, travel=(X, Y, Z), tilt=(tilt_letter, tilt_range), pivot_below_top=over.pop("pivot", 150.0),
+    p = dict(name=name, travel=(X, Y, Z), tilt=(tilt_letter, tilt_range), pivot_below_top=ov.pop("pivot", 150.0),
              table_d=td, nose=tuple(nose), rapid=tuple(rap), feed=fr, rapid_tilt=rt or VAC_ROT, rapid_c=rc or VAC_ROT,
              spindle=sp, maxtool=mt, changer=ch, nose_r=110.0, cradle_side=80.0)
-    p.update(over)
+    p.update(ov)
     m = arch.trunnion(p)
     mark_unknowns(m, known, f is not None, rk)
+    if any(e.startswith("spindle nose") for e in est):
+        nose_estimate(m, [e for e in est if e.startswith("spindle nose")][0])
+    if mtc and "UNKNOWN" in " ".join(mtc):
+        over(m, "spindle.S1.max", "unknown", "; ".join(mtc))
     src, sn = sources(d)
-    ctl = over.get("control") or dialect(d, False)
+    ctl = ov.get("control") or dialect(d, False)
     axis = "X" if tilt_letter == "A" else "Y"
     m.update(name=name, control=ctl or "unknown", coolants=["flood"], source=src, taken=d.get("taken", TAKEN), header=header,
              note=note(*extra,
@@ -216,7 +224,7 @@ def trunnion(slug, name, header, tilt_letter, tilt_range, extra=(), **over):
                        "control UNKNOWN (not published)" if not ctl else None))
     return m
 
-def hmc(slug, name, header, extra=(), **over):
+def hmc(slug, name, header, extra=(), **ov):
     d = load(slug)
     t = d["travel_mm"]
     X, Y, Z = (num(t.get(k)) for k in "XYZ")
@@ -233,11 +241,14 @@ def hmc(slug, name, header, extra=(), **over):
     ch, chn = changer(d)
     p = dict(name=name, travel=(X, Y, Z), pallet=P, spindle_above_pallet=tuple(cy), nose_to_center=(100.0, 100.0 + Z),
              rapid=tuple(rap), feed=fr, rapid_b=rb or VAC_ROT, spindle=sp, maxtool=mt, changer=ch)
-    p.update(over)
+    p.update(ov)
     m = arch.hmc(p)
     mark_unknowns(m, known, f is not None, ("B",) if rb else ())
+    nose_estimate(m, "spindle nose to pallet centre not published: 100 at the end of Z (estimate)")
+    if mtc and "UNKNOWN" in " ".join(mtc):
+        over(m, "spindle.S1.max", "unknown", "; ".join(mtc))
     src, sn = sources(d)
-    ctl = over.get("control") or dialect(d, False)
+    ctl = ov.get("control") or dialect(d, False)
     pal = d.get("pallet") or {}
     m.update(name=name, control=ctl or "unknown", coolants=["flood"], source=src, taken=d.get("taken", TAKEN), header=header,
              note=note(*extra,
@@ -250,7 +261,7 @@ def hmc(slug, name, header, extra=(), **over):
                        "control UNKNOWN (not published)" if not ctl else None))
     return m
 
-def lathe(slug, name, header, extra=(), **over):
+def lathe(slug, name, header, extra=(), **ov):
     d = load(slug)
     t = d["travel_mm"]
     Xs, Zs = num(t.get("X")), num(t.get("Z"))
@@ -277,15 +288,17 @@ def lathe(slug, name, header, extra=(), **over):
         sp["iface"] = d["spindle_nose_type"]
     p = dict(name=name, stroke=(Xs, Zs), max_dia=D, max_len=L, chuck_d=cd, swing=sw, stations=int(st) if st else 24,
              rapid=tuple(rap), feed=fr, spindle=sp, index_s=num(d.get("turret_index_s")) or 0.001)
-    p.update(over)
+    p.update(ov)
     m = arch.lathe(p)
     mark_unknowns(m, dict(zip("XZ", known.values())), f is not None)
+    if any(e.startswith("swing") or e.startswith("max turning length") for e in est):
+        over(m, "spindle.main.max", "estimate", "; ".join(e for e in est if e.startswith(("swing", "max turning"))))
     if not st:
         m["turrets"][0]["c_stations"] = "UNKNOWN (unpublished): 24, no T-number check"
     if not d.get("turret_index_s"):
         m["turrets"][0]["c_index_s"] = "UNKNOWN (unpublished): 0.001 s (must be > 0)"
     src, sn = sources(d)
-    ctl = over.get("control") or dialect(d, True)
+    ctl = ov.get("control") or dialect(d, True)
     m.update(name=name, control=ctl or "unknown", coolants=["flood"], source=src, taken=d.get("taken", TAKEN), header=header,
              note=note(*extra, *est, ptxt, *sn, *common_notes(d), CONV_LATHE, VACUOUS, ENV,
                        "the base frame is turned so x is the slide's X (a slant bed's angle is not modelled); the tailstock is not modelled",

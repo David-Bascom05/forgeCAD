@@ -17,6 +17,7 @@ clearance = 1
 source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus | https://www.fanucamerica.com/uploads/files/data-sheets/robodrill-a-d21mib5-plus.pdf | https://www.fanucamerica.com/uploads/files/data-sheets/robodrill-alphadib-plus-series-brochure.pdf"
 taken = "2026-11-23"
 note = "architecture assumed: X/Y table, Z head on a fixed column (FANUC's pages do not say which unit carries which axis: UNKNOWN); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); nose to table 150-480 is the standard column (the high column HC100 option gives 250-580); spindle power published as ratings only (1-min 14.2 kW, cont 4.0 kW, 80 N.m max, 13.6 N.m cont): no curve, no power check; 24,000 rpm spindle and the ADV variant (cut to cut 1.3 s) are options; accel UNKNOWN; overall W/D/H only in a drawing not read (UNKNOWN); machine 2000 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+real = true
 
 [[machine.joint]]
 name = "Y"
@@ -81,7 +82,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/fanuc/robodrill-a-d21mib5/bed.fg"
+part = "parts/fanuc/fanuc-robodrill-a-d21mib5/bed.fg"
 ignore = ["saddle", "column"]
 [[machine.body.box]]
 min = [-325, -500, -700]
@@ -90,7 +91,7 @@ max = [325, 865, -400]
 [[machine.body]]
 name = "column"
 link = "base"
-part = "parts/fanuc/robodrill-a-d21mib5/column.fg"
+part = "parts/fanuc/fanuc-robodrill-a-d21mib5/column.fg"
 ignore = ["bed", "head"]
 [[machine.body.box]]
 min = [-300, 465, -400]
@@ -99,7 +100,7 @@ max = [300, 865, 1080]
 [[machine.body]]
 name = "saddle"
 link = "Y"
-part = "parts/fanuc/robodrill-a-d21mib5/saddle.fg"
+part = "parts/fanuc/fanuc-robodrill-a-d21mib5/saddle.fg"
 ignore = ["bed", "table"]
 [[machine.body.box]]
 min = [-260, -200, -250]
@@ -108,7 +109,7 @@ max = [260, 200, -100]
 [[machine.body]]
 name = "table"
 link = "X"
-part = "parts/fanuc/robodrill-a-d21mib5/table.fg"
+part = "parts/fanuc/fanuc-robodrill-a-d21mib5/table.fg"
 ignore = ["saddle"]
 [[machine.body.box]]
 min = [-325, -200, -100]
@@ -117,7 +118,7 @@ max = [325, 200, 0]
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/fanuc/robodrill-a-d21mib5/nose.fg"
+part = "parts/fanuc/fanuc-robodrill-a-d21mib5/nose.fg"
 ignore = ["column"]
 [[machine.body.cyl]]
 base = [0, 0, 480]
@@ -128,11 +129,156 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/fanuc/robodrill-a-d21mib5/head.fg"
+part = "parts/fanuc/fanuc-robodrill-a-d21mib5/head.fg"
 ignore = ["column"]
 [[machine.body.box]]
 min = [-110, -110, 630]
 max = [110, 465, 1030]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "Y stroke 400 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "54000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "X stroke 500 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "54000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "Z stroke 330 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "54000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 10000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "21"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "1.6 s (cut to cut with a 2 kg tool, published (tool to tool 0.9))"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "3.0 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21mib5-plus"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
 
 # ---------------------------------------------------------------------------------------------
 # FANUC ROBODRILL ALPHA-D21LIB5 Plus: BT30 drill/tap/mill centre, FANUC 31i-B5 Plus.
@@ -148,6 +294,7 @@ clearance = 1
 source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus | https://www.fanucamerica.com/uploads/files/data-sheets/robodrill-alphadib-plus-series-brochure.pdf"
 taken = "2026-11-23"
 note = "architecture assumed: X/Y table, Z head on a fixed column (FANUC's pages do not say which unit carries which axis: UNKNOWN); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); nose to table 150-480 is the standard column (the high column HC100 option gives 250-580); spindle power published as ratings only (1-min 14.2 kW, cont 4.0 kW, 80 N.m max, 13.6 N.m cont): no curve, no power check; 24,000 rpm spindle and the ADV variant (cut to cut 1.3 s) are options; accel UNKNOWN; overall W/D/H only in a drawing not read (UNKNOWN); machine 2100 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+real = true
 
 [[machine.joint]]
 name = "Y"
@@ -212,7 +359,7 @@ xdir = [1, 0, 0]
 [[machine.body]]
 name = "bed"
 link = "base"
-part = "parts/fanuc/robodrill-a-d21lib5/bed.fg"
+part = "parts/fanuc/fanuc-robodrill-a-d21lib5/bed.fg"
 ignore = ["saddle", "column"]
 [[machine.body.box]]
 min = [-425, -505, -700]
@@ -221,7 +368,7 @@ max = [425, 865, -400]
 [[machine.body]]
 name = "column"
 link = "base"
-part = "parts/fanuc/robodrill-a-d21lib5/column.fg"
+part = "parts/fanuc/fanuc-robodrill-a-d21lib5/column.fg"
 ignore = ["bed", "head"]
 [[machine.body.box]]
 min = [-300, 465, -400]
@@ -230,7 +377,7 @@ max = [300, 865, 1080]
 [[machine.body]]
 name = "saddle"
 link = "Y"
-part = "parts/fanuc/robodrill-a-d21lib5/saddle.fg"
+part = "parts/fanuc/fanuc-robodrill-a-d21lib5/saddle.fg"
 ignore = ["bed", "table"]
 [[machine.body.box]]
 min = [-340, -205, -250]
@@ -239,7 +386,7 @@ max = [340, 205, -100]
 [[machine.body]]
 name = "table"
 link = "X"
-part = "parts/fanuc/robodrill-a-d21lib5/table.fg"
+part = "parts/fanuc/fanuc-robodrill-a-d21lib5/table.fg"
 ignore = ["saddle"]
 [[machine.body.box]]
 min = [-425, -205, -100]
@@ -248,7 +395,7 @@ max = [425, 205, 0]
 [[machine.body]]
 name = "nose"
 link = "Z"
-part = "parts/fanuc/robodrill-a-d21lib5/nose.fg"
+part = "parts/fanuc/fanuc-robodrill-a-d21lib5/nose.fg"
 ignore = ["column"]
 [[machine.body.cyl]]
 base = [0, 0, 480]
@@ -259,8 +406,153 @@ h = 150
 [[machine.body]]
 name = "head"
 link = "Z"
-part = "parts/fanuc/robodrill-a-d21lib5/head.fg"
+part = "parts/fanuc/fanuc-robodrill-a-d21lib5/head.fg"
 ignore = ["column"]
 [[machine.body.box]]
 min = [-110, -110, 630]
 max = [110, 465, 1030]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "Y stroke 400 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "54000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "X stroke 700 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "54000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "Z stroke 330 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "54000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "30000 mm/min"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 10000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "21"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "1.6 s (cut to cut with a 2 kg tool, published (tool to tool 0.9))"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "3.0 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://www.fanucamerica.com/products/robodrill/a-d21lib5-plus"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"

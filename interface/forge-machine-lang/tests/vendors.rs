@@ -13,7 +13,8 @@ fn vendor_files() -> Vec<(String, String)> {
     };
     for e in rd {
         let p = e.unwrap().path();
-        if p.extension().is_some_and(|x| x == "toml") {
+        // the generic placeholders are tested by tests/parts.rs; this covers the real machines
+        if p.extension().is_some_and(|x| x == "toml") && !p.ends_with("generic.toml") {
             out.push((p.display().to_string(), std::fs::read_to_string(&p).unwrap()));
         }
     }
@@ -29,6 +30,9 @@ fn vendor_machines_parse_build_and_stay_clear() {
         let ms = MachineDef::parse_all(&src).unwrap_or_else(|e| panic!("{file}: {e}"));
         for m in ms {
             m.validate().unwrap_or_else(|e| panic!("{file} {}: {e}", m.name));
+            assert!(m.real, "{}: a vendor machine is `real = true`", m.name);
+            m.validate_cites()
+                .unwrap_or_else(|e| panic!("{file} {}: {e}", m.name));
             assert!(m.source.starts_with("http"), "{}: source must be a URL", m.name);
             assert!(
                 m.bodies.iter().all(|b| b.part.is_some()),

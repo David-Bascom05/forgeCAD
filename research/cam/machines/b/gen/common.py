@@ -35,3 +35,11 @@ def mark(m, joint, field, comment):
             j["c_" + field] = comment
             return
     raise KeyError(joint)
+
+def over(m, path, status, basis):
+    m.setdefault("cite_over", {})[path] = dict(status=status, basis=basis)
+
+NOSE_EST = "spindle nose to table not published: placed as the note says"
+def nose_estimate(m, basis=NOSE_EST):
+    over(m, "spindle.S1.nose", "estimate", basis)
+    over(m, "mount.spindle.at", "estimate", basis)
