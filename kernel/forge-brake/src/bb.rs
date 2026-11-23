@@ -115,12 +115,27 @@ pub fn certify<P: Problem>(
     budget: usize,
     measure: bool,
 ) -> Verdict {
+    certify_below(pb, roots, limit, res, budget, measure, f64::INFINITY)
+}
+
+/// `certify`, measuring no further than `cut`: a distance known to be at least `cut` is not
+/// measured more finely (another piece is already nearer).
+pub fn certify_below<P: Problem>(
+    pb: &P,
+    roots: &[Cell],
+    limit: f64,
+    res: f64,
+    budget: usize,
+    measure: bool,
+    cut: f64,
+) -> Verdict {
     let mut spent = 0usize;
-    let v = search(pb, roots, limit, res, budget, measure, &mut spent);
+    let v = search(pb, roots, limit, res, budget, measure, cut, &mut spent);
     CELLS.fetch_add(spent, std::sync::atomic::Ordering::Relaxed);
     v
 }
 
+#[allow(clippy::too_many_arguments)]
 fn search<P: Problem>(
     pb: &P,
     roots: &[Cell],
@@ -128,6 +143,7 @@ fn search<P: Problem>(
     res: f64,
     budget: usize,
     measure: bool,
+    cut: f64,
     spent: &mut usize,
 ) -> Verdict {
     let mut heap = BinaryHeap::new();
@@ -141,15 +157,15 @@ fn search<P: Problem>(
     let mut upper = f64::INFINITY;
     while let Some(Item { lb, cell }) = heap.pop() {
         // the least bound left settles it: so does every other
-        // measured to `res`, or to a twentieth of the margin over the limit when that is more
-        let tol = res.max(0.05 * (upper - limit));
-        if (!measure && lb >= limit) || (measure && lb >= limit && lb >= upper - tol) {
+        // measured to `res`, or to a fifth of the margin over the limit when that is more
+        let tol = res.max(0.2 * (upper - limit));
+        if (!measure && lb >= limit) || (measure && lb >= limit && lb >= upper.min(cut) - tol) {
             lower = lower.min(lb);
             break;
         }
         *spent += 1;
-        // measuring past a proven pass gets a quarter of the budget
-        if measure && lb >= limit && *spent > budget / 4 {
+        // measuring past a proven pass gets a tenth of the budget
+        if measure && lb >= limit && *spent > budget / 10 {
             return Verdict::Clear {
                 lower: lower.min(lb),
                 upper: upper.max(lower.min(lb)),
@@ -271,7 +287,7 @@ mod tests {
                 assert!(
                     lower <= 0.5 + 1e-9
                         && upper >= 0.5 - 1e-9
-                        && upper - lower <= 0.001f64.max(0.05 * (upper - 0.4)) + 1e-12,
+                        && upper - lower <= 0.001f64.max(0.2 * (upper - 0.4)) + 1e-12,
                     "{lower} {upper}"
                 )
             }

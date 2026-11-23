@@ -70,7 +70,15 @@ struct Search<'a> {
     setups: Vec<Setup>,
     memo: HashMap<(u64, usize), Option<Step>>,
     selfs: HashMap<(u64, usize), Check>,
+    /// The gauge by (bends done, bend, rotated): it reads neither punch nor die.
+    gauges: HashMap<(u64, usize, bool), (Check, Option<crate::sim::Gauged>)>,
+    /// Quick checks against the fixed tools, by (done, bend, rotated, die); against the ram's,
+    /// by (done, bend, rotated, punch, die height: top dead centre's tip).
+    fixed: HashMap<(u64, usize, bool, usize), Vec<Check>>,
+    riding: HashMap<(u64, usize, bool, usize, u64), Vec<Check>>,
     dead: HashSet<u64>,
+    verdicts: std::rc::Rc<std::cell::RefCell<crate::sim::Memo>>,
+    legs: HashMap<(u64, usize), (f64, f64, f64)>,
     /// Per bend: (bends done, failures, the attempt).
     best: Vec<Option<(usize, usize, Step, u64)>>,
     explored: usize,
@@ -107,6 +115,8 @@ impl<'a> Search<'a> {
             (p.v - want)
                 .abs()
                 .total_cmp(&(q.v - want).abs())
+                // then the widest die angle (acute dies last), then by id
+                .then(q.angle.total_cmp(&p.angle))
                 .then(p.id.cmp(&q.id))
         });
         let mut setups = Vec::new();
@@ -127,7 +137,12 @@ impl<'a> Search<'a> {
             setups,
             memo: HashMap::new(),
             selfs: HashMap::new(),
+            gauges: HashMap::new(),
+            fixed: HashMap::new(),
+            riding: HashMap::new(),
             dead: HashSet::new(),
+            verdicts: Default::default(),
+            legs: HashMap::new(),
             best: vec![None; m.bends.len()],
             explored: 0,
             budget: if opts.budget == 0 { 4000 } else { opts.budget },
@@ -144,7 +159,18 @@ impl<'a> Search<'a> {
     fn run(&mut self, done: &[bool], j: usize, setup: Setup, quick: bool) -> Step {
         self.explored += 1;
         let ob = self.overbend(j);
-        let ctx = StepCtx::new(self.m, self.tl, done, j, setup, ob);
+        let mut ctx = StepCtx::new(self.m, self.tl, done, j, setup, ob);
+        ctx.memo = Some(self.verdicts.clone());
+        let lk = (mask(done), j);
+        let legs = match self.legs.get(&lk) {
+            Some(l) => *l,
+            None => {
+                let l = ctx.leg_geometry();
+                self.legs.insert(lk, l);
+                l
+            }
+        };
+        ctx.legs = Some(legs);
         let (mut checks, travel, force) = ctx.rules(self.opts.uts);
         let (pl, dl) = ctx.tool_lengths();
         let mut step = Step {
@@ -168,14 +194,23 @@ impl<'a> Search<'a> {
             step.checks = checks;
             return step;
         }
-        let (gc, gauge) = ctx.gauge();
+        let m = mask(done);
+        let gk = (m, j, setup.rotate);
+        let (gc, gauge) = match self.gauges.get(&gk) {
+            Some(g) => g.clone(),
+            None => {
+                let g = ctx.gauge();
+                self.gauges.insert(gk, g.clone());
+                g
+            }
+        };
         checks.push(gc);
         step.gauge = gauge.clone();
         if quick && failed(&checks) {
             step.checks = checks;
             return step;
         }
-        let key = (mask(done), j);
+        let key = (m, j);
         let sc = match self.selfs.get(&key) {
             Some(c) => c.clone(),
             None => {
@@ -190,16 +225,66 @@ impl<'a> Search<'a> {
             return step;
         }
         use crate::sim::Phase;
+        if quick {
+            // against the ram's tools, then the fixed ones; each kept for the setups sharing it
+            let rk = (
+                m,
+                j,
+                setup.rotate,
+                setup.punch,
+                self.tl.dies[setup.die].height.to_bits(),
+            );
+            let riding = match self.riding.get(&rk) {
+                Some(c) => c.clone(),
+                None => {
+                    let mut v = Vec::new();
+                    for phase in [Phase::Approach, Phase::Bend] {
+                        ctx.collisions_of(phase, gauge.as_ref(), &mut v, true, true);
+                        if failed(&v) {
+                            break;
+                        }
+                    }
+                    self.riding.insert(rk, v.clone());
+                    v
+                }
+            };
+            checks.extend(riding);
+            if failed(&checks) {
+                step.checks = checks;
+                return step;
+            }
+            let fk = (m, j, setup.rotate, setup.die);
+            let fixed = match self.fixed.get(&fk) {
+                Some(c) => c.clone(),
+                None => {
+                    let mut v = Vec::new();
+                    for phase in [Phase::Static, Phase::Approach, Phase::Bend] {
+                        let g = if phase == Phase::Static {
+                            None
+                        } else {
+                            gauge.as_ref()
+                        };
+                        ctx.collisions_of(phase, g, &mut v, true, false);
+                        if failed(&v) {
+                            break;
+                        }
+                    }
+                    self.fixed.insert(fk, v.clone());
+                    v
+                }
+            };
+            checks.extend(fixed);
+            // the return is a warning: it never decides a setup
+            step.checks = checks;
+            return step;
+        }
         for phase in [Phase::Static, Phase::Approach, Phase::Bend, Phase::Return] {
             let g = if phase == Phase::Static {
                 None
             } else {
                 gauge.as_ref()
             };
-            ctx.collisions(phase, g, &mut checks, quick);
-            if quick && failed(&checks) {
-                break;
-            }
+            ctx.collisions(phase, g, &mut checks, false);
         }
         step.checks = checks;
         step

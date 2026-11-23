@@ -50,7 +50,7 @@ Press {
 }
 Tooling { id, punches: [..], dies: [..], press: Press,
           clearance: 0.5,          // tool to part, the least allowed
-          self_clearance: 0.05,    // part to itself (penetration allowance)
+          self_clearance: 0,       // part to itself, the least gap allowed
           springback: [{ material: "steel", angle: 90, overbend: 2 }, ..] }
 ```
 
@@ -94,7 +94,7 @@ Per step, through the motion:
 |---|---|---|
 | `tool_collision` | part vs punch body, die, ram, bed, backgauge fingers | least distance vs `clearance` |
 | `closes_on_punch` | an already-bent flange closes on the punch (box / channel) | least distance vs `clearance` |
-| `self_collision` | moving side vs the rest of the part | penetration vs `self_clearance` |
+| `self_collision` | moving side vs the rest of the part | least gap vs `self_clearance` (0: touching allowed) |
 | `min_flange` | each leg reaches past the die shoulder's contact | leg length vs contact reach |
 | `v_too_narrow` | the shoulder contact falls on the zone, not the leg | contact x vs zone half-chord |
 | `die_angle` | the overbent included angle vs the die's angle | included vs die angle |
@@ -167,3 +167,25 @@ contained until the UI session's tokens land.
 - Hems are not simulated (they need a pre-bend and a flattening die): `HemNotSimulated`.
 - Holes and cuts inside a bend zone are counted as material (conservative).
 - One punch and one die per step (no multi-station setups yet).
+
+## As built (notes)
+
+- **Working contacts.** The die lies wholly under each leg's outside-skin half-plane past that
+  leg's tangent line, and the punch tip wholly over its inside one, while the angle and radius
+  rules hold. Any material there (cell by cell, whatever piece it is) is excluded from those two
+  elements; the moving zone is excluded from both. Everything else is checked by distance.
+- **Regions.** Every strip's region is its outline (or its zone's slot) within the flat pattern D
+  (holes, reliefs, corner cuts), less the zones' slots, with its boundary kept exactly; a zone
+  with cuts is bounded by the developed distance stretched by (2/pi) min(1, r_in/rn) below and
+  max(1, r_out/rn) above.
+- **Prism bound.** Against a tool (a y-prism) a cell's bound is the 2D bound in (x, z) combined
+  exactly with the least y distance, so cells are not split along the bed.
+- **Measuring.** A decision stops at the limit; a reported value is measured to the resolution or
+  a fifth of the margin, and pairs are measured nearest first with the best so far as a cut.
+- **Planner caches.** The gauge (per bends done, bend, orientation), the legs and part length,
+  ram-side and fixed-side decisions, and every verdict keyed by the done bends on the piece's own
+  path to the moving bend. Warnings (withdraw) never decide a setup.
+- **Tool lengths.** The longest segment sum within [bend − 2 short_end, bend − 2 clearance], else
+  the shortest past the first: a box's side tooling fits between its standing ends.
+- **Speed.** The example load tray (6 bends) plans in about 4 s; a 4-bend box with no feasible
+  order is refuted in about 5 s.

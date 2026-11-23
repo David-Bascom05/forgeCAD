@@ -315,9 +315,18 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             "--px" => a.px = it.next().and_then(|p| p.parse().ok()),
             "--at" => a.at = it.next().cloned(),
             "--base" => a.base = it.next().cloned(),
+            // `query F bendsim`'s: carried as its words
+            flag @ ("--vendor" | "--tooling" | "--sequence" | "--sheet" | "--uts") => {
+                a.words.push(flag.trim_start_matches("--").to_string());
+                if let Some(v) = it.next() {
+                    a.words.push(v.clone());
+                }
+            }
             "-o" => out = it.next().cloned(),
             w if w.starts_with("--") => {
-                eprintln!("unknown option {w} (--json --labels --px --at --base -o)");
+                eprintln!(
+                    "unknown option {w} (--json --labels --px --at --base -o; bendsim: --vendor --tooling --sequence --sheet --uts)"
+                );
                 return ExitCode::from(2);
             }
             _ => a.words.push(w.clone()),

@@ -158,7 +158,7 @@ pub struct Tooling {
     pub press: Press,
     /// The least distance allowed between the part and any tool.
     pub clearance: f64,
-    /// The deepest the part may run into itself (0: touching is the limit).
+    /// The least gap allowed between the part's own pieces (0: touching is the limit).
     pub self_clearance: f64,
     /// How far each end of a bend may run past the tool covering it.
     pub short_end: Option<f64>,

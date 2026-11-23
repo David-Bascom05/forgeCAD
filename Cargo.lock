@@ -206,6 +206,7 @@ dependencies = [
  "forge-agent",
  "forge-asm",
  "forge-bool",
+ "forge-brake",
  "forge-dirs",
  "forge-draw",
  "forge-dwg",

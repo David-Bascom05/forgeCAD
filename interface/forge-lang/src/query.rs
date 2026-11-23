@@ -74,7 +74,8 @@ pub struct Request {
 }
 
 pub const HELP: &str = "holes [of OCC] [d D] | section x|y|z=V [of OCC] | section at X Y Z normal NX NY NZ [of OCC] | \
-aligned [HOLE HOLE] [tol T] | gap FACE FACE | interference [OCC OCC] | frame SKETCH|PLANE [of OCC] | faces [of OCC] | tabs [of OCC] [t MAX] | unfold; \
+aligned [HOLE HOLE] [tol T] | gap FACE FACE | interference [OCC OCC] | frame SKETCH|PLANE [of OCC] | faces [of OCC] | tabs [of OCC] [t MAX] | unfold | \
+bendsim [tooling T] [vendor V] [sequence S] [sheet NAME] [uts MPA]; \
 any of them `in OCC` for that part's frame. In an assembly a name is OCC/NAME.";
 
 fn num(w: Option<&String>, what: &str) -> Result<f64, String> {
@@ -310,6 +311,13 @@ pub fn ask_file(path: &Path, root: Option<PathBuf>, text: &str) -> Answer {
 
 /// Runs `src` (a part or an assembly, its files beside `dir`) and answers the query.
 pub fn ask(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, text: &str) -> Answer {
+    let w = words(text);
+    if w.first().is_some_and(|x| x == "bendsim") {
+        return match crate::bendsim::parse(&w[1..]) {
+            Ok(a) => crate::bendsim::ask_src(src, dir, root, &a),
+            Err(e) => Answer::err(qe("Query", e)),
+        };
+    }
     let req = match parse(text) {
         Ok(r) => r,
         Err(e) => return Answer::err(qe("Query", e)),

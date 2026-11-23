@@ -44,6 +44,9 @@ query F params|features|stat|check
 query F SEL [--at FEAT]     @handles: `faces plane normal +z top`, `edges of boss convex`;
                             --at: the part as it stood after that feature (measure, render too)
 query F holes|aligned|interference|faces | section z=67 | gap A B | frame SKETCH
+query F bendsim [--tooling T] [--vendor V] [--sequence 3,1,2]
+                            a sheet bent on a press brake: order, tooling, every check through
+                            each bend's motion, fixes (docs/bendsim.md)
 measure F REF [REF] | mass | wall [exact]
 render F [VIEW] [--labels SEL] [--px N] [-o F.png]
 export F [ap214|ap242] [tol MM] [-o F.step] | dxf [SHEET] | dwg [SHEET]

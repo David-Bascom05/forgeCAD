@@ -106,7 +106,7 @@ pub enum Severity {
     Warning,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Phase {
     /// The part flat on the die, nothing moving (gauging).
     Static,
@@ -305,6 +305,8 @@ pub struct Piece {
     pub folded: bool,
     /// In the plane of wall a or b: joined to it by unbent zones only.
     pub on_leg: bool,
+    /// The done bends on its path to the moving bend (its own, for a zone), as a mask.
+    pub path: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -354,7 +356,20 @@ pub struct StepCtx<'a> {
     /// The punch tip's height at top dead centre.
     pub z_tdc: f64,
     lengths: (Option<f64>, Option<f64>),
+    die_index: usize,
+    /// Verdicts kept across steps: a piece's place depends only on the bends on its path to
+    /// the moving one, so its verdict against a tool holds wherever those are bent alike.
+    pub memo: Option<std::rc::Rc<std::cell::RefCell<Memo>>>,
+    /// The legs' straight runs (far, near) and the part's length along the bed, if already known
+    /// for these bends done: they read no tool.
+    pub legs: Option<(f64, f64, f64)>,
 }
+
+/// A distance verdict's key: the piece (strip kind and id, the done bends on its path), the tool
+/// element, the phase, the orientation, the moving bend and its overbent turn, the die (where it
+/// moves the punch), and whether it was only decided or measured.
+pub type MemoKey = (u8, u32, u64, String, Phase, bool, usize, u64, usize, bool);
+pub type Memo = std::collections::HashMap<MemoKey, Verdict>;
 
 /// The cells' budget for one piece against one target.
 const BUDGET: usize = 60_000;
@@ -389,6 +404,12 @@ impl<'a> StepCtx<'a> {
         let folded_of = |w: usize| m.path_bends(j, w).iter().any(|&k| done[k] && k != j);
         // on a leg: every bend between it and zone j unbent (wall a's and b's own paths are empty)
         let on_leg = |w: usize| !folded_of(w);
+        let path_mask = |w: usize| {
+            m.path_bends(j, w)
+                .into_iter()
+                .filter(|&k| done[k] && k != j)
+                .fold(0u64, |acc, k| acc | (1 << k))
+        };
         let mut pieces = Vec::new();
         let zj_to_dev = bj.zdev;
         for (wi, w) in m.walls.iter().enumerate() {
@@ -426,6 +447,7 @@ impl<'a> StepCtx<'a> {
                 inv: iso.inverse(),
                 folded: !near && folded_of(wi),
                 on_leg: on_leg(wi),
+                path: path_mask(wi),
             });
         }
         for (k, b) in m.bends.iter().enumerate() {
@@ -446,6 +468,7 @@ impl<'a> StepCtx<'a> {
                     inv: Iso3::ID,
                     folded: false,
                     on_leg: false,
+                    path: 0,
                 });
                 continue;
             }
@@ -466,6 +489,7 @@ impl<'a> StepCtx<'a> {
                 inv: iso.inverse(),
                 folded: done[k] || folded_of(b.a),
                 on_leg: !done[k] && on_leg(b.a) && on_leg(b.b),
+                path: path_mask(b.a) | path_mask(b.b) | (u64::from(done[k]) << k),
             });
         }
         let s = die.shoulder();
@@ -496,6 +520,9 @@ impl<'a> StepCtx<'a> {
             rs: die.shoulder_radius,
             z_tdc,
             lengths,
+            die_index: setup.die,
+            memo: None,
+            legs: None,
         }
     }
 
@@ -762,6 +789,21 @@ impl<'a> StepCtx<'a> {
         self.tool_checks(phase, gauge, out, quick, &|_| true);
     }
 
+    /// `collisions` against the tools that ride the ram (punch, ram) when `punch`, else against
+    /// the fixed ones (die, bed, backgauge).
+    pub fn collisions_of(
+        &self,
+        phase: Phase,
+        gauge: Option<&Gauged>,
+        out: &mut Vec<Check>,
+        quick: bool,
+        punch: bool,
+    ) {
+        self.tool_checks(phase, gauge, out, quick, &|e| {
+            (e.attach == Attach::Punch) == punch
+        });
+    }
+
     fn tool_checks(
         &self,
         phase: Phase,
@@ -790,11 +832,26 @@ impl<'a> StepCtx<'a> {
             _ => 0,
         };
         let mut lowest = (f64::INFINITY, f64::INFINITY, String::new());
-        'outer: for el in &els {
+        // the pairs, nearest first by their whole bound, so a measured distance cuts the rest short
+        let mut pairs: Vec<(f64, &Element, &Piece)> = Vec::new();
+        for el in &els {
             for pc in &self.pieces {
                 if el.work != Work::None && matches!(pc.kind, Kind::ZoneJ { .. }) {
                     continue;
                 }
+                let pb = ToolPb {
+                    ctx: self,
+                    pc,
+                    el,
+                    phase,
+                };
+                let root = self.roots(pc, s)[0];
+                pairs.push((pb.lower(&pb.enclose(&root)).0, el, pc));
+            }
+        }
+        pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
+        'outer: for (_, el, pc) in pairs {
+            {
                 let roots = self.roots(pc, s);
                 let pb = ToolPb {
                     ctx: self,
@@ -804,7 +861,54 @@ impl<'a> StepCtx<'a> {
                 };
                 let c0 = bb::CELLS.load(std::sync::atomic::Ordering::Relaxed);
                 let t0 = std::time::Instant::now();
-                let v = bb::certify(&pb, &roots, limit, res, BUDGET, !quick);
+                let key: Option<MemoKey> = (!el.name.starts_with("backgauge")).then(|| {
+                    let (kind, id) = match pc.strip {
+                        Strip::Wall(w) => (0u8, w.0),
+                        Strip::Bend(b) => (1u8, b.0),
+                    };
+                    // where the punch is placed by the die (approach, return) or the tool is the die
+                    let die = if el.attach == Attach::Die || phase != Phase::Bend {
+                        self.die_index + 1
+                    } else {
+                        0
+                    };
+                    (
+                        kind,
+                        id,
+                        pc.path,
+                        el.name.clone(),
+                        phase,
+                        self.rot < 0.0,
+                        self.j,
+                        self.phimax.to_bits(),
+                        die,
+                        quick,
+                    )
+                });
+                let kept = key
+                    .as_ref()
+                    .and_then(|k| self.memo.as_ref().and_then(|m| m.borrow().get(k).copied()));
+                let v = match kept {
+                    // a measured verdict also settles a decision; a cut one is measured afresh
+                    Some(v) => v,
+                    None => {
+                        let v = bb::certify_below(
+                            &pb,
+                            &roots,
+                            limit,
+                            res,
+                            BUDGET,
+                            !quick,
+                            if quick { f64::INFINITY } else { lowest.1 },
+                        );
+                        if let (Some(k), Some(m)) = (key, self.memo.as_ref())
+                            && (quick || lowest.1.is_infinite())
+                        {
+                            m.borrow_mut().insert(k, v);
+                        }
+                        v
+                    }
+                };
                 if std::env::var_os("BENDSIM_TRACE").is_some() {
                     eprintln!(
                         "trace {:?} {} {:?} quick {} cells {} {:?} {:?}",
@@ -822,6 +926,7 @@ impl<'a> StepCtx<'a> {
                         if upper < lowest.1 {
                             lowest = (lower, upper, el.name.clone());
                         }
+                        lowest.0 = lowest.0.min(lower);
                         continue;
                     }
                     Verdict::Hit { d, q, at } => (true, d, Some(q), Some(at)),
@@ -907,7 +1012,8 @@ impl<'a> StepCtx<'a> {
 
     /// The moving side against the rest of the part, through the bend.
     pub fn self_check(&self, quick: bool) -> Check {
-        let limit = -self.tl.self_clearance - 1e-5;
+        // the least gap allowed (0: touching is the limit), less the touch tolerance
+        let limit = self.tl.self_clearance - 1e-5;
         let res = 0.02;
         let s = Interval::new(0.0, self.phimax);
         let (a, b) = (self.bj.a, self.bj.b);
@@ -1024,6 +1130,11 @@ impl<'a> StepCtx<'a> {
             .enumerate()
             .map(|(k, z)| (k, z.slot().moved(&z.zdev)))
             .collect();
+        let outline_regions: Vec<(Rigid2, Region)> = m
+            .walls
+            .iter()
+            .map(|w| (w.dev.inverse(), Region::of(w.outline.clone())))
+            .collect();
         let material = |p: Point2| -> bool {
             for (k, s) in &slots {
                 if *k != self.j && self.done[*k] && s.inside(p, 0.0) {
@@ -1033,10 +1144,7 @@ impl<'a> StepCtx<'a> {
             if slots[self.j].1.inside(p, 0.0) {
                 return false;
             }
-            let in_wall = m.walls.iter().any(|w| {
-                let q = w.dev.inverse().apply(p);
-                Region::of(w.outline.clone()).in_loops(q)
-            });
+            let in_wall = outline_regions.iter().any(|(inv, r)| r.in_loops(inv.apply(p)));
             in_wall
                 || slots
                     .iter()
@@ -1103,7 +1211,7 @@ impl<'a> StepCtx<'a> {
         let mut c = Check::rule(Rule::VTooNarrow, cmin, 0.0, false);
         c.phi = Some(at);
         out.push(c);
-        let (far, near) = (self.leg_run(true), self.leg_run(false));
+        let (far, near, ylen) = self.leg_geometry();
         let mut mf = Check::rule(Rule::MinFlange, far.min(near), cmax.max(0.0), false);
         let leg = if far <= near { self.bj.b } else { self.bj.a };
         mf.part = Some(PartRef {
@@ -1141,7 +1249,7 @@ impl<'a> StepCtx<'a> {
             });
         }
         out.push(seg);
-        let ylen = self.part_extent_y();
+
         let tool_len = pl.unwrap_or(0.0).max(dl.unwrap_or(0.0));
         let pr = &self.tl.press;
         let mut bl = Check::rule(Rule::BedLength, ylen, pr.housing_gap, true);
@@ -1160,8 +1268,9 @@ impl<'a> StepCtx<'a> {
                 (self.punch.max_load, &self.punch.id),
                 (self.die.max_load, &self.die.id),
             ] {
+                // the most binding limit, by ratio (the press in kN, a tool in kN per metre)
                 if let Some(l) = load
-                    && per_m - l > value - lim
+                    && per_m / l > value / lim
                 {
                     value = per_m;
                     lim = l;
@@ -1173,6 +1282,12 @@ impl<'a> StepCtx<'a> {
             out.push(c);
         }
         (out, travel, force)
+    }
+
+    /// The legs' straight runs (far, near) and the part's length along the bed.
+    pub fn leg_geometry(&self) -> (f64, f64, f64) {
+        self.legs
+            .unwrap_or_else(|| (self.leg_run(true), self.leg_run(false), self.part_extent_y()))
     }
 
     /// The part's length along the bed (press y), exact for walls, enclosed for zones.
@@ -1367,7 +1482,7 @@ fn rect(x0: f64, z0: f64, x1: f64, z1: f64) -> Region {
     ])
 }
 
-/// The least and greatest of f over [lo, hi], within 1e-9, by interval bisection; and where the
+/// The least and greatest of f over [lo, hi], within 1e-6, by interval bisection; and where the
 /// least falls.
 fn range_1d(fi: impl Fn(Interval) -> Interval, fp: impl Fn(f64) -> f64, lo: f64, hi: f64) -> (f64, f64, f64) {
     let ends = [fp(lo), fp(hi)];
@@ -1377,7 +1492,7 @@ fn range_1d(fi: impl Fn(Interval) -> Interval, fp: impl Fn(f64) -> f64, lo: f64,
     let mut n = 0;
     while let Some(i) = stack.pop() {
         n += 1;
-        if n > 20_000 {
+        if n > 4000 {
             break;
         }
         let e = fi(i);
@@ -1386,7 +1501,7 @@ fn range_1d(fi: impl Fn(Interval) -> Interval, fp: impl Fn(f64) -> f64, lo: f64,
             best_lo = (m, i.mid());
         }
         best_hi = best_hi.max(m);
-        if (e.lo >= best_lo.0 - 1e-9 && e.hi <= best_hi + 1e-9) || i.width() < 1e-12 {
+        if (e.lo >= best_lo.0 - 1e-6 && e.hi <= best_hi + 1e-6) || i.width() < 1e-9 {
             continue;
         }
         let (a, b) = i.split();
