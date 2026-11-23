@@ -227,6 +227,10 @@ impl Joins {
 /// is on its boundary.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Body {
+    /// Some face may be a sheet's (`Face::sheet`): set with the first sheet face made, carried by
+    /// appending and compacting, never read off the topology. A solid never has it, so its checks
+    /// pass every sheet rule over without looking at a face.
+    pub sheets: bool,
     /// Faces (and edges) removed by in-place edits and not yet compacted away.
     pub dead: usize,
     /// What `forge_bool::unify` must know beyond the entities: merged names and kept edges.
@@ -280,15 +284,19 @@ impl Body {
 
     /// Whether the body is a sheet: it has faces, all of them sheet faces.
     pub fn is_sheet(&self) -> bool {
+        if !self.sheets {
+            return false;
+        }
         let mut live = self.faces.iter().filter(|f| f.alive).peekable();
         live.peek().is_some() && live.all(|f| f.sheet)
     }
     /// Whether any live face is a sheet's.
     pub fn has_sheet(&self) -> bool {
-        self.faces.iter().any(|f| f.alive && f.sheet)
+        self.sheets && self.faces.iter().any(|f| f.alive && f.sheet)
     }
     /// Makes every face a sheet's: for what makes a sheet, once its faces are made.
     pub fn mark_sheet(&mut self) {
+        self.sheets = true;
         for f in &mut self.faces {
             f.sheet = true;
         }
@@ -502,6 +510,7 @@ impl Body {
         let mut emap = vec![NONE; self.edges.len()];
         let mut smap = vec![NONE; groups];
         let mut out = Body {
+            sheets: self.sheets,
             dead: 0,
             joins: std::mem::take(&mut self.joins),
             vertices: Vec::with_capacity(self.vertices.len()),
@@ -605,8 +614,9 @@ impl Body {
             let face = self.face(f);
             let shell = *smap[group[f.index()]].get_or_insert_with(|| out.add_shell());
             let nf = out.add_face(shell, face.surface.clone(), face.same_sense, face.name);
-            if face.sheet {
+            if self.sheets && face.sheet {
                 out.faces[nf.index()].sheet = true;
+                out.sheets = true;
             }
             if let Some(b) = face.bbox.get() {
                 out.faces[nf.index()].bbox.set(*b);
@@ -772,6 +782,7 @@ impl Body {
             faces: x.faces.iter().map(|k| FaceId(k.0 + f)).collect(),
         }));
         self.dead += other.dead;
+        self.sheets |= other.sheets;
         self.joins.extend(&other.joins);
     }
 

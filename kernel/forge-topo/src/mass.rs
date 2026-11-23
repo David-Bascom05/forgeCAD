@@ -161,7 +161,7 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
     let (mut sheet_area, mut sheet_faces) = (0.0, 0);
     for (&f, got) in ids.iter().zip(each) {
         let (v, er) = got.map_err(|why| MassError { face: f, why })?;
-        if body.face(f).sheet {
+        if body.sheets && body.face(f).sheet {
             sheet_area += v[10];
             sheet_faces += 1;
             faces.push((f, v[10]));

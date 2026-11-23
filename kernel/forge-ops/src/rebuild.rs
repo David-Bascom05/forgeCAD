@@ -170,10 +170,12 @@ pub fn rebuild_some_reach(
         if !closed && ps.distance(pe) <= tol::LINEAR {
             return Err(RebuildError::Collapsed { edge: name });
         }
-        let shift = ps
+        let mut shift = ps
             .distance(old_pts[vs.index()])
-            .max(pe.distance(old_pts[ve.index()]))
-            .max(reach);
+            .max(pe.distance(old_pts[ve.index()]));
+        if reach > 0.0 {
+            shift = shift.max(reach);
+        }
         // (a seam on a procedural surface round an axis has no meridian to meet)
         let (curve, range) = b
             .as_ref()

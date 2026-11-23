@@ -932,8 +932,9 @@ pub fn rigid_copy(b: &forge_topo::Body, f: &Frame) -> forge_topo::Body {
         let face = b.face(fid);
         let shell = *smap[face.shell.index()].get_or_insert_with(|| out.add_shell());
         let nf = out.add_face(shell, face.surface.transformed(f), face.same_sense, face.name);
-        if face.sheet {
+        if b.sheets && face.sheet {
             out.faces[nf.index()].sheet = true;
+            out.sheets = true;
         }
         for &l in &face.loops {
             let mut uses = Vec::new();
