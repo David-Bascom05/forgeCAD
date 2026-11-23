@@ -433,7 +433,8 @@ fn main() {
                     }
                     if mutate && v == Verdict::Accepted {
                         let nf = r.result.as_ref().map_or(0, |b| b.face_ids().count());
-                        let mut ms = vec![Mutation::DropFace(0)];
+                        // (an empty result has no face to drop)
+                        let mut ms: Vec<Mutation> = (0..nf.min(1)).map(Mutation::DropFace).collect();
                         if nf > 1 {
                             ms.push(Mutation::DropFace(nf - 1));
                         }

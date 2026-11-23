@@ -213,16 +213,101 @@ def interpret (l : Rat) (keys : Array V3) (opds : Array ROpd) (res : RRes) :
       users := (snapped[i]!.getD j default, lps) :: users
   for r in [0:res.faces.size] do
     users := (rplanes[r]!, res.faces[r]!.2.2.loops) :: users
-  let kp := keyPlanes keys.size users
+  let kp0 := keyPlanes keys.size users
+  -- a key the plan put on a face's edge (a T-junction) is on that edge's faces too: the faces
+  -- (operand or result) whose loops hold the edge
+  let faceEdges : Array (Nat × Nat × Plane) := Id.run do
+    let mut out := #[]
+    let fs : List (Plane × Array (Array Nat)) :=
+      ((List.range opds.size).flatMap fun i => (List.range opds[i]!.faces.size).map fun j =>
+        (snapped[i]![j]!, opds[i]!.faces[j]!.loops)) ++
+      (List.range res.faces.size).map fun r => (rplanes[r]!, res.faces[r]!.2.2.loops)
+    for (pl, lps) in fs do
+      for lp in lps do
+        for m in [0:lp.size] do
+          out := out.push (lp[m]!, lp[(m + 1) % lp.size]!, pl)
+    return out
+  let fk : Array (Float × Float × Float) := keys.map fun p => (qf p.x, qf p.y, qf p.z)
+  let lf := qf l
+  let mut kp := kp0
+  for k in [0:keys.size] do
+    if kp0[k]!.isEmpty then continue
+    let (px, py, pz) := fk[k]!
+    for (a, b, pl) in faceEdges do
+      if a == k || b == k || kp[k]!.contains pl then continue
+      let (ax, ay, az) := fk[a]!
+      let (bx, by_, bz) := fk[b]!
+      let (dx, dy, dz) := (bx - ax, by_ - ay, bz - az)
+      let dd := dx * dx + dy * dy + dz * dz
+      if dd == 0 then continue
+      let t := ((px - ax) * dx + (py - ay) * dy + (pz - az) * dz) / dd
+      if t ≤ 0 || t ≥ 1 then continue
+      let (ex, ey, ez) := (ax + t * dx - px, ay + t * dy - py, az + t * dz - pz)
+      if ex * ex + ey * ey + ez * ez ≤ lf * lf then
+        kp := kp.set! k (pl :: kp[k]!)
   let mut exact : Array V3 := keys
+  -- first the keys three independent planes fix; then the others, each on an edge it lies on
+  -- (a T-junction: a vertex the plan put on an edge) or else on its planes
+  let mut fixed : Array Bool := Array.replicate keys.size false
+  let mut rest : List Nat := []
   for k in [0:keys.size] do
     if kp[k]!.isEmpty then continue
-    match settle kp[k]! keys[k]! with
-    | none => throw ("scope", s!"vertex {fmtV keys[k]!} is not one point of the planes round it")
+    match Snap.vertexAt kp[k]! with
     | some p =>
       if (p - keys[k]!).norm2 > l * l then
         throw ("rejected", s!"vertex {fmtV keys[k]!} is over LINEAR from its planes' meet {fmtV p}")
       exact := exact.set! k p
+      fixed := fixed.set! k true
+    | none => rest := k :: rest
+  let edges : List (Nat × Nat) := users.flatMap fun (_, lps) => lps.toList.flatMap fun lp =>
+    (List.range lp.size).map fun m => (lp[m]!, lp[(m + 1) % lp.size]!)
+  for k in rest.reverse do
+    let p := keys[k]!
+    let onAll := fun (q : V3) => kp[k]!.all fun P => P.eval q == 0
+    -- the edges (both ends fixed) the key lies on, within LINEAR: there it must be on the edge
+    let near := edges.filterMap fun (a, b) =>
+      if a == k || b == k || !fixed[a]! || !fixed[b]! then none
+      else
+        let A := exact[a]!
+        let d := exact[b]! - A
+        let dd := d.dot d
+        let t0 := if dd == 0 then 0 else (p - A).dot d / dd
+        if dd == 0 || !(0 < t0 && t0 < 1) || (A + t0 * d - p).norm2 > l * l then none
+        else some (A, d, t0)
+    -- on such an edge: where a plane round the key crosses its line, else the kernel's point's foot
+    let onEdge : Option (Option V3) := near.head?.map fun _ => near.findSome? fun (A, d, t0) =>
+      let tP : Option Rat := (kp[k]!.find? fun P => P.n.dot d != 0).map fun P =>
+        (P.c - P.n.dot A) / P.n.dot d
+      let t : Rat := tP.getD t0
+      let q : V3 := A + t * d
+      if 0 < t && t < 1 && (q - p).norm2 ≤ l * l && onAll q then some q else none
+    if onEdge == some none then
+      throw ("scope", s!"vertex {fmtV keys[k]!} is not one point of the planes and the edge round it")
+    match onEdge.join <|> settle kp[k]! p with
+    | none => throw ("scope", s!"vertex {fmtV keys[k]!} is not one point of the planes round it")
+    | some q =>
+      if (q - p).norm2 > l * l then
+        throw ("rejected", s!"vertex {fmtV keys[k]!} is over LINEAR from its planes' meet {fmtV q}")
+      exact := exact.set! k q
+  -- a key inside a face's edge (within LINEAR) must be on that edge's line exactly: else the
+  -- kernel put it there by tolerance, and the snapped faces have no one point for it
+  for k in [0:keys.size] do
+    if kp0[k]!.isEmpty then continue
+    let (px, py, pz) := fk[k]!
+    for (a, b, _) in faceEdges do
+      if a == k || b == k then continue
+      let (ax, ay, az) := fk[a]!
+      let (bx, by_, bz) := fk[b]!
+      let (dx, dy, dz) := (bx - ax, by_ - ay, bz - az)
+      let dd := dx * dx + dy * dy + dz * dz
+      if dd == 0 then continue
+      let t := ((px - ax) * dx + (py - ay) * dy + (pz - az) * dz) / dd
+      if t ≤ 0 || t ≥ 1 then continue
+      let (ex, ey, ez) := (ax + t * dx - px, ay + t * dy - py, az + t * dz - pz)
+      if ex * ex + ey * ey + ez * ez > lf * lf then continue
+      let d := exact[b]! - exact[a]!
+      if !((exact[k]! - exact[a]!).cross d).isZero then
+        throw ("scope", s!"vertex {fmtV keys[k]!} is not one point of the planes and the edge round it")
   let pt := fun (k : Nat) => exact.getD k default
   let face := fun (pl : Plane) (lps : Array (Array Nat)) =>
     (⟨pl, lps.map fun lp => lp.map pt⟩ : Face)
@@ -258,7 +343,14 @@ def explain (op : List Bool → Bool) (ins : List Opd) (res : List Face) : Strin
       match firstBad (o.faces.zip o.tris) (fun ft => nonzero ft.1.plane.n &&
           ft.2.all (fun t => onPlane ft.1.plane t && proper ft.1.plane t) &&
           zero1 (faceSegs ft.1 ++ ft.2.flatMap Tri.segs)) with
-      | some (j, _) => return s!"operand {i}: the pieces of face {j} do not tile it"
+      | some (j, ft) =>
+        let es := ends (faceSegs ft.1 ++ ft.2.flatMap Tri.segs)
+        let odd := (es.filter fun e => (es.filter (· == e)).length % 2 == 1).take 4
+        let offP := ft.2.filter fun t => !onPlane ft.1.plane t
+        let notProper := ft.2.filter fun t => !proper ft.1.plane t
+        return s!"operand {i}: the pieces of face {j} do not tile it (odd ends at " ++
+          ", ".intercalate (odd.map fun e => fmtV e.2) ++
+          s!"; {offP.length} triangles off its plane, {notProper.length} degenerate)"
       | none => return s!"operand {i}: faces and triangle lists differ in number"
     if !closedOK o then return s!"operand {i} is not closed"
   for P in planes ins res do
