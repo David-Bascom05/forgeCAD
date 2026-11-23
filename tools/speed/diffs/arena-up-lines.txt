@@ -1,0 +1,69 @@
+# The arena commit (71580ec) on the lines it put up, per function: before = 71580ec^, after = 71580ec
+# (exact callgrind, switch off; tools/speed/fndiff.py before.cg after.cg). Then 8cde56e (tool_box with no
+# allocation) took upto/upto-flat below base; what is left is +0.01% on four seq lines and volute cli:
+# into_compact's room (+5k) and the FaceHulls drop (+3k), ours, not glibc.
+
+== upto-seq
+  ours (kernel, std, forge-lang) +46691   glibc -15430   total +31261
+      -120870  ???:<forge_math::interval::Box3>::from_points::<core::iter::adapters::flatten::FlatMap<core::iter::adapters::flatten::Fl
+       -13098  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms [/usr/lib/x86_64-linux-gnu
+        -1350  ???:core::ptr::drop_glue::<core::iter::adapters::flatten::FlatMap<core::iter::adapters::flatten::FlatMap<core::slice::it
+        -1180  ./stdio-common/./stdio-common/vfscanf-internal.c:__vfscanf_internal [/usr/lib/x86_64-linux-gnu/libc.so.6]
+         +709  ./malloc/./malloc/malloc.c:_int_realloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+        +1200  ???:core::ptr::drop_glue::<core::iter::adapters::flatten::FlatMap<core::slice::iter::Iter<forge_ops::profile::ProfileLoo
+        +3150  ???:core::ptr::drop_glue::<forge_topo::body::Cached<forge_topo::body::FaceHulls>> [/home/user/forgeCAD/target/exp/callgr
+       +25050  ???:<core::iter::adapters::flatten::FlattenCompat<core::iter::adapters::map::Map<core::slice::iter::Iter<forge_ops::prof
+       +39270  ???:core::iter::adapters::flatten::and_then_or_clear::<core::iter::adapters::flatten::FlatMap<core::slice::iter::Iter<(f
+      +100440  ???:forge_model::hole::tool_box [/home/user/forgeCAD/target/exp/callgrind/release/examples/regen1]
+
+== upto-flat-nary1
+  ours (kernel, std, forge-lang) +11835   glibc -4135   total +7700
+       -32232  ???:<forge_math::interval::Box3>::from_points::<core::iter::adapters::flatten::FlatMap<core::iter::adapters::flatten::Fl
+        -2623  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms [/usr/lib/x86_64-linux-gnu
+        -1180  ./stdio-common/./stdio-common/vfscanf-internal.c:__vfscanf_internal [/usr/lib/x86_64-linux-gnu/libc.so.6]
+         -552  ./stdlib/../stdlib/strtol_l.c:____strtoul_l_internal [/usr/lib/x86_64-linux-gnu/libc.so.6]
+         +285  ???:core::ptr::drop_glue::<forge_topo::body::Cached<forge_topo::body::FaceHulls>> [/home/user/forgeCAD/target/exp/callgr
+         +320  ???:core::ptr::drop_glue::<core::iter::adapters::flatten::FlatMap<core::slice::iter::Iter<forge_ops::profile::ProfileLoo
+         +532  ./malloc/./malloc/malloc.c:_int_malloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+        +6680  ???:<core::iter::adapters::flatten::FlattenCompat<core::iter::adapters::map::Map<core::slice::iter::Iter<forge_ops::prof
+       +10472  ???:core::iter::adapters::flatten::and_then_or_clear::<core::iter::adapters::flatten::FlatMap<core::slice::iter::Iter<(f
+       +26784  ???:forge_model::hole::tool_box [/home/user/forgeCAD/target/exp/callgrind/release/examples/regen1]
+
+== torture-seq
+  ours (kernel, std, forge-lang) +7838   glibc -2165   total +5673
+        -1180  ./stdio-common/./stdio-common/vfscanf-internal.c:__vfscanf_internal [/usr/lib/x86_64-linux-gnu/libc.so.6]
+         -552  ./stdlib/../stdlib/strtol_l.c:____strtoul_l_internal [/usr/lib/x86_64-linux-gnu/libc.so.6]
+         -440  ???:core::ptr::drop_glue::<forge_topo::body::Body> [/home/user/forgeCAD/target/exp/callgrind/release/examples/regen1]
+          -88  ./libio/./libio/genops.c:_IO_sputbackc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+           +7  ./malloc/./malloc/malloc.c:free [/usr/lib/x86_64-linux-gnu/libc.so.6]
+           +7  ???:0x0000000000946694 [???]
+          +12  ???:0x0000000000196670 [/home/user/forgeCAD/target/exp/callgrind/release/examples/regen1]
+          +14  ???:0x0000000000196630 [/home/user/forgeCAD/target/exp/callgrind/release/examples/regen1]
+        +3300  ???:core::ptr::drop_glue::<forge_topo::body::Cached<forge_topo::body::FaceHulls>> [/home/user/forgeCAD/target/exp/callgr
+        +5068  ???:<forge_topo::body::Body>::into_compact [/home/user/forgeCAD/target/exp/callgrind/release/examples/regen1]
+
+== bracket-nary1
+  ours (kernel, std, forge-lang) -22124   glibc -95532   total -117656
+      -148937  ???:<alloc::vec::Vec<forge_topo::body::Edge> as core::clone::Clone>::clone [/home/user/forgeCAD/target/exp/callgrind/rel
+       -78702  ???:<alloc::vec::Vec<forge_topo::body::Face> as core::clone::Clone>::clone [/home/user/forgeCAD/target/exp/callgrind/rel
+       -75146  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms [/usr/lib/x86_64-linux-gnu
+       -31672  ???:<forge_math::interval::Box3>::from_points::<core::iter::adapters::flatten::FlatMap<core::iter::adapters::flatten::Fl
+        +5185  ???:<forge_geom::surface::Surface as core::cmp::PartialEq>::eq [/home/user/forgeCAD/target/exp/callgrind/release/example
+        +5768  ???:<core::iter::adapters::flatten::FlattenCompat<core::iter::adapters::map::Map<core::slice::iter::Iter<forge_ops::prof
+       +10168  ???:core::iter::adapters::flatten::and_then_or_clear::<core::iter::adapters::flatten::FlatMap<core::slice::iter::Iter<(f
+       +26208  ???:forge_model::hole::tool_box [/home/user/forgeCAD/target/exp/callgrind/release/examples/benchparts]
+       +76301  ???:<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<forge_topo::body::Face>> as core::iter::traits::iterat
+      +127390  ???:<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<forge_topo::body::Edge>> as core::iter::traits::iterat
+
+== bracket-res
+  ours (kernel, std, forge-lang) -23388   glibc -62290   total -85678
+      -131531  ???:<alloc::vec::Vec<forge_topo::body::Edge> as core::clone::Clone>::clone [/home/user/forgeCAD/target/exp/callgrind/rel
+       -69965  ???:<alloc::vec::Vec<forge_topo::body::Face> as core::clone::Clone>::clone [/home/user/forgeCAD/target/exp/callgrind/rel
+       -58750  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms [/usr/lib/x86_64-linux-gnu
+       -15836  ???:<forge_math::interval::Box3>::from_points::<core::iter::adapters::flatten::FlatMap<core::iter::adapters::flatten::Fl
+        +2884  ???:<core::iter::adapters::flatten::FlattenCompat<core::iter::adapters::map::Map<core::slice::iter::Iter<forge_ops::prof
+        +5084  ???:core::iter::adapters::flatten::and_then_or_clear::<core::iter::adapters::flatten::FlatMap<core::slice::iter::Iter<(f
+        +5185  ???:<forge_geom::surface::Surface as core::cmp::PartialEq>::eq [/home/user/forgeCAD/target/exp/callgrind/release/example
+       +13104  ???:forge_model::hole::tool_box [/home/user/forgeCAD/target/exp/callgrind/release/examples/benchparts]
+       +67850  ???:<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<forge_topo::body::Face>> as core::iter::traits::iterat
+      +112570  ???:<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<forge_topo::body::Edge>> as core::iter::traits::iterat

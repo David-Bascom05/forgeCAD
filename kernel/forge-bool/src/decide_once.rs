@@ -1569,7 +1569,6 @@ struct Built {
     /// a vertex cell's exact point
     point: Dense<HPoint>,
     /// a vertex cell's point in f64 (the exact one rounded once), for the write
-    #[allow(dead_code)]
     pointf: Dense<[f64; 3]>,
     /// an edge cell's two vertex cells
     ends: Dense<(u32, u32)>,
@@ -1582,7 +1581,6 @@ struct Built {
     /// per cell: its covector
     cells: Vec<Row>,
     /// per cell: is it on a wall (some wall class zero); for the write
-    #[allow(dead_code)]
     wall: Vec<bool>,
     /// cell ids by covector (`rk`)
     by: FxMap<(u64, u64), u32>,
@@ -2029,6 +2027,7 @@ pub struct Decided {
 type Filled = (Vec<In>, Vec<DyPlane>, Classes, Vec<Pts>, Built, Region);
 
 /// The ledger of `bodies`, filled, with the witnesses answered; and what the bridge kept.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn fill(bodies: &[&Body], rule: &Rule) -> Result<Filled, Skip> {
     let fs = inputs(bodies)?;
     let (snapped, reps) = snap(&fs)?;
@@ -2222,6 +2221,21 @@ pub fn boolean(a: &Body, b: &Body, op: Op) -> Result<Option<Body>, BoolError> {
     nary(&[a, b], &rule_of(op))
 }
 
+/// `boolean` into `target`, in place: outside the region its faces, edges and vertices are not
+/// touched (§3a's write as an edit). `Ok(false)` where the decide-once path does not apply, and
+/// `target` is as it was.
+pub fn boolean_in(target: &mut Body, b: &Body, op: Op) -> Result<bool, BoolError> {
+    // (the tool first: it is small, and a curved one skips before the part is read)
+    if !flat(b) {
+        return Ok(false);
+    }
+    let Some(plan) = plan_of(&[&*target, b], &rule_of(op))? else {
+        return Ok(false);
+    };
+    apply(target, plan, &[b]);
+    Ok(true)
+}
+
 /// Every face a plane and every edge a line.
 pub fn flat(b: &Body) -> bool {
     b.edge_ids().all(|e| matches!(b.edge(e).curve, Curve::Line(_)))
@@ -2254,19 +2268,42 @@ pub fn history(tools: &[&Body], ops: &[Op]) -> Result<Option<Body>, BoolError> {
 
 /// Any number of flat bodies under one pointwise rule, in one call.
 pub fn nary(bodies: &[&Body], rule: &Rule) -> Result<Option<Body>, BoolError> {
+    if !bodies.iter().skip(1).all(|b| flat(b)) {
+        return Ok(None);
+    }
+    let Some(plan) = plan_of(bodies, rule)? else {
+        return Ok(None);
+    };
+    let mut b = bodies[0].clone();
+    apply(&mut b, plan, &bodies[1..]);
+    Ok(Some(if b.dead > 0 { b.into_compact() } else { b }))
+}
+
+/// FORGE_DECIDE_STATS set: each boolean's sizes, and why one skips, to stderr. Read once (a
+/// variable read scans the environment: per boolean it cost the parts decide-once never runs on
+/// ~0.2% of their instructions).
+fn stats() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("FORGE_DECIDE_STATS").is_some())
+}
+
+/// The result of `bodies` under `rule` as an edit of body 0: `Ok(None)` where the decide-once
+/// path does not apply.
+#[inline(never)] // the whole of a decide-once boolean but its edit (tools/speed/phases.sh)
+fn plan_of(bodies: &[&Body], rule: &Rule) -> Result<Option<Plan>, BoolError> {
     #[cfg(feature = "decisions")]
     let _scope = crate::decisions::scope("decide-once", String::from("plain"));
     let (fs, snapped, cls, pts, built, reg) = match fill(bodies, rule) {
         Ok(x) => x,
         Err(e) => {
-            if std::env::var_os("FORGE_DECIDE_STATS").is_some() {
+            if stats() {
                 eprintln!("decide-once skip: {e:?}");
             }
             return Ok(None);
         }
     };
     let outcome = core::core(&built.ledger, rule, &core::MetricLedger::default());
-    if std::env::var_os("FORGE_DECIDE_STATS").is_some() {
+    if stats() {
         eprintln!(
             "decide-once: {} bodies, {} faces ({} near), {} classes, {} cells, {} pieces, {} edges, {} verts, {} witnesses",
             bodies.len(),
@@ -2289,7 +2326,6 @@ pub fn nary(bodies: &[&Body], rule: &Rule) -> Result<Option<Body>, BoolError> {
         snapped: &snapped,
         reg: &reg,
         pf: cls.planes.iter().map(plane_f).collect(),
-        at: RefCell::new(HashMap::default()),
     };
     let written = |out: Option<&core::Body>| {
         write(&w, out).unwrap_or_else(|| panic!("decide-once: the result's segments do not close into loops"))
@@ -2352,6 +2388,7 @@ fn why_split(l: &Ledger) -> Option<String> {
 /// §6.1 step 3 on the core's body: an edge shorter than LINEAR, or a vertex within LINEAR of a
 /// face it is not on (over the face's box), is a sub-LINEAR feature of the exact result. It is not
 /// collapsed: the boolean refuses there (ZeroThickness), the one answer besides a valid body.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn sliver(cls: &Classes, b: &Built, out: &core::Body) -> Option<Point3> {
     let l = lin();
     let pt = |v: u32| {
@@ -2448,21 +2485,35 @@ struct Seg {
     a: PK,
     b: PK,
     src: usize,
+    /// a whole edge of body 0 whose other face is far (kept as it is): the segment is that edge,
+    /// used as its coedge on the near face used it
+    keep: Option<(EdgeId, bool)>,
 }
 
-/// A pool of segments that forms one or more final faces: a class plane and outward sense, or a
-/// far face kept whole.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-enum Grp {
-    Plane(u32, i8),
-    Far(usize),
+/// A pool of segments that forms one or more final faces: a class plane and outward sense.
+type Grp = (u32, i8);
+
+/// A loop of body 0's near face `g` kept as it is (wholly outside the region, every edge along a
+/// far face): moved to the final face that holds it, by id.
+struct Kept {
+    g: usize,
+    lp: forge_topo::LoopId,
+    /// its place among the face's loops (and the input's `In.loops`)
+    li: usize,
+    grp: Grp,
+}
+
+/// A loop of a final face: segments to build, or a kept loop (an index into the kept ones).
+enum Lp {
+    New(Vec<Seg>),
+    Kept(usize),
 }
 
 /// A final face before it is built.
 struct Fin {
     grp: Grp,
-    /// loops of segments (outer first)
-    loops: Vec<Vec<Seg>>,
+    /// loops (outer first)
+    loops: Vec<Lp>,
     /// the least input face it holds a segment of
     src: usize,
 }
@@ -2477,35 +2528,23 @@ struct Wr<'a> {
     snapped: &'a [DyPlane],
     reg: &'a Region,
     pf: Vec<PlaneF>,
-    at: RefCell<HashMap<PK, [f64; 3]>>,
 }
 
 impl Wr<'_> {
+    /// A point's place: a vertex cell's exact point rounded once, or body 0's vertex as it is.
     fn pos(&self, k: PK) -> [f64; 3] {
-        if let Some(p) = self.at.borrow().get(&k) {
-            return *p;
-        }
-        let p = match k {
-            PK::Cell(c) => self.built.point[&c].to_f64(),
+        match k {
+            PK::Cell(c) => self.built.pointf[&c],
             PK::Orig(v) => {
                 let q = self.bodies[0].vertex(v).point;
                 [q.x, q.y, q.z]
             }
-        };
-        self.at.borrow_mut().insert(k, p);
-        p
+        }
     }
 
     /// The outward normal of a group, in f64.
     fn normal(&self, g: Grp) -> [f64; 3] {
-        let (n, s) = match g {
-            Grp::Plane(c, o) => (self.pf[c as usize].n, o as f64),
-            Grp::Far(i) => {
-                let pf = plane_f(&self.fs[i].plane);
-                let ss = self.bodies[self.fs[i].body].face(self.fs[i].face).same_sense;
-                (pf.n, if ss { 1.0 } else { -1.0 })
-            }
-        };
+        let (n, s) = (self.pf[g.0 as usize].n, g.1 as f64);
         [n[0] * s, n[1] * s, n[2] * s]
     }
 
@@ -2523,6 +2562,158 @@ impl Wr<'_> {
         let cv = covector(self.cls, &self.pf, &h, &[cg, ck, w]);
         self.built.by.get(&rk(cv)).map(|&c| PK::Cell(c))
     }
+}
+
+/// A vertex of the result: one of body 0's, kept, or the plan's `i`th new one.
+#[derive(Clone, Copy, Debug)]
+enum VRef {
+    Old(VertexId),
+    New(u32),
+}
+
+/// An edge of the result: one of body 0's, kept, or the plan's `i`th new one.
+#[derive(Clone, Copy, Debug)]
+enum ERef {
+    Old(EdgeId),
+    New(u32),
+}
+
+struct NewEdge {
+    curve: Curve,
+    range: Interval,
+    a: VRef,
+    b: VRef,
+    name: Name,
+}
+
+/// A loop of a new face: built from edge uses, or one of body 0's moved over as it is.
+enum NewLoop {
+    Uses(Vec<(ERef, bool)>),
+    Kept(forge_topo::LoopId),
+}
+
+struct NewFace {
+    surface: Surface,
+    same_sense: bool,
+    name: Name,
+    loops: Vec<NewLoop>,
+}
+
+/// The result as an edit of body 0 (§3a's write, incremental): body 0's faces outside the region
+/// stay where they are, by index, with their edges and vertices; the near faces go, and the final
+/// faces round the region come in their place, stitched to the kept edges along the frontier. So
+/// a boolean costs what its region holds, not what the part holds.
+struct Plan {
+    /// every face of body 0 goes (the region is everything, or outside it the result is empty)
+    kill_all: bool,
+    /// else these (body 0's near faces)
+    kill: Vec<FaceId>,
+    /// loops taken off their (killed) face first, to be moved to a new one
+    detach: Vec<(FaceId, forge_topo::LoopId)>,
+    verts: Vec<(Point3, Name)>,
+    edges: Vec<NewEdge>,
+    faces: Vec<NewFace>,
+    aliases: Vec<(Name, Name)>,
+    /// (piece, whole): the names of an input face split over several final faces
+    pieces: Vec<(Name, Name)>,
+}
+
+/// Each name's whole, as unify reads it (unify.rs, rename_wholes): the inputs' joins.pieces, a
+/// piece recorded twice taking the lesser whole, a piece recorded as its own whole skipped.
+struct Pieces(Vec<(Name, Name)>);
+
+impl Pieces {
+    fn of(bodies: &[&Body]) -> Pieces {
+        let mut v: Vec<(Name, Name)> = Vec::new();
+        for b in bodies {
+            v.extend(b.joins.pieces.iter().copied().filter(|&(p, w)| p != w));
+        }
+        v.sort_unstable();
+        v.dedup_by_key(|x| x.0);
+        Pieces(v)
+    }
+    fn up(&self, n: Name) -> Option<Name> {
+        self.0.binary_search_by_key(&n, |x| x.0).ok().map(|i| self.0[i].1)
+    }
+    /// The whole's whole, and so on, back to the face no boolean split.
+    fn whole(&self, n: Name) -> Option<Name> {
+        let mut w = self.up(n)?;
+        for _ in 0..self.0.len() {
+            match self.up(w) {
+                Some(x) => w = x,
+                None => break,
+            }
+        }
+        Some(w)
+    }
+}
+
+/// The plan done to `body` (body 0, or its copy); `tools` give their joins.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
+fn apply(body: &mut Body, plan: Plan, tools: &[&Body]) {
+    for &(f, l) in &plan.detach {
+        body.faces[f.index()].loops.retain(|&x| x != l);
+    }
+    if plan.kill_all {
+        let ids: Vec<FaceId> = body.face_ids().collect();
+        for f in ids {
+            body.kill_face(f);
+        }
+    } else {
+        for &f in &plan.kill {
+            body.kill_face(f);
+        }
+    }
+    if plan.faces.is_empty() && plan.kill_all {
+        *body = Body::default();
+        return;
+    }
+    let v0 = body.vertices.len() as u32;
+    for (p, n) in plan.verts {
+        body.add_vertex(p, n);
+    }
+    let vr = |r: VRef| match r {
+        VRef::Old(v) => v,
+        VRef::New(i) => VertexId(v0 + i),
+    };
+    let e0 = body.edges.len() as u32;
+    for e in plan.edges {
+        body.add_edge(e.curve, e.range, vr(e.a), vr(e.b), e.name);
+    }
+    let shell = body.add_shell();
+    let mut uses = Vec::new();
+    for f in plan.faces {
+        let id = body.add_face(shell, f.surface, f.same_sense, f.name);
+        for lp in &f.loops {
+            let lp = match lp {
+                NewLoop::Kept(l) => {
+                    body.faces[id.index()].loops.push(*l);
+                    body.loops[l.index()].face = id;
+                    continue;
+                }
+                NewLoop::Uses(u) => u,
+            };
+            uses.clear();
+            for &(e, fw) in lp {
+                let e = match e {
+                    ERef::Old(x) => x,
+                    ERef::New(i) => EdgeId(e0 + i),
+                };
+                uses.push((e, fw));
+            }
+            body.add_loop(id, &uses);
+        }
+    }
+    for t in tools {
+        body.joins.extend(&t.joins);
+    }
+    body.joins.aliases.extend(plan.aliases);
+    body.joins.pieces.extend(plan.pieces);
+    if body.face_ids().next().is_none() {
+        *body = Body::default();
+        return;
+    }
+    body.rebuild_shells();
 }
 
 /// Projection axes of a plane with outward normal `n`, so that (s, t) runs counter-clockwise about
@@ -2543,10 +2734,9 @@ fn chain(w: &Wr, segs: &[Seg], n: [f64; 3]) -> Option<Vec<Vec<Seg>>> {
         let p = w.pos(k);
         (p[ax.0], p[ax.1])
     };
-    let mut from: std::collections::BTreeMap<PK, Vec<usize>> = std::collections::BTreeMap::new();
-    for (i, s) in segs.iter().enumerate() {
-        from.entry(s.a).or_default().push(i);
-    }
+    // the segments by start point (then by index: the order they came in)
+    let mut from: Vec<(PK, u32)> = segs.iter().enumerate().map(|(i, s)| (s.a, i as u32)).collect();
+    from.sort_unstable();
     let mut used = vec![false; segs.len()];
     let mut loops = Vec::new();
     for s0 in 0..segs.len() {
@@ -2560,7 +2750,13 @@ fn chain(w: &Wr, segs: &[Seg], n: [f64; 3]) -> Option<Vec<Vec<Seg>>> {
         let mut guard = 0;
         while segs[cur].b != start || lp.is_empty() {
             let at = segs[cur].b;
-            let cands: Vec<usize> = from.get(&at)?.iter().copied().filter(|&j| !used[j]).collect();
+            let lo = from.partition_point(|x| x.0 < at);
+            let cands: Vec<usize> = from[lo..]
+                .iter()
+                .take_while(|x| x.0 == at)
+                .map(|x| x.1 as usize)
+                .filter(|&j| !used[j])
+                .collect();
             let next = match cands.len() {
                 0 => return None,
                 1 => cands[0],
@@ -2618,179 +2814,315 @@ fn inside_loop(w: &Wr, lp: &[Seg], ax: (usize, usize), q: (f64, f64)) -> bool {
     c
 }
 
-/// The body the core's answer describes, with everything outside the region passed through
-/// (§3a's write), written fresh. `None` only if the segments do not close into loops, which a
-/// valid ledger never gives.
-fn write(w: &Wr, out: Option<&core::Body>) -> Option<Body> {
-    let (bodies, fs, cls, built, reg) = (w.bodies, w.fs, w.cls, w.built, w.reg);
-    let mut pools: std::collections::BTreeMap<Grp, Vec<Seg>> = std::collections::BTreeMap::new();
-    // body 0's global face index by FaceId
-    let mut gidx: HashMap<FaceId, usize> = HashMap::default();
-    for (g, f) in fs.iter().enumerate() {
-        if f.body == 0 {
-            gidx.insert(f.face, g);
+/// The points of a final face's loop, in order: its segments' starts, or a kept loop's vertices.
+fn lp_points(w: &Wr, kept: &[Kept], lp: &Lp, out: &mut Vec<[f64; 3]>) {
+    out.clear();
+    match lp {
+        Lp::New(segs) => out.extend(segs.iter().map(|s| w.pos(s.a))),
+        Lp::Kept(i) => {
+            let b0 = w.bodies[0];
+            out.extend(b0.lp(kept[*i].lp).coedges().map(|c| {
+                let q = b0.vertex(b0.coedge_start(c)).point;
+                [q.x, q.y, q.z]
+            }));
         }
     }
-    // 1. outside the region: far faces whole, near faces clipped at the walls
-    if let Some((lo, hi)) = reg.bx
-        && reg.keeps_target
-    {
+}
+
+/// `area` of a final face's loop.
+fn area_l(w: &Wr, kept: &[Kept], lp: &Lp, ax: (usize, usize)) -> f64 {
+    if let Lp::New(segs) = lp {
+        return area(w, segs, ax);
+    }
+    let mut ps = Vec::new();
+    lp_points(w, kept, lp, &mut ps);
+    let n = ps.len();
+    (0..n)
+        .map(|k| {
+            let (p, q) = (ps[k], ps[(k + 1) % n]);
+            p[ax.0] * q[ax.1] - q[ax.0] * p[ax.1]
+        })
+        .sum()
+}
+
+/// `inside_loop` for a final face's loop.
+fn inside_l(w: &Wr, kept: &[Kept], lp: &Lp, ax: (usize, usize), q: (f64, f64)) -> bool {
+    if let Lp::New(segs) = lp {
+        return inside_loop(w, segs, ax, q);
+    }
+    let mut ps = Vec::new();
+    lp_points(w, kept, lp, &mut ps);
+    let n = ps.len();
+    let mut c = false;
+    for k in 0..n {
+        let (p, r) = (ps[k], ps[(k + 1) % n]);
+        let (a, b) = ((p[ax.0], p[ax.1]), (r[ax.0], r[ax.1]));
+        if (a.1 > q.1) != (b.1 > q.1) && q.0 < a.0 + (q.1 - a.1) * (b.0 - a.0) / (b.1 - a.1) {
+            c = !c;
+        }
+    }
+    c
+}
+
+/// The middle of a loop's first side, projected: the point a hole is placed by.
+fn mid_l(w: &Wr, kept: &[Kept], lp: &Lp, ax: (usize, usize)) -> (f64, f64) {
+    let (p, q) = match lp {
+        Lp::New(h) => (w.pos(h[0].a), w.pos(h[0].b)),
+        Lp::Kept(_) => {
+            let mut ps = Vec::new();
+            lp_points(w, kept, lp, &mut ps);
+            (ps[0], ps[1 % ps.len()])
+        }
+    };
+    ((p[ax.0] + q[ax.0]) / 2.0, (p[ax.1] + q[ax.1]) / 2.0)
+}
+
+/// The body the core's answer describes, as an edit of body 0 (§3a's write): outside the region
+/// body 0 stays as it is, by index (its far faces, their edges and vertices are not read or
+/// copied); the near faces are rebuilt, clipped at the walls, and stitched to the core's faces.
+/// `None` only if the segments do not close into loops, which a valid ledger never gives.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
+fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
+    let (bodies, fs, cls, built, reg) = (w.bodies, w.fs, w.cls, w.built, w.reg);
+    let mut pools: std::collections::BTreeMap<Grp, Vec<Seg>> = std::collections::BTreeMap::new();
+    let keep_far = reg.bx.is_some() && reg.keeps_target;
+    let mut kept: Vec<Kept> = Vec::new();
+    // 1. outside the region: the near faces of body 0 clipped at the walls (the far ones stay)
+    if let (Some((lo, hi)), true) = (reg.bx, keep_far) {
         let b0 = bodies[0];
-        let inside = |p: [f64; 3]| (0..3).all(|k| lo[k] < p[k] && p[k] < hi[k]);
+        // body 0's input face index by FaceId, for the near faces
+        let mut gidx: Vec<u32> = vec![NONE; b0.faces.len()];
         for (g, f) in fs.iter().enumerate() {
-            if f.body != 0 {
+            if f.body == 0 && reg.near[g] {
+                gidx[f.face.index()] = g as u32;
+            }
+        }
+        let inside = |p: [f64; 3]| (0..3).all(|k| lo[k] < p[k] && p[k] < hi[k]);
+        // the segments of loop `lp` of near face `g` outside the open box, clipped at its walls
+        let segs_of = |g: usize, lp: forge_topo::LoopId, out: &mut Vec<Seg>| -> Option<()> {
+            for c in b0.lp(lp).coedges() {
+                let (u, v) = (b0.coedge_start(c), b0.coedge_end(c));
+                let (pu, pv) = (w.pos(PK::Orig(u)), w.pos(PK::Orig(v)));
+                let (iu, iv) = (inside(pu), inside(pv));
+                if iu && iv {
+                    continue;
+                }
+                // the segment's span in the box (Liang–Barsky), and the walls it enters and
+                // leaves by
+                let (mut t0, mut t1) = (0.0f64, 1.0f64);
+                let (mut w0, mut w1) = (None, None);
+                let mut miss = false;
+                for k in 0..3 {
+                    let d = pv[k] - pu[k];
+                    if d == 0.0 {
+                        if pu[k] <= lo[k] || pu[k] >= hi[k] {
+                            miss = true;
+                        }
+                        continue;
+                    }
+                    let (ta, tb) = ((lo[k] - pu[k]) / d, (hi[k] - pu[k]) / d);
+                    let (wa, wb) = (cls.walls[2 * k], cls.walls[2 * k + 1]);
+                    let ((tn, wn), (tx, wx)) = if ta < tb {
+                        ((ta, wa), (tb, wb))
+                    } else {
+                        ((tb, wb), (ta, wa))
+                    };
+                    if tn > t0 {
+                        t0 = tn;
+                        w0 = Some(wn);
+                    }
+                    if tx < t1 {
+                        t1 = tx;
+                        w1 = Some(wx);
+                    }
+                }
+                let e = b0.coedge(c).edge;
+                // the edge's other face, as an input face index (NONE: far)
+                let other = b0
+                    .edge(e)
+                    .coedges
+                    .iter()
+                    .copied()
+                    .find(|&x| x != c)
+                    .map(|pc| gidx[b0.coedge_face(pc).index()]);
+                if miss || t0 >= t1 {
+                    // whole, outside: along a far face it is that face's edge, kept
+                    let keep = (other == Some(NONE)).then(|| (e, b0.coedge(c).forward));
+                    out.push(Seg {
+                        a: PK::Orig(u),
+                        b: PK::Orig(v),
+                        src: g,
+                        keep,
+                    });
+                    continue;
+                }
+                let k = other.filter(|&k| k != NONE)? as usize;
+                if !iu {
+                    let x = w.crossing(g, k, w0?)?;
+                    out.push(Seg {
+                        a: PK::Orig(u),
+                        b: x,
+                        src: g,
+                        keep: None,
+                    });
+                }
+                if !iv {
+                    let x = w.crossing(g, k, w1?)?;
+                    out.push(Seg {
+                        a: x,
+                        b: PK::Orig(v),
+                        src: g,
+                        keep: None,
+                    });
+                }
+            }
+            Some(())
+        };
+        // the face across coedge `c`'s edge is far (kept)
+        let gfar = |c: forge_topo::CoedgeId| -> bool {
+            let e = b0.coedge(c).edge;
+            b0.edge(e)
+                .coedges
+                .iter()
+                .copied()
+                .find(|&x| x != c)
+                .is_some_and(|pc| gidx[b0.coedge_face(pc).index()] == NONE)
+        };
+        let mut tmp = Vec::new();
+        for (g, f) in fs.iter().enumerate() {
+            if f.body != 0 || !reg.near[g] {
                 continue;
             }
             let face = b0.face(f.face);
-            for &lp in face.loops.iter() {
-                for c in b0.lp(lp).coedges() {
-                    let (u, v) = (b0.coedge_start(c), b0.coedge_end(c));
-                    if !reg.near[g] {
-                        pools.entry(Grp::Far(g)).or_default().push(Seg {
-                            a: PK::Orig(u),
-                            b: PK::Orig(v),
-                            src: g,
-                        });
-                        continue;
-                    }
-                    let grp = Grp::Plane(cls.of_face[g], w_out(w, g) as i8);
-                    let (pu, pv) = (w.pos(PK::Orig(u)), w.pos(PK::Orig(v)));
-                    let (iu, iv) = (inside(pu), inside(pv));
-                    if iu && iv {
-                        continue;
-                    }
-                    // the segment's span in the box (Liang–Barsky), and the walls it enters and
-                    // leaves by
-                    let (mut t0, mut t1) = (0.0f64, 1.0f64);
-                    let (mut w0, mut w1) = (None, None);
-                    let mut miss = false;
-                    for k in 0..3 {
-                        let d = pv[k] - pu[k];
-                        if d == 0.0 {
-                            if pu[k] <= lo[k] || pu[k] >= hi[k] {
-                                miss = true;
-                            }
-                            continue;
-                        }
-                        let (ta, tb) = ((lo[k] - pu[k]) / d, (hi[k] - pu[k]) / d);
-                        let (wa, wb) = (cls.walls[2 * k], cls.walls[2 * k + 1]);
-                        let ((tn, wn), (tx, wx)) = if ta < tb {
-                            ((ta, wa), (tb, wb))
-                        } else {
-                            ((tb, wb), (ta, wa))
-                        };
-                        if tn > t0 {
-                            t0 = tn;
-                            w0 = Some(wn);
-                        }
-                        if tx < t1 {
-                            t1 = tx;
-                            w1 = Some(wx);
-                        }
-                    }
-                    let other = || -> Option<usize> {
-                        let e = b0.coedge(c).edge;
-                        let pc = b0.edge(e).coedges.iter().copied().find(|&x| x != c)?;
-                        gidx.get(&b0.coedge_face(pc)).copied()
-                    };
-                    let pool = pools.entry(grp).or_default();
-                    if miss || t0 >= t1 {
-                        pool.push(Seg {
-                            a: PK::Orig(u),
-                            b: PK::Orig(v),
-                            src: g,
-                        });
-                        continue;
-                    }
-                    let k = other()?;
-                    if !iu {
-                        let x = w.crossing(g, k, w0?)?;
-                        pool.push(Seg {
-                            a: PK::Orig(u),
-                            b: x,
-                            src: g,
-                        });
-                    }
-                    if !iv {
-                        let x = w.crossing(g, k, w1?)?;
-                        pool.push(Seg {
-                            a: x,
-                            b: PK::Orig(v),
-                            src: g,
-                        });
-                    }
+            let grp = (cls.of_face[g], w_out(w, g) as i8);
+            for (li, &lp) in face.loops.iter().enumerate() {
+                // a loop wholly outside the closed box, every edge of it along a far face: kept as
+                // it is, by its id (unless a rebuilt segment meets one of its vertices, below)
+                let (llo, lhi) = f.lboxes[li];
+                if (0..3).any(|k| lhi[k] < lo[k] || llo[k] > hi[k]) && b0.lp(lp).coedges().all(&gfar) {
+                    kept.push(Kept { g, lp, li, grp });
+                    continue;
+                }
+                tmp.clear();
+                segs_of(g, lp, &mut tmp)?;
+                pools.entry(grp).or_default().extend_from_slice(&tmp);
+            }
+        }
+        // a kept loop through a point a rebuilt segment has is rebuilt too (so every final face
+        // round a point is counted where vertices are decided), until none is
+        let mut at_pts: Vec<VertexId> = Vec::new();
+        for segs in pools.values() {
+            for sg in segs {
+                if let PK::Orig(v) = sg.a {
+                    at_pts.push(v);
                 }
             }
+        }
+        at_pts.sort_unstable();
+        at_pts.dedup();
+        loop {
+            let mut moved = false;
+            let mut k = 0;
+            while k < kept.len() {
+                let x = &kept[k];
+                if fs[x.g].loops[x.li]
+                    .iter()
+                    .any(|v| at_pts.binary_search(v).is_ok())
+                {
+                    let x = kept.remove(k);
+                    tmp.clear();
+                    segs_of(x.g, x.lp, &mut tmp)?;
+                    pools.entry(x.grp).or_default().extend_from_slice(&tmp);
+                    at_pts.extend(fs[x.g].loops[x.li].iter().copied());
+                    moved = true;
+                } else {
+                    k += 1;
+                }
+            }
+            if !moved {
+                break;
+            }
+            at_pts.sort_unstable();
+            at_pts.dedup();
         }
     }
     // 2. inside: the core's faces, their boundary off the walls
     if let Some(out) = out {
+        // a face's uses of each edge cell, by cell id (reset after each face)
+        let mut count: Vec<u8> = vec![0; built.wall.len()];
+        let mut segs = Vec::new();
         for f in &out.faces {
-            let grp = Grp::Plane(f.plane, if f.orient == Sgn::Pos { 1 } else { -1 });
-            let mut count: HashMap<u32, u32> = HashMap::default();
-            let mut segs = Vec::new();
+            let grp = (f.plane, if f.orient == Sgn::Pos { 1 } else { -1 });
+            segs.clear();
             for c in &f.facets {
-                let mut poly = built.facet[&c.0].poly.clone();
-                if f.orient == Sgn::Neg {
-                    poly.reverse();
-                }
-                for k in 0..poly.len() {
-                    let (u, v) = (poly[k], poly[(k + 1) % poly.len()]);
-                    let e = edge_cell(built, u, v)?;
-                    *count.entry(e).or_default() += 1;
+                let fc = &built.facet[&c.0];
+                let n = fc.poly.len();
+                for k in 0..n {
+                    // the polygon reversed for an inward-facing facet (edge j runs poly[j] to
+                    // poly[j + 1])
+                    let (u, v, e) = if f.orient == Sgn::Neg {
+                        let (i, j) = (n - 1 - k, (2 * n - 2 - k) % n);
+                        (fc.poly[i], fc.poly[j], fc.poly_e[j])
+                    } else {
+                        (fc.poly[k], fc.poly[(k + 1) % n], fc.poly_e[k])
+                    };
+                    count[e as usize] = count[e as usize].saturating_add(1);
                     segs.push((u, v, e));
                 }
             }
             let pool = pools.entry(grp).or_default();
-            for (u, v, e) in segs {
-                if count[&e] == 1 && !built.wall[e as usize] {
+            for &(u, v, e) in &segs {
+                if count[e as usize] == 1 && !built.wall[e as usize] {
                     pool.push(Seg {
                         a: PK::Cell(u),
                         b: PK::Cell(v),
                         src: f.origin.0 as usize,
+                        keep: None,
                     });
                 }
             }
+            for &(_, _, e) in &segs {
+                count[e as usize] = 0;
+            }
         }
     }
-    // 3. the final faces: each pool's loops, holes given to the outer loop round them
+    // 3. the final faces: each group's loops (chained from its segments, and its kept ones),
+    // holes given to the outer loop round them
+    let mut groups: Vec<Grp> = pools.keys().copied().collect();
+    groups.extend(kept.iter().map(|x| x.grp));
+    groups.sort_unstable();
+    groups.dedup();
     let mut fins: Vec<Fin> = Vec::new();
-    for (&grp, segs) in &pools {
-        if segs.is_empty() {
-            continue;
-        }
+    for grp in groups {
         let n = w.normal(grp);
         let ax = axes_of(n);
-        let loops = chain(w, segs, n)?;
-        let src_of = |lp: &[Seg]| lp.iter().map(|s| s.src).min().unwrap_or(usize::MAX);
-        if let Grp::Far(g) = grp {
-            let mut loops = loops;
-            let mut best = 0;
-            for k in 1..loops.len() {
-                if area(w, &loops[k], ax) > area(w, &loops[best], ax) {
-                    best = k;
-                }
+        let mut loops: Vec<Lp> = match pools.get(&grp) {
+            Some(segs) if !segs.is_empty() => chain(w, segs, n)?.into_iter().map(Lp::New).collect(),
+            _ => Vec::new(),
+        };
+        for (i, x) in kept.iter().enumerate() {
+            if x.grp == grp {
+                loops.push(Lp::Kept(i));
             }
-            loops.swap(0, best);
-            fins.push(Fin { grp, loops, src: g });
+        }
+        if loops.is_empty() {
             continue;
         }
         let (mut outer, mut holes) = (Vec::new(), Vec::new());
         for lp in loops {
-            if area(w, &lp, ax) > 0.0 {
+            if area_l(w, &kept, &lp, ax) > 0.0 {
                 outer.push(lp);
             } else {
                 holes.push(lp);
             }
         }
-        let mut faces: Vec<Vec<Vec<Seg>>> = outer.into_iter().map(|o| vec![o]).collect();
+        let mut faces: Vec<Vec<Lp>> = outer.into_iter().map(|o| vec![o]).collect();
         for h in holes {
-            let (p, q) = (w.pos(h[0].a), w.pos(h[0].b));
-            let m = ((p[ax.0] + q[ax.0]) / 2.0, (p[ax.1] + q[ax.1]) / 2.0);
+            let m = mid_l(w, &kept, &h, ax);
             let mut best: Option<(f64, usize)> = None;
             for (k, fl) in faces.iter().enumerate() {
-                if inside_loop(w, &fl[0], ax, m) {
-                    let a = area(w, &fl[0], ax);
+                if inside_l(w, &kept, &fl[0], ax, m) {
+                    let a = area_l(w, &kept, &fl[0], ax);
                     if best.is_none_or(|(b, _)| a < b) {
                         best = Some((a, k));
                     }
@@ -2799,16 +3131,42 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Body> {
             faces[best?.1].push(h);
         }
         for fl in faces {
-            let src = fl.iter().map(|lp| src_of(lp)).min().unwrap_or(usize::MAX);
+            let src = fl
+                .iter()
+                .map(|lp| match lp {
+                    Lp::New(segs) => segs.iter().map(|s| s.src).min().unwrap_or(usize::MAX),
+                    Lp::Kept(i) => kept[*i].g,
+                })
+                .min()
+                .unwrap_or(usize::MAX);
             fins.push(Fin { grp, loops: fl, src });
         }
     }
     // in input arena order (of the least input face each holds)
     fins.sort_by_key(|f| f.src);
-    if fins.is_empty() {
-        return Some(Body::default());
+    let mut kill = Vec::new();
+    if keep_far {
+        for (g, f) in fs.iter().enumerate() {
+            if f.body == 0 && reg.near[g] {
+                kill.push(f.face);
+            }
+        }
     }
-    build_body(w, &fins)
+    let mut plan = Plan {
+        kill_all: !keep_far,
+        kill,
+        detach: kept.iter().map(|x| (fs[x.g].face, x.lp)).collect(),
+        verts: Vec::new(),
+        edges: Vec::new(),
+        faces: Vec::new(),
+        aliases: Vec::new(),
+        pieces: Vec::new(),
+    };
+    if fins.is_empty() {
+        return Some(plan);
+    }
+    build_body(w, &fins, &kept, &mut plan)?;
+    Some(plan)
 }
 
 /// A near face's outward sense against its class plane.
@@ -2822,247 +3180,431 @@ fn w_out(w: &Wr, g: usize) -> i32 {
     }
 }
 
-/// The body of the final faces: vertices where three or more faces meet, an edge per straight run
-/// between two, shells by adjacency; names kept where the entity is the input's.
-fn build_body(w: &Wr, fins: &[Fin]) -> Option<Body> {
+/// The final faces into the plan: vertices where three or more faces meet (body 0's kept faces
+/// counted), an edge per straight run between two final faces, and body 0's edges along a kept
+/// face used as they are; names kept where the entity is the input's. Every table is a sorted
+/// list or a list by point index (no maps but the names').
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
+fn build_body(w: &Wr, fins: &[Fin], kept: &[Kept], plan: &mut Plan) -> Option<()> {
     let (bodies, fs, cls, built) = (w.bodies, w.fs, w.cls, w.built);
     let face_name = |g: usize| bodies[fs[g].body].face(fs[g].face).name;
-    // the faces round each point
-    let mut round: std::collections::BTreeMap<PK, Vec<usize>> = std::collections::BTreeMap::new();
+    let keep_far = w.reg.bx.is_some() && w.reg.keeps_target;
+    // the points: every segment's start, sorted, with the final faces round each
+    let mut pf: Vec<(PK, u32)> = Vec::new();
     for (fi, f) in fins.iter().enumerate() {
         for lp in &f.loops {
+            let Lp::New(lp) = lp else { continue };
             for s in lp {
-                let r = round.entry(s.a).or_default();
-                if !r.contains(&fi) {
-                    r.push(fi);
-                }
+                pf.push((s.a, fi as u32));
             }
         }
     }
-    let is_vert = |k: PK| round.get(&k).is_some_and(|r| r.len() >= 3);
-    // runs: each loop cut at its vertices
-    struct Run {
-        a: PK,
-        b: PK,
+    pf.sort_unstable();
+    pf.dedup();
+    let mut pts: Vec<PK> = Vec::new();
+    let mut start: Vec<u32> = Vec::new();
+    for (i, &(k, _)) in pf.iter().enumerate() {
+        if pts.last() != Some(&k) {
+            pts.push(k);
+            start.push(i as u32);
+        }
     }
-    let mut face_runs: Vec<Vec<Vec<Run>>> = Vec::new();
-    let mut edge_faces: std::collections::BTreeMap<(PK, PK), Vec<usize>> = std::collections::BTreeMap::new();
+    start.push(pf.len() as u32);
+    let at = |k: PK| pts.binary_search(&k).ok();
+    // a vertex: three or more faces round it, body 0's kept faces counted
+    let mut vert = vec![false; pts.len()];
+    for (i, &k) in pts.iter().enumerate() {
+        let mut n = (start[i + 1] - start[i]) as usize;
+        if let (PK::Orig(v), true) = (k, n < 3 && keep_far) {
+            n += w.pts[0]
+                .round(v)
+                .iter()
+                .filter(|&&g| !w.reg.near[g as usize])
+                .count();
+        }
+        vert[i] = n >= 3;
+    }
+    // runs: each loop cut at its vertices, and either side of a kept edge; ends as point indices
+    struct Run {
+        a: u32,
+        b: u32,
+        keep: Option<(EdgeId, bool)>,
+    }
+    // per loop: its runs, or None for a kept loop
+    let mut face_runs: Vec<Vec<Option<Vec<Run>>>> = Vec::with_capacity(fins.len());
+    // (edge key, final face) of every run that is not a kept edge
+    let mut ef: Vec<((u32, u32), u32)> = Vec::new();
     for (fi, f) in fins.iter().enumerate() {
-        let mut lruns = Vec::new();
+        let mut lruns = Vec::with_capacity(f.loops.len());
         for lp in &f.loops {
-            let first = lp.iter().position(|s| is_vert(s.a))?;
+            let Lp::New(lp) = lp else {
+                lruns.push(None);
+                continue;
+            };
             let n = lp.len();
-            let mut runs = Vec::new();
-            let mut a = lp[first].a;
-            for k in 0..n {
-                let s = &lp[(first + k) % n];
-                if is_vert(s.b) {
-                    runs.push(Run { a, b: s.b });
-                    a = s.b;
+            let ia: Vec<u32> = lp
+                .iter()
+                .map(|s| at(s.a).map(|i| i as u32))
+                .collect::<Option<_>>()?;
+            let cut =
+                |k: usize| vert[ia[k] as usize] || lp[k].keep.is_some() || lp[(k + n - 1) % n].keep.is_some();
+            let first = (0..n).find(|&k| cut(k))?;
+            let mut runs: Vec<Run> = Vec::new();
+            for j in 0..n {
+                let k = (first + j) % n;
+                let b = ia[(k + 1) % n];
+                if j == 0 || cut(k) {
+                    runs.push(Run {
+                        a: ia[k],
+                        b,
+                        keep: lp[k].keep,
+                    });
+                } else {
+                    runs.last_mut().unwrap().b = b;
                 }
             }
             for r in &runs {
-                let key = if r.a <= r.b { (r.a, r.b) } else { (r.b, r.a) };
-                edge_faces.entry(key).or_default().push(fi);
+                if r.keep.is_none() {
+                    ef.push(((r.a.min(r.b), r.a.max(r.b)), fi as u32));
+                }
             }
-            lruns.push(runs);
+            lruns.push(Some(runs));
         }
         face_runs.push(lruns);
     }
-    // shells: faces joined across edges
-    let mut uf = Uf::new(fins.len());
-    for fsx in edge_faces.values() {
-        if fsx.len() != 2 {
+    // each edge between exactly two final faces
+    ef.sort_unstable();
+    let mut keys: Vec<(u32, u32)> = Vec::new();
+    let mut kstart: Vec<u32> = Vec::new();
+    for (i, &(k, _)) in ef.iter().enumerate() {
+        if keys.last() != Some(&k) {
+            keys.push(k);
+            kstart.push(i as u32);
+        }
+    }
+    kstart.push(ef.len() as u32);
+    for i in 0..keys.len() {
+        if kstart[i + 1] - kstart[i] != 2 {
             return None;
         }
-        uf.union(fsx[0], fsx[1]);
     }
-    // names
-    let mut per_src: HashMap<usize, u64> = HashMap::default();
-    for f in fins {
-        *per_src.entry(f.src).or_default() += 1;
-    }
-    let mut seen: HashMap<usize, u64> = HashMap::default();
-    let mut used: HashMap<Name, ()> = HashMap::default();
-    let mut fnames = Vec::new();
-    for f in fins {
-        let base = face_name(f.src);
-        let name = if per_src[&f.src] == 1 {
-            base
-        } else {
-            let k = seen.entry(f.src).or_default();
-            *k += 1;
-            base.piece(Name::NONE.with_name(base).with(*k))
-        };
-        fnames.push(unique(&mut used, name));
-    }
-    // the input's vertices by their place in the result, for points and names kept
-    let mut orig_v: HashMap<u32, (usize, VertexId)> = HashMap::default();
-    for (k, b) in bodies.iter().enumerate() {
-        for (g, f) in fs.iter().enumerate() {
-            if f.body != k || cls.of_face[g] == NONE {
-                continue;
-            }
-            for lp in &f.loops {
-                for &v in lp {
-                    // (only a vertex in the region can be a cell)
-                    if k == 0 && vid_of_orig(w, v) {
-                        continue;
-                    }
-                    let h = w.pts[k].ph(v, w.snapped);
-                    let cv = covector(cls, &w.pf, &h, &[]);
-                    if let Some(&c) = built.by.get(&rk(cv)) {
-                        orig_v.entry(c).or_insert((k, v));
-                    }
-                }
-            }
-        }
-        let _ = b;
-    }
-    let mut body = Body::default();
-    let mut vid: HashMap<PK, VertexId> = HashMap::default();
-    let mut vused: HashMap<Name, ()> = HashMap::default();
-    let mut vertex = |body: &mut Body, k: PK| -> VertexId {
-        if let Some(&v) = vid.get(&k) {
-            return v;
-        }
-        let (p, name) = match k {
-            PK::Orig(v) => {
-                let x = bodies[0].vertex(v);
-                (x.point, x.name)
-            }
-            PK::Cell(c) => match orig_v.get(&c) {
-                Some(&(b, v)) => {
-                    let x = bodies[b].vertex(v);
-                    (x.point, x.name)
-                }
-                None => {
-                    let q = w.pos(k);
-                    (
-                        Point3::new(q[0], q[1], q[2]),
-                        Name::NONE.with_str("decide-once vertex").with(c as u64),
-                    )
-                }
-            },
-        };
-        let v = body.add_vertex(p, unique(&mut vused, name));
-        vid.insert(k, v);
-        v
-    };
-    // the input's edges by their two vertices' places, for names kept
-    let placed: RefCell<HashMap<(usize, VertexId), Option<PK>>> = RefCell::new(HashMap::default());
-    let place = |b: usize, v: VertexId| -> Option<PK> {
-        if let Some(&p) = placed.borrow().get(&(b, v)) {
-            return p;
-        }
-        let p = if b == 0 && vid_of_orig(w, v) {
-            Some(PK::Orig(v))
-        } else {
-            let h = w.pts[b].ph(v, w.snapped);
-            let cv = covector(cls, &w.pf, &h, &[]);
-            built.by.get(&rk(cv)).map(|&c| PK::Cell(c))
-        };
-        placed.borrow_mut().insert((b, v), p);
-        p
-    };
-    let mut orig_e: HashMap<(PK, PK), Name> = HashMap::default();
-    let gof: HashMap<(usize, FaceId), usize> = fs
-        .iter()
-        .enumerate()
-        .map(|(g, f)| ((f.body, f.face), g))
-        .collect();
-    for (k, b) in bodies.iter().enumerate() {
-        for e in b.edge_ids() {
-            let ed = b.edge(e);
-            let touches_near = ed.coedges.iter().any(|&c| {
-                gof.get(&(k, b.coedge_face(c)))
-                    .is_some_and(|&g| w.reg.near[g] || k == 0)
-            });
-            if !touches_near {
-                continue;
-            }
-            if let (Some(a), Some(z)) = (place(k, ed.start), place(k, ed.end)) {
-                let key = if a <= z { (a, z) } else { (z, a) };
-                orig_e.entry(key).or_insert(ed.name);
-            }
-        }
-    }
-    let mut shell_of: HashMap<usize, forge_topo::ShellId> = HashMap::default();
-    let mut eid: HashMap<(PK, PK), (EdgeId, PK)> = HashMap::default();
-    let mut eused: HashMap<Name, ()> = HashMap::default();
-    for (fi, f) in fins.iter().enumerate() {
-        let root = uf.find(fi);
-        let shell = *shell_of.entry(root).or_insert_with(|| body.add_shell());
-        let (surface, same_sense) = match f.grp {
-            Grp::Far(g) => {
-                let x = bodies[fs[g].body].face(fs[g].face);
-                (x.surface.clone(), x.same_sense)
-            }
-            Grp::Plane(c, o) => {
-                let cp = &cls.planes[c as usize];
-                let src = if fs[f.src].plane.same_set(cp) {
-                    f.src
-                } else {
-                    cls.rep[c as usize]
-                };
-                let along = fs[src].plane.n.dot(&cp.n).signum() > 0;
-                (
-                    bodies[fs[src].body].face(fs[src].face).surface.clone(),
-                    along == (o > 0),
-                )
-            }
-        };
-        let face = body.add_face(shell, surface, same_sense, fnames[fi]);
-        for runs in &face_runs[fi] {
-            let mut uses = Vec::new();
-            for r in runs {
-                let key = if r.a <= r.b { (r.a, r.b) } else { (r.b, r.a) };
-                let (e, start) = match eid.get(&key) {
-                    Some(&x) => x,
-                    None => {
-                        let (va, vb) = (vertex(&mut body, r.a), vertex(&mut body, r.b));
-                        let (pa, pb) = (body.vertex(va).point, body.vertex(vb).point);
-                        let line = Line::through(pa, pb)?;
-                        let name = match orig_e.get(&key) {
-                            Some(&n) => n,
-                            None => {
-                                let names: Vec<Name> = edge_faces[&key].iter().map(|&x| fnames[x]).collect();
-                                Name::NONE.with_str("decide-once edge").with_set(&names)
-                            }
-                        };
-                        let e = body.add_edge(
-                            Curve::Line(line),
-                            Interval::new(0.0, pa.distance(pb)),
-                            va,
-                            vb,
-                            unique(&mut eused, name),
-                        );
-                        eid.insert(key, (e, r.a));
-                        (e, r.a)
-                    }
-                };
-                uses.push((e, start == r.a));
-            }
-            body.add_loop(face, &uses);
-        }
-    }
-    // joins: the inputs', and an input face whose name no final face has went to the first that
-    // holds a segment of it
-    for b in bodies {
-        body.joins.extend(&b.joins);
-    }
-    let mut named: HashMap<Name, ()> = fnames.iter().map(|&n| (n, ())).collect();
+    // names, by unify's rule (unify.rs, rename_wholes), so a face is named alike on both paths:
+    // - an input face in one final face keeps its name; one split over several gives each a
+    //   piece of its name, recorded as that name's piece (joins.pieces);
+    // - a final face of several input faces (merged) takes the least of their wholes (a name's
+    //   whole: back along joins.pieces to the face no boolean split), else the least of their
+    //   own; where two would take one name, or a live face left alone holds it, each keeps the
+    //   least of its own; every member's own name is an alias of the final one
+    let mut sf: Vec<(usize, u32)> = Vec::new();
     for (fi, f) in fins.iter().enumerate() {
         for lp in &f.loops {
-            for s in lp {
-                let n = face_name(s.src);
-                if named.insert(n, ()).is_none() {
-                    body.joins.aliases.push((n, fnames[fi]));
+            match lp {
+                Lp::New(segs) => sf.extend(segs.iter().map(|s| (s.src, fi as u32))),
+                Lp::Kept(i) => sf.push((kept[*i].g, fi as u32)),
+            }
+        }
+    }
+    sf.sort_unstable();
+    sf.dedup();
+    // per final face: its members (own name, its whole if it has one)
+    let mut members: Vec<Vec<(Name, Option<Name>)>> = vec![Vec::new(); fins.len()];
+    let pieces = Pieces::of(bodies);
+    let mut i = 0;
+    while i < sf.len() {
+        let mut j = i;
+        while j < sf.len() && sf[j].0 == sf[i].0 {
+            j += 1;
+        }
+        let own = face_name(sf[i].0);
+        for (k, &(_, fi)) in sf[i..j].iter().enumerate() {
+            if j - i == 1 {
+                members[fi as usize].push((own, pieces.whole(own)));
+            } else {
+                let piece = own.piece(Name::NONE.with_name(own).with(k as u64 + 1));
+                plan.pieces.push((piece, own));
+                members[fi as usize].push((piece, Some(pieces.whole(own).unwrap_or(own))));
+            }
+        }
+        i = j;
+    }
+    let mut fnames: Vec<Name> = Vec::with_capacity(fins.len());
+    for ms in &members {
+        let own = ms.iter().map(|m| m.0).min().unwrap_or(Name::NONE);
+        fnames.push(if ms.len() < 2 {
+            own
+        } else if ms.iter().any(|m| m.1.is_some()) {
+            ms.iter().map(|m| m.1.unwrap_or(m.0)).min().unwrap_or(own)
+        } else {
+            own
+        });
+    }
+    {
+        // a merged face's name another would take, or one a live face of body 0 holds that is not
+        // among the faces this boolean remakes: each keeps the least of its own
+        let mut taken: Vec<Name> = fnames.clone();
+        taken.sort_unstable();
+        for (fi, ms) in members.iter().enumerate() {
+            if ms.len() < 2 || ms.iter().any(|m| m.0 == fnames[fi]) {
+                continue;
+            }
+            let n = fnames[fi];
+            let twice = taken.partition_point(|&x| x < n) + 1 < taken.partition_point(|&x| x <= n);
+            let held = bodies[0].face_by_name(n).is_some_and(|f| {
+                !w.fs
+                    .iter()
+                    .enumerate()
+                    .any(|(g, x)| x.body == 0 && x.face == f && w.reg.near[g])
+            });
+            if twice || held {
+                fnames[fi] = ms.iter().map(|m| m.0).min().unwrap_or(n);
+            }
+        }
+    }
+    let mut used: HashMap<Name, ()> = HashMap::default();
+    for n in fnames.iter_mut() {
+        *n = unique(&mut used, *n);
+    }
+    for (fi, ms) in members.iter().enumerate() {
+        if ms.len() < 2 {
+            continue;
+        }
+        for m in ms {
+            if m.0 != fnames[fi] {
+                plan.aliases.push((m.0, fnames[fi]));
+            }
+        }
+    }
+    // the points that are vertex cells, by their f64 place along x, to find an input vertex's:
+    // candidates within a bound well past the rounding (each coordinate within 4 ulps of the exact
+    // one), then the exact test decides
+    let mut by_x: Vec<([f64; 3], u32)> = Vec::with_capacity(pts.len());
+    for (i, &k) in pts.iter().enumerate() {
+        if let PK::Cell(_) = k {
+            by_x.push((w.pos(k), i as u32));
+        }
+    }
+    by_x.sort_unstable_by(|a, b| a.0[0].total_cmp(&b.0[0]).then(a.1.cmp(&b.1)));
+    let near = |a: f64, b: f64| (a - b).abs() <= 1e-12 * (1.0 + a.abs().max(b.abs()));
+    // the point an input vertex is, if any: body 0's outside the region by its id, else the
+    // vertex cell at its exact point
+    let place_new = |b: usize, v: VertexId| -> Option<u32> {
+        if b == 0 && vid_of_orig(w, v) {
+            return at(PK::Orig(v)).map(|i| i as u32);
+        }
+        let q = w.pts[b].pf(v, w.snapped);
+        let lo = by_x.partition_point(|x| x.0[0] < q[0] && !near(x.0[0], q[0]));
+        for &(p, i) in &by_x[lo..] {
+            if !near(p[0], q[0]) {
+                break;
+            }
+            if !(near(p[1], q[1]) && near(p[2], q[2])) {
+                continue;
+            }
+            let PK::Cell(c) = pts[i as usize] else { continue };
+            w.pts[b].ensure(v, w.snapped);
+            if w.pts[b].exact.borrow()[v.index()]
+                .as_ref()
+                .is_some_and(|h| built.point[&c].same(h))
+            {
+                return Some(i);
+            }
+        }
+        None
+    };
+    // the input vertices to place: the near faces' and the ends of the edges named below, each
+    // placed once
+    let mut want: Vec<(usize, VertexId)> = Vec::new();
+    for (g, f) in fs.iter().enumerate() {
+        if cls.of_face[g] == NONE {
+            continue;
+        }
+        for lp in &f.loops {
+            for &v in lp {
+                want.push((f.body, v));
+            }
+        }
+    }
+    for (k, b) in bodies.iter().enumerate().skip(1) {
+        for e in b.edge_ids() {
+            want.push((k, b.edge(e).start));
+            want.push((k, b.edge(e).end));
+        }
+    }
+    want.sort_unstable();
+    want.dedup();
+    let placed: Vec<Option<u32>> = want.iter().map(|&(b, v)| place_new(b, v)).collect();
+    let place =
+        |b: usize, v: VertexId| -> Option<u32> { want.binary_search(&(b, v)).ok().and_then(|j| placed[j]) };
+    // the inputs' vertices at the points, for points and names kept (the near faces' only: a far
+    // face has no vertex in the region); the first in input order
+    let mut orig_v: Vec<Option<(usize, VertexId)>> = vec![None; pts.len()];
+    for (g, f) in fs.iter().enumerate() {
+        if cls.of_face[g] == NONE {
+            continue;
+        }
+        let k = f.body;
+        for lp in &f.loops {
+            for &v in lp {
+                // (only a vertex in the region can be a cell)
+                if k == 0 && vid_of_orig(w, v) {
+                    continue;
+                }
+                if let Some(i) = place(k, v)
+                    && orig_v[i as usize].is_none()
+                {
+                    orig_v[i as usize] = Some((k, v));
                 }
             }
         }
     }
-    Some(body)
+    let mut vid: Vec<Option<(VRef, Point3)>> = vec![None; pts.len()];
+    let mut vused: HashMap<Name, ()> = HashMap::default();
+    let mut vertex = |plan: &mut Plan, i: u32| -> (VRef, Point3) {
+        if let Some(v) = vid[i as usize] {
+            return v;
+        }
+        let k = pts[i as usize];
+        let r = match (k, orig_v[i as usize]) {
+            (PK::Orig(v), _) | (PK::Cell(_), Some((0, v))) => (VRef::Old(v), bodies[0].vertex(v).point),
+            (PK::Cell(_), Some((b, v))) => {
+                let x = bodies[b].vertex(v);
+                plan.verts.push((x.point, unique(&mut vused, x.name)));
+                (VRef::New(plan.verts.len() as u32 - 1), x.point)
+            }
+            (PK::Cell(_), None) => {
+                let q = w.pos(k);
+                let p = Point3::new(q[0], q[1], q[2]);
+                // named by the final faces round it: what meets there
+                let names: Vec<Name> = (start[i as usize]..start[i as usize + 1])
+                    .map(|j| fnames[pf[j as usize].1 as usize])
+                    .collect();
+                let name = Name::NONE.with_str("decide-once vertex").with_set(&names);
+                plan.verts.push((p, unique(&mut vused, name)));
+                (VRef::New(plan.verts.len() as u32 - 1), p)
+            }
+        };
+        vid[i as usize] = Some(r);
+        r
+    };
+    // the inputs' edges by their two ends' points, for names kept: body 0's near faces' edges,
+    // then the tools' (the first kept)
+    let mut oe: Vec<((u32, u32), u32, Name)> = Vec::new();
+    let name_edge = |k: usize, e: EdgeId, oe: &mut Vec<((u32, u32), u32, Name)>| {
+        let ed = bodies[k].edge(e);
+        if let (Some(a), Some(z)) = (place(k, ed.start), place(k, ed.end)) {
+            oe.push(((a.min(z), a.max(z)), oe.len() as u32, ed.name));
+        }
+    };
+    {
+        let b0 = bodies[0];
+        for (g, f) in fs.iter().enumerate() {
+            if f.body != 0 || !w.reg.near[g] {
+                continue;
+            }
+            for &lp in b0.face(f.face).loops.iter() {
+                // (a kept loop's edges are kept: no run is named by them)
+                if kept.iter().any(|x| x.lp == lp) {
+                    continue;
+                }
+                for c in b0.lp(lp).coedges() {
+                    name_edge(0, b0.coedge(c).edge, &mut oe);
+                }
+            }
+        }
+    }
+    for (k, b) in bodies.iter().enumerate().skip(1) {
+        for e in b.edge_ids() {
+            name_edge(k, e, &mut oe);
+        }
+    }
+    oe.sort_unstable_by_key(|x| (x.0, x.1));
+    oe.dedup_by_key(|x| x.0);
+    let mut eslot: Vec<u32> = vec![NONE; keys.len()];
+    let mut eused: HashMap<Name, ()> = HashMap::default();
+    for (fi, f) in fins.iter().enumerate() {
+        let (c, o) = f.grp;
+        let cp = &cls.planes[c as usize];
+        let src = if fs[f.src].plane.same_set(cp) {
+            f.src
+        } else {
+            cls.rep[c as usize]
+        };
+        let along = fs[src].plane.n.dot(&cp.n).signum() > 0;
+        let mut nf = NewFace {
+            surface: bodies[fs[src].body].face(fs[src].face).surface.clone(),
+            same_sense: along == (o > 0),
+            name: fnames[fi],
+            loops: Vec::with_capacity(face_runs[fi].len()),
+        };
+        for (li, runs) in face_runs[fi].iter().enumerate() {
+            let Some(runs) = runs else {
+                let Lp::Kept(i) = f.loops[li] else { unreachable!() };
+                nf.loops.push(NewLoop::Kept(kept[i].lp));
+                continue;
+            };
+            let mut uses = Vec::with_capacity(runs.len());
+            for r in runs {
+                if let Some((e, fw)) = r.keep {
+                    uses.push((ERef::Old(e), fw));
+                    continue;
+                }
+                let key = (r.a.min(r.b), r.a.max(r.b));
+                let ki = keys.binary_search(&key).ok()?;
+                if eslot[ki] == NONE {
+                    // the edge runs from the first run's start that makes it
+                    let ((va, pa), (vb, pb)) = (vertex(plan, key.0), vertex(plan, key.1));
+                    let line = Line::through(pa, pb)?;
+                    let name = match oe.binary_search_by_key(&key, |x| x.0) {
+                        Ok(j) => oe[j].2,
+                        Err(_) => {
+                            let names: Vec<Name> = (kstart[ki]..kstart[ki + 1])
+                                .map(|j| fnames[ef[j as usize].1 as usize])
+                                .collect();
+                            Name::NONE.with_str("decide-once edge").with_set(&names)
+                        }
+                    };
+                    plan.edges.push(NewEdge {
+                        curve: Curve::Line(line),
+                        range: Interval::new(0.0, pa.distance(pb)),
+                        a: va,
+                        b: vb,
+                        name: unique(&mut eused, name),
+                    });
+                    eslot[ki] = plan.edges.len() as u32 - 1;
+                }
+                uses.push((ERef::New(eslot[ki]), r.a == key.0));
+            }
+            nf.loops.push(NewLoop::Uses(uses));
+        }
+        plan.faces.push(nf);
+    }
+    // an input face whose name no final face has went to the first that holds a segment of it
+    // (a far face keeps its own)
+    let mut named: HashMap<Name, ()> = fnames.iter().map(|&n| (n, ())).collect();
+    for &(n, _) in &plan.aliases {
+        named.insert(n, ());
+    }
+    for (fi, f) in fins.iter().enumerate() {
+        for lp in &f.loops {
+            match lp {
+                Lp::New(lp) => {
+                    for s in lp {
+                        let n = face_name(s.src);
+                        if named.insert(n, ()).is_none() {
+                            plan.aliases.push((n, fnames[fi]));
+                        }
+                    }
+                }
+                Lp::Kept(i) => {
+                    let n = face_name(kept[*i].g);
+                    if named.insert(n, ()).is_none() {
+                        plan.aliases.push((n, fnames[fi]));
+                    }
+                }
+            }
+        }
+    }
+    Some(())
 }
 
 /// Is body 0's vertex `v` outside the region (a point the write keeps by its own identity)?
@@ -3075,10 +3617,4 @@ fn vid_of_orig(w: &Wr, v: VertexId) -> bool {
             !(0..3).all(|k| lo[k] < q[k] && q[k] < hi[k])
         }
     }
-}
-
-/// The edge cell between two vertex cells of a facet.
-fn edge_cell(b: &Built, u: u32, v: u32) -> Option<u32> {
-    b.by.get(&rk(row_join(b.cells[u as usize], b.cells[v as usize])))
-        .copied()
 }

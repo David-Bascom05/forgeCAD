@@ -801,7 +801,8 @@ impl<'s> Eval<'s> {
     }
 
     fn recursion(&mut self, prog: &[Stmt]) {
-        let mut calls: HashMap<String, (Span, BTreeSet<String>)> = HashMap::new();
+        // (by name: the errors come out in that order, not a hash's)
+        let mut calls: std::collections::BTreeMap<String, (Span, BTreeSet<String>)> = Default::default();
         for s in prog {
             if let StmtKind::Fn { name, body, .. } = &s.kind {
                 let mut names = BTreeSet::new();

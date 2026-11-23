@@ -227,32 +227,41 @@ impl Hole {
     }
 }
 
-fn segment_points(s: &Segment) -> Vec<Point2> {
+/// Points whose hull holds segment `s`: the first `n` of the array (no allocation).
+fn segment_points(s: &Segment) -> ([Point2; 4], usize) {
     match *s {
         Segment::Spline(ref c) => {
             let b = c.c.bbox(c.c.domain());
+            (
+                [
+                    Point2::new(b.x.lo, b.y.lo),
+                    Point2::new(b.x.lo, b.y.hi),
+                    Point2::new(b.x.hi, b.y.lo),
+                    Point2::new(b.x.hi, b.y.hi),
+                ],
+                4,
+            )
+        }
+        Segment::Line { a, b } => ([a, b, a, b], 2),
+        Segment::Arc { center, radius, .. } | Segment::Circle { center, radius, .. } => (
             [
-                (b.x.lo, b.y.lo),
-                (b.x.lo, b.y.hi),
-                (b.x.hi, b.y.lo),
-                (b.x.hi, b.y.hi),
-            ]
-            .map(|(x, y)| Point2::new(x, y))
-            .to_vec()
-        }
-        Segment::Line { a, b } => vec![a, b],
-        Segment::Arc { center, radius, .. } | Segment::Circle { center, radius, .. } => {
-            [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)]
-                .map(|(x, y)| center + Vec2::new(x * radius, y * radius))
-                .to_vec()
-        }
+                center + Vec2::new(radius, radius),
+                center + Vec2::new(radius, -radius),
+                center + Vec2::new(-radius, radius),
+                center + Vec2::new(-radius, -radius),
+            ],
+            4,
+        ),
     }
 }
 
 pub(crate) fn profile_points(p: &Profile) -> impl Iterator<Item = Point2> + '_ {
-    p.loops
-        .iter()
-        .flat_map(|l| l.segments.iter().flat_map(|(s, _)| segment_points(s)))
+    p.loops.iter().flat_map(|l| {
+        l.segments.iter().flat_map(|(s, _)| {
+            let (ps, n) = segment_points(s);
+            ps.into_iter().take(n)
+        })
+    })
 }
 
 /// A box holding a solid feature's tool.
@@ -262,10 +271,21 @@ fn tool_box(f: &Feature) -> Box3 {
             profile,
             extent: Extent::Distance(distance),
             ..
-        } => Box3::from_points(profile_points(profile).flat_map(|q| {
-            let p = profile.plane.plane_point(q);
-            [p, p + profile.plane.z() * *distance]
-        })),
+        } => {
+            // each profile point and its place a distance up, in that order
+            let mut b = Box3::EMPTY;
+            for l in &profile.loops {
+                for (sg, _) in &l.segments {
+                    let (ps, n) = segment_points(sg);
+                    for &q in &ps[..n] {
+                        let p = profile.plane.plane_point(q);
+                        b.include(p);
+                        b.include(p + profile.plane.z() * *distance);
+                    }
+                }
+            }
+            b
+        }
         Feature::Revolve { profile, axis, .. } => {
             let dir = axis.dir.normalize().unwrap_or(Vec2::Y);
             let (mut lo, mut hi, mut r) = (f64::INFINITY, f64::NEG_INFINITY, 0.0f64);
