@@ -20,10 +20,14 @@
 #![forbid(unsafe_code)]
 
 mod index;
+pub mod row;
 mod sort;
 mod union_find;
+pub mod v2;
 
 pub use index::Index;
+pub use row::Row;
+use row::{row_eq, row_get, row_le, row_set, row_zero_mask};
 use union_find::Uf;
 
 /// A side of a carrier class: below it, on it, above it.
@@ -52,6 +56,9 @@ pub struct BodyId(pub u32);
 pub struct Ledger {
     /// The number of bodies (operands), `0 .. nb`.
     pub nb: u32,
+    /// The number of carrier classes: every covector's length (at most [`row::MAX_WIDTH`] for the
+    /// core to run).
+    pub width: u32,
     /// Per input face, its body.
     pub face_body: Vec<BodyId>,
     /// Per input face, its carrier class (two faces one surface).
@@ -59,7 +66,7 @@ pub struct Ledger {
     /// A cell's covector: its row of the side table, one sign per class. No two rows equal. Every
     /// facet's two sides should be here too (the witnesses name them); one that is not is added by
     /// the core for its own use.
-    pub cells: Vec<Vec<Sgn>>,
+    pub cells: Vec<Row>,
     /// Decided: the facet lies inside the face. In face arena order.
     pub pieces: Vec<(CellId, FaceId)>,
     /// Decided: the side cell is inside the body (the witness answers that are "inside").
@@ -133,12 +140,21 @@ pub enum Refusal {
     ZeroThickness(CellId),
 }
 
+/// Why the core does not run on a ledger (a counted, decided rule: the caller takes the other
+/// path).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SkipReason {
+    /// More classes than a row holds.
+    Wide,
+}
+
 /// The core's answer. There is no retry.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
     Ok(Body),
     Empty,
     Refused(Refusal),
+    Skip(SkipReason),
 }
 
 const NONE: u32 = u32::MAX;
@@ -146,21 +162,23 @@ const NONE: u32 = u32::MAX;
 /// Past this many zeros a cell's neighbours are found by scanning instead of enumerating.
 const ENUM_ZEROS: usize = 12;
 
-/// `Cov.zeroIdx`: the first zero, or the length if there is none.
-pub fn zero_idx(x: &[Sgn]) -> usize {
+/// `Cov.zeroIdx`: the first zero of a covector of width `w`, or `w` if there is none.
+pub fn zero_idx(x: Row, w: usize) -> usize {
+    let m = row_zero_mask(x, w);
     let mut i = 0;
-    while i < x.len() && x[i] != Sgn::Zero {
+    while i < w && (m >> i) & 1 == 0 {
         i += 1;
     }
     i
 }
 
 /// `Cov.isFacet`: exactly one zero.
-pub fn is_facet(x: &[Sgn]) -> bool {
+pub fn is_facet(x: Row, w: usize) -> bool {
+    let m = row_zero_mask(x, w);
     let mut n: usize = 0;
     let mut i = 0;
-    while i < x.len() {
-        if x[i] == Sgn::Zero {
+    while i < w {
+        if (m >> i) & 1 == 1 {
             n += 1;
         }
         i += 1;
@@ -168,32 +186,23 @@ pub fn is_facet(x: &[Sgn]) -> bool {
     n == 1
 }
 
-/// `Cov.le`: `x` is a face of `y`.
-pub fn le(x: &[Sgn], y: &[Sgn]) -> bool {
-    let mut ok = x.len() == y.len();
-    let mut i = 0;
-    while ok && i < x.len() {
-        ok = x[i] == Sgn::Zero || x[i] == y[i];
-        i += 1;
-    }
-    ok
+/// `Cov.le`: `x` is a face of `y` (rows of one width).
+pub fn le(x: Row, y: Row) -> bool {
+    row_le(x, y)
 }
 
-/// `X.set i s` (unchanged past the end, as `List.set`).
-fn with_set(x: &[Sgn], i: usize, s: Sgn) -> Vec<Sgn> {
-    let mut v = x.to_vec();
-    if i < v.len() {
-        v[i] = s;
-    }
-    v
+/// `X.set i s` (unchanged past the width, as `List.set`).
+fn with_set(x: Row, w: usize, i: usize, s: Sgn) -> Row {
+    if i < w { row_set(x, i, s) } else { x }
 }
 
-/// The zeros of a covector.
-fn zeros(x: &[Sgn]) -> Vec<usize> {
+/// The zeros of a covector of width `w`.
+fn zeros(x: Row, w: usize) -> Vec<usize> {
+    let m = row_zero_mask(x, w);
     let mut z = Vec::new();
     let mut i = 0;
-    while i < x.len() {
-        if x[i] == Sgn::Zero {
+    while i < w {
+        if (m >> i) & 1 == 1 {
             z.push(i);
         }
         i += 1;
@@ -201,11 +210,16 @@ fn zeros(x: &[Sgn]) -> Vec<usize> {
     z
 }
 
+/// The ledger's width.
+fn wd(l: &Ledger) -> usize {
+    l.width as usize
+}
+
 /// The cells the core adds to the ledger's: any side cell it lacked. Owned, and passed beside
 /// the ledger (no struct holds a borrow, for Aeneas).
 struct Ext {
     index: Index,
-    extra: Vec<Vec<Sgn>>,
+    extra: Vec<Row>,
 }
 
 fn new_ext(l: &Ledger) -> Ext {
@@ -216,12 +230,12 @@ fn new_ext(l: &Ledger) -> Ext {
 }
 
 /// A cell's covector.
-fn cov<'a>(l: &'a Ledger, ext: &'a Ext, id: u32) -> &'a [Sgn] {
+fn cov(l: &Ledger, ext: &Ext, id: u32) -> Row {
     let n = l.cells.len();
     if (id as usize) < n {
-        &l.cells[id as usize]
+        l.cells[id as usize]
     } else {
-        &ext.extra[id as usize - n]
+        ext.extra[id as usize - n]
     }
 }
 
@@ -229,23 +243,12 @@ fn ncells(l: &Ledger, ext: &Ext) -> usize {
     l.cells.len() + ext.extra.len()
 }
 
-/// Two covectors equal.
-fn same_cov(a: &[Sgn], b: &[Sgn]) -> bool {
-    let mut same = a.len() == b.len();
-    let mut i = 0;
-    while same && i < a.len() {
-        same = a[i] == b[i];
-        i += 1;
-    }
-    same
-}
-
 /// The id of a covector, or NONE.
-fn find(l: &Ledger, ext: &Ext, key: &[Sgn]) -> u32 {
+fn find(l: &Ledger, ext: &Ext, key: Row) -> u32 {
     let mut f = ext.index.find_h(&l.cells, key);
     let mut i = 0;
     while f == NONE && i < ext.extra.len() {
-        if same_cov(&ext.extra[i], key) {
+        if row_eq(ext.extra[i], key) {
             f = (l.cells.len() + i) as u32;
         }
         i += 1;
@@ -254,8 +257,8 @@ fn find(l: &Ledger, ext: &Ext, key: &[Sgn]) -> u32 {
 }
 
 /// The id of `key`, added if new.
-fn intern(l: &Ledger, ext: &mut Ext, key: Vec<Sgn>) -> u32 {
-    let f = find(l, ext, &key);
+fn intern(l: &Ledger, ext: &mut Ext, key: Row) -> u32 {
+    let f = find(l, ext, key);
     if f != NONE {
         f
     } else {
@@ -312,7 +315,7 @@ fn split_ok(l: &Ledger, ext: &Ext) -> bool {
         } else {
             let x = cov(l, ext, c.0);
             let b = body_of(l, f);
-            ok = is_facet(x) && zero_idx(x) == cls_of(l, f) as usize && b < l.nb;
+            ok = is_facet(x, wd(l)) && zero_idx(x, wd(l)) == cls_of(l, f) as usize && b < l.nb;
             triples.push((c.0, b, f.0));
         }
         k += 1;
@@ -347,10 +350,10 @@ fn split(l: &Ledger, ext: &mut Ext) -> Split {
     let mut minus = Vec::new();
     let mut i = 0;
     while i < facets.len() {
-        let x = cov(l, ext, facets[i]).to_vec();
-        let z = zero_idx(&x);
-        plus.push(intern(l, ext, with_set(&x, z, Sgn::Pos)));
-        minus.push(intern(l, ext, with_set(&x, z, Sgn::Neg)));
+        let x = cov(l, ext, facets[i]);
+        let z = zero_idx(x, wd(l));
+        plus.push(intern(l, ext, with_set(x, wd(l), z, Sgn::Pos)));
+        minus.push(intern(l, ext, with_set(x, wd(l), z, Sgn::Neg)));
         i += 1;
     }
     let mut tope_pos = vec![NONE; ncells(l, ext)];
@@ -419,7 +422,8 @@ fn flood(s: &Split, i: usize) -> Uf {
 pub fn witnesses(l: &Ledger) -> Vec<(CellId, BodyId)> {
     let mut ext = new_ext(l);
     let mut out = Vec::new();
-    if split_ok(l, &ext) {
+    // (none past a row's width: the core skips such a ledger)
+    if l.width <= row::MAX_WIDTH && split_ok(l, &ext) {
         let s = split(l, &mut ext);
         let mut i = 0;
         while i < l.nb as usize {
@@ -516,7 +520,7 @@ struct Assembled {
 /// are enumerated and looked up; otherwise the result is scanned (the Lean's filter).
 fn around(l: &Ledger, ext: &Ext, a: &Assembled, x: u32) -> Vec<u32> {
     let xc = cov(l, ext, x);
-    let z = zeros(xc);
+    let z = zeros(xc, wd(l));
     let mut out = Vec::new();
     if z.len() > ENUM_ZEROS {
         let mut p = 0;
@@ -533,8 +537,8 @@ fn around(l: &Ledger, ext: &Ext, a: &Assembled, x: u32) -> Vec<u32> {
 }
 
 /// `around`'s enumeration: `x` (`xc`, zeros `z`) with one zero kept and the others signed.
-fn around_enum(l: &Ledger, ext: &Ext, a: &Assembled, xc: &[Sgn], z: &[usize], out: &mut Vec<u32>) {
-    let mut buf = xc.to_vec();
+fn around_enum(l: &Ledger, ext: &Ext, a: &Assembled, xc: Row, z: &[usize], out: &mut Vec<u32>) {
+    let mut buf = xc;
     let k = z.len();
     let mut keep = 0;
     while keep < k {
@@ -545,14 +549,14 @@ fn around_enum(l: &Ledger, ext: &Ext, a: &Assembled, xc: &[Sgn], z: &[usize], ou
             let mut j = 0;
             while j < k {
                 if j == keep {
-                    buf[z[j]] = Sgn::Zero;
+                    buf = row_set(buf, z[j], Sgn::Zero);
                 } else {
-                    buf[z[j]] = if (m >> bit) & 1 == 1 { Sgn::Pos } else { Sgn::Neg };
+                    buf = row_set(buf, z[j], if (m >> bit) & 1 == 1 { Sgn::Pos } else { Sgn::Neg });
                     bit += 1;
                 }
                 j += 1;
             }
-            let id = find(l, ext, &buf);
+            let id = find(l, ext, buf);
             if id != NONE && a.rpos[id as usize] != NONE {
                 out.push(a.rpos[id as usize]);
             }
@@ -567,7 +571,7 @@ fn around_enum(l: &Ledger, ext: &Ext, a: &Assembled, xc: &[Sgn], z: &[usize], ou
 /// zeros zeroed (`z` is `v`'s zeros). Only those the ledger has are returned, by id.
 fn between(l: &Ledger, ext: &Ext, z: &[usize], phi: u32) -> Vec<u32> {
     let pc = cov(l, ext, phi);
-    let zp = zero_idx(pc);
+    let zp = zero_idx(pc, wd(l));
     let mut others = Vec::new();
     let mut j = 0;
     while j < z.len() {
@@ -579,19 +583,23 @@ fn between(l: &Ledger, ext: &Ext, z: &[usize], phi: u32) -> Vec<u32> {
     let mut out = Vec::new();
     let k = others.len();
     let combos: u32 = 1u32 << k;
-    let mut buf = pc.to_vec();
+    let mut buf = pc;
     let mut m: u32 = 1;
     while m < combos {
         let mut j = 0;
         while j < k {
-            buf[others[j]] = if (m >> j) & 1 == 1 {
-                Sgn::Zero
-            } else {
-                pc[others[j]]
-            };
+            buf = row_set(
+                buf,
+                others[j],
+                if (m >> j) & 1 == 1 {
+                    Sgn::Zero
+                } else {
+                    row_get(pc, others[j])
+                },
+            );
             j += 1;
         }
-        let id = find(l, ext, &buf);
+        let id = find(l, ext, buf);
         if id != NONE {
             out.push(id);
         }
@@ -633,13 +641,18 @@ fn edges_between(l: &Ledger, ext: &Ext, is_edge: &[bool], v: u32, z: &[usize], p
 /// **The core**: one pass, no retries (`ForgeExact.DecideOnce.coreM`: `core` with the metric
 /// stage, which is the identity when `m.thin` is empty).
 pub fn core(l: &Ledger, rule: &Rule, m: &MetricLedger) -> Outcome {
-    let mut ext = new_ext(l);
-    // 1–2. split and imprint
-    if !split_ok(l, &ext) {
-        Outcome::Refused(Refusal::SplitCrossed)
+    if l.width > row::MAX_WIDTH {
+        // (checked before any row is read)
+        Outcome::Skip(SkipReason::Wide)
     } else {
-        let s = split(l, &mut ext);
-        classify_on(l, &ext, &s, rule, m)
+        let mut ext = new_ext(l);
+        // 1–2. split and imprint
+        if !split_ok(l, &ext) {
+            Outcome::Refused(Refusal::SplitCrossed)
+        } else {
+            let s = split(l, &mut ext);
+            classify_on(l, &ext, &s, rule, m)
+        }
     }
 }
 
@@ -879,7 +892,7 @@ fn core_k(l: &Ledger, ext: &Ext, s: &Split, keep: &[bool]) -> Outcome {
 
 /// `badVert`: the result facets round `v` (`ar`) in more than one class of `fanRel v`.
 fn bad_vert(l: &Ledger, ext: &Ext, a: &Assembled, is_edge: &[bool], v: u32, ar: &[u32]) -> bool {
-    let z = zeros(cov(l, ext, v));
+    let z = zeros(cov(l, ext, v), wd(l));
     let mut uf = Uf::new(ar.len());
     // the first fan member seen through each edge cell: (edge, local index)
     let mut seen: Vec<(u32, u32)> = Vec::new();
@@ -978,7 +991,7 @@ fn unify(
             let mut q = p + 1;
             while q < ar.len() {
                 let (c, d) = (ar[p] as usize, ar[q] as usize);
-                if zero_idx(cov(l, ext, a.result[c])) == zero_idx(cov(l, ext, a.result[d]))
+                if zero_idx(cov(l, ext, a.result[c]), wd(l)) == zero_idx(cov(l, ext, a.result[d]), wd(l))
                     && a.orient[c] == a.orient[d]
                 {
                     join.union(c, d);
@@ -1002,7 +1015,7 @@ fn unify(
             let ff = s.first_face[h as usize];
             faces.push(OutFace {
                 facets: Vec::new(),
-                plane: zero_idx(cov(l, ext, h)) as u32,
+                plane: zero_idx(cov(l, ext, h), wd(l)) as u32,
                 orient: a.orient[p],
                 origin: FaceId(if ff == NONE { 0 } else { ff }),
             });
@@ -1054,7 +1067,7 @@ fn unify(
     while k < l.verts.len() {
         if !is_out_v[k] {
             let v = l.verts[k].0;
-            let z = zeros(cov(l, ext, v));
+            let z = zeros(cov(l, ext, v), wd(l));
             let mut round: Vec<u32> = Vec::new();
             let ar = &around_v[k];
             let mut j = 0;

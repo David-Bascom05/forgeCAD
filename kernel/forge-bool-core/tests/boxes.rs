@@ -3,7 +3,7 @@
 //! face touches. The Lean evaluates the same ledgers at build time; the answers must agree.
 
 use forge_bool_core::{
-    BodyId, CellId, FaceId, Ledger, MetricLedger, Outcome, Refusal, Rule, Sgn, core, witnesses,
+    BodyId, CellId, FaceId, Ledger, MetricLedger, Outcome, Refusal, Rule, Sgn, core, row, witnesses,
 };
 
 type D = (i64, i64, i64);
@@ -186,8 +186,11 @@ fn box_ledger(k: i64, boxes: &[BoxN]) -> Ledger {
     let edges = es.iter().map(|&c| id(c, &mut cells)).collect();
     let verts = vs.iter().map(|&c| id(c, &mut cells)).collect();
     let nf = 6 * boxes.len();
+    let width = cells.first().map_or(0, |c| c.len()) as u32;
+    let cells = cells.iter().map(|c| row::row_of(c)).collect();
     Ledger {
         nb: boxes.len() as u32,
+        width,
         face_body: (0..nf).map(|f| BodyId((f / 6) as u32)).collect(),
         face_class: (0..nf)
             .map(|f| {
@@ -231,7 +234,10 @@ fn summary(l: &Ledger, o: Outcome) -> Summary {
         Outcome::Empty => Summary::Empty,
         Outcome::Refused(Refusal::SplitCrossed) => Summary::Split,
         Outcome::Refused(Refusal::InconsistentClassification) => Summary::Inconsistent,
-        Outcome::Refused(Refusal::ZeroThickness(c)) => Summary::Zero(l.cells[c.0 as usize].clone()),
+        Outcome::Refused(Refusal::ZeroThickness(c)) => {
+            Summary::Zero(row::row_signs(l.cells[c.0 as usize], l.width as usize))
+        }
+        Outcome::Skip(_) => panic!("a box ledger is never wide"),
     }
 }
 
@@ -375,7 +381,7 @@ fn box_pairs_never_retry() {
 /// The metric ledger (stage 4b) on Rungs.lean's two features, with the Lean's answers.
 fn run_m(k: i64, boxes: &[BoxN], rule: Rule, thin: D) -> Summary {
     let l = box_ledger(k, boxes);
-    let c = cov(k, thin);
+    let c = row::row_of(&cov(k, thin));
     let id = CellId(
         l.cells
             .iter()
@@ -399,4 +405,47 @@ fn collapse_fills_an_enclosed_void_and_refuses_a_fin() {
         run_m(3, &fin, Rule::Union, (3, 1, 3)),
         Summary::Zero(cov(3, (3, 1, 3)))
     );
+}
+
+/// The v2 ledger's well-formedness check on a hand-made ledger: two boxes' worth is not needed,
+/// one facet between two rooms, one edge, one vert, is enough to exercise each clause.
+#[test]
+fn v2_ledger_wf() {
+    use forge_bool_core::v2::*;
+    let good = Ledger {
+        nb: 1,
+        face_body: vec![BodyId(0)],
+        face_class: vec![0],
+        n_rooms: 2,
+        facet_class: vec![0],
+        facet_rooms: vec![(0, 1)],
+        pieces: vec![(FacetId(0), FaceId(0))],
+        inside: vec![(RoomId(1), BodyId(0))],
+        edge_facets: Csr {
+            start: vec![0, 2],
+            ids: vec![0, 0],
+        },
+        vert_edges: Csr {
+            start: vec![0, 1],
+            ids: vec![0],
+        },
+        vert_sectors: SecCsr {
+            start: vec![0, 1],
+            sec: vec![Sector { facet: 0, a: 0, b: 0 }],
+        },
+    };
+    assert!(ledger_wf(&good));
+    let mut l = good.clone();
+    l.facet_rooms = vec![(1, 1)];
+    assert!(!ledger_wf(&l), "a facet's sides are distinct rooms");
+    let mut l = good.clone();
+    l.edge_facets.ids = vec![0, 0, 0];
+    l.edge_facets.start = vec![0, 3];
+    assert!(!ledger_wf(&l), "a facet at most twice round an edge");
+    let mut l = good.clone();
+    l.pieces.clear();
+    assert!(!ledger_wf(&l), "every facet a piece");
+    let mut l = good;
+    l.vert_sectors.sec[0].b = 5;
+    assert!(!ledger_wf(&l), "a sector's edges at its vert");
 }
