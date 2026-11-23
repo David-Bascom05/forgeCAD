@@ -162,3 +162,12 @@ jobs:
           rustup show
           FG_LEAN=1 cargo test --release --locked -p forge-geom --test spline_diff
           git diff --exit-code kernel/forge-geom/tests/spline_diff.digest
+      - name: L5, the evaluation in binary64 (research/spline-loops/fp on verify/ieee754)
+        if: ${{ !cancelled() }}
+        working-directory: research/spline-loops/fp
+        run: |
+          "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
+          lake exe cache get
+          lake build
+          lake env lean Axioms.lean | tee axioms.txt
+          ! grep -E "sorryAx|ofReduceBool" axioms.txt

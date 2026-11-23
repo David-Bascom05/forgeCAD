@@ -1,0 +1,15 @@
+name = "splinefp"
+version = "0.1.0"
+defaultTargets = ["SplineFP"]
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+# The binary64 model of verify/ieee754 (its Mathlib pin, v4.36.0, comes with it).
+[[require]]
+name = "ieee754"
+path = "../../../verify/ieee754"
+
+[[lean_lib]]
+name = "SplineFP"
