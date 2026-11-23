@@ -148,3 +148,5 @@ import ForgeCurved
 #print axioms ForgeCurved.Star.star
 #print axioms ForgeCurved.Crossings.crossings_of_cover
 #print axioms ForgeCurved.Crossings.nesting_of_cover
+#print axioms ForgeCurved.BodyModel.denote_eq_closure_rooms
+#print axioms ForgeCurved.BodyModel.room_in_or_out

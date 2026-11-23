@@ -56,3 +56,4 @@ import ForgeCurved.Nesting
 import ForgeCurved.BranchOrder
 import ForgeCurved.Star
 import ForgeCurved.Crossings
+import ForgeCurved.BodyModel
