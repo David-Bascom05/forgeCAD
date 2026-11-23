@@ -405,6 +405,10 @@ fn identical_cylinder_cut_is_empty() {
 /// corner vertex (exact-comparison.md): the ball's pole had no normal, so the touch went
 /// undecided. Now ZeroThickness there.
 #[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn ball_resting_on_the_top_is_non_manifold() {
     agrees_curved(&degenerate_curved("plane_sphere/tangent_top_above/Add"));
 }
@@ -414,6 +418,10 @@ fn ball_resting_on_the_top_is_non_manifold() {
 /// material between the cavity and the top is a cusp ring. The kernel built 31 476.4 mm³; now
 /// ZeroThickness.
 #[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn cavity_touching_the_top_from_inside_is_non_manifold() {
     agrees_curved(&degenerate_curved("plane_sphere/tangent_top_inside/Cut"));
 }
@@ -421,6 +429,10 @@ fn cavity_touching_the_top_from_inside_is_non_manifold() {
 /// Two balls touching from outside (sphere_sphere/tangent_outside/Add): the union is two
 /// solids meeting at a point. The kernel built 4 712.4 mm³; now ZeroThickness.
 #[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn balls_touching_at_a_point_are_non_manifold() {
     agrees_curved(&degenerate_curved("sphere_sphere/tangent_outside/Add"));
 }
@@ -430,6 +442,10 @@ fn balls_touching_at_a_point_are_non_manifold() {
 /// estimate is 6 806.8 mm³). The kernel refused Unsupported(SplitThroughSingular) on the sphere,
 /// whose pole lies on the rim (a hair off it, `normal` refused for a ball this small); it builds.
 #[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn ball_centred_on_a_rim_builds() {
     agrees_curved(&degenerate_curved("cylinder_sphere/centre_on_rim/Add"));
 }
@@ -518,11 +534,11 @@ fn band_rims_within_tolerance_close() {
 /// 13 sin 1°) leave P along one tangent. The split walk tells such ways apart by chords, but a
 /// chord at a pole had no direction, so the tie stood and the cycle did not close (SplitCrossed).
 /// At a pole the chord is taken in the tangent plane the pole's directions are.
+/// (The reference leaves this one ambiguous: the top edge touching the ball at its pole is an
+/// edge-on-surface contact it does not decide yet, exact-comparison-curved.md "Still open". The
+/// kernel builds; the test waits on the reference.)
 #[test]
-#[cfg_attr(
-    not(feature = "reference"),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference ambiguous: edge-on-surface contact at the pole (a reference gap)"]
 fn ball_tangent_to_a_pocket_edge_at_its_pole_builds() {
     let src = "param block.d = 18
 sketch base(on: xy) {
@@ -562,26 +578,46 @@ bowl = ball(top.c, r, cut: true)
 /// closed form and refuses ZeroThickness. On a box's vertex and edge, a cylinder's wall, another
 /// cone's wall, and a ball's pole on the apex.
 #[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn cone_apex_on_a_box_vertex_is_non_manifold() {
     agrees_curved(&degenerate_curved("plane_cone/apex_on_vertex/Add"));
 }
 
 #[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn cone_apex_on_a_box_edge_is_non_manifold() {
     agrees_curved(&degenerate_curved("plane_cone/apex_on_edge/Add"));
 }
 
 #[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn cone_apex_on_a_cylinder_wall_is_non_manifold() {
     agrees_curved(&degenerate_curved("cylinder_cone/apex_on_wall/Add"));
 }
 
 #[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn cone_apex_on_a_cone_is_non_manifold() {
     agrees_curved(&degenerate_curved("cone_cone/apex_on_surface/Add"));
 }
 
 #[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn ball_pole_on_a_cone_apex_is_non_manifold() {
     agrees_curved(&degenerate_curved("cone_sphere/pole_on_apex/Add"));
 }

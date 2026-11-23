@@ -18,6 +18,8 @@ pub mod classify;
 pub mod decide_once;
 #[cfg(feature = "decisions")]
 pub mod decisions;
+#[cfg(any(test, feature = "decisions"))]
+pub mod edge_screen;
 pub mod imprint;
 pub mod nary;
 pub mod shape;
