@@ -986,6 +986,7 @@ enum Cut {
 /// curves are apart; curves that themselves cross leave chords that cannot be cut, and that is the
 /// face's own error (`ConstraintsIntersect`), or with `mend` (a file's body, whose edges meet only
 /// within its tolerance) the triangulation's to draw as it is.
+#[inline(never)]
 fn uncross(
     body: &Body,
     prep: &Prep,
@@ -1034,16 +1035,14 @@ fn uncross(
         }
     };
 
-    // the chords cut into x-monotone chains (exactly: by comparing their ends' x): in a chain,
-    // chords that share no end span x apart and cannot meet, so only chords of two chains whose
+    // the chords cut into monotone chains, in the order of x then y (exactly: comparing their
+    // ends): a chord lies between its ends in that order, so in a chain chords that share no end
+    // lie apart and cannot meet, so only chords of two chains whose
     // boxes overlap are compared, each pair once, walking both chains in x (Shamos and Hoey's
     // monotone pieces)
-    struct Seg {
-        x: (f64, f64),
-        y: (f64, f64),
-        a: u32,
-        b: u32,
-    }
+    // (a chord is its two ends; only a chain keeps a box, and a chord's is worked out when it is
+    // compared: few are)
+    type Seg = (u32, u32);
     struct Chain {
         x: (f64, f64),
         y: (f64, f64),
@@ -1062,42 +1061,50 @@ fn uncross(
                 same(a, b, &mut cuts);
                 continue;
             }
-            let d = if r.x > p.x {
+            // (by x, then y: never level, p and r being two places)
+            let d = if r.x > p.x || (r.x == p.x && r.y > p.y) {
                 1
-            } else if r.x < p.x {
-                -1
             } else {
-                0
+                -1
             };
-            let x = (p.x.min(r.x), p.x.max(r.x));
-            let y = (p.y.min(r.y), p.y.max(r.y));
             match chains.last_mut() {
-                Some(c) if d != 0 && d == dir && c.from + c.len == segs.len() => {
-                    c.x = (c.x.0.min(x.0), c.x.1.max(x.1));
-                    c.y = (c.y.0.min(y.0), c.y.1.max(y.1));
+                Some(c) if d == dir && c.from + c.len == segs.len() => {
+                    // (p is in its box already: the chord before ends there)
+                    c.x = (c.x.0.min(r.x), c.x.1.max(r.x));
+                    c.y = (c.y.0.min(r.y), c.y.1.max(r.y));
                     c.len += 1;
                 }
                 _ => chains.push(Chain {
-                    x,
-                    y,
+                    x: (p.x.min(r.x), p.x.max(r.x)),
+                    y: (p.y.min(r.y), p.y.max(r.y)),
                     from: segs.len(),
                     len: 1,
-                    up: d >= 0,
+                    up: d > 0,
                 }),
             }
             dir = d;
-            segs.push(Seg { x, y, a, b });
+            segs.push((a, b));
         }
     }
-    let pair = |s: &Seg, t: &Seg, cuts: &mut Vec<Cut>| -> Result<(), CdtError> {
-        if s.y.1 < t.y.0 || t.y.1 < s.y.0 || s.x.1 < t.x.0 || t.x.1 < s.x.0 {
-            return Ok(());
-        }
-        let (a, b, c, d) = (s.a, s.b, t.a, t.b);
+    // a chord's ends in the chains' order (x, then y): its low and high
+    let before = |p: Point2, q: Point2| p.x < q.x || (p.x == q.x && p.y < q.y);
+    let ends = |s: Seg| {
+        let (p, q) = (pts[s.0 as usize], pts[s.1 as usize]);
+        if before(p, q) { (p, q) } else { (q, p) }
+    };
+    let pair = |s: Seg, t: Seg, cuts: &mut Vec<Cut>| -> Result<(), CdtError> {
+        let ((a, b), (c, d)) = (s, t);
         if a == c || a == d || b == c || b == d {
             return Ok(());
         }
         let (pa, pb, pc, pd) = (pts[a as usize], pts[b as usize], pts[c as usize], pts[d as usize]);
+        if pa.y.max(pb.y) < pc.y.min(pd.y)
+            || pc.y.max(pd.y) < pa.y.min(pb.y)
+            || pa.x.max(pb.x) < pc.x.min(pd.x)
+            || pc.x.max(pd.x) < pa.x.min(pb.x)
+        {
+            return Ok(());
+        }
         let mut at_one = false;
         for (x, px) in [(a, pa), (b, pb)] {
             for (y, py) in [(c, pc), (d, pd)] {
@@ -1145,7 +1152,7 @@ fn uncross(
         .collect();
     order.sort_unstable();
     // chord k of a chain in increasing x
-    let at = |c: &Chain, k: usize| &segs[if c.up { c.from + k } else { c.from + c.len - 1 - k }];
+    let at = |c: &Chain, k: usize| segs[if c.up { c.from + k } else { c.from + c.len - 1 - k }];
     for (n, &(_, i)) in order.iter().enumerate() {
         let ci = &chains[i as usize];
         for &(_, j) in &order[n + 1..] {
@@ -1156,13 +1163,38 @@ fn uncross(
             if ci.y.1 < cj.y.0 || cj.y.1 < ci.y.0 {
                 continue;
             }
-            let (mut p, mut q) = (0, 0);
+            // from the first chord of each that reaches the other's box, to the last that starts
+            // in it (a chain's chords run on in x: found by halving)
+            let first = |c: &Chain, x: f64| {
+                let (mut l, mut h) = (0, c.len);
+                while l < h {
+                    let m = (l + h) / 2;
+                    if ends(at(c, m)).1.x < x {
+                        l = m + 1;
+                    } else {
+                        h = m;
+                    }
+                }
+                l
+            };
+            let (mut p, mut q) = (first(ci, cj.x.0), first(cj, ci.x.0));
             while p < ci.len && q < cj.len {
                 let (s, t) = (at(ci, p), at(cj, q));
-                pair(s, t, &mut cuts)?;
-                if s.x.1 < t.x.1 {
+                let ((ls, hs), (lt, ht)) = (ends(s), ends(t));
+                if ls.x > cj.x.1 || lt.x > ci.x.1 {
+                    break;
+                }
+                // (boxes apart: x by the chains' order, y here)
+                if ls.x <= ht.x
+                    && lt.x <= hs.x
+                    && ls.y.min(hs.y) <= lt.y.max(ht.y)
+                    && lt.y.min(ht.y) <= ls.y.max(hs.y)
+                {
+                    pair(s, t, &mut cuts)?;
+                }
+                if before(hs, ht) {
                     p += 1;
-                } else if t.x.1 < s.x.1 {
+                } else if before(ht, hs) {
                     q += 1;
                 } else {
                     // both end at one x: the next of each starts there, and meets the other
