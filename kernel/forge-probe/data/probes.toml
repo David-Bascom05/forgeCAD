@@ -445,3 +445,98 @@ status = "option"
 source = "https://tormach.com/wireless-probe-and-tool-setter-kit-54582.html (Tormach, Wireless Probe and Tool Setter Kit, PN 54582, product page: Specifications)"
 taken = "2026-11-24"
 note = "part of the kit: 1500MX, and 770MX with ML serial numbers sold after 1 December 2025"
+
+[[probe]]
+id = "blum-tc52"
+kind = "work-probe"
+vendor = "Blum-Novotest"
+product = "TC52"
+note = "Approach direction ±X, ±Y, -Z (Blum's notation); measuring force XY 2.3 N (low force 0.65 N), Z 5.7 N (1.6 N), stylus L = 30 mm; max acceleration 50 m/s²; tool holder BTH 25; infrared range ±60° in Z, 360° in X/Y."
+real = true
+sensing = "contact"
+transmission = "optical"
+repeat = 0.0003
+max_feed = 2000
+overtravel = [11, 6]
+mass = 0.25
+body = [[20, 0, 62]]
+[[probe.cite]]
+path = "transmission"
+status = "published"
+source = "https://www.blum-novotest.com/fileadmin/benutzerdaten/blum-novotest-de/pdf/downloads/messkomponenten/messtaster/tc52/tc52-en.pdf (Blum-Novotest, TC52 touch probe data sheet, version 04|15: Technical data)"
+taken = "2026-11-24"
+value = "signal transmission: infrared"
+[[probe.cite]]
+path = "repeat"
+status = "published"
+source = "https://www.blum-novotest.com/fileadmin/benutzerdaten/blum-novotest-de/pdf/downloads/messkomponenten/messtaster/tc52/tc52-en.pdf (Blum-Novotest, TC52 touch probe data sheet, version 04|15: Technical data)"
+taken = "2026-11-24"
+value = "repeatability 0.3 µm 2σ"
+[[probe.cite]]
+path = "max_feed"
+status = "published"
+source = "https://www.blum-novotest.com/fileadmin/benutzerdaten/blum-novotest-de/pdf/downloads/messkomponenten/messtaster/tc52/tc52-en.pdf (Blum-Novotest, TC52 touch probe data sheet, version 04|15: Technical data)"
+taken = "2026-11-24"
+value = "max. probing speed 2 m/min"
+[[probe.cite]]
+path = "overtravel"
+status = "published"
+source = "https://www.blum-novotest.com/fileadmin/benutzerdaten/blum-novotest-de/pdf/downloads/messkomponenten/messtaster/tc52/tc52-en.pdf (Blum-Novotest, TC52 touch probe data sheet, version 04|15: Technical data)"
+taken = "2026-11-24"
+value = "max. deflection in XY | Z: ±11° | 6 mm"
+[[probe.cite]]
+path = "mass"
+status = "published"
+source = "https://www.blum-novotest.com/fileadmin/benutzerdaten/blum-novotest-de/pdf/downloads/messkomponenten/messtaster/tc52/tc52-en.pdf (Blum-Novotest, TC52 touch probe data sheet, version 04|15: Technical data)"
+taken = "2026-11-24"
+value = "mass 250 g"
+[[probe.cite]]
+path = "body"
+status = "estimate"
+source = "https://www.blum-novotest.com/fileadmin/benutzerdaten/blum-novotest-de/pdf/downloads/messkomponenten/messtaster/tc52/tc52-en.pdf (Blum-Novotest, TC52 touch probe data sheet, version 04|15: Technical data)"
+taken = "2026-11-24"
+value = "drawing: Ø40 body, 62 mm long; Ø13 and 14 mm at the stylus end"
+basis = "the drawing's 62 mm is taken as the body's length from the stylus mounting face toward the holder and Ø40 for all of it (the Ø13 end inside it): errs large"
+[[probe.cite]]
+path = "stylus"
+status = "unknown"
+basis = "no standard stylus is stated (forces are given for L = 30 mm): the setup gives the stylus"
+
+[[probe]]
+id = "marposs-vop40"
+kind = "work-probe"
+vendor = "Marposs"
+product = "VOP40"
+note = "Modulated optical transmission, used with the VOI receiver (E83 RX in legacy mode); trigger force X-Y 0.5-0.9 N, Z 5.8 N with the standard 50 mm stylus; overstroke X-Y 12 mm, Z 6 mm with the standard 50 mm stylus (stated in mm, not as an angle)."
+real = true
+sensing = "contact"
+transmission = "optical"
+repeat = 0.001
+[[probe.cite]]
+path = "transmission"
+status = "published"
+source = "https://www.marposs.com/media/4558/d-1/t-file/D6C08100G0.pdf (Marposs, machine tool probing brochure D6C08100G0, edition 07/2017: VOP40 technical specifications)"
+taken = "2026-11-24"
+value = "data transmission optical; transmission range 6 m"
+[[probe.cite]]
+path = "repeat"
+status = "published"
+source = "https://www.marposs.com/media/4558/d-1/t-file/D6C08100G0.pdf (Marposs, machine tool probing brochure D6C08100G0, edition 07/2017: VOP40 technical specifications)"
+taken = "2026-11-24"
+value = "repeatability (2σ) 1 µm with the standard 50 mm stylus at 600 mm/min"
+[[probe.cite]]
+path = "overtravel"
+status = "unknown"
+basis = "the brochure gives the overstroke as X-Y 12 mm and Z 6 mm at a 50 mm stylus, not as an XY angle; the record does not convert it"
+[[probe.cite]]
+path = "max_feed"
+status = "unknown"
+basis = "the brochure gives only the 600 mm/min of its repeatability test"
+[[probe.cite]]
+path = "body"
+status = "unknown"
+basis = "the drawing shows Ø40 and 50 mm but not which extent 50 mm spans, so no envelope that surely contains the probe can be drawn from it"
+[[probe.cite]]
+path = "stylus"
+status = "unknown"
+basis = "a standard 50 mm stylus is named but its ball is not stated: the setup gives the stylus"
