@@ -120,6 +120,7 @@ scope).
 | not-names | `interface/forge-lang/src/bench.rs::NAMES` | | benchmark part files | not a namespace |
 | not-names | `interface/forge-lang/src/bendsim.rs::LENGTHS` | | keys of a vendor file (TOML), not .fg | not a namespace |
 | not-names | `interface/forge-lang/src/builtins.rs::CONTROL` | | keyword arguments of `spline` | not a namespace |
+| not-names | `interface/forge-lang/src/builtins.rs::PURE` | | the built-ins that are functions of numbers alone (a subset of `core`), exempt from the magnitude bound (`Bounds.runK_of_run`) | not a namespace |
 | not-names | `interface/forge-lang/src/builtins.rs::SLOPES` | | keyword arguments of `spline` | not a namespace |
 | not-names | `interface/forge-lang/src/eval.rs::WORDS` | | depth words, a subset of the `constants` family | not a namespace |
 | not-names | `interface/forge-lang/src/explode.rs::SCREWS` | | standard screw file names | not a namespace |
@@ -165,8 +166,15 @@ scope).
   a header word and its built-ins (`source`, `drop`, ..); rows when it lands.
 * Workholding / tool-library built-ins (WORKHOLDING, MACHINE-LIB): rows when they reach a
   document.
-* PR #13 (language limits, `ForgeLang/Bounds.lean` on branch
-  claude/repo-review-mbdrlj-import-robust): its theorems join this index when it lands.
+
+## Language limits (PR #13)
+
+`Bounds.lean`: the magnitude bound where values enter the kernel (`builtins.rs`
+`within_bounds`, `eval::MAX_MAGNITUDE`/`MAX_ANGLE`) is a check on the finished model's numbers
+(`runK`), not an observation, so P2, P4 and P5 hold for it as for `run` (`runK_of_run`,
+`runK_mono`, `runK_unique`, `runK_error_stable`, `setParam_bounded`, `setParam_bounded_ids`); the
+other limits are fuel or `range`; nesting is counted at calls and the evaluator's recursion is at
+most `maxDepth + nestBudget` = 600 levels (`stack_depth_le`).
 
 ## Also proven (not per item)
 
