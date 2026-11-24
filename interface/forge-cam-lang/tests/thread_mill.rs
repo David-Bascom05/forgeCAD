@@ -79,7 +79,7 @@ fn radial_and_spring_passes_left_hand_and_arc_leads() {
     assert!(
         cam.errors
             .iter()
-            .any(|e| e.contains("clear does not take `passes:`")),
+            .any(|e| e.contains("`passes` is not an argument of `clear`")),
         "{:?}",
         cam.errors
     );

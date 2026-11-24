@@ -1,0 +1,159 @@
+{
+ "vendor": "Kern Microtechnik (AMETEK)",
+ "model": "Micro HD",
+ "family": "HD line (Micro HD / Micro HD+)",
+ "source": [
+  "https://edge.sitecorecloud.io/ametekinc1236b-ametekb19a-productiondcfa-1d17/media/Project/Ametek/kern/Pdf/Kern-Maschinenvergleich_EN.pdf",
+  "https://edge.sitecorecloud.io/ametekinc1236b-ametekb19a-productiondcfa-1d17/media/Project/Ametek/kern/Pdf/Deutsch/Kern-HD-Linie-DE.pdf"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "Ultra-compact one-box 5-axis: hydrostatic (micro-gap) linear guides with linear direct drives; rotary + swivel unit carries the work (rolling-bearing on Micro HD, hydrostatic on HD+). Swivel 220 deg (opt. 280), rotary 360 endless. Axis letters, which unit carries X/Y/Z, spindle orientation not stated in these PDFs.",
+ "control": {
+  "standard": "HEIDENHAIN TNC7",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 350,
+  "Y": 220,
+  "Z": 250
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null,
+  "swivel_axis_letter_unpublished": {
+   "range_deg": "220 deg total (opt. 280)",
+   "rapid_rpm": 100,
+   "indexing_or_full": "full 5-axis simultaneous; clamp 300 Nm"
+  },
+  "rotary_axis_letter_unpublished": {
+   "range_deg": "360 endless",
+   "rapid_rpm": 200,
+   "indexing_or_full": "full"
+  }
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 50,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 42000,
+  "rpm_min": null,
+  "taper_or_interface": "HSK-E40",
+  "power_kw": {
+   "cont": 15,
+   "30min": null,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": 6,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 60,
+  "Y": 60,
+  "Z": 60,
+  "A_or_B_rpm": 100,
+  "C_rpm": 200
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": "X 10, Y 12, Z 20 m/s2",
+ "changer": {
+  "pockets": 90,
+  "options": [
+   "90 / 102 / 186 / 210 (HSK 40)",
+   "combined tool + workpiece changer (up to 60 workpieces)"
+  ],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": 70,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": 155,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": "internal coolant via optional rotary union (HD brochure)"
+ },
+ "overall_mm": {
+  "W": 1640,
+  "D": 2800,
+  "H": 2740
+ },
+ "weight_kg": 5500,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "changer.chip_to_chip_s",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_kg",
+  "changer.tool_to_tool_s",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "milling_head",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "rotary.A",
+  "rotary.B",
+  "rotary.C",
+  "rotary_table_dia_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_min",
+  "spindle.torque_nm.max",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "table_mm"
+ ],
+ "options": [
+  "HSK-E25 50,000 rpm 6 kW S1 (rolling)",
+  "HSK-E25 80,000 rpm 5.5 kW S1 air bearing",
+  "HSK-E40 45,000 rpm 15 kW S1 CSC",
+  "Micro HD+: hydrostatic rotary/swivel, clamp 450 Nm"
+ ],
+ "notes": "Maker host www.kern-microtechnik.com returned 429; PDFs fetched from Kern/AMETEK media CDN (edge.sitecorecloud.io .../Ametek/kern/...). Spindle: comparison sheet lists option 1 HSK-E25 50,000 and option 2 HSK-E40 42,000 with S1 15 kW / 6 Nm (one value for both); HD brochure gives 15 kW to the E40 and 6 kW to the E25. Recorded E40 42,000 / 15 kW as the spindle; which is standard is not stated. Max workpiece dia 350 x 200 mm. Overall: comparison sheet L x W x H 2,800 x 1,640 x 2,740 (without aspiration); HD brochure min. space W/D/H 1.68 x 2.70 x 2.65 m. Positioning P < 1 um (VDI/DGQ 3441). Brochure is German (Stand 09/2024); restated.",
+ "_not_applicable": [
+  "swing_over_bed_mm",
+  "max_turning_dia_mm",
+  "max_turning_length_mm",
+  "chuck_size_in",
+  "bar_capacity_mm",
+  "spindle_nose_type",
+  "sub_spindle",
+  "live_tool",
+  "turret_stations",
+  "turret_index_s",
+  "tailstock"
+ ]
+}

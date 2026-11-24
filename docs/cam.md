@@ -114,6 +114,10 @@ plus or minus a length along the setup's up (`to: f.plate.end + 0.5`). In a setu
 (`from:`), the same reference is read in the turned frame. A reference that is not horizontal, or
 in any other argument, is refused.
 
+Every built-in takes the arguments listed for it in forge-cam-lang's `ARGS` (the table above);
+any other name is refused (`UnknownArg`), with the nearest as the fix: `stepovr` is "did you mean
+`stepover`?".
+
 Holes are read from the part's history (`hole(d:, depth:, thread:, ...)`), never recognised from
 the shape: `f.bolts` is the `bolts` hole feature with its diameter, depth, thread and fit.
 
@@ -172,3 +176,26 @@ minus what each op provably cleared (kernel/forge-cam/src/stock.rs), so it conta
 facing, clearing, contours, hole pockets and hole plans, with linking by retract. Not yet:
 adaptive clearing (patents first), 3-axis surfacing, 3+2, turning, 5-axis; chamfer mills,
 threads modelled as helicoidal faces (`thread(hole:)`): the lowering refuses them, so a modelled thread is milled as a declared Δ only when the model records it instead.
+
+## In the app: the Manufacture workspace
+
+Open a machining document in the app (natively or in the browser) and it opens on the
+**Manufacture** tab, with its part in the view. The document's text stays the source of truth:
+the browser, the dialogs and the ribbon make the same edit ops an agent sends (`SetArg`,
+`AddFeature`, `DeleteFeature`, `MoveFeature`, `Suppress`, `Rename`), and what they show is this
+document's run, the reply above.
+
+- **Setup ▸ New Setup**: machine, origin, work offset, placement (`at:`), fixture, stock (the
+  part's box plus offsets, or a fixed box), heights; a new setup comes with its `program(..)`.
+- **2D** and **Drilling**: one dialog per op built-in, with Tool, Geometry, Heights, Passes and
+  Linking tabs; a hole or sketch is chosen from the part's history or picked in the view.
+- **The browser**: setups, their ops and programs, each certified, refused, not posted, stale
+  (edited since it was generated) or suppressed; right-click to edit, move, suppress or delete.
+  The selected op's tool, feeds, path and certificate show below it, and its failed checks:
+  click one to locate its witness in the view.
+- **Generate** (and Auto Generate), **Post Process** (dialect, number, the NC text, Write NC
+  File), **Setup Sheet**, **Checks**, **Tool Library** (add a library tool with its T number),
+  **Document Text** (the text by hand).
+
+Code: interface/forge-render/src/shell/cam/ and src/gui_cam.rs; notes and screenshots in
+research/cam/ui/.

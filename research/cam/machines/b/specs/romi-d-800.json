@@ -1,0 +1,133 @@
+{
+ "vendor": "ROMI",
+ "model": "D 800",
+ "family": "ROMI D Series New Generation",
+ "source": [
+  "https://www.romi.com/wp-content/uploads/2018/04/cat_romi_d_ng_in_rmtl_aj_092025_low.pdf",
+  "https://romi.com/en/produtos/machining-centers"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "vmc3",
+ "architecture": "Fixed-column VMC: X = upper (superior) table travel on Y = lower (inferior) saddle travel, Z = headstock on column; vertical spindle; roller linear guides X/Y/Z.",
+ "control": {
+  "standard": "Fanuc 0i-MF Plus i-HMI (15in touch)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 800,
+  "Y": 610,
+  "Z": 640
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": [
+  110,
+  750
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  914,
+  560
+ ],
+ "table_load_kg": 900,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 10000,
+  "rpm_min": 10,
+  "taper_or_interface": "ISO 40 (BT/BBT-40 std; CAT/DIN 40 opt)",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": "18.5 kW S3-15%"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 118
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 40,
+  "Y": 40,
+  "Z": 40,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": 20,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [
+   "48"
+  ],
+  "tool_to_tool_s": 3.2,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": 75,
+  "max_tool_dia_empty_adjacent_mm": 127,
+  "max_tool_len_mm": 300,
+  "max_tool_kg": 7
+ },
+ "coolant": {
+  "through_spindle": false,
+  "notes": "5 bar flood std; through-spindle 7/15 bar or 20/70 bar optional"
+ },
+ "overall_mm": {
+  "W": 3170,
+  "D": 3795,
+  "H": 3140
+ },
+ "weight_kg": 6600,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "milling_head",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rotary_table_dia_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "15,000 rpm spindle, 15 kW S1, 102 Nm",
+  "48-tool ATC (3.3 s, 6,950 kg machine)",
+  "MGR 210D 4th axis rotary table + tailstock",
+  "TSC 7/15/20/70 bar"
+ ],
+ "notes": "Rapids published 40 m/min (1,575 ipm). Table T-slots 5 x 18 mm at 89 mm. Footprint 3,170 x 3,795 (front x side) with conveyor-length variants; height 3,140 (without mist extractor). Weight 6,600 kg (30 tools) / 6,950 (48)."
+}

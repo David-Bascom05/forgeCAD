@@ -78,7 +78,7 @@ fn line_leads_and_refusals() {
     assert!(
         cam.errors
             .iter()
-            .any(|e| e.contains("clear does not take `lead:`")),
+            .any(|e| e.contains("`lead` is not an argument of `clear`")),
         "{:?}",
         cam.errors
     );

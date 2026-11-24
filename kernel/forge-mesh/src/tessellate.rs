@@ -873,6 +873,8 @@ pub fn tessellate_tolerant(body: &Body, q: &Quality) -> Result<TriMesh, TessErro
     if body.dead > 0 {
         return tessellate_tolerant(&body.compact(), q);
     }
+    // a file's body is drawn within a file's budget, the import's own where one is live
+    let _b = (!forge_geom::budget::limited()).then(|| forge_geom::budget::scoped(forge_geom::budget::FILE));
     tessellate_with(body, q, true)
 }
 
@@ -1758,6 +1760,15 @@ fn mesh_face(
         global.iter().map(|&g| Some(mesh.positions[g as usize])).collect();
     if let Some(g) = &grid {
         node_index = g.place(surface, mesh);
+        // a staircase runs over placed nodes only; on a file's face it can reach one that is not
+        if g.cycles
+            .borrow()
+            .iter()
+            .flatten()
+            .any(|&(i, j)| node_index.get(g.id(i, j)).is_none_or(|&x| x == u32::MAX))
+        {
+            return Err(CdtError::Internal(Fault::StaircaseOffNodes));
+        }
         for cycle in g.cycles.borrow().iter() {
             known.extend(
                 cycle

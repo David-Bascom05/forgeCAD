@@ -1,0 +1,6 @@
+# polar(n: 2^32): 309 GB of points asked at once. A count used as a size (polar's, a pattern's)
+# is at most 100 000 (`eval::MAX_COUNT`).
+from: examples/rack18u/hw/iso7380_m5x12.fg
+replace: shared n6 = count(6)
+with: shared n6 = count(4294967296.)
+expect: refused

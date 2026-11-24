@@ -1101,7 +1101,7 @@ fn axial_stock_to_leave_raises_the_floors() {
     assert!(
         cam.errors
             .iter()
-            .any(|e| e.contains("drill does not take `leave_axial:`")),
+            .any(|e| e.contains("`leave_axial` is not an argument of `drill`")),
         "{:?}",
         cam.errors
     );
@@ -1159,7 +1159,7 @@ fn a_contour_takes_its_direction_and_passes() {
     assert!(
         cam.errors
             .iter()
-            .any(|e| e.contains("clear does not take `spring:`")),
+            .any(|e| e.contains("`spring` is not an argument of `clear`")),
         "{:?}",
         cam.errors
     );
@@ -1314,4 +1314,31 @@ fn stock_is_a_bar_a_tube_or_a_modelled_solid() {
         cam.errors
     );
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A statement's `param`s are names its arguments read, and only its own: `param skim.d` is
+/// `skim`'s, `param xskim.d` is not (the owner was once matched by the tail of its debug text,
+/// which matched nothing, so every param was dropped).
+#[test]
+fn a_statements_params_are_its_own() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let own = forge_cam_lang::run(
+        &doc("param skim.d = 18\nskim = facing(op1, tool: t1, to: d, step: 1)\n"),
+        &dir,
+    );
+    assert!(
+        own.errors.iter().all(|e| !e.contains("unknown name")),
+        "{:?}",
+        own.errors
+    );
+    assert!(own.ops.iter().any(|o| o.name == "skim"), "{:?}", own.errors);
+    let other = forge_cam_lang::run(
+        &doc("param xskim.d = 18\nskim = facing(op1, tool: t1, to: d, step: 1)\n"),
+        &dir,
+    );
+    assert!(
+        other.errors.iter().any(|e| e.contains("unknown name `d`")),
+        "{:?}",
+        other.errors
+    );
 }
