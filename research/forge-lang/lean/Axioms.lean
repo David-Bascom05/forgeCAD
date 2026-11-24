@@ -195,3 +195,5 @@ open ForgeLang ForgeLang.Counter
 #print axioms ren_top
 #print axioms rename_body
 #print axioms renFirst_keep
+#print axioms lift_nested
+#print axioms liftLiteral_body
