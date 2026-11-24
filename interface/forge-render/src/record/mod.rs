@@ -1,6 +1,6 @@
-//! Photos and recordings of any environment (research/render/record.md): the encoders here are
-//! plain functions of frames (RGBA8, rows from the top), the same natively and in the browser.
+//! Photos and recordings of any environment (research/render/record.md): the muxers here are
+//! plain functions of encoded frames, the same natively and in the browser; the encoding is the
+//! bundled ffmpeg's (native, a subprocess) or the browser's own (WebCodecs).
 
-pub mod gif;
-pub mod webm;
+pub mod mp4;
 pub mod zip;

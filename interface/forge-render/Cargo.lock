@@ -1347,7 +1347,6 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "web-time",
- "weezl",
  "wgpu",
  "windows-native-keyring-store",
  "winit",
