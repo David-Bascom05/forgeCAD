@@ -28,16 +28,18 @@ they meet in d_A = ±d_B, an X. The boolean traced that intersection with the ma
   vertices with a sliver between them (SplitCrossed on S), or
 - traced the ridge twice, from both nodes (two edges on one curve: D9, ZeroThickness).
 
-## The fix (kernel/forge-bool/src/node.rs)
+## The fix (kernel/forge-geom/src/node.rs, asked by forge-bool's `ssi::search` of every traced pair)
 
-For a face pair whose traced curves pass within two steps of a node, and only where every condition
-below holds (else the trace stands as before):
+For a pair of surfaces whose traced curves pass within two steps of a node, and only where every
+condition below holds (else the trace stands as before). The node is a property of the surfaces
+alone, so the mend sits where the trace is made, not in the boolean's pair loop (an earlier version
+there cost +0.017..0.047% across the gate's parts in codegen alone):
 
 1. both surfaces are tubes, recognised exactly: cylinder, torus, a pipe about a line or a circle;
-2. both rolls off a plane face along an edge, the two planes coincide (S), each spine lies
-   parallel to S at its radius from it, both on one side;
+2. one plane S lies a radius over both spines, parallel to each, both on one side (a few flops
+   first: directions square to S's normal, offsets differing by the radii's difference);
 3. the node is the springs' crossing, in closed form on S (line × line, line × circle, circle ×
-   circle), crossing at a sine of at least 0.02, on both springs' edges;
+   circle), crossing at a sine of at least 0.02;
 4. the mend stays within a quarter of min(r, a circular spine's radius) of the node, where each cap
    is one sheet, and four reaches clear of any other crossing of the two springs.
 

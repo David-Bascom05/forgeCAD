@@ -2,7 +2,7 @@ import Mathlib.Analysis.SpecialFunctions.Sqrt
 import Mathlib.Analysis.SpecialFunctions.Trigonometric.Basic
 
 /-!
-# C.node: one branch out of a tangent node (forge-bool `node.rs`)
+# C.node: one branch out of a tangent node (forge-geom `node.rs`)
 
 Two rounds, one of each operand, are tubes of radii `rA`, `rB` whose spines lie parallel to a
 common plane S at their radius from it, on one side: each touches S along its spring. Where the

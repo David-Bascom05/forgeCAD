@@ -37,7 +37,6 @@ pub mod nary;
 pub mod rim_cert;
 pub mod shape;
 // (debug builds only: release compiles none of it, so its code and layout are as before)
-mod node;
 #[cfg(debug_assertions)]
 pub mod size;
 pub mod ssi;

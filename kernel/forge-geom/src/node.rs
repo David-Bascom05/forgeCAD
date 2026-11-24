@@ -1,35 +1,34 @@
 //! Tangent nodes (research/curved-sites/blend-node.md, ledger C.node).
 //!
-//! Two rounds, one from each operand, each a tube (a cylinder, a ring torus, or a rolling-ball pipe
-//! about a straight or circular spine) rolling off a face on one common plane S: each touches S
-//! along its spring (its spine moved onto S), and where the springs cross the two tubes share S's
-//! normal, so they touch. Their intersection crosses itself there (an X), and a marching trace
-//! cannot be trusted near it: it ends a hair off the node (the surfaces' heights over S differ to
-//! second order only, so a height error e moves the trace's end by about √(2 r e)), or traces one
-//! branch twice from both sides.
+//! Two tubes (a cylinder, a torus, or a rolling-ball pipe about a straight or circular spine) whose
+//! spines both lie parallel to one plane S at their radius from it, on one side: each touches S
+//! along its spring (its spine moved onto S), and where the springs cross the two share S's normal,
+//! so they touch. Two rounds of a boolean's operands that roll off one common face meet so. Their
+//! intersection crosses itself there (an X), and a marching trace cannot be trusted near it: it ends
+//! a hair off the node (the heights over S differ to second order only, so a height error e moves the
+//! trace's end by about √(2 r e)), or traces one branch twice, from both sides.
 //!
 //! What stands instead, and why it is sound (verify/forge-curved/ForgeCurved/BlendNode.lean):
-//! - over S, at plane distance ρ from its spring, each tube's cap lies h(ρ) = r − √(r² − ρ²) below
-//!   S (`tube_height`), and h is strictly increasing on [0, r] (`tube_height_strictMono`);
-//! - so where both faces lie past their springs, hA(ρA) = hB(ρB) holds for at most one ρB per ρA,
-//!   increasing with ρA (`one_branch`, `branch_increasing`): one branch leaves the node into the
-//!   region both faces cover, and the node is on both tubes (ρA = ρB = 0);
+//! - over S, within its radius of its spring, each tube's cap lies h(ρ) = r − √(r² − ρ²) below S
+//!   at plane distance ρ from the spring (`cap_section`), and h is strictly increasing on [0, r]
+//!   (`h_strictMonoOn`);
+//! - so where both caps lie past their springs, hA(ρA) = hB(ρB) holds for at most one ρB per ρA,
+//!   increasing with ρA, meeting either spring only at the node (`one_branch`, `tubes_one_branch`,
+//!   `branch_increasing`, `branch_meets_springs_only_at_node`), and the node is on both (`h_zero`);
 //! - the node is the springs' crossing, in closed form on S (lines and circles), well conditioned
-//!   where they cross at an angle (`SIN_LEAST`), and taken only where no other crossing of the two
-//!   springs lies within four reaches.
+//!   where they cross at an angle (`SIN_LEAST`), and mended only where no other crossing of the two
+//!   springs lies within four reaches and the reach is within a quarter of each cap's (`reach_of`).
 //!
 //! A traced curve that comes within `reach` (two of its steps) of a node is cut there, and each
 //! stretch that ran into the node is walked back into it along both surfaces, ending on it exactly
 //! (`towards_touch`); a stretch running along one already kept is the same branch and is dropped.
-//! Anything outside those conditions is left as the trace gave it.
+//! Anything outside those conditions is left as the trace gave it. forge-bool's `ssi::search` asks
+//! this of every pair it traces.
 
-use forge_geom::blend::Pipe;
-use forge_geom::intcurve::{IntCurve, direction, refine, towards_touch};
-use forge_geom::intersect::Contact;
-use forge_geom::{Curve, CurveGeom, Surface};
+use crate::blend::Pipe;
+use crate::intcurve::{IntCurve, direction, refine, towards_touch};
+use crate::{Curve, CurveGeom, Surface};
 use forge_math::{Interval, Point3, Vec3, tol};
-use forge_topo::{Body, EdgeId, FaceId};
-use std::sync::Arc;
 
 /// The springs must cross at more than this sine (about 1.1 degrees): below it the crossing's place
 /// along them is as uncertain as the trace's.
@@ -161,36 +160,6 @@ struct Node {
     radius: f64,
 }
 
-/// The edges of face `f` (a tube) whose neighbour across lies on a plane the tube rolls off: the
-/// spine parallel to it at the radius (`spring`; no normals asked), with that plane's face, its
-/// spring and side.
-fn springs_on(body: &Body, f: FaceId, t: (Spine, f64)) -> Vec<(EdgeId, FaceId, Spine, f64)> {
-    let mut out = Vec::new();
-    for &l in &body.face(f).loops {
-        for c in body.lp(l).coedges() {
-            let Some(g) = body.partner(c).map(|o| body.coedge_face(o)) else {
-                continue;
-            };
-            let Surface::Plane(s) = &body.face(g).surface else {
-                continue;
-            };
-            if g == f {
-                continue;
-            }
-            if let Some((x, side)) = spring(t, s.frame.origin, s.frame.z().get()) {
-                out.push((body.coedge(c).edge, g, x, side));
-            }
-        }
-    }
-    out
-}
-
-/// Whether `p` lies on the edge, within tolerance.
-fn on_edge(body: &Body, e: EdgeId, p: Point3) -> bool {
-    let edge = body.edge(e);
-    edge.curve.eval(edge.curve.closest(p, edge.range)).distance(p) <= tol::LINEAR
-}
-
 /// Whether one plane can lie a radius over both spines, parallel to each, on one side: the cheap
 /// test before any face is read. Its normal n is square to every spine direction (a circle's:
 /// along its axis), and the spines' offsets along it differ by the radii's difference.
@@ -211,76 +180,68 @@ fn one_plane_fits((x, rx): (Spine, f64), (y, ry): (Spine, f64)) -> bool {
     }
 }
 
-/// The tangent nodes of face `fa` of `a` (surface a tube) and `fb` of `b` (a tube).
-fn nodes(a: &Body, fa: FaceId, b: &Body, fb: FaceId, ta: (Spine, f64), tb: (Spine, f64)) -> Vec<Node> {
+/// The tangent nodes of two tubes: for each plane lying a radius over both spines, parallel to
+/// each, on one side (there are at most two: the spines' common level plus or minus the radius),
+/// the crossings of their springs at a sine of at least `SIN_LEAST`.
+fn nodes(ta: (Spine, f64), tb: (Spine, f64)) -> Vec<Node> {
+    let (x, rx) = ta;
+    let (p, n) = match (x, tb.0) {
+        (Spine::Line(p, d), Spine::Line(_, e)) => match d.cross(e).normalize() {
+            Some(n) => (p, n.get()),
+            // parallel springs never cross
+            None => return Vec::new(),
+        },
+        (Spine::Line(p, _), Spine::Circle(_, a, _)) => (p, a),
+        (Spine::Circle(c, a, _), _) => (c, a),
+    };
+    let reach = reach_of(ta).min(reach_of(tb));
     let mut out: Vec<Node> = Vec::new();
-    let on_a = springs_on(a, fa, ta);
-    if on_a.is_empty() {
-        return out;
-    }
-    let on_b = springs_on(b, fb, tb);
-    for &(ea, ga, xa, sa) in &on_a {
-        for &(eb, gb, xb, sb) in &on_b {
-            let (Surface::Plane(pa), Surface::Plane(pb)) = (&a.face(ga).surface, &b.face(gb).surface) else {
-                continue;
-            };
-            // both tubes under one plane, on one side (sides read against A's plane's normal):
-            // their caps meet there, not a cap and a far side
-            let sb = if pa.frame.z().dot(pb.frame.z()) < 0.0 {
-                -sb
-            } else {
-                sb
-            };
-            if sa != sb || !crate::ssi::coincident(&a.face(ga).surface, &b.face(gb).surface) {
+    for side in [1.0, -1.0] {
+        let o = p + n * (side * rx);
+        let (Some((xa, sa)), Some((xb, sb))) = (spring(ta, o, n), spring(tb, o, n)) else {
+            continue;
+        };
+        // both spines under the plane, on one side: their caps meet there, not a cap and a far side
+        if sa != sb {
+            continue;
+        }
+        let all = crossings(xa, xb);
+        for (k, &(at, sin)) in all.iter().enumerate() {
+            if sin < SIN_LEAST {
                 continue;
             }
-            let all = crossings(xa, xb);
-            for (k, &(p, sin)) in all.iter().enumerate() {
-                if sin < SIN_LEAST || !on_edge(a, ea, p) || !on_edge(b, eb, p) {
-                    continue;
-                }
-                let apart = all
-                    .iter()
-                    .enumerate()
-                    .filter(|&(j, _)| j != k)
-                    .map(|(_, q)| q.0.distance(p))
-                    .fold(f64::INFINITY, f64::min);
-                if !out.iter().any(|m| m.at.distance(p) <= tol::LINEAR) {
-                    out.push(Node {
-                        at: p,
-                        apart,
-                        radius: reach_of(ta).min(reach_of(tb)),
-                    });
-                }
-            }
+            let apart = all
+                .iter()
+                .enumerate()
+                .filter(|&(j, _)| j != k)
+                .map(|(_, q)| q.0.distance(at))
+                .fold(f64::INFINITY, f64::min);
+            out.push(Node {
+                at,
+                apart,
+                radius: reach,
+            });
         }
     }
     out
 }
 
-/// The curves where faces `fa` of `a` and `fb` of `b` meet, mended at their tangent nodes (see the
+/// Traced curves of surfaces `a` and `b` (forge-bool `ssi::search`'s), mended at their tangent nodes (see the
 /// module's note); as they came wherever that does not apply.
 #[cold]
 #[inline(never)]
-pub(crate) fn mend(
-    a: &Body,
-    fa: FaceId,
-    b: &Body,
-    fb: FaceId,
-    curves: Vec<(Curve, Contact)>,
-) -> Vec<(Curve, Contact)> {
-    let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
-    let (Some(ta), Some(tb)) = (tube(sa), tube(sb)) else {
+pub fn mend(a: &Surface, b: &Surface, curves: Vec<IntCurve>) -> Vec<IntCurve> {
+    let (Some(ta), Some(tb)) = (tube(a), tube(b)) else {
         return curves;
     };
     if !one_plane_fits(ta, tb) {
         return curves;
     }
-    let found = nodes(a, fa, b, fb, ta, tb);
+    let found = nodes(ta, tb);
     if found.is_empty() {
         return curves;
     }
-    mended(sa, sb, &curves, &found).unwrap_or(curves)
+    mended(a, b, &curves, &found).unwrap_or(curves)
 }
 
 /// A chain of points on both surfaces as a curve, as forge-geom's trace ends one: its sag (each
@@ -352,24 +313,15 @@ fn stretches(k: &IntCurve, near: impl Fn(Point3) -> Option<usize>) -> Vec<Stretc
 }
 
 /// `mend`'s work: None where any step of it does not go through (the trace is then kept whole).
-fn mended(
-    sa: &Surface,
-    sb: &Surface,
-    curves: &[(Curve, Contact)],
-    nodes: &[Node],
-) -> Option<Vec<(Curve, Contact)>> {
-    let mut out: Vec<(Curve, Contact)> = Vec::new();
+fn mended(sa: &Surface, sb: &Surface, curves: &[IntCurve], nodes: &[Node]) -> Option<Vec<IntCurve>> {
     let mut runs: Vec<IntCurve> = Vec::new();
-    for (c, contact) in curves {
-        let Curve::Intersection(k) = c else {
-            out.push((c.clone(), *contact));
-            continue;
-        };
+    let mut out: Vec<IntCurve> = Vec::new();
+    for k in curves {
         let step = step_of(k);
         let reach = 2.0 * step;
         let near = |p: Point3| nodes.iter().position(|m| m.at.distance(p) <= reach);
         if !k.pts.iter().any(|&p| near(p).is_some()) {
-            out.push((c.clone(), *contact));
+            out.push(k.clone());
             continue;
         }
         // the mend stays where the one-branch argument holds: well inside both caps, and clear of
@@ -426,10 +378,7 @@ fn mended(
             }
         }
     }
-    out.extend(
-        runs.into_iter()
-            .map(|r| (Curve::Intersection(Arc::new(r)), Contact::Crossing)),
-    );
+    out.extend(runs);
     Some(out)
 }
 

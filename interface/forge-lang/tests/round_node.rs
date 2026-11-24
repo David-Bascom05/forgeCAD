@@ -1,6 +1,6 @@
 //! A round too big for one fillet (fg_mcp's plate: its top face's four edges and a dent's rim),
 //! built as two rounds the part takes together (forge-model's `overlapping_rounds`): the two
-//! blends' springs cross on the top face, where the blends touch (forge-bool's node.rs). Before the
+//! blends' springs cross on the top face, where the blends touch (forge-geom's node.rs). Before the
 //! node was mended, about one radius in twenty between 10.9 and 24.3 was refused (SplitCrossed,
 //! InconsistentClassification, ZeroThickness), scattered, so "the largest radius that builds" had no
 //! meaning: research/curved-sites/blend-node.md.
