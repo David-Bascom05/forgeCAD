@@ -2399,10 +2399,16 @@ mod tests {
         };
         assert!(arc_by_chords(&col, &body, &f, &clear, -0.01, 0.01).is_some());
         for bad in [f64::NAN, f64::INFINITY, -1.0, 0.0] {
-            assert!(arc_by_chords(&col, &body, &f, &clear, -0.01, bad).is_none(), "tol {bad}");
+            assert!(
+                arc_by_chords(&col, &body, &f, &clear, -0.01, bad).is_none(),
+                "tol {bad}"
+            );
         }
         for bad in [f64::NAN, f64::INFINITY] {
-            assert!(arc_by_chords(&col, &body, &f, &clear, bad, 0.01).is_none(), "limit {bad}");
+            assert!(
+                arc_by_chords(&col, &body, &f, &clear, bad, 0.01).is_none(),
+                "limit {bad}"
+            );
         }
     }
 }
