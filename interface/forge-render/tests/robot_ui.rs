@@ -5,7 +5,7 @@
 //! (research/export/urdf-ui/); without an adapter the test says so and stops.
 
 use forge_render::gui::{Gui, Headless};
-use forge_render::shell::robot_ui::Sel;
+use forge_render::shell::robot::Sel;
 use std::path::{Path, PathBuf};
 
 const EXAMPLES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
@@ -196,7 +196,7 @@ fn the_panel_edits_the_robot_document_and_the_source() {
         .as_mut()
         .unwrap()
         .out
-        .push(forge_render::shell::robot_ui::RobotAct::Undo);
+        .push(forge_render::shell::robot::RobotAct::Undo);
     settle_panel(&mut h);
     let said = h.gui.shell.robot.as_ref().unwrap().said.clone();
     assert!(
@@ -221,7 +221,7 @@ fn the_panel_edits_the_robot_document_and_the_source() {
         .as_mut()
         .unwrap()
         .out
-        .push(forge_render::shell::robot_ui::RobotAct::Edit(
+        .push(forge_render::shell::robot::RobotAct::Edit(
             forge_lang::robot::Edit::Set {
                 line: Some(c.line),
                 call: String::new(),
@@ -261,7 +261,7 @@ fn the_panel_edits_the_robot_document_and_the_source() {
         .as_mut()
         .unwrap()
         .out
-        .push(forge_render::shell::robot_ui::RobotAct::Assembly {
+        .push(forge_render::shell::robot::RobotAct::Assembly {
             joint: "elbow".into(),
             arg: "limit".into(),
             text: "(-100deg, 100deg)".into(),
@@ -297,7 +297,7 @@ fn the_panel_edits_the_robot_document_and_the_source() {
         .as_mut()
         .unwrap()
         .out
-        .push(forge_render::shell::robot_ui::RobotAct::Export);
+        .push(forge_render::shell::robot::RobotAct::Export);
     settle_panel(&mut h);
     let out = file.parent().unwrap().join("arm2_robot_urdf/arm2_robot.urdf");
     assert!(out.is_file(), "{}", h.gui.shell.robot.as_ref().unwrap().said);
@@ -306,7 +306,7 @@ fn the_panel_edits_the_robot_document_and_the_source() {
 #[test]
 fn the_tree_is_edited_from_the_panel() {
     use forge_lang::robot::Edit;
-    use forge_render::shell::robot_ui::RobotAct;
+    use forge_render::shell::robot::RobotAct;
     let Ok(mut h) = Headless::new((1600.0, 1000.0), 1.0) else {
         eprintln!("skipped: no adapter");
         return;

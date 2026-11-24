@@ -7,7 +7,7 @@
 
 use super::Gui;
 use crate::origin::WorldVert;
-use crate::shell::robot_ui::{RobotAct, RobotPanel};
+use crate::shell::robot::{RobotAct, RobotPanel};
 use forge_lang::urdf::{self, Exported, UrdfError};
 use std::path::Path;
 
@@ -104,7 +104,7 @@ impl Gui {
                 crate::overlay::triad(at, axes, r * 0.05, cam, size, px, &mut through);
                 if let Some(a) = j.axis {
                     let d = jf.vec_to_world(forge_math::Vec3::new(a[0], a[1], a[2]));
-                    let chosen = p.sel == Some(crate::shell::robot_ui::Sel::Joint(j.name.clone()));
+                    let chosen = p.sel == Some(crate::shell::robot::Sel::Joint(j.name.clone()));
                     let len = if chosen { r * 0.3 } else { r * 0.15 };
                     let (w, c) = if chosen {
                         (px * 4.0, [acc[0], acc[1], acc[2], 1.0])
@@ -172,6 +172,7 @@ impl Gui {
     }
 
     fn robot_reload(&mut self, panel: &mut RobotPanel) {
+        panel.stale = false;
         let t = crate::viewer::now_ms();
         match robot_export(&panel.file) {
             Ok(r) => panel.load(r),
