@@ -600,7 +600,7 @@ pub fn measure_op(
         let flutes = p.tool.nof.max(1) as f64;
         let rpm = p.rpm;
         q.rpm = rpm;
-        q.p_avail = power_at(&curve, rpm);
+        q.p_avail = power_at(curve, rpm);
         let l = cell.max((0.25 * r).min(0.5));
         let mut at = p.start;
         // the last feed direction (xy), for corners
@@ -732,7 +732,11 @@ pub fn measure_op(
                         // the target at this sample: the op's own (rough's class chip under
                         // 90°), else the group's slot chip
                         let target = if q.fz_class > 0.0 {
-                            if e.phi < 90.0 { q.fz_class_rough } else { q.fz_class }
+                            if e.phi < 90.0 {
+                                q.fz_class_rough
+                            } else {
+                                q.fz_class
+                            }
                         } else {
                             q.fz_target
                         };
@@ -951,13 +955,18 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                 }
                 // FORGE_QUALITY_BREAKDOWN=OP: where that op's time goes, by kind of move
                 if let Ok(want) = std::env::var("FORGE_QUALITY_BREAKDOWN") {
-                    let mut acc: std::collections::BTreeMap<&str, (usize, f64, f64, f64)> = Default::default();
+                    let mut acc: std::collections::BTreeMap<&str, (usize, f64, f64, f64)> =
+                        Default::default();
                     for (si, sg) in tl.segments.iter().enumerate() {
-                        let Some(Some(k)) = op_of.get(sg.line) else { continue };
+                        let Some(Some(k)) = op_of.get(sg.line) else {
+                            continue;
+                        };
                         if job.ops[*k].name != want {
                             continue;
                         }
-                        let dz = (sg.q1.get(2).copied().unwrap_or(0.0) - sg.q0.get(2).copied().unwrap_or(0.0)).abs();
+                        let dz = (sg.q1.get(2).copied().unwrap_or(0.0)
+                            - sg.q0.get(2).copied().unwrap_or(0.0))
+                        .abs();
                         let dxy = ((sg.q1[0] - sg.q0[0]).powi(2) + (sg.q1[1] - sg.q0[1]).powi(2)).sqrt();
                         let cat = match sg.kind {
                             forge_machine::sim::SegKind::Rapid => "rapid",
@@ -974,7 +983,10 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                         e.3 += dxy + dz;
                     }
                     for (c, (n, tm, tl, l)) in acc {
-                        eprintln!("breakdown {want} {c:12} n {n:6} len {l:8.0} t_min {tm:7.1} t_plan {tl:7.1} over {:6.1}", tl - tm);
+                        eprintln!(
+                            "breakdown {want} {c:12} n {n:6} len {l:8.0} t_min {tm:7.1} t_plan {tl:7.1} over {:6.1}",
+                            tl - tm
+                        );
                     }
                 }
                 for (si, sg) in tl.segments.iter().enumerate() {

@@ -290,7 +290,10 @@ impl Field {
             let n = (l / self.map0.h).ceil().max(1.0) as usize;
             for k in 0..=n {
                 let t = k as f64 / n as f64;
-                let (x, y) = (w[0][0] + t * (w[1][0] - w[0][0]), w[0][1] + t * (w[1][1] - w[0][1]));
+                let (x, y) = (
+                    w[0][0] + t * (w[1][0] - w[0][0]),
+                    w[0][1] + t * (w[1][1] - w[0][1]),
+                );
                 top = top.max(self.top0(x, y, rr) + CLEAR);
             }
         }
@@ -431,7 +434,11 @@ pub fn adaptive(
     let rmin = 0.5 * tool.tool.dc;
     let link_margin = LINK_MARGIN_R * 0.5 * tool.tool.dc;
     // the feed of links through cleared air
-    let lf = if prm.link_feed > 0.0 { prm.link_feed } else { feed.0 };
+    let lf = if prm.link_feed > 0.0 {
+        prm.link_feed
+    } else {
+        feed.0
+    };
     // the direction the last pass went along the sweep (+1 with it, −1 against it)
     let mut last_sign = 1.0f64;
     let mut rings_log: Vec<RingRun> = Vec::new();
@@ -840,7 +847,9 @@ pub fn adaptive(
             } else if let Some(legs) = (cur[2] == z && retrace_ok)
                 .then(|| {
                     let cap = f.link_budget([cur[0], cur[1]], p, z, link_margin);
-                    retrace_path_link(&f, &mut grid, cur, p, &hist, z, cap, &|a, b| f.link_clear(a, b, z))
+                    retrace_path_link(&f, &mut grid, cur, p, &hist, z, cap, &|a, b| {
+                        f.link_clear(a, b, z)
+                    })
                 })
                 .flatten()
                 .map(|m| at_feed(m, lf))
@@ -1382,7 +1391,11 @@ fn path_link(
         let k = idx(c);
         if st[k] == 0 {
             let p = gr.at(c.0, c.1);
-            st[k] = if f.ok(p[0], p[1]) && !f.disk_has_material(p[0], p[1], z) { 1 } else { 2 };
+            st[k] = if f.ok(p[0], p[1]) && !f.disk_has_material(p[0], p[1], z) {
+                1
+            } else {
+                2
+            };
         }
         st[k] == 1
     };
@@ -1438,7 +1451,16 @@ fn path_link(
         if d > dist[idx(c)] {
             continue;
         }
-        for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)] {
+        for (di, dj) in [
+            (-1i64, 0i64),
+            (1, 0),
+            (0, -1),
+            (0, 1),
+            (-1, -1),
+            (-1, 1),
+            (1, -1),
+            (1, 1),
+        ] {
             let (ni, nj) = (c.0 as i64 + di, c.1 as i64 + dj);
             if ni < 0 || nj < 0 || ni as usize >= grid.nx || nj as usize >= grid.ny {
                 continue;
@@ -1999,7 +2021,7 @@ mod tests {
         let pts = travelled_links(path, &out.retraces);
         // (1)
         let mut run: Vec<[f64; 2]> = Vec::new();
-        let mut check = |run: &mut Vec<[f64; 2]>| {
+        let check = |run: &mut Vec<[f64; 2]>| {
             let mut total = 0.0f64;
             let mut last: Option<f64> = None;
             for w in run.windows(2) {
@@ -2289,11 +2311,8 @@ mod tests {
                     "two-way {two_way}: a cleanup run {g:?} removes nothing"
                 );
                 if g.whole {
-                    for i in g.first..g.end {
-                        assert!(
-                            removed[i] > 0.0,
-                            "two-way {two_way}: whole ring {g:?}: move {i} in air"
-                        );
+                    for (i, r) in removed.iter().enumerate().take(g.end).skip(g.first) {
+                        assert!(*r > 0.0, "two-way {two_way}: whole ring {g:?}: move {i} in air");
                     }
                 }
             }
