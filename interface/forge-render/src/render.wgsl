@@ -817,7 +817,10 @@ fn ao_fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
         hidden += max(dot(d, n) / sqrt(far2 + 1e-6) - AO_BIAS, 0.0) * fall;
     }
     let ao = saturate(1.0 - AO_STRENGTH * hidden / f32(AO_SAMPLES));
-    return vec4f(ao, p.z, 0.0, 1.0);
+    // the distance kept in units of the near plane's (its target is half floats, which end at
+    // 65504: a parallel view stands a thousand radii off, so a part some tens of mm across was
+    // past it in mm, the smoothing's weights went NaN and the part was drawn black)
+    return vec4f(ao, p.z / g.ao.z, 0.0, 1.0);
 }
 
 // over the noise's 4 x 4 pattern, only from the same surface
@@ -852,7 +855,8 @@ fn ao_apply_fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
     if d <= 0.0 {
         return vec4f(1.0);
     }
-    let z = g.ao.z / d;
+    // the distance as `ao_fs` keeps it: in units of the near plane's
+    let z = 1.0 / d;
     let half_px = (at.xy - 1.0) * 0.5;
     let base = vec2i(floor(half_px));
     let f = half_px - floor(half_px);

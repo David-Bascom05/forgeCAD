@@ -770,6 +770,9 @@ impl Gfx {
             return;
         };
         let (field, range, made, waker) = (self.field.clone(), self.range, self.made.clone(), waker.clone());
+        // let go before the job starts: in the single-threaded page it runs right here, and takes
+        // the same lock (a second lock on one thread panics there)
+        drop(m);
         crate::plat::spawn("forge-job", move || {
             let lod = crate::tess::lod_of_mesh(&mesh, UNPICKED);
             // the simulated part all over (on the tool and off it), banded as the legend is, by the
@@ -816,6 +819,8 @@ impl Gfx {
         };
         m.heat_asked = Some(key);
         let (range, at, t, made, waker) = (self.range, self.at, self.t, self.made.clone(), waker.clone());
+        // let go first, as in `want_sim`
+        drop(m);
         crate::plat::spawn("forge-job", move || {
             let (heat, ext) = paint(&l, &span, &field, range, at, t);
             let mut m = made.lock().unwrap_or_else(|e| e.into_inner());
