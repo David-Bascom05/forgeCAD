@@ -35,29 +35,10 @@ pub enum Sep {
 // whose products neither overflow nor underflow: true within `tol::INPUT_SIZE`.
 // ---------------------------------------------------------------------------------------------
 
-/// `a + b = s + e` exactly.
-fn two_sum(a: f64, b: f64) -> (f64, f64) {
-    let s = a + b;
-    let bb = s - a;
-    let e = (a - (s - bb)) + (b - bb);
-    (s, e)
-}
-
-/// Dekker's split: `a = hi + lo`, each half of the significand.
-fn split(a: f64) -> (f64, f64) {
-    let c = 134_217_729.0 * a;
-    let hi = c - (c - a);
-    (hi, a - hi)
-}
-
-/// `a · b = p + e` exactly (Dekker; no fused multiply-add, which native and wasm round apart).
-pub(crate) fn two_prod(a: f64, b: f64) -> (f64, f64) {
-    let p = a * b;
-    let (ah, al) = split(a);
-    let (bh, bl) = split(b);
-    let e = al * bl - (((p - ah * bh) - al * bh) - ah * bl);
-    (p, e)
-}
+// forge-num's error-free transformations (the one copy; forge-math's text): `a + b = s + e` and
+// `a · b = p + e` exactly (Dekker; no fused multiply-add, which native and wasm round apart).
+pub(crate) use forge_num::shewchuk::two_product as two_prod;
+use forge_num::shewchuk::two_sum;
 
 /// The exact sign of the sum of `terms`: grown into a nonoverlapping expansion (each new term
 /// carried through every component by TwoSum, the rounding errors kept), whose most significant

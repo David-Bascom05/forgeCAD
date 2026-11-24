@@ -10,32 +10,9 @@
 
 /// `16 ε`, `ε = 2⁻⁵³`: the filters' relative bound.
 const FILTER: f64 = 16.0 * (f64::EPSILON * 0.5);
-/// Dekker's splitter, `2²⁷ + 1`.
-const SPLITTER: f64 = 134_217_729.0;
 
-/// `a + b` and its rounding error, exactly (Knuth).
-pub fn two_sum(a: f64, b: f64) -> (f64, f64) {
-    let x = a + b;
-    let bv = x - a;
-    let av = x - bv;
-    (x, (a - av) + (b - bv))
-}
-
-/// Veltkamp's split of `a` into two 26-bit halves.
-pub fn split(a: f64) -> (f64, f64) {
-    let c = SPLITTER * a;
-    let hi = c - (c - a);
-    (hi, a - hi)
-}
-
-/// `a b` and its rounding error, exactly (Dekker).
-pub fn two_product(a: f64, b: f64) -> (f64, f64) {
-    let x = a * b;
-    let (ah, al) = split(a);
-    let (bh, bl) = split(b);
-    let err = x - ah * bh - al * bh - ah * bl;
-    (x, al * bl - err)
-}
+/// Two-sum, split and two-product: forge-num's, the one copy (forge-math's text).
+pub use forge_num::shewchuk::{split, two_product, two_sum};
 
 /// The sign of a float: `1`, `-1` or `0` (`signum` on a nonzero value).
 pub fn sgn(x: f64) -> f64 {

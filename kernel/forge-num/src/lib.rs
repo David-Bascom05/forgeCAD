@@ -5,6 +5,8 @@
 //!   common case) and as a [`Nat`] past it.
 //! - [`dy`]: [`Dy`], an exact dyadic `m · 2^e`: exact `+ − ×`, and the two roundings to f64 its
 //!   callers pin (nearest-or-adjacent for output).
+//! - [`shewchuk`]: the error-free transformations (two-sum, split, two-product) every exact
+//!   predicate is built on.
 //!
 //! The crate depends on nothing, so the whole of it can be an Aeneas target (L4). Speed comes
 //! first: where two implementations differed, the faster one is kept, measured. Within that it is
@@ -16,6 +18,7 @@
 pub mod dy;
 pub mod int;
 pub mod nat;
+pub mod shewchuk;
 
 pub use dy::Dy;
 pub use int::Big;

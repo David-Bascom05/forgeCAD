@@ -463,21 +463,8 @@ mod tests {
     /// Double-double arithmetic: a reference for sin and cos to ~1e-30, from IEEE + - * only.
     mod dd {
         pub type D = (f64, f64);
-        pub fn two_sum(a: f64, b: f64) -> D {
-            let s = a + b;
-            let v = s - a;
-            (s, (a - (s - v)) + (b - v))
-        }
-        fn split(a: f64) -> (f64, f64) {
-            let c = 134_217_729.0 * a;
-            let h = c - (c - a);
-            (h, a - h)
-        }
-        pub fn two_prod(a: f64, b: f64) -> D {
-            let p = a * b;
-            let ((ah, al), (bh, bl)) = (split(a), split(b));
-            (p, ((ah * bh - p) + ah * bl + al * bh) + al * bl)
-        }
+        use forge_num::shewchuk::two_product as two_prod;
+        pub use forge_num::shewchuk::two_sum;
         pub fn add(a: D, b: D) -> D {
             let (s, e) = two_sum(a.0, b.0);
             let e = e + a.1 + b.1;

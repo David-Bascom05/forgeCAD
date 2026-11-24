@@ -26,7 +26,6 @@ use crate::{Point2, Vec2, Vec3};
 use std::cmp::Ordering;
 
 const EPS: f64 = f64::EPSILON * 0.5;
-const SPLITTER: f64 = 134_217_729.0; // 2^27 + 1
 const CCW_BOUND: f64 = (3.0 + 16.0 * EPS) * EPS;
 const ICC_BOUND: f64 = (10.0 + 96.0 * EPS) * EPS;
 // Shewchuk's stage-B bounds: the determinant of the rounded differences,
@@ -275,34 +274,15 @@ const DOT3_BOUND: f64 = (3.0 + 32.0 * EPS) * EPS;
 /// The same for a triple product a . (b x c), relative to its permanent.
 const TRIPLE_BOUND: f64 = (5.0 + 64.0 * EPS) * EPS;
 
-fn two_sum(a: f64, b: f64) -> (f64, f64) {
-    let x = a + b;
-    let bv = x - a;
-    let av = x - bv;
-    (x, (a - av) + (b - bv))
-}
+use forge_num::shewchuk::{two_diff, two_sum};
 
-fn two_diff(a: f64, b: f64) -> (f64, f64) {
-    let x = a - b;
-    let bv = a - x;
-    let av = x + bv;
-    (x, (a - av) + (bv - b))
-}
-
-fn split(a: f64) -> (f64, f64) {
-    let c = SPLITTER * a;
-    let hi = c - (c - a);
-    (hi, a - hi)
-}
-
+/// forge-num's `two_product` (the one copy of Dekker's product), with this module's debug-build
+/// check of its precondition in front.
+#[inline]
 fn two_product(a: f64, b: f64) -> (f64, f64) {
     #[cfg(debug_assertions)]
     check_two_product(a, b);
-    let x = a * b;
-    let (ahi, alo) = split(a);
-    let (bhi, blo) = split(b);
-    let err = ((x - ahi * bhi) - alo * bhi) - ahi * blo;
-    (x, alo * blo - err)
+    forge_num::shewchuk::two_product(a, b)
 }
 
 /// The sign of an expansion is the sign of its largest component.

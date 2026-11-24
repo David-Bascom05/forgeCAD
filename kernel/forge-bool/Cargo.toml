@@ -8,6 +8,8 @@ repository.workspace = true
 
 [dependencies]
 forge-math = { path = "../forge-math" }
+# the error-free transformations of edge_screen.rs's exact signs
+forge-num = { path = "../forge-num" }
 forge-geom = { path = "../forge-geom" }
 forge-topo = { path = "../forge-topo" }
 forge-bool-core = { path = "../forge-bool-core", optional = true }
