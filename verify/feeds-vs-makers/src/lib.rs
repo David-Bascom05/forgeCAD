@@ -17,7 +17,7 @@ pub mod turning;
 
 use forge_agent::json::Json;
 use forge_tooling::Library;
-use forge_tooling::feeds::{Generic, Quantiles, Substrate, ToolClass};
+use forge_tooling::feeds::{Generic, Quantiles, Substrate, ToolClass, TurnGeneric};
 use forge_tooling::resolve::{self, Ask, DrillAsk, DrillTool, Spindle, ToolData};
 use std::path::Path;
 
@@ -803,4 +803,118 @@ pub fn generic_held_out(rows: &[Row]) -> Vec<(usize, f64, Option<f64>, String)> 
         }
     }
     out
+}
+
+/// One maker row of turning data: (maker, vc, f, ap).
+type TurnSample = (String, f64, f64, Option<f64>);
+
+/// The generic turning classes from the inserts' maker presets (each cited to its maker's
+/// grade table): one row per (maker, group, chipbreaker, grade, material) the makers print, so an
+/// insert sold in many codes counts once. Per group × material family, and per whole group,
+/// with at least GENERIC_MIN_ROWS rows from at least GENERIC_MIN_MAKERS makers: the speeds',
+/// feeds' and depths' min, P10, P25, median, max.
+pub fn turn_generic_table(lib: &Library) -> Vec<TurnGeneric> {
+    turn_generic_table_without(lib, None)
+}
+
+/// As `turn_generic_table`, leaving one maker's rows out (the hold-out).
+pub fn turn_generic_table_without(lib: &Library, without: Option<&str>) -> Vec<TurnGeneric> {
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut seen = BTreeSet::new();
+    // (group, family) -> rows (maker, vc, f, ap)
+    let mut classes: BTreeMap<(String, String), Vec<TurnSample>> = BTreeMap::new();
+    for ins in lib.inserts.iter().filter(|i| Some(i.maker.as_str()) != without) {
+        for p in &ins.presets {
+            let head = format!("{} {} ", p.group, ins.chipbreaker);
+            let Some(rest) = p.name.strip_prefix(&head) else {
+                continue;
+            };
+            let Some((grade, mat)) = rest.split_once(' ') else {
+                continue;
+            };
+            if !seen.insert((
+                ins.maker.clone(),
+                p.group.clone(),
+                ins.chipbreaker.clone(),
+                grade.to_string(),
+                mat.to_string(),
+            )) {
+                continue;
+            }
+            let row = (ins.maker.clone(), p.vc, p.fz, p.ap);
+            if let Some(f) = forge_tooling::feeds::family_of_text(mat) {
+                classes
+                    .entry((p.group.clone(), f.to_string()))
+                    .or_default()
+                    .push(row.clone());
+            }
+            classes
+                .entry((p.group.clone(), "*".to_string()))
+                .or_default()
+                .push(row);
+        }
+    }
+    let mut out = Vec::new();
+    for ((group, family), rows) in classes {
+        let mut makers: Vec<String> = rows.iter().map(|r| r.0.clone()).collect();
+        makers.sort();
+        makers.dedup();
+        if rows.len() < GENERIC_MIN_ROWS || makers.len() < GENERIC_MIN_MAKERS {
+            continue;
+        }
+        let (Some(vc), Some(f), Some(ap)) = (
+            Quantiles::of(rows.iter().map(|r| r.1).collect()),
+            Quantiles::of(rows.iter().map(|r| r.2).collect()),
+            Quantiles::of(rows.iter().filter_map(|r| r.3).collect()),
+        ) else {
+            continue;
+        };
+        out.push(TurnGeneric {
+            group,
+            family,
+            n: rows.len(),
+            makers,
+            vc,
+            f,
+            ap,
+            cites: Vec::new(),
+        });
+    }
+    out
+}
+
+/// The `[[turn_generic]]` records' text.
+pub fn turn_generic_toml(table: &[TurnGeneric]) -> String {
+    let f5 = |a: Quantiles| {
+        format!(
+            "[{:.4}, {:.4}, {:.4}, {:.4}, {:.4}]",
+            a.min, a.p10, a.p25, a.median, a.max
+        )
+    };
+    let mut s = String::new();
+    for g in table {
+        s.push_str(&format!(
+            "\n[[turn_generic]]\ngroup = \"{}\"\nfamily = \"{}\"\nn = {}\nmakers = [{}]\nvc = {}\nf = {}\nap = {}\nreal = true\n",
+            g.group,
+            g.family,
+            g.n,
+            g.makers.iter().map(|m| format!("\"{m}\"")).collect::<Vec<_>>().join(", "),
+            f5(g.vc),
+            f5(g.f),
+            f5(g.ap)
+        ));
+        for (path, what) in [
+            ("vc", "cutting speeds"),
+            ("f", "feeds per revolution"),
+            ("ap", "depths of cut"),
+        ] {
+            s.push_str(&format!(
+                "[[turn_generic.cite]]\npath = \"{path}\"\nstatus = \"estimate\"\nsource = \"the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table\"\ntaken = \"2026-11-24\"\nbasis = \"min, 10th and 25th percentiles, median, max of {} makers' {what} over {} grade-table rows of class {}\"\n",
+                g.makers.len(),
+                g.n,
+                g.class()
+            ));
+        }
+    }
+    s
 }

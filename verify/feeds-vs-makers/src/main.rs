@@ -7,14 +7,16 @@ fn main() {
     let (rows, skips) = feeds_vs_makers::rows(&raw);
     if std::env::args().any(|a| a == "--generic") {
         let t = feeds_vs_makers::generic_table(&rows, None);
+        let tt = feeds_vs_makers::turn_generic_table(&forge_tooling::Library::builtin());
         std::fs::write(
             root.join("../../kernel/forge-tooling/data/generic.toml"),
-            feeds_vs_makers::generic_toml(&t),
+            feeds_vs_makers::generic_toml(&t) + &feeds_vs_makers::turn_generic_toml(&tt),
         )
         .unwrap();
         println!(
-            "{} generic classes (rerun without --generic for the report)",
-            t.len()
+            "{} generic classes, {} turning classes (rerun without --generic for the report)",
+            t.len(),
+            tt.len()
         );
         return;
     }

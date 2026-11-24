@@ -705,6 +705,7 @@ pub struct Library {
     /// Chip factors per op class (rough, finish) against the slot chip.
     pub op_classes: Vec<feeds::OpClassData>,
     pub generics: Vec<feeds::Generic>,
+    pub turn_generics: Vec<feeds::TurnGeneric>,
     /// Elastic data per tool substrate (deflection).
     pub substrates: Vec<feeds::SubstrateData>,
     pub vises: Vec<Vise>,
@@ -1050,6 +1051,9 @@ impl Library {
         for r in tables(&t, "generic") {
             self.generics.push(feeds::Generic::from_table(r)?);
         }
+        for r in tables(&t, "turn_generic") {
+            self.turn_generics.push(feeds::TurnGeneric::from_table(r)?);
+        }
         for r in tables(&t, "tap") {
             self.tapping.push(feeds::TapRow::from_table(r)?);
         }
@@ -1178,6 +1182,16 @@ impl Library {
             op: self.generic(group, op, tc)?,
             slot: self.generic(group, "slot", tc)?,
         })
+    }
+    /// The generic turning class for a group: the part's material family's where it has data,
+    /// else the whole group's.
+    pub fn turn_generic(&self, group: &str, family: Option<&str>) -> Option<&feeds::TurnGeneric> {
+        let find = |f: &str| {
+            self.turn_generics
+                .iter()
+                .find(|g| g.group == group && g.family == f)
+        };
+        family.and_then(find).or_else(|| find("*"))
     }
     pub fn op_class(&self, name: &str) -> Option<&feeds::OpClassData> {
         self.op_classes.iter().find(|x| x.name == name)

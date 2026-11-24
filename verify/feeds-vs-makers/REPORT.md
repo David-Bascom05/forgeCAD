@@ -334,30 +334,32 @@ All: rpm 0.60 (0.34–1.00, n 3124), fz 0.56 (0.30–0.96, n 3108), feed rate 0.
 
 ## Turning: insert presets against the makers' grade tables
 
-980 (row, insert) pairs from Sumitomo, Tungaloy, Korloy and Ingersoll grade tables (research/cam/tooling/raw/turn-vc), over 44 inserts of the library. Theirs is the maker's start value (Sumitomo's optimum, Korloy's recommended, else the low end of the printed range: the presets' convention); ours is the insert's preset as `Insert::preset_for` picks it. Ratios ours/theirs, median (10th–90th, n).
+1166 (row, insert) pairs from Sumitomo, Tungaloy, Korloy and Ingersoll grade tables (research/cam/tooling/raw/turn-vc), over 53 inserts of the library. Theirs is the maker's start value (Sumitomo's optimum, Korloy's recommended, else the low end of the printed range: the presets' convention); ours is the insert's preset as `Insert::preset_for` picks it. Ratios ours/theirs, median (10th–90th, n).
 
-- Reproduction: with the row's grade and material, 980 of 980 pairs land inside the maker's printed range (vc; f and ap where printed).
+- Reproduction: with the row's grade and material, 1154 of 1154 pairs land inside the maker's printed range (vc; f and ap where printed).
 
 | path | pairs | vc ours/theirs | f ours/theirs |
 |---|---|---|---|
-| own (grade + material) | 980 | 1.00 (1.00–1.00, n 980) | 1.00 (1.00–1.00, n 465) |
-| graded (grade, no material: the grade's lead row) | 980 | 1.07 (1.00–1.60, n 980) | 1.00 (1.00–1.00, n 465) |
-| default (no grade, no material: the slowest grade's lead row) | 980 | 0.94 (0.48–1.33, n 980) | 1.00 (0.71–1.00, n 465) |
+| own (grade + material) | 1154 | 1.00 (1.00–1.00, n 1154) | 1.00 (1.00–1.00, n 465) |
+| graded (grade, no material: P10 by speed of the grade's rows) | 1154 | 1.00 (0.62–1.00, n 1154) | 1.00 (1.00–1.00, n 465) |
+| default (no grade, no material: P10 by speed of the insert's rows) | 1154 | 0.77 (0.47–1.00, n 1154) | 1.00 (0.71–1.20, n 465) |
+| generic, held out (no preset: P10 of the class from the other makers) | 1077 | 0.75 (0.48–1.12, n 1077) | 0.40 (0.29–0.50, n 465) |
 
-- The default path is above the maker's start speed for the row in 246 of 980 pairs: a row of a slower material than the grade's lead row (the lead row is the maker's first printed material, e.g. Sumitomo's mild steel), or a slower grade's row when the insert's grade is not stated cannot be slower than the slowest grade's lead row.
+- Above the maker's start value for the row: the insert's default (no grade, no material) in 70 of 1154 pairs on speed, 56 of 465 on feed; the generic default held out (a tool with no preset, its class built from the other makers) in 204 of 1077 on speed, 0 of 465 on feed. The insert's default is a row of its own table (P10 by speed of every grade's printed rows), so it is above only the slowest few rows.
 
 | maker | pairs | default vc ours/theirs | default f ours/theirs |
 |---|---|---|---|
-| sumitomo | 348 | 1.13 (0.67–1.70, n 348) | 1.00 (0.71–1.20, n 348) |
+| sumitomo | 348 | 0.69 (0.53–1.00, n 348) | 1.00 (0.71–1.20, n 348) |
 | tungaloy | 117 | 0.42 (0.28–1.00, n 117) | 1.00 (1.00–1.00, n 117) |
-| korloy | 0 | – | – |
-| ingersoll | 515 | 0.85 (0.54–1.07, n 515) | – |
+| korloy | 186 | 0.90 (0.61–1.00, n 174) | – |
+| ingersoll | 515 | 0.82 (0.51–1.00, n 515) | – |
 
 | group | pairs | default vc ours/theirs | default f ours/theirs |
 |---|---|---|---|
-| P | 448 | 0.88 (0.33–1.21, n 448) | 1.00 (0.71–1.00, n 197) |
-| M | 326 | 1.00 (0.56–1.70, n 326) | 1.00 (0.71–1.00, n 160) |
-| K | 168 | 1.00 (0.67–1.18, n 168) | 1.00 (1.00–1.20, n 108) |
-| S | 38 | 0.77 (0.77–1.00, n 38) | – |
+| P | 502 | 0.77 (0.42–1.00, n 502) | 1.00 (1.00–1.00, n 197) |
+| M | 374 | 0.69 (0.53–1.00, n 374) | 1.00 (0.71–1.00, n 160) |
+| K | 201 | 0.85 (0.57–1.00, n 201) | 1.00 (1.00–1.20, n 108) |
+| S | 65 | 0.78 (0.70–1.00, n 65) | – |
+| H | 12 | 1.00 (0.90–1.00, n 12) | – |
 
-- Not compared: Korloy's 9 inserts (no s/re in the raw extraction, so no records), inserts and groups with no printed vc (see raw/turn-vc `missing`), and K/S/H/N tables for chipbreakers the inserts do not have. A tool with no preset for the part's group gets no turning default: the op asks for vc and f (no generic turning layer yet).
+- Not compared: inserts and groups with no printed vc (see raw/turn-vc `missing`), and K/S/H/N tables for chipbreakers the inserts do not have. A tool with no preset for the part's group takes the generic turning class (data/generic.toml `[[turn_generic]]`: P10 of the inserts' maker rows per group, and per material family where two makers print it), labelled, with its spread; an op is refused only when no class has data for the group.

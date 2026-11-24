@@ -1641,3 +1641,115 @@ status = "estimate"
 source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
 taken = "2026-11-24"
 basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 283 rows of class S titanium any op; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[turn_generic]]
+group = "K"
+family = "*"
+n = 41
+makers = ["Ingersoll", "Korloy", "Sumitomo Electric Hardmetal"]
+vc = [85.0000, 135.0000, 150.0000, 179.8320, 400.0000]
+f = [0.1000, 0.1000, 0.2000, 0.2500, 0.3560]
+ap = [0.4000, 1.0000, 1.0000, 2.0000, 2.9970]
+real = true
+[[turn_generic.cite]]
+path = "vc"
+status = "estimate"
+source = "the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' cutting speeds over 41 grade-table rows of class K turning"
+[[turn_generic.cite]]
+path = "f"
+status = "estimate"
+source = "the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' feeds per revolution over 41 grade-table rows of class K turning"
+[[turn_generic.cite]]
+path = "ap"
+status = "estimate"
+source = "the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' depths of cut over 41 grade-table rows of class K turning"
+
+[[turn_generic]]
+group = "M"
+family = "*"
+n = 68
+makers = ["Ingersoll", "Korloy", "Sumitomo Electric Hardmetal"]
+vc = [79.2480, 100.5840, 120.0000, 150.0000, 240.7920]
+f = [0.1000, 0.1000, 0.2300, 0.3050, 0.3560]
+ap = [0.4000, 0.5000, 1.5000, 2.0070, 3.0000]
+real = true
+[[turn_generic.cite]]
+path = "vc"
+status = "estimate"
+source = "the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' cutting speeds over 68 grade-table rows of class M turning"
+[[turn_generic.cite]]
+path = "f"
+status = "estimate"
+source = "the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' feeds per revolution over 68 grade-table rows of class M turning"
+[[turn_generic.cite]]
+path = "ap"
+status = "estimate"
+source = "the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' depths of cut over 68 grade-table rows of class M turning"
+
+[[turn_generic]]
+group = "P"
+family = "*"
+n = 106
+makers = ["Ingersoll", "Korloy", "Sumitomo Electric Hardmetal", "Tungaloy"]
+vc = [50.0000, 118.8720, 140.2080, 170.6880, 350.0000]
+f = [0.1000, 0.1000, 0.2000, 0.2790, 0.3560]
+ap = [0.4000, 1.0000, 1.0000, 2.0070, 2.9970]
+real = true
+[[turn_generic.cite]]
+path = "vc"
+status = "estimate"
+source = "the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 4 makers' cutting speeds over 106 grade-table rows of class P turning"
+[[turn_generic.cite]]
+path = "f"
+status = "estimate"
+source = "the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 4 makers' feeds per revolution over 106 grade-table rows of class P turning"
+[[turn_generic.cite]]
+path = "ap"
+status = "estimate"
+source = "the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 4 makers' depths of cut over 106 grade-table rows of class P turning"
+
+[[turn_generic]]
+group = "S"
+family = "*"
+n = 18
+makers = ["Ingersoll", "Korloy"]
+vc = [30.4800, 30.4800, 35.0000, 39.6240, 55.0000]
+f = [0.1000, 0.1000, 0.1000, 0.2300, 0.3560]
+ap = [0.4000, 0.4000, 0.5000, 1.5000, 2.9970]
+real = true
+[[turn_generic.cite]]
+path = "vc"
+status = "estimate"
+source = "the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds over 18 grade-table rows of class S turning"
+[[turn_generic.cite]]
+path = "f"
+status = "estimate"
+source = "the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' feeds per revolution over 18 grade-table rows of class S turning"
+[[turn_generic.cite]]
+path = "ap"
+status = "estimate"
+source = "the inserts' [[insert.preset]] (kernel/forge-tooling/data/turning/*.toml), each cited to its maker's grade table"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' depths of cut over 18 grade-table rows of class S turning"

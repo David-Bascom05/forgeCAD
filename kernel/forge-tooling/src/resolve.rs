@@ -979,6 +979,23 @@ pub struct TurnData {
     pub source: String,
     /// The entering angle κr, degrees (the holder's `kr`); None: not known.
     pub kr: Option<f64>,
+    /// The layer these values are: `Library` (the insert's own maker preset) or `Material`
+    /// (the generic turning class, `from_generic`).
+    pub layer: Source,
+    /// The makers' spread of the generic class (None for a preset).
+    pub spread: Option<TurnSpread>,
+}
+
+/// The makers' spread for a generic turning class.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TurnSpread {
+    pub class: String,
+    pub n: usize,
+    pub makers: Vec<String>,
+    /// m/min, mm/rev, mm.
+    pub vc: Quantiles,
+    pub f: Quantiles,
+    pub ap: Quantiles,
 }
 
 impl TurnData {
@@ -999,6 +1016,40 @@ impl TurnData {
             ap: p.preset.ap,
             source: format!("the insert's {} preset, {}; {cite}", p.preset.name, p.why),
             kr,
+            layer: Source::Library,
+            spread: None,
+        }
+    }
+    /// The generic turning default for a tool with no maker data for the group: the class's
+    /// 10th percentile speed, feed and depth (coordinator's rule: too fast breaks tools, too
+    /// slow only costs time), with the class's spread.
+    pub fn from_generic(g: &feeds::TurnGeneric, kr: Option<f64>) -> TurnData {
+        TurnData {
+            vc: Some(g.vc.default_value()),
+            f: Some(g.f.default_value()),
+            ap: Some(g.ap.default_value()),
+            source: format!(
+                "10th percentile of {} maker insert rows ({}) for class {}; vc {:.0}–{:.0} (median {:.0}) m/min, f {:.2}–{:.2} (median {:.2}) mm/rev (data/generic.toml)",
+                g.n,
+                g.makers.join(", "),
+                g.class(),
+                g.vc.min,
+                g.vc.max,
+                g.vc.median,
+                g.f.min,
+                g.f.max,
+                g.f.median
+            ),
+            kr,
+            layer: Source::Material,
+            spread: Some(TurnSpread {
+                class: g.class(),
+                n: g.n,
+                makers: g.makers.clone(),
+                vc: g.vc,
+                f: g.f,
+                ap: g.ap,
+            }),
         }
     }
 }
@@ -1022,6 +1073,8 @@ pub struct TurnPoint {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TurnResolved {
+    /// The makers' spread where the values are the generic turning class's.
+    pub spread: Option<TurnSpread>,
     /// G96 surface speed, or the speed of a fixed rpm at the largest diameter.
     pub vc: Val,
     /// G97 spindle speed, when fixed.
@@ -1053,9 +1106,8 @@ pub fn turning(
     spindle: &Spindle,
     d_range: [f64; 2],
 ) -> Option<TurnResolved> {
-    let lib = |v: Option<f64>, unit: &'static str| {
-        v.map(|x| Val::new(x, unit, Source::Library, tool.source.clone()))
-    };
+    let lib =
+        |v: Option<f64>, unit: &'static str| v.map(|x| Val::new(x, unit, tool.layer, tool.source.clone()));
     let user = |v: Option<f64>, unit: &'static str| v.map(|x| Val::new(x, unit, Source::User, ""));
     let f = user(ask.f, "mm/rev").or_else(|| lib(tool.f, "mm/rev"))?;
     let ap = user(ask.ap, "mm").or_else(|| lib(tool.ap, "mm"))?;
@@ -1279,6 +1331,7 @@ pub fn turning(
         }
     });
     Some(TurnResolved {
+        spread: tool.spread.clone(),
         vc,
         rpm: rpm_fixed,
         max_rpm,
@@ -1960,6 +2013,8 @@ mod tests {
             ap: Some(3.0),
             source: "test insert".into(),
             kr: Some(90.0),
+            layer: Source::Library,
+            spread: None,
         }
     }
 

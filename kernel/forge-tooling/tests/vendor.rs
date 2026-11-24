@@ -528,9 +528,10 @@ fn shop_part_tools() {
     assert_eq!((tm.dc, tm.tp, tm.nof), (7.0, 1.5, 3));
 }
 
-/// An insert's preset for a cut: the grade asked (an unknown one lists the grades), none asked
-/// the slowest grade's lead row; within the grade the row naming the stock material, else the
-/// grade's lead row; the turning resolver's library layer carries it with its cite.
+/// An insert's preset for a cut: the grade asked (an unknown one lists the grades); within the
+/// grade the row naming the stock material, else the 10th percentile by speed of the grade's
+/// rows; no grade asked, the 10th percentile of all the insert's rows for the group. The
+/// turning resolver's library layer carries it with its cite.
 #[test]
 fn insert_preset_for_grade_and_material() {
     let l = Library::builtin();
@@ -542,24 +543,66 @@ fn insert_preset_for_grade_and_material() {
     // CAM-HAAS's example: P GU AC8115P = vc 350, f 0.25, ap 2.5 (the printed optimum)
     let p = ins.preset_for("P", Some("AC8115P"), None).unwrap().unwrap();
     assert_eq!((p.preset.vc, p.preset.fz, p.preset.ap), (350.0, 0.25, Some(2.5)));
-    assert!(p.why.contains("lead row"), "{}", p.why);
+    assert!(p.why.contains("10th percentile"), "{}", p.why);
     // a grade the maker prints none for: the grades it has, to choose from
     let e = ins.preset_for("P", Some("XX99"), None).unwrap_err();
     assert!(e.contains(&"AC8115P".to_string()), "{e:?}");
-    // no grade: the slowest of the grades' lead rows
+    // no grade: the 10th percentile by speed over every grade's material rows for P
     let d = ins.preset_for("P", None, None).unwrap().unwrap();
-    let slowest = ins
+    let rows: Vec<f64> = ins
         .presets
         .iter()
-        .filter(|q| q.group == "P" && q.name.split(' ').count() == 3)
+        .filter(|q| q.group == "P" && q.name.split(' ').count() > 3)
         .map(|q| q.vc)
-        .fold(f64::INFINITY, f64::min);
-    assert_eq!(d.preset.vc, slowest);
+        .collect();
+    let q = forge_tooling::feeds::Quantiles::of(rows).unwrap();
+    assert_eq!(d.preset.vc, q.p10);
     assert!(d.why.contains("grade not stated"), "{}", d.why);
+    // a named material picks its row in the grade: Sumitomo's medium/high carbon steel row
+    let m = ins
+        .preset_for("P", Some("AC8025P"), Some("C45 bright"))
+        .unwrap()
+        .unwrap();
+    assert!(
+        m.why.contains("10th percentile") || m.why.contains("stock material"),
+        "{}",
+        m.why
+    );
     // the turning resolver's library layer, with the cite's page
     let t = forge_tooling::resolve::TurnData::from_pick(&p, Some(95.0));
     assert_eq!((t.vc, t.f, t.ap), (Some(350.0), Some(0.25), Some(2.5)));
     assert!(t.source.contains("sumitool.com"), "{}", t.source);
     // no preset for the group: none (the op asks for vc and f)
     assert!(ins.preset_for("N", None, None).unwrap().is_none());
+}
+
+/// A turning tool with no preset for the group takes the generic turning class: P10 of the
+/// makers' insert rows for the group, labelled `material` with the class's spread.
+#[test]
+fn generic_turning_default() {
+    use forge_tooling::resolve::{self, Source, Spindle, TurnAsk, TurnData};
+    let l = Library::builtin();
+    let g = l.turn_generic("P", Some("wood")).unwrap();
+    assert_eq!((g.group.as_str(), g.family.as_str()), ("P", "*"));
+    assert!(g.makers.len() >= 2 && g.n >= 10);
+    let t = TurnData::from_generic(g, Some(95.0));
+    let r = resolve::turning(
+        &TurnAsk::default(),
+        &t,
+        l.group("P"),
+        &Spindle {
+            rpm: [50.0, 4000.0],
+            max_feed: 0.0,
+            power: &[],
+        },
+        [20.0, 60.0],
+    )
+    .unwrap();
+    assert_eq!((r.vc.v, r.vc.source), (g.vc.p10, Source::Material));
+    assert_eq!((r.f.v, r.f.source), (g.f.p10, Source::Material));
+    assert!(r.vc.note.contains("10th percentile"), "{}", r.vc.note);
+    let sp = r.spread.unwrap();
+    assert_eq!((sp.vc, sp.n), (g.vc, g.n));
+    // no class for a group with no turning data: nothing to default to (the op is refused)
+    assert!(l.turn_generic("N", None).is_none());
 }

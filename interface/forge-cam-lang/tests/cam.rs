@@ -1516,6 +1516,10 @@ fn generic_tools_take_their_class_by_material_family() {
     assert_eq!(al.vc.v, sp.vc.p10);
     assert!(al.vc.note.contains("10th percentile"), "{}", al.vc.note);
     let spn = n.spread.clone().unwrap();
-    assert!(!spn.class.contains("aluminium") && !spn.class.contains("copper"), "{}", spn.class);
+    assert!(
+        !spn.class.contains("aluminium") && !spn.class.contains("copper"),
+        "{}",
+        spn.class
+    );
     assert!(n.vc.v < al.vc.v, "{} {}", n.vc.v, al.vc.v);
 }

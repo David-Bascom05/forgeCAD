@@ -183,57 +183,74 @@ impl Insert {
         let mut grades: Vec<&str> = parts.iter().map(|x| x.1).collect();
         grades.sort();
         grades.dedup();
-        let lead = |g: &str| parts.iter().find(|x| x.1 == g && x.2.is_empty()).map(|x| x.0);
-        let (grade, how) = match grade {
-            Some(g) if grades.contains(&g) => (g, format!("grade {g}")),
-            Some(_) => return Err(grades.iter().map(|g| g.to_string()).collect()),
-            None => {
-                let g = grades
+        // the 10th-percentile row by speed of a set (an actual cited row: nearest rank)
+        fn p10(rows: Vec<&Preset>) -> Option<&Preset> {
+            let q = crate::feeds::Quantiles::of(rows.iter().map(|p| p.vc).collect())?;
+            rows.into_iter().find(|p| p.vc == q.p10)
+        }
+        // a grade's material rows (its lead row where it prints none)
+        let rows_of = |g: Option<&str>| -> Vec<&Preset> {
+            let m: Vec<&Preset> = parts
+                .iter()
+                .filter(|x| g.is_none_or(|g| x.1 == g) && !x.2.is_empty())
+                .map(|x| x.0)
+                .collect();
+            if m.is_empty() {
+                parts
                     .iter()
-                    .copied()
-                    .filter(|g| lead(g).is_some())
-                    .min_by(|a, b| lead(a).unwrap().vc.total_cmp(&lead(b).unwrap().vc))
-                    .unwrap_or(grades[0]);
-                (
-                    g,
-                    if grades.len() > 1 {
-                        format!(
-                            "grade not stated: {g}, the slowest of the maker's {} for {group} ({}); give the insert's grade to use its own",
-                            grades.len(),
-                            grades.join(", ")
-                        )
-                    } else {
-                        format!("grade {g} (the only one printed for {group})")
-                    },
-                )
+                    .filter(|x| g.is_none_or(|g| x.1 == g))
+                    .map(|x| x.0)
+                    .collect()
+            } else {
+                m
             }
         };
-        let matched = material.and_then(|m| {
-            parts
+        let grade = match grade {
+            Some(g) if grades.contains(&g) => Some(g),
+            Some(_) => return Err(grades.iter().map(|g| g.to_string()).collect()),
+            None => None,
+        };
+        let matched = match (grade, material) {
+            (Some(g), Some(m)) => parts
                 .iter()
-                .filter(|x| x.1 == grade && !x.2.is_empty())
+                .filter(|x| x.1 == g && !x.2.is_empty())
                 .map(|x| (material_score(x.2, m), x.0))
                 .filter(|x| x.0 > 0)
                 .max_by(|a, b| a.0.cmp(&b.0).then(b.1.vc.total_cmp(&a.1.vc)))
-                .map(|x| x.1)
-        });
-        let (p, why) = match (matched, lead(grade)) {
-            (Some(p), _) => (p, format!("{how}; the maker's row for the stock material")),
-            (None, Some(p)) => (
-                p,
-                format!(
-                    "{how}; the maker's lead row for the grade{}",
-                    if material.is_some() {
-                        " (no row names the stock material)"
-                    } else {
-                        ""
-                    }
-                ),
-            ),
-            (None, None) => match parts.iter().find(|x| x.1 == grade) {
-                Some(x) => (x.0, how),
-                None => return Ok(None),
-            },
+                .map(|x| x.1),
+            _ => None,
+        };
+        let (p, why) = match (matched, grade) {
+            (Some(p), Some(g)) => (p, format!("grade {g}; the maker's row for the stock material")),
+            (_, Some(g)) => {
+                let rows = rows_of(Some(g));
+                let n = rows.len();
+                let Some(p) = p10(rows) else { return Ok(None) };
+                (
+                    p,
+                    format!(
+                        "grade {g}; {}: the 10th percentile by speed of the grade's {n} rows",
+                        if material.is_some() {
+                            "no row names the stock material"
+                        } else {
+                            "no stock material named"
+                        }
+                    ),
+                )
+            }
+            (_, None) => {
+                let rows = rows_of(None);
+                let n = rows.len();
+                let Some(p) = p10(rows) else { return Ok(None) };
+                (
+                    p,
+                    format!(
+                        "grade not stated: the 10th percentile by speed of the insert's {n} rows for {group} over its {} grades ({}); give the insert's grade (and the stock material) to use its own",
+                        grades.len(),
+                        grades.join(", ")
+                    ),
+                )
+            }
         };
         let path = format!("preset.{}", p.name);
         Ok(Some(InsertPick {

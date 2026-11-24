@@ -108,7 +108,8 @@ fn generic_held_out_by_maker() {
 #[test]
 fn generic_table_is_current() {
     let t = feeds_vs_makers::generic_table(&rows(), None);
-    let now = feeds_vs_makers::generic_toml(&t);
+    let tt = feeds_vs_makers::turn_generic_table(&forge_tooling::Library::builtin());
+    let now = feeds_vs_makers::generic_toml(&t) + &feeds_vs_makers::turn_generic_toml(&tt);
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kernel/forge-tooling/data/generic.toml");
     if std::env::var("FORGE_BLESS").is_ok() {
         std::fs::write(&path, &now).unwrap();

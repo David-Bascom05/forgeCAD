@@ -29,6 +29,9 @@ pub struct TurnRow {
     pub graded: Option<(f64, f64, Option<f64>)>,
     pub default: Option<(f64, f64, Option<f64>)>,
     pub default_why: String,
+    /// The generic turning default (a tool with no preset), its class built from the other
+    /// makers' inserts only (held out): (vc, f, ap).
+    pub generic_held_out: Option<(f64, f64, Option<f64>)>,
     pub url: String,
 }
 
@@ -58,6 +61,9 @@ fn printed(j: Option<&Json>) -> Option<(f64, f64, f64)> {
 
 pub fn rows(raw: &Path) -> Vec<TurnRow> {
     let lib = Library::builtin();
+    // the generic turning classes without each maker (the maker's name as its inserts carry it)
+    let mut held: std::collections::BTreeMap<String, Vec<forge_tooling::feeds::TurnGeneric>> =
+        Default::default();
     let mut out = Vec::new();
     for maker in ["sumitomo", "tungaloy", "korloy", "ingersoll"] {
         let Ok(src) = std::fs::read_to_string(raw.join(format!("turn-vc/{maker}.json"))) else {
@@ -93,6 +99,20 @@ pub fn rows(raw: &Path) -> Vec<TurnRow> {
                     .find(|p| p.name == own_name)
                     .map(|p| (p.vc, p.fz, p.ap));
                 let dflt = ins.preset_for(&group, None, None).ok().flatten();
+                let table = held
+                    .entry(ins.maker.clone())
+                    .or_insert_with(|| crate::turn_generic_table_without(&lib, Some(&ins.maker)));
+                let fam = forge_tooling::feeds::family_of_text(&material);
+                let generic = fam
+                    .and_then(|f| table.iter().find(|g| g.group == group && g.family == f))
+                    .or_else(|| table.iter().find(|g| g.group == group && g.family == "*"))
+                    .map(|g| {
+                        (
+                            g.vc.default_value(),
+                            g.f.default_value(),
+                            Some(g.ap.default_value()),
+                        )
+                    });
                 out.push(TurnRow {
                     maker: maker.into(),
                     insert: lid.clone(),
@@ -106,6 +126,7 @@ pub fn rows(raw: &Path) -> Vec<TurnRow> {
                     graded: run(Some(&grade), None),
                     default: dflt.as_ref().map(|p| (p.preset.vc, p.preset.fz, p.preset.ap)),
                     default_why: dflt.map_or(String::new(), |p| p.why),
+                    generic_held_out: generic,
                     url: s("url"),
                 });
             }
@@ -168,21 +189,29 @@ pub fn markdown(rows: &[TurnRow]) -> String {
     };
     s.push_str("\n| path | pairs | vc ours/theirs | f ours/theirs |\n|---|---|---|---|\n");
     s.push_str(&line("own (grade + material)", &|r| r.ratio(r.own)));
-    s.push_str(&line("graded (grade, no material: the grade's lead row)", &|r| {
-        r.ratio(r.graded)
-    }));
     s.push_str(&line(
-        "default (no grade, no material: the slowest grade's lead row)",
+        "graded (grade, no material: P10 by speed of the grade's rows)",
+        &|r| r.ratio(r.graded),
+    ));
+    s.push_str(&line(
+        "default (no grade, no material: P10 by speed of the insert's rows)",
         &|r| r.ratio(r.default),
     ));
-    let above = rows
-        .iter()
-        .filter_map(|r| r.ratio(r.default))
-        .filter(|x| x.0 > 1.0 + 1e-9)
-        .count();
-    let n = rows.iter().filter(|r| r.default.is_some()).count();
+    s.push_str(&line(
+        "generic, held out (no preset: P10 of the class from the other makers)",
+        &|r| r.ratio(r.generic_held_out),
+    ));
+    let share = |f: &PathRatio| {
+        let v: Vec<(f64, Option<f64>)> = rows.iter().filter_map(f).collect();
+        let a = v.iter().filter(|x| x.0 > 1.0 + 1e-9).count();
+        let fa = v.iter().filter_map(|x| x.1).filter(|x| *x > 1.0 + 1e-9).count();
+        let fv = v.iter().filter_map(|x| x.1).count();
+        (a, v.len(), fa, fv)
+    };
+    let (a, n, fa, fv) = share(&|r| r.ratio(r.default));
+    let (ga, gn, gfa, gfv) = share(&|r| r.ratio(r.generic_held_out));
     s.push_str(&format!(
-        "\n- The default path is above the maker's start speed for the row in {above} of {n} pairs: a row of a slower material than the grade's lead row (the lead row is the maker's first printed material, e.g. Sumitomo's mild steel), or a slower grade's row when the insert's grade is not stated cannot be slower than the slowest grade's lead row.\n"
+        "\n- Above the maker's start value for the row: the insert's default (no grade, no material) in {a} of {n} pairs on speed, {fa} of {fv} on feed; the generic default held out (a tool with no preset, its class built from the other makers) in {ga} of {gn} on speed, {gfa} of {gfv} on feed. The insert's default is a row of its own table (P10 by speed of every grade's printed rows), so it is above only the slowest few rows.\n"
     ));
     s.push_str("\n| maker | pairs | default vc ours/theirs | default f ours/theirs |\n|---|---|---|---|\n");
     for m in ["sumitomo", "tungaloy", "korloy", "ingersoll"] {
@@ -209,6 +238,6 @@ pub fn markdown(rows: &[TurnRow]) -> String {
             fmt(stats(r.iter().filter_map(|x| x.1).collect()))
         ));
     }
-    s.push_str("\n- Not compared: Korloy's 9 inserts (no s/re in the raw extraction, so no records), inserts and groups with no printed vc (see raw/turn-vc `missing`), and K/S/H/N tables for chipbreakers the inserts do not have. A tool with no preset for the part's group gets no turning default: the op asks for vc and f (no generic turning layer yet).\n");
+    s.push_str("\n- Not compared: inserts and groups with no printed vc (see raw/turn-vc `missing`), and K/S/H/N tables for chipbreakers the inserts do not have. A tool with no preset for the part's group takes the generic turning class (data/generic.toml `[[turn_generic]]`: P10 of the inserts' maker rows per group, and per material family where two makers print it), labelled, with its spread; an op is refused only when no class has data for the group.\n");
     s
 }
