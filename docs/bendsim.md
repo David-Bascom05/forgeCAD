@@ -117,8 +117,11 @@ z up from the die's top.
 Fold states are the exact partial refolds of the folded part (the neutral layer kept). Distances
 are certified, not sampled: each piece is enclosed over boxes of its parameters and of the motion
 by outward-rounded interval arithmetic and branch and bound, so a pass holds at every instant of
-the bend (to the stated resolution: distance >= limit - res), and a fail names a real point whose
-distance, its error budget added, is under the limit. Anything else is `undecided`, never a pass.
+the bend (distance >= limit, proven), and a fail names a real point whose distance, its error
+budget added, is under the limit. A distance proven only to within the search's resolution of the
+limit (limit - res <= distance, not proven >= limit, and no point found under it) is `near`: a
+warning, not a pass, that leaves the program feasible (the reply gives its `resolution`). Anything
+else is `undecided`, never a pass.
 The double signed distances carry a stated error budget (`forge_brake::bb::sd_err`), an
 assumption still to be proven. Contacts the bend is made by (the punch tip on the zone,
 the legs on the die's shoulders) are decided by the closed-form rules. The search is deterministic.
