@@ -26,10 +26,16 @@
     cross-section, name, angle, radius, height, rated load; the id on hover), only what fits;
   - 08: the stations on the bed, drawn to scale between the housings, each stack in its
     published segments; dragged to place;
-  - 09: the same at 1024 x 700: nothing cut off.
+  - 09: the same at 1024 x 700: nothing cut off;
+  - 10: the view cube's LEFT: down the bend line (the cube is named in the press's frame: LEFT
+    and RIGHT along the bed, FRONT the operator's side, BACK the backgauge's; its home the
+    framed working zone);
+  - 11: see-through: from the operator's side and above, the part's web and first flange stand
+    between the eye and the second bend and are drawn as ghosts (per body, kept up with the eye;
+    a collision's red is never ghosted).
 - `shots/web-*.png`: interface/forge-render/web/tests/bendsim.cjs in Chromium (software WebGPU),
-  the wasm32 build: the same channel on the library's first press with its maker's tools
-  (TruBend 5085), at the start, the first bend and the second.
+  the wasm32 build (bendsim/env f6763b3a): the same channel on the library's first press with
+  its maker's tools, at the start, the first bend and the second; the same layout as native.
 - `band-27900c27.txt`: tools/speed/band.py, main f04c533e vs bendsim/env 27900c27, exact
   callgrind on one machine: every strict line <= +0.0000%, strict total -0.0085%; bits.txt
   unchanged.
