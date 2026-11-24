@@ -550,8 +550,17 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
         } else {
             format!("{} / {}", clock(st.t), clock(total))
         };
-        ui.label(egui::RichText::new(now).monospace().color(t.ink))
-            .on_hover_text(format!("{} of {}", clock(st.t), clock(total)));
+        // the playback clock runs at feed time (feeds and rapids at their programmed rates): not
+        // the cycle time, which the Program tab gives (the bound and the estimate)
+        let tip = format!(
+            "{} of {} at feed time: feeds and rapids at their programmed rates, no acceleration or tool changes. Not the cycle time: the Program tab gives that (\u{2265} the least it can take \u{b7} est. an estimate).",
+            clock(st.t),
+            clock(total)
+        );
+        ui.label(egui::RichText::new(now).monospace().color(t.ink)).on_hover_text(&tip);
+        if !compact {
+            ui.label(egui::RichText::new("feed time").size(11.0).color(t.ink2)).on_hover_text(&tip);
+        }
         ui.separator();
         if !compact {
             ui.label(egui::RichText::new("Speed").color(t.ink2));
