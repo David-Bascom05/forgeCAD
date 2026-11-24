@@ -149,7 +149,7 @@ def interval.Interval.atan2.closure_1 := Unit
 def interval.Interval.atan2.closure := Unit
 
 /-- [forge_math::interval::Box3]
-    Source: 'kernel/forge-math/src/interval.rs', lines 244:0-248:1
+    Source: 'kernel/forge-math/src/interval.rs', lines 291:0-295:1
     Visibility: public -/
 structure interval.Box3 where
   x : interval.Interval
@@ -157,7 +157,7 @@ structure interval.Box3 where
   z : interval.Interval
 
 /-- [forge_math::interval::Box2]
-    Source: 'kernel/forge-math/src/interval.rs', lines 310:0-313:1
+    Source: 'kernel/forge-math/src/interval.rs', lines 357:0-360:1
     Visibility: public -/
 structure interval.Box2 where
   u : interval.Interval

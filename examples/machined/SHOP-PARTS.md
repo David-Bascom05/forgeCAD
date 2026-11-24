@@ -78,7 +78,7 @@ stock that `rough` did not remove.
 | tap | refused | the same rapid into the same unremoved stock |
 | brk | certified | |
 | face2, rel | certified | |
-| cbh | certified | Guhring 5.5 drill. The drill stopped 1.28 mm short of the flat floor (e7b3cd87: it was a −0.52 gouge through the floor). The floor's ring and the Ø10 × 5 counterbore are left uncut, said |
+| cbh | certified | Guhring 5.5 drill, its point stopped on the flat floor (e7b3cd87: it was a −0.52 gouge through the floor); then the Ø10 × 5 counterbore pocketed by the largest end mill under 10 (9b4e598a). The floor's ring is said |
 
 ### hub_turn.fg: certified in full on claude/cam-turn-hub @f8b0152f (14 ops, 1811 checks, 0.58 s)
 
