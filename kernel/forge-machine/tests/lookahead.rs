@@ -175,7 +175,8 @@ fn bounds_and_the_acceleration_scale() {
     };
     let (h, one, two) = (at(0.5), at(1.0), at(2.0));
     assert!(h >= one && one >= two, "{h} {one} {two}");
-    assert!(close(one, tl.t_la));
+    // plan gives the segments; the program's t_la adds what t_min spends off them (the dwell)
+    assert!(close(one, tl.seg_la.iter().sum::<f64>()));
     println!(
         "t_min {:.3}  t_la {:.3} (x0.5 {h:.3}, x2 {two:.3})  t_stop {:.3}",
         tl.t_min, tl.t_la, tl.t_stop
@@ -286,4 +287,37 @@ fn a_records_acceleration_takes_precedence_over_the_assumption_set() {
         (t - trapezoid(100.0, 0.0, 0.0, 100.0, 3000.0)).abs() < 1e-6,
         "{t}"
     );
+}
+
+/// The whole program: tool changes and dwells (marks, not segments) are in t_la and t_scurve as
+/// in t_min, so the estimates never come out under the bound (CAM-UI's report).
+#[test]
+fn the_program_estimates_count_tool_changes_and_dwells() {
+    let m = builtin_named("generic-vmc3").unwrap();
+    let mut s = Setup::new(&m, Control::for_dialect(&m, "fanuc", 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -300.0])];
+    s.h = vec![(1, 100.0), (2, 90.0)];
+    let tool = |t: u32| SimTool {
+        t,
+        name: format!("e{t}"),
+        tip: [0.0, 0.0, -100.0],
+        body: vec![(5.0, 0.0, 25.0), (12.0, 25.0, 80.0)],
+        cut: Cut::Mill { r: 5.0, corner: 0.0 },
+    };
+    s.tools = vec![tool(1), tool(2)];
+    s.start_tool = Some(1);
+    let prog = "G43 H1\nG0 X0 Y0 Z10.\nG1 X1. F6000.\nG4 P2000\nG0 Z100.\nT2 M6\nG43 H2\nG0 X0 Y0 Z10.\n\
+                G1 X1. F6000.\nG4 P3000\nG0 Z100.\nT1 M6\nG43 H1\nG0 X2. Y0 Z10.\n";
+    let tl = sim::simulate(prog, &s).unwrap();
+    let on_segments: f64 = tl.segments.iter().map(|g| g.t_min).sum();
+    let off = tl.t_min - on_segments;
+    let change = m.changer.as_ref().and_then(|c| c.change_s).unwrap_or(0.0);
+    // two dwells (5 s) and two changes: off the segments, and counted once each
+    assert!(off >= 5.0 + 2.0 * change - 1e-9, "{off}");
+    assert!(tl.t_min <= tl.t_la + 1e-9, "t_min {} t_la {}", tl.t_min, tl.t_la);
+    assert!(tl.t_min <= tl.t_scurve + 1e-9, "t_min {} t_scurve {}", tl.t_min, tl.t_scurve);
+    let la: f64 = tl.seg_la.iter().sum();
+    let sc: f64 = tl.seg_scurve.iter().sum();
+    assert!(close(tl.t_la, la + off), "{} vs {}", tl.t_la, la + off);
+    assert!(close(tl.t_scurve, sc + off), "{} vs {}", tl.t_scurve, sc + off);
 }

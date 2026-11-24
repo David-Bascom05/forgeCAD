@@ -1387,12 +1387,15 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
     }
     tl.t_min = t;
     tl.t_stop = t_est;
+    // the time t_min spends off the segments (tool changes, dwells, indexes, pallet changes: the
+    // marks), which the planners do not see: added to both, as t_min counts it
+    let off_segments = (t - tl.segments.iter().map(|sg| sg.t_min).sum::<f64>()).max(0.0);
     let (per, total) = crate::lookahead::plan(def, &tl, &crate::lookahead::LookAhead::default());
     tl.seg_la = per;
-    tl.t_la = total;
+    tl.t_la = total + off_segments;
     let (per, total) = crate::lookahead::plan_scurve(def, &tl, &crate::lookahead::SCurve::default());
     tl.seg_scurve = per;
-    tl.t_scurve = total;
+    tl.t_scurve = total + off_segments;
     for sg in &tl.segments {
         for z in &def.zones {
             if let Some(sv) = zone_entry(def, z, sg) {
