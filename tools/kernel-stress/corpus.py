@@ -74,7 +74,7 @@ def make(out):
                     continue
                 s, op = key.split(":", 1)
                 sol = f["solids"].get(int(s[1:]), {})
-                st = "hang" if h in f["hangs"] else f"crash rc {h['rc']}"
+                st = h.get("what", "hang") if h in f["hangs"] else f"crash rc {h['rc']}"
                 by[f"{family(op)} {st}"].append((sol.get("faces", 10**9), [
                     z["name"] + ".zip", f["file"], str(sol.get("ent", "?")), family(op), st, h.get("d", "")[:120]]))
     print("\t".join(COLS))

@@ -9,7 +9,8 @@
 //! An `Ok` whose body fails `check`, whose mesh is open, or whose volume disagrees with the
 //! oracle is `wrong`: the worst kind of answer, so it is told apart from a refusal.
 //!
-//! `forge-stress FILE.step [--timeout S] [--max-solids N] [--skip k1,k2] [--only k1,k2]`
+//! `forge-stress FILE.step [--timeout S] [--max-rss-mb M] [--max-solids N] [--skip k1,k2] [--only k1,k2]`
+//! Past `--max-rss-mb` (4000) resident, the op is written as `memory` and the run ends as for a hang.
 
 use forge_bool::{Op, boolean};
 use forge_math::{Box3, Frame, Point2, Point3, UnitVec3, Vec3};
@@ -277,14 +278,12 @@ impl Ops<'_> {
         let key = format!("s{}:{op}", self.s);
         // the answer's check, mass and mesh are watched with it: a body a boolean got wrong can
         // hang them as well as the boolean
-        let (r, ms) = self
-            .cx
-            .run(&key, || {
-                let t = Instant::now();
-                let r = boolean(a, b, how, 9000).map_err(|e| format!("{e:?}"));
-                let bms = t.elapsed().as_secs_f64() * 1e3;
-                (bms, judge(r))
-            });
+        let (r, ms) = self.cx.run(&key, || {
+            let t = Instant::now();
+            let r = boolean(a, b, how, 9000).map_err(|e| format!("{e:?}"));
+            let bms = t.elapsed().as_secs_f64() * 1e3;
+            (bms, judge(r))
+        });
         match r {
             Res::Skipped => f64::NAN,
             Res::Panic(m) => {
@@ -293,7 +292,13 @@ impl Ops<'_> {
             }
             Res::Done((bms, (st, v, d))) => {
                 // the boolean's own time; the check of its answer after it is in `all_ms`
-                self.line(op, bms, &st, &format!(",\"vol\":{},\"all_ms\":{ms:.1}", num(v)), &d);
+                self.line(
+                    op,
+                    bms,
+                    &st,
+                    &format!(",\"vol\":{},\"all_ms\":{ms:.1}", num(v)),
+                    &d,
+                );
                 if st == "empty" { 0.0 } else { v }
             }
         }
@@ -356,17 +361,25 @@ fn main() {
             .unwrap_or_default();
         *PANIC.lock().unwrap() = format!("{msg}{loc}");
     }));
+    let max_rss: f64 = opt("--max-rss-mb").and_then(|t| t.parse().ok()).unwrap_or(4000.0);
     {
         let armed = armed.clone();
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(Duration::from_millis(200));
-                if let Some((k, when)) = armed.lock().unwrap().clone()
-                    && Instant::now() > when
-                {
-                    let (hwm, _) = rss();
-                    emit(format!("{{\"ev\":\"hang\",\"key\":\"{k}\",\"hwm_mb\":{hwm:.0}}}"));
-                    std::process::exit(3);
+                if let Some((k, when)) = armed.lock().unwrap().clone() {
+                    let (hwm, cur) = rss();
+                    if Instant::now() > when {
+                        emit(format!("{{\"ev\":\"hang\",\"key\":\"{k}\",\"hwm_mb\":{hwm:.0}}}"));
+                        std::process::exit(3);
+                    }
+                    // an op that eats the machine: written, and the run ends as for a hang
+                    if cur > max_rss {
+                        emit(format!(
+                            "{{\"ev\":\"memory\",\"key\":\"{k}\",\"rss_mb\":{cur:.0}}}"
+                        ));
+                        std::process::exit(3);
+                    }
                 }
             }
         });
@@ -612,7 +625,11 @@ fn main() {
             ("sec_z37", Point3::new(c.x, c.y, bx.z.lo + 0.37 * d), UnitVec3::Z),
             // the middle on x moved off by a hair: a plane through a turned part's axis meets its
             // seams and poles, and a fault there and not here is the plane's
-            ("sec_x_off", Point3::new(c.x + 1.37e-4 * bx.diagonal(), c.y, c.z), UnitVec3::X),
+            (
+                "sec_x_off",
+                Point3::new(c.x + 1.37e-4 * bx.diagonal(), c.y, c.z),
+                UnitVec3::X,
+            ),
         ] {
             let key = format!("s{i}:{name}");
             let (r, ms) =

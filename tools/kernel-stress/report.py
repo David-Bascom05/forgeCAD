@@ -76,7 +76,9 @@ def load(out):
                 cur["solids"].setdefault(e["s"], e)
             elif ev == "op":
                 cur["ops"][(e["s"], e["op"])] = e
-            elif ev == "hang":
+            elif ev in ("hang", "memory"):
+                # an op past the time or memory limit: the run ends there and is rerun without it
+                e["what"] = "memory" if ev == "memory" else "hang"
                 cur["hangs"].append(e)
             elif ev == "crash":
                 cur["crashes"].append(e)
@@ -179,8 +181,10 @@ def main():
                 worst.append((3 if stt == "wrong" else 2, w, e.get("d", "")))
         for h in f["hangs"]:
             r["hang"] += 1
-            cat(f"{family(h['key'].split(':')[-1])}: hang", "over the op timeout", f"{where0} {h['key']}")
-            worst.append((2.5, f"{where0} {h['key']}", "hang"))
+            what = h.get("what", "hang")
+            why = f"over {h.get('rss_mb', '?')} MB resident" if what == "memory" else "over the op timeout"
+            cat(f"{family(h['key'].split(':')[-1])}: {what}", why, f"{where0} {h['key']}")
+            worst.append((2.6 if what == "memory" else 2.5, f"{where0} {h['key']}", f"{what}: {why}"))
         for c in f["crashes"]:
             if c.get("key") != "import":
                 r["crash"] += 1

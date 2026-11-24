@@ -8,8 +8,8 @@
 #
 # The zips come from the branch haas-3d-models (fetched, never checked out: each one is read with
 # `git show` into a scratch dir, unpacked, run, and deleted), or from -z DIR. No names: all of them.
-# A hung op ends its run with code 3 and the hung op's key; the file is run again with that op
-# skipped, so a hang costs one op, not the file. Nothing here writes into the repository but the
+# A hung op (past -t seconds, or past 4 GB resident) ends its run with code 3; the file is run
+# again with that op skipped, so a hang costs one op, not the file. Nothing here writes into the repository but the
 # report; the raw models are never committed.
 set -uo pipefail
 
