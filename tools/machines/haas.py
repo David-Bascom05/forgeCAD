@@ -246,8 +246,9 @@ def fg_head(title, ax, ay, nose_z, nose_r, nose_h, box_lo, box_hi):
     return "\n".join(s) + "\n"
 
 
-def body(r, name, link, prims, part, ignore=(), status="estimate", basis="", source="", value="", taken=TAKEN):
-    r.bodies.append((name, link, prims, list(ignore), part))
+def body(r, name, link, prims, part, ignore=(), status="estimate", basis="", source="", value="", taken=TAKEN,
+         check=True):
+    r.bodies.append((name, link, prims, list(ignore) + ([] if check else ["__display__"]), part))
     r.cite(f"body.{name}", status, basis=basis, source=source, value=value, taken=taken)
 
 
@@ -506,6 +507,23 @@ def frame_bodies(r, kind):
              basis=("the column is not dimensioned: 600 x 600 mm behind the head housing (whose back face it carries), from the "
                     f"base top to the enclosure window height ({v['top_of_enclosure_window_h']['v']:g} mm above the floor), over the "
                     "spindle's mid-travel X. Its front face is behind the table's farthest +Y travel"))
+        # display only (`check = false`): the enclosure shell (doors open while a program runs) and
+        # the telescoping Y way covers, drawn for the sim, never collided
+        y_hi = c_hi[1] + 300
+        e_lo, e_hi = [ax - v["overall_w"]["v"] / 2, y_hi - v["overall_d"]["v"], floor], [ax + v["overall_w"]["v"] / 2, y_hi, top]
+        lbody(r, "enclosure", "base", [("box", e_lo, e_hi)],
+              fg_box(f"{r.name} enclosure outline (display only: drawn see-through, never collided)", *shrink_box(e_lo, e_hi)),
+              check=False, status="estimate", source=src("overall_w"),
+              value=f"{v['overall_w']['stated']}; {v['overall_d']['stated']}; {v['top_of_enclosure_window_h']['stated']}",
+              basis=("published: the operating width and depth and the enclosure window height; its placement around the "
+                     "table is not dimensioned: centred on the spindle's mid-travel X, its back 300 mm behind the column. "
+                     "An outline, not the sheet metal: display only"))
+        w_lo, w_hi = [-(tl / 2 - 60), -(tw / 2 + 20) - ty, base_top], [tl / 2 - 60, head_back, base_top + 30]
+        lbody(r, "waycovers", "base", [("box", w_lo, w_hi)],
+              fg_box(f"{r.name} Y way covers (display only: telescoping, drawn at full extent)", *shrink_box(w_lo, w_hi)),
+              check=False, status="estimate", source=src("base_top_h"), value=v["base_top_h"]["stated"],
+              basis=("not dimensioned: a 30 mm layer on the base top over the saddle's whole Y travel, the saddle's width. "
+                     "The covers telescope with Y; drawn at full extent, display only"))
     else:  # umc: X, Y, Z on the head side; the column carries them and moves in X
         top_h = v["overall_h"]["v"]
         b_lo, b_hi = [-(ax + 400), -500, -900], [ax + 400, head_back + 600, -551]
@@ -522,6 +540,16 @@ def frame_bodies(r, kind):
              basis=("the column is not dimensioned; Haas UMCs carry Y and Z on a column moving in X (record kinematics): "
                     "an 800 x 500 mm box behind the head housing, from the base top to 1500 mm above the platter, under the "
                     f"published overall height ({v['overall_h']['v']:g} mm above the floor)"))
+        y_hi = c_hi[1] + 400
+        e_lo, e_hi = [-v["overall_w_body"]["v"] / 2, y_hi - v["overall_d"]["v"], b_lo[2]], \
+                     [v["overall_w_body"]["v"] / 2, y_hi, b_lo[2] + top_h]
+        lbody(r, "enclosure", "base", [("box", e_lo, e_hi)],
+              fg_box(f"{r.name} enclosure outline (display only: drawn see-through, never collided)", *shrink_box(e_lo, e_hi)),
+              check=False, status="estimate", source=src("overall_d"),
+              value=f"{v['overall_w_body']['stated']}; {v['overall_d']['stated']}; {v['overall_h']['stated']}",
+              basis=("published: the width without the conveyor, the depth and the overall height; the floor's height under "
+                     "the platter is unpublished, so the outline stands on the base stand-in's bottom, 400 mm behind the "
+                     "column. An outline, not the sheet metal: display only"))
 
 
 def lathe_common(r, kind, control_note):
@@ -777,8 +805,12 @@ VMC_NOTES = {
 def prim_toml(r, bname, link, prims, ignore, part):
     out = [f"[[machine.body]]", f"name = {tv(bname)}", f"link = {tv(link)}",
            f"part = {tv(f'parts/haas/{r.name}/{bname}.fg')}"]
+    display = "__display__" in ignore
+    ignore = [i for i in ignore if i != "__display__"]
     if ignore:
         out.append(f"ignore = {tv(ignore)}")
+    if display:  # drawn, never collision-checked (CAM-MACHINE's `check = false`)
+        out.append("check = false")
     for p in prims:
         if p[0] == "box":
             out += ["[[machine.body.box]]", f"min = {tv(p[1])}", f"max = {tv(p[2])}"]

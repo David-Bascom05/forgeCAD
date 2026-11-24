@@ -120,6 +120,22 @@ ignore = ["head", "base"]
 [[machine.body.box]]
 min = [81, 623, -345.44]
 max = [681, 1223, 1455.42]
+[[machine.body]]
+name = "enclosure"
+link = "base"
+part = "parts/haas/haas-vf-2/enclosure.fg"
+check = false
+[[machine.body.box]]
+min = [-1192.53, -727.44, -889]
+max = [1954.53, 1523, 1455.42]
+[[machine.body]]
+name = "waycovers"
+link = "base"
+part = "parts/haas/haas-vf-2/waycovers.fg"
+check = false
+[[machine.body.box]]
+min = [-397, -604, -345.44]
+max = [397, 623, -315.44]
 [[machine.cite]]
 path = "machine.coolants"
 status = "published"
@@ -324,6 +340,20 @@ source = "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3"
 taken = "2026-11-24"
 value = "92.3in [2345mm] WINDOW (Height Breakdown, front view; highest enclosure sheet-metal level dimensioned)"
 basis = "the column is not dimensioned: 600 x 600 mm behind the head housing (whose back face it carries), from the base top to the enclosure window height (2344.42 mm above the floor), over the spindle's mid-travel X. Its front face is behind the table's farthest +Y travel"
+[[machine.cite]]
+path = "body.enclosure"
+status = "estimate"
+source = "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=1"
+taken = "2026-11-24"
+value = "123.9in [3147mm] OPERATING WIDTH (Installed Dimensions, plan view incl. chip conveyor); 88.6in [2249mm] OPERATING DEPTH; 92.3in [2345mm] WINDOW (Height Breakdown, front view; highest enclosure sheet-metal level dimensioned)"
+basis = "published: the operating width and depth and the enclosure window height; its placement around the table is not dimensioned: centred on the spindle's mid-travel X, its back 300 mm behind the column. An outline, not the sheet metal: display only"
+[[machine.cite]]
+path = "body.waycovers"
+status = "estimate"
+source = "https://shop.phillipscorp.com/cdn/shop/files/vf-2_mld__1.pdf#page=3"
+taken = "2026-11-24"
+value = "21.4in [544mm] (front view, right; leader to top of base sheet metal)"
+basis = "not dimensioned: a 30 mm layer on the base top over the saddle's whole Y travel, the saddle's width. The covers telescope with Y; drawn at full extent, display only"
 
 # ---------------------------------------------------------------------------------------------
 [[machine]]
@@ -2624,6 +2654,14 @@ ignore = ["head", "base"]
 [[machine.body.box]]
 min = [-19, 674, -550]
 max = [781, 1174, 1500]
+[[machine.body]]
+name = "enclosure"
+link = "base"
+part = "parts/haas/haas-umc-750/enclosure.fg"
+check = false
+[[machine.body.box]]
+min = [-1422.4, -1296.2, -900]
+max = [1422.4, 1574, 2148]
 [[machine.cite]]
 path = "machine.coolants"
 status = "published"
@@ -2904,6 +2942,13 @@ source = "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Di
 taken = "2026-11-24"
 value = "120\" (3048 mm) Max Spindle Height"
 basis = "the column is not dimensioned; Haas UMCs carry Y and Z on a column moving in X (record kinematics): an 800 x 500 mm box behind the head housing, from the base top to 1500 mm above the platter, under the published overall height (3048 mm above the floor)"
+[[machine.cite]]
+path = "body.enclosure"
+status = "estimate"
+source = "https://www.haas.co.uk/wp-content/uploads/2019/10/UMC-750_UMC-750SS_Dimensions.pdf#page=1"
+taken = "2026-11-24"
+value = "112\" (2845 mm) (plan, machine without chip conveyor); 113\" (2870 mm) (plan, front to rear; also 113\" (2870 mm) in Machine Clearance Dimensions p2); 120\" (3048 mm) Max Spindle Height"
+basis = "published: the width without the conveyor, the depth and the overall height; the floor's height under the platter is unpublished, so the outline stands on the base stand-in's bottom, 400 mm behind the column. An outline, not the sheet metal: display only"
 [[machine.cite]]
 path = "zones"
 status = "unknown"
