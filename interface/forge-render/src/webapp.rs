@@ -113,6 +113,8 @@ pub fn app_wake() {
 enum Msg {
     Ready(Box<Host>),
     Wake,
+    /// A pick's answer looked for, nothing drawn (see `about_to_wait`).
+    Poll,
 }
 
 /// The canvas, its surface and the app on it. Offscreen (`?offscreen=WxH`: where a WebGPU canvas
@@ -130,6 +132,8 @@ struct Host {
     gui: Gui,
     input: Input,
     frames: u64,
+    /// A `Msg::Poll` is on its way (one at a time).
+    polling: bool,
     /// A frame the app asked for later (a tooltip's delay), as `now_ms`.
     next: Option<f64>,
 }
@@ -221,6 +225,7 @@ async fn open_host(
         gui,
         input: Input::default(),
         frames: 0,
+        polling: false,
         next: None,
     })
 }
@@ -519,6 +524,19 @@ impl Host {
     }
 }
 
+/// The loop woken soon, to look for a pick's answer, nothing drawn for it.
+fn poll_later() {
+    let Some(w) = web_sys::window() else { return };
+    let f = Closure::once_into_js(|| {
+        WAKE.with(|w| {
+            if let Some(p) = w.borrow().as_ref() {
+                let _ = p.send_event(Msg::Poll);
+            }
+        })
+    });
+    let _ = w.set_timeout_with_callback_and_timeout_and_arguments_0(f.unchecked_ref(), 4);
+}
+
 /// A frame `ms` from now (the app asked for one later).
 fn later(ms: f64) {
     let Some(w) = web_sys::window() else { return };
@@ -548,6 +566,12 @@ impl ApplicationHandler<Msg> for App {
     }
 
     fn user_event(&mut self, _: &ActiveEventLoop, m: Msg) {
+        if let Msg::Poll = m {
+            if let Some(h) = &mut self.host {
+                h.polling = false;
+            }
+            return;
+        }
         if let Msg::Ready(h) = m {
             self.host = Some(h);
         }
@@ -593,9 +617,15 @@ impl ApplicationHandler<Msg> for App {
 
     fn about_to_wait(&mut self, _: &ActiveEventLoop) {
         let Some(h) = &mut self.host else { return };
-        if h.gui.pick_busy() || h.gui.picks() || h.next.is_some_and(|n| now_ms() >= n) {
+        // as natively: a pick's answer is waited for without drawing (a frame drawn while it's
+        // out only queues more GPU work ahead of it: on a slow adapter it never came back, and
+        // the page drew every frame for good); drawn once it's back
+        if h.gui.picks() || h.next.is_some_and(|n| now_ms() >= n) {
             h.next = None;
             h.window.request_redraw();
+        } else if h.gui.pick_busy() && !h.polling {
+            h.polling = true;
+            poll_later();
         }
     }
 }
