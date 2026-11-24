@@ -41,3 +41,45 @@ Clips (12 s, the tray's six bends):
 - `shots/load-tray-orbit.mp4`: the eye turning a degree a frame round the subject.
 
 Each clip has a 3 x 3 strip beside it.
+
+## With the operator's camera (David: still, panning down the line)
+
+Follow bend now keeps the eye's orientation and distance:
+
+- the working view is framed once, on the part's motion at the tools over every step at its
+  station;
+- the part's small motions (the slide to the stop, the lift, the ram's stroke, a flange's swing,
+  a turn over) leave the eye still;
+- the eye pans along the bed only when the part's middle leaves the frame's middle 60 %, and
+  brings the part back only when it nears the frame's edge;
+- it draws back once at most, and only if the part cannot fit;
+- the operator's handling starts no move;
+- every move is a smoothstep over 15 frames, from rest to rest, with no cut.
+
+The same measure, with the watched points now also including the free edge of the flange
+swinging up, and a body seen through at 3 % of them:
+
+| turn | watched seen | view ghosted | frame |
+|---|---|---|---|
+| 0 | 99.8 % | 7.2 % | 32.3 ms |
+| 60 | 99.8 % | 7.6 % | 36.6 ms |
+| 120 | 99.5 % | 7.2 % | 36.4 ms |
+| 180 | 100.0 % | 8.0 % | 37.8 ms |
+
+Smoothness of the clips, measured the coordinator's way: the frame-to-frame mean luma difference
+at 160 px wide (ffmpeg `tblend` difference, `signalstats` YAVG).
+
+| clip | max, before | after | median, before | after | frames over 5, before | after | duplicates, after |
+|---|---|---|---|---|---|---|---|
+| three-quarter | 24.5 | 7.6 | 0.30 | 0.18 | 50 | 12 | 0 |
+| profile | 30.1 | 2.1 | 0.28 | 0.15 | 23 | 0 | 0 |
+| orbit | 18.6 | 10.2 | 1.09 | 1.02 | 26 | 8 | 0 |
+
+The camera's cuts at each step boundary and its re-framing back and forth are gone. The
+three-quarter clip's remaining frames over 5 fall at each step's t ≈ 0.32 and 0.93: the start of
+the ram's approach and the end of its return. That is the press moving fast through the picture
+at twice real speed (24 s of program in a 12 s clip), and the cut-away taking the ram away or
+putting it back in one frame. A fade for the cut-away is the next step.
+
+Each frame is rendered once, at its own instant, with no clock read, so no frame is duplicated.
+Frames repeat only where nothing in the picture moves.
