@@ -84,7 +84,26 @@ argument it gives is listed), `FamiliesArgs.misspelled_refused`, and for an exte
 
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
-| args | `cam` | | `interface/forge-cam-lang/src/lib.rs` `named`: no list yet | GAP: a keyword no built-in reads is ignored (`stepovr:` runs on the default); the check, once a list exists, is `FamiliesArgs.misspelled_refused` |
+| args | `cam::part` | `#0`, `group` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::machine` | `#0` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::tool` | `#0`, `t`, `stickout`, `holder` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::setup` | `#0`, `machine`, `stock`, `origin`, `wcs`, `at`, `tol`, `clearance`, `clear`, `retract`, `fixture`, `from` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::facing` | `#0`, `tool`, `to`, `step`, `leave_axial` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::clear` | `#0`, `tool`, `from`, `to`, `step`, `stepover`, `leave`, `leave_axial`, `ramp` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::contour` | `#0`, `tool`, `side`, `from`, `to`, `step`, `leave`, `leave_axial`, `direction`, `finish`, `finish_step`, `spring` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::pocket` | `#0`, `#1`, `tool`, `from`, `to`, `step`, `stepover`, `leave`, `leave_axial`, `ramp` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::drill` | `#0`, `#1`, `plan` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::engrave` | `#0`, `#1`, `tool`, `depth`, `step`, `from` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::slot` | `#0`, `#1`, `tool`, `depth`, `step`, `from`, `ramp` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::thread_mill` | `#0`, `#1`, `tool`, `length` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::edge_break` | `#0`, `tool`, `at`, `size` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::soft_jaw` | `#0`, `blank`, `from`, `grip`, `fit`, `tool`, `relief`, `min_contact` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::program` | `#0`, `post`, `number`, `ops`, `decimals`, `feed_decimals`, `coolant`, `file`, `ext`, `out`, `comment`, `tools` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::box` | `margin`, `below`, `min`, `max` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::cylinder` | `d`, `margin`, `below` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::tube` | `d`, `id`, `margin`, `below` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::solid` | `#0` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::vise` | `#0`, `across`, `clamp`, `parallel`, `clearance` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
 | args | `turn` | | `interface/forge-turn-lang/src/lib.rs` `named_args`: no list yet | GAP: as for `cam`; `FamiliesArgs.misspelled_refused` once a list exists |
 
 ## Edit ops
@@ -184,6 +203,8 @@ scope).
   `drill = drill(..)` were refused (`StillRead`) because a later `d2 = drill(..)` only calls the
   built-in, AddFeature of such a call above the binding likewise, and Suppress took `d2` out with
   it: fixed (`edit::mentions_in`; test edits::a_call_head_in_a_machining_document_is_not_a_read).
+* forge-cam-lang ignored an unknown keyword (`stepovr:` ran on the default): now refused with
+  the nearest name (CAM-CORE's `ARGS` and `named_of`, cam/parity), one `args` row per built-in.
 * A machining document passes over a bare call statement silently (`facing(op1, ..)` with no
   name does nothing, reports nothing): reported to CAM-CORE / CAM-TURN.
 * A `fn`'s name and params may take a built-in's name (no `ShadowsBuiltin`): harmless, they are
