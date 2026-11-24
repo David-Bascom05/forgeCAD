@@ -255,10 +255,18 @@ an on-demand command), never on the build path.
 | families, more, plane_plane, notched, lang | 1524 | 0 | 785 | 2976 rejected | 3045 rejected, 3 accepted |
 
 Out of scope in the second run: 342 the kernel refused, 267 an edge not straight, 131 the n-ary
-boolean, 45 a vertex not one point of the planes (and the edge) round it. **Open**: those 45 vertices
-are listed by coordinate in the run's output and are handed to FLAT-SITES, who owns vertex
-placement. Each one is either a tolerance merge (out of scope by design) or a vertex the kernel put
-in the wrong place. Which, case by case, is UNKNOWN.
+boolean, 45 a vertex not one point of the planes (and the edge) round it. FLAT-SITES attributed and
+measured those 45 (on main 4846170a, the same totals). They come from coincident_walls 22, lang 17,
+and one each from loft_ends, coplanar_stack, near_tolerance/20, degen_plane_plane, and
+plane_plane/diamond_corners_on_edges Add and Keep. Every result is valid (forge_topo::check). In 44 of
+them every vertex lies within 3.7e-12 of each face plane and straight-edge line round it (most within
+1e-15 to 6e-14; the worst, lang/10 boolean 2 inter, is 8.4e-13 from a plane and 3.7e-12 from a line).
+near_tolerance/20 boolean 4 union's worst vertex is 9.99999999962e-6 from a plane and 6.7e-6 from an
+edge line: at most δ = LINEAR = 1e-5, as that family is built to be. So all 45 are tolerance merges
+(the snapped planes have no single point) with the kernel's vertex within δ of every carrier, and
+none is a crossing snapped beyond δ. This covers validity and the vertex/edge half of Faithful only:
+the region half and exact `denote` equality are not covered here. The exact reference judges most of
+these families as agreeing, and near_tolerance mostly as ambiguous.
 
 The 3 accepted mutants are all A op A on equal solids, where union and intersection are the same
 point set (equivalent mutants, not a checker that accepts a wrong certificate):
