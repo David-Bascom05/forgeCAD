@@ -2453,7 +2453,11 @@ impl<'s> Eval<'s> {
         r?;
         {
             let mut skb = sk.borrow_mut();
-            let mut named: Vec<(String, Value)> = scope.into_iter().map(|(k, (v, _))| (k, v)).collect();
+            // kept without a strong way back to this sketch (`sketch::detach`)
+            let mut named: Vec<(String, Value)> = scope
+                .into_iter()
+                .map(|(k, (v, _))| (k, crate::sketch::detach(v, &sk)))
+                .collect();
             named.sort_by(|a, b| a.0.cmp(&b.0));
             skb.named = named;
         }
