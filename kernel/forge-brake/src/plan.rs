@@ -29,6 +29,9 @@ pub struct Options {
     /// Keep the last step's punch and die where they pass (fewer tool changes), before the
     /// search's own order.
     pub keep_tools: bool,
+    /// With `sequence`: each step's setup as the program states it (None: chosen as usual).
+    /// A stated setup is simulated as stated, failing or not.
+    pub setups: Option<Vec<Option<Setup>>>,
 }
 
 /// What stops a bend: its best attempt's failing checks.
@@ -522,7 +525,25 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
     let mut steps = Vec::new();
     let mut feasible = true;
     let mut blocking = Vec::new();
-    for &j in seq {
+    for (i, &j) in seq.iter().enumerate() {
+        // a setup the program states: simulated as stated
+        if let Some(Some(setup)) = opts.setups.as_ref().and_then(|v| v.get(i)) {
+            let full = s.run(&done, j, *setup, false);
+            if !full.pass() {
+                feasible = false;
+                blocking.push(Blocking {
+                    bend: j,
+                    joint: m.bends[j].joint,
+                    after: (0..m.bends.len()).filter(|i| done[*i]).collect(),
+                    punch: full.punch.clone(),
+                    die: full.die.clone(),
+                    checks: full.failures().into_iter().cloned().collect(),
+                });
+            }
+            steps.push(full);
+            done[j] = true;
+            continue;
+        }
         let prev = steps.last().map(|st: &Step| st.setup);
         match s.try_bend_after(&done, j, prev) {
             Some(st) => steps.push(st),

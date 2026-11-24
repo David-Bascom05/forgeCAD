@@ -1,0 +1,15 @@
+[package]
+name = "forge-bend-lang"
+description = "The bending document: a press-brake program in .fg (`forgecad bend`), its reply forgecad.bending/1 and setup sheet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-lang = { path = "../forge-lang" }
+forge-agent = { path = "../forge-agent" }
+forge-brake = { path = "../../kernel/forge-brake" }
+
+[lints]
+workspace = true

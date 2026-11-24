@@ -20,6 +20,7 @@ fn usage() -> ExitCode {
          forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
          forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|dxf [SHEET])\n       \
          forgecad cam FILE.fg [sheet] [--json] [-o OUT]   (a machining document: certified toolpaths, the program or setup sheet)\n       \
+         forgecad bend FILE.fg [sheet] [--json] [-o OUT]   (a bending document: the press-brake program simulated, or its setup sheet)\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
          forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
          forgecad versions F | history F [--all] | create_version F NAME [NOTES] | restore F v3|SAVE | compare F A B [--volume]\n       \
@@ -405,6 +406,7 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             "export" => "step",
             "cam" if a.words.first().is_some_and(|w| w == "sheet") => "html",
             "cam" => "nc",
+            "bend" => "html",
             _ => "png",
         };
         let stem = a.file.trim_end_matches(".fg");

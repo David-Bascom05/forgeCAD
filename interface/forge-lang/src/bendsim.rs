@@ -40,6 +40,28 @@ pub struct Ask {
     pub keep_tools: bool,
     /// Also answer up to this many ranked feasible programs (`programs`).
     pub programs: Option<usize>,
+    /// Stations along the bed as a program states them (a `bending` document's `station`s).
+    pub stations: Vec<StationAsk>,
+    /// Per step of `sequence`, what the program states of its setup.
+    pub steps: Vec<StepAsk>,
+}
+
+/// A station: its punch and die (library ids), its centre along the bed from the bed's centre,
+/// and its stacks' lengths.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StationAsk {
+    pub punch: String,
+    pub die: String,
+    pub y: f64,
+    pub punch_length: f64,
+    pub die_length: f64,
+}
+
+/// A step's stated setup: its station (an index into `Ask::stations`) and orientation.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StepAsk {
+    pub station: Option<usize>,
+    pub rotate: Option<bool>,
 }
 
 /// The words after `bendsim`.
@@ -189,7 +211,43 @@ pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &As
 /// One built sheet simulated (for a caller that has run the part already, as `query F dfm`
 /// does): its vendor's tooling unless `ask` names other.
 pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Sim, Answer> {
-    let (tooling, tsource) = tooling(ask, dir, sh.vendor.as_ref().map(|v| v.id.as_str()))?;
+    // a program's stations: their tools are the ones on the press
+    let mut ask = ask.clone();
+    if !ask.stations.is_empty() {
+        let mut ps: Vec<String> = ask.stations.iter().map(|s| s.punch.clone()).collect();
+        let mut ds: Vec<String> = ask.stations.iter().map(|s| s.die.clone()).collect();
+        ps.dedup();
+        ds.dedup();
+        ask.punches.get_or_insert(ps);
+        ask.dies.get_or_insert(ds);
+    }
+    let ask = &ask;
+    let (mut tooling, tsource) = tooling(ask, dir, sh.vendor.as_ref().map(|v| v.id.as_str()))?;
+    for st in &ask.stations {
+        let (Some(p), Some(d)) = (
+            tooling.punches.iter().position(|x| x.id == st.punch),
+            tooling.dies.iter().position(|x| x.id == st.die),
+        ) else {
+            return Err(err(
+                "BadStation",
+                format!(
+                    "a station's punch {} or die {} is not on the press",
+                    st.punch, st.die
+                ),
+                vec![],
+            ));
+        };
+        tooling.stations.push(fb::tooling::Station {
+            punch: p,
+            die: d,
+            y: st.y,
+            punch_length: st.punch_length,
+            die_length: st.die_length,
+        });
+    }
+    if let Err(e) = tooling.validate() {
+        return Err(err("BadStation", format!("{e:?}"), vec![]));
+    }
     let model = match fb::Model::new(&sh.sheet) {
         Ok(m) => m,
         Err(e) => return Err(model_err(sh, &e)),
@@ -210,6 +268,20 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         material: sh.material.clone(),
         uts,
         keep_tools: ask.keep_tools,
+        setups: (!ask.steps.is_empty()).then(|| {
+            ask.steps
+                .iter()
+                .map(|st| {
+                    st.station
+                        .and_then(|k| tooling.stations.get(k))
+                        .map(|s| fb::Setup {
+                            punch: s.punch,
+                            die: s.die,
+                            rotate: st.rotate.unwrap_or(false),
+                        })
+                })
+                .collect()
+        }),
         ..fb::Options::default()
     };
     let mut plan = fb::plan(&model, &tooling, &opts);

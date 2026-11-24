@@ -51,6 +51,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-bend-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-brake",
+ "forge-lang",
+]
+
+[[package]]
 name = "forge-bool"
 version = "0.1.0"
 dependencies = [
@@ -122,6 +131,7 @@ name = "forge-cli"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-bend-lang",
  "forge-cam-lang",
  "forge-dirs",
  "forge-geom",
