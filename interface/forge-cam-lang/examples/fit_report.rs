@@ -1,5 +1,5 @@
-//! The fitter's effect on 3D finishing (forge_cam::fit through forge-cam-3d's linking), per
-//! strategy on the mould core, ball-6, cusp 0.01:
+//! The fitter's effect on 3D finishing and surfacing (forge_cam::fit through forge-cam-3d's
+//! linking and surf.rs), per op on the mould core, ball-6 (cusp 0.01 where the op takes one):
 //! cargo run --release -p forge-cam-lang --example fit_report [-- strategy ...]
 //!
 //! Two runs of each op: cusp 0.01 with `fit: 0`, and with the fit's default. Reported: the op's blocks, the mean cutting-move length, the posted program's
@@ -277,13 +277,7 @@ fn main() {
         } else {
             "cusp: 0.01, "
         };
-        // (parallel and waterline take no `fit` here: both runs are the same op)
-        let unfit = if matches!(name, "parallel" | "waterline") {
-            ""
-        } else {
-            "fit: 0, "
-        };
-        let a = run(&op.replace("CUSP, ", &format!("{cusp}{unfit}")), &dir);
+        let a = run(&op.replace("CUSP, ", &format!("{cusp}fit: 0, ")), &dir);
         // FIT=<mm> overrides the default fit for the second run
         let fit = std::env::var("FIT")
             .map(|f| format!("fit: {f}, "))

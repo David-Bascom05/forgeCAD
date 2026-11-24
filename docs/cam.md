@@ -97,7 +97,12 @@ ways, and each piece is proven by the drop-cutter as a chord is before it is kep
 `fit`, shared with adaptive). The fit comes out of the path's tolerance, not the cusp: the passes
 are draped within `tol` − `fit` above the surface (`steep_shallow`'s waterlines are left as the plain op's, unfitted), so a fitted path
 keeps the plain op's `tol` and its spacing, and the cusp is the plain op's. The plan gives the
-pieces made and their measured largest distance from the passes.
+pieces made and their measured largest distance from the passes. `parallel` and `waterline` also take `fit:`, a chord tolerance in mm
+(default 0.25 × the setup's `tol`, at most half of it; `fit: 0` turns it off): each run is fitted
+into the longest lines and arcs (G2/G3 in xy, level) within it, both ways (forge-cam's `fit`), each
+piece proven by the generator's own check (the cutter's clearance at −tol/2) before it is kept, no
+arc below the radius at which the machine would slow on it. `zlevel`'s passes are exact offsets
+already. `fit:` changes only the moves emitted for a run, never its pass spacing or how it is draped.
 | `program(SETUP or [SETUPS], post:, number:, ops:)` | `fanuc`, `haas`, `linuxcnc`, `grbl` (default: the machine's control); `ops: OP` or `[OPS]` posts only those ops of its setups. Each op is certified on the stock every earlier op of its setup (and of the setup it continues) leaves, so those are posted first, by an earlier program or earlier in this one, or the program is refused with the fix; an op no program posts is not certified (`unposted`). `decimals:` and `feed_decimals:` set the program's number formats (the text is quantised, read back and certified at them), `coolant:` (`"flood"`, `"mist"`, `"through"`, `"off"`) every path's coolant, refused if the machine has none of it. `split: "setup"`: one program per setup, named `PROGRAM/SETUP` and numbered on from `number:` (the reply's program has its `setup`) |
 
 `ramp: DEG` (over 0, at most 30) enters each pass by a helix of half the tool's radius at that angle,
