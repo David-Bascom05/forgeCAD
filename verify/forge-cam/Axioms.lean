@@ -107,3 +107,4 @@ import ForgeCam
 #print axioms ForgeCam.Turn.zono_eq_hull
 #print axioms ForgeCam.Turn.smear_hull
 #print axioms ForgeCam.Turn.eroded_gap
+#print axioms ForgeCam.sd_ge_of_halfspace
