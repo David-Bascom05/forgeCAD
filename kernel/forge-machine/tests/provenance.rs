@@ -138,3 +138,34 @@ fn a_body_with_no_envelope_is_left_out_and_reported() {
         "{u:?}"
     );
 }
+
+#[test]
+fn m6_moves_to_the_change_position_and_that_move_is_checked() {
+    let m = &forge_machine::library::builtin_named("generic-vmc3").unwrap();
+    assert_eq!(m.changer.as_ref().unwrap().position, vec![("Z".to_string(), 0.0)]);
+    let mut s = Setup::new(m, Control::for_dialect(m, "fanuc", 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -500.0])];
+    let tl = sim::simulate("G0 X0 Y0 Z-100.\nT2 M6\n", &s).unwrap();
+    let z = m.joint_index("Z").unwrap();
+    let up: Vec<&sim::Segment> = tl.segments.iter().filter(|sg| sg.line == 2).collect();
+    assert_eq!(up.len(), 1, "{:?}", tl.segments);
+    assert_eq!((up[0].q0[z], up[0].q1[z]), (-600.0, 0.0));
+    assert!(up[0].t_min > 0.0);
+    assert!(
+        !sim::unchecked(m, &tl)
+            .iter()
+            .any(|u| u.path == "changer.position")
+    );
+    // a changer that does not state its move: the move is not checked, and the reply says so
+    let mut m2 = m.clone();
+    m2.changer.as_mut().unwrap().position.clear();
+    let mut s2 = Setup::new(&m2, Control::for_dialect(&m2, "fanuc", 1).unwrap()).unwrap();
+    s2.wcs = s.wcs.clone();
+    let tl2 = sim::simulate("G0 X0 Y0 Z-100.\nT2 M6\n", &s2).unwrap();
+    assert!(!tl2.segments.iter().any(|sg| sg.line == 2));
+    assert!(
+        sim::unchecked(&m2, &tl2)
+            .iter()
+            .any(|u| u.path == "changer.position" && u.why == "unknown")
+    );
+}

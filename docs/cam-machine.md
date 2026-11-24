@@ -75,7 +75,11 @@ joint that positions this spindle as a C axis).
 
 ## `[[machine.changer]]` (at most one)
 
-`pockets`, `change_s` (chip to chip), `max_tool_kg`.
+`pockets`, `change_s` (chip to chip), `max_tool_kg`. Optional: `position_joints` and `position`,
+where M6 moves the machine by itself before the swap (joint values, e.g. `position_joints = ["Z"]`,
+`position = [0]` for a Haas, whose M06 sends Z to machine zero). The simulation makes that move as
+a rapid with the old tool, timed and collision-checked; without it the move is not simulated and
+every tool change reports `changer.position` not checked.
 
 ## `[[machine.mount]]`
 

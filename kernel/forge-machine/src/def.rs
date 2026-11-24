@@ -216,6 +216,10 @@ pub struct Changer {
     /// Chip-to-chip tool change time, seconds. None: cited `unknown` (0 in t_min).
     pub change_s: Option<f64>,
     pub max_tool_kg: Option<f64>,
+    /// Where M6 moves the machine by itself before the swap (a Haas M06 sends Z to machine zero):
+    /// (joint name, joint value), in the order given. Empty: not stated, and the sim says the
+    /// change move was not checked.
+    pub position: Vec<(String, f64)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -827,7 +831,21 @@ impl MachineDef {
                     Some(v) => positive(&rec, k, v).map(Some),
                     None => Ok(None),
                 };
+                let pj = texts(c, "position_joints").unwrap_or_default();
+                let pv = nums(c, "position").unwrap_or_default();
+                if pj.len() != pv.len() {
+                    return Err(DefError::Bad {
+                        record: rec,
+                        field: "position",
+                        why: format!(
+                            "needs one value per joint of `position_joints` ({} joints, {} values)",
+                            pj.len(),
+                            pv.len()
+                        ),
+                    });
+                }
                 Some(Changer {
+                    position: pj.into_iter().zip(pv).collect(),
                     pockets: p.map(|p| p as u32),
                     change_s: pos(
                         "change_s",
@@ -1112,6 +1130,7 @@ impl MachineDef {
                 (Some("turret"), Some(n), Some(_)) => self.turrets.iter().any(|t| t.name == n),
                 (Some("mount"), Some(n), Some(_)) => self.mount(n).is_some(),
                 (Some("machine"), Some(_), None) => true,
+                (Some("changer"), Some("position"), None) => self.changer.is_some(),
                 _ => false,
             }
         };
@@ -1381,6 +1400,21 @@ impl MachineDef {
         }
         if !matches!(self.kind, Kind::Lathe | Kind::MillTurn) && self.length_joint.is_none() {
             return Err(self.shape("a mill needs `length_joint` (the joint G43 moves)".into()));
+        }
+        if let Some(c) = &self.changer {
+            for (jn, v) in &c.position {
+                let Some(j) = self.joint(jn) else {
+                    return Err(self.shape(format!("the changer's position names no joint `{jn}`")));
+                };
+                if let Some(r) = j.range
+                    && !(r[0] <= *v && *v <= r[1])
+                {
+                    return Err(self.shape(format!(
+                        "the changer's position {jn} = {v} is outside its range [{}, {}]",
+                        r[0], r[1]
+                    )));
+                }
+            }
         }
         let rapids_ok = self.joints.iter().all(|j| match (j.max_feed, j.rapid) {
             (Some(f), Some(r)) => f <= r,

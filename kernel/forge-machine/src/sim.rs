@@ -612,6 +612,22 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                             });
                         }
                     };
+                    // the changer's own move (M06 sends Z to its change position): a rapid with the
+                    // old tool, collision-checked like any other
+                    if let Some(c) = &def.changer
+                        && !c.position.is_empty()
+                    {
+                        let mut q1 = q.clone();
+                        for (jn, v) in &c.position {
+                            if let Some(j) = def.joint_index(jn) {
+                                q1[j] = *v;
+                            }
+                        }
+                        for seg in rapid(s, ln, &q, &q1, t, tool, spindle, &mut tl) {
+                            push_seg(&mut tl, &mut t, &mut t_est, seg);
+                        }
+                        q = q1;
+                    }
                     if let Some(max) = max
                         && *tn > max
                     {
@@ -1223,6 +1239,12 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
             }
             Happening::ToolChange { .. } => {
                 if let Some(c) = &def.changer {
+                    note(
+                        "changer.position".into(),
+                        !c.position.is_empty(),
+                        m.line,
+                        "tool change move",
+                    );
                     note(
                         "changer.pockets".into(),
                         c.pockets.is_some(),

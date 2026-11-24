@@ -65,6 +65,8 @@ interface = "BT40"
 pockets = 24
 change_s = 2.5
 max_tool_kg = 8
+position_joints = ["Z"]   # M6 sends Z to machine zero first (an assumption for this generic machine)
+position = [0]
 
 [[machine.mount]]
 name = "spindle"
@@ -222,6 +224,8 @@ interface = "HSK-A63"
 pockets = 30
 change_s = 3.0
 max_tool_kg = 6
+position_joints = ["Z"]   # M6 sends Z to machine zero first (an assumption for this generic machine)
+position = [0]
 
 [[machine.mount]]
 name = "spindle"
@@ -541,6 +545,8 @@ interface = "Capto C5"
 pockets = 40
 change_s = 4.0
 max_tool_kg = 5
+position_joints = ["X", "Z"]   # M6 sends the head to X and Z home first (an assumption)
+position = [300, 600]
 
 [[machine.mount]]
 name = "bhead"
