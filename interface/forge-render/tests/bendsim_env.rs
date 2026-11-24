@@ -361,8 +361,8 @@ fn following_keeps_the_handled_part_in_view() {
 }
 
 /// No flicker (David): the eye swept round the second bend through the views where the first
-/// flange crosses in front of it, a frame a step: a body's see-through never jumps; it fades in
-/// and out a step a frame, from and to solid.
+/// flange crosses in front of it, a frame a step: what is seen through in the x-ray window never
+/// jumps; it fades in and out a step a frame.
 #[test]
 fn see_through_fades_and_never_flickers() {
     let Some(mut h) = headless() else { return };
@@ -379,7 +379,15 @@ fn see_through_fades_and_never_flickers() {
         h.step();
     }
     let step = (1.0 - opacity) / forge_render::gui::gui_bendsim::FADE_FRAMES as f32 + 0.01;
-    let mut was: std::collections::HashMap<u32, f32> = Default::default();
+    // as it stands before the sweep (what already fades counts from there)
+    let names = h.gui.bend.drawn_names();
+    let mut was: std::collections::HashMap<String, f32> = h
+        .gui
+        .bend
+        .ghosts
+        .iter()
+        .map(|g| (names[g.placement as usize].clone(), g.rgba[3] as f32 / 255.0))
+        .collect();
     let mut worst = 0f32;
     let mut ghosted = 0usize;
     for i in 0..=80 {
@@ -391,18 +399,24 @@ fn see_through_fades_and_never_flickers() {
             v.nav.jump_to(c);
         }
         h.step();
-        let now: std::collections::HashMap<u32, f32> = h
+        // by the body's name: a placement's index moves as window pieces come and go
+        let names = h.gui.bend.drawn_names();
+        let now: std::collections::HashMap<String, f32> = h
             .gui
             .bend
             .ghosts
             .iter()
-            .map(|g| (g.placement, g.rgba[3] as f32 / 255.0))
+            .map(|g| (names[g.placement as usize].clone(), g.rgba[3] as f32 / 255.0))
             .collect();
-        // solid is alpha 1: a body not listed is solid
-        for k in was.keys().chain(now.keys()) {
+        // a piece kept from one frame to the next fades a step at most; a piece that comes into
+        // the window comes in near solid (it fades in); one that leaves the window has nothing
+        // left in it to jump
+        for (k, b) in &now {
             let a = was.get(k).copied().unwrap_or(1.0);
-            let b = now.get(k).copied().unwrap_or(1.0);
-            worst = worst.max((a - b).abs());
+            worst = worst.max(a - b);
+            if was.contains_key(k) {
+                worst = worst.max(b - a);
+            }
         }
         ghosted = ghosted.max(now.len());
         was = now;
@@ -481,4 +495,34 @@ fn bend_two_followed_shows_the_part() {
         least = least.min((yhi.min(1.0) - ylo.max(-1.0)) / 2.0);
     }
     assert!(least > 0.2, "the part only {least:.2} of the view's height at some instant");
+}
+
+/// Any part in the way, locally (David): from the Press Overview the press's frame stands
+/// between the eye and bend 2; it is seen through only inside the x-ray window round the bend
+/// (drawn as a ghost piece there and solid round it), not faded whole.
+#[test]
+fn a_press_part_in_the_way_is_seen_through_in_the_window_only() {
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "xray", "trumpf-trubend-5130", None);
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.step = 1;
+        b.t = 0.6;
+    }
+    frame(&mut h, Framing::Overview);
+    for _ in 0..20 {
+        h.step();
+    }
+    let names = h.gui.bend.drawn_names();
+    let pieces: Vec<&String> = names.iter().filter(|n| n.ends_with("#xray")).collect();
+    let press: Vec<&&String> = pieces
+        .iter()
+        .filter(|n| !n.starts_with("part:") && !n.contains("punch:") && !n.contains("die:"))
+        .collect();
+    assert!(!press.is_empty(), "a press part seen through: {pieces:?}");
+    for p in &press {
+        let whole = p.trim_end_matches("#xray");
+        assert!(names.iter().any(|n| n == whole), "{whole} solid round its window piece");
+    }
+    assert!(!h.gui.bend.ghosts.is_empty());
 }
