@@ -229,6 +229,9 @@ pub struct FileRec {
     /// A made file's place while undone; the document open when the app switched to it.
     pub trash: Option<PathBuf>,
     pub opened_from: Option<String>,
+    /// From a saved conversation: its Undo and Redo check the file is still as they'd leave it
+    /// (the document's own undo steps aren't these any more).
+    pub restored: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -276,6 +279,7 @@ impl Turns {
                 undone: false,
                 trash: None,
                 opened_from: None,
+                restored: false,
             });
         }
         let f = t.files.iter_mut().find(|f| f.path == path).expect("recorded");
@@ -284,6 +288,19 @@ impl Turns {
             d.external(text, &t.label, f.key, true);
         }
         first
+    }
+
+    /// A saved conversation's turns, as its Diff cards name them: each file marked restored.
+    pub fn restore(&mut self, mut done: Vec<TurnRec>) {
+        for t in &mut done {
+            for f in &mut t.files {
+                self.next += 1;
+                f.key = self.next;
+                f.restored = true;
+            }
+        }
+        self.done = done;
+        self.open = None;
     }
 
     pub fn file_mut(&mut self, path: &str) -> Option<&mut FileRec> {

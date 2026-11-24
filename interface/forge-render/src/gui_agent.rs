@@ -38,6 +38,8 @@ pub struct AgentHost {
     /// The document the agent was last told is open.
     told: Option<String>,
     loaded: bool,
+    /// The project whose last conversation was looked for, when its Agent tab first showed.
+    reopened_for: Option<PathBuf>,
     keyring: Option<Receiver<Result<Option<bool>, String>>>,
     /// CLI program override, and where it runs, unless a test says otherwise.
     pub program: Option<String>,
@@ -132,6 +134,7 @@ impl Gui {
                 AgentSettings::from_toml(&text).write_extra(&mut self.shell.settings.extra);
             }
         }
+        self.agent_reopen_last();
         let project = self.agent_root().map(|p| p.display().to_string());
         if project != self.shell.agent.project {
             self.shell.agent.resume_open = false;
@@ -451,6 +454,7 @@ impl Gui {
             return;
         };
         chat.entries = self.shell.agent.entries.clone();
+        chat.turns = self.agent.turns.done.clone();
         if let Some((_, settings)) = &self.agent.made_for {
             chat.settings = settings.clone();
         }
@@ -470,6 +474,37 @@ impl Gui {
                 self.agent.save_error = None;
             }
         }
+    }
+
+    /// The first time the Agent tab shows for a project, its last conversation comes back (the
+    /// tab's + starts a new one), as `claude --continue` would.
+    fn agent_reopen_last(&mut self) {
+        if self.shell.agent.tab != crate::shell::agent::SideTab::Agent
+            || !self.shell.agent.entries.is_empty()
+            || self.agent.chat.is_some()
+            || self.agent_busy()
+        {
+            return;
+        }
+        let Some(root) = self.agent_root() else { return };
+        if self.agent.reopened_for.as_ref() == Some(&root) {
+            return;
+        }
+        self.agent.reopened_for = Some(root.clone());
+        let Some(base) = self.agent.conversation_dir() else {
+            return;
+        };
+        let Ok(list) = crate::agent::conversations::list(&base, &root) else {
+            return;
+        };
+        // the last saved; within one second (its stamp's grain), the last made (its id starts
+        // with its time, in nanoseconds)
+        let Some(last) = list.iter().max_by_key(|c| (c.updated, c.id.clone())) else {
+            return;
+        };
+        let id = last.id.clone();
+        self.agent_resume_conversation(&id);
+        self.shell.agent.resume_open = false;
     }
 
     fn agent_list_conversations(&mut self) {
@@ -535,6 +570,7 @@ impl Gui {
         let current = self.shell.agent.settings.clone();
         let interrupted = chat.interrupted;
         self.agent_reset();
+        self.agent.turns.restore(chat.turns.clone());
         self.shell.agent.restore_entries(chat.entries.clone());
         chat.settings.trusted = current.trusted;
         chat.settings.speech_key = current.speech_key;
@@ -551,7 +587,7 @@ impl Gui {
             text: if interrupted {
                 "Resumed an interrupted conversation. Project files are unchanged by resuming."
             } else {
-                "Resumed conversation. Past changes are summaries; use Versions to restore a design."
+                "Resumed conversation. Its changes still undo while their files are as it left them; + starts a new conversation."
             }
             .into(),
             error: false,
@@ -625,7 +661,7 @@ impl Gui {
 
     /// A file's change in a turn taken back or put back: through the document when it's open;
     /// a made file moved aside (never deleted) and its document closed, or moved back and opened.
-    fn agent_flip(&mut self, turn: usize, index: usize, undo: bool) -> Result<(), String> {
+    pub fn agent_flip(&mut self, turn: usize, index: usize, undo: bool) -> Result<(), String> {
         let Some(f) = self
             .agent
             .turns
@@ -638,6 +674,35 @@ impl Gui {
         };
         if f.undone == undo {
             return Ok(());
+        }
+        // a turn from a saved conversation: only over the file as it would leave it, never over
+        // what's been done since
+        if f.restored {
+            let want = if undo { Some(&f.after) } else { f.before.as_ref() };
+            // the file as the person has it: its document when it's open (in this tab or
+            // another, which comes up), else what's on disk
+            if self.agent_path().as_deref() != Some(f.path.as_str())
+                && let Some(i) = self.agent_tab_of(&f.path)
+            {
+                self.activate(i);
+            }
+            let open = (self.agent_path().as_deref() == Some(f.path.as_str()))
+                .then(|| doc(&mut self.shell.drawing, &mut self.fg).map(|d| d.text().to_string()))
+                .flatten();
+            let now = open.or_else(|| forge_dirs::fs::read_to_string(&f.path).ok());
+            let fits = match (want, &now) {
+                (Some(w), Some(n)) => w == n,
+                // a file the turn made, undone: it's gone, as Redo wants
+                (None, None) => true,
+                _ => false,
+            };
+            if !fits {
+                return Err(format!(
+                    "{} has changed since this turn: not {}. Versions can take it back to any saved state.",
+                    name_of(&f.path),
+                    if undo { "undone" } else { "redone" }
+                ));
+            }
         }
         let active = self.agent_path();
         let set = |g: &mut Gui, trash: Option<PathBuf>| {
