@@ -1,0 +1,26 @@
+# Runtime checks removed because a proof says they cannot fire (verify/REMOVED-CHECKS.toml): each
+# entry's code unchanged since its review, its lemmas still declared and in their project's axiom
+# report (whose own job checks them), its guarding tests present and not ignored. A Python script,
+# no build: seconds. It runs on every pull request, as any Rust file it lists may change.
+name: removed-checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  registry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: the registry's entries hold
+        run: python3 tools/ci/removed_checks.py
+      - name: the check catches stale entries (its self-test)
+        run: sh tools/ci/removed_checks_selftest.sh
