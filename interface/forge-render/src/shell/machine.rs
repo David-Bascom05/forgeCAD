@@ -1049,7 +1049,7 @@ fn tab_joints(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
                 let txt = format!(
                     "{}{} {} ({}, {})",
                     "    ".repeat(depth),
-                    "└",
+                    "-",
                     j.name,
                     if j.ty == JointType::Linear {
                         "linear"

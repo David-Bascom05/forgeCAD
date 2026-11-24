@@ -553,7 +553,7 @@ impl CamWs {
             Cmd::NewLatheSetup => self.setup_dlg = Some(self.new_lathe_dlg()),
             Cmd::NewOp(func) => match self.setup_now() {
                 Some(su) => self.op_dlg = Some(self.new_op_dlg(func, &su)),
-                None => self.said = Some("make a setup first: Setup ▸ New Setup".into()),
+                None => self.said = Some("make a setup first: Setup > New Setup".into()),
             },
             Cmd::Edit(id) => self.open_dialog(&id),
             Cmd::Select(id) => self.select(&id),

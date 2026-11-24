@@ -693,7 +693,7 @@ fn details(
                 note(
                     ui,
                     &format!(
-                        "Left over: ρ {}…{}, z {}…{} ({})",
+                        "Left over: r {}…{}, z {}…{} ({})",
                         num(l.boxes[0][0]),
                         num(l.boxes[0][2]),
                         num(l.z[0]),
