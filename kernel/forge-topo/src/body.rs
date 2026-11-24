@@ -251,6 +251,11 @@ pub struct Body {
     pub unverified: Option<String>,
     /// What of the file was not read into this body, in plain words: solids the reader refused.
     pub left_out: Option<String>,
+    /// At least every vertex's `tol` (0 when none was ever more than `LINEAR`): what a point's
+    /// nearness to the boundary must look past (forge-bool's point_in_face, CacheOK G9). Kept by
+    /// `add_tolerant_vertex` and `grow_vertex_tol`: a vertex's `tol` is raised through those only.
+    /// (Kept as an f32 rounded up, so the body grows by nothing: read it with `vertex_tol()`.)
+    pub vertex_tol: f32,
 }
 
 /// Boxes over runs of face ids (a chunk of 16 faces, a block of 16 chunks), each the hull of
@@ -305,6 +310,7 @@ impl Body {
             unplaced: self.unplaced,
             unverified: self.unverified.clone(),
             left_out: self.left_out.clone(),
+            vertex_tol: self.vertex_tol,
         }
     }
 }
@@ -534,6 +540,7 @@ impl Body {
             split: std::mem::take(&mut self.split),
             from_file: self.from_file,
             unplaced: self.unplaced,
+            vertex_tol: self.vertex_tol,
             unverified: self.unverified.take(),
             left_out: self.left_out.take(),
         };
@@ -611,6 +618,7 @@ impl Body {
         out.unplaced = self.unplaced;
         out.unverified = self.unverified.clone();
         out.left_out = self.left_out.clone();
+        out.vertex_tol = self.vertex_tol;
         out.joins = self.joins.clone();
         out.vertices.reserve(self.vertices.len());
         out.edges.reserve(self.edges.len());
@@ -797,8 +805,33 @@ impl Body {
     }
 
     /// A vertex with its own tolerance (at least LINEAR).
+    /// Vertex `v`'s tolerance raised to at least `tol`, the body's bound with it.
+    pub fn grow_vertex_tol(&mut self, v: VertexId, tol: f64) {
+        let x = &mut self.vertices[v.index()];
+        x.tol = x.tol.max(tol);
+        let t = x.tol;
+        self.bound_vertex_tol(t);
+    }
+
+    /// The bound at least `tol` (an f32 at or above it).
+    fn bound_vertex_tol(&mut self, tol: f64) {
+        if tol > f64::from(self.vertex_tol) {
+            let mut b = tol as f32;
+            if f64::from(b) < tol {
+                b = b.next_up();
+            }
+            self.vertex_tol = b;
+        }
+    }
+
+    /// At least every vertex's tolerance (0 when none was raised past `LINEAR`).
+    pub fn vertex_tol(&self) -> f64 {
+        f64::from(self.vertex_tol)
+    }
+
     pub fn add_tolerant_vertex(&mut self, point: Point3, tol: f64, name: Name) -> VertexId {
         let tol = tol.max(forge_math::tol::LINEAR);
+        self.bound_vertex_tol(tol);
         self.vertices.push(Vertex { point, name, tol });
         VertexId(self.vertices.len() as u32 - 1)
     }

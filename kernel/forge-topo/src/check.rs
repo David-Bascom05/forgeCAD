@@ -507,23 +507,34 @@ fn check_strays(body: &Body, out: &mut Vec<Problem>) {
 impl crate::topo::Sink for Vec<Problem> {
     #[inline]
     fn stray(&mut self, v: usize) {
-        self.push(Problem::StrayVertex { vertex: VertexId(v as u32) });
+        self.push(Problem::StrayVertex {
+            vertex: VertexId(v as u32),
+        });
     }
     #[inline]
     fn edge_uses(&mut self, e: usize, n: usize) {
-        self.push(Problem::EdgeUses { edge: EdgeId(e as u32), uses: n });
+        self.push(Problem::EdgeUses {
+            edge: EdgeId(e as u32),
+            uses: n,
+        });
     }
     #[inline]
     fn edge_same_way(&mut self, e: usize) {
-        self.push(Problem::EdgeUsesSameWay { edge: EdgeId(e as u32) });
+        self.push(Problem::EdgeUsesSameWay {
+            edge: EdgeId(e as u32),
+        });
     }
     #[inline]
     fn edge_degenerate(&mut self, e: usize) {
-        self.push(Problem::EdgeDegenerate { edge: EdgeId(e as u32) });
+        self.push(Problem::EdgeDegenerate {
+            edge: EdgeId(e as u32),
+        });
     }
     #[inline]
     fn face_no_loops(&mut self, f: usize) {
-        self.push(Problem::FaceNoLoops { face: FaceId(f as u32) });
+        self.push(Problem::FaceNoLoops {
+            face: FaceId(f as u32),
+        });
     }
     #[inline]
     fn loop_empty(&mut self, l: usize) {
@@ -531,15 +542,22 @@ impl crate::topo::Sink for Vec<Problem> {
     }
     #[inline]
     fn loop_broken(&mut self, l: usize, c: usize) {
-        self.push(Problem::LoopBroken { lp: LoopId(l as u32), after: CoedgeId(c as u32) });
+        self.push(Problem::LoopBroken {
+            lp: LoopId(l as u32),
+            after: CoedgeId(c as u32),
+        });
     }
     #[inline]
     fn shell_faces(&mut self, s: usize) {
-        self.push(Problem::ShellFaces { shell: ShellId(s as u32) });
+        self.push(Problem::ShellFaces {
+            shell: ShellId(s as u32),
+        });
     }
     #[inline]
     fn shell_disconnected(&mut self, s: usize) {
-        self.push(Problem::ShellDisconnected { shell: ShellId(s as u32) });
+        self.push(Problem::ShellDisconnected {
+            shell: ShellId(s as u32),
+        });
     }
     #[inline]
     fn back_link(&mut self, what: u8, id: usize) {
@@ -659,7 +677,10 @@ impl crate::topo_edges::EdgeTopo for View<'_> {
                 .period
                 .is_none_or(|p| (edge.range.width() - p).abs() > tol::ANGULAR * 10.0)
         } else {
-            edge.curve.eval(edge.range.lo).distance(edge.curve.eval(edge.range.hi)) <= tol::LINEAR
+            edge.curve
+                .eval(edge.range.lo)
+                .distance(edge.curve.eval(edge.range.hi))
+                <= tol::LINEAR
         }
     }
 }
@@ -675,7 +696,11 @@ pub struct ShellView<'a> {
 
 impl<'a> ShellView<'a> {
     pub fn of(body: &'a Body) -> ShellView<'a> {
-        ShellView { view: View::of(body), shells: &body.shells, face_shells: &body.faces }
+        ShellView {
+            view: View::of(body),
+            shells: &body.shells,
+            face_shells: &body.faces,
+        }
     }
 }
 

@@ -437,6 +437,13 @@ fn info(body: &Body, f: FaceId) -> &FaceInfo {
 
 impl<'a> Index<'a> {
     pub fn new(body: &'a Body) -> Self {
+        // (the body's vertex tolerance bounds every vertex's: point_in_face looks that far, G9)
+        debug_assert!(
+            body.vertices
+                .iter()
+                .all(|v| v.tol <= body.vertex_tol().max(forge_math::tol::LINEAR)),
+            "a vertex's tol raised past Body::vertex_tol (raise it with grow_vertex_tol)"
+        );
         let ix = Index {
             body,
             bbox: Box3::EMPTY,
@@ -536,12 +543,19 @@ impl<'a> Index<'a> {
         {
             return w;
         }
-        // nearest boundary point, exactly
+        // nearest boundary point, exactly: looked for within the face's sag reach and the body's
+        // vertex tolerance (a point within a tolerant vertex's ball is on the boundary however far
+        // past every edge's sag it lies; and any reach at least this answers alike: CacheOK, G9)
+        let reach = if body.vertex_tol() > info.reach {
+            body.vertex_tol()
+        } else {
+            info.reach
+        };
         let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
         let mut near: Vec<u32> = Vec::new();
         // each candidate in turn (the band rows round p, or every use), the nearest kept
         let mut try_one = |&(c, ref b): &(forge_topo::CoedgeId, Box3)| {
-            if c == GONE || box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
+            if c == GONE || box_distance(b, p) > reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
                 return;
             }
             let e = body.edge(body.coedge(c).edge);
@@ -553,7 +567,7 @@ impl<'a> Index<'a> {
         };
         match &info.bands {
             Some(bands) => {
-                bands.near(p, info.reach, &mut near);
+                bands.near(p, reach, &mut near);
                 for &i in &near {
                     try_one(&info.edges[i as usize]);
                 }
@@ -688,9 +702,10 @@ impl<'a> Index<'a> {
             .is_none()
         {
             // the nearest boundary point, as point_in_face_past finds it
+            let reach = info.reach.max(body.vertex_tol());
             let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
             for &(c, ref b) in &info.edges {
-                if c == GONE || box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
+                if c == GONE || box_distance(b, p) > reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
                     continue;
                 }
                 let e = body.edge(body.coedge(c).edge);
@@ -1655,5 +1670,51 @@ mod simple_vs_polygon {
             }
         }
         assert!(decided > 1000);
+    }
+}
+
+#[cfg(test)]
+mod vertex_ball {
+    use super::*;
+    use forge_math::Frame;
+    use forge_ops::{Profile, extrude};
+
+    /// A box's top corner tolerant (1e-4, ten times LINEAR): a point on the top's plane 4.9e-5 off
+    /// the corner, diagonally outside the face, is within the corner's ball, so on the boundary.
+    /// The index looked only as far as its edges' sag (LINEAR here) and never reached the corner:
+    /// Outside; and a kept index whose reach was wider said On (G9).
+    #[test]
+    fn a_point_in_a_tolerant_corners_ball_is_on_the_boundary() {
+        let mut b = extrude(
+            &Profile {
+                plane: Frame::WORLD,
+                loops: vec![Profile::rectangle(Point2::ORIGIN, 10.0, 20.0, 0)],
+            },
+            5.0,
+            1,
+        )
+        .unwrap();
+        let corner = b
+            .vertex_ids()
+            .find(|&v| b.vertex(v).point.distance(Point3::new(0.0, 0.0, 5.0)) < 1e-9)
+            .expect("corner");
+        b.grow_vertex_tol(corner, 1e-4);
+        let top = b
+            .face_ids()
+            .find(|&f| {
+                matches!(&b.face(f).surface, Surface::Plane(pl)
+                    if (pl.frame.origin.z - 5.0).abs() < 1e-9 && pl.frame.z().get().z.abs() > 0.99)
+            })
+            .expect("top");
+        let ix = Index::new(&b);
+        assert_eq!(
+            ix.point_in_face(top, Point3::new(-3.5e-5, -3.5e-5, 5.0)),
+            Where::On
+        );
+        // past the ball: off the face
+        assert_eq!(
+            ix.point_in_face(top, Point3::new(-1e-4, -1e-4, 5.0)),
+            Where::Outside
+        );
     }
 }
