@@ -7,6 +7,8 @@ fn main() {
     let mut cfg = Config::default();
     let mut out: Option<PathBuf> = None;
     let mut files: Vec<PathBuf> = Vec::new();
+    let mut ngc: Vec<(PathBuf, ([f64; 3], [f64; 3]))> = Vec::new();
+    let mut flutes: Option<u32> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -38,9 +40,60 @@ fn main() {
                 }
                 return;
             }
+            "--moves" => {
+                // one op's planned moves i0..i1: --moves FILE OP I0 I1
+                let f = PathBuf::from(args.next().expect("--moves FILE OP I0 I1"));
+                let op = args.next().expect("OP");
+                let i0: usize = args.next().and_then(|x| x.parse().ok()).unwrap_or(0);
+                let i1: usize = args.next().and_then(|x| x.parse().ok()).unwrap_or(i0 + 20);
+                let src = std::fs::read_to_string(&f).expect("read");
+                let cam = forge_cam_lang::run(&src, f.parent().unwrap());
+                for o in cam.ops.iter().filter(|o| o.name == op) {
+                    for (pi, p) in o.paths.iter().enumerate() {
+                        for (i, m) in p.moves.iter().enumerate().skip(i0).take(i1.saturating_sub(i0)) {
+                            println!("path {pi} move {i}: {m:?}");
+                        }
+                    }
+                }
+                return;
+            }
+            "--ngc" => {
+                // a foreign program: --ngc FILE X0 Y0 Z0 X1 Y1 Z1 [--flutes N] (the stock box)
+                let f = PathBuf::from(args.next().expect("--ngc FILE X0 Y0 Z0 X1 Y1 Z1"));
+                let v: Vec<f64> = (0..6)
+                    .map(|_| {
+                        args.next()
+                            .and_then(|x| x.parse().ok())
+                            .expect("the stock box: six numbers")
+                    })
+                    .collect();
+                ngc.push((f, ([v[0], v[1], v[2]], [v[3], v[4], v[5]])));
+            }
+            "--flutes" => flutes = args.next().and_then(|s| s.parse().ok()),
             "--cell" => cfg.cell = args.next().and_then(|s| s.parse().ok()),
             _ => files.push(PathBuf::from(a)),
         }
+    }
+    if !ngc.is_empty() {
+        let jobs: Vec<_> = ngc
+            .iter()
+            .map(|(f, stock)| {
+                let text = std::fs::read_to_string(f).expect("read the program");
+                let fo = forge_cam_quality::foreign::Foreign {
+                    stock: *stock,
+                    flutes,
+                    dialect: "linuxcnc".into(),
+                    machine: cfg.machine.clone().unwrap_or_else(|| "generic-vmc3".into()),
+                    cell: cfg.cell.unwrap_or(0.1),
+                };
+                forge_cam_quality::foreign::measure_text(&text, f.display().to_string(), &fo)
+            })
+            .collect();
+        print!("{}", table(&jobs));
+        if let Some(o) = out {
+            std::fs::write(&o, json(&jobs)).expect("write the JSON");
+        }
+        return;
     }
     if files.is_empty() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

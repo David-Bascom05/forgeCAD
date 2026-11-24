@@ -74,3 +74,42 @@ Still to do: comparison against an open-source reference (pending the licence ve
 the cut feed (G0 would need G3 against the op's own cleared voids); contour lead-in/out arcs;
 rest machining; scallop for 3-axis; engagement-controlled clearing (research/cam/
 engagement-clearing.md, after counsel).
+
+## Foreign programs: the same parts, another CAM system (rptu-10.txt)
+
+```
+cargo run --release -p forge-cam-quality -- --ngc FILE X0 Y0 Z0 X1 Y1 Z1 [--flutes N] [--machine M]
+```
+
+measures a program another system posted (src/foreign.rs): the text is read by forge-machine's
+interpreter (LinuxCNC dialect, up to 4 decimals and 3 in F), split into its ops at its operation
+comments, swept through the stock box given (program frame), and timed on the same machine
+model as our own programs. Tools come from the tool comments (`(T1 D=6. CR=0. ...)`); without
+`--flutes` the chip columns are per revolution. `tests/foreign.rs` pins part 3.
+
+The parts are RPTU's 10-part 3-axis benchmark (verify/cam-parts/rptu-10, CC BY 4.0, NOTICE
+there): STEP models and the Autodesk CAM programs the authors made and machined, one 6 mm flat
+end mill. `parts/rptu/` imports parts 2–6 (`import(file: "N.step")`) and machines them with our
+ops and the same tool: face 1 mm, the surrounding step (`clear` or `adaptive`), the holes and
+pockets (`pocket`), all certified. Part 1 is refused: its side walls are notched by the through
+slot (`NotPrism`, as open_step; with CAM-CORE). Parts 7–10 have freeform (3-axis finishing).
+
+Whole program, t_stop on generic-vmc3 (2026-11-24):
+
+| part | Autodesk | ours, step by `clear` | ours, step by `adaptive` |
+|---|---|---|---|
+| 2 (4 holes) | 315.7 s | 104.9 s | – |
+| 3 (+ rectangular step) | 474.4 s | 153.8 s | 319.2 s |
+| 4 (+ circular step) | 514.7 s | 217.2 s | 197.1 s |
+| 5 (+ mixed step) | 463.8 s | 198.2 s | 192.2 s |
+| 6 (+ circular pocket) | 681.8 s | 256.1 s | 421.2 s |
+
+Read with care: the feeds differ as well as the paths. Theirs: S18000 (generic-vmc3 stops at
+12000: one `Rpm` violation, the timeline runs the programmed F), F2000 side cutting (0.111
+mm/rev), F1000 in pockets, F333 plunging, facing one-way with a lift per pass, holes by a
+shallow helix (0.22 mm per turn) to depth. Ours: the cutting data's fz 0.039 × 3 flutes at 12000
+(F1402, raised where the engagement thins the chip). Their adaptive holds the engagement
+(φmax 80°, 2% air on part 3's step: 63 s); ours does not yet (part 3: 211 s, 80% air, 109
+retracts): that is the work. Their offset pocket for part 6's circular pocket meets 180° as ours
+does. The block: the dataset says 80 × 80 × 50; the models are 50–52 mm tall and every program
+faces 1 mm off: measured as Z −50..0 with the part's top at Z −1 (NOTICE).

@@ -1704,8 +1704,13 @@ impl Cam {
                 let path = dir.join(&file);
                 let src =
                     forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-                let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
-                let holes = holes::hole_view(&src, forge_lang::Options::default());
+                // the part's directory: where its imported files (STEP) and fonts are found
+                let opts = || forge_lang::Options {
+                    dir: path.parent().map(|p| p.to_path_buf()),
+                    ..forge_lang::Options::default()
+                };
+                let (run, _) = forge_lang::run(&src, opts(), Default::default());
+                let holes = holes::hole_view(&src, opts());
                 if !run.ok() {
                     return Err(format!(
                         "the part `{file}` does not build: {:?}",
