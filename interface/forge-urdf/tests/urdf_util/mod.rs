@@ -2,8 +2,8 @@
 //! (independent of the exporter's own frames), and urdfdom's `check_urdf` where installed.
 #![allow(dead_code)]
 
-use forge_lang::urdf::Exported;
 use forge_math::{Frame, dmath};
+use forge_urdf::Exported;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 

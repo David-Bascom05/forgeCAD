@@ -6,9 +6,9 @@
 
 mod urdf_util;
 
-use forge_lang::robot::{self, RobotError};
-use forge_lang::urdf::{self, Exported, UrdfError};
 use forge_lang::{Options, Run};
+use forge_urdf::robot::{self, RobotError};
+use forge_urdf::{self as urdf, Exported, UrdfError};
 use std::path::{Path, PathBuf};
 use urdf_util::*;
 
@@ -451,7 +451,7 @@ fn the_view_drives_the_robot_as_the_assembly_moves() {
 
 #[test]
 fn edits_set_and_reset_overrides_in_the_text() {
-    use forge_lang::robot::{Edit, edit};
+    use forge_urdf::robot::{Edit, edit};
     let base = doc("joint(src.elbow, damping: 0.1)\n");
     // a new statement for a joint with none
     let s = edit(
@@ -618,4 +618,48 @@ fn a_reserved_name_is_not_bound() {
     )
     .expect("reads");
     assert_eq!(r.geometry[0].spec, robot::GeoSpec::Hull);
+}
+
+/// The robot reader's call arms (`"name" =>` in read, statement and value) are exactly
+/// forge-lang's word lists for the document kind (`shared` is its own statement kind), so the
+/// lists LANG-PROOFS' coverage reads cannot drift from what the reader takes.
+#[test]
+fn the_readers_arms_are_the_languages_word_lists() {
+    use std::collections::BTreeSet;
+    let src = include_str!("../src/robot.rs");
+    let mut arms = BTreeSet::new();
+    for line in src.lines() {
+        let t = line.trim_start();
+        let Some(head) = t
+            .strip_suffix('{')
+            .map(str::trim_end)
+            .unwrap_or(t)
+            .strip_suffix("=>")
+        else {
+            continue;
+        };
+        let head = head.split(" if ").next().unwrap_or("").trim();
+        let words: Vec<&str> = head.split(" | ").collect();
+        if words.iter().all(|w| {
+            w.len() > 2
+                && w.starts_with('"')
+                && w.ends_with('"')
+                && w[1..w.len() - 1]
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '_')
+        }) {
+            arms.extend(words.iter().map(|w| w[1..w.len() - 1].to_string()));
+        }
+    }
+    assert!(
+        src.contains("StmtKind::Shared"),
+        "shared is read as its own statement kind"
+    );
+    let want: BTreeSet<String> = forge_lang::robot::STATEMENTS
+        .iter()
+        .chain(forge_lang::robot::VALUES.iter())
+        .filter(|w| **w != "shared")
+        .map(|w| w.to_string())
+        .collect();
+    assert_eq!(arms, want);
 }

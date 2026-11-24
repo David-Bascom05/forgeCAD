@@ -6,9 +6,9 @@
 //! request; byte-identical output twice over; and urdfdom's `check_urdf` on every file when it
 //! is installed (`apt install liburdfdom-tools`).
 
-use forge_lang::urdf::{self, Exported, UrdfError};
 use forge_lang::{Options, Run};
 use forge_math::dmath;
+use forge_urdf::{self as urdf, Exported, UrdfError};
 use std::path::{Path, PathBuf};
 
 fn dir(name: &str) -> PathBuf {

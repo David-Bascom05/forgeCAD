@@ -222,7 +222,7 @@ fn the_panel_edits_the_robot_document_and_the_source() {
         .unwrap()
         .out
         .push(forge_render::shell::robot::RobotAct::Edit(
-            forge_lang::robot::Edit::Set {
+            forge_urdf::robot::Edit::Set {
                 line: Some(c.line),
                 call: String::new(),
                 target: String::new(),
@@ -265,7 +265,7 @@ fn the_panel_edits_the_robot_document_and_the_source() {
             joint: "elbow".into(),
             arg: "limit".into(),
             text: "(-100deg, 100deg)".into(),
-            then: forge_lang::robot::Edit::Reset {
+            then: forge_urdf::robot::Edit::Reset {
                 line,
                 field: "limit".into(),
             },
@@ -305,8 +305,8 @@ fn the_panel_edits_the_robot_document_and_the_source() {
 
 #[test]
 fn the_tree_is_edited_from_the_panel() {
-    use forge_lang::robot::Edit;
     use forge_render::shell::robot::RobotAct;
+    use forge_urdf::robot::Edit;
     let Ok(mut h) = Headless::new((1600.0, 1000.0), 1.0) else {
         eprintln!("skipped: no adapter");
         return;
