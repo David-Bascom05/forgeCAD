@@ -51,6 +51,14 @@ Expect about 2 min with the Mathlib cache. Post.lean's `step` takes about 45 s.
   B_{r+m} as computed, m = 1e-6, contains the opening (F ⊖ B_r) ⊕ B_r. Not in Lean (hyp). It
   bears only on the label "tool radius", never on G1–G6.
 
+- **H.probe (a probe move's contact window).** In a `PMove::Probe`'s window (Phase::Touch) the
+  stylus ball is exempt against every part and stock face, not only the one probed: a second
+  face (a corner, a wall beside a web) meeting the ball there is certified, though the trigger
+  would come from it (a wrong measurement, not a crash; every other body keeps the clearance).
+  Tightening (CAM-CORE): in the window, hold the ball to the clearance from every face but those
+  whose contact normal opposes the move (n·u < −cos θ). Also assumed: the control stops within
+  `over` of the first trigger (the probe's overtravel spec). Not in Lean (hyp).
+
 ## The vise code (3e8a91d, 0a4c189): done
 
 ForgeCam/Vise.lean adds 7 theorems (41 in all).

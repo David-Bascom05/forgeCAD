@@ -130,6 +130,13 @@ chk = inspect(op1, tool: p, at: (43, 0, 10), normal: (1, 0, 0), nominal: 43, tol
   before the contact, default twice the setup's clearance, at least 0.5), `feed:` (the search,
   default 100 mm/min) and `link_feed:` (the moves between, default 1000 mm/min).
 
+The approach must exceed `entry` by more than the clearance, so every probe move has a
+checked approach before its window. The window's soundness assumes the control stops within
+`over` of the first trigger: that is the probe's overtravel specification, so `over` must not
+exceed it (the device records give it as `overtravel`). Inside the window the ball is exempt
+against every face, not only the probed one (verify/forge-cam RESUME, H.probe): a second face
+there would give a wrong measurement, not a crash.
+
 Each probe move is certified as its whole search: from its start to `over` past the nominal
 contact, as if the probe never triggered. Every body of the probe keeps the setup's clearance
 from the part and the stock on every move. The one exception is the ball inside the contact

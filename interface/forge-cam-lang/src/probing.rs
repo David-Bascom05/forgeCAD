@@ -206,6 +206,8 @@ pub struct Plan {
     pub entry: f64,
     pub feed: f64,
     pub link_feed: f64,
+    /// The setup's clearance: each probe move's approach is longer than entry + this.
+    pub clear_gap: f64,
     /// The setup's clear height (rapids) and the top the probe starts down from.
     pub clear: f64,
     pub top: f64,
@@ -285,6 +287,12 @@ pub fn path(p: &Plan, tool: usize, ball: f64) -> Result<(OpPath, Vec<ProbePoint>
         || p.approach <= p.entry
     {
         return Err("probing: over > 0, entry > 0, approach > entry and feed > 0".into());
+    }
+    if p.approach <= p.entry + p.clear_gap {
+        return Err(format!(
+            "approach: {} must exceed entry ({}) by more than the clearance ({}), so each probe move has a checked approach before its contact window",
+            p.approach, p.entry, p.clear_gap
+        ));
     }
     let pts = points(p)?;
     let mut moves = vec![];
@@ -379,6 +387,12 @@ pub fn path_along(
         || p.approach <= p.entry
     {
         return Err("probing: over > 0, entry > 0, approach > entry and feed > 0".into());
+    }
+    if p.approach <= p.entry + p.clear_gap {
+        return Err(format!(
+            "approach: {} must exceed entry ({}) by more than the clearance ({}), so the probe move has a checked approach before its contact window",
+            p.approach, p.entry, p.clear_gap
+        ));
     }
     let to = contact(p.at, n, 0.5 * ball);
     let a = add(to, n, p.approach);

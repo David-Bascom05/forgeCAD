@@ -3209,6 +3209,7 @@ impl Cam {
             entry,
             feed: get_num(a, "feed", Some(100.0))?,
             link_feed: get_num(a, "link_feed", Some(1000.0))?,
+            clear_gap: s.clearance,
             clear: s.heights.clear,
             top: s.stock.max[2] + s.clearance,
         };
@@ -4542,7 +4543,9 @@ impl Cam {
                         i,
                     ));
                 }
-                forge_post::Motion::Feed(_, q) | forge_post::Motion::Arc { f: q, .. } | forge_post::Motion::Probe(_, q)
+                forge_post::Motion::Feed(_, q)
+                | forge_post::Motion::Arc { f: q, .. }
+                | forge_post::Motion::Probe(_, q)
                     if q.unsigned_abs() >= 1 << 53 || over(q) =>
                 {
                     let v = q as f64 / fs;

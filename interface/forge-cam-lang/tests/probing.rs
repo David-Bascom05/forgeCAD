@@ -124,11 +124,28 @@ fn an_overtravel_that_brings_the_stem_to_the_wall_fails() {
 
 #[test]
 fn a_probe_feed_past_the_machines_feed_limit_fails_g5() {
-    let cam = run("z0 = probe_wcs(op1, tool: p, kind: \"surface\", at: (25, 25, 20), feed: 1000000)\nprog = program(op1, post: \"linuxcnc\", number: 10)\n");
+    let cam = run(
+        "z0 = probe_wcs(op1, tool: p, kind: \"surface\", at: (25, 25, 20), feed: 1000000)\nprog = program(op1, post: \"linuxcnc\", number: 10)\n",
+    );
     let o = op(&cam, "z0");
     assert!(
-        o.checks.iter().any(|c| c.verdict != "pass" && c.other.contains("feed limit")),
+        o.checks
+            .iter()
+            .any(|c| c.verdict != "pass" && c.other.contains("feed limit")),
         "{:?}",
         o.checks
+    );
+}
+
+#[test]
+fn an_approach_no_longer_than_the_window_is_refused() {
+    let cam =
+        run("z0 = probe_wcs(op1, tool: p, kind: \"surface\", at: (25, 25, 20), approach: 1.05, entry: 1)\n");
+    let o = op(&cam, "z0");
+    assert_eq!(o.status, "refused");
+    assert!(
+        o.refusal.as_ref().unwrap().contains("checked approach"),
+        "{:?}",
+        o.refusal
     );
 }
