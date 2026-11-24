@@ -41,7 +41,9 @@ find it (given D1's boxes and the distance filter's completeness).
   offset. So the exact point a sample stands for is off the edge, and the exact answer there is
   `Inside` or `Outside`, not today's tolerance `On`. These 36 decisions differ from the exact
   reading. The exact result would keep a sliver ~1e-14 wide along each edge where today's merges
-  it. Whether that is a wrong result or the intended tolerance model is the owner's call (open).
+  it. Judged against §E (the coordinator's ruling): the tolerance `On` is correct there under
+  δ-Faithful, the result valid and each edge within δ of its exact meet (TolOn.lean
+  `edge_within_of_ends`; measured: edges within 2.7e-13 of their exact meet lines).
 
 **Ledger.** 1a.where: proven (this file). 1a.classify: the On branch proven from facts 1–2
 (`classify_on_sound`), fact 1 a GAP (fails on the bench parts frame and volute, above); the ray
