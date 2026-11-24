@@ -129,7 +129,7 @@ fn structural_errors_are_typed() {
     // unknown kind names the choices
     let e = refused(&MINI.replace("kind = \"vmc3\"", "kind = \"robot\""));
     assert!(
-        matches!(e, DefError::Unknown { field: "kind", ref known, .. } if known.len() == 7),
+        matches!(e, DefError::Unknown { field: "kind", ref known, .. } if known.len() == 8),
         "{e:?}"
     );
     // a rotary without a pivot
