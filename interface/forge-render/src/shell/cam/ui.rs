@@ -1006,9 +1006,26 @@ fn details(
                     width,
                     t.ink,
                 );
-                match run.and_then(|r| r.cycle([o.name.as_str()])) {
+                let own = run.and_then(|r| r.cycle([o.name.as_str()]));
+                match own {
                     Some(c) => fact_tip(ui, t, "Cycle time", &cycle_words(c), CYCLE_TIP, width, t.ink),
                     None => fact(ui, t, "Feed time", &time(o.time_s), width, t.ink),
+                }
+                // adaptive: what clear (at its own defaults) would take on the same setup, tool
+                // and heights, so the faster can be chosen (TOOLPATH-QUALITY)
+                if o.kind == "adaptive" {
+                    let tip = "Clear on the same setup, tool, heights and stock to leave, at clear's own defaults, measured on the machine's timeline as this op is. A tuned clear (fewer, deeper levels) may be faster still.";
+                    let ready = w.alt.as_ref().filter(|a| a.0 == o.name && run.is_some_and(|r| r.text == a.1));
+                    match (ready, own) {
+                        (Some((_, _, Some(c))), Some(me)) => {
+                            let pct = (c.1 / me.1 - 1.0) * 100.0;
+                            let words = format!("{} ({}{:.0}%)", cycle_short(*c), if pct >= 0.0 { "+" } else { "\u{2212}" }, pct.abs());
+                            fact_tip(ui, t, "Clear (its defaults)", &words, tip, width, if c.1 < me.1 { t.warn } else { t.ink2 });
+                        }
+                        (Some((_, _, Some(c))), None) => fact_tip(ui, t, "Clear (its defaults)", &cycle_short(*c), tip, width, t.ink2),
+                        (Some((_, _, None)), _) => fact_tip(ui, t, "Clear (its defaults)", "does not build here", tip, width, t.ink2),
+                        (None, _) => fact_tip(ui, t, "Clear (its defaults)", "measuring\u{2026}", tip, width, t.ink2),
+                    }
                 }
             }
             if let Some(l) = o.least {
