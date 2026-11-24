@@ -407,8 +407,10 @@ fn search(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
         Some(r) if r != SurfaceSurface::NotAnalytic => r,
         _ => match forge_geom::intcurve::trace(a, b, region) {
             Some(cs) if cs.is_empty() => SurfaceSurface::Empty,
+            // two rounds touching where their springs cross: the trace mended there (forge-geom node.rs)
             Some(cs) => SurfaceSurface::Curves(
-                cs.into_iter()
+                forge_geom::node::mend(a, b, cs)
+                    .into_iter()
                     .map(|c| (Curve::Intersection(std::sync::Arc::new(c)), Contact::Crossing))
                     .collect(),
             ),
@@ -538,14 +540,7 @@ fn equal_crossing(c: &Cylinder, d: &Cylinder) -> Option<SurfaceSurface> {
         // a point x t from the crossing is t |x × a| from either axis
         let frame = Frame::from_axes(o, x, m, x.cross(m))?;
         let major = r / x.cross(a).length();
-        out.push((
-            Curve::Ellipse(Ellipse {
-                frame,
-                major,
-                minor: r,
-            }),
-            Contact::Crossing,
-        ));
+        out.push((Curve::Ellipse(Ellipse::new(frame, major, r)), Contact::Crossing));
     }
     Some(SurfaceSurface::Curves(out))
 }

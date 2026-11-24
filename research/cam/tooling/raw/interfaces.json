@@ -1,0 +1,1298 @@
+{
+ "taken": "2026-11-24",
+ "note": "Values are restated from maker-hosted catalogue pages/drawings; inch values converted exactly (x25.4). Where several makers print a value, the primary is in values[key] and the others in values[key+\"__alt\"] (list). Disagreements are in conflicts.",
+ "interfaces": [
+  {
+   "id": "BT30",
+   "standard": "\"Bottle Grip Taper\" (Sumitomo, JIS B 6339 lineage, not named on the page); retention knobs: \"JIS-BT 6339\" / \"MAS 403\" (Schunk), \"MAS\" (Techniks)",
+   "values": {
+    "gauge_d": {
+     "v": 31.75,
+     "unit": "mm",
+     "stated": "D (Standard Dimensions) 31.75  [BT30: D 31.75 D1 46 D2 38 t1 20 t2 8 t3 13.6 t4 2 t5 2 d2 14 d3 12.5 L 48.4 l2 24 l3 7 l4 17 g M12 b1 16.1 t7 16.3]",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "taper": {
+     "v": "7/24",
+     "unit": "text",
+     "stated": "\"7/24 Taper\" (Fig 3 label)",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "taper_length": {
+     "v": 48.4,
+     "unit": "mm",
+     "stated": "L 48.4",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "L is drawn from the gauge diameter (oD) to the taper small end in Fig 3."
+    },
+    "flange_d": {
+     "v": 46,
+     "unit": "mm",
+     "stated": "D1 46",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "flange_t": {
+     "v": 20,
+     "unit": "mm",
+     "stated": "t1 20",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "t1 drawn across the flange in Fig 3; read as flange width (back face to front face). Consistent with Maritool front-face ordinates (t4+t1) but the reading of the figure is ours."
+    },
+    "gauge_to_flange_back": {
+     "v": 2,
+     "unit": "mm",
+     "stated": "t4 2",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "t4 drawn from the gauge line (oD) to the flange back face in Fig 3."
+    },
+    "flange_D2": {
+     "v": 38,
+     "unit": "mm",
+     "stated": "D2 38",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "D2 is a diameter drawn at the V-groove in Fig 3 (smaller than D1); the figure does not name it, so it is not asserted to be the groove root diameter."
+    },
+    "key_slot_w": {
+     "v": 16.1,
+     "unit": "mm",
+     "stated": "b1 16.1",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "b1: drive slot width (end view, Fig 3)."
+    },
+    "key_slot_t7": {
+     "v": 16.3,
+     "unit": "mm",
+     "stated": "t7 16.3",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "t7: dimension in the end view from the slot; the figure shows it between the slot bottom and the axis/opposite edge - not interpreted further."
+    },
+    "pull_stud_thread": {
+     "v": "M12",
+     "unit": "text",
+     "stated": "g M12",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "pull_stud_thread_depth_l2": {
+     "v": 24,
+     "unit": "mm",
+     "stated": "l2 24",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "l2: threaded-bore length from the small end (Fig 3)."
+    },
+    "retention_bore_d2": {
+     "v": 14,
+     "unit": "mm",
+     "stated": "d2 14",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "d2: counterbore diameter at small end (Fig 3)."
+    },
+    "retention_bore_d3": {
+     "v": 12.5,
+     "unit": "mm",
+     "stated": "d3 12.5",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "d3: second bore diameter at small end (Fig 3)."
+    },
+    "raw_unlabelled": {
+     "v": "t2 8; t3 13.6; t5 2; l3 7; l4 17",
+     "unit": "text",
+     "stated": "t2 8 t3 13.6 t5 2 l3 7 l4 17",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "Flange/V-groove axial positions and bore lengths per Fig 3; we do not assign their meanings (t2/t3/t5 locate the V-groove relative to the flange; l4 is drawn under the flange)."
+    },
+    "gauge_d__alt": [
+     {
+      "v": 31.75,
+      "unit": "mm",
+      "stated": "Ø1.25",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/c3534f01_BT30%20ER20-7.8.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ],
+    "flange_d__alt": [
+     {
+      "v": 45.974,
+      "unit": "mm",
+      "stated": "Ø1.81",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/c3534f01_BT30%20ER20-7.8.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ],
+    "taper_length__alt": [
+     {
+      "v": 48.514,
+      "unit": "mm",
+      "stated": "1.91 (ordinate at taper small end, from 0 at gauge line)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/c3534f01_BT30%20ER20-7.8.pdf#page=1",
+      "maker": "Maritool",
+      "note": "Maritool drawings use ordinate dimensions along the axis with 0 (\".00\") at the taper large end where the gauge diameter is dimensioned (the gauge line); values are read from that origin."
+     }
+    ],
+    "gauge_to_flange_back__alt": [
+     {
+      "v": 2.032,
+      "unit": "mm",
+      "stated": ".08 (ordinate)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/c3534f01_BT30%20ER20-7.8.pdf#page=1",
+      "maker": "Maritool",
+      "note": "Maritool drawings use ordinate dimensions along the axis with 0 (\".00\") at the taper large end where the gauge diameter is dimensioned (the gauge line); values are read from that origin."
+     }
+    ],
+    "gauge_to_flange_front": {
+     "v": 22.098,
+     "unit": "mm",
+     "stated": ".87 (ordinate at flange front face)",
+     "url": "https://d1hdtb64aspgjo.cloudfront.net/c3534f01_BT30%20ER20-7.8.pdf#page=1",
+     "maker": "Maritool",
+     "note": "Maritool drawings use ordinate dimensions along the axis with 0 (\".00\") at the taper large end where the gauge diameter is dimensioned (the gauge line); values are read from that origin."
+    },
+    "pull_stud_thread__alt": [
+     {
+      "v": "M12x1.75",
+      "unit": "text",
+      "stated": "M12x1.75 THREAD x 1.00 DEEP; C'BORE DIA .494 x .240 DEEP",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/c3534f01_BT30%20ER20-7.8.pdf#page=1",
+      "maker": "Maritool"
+     },
+     {
+      "v": "M12-1.75",
+      "unit": "text",
+      "stated": "3004TRK-MF BT30 - MAS 60° ... T M12-1.75",
+      "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf#page=3",
+      "maker": "Techniks"
+     },
+     {
+      "v": "M12",
+      "unit": "text",
+      "stated": "AZB JIS-BT 30 30° MAS 403 ... G1 M12",
+      "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline#page=987",
+      "maker": "SCHUNK"
+     }
+    ]
+   },
+   "sources": [
+    "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+    "https://d1hdtb64aspgjo.cloudfront.net/c3534f01_BT30%20ER20-7.8.pdf#page=1",
+    "https://www.maritool.com/Mill-Tool-Holders-BT30-ER-Collet-Chucks/c23_33_35/p27684/BT30-ER20-7.8-Collet-Chuck-Tool-Holder/product_info.html",
+    "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf#page=3",
+    "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline#page=987"
+   ],
+   "unknown": [
+    "small_d: taper small-end diameter not printed by Sumitomo/Maritool for BT",
+    "v_groove_angle: no maker page found that dimensions the BT V-groove angle (Sumitomo Fig 3 shows 60° but at the taper small end, not the groove)",
+    "v_groove_d / groove position: Sumitomo D2, t2, t3, t5 are printed (see flange_D2, raw_unlabelled) but the figure does not name them, so they are not mapped to groove root diameter / groove position",
+    "key slot width: Maritool BT30 drawing does not dimension it (Sumitomo b1 16.1 is the only source)"
+   ],
+   "conflicts": []
+  },
+  {
+   "id": "BT40",
+   "standard": "\"Bottle Grip Taper\" (Sumitomo, JIS B 6339 lineage, not named on the page); retention knobs: \"JIS-BT 6339\" / \"MAS 403\" (Schunk), \"MAS\" (Techniks)",
+   "values": {
+    "gauge_d": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "D (Standard Dimensions) 44.45  [BT40: D 44.45 D1 63 D2 53 t1 25 t2 10 t3 16.6 t4 2 t5 2 d2 19 d3 17 L 65.4 l2 30 l3 8 l4 21 g M16 b1 16.1 t7 22.6]",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "taper": {
+     "v": "7/24",
+     "unit": "text",
+     "stated": "\"7/24 Taper\" (Fig 3 label)",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "taper_length": {
+     "v": 65.4,
+     "unit": "mm",
+     "stated": "L 65.4",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "L is drawn from the gauge diameter (oD) to the taper small end in Fig 3."
+    },
+    "flange_d": {
+     "v": 63,
+     "unit": "mm",
+     "stated": "D1 63",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "flange_t": {
+     "v": 25,
+     "unit": "mm",
+     "stated": "t1 25",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "t1 drawn across the flange in Fig 3; read as flange width (back face to front face). Consistent with Maritool front-face ordinates (t4+t1) but the reading of the figure is ours."
+    },
+    "gauge_to_flange_back": {
+     "v": 2,
+     "unit": "mm",
+     "stated": "t4 2",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "t4 drawn from the gauge line (oD) to the flange back face in Fig 3."
+    },
+    "flange_D2": {
+     "v": 53,
+     "unit": "mm",
+     "stated": "D2 53",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "D2 is a diameter drawn at the V-groove in Fig 3 (smaller than D1); the figure does not name it, so it is not asserted to be the groove root diameter."
+    },
+    "key_slot_w": {
+     "v": 16.1,
+     "unit": "mm",
+     "stated": "b1 16.1",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "b1: drive slot width (end view, Fig 3)."
+    },
+    "key_slot_t7": {
+     "v": 22.6,
+     "unit": "mm",
+     "stated": "t7 22.6",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "t7: dimension in the end view from the slot; the figure shows it between the slot bottom and the axis/opposite edge - not interpreted further."
+    },
+    "pull_stud_thread": {
+     "v": "M16",
+     "unit": "text",
+     "stated": "g M16",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "pull_stud_thread_depth_l2": {
+     "v": 30,
+     "unit": "mm",
+     "stated": "l2 30",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "l2: threaded-bore length from the small end (Fig 3)."
+    },
+    "retention_bore_d2": {
+     "v": 19,
+     "unit": "mm",
+     "stated": "d2 19",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "d2: counterbore diameter at small end (Fig 3)."
+    },
+    "retention_bore_d3": {
+     "v": 17,
+     "unit": "mm",
+     "stated": "d3 17",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "d3: second bore diameter at small end (Fig 3)."
+    },
+    "raw_unlabelled": {
+     "v": "t2 10; t3 16.6; t5 2; l3 8; l4 21",
+     "unit": "text",
+     "stated": "t2 10 t3 16.6 t5 2 l3 8 l4 21",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "Flange/V-groove axial positions and bore lengths per Fig 3; we do not assign their meanings (t2/t3/t5 locate the V-groove relative to the flange; l4 is drawn under the flange)."
+    },
+    "gauge_d__alt": [
+     {
+      "v": 44.45,
+      "unit": "mm",
+      "stated": "Ø1.75",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/ed7901ff_BT40-ER20-80-REV1.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ],
+    "flange_d__alt": [
+     {
+      "v": 62.992,
+      "unit": "mm",
+      "stated": "Ø2.48",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/ed7901ff_BT40-ER20-80-REV1.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ],
+    "taper_length__alt": [
+     {
+      "v": 65.532,
+      "unit": "mm",
+      "stated": "2.58 (ordinate at taper small end)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/ed7901ff_BT40-ER20-80-REV1.pdf#page=1",
+      "maker": "Maritool",
+      "note": "Maritool drawings use ordinate dimensions along the axis with 0 (\".00\") at the taper large end where the gauge diameter is dimensioned (the gauge line); values are read from that origin."
+     }
+    ],
+    "gauge_to_flange_back__alt": [
+     {
+      "v": 2.0066,
+      "unit": "mm",
+      "stated": ".079 (ordinate)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/ed7901ff_BT40-ER20-80-REV1.pdf#page=1",
+      "maker": "Maritool",
+      "note": "Maritool drawings use ordinate dimensions along the axis with 0 (\".00\") at the taper large end where the gauge diameter is dimensioned (the gauge line); values are read from that origin."
+     }
+    ],
+    "gauge_to_flange_front": {
+     "v": 26.924,
+     "unit": "mm",
+     "stated": "1.06 (ordinate at flange front face)",
+     "url": "https://d1hdtb64aspgjo.cloudfront.net/ed7901ff_BT40-ER20-80-REV1.pdf#page=1",
+     "maker": "Maritool",
+     "note": "Maritool drawings use ordinate dimensions along the axis with 0 (\".00\") at the taper large end where the gauge diameter is dimensioned (the gauge line); values are read from that origin."
+    },
+    "pull_stud_thread__alt": [
+     {
+      "v": "M16x2.0",
+      "unit": "text",
+      "stated": "M16x2.0 THREAD x 1.25 DEEP; Ø.669 C'BORE x .323 DEEP",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/ed7901ff_BT40-ER20-80-REV1.pdf#page=1",
+      "maker": "Maritool"
+     },
+     {
+      "v": "M16-2",
+      "unit": "text",
+      "stated": "4003TRK-MF BT40 - MAS 45° ... T M16-2",
+      "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf#page=3",
+      "maker": "Techniks"
+     },
+     {
+      "v": "M16",
+      "unit": "text",
+      "stated": "AZB JIS-BT 40 30° MAS 403 ... G1 M16",
+      "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline#page=987",
+      "maker": "SCHUNK"
+     }
+    ],
+    "key_slot_w__alt": [
+     {
+      "v": 16.383,
+      "unit": "mm",
+      "stated": ".645 (unlabelled, drawn across the drive slot)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/ed7901ff_BT40-ER20-80-REV1.pdf#page=1",
+      "maker": "Maritool",
+      "note": "Dimension drawn between the drive-slot walls in the side view; not labelled as slot width."
+     }
+    ]
+   },
+   "sources": [
+    "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+    "https://d1hdtb64aspgjo.cloudfront.net/ed7901ff_BT40-ER20-80-REV1.pdf#page=1",
+    "https://www.maritool.com/Mill-Tool-Holders-BT40-ER-Collet-Chucks/c23_26_36/p331/BT40-ER20-80-COLLET-CHUCK-TOOL-HOLDER/product_info.html",
+    "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf#page=3",
+    "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline#page=987"
+   ],
+   "unknown": [
+    "small_d: taper small-end diameter not printed by Sumitomo/Maritool for BT",
+    "v_groove_angle: no maker page found that dimensions the BT V-groove angle (Sumitomo Fig 3 shows 60° but at the taper small end, not the groove)",
+    "v_groove_d / groove position: Sumitomo D2, t2, t3, t5 are printed (see flange_D2, raw_unlabelled) but the figure does not name them, so they are not mapped to groove root diameter / groove position"
+   ],
+   "conflicts": [
+    {
+     "key": "key_slot_w",
+     "values": [
+      {
+       "maker": "Sumitomo",
+       "stated": "b1 16.1",
+       "mm": 16.1
+      },
+      {
+       "maker": "Maritool",
+       "stated": ".645 (unlabelled, across drive slot on BT40-ER20-80 drawing)",
+       "mm": 16.383
+      }
+     ],
+     "note": "Differ by 0.28 mm; Maritool dimension is unlabelled and may be a nominal/rounded value."
+    }
+   ]
+  },
+  {
+   "id": "BT50",
+   "standard": "\"Bottle Grip Taper\" (Sumitomo, JIS B 6339 lineage, not named on the page); retention knobs: \"JIS-BT 6339\" / \"MAS 403\" (Schunk), \"MAS\" (Techniks)",
+   "values": {
+    "gauge_d": {
+     "v": 69.85,
+     "unit": "mm",
+     "stated": "D (Standard Dimensions) 69.85  [BT50: D 69.85 D1 100 D2 85 t1 35 t2 15 t3 23.2 t4 3 t5 3 d2 27 d3 25 L 101.8 l2 45 l3 11 l4 31 g M24 b1 25.7 t7 35.4]",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "taper": {
+     "v": "7/24",
+     "unit": "text",
+     "stated": "\"7/24 Taper\" (Fig 3 label)",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "taper_length": {
+     "v": 101.8,
+     "unit": "mm",
+     "stated": "L 101.8",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "L is drawn from the gauge diameter (oD) to the taper small end in Fig 3."
+    },
+    "flange_d": {
+     "v": 100,
+     "unit": "mm",
+     "stated": "D1 100",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "flange_t": {
+     "v": 35,
+     "unit": "mm",
+     "stated": "t1 35",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "t1 drawn across the flange in Fig 3; read as flange width (back face to front face). Consistent with Maritool front-face ordinates (t4+t1) but the reading of the figure is ours."
+    },
+    "gauge_to_flange_back": {
+     "v": 3,
+     "unit": "mm",
+     "stated": "t4 3",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "t4 drawn from the gauge line (oD) to the flange back face in Fig 3."
+    },
+    "flange_D2": {
+     "v": 85,
+     "unit": "mm",
+     "stated": "D2 85",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "D2 is a diameter drawn at the V-groove in Fig 3 (smaller than D1); the figure does not name it, so it is not asserted to be the groove root diameter."
+    },
+    "key_slot_w": {
+     "v": 25.7,
+     "unit": "mm",
+     "stated": "b1 25.7",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "b1: drive slot width (end view, Fig 3)."
+    },
+    "key_slot_t7": {
+     "v": 35.4,
+     "unit": "mm",
+     "stated": "t7 35.4",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "t7: dimension in the end view from the slot; the figure shows it between the slot bottom and the axis/opposite edge - not interpreted further."
+    },
+    "pull_stud_thread": {
+     "v": "M24",
+     "unit": "text",
+     "stated": "g M24",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "pull_stud_thread_depth_l2": {
+     "v": 45,
+     "unit": "mm",
+     "stated": "l2 45",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "l2: threaded-bore length from the small end (Fig 3)."
+    },
+    "retention_bore_d2": {
+     "v": 27,
+     "unit": "mm",
+     "stated": "d2 27",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "d2: counterbore diameter at small end (Fig 3)."
+    },
+    "retention_bore_d3": {
+     "v": 25,
+     "unit": "mm",
+     "stated": "d3 25",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "d3: second bore diameter at small end (Fig 3)."
+    },
+    "raw_unlabelled": {
+     "v": "t2 15; t3 23.2; t5 3; l3 11; l4 31",
+     "unit": "text",
+     "stated": "t2 15 t3 23.2 t5 3 l3 11 l4 31",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "Flange/V-groove axial positions and bore lengths per Fig 3; we do not assign their meanings (t2/t3/t5 locate the V-groove relative to the flange; l4 is drawn under the flange)."
+    },
+    "pull_stud_thread__alt": [
+     {
+      "v": "M24",
+      "unit": "text",
+      "stated": "17805 BT50 - 45° ... T M24 (BT RETENTION KNOBS, Dimensions in millimeters)",
+      "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf#page=5",
+      "maker": "Techniks"
+     },
+     {
+      "v": "M24",
+      "unit": "text",
+      "stated": "AZB JIS-BT 50 30° MAS 403 ... G1 M24",
+      "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline#page=987",
+      "maker": "SCHUNK"
+     }
+    ]
+   },
+   "sources": [
+    "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/n2.pdf#page=31",
+    "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf#page=5",
+    "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline#page=987"
+   ],
+   "unknown": [
+    "small_d: taper small-end diameter not printed by Sumitomo/Maritool for BT",
+    "v_groove_angle: no maker page found that dimensions the BT V-groove angle (Sumitomo Fig 3 shows 60° but at the taper small end, not the groove)",
+    "v_groove_d / groove position: Sumitomo D2, t2, t3, t5 are printed (see flange_D2, raw_unlabelled) but the figure does not name them, so they are not mapped to groove root diameter / groove position",
+    "gauge_to_flange_front: no BT50 maker drawing with axial ordinates found (Maritool BT50 product pages carry no drawing PDF); Sumitomo prints t1/t4 only"
+   ],
+   "conflicts": []
+  },
+  {
+   "id": "CAT40",
+   "standard": "\"CAT A.N.S.I. B5.50\" (ISCAR); \"ASME B5.50\" (SCHUNK holder headings)",
+   "values": {
+    "gauge_d": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "d1 1.750 (INCH)  [CAT40: b 0.645; d 0.2756; d1 1.75; G 5/8-11; d3 0.72; C 0.188; d5 2.863; d6 2.5; d8 1.75; f1 0.4375; f2 1.38; f3 0.75; L1 2.687; L4 1.12; L6 0.985; L7 0.89; e1 1.062; d12 0.157; a 0.125]",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "taper": {
+     "v": 8.297222222222222,
+     "unit": "deg",
+     "stated": "8°17'50\" (angle drawn between taper surface and axis, Type A figure)",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "Half-angle as drawn; 7:24 ratio not printed on this page."
+    },
+    "taper_length": {
+     "v": 68.2498,
+     "unit": "mm",
+     "stated": "L1 ±.005 2.687",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "L1 drawn from the gauge line to the taper small end."
+    },
+    "flange_d": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "d6 ±.002 2.500",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "gauge_to_flange_back": {
+     "v": 3.175,
+     "unit": "mm",
+     "stated": "a 0.125",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "a drawn between gauge line and flange back face."
+    },
+    "gauge_to_flange_front": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "f3 ±.002 0.75",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "f3 drawn from gauge line to flange front face."
+    },
+    "v_groove_ball_d": {
+     "v": 7.0002,
+     "unit": "mm",
+     "stated": "d 0.2756 (gauge ball diameter in the V-groove)",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "v_groove_over_ball_d": {
+     "v": 72.7202,
+     "unit": "mm",
+     "stated": "d5 ±.002 2.863 (diameter over gauge balls)",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "v_groove_ball_pos": {
+     "v": 11.1125,
+     "unit": "mm",
+     "stated": "f1 ±.005 0.4375",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "f1 drawn from gauge line to the gauge-ball (V-groove) centre plane."
+    },
+    "body_d_behind_flange": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "d8 ±.005 1.750",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "d8: diameter of the body on the tool side of the flange (Type A figure)."
+    },
+    "f2_min": {
+     "v": 35.052,
+     "unit": "mm",
+     "stated": "f2 Min. 1.38",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "f2 Min. as drawn in the Type A figure (axial extent ending at the end of the d8 body); start point not interpreted."
+    },
+    "key_slot_w": {
+     "v": 16.383,
+     "unit": "mm",
+     "stated": "b ±.001 0.645",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "key_slot_depth_L6": {
+     "v": 25.019,
+     "unit": "mm",
+     "stated": "L6 +.000/-.015 0.985",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "L6: axis to slot bottom (end view), one side."
+    },
+    "key_slot_depth_L7": {
+     "v": 22.606,
+     "unit": "mm",
+     "stated": "L7 +.000/-.015 0.89",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "L7: axis to slot bottom (end view), other side."
+    },
+    "pull_stud_thread": {
+     "v": "5/8-11 UNC-2B",
+     "unit": "text",
+     "stated": "G UNC-2B 5/8-11",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "retention_bore_d3": {
+     "v": 18.288,
+     "unit": "mm",
+     "stated": "d3 ±.01 0.72",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "d3: counterbore diameter at the small end."
+    },
+    "retention_bore_C": {
+     "v": 4.7752,
+     "unit": "mm",
+     "stated": "C ±.01 0.188",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "C: counterbore depth at the small end."
+    },
+    "thread_length_min_L4": {
+     "v": 28.448,
+     "unit": "mm",
+     "stated": "L4 Min. 1.12",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "coolant_e1": {
+     "v": 26.9748,
+     "unit": "mm",
+     "stated": "e1 ±.004 1.062",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "Type B coolant-through-flange hole offset."
+    },
+    "coolant_d12": {
+     "v": 3.9878,
+     "unit": "mm",
+     "stated": "d12 0.157",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "Type B coolant hole diameter (30° to axis)."
+    },
+    "gauge_d__alt": [
+     {
+      "v": 44.45,
+      "unit": "mm",
+      "stated": "Ø1.75",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/b7ce44b5_CAT40-ER16-3.0-REV1.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ],
+    "flange_d__alt": [
+     {
+      "v": 63.5,
+      "unit": "mm",
+      "stated": "2.50",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/b7ce44b5_CAT40-ER16-3.0-REV1.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ],
+    "taper_length__alt": [
+     {
+      "v": 68.326,
+      "unit": "mm",
+      "stated": "2.69 (ordinate at taper small end)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/b7ce44b5_CAT40-ER16-3.0-REV1.pdf#page=1",
+      "maker": "Maritool",
+      "note": "Maritool drawings use ordinate dimensions along the axis with 0 (\".00\") at the taper large end where the gauge diameter is dimensioned (the gauge line); values are read from that origin."
+     }
+    ],
+    "gauge_to_flange_back__alt": [
+     {
+      "v": 3.175,
+      "unit": "mm",
+      "stated": ".125 (ordinate)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/b7ce44b5_CAT40-ER16-3.0-REV1.pdf#page=1",
+      "maker": "Maritool",
+      "note": "Maritool drawings use ordinate dimensions along the axis with 0 (\".00\") at the taper large end where the gauge diameter is dimensioned (the gauge line); values are read from that origin."
+     }
+    ],
+    "gauge_to_flange_front__alt": [
+     {
+      "v": 19.05,
+      "unit": "mm",
+      "stated": ".75 (ordinate)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/b7ce44b5_CAT40-ER16-3.0-REV1.pdf#page=1",
+      "maker": "Maritool",
+      "note": "Maritool drawings use ordinate dimensions along the axis with 0 (\".00\") at the taper large end where the gauge diameter is dimensioned (the gauge line); values are read from that origin."
+     }
+    ],
+    "key_slot_w__alt": [
+     {
+      "v": 16.383,
+      "unit": "mm",
+      "stated": ".645 (unlabelled, across drive slot)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/b7ce44b5_CAT40-ER16-3.0-REV1.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ],
+    "pull_stud_thread__alt": [
+     {
+      "v": "5/8-11",
+      "unit": "text",
+      "stated": "5/8-11 THREAD x 1-1/8 DEEP; Ø.642 C'BORE x .300 DEEP",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/b7ce44b5_CAT40-ER16-3.0-REV1.pdf#page=1",
+      "maker": "Maritool"
+     },
+     {
+      "v": "5/8\"-11",
+      "unit": "text",
+      "stated": "40NTRK-MF CAT40 - ANSI ... T 5/8\" - 11",
+      "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf#page=2",
+      "maker": "Techniks"
+     }
+    ]
+   },
+   "sources": [
+    "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+    "https://d1hdtb64aspgjo.cloudfront.net/b7ce44b5_CAT40-ER16-3.0-REV1.pdf#page=1",
+    "https://www.maritool.com/Mill-Tool-Holders-CAT40-ER-Collet-Chucks/c23_25_42/p100/CAT40-ER16-3.0-COLLET-CHUCK-TOOL-HOLDER/product_info.html",
+    "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf#page=2"
+   ],
+   "unknown": [
+    "small_d: taper small-end diameter not printed (ISCAR/Maritool)",
+    "v_groove_angle: not dimensioned on ISCAR or Maritool drawings (ISCAR gives the gauge-ball geometry d, d5, f1 instead)",
+    "v_groove root diameter: not printed",
+    "flange_t: not printed as a single dimension (ISCAR a and f3 locate the back and front faces)"
+   ],
+   "conflicts": [
+    {
+     "key": "taper_length",
+     "values": [
+      {
+       "maker": "ISCAR",
+       "stated": "L1 2.687",
+       "mm": 68.2498
+      },
+      {
+       "maker": "Maritool",
+       "stated": "2.69",
+       "mm": 68.326
+      }
+     ],
+     "note": "Agree to Maritool's 2-decimal rounding; listed for completeness only."
+    },
+    {
+     "key": "pull_stud_thread",
+     "values": [
+      {
+       "maker": "ISCAR/Maritool/Techniks",
+       "stated": "5/8-11"
+      },
+      {
+       "maker": "SCHUNK",
+       "stated": "AZB MAZAK CAT 40 45° L1=41,3 ... G1 M16 (and AZB MAZAK CAT 40 45° 5/8\"-11 UNC ... G1 M5/8\")",
+       "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline#page=989"
+      }
+     ],
+     "note": "SCHUNK lists Mazak-specific CAT40 knobs with M16 thread alongside a 5/8\"-11 one; the ANSI CAT40 thread per ISCAR/Maritool/Techniks is 5/8-11."
+    }
+   ]
+  },
+  {
+   "id": "CAT50",
+   "standard": "\"CAT A.N.S.I. B5.50\" (ISCAR); \"ASME B5.50\" (SCHUNK holder headings)",
+   "values": {
+    "gauge_d": {
+     "v": 69.85,
+     "unit": "mm",
+     "stated": "d1 2.750 (INCH)  [CAT50: b 1.02; d 0.2756; d1 2.75; G 1-8; d3 1.125; C 0.25; d5 4.238; d6 3.875; d8 2.75; f1 0.4375; f2 1.38; f3 0.75; L1 4.0; L4 1.75; L6 1.485; L7 1.39; e1 1.653; d12 0.236; a 0.125]",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "taper": {
+     "v": 8.297222222222222,
+     "unit": "deg",
+     "stated": "8°17'50\" (angle drawn between taper surface and axis, Type A figure)",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "Half-angle as drawn; 7:24 ratio not printed on this page."
+    },
+    "taper_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "L1 ±.005 4.000",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "L1 drawn from the gauge line to the taper small end."
+    },
+    "flange_d": {
+     "v": 98.425,
+     "unit": "mm",
+     "stated": "d6 ±.002 3.875",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "gauge_to_flange_back": {
+     "v": 3.175,
+     "unit": "mm",
+     "stated": "a 0.125",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "a drawn between gauge line and flange back face."
+    },
+    "gauge_to_flange_front": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "f3 ±.002 0.75",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "f3 drawn from gauge line to flange front face."
+    },
+    "v_groove_ball_d": {
+     "v": 7.0002,
+     "unit": "mm",
+     "stated": "d 0.2756 (gauge ball diameter in the V-groove)",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "v_groove_over_ball_d": {
+     "v": 107.6452,
+     "unit": "mm",
+     "stated": "d5 ±.002 4.238 (diameter over gauge balls)",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "v_groove_ball_pos": {
+     "v": 11.1125,
+     "unit": "mm",
+     "stated": "f1 ±.005 0.4375",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "f1 drawn from gauge line to the gauge-ball (V-groove) centre plane."
+    },
+    "body_d_behind_flange": {
+     "v": 69.85,
+     "unit": "mm",
+     "stated": "d8 ±.005 2.750",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "d8: diameter of the body on the tool side of the flange (Type A figure)."
+    },
+    "f2_min": {
+     "v": 35.052,
+     "unit": "mm",
+     "stated": "f2 Min. 1.38",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "f2 Min. as drawn in the Type A figure (axial extent ending at the end of the d8 body); start point not interpreted."
+    },
+    "key_slot_w": {
+     "v": 25.908,
+     "unit": "mm",
+     "stated": "b ±.001 1.02",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "key_slot_depth_L6": {
+     "v": 37.719,
+     "unit": "mm",
+     "stated": "L6 +.000/-.015 1.485",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "L6: axis to slot bottom (end view), one side."
+    },
+    "key_slot_depth_L7": {
+     "v": 35.306,
+     "unit": "mm",
+     "stated": "L7 +.000/-.015 1.39",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "L7: axis to slot bottom (end view), other side."
+    },
+    "pull_stud_thread": {
+     "v": "1-8 UNC-2B",
+     "unit": "text",
+     "stated": "G UNC-2B 1-8",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "retention_bore_d3": {
+     "v": 28.575,
+     "unit": "mm",
+     "stated": "d3 ±.01 1.125",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "d3: counterbore diameter at the small end."
+    },
+    "retention_bore_C": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "C ±.01 0.25",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "C: counterbore depth at the small end."
+    },
+    "thread_length_min_L4": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "L4 Min. 1.75",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR"
+    },
+    "coolant_e1": {
+     "v": 41.9862,
+     "unit": "mm",
+     "stated": "e1 ±.004 1.653",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "Type B coolant-through-flange hole offset."
+    },
+    "coolant_d12": {
+     "v": 5.9944,
+     "unit": "mm",
+     "stated": "d12 0.236",
+     "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+     "maker": "ISCAR",
+     "note": "Type B coolant hole diameter (30° to axis)."
+    },
+    "gauge_d__alt": [
+     {
+      "v": 69.85,
+      "unit": "mm",
+      "stated": "Ø2.75 (at taper large end)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/f40d29f4_CAT50%20ER32-3.0.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ],
+    "flange_d__alt": [
+     {
+      "v": 98.425,
+      "unit": "mm",
+      "stated": "Ø3.875",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/f40d29f4_CAT50%20ER32-3.0.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ],
+    "taper_length__alt": [
+     {
+      "v": 102.362,
+      "unit": "mm",
+      "stated": "4.03 (ordinate at taper small end)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/f40d29f4_CAT50%20ER32-3.0.pdf#page=1",
+      "maker": "Maritool",
+      "note": "Maritool drawings use ordinate dimensions along the axis with 0 (\".00\") at the taper large end where the gauge diameter is dimensioned (the gauge line); values are read from that origin."
+     }
+    ],
+    "gauge_to_flange_back__alt": [
+     {
+      "v": 3.175,
+      "unit": "mm",
+      "stated": ".125 (ordinate)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/f40d29f4_CAT50%20ER32-3.0.pdf#page=1",
+      "maker": "Maritool",
+      "note": "Maritool drawings use ordinate dimensions along the axis with 0 (\".00\") at the taper large end where the gauge diameter is dimensioned (the gauge line); values are read from that origin."
+     }
+    ],
+    "gauge_to_flange_front__alt": [
+     {
+      "v": 19.05,
+      "unit": "mm",
+      "stated": ".75 (ordinate)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/f40d29f4_CAT50%20ER32-3.0.pdf#page=1",
+      "maker": "Maritool",
+      "note": "Maritool drawings use ordinate dimensions along the axis with 0 (\".00\") at the taper large end where the gauge diameter is dimensioned (the gauge line); values are read from that origin."
+     }
+    ],
+    "key_slot_w__alt": [
+     {
+      "v": 25.908,
+      "unit": "mm",
+      "stated": "1.02 (unlabelled, across drive slot)",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/f40d29f4_CAT50%20ER32-3.0.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ],
+    "pull_stud_thread__alt": [
+     {
+      "v": "1\"-8",
+      "unit": "text",
+      "stated": "1\" - 8 THREAD x 1-3/4 DEEP; C'BORE DIA 1.032 x .400 DEEP",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/f40d29f4_CAT50%20ER32-3.0.pdf#page=1",
+      "maker": "Maritool"
+     },
+     {
+      "v": "1\"-8",
+      "unit": "text",
+      "stated": "50NTRK-MF CAT50 - ANSI ... T 1\" - 8",
+      "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf#page=2",
+      "maker": "Techniks"
+     }
+    ]
+   },
+   "sources": [
+    "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/CAT.pdf#page=1",
+    "https://d1hdtb64aspgjo.cloudfront.net/f40d29f4_CAT50%20ER32-3.0.pdf#page=1",
+    "https://www.maritool.com/Mill-Tool-Holders-CAT50-Collet-Chucks/c23_24_45/p17205/CAT50-ER32-3.0-COLLET-CHUCK-TOOL-HOLDER/product_info.html",
+    "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf#page=2"
+   ],
+   "unknown": [
+    "small_d: taper small-end diameter not printed (ISCAR/Maritool)",
+    "v_groove_angle: not dimensioned on ISCAR or Maritool drawings (ISCAR gives the gauge-ball geometry d, d5, f1 instead)",
+    "v_groove root diameter: not printed",
+    "flange_t: not printed as a single dimension (ISCAR a and f3 locate the back and front faces)"
+   ],
+   "conflicts": [
+    {
+     "key": "taper_length",
+     "values": [
+      {
+       "maker": "ISCAR",
+       "stated": "L1 ±.005 4.000",
+       "mm": 101.6
+      },
+      {
+       "maker": "Maritool",
+       "stated": "4.03 (ordinate, CAT50 ER32-3.0 drawing)",
+       "mm": 102.362
+      }
+     ],
+     "note": "0.76 mm apart; Maritool value is a product drawing ordinate, ISCAR value is from its \"Toolholder Standard\" table."
+    },
+    {
+     "key": "pull_stud_thread",
+     "values": [
+      {
+       "maker": "ISCAR/Maritool/Techniks",
+       "stated": "1-8"
+      },
+      {
+       "maker": "SCHUNK",
+       "stated": "AZB MAZAK CAT 50 45° ... G1 M24",
+       "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline#page=989"
+      }
+     ],
+     "note": "SCHUNK Mazak CAT50 knob is metric M24; ANSI CAT50 per ISCAR/Maritool/Techniks is 1-8."
+    }
+   ]
+  },
+  {
+   "id": "HSK-A63",
+   "standard": "\"HSK A\" (Sumitomo, \"Based on the ISO standard HSK shank\"); \"DIN ISO 12164-1\" (SCHUNK holder headings); \"DIN 69893-1\" (Haimer)",
+   "values": {
+    "flange_d": {
+     "v": 63,
+     "unit": "mm",
+     "stated": "HSK A63 DCON (Mounting Dia.) 63",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/g.pdf#page=18",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "DCON drawn as the flange (collar) outer diameter in the Size figure."
+    },
+    "taper_gauge_d": {
+     "v": 48,
+     "unit": "mm",
+     "stated": "HSK A63 DCON2 (Mounting Dia.) 48",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/g.pdf#page=18",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "DCON2 drawn at the large end of the 1/10 taper, at the face-contact side of the flange."
+    },
+    "taper": {
+     "v": "1/10",
+     "unit": "text",
+     "stated": "\"1/10 Taper\" (Size figure)",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/g.pdf#page=18",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "taper__alt": [
+     {
+      "v": "1/10",
+      "unit": "text",
+      "stated": "1/10 TAPER",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/6f96fe94_HSK63A-D2.0-1.75.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ],
+    "face_contact": {
+     "v": "face contact + taper",
+     "unit": "text",
+     "stated": "\"Face Contact\" called out between HSK shank flange face and spindle face (Mechanism figure)",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/g.pdf#page=18",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "taper_length": {
+     "v": 32.004,
+     "unit": "mm",
+     "stated": "1.26 (ordinate at taper small end, from 0.00/0 at the flange face-contact plane)",
+     "url": "https://d1hdtb64aspgjo.cloudfront.net/6f96fe94_HSK63A-D2.0-1.75.pdf#page=1",
+     "maker": "Maritool",
+     "note": "Maritool HSK drawings put the axial origin at the flange face (spindle contact face); the taper runs to this ordinate."
+    },
+    "collar_t": {
+     "v": 25.908,
+     "unit": "mm",
+     "stated": "1.02 (ordinate at the far side of the flange/collar, from 0 at the contact face)",
+     "url": "https://d1hdtb64aspgjo.cloudfront.net/6f96fe94_HSK63A-D2.0-1.75.pdf#page=1",
+     "maker": "Maritool",
+     "note": "Read as collar (flange) thickness from the contact face to the gripper-side face; this is our reading of the ordinate drawing."
+    }
+   },
+   "sources": [
+    "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/g.pdf#page=18",
+    "https://d1hdtb64aspgjo.cloudfront.net/6f96fe94_HSK63A-D2.0-1.75.pdf#page=1",
+    "https://www.maritool.com/Mill-Tool-Holders-HSK-HSK63A-Tool-Holders-HSK63A-Blank-Tool-Holders/c23_46_943_1941/p27380/HSK63A-2.0-Nose-x-1.75-Gage-Blank-With-2-Holes/product_info.html"
+   ],
+   "unknown": [
+    "small_d: taper small-end diameter not printed",
+    "clamping bore (internal clamping shoulder diameter/angle): not printed by Sumitomo/Maritool",
+    "drive key slot (end) width/depth: drawn on Maritool HSK drawings but not dimensioned",
+    "gripper V-groove angle/diameter: not dimensioned",
+    "gauge line position: Maritool uses the face-contact plane as 0; no maker page found that prints a separate gauge-line offset",
+    "flange_d from Maritool: HSK63A blank drawing dimensions only the nose (Ø2.00), not the flange; Sumitomo DCON 63 is the only flange source"
+   ],
+   "conflicts": []
+  },
+  {
+   "id": "HSK-A100",
+   "standard": "\"HSK A\" (Sumitomo, \"Based on the ISO standard HSK shank\"); \"DIN ISO 12164-1\" (SCHUNK holder headings); \"DIN 69893-1\" (Haimer)",
+   "values": {
+    "flange_d": {
+     "v": 100,
+     "unit": "mm",
+     "stated": "HSK A100 DCON (Mounting Dia.) 100",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/g.pdf#page=18",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "DCON drawn as the flange (collar) outer diameter in the Size figure."
+    },
+    "taper_gauge_d": {
+     "v": 75,
+     "unit": "mm",
+     "stated": "HSK A100 DCON2 (Mounting Dia.) 75",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/g.pdf#page=18",
+     "maker": "Sumitomo Electric Hardmetal",
+     "note": "DCON2 drawn at the large end of the 1/10 taper, at the face-contact side of the flange."
+    },
+    "taper": {
+     "v": "1/10",
+     "unit": "text",
+     "stated": "\"1/10 Taper\" (Size figure)",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/g.pdf#page=18",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "taper__alt": [
+     {
+      "v": "1/10",
+      "unit": "text",
+      "stated": "1/10 TAPER",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/17dd199d_HSK100A-SF.500-7.0T.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ],
+    "face_contact": {
+     "v": "face contact + taper",
+     "unit": "text",
+     "stated": "\"Face Contact\" called out between HSK shank flange face and spindle face (Mechanism figure)",
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/g.pdf#page=18",
+     "maker": "Sumitomo Electric Hardmetal"
+    },
+    "taper_length": {
+     "v": 50.038,
+     "unit": "mm",
+     "stated": "1.97 (ordinate at taper small end, from 0.00/0 at the flange face-contact plane)",
+     "url": "https://d1hdtb64aspgjo.cloudfront.net/17dd199d_HSK100A-SF.500-7.0T.pdf#page=1",
+     "maker": "Maritool",
+     "note": "Maritool HSK drawings put the axial origin at the flange face (spindle contact face); the taper runs to this ordinate."
+    },
+    "collar_t": {
+     "v": 28.956,
+     "unit": "mm",
+     "stated": "1.14 (ordinate at the far side of the flange/collar, from 0 at the contact face)",
+     "url": "https://d1hdtb64aspgjo.cloudfront.net/17dd199d_HSK100A-SF.500-7.0T.pdf#page=1",
+     "maker": "Maritool",
+     "note": "Read as collar (flange) thickness from the contact face to the gripper-side face; this is our reading of the ordinate drawing."
+    },
+    "flange_d__alt": [
+     {
+      "v": 99.9998,
+      "unit": "mm",
+      "stated": "Ø3.937",
+      "url": "https://d1hdtb64aspgjo.cloudfront.net/17dd199d_HSK100A-SF.500-7.0T.pdf#page=1",
+      "maker": "Maritool"
+     }
+    ]
+   },
+   "sources": [
+    "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/g.pdf#page=18",
+    "https://d1hdtb64aspgjo.cloudfront.net/17dd199d_HSK100A-SF.500-7.0T.pdf#page=1",
+    "https://www.maritool.com/Mill-Tool-Holders-HSK-HSK100A-Tool-Holders-HSK100A-Shrink-Fit-Tool-Holders/c23_46_1513_1903/p28344/HSK100A-Tapered-Nose-Shrink-Fit-Tool-Holder-.500-7.0/product_info.html"
+   ],
+   "unknown": [
+    "small_d: taper small-end diameter not printed",
+    "clamping bore (internal clamping shoulder diameter/angle): not printed by Sumitomo/Maritool",
+    "drive key slot (end) width/depth: drawn on Maritool HSK drawings but not dimensioned",
+    "gripper V-groove angle/diameter: not dimensioned",
+    "gauge line position: Maritool uses the face-contact plane as 0; no maker page found that prints a separate gauge-line offset"
+   ],
+   "conflicts": []
+  }
+ ],
+ "blocked": [
+  {
+   "url": "https://www.lyndexnikken.com/wp-content/uploads/2026/01/00_TSC2024_Introduction_TOC_WEBv1.pdf",
+   "why": "HTTP 403 Cloudflare \"Attention Required\" challenge - not worked around"
+  },
+  {
+   "url": "https://www.iscar.com/Catalogs/flipview/flipview2022/english-1/MILLING-CATALOG-38_2021-p549-788/files/basic-html/page2.html",
+   "why": "HTTP 403 Cloudflare \"Just a moment...\" bot challenge (ISCAR flipbook catalogues; the eCatalog INFO PDF for CAT was reachable)"
+  },
+  {
+   "url": "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/{BT,MAS,HSK,...}.pdf",
+   "why": "guessed sibling filenames return 404; no BT/HSK equivalent of CAT.pdf found"
+  },
+  {
+   "url": "https://shop.haimer.com/us/Shrink-Fit-Chuck-Standard-Version-DIN-69893-1-HSK-A63/A63.147.10",
+   "why": "reachable, but prints only holder-level data (flange diameter A4/DF 2.48 inch, \"Taper angle B51 4,5°\" = chuck nose); no interface table. Not used."
+  }
+ ]
+}

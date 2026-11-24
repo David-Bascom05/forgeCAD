@@ -1,0 +1,35 @@
+# The tangent-node mend's mutation check (verify/REMOVED-CHECKS.toml, blend-node-mend): with the
+# mend switched off, fg_mcp's plate must be refused again at the radii the mend made build
+# (interface/forge-lang/tests/round_node.rs), and with it on, built at every one.
+name: node-mutation
+on:
+  push:
+    paths:
+      - "kernel/forge-geom/src/node.rs"
+      - "kernel/forge-geom/src/intcurve.rs"
+      - "kernel/forge-bool/src/ssi.rs"
+      - "interface/forge-lang/tests/round_node.rs"
+      - ".github/workflows/node-mutation.yml"
+  pull_request:
+    paths:
+      - "kernel/forge-geom/src/node.rs"
+      - "kernel/forge-geom/src/intcurve.rs"
+      - "kernel/forge-bool/src/ssi.rs"
+      - "interface/forge-lang/tests/round_node.rs"
+      - ".github/workflows/node-mutation.yml"
+  workflow_dispatch:
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FORGECAD_CACHE: "off"
+    steps:
+      - uses: actions/checkout@v4
+      - name: rust (rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: with the mend (the radii build)
+        run: cargo test --release -p forge-lang --test round_node
+      - name: without the mend (the radii are refused again)
+        run: cargo test --release -p forge-lang --test round_node --features node-mend-off

@@ -5,8 +5,8 @@
 use crate::Cam;
 use forge_cam::engage::{HeightMap, Profile};
 use forge_cam::life::{Entry, ToolGeom, measure};
-use forge_tooling::entry::{self, Check, Finding};
 use forge_tooling::Kind;
+use forge_tooling::entry::{self, Check, Finding};
 use forge_tooling::life::{self, Cut, Limit, Row, ToolLife, Warning};
 use std::collections::BTreeMap;
 
@@ -33,7 +33,9 @@ pub struct ToolLifeOut {
 /// library has it (an alias such as "AISI 1045" resolves to the library's "1045 cold drawn",
 /// and a row for another condition of the grade must not match it by the alias), else as given.
 pub fn work_name(m: &str) -> String {
-    forge_material::find(m).map(|f| f.name.clone()).unwrap_or_else(|| m.to_string())
+    forge_material::find(m)
+        .map(|f| f.name.clone())
+        .unwrap_or_else(|| m.to_string())
 }
 
 #[derive(Default)]

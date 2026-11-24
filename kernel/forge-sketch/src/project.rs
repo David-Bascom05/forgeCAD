@@ -185,7 +185,13 @@ fn fit(
         for i in 1..=n {
             knots.push(knots[i - 1] + pts[i].distance(pts[i - 1]));
         }
-        let made = forge_geom::spline::PlaneSpline::through(pts.clone(), None, None);
+        // a closed curve's image is periodic, through its start again
+        let made = if closed {
+            pts[n] = pts[0];
+            forge_geom::spline::PlaneSpline::through_periodic(pts.clone())
+        } else {
+            forge_geom::spline::PlaneSpline::through(pts.clone(), None, None)
+        };
         let Some(sp) = made else {
             return Err("the curve's image doubles back on itself here; it has no spline through it".into());
         };
@@ -323,11 +329,7 @@ mod tests {
     #[test]
     fn what_a_sketch_has_no_curve_for_is_refused_and_edge_on_is_a_line() {
         let z = Frame::default();
-        let e = forge_geom::Ellipse {
-            frame: z,
-            major: 6.0,
-            minor: 3.0,
-        };
+        let e = forge_geom::Ellipse::new(z, 6.0, 3.0);
         let (a, b) = (Point3::new(6.0, 0.0, 0.0), Point3::new(-6.0, 0.0, 0.0));
         let whole = Interval::new(0.0, dmath::TAU);
         let source = edge(Curve::Ellipse(e), whole, a, a);
@@ -347,7 +349,7 @@ mod tests {
             panic!("a line")
         };
         assert!((p.distance(q) - 12.0).abs() < 1e-12);
-        let par = forge_geom::Parabola { frame: z, focal: 1.0 };
+        let par = forge_geom::Parabola::new(z, 1.0);
         let g = edge(Curve::Parabola(par), Interval::new(-1.0, 1.0), a, b);
         assert!(flat(&z, &g, None).unwrap_err().contains("general curve"));
         // a circle one hair off parallel is still it; further, an ellipse named by its tilt

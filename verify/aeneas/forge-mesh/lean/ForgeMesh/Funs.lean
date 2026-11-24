@@ -85,7 +85,7 @@ def forge_math.predicates.ICC_BOUND : Result F64 := do
   ok (F64.Ops.mul fl2 fl)
 
 /-- [forge_math::predicates::certainly_in_circle]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 646:0-646:78
+    Source: 'kernel/forge-math/src/predicates.rs', lines 658:0-658:78
     Name pattern: [forge_math::predicates::certainly_in_circle]
     Visibility: public -/
 @[rust_fun "forge_math::predicates::certainly_in_circle"]

@@ -18,9 +18,11 @@ is. Here the same theorems are stated for the real functions:
 2. the copy returns the same value (the ieee session's `*_of_fast`);
 3. so their theorem's conclusion holds for the real function's result.
 
-The theorems are the fast paths only: the slow paths go through `orient2d_adapt`, whose expansion
-arithmetic (`sum_into`, `scale_into`, `estimate`) is opaque in this translation. See
-verify/aeneas/forge-math/README.md.
+The theorems are the fast paths only. The slow paths go through `orient2d_adapt`, whose expansion
+arithmetic (`sum_into`, `scale_into`, `estimate`) is translated since 6a6534d (`Funs.lean`:
+`predicates.sum_into`, `predicates.scale_into` with their loops, `next_component`,
+`predicates.estimate`) and waits for the expansion theory (verify/ieee754's `Expansion.lean`).
+See verify/aeneas/forge-math/README.md.
 -/
 
 open Aeneas Aeneas.Std Result
