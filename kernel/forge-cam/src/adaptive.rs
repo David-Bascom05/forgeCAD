@@ -283,6 +283,9 @@ pub fn adaptive(
         }
         let mut entered = false;
         let mut guard = 0usize;
+        let mut small = 0usize;
+        // entries at this level: a new one where the passes stop with material left
+        let mut entries = 0usize;
         loop {
             guard += 1;
             if guard > 10_000 {
@@ -320,7 +323,14 @@ pub fn adaptive(
                 // the deepest allowed candidate with material under it
                 let mut deep: Option<([f64; 2], f64)> = None;
                 for &p in &cands {
-                    if !f.disk_has_material(p[0], p[1], z) && !f.material(p[0], p[1], z) {
+                    // the first entry: anywhere with material in reach; a later one only where
+                    // material stands under the centre itself (not for crumbs at a wall)
+                    let here = f.material(p[0], p[1], z);
+                    if if entries > 0 {
+                        !here
+                    } else {
+                        !here && !f.disk_has_material(p[0], p[1], z)
+                    } {
                         continue;
                     }
                     let d = edge_dist(&f.allowed, p[0], p[1]);
@@ -332,7 +342,32 @@ pub fn adaptive(
                 // a helix of radius up to r where it fits (a hole of 2r: room to start passes
                 // off its centre), else a plunge
                 let rh = f.r.min((depth - 1e-3).max(0.0));
-                let top_z = above;
+                // the helix starts just above the stock it meets (the highest in its swept disk),
+                // not at the level's top: a later entry comes down through cleared air
+                let top_z = {
+                    let rr = rh + f.r + f.map.h;
+                    let n = (rr / f.map.h).ceil() as i64;
+                    let mut t = f64::NEG_INFINITY;
+                    for j in -n..=n {
+                        for i in -n..=n {
+                            let (dx, dy) = (i as f64 * f.map.h, j as f64 * f.map.h);
+                            if dx * dx + dy * dy <= rr * rr {
+                                t = t.max(f.map.top(p[0] + dx, p[1] + dy));
+                            }
+                        }
+                    }
+                    (t + 0.5).clamp(z, above)
+                };
+                // a later entry: up from where the tool is first (a rapid only above the work)
+                if let Some(c) = at
+                    && c[2] < h.retract
+                {
+                    mv.push(PMove::Line {
+                        to: [c[0], c[1], h.retract],
+                        f: feed.0,
+                        phase: Phase::Link,
+                    });
+                }
                 mv.push(PMove::Rapid {
                     to: [p[0] + rh, p[1], h.retract],
                 });
@@ -430,7 +465,16 @@ pub fn adaptive(
                 entered = true;
                 continue;
             }
-            let Some((p, _)) = best else { break };
+            let Some((p, _)) = best else {
+                // no start next to material: a new entry if material is left (at most 20)
+                entries += 1;
+                if entries >= 20 {
+                    break;
+                }
+                entered = false;
+                small = 0;
+                continue;
+            };
             // the link, by the fixed rule
             let cur = at.expect("entered");
             let target = [p[0], p[1], z];
@@ -526,18 +570,24 @@ pub fn adaptive(
                     break;
                 }
                 let Some((phi, w, q)) = found else { break };
-                if phi <= 0.0 {
+                let got = f.map.sweep(pos, q, &f.prof.clone());
+                removed += got;
+                // a step that removes less than a 0.01 mm strip counts as air: a pass grazing
+                // slivers would otherwise orbit
+                let step_len = ((q[0] - pos[0]).powi(2) + (q[1] - pos[1]).powi(2)).sqrt();
+                if phi <= 0.0 || got < 0.01 * step_len * (above - z).max(f.map.h) {
                     air_run += 1;
                     // in air two radii after cutting, or four before meeting material: done
                     let limit = if touched { 8 } else { 16 };
                     if air_run > limit {
+                        moves_at_level.push((pos, q));
+                        pass.push(q);
                         break;
                     }
                 } else {
                     air_run = 0;
                     touched = true;
                 }
-                removed += f.map.sweep(pos, q, &f.prof.clone());
                 moves_at_level.push((pos, q));
                 pass.push(q);
                 pos = q;
@@ -551,15 +601,126 @@ pub fn adaptive(
             at = Some(if keep > 0 { pass[keep - 1] } else { target });
             // each start is used once (crumbs the cap keeps a pass from reaching are left to
             // the wall pass, not retried)
-            let _ = removed;
             cands.retain(|c| *c != p);
+            // three passes in a row that each removed next to nothing: the rest is crumbs the
+            // cap keeps the passes from (corners), left to the rings below
+            if removed < 0.25 * f.r * f.r * (above - z).max(f.map.h) {
+                small += 1;
+                if small >= 3 {
+                    // the passes stall: a new entry where material is left (at most 20)
+                    entries += 1;
+                    if entries >= 20 {
+                        break;
+                    }
+                    entered = false;
+                    small = 0;
+                }
+            } else {
+                small = 0;
+            }
         }
         // a plain offset pass along the walls (rule 5), linked by the same rule
-        if prm.wall_pass
-            && let Ok((ring, _)) = offset(rg, r)
-        {
-            {
-                for l in &ring {
+        // and plain offset rings at r + k·r inside it (inner first) where material is left
+        // between the passes and the wall band: each ring cut only if its disk meets material,
+        // entered at a vertex whose disk is clear (else left), the wall ring always, last
+        if prm.wall_pass {
+            let mut rings: Vec<(usize, Vec<Seg>)> = Vec::new();
+            for k in 0..64 {
+                let Ok((ring, _)) = offset(rg, r + k as f64 * f.r) else {
+                    break;
+                };
+                if ring.is_empty() {
+                    break;
+                }
+                for l in ring {
+                    rings.push((k, l.segs));
+                }
+            }
+            rings.sort_by_key(|x| std::cmp::Reverse(x.0));
+            for (k, segs) in rings {
+                if segs.is_empty() {
+                    continue;
+                }
+                // points along it no further apart than a cell (arcs' chords and lines alike)
+                let mut pts = polygon(&segs, 0.01);
+                pts.push(pts[0]);
+                let dense: Vec<(f64, f64)> = pts
+                    .windows(2)
+                    .flat_map(|w| {
+                        let n = (((w[1].0 - w[0].0) * (w[1].0 - w[0].0)
+                            + (w[1].1 - w[0].1) * (w[1].1 - w[0].1))
+                            .sqrt()
+                            / f.map.h)
+                            .ceil()
+                            .max(1.0) as usize;
+                        (0..n).map(move |m| {
+                            let t = m as f64 / n as f64;
+                            (w[0].0 + t * (w[1].0 - w[0].0), w[0].1 + t * (w[1].1 - w[0].1))
+                        })
+                    })
+                    .collect();
+                if k > 0 && !dense.iter().any(|q| f.disk_has_material(q.0, q.1, z)) {
+                    continue;
+                }
+                // a vertex to enter at whose disk is clear, the loop turned to start there
+                // a point to enter at whose disk is clear: a vertex, else a point along a segment
+                // (the segment split there), the loop turned to start there
+                let mut entry: Option<(usize, Option<forge_cam_geom::region::P2>)> = (0..segs.len())
+                    .find(|&i| {
+                        let q = segs[i].start();
+                        !f.disk_has_material(q.x, q.y, z)
+                    })
+                    .map(|i| (i, None));
+                if entry.is_none() {
+                    'seek: for (i, sg) in segs.iter().enumerate() {
+                        for q in polygon(std::slice::from_ref(sg), 0.01).iter().skip(1) {
+                            if !f.disk_has_material(q.0, q.1, z) {
+                                entry = Some((i, Some(p2(q.0, q.1))));
+                                break 'seek;
+                            }
+                        }
+                        // lines give only their start: sample them too
+                        if let Seg::Line { a, b } = *sg {
+                            let n = (((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)).sqrt() / f.map.h)
+                                .ceil() as usize;
+                            for m in 1..n {
+                                let t = m as f64 / n as f64;
+                                let (x, y) = (a.x + t * (b.x - a.x), a.y + t * (b.y - a.y));
+                                if !f.disk_has_material(x, y, z) {
+                                    entry = Some((i, Some(p2(x, y))));
+                                    break 'seek;
+                                }
+                            }
+                        }
+                    }
+                }
+                // an inner ring with no clear point is left; the wall ring is always cut
+                let (i0, split) = match entry {
+                    Some(e) => e,
+                    None if k == 0 => (0, None),
+                    None => continue,
+                };
+                let mut l: Vec<Seg> = Vec::with_capacity(segs.len() + 1);
+                match split {
+                    None => {
+                        l.extend_from_slice(&segs[i0..]);
+                        l.extend_from_slice(&segs[..i0]);
+                    }
+                    Some(q) => {
+                        let (first, last) = match segs[i0] {
+                            Seg::Line { a, b } => (Seg::Line { a: q, b }, Seg::Line { a, b: q }),
+                            Seg::Arc { a, b, c, ccw } => {
+                                (Seg::Arc { a: q, b, c, ccw }, Seg::Arc { a, b: q, c, ccw })
+                            }
+                        };
+                        l.push(first);
+                        l.extend_from_slice(&segs[i0 + 1..]);
+                        l.extend_from_slice(&segs[..i0]);
+                        l.push(last);
+                    }
+                }
+                let l = forge_cam_geom::region::Loop { segs: l };
+                {
                     let s0 = l.segs[0].start();
                     let target = [s0.x, s0.y, z];
                     let cur = at.unwrap_or(target);
