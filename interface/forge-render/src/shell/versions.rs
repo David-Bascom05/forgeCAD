@@ -3,6 +3,7 @@
 //! Compare and Copy ID; Create Version and Release at the top; and, while comparing, what
 //! changed in features and parameters. The host fills it and does what `VersionsAct`s ask.
 
+use super::placed::Placed as _;
 use super::theme::{Theme, mono, sans, semi};
 use super::{Shell, icons};
 use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
@@ -777,7 +778,7 @@ impl Shell {
                 .order(egui::Order::Foreground)
                 .default_pos(area.center() - vec2(180.0, 90.0))
                 .constrain_to(area)
-                .show(ctx, |ui| {
+                .show_fit(ctx, |ui| {
                     ui.label(egui::RichText::new("Name").font(sans(12.0)));
                     let r = ui.add(
                         egui::TextEdit::singleline(&mut name)
@@ -828,7 +829,7 @@ impl Shell {
                 .order(egui::Order::Foreground)
                 .default_pos(area.center() - vec2(180.0, 100.0))
                 .constrain_to(area)
-                .show(ctx, |ui| {
+                .show_fit(ctx, |ui| {
                     let what = self.versions.doc.as_ref().map_or(String::new(), |d| d.0.clone());
                     ui.label(egui::RichText::new(what).font(mono(12.0)));
                     ui.label(egui::RichText::new("Reason").font(sans(12.0)));

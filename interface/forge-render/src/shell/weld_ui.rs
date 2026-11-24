@@ -3,6 +3,7 @@
 
 use super::Shell;
 use super::fgasm::{dialog_frame, dialog_head};
+use super::placed::Placed as _;
 use super::theme::{self, S1, S2};
 use egui::{Rect, pos2, vec2};
 
@@ -201,7 +202,7 @@ impl Shell {
             .max_width(w)
             .frame(dialog_frame(&t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 close = dialog_head(ui, &t, "cutlist", "Cut List", "weld:cutlist", &mut places);
                 if list.is_empty() {
                     ui.label(

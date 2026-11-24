@@ -3004,7 +3004,7 @@ impl Shell {
             .resizable(false)
             .default_pos(pos2(500.0, 220.0))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 ui.label(egui::RichText::new(format!("From {}", name_of(&nd.model))).font(semi(13.0)));
                 ui.label("Sheet size");
                 egui::Grid::new("sizes").show(ui, |ui| {

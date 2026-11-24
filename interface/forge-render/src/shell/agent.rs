@@ -3,6 +3,7 @@
 //! host runs the backend (`crate::agent`) and does what `AgentAct`s ask.
 
 use super::agent_settings::{self, AgentSettings, SettingsAct};
+use super::placed::Placed as _;
 use super::theme::{Theme, medium, mono, sans, semi};
 use super::{HEAD_H, Shell, icons};
 use egui::text::{LayoutJob, TextFormat};
@@ -1028,7 +1029,7 @@ impl Shell {
             .id(egui::Id::unique("agent-resume-window"))
             .open(&mut open)
             .default_size(vec2(480.0, 360.0))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 ui.label(self.agent.project.as_deref().unwrap_or("Current project"));
                 let search = ui.add(
                     egui::TextEdit::singleline(&mut self.agent.resume_filter)

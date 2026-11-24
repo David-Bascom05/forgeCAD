@@ -9,6 +9,7 @@
 //! editing it drops its cites, making it the user's own. "?" marks a value unknown (a cite with
 //! the number kept as a stand-in until the format can hold UNKNOWN: request F1).
 use super::Shell;
+use super::placed::Placed as _;
 use super::theme::{Theme, mono, sans, semi};
 use egui::{Color32, RichText, Ui, pos2, vec2};
 use forge_machine::collide::{self, Verdict};
@@ -1238,7 +1239,7 @@ impl Shell {
                 .fixed_pos(pos2(v.left() + 8.0, v.top() + 8.0))
                 .fixed_size(vec2(250.0, (v.height() - 140.0).max(200.0)))
                 .frame(super::theme::panel_frame(&t))
-                .show(ctx, |ui| {
+                .show_fit(ctx, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new("Machine Builder").font(semi(14.0)).color(t.ink));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1271,7 +1272,7 @@ impl Shell {
             .fixed_pos(pos2(v.right() - 438.0, v.top() + 8.0))
             .fixed_size(vec2(430.0, (v.height() - 140.0).max(200.0)))
             .frame(super::theme::panel_frame(&t))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 if st.lib == "machine" {
                     editor(ui, &t, &mut st, &mut places, false)
                 } else if let Some(tu) = &mut st.tooling {
@@ -1291,7 +1292,7 @@ impl Shell {
             .fixed_pos(pos2(v.left() + 8.0, v.bottom() - 124.0))
             .fixed_size(vec2((v.width() - 16.0).max(200.0), 108.0))
             .frame(super::theme::panel_frame(&t))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 if st.lib == "machine" {
                     jog(ui, &t, &mut st, &mut places)
                 } else if st.lib == "workholding" {

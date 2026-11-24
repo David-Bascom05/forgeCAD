@@ -472,7 +472,7 @@ impl Shell {
             .fixed_size(vec2(DIALOG_W, 0.0))
             .frame(frame)
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 ui.label(egui::RichText::new(format!("Edit Occurrence {}", e.occ)).font(semi(14.0)));
                 ui.label(
                     egui::RichText::new(format!("of {}: empty fields take the default", e.component))

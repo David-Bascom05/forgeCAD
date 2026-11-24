@@ -9,6 +9,7 @@
 
 use super::Shell;
 use super::fg::{FgPanel, From};
+use super::placed::Placed as _;
 use super::sheet::SheetAct;
 use super::theme::{medium, mono, sans, semi};
 use egui::{Color32, Ui, pos2, vec2};
@@ -360,12 +361,17 @@ impl Shell {
             .title_bar(false)
             .collapsible(false)
             .resizable(false)
-            .default_pos(pos2((v.left() + 360.0).min(area.right() - 568.0).max(area.left() + 8.0), v.top() + 48.0))
+            .default_pos(pos2(
+                (v.left() + 360.0)
+                    .min(area.right() - 568.0)
+                    .max(area.left() + 8.0),
+                v.top() + 48.0,
+            ))
             .default_width(560.0f32.min(area.width() - 16.0))
             .max_width(area.width() - 16.0)
             .frame(super::fgasm::dialog_frame(&t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
                         egui::RichText::new("Sheet Metal Vendor")
@@ -649,7 +655,7 @@ impl Shell {
             .default_width(500.0)
             .frame(super::fgasm::dialog_frame(&t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_fit(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
                         egui::RichText::new("Design for Manufacture")
