@@ -346,4 +346,91 @@ mod tests {
             assert!(lo <= gap && lo > gap - 1e-9, "torus gap {gap} lo {lo}");
         }
     }
+
+    /// A mould-like part (a cone wall with a 1:5 draft, its foot filleted by a concave torus of
+    /// radius 3) under ball raster moves at clearances 0.05..3: every pair the branch and bound
+    /// decides alone is decided the same here (never Clear where it Hits), and the cells and time
+    /// with the closed form against without (printed; run with --nocapture).
+    #[test]
+    fn mould_raster_cells_and_time() {
+        let body = ball(6.0);
+        let (x, y, ax) = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]);
+        // the wall: radius 30 at z = 3 shrinking 0.2 a unit up, z 3..23
+        let cone = Face::new(
+            Surf::Cone {
+                o: [0.0, 0.0, 3.0],
+                x,
+                y,
+                ax,
+                r0: 30.0,
+                k: -0.2,
+            },
+            Ival::new(-1.0, 1.0),
+            Ival::new(0.0, 20.0),
+            None,
+            1e-9,
+            1,
+        );
+        // the fillet: tube radius 3 about the circle of radius 33 at z = 3 (outside the wall's
+        // foot), the quarter facing the wall's foot: φ about 225° (middle), ψ ∈ ±45°
+        let (cm, sm) = (-std::f64::consts::FRAC_1_SQRT_2, -std::f64::consts::FRAC_1_SQRT_2);
+        let fillet = Face::new(
+            Surf::Torus {
+                o: [0.0, 0.0, 3.0],
+                x,
+                y,
+                ax,
+                big: 33.0,
+                r: 3.0,
+                cm,
+                sm,
+            },
+            Ival::new(-1.0, 1.0),
+            Ival::new(-0.42, 0.42),
+            None,
+            1e-9,
+            2,
+        );
+        let faces = [cone, fillet];
+        let (mut cells_fast, mut cells_bb, mut t_fast, mut t_bb) = (0usize, 0usize, 0.0f64, 0.0f64);
+        let (mut n, mut clear_fast) = (0, 0);
+        for row in 0..12 {
+            let yy = -40.0 + row as f64 * 7.0;
+            for z in [3.05, 4.0, 8.0, 14.0, 20.0, 26.0] {
+                for (i, xx) in [-50.0, -30.0, -10.0, 10.0, 30.0]
+                    .windows(2)
+                    .map(|w| (w[0], w[1]))
+                    .enumerate()
+                {
+                    let _ = i;
+                    let mv = crate::check::Move::Line {
+                        a: [xx.0, yy, z],
+                        b: [xx.1, yy, z],
+                    };
+                    for f in &faces {
+                        n += 1;
+                        let t0 = std::time::Instant::now();
+                        let (vf, cf) = crate::check::certify(&body, f, &mv, 0.0, 0.01, 50_000);
+                        t_fast += t0.elapsed().as_secs_f64();
+                        let t0 = std::time::Instant::now();
+                        let (vb, cb) = certify_bb(&body, f, &mv, 0.0, 0.01, 50_000);
+                        t_bb += t0.elapsed().as_secs_f64();
+                        cells_fast += cf;
+                        cells_bb += cb;
+                        if matches!(vf, Verdict::Clear { .. }) {
+                            clear_fast += 1;
+                            assert!(
+                                !matches!(vb, Verdict::Hit { .. }),
+                                "fast Clear where the B&B hits: {mv:?} {:?}",
+                                f.surf
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        eprintln!(
+            "mould: pairs {n} cleared {clear_fast}; cells fast {cells_fast} vs B&B {cells_bb}; secs fast {t_fast:.3} vs B&B {t_bb:.3}"
+        );
+    }
 }
