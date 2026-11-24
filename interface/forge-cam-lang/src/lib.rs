@@ -260,6 +260,21 @@ impl PartIn {
     }
 }
 
+/// Whether a posted feed F = q / 10^k is over the limit `max_feed` (mm/min), decided exactly: a
+/// whole-number limit (< 2^53) times 10^k is an integer, compared with q in u128 (10^22 · 2^53
+/// < 2^127), so F exactly at the limit passes; any other limit scaled in outward-rounded
+/// arithmetic (its lower end), so a pass is never a rounding.
+fn feed_over(q: i64, k: u32, max_feed: f64) -> bool {
+    let k = k.min(22);
+    if max_feed >= 0.0 && max_feed.fract() == 0.0 && max_feed < 9007199254740992.0 {
+        return q > 0 && (q as u128) > (max_feed as u128) * 10u128.pow(k);
+    }
+    let fmax = forge_cam_geom::ival::Ival::pt(max_feed)
+        .mul(forge_cam_geom::ival::Ival::pt(10f64.powi(k as i32)))
+        .lo;
+    (q as f64) > fmax || fmax.is_nan()
+}
+
 fn dist_pts(a: forge_cam_geom::region::P2, b: forge_cam_geom::region::P2) -> f64 {
     ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt()
 }
@@ -3496,7 +3511,6 @@ impl Cam {
     /// the limits are compared as integers and f64 values scaled in outward-rounded arithmetic
     /// (a limit's scaled lower end), so a pass is never a rounding. The first violation.
     fn runtime_limits(&self, oi: usize, ms: &[forge_post::Motion], feed_decimals: u32) -> Option<CheckOut> {
-        use forge_cam_geom::ival::Ival;
         let s = &self.setups[self.ops[oi].setup];
         let m = self.lib.machine(&s.machine).ok()?;
         let fail = |value: f64, limit: f64, what: String, i: usize| CheckOut {
@@ -3514,7 +3528,7 @@ impl Cam {
         // 10^k exactly (k ≤ 22, so the power is an exact f64), then the limit times it
         let k = feed_decimals.min(22) as i32;
         let fs = 10f64.powi(k);
-        let fmax = Ival::pt(m.max_feed).mul(Ival::pt(fs)).lo;
+        let over = |q: i64| feed_over(q, k as u32, m.max_feed);
         for (i, mo) in ms.iter().enumerate() {
             match *mo {
                 // |q| < 2^53: the integer is the f64
@@ -3537,7 +3551,7 @@ impl Cam {
                     ));
                 }
                 forge_post::Motion::Feed(_, q) | forge_post::Motion::Arc { f: q, .. }
-                    if q.unsigned_abs() >= 1 << 53 || (q as f64) > fmax || fmax.is_nan() =>
+                    if q.unsigned_abs() >= 1 << 53 || over(q) =>
                 {
                     let v = q as f64 / fs;
                     return Some(fail(
@@ -4547,5 +4561,25 @@ impl Cam {
         self.programs
             .iter()
             .find_map(|p| p.text.as_deref().map(|t| (t, p.post.as_str())))
+    }
+}
+
+#[cfg(test)]
+mod feed_tests {
+    use super::feed_over;
+
+    /// F exactly at a whole-number limit passes (FEEDS-SPEEDS: it was refused, the limit's
+    /// scaled lower end being one ulp under); one step over fails; a fractional limit keeps the
+    /// outward-rounded bound.
+    #[test]
+    fn a_feed_at_the_limit_passes_and_one_step_over_fails() {
+        assert!(!feed_over(100_000, 1, 10_000.0));
+        assert!(feed_over(100_001, 1, 10_000.0));
+        assert!(!feed_over(10_000, 0, 10_000.0));
+        assert!(feed_over(10_001, 0, 10_000.0));
+        assert!(!feed_over(5_000_000, 3, 5_000.0));
+        assert!(feed_over(37_264, 1, 3726.3));
+        assert!(!feed_over(37_262, 1, 3726.3));
+        assert!(feed_over(1, 1, f64::NAN));
     }
 }
