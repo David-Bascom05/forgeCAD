@@ -256,4 +256,18 @@ fn a_see_through_body_is_blended_in_a_photo() {
         "{blended} of {} px of the body blended",
         body.len()
     );
+    // and its white outline (world lines facing the capture's camera): near-white pixels that
+    // aren't there with nothing seen through
+    let white = |px: &[u8]| px.chunks(4).filter(|p| p[..3].iter().all(|&c| c >= 235)).count();
+    h.gui.shell.sheet.bend_sim.as_mut().unwrap().see_through = false;
+    for _ in 0..30 {
+        h.step();
+    }
+    let clear = photo_px(&mut h, &dir, "clear.png");
+    assert!(
+        white(&ghost) > white(&clear) + 100,
+        "the outline: {} white px with see-through, {} without",
+        white(&ghost),
+        white(&clear)
+    );
 }
