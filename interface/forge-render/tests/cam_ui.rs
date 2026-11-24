@@ -424,6 +424,17 @@ fn a_turning_document_docks_its_section_and_windows_take_turns() {
     h.step();
     let w = h.gui.shell.cam.as_ref().unwrap();
     assert!(w.tools_open && !w.programs_open, "one floating window at a time");
+    // a turning run is not measured: nothing to colour its toolpath by
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Quality);
+    for _ in 0..6 {
+        h.step();
+    }
+    assert!(h.gui.shell.place("cam:quality:colour:chip").is_some(), "the quality window's chips");
+    h.click("cam:quality:colour:chip");
+    for _ in 0..4 {
+        h.step();
+    }
+    assert_eq!(h.gui.shell.cam.as_ref().unwrap().focus.colour_by, None, "a turning run coloured by chip load");
 }
 
 /// The op dialog's keys: Esc cancels (the text unchanged), Enter is OK (the edit written).
