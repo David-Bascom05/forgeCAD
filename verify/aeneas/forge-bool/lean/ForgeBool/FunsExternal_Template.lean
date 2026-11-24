@@ -228,7 +228,7 @@ axiom forge_math.interval.Box3.grow
   : forge_math.interval.Box3 → F64 → Result forge_math.interval.Box3
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::center]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 346:4-346:34
+    Source: 'kernel/forge-math/src/interval.rs', lines 347:4-347:34
     Name pattern: [forge_math::interval::{forge_math::interval::Box3}::center]
     Visibility: public -/
 @[rust_fun "forge_math::interval::{forge_math::interval::Box3}::center"]
