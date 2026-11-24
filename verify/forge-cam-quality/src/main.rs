@@ -4,11 +4,14 @@
 use forge_cam_quality::{Config, json, measure, table};
 use std::path::PathBuf;
 
+
+/// A stock box: its min and max corners (mm).
+type Bounds = ([f64; 3], [f64; 3]);
 fn main() {
     let mut cfg = Config::default();
     let mut out: Option<PathBuf> = None;
     let mut files: Vec<PathBuf> = Vec::new();
-    let mut ngc: Vec<(PathBuf, ([f64; 3], [f64; 3]))> = Vec::new();
+    let mut ngc: Vec<(PathBuf, Bounds)> = Vec::new();
     let mut flutes: Option<u32> = None;
     let mut part: Option<(PathBuf, [f64; 3])> = None;
     // each job's stock against the part, after the table
