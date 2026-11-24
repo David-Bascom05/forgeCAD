@@ -458,6 +458,8 @@ fn go_tab(h: &mut Headless, tab: &str) -> bool {
 #[derive(Clone)]
 enum Click {
     Tool,
+    /// A button the shell placed by name, in a panel already open.
+    Place(String),
     Menu {
         opener: String,
         right: bool,
@@ -489,6 +491,16 @@ fn open_menu(h: &mut Headless, opener: &str, right: bool) -> bool {
 fn do_click(h: &mut Headless, how: &Click, group: &str, tool: &str) -> bool {
     match how {
         Click::Tool => click_tool(h, group, tool),
+        Click::Place(name) => {
+            let tip = h
+                .gui
+                .shell
+                .place(name)
+                .map(|r| hover_tip(h, r))
+                .unwrap_or_default();
+            TIP.with(|t| *t.borrow_mut() = tip);
+            click_place(h, name)
+        }
         Click::Menu { opener, right, item } => {
             if !open_menu(h, opener, *right) {
                 return false;
@@ -543,6 +555,9 @@ impl Crawl {
         }
         if only_tab.is_none() || only_tab == Some("menus") {
             h = self.menus(f, h);
+        }
+        if only_tab.is_none() || only_tab == Some("side") {
+            h = self.side_panels(f, h);
         }
         for tab in tabs {
             // View, Inspect and Manage are the same everywhere: once per kind of document
@@ -692,6 +707,80 @@ impl Crawl {
                     None => start(f, self.size).unwrap(),
                 };
             }
+        }
+        h
+    }
+
+    /// The side panel's tabs (Model, Agent, Versions): each opened, then every button it places
+    /// that the Model tab's browser doesn't (its rows are the menus' business), clicked from it.
+    fn side_panels(&mut self, f: &Fixture, mut h: Headless) -> Headless {
+        let side = |h: &Headless| h.gui.shell.view_rect.left();
+        let tabs: Vec<String> = h
+            .gui
+            .shell
+            .places
+            .iter()
+            .filter_map(|(k, _)| k.strip_prefix("side:tab:").map(|x| x.to_string()))
+            .collect();
+        let base = Snap::take(&mut h);
+        for tab in tabs {
+            if tab == "Model" || !self.seen.insert(format!("{}:side:{tab}", kind_of(f))) {
+                continue;
+            }
+            let opener = format!("side:tab:{tab}");
+            let open = |h: &mut Headless| {
+                click_place(h, &opener);
+                settled(h, 5.0);
+                park(h);
+            };
+            open(&mut h);
+            let now = Snap::take(&mut h);
+            let edge = side(&h);
+            let items: Vec<String> = now
+                .places
+                .iter()
+                .filter(|(k, r)| {
+                    r.center().x < edge
+                        && r.area() < 40_000.0
+                        && !base.places.contains_key(*k)
+                        && !["fg:", "side:tab:", "doc:"].iter().any(|p| k.starts_with(p))
+                })
+                .map(|(k, _)| k.clone())
+                .collect();
+            eprintln!("  side {tab}: {} buttons", items.len());
+            for item in items {
+                let label = item.clone();
+                let how = Click::Place(item);
+                let (rec, fresh) = self.probe(
+                    f,
+                    h,
+                    &format!("side {tab}"),
+                    "",
+                    &tab,
+                    &label,
+                    true,
+                    base.env,
+                    &how,
+                );
+                eprintln!(
+                    "  {:<14} {:<30} {:<16} {}",
+                    f.name,
+                    format!("{tab}/{label}"),
+                    rec.class.word(),
+                    rec.detail
+                );
+                self.records.push(rec);
+                h = match fresh {
+                    Some(h) => h,
+                    None => {
+                        let mut h = start(f, self.size).unwrap();
+                        open(&mut h);
+                        h
+                    }
+                };
+            }
+            click_place(&mut h, "side:tab:Model");
+            settled(&mut h, 5.0);
         }
         h
     }
