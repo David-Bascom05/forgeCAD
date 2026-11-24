@@ -7,7 +7,10 @@
   md2toml.py and press2toml.py.
 - `shots/native-*.png`: interface/forge-render/tests/bendsim_env.rs on the view's renderer
   (Vulkan, lavapipe), `BENDSIM_SHOTS=DIR`, at the environment's own framings (View: Part and
-  Tools, the default; Press Overview):
+  Tools, the default: the operator's front-right, the part's whole motion through the step
+  and the working punch and die, the press's parts between eye and subject cut away; Press
+  Overview: all of it), laid out to docs/ux/STANDARD.md (ux/standard 85cdc22d): the program in
+  the browser, the selected bend's sheet docked at the right, icon transport:
   - 00: a 100 x 200 channel on a Trumpf TruBend 5130 with Trumpf's own punches and dies, the
     default view (the part, the punch and the die nearly end on, the bend line marked amber)
     and the Press Overview (C-frame housings from the published throat, ram, bed);
@@ -22,7 +25,8 @@
   - 07: Machine & Tools: the press by its maker's name, the tool library as cards (drawn
     cross-section, name, angle, radius, height, rated load; the id on hover), only what fits;
   - 08: the stations on the bed, drawn to scale between the housings, each stack in its
-    published segments; dragged to place.
+    published segments; dragged to place;
+  - 09: the same at 1024 x 700: nothing cut off.
 - `shots/web-*.png`: interface/forge-render/web/tests/bendsim.cjs in Chromium (software WebGPU),
   the wasm32 build: the same channel on the library's first press with its maker's tools
   (TruBend 5085), at the start, the first bend and the second.
