@@ -3,7 +3,10 @@ import Mathlib.Data.Real.Basic
 import Mathlib.Tactic
 
 /-!
-# The bend simulator's branch and bound, sound (kernel/forge-brake/src/bb.rs)
+# The certified branch and bound, sound (kernel/forge-bb; its first client the bend simulator, kernel/forge-brake/src/bb.rs)
+
+forge-bb's `search` is this file's `search` (its pick order a heap by `lb`); forge-brake's `bb.rs`
+is its `Problem` (the evaluator contracts below).
 
 forge-brake certifies, for a piece of the part against a tool (or against another piece), over the
 motion parameter `s` (the fold angle `φ`, or the ram height):

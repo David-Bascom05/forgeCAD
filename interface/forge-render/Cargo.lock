@@ -1055,6 +1055,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-bb"
+version = "0.1.0"
+
+[[package]]
 name = "forge-bend-lang"
 version = "0.1.0"
 dependencies = [
@@ -1077,6 +1081,7 @@ dependencies = [
 name = "forge-brake"
 version = "0.1.0"
 dependencies = [
+ "forge-bb",
  "forge-math",
  "forge-mesh",
  "forge-ops",
