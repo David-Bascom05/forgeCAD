@@ -74,6 +74,12 @@ opaque F64.Insts.CoreFmtDebug.fmt :
     F64 → core.fmt.Formatter → Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter) :=
   fun _ f => ok (.Ok (), f)
 
+/-- `<f64 as Display>::fmt`: Lean `opaque` (formatting is not part of any feature; reached from a
+debug-only assertion's message, e.g. forge-geom's `Ellipse::new`). -/
+opaque F64.Insts.CoreFmtDisplay.fmt :
+    F64 → core.fmt.Formatter → Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter) :=
+  fun _ f => ok (.Ok (), f)
+
 /-- `<f64 as PartialEq>::eq`, called through the trait: IEEE equality. -/
 def F64.Insts.CoreCmpPartialEqF64.eq (a b : F64) : Result Bool := ok (IEEE754.FP.eq a b)
 /-- `<f64 as PartialEq>::ne` -/

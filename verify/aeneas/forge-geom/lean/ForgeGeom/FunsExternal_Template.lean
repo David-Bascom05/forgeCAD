@@ -36,6 +36,16 @@ axiom core.array.Array.map
 @[rust_fun "core::clone::impls::{core::clone::Clone<f64>}::clone"]
 axiom F64.Insts.CoreCloneClone.clone : F64 → Result F64
 
+/-- [core::fmt::float::{impl core::fmt::Display for f64}::fmt]:
+    Source: '/rustc/library/core/src/fmt/float.rs', lines 217:16-217:64; this code is generated from a macro invocation at: '/rustc/library/core/src/fmt/float.rs', lines 239:0-239:21
+    Name pattern: [core::fmt::float::{core::fmt::Display<f64>}::fmt]
+    Visibility: public -/
+@[rust_fun "core::fmt::float::{core::fmt::Display<f64>}::fmt"]
+axiom F64.Insts.CoreFmtDisplay.fmt
+  :
+  F64 → core.fmt.Formatter → Result ((core.result.Result Unit
+    core.fmt.Error) × core.fmt.Formatter)
+
 /-- [core::iter::traits::iterator::Iterator::any]:
     Source: '/rustc/library/core/src/iter/traits/iterator.rs', lines 2897:4-2900:37
     Name pattern: [core::iter::traits::iterator::Iterator::any]
@@ -54,6 +64,13 @@ axiom core.iter.traits.iterator.Iterator.any.default
     Visibility: public -/
 @[rust_const "core::f64::{f64}::MIN_POSITIVE"]
 axiom core.f64.F64.MIN_POSITIVE : Result F64
+
+/-- [core::f64::{f64}::is_finite]:
+    Source: '/rustc/library/core/src/num/f64.rs', lines 714:4-714:40
+    Name pattern: [core::f64::{f64}::is_finite]
+    Visibility: public -/
+@[rust_fun "core::f64::{f64}::is_finite"]
+axiom core.f64.F64.is_finite : F64 → Result Bool
 
 /-- [core::f64::{f64}::max]:
     Source: '/rustc/library/core/src/num/f64.rs', lines 1058:4-1058:45

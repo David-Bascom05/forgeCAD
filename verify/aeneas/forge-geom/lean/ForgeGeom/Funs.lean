@@ -31,8 +31,25 @@ def F64.Insts.CoreCloneClone : core.clone.Clone F64 := {
   clone := F64.Insts.CoreCloneClone.clone
 }
 
+/-- Trait implementation: [core::fmt::float::{impl core::fmt::Display for f64}]
+    Source: '/rustc/library/core/src/fmt/float.rs', lines 216:12-216:32; this code is generated from a macro invocation at: '/rustc/library/core/src/fmt/float.rs', lines 239:0-239:21
+    Name pattern: [core::fmt::Display<f64>] -/
+@[reducible, rust_trait_impl "core::fmt::Display<f64>"]
+def F64.Insts.CoreFmtDisplay : core.fmt.Display F64 := {
+  fmt := F64.Insts.CoreFmtDisplay.fmt
+}
+
+/-- [forge_geom::curve::{forge_geom::curve::Ellipse}::new]:
+    Source: 'kernel/forge-geom/src/curve.rs', lines 85:4-91:5
+    Visibility: public -/
+def curve.Ellipse.new
+  (frame : forge_math.frame.Frame) (major : F64) (minor : F64) :
+  Result curve.Ellipse
+  := do
+  ok { frame, major, minor }
+
 /-- [forge_geom::curve::{forge_geom::curve::Line}::new]:
-    Source: 'kernel/forge-geom/src/curve.rs', lines 187:4-189:5
+    Source: 'kernel/forge-geom/src/curve.rs', lines 219:4-221:5
     Visibility: public -/
 def curve.Line.new
   (origin : forge_math.vec.Point3) (dir : forge_math.vec.UnitVec3) :

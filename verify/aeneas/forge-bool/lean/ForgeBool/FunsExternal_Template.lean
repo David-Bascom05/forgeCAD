@@ -105,8 +105,16 @@ axiom
     Visibility: public -/
 @[rust_fun "std::f64::{f64}::sqrt"] axiom std.f64.F64.sqrt : F64 → Result F64
 
+/-- [forge_geom::curve::{forge_geom::curve::Ellipse}::new]:
+    Source: 'kernel/forge-geom/src/curve.rs', lines 85:4-85:63
+    Name pattern: [forge_geom::curve::{forge_geom::curve::Ellipse}::new]
+    Visibility: public -/
+@[rust_fun "forge_geom::curve::{forge_geom::curve::Ellipse}::new"]
+axiom forge_geom.curve.Ellipse.new
+  : forge_math.frame.Frame → F64 → F64 → Result forge_geom.curve.Ellipse
+
 /-- [forge_geom::curve::{forge_geom::curve::Line}::new]:
-    Source: 'kernel/forge-geom/src/curve.rs', lines 187:4-187:53
+    Source: 'kernel/forge-geom/src/curve.rs', lines 219:4-219:53
     Name pattern: [forge_geom::curve::{forge_geom::curve::Line}::new]
     Visibility: public -/
 @[rust_fun "forge_geom::curve::{forge_geom::curve::Line}::new"]
