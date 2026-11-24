@@ -24,6 +24,13 @@
 //! depth). This is how a 3D finishing move is certified against curved faces without the
 //! branch and bound over the tool's own bodies, whose tangent contacts are slow.
 //!
+//! **A dome cylinder's move, exactly.** A horizontal cylinder above its axis, against a convex
+//! column, along a line move: across the axis its untrimmed CL is concave (the sup-convolution of
+//! the disk's top and the profile upside down), the tip affine, so the move's worst point is the
+//! unconstrained maximum (the two conjugates) unless its maximiser lies beyond an end, when that
+//! end decides (`cyl_chord`, Concave.lean). Past the face's end along the axis, the column's
+//! section there (`section`) or b(√·)'s superadditivity (`Column::sq_convex`).
+//!
 //! Both are found by interval branch and bound over the face's parameters (and the move's s):
 //! - an upper bound per cell from the mean-value form of y.z − b_k(ρ) for each profile piece k
 //!   whose ρ-range the cell meets (each piece is smooth in the parameters), intersected with the
@@ -419,6 +426,20 @@ impl Column {
         true
     }
 
+    /// Whether h(x) = b(√x) is convex on [0, R²]: the profile starts on the axis, is convex, and
+    /// b'(ρ)/ρ never falls (flat rings and arcs centred on or right of the axis; not a cone).
+    /// Then b(√(u² + a²)) ≥ b(|u|) + b(a) − b(0) (a convex h with h(0) is superadditive): a tool
+    /// a beyond a horizontal cylinder's end sees it at least b(a) − b(0) lower (`gap_move`).
+    pub fn sq_convex(&self) -> bool {
+        if self.segs[0].a()[0] != 0.0 || !self.convex() {
+            return false;
+        }
+        self.segs.iter().all(|sg| match *sg {
+            CSeg::Line { a, b } => a[1] == b[1],
+            CSeg::Arc { c, .. } => c[0] >= 0.0,
+        })
+    }
+
     /// The profile's top: b(R).
     pub fn top(&self) -> f64 {
         self.segs[self.segs.len() - 1].b()[1]
@@ -771,7 +792,27 @@ pub fn drop_above(
     res: f64,
     budget: usize,
 ) -> Cl {
-    search(col, faces, idx, x, y, floor, res, budget, true)
+    search(col, faces, idx, x, y, floor, f64::INFINITY, res, budget, true)
+}
+
+/// Whether CL at (x, y) is above z: `drop`'s search, stopped as soon as the answer is proven
+/// either way (hi ≤ z: the column at z misses the faces; lo > z: it meets one), else run to
+/// `res`. Its bounds hold CL as `drop`'s do, so a decided answer is true: `drop` can only agree
+/// with it or leave it within `res` of z.
+#[allow(clippy::too_many_arguments)]
+pub fn drop_decide(
+    col: &Column,
+    faces: &[Face],
+    idx: &[u32],
+    x: f64,
+    y: f64,
+    z: f64,
+    floor: f64,
+    res: f64,
+    budget: usize,
+) -> Cl {
+    let f = if floor > z { floor } else { z };
+    search(col, faces, idx, x, y, f, z, res, budget, true)
 }
 
 /// The branch and bound alone, without the closed forms: the reference the closed forms are
@@ -785,7 +826,18 @@ pub fn drop_general(
     res: f64,
     budget: usize,
 ) -> Cl {
-    search(col, faces, idx, x, y, f64::NEG_INFINITY, res, budget, false)
+    search(
+        col,
+        faces,
+        idx,
+        x,
+        y,
+        f64::NEG_INFINITY,
+        f64::INFINITY,
+        res,
+        budget,
+        false,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -796,6 +848,7 @@ fn search(
     x: f64,
     y: f64,
     floor: f64,
+    stop: f64,
     res: f64,
     budget: usize,
     closed_forms: bool,
@@ -867,7 +920,7 @@ fn search(
         if hi < done {
             hi = done;
         }
-        if hi - lo <= res || cells >= budget || hi <= floor {
+        if hi - lo <= res || cells >= budget || hi <= floor || lo > stop {
             break;
         }
         let Some((u, ki, c)) = heap.pop() else {
@@ -941,15 +994,15 @@ fn point_u(col: &Column, f: &Face, mv: &Move, p: f64, q: f64) -> f64 {
 /// A sphere is such a disk in the plane through its centre; so is a cylinder with a horizontal
 /// axis, in the plane across it (a line along the axis at the column's nearest point is the
 /// highest, b being non-decreasing).
-fn disk_drop<T: NumS>(col: &Column, sr: f64, d: T) -> Option<(T, f64)> {
+fn disk_drop<T: NumS>(segs: &[CSeg], sr: f64, d: T) -> Option<(T, f64)> {
     let s2 = Ival::pt(sr).sqr();
     let mut best: Option<T> = None;
     let mut arg = 0.0f64;
     let mut bestf = f64::NEG_INFINITY;
     let dv = d.val();
     let mut i = 0;
-    while i < col.segs.len() {
-        let sg = col.segs[i];
+    while i < segs.len() {
+        let sg = segs[i];
         let (a, b) = (sg.a(), sg.b());
         // the ends: on the circle exactly at their own heights
         let mut e = 0;
@@ -1219,7 +1272,7 @@ pub fn closed(col: &Column, f: &Face, x: f64, y: f64) -> Option<(f64, Option<(f6
                 let w = [xl * ex, xl * ey, -h];
                 return Some((ub, sphere_param(w, fx, fy, ax, r)));
             }
-            let Some((v, rho)) = disk_drop(col, r, d) else {
+            let Some((v, rho)) = disk_drop(&col.segs, r, d) else {
                 return Some((f64::NEG_INFINITY, None));
             };
             let rho = inside(col, rho);
@@ -1280,7 +1333,7 @@ pub fn closed(col: &Column, f: &Face, x: f64, y: f64) -> Option<(f64, Option<(f6
                     [xl * nx, xl * ny, -h],
                 )
             } else {
-                let Some((v, rho)) = disk_drop(col, r, d) else {
+                let Some((v, rho)) = disk_drop(&col.segs, r, d) else {
                     return Some((f64::NEG_INFINITY, None));
                 };
                 let rho = inside(col, rho);
@@ -1332,7 +1385,7 @@ pub fn closed(col: &Column, f: &Face, x: f64, y: f64) -> Option<(f64, Option<(f6
                 let xr = d + inside_signed(col, rho);
                 (xr, -(r * r - xr * xr).max(0.0).sqrt())
             } else {
-                let Some((_, rho)) = disk_drop(col, r, Ival::pt(d.abs())) else {
+                let Some((_, rho)) = disk_drop(&col.segs, r, Ival::pt(d.abs())) else {
                     return Some((ub, None));
                 };
                 let rho = inside(col, rho);
@@ -1785,10 +1838,12 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
             );
         }
     }
+    let convex = col.convex();
+    let dome_cyl = convex && matches!(f.surf, Surf::Cyl { ax, .. } if ax[2] == 0.0) && bowl_eta(f).is_none();
+    let sq_convex = dome_cyl && col.sq_convex();
     let mut cells = 0usize;
     let mut worst = f64::NEG_INFINITY;
     let mut rest: Vec<Ival> = Vec::new();
-    let convex = col.convex();
     if has_closed(&f.surf) {
         let mut st: Vec<Ival> = vec![Ival::new(0.0, 1.0)];
         while let Some(si) = st.pop() {
@@ -1820,22 +1875,72 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
                 // a smaller piece of s may clear it only if the bound's other end would
                 sphere_may = Ival::pt(r).sub(sd).lo <= need;
             }
-            match closed_u(col, f, mv, si) {
-                Some(None) => continue,
-                Some(Some(u)) if u <= need => {
+            // a dome cylinder (a horizontal axis) against a convex column along a line: exact
+            // over the piece (its untrimmed CL is concave across the axis, so the piece's worst
+            // point is the unconstrained maximum or its nearer end: `cyl_chord`, Concave.lean)
+            let chord = if dome_cyl {
+                match (*mv, si.lo == si.hi) {
+                    (Move::Line { .. }, false) => {
+                        // past the face's end along the axis by a: the column's section there
+                        // (ball and flat profiles), else the whole profile
+                        let ga = mv.at(Ival::pt(si.lo));
+                        let gb = mv.at(Ival::pt(si.hi));
+                        // (the face widened by mu: its span too)
+                        let a = Ival::pt(beyond_end(f, mv.at(si))).sub(Ival::pt(f.mu)).lo;
+                        if a > 0.0
+                            && let Some(sec) = section(&col.segs, a)
+                        {
+                            if sec.is_empty() {
+                                Some(f64::NEG_INFINITY)
+                            } else {
+                                cyl_chord_iv(&sec, f, ga, gb)
+                            }
+                        } else {
+                            cyl_chord_iv(&col.segs, f, ga, gb).map(|u| {
+                                // h = b(√·) convex: lower by b(a) − b(0)
+                                if a > 0.0 && sq_convex && u != f64::NEG_INFINITY {
+                                    match col.b(Ival::pt(a)) {
+                                        None => f64::NEG_INFINITY,
+                                        Some(ba) => Ival::pt(u).sub(ba).add(Ival::pt(col.segs[0].a()[1])).hi,
+                                    }
+                                } else {
+                                    u
+                                }
+                            })
+                        }
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            if let Some(u) = chord {
+                if u <= need {
                     if u > worst {
                         worst = u;
                     }
                     continue;
                 }
-                _ => {}
+            } else {
+                match closed_u(col, f, mv, si) {
+                    Some(None) => continue,
+                    Some(Some(u)) if u <= need => {
+                        if u > worst {
+                            worst = u;
+                        }
+                        continue;
+                    }
+                    _ => {}
+                }
             }
             // at the piece's middle: the contact, if it is in the face, is a witness or shows the
             // closed form is the face's own there (then split s); else the face's edge decides
             let sm = si.mid();
             let g = mv.at(Ival::pt(sm));
             // a sphere's bound against a convex column tightens as s shrinks: split for it too
-            let mut own = sphere_may;
+            // a dome cylinder's exact bound tightens as s shrinks too (a piece across the face's
+            // end splits into one within the span and one past it)
+            let mut own = sphere_may || chord.is_some();
             if let Some((_, Some((p, q)))) = closed(col, f, g[0].mid(), g[1].mid())
                 && f.holds(Ival::pt(p), Ival::pt(q)) == 1
             {
@@ -1951,6 +2056,234 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
     )
 }
 
+/// A convex profile's conjugate at slope k ≥ 0 (an interval): an upper bound of
+/// B(k) = max over ρ ∈ [0, R] of k ρ − b(ρ), and an interval holding a maximiser ρ* (for every
+/// slope in k: the maximisers move outward with k, b being convex). None: the profile does not
+/// start on the axis.
+fn conj(segs: &[CSeg], cr: f64, k: Ival) -> Option<(f64, Ival)> {
+    if segs[0].a()[0] != 0.0 || k.lo < 0.0 {
+        return None;
+    }
+    let one = Ival::pt(1.0);
+    let mut best = f64::NEG_INFINITY;
+    let mut up = |v: Ival| {
+        if v.hi > best {
+            best = v.hi;
+        }
+    };
+    // an arc's tangency place for slope k: c.ρ + r k / √(1 + k²)
+    let tang =
+        |c: [f64; 2], r: f64, k: Ival| Ival::pt(c[0]).add(Ival::pt(r).mul(k).div(one.add(k.sqr()).sqrt()));
+    for sg in segs {
+        let (a, b) = (sg.a(), sg.b());
+        // the ends (a line's maximum is at one of them)
+        up(k.mul(Ival::pt(a[0])).sub(Ival::pt(a[1])));
+        up(k.mul(Ival::pt(b[0])).sub(Ival::pt(b[1])));
+        if let CSeg::Arc { a, b, c, r } = *sg {
+            // k ρ − c.z + √(r² − (ρ − c.ρ)²) is concave: its stationary value bounds the piece
+            // (taken when the place may be inside it; else the ends hold the piece's maximum)
+            let t = tang(c, r, k);
+            if t.hi >= a[0] && t.lo <= b[0] {
+                up(k.mul(Ival::pt(c[0]))
+                    .sub(Ival::pt(c[1]))
+                    .add(Ival::pt(r).mul(one.add(k.sqr()).sqrt())));
+            }
+        }
+    }
+    // ρ*: from below, the first place whose right slope may reach k.lo; from above, the last
+    // whose left slope may be at most k.hi
+    let mut lo = cr;
+    for sg in segs {
+        let (a, b) = (sg.a(), sg.b());
+        let below = match *sg {
+            CSeg::Line { .. } => {
+                let sl = Ival::pt(b[1])
+                    .sub(Ival::pt(a[1]))
+                    .div(Ival::pt(b[0]).sub(Ival::pt(a[0])));
+                sl.hi < k.lo
+            }
+            CSeg::Arc { c, r, .. } => tang(c, r, Ival::pt(k.lo)).lo > b[0],
+        };
+        if !below {
+            lo = match *sg {
+                CSeg::Line { .. } => a[0],
+                CSeg::Arc { c, r, .. } => tang(c, r, Ival::pt(k.lo)).lo.max(a[0]),
+            };
+            break;
+        }
+    }
+    let mut hi = 0.0f64;
+    for sg in segs.iter().rev() {
+        let (a, b) = (sg.a(), sg.b());
+        let above = match *sg {
+            CSeg::Line { .. } => {
+                let sl = Ival::pt(b[1])
+                    .sub(Ival::pt(a[1]))
+                    .div(Ival::pt(b[0]).sub(Ival::pt(a[0])));
+                sl.lo > k.hi
+            }
+            CSeg::Arc { c, r, .. } => tang(c, r, Ival::pt(k.hi)).hi < a[0],
+        };
+        if !above {
+            hi = match *sg {
+                CSeg::Line { .. } => b[0],
+                CSeg::Arc { c, r, .. } => tang(c, r, Ival::pt(k.hi)).hi.min(b[0]),
+            };
+            break;
+        }
+    }
+    if !(lo <= hi) {
+        // rounding at a joint: the whole range holds it
+        return Some((best, Ival::new(0.0, cr)));
+    }
+    Some((best, Ival::new(lo, hi)))
+}
+
+/// A line move against a dome cylinder (horizontal axis, the face above it) and a convex column:
+/// an upper bound of u(s) = CL(g(s)) − g(s).z over the whole move for the untrimmed cylinder
+/// (−∞: out of reach throughout). In the plane across the axis, with d the tool's signed
+/// lateral place, CL = o.z + φ(d), φ(d) = max over e − u = d of √(r² − e²) − b(|u|): the sum of
+/// two concave functions' sup-convolution, so concave. Along the move d and z are affine, so
+/// with λ = Δz/Δd, u = φ(d) − λ d + const: its maximum over all d is
+/// r √(1 + λ²) + B(|λ|) (the disk's and the profile's conjugates), attained at
+/// d* = e* − u*, e* = −λ r / √(1 + λ²), u* = sign(λ) ρ*. If d* is outside the move's range of
+/// d, the maximum over the move is at its nearer end (concavity); else it is the unconstrained
+/// one. None: not this case (or Δd not proven non-zero: the existing route handles it).
+pub fn cyl_chord(col: &Column, f: &Face, mv: &Move) -> Option<f64> {
+    let Move::Line { a, b } = *mv else {
+        return None;
+    };
+    if !col.convex() {
+        return None;
+    }
+    let iv = |p: [f64; 3]| [Ival::pt(p[0]), Ival::pt(p[1]), Ival::pt(p[2])];
+    cyl_chord_iv(&col.segs, f, iv(a), iv(b))
+}
+
+/// `cyl_chord` over a straight piece given by its ends as intervals (each holds the true end);
+/// the column is convex (the caller's).
+fn cyl_chord_iv(segs: &[CSeg], f: &Face, a: [Ival; 3], b: [Ival; 3]) -> Option<f64> {
+    let Surf::Cyl { o, ax, r, .. } = f.surf else {
+        return None;
+    };
+    if ax[2] != 0.0 || bowl_eta(f).is_some() {
+        return None;
+    }
+    let len = Ival::pt(ax[0]).sqr().add(Ival::pt(ax[1]).sqr()).sqrt();
+    let lat = |p: [Ival; 3]| {
+        let rx = p[0].sub(Ival::pt(o[0]));
+        let ry = p[1].sub(Ival::pt(o[1]));
+        rx.mul(Ival::pt(ax[1])).sub(ry.mul(Ival::pt(ax[0]))).div(len)
+    };
+    let (d0, d1) = (lat(a), lat(b));
+    let dd = d1.sub(d0);
+    if dd.sign() == 0 {
+        // (nearly) along the axis: d over the piece is within the ends' hull (affine), z at
+        // least the lower end's
+        let zl = a[2].min(b[2]);
+        return Some(match disk_drop(segs, r, d0.hull(d1).abs()) {
+            Some((v, _)) => Ival::pt(o[2]).add(v).sub(zl).hi,
+            None => f64::NEG_INFINITY,
+        });
+    }
+    let lam = b[2].sub(a[2]).div(dd);
+    let k = lam.abs();
+    let cr = segs[segs.len() - 1].b()[0];
+    let (bk, rho) = conj(segs, cr, k)?;
+    let w = Ival::pt(1.0).add(lam.sqr()).sqrt();
+    let es = lam.mul(Ival::pt(r)).div(w).neg();
+    let us = match lam.sign() {
+        1 => rho,
+        -1 => rho.neg(),
+        _ => Ival::new(-rho.hi, rho.hi),
+    };
+    let ds = es.sub(us);
+    // the end nearer d* (the lower d first)
+    let (lo_end, hi_end, dl, dh) = if dd.lo > 0.0 {
+        (a, b, d0, d1)
+    } else {
+        (b, a, d1, d0)
+    };
+    // the untrimmed CL at an end (closed_t's dome cylinder: o.z + φ(|d|))
+    let at_end = |p: [Ival; 3]| -> f64 {
+        match disk_drop(segs, r, lat(p).abs()) {
+            Some((v, _)) => Ival::pt(o[2]).add(v).sub(p[2]).hi,
+            None => f64::NEG_INFINITY,
+        }
+    };
+    if ds.hi < dl.lo {
+        return Some(at_end(lo_end));
+    }
+    if ds.lo > dh.hi {
+        return Some(at_end(hi_end));
+    }
+    // the unconstrained maximum: o.z + r √(1 + λ²) + B − (z − λ d) at either end
+    let top = Ival::pt(o[2]).add(Ival::pt(r).mul(w)).add(Ival::pt(bk));
+    let ua = top.sub(a[2].sub(lam.mul(d0))).hi;
+    let ub = top.sub(b[2].sub(lam.mul(d1))).hi;
+    Some(if ua < ub { ua } else { ub })
+}
+
+/// The column's section by a vertical plane a ≥ 0 from its axis, as a profile in the plane's
+/// lateral place u: b_a(u) = b(√(u² + a²)), |u| ≤ √(R² − a²), for a one-piece profile: a flat
+/// end, or a ball (b = c.z − √(r² − ρ²) gives c.z − √((r² − a²) − u²)); rounded to a profile
+/// below it and as wide or wider. None for other profiles. Empty: a ≥ R (no part of the column
+/// there). Convex if the column is (b convex and non-decreasing, √(u² + a²) convex).
+fn section(segs: &[CSeg], a: f64) -> Option<Vec<CSeg>> {
+    // one piece (a flat end, a ball): each bound rounded the column's way (wider, lower)
+    let [sg] = segs else {
+        return None;
+    };
+    let (pa, pb) = (sg.a(), sg.b());
+    if pa[0] != 0.0 {
+        return None;
+    }
+    if !(a < pb[0]) {
+        return Some(Vec::new());
+    }
+    let a2 = Ival::pt(a).sqr();
+    // the section's half-width √(R² − a²), up
+    let ub = Ival::pt(pb[0]).sqr().sub(a2).sqrt().hi;
+    match *sg {
+        CSeg::Line { a: la, b: lb } if la[1] == lb[1] => Some(vec![CSeg::Line {
+            a: [0.0, la[1]],
+            b: [ub, la[1]],
+        }]),
+        CSeg::Arc { c, r, b: ab, .. } if c[0] == 0.0 => {
+            // c.z − √((r² − a²) − u²): the radius up (the arc lower), its start b(a) down
+            let rr = Ival::pt(r).sqr().sub(a2).sqrt().hi;
+            let za = Ival::pt(c[1]).sub(Ival::pt(rr)).lo;
+            Some(vec![CSeg::Arc {
+                a: [0.0, za],
+                b: [if ub > rr { ub } else { rr }, ab[1]],
+                c,
+                r: rr,
+            }])
+        }
+        _ => None,
+    }
+}
+
+/// How far (a lower bound, ≥ 0) the tool's axis is beyond a horizontal cylinder face's span
+/// along its axis, over the tool positions g (0 where it may be within the span).
+fn beyond_end(f: &Face, g: [Ival; 3]) -> f64 {
+    let Surf::Cyl { o, ax, .. } = f.surf else {
+        return 0.0;
+    };
+    let len = Ival::pt(ax[0]).sqr().add(Ival::pt(ax[1]).sqr()).sqrt();
+    // the axial place: (g − o)·ax / |ax|; the face's span: q |ax|
+    let t = g[0]
+        .sub(Ival::pt(o[0]))
+        .mul(Ival::pt(ax[0]))
+        .add(g[1].sub(Ival::pt(o[1])).mul(Ival::pt(ax[1])))
+        .div(len);
+    let (q0, q1) = (Ival::pt(f.q.lo).mul(len), Ival::pt(f.q.hi).mul(len));
+    let past = t.sub(q1).lo;
+    let before = q0.sub(t).lo;
+    let a = if past > before { past } else { before };
+    if a > 0.0 { a } else { 0.0 }
+}
+
 /// A move's path in xy as a section curve: a line's (a point for a vertical move), or a planar
 /// or helical arc's (each under a half turn, as the checker cuts them).
 fn xy_path(mv: &Move) -> Option<crate::slab::Sec> {
@@ -2028,7 +2361,7 @@ fn closed_t<T: NumS>(col: &Column, f: &Face, x: T, y: T) -> Option<Option<T>> {
             let v = if bowl {
                 bowl_drop(col, r, d, -r, r)
             } else {
-                disk_drop(col, r, d)
+                disk_drop(&col.segs, r, d)
             };
             Some(v.map(|(v, _)| T::c(o[2]).add(v).add(T::c(lift))))
         }
@@ -2044,7 +2377,7 @@ fn closed_t<T: NumS>(col: &Column, f: &Face, x: T, y: T) -> Option<Option<T>> {
                 let (xa, xb) = cyl_lateral(&f.surf, f.p);
                 bowl_drop(col, r, cr.div(T::iv(len)), xa, xb)
             } else {
-                disk_drop(col, r, cr.sqr().sqrt().div(T::iv(len)))
+                disk_drop(&col.segs, r, cr.sqr().sqrt().div(T::iv(len)))
             };
             Some(v.map(|(v, _)| T::c(o[2]).add(v).add(T::c(lift))))
         }
@@ -2058,7 +2391,7 @@ fn closed_t<T: NumS>(col: &Column, f: &Face, x: T, y: T) -> Option<Option<T>> {
                 let (xa, xb) = tube_lateral(f);
                 bowl_drop(col, r, d, xa, xb)
             } else {
-                disk_drop(col, r, d.sqr().sqrt())
+                disk_drop(&col.segs, r, d.sqr().sqrt())
             };
             Some(v.map(|(v, _)| T::c(o[2]).add(v).add(T::c(lift))))
         }

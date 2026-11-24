@@ -209,6 +209,31 @@ impl<'a> Surfacer<'a> {
         c
     }
 
+    /// `cl`, but only as far as deciding whether CL is above z (`drop_decide`): the push-cutter's
+    /// question. A decided answer (hi ≤ z, or lo > z) is true; else the bounds are within `res`.
+    pub fn cl_vs(&self, x: f64, y: f64, z: f64) -> Cl {
+        let r = self.make.r;
+        let idx = self.grid.near(x - r, y - r, x + r, y + r);
+        let mut c = drop::drop_decide(
+            &self.make,
+            self.faces,
+            &idx,
+            x,
+            y,
+            z,
+            self.floor,
+            self.res,
+            self.budget / 10,
+        );
+        if c.hi < self.floor {
+            c.hi = self.floor;
+        }
+        if c.lo < self.floor {
+            c.lo = self.floor;
+        }
+        c
+    }
+
     /// The vertical-gap check of one cutting move against every face near it, at `limit`.
     pub fn gap(&self, a: [f64; 3], b: [f64; 3], limit: f64) -> Gap {
         self.gap_at(a, b, limit).0
@@ -514,14 +539,14 @@ pub fn push(sf: &Surfacer, a: [f64; 2], b: [f64; 2], z: f64, step: f64) -> Optio
     for k in 0..=n {
         let t = k as f64 / n as f64;
         let p = at(t);
-        let c = sf.cl(p[0], p[1]);
+        let c = sf.cl_vs(p[0], p[1], z);
         if c.lo > z {
             let mut lo = free?;
             let mut hi = t;
             while (hi - lo) * len > sf.res {
                 let m = 0.5 * (lo + hi);
                 let pm = at(m);
-                let cm = sf.cl(pm[0], pm[1]);
+                let cm = sf.cl_vs(pm[0], pm[1], z);
                 if cm.lo > z {
                     hi = m;
                 } else if cm.hi <= z {
@@ -1513,7 +1538,15 @@ pub fn zlevel_voids(
             && stepover <= rf
             && let Ok((v, _)) = offset(&free, -rf)
         {
-            voids.push((region_of(&v), z));
+            let v = region_of(&v);
+            // the same region as the level above's: it is cleared down to this level, which
+            // holds the higher one's void (V above z ⊇ V above the higher floor); the stock then
+            // takes one void, not a run of equal ones (equal boundaries are an exact boolean's
+            // costliest case)
+            match voids.last_mut() {
+                Some((last, f)) if *last == v && z <= *f => *f = z,
+                _ => voids.push((v, z)),
+            }
         }
         // passes: the free region's boundary, then its offsets inward by k·stepover
         let mut k = 0usize;
