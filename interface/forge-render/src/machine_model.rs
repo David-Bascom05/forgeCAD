@@ -43,9 +43,15 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Tris, String> {
             }
             done(t, name)
         }
-        Format::Step | Format::Iges | Format::Parasolid => {
+        f @ (Format::Step | Format::Iges | Format::Parasolid) => {
+            // the headline, then the reader's reason (shown on hover: `headline`)
+            let kind = match f {
+                Format::Step => "STEP",
+                Format::Iges => "IGES",
+                _ => "Parasolid",
+            };
             let imp = forge_step::import(bytes, &forge_step::Limits::default())
-                .map_err(|_| format!("{name}: not a model this reads"))?;
+                .map_err(|e| format!("{name} couldn't be read as a {kind} model\n{e}"))?;
             let mut t = Tris::default();
             let mut failed = 0;
             for s in &imp.solids {
@@ -64,6 +70,11 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Tris, String> {
             done(t, name)
         }
     }
+}
+
+/// A message's first line and the rest: what a panel shows, and what it shows on hover.
+pub fn headline(msg: &str) -> (&str, &str) {
+    msg.split_once('\n').unwrap_or((msg, ""))
 }
 
 fn done(t: Tris, name: &str) -> Result<Tris, String> {
@@ -150,7 +161,11 @@ mod tests {
         assert_eq!(p.pos[1], [25.4, 0.0, 100.0]);
         assert_eq!(placed_points(&t, &m).len(), 3);
         // an STL's bytes under a Parasolid name: read as what its name says, and refused
-        assert!(read("part.x_t", stl).unwrap_err().contains("not a model this reads"));
+        let e = read("part.x_t", stl).unwrap_err();
+        assert!(e.starts_with("part.x_t couldn't be read as a Parasolid model\n"), "{e}");
+        let (head, why) = headline(&e);
+        assert_eq!(head, "part.x_t couldn't be read as a Parasolid model");
+        assert!(!why.is_empty());
         assert!(read("empty.stl", b"solid x\nendsolid x\n").is_err());
     }
 }

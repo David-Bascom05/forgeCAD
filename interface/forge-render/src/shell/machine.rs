@@ -1693,7 +1693,16 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
         }
     });
     if !st.message.is_empty() {
-        ui.label(RichText::new(&st.message).font(sans(11.0)).color(t.ink2));
+        said(ui, &st.message, t.ink2);
+    }
+}
+
+/// A message: its first line, the reader's reason after it on hover.
+fn said(ui: &mut Ui, msg: &str, color: Color32) {
+    let (head, why) = crate::machine_model::headline(msg);
+    let r = ui.label(RichText::new(head).font(sans(11.0)).color(color));
+    if !why.is_empty() {
+        r.on_hover_text(why);
     }
 }
 
@@ -2544,9 +2553,7 @@ fn model_rows(
                 touch.fit_to_model = Some(i);
             }
         }
-        Some(Err(e)) => {
-            ui.label(RichText::new(e).font(sans(11.0)).color(t.error));
-        }
+        Some(Err(e)) => said(ui, e, t.error),
         _ => {}
     }
     if ch {

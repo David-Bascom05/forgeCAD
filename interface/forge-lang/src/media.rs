@@ -256,7 +256,15 @@ pub fn solid(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) ->
         }
         // the reader's words would quote the file: only how far it got
         let imp = forge_step::import(data, &forge_step::Limits::default())
-            .map_err(|_| FileProblem::Unreadable("not a model this reads".into()))?;
+            .map_err(|_| {
+                let kind = match ext.as_str() {
+                    "step" | "stp" => "STEP",
+                    "igs" | "iges" => "IGES",
+                    "brep" => "BREP",
+                    _ => "Parasolid",
+                };
+                FileProblem::Unreadable(format!("couldn't be read as a {kind} model"))
+            })?;
         if imp.solids.is_empty() {
             return Err(FileProblem::Unreadable("no solid this reads".into()));
         }
