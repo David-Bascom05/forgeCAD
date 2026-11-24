@@ -28,7 +28,8 @@ pub mod cycle;
 pub mod export;
 pub mod holes;
 pub mod life;
-mod memo;
+/// The memos (kernel/forge-memo), by the path they had here.
+pub use forge_memo as memo;
 pub mod probing;
 pub mod sim;
 pub mod toollog;
@@ -72,6 +73,42 @@ static ROUND_TRIPS: memo::Memo<RoundTrip> = memo::Memo::new();
 /// 2D ops' engagement samples, per path (`feeds_from_engagement`).
 static SCHEDULED: memo::Memo<Vec<Vec<forge_cam::engage::Sample>>> = memo::Memo::new();
 
+/// An adaptive clearing's path, the cells it cleared per level and its notes for the user, or
+/// its refusal (`adaptive_memo`).
+type Cleared = Result<(OpPath, Vec<(Region, f64)>, Vec<String>), String>;
+static ADAPTIVE: memo::Memo<Cleared> = memo::Memo::new();
+
+/// `forge_cam::adaptive::adaptive`, taken from an earlier run when every argument is the same
+/// (memo.rs): it is a function of them alone (no clock, file or state; two env switches only
+/// print), so the path and voids are the ones it would make. The cut by each of its fields
+/// (a new field fails to compile until it is in the key); the rest by their full text. Without
+/// it every rerun and every edit of another op cut each adaptive op again: seconds a click.
+fn adaptive_memo(
+    rg: &Region,
+    cut: ops::Cut,
+    span: ops::Span,
+    ip: &forge_cam::stock::InProcess,
+    prm: &forge_cam::adaptive::Adaptive,
+) -> Cleared {
+    let ops::Cut {
+        tool,
+        tidx,
+        h,
+        feed,
+        ramp_feed,
+        lead_feed,
+    } = cut;
+    let key = format!(
+        "adaptive/2 {:?}",
+        (rg, (tool, tidx, h, feed, ramp_feed, lead_feed), span, ip, prm)
+    );
+    ADAPTIVE.get_or(key, || {
+        forge_cam::adaptive::adaptive(rg, cut, span, ip, prm)
+            .map(|o| (o.path, o.voids, o.notes))
+            .map_err(|e| format!("{e:?}"))
+    })
+}
+
 /// A 3-axis finishing op's paths (or refusal), the lines it adds to the plan, and its finish record.
 type Finished = (Result<Vec<OpPath>, String>, Vec<String>, Option<Finish>);
 static FINISHED: memo::Memo<Finished> = memo::Memo::new();
@@ -105,6 +142,38 @@ fn certify_memo(
     CERTIFIED.get_or(key, || {
         ops::certify_with(p, tool, part, stages, fixture, fclear, tol, clearance, column)
     })
+}
+
+/// The sketches a machining document's engrave and slot ops cut (`NAME = engrave(SETUP,
+/// PART.SKETCH, ..)`, `slot(..)`), by the name of the part they are written of: those ops ask
+/// their part for the sketch's frame. Only that form is read; a sketch reached otherwise is
+/// asked of its part anew (`PartIn::frame_of`).
+fn frames_wanted(prog: &[forge_lang::syntax::Stmt]) -> BTreeMap<String, Vec<String>> {
+    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for st in prog {
+        let StmtKind::Assign { value, .. } = &st.kind else {
+            continue;
+        };
+        let ExprKind::Call(f, args) = &value.kind else {
+            continue;
+        };
+        if !matches!(&f.kind, ExprKind::Name(n) if n == "engrave" || n == "slot") {
+            continue;
+        }
+        // the second positional argument
+        let Some(a) = args.iter().filter(|a| a.name.is_none()).nth(1) else {
+            continue;
+        };
+        if let ExprKind::Attr(x, sk) = &a.value.kind
+            && let ExprKind::Name(part) = &x.kind
+        {
+            let v = out.entry(part.clone()).or_default();
+            if !v.contains(sk) {
+                v.push(sk.clone());
+            }
+        }
+    }
+    out
 }
 
 /// Whether a source is a machining document.
@@ -204,6 +273,10 @@ struct PartIn {
     material_note: String,
     /// The material's machining data (its record's machining.* keys), read once.
     stock: Option<feeds::Stock>,
+    /// The part as its load ran it (anchors on), for its sketches' frames without running it
+    /// again (`frame_of`): kept only when the document engraves or slots; None otherwise (and
+    /// for a turned part or soft jaws), where a frame is asked of the source anew.
+    prepared: Option<std::sync::Arc<forge_lang::query::Prepared>>,
 }
 
 struct SetupIn {
@@ -1348,9 +1421,33 @@ pub struct Cam {
     pub programs: Vec<ProgramOut>,
     lib: std::sync::Arc<Library>,
     jaws: Vec<forge_cam::fixture::SoftJaws>,
+    /// The sketches the document's engrave and slot ops cut, by the part statement they are
+    /// of (`frames_wanted`): such a part is loaded with its anchors and those sketches asked,
+    /// so the ops' sketch frames come from that run. Empty for most documents.
+    frames: BTreeMap<String, Vec<String>>,
 }
 
 impl PartIn {
+    /// The part's answer to `frame SKETCH`: from its load's run where that was kept (and the
+    /// query is one a kept run answers), else asked of its source anew. The same answer either
+    /// way: the query runs the part with its anchors, as the load did, and answers from that
+    /// run (debug builds ask anew as well and compare every word and number).
+    fn frame_of(&self, sk: &str) -> forge_lang::query::Answer {
+        let q = format!("frame {sk}");
+        let ask = || forge_lang::query::ask(&self.src, Some(self.pdir.clone()), None, &q);
+        match self
+            .prepared
+            .as_ref()
+            .and_then(|p| forge_lang::query::ask_prepared(p, &q))
+        {
+            Some(a) => {
+                debug_assert_eq!(format!("{a:?}"), format!("{:?}", ask()), "frame {sk}");
+                a
+            }
+            None => ask(),
+        }
+    }
+
     /// `faces`' full text, made at the first call.
     fn faces_key(&self) -> &str {
         self.faces_text.get_or_init(|| format!("part {:?}", self.faces))
@@ -1689,6 +1786,7 @@ impl Cam {
             hardness: p.hardness,
             material_note: p.material_note.clone(),
             stock: p.stock.clone(),
+            prepared: None,
         };
         self.parts.push(turned);
         Ok(self.parts.len() - 1)
@@ -2288,6 +2386,7 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
         programs: vec![],
         lib,
         jaws: vec![],
+        frames: BTreeMap::new(),
     };
     let prog = match syntax::parse(src) {
         Ok(p) => p,
@@ -2297,6 +2396,7 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
             return cam;
         }
     };
+    cam.frames = frames_wanted(&prog);
     if !is_machining(src) {
         cam.ok = false;
         cam.errors
@@ -2728,7 +2828,25 @@ impl Cam {
                     dir: path.parent().map(|p| p.to_path_buf()),
                     ..forge_lang::Options::default()
                 };
-                let (run, _) = forge_lang::run(&src, opts(), Default::default());
+                // a part the document engraves or slots: its anchors too, and the sketches cut
+                // asked, so their frames come from this run, not two more (`frame_of`). Anchors
+                // and asks are found after the part is built, from what it is: its body, props
+                // and errors are the same. Any other part is run exactly as before
+                let asks = self.frames.get(name).cloned().unwrap_or_default();
+                let (run, _) = forge_lang::run(
+                    &src,
+                    forge_lang::Options {
+                        anchors: !asks.is_empty(),
+                        asks: asks.clone(),
+                        ..opts()
+                    },
+                    Default::default(),
+                );
+                let prepared = if asks.is_empty() {
+                    None
+                } else {
+                    forge_lang::query::prepare(&run, &asks).map(std::sync::Arc::new)
+                };
                 let holes = holes::hole_view(&src, opts());
                 if !run.ok() {
                     return Err(format!(
@@ -2798,6 +2916,7 @@ impl Cam {
                     hardness: material.as_deref().and_then(|m| Self::stock_hardness(m, dir)),
                     material,
                     material_note,
+                    prepared,
                 });
                 Ok(V::Part(self.parts.len() - 1))
             }
@@ -3320,6 +3439,7 @@ impl Cam {
                 .and_then(|m| Self::stock_family(m, Path::new("."))),
             material: jaw_material,
             material_note: jaw_note,
+            prepared: None,
         });
         self.jaws.push(sj);
         Ok(V::Jaws(self.jaws.len() - 1, self.parts.len() - 1))
@@ -3381,7 +3501,7 @@ impl Cam {
         };
         // the sketch's plane, from the part's query (r9-rounded: toolpath placement only; the
         // path is certified as posted)
-        let ans = forge_lang::query::ask(&part.src, Some(part.pdir.clone()), None, &format!("frame {sk}"));
+        let ans = part.frame_of(&sk);
         if !ans.ok {
             return Err(format!("{what}: {}", ans.text.trim()));
         }
@@ -5508,7 +5628,7 @@ impl Cam {
                         };
                         let mut paths = vec![];
                         for rg in &regions {
-                            let out = forge_cam::adaptive::adaptive(
+                            let (path, vs, notes) = adaptive_memo(
                                 rg,
                                 ops::Cut {
                                     tool: t,
@@ -5521,15 +5641,14 @@ impl Cam {
                                 ops::Span { top, bottom, step },
                                 &s.ip,
                                 &prm,
-                            )
-                            .map_err(|e| format!("{e:?}"))?;
-                            for n in &out.notes {
+                            )?;
+                            for n in &notes {
                                 self.warnings.push(format!("{name}: {n}"));
                             }
-                            for (v, z) in out.voids {
+                            for (v, z) in vs {
                                 voids.push((Some(v), z));
                             }
-                            paths.push(out.path);
+                            paths.push(path);
                         }
                         Ok(paths)
                     }
@@ -6129,7 +6248,14 @@ impl Cam {
                 [area[0], area[3]],
             ]),
             zmin: bottom,
-            zmax: top + 1e-9,
+            // the passes' points stand up to the drape's leave (within tol) above the CL surface:
+            // by default (`from` the part's top, an exact box's top face) that face's passes are
+            // in the range; a `from` given is taken as given
+            zmax: if a.contains_key("from") {
+                top + 1e-9
+            } else {
+                top + tol
+            },
             ..Default::default()
         };
         // sin and cos of an angle in degrees, enclosed (dmath is within a few ulps)
@@ -11046,5 +11172,117 @@ mod surfacing_memo_tests {
         let (pa, pb) = (cut(&a), cut(&b));
         assert!(pa.contains("moves"), "the generators made no path: {pa}");
         assert_eq!(pa, pb, "a generator read the tool beyond its cutter");
+    }
+}
+
+#[cfg(test)]
+mod frame_tests {
+    use super::*;
+
+    /// A part the document engraves or slots is loaded with its anchors and the sketches cut
+    /// asked; each of those sketches' frames then comes from that run, and is what the part's
+    /// source asked anew answers, word for word and number for number. A document that cuts no
+    /// sketch keeps no run: its parts load as before.
+    #[test]
+    fn the_frames_are_the_asked_ones() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        for doc in ["manifold_cam.fg", "plate_mark_cam.fg", "slot_plate_cam.fg"] {
+            let src = forge_dirs::fs::read_to_string(dir.join(doc)).unwrap();
+            let cam = run(&src, &dir);
+            assert!(!cam.frames.is_empty(), "{doc}: no sketch found to cut");
+            let mut answered = 0;
+            for (part, sks) in &cam.frames {
+                for sk in sks {
+                    let p = cam
+                        .parts
+                        .iter()
+                        .find(|p| p.prepared.is_some())
+                        .unwrap_or_else(|| panic!("{doc}: {part} kept no run"));
+                    let kept =
+                        forge_lang::query::ask_prepared(p.prepared.as_ref().unwrap(), &format!("frame {sk}"))
+                            .unwrap_or_else(|| panic!("{doc}: {part}.{sk} not answered from the kept run"));
+                    let fresh =
+                        forge_lang::query::ask(&p.src, Some(p.pdir.clone()), None, &format!("frame {sk}"));
+                    assert!(fresh.ok, "{doc}: {sk}: {}", fresh.text);
+                    assert_eq!(format!("{kept:?}"), format!("{fresh:?}"), "{doc}: {part}.{sk}");
+                    assert_eq!(format!("{:?}", p.frame_of(sk)), format!("{fresh:?}"));
+                    answered += 1;
+                }
+            }
+            assert!(answered > 0, "{doc}");
+        }
+        let src = forge_dirs::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+        let cam = run(&src, &dir);
+        assert!(cam.frames.is_empty() && cam.parts.iter().all(|p| p.prepared.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod adaptive_memo_tests {
+    /// Every input class of an adaptive op is in its memo key: its engagement, levels (from,
+    /// to, step), the tool, the in-process stock before it (the facing above it) and the part's
+    /// section each cut it anew, and that run is the fresh one (every memo bypassed); the same
+    /// text, and an edit adaptive does not read (the program's number), take it from the memo.
+    #[test]
+    fn each_input_class_clears_anew() {
+        let src_dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../verify/forge-cam-quality/parts");
+        // scratch under the workspace's target (wasm32-wasip1 has no temp_dir or pid)
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/adaptive_memo_test");
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("deep_open_slot.fg")).unwrap();
+        forge_dirs::fs::write(dir.join("deep_open_slot.fg"), &part).unwrap();
+        let doc = "machining\nf = part(\"deep_open_slot.fg\", group: \"P\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-6\", t: 1, stickout: 30, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: \"top-corner\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 20, step: 1)\nrough = adaptive(op1, tool: t1, from: 20, to: 5.2, step: 15, engagement: 40)\nprog = program(op1, post: \"fanuc\", number: 5008)\n";
+        let reply = |cam: &super::Cam| {
+            let mut t = cam.json().to_string();
+            for p in &cam.programs {
+                t.push_str(&format!("\n{:?}", p.text));
+            }
+            t
+        };
+        let run = |d: &str| {
+            let before = super::ADAPTIVE.computed();
+            let cam = super::run(d, &dir);
+            assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+            assert!(cam.ops[1].moves > 0, "adaptive cut nothing");
+            (super::ADAPTIVE.computed() - before, reply(&cam))
+        };
+        let fresh = |d: &str| {
+            super::memo::bypass(true);
+            let cam = super::run(d, &dir);
+            super::memo::bypass(false);
+            reply(&cam)
+        };
+        let (n, first) = run(doc);
+        assert_eq!(n, 1);
+        assert_eq!(run(doc), (0, first.clone()), "the same text cut it again");
+        let r = run(&doc.replace("number: 5008", "number: 5009"));
+        assert_eq!(r.0, 0, "the program's number: cut again");
+        for (what, d) in [
+            ("engagement", doc.replace("engagement: 40", "engagement: 35")),
+            // read only by adaptive itself (not the feeds, as engagement is)
+            (
+                "step length",
+                doc.replace("engagement: 40)", "engagement: 40, step_length: 0.6)"),
+            ),
+            ("level", doc.replace("to: 5.2", "to: 6")),
+            ("step", doc.replace("step: 15", "step: 7.5")),
+            ("tool", doc.replace("\"flat-6\"", "\"flat-10\"")),
+            (
+                "stock before it",
+                doc.replace("to: 20, step: 1)", "to: 19.5, step: 1)"),
+            ),
+        ] {
+            let (n, got) = run(&d);
+            assert_eq!(n, 1, "{what}: not cut anew");
+            assert_eq!(got, fresh(&d), "{what}: not the fresh run");
+        }
+        let edited = part.replacen("shared w = 12", "shared w = 13", 1);
+        assert_ne!(edited, part, "the part's slot width moved");
+        forge_dirs::fs::write(dir.join("deep_open_slot.fg"), &edited).unwrap();
+        let (n, got) = run(doc);
+        assert_eq!(n, 1, "part: not cut anew");
+        assert_eq!(got, fresh(doc), "part: not the fresh run");
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
     }
 }
