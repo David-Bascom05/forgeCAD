@@ -1007,6 +1007,8 @@ fn nary_body(
                             &mut out.cuts,
                             &mut out.imprints,
                             &mut Vec::new(),
+                            // (the n-ary result takes no `imprint_tols`)
+                            false,
                         )?;
                         imprint(
                             both,
@@ -1018,6 +1020,8 @@ fn nary_body(
                             &mut out.cuts,
                             &mut out.imprints,
                             &mut Vec::new(),
+                            // (the n-ary result takes no `imprint_tols`)
+                            false,
                         )?;
                         continue;
                     }
@@ -1866,7 +1870,7 @@ fn nary_body(
     let mut face_imprints: Vec<Vec<Vec<usize>>> =
         tools.iter().map(|b| vec![Vec::new(); b.faces.len()]).collect();
     for (ii, im) in imprints.iter().enumerate() {
-        face_imprints[im.into_side][im.into.index()].push(ii);
+        face_imprints[im.into_side as usize][im.into.index()].push(ii);
     }
     let mut cut_faces: Vec<Vec<bool>> = tools.iter().map(|b| vec![false; b.faces.len()]).collect();
     for &(sd, e, _) in &by_edge {

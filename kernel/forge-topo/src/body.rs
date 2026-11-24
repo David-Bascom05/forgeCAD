@@ -44,7 +44,9 @@ pub struct Edge {
     pub coedges: Small<CoedgeId, 2>,
     pub name: Name,
     /// How far the edge may lie from its faces: `tol::LINEAR`, or more on an edge read from a
-    /// file, the deviation measured there. Only import sets it; pieces of an edge inherit it.
+    /// file, the deviation measured there, or on an edge a boolean imprinted on a face of the
+    /// other body that it strays from further (`forge_bool`'s `imprint_tols`). Pieces of an edge
+    /// inherit it.
     pub tol: f64,
     /// False once no face uses the edge (after an in-place edit).
     pub alive: bool,

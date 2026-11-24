@@ -790,3 +790,179 @@ fn a_region_split_again_by_its_naming_edge_gets_its_own_name() {
 fn a_hundred_tilted_booleans_on_one_plate() {
     plate_chain(100, 0.05, &[]);
 }
+
+/// `drift_adv top`'s op `i` from its parameters `q` (each in [-1, 1]): a 3 mm slab, tilted by up
+/// to 1e-7, its bottom (a union) or top (a cut) within two tolerances of a plate's top at z = 10;
+/// and the 100 x 100 x 10 plate itself.
+fn top_slab(i: usize, q: [f64; 6]) -> (Body, Op) {
+    const L: f64 = 1e-5;
+    let id = 100 + i as u64;
+    let op = if i.is_multiple_of(2) { Op::Subtract } else { Op::Union };
+    let (x0, y0) = (50.0 + 40.0 * q[0], 50.0 + 40.0 * q[1]);
+    let (w, h) = (5.0 + 20.0 * (q[2] + 1.0), 5.0 + 20.0 * (q[3] + 1.0));
+    let z = 10.0 + 2.0 * L * q[4];
+    let tilt = 1e-7 * q[5];
+    let n = Vec3::new(tilt, -tilt, 1.0).normalize().unwrap();
+    let at = Point3::new(x0, y0, if op == Op::Union { z } else { z - 3.0 });
+    let f = Frame::from_zx(at, n, Vec3::new(1.0, 0.0, 0.0)).unwrap();
+    (slab(f, w, h, 3.0, id), op)
+}
+
+fn slab(f: Frame, w: f64, h: f64, d: f64, id: u64) -> Body {
+    let pts = [(0.0, 0.0), (w, 0.0), (w, h), (0.0, h)];
+    let segs = (0..4)
+        .map(|i| {
+            let (a, b) = (pts[i], pts[(i + 1) % 4]);
+            (
+                Segment::Line {
+                    a: Point2::new(a.0, a.1),
+                    b: Point2::new(b.0, b.1),
+                },
+                id * 10 + i as u64,
+            )
+        })
+        .collect();
+    extrude(
+        &Profile {
+            plane: f,
+            loops: vec![ProfileLoop::new(segs)],
+        },
+        d,
+        id,
+    )
+    .unwrap()
+}
+
+/// Slabs stacked within two tolerances of a plate's top and tilted by up to 1e-7, so each one's
+/// face is found on the top's surface (coplanar) and the edges of one imprint on the other: an
+/// imprinted edge strays 1.29e-5 from the face it now bounds, past its own tolerance of 1e-5.
+/// Its tolerance must grow to hold that (research/booleans/drift.md): with it the result was an
+/// Ok that `check` finds an edge off its face in (EdgeOffFace), a wrong Ok. Four ops of a
+/// hill-climbed fifty (`drift_adv top`), by their original indices.
+#[test]
+fn an_imprinted_edge_off_its_new_face_grows_its_tolerance() {
+    let mut body = slab(Frame::WORLD, 100.0, 100.0, 10.0, 1);
+    let ops: [(usize, [f64; 6]); 4] = [
+        (
+            7,
+            [
+                0.5918829918885135,
+                0.30239341812934617,
+                -0.3509277137226333,
+                0.0393398165925507,
+                0.42821974697303966,
+                0.4670581994319918,
+            ],
+        ),
+        (
+            26,
+            [
+                0.5088582386782867,
+                0.8576087878475563,
+                -0.1598695157072878,
+                -0.015880172925941904,
+                0.00011761254002262689,
+                0.388185391233117,
+            ],
+        ),
+        (
+            31,
+            [
+                0.9556838675228327,
+                0.020294401467336298,
+                1.0,
+                0.329820388187806,
+                -0.9624960073434354,
+                0.23750013520793,
+            ],
+        ),
+        (
+            32,
+            [
+                0.9348006431398126,
+                0.41442383150441364,
+                -0.8599947362654539,
+                0.7072555274370649,
+                -0.21964280055656504,
+                0.22248465631838577,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = top_slab(i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        if let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) {
+            let p = check(&r);
+            assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+            body = r;
+        }
+    }
+}
+
+/// The same stack: an edge's end vertex where it is imprinted on the other body's face lies
+/// 1.51e-5 from that face's plane; its tolerance (the ball every surface through it meets,
+/// `Vertex::tol`) must grow to hold it, not stay at 1e-5. Three ops of a hill-climbed fifty.
+#[test]
+fn an_imprinted_edges_end_vertex_holds_its_new_face() {
+    let mut body = slab(Frame::WORLD, 100.0, 100.0, 10.0, 1);
+    let ops: [(usize, [f64; 6]); 3] = [
+        (
+            9,
+            [
+                -0.26507043851392975,
+                0.8406934451433343,
+                0.13335405654850618,
+                0.31614661880392536,
+                0.60960096690831,
+                1.0,
+            ],
+        ),
+        (
+            27,
+            [
+                -0.6739908258109015,
+                0.8580906948089231,
+                0.36771629220373514,
+                0.35843675683996346,
+                0.10504478019733154,
+                0.3343261878770015,
+            ],
+        ),
+        (
+            34,
+            [
+                -0.543396694807474,
+                0.736688722718039,
+                0.881245991414807,
+                0.4951744296767451,
+                0.7269937185748625,
+                -0.7096159813835494,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = top_slab(i, q);
+        let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) else {
+            continue;
+        };
+        for e in r.edge_ids() {
+            let edge = r.edge(e);
+            for &c in &edge.coedges {
+                let f = r.coedge_face(c);
+                let forge_geom::Surface::Plane(pl) = &r.face(f).surface else {
+                    continue;
+                };
+                for v in [edge.start, edge.end] {
+                    let x = r.vertex(v);
+                    let d = pl.signed_distance(x.point).abs();
+                    assert!(
+                        d <= x.tol,
+                        "op {i} ({op:?}): vertex {v:?} {d:e} from face {f:?}, tol {:e}",
+                        x.tol
+                    );
+                }
+            }
+        }
+        body = r;
+    }
+}
