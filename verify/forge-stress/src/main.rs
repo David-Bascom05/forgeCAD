@@ -222,6 +222,12 @@ fn bore(at: Point3, z: UnitVec3, r: f64, len: f64) -> Option<Body> {
 }
 
 /// What a boolean's answer is: its status word, its volume, and what is wrong with it.
+thread_local! {
+    /// The error bounds `mass` gave the answers judged since the last oracle: what their volumes
+    /// may be off by, honestly said (a file's tolerant edges widen it), which an oracle allows.
+    static BOUND: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
+}
+
 fn judge(r: Result<Body, String>) -> (String, f64, String) {
     match r {
         Err(e) => {
@@ -241,7 +247,10 @@ fn judge(r: Result<Body, String>) -> (String, f64, String) {
                 return ("wrong".into(), f64::NAN, format!("check: {why}"));
             }
             let v = match mass::mass_rel(&b, 1e-6) {
-                Ok(m) => m.volume,
+                Ok(m) => {
+                    BOUND.with(|c| c.set(c.get() + m.err[0]));
+                    m.volume
+                }
                 Err(e) => return ("wrong".into(), f64::NAN, format!("mass: {e}")),
             };
             match mesh(&b) {
@@ -304,22 +313,32 @@ impl Ops<'_> {
         }
     }
 
-    /// `a + b` against `want`, as an oracle line.
-    fn oracle(&self, op: &str, got: f64, want: f64, scale: f64) {
+    /// `a + b` against `want`, as an oracle line: within 1e-4 of `scale`, or within the error
+    /// bounds `mass` said the volumes have (`bound`, the operands', and the answers' since the
+    /// last oracle). A difference inside what `mass` owns to is not a wrong answer: on a file's
+    /// tolerant edge (6 um off a cylinder it meets nearly tangent, TM-1) the volume is honestly
+    /// uncertain by more than 1e-4.
+    fn oracle(&self, op: &str, got: f64, want: f64, scale: f64, bound: f64) {
+        let bound = bound + BOUND.with(|c| c.replace(0.0));
         if !got.is_finite() || !want.is_finite() {
             return;
         }
         let err = (got - want).abs() / scale.max(1e-12);
-        let st = if err <= 1e-4 { "ok" } else { "wrong" };
+        let st = if err <= 1e-4 || (got - want).abs() <= bound {
+            "ok"
+        } else {
+            "wrong"
+        };
         self.line(
             op,
             0.0,
             st,
             &format!(
-                ",\"got\":{},\"want\":{},\"rel\":{}",
+                ",\"got\":{},\"want\":{},\"rel\":{},\"bound\":{}",
                 num(got),
                 num(want),
-                num(err)
+                num(err),
+                num(bound)
             ),
             if st == "ok" { "" } else { "volumes do not add up" },
         );
@@ -534,7 +553,7 @@ fn main() {
     ));
 
     // every solid: check, mass, mesh
-    let mut good: Vec<(usize, f64, Box3)> = Vec::new();
+    let mut good: Vec<(usize, f64, f64, Box3)> = Vec::new();
     for (i, s) in imp.solids.iter().enumerate() {
         let b = &s.body;
         let nv = b.vertex_ids().count();
@@ -548,11 +567,11 @@ fn main() {
         let (r, mms) = cx.run(&format!("s{i}:mass"), || {
             mass::mass_rel(b, 1e-6).map_err(|e| e.to_string())
         });
-        let (vol, area, merr) = match r {
-            Res::Done(Ok(m)) => (m.volume, m.area, String::new()),
-            Res::Done(Err(e)) => (f64::NAN, f64::NAN, e),
-            Res::Panic(m) => (f64::NAN, f64::NAN, format!("panic: {m}")),
-            Res::Skipped => (f64::NAN, f64::NAN, "skipped".into()),
+        let (vol, area, merr, verr) = match r {
+            Res::Done(Ok(m)) => (m.volume, m.area, String::new(), m.err[0]),
+            Res::Done(Err(e)) => (f64::NAN, f64::NAN, e, f64::NAN),
+            Res::Panic(m) => (f64::NAN, f64::NAN, format!("panic: {m}"), f64::NAN),
+            Res::Skipped => (f64::NAN, f64::NAN, "skipped".into(), f64::NAN),
         };
         let (r, tms) = cx.run(&format!("s{i}:mesh"), || mesh(b));
         let (watertight, manifold, mvol, tris, mrr) = match r {
@@ -584,7 +603,7 @@ fn main() {
             num(bx.diagonal())
         ));
         if nprob == 0 && vol.is_finite() && vol > 0.0 && watertight {
-            good.push((i, vol, bx));
+            good.push((i, vol, verr, bx));
         }
     }
 
@@ -603,11 +622,11 @@ fn main() {
             k += step;
         }
     }
-    let info: BTreeMap<usize, (f64, Box3)> = good.iter().map(|g| (g.0, (g.1, g.2))).collect();
+    let info: BTreeMap<usize, (f64, f64, Box3)> = good.iter().map(|g| (g.0, (g.1, g.2, g.3))).collect();
     for &i in &chosen {
         let s = &imp.solids[i];
         let b = &s.body;
-        let (vol, bx) = info[&i];
+        let (vol, verr, bx) = info[&i];
         let c = bx.center();
         let (w, h, d) = (bx.x.width(), bx.y.width(), bx.z.width());
         let small = w.min(h).min(d).max(1e-3);
@@ -672,13 +691,13 @@ fn main() {
         ) {
             let sub = o.boolean("box_sub", b, &t, Op::Subtract);
             let int = o.boolean("box_int", b, &t, Op::Intersect);
-            o.oracle("box_sum", sub + int, vol, vol);
+            o.oracle("box_sum", sub + int, vol, vol, verr);
         }
         // a bore along z through the middle
         if let Some(t) = bore(c, UnitVec3::Z, 0.13 * small, 3.0 * bx.diagonal()) {
             let sub = o.boolean("bore_sub", b, &t, Op::Subtract);
             let int = o.boolean("bore_int", b, &t, Op::Intersect);
-            o.oracle("bore_sum", sub + int, vol, vol);
+            o.oracle("bore_sum", sub + int, vol, vol, verr);
         }
         // a copy beside it, touching its box, and one half over it
         // copies of it moved along x: beside (touching its box), over (half on it), and half on it
@@ -704,15 +723,15 @@ fn main() {
             }
             let u = o.boolean(&format!("union_{tag}"), b, &copy, Op::Union);
             let x = o.boolean(&format!("int_{tag}"), b, &copy, Op::Intersect);
-            o.oracle(&format!("{tag}_sum"), u + x, 2.0 * vol, vol);
+            o.oracle(&format!("{tag}_sum"), u + x, 2.0 * vol, vol, 2.0 * verr);
         }
     }
     // two of the file's own solids whose boxes overlap: the first few such pairs among the chosen
     let mut pairs = 0;
     'outer: for (k, &i) in chosen.iter().enumerate() {
         for &j in &chosen[k + 1..] {
-            let (vi, bi) = info[&i];
-            let (vj, bj) = info[&j];
+            let (vi, ei, bi) = info[&i];
+            let (vj, ej, bj) = info[&j];
             let ov = bi.x.lo < bj.x.hi
                 && bj.x.lo < bi.x.hi
                 && bi.y.lo < bj.y.hi
@@ -731,7 +750,7 @@ fn main() {
             let tag = format!("pair{j}");
             let u = o.boolean(&format!("union_{tag}"), a, b, Op::Union);
             let x = o.boolean(&format!("int_{tag}"), a, b, Op::Intersect);
-            o.oracle(&format!("{tag}_sum"), u + x, vi + vj, vi.max(vj));
+            o.oracle(&format!("{tag}_sum"), u + x, vi + vj, vi.max(vj), ei + ej);
             pairs += 1;
             if pairs >= 6 {
                 break 'outer;
