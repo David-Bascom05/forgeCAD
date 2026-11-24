@@ -386,7 +386,7 @@ fn pieces_n(from: [f64; 3], m: &PMove, n: usize) -> Vec<[f64; 3]> {
 }
 
 /// A move's length (arcs along the helix).
-fn move_len(from: [f64; 3], m: &PMove) -> f64 {
+pub(crate) fn move_len(from: [f64; 3], m: &PMove) -> f64 {
     let d3 = |a: [f64; 3], b: [f64; 3]| {
         ((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2])).sqrt()
     };

@@ -112,11 +112,18 @@ class Out:
     def __init__(self):
         self.lines = []
 
-    def rec(self, header, fields, cites):
+    def rec(self, header, fields, cites, presets=()):
         self.lines.append(f"[[{header}]]")
         for k, v in fields.items():
             if v is not None and v != "":
                 self.lines.append(f"{k} = {tv(v)}")
+        for pr in presets:
+            self.lines.append(f"[[{header}.preset]]")
+            for k in ("name", "group", "vc", "fz", "ap", "ae"):
+                v = pr.get(k)
+                if v is not None:
+                    self.lines.append(f"{k} = {tv(v) if isinstance(v, str) else repr(round(float(v), 6))}")
+        cites = list(cites) + [pr["cite"] for pr in presets]
         for c in cites:
             self.lines.append(f"[[{header}.cite]]")
             for k in ("path", "status", "source", "taken", "value", "basis", "note"):
@@ -234,15 +241,24 @@ def make_presets(vendor, ty, f, r, skips):
         rows.append(dict(g=g, cls=CLASS[op], vc=vc, fz=fz, vr=vr, fr=fr, dfz=derived_fz,
                          printed=printed, fzx=fzx, c=c))
     # a diameter on the boundary of two of the maker's diameter columns gets a row from each:
-    # keep the lower feed (then speed) and say so
+    # keep the column whose lower edge is the diameter (its range's low end, which a preset
+    # takes, is the value for that diameter), else the lower feed; and say so
+    def lower_edge(y):
+        m = re.search(r"column\s+(\d+)(?:/(\d+))?\s*-", str(y["c"].get("condition") or ""))
+        if not m:
+            return None
+        return float(m.group(1)) / float(m.group(2) or 1) * 25.4
     uniq = {}
     for x in rows:
         k = (x["g"], x["cls"], mat_of(x["c"]))
         if k in uniq:
             skips["boundary-column rows merged"] += 1
-            keep = min(uniq[k], x, key=lambda y: (y["fz"], y["vc"]))
+            at_edge = [y for y in (uniq[k], x) if lower_edge(y) is not None
+                       and abs(lower_edge(y) - f["dc"]) < 1e-6]
+            keep = at_edge[0] if len(at_edge) == 1 else min(uniq[k], x, key=lambda y: (y["fz"], y["vc"]))
             other = x if keep is uniq[k] else uniq[k]
-            keep = dict(keep, boundary=(keep["c"].get("condition"), other["c"].get("condition")))
+            why = "the one whose lower edge is the diameter" if len(at_edge) == 1 else "the lower feed"
+            keep = dict(keep, boundary=(keep["c"].get("condition"), other["c"].get("condition"), why))
             uniq[k] = keep
         else:
             uniq[k] = x
@@ -283,8 +299,8 @@ def preset(vendor, ty, f, r, x, name, how):
     if vendor == "helical" and cls == "finish" and ae is not None:
         notes.append("programmed at ae: the finishing column is a programmed feed at the stated RDOC")
     if x.get("boundary"):
-        a, b = x["boundary"]
-        notes.append(f"the tool's diameter lies in two of the source's columns ({a}; {b}): the lower feed is kept")
+        a, b, why = x["boundary"]
+        notes.append(f"the tool's diameter lies in two of the source's columns ({a}; {b}): the first is kept, {why}")
     if x["dfz"]:
         notes.append("fz is the tap's pitch per revolution (a tap feeds its pitch); the source prints vc only")
     elif ty in ("drill", "spot") or (x["fzx"] or {}).get("unit") == "mm/rev":
@@ -529,20 +545,129 @@ def collet(vendor, r, out, skips):
         skips[f"kind {kind}"] += 1
 
 
+TURN_VC = os.path.join(RAW, "turn-vc")
+
+
+def turn_vc_rows(vendor):
+    p = os.path.join(TURN_VC, f"{vendor}.json")
+    return json.load(open(p))["rows"] if os.path.exists(p) else []
+
+
+def nominal_or_low(x):
+    """(value, how): the maker's printed nominal, optimum or recommended value ("start here")
+    when given, else a range's low
+    end, else the single value; how is None for a single printed value."""
+    for k in ("optimum", "recommended"):  # Sumitomo min-optimum-max, Korloy "300 (210~390)"
+        if isinstance((x or {}).get(k), (int, float)):
+            return x[k], None
+    v = (x or {}).get("v")
+    if isinstance(v, dict):
+        if isinstance(v.get("nominal"), (int, float)):
+            return v["nominal"], None
+        v = v.get("range")
+    if isinstance(v, list):
+        v = [y for y in v if isinstance(y, (int, float))]
+        return (min(v), "the low end of the printed range") if v else (None, None)
+    return (v, None) if isinstance(v, (int, float)) else (None, None)
+
+
+def insert_presets(vendor, r, f, skips):
+    """FEEDS-SPEEDS' turning presets: per printed (ISO group, grade) vc for this insert, with
+    the feed (mm/rev, in `fz`) and ap printed with it or on the insert's own row; a vc without a
+    feed is held back. "<G> <chipbreaker> <grade>" is the first material the maker prints for
+    the group (their table's lead row); every material is also "<... grade> <material>"."""
+    out, names = [], set()
+    own = (r.get("cutting") or [None])[0]  # Korloy/Ingersoll: f and ap per chipbreaker row
+    cb = f.get("chipbreaker") or ""
+    for row in turn_vc_rows(vendor):
+        if r["id"] not in row.get("insert_ids", []):
+            continue
+        printed = row.get("iso_group")
+        g = printed or group_of(str(row.get("material_stated") or ""))
+        vc, vhow = nominal_or_low(row.get("vc"))
+        fx, ax, src2 = row.get("f"), row.get("ap"), None
+        if not fx and own and own.get("f"):
+            fx, ax, src2 = own.get("f"), ax or own.get("ap"), r["url"]
+        fz, fhow = nominal_or_low(fx)
+        ap, ahow = nominal_or_low(ax)
+        if not g or not vc or not fz:
+            skips["turning vc row held back (no group, vc or feed)"] += 1
+            continue
+        head = " ".join(x for x in (g, cb or row.get("chipbreaker") or "", row.get("grade") or "") if x)
+        mat = " ".join(str(row.get("material_stated") or "").split())
+        for name, lead in ((head, True), (f"{head} {mat}" if mat else None, False)):
+            if not name or name in names:
+                continue
+            names.add(name)
+            basis, notes = [], []
+            if not printed:
+                basis.append(f"the maker's material '{mat}' mapped to ISO 513 group {g} by its name")
+            if lead:
+                notes.append("of the maker's materials for this group and grade, the first printed")
+            if not row.get("chipbreaker"):
+                basis.append("the maker prints this vc per grade, not per chipbreaker: matched to the insert "
+                             "by the grades its catalogue row offers")
+            for what, how in (("vc", vhow), ("f", fhow), ("ap", ahow)):
+                if how:
+                    basis.append(f"{what} is {how}")
+            if src2:
+                notes.append(f"f and ap from the insert's own row ({src2}), vc from the grade table")
+            notes.append("fz holds the feed per revolution, mm/rev; a printed optimum, recommended or "
+                         "nominal value is kept as the start value")
+            st = lambda x: (x or {}).get("stated", "")
+            value = "; ".join(v for v in (row.get("grade") or "", mat, st(row.get("vc")), st(fx), st(ax)) if v)
+            if re.search(r"\b(SFM|IPR|ipr|inch|in)\b", value):
+                notes.append("metric values are exact conversions (SFM x 0.3048 m/min, IPR x 25.4 mm, in x 25.4 mm)")
+            if row.get("note"):
+                notes.append(row["note"])
+            cite = dict(path=f"preset.{name}", status="estimate" if basis else "published", source=row["url"],
+                        taken=r.get("taken", TAKEN), value=value, basis="; ".join(basis), note="; ".join(notes))
+            out.append(dict(name=name, group=g, vc=vc, fz=fz, ap=ap, cite=cite))
+    order = lambda p: (GROUP_ORDER.index(p["group"]) if p["group"] in GROUP_ORDER else 9, p["name"])
+    return sorted(out, key=order)
+
+
+# ISO 1832: thickness digits (mm) and corner radius digits (tenths of a mm)
+ISO_S = {"01": 1.59, "T1": 1.98, "02": 2.38, "T2": 2.78, "03": 3.18, "T3": 3.97, "04": 4.76, "05": 5.56,
+         "06": 6.35, "07": 7.94, "09": 9.52}
+
+
+def iso_digits(code, k):
+    m = re.match(r"^[A-Z]{4}(\d{2})(\w{2})(\d{2})", code)
+    if not m:
+        return None
+    if k == "s":
+        return ISO_S.get(m.group(2))
+    if k == "re":
+        return int(m.group(3)) / 10
+    return None
+
+
 def turning(vendor, r, out, skips):
     vals = r["values"]
     code = (r.get("iso_code") or "").replace(" ", "")
     if not code:
         skips["no ISO code (inch/ANSI only)"] += 1
         return
-    base = dict(maker=VENDORS[vendor], source=r["url"], taken=r.get("taken", TAKEN), note=r.get("name", "")[:140])
+    base = dict(maker=VENDORS[vendor], real=True, source=r["url"], taken=r.get("taken", TAKEN), note=r.get("name", "")[:140])
     if r["kind"] == "insert":
         f, cites = {"code": code}, [pub("code", r, r.get("id", code))]
         for k in ("ic", "s", "re"):
             v = num(vals, k)
             if v is None:
-                skips[f"insert without {k}"] += 1
-                return
+                # the maker prints only the size row's range (Korloy): the ISO 1832 code's own
+                # digits give the value, kept only when it lies inside the printed range
+                v, st = iso_digits(code, k), stated(r, "re_range" if k == "re" else k)
+                lo_hi = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", st)[-2:]] if st else []
+                if v is None or len(lo_hi) != 2 or not (lo_hi[0] - 1e-9 <= v <= lo_hi[1] + 1e-9):
+                    skips[f"insert without {k}"] += 1
+                    return
+                f[k] = v
+                cites.append(dict(path=k, status="estimate", source=r["url"], taken=r.get("taken", TAKEN), value=st,
+                                  basis=f"the catalogue prints only the size row's range; {k} = {v:g} from the ISO 1832 "
+                                        f"code {code} (its {'corner-radius' if k == 're' else 'thickness'} digits), "
+                                        "inside the printed range"))
+                continue
             f[k] = v
             cites.append(pub(k, r, stated(r, k)))
             # an inch catalogue's corner radius is the metric one rounded to 3 decimals of an inch
@@ -568,7 +693,7 @@ def turning(vendor, r, out, skips):
         rid = f"{vendor}-{r['id']}".replace(" ", "")
         for k, why in TURN_SKIP.get(vendor, {}).items():
             base["note"] = (base["note"] + "; " if base["note"] else "") + f"not mapped: {why}"
-        out.rec("insert", {"id": rid, **f, **base}, cites)
+        out.rec("insert", {"id": rid, **f, **base}, cites, insert_presets(vendor, r, f, skips))
         return
     # holders and bars: a row listing both hands becomes one record per hand
     kind = "holder" if r["kind"] == "turn_holder" else "bar"
@@ -606,6 +731,137 @@ def turning(vendor, r, out, skips):
         out.rec("turn_holder", {"id": rid, "code": hc, "kind": kind, "hand": hand, **g, **base}, cites)
 
 
+# Single tools found for the shop parts (raw/real-tools/<vendor>.json): parting blades and
+# inserts, indexable drills, solid drills, thread mills, each value cited to the catalogue page.
+REAL_TOOLS = os.path.join(RAW, "real-tools")
+
+
+def shop_presets(r, kind):
+    """One preset per printed ISO group: the first material the maker prints (its table's lead
+    row; of bracketing diameter columns, the first, the smaller tool's); vc the printed
+    optimum (Sumitomo min-optimum-max) else the range's low end; the feed as printed."""
+    out, seen = [], set()
+    for c in r.get("cutting") or []:
+        g = c.get("iso_group")
+        fx = c.get("f") or c.get("fz")
+        if not g or g in seen or not fx:
+            continue
+        def start(x):
+            v = x.get("v")
+            if isinstance(v, list) and len(v) == 3 and "optimum" in str(c.get("material_stated", "")).lower() + str(r.get("notes", "")).lower():
+                return v[1], None
+            if isinstance(v, list) and len(v) == 3 and re.search(r"\d+-\d+-\d+", str(x.get("stated", ""))):
+                return v[1], "the printed optimum (min-optimum-max)"
+            if isinstance(v, list):
+                return min(v), "the low end of the printed range"
+            return v, None
+        vc, vh = start(c["vc"])
+        fz, fh = start(fx)
+        seen.add(g)
+        name = f"{g} general"
+        basis = [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "low end" in h]
+        notes = ["of the maker's materials for this group, the first printed"]
+        notes += [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "optimum" in h]
+        if kind == "drill":
+            notes.append("fz is the feed per revolution, mm/rev")
+        if re.search(r"column", str(c.get("material_stated", ""))):
+            basis.append("the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed")
+        if re.search(r"\b(SFM|IPR)\b", str(c["vc"].get("stated", "")) + str(fx.get("stated", ""))):
+            notes.append("metric values are exact conversions (SFM x 0.3048, IPR x 25.4)")
+        cite = dict(path=f"preset.{name}", status="estimate" if basis else "published", source=c.get("url") or r["url"],
+                    taken=r.get("taken", TAKEN),
+                    value=f"{c.get('material_stated', '')}; vc {c['vc'].get('stated', '')}; {fx.get('stated', '')}",
+                    basis="; ".join(basis), note="; ".join(notes))
+        out.append(dict(name=name, group=g, vc=vc, fz=fz, cite=cite))
+    return out
+
+
+def shop(vendor, r, outs, skips):
+    vals, url, tk = r["values"], r["url"], r.get("taken", TAKEN)
+    V = lambda k: (vals.get(k) or {}).get("v")
+    S = lambda k: (vals.get(k) or {}).get("stated", "")
+    P = lambda path, k: dict(path=path, status="published", source=url, taken=tk, value=S(k))
+    E = lambda path, k, basis: dict(path=path, status="estimate", source=url, taken=tk, value=S(k), basis=basis)
+    base = dict(maker=VENDORS[vendor], real=True, source=url, taken=tk, note=r.get("name", "")[:140])
+    rid = f"{vendor}-{r['id']}".replace(" ", "")
+    k = r["kind"]
+    if k == "parting_blade":
+        f = dict(code=r["id"], h=V("h"), t_blade=V("b"), l1=V("lf"), cdx=V("cutdia") / 2, max_bar=V("cutdia"),
+                 seat=str(V("seat_size")), insert=", ".join(V("compatible_inserts") or []), hand="N")
+        cites = [dict(path="code", status="published", source=url, taken=tk, value=r["id"]),
+                 P("h", "h"), P("t_blade", "b"), P("l1", "lf"), P("max_bar", "cutdia"), P("seat", "seat_size"),
+                 P("insert", "compatible_inserts"),
+                 E("cdx", "cutdia", "no reach is printed: half the printed max cut-off diameter CUTDIA"),
+                 dict(path="hand", status="estimate", source=url, taken=tk, value=S("fig"),
+                      basis="the catalogue figure shows a double-ended neutral blade; no R/L is printed")]
+        base["note"] = (base["note"] + f"; clamps in tool blocks {V('tool_block')}; {V('clamp')}").strip("; ")
+        outs["turning"].rec("blade", {"id": rid, **f, **base}, cites)
+    elif k == "grooving_insert":
+        f = dict(code=r["id"], width=V("cw"), re=V("re"), head=V("insl"), seat=str(V("seat_size")))
+        cites = [dict(path="code", status="published", source=url, taken=tk, value=r["id"]),
+                 P("width", "cw"), P("re", "re"), P("head", "insl"), P("seat", "seat_size")]
+        base["note"] = (base["note"] + "; grades " + ", ".join(V("grades_available") or [])
+                        + "; no preset: the maker prints vc but its feed only as a bar chart (F236)").strip("; ")
+        outs["turning"].rec("groove_insert", {"id": rid, **f, **base}, cites)
+    elif k in ("indexable_drill", "drill", "thread_mill"):
+        ty = "thread_mill" if k == "thread_mill" else "drill"
+        dcon = V("dcon") if V("dcon") is not None else V("dconms")
+        dk = "dcon" if V("dcon") is not None else "dconms"
+        f = dict(type=ty, dc=V("dc"), dcon=dcon, oal=V("oal") or V("lf"))
+        cites = [P("dc", "dc"), P("dcon", dk), P("oal", "oal" if V("oal") is not None else "lf")]
+        if k == "indexable_drill":
+            if V("lcf") is not None:
+                f["lcf"] = V("lcf"); cites.append(P("lcf", "lcf"))
+            else:
+                f["lcf"] = V("lux"); cites.append(E("lcf", "lux", "no flute length or drilling depth is printed: the neck length LUX, the length clear of the body"))
+            f["sig"] = 180
+            cites.append(dict(path="sig", status="estimate", source=url, taken=tk, value=f"insert {V('insert')}",
+                              basis="an indexable drill cuts a flat bottom: 180 (CAM-TURN's drill model: tip height r/tan(sig/2) = 0)"))
+            base["note"] = (base["note"] + f"; insert {V('insert')}").strip("; ")
+        elif k == "drill":
+            f["lcf"], f["sig"] = V("lcf"), V("sig")
+            cites += [P("lcf", "lcf"), P("sig", "sig")]
+            if isinstance(V("flutes"), (int, float)):
+                f["nof"] = V("flutes"); cites.append(P("nof", "flutes"))
+        else:
+            f["lcf"], f["tp"], f["nof"] = V("apmx"), V("pitch"), V("flutes")
+            cites += [P("lcf", "apmx"), P("tp", "pitch"), P("nof", "flutes")]
+        mat = V("material")
+        if isinstance(mat, str):
+            f["material"] = "carbide" if "carbide" in mat.lower() else ("hss" if "hs" in mat.lower() else mat)
+            cites.append(P("material", "material"))
+        presets = shop_presets(r, ty)
+        head = dict(id=rid, **f, vendor=VENDORS[vendor], product_id=r["id"], real=True, source=url, taken=tk,
+                    note=base["note"])
+        out = outs["tools"]
+        out.lines.append("[[tool]]")
+        for kk, v in head.items():
+            if v is not None and v != "":
+                out.lines.append(f"{kk} = {tv(v)}")
+        for pr in presets:
+            out.lines.append("[[tool.preset]]")
+            for kk in ("name", "group", "vc", "fz"):
+                out.lines.append(f"{kk} = {tv(pr[kk]) if isinstance(pr[kk], str) else repr(round(float(pr[kk]), 6))}")
+        for c in cites + [p["cite"] for p in presets]:
+            out.lines.append("[[tool.cite]]")
+            for kk in ("path", "status", "source", "taken", "value", "basis", "note"):
+                if c.get(kk):
+                    out.lines.append(f"{kk} = {tv(c[kk])}")
+        out.lines.append("")
+    elif k == "tool_block":
+        f = dict(code=r["id"], h=V("h"), b=V("b"), l1=V("oal"), blade_h=32 if V("blade") == "CGP32..." else None)
+        cites = [dict(path="code", status="published", source=url, taken=tk, value=r["id"]),
+                 P("h", "h"), P("b", "b"), P("l1", "oal")]
+        if f["blade_h"]:
+            cites.append(dict(path="blade_h", status="estimate", source=url, taken=tk, value=S("blade"),
+                              basis="the block takes CGP32 blades, whose height H is 32 (F229)"))
+        base["note"] = (base["note"] + f"; HFASSY {V('hfassy')}, HBH {V('hbh')}, OAH {V('oah')}, OAW {V('oaw')} mm "
+                        "(the block's other printed dimensions)").strip("; ")
+        outs["turning"].rec("tool_block", {"id": rid, **f, **base}, cites)
+    else:
+        skips[f"shop kind {k}"] += 1
+
+
 def main():
     report = {}
     for vendor in VENDORS:
@@ -637,6 +893,10 @@ def main():
             for k, o in outs.items():
                 if len(o.lines) > n0[k]:
                     counts[k] += 1
+        rp = os.path.join(REAL_TOOLS, f"{vendor}.json")
+        for r in (json.load(open(rp))["records"] if os.path.exists(rp) else []):
+            shop(vendor, r, outs, skips)
+            counts["shop tools"] += 1
         for k, o in outs.items():
             path = os.path.join(DATA, k, f"{vendor}.toml")
             if o.lines:

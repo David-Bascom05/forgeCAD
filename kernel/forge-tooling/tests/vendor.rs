@@ -258,3 +258,141 @@ fn presets_follow_the_spec() {
             .any(|c| c.note.contains("upper limit"))
     );
 }
+
+/// Parting: a groove insert, the blade it seats in and the block the blade clamps in, each
+/// read with its cites (CAM-TURN's shape: the cut is the insert's width, the reach the blade's
+/// cdx, the blade body its t_blade).
+#[test]
+fn parting_records_read() {
+    let src = r#"
+[[groove_insert]]
+id = "x-gi"
+code = "GI 3.00-0.20"
+width = 3.0
+re = 0.2
+real = true
+[[groove_insert.preset]]
+name = "P"
+group = "P"
+vc = 100
+fz = 0.08
+[[groove_insert.cite]]
+path = "code"
+status = "published"
+source = "s"
+taken = "2026-11-24"
+[[groove_insert.cite]]
+path = "width"
+status = "published"
+source = "s"
+taken = "2026-11-24"
+[[groove_insert.cite]]
+path = "re"
+status = "published"
+source = "s"
+taken = "2026-11-24"
+
+[[blade]]
+id = "x-bl"
+code = "BL 26-3"
+h = 26
+t_blade = 2.4
+l1 = 110
+cdx = 40
+max_bar = 80
+hand = "N"
+
+[[tool_block]]
+id = "x-tb"
+code = "TB 25"
+h = 25
+b = 25
+l1 = 110
+"#;
+    // a real record must cite its preset
+    let mut l = Library::default();
+    assert!(matches!(
+        l.add("x.toml", src),
+        Err(LibError::Bad { field: "real", .. })
+    ));
+    let ok = src.replace(
+        "[[groove_insert.cite]]\npath = \"code\"",
+        "[[groove_insert.cite]]\npath = \"preset.P\"\nstatus = \"published\"\nsource = \"s\"\ntaken = \"2026-11-24\"\n[[groove_insert.cite]]\npath = \"code\"",
+    );
+    let mut l = Library::default();
+    l.add("x.toml", &ok).unwrap();
+    assert_eq!((l.groove_inserts[0].width, l.groove_inserts[0].re), (3.0, 0.2));
+    assert_eq!(l.groove_inserts[0].presets[0].fz, 0.08);
+    let b = &l.blades[0];
+    assert_eq!((b.h, b.t_blade, b.cdx, b.max_bar), (26.0, 2.4, 40.0, Some(80.0)));
+    assert_eq!(l.tool_blocks[0].h, 25.0);
+    // a blade with no reach is refused by name
+    let mut l = Library::default();
+    let e = l.add("x.toml", &ok.replace("cdx = 40\n", "")).unwrap_err();
+    assert!(matches!(e, LibError::Missing { field: "cdx", .. }), "{e:?}");
+}
+
+/// Turning presets from the makers' grade tables (FEEDS-SPEEDS): Sumitomo's "Recommended
+/// Cutting Conditions" (A13) for GU in AC8115P, mild steel: vc 260-350-500 m/min, f 0.1-0.25-0.4,
+/// ap 1.0-2.5-4.0, the printed optimum kept.
+#[test]
+fn insert_presets_from_grade_tables() {
+    let l = Library::builtin();
+    let i = l
+        .inserts
+        .iter()
+        .find(|i| i.id == "sumitomo-CNMG120408N-GU")
+        .unwrap();
+    let p = i.presets.iter().find(|p| p.name == "P GU AC8115P").unwrap();
+    assert_eq!((p.vc, p.fz, p.ap), (350.0, 0.25, Some(2.5)));
+    let c = i.cites.iter().find(|c| c.path == "preset.P GU AC8115P").unwrap();
+    assert_eq!(c.status, CiteStatus::Published);
+    assert!(c.value.contains("260-350-500"), "{}", c.value);
+    // every insert preset is cited and positive; the makers that print vc per grade only are
+    // estimates (matched by the grades the insert is offered in)
+    let mut n = 0;
+    for i in &l.inserts {
+        for p in &i.presets {
+            n += 1;
+            assert!(p.vc > 0.0 && p.fz > 0.0, "{}: {}", i.id, p.name);
+            let c = i
+                .cites
+                .iter()
+                .find(|c| c.path == format!("preset.{}", p.name))
+                .unwrap();
+            if i.maker == "Ingersoll" || i.maker == "Korloy" {
+                assert_eq!(c.status, CiteStatus::Estimate, "{}: {}", i.id, p.name);
+            }
+        }
+    }
+    assert!(n >= 500, "{n}");
+}
+
+/// The real tools found for the shop parts (raw/real-tools): CAM-TURN's parting blade and 26 mm
+/// U-drill, CAM-CORE's 18.5 / 6 / 5.5 mm drills and 1.5-pitch thread mill.
+#[test]
+fn shop_part_tools() {
+    let l = Library::builtin();
+    let b = l.blades.iter().find(|b| b.id == "tungaloy-CGP32-3D").unwrap();
+    assert_eq!((b.h, b.t_blade, b.l1, b.max_bar), (32.0, 2.4, 150.0, Some(100.0)));
+    let gi = l
+        .groove_inserts
+        .iter()
+        .find(|g| g.id == "tungaloy-SGM3-020")
+        .unwrap();
+    assert_eq!((gi.width, gi.re, gi.head), (3.0, 0.2, Some(20.0)));
+    let u = l.tool("sumitomo-WDX260D4S32").unwrap();
+    assert_eq!((u.dc, u.dcon, u.angle), (26.0, 32.0, 180.0));
+    u.shape(u.lcf + 2.0, None).unwrap();
+    for (id, d) in [
+        ("guhring-9055180185000", 18.5),
+        ("guhring-9055180060000", 6.0),
+        ("guhring-9055180055000", 5.5),
+    ] {
+        let t = l.tool(id).unwrap();
+        assert_eq!((t.dc, t.angle), (d, 130.0), "{id}");
+        assert!(t.real && !t.presets.is_empty(), "{id}");
+    }
+    let tm = l.tool("tungaloy-MTEC0807C171.5ISO").unwrap();
+    assert_eq!((tm.dc, tm.tp, tm.nof), (7.0, 1.5, 3));
+}

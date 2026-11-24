@@ -9,7 +9,7 @@ part-off, drill on centre; insert and holder libraries (ISO insert codes). All 2
 | piece | where | state |
 |---|---|---|
 | half-profile | profile.rs | a body of revolution about z lowered to its (ρ, z) region, exact in kind: planes ⟂ z, cylinders, cones, spheres and tori about z (seams skipped; a torus or sphere arc's side from the face's uv range). Anything else (flats, cross holes, keyways, faces about another axis) refused by kind, `NotTurned`, with the face. |
-| inserts and holders | insert.rs, data/turning.toml | ISO 1832 insert codes (C D V T S R shapes, clearance letter, IC series, thickness, nose radius) and ISO 5608 external holders (P/S clamping, styles A B D F G J K L N S T V, right hand, shank, length). Grooving and part-off blades, 60° thread inserts, drills on the centre line. Generic library (verify with the vendor). |
+| inserts and holders | insert.rs, data/turning.toml | ISO 1832 insert codes (C D V T S W R shapes: the trigon W a hexagon of six equal eroded sides, clearance letter, IC series, thickness, nose radius) and ISO 5608 external holders (P/S clamping, styles A B D F G J K L N S T V, right hand, shank, length). Grooving and part-off blades, 60° thread inserts, drills on the centre line. Generic library (verify with the vendor). |
 | tool model | insert.rs | every body is K ⊕ B_r (K a convex core); below the centre height the outline shrinks by the clearance angle; holder head (a seat inset 0.5 under the insert, relieved like it) and shank. |
 | certified checker | check.rs | 2D, exact in kind: the swept core Z = K ⊕ [0, e]·x̂ ⊕ [a, b] = conv(P) against each obstacle piece by separating axes (the gap between P's and the piece's projections, proven: `sep_axis_hull`); a concave arc not separated whole is split into sub-arcs; containment by `clear_of_frontier`; the full section H ∪ mirror(H); arc moves as chords with the sagitta; witnesses (Hit) only at real points of the tool. |
 | ops | ops.rs | face (to the centre line), rough (axial passes, G71-like, expanded, at every ap and every cylinder of the grown part), finish (the exact offset H ⊕ B_{r_ε + leave}: nose-radius compensation, posted as the imaginary tip with G40), groove (plunges, walls exact), part-off (past the centre), thread (ISO metric 60°, radial infeed of equal chip area, a declared removal Δ), drill on the centre line (pecking). |
@@ -90,7 +90,7 @@ What the checks caught while the examples were written (each now a test, tests/r
    the ops that feed toward the chuck; `finish_up` walks the grown profile up (+z) from z_lo to
    z_hi (examples/machined/collar_turn.fg: a back chamfer, certified in full; caught: the
    right-hand VBMT on down the chamfer, and the left-hand one started 1 mm over the shoulder,
-   its insert hanging 9 mm toward the chuck). Left: left-hand boring bars, left-hand roughing.
+   its insert hanging 9 mm toward the chuck). Left-hand bars decode (the R twin mirrored) and are refused by the ops that feed toward the chuck. Left-hand roughing: `rough_up` (axial passes up from room already cut; its moves inside that room are feeds, since the column stock, a height per ρ, cannot hold a room under an overhang and would refuse a rapid there against stock that is gone: sound, conservative; `cam F check`'s exact stock has no such limit). Left: a left-hand bore op. tests/vendor_codes.rs (CAM-HAAS): 75 real catalogue codes decode to their makers' stated IC, s, re, l, κr, hand, shank and length, and an undecodable code fails.
    Other workholding: `Setup.fixtures`, named envelopes of revolution (a tailstock's centre and
    quill, a steady rest), checked as the chuck is (G2); a live centre refuses facing to the
    centre line and finishing from over it (tests/refuse.rs). The .fg records come from
@@ -119,3 +119,30 @@ What the checks caught while the examples were written (each now a test, tests/r
    chuck).
 7. Canned cycles (G71/G70/G76) as posted text (today the cycles are expanded into moves, which
    is what G6 reads back and certifies).
+
+## The hub (CAM-CORE's shop test part, examples/machined/hub_turn.fg)
+
+14 ops on a hollow hub from a Ø66 bar; 6 certified at first, all 14 now (certification full, 1811
+checks, 0.58 s; the exact path too). The root causes:
+
+1. OD finish on a hollow part found no start: it looked for the front at the part's least radius
+   (the drilled hole's); it now starts at the front face's inner edge (`cap_left`: the grown
+   part's front cap). The same cap keeps OD rough passes out of the bore (a pass at the grown
+   bore's cylinder sent the right-hand insert down the bore) and bore passes out of the outside.
+2. A drill the size of its hole: gap zero, which the checker cannot prove (its containment
+   argument needs a strictly positive gap). G1 for a cutter is now checked against P ⊖ B_tol with
+   need = leave: the same placements as dist(tool, P) ≥ leave − tol (a point of P ⊖ B_tol has
+   B(y, tol) ⊆ P), and a touching tool is then tol clear. The same held the inside thread (its
+   band edge on the minor bore). Then a real refusal: drill-26's Ø32 shank entered the Ø28 bore on
+   an 86 deep hole; `drill-26-4d` (110 flute) is in the library.
+3. Rough, bore rough and the inside thread above the front face: 1 (the passes) and 2 (zero gap).
+4. Both finishes dove into the relief grooves (the insert's body over the groove's far wall: a
+   real gouge). `skip:` bridges a z range on the far side of the gap (a straight chord cut the
+   shoulder's corner by 0.12: caught, hence the elbow).
+5. The left-hand back chamfer 0.197 from leftover stock: that stock was the stray bore passes'
+   (1); gone with them.
+6. Part-off: no blade reached a Ø66 bar's centre. `part-3-deep` (reach 40); the refusal now names
+   the library's blades that reach. The generic blade model was also wrong for deep blades: its
+   side taper ran the whole reach (closing a 40 mm blade, and narrower than catalogue blades at the
+   back: not a superset, T.model); now a 6 mm head with the side clearance and a straight body at
+   most 0.2 per side narrower (two convex bodies).

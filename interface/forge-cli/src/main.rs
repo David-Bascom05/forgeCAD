@@ -13,6 +13,25 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
+/// Today's date in UTC from the system clock.
+fn today() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    // civil from days (H. Hinnant's algorithm)
+    let z = secs.div_euclid(86_400) + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
 fn usage() -> ExitCode {
     eprintln!(
         "usage: forgecad [open [FILE | APP_ARGS...]]   (open the native app)\n       \
@@ -31,6 +50,7 @@ fn usage() -> ExitCode {
          forgecad machine SETUP.toml [--json]   (posted G-code on a machine: timeline, collisions, removal)\n       \
          forgecad machine list [--json] | new NAME (--from M | --template T) [--project] | check FILE|NAME [--json]   (your own machines)\n       \
          forgecad mesh FILE.stl|obj|3mf [--json]        (a mesh read and measured: not a B-rep)\n       \
+         forgecad tool log add|list|observe|worn|chipped|broken|regrind|predict|run|calibrate ..   (physical tools: wear and life)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
          forgecad workholding list [KIND] | show NAME | schema | new NAME --from X [field=value ..] [--json]   (vises, clamps, plates, chucks, collets)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
@@ -219,6 +239,24 @@ fn main() -> ExitCode {
         Some("import") if args.len() >= 3 => import(&args[2..]),
         Some("machine") if args.len() >= 3 => machine(&args[2..]),
         Some("mesh") if args.len() >= 3 => mesh(&args[2..]),
+        Some("tool") if args.get(2).is_some_and(|w| w == "log") => {
+            let env = forge_cam_lang::toollog::Env {
+                project: std::path::PathBuf::from("."),
+                today: today(),
+            };
+            let user = forge_dirs::config().map(|c| c.join("forgecad").join("cam"));
+            let mut store = forge_cam_lang::toolstore::store(
+                &env.project,
+                user.as_deref(),
+                args.iter().any(|a| a == "--project"),
+            );
+            let o = forge_cam_lang::toollog::run(&env, &mut store, &args[3..]);
+            let _ = write!(std::io::stdout(), "{}", o.out);
+            if !o.err.is_empty() {
+                eprintln!("{}", o.err.trim_end());
+            }
+            ExitCode::from(o.code)
+        }
         Some("vendor") => {
             let json = args.iter().any(|a| a == "--json");
             let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
@@ -562,13 +600,14 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     }
     // a closed pipe (`| head`) is not an error worth a panic
     let _ = writeln!(std::io::stdout(), "{text}");
-    // cam: 0 fully certified, 3 released but certified except G5 (a setup not placed), 1 refused
+    // cam: 0 fully certified, 3 released but certified except a check (G5: a setup not placed;
+    // G4: the leftover not computed), 1 refused
     if cmd == "cam"
         && r.ok
         && let forge_agent::json::Json::Obj(fs) = &r.json
-        && fs
-            .iter()
-            .any(|(k, v)| k == "certification" && *v == forge_agent::json::Json::Str("except G5".into()))
+        && fs.iter().any(|(k, v)| {
+            k == "certification" && matches!(v, forge_agent::json::Json::Str(c) if c.contains("except"))
+        })
     {
         return ExitCode::from(3);
     }
