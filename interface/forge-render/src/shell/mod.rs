@@ -1215,9 +1215,15 @@ impl Shell {
         let elided = g.size().x >= room - 1.0;
         let said = Rect::from_min_size(pos2(x + 4.0, st.center().y - g.size().y * 0.5), g.size());
         p.galley(said.min, g, Color32::WHITE);
-        if elided {
+        // the whole line on hover when cut; a release refusal's detail (its rule, the syntax) too
+        let detail = if self.tab == CAM_TAB { self.cam.as_ref().and_then(cam::release_words).map(|b| b.detail) } else { None };
+        if elided || detail.is_some() {
             let r = ui.interact(said, ui.scope_id().with("status-line"), Sense::hover());
-            r.on_hover_text(line);
+            r.on_hover_text(match (elided, detail) {
+                (true, Some(d)) => format!("{line}\n\n{d}"),
+                (false, Some(d)) => d,
+                _ => line.to_string(),
+            });
         }
         if let (Some((label, action)), Some(g)) = (fix, fix_g) {
             let fr = Rect::from_min_size(pos2(said.right() + 12.0, st.top() + 2.0), vec2(g.size().x + 16.0, STATUS_H - 4.0));

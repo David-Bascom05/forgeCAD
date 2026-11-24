@@ -332,6 +332,10 @@ impl Shell {
                         Cert::Certified => ("certified".into(), t.success),
                         // not a failure: a rule this run does not decide (G4's leftover not
                         // computed; G5's travel by span only until a setup is placed)
+                        // G5 unchecked on a mill: no program is releasable, so the header says so
+                        Cert::Unchecked(g) if g.contains("G5") && !w.turning() => {
+                            ("certified · not releasable: setup not placed".into(), t.warn)
+                        }
                         Cert::Unchecked(g) => (format!("certified · {}", unchecked_chip(g)), t.ink2),
                         Cert::Refused => ("refused".into(), t.error),
                     },
@@ -343,17 +347,22 @@ impl Shell {
                     ui.interact(r, ui.scope_id().with("cam-cert"), Sense::hover())
                         .on_hover_text(unchecked_words(g));
                 }
-                ui.painter().text(
+                let head = ui.painter().text(
                     pos2(r.left() + 32.0, r.center().y),
                     Align2::LEFT_CENTER,
                     "Setups",
                     medium(13.0),
                     t.ink,
                 );
+                // the words in the room beside "Setups": where they do not fit, the short form
+                // (what follows the colon is the hover's)
+                let room = r.right() - 10.0 - head.right() - 12.0;
+                let fits = |s: &str| ui.fonts_mut(|f| f.layout_no_wrap(s.to_string(), sans(12.0), cert.1)).size().x <= room;
+                let words = if fits(&cert.0) { cert.0.clone() } else { cert.0.split(':').next().unwrap_or("").to_string() };
                 ui.painter().text(
                     pos2(r.right() - 10.0, r.center().y),
                     Align2::RIGHT_CENTER,
-                    &cert.0,
+                    &words,
                     sans(12.0),
                     cert.1,
                 );
@@ -552,7 +561,20 @@ impl Shell {
                         note(ui, e, width, t.error);
                     }
                 }
-                if let Some(s) = &w.said {
+                // why a program can't be released: one sentence, the next step; the code and the
+                // syntax on hover (UX-LEAD)
+                let blocked = release_words(&w);
+                if let Some(b) = &blocked {
+                    let r0 = ui.cursor().min.y;
+                    note(ui, &b.sentence, width, t.warn);
+                    note(ui, &b.next, width, t.ink2);
+                    let r = Rect::from_min_max(pos2(area.left(), r0), pos2(area.left() + width, ui.cursor().min.y));
+                    ui.interact(r, ui.scope_id().with("cam-blocked"), Sense::hover()).on_hover_text(&b.detail);
+                    places.push(("cam:blocked".into(), r));
+                }
+                if let Some(s) = &w.said
+                    && blocked.as_ref().is_none_or(|b| &b.sentence != s)
+                {
                     note(ui, s, width, t.warn);
                 }
             });
@@ -3749,7 +3771,7 @@ pub fn status_line(w: &CamWs) -> String {
     };
     // certified only as far as it is: a program that cannot be released says so
     let cert = match (release_block(w), w.run.as_ref().map(|r| cert_of(r.ok, &r.certification))) {
-        (Some(_), _) => format!("{built}/{n} ops built \u{b7} not released: {}", release_short(w)),
+        (Some(_), _) => format!("{built}/{n} ops built \u{b7} not releasable: {}", release_short(w)),
         (None, Some(Cert::Unchecked(g))) => format!("{built}/{n} ops certified \u{b7} {}", unchecked_chip(g)),
         _ => format!("{built}/{n} ops certified"),
     };
@@ -3786,11 +3808,54 @@ pub fn release_block(w: &CamWs) -> Option<String> {
     ))
 }
 
+/// Why a program can't be released, for a person (UX-LEAD): one sentence, what to do next, and
+/// the detail (the rule's code, the `at:` syntax) for the hover only.
+pub struct Blocked {
+    pub sentence: String,
+    pub next: String,
+    pub detail: String,
+}
+
+/// `release_block` in plain words, from the run's programs and the document's setups.
+pub fn release_words(w: &CamWs) -> Option<Blocked> {
+    let detail = release_block(w)?;
+    let r = w.run.as_ref()?;
+    let bad: Vec<&str> = r.programs.iter().filter(|p| p.certified != "full").map(|p| p.name.as_str()).collect();
+    let progs = if bad.len() == 1 { format!("Program {}", bad[0]) } else { format!("Programs {}", bad.join(", ")) };
+    let g5 = r.programs.iter().any(|p| p.certified.contains("G5"));
+    let unplaced: Vec<String> = w.setups().iter().filter(|s| s.arg("at").is_none()).map(|s| s.name.clone()).collect();
+    let (sentence, next) = if g5 && !unplaced.is_empty() {
+        let who = if unplaced.len() == 1 {
+            format!("setup {} isn't", unplaced[0])
+        } else {
+            format!("setups {} aren't", unplaced.join(", "))
+        };
+        (
+            format!("{progs} can't be released: {who} placed on the machine."),
+            format!(
+                "Place {} to check machine travel, or allow uncertified output in NC Programs.",
+                if unplaced.len() == 1 { "it" } else { "them" }
+            ),
+        )
+    } else if g5 {
+        (
+            format!("{progs} can't be released: machine travel isn't checked in full."),
+            "Choose a machine and place the setup, or allow uncertified output in NC Programs.".to_string(),
+        )
+    } else {
+        (
+            format!("{progs} can't be released: {} isn't certified.", if bad.len() == 1 { "it" } else { "each" }),
+            "See Checks for why, or allow uncertified output in NC Programs.".to_string(),
+        )
+    };
+    Some(Blocked { sentence, next, detail })
+}
+
 /// `release_block` in a few words, for the status line.
 fn release_short(w: &CamWs) -> &'static str {
     match w.run.as_ref() {
-        Some(r) if r.programs.iter().any(|p| p.certified.contains("G5")) => "setup not placed (G5)",
-        Some(r) if r.programs.iter().any(|p| p.certified.contains("G4")) => "leftover not checked (G4)",
+        Some(r) if r.programs.iter().any(|p| p.certified.contains("G5")) => "setup not placed",
+        Some(r) if r.programs.iter().any(|p| p.certified.contains("G4")) => "leftover not checked",
         _ => "not certified",
     }
 }
@@ -4048,10 +4113,14 @@ pub(crate) fn cert_of(ok: bool, certification: &str) -> Cert {
 
 /// A certified run's words as the simulation's header says them ("Certified", or "Certified ·
 /// leftover not checked" with the hover's explanation), the same as the Setups chip.
-pub fn certified_words(certification: &str) -> (String, Option<String>) {
+pub fn certified_words(certification: &str) -> (String, Option<String>, bool) {
     match cert_of(true, certification) {
-        Cert::Unchecked(g) => (format!("Certified \u{b7} {}", unchecked_chip(g)), Some(unchecked_words(g))),
-        _ => ("Certified".to_string(), None),
+        // G5 unchecked: certified, but no program is releasable until the setup is placed (amber)
+        Cert::Unchecked(g) if g.contains("G5") => {
+            ("Certified \u{b7} not releasable: setup not placed".to_string(), Some(unchecked_words(g)), true)
+        }
+        Cert::Unchecked(g) => (format!("Certified \u{b7} {}", unchecked_chip(g)), Some(unchecked_words(g)), false),
+        _ => ("Certified".to_string(), None, false),
     }
 }
 
@@ -4072,7 +4141,7 @@ fn unchecked_words(g: &str) -> String {
               placed on the machine. Set its position (at:) in the setup dialog to check positions too.";
     match g {
         "G4" => format!("{g4}\nEvery op is certified and every program released."),
-        "G5" => format!("{g5}\nEvery op is certified."),
+        "G5" => format!("{g5}\nEvery op is certified; no program is releasable until the setup is placed."),
         "G4 and G5" => format!("{g4}\n{g5}\nEvery op is certified."),
         _ => "A check is not decided in this run. Every op is certified.".into(),
     }
@@ -4109,10 +4178,14 @@ mod tests {
     /// string ("full except G4 (leftover not computed)"), the code on the hover's first line.
     #[test]
     fn the_simulations_header_reads_as_the_chip() {
-        assert_eq!(super::certified_words("full"), ("Certified".to_string(), None));
-        let (w, h) = super::certified_words("full except G4 (leftover not computed)");
+        assert_eq!(super::certified_words("full"), ("Certified".to_string(), None, false));
+        let (w, h, amber) = super::certified_words("full except G4 (leftover not computed)");
         assert_eq!(w, "Certified \u{b7} leftover not checked");
-        assert!(h.is_some_and(|h| h.starts_with("G4:")));
+        assert!(h.is_some_and(|h| h.starts_with("G4:")) && !amber);
+        // G5 unchecked: not releasable, in amber, the span-only check on hover
+        let (w, h, amber) = super::certified_words("except G5");
+        assert_eq!(w, "Certified \u{b7} not releasable: setup not placed");
+        assert!(h.is_some_and(|h| h.contains("span only")) && amber);
     }
 
     /// mold_core_cam end to end: its five ops and its program certify, G4 is not computed: the

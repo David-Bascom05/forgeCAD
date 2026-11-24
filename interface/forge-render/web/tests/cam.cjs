@@ -203,11 +203,13 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     await cam("unset op1 at");
     st = await t.until(p, (s) => generated(s) && s.cam.certification !== "full", "generated, unplaced", 60000);
     assert.doesNotMatch(st.cam.text, /at: \(/, st.cam.text);
-    assert.match(st.cam.status_line, /not released/, st.cam.status_line);
+    assert.match(st.cam.status_line, /not releasable: setup not placed/, st.cam.status_line);
     assert.doesNotMatch(st.cam.status_line, /ops certified/, st.cam.status_line);
     assert.match(st.cam.release_block ?? "", /at:/, `${st.cam.release_block}`);
     await cam("export prog");
-    st = await t.until(p, (s) => /G5|at:|certified/.test(s.cam.said ?? ""), "the refusal said");
+    st = await t.until(p, (s) => s.cam.said != null, "the refusal said");
+    // one sentence for a person: no rule code, no syntax (those are the hover's)
+    assert.equal(st.cam.said, "Program prog can't be released: setup op1 isn't placed on the machine.");
     assert.equal(st.cam.status_line, st.cam.said, "the refusal is what the status bar shows");
     await shot(p, "cam-22-export-refused.png");
     await click(p, "status:fix");

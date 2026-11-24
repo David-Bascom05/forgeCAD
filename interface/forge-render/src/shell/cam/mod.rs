@@ -26,7 +26,7 @@ pub mod schema;
 pub mod turnview;
 mod ui;
 pub use ui::{CYCLE_TIP, alt_clear_words, certified_words, check_lines, cycle_words, text_panel_h};
-pub use ui::{disabled_why, groups, release_block, status_fix, status_line};
+pub use ui::{Blocked, disabled_why, groups, release_block, release_words, status_fix, status_line};
 
 use doc::{Edit, Role, Stmt};
 use std::path::PathBuf;

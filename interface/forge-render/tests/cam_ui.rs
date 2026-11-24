@@ -175,9 +175,20 @@ fn post_process_shows_the_program_and_writes_it() {
     // Process is off, the status says why, and its fix opens the setup
     h.step();
     let line = forge_render::shell::cam::status_line(h.gui.shell.cam.as_ref().unwrap());
-    assert!(line.contains("not released") && !line.contains("ops certified"), "{line}");
+    assert!(line.contains("not releasable: setup not placed") && !line.contains("ops certified"), "{line}");
+    assert!(!line.contains("G5"), "no rule codes on the screen: {line}");
     let why = forge_render::shell::cam::release_block(h.gui.shell.cam.as_ref().unwrap()).expect("blocked");
-    assert!(why.contains("at:"), "{why}");
+    assert!(why.contains("at:"), "the syntax on hover: {why}");
+    // one sentence for a person, and what to do (UX-LEAD); the code and syntax on hover only
+    let b = forge_render::shell::cam::release_words(h.gui.shell.cam.as_ref().unwrap()).expect("blocked");
+    assert_eq!(b.sentence, "Program prog can't be released: setup op1 isn't placed on the machine.");
+    assert_eq!(b.next, "Place it to check machine travel, or allow uncertified output in NC Programs.");
+    assert!(h.placed("cam:blocked").is_some(), "the sentence under Tools");
+    // a refused export says the sentence on the status bar
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::ExportNc(None));
+    h.step();
+    let line = forge_render::shell::cam::status_line(h.gui.shell.cam.as_ref().unwrap());
+    assert_eq!(line, b.sentence);
     assert!(h.click("tool:Post Process"));
     h.step();
     assert!(h.placed("cam:post:text").is_none(), "Post Process is off while not releasable");
