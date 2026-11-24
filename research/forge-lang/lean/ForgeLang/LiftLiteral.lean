@@ -1,4 +1,5 @@
 import ForgeLang.RenamePart
+import ForgeLang.Complete
 
 /-!
 # LiftLiteral (`edit.rs`, `Op::LiftLiteral`): a literal becomes a named param
@@ -361,5 +362,27 @@ theorem liftLiteral_body {n : Nat} {D : Defs} {σ : Site → Int} {body : List S
       simp [List.lookup, this]⟩
     have hl := (lift_nested x0 p (n + 2)).s hD h' hr hn hb
     simp [execS, execOne, evalE, hl]
+
+/-- LiftLiteral at any place: the new binding goes right before the statements it is lifted in
+(`ys`; a `Local` scope's param sits before its feature, a shared one first), the statements
+before (`xs`) untouched. If the document evaluates, the lifted one evaluates to the same model and
+log. -/
+theorem liftLiteral_at {n : Nat} {D : Defs} {σ : Site → Int} {xs ys : List Stmt} {Δ : Env}
+    {m : Model} {l : Log} (x0 : Name) (p : Site) (hD : x0 ∉ D.reads) (hn : NoBindB x0 x0 ys)
+    (hb : x0 ∉ fvB ys) (h : execS n D σ [] (xs ++ ys) = .ok (Δ, m, l)) :
+    ∃ N Δ', execS N D σ [] (xs ++ .let_ x0 (.lit p) :: lfB x0 p ys) = .ok (Δ', m, l) := by
+  obtain ⟨Δ1, m1, l1, Δ2, m2, l2, h1, h2, e⟩ := execS_append xs ys h
+  simp only [Prod.mk.injEq] at e
+  obtain ⟨-, rfl, rfl⟩ := e
+  have hr : LRel x0 p (Δ1 ++ []) ((x0, .num (.site p)) :: (Δ1 ++ [])) :=
+    ⟨by simp [List.lookup], fun y hy => by
+      have : (y == x0) = false := by simpa using hy
+      simp [List.lookup, this]⟩
+  have hl := (lift_nested x0 p n).s hD h2 hr hn hb
+  have hlet : execOne 2 D σ (Δ1 ++ []) (.let_ x0 (.lit p)) =
+      .ok ([(x0, .num (.site p))], [], []) := by simp [execOne, evalE]
+  obtain ⟨N1, hN1⟩ := execS_cons_compose hlet (by simpa using hl)
+  obtain ⟨N, hN⟩ := execS_compose' h1 hN1
+  exact ⟨N, _, by simpa using hN⟩
 
 end ForgeLang
