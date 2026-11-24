@@ -163,7 +163,7 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                 (
                     "Post Process",
                     "cam_post",
-                    a(Ask::PostProcess),
+                    release_block(w).is_none().then_some(Action::Cam(Ask::PostProcess)),
                     w.post_dlg.is_some(),
                 ),
                 ("NC Programs", "cam_sheet", a(Ask::Programs), w.programs_open),
@@ -181,13 +181,13 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                 (
                     "Setup Sheet",
                     "cam_sheet",
-                    w.run.is_some().then_some(Action::Cam(Ask::SetupSheet)),
+                    release_block(w).is_none().then_some(Action::Cam(Ask::SetupSheet)),
                     false,
                 ),
                 (
                     "Export NC",
                     "cam_post",
-                    w.run.is_some().then_some(Action::Cam(Ask::ExportNc)),
+                    release_block(w).is_none().then_some(Action::Cam(Ask::ExportNc)),
                     false,
                 ),
                 ("Checks", "cam_check", a(Ask::Checks), w.checks_open),
@@ -227,6 +227,13 @@ pub fn cycle_words((lo, est): (f64, f64)) -> String {
 }
 
 /// As `cycle_words`, short (m:ss), for the browser's rows.
+/// What clear would take, beside an adaptive op's own time: "≥ 2:08 · est. 2:17 · 55% less
+/// time" (whose time and of what, said: UX-LEAD).
+pub fn alt_clear_words(clear: (f64, f64), own: (f64, f64)) -> String {
+    let pct = (clear.1 / own.1 - 1.0) * 100.0;
+    format!("{} \u{b7} {:.0}% {} time", cycle_short(clear), pct.abs(), if pct < 0.0 { "less" } else { "more" })
+}
+
 fn cycle_short((lo, est): (f64, f64)) -> String {
     format!("\u{2265} {} \u{b7} est. {}", short_time(lo), short_time(est))
 }
@@ -1018,13 +1025,12 @@ fn details(
                     let ready = w.alt.as_ref().filter(|a| a.0 == o.name && run.is_some_and(|r| r.text == a.1));
                     match (ready, own) {
                         (Some((_, _, Some(c))), Some(me)) => {
-                            let pct = (c.1 / me.1 - 1.0) * 100.0;
-                            let words = format!("{} ({}{:.0}%)", cycle_short(*c), if pct >= 0.0 { "+" } else { "\u{2212}" }, pct.abs());
-                            fact_tip(ui, t, "Clear (its defaults)", &words, tip, width, if c.1 < me.1 { t.warn } else { t.ink2 });
+                            let words = alt_clear_words(*c, me);
+                            fact_tip(ui, t, "With clear instead", &words, tip, width, if c.1 < me.1 { t.warn } else { t.ink2 });
                         }
-                        (Some((_, _, Some(c))), None) => fact_tip(ui, t, "Clear (its defaults)", &cycle_short(*c), tip, width, t.ink2),
-                        (Some((_, _, None)), _) => fact_tip(ui, t, "Clear (its defaults)", "does not build here", tip, width, t.ink2),
-                        (None, _) => fact_tip(ui, t, "Clear (its defaults)", "measuring\u{2026}", tip, width, t.ink2),
+                        (Some((_, _, Some(c))), None) => fact_tip(ui, t, "With clear instead", &cycle_short(*c), tip, width, t.ink2),
+                        (Some((_, _, None)), _) => fact_tip(ui, t, "With clear instead", "does not build here", tip, width, t.ink2),
+                        (None, _) => fact_tip(ui, t, "With clear instead", "measuring\u{2026}", tip, width, t.ink2),
                     }
                 }
             }
@@ -3719,6 +3725,10 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
 
 /// The status bar's words for the workspace.
 pub fn status_line(w: &CamWs) -> String {
+    // what was just refused (an export, a post) first, until the text or the run changes
+    if let Some(s) = &w.said {
+        return s.clone();
+    }
     let n = w.stmts.iter().filter(|s| s.is_op() && !s.suppressed).count();
     let built = w
         .stmts
@@ -3737,11 +3747,74 @@ pub fn status_line(w: &CamWs) -> String {
     } else {
         String::new()
     };
+    // certified only as far as it is: a program that cannot be released says so
+    let cert = match (release_block(w), w.run.as_ref().map(|r| cert_of(r.ok, &r.certification))) {
+        (Some(_), _) => format!("{built}/{n} ops built \u{b7} not released: {}", release_short(w)),
+        (None, Some(Cert::Unchecked(g))) => format!("{built}/{n} ops certified \u{b7} {}", unchecked_chip(g)),
+        _ => format!("{built}/{n} ops certified"),
+    };
     format!(
-        "{} · {built}/{n} ops certified{machining}{}",
+        "{} \u{b7} {cert}{machining}{}",
         w.path.rsplit('/').next().unwrap_or(""),
-        if w.dirty() { " · unsaved" } else { "" }
+        if w.dirty() { " \u{b7} unsaved" } else { "" }
     )
+}
+
+/// Why the programs cannot be released (Export NC, the setup sheet, Post Process are off): a
+/// program not certified in full, unless uncertified output is allowed (NC Programs). None
+/// while they can, or there is no run to say.
+pub fn release_block(w: &CamWs) -> Option<String> {
+    let r = w.run.as_ref()?;
+    if w.allow_uncertified || w.turning() {
+        return None;
+    }
+    let bad: Vec<&super::run::ProgRes> = r.programs.iter().filter(|p| p.certified != "full").collect();
+    if bad.is_empty() {
+        return None;
+    }
+    let names: Vec<&str> = bad.iter().map(|p| p.name.as_str()).collect();
+    let why = if bad.iter().any(|p| p.certified.contains("G5")) {
+        "a setup is not placed on the machine, so travel (G5) is checked by span only: give the setup its position (at:, the work offset in machine coordinates)"
+    } else if bad.iter().any(|p| p.certified.contains("G4")) {
+        "the stock left (G4) is not checked in this run"
+    } else {
+        "it is not certified"
+    };
+    Some(format!(
+        "{} cannot be released: {why}. Or allow uncertified output in NC Programs.",
+        names.join(", ")
+    ))
+}
+
+/// `release_block` in a few words, for the status line.
+fn release_short(w: &CamWs) -> &'static str {
+    match w.run.as_ref() {
+        Some(r) if r.programs.iter().any(|p| p.certified.contains("G5")) => "setup not placed (G5)",
+        Some(r) if r.programs.iter().any(|p| p.certified.contains("G4")) => "leftover not checked (G4)",
+        _ => "not certified",
+    }
+}
+
+/// The status bar's fix for what blocks release, where one click gets there: a setup with no
+/// `at:` opens its dialog.
+pub fn status_fix(w: &CamWs) -> Option<(&'static str, Action)> {
+    let r = w.run.as_ref()?;
+    (release_block(w).is_some() && r.programs.iter().any(|p| p.certified.contains("G5")))
+        .then_some(("Place the setup\u{2026}", Action::Cam(Ask::PlaceSetup)))
+}
+
+/// Why a Manufacture tool is off, for its tooltip.
+pub fn disabled_why(w: &CamWs, tool: &str) -> Option<String> {
+    match tool {
+        "Export NC" | "Setup Sheet" | "Post Process" => {
+            if w.run.is_none() {
+                Some("Generate first.".into())
+            } else {
+                release_block(w)
+            }
+        }
+        _ => None,
+    }
 }
 
 /// A tool kind in words.

@@ -25,8 +25,8 @@ pub mod toollib;
 pub mod schema;
 pub mod turnview;
 mod ui;
-pub use ui::{CYCLE_TIP, certified_words, check_lines, cycle_words, text_panel_h};
-pub use ui::{groups, status_line};
+pub use ui::{CYCLE_TIP, alt_clear_words, certified_words, check_lines, cycle_words, text_panel_h};
+pub use ui::{disabled_why, groups, release_block, status_fix, status_line};
 
 use doc::{Edit, Role, Stmt};
 use std::path::PathBuf;
@@ -89,6 +89,8 @@ pub enum Ask {
     AutoGenerate,
     CheckNow,
     SectionView,
+    /// The unplaced setup's dialog (a refusal's fix: G5 needs its `at:`).
+    PlaceSetup,
     /// NC Programs: every program's files with the host's Save As.
     ExportNc,
     /// The setup sheet and tool list with the host's Save As.
@@ -117,6 +119,7 @@ impl From<Ask> for Cmd {
             Ask::AutoGenerate => Cmd::AutoGenerate,
             Ask::CheckNow => Cmd::CheckNow,
             Ask::SectionView => Cmd::SectionView,
+            Ask::PlaceSetup => Cmd::PlaceSetup,
             Ask::ExportNc => Cmd::ExportNc(None),
             Ask::ExportSheet => Cmd::ExportSheet,
             Ask::RepostStale => Cmd::RepostStale,
@@ -160,6 +163,8 @@ pub enum Cmd {
     CheckNow,
     /// The turning view, shown or not.
     SectionView,
+    /// The unplaced setup's dialog.
+    PlaceSetup,
     /// Post program NAME (or all) into the document's folder.
     PostNc(Option<String>),
     /// The Post Process dialog at the K-th program.
@@ -512,6 +517,8 @@ impl CamWs {
     }
 
     fn reread(&mut self) {
+        // what was said is about the text before
+        self.said = None;
         if let Some(s) = doc::read(&self.text) {
             self.stmts = s;
         }
@@ -552,6 +559,7 @@ impl CamWs {
 
     /// A run finished (the host's).
     pub fn ran(&mut self, r: run::Run) {
+        self.said = None;
         if self.running.as_deref() == Some(r.text.as_str()) {
             self.running = None;
         }
@@ -713,6 +721,17 @@ impl CamWs {
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
             Cmd::SectionView => self.turnview.open = !self.turnview.open,
+            // the first setup with no `at:` (its work offset in machine coordinates), opened
+            Cmd::PlaceSetup => {
+                let su = self
+                    .stmts
+                    .iter()
+                    .find(|s| s.role == Role::Setup && s.arg("at").is_none())
+                    .map(|s| s.name.clone());
+                if let Some(su) = su {
+                    self.command(Cmd::Edit(su));
+                }
+            }
             Cmd::PostNc(n) => self.post_programs(n.as_deref()),
             Cmd::PostAt(k) => {
                 self.close_windows();

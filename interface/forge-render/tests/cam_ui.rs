@@ -171,17 +171,30 @@ fn the_op_dialog_edits_the_text_and_marks_it_stale() {
 #[test]
 fn post_process_shows_the_program_and_writes_it() {
     let Some((mut h, file)) = open_unplaced("post") else { return };
+    // the flange's setup is not placed (G5 unchecked): its program cannot be released, so Post
+    // Process is off, the status says why, and its fix opens the setup
+    h.step();
+    let line = forge_render::shell::cam::status_line(h.gui.shell.cam.as_ref().unwrap());
+    assert!(line.contains("not released") && !line.contains("ops certified"), "{line}");
+    let why = forge_render::shell::cam::release_block(h.gui.shell.cam.as_ref().unwrap()).expect("blocked");
+    assert!(why.contains("at:"), "{why}");
+    assert!(h.click("tool:Post Process"));
+    h.step();
+    assert!(h.placed("cam:post:text").is_none(), "Post Process is off while not releasable");
+    // the fix is seen whatever the words before it: never under the markup toggle
+    let (fx, mk) = (h.gui.shell.place("status:fix").unwrap(), h.gui.shell.place("status:markup").unwrap());
+    assert!(fx.right() <= mk.left(), "{fx:?} under {mk:?}");
+    assert!(h.click("status:fix"));
+    h.step();
+    assert!(h.gui.shell.cam.as_ref().unwrap().setup_dlg.is_some(), "the fix opens the setup");
+    h.gui.shell.cam.as_mut().unwrap().setup_dlg = None;
+    // allowed uncertified: Post Process opens, writes the program stamped
+    h.gui.shell.cam.as_mut().unwrap().allow_uncertified = true;
+    h.step();
     assert!(h.click("tool:Post Process"));
     h.step();
     assert!(h.placed("cam:post:text").is_some());
     shot(&mut h, "cam-post");
-    // the flange's setup is not placed (G5 unchecked): refused until allowed
-    assert!(h.click("cam:post:write"));
-    h.step();
-    assert!(!file.with_file_name("prog.nc").exists());
-    let said = h.gui.shell.cam.as_ref().unwrap().said.clone().unwrap_or_default();
-    assert!(said.contains("Allow uncertified"), "{said}");
-    h.gui.shell.cam.as_mut().unwrap().allow_uncertified = true;
     assert!(h.click("cam:post:write"));
     // the write lands a few frames on (sooner or later under a loaded machine)
     for _ in 0..200 {
@@ -783,5 +796,11 @@ fn an_adaptive_op_shows_what_clear_would_take() {
     assert_eq!(op, "top");
     let (lo, est) = got.expect("clear builds on the flange");
     assert!(lo > 0.0 && est >= lo);
+    // the row says whose time and of what (UX-LEAD): "≥ … · est. … · N% less time"
+    let own = w.run.as_ref().unwrap().cycle(["top"]).expect("adaptive's own time");
+    let words = forge_render::shell::cam::alt_clear_words((lo, est), own);
+    let pct = ((est / own.1 - 1.0) * 100.0).abs();
+    assert!(words.ends_with(&format!("{pct:.0}% {} time", if est < own.1 { "less" } else { "more" })), "{words}");
+    assert!(words.starts_with('\u{2265}'), "{words}");
     shot(&mut h, "cam-adaptive-vs-clear");
 }

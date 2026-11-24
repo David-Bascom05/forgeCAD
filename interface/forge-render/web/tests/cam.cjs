@@ -133,14 +133,19 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     await click(p, "cam:row:prof", 0, true);
     await t.until(p, (s) => s.cam.dialogs.includes("op"), "the op dialog, by a double click");
     await click(p, "cam:op:tab:3");
-    // typed once the field has the focus: click it and type until the dialog has the value
+    // typed once the field has the focus: the typing is taken on a later frame, so wait for it
+    // in the dialog before typing again (typing again too soon doubles it: 0.20.2)
     for (let k = 0; ; k++) {
       await click(p, "cam:op:arg:leave");
       await p.evaluate(() => window.forgecad.fc.app_type("0.2", false));
-      await settle(p);
-      const now = await p.evaluate(() => window.forgecad.state());
-      if (/leave: 0\.2\)/.test(now.cam.op_text ?? "")) break;
-      assert.ok(k < 5, `never typed: ${now.cam.op_text}`);
+      const got = await t
+        .until(p, (s) => /leave: 0\.2/.test(s.cam.op_text ?? ""), "the typing taken", 10000)
+        .catch(() => null);
+      if (got) {
+        assert.match(got.cam.op_text, /leave: 0\.2\)/, got.cam.op_text);
+        break;
+      }
+      assert.ok(k < 3, "never typed");
     }
     const before = st.cam.text;
     await click(p, "cam:op:ok");
@@ -190,6 +195,24 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     assert.equal(zb.readUInt32LE(0), 0x04034b50, "a zip");
     assert.ok(zb.includes(Buffer.from("shaft_turn-tools.txt")), "the tool list in it");
     console.log("ok - NC export: posted into the project, exported as a download, several as a zip");
+
+    // a milling setup not placed (G5 unchecked): Export NC is refused, and the reason is on the
+    // screen (the status bar), with its fix one click away; never "certified"
+    await p.evaluate((d) => window.forgecad.fc.app_open(d), doc);
+    st = await t.until(p, (s) => generated(s) && s.cam.path.endsWith("flange_cam.fg"), "the flange again");
+    await cam("unset op1 at");
+    st = await t.until(p, (s) => generated(s) && s.cam.certification !== "full", "generated, unplaced", 60000);
+    assert.doesNotMatch(st.cam.text, /at: \(/, st.cam.text);
+    assert.match(st.cam.status_line, /not released/, st.cam.status_line);
+    assert.doesNotMatch(st.cam.status_line, /ops certified/, st.cam.status_line);
+    assert.match(st.cam.release_block ?? "", /at:/, `${st.cam.release_block}`);
+    await cam("export prog");
+    st = await t.until(p, (s) => /G5|at:|certified/.test(s.cam.said ?? ""), "the refusal said");
+    assert.equal(st.cam.status_line, st.cam.said, "the refusal is what the status bar shows");
+    await shot(p, "cam-22-export-refused.png");
+    await click(p, "status:fix");
+    await t.until(p, (s) => s.cam.dialogs.includes("setup"), "the fix: the setup dialog");
+    console.log("ok - Export NC on an unplaced setup: refused, the reason on screen, the fix a click away");
     t.check(p);
   } finally {
     await b.close();
