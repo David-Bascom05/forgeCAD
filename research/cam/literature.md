@@ -149,7 +149,7 @@ inside corner of an offset path, φ rises sharply, up to 180° in a slot.
   model of the remaining stock, choosing each step so that the engaged arc stays under a limit.
 
 **Computing the radial engagement.** Engagement is the angle of the tool circle that lies inside
-the remaining stock. Spence & Altintas (1994, §7) did it on CSG. The MERL ADF work (Erdim &
+the remaining stock. Spence & Altintas (1994, §7) did it on CSG. The Mitsubishi Electric Research Laboratories ADF work (Erdim &
 Sullivan 2012, TR2012-093 [S]) does it on distance fields. Most CAM does it on rasters.
 **Chip thinning.** [K] With a_e < D/2 the largest chip is h_max = f_z·sin φ_e =
 2 f_z·√((a_e/D)(1 − a_e/D)), so the feed is raised by D/(2√(a_e(D − a_e))) to get back the nominal
@@ -348,7 +348,7 @@ stock (§7) and the fixtures, not only the part.
   Image-space booleans on a per-pixel depth list (the "dexel", a depth element) along the view
   direction. About 10 cuts a second on the hardware of the day.
 - **Stifter, S. (1995). "Simulation of NC machining based on the dexel model: a critical
-  analysis."** *IJAMT* 10. [S] (cited in dexel patents)
+  analysis."** *IJAMT* 10. [S]
   The error analysis: a single direction of dexels misses walls parallel to it, which motivates
   tri-dexels.
 - **Müller, Surmann, Stautner, Albersmann, Weinert (2003). "Online sculpting and visualization of
