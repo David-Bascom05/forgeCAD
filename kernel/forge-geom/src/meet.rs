@@ -1611,13 +1611,14 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
         let grown = region.grow(step);
         let inside: Vec<bool> = chain.iter().map(|&p| grown.contains(p)).collect();
         if inside.iter().all(|&x| x) {
-            curves.push(crate::intcurve::finish(
-                a,
-                b,
-                chain.into_iter().map(exact).collect(),
-                true,
-                step,
-            ));
+            let mut pts: Vec<Point3> = chain.into_iter().map(exact).collect();
+            // a walk that came back to its first point, refined onto it: a last point within a
+            // tolerance of the first would close the loop with a link of nothing (the curve's
+            // speed falls to nothing there, and a direction taken at that parameter is noise)
+            while pts.len() > 3 && pts[pts.len() - 1].distance(pts[0]) <= tol::LINEAR {
+                pts.pop();
+            }
+            curves.push(crate::intcurve::finish(a, b, pts, true, step));
             continue;
         }
         for i in 0..n {
