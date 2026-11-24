@@ -28,7 +28,10 @@ fn settle(h: &mut Headless) {
             break;
         }
     }
-    let _ = h.until(|g| g.view.as_ref().is_some_and(|v| !v.nav.moving()));
+    // the view fitted to the robot on entering, and still
+    let _ = h.until(|g| {
+        g.shell.robot.as_ref().is_some_and(|r| r.framed) && g.view.as_ref().is_some_and(|v| !v.nav.moving())
+    });
     for _ in 0..6 {
         h.step();
     }
@@ -88,6 +91,13 @@ fn a_robot_opens_with_its_panel_and_its_joints_move_the_parts() {
     assert!(p.error.is_none(), "{:?}", p.error);
     let view = p.view.as_ref().expect("the view");
     assert_eq!(view.root, "base");
+    // the environment entered: its tab, and the view fitted to the robot
+    assert_eq!(h.gui.shell.tab, forge_render::shell::ROBOT_TAB);
+    assert!(p.framed, "the view is fitted to the robot on entering");
+    assert!(
+        p.q.is_empty(),
+        "nothing moved the joints: the sliders only show them"
+    );
     assert!(view.joints.iter().any(|j| j.name == "elbow"));
     shot(&mut h, "01-robot-open");
 

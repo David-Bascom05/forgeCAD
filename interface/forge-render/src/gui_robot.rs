@@ -293,10 +293,13 @@ impl Gui {
             && v.nav.size == want
         {
             p.framed = true;
-            // the iso fit, not a Home the user set (kept for their Home)
-            let set = v.nav.home_view.take();
-            v.nav.home(&v.scene);
-            v.nav.home_view = set;
+            // the robot's parts filling 70% of the view's shorter side, from the 3/4 view
+            let pts = v.scene.shown_corners();
+            if pts.is_empty() {
+                v.nav.fit_all(&v.scene);
+            } else {
+                v.nav.frame(&pts, 0.7);
+            }
             v.dirty = true;
             return true;
         }

@@ -451,12 +451,12 @@ fn num(x: f64, dec: usize) -> String {
     s.replacen('-', "−", 1)
 }
 
-/// A length given in metres, in the user's unit.
-fn len(m: f64, inch: bool) -> String {
+/// A length given in mm (the view's frames are the source's, in mm), in the user's unit.
+fn len(mm: f64, inch: bool) -> String {
     if inch {
-        format!("{} in", num(m / 0.0254, 4))
+        format!("{} in", num(mm / 25.4, 4))
     } else {
-        format!("{} mm", num(m * 1000.0, 3))
+        format!("{} mm", num(mm, 3))
     }
 }
 
@@ -786,7 +786,7 @@ impl Shell {
                     .split_once('(')
                     .map_or(c.what.as_str(), |(_, x)| x.trim_end_matches(')'));
                 let sentence = format!(
-                    "{} {} changed in {src}: {} → {}. The robot overrides it: {}.",
+                    "{} {} changed in {src} from {} to {}. The robot overrides it with {}.",
                     cap(name),
                     c.field,
                     pretty(&c.was),
@@ -897,7 +897,10 @@ impl Shell {
                         })
                         .fixed_decimals(1);
                     let r = ui.add_enabled(j.mimic.is_none(), s);
-                    if r.changed() {
+                    // (a slider says changed when it only shows the value again: moved only
+                    // when the value is another)
+                    let was = p.value(j);
+                    if r.changed() && (shown / k - was).abs() > 1e-12 * (1.0 + was.abs()) {
                         p.set(&j.name, shown / k);
                     }
                     ui.end_row();
@@ -949,6 +952,7 @@ impl Shell {
             );
             ui.add_space(24.0);
             ui.label(RichText::new(&j.name).font(medium(14.0)).color(t.ink));
+            ui.add_space(6.0);
             ui.label(
                 RichText::new(format!("{} joint", kind_name(j.kind)))
                     .font(sans(12.0))
@@ -969,14 +973,8 @@ impl Shell {
                     kind_name(j.kind),
                     Some(&Prov::Linked),
                 );
-                row(
-                    ui,
-                    t,
-                    "Parent → child",
-                    "parent, child",
-                    &format!("{} → {}", j.parent, j.child),
-                    None,
-                );
+                row(ui, t, "Parent link", "parent", &j.parent, None);
+                row(ui, t, "Child link", "child", &j.child, None);
                 if !j.of.is_empty() && j.of != j.name {
                     row(ui, t, "Source joint", "of", &j.of, None);
                 }
@@ -1081,7 +1079,7 @@ impl Shell {
                 {
                     p.draft.insert(lo_key.clone(), lo);
                 }
-                ui.label("…");
+                ui.label(RichText::new("to").font(sans(12.0)).color(t.ink2));
                 if ui
                     .add(egui::DragValue::new(&mut hi).speed(0.5).suffix(unit))
                     .changed()
@@ -1263,6 +1261,7 @@ impl Shell {
             );
             ui.add_space(24.0);
             ui.label(RichText::new(&l.name).font(medium(14.0)).color(t.ink));
+            ui.add_space(6.0);
             let kind = if view.root == l.name {
                 "Root link"
             } else if l.dummy {
