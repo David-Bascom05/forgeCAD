@@ -288,7 +288,10 @@ fn the_cube_looks_down_the_bend_and_what_hides_it_is_seen_through() {
     let n = h.gui.bend.ghosts.len();
     assert!(n > 0, "a flange between the eye and the bend is seen through");
     h.gui.shell.sheet.bend_sim.as_mut().unwrap().see_through = false;
-    for _ in 0..3 {
+    // it fades back over FADE_FRAMES frames, not at once (no flicker)
+    h.step();
+    assert!(!h.gui.bend.ghosts.is_empty(), "fading back, not snapped");
+    for _ in 0..forge_render::gui::gui_bendsim::FADE_FRAMES + 2 {
         h.step();
     }
     assert!(h.gui.bend.ghosts.is_empty(), "off: everything solid");
@@ -340,4 +343,55 @@ fn following_keeps_the_handled_part_in_view() {
         }
     }
     assert!(seen.iter().all(|s| s.1), "the whole part in view at every instant: {seen:?}");
+}
+
+/// No flicker (David): the eye swept round the second bend through the views where the first
+/// flange crosses in front of it, a frame a step: a body's see-through never jumps; it fades in
+/// and out a step a frame, from and to solid.
+#[test]
+fn see_through_fades_and_never_flickers() {
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "flicker", "trumpf-trubend-5130", None);
+    let opacity = {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.see_through = true;
+        b.step = 1;
+        b.t = 0.7;
+        b.opacity
+    };
+    frame(&mut h, Framing::Work);
+    for _ in 0..4 {
+        h.step();
+    }
+    let step = (1.0 - opacity) / forge_render::gui::gui_bendsim::FADE_FRAMES as f32 + 0.01;
+    let mut was: std::collections::HashMap<u32, f32> = Default::default();
+    let mut worst = 0f32;
+    let mut ghosted = 0usize;
+    for i in 0..=80 {
+        {
+            let v = h.gui.view.as_mut().unwrap();
+            let mut c = v.nav.camera;
+            c.yaw = (200.0 + i as f32).to_radians();
+            c.pitch = 25f32.to_radians();
+            v.nav.jump_to(c);
+        }
+        h.step();
+        let now: std::collections::HashMap<u32, f32> = h
+            .gui
+            .bend
+            .ghosts
+            .iter()
+            .map(|g| (g.placement, g.rgba[3] as f32 / 255.0))
+            .collect();
+        // solid is alpha 1: a body not listed is solid
+        for k in was.keys().chain(now.keys()) {
+            let a = was.get(k).copied().unwrap_or(1.0);
+            let b = now.get(k).copied().unwrap_or(1.0);
+            worst = worst.max((a - b).abs());
+        }
+        ghosted = ghosted.max(now.len());
+        was = now;
+    }
+    assert!(ghosted > 0, "something stood in front of the bend at some instant");
+    assert!(worst <= step, "a see-through jump of {worst} in one frame (a step is {step})");
 }
