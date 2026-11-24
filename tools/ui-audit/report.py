@@ -36,6 +36,41 @@ def findings(r):
     return out
 
 
+SMALL = {"of", "to", "and", "or", "the", "a", "an", "in", "on", "for", "from", "by", "as", "at", "into"}
+
+
+def label_findings(r):
+    """STANDARD §5 (ux/glyphs): Title Case on the ribbon; "…" one character, only before a dialog."""
+    name, out = r["tool"], []
+    if any(rule == "label" for rule, _, _ in findings(r)):
+        return out
+    if "..." in name:
+        out.append(("label", False, f'"{name}": three dots for "…"'))
+    if r["tab"].startswith("menu ") is False and r["class"] != "DISABLED":
+        if name.endswith(("…", "...")) and r["class"] not in ("DIALOG", "PANEL", "FILE PICKER", "HOST"):
+            out.append(("label", False, f'"{name}": "…" but no dialog follows'))
+    if not r["tab"].startswith("menu "):
+        low = [w for w in name.replace("/", " ").split()[1:] if w not in SMALL and w[:1].islower()]
+        if low:
+            out.append(("label", False, f'"{name}": not Title Case ({", ".join(low)})'))
+    return out
+
+
+P1 = {"crash", "nothing", "page-crash", "page-nothing", "silent-mode"}
+P2 = {"raw-text", "no-unit", "no-reason", "clipped", "off-screen", "no-exit", "error-text", "tiny-text", "empty", "overlap"}
+
+
+def plevel(r, fs):
+    rules = {rule for rule, _, _ in fs}
+    if r["class"] in ("CRASH", "NOTHING VISIBLE") or rules & P1:
+        return "P1"
+    if rules & P2:
+        return "P2"
+    if fs:
+        return "P3"
+    return ""
+
+
 def score(r, fs):
     s = {"CRASH": 100, "NOTHING VISIBLE": 0, "ERROR TEXT": 30}.get(r["class"], 0)
     for rule, hard, _ in fs:
@@ -71,7 +106,7 @@ def main():
     os.makedirs(os.path.join(OUT, "thumbs"), exist_ok=True)
     rows = []
     for r in recs:
-        fs = findings(r) + narrow.get(key(r), [])
+        fs = findings(r) + label_findings(r) + narrow.get(key(r), [])
         w = web.get(key(r))
         if w and w["class"] in ("CRASH", "NOTHING VISIBLE") and r["class"] not in ("CRASH", "NOTHING VISIBLE"):
             fs.append(("page-" + ("crash" if w["class"] == "CRASH" else "nothing"), True, w["detail"]))
@@ -87,7 +122,7 @@ def main():
                 name = os.path.basename(src)
                 shutil.copy(src, os.path.join(OUT, "thumbs", name))
                 thumb = f"thumbs/{name}"
-        rows.append(dict(r, web=(w["class"] if w else ""), key=key(r), fs=fs, score=s, verdict=v, auto=auto, note=note, thumbp=thumb))
+        rows.append(dict(r, p=plevel(r, fs), web=(w["class"] if w else ""), key=key(r), fs=fs, score=s, verdict=v, auto=auto, note=note, thumbp=thumb))
     classes = Counter(r["class"] for r in rows)
     vs = Counter(r["verdict"] for r in rows if r["class"] != "DISABLED")
     worst = sorted((r for r in rows), key=lambda r: -r["score"])[:20]
@@ -114,14 +149,14 @@ def main():
     L.append("\n## The 20 worst\n")
     for i, r in enumerate(worst, 1):
         probs = "; ".join(f"{rule}: {what}" for rule, hard, what in r["fs"] if hard) or r["detail"]
-        L.append(f"{i}. **{r['key']}** ({r['class']}, score {r['score']}, {r['verdict']}): {probs}")
+        L.append(f"{i}. **{r['key']}** ({r['p']}, {r['class']}, score {r['score']}, {r['verdict']}): {probs}")
     L.append("\n## Every command\n")
     by = defaultdict(list)
     for r in rows:
         by[(r["fixture"], r["env"], r["tab"])].append(r)
     for (fx, env, tab), rs in by.items():
         L.append(f"### {fx} · {env + ': ' if env else ''}{tab}\n")
-        L.append("| Command | What happens | Page | Verdict | Problems | Shot |\n|---|---|---|---|---|---|")
+        L.append("| Command | What happens | Page | Verdict | P | Problems | Shot |\n|---|---|---|---|---|---|---|")
         for r in rs:
             probs = "<br>".join(f"{'**' if hard else ''}{rule}{'**' if hard else ''}: {what}".replace("|", "\\|")
                                 for rule, hard, what in r["fs"])
@@ -130,13 +165,24 @@ def main():
             shot = f"![]({r['thumbp']})" if r["thumbp"] else ""
             det = r["detail"].replace("|", "\\|")
             page = "" if not r["web"] else ("same" if r["web"] == r["class"] else r["web"])
-            L.append(f"| {r['group']} › {r['tool']} | {r['class']}: {det} | {page} | {r['verdict']} | {probs} | {shot} |")
+            L.append(f"| {r['group']} › {r['tool']} | {r['class']}: {det} | {page} | {r['verdict']} | {r['p']} | {probs} | {shot} |")
         L.append("")
     open(os.path.join(OUT, "report.md"), "w").write("\n".join(L) + "\n")
     T = ["# UI audit thumbnails\n", "Every popup or panel a command opened, worst first.\n"]
     for r in sorted((r for r in rows if r["thumbp"]), key=lambda r: -r["score"]):
         T.append(f"**{r['key']}** · {r['verdict']} · score {r['score']}\n\n![]({r['thumbp']})\n")
     open(os.path.join(OUT, "thumbs.md"), "w").write("\n".join(T) + "\n")
+    # UX-LEAD's single table: research/button-audit/SCORES.md
+    S = ["# Button audit scores\n",
+         "Every live command, worst first: verdict (good / fix / redo), P-level (STANDARD severity), the "
+         "rules it breaks. Full detail and shots: research/ui-audit/report.md.\n",
+         "| Command | What a click does | Verdict | P | Score | Problems |", "|---|---|---|---|---|---|"]
+    for r in sorted((r for r in rows if r["class"] != "DISABLED" or r["fs"]), key=lambda r: -r["score"]):
+        probs = "; ".join(f"{rule}: {what}" for rule, hard, what in r["fs"]).replace("|", "\\|")
+        S.append(f"| {r['key']} | {r['class']} | {r['verdict']} | {r['p']} | {r['score']} | {probs} |")
+    bdir = os.path.join(OUT, "..", "button-audit")
+    os.makedirs(bdir, exist_ok=True)
+    open(os.path.join(bdir, "SCORES.md"), "w").write("\n".join(S) + "\n")
     print(f"{len(rows)} commands; classes {dict(classes)}; verdicts {dict(vs)}")
     for i, r in enumerate(worst, 1):
         print(f"{i:2}. {r['key']} [{r['class']}] {r['score']}")

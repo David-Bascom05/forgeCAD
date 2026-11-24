@@ -670,6 +670,7 @@ impl Crawl {
             ms: 0,
         };
         let slug = slug(&format!("{}-{}{}-{}", f.name, env, tab, tool));
+        rec.findings.extend(judge::label(tool, matches!(how, Click::Tool), true));
         if !live {
             rec.class = Class::Disabled;
             let (why, tip) = disabled_tip(&mut h, group, tool);

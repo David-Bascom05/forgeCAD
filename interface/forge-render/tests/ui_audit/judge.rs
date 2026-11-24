@@ -288,3 +288,28 @@ fn contrast(s: &Snap, t: &Text) -> Option<f32> {
 pub fn finding(rule: &'static str, hard: bool, what: impl Into<String>) -> Finding {
     f(rule, hard, what)
 }
+
+/// A ribbon command's or menu item's label against STANDARD §5: Title Case on the ribbon, "…" as
+/// one character and only where a dialog or more input follows.
+pub fn label(name: &str, ribbon: bool, class_opens_dialog: bool) -> Vec<Finding> {
+    let mut out = Vec::new();
+    if name.contains("...") {
+        out.push(f("label", false, format!("\"{name}\": three dots for \"…\"")));
+    }
+    if name.ends_with('…') && !class_opens_dialog {
+        out.push(f("label", false, format!("\"{name}\": \"…\" but no dialog follows")));
+    }
+    if ribbon {
+        const SMALL: &[&str] = &["of", "to", "and", "or", "the", "a", "an", "in", "on", "for", "from", "by", "as", "at", "into"];
+        let lower: Vec<&str> = name
+            .split(|c: char| c.is_whitespace() || c == '/')
+            .skip(1)
+            .filter(|w| !w.is_empty() && !SMALL.contains(w))
+            .filter(|w| w.chars().next().is_some_and(|c| c.is_ascii_lowercase()))
+            .collect();
+        if !lower.is_empty() {
+            out.push(f("label", false, format!("\"{name}\": not Title Case ({})", lower.join(", "))));
+        }
+    }
+    out
+}
