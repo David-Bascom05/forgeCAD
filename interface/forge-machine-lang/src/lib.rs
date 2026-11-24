@@ -32,6 +32,15 @@ pub fn outside(p: &Prim, x: [f64; 3]) -> f64 {
             }
             d
         }
+        Prim::OBox { o, axes, size } => {
+            let w = [x[0] - o[0], x[1] - o[1], x[2] - o[2]];
+            let mut d: f64 = f64::NEG_INFINITY;
+            for k in 0..3 {
+                let s = w[0] * axes[k][0] + w[1] * axes[k][1] + w[2] * axes[k][2];
+                d = d.max(-s).max(s - size[k]);
+            }
+            d
+        }
         Prim::Cyl { base, axis, r, h } => {
             let w = [x[0] - base[0], x[1] - base[1], x[2] - base[2]];
             let z = w[0] * axis[0] + w[1] * axis[1] + w[2] * axis[2];
@@ -46,6 +55,7 @@ fn prim_volume(p: &Prim) -> f64 {
     match p {
         Prim::Box { min, max } => (max[0] - min[0]) * (max[1] - min[1]) * (max[2] - min[2]),
         Prim::Cyl { r, h, .. } => forge_math::dmath::PI * r * r * h,
+        Prim::OBox { size, .. } => size[0] * size[1] * size[2],
     }
 }
 

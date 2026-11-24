@@ -679,3 +679,57 @@ fn ratings_torque_ref_and_the_table_load() {
         (Ok(()), Some("setup.work_kg".to_string()))
     );
 }
+
+#[test]
+fn an_oriented_box_is_exact_where_its_bound_is_not() {
+    use forge_machine::collide::{self, Role, Verdict};
+    use forge_machine::def::Prim;
+    let m = &forge_machine::library::builtin_named("generic-vmc3").unwrap();
+    let mut s = Setup::new(m, Control::for_dialect(m, "fanuc", 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -500.0])];
+    s.h = vec![(1, 100.0)];
+    s.tools = vec![sim::SimTool {
+        t: 1,
+        name: "e10".into(),
+        tip: [0.0, 0.0, -100.0],
+        body: vec![(5.0, 0.0, 40.0)],
+        cut: sim::Cut::Mill { r: 5.0, corner: 0.0 },
+    }];
+    s.start_tool = Some(1);
+    // a 40 x 40 x 20 block centred on (100, 0), turned 45° about z
+    let h = std::f64::consts::FRAC_1_SQRT_2;
+    let (u, v) = ([h, h, 0.0], [-h, h, 0.0]);
+    let side = 40.0;
+    let o = [
+        100.0 - side * (u[0] + v[0]) * 0.5,
+        -side * (u[1] + v[1]) * 0.5,
+        0.0,
+    ];
+    let blk = Prim::OBox {
+        o,
+        axes: [u, v, [0.0, 0.0, 1.0]],
+        size: [side, side, 20.0],
+    };
+    let body = collide::part_body(&s, "clamp", &[blk], Role::Fixture);
+    // a pass along the block's face dx + dy = 20√2, `off` mm outside it, at z 5
+    let run = |off: f64| {
+        let c = side * std::f64::consts::SQRT_2 * 0.5 + off * std::f64::consts::SQRT_2;
+        let prog = format!(
+            "G43 H1\nG0 X{:.3} Y60. Z50.\nZ5.\nG1 X{:.3} Y-60. F500.\nG0 Z50.\n",
+            100.0 + c - 60.0,
+            100.0 + c + 60.0
+        );
+        let tl = sim::simulate(&prog, &s).unwrap();
+        collide::check(&s, &tl, std::slice::from_ref(&body)).contacts
+    };
+    // 10 mm off the face (tool radius 5, clearance 1): clear, though inside the block's bound
+    let c = run(10.0);
+    assert!(c.iter().all(|c| c.b != "clamp" && c.a != "clamp"), "{c:?}");
+    // 3 mm off: the tool's side cuts into the block
+    let c = run(3.0);
+    assert!(
+        c.iter()
+            .any(|c| (c.a == "clamp" || c.b == "clamp") && matches!(c.verdict, Verdict::Hit { .. })),
+        "{c:?}"
+    );
+}

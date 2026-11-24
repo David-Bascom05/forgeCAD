@@ -134,28 +134,36 @@ pub fn part_body(s: &Setup, name: &str, prims_in_part: &[Prim], role: Role) -> C
         .iter()
         .flat_map(|p| match p {
             Prim::Box { min, max } => {
-                // a box in the part frame is an oriented box in the base frame: keep it exact as
-                // a box only when the frame is axis-aligned; otherwise it is refused (none of the
-                // built-in mounts is skewed)
+                // a box in the part frame is an oriented box in the base frame: a box again when
+                // the frame is axis-aligned, else an oriented box
                 let a = f.apply(*min);
                 let b = f.apply(*max);
                 let axis_aligned =
                     f.r.iter()
                         .all(|row| row.iter().filter(|x| **x != 0.0).count() == 1);
-                assert!(
-                    axis_aligned,
-                    "a skewed part mount: boxes need an axis-aligned part frame"
-                );
-                vec![Prim::Box {
-                    min: [a[0].min(b[0]), a[1].min(b[1]), a[2].min(b[2])],
-                    max: [a[0].max(b[0]), a[1].max(b[1]), a[2].max(b[2])],
-                }]
+                if axis_aligned {
+                    vec![Prim::Box {
+                        min: [a[0].min(b[0]), a[1].min(b[1]), a[2].min(b[2])],
+                        max: [a[0].max(b[0]), a[1].max(b[1]), a[2].max(b[2])],
+                    }]
+                } else {
+                    vec![Prim::OBox {
+                        o: a,
+                        axes: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]].map(|d| f.dir(d)),
+                        size: [max[0] - min[0], max[1] - min[1], max[2] - min[2]],
+                    }]
+                }
             }
             Prim::Cyl { base, axis, r, h } => vec![Prim::Cyl {
                 base: f.apply(*base),
                 axis: f.dir(*axis),
                 r: *r,
                 h: *h,
+            }],
+            Prim::OBox { o, axes, size } => vec![Prim::OBox {
+                o: f.apply(*o),
+                axes: axes.map(|a| f.dir(a)),
+                size: *size,
             }],
         })
         .collect();
@@ -218,6 +226,26 @@ fn place(p: &Prim, t: &IRigid) -> IPrim {
                 c: t.apply(&cc),
                 e,
                 h,
+            }
+        }
+        Prim::OBox { o, axes, size } => {
+            // the centre in interval arithmetic (sound for float axes); the axes as given, so the
+            // support function Σ h_i |e_i · n| is exact for the parallelepiped they span
+            let mut c = ip(*o);
+            for k in 0..3 {
+                let half = Interval::point(size[k]) * Interval::point(0.5);
+                for i in 0..3 {
+                    c[i] = c[i] + half * Interval::point(axes[k][i]);
+                }
+            }
+            let e = axes.map(|a| {
+                let ia = ip(a);
+                [0, 1, 2].map(|i| t.r[i][0] * ia[0] + t.r[i][1] * ia[1] + t.r[i][2] * ia[2])
+            });
+            IPrim::Box {
+                c: t.apply(&c),
+                e,
+                h: size.map(|x| (x * 0.5).next_up()),
             }
         }
         Prim::Cyl { base, axis, r, h } => {
@@ -395,6 +423,12 @@ fn samples(p: &Prim, t: &Rigid) -> Vec<V3> {
                 out.push(t.apply([pick(0, 0), pick(1, 1), pick(2, 2)]));
             }
         }
+        Prim::OBox { o, axes, size } => {
+            for i in 0..27 {
+                let f = [0, 1, 2].map(|d| ((i / [1, 3, 9][d]) % 3) as f64 * 0.5);
+                out.push(t.apply(Prim::obox_at(o, axes, size, f)));
+            }
+        }
         Prim::Cyl { base, axis, r, h } => {
             let u = if axis[0].abs() < 0.9 {
                 kin::cross(*axis, [1.0, 0.0, 0.0])
@@ -426,6 +460,15 @@ fn depth(p: &Prim, t: &Rigid, x: V3) -> f64 {
         Prim::Box { min, max } => (0..3)
             .map(|k| (l[k] - min[k]).min(max[k] - l[k]))
             .fold(f64::INFINITY, f64::min),
+        Prim::OBox { o, axes, size } => {
+            let w = kin::sub(l, *o);
+            (0..3)
+                .map(|k| {
+                    let s = kin::dot(w, axes[k]);
+                    s.min(size[k] - s)
+                })
+                .fold(f64::INFINITY, f64::min)
+        }
         Prim::Cyl { base, axis, r, h } => {
             let w = kin::sub(l, *base);
             let z = kin::dot(w, *axis);
@@ -638,6 +681,16 @@ pub fn dense_overlap(a: &CBody, b: &CBody, pose: &[Rigid]) -> bool {
                                 f(j, min[1], max[1]),
                                 f(k, min[2], max[2]),
                             ]));
+                        }
+                    }
+                }
+            }
+            Prim::OBox { o, axes, size } => {
+                for i in 0..n {
+                    for j in 0..n {
+                        for k in 0..n {
+                            let f = [i, j, k].map(|m| m as f64 / (n - 1) as f64);
+                            out.push(t.apply(Prim::obox_at(o, axes, size, f)));
                         }
                     }
                 }

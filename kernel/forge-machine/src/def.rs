@@ -304,6 +304,26 @@ pub enum Prim {
         r: f64,
         h: f64,
     },
+    /// Oriented box: the points o + s·axes[0] + t·axes[1] + r·axes[2], 0 ≤ s ≤ size[0], ...
+    /// (axes orthonormal, checked on read): a workholding block placed at an angle.
+    OBox {
+        o: [f64; 3],
+        axes: [[f64; 3]; 3],
+        size: [f64; 3],
+    },
+}
+
+impl Prim {
+    /// An oriented box's point at fractions (a, b, c) of its sides.
+    pub fn obox_at(o: &[f64; 3], axes: &[[f64; 3]; 3], size: &[f64; 3], f: [f64; 3]) -> [f64; 3] {
+        let mut p = *o;
+        for k in 0..3 {
+            for i in 0..3 {
+                p[i] += f[k] * size[k] * axes[k][i];
+            }
+        }
+        p
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

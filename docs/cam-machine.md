@@ -281,6 +281,12 @@ base = [70, 0, 0]
 axis = [0, 0, 1]
 r = 8
 h = 25
+[[setup.fixture.obox]]     # a block at an angle: o + s u + t v + r w, 0 ≤ s ≤ size[0], ...
+o = [90, -10, 0]           # (u, v, w orthonormal)
+u = [0.7071067811865476, 0.7071067811865476, 0]
+v = [-0.7071067811865476, 0.7071067811865476, 0]
+w = [0, 0, 1]
+size = [40, 20, 15]
 ```
 
 Examples: examples/machine (a slot, the same with a crash at N130, a faced and turned bar).

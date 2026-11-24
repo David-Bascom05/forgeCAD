@@ -236,9 +236,26 @@ impl SetupSpec {
                     h,
                 });
             }
+            for b in tables(f, "obox") {
+                let o = need_vec::<3>(b, &r, "o")?;
+                let axes = [
+                    need_vec::<3>(b, &r, "u")?,
+                    need_vec::<3>(b, &r, "v")?,
+                    need_vec::<3>(b, &r, "w")?,
+                ];
+                let size = need_vec::<3>(b, &r, "size")?;
+                let dot = |a: &[f64; 3], c: &[f64; 3]| a[0] * c[0] + a[1] * c[1] + a[2] * c[2];
+                let ortho = (0..3).all(|i| {
+                    (0..3).all(|j| (dot(&axes[i], &axes[j]) - if i == j { 1.0 } else { 0.0 }).abs() < 1e-9)
+                });
+                if !ortho || size.iter().any(|x| x.is_nan() || *x <= 0.0) {
+                    return Err(format!("{r}: an obox needs orthonormal u, v, w and size > 0"));
+                }
+                prims.push(Prim::OBox { o, axes, size });
+            }
             if prims.is_empty() {
                 return Err(format!(
-                    "{r}: give `min`/`max`, or [[setup.fixture.box]] / [[setup.fixture.cyl]]"
+                    "{r}: give `min`/`max`, or [[setup.fixture.box]] / [[setup.fixture.cyl]] / [[setup.fixture.obox]]"
                 ));
             }
             if fixture.iter().any(|x: &Fixture| x.name == name) {
