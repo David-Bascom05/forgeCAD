@@ -58,6 +58,18 @@ axiom core.iter.traits.iterator.Iterator.any.default
   Clause0_Item Bool) :
   Self → F → Result (Bool × Self)
 
+/-- [core::iter::traits::iterator::Iterator::all]:
+    Source: '/rustc/library/core/src/iter/traits/iterator.rs', lines 2840:4-2843:64
+    Name pattern: [core::iter::traits::iterator::Iterator::all]
+    Visibility: public -/
+@[trait_default, rust_fun "core::iter::traits::iterator::Iterator::all"]
+axiom core.iter.traits.iterator.Iterator.all.default
+  {Self : Type _} {F : Type _} {Clause0_Item : Type _} (IteratorInst :
+  core.iter.traits.iterator.Iterator Self Clause0_Item)
+  (opsfunctionFnMutFTupleClause0_ItemBoolInst : core.ops.function.FnMut F
+  Clause0_Item Bool) :
+  Self → F → Result (Bool × Self)
+
 /-- [core::f64::{f64}::MIN_POSITIVE]
     Source: '/rustc/library/core/src/num/f64.rs', lines 456:4-456:31
     Name pattern: [core::f64::{f64}::MIN_POSITIVE]

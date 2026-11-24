@@ -283,13 +283,16 @@ if (q.get("open")) {
     refused = `Couldn't open ${q.get("open")}: it isn't in this project.`;
   }
 }
-// the app first, with the part asked for: the project's other files follow behind its first frame
-// (hundreds of them took a round trip each before it showed)
-await Promise.all([home?.load(), asked && mirror?.loadOne(asked)]);
+// the app first: the project's files follow behind its first frame (hundreds of them took a
+// round trip each before it showed). A linked file opens once they have all come: opened before,
+// what it reads (a machining document's part, a drawing's) was missing from its first build
+// ("0/5 ops certified" on a good part, its export refused, until a rebuild)
+await home?.load();
 // ?noapp: the files and the kernel only, no canvas (the parity test)
 if (!q.has("noapp")) {
-  fc.start_app(asked ? `${MOUNT}/${asked}` : undefined, q.get("offscreen") ?? undefined);
-  if (q.get("env")) fc.app_env(q.get("env"));
+  fc.start_app(undefined, q.get("offscreen") ?? undefined);
+  if (asked) fc.app_say("Loading project…");
+  else if (q.get("env")) fc.app_env(q.get("env"));
   if (refused) fc.app_say(refused);
 }
 say("started");
@@ -305,8 +308,8 @@ const loaded = (async () => {
   }
   if (q.has("noapp")) return;
   if (asked) {
-    // what the part reads (an assembly's parts, a font) may have come since its first build
-    fc.app_rebuild();
+    fc.app_open(`${MOUNT}/${asked}`);
+    if (q.get("env")) fc.app_env(q.get("env"));
   } else if (!refused) {
     // (a link refused: nothing else opened in its place, the status saying why)
     const first = files().filter((p) => p.endsWith(".fg")).sort()[0];

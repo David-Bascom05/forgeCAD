@@ -632,7 +632,7 @@ mod bounded {
     /// every build of a part kept its sketches (a sketch with a named entity is an `Rc` cycle).
     #[test]
     fn a_session_frees_each_requests_sketches() {
-        let dir = std::env::temp_dir().join(format!("forge-serve-bounded-{}", std::process::id()));
+        let dir = forge_dirs::temp_dir().join(format!("forge-serve-bounded-{}", forge_dirs::process_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let part = dir.join("plate.fg");
         std::fs::write(
