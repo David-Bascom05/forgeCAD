@@ -46,6 +46,11 @@ Expect about 2 min with the Mathlib cache. Post.lean's `step` takes about 45 s.
 - **The Δ search's bound.** lower ≤ sdRZ(D, h − z) over the cells is the interval extension's
   claim, which is L5 (ival.rs against verify/ieee754).
 
+- **H.grid (G4's tool-radius reason).** An offset's loops lie within ~4·2⁻³² mm of the exact
+  offset's boundary (each vertex and arc centre rounded to offset::GRID), so (F ⊖ B_{r−m}) ⊕
+  B_{r+m} as computed, m = 1e-6, contains the opening (F ⊖ B_r) ⊕ B_r. Not in Lean (hyp). It
+  bears only on the label "tool radius", never on G1–G6.
+
 ## The vise code (3e8a91d, 0a4c189): done
 
 ForgeCam/Vise.lean adds 7 theorems (41 in all).
@@ -132,6 +137,18 @@ Shadow.lean proves S1–S4, with `shadow_face` and `certified_clear_gen` assembl
 - Mismatch, sent to CAM: the cone's whole-move `dmin = pt_sec(axis, Sec::Arc)` uses the arc's
   stored f64 ends with no gap lowering (since 3a388e5, `dist` and `dist_region` lower).
   `arc_near` proves dmin − gap sound; or use ||c − o| − r|.
+  - Closed in cam/path-arc-ends, wider than reported: the PATH arc's stored ends (Move::planar's
+    f64 mids of the ends' enclosures) were taken as exact in slab (dist, dist_region: only the
+    face's gaps were lowered), in the shadow cone's dmin, and in the B&B's planar closed form
+    (cell_eval_planar's sector). Each now widens the path's distances by Move::path_gap =
+    2·g + 2ε (g = arc_gap of the stored arc, ε = the ends' enclosure half-widths): the true arc
+    and the model arc M (Trim.lean's: circle arc between the stored ends' rays plus radial
+    pieces) are within 2ε of each other (argument in path_gap's doc), and the candidates bound
+    distances to M once lowered by 2·g (segArc_trim, arcArc_trim, arc_near). The 2ε step is
+    argued in the code; its metric steps are proven (PathEnds.lean: `proj_near`, `chord_mono`), the cone decomposition of the whole arc not yet (hyp H.pathends, that step only). Seen in the bits test: a bull at
+    radius 11.29 about a 7.3 cylinder was a Hit at d = −0.0100000000000002 (past −0.01 by
+    2e-16, on the unaccounted ends), now Undecided; refused either way. Digest re-pinned
+    (native = wasm32-wasip1: 0x18f7a4235d47008e).
 
 ## Still to do when asked
 

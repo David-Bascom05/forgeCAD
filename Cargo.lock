@@ -125,6 +125,7 @@ dependencies = [
  "forge-geom",
  "forge-import",
  "forge-lang",
+ "forge-machine-lang",
  "forge-material",
  "forge-math",
  "forge-mesh",
@@ -132,6 +133,7 @@ dependencies = [
  "forge-ops",
  "forge-step",
  "forge-topo",
+ "forge-turn-lang",
  "forge-workholding",
 ]
 
@@ -297,6 +299,25 @@ dependencies = [
  "forge-units",
  "forge-vendor",
  "forge-weld",
+]
+
+[[package]]
+name = "forge-machine"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-machine-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-lang",
+ "forge-machine",
+ "forge-math",
+ "forge-mesh",
 ]
 
 [[package]]
@@ -509,6 +530,29 @@ dependencies = [
  "forge-math",
  "forge-model",
  "forge-topo",
+]
+
+[[package]]
+name = "forge-turn"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-geom",
+ "forge-math",
+ "forge-ops",
+ "forge-post",
+ "forge-tooling",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-turn-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-cam-geom",
+ "forge-lang",
+ "forge-turn",
 ]
 
 [[package]]

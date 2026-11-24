@@ -27,6 +27,7 @@ fn usage() -> ExitCode {
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, parts under DIR, default .; edits only if --writable)\n       \
          forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only]   (the browser app on DIR's files)\n       \
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
+         forgecad machine SETUP.toml [--json] | list   (posted G-code on a machine: timeline, collisions, removal)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
          forgecad workholding list [KIND] | show NAME | schema | new NAME --from X [field=value ..] [--json]   (vises, clamps, plates, chucks, collets)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
@@ -213,6 +214,7 @@ fn main() -> ExitCode {
         }
         Some("web") => web::main(&args[2..]),
         Some("import") if args.len() >= 3 => import(&args[2..]),
+        Some("machine") if args.len() >= 3 => machine(&args[2..]),
         Some("vendor") => {
             let json = args.iter().any(|a| a == "--json");
             let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
@@ -272,6 +274,41 @@ fn quoted(s: &str) -> String {
         }
     }
     o + "\""
+}
+
+/// Posted G-code simulated on a machine (forge-machine): `list` the machines, or run a setup file.
+fn machine(argv: &[String]) -> ExitCode {
+    if argv[0] == "list" {
+        let lib = match forge_machine_lang::library(std::path::Path::new(".")) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return ExitCode::FAILURE;
+            }
+        };
+        for (m, file) in &lib.machines {
+            println!("{} {} ({}) {}", m.name, m.kind.name(), m.control, file);
+        }
+        return ExitCode::SUCCESS;
+    }
+    let json = argv.iter().any(|a| a == "--json");
+    let Some(file) = argv.iter().find(|a| !a.starts_with("--")) else {
+        return usage();
+    };
+    match forge_machine_lang::run_setup(std::path::Path::new(file)) {
+        Ok(o) => {
+            let _ = writeln!(std::io::stdout(), "{}", if json { o.json } else { o.text });
+            if o.ok {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::from(2)
+        }
+    }
 }
 
 /// Another system's file as part files, one a body: a line each says what became of it.
