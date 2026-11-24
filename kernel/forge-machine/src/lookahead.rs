@@ -29,7 +29,7 @@
 //! not a bound: a control with a longer lookahead or jerk limits differs. Its parameters are
 //! inputs so a comparison can be run over a range of them; the defaults are grbl's.
 use crate::def::{JointType, MachineDef};
-use crate::sim::{Path, Timeline};
+use crate::sim::{Path, SegKind, Timeline};
 
 /// The planner's inputs.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -278,6 +278,9 @@ pub struct SCurve {
     /// The look-ahead depth (blocks): each block's exit is planned so the control can stop
     /// within the next `window` blocks. None: over the whole run (the record's `lookahead`).
     pub window: Option<usize>,
+    /// Stop at the end of every G0 block (no blending into or out of a rapid), as a control
+    /// that does not blend rapids. False: G0 blocks are blended like any other.
+    pub rapid_stop: bool,
 }
 
 impl SCurve {
@@ -287,6 +290,8 @@ impl SCurve {
         SCurve {
             block_cycle: def.block_cycle,
             window: def.lookahead,
+            // unless the record says the control blends rapids: a stop at every G0 block
+            rapid_stop: def.rapid_blend != Some(true),
             ..SCurve::default()
         }
     }
@@ -304,6 +309,7 @@ impl Default for SCurve {
             tolerance: 0.02,
             block_cycle: None,
             window: None,
+            rapid_stop: false,
         }
     }
 }
@@ -416,7 +422,10 @@ pub fn plan_scurve(def: &MachineDef, tl: &Timeline, p: &SCurve) -> (Vec<f64>, f6
             let pv = &tl.segments[si - 1];
             let gap_t = (sg.t0 - (pv.t0 + pv.t_min)).abs() > 1e-9 * sg.t0.abs().max(1.0);
             let gap_q = pv.q1.iter().zip(&sg.q0).any(|(a, b)| (a - b).abs() > 1e-9);
-            if gap_t || gap_q || pv.tool != sg.tool || pv.spindle != sg.spindle {
+            let rapid_end = p.rapid_stop
+                && pv.line != sg.line
+                && (matches!(pv.kind, SegKind::Rapid) || matches!(sg.kind, SegKind::Rapid));
+            if gap_t || gap_q || rapid_end || pv.tool != sg.tool || pv.spindle != sg.spindle {
                 flush(&mut run, &mut per);
             }
         }
