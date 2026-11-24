@@ -849,6 +849,22 @@ impl Shell {
         let sheet = !fg.sheets.is_empty();
         let mut flat_row = false;
         let stmts = statements(&fg.feats);
+        // a menu item that can only be refused is drawn off with the reason (STANDARD §7):
+        // while a sketch is open, and a delete or move another statement's reading stops
+        let sketching = self.sketch.is_some();
+        let source = fg.source.clone();
+        let refusal = |op: &Op| -> Option<String> {
+            if sketching {
+                return Some("Finish or cancel the sketch first".into());
+            }
+            match forge_lang::edit::apply_all_checked(&source, std::slice::from_ref(op)) {
+                Ok(_) => None,
+                Err(forge_lang::error::Error::StillRead { reader, .. }) => {
+                    Some(format!("Used by {reader}: delete or change {reader} first"))
+                }
+                Err(e) => Some(e.text()),
+            }
+        };
         let mut menu_places: Vec<(String, Rect)> = Vec::new();
         egui::ScrollArea::vertical()
             .id_salt("fg-tree")
@@ -1080,8 +1096,12 @@ impl Shell {
                     let edit = row.feat.is_some() && statement_of(&key) == key;
                     resp.context_menu(|ui| {
                         ui.set_min_width(150.0);
-                        let mut item = |ui: &mut Ui, label: &str, name: &str| {
-                            let b = ui.button(egui::RichText::new(label).font(sans(12.0)));
+                        let mut off_item = |ui: &mut Ui, label: &str, name: &str, why: Option<String>| {
+                            let b = ui.add_enabled(why.is_none(), egui::Button::new(egui::RichText::new(label).font(sans(12.0))));
+                            let b = match why {
+                                Some(w) => b.on_disabled_hover_text(w),
+                                None => b,
+                            };
                             menu_places.push((format!("fg:menu:{name}:{key}"), b.rect));
                             let hit = b.clicked();
                             if hit {
@@ -1090,42 +1110,49 @@ impl Shell {
                             hit
                         };
                         if is_sketch {
-                            if item(ui, "Edit Sketch", "edit-sketch") {
+                            if off_item(ui, "Edit Sketch", "edit-sketch", None) {
                                 fg.out.push(FgAct::EditSketch(key.clone()));
                             }
-                        } else if edit && item(ui, "Edit Feature", "edit") {
+                        } else if edit && off_item(ui, "Edit Feature", "edit", None) {
                             fg.out.push(FgAct::EditFeature(key.clone()));
                         }
                         let at = stmts.iter().position(|s| *s == key);
                         if let Some(k) = at {
-                            if item(ui, "Rename", "rename") {
+                            if off_item(ui, "Rename", "rename", None) {
                                 fg.renaming = Some((key.clone(), key.clone()));
                                 fg.rename_fresh = true;
                             }
-                            if k > 0 && item(ui, "Move Up", "up") {
-                                fg.out.push(FgAct::Apply(Op::MoveFeature {
+                            if k > 0 {
+                                let op = Op::MoveFeature {
                                     id: key.clone(),
                                     before: Some(stmts[k - 1].clone()),
-                                }));
+                                };
+                                if off_item(ui, "Move Up", "up", refusal(&op)) {
+                                    fg.out.push(FgAct::Apply(op));
+                                }
                             }
-                            if k + 1 < stmts.len() && item(ui, "Move Down", "down") {
-                                fg.out.push(FgAct::Apply(Op::MoveFeature {
+                            if k + 1 < stmts.len() {
+                                let op = Op::MoveFeature {
                                     id: key.clone(),
                                     before: stmts.get(k + 2).cloned(),
-                                }));
+                                };
+                                if off_item(ui, "Move Down", "down", refusal(&op)) {
+                                    fg.out.push(FgAct::Apply(op));
+                                }
                             }
                             ui.separator();
-                            if item(ui, "Suppress Features", "suppress") {
+                            if off_item(ui, "Suppress Features", "suppress", None) {
                                 fg.out.push(FgAct::Apply(Op::Suppress { id: key.clone() }));
                             }
                             // Inventor's End of Part dragged here: what follows isn't built
                             if fg.rollback.as_deref() != Some(key.as_str())
-                                && item(ui, "Move End of Part Here", "rollback")
+                                && off_item(ui, "Move End of Part Here", "rollback", None)
                             {
                                 fg.out.push(FgAct::Rollback(Some(key.clone())));
                             }
-                            if item(ui, "Delete", "delete") {
-                                fg.out.push(FgAct::Apply(Op::DeleteFeature { id: key.clone() }));
+                            let op = Op::DeleteFeature { id: key.clone() };
+                            if off_item(ui, "Delete", "delete", refusal(&op)) {
+                                fg.out.push(FgAct::Apply(op));
                             }
                         }
                         // one instance of a loop or a call: a shared param of its own
@@ -1135,7 +1162,7 @@ impl Shell {
                                 Op::SplitInstance { param, .. } => format!("split:{param}"),
                                 _ => unreachable!("just made"),
                             };
-                            if item(ui, &op_label(&op), &name) {
+                            if off_item(ui, &op_label(&op), &name, None) {
                                 fg.out.push(FgAct::Apply(op));
                             }
                         }

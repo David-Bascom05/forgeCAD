@@ -343,6 +343,11 @@ pub struct Shell {
     pub tab: usize,
     pub name: String,
     pub status: String,
+    /// The status line's two layers: what a standing state last wrote there (`state_status`),
+    /// and a command's own words over it, with when they came. An event is never written over
+    /// by a state the next frame: it shows ~4 s or until the next press, then the state is back.
+    status_state: String,
+    status_event: Option<(String, f64)>,
     pub view: ViewState,
     pub out: Vec<Action>,
     /// Where the viewport is, in logical pixels, snapped to device pixels.
@@ -453,6 +458,8 @@ impl Default for Shell {
             tab: 0,
             name: String::new(),
             status: String::new(),
+            status_state: String::new(),
+            status_event: None,
             view: ViewState::default(),
             out: Vec::new(),
             view_rect: Rect::ZERO,
@@ -633,6 +640,24 @@ impl Shell {
         if let Some(name) = flip {
             self.overlays_mut().flip(name);
         }
+    }
+
+    /// A standing state's words in the status line (the sketch's degrees of freedom, an
+    /// environment's summary), written each frame: they show unless a command spoke since,
+    /// whose words are kept a while first (UX-LEAD: a reply is never swallowed by a state).
+    pub fn state_status(&mut self, ctx: &egui::Context, state: String) {
+        let now = ctx.input(|i| i.time);
+        let pressed = ctx.input(|i| i.pointer.any_pressed() || i.events.iter().any(|e| matches!(e, egui::Event::Key { pressed: true, .. })));
+        if self.status != self.status_state && !self.status.trim().is_empty() {
+            self.status_event = Some((self.status.clone(), now));
+        } else if pressed || self.status_event.as_ref().is_some_and(|(_, at)| now - at > 4.0) {
+            self.status_event = None;
+        }
+        if self.status_event.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        }
+        self.status = self.status_event.as_ref().map_or(state, |(w, _)| w.clone());
+        self.status_state = self.status.clone();
     }
 
     pub fn place(&self, name: &str) -> Option<Rect> {

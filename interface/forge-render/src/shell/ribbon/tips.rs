@@ -103,6 +103,18 @@ fn why(s: &Shell, scope: &str, name: &str) -> String {
     if s.no_document() && scope != "thermo" {
         return "open or create a part first (File > New, or Open)".into();
     }
+    if s.tab == super::super::ASM_TAB {
+        match name {
+            "Pattern" | "Mirror" | "Copy" => {
+                return "choose a top-level part in the browser first".into();
+            }
+            "Keep Position" | "Return to Design" => {
+                return "drag a part first (Free Move or Free Rotate): these keep or drop where it went"
+                    .into();
+            }
+            _ => {}
+        }
+    }
     match scope {
         "sketch" if s.sketch.is_none() => {
             "start a sketch first: 3D Model > Start Sketch, or double-click a sketch in the browser".into()

@@ -679,6 +679,14 @@ pub fn suppress_op(id: &str, on: bool) -> Op {
 
 /// A component suppressed with the joints and constraints that name it, as Inventor does;
 /// unsuppressed with them.
+/// A top-level part is chosen in the browser: what Pattern, Mirror and Copy act on (the ribbon
+/// draws them off until there is one, saying so).
+pub fn top_chosen(a: &AsmPanel) -> bool {
+    a.selected
+        .as_ref()
+        .is_some_and(|k| a.insts.iter().any(|i| i.path == *k && !i.path.contains('.') && !i.sub))
+}
+
 pub fn suppress_ops(a: &AsmPanel, id: &str, on: bool) -> Vec<Op> {
     let mut ops = vec![suppress_op(id, on)];
     ops.extend(

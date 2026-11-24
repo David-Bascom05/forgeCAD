@@ -86,11 +86,22 @@ fn asm_groups(s: &Shell) -> Option<Vec<Group>> {
                         s.content.open,
                     ),
                 ],
-                vec![
-                    fg("Pattern", "rect", FgCmd::Pattern, up("pattern")),
-                    fg("Mirror", "mirror", FgCmd::Mirror, up("mirror")),
-                    fg("Copy", "subasm", FgCmd::Copy, up("copy")),
-                ],
+                {
+                    // these act on a chosen top-level part: off until there is one, saying so
+                    // (one already open stays on, to close it)
+                    let top = a.is_some_and(super::asmtools::top_chosen);
+                    let chosen = |name, icon, c: FgCmd, on: bool| Tool {
+                        name,
+                        icon,
+                        action: a.filter(|_| top || on).map(|_| Action::Fg(c)),
+                        on,
+                    };
+                    vec![
+                        chosen("Pattern", "rect", FgCmd::Pattern, up("pattern")),
+                        chosen("Mirror", "mirror", FgCmd::Mirror, up("mirror")),
+                        chosen("Copy", "subasm", FgCmd::Copy, up("copy")),
+                    ]
+                },
             ),
             g(
                 "Position",
