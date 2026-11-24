@@ -68,6 +68,7 @@ fn click(h: &mut Headless, name: &str) {
 fn close(h: &mut Headless, yaw: f32, dist: f32) {
     let v = h.gui.view.as_mut().unwrap();
     let mut c = v.nav.camera;
+    c.parallel = false;
     c.target = [0.0, 0.0, 40.0];
     c.yaw = yaw.to_radians();
     c.pitch = 12f32.to_radians();
@@ -124,7 +125,7 @@ fn a_channel_on_a_trubend_in_3d() {
     shot(&mut h, "00-trubend-default-view");
     close(&mut h, 225.0, 4200.0);
     shot(&mut h, "00-trubend-whole-press");
-    close(&mut h, 262.0, 520.0);
+    close(&mut h, 262.0, 560.0);
     for (step, t, name) in [
         (0, 0.3, "01-trubend-approach"),
         (0, 0.6, "02-trubend-bend-1"),

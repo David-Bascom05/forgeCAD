@@ -137,6 +137,7 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
     let t = s.theme;
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(egui::vec2(10.0, 8.0))));
     child.set_clip_rect(r);
+    let mut flat = None;
     egui::ScrollArea::vertical()
         .id_salt("env-bendsim-browser")
         .show(&mut child, |ui| {
@@ -149,10 +150,16 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
             ui.separator();
             super::bendsim::sequence_ui(ui, &mut b);
             ui.separator();
-            super::bendsim::results_ui(ui, &b);
+            flat = super::bendsim::results_ui(ui, &b);
         });
     s.places.push(("env:bendsim:browser".into(), r));
     s.sheet.bend_sim = Some(b);
+    // the flat pattern, its bend lines shown, the bend named (picking one line out is a gap)
+    if let Some(bend) = flat {
+        s.sheet.bend_lines = true;
+        s.out.push(Action::EnterEnv(EnvId::FlatPattern));
+        s.status = format!("Flat Pattern: bend {bend}");
+    }
     true
 }
 
@@ -160,7 +167,10 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
 pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
     if let Some(b) = &mut s.sheet.bend_sim {
         b.tick(f64::from(ctx.input(|i| i.stable_dt)).min(0.1));
-        if b.playing {
+        // playing, or moved from outside (the page, the agent): the view has frames to draw
+        let now = (b.step, b.t.to_bits());
+        if b.playing || b.painted != Some(now) {
+            b.painted = Some(now);
             ctx.request_repaint();
         }
     }

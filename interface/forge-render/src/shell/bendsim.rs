@@ -54,6 +54,8 @@ pub struct BendSimUi {
     pub catalog: Option<Result<Catalog, String>>,
     /// The planner found no feasible order: the part's own order is shown, as given.
     pub as_given: bool,
+    /// The step and instant last asked to be drawn.
+    pub painted: Option<(usize, u64)>,
 }
 
 fn dir_of(path: &str) -> Option<std::path::PathBuf> {
@@ -117,6 +119,7 @@ impl BendSimUi {
             path: path.into(),
             catalog: None,
             as_given,
+            painted: None,
         };
         if let Some(p) = b.choice.press.clone() {
             b.table_height = b.catalog().and_then(|c| c.press(&p)).and_then(|r| r.table_height);
@@ -525,13 +528,15 @@ pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
     }
 }
 
-/// The step's results: tooling, gauge, force, springback and every check.
-pub fn results_ui(ui: &mut egui::Ui, st: &BendSimUi) {
+/// The step's results: tooling, gauge, force, springback and every check. Returns the bend's
+/// name when its "flat pattern" link is clicked.
+pub fn results_ui(ui: &mut egui::Ui, st: &BendSimUi) -> Option<String> {
+    let mut flat = None;
     let sim = match &st.sim {
         Ok(s) => s,
         Err(e) => {
             ui.colored_label(look::FAIL, e);
-            return;
+            return None;
         }
     };
     let plan = &sim.plan;
@@ -559,6 +564,9 @@ pub fn results_ui(ui: &mut egui::Ui, st: &BendSimUi) {
             if s.flip { " · flipped" } else { "" },
             if s.setup.rotate { " · end for end" } else { "" }
         ));
+        if ui.link("this bend on the flat pattern").clicked() {
+            flat = Some(names[s.bend].clone());
+        }
         if let (Some(pl), Some(dl)) = (s.punch_length, s.die_length) {
             ui.label(format!("stacks: punch {pl:.0} mm, die {dl:.0} mm"));
         }
@@ -626,6 +634,7 @@ pub fn results_ui(ui: &mut egui::Ui, st: &BendSimUi) {
             ),
         );
     }
+    flat
 }
 
 /// The timeline: every step a block, its stages marked; drag to scrub.

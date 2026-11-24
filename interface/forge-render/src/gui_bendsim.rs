@@ -198,15 +198,11 @@ impl Gui {
             self.bend.names = names;
         }
         if !self.bend.framed {
-            // the working station and the part, not the whole floor
-            let near: Vec<&Body> = bodies
-                .iter()
-                .filter(|x| {
-                    x.look == Look::Sheet || x.name.starts_with("punch:") || x.name.starts_with("die:")
-                })
-                .collect();
+            // the part on the working station, seen along the bed from its near end and a
+            // little in front (the operator's side) and above: the punch, the V and the part's
+            // section in view, the ram and frame behind
             let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
-            for x in near {
+            for x in bodies.iter().filter(|x| x.look == Look::Sheet) {
                 if let Some((a, c)) = x.mesh.bounds() {
                     for k in 0..3 {
                         lo[k] = lo[k].min(a[k]);
@@ -215,14 +211,13 @@ impl Gui {
                 }
             }
             if lo[0] <= hi[0] {
-                let center = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
-                let radius = 0.5 * (0..3).map(|k| (hi[k] - lo[k]).powi(2)).sum::<f32>().sqrt();
-                // from the operator's side (-x), a little to the left and above, as one
-                // stands at a press brake
-                let mut cam = crate::camera::Camera::fit(center, radius);
-                cam.yaw = 252f32.to_radians();
-                cam.pitch = 14f32.to_radians();
-                cam.fit_to(radius * 1.5, v.nav.size.0.max(1), v.nav.size.1.max(1));
+                let center = [0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1]), 40.0];
+                let reach = (hi[0] - lo[0]).max(hi[1] - lo[1]).max(hi[2] - lo[2]);
+                // a perspective eye of its own (the design's may be parallel)
+                let mut cam = crate::camera::Camera::fit(center, reach);
+                cam.yaw = 262f32.to_radians();
+                cam.pitch = 12f32.to_radians();
+                cam.dist = (2.6 * reach).max(450.0);
                 v.nav.jump_to(cam);
             }
             self.bend.framed = true;

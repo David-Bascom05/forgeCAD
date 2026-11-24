@@ -284,13 +284,12 @@ fn loops(r: &Region, h: f64) -> Option<Vec<Vec<Point2>>> {
     Some(out)
 }
 
+/// Points, triangles over them, and the boundary's edges.
+type Tess = (Vec<Point2>, Vec<[u32; 3]>, Vec<(u32, u32)>);
+
 /// A 2D region triangulated (with interior points every `grid`, if any): points, triangles and
 /// boundary edges.
-fn triangulate(
-    r: &Region,
-    h: f64,
-    grid: Option<f64>,
-) -> Option<(Vec<Point2>, Vec<[u32; 3]>, Vec<(u32, u32)>)> {
+fn triangulate(r: &Region, h: f64, grid: Option<f64>) -> Option<Tess> {
     let ls = loops(r, h)?;
     let mut pts = Vec::new();
     let mut idx = Vec::new();
@@ -637,7 +636,7 @@ impl<'a> Scene<'a> {
             let r = Rigid3::about(axis, ang * (1.0 - f));
             let q = r.vec(sub(p, c));
             let hc = h.apply(c);
-            let lift = 150.0 * (dmath::PI * f).sin();
+            let lift = 150.0 * dmath::sin(dmath::PI * f);
             [
                 q[0] + hc[0] + (c[0] - hc[0]) * f,
                 q[1] + hc[1] + (c[1] - hc[1]) * f,
@@ -645,16 +644,16 @@ impl<'a> Scene<'a> {
             ]
         };
         let pcs: Vec<Piece> = ctx.pieces.clone();
-        let meshes: Vec<Option<(Vec<Point2>, Vec<[u32; 3]>, Vec<(u32, u32)>, Strip)>> = self
+        let meshes: Vec<Option<(Tess, Strip)>> = self
             .piece_meshes(k, &ctx)
             .iter()
             .map(|m| {
                 m.as_ref()
-                    .map(|m| (m.pts.clone(), m.tris.clone(), m.edges.clone(), m.strip))
+                    .map(|m| ((m.pts.clone(), m.tris.clone(), m.edges.clone()), m.strip))
             })
             .collect();
         for (i, (pc, pm)) in pcs.iter().zip(meshes).enumerate() {
-            let Some((pts, tris, edges, strip)) = pm else {
+            let Some(((pts, tris, edges), strip)) = pm else {
                 continue;
             };
             let pphi = phi;
@@ -946,13 +945,7 @@ pub fn extrude(sec: &Region, dx: f64, dz: f64, y0: f64, y1: f64) -> Option<Mesh>
     }
     // (x, z) counter-clockwise has normal -y under the right-hand rule with axes x, y, z: fix
     // by checking one triangle
-    if let Some(&[a, b, c]) = m
-        .tri
-        .first()
-        .map(|t| t.map(|v| m.pos[v as usize]))
-        .as_ref()
-        .map(|x| x)
-    {
+    if let Some(&[a, b, c]) = m.tri.first().map(|t| t.map(|v| m.pos[v as usize])).as_ref() {
         let n = cross(
             [(b[0] - a[0]) as f64, (b[1] - a[1]) as f64, (b[2] - a[2]) as f64],
             [(c[0] - a[0]) as f64, (c[1] - a[1]) as f64, (c[2] - a[2]) as f64],
