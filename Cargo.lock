@@ -93,6 +93,7 @@ version = "0.1.0"
 dependencies = [
  "forge-cam",
  "forge-cam-geom",
+ "forge-lang",
  "forge-math",
  "forge-post",
  "forge-tooling",

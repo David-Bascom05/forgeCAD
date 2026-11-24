@@ -25,4 +25,5 @@ pub mod rest;
 pub mod scallop;
 pub mod steep;
 pub mod strategy;
+pub mod surfdrop;
 pub mod waterline;

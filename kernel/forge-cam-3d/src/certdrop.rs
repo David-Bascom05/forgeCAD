@@ -120,49 +120,7 @@ impl DropCutter for CertDrop<'_> {
     }
 
     fn drop_seg(&self, a: [f64; 2], b: [f64; 2]) -> Option<Band> {
-        let da = self.drop(a[0], a[1]);
-        let db = self.drop(b[0], b[1]);
-        let lo = match (da, db) {
-            (None, None) => None,
-            (Some(p), None) | (None, Some(p)) => Some(p.lo),
-            (Some(p), Some(q)) => Some(p.lo.max(q.lo)),
-        };
-        // the upper end: the lowest height, by bisection, at which the level move is proven
-        // clear, above the ends' own bands
-        let start = match (da, db) {
-            (None, None) => f64::NEG_INFINITY,
-            (Some(p), None) | (None, Some(p)) => p.hi,
-            (Some(p), Some(q)) => p.hi.max(q.hi),
-        };
-        let (blo, bhi) = bx(a, b);
-        let ids = self.near(blo, bhi);
-        let mut top = f64::NEG_INFINITY;
-        for &i in &ids {
-            top = top.max(self.faces[i].bbox[2].hi + 1.0);
-        }
-        if ids.is_empty() {
-            return lo.map(|l| Band { lo: l, hi: start });
-        }
-        let mut h = top;
-        let mut l = if start.is_finite() { start } else { top - 1e3 };
-        if self.seg_below(a, b, l) {
-            h = l;
-        } else {
-            let mut k = 0;
-            while h - l > self.tol && k < 60 {
-                let m = 0.5 * (l + h);
-                if self.seg_below(a, b, m) {
-                    h = m;
-                } else {
-                    l = m;
-                }
-                k += 1;
-            }
-        }
-        Some(Band {
-            lo: lo.unwrap_or(f64::NEG_INFINITY),
-            hi: h,
-        })
+        crate::drop::seg_band(self, a, b, self.tol)
     }
 
     fn seg_below(&self, a: [f64; 2], b: [f64; 2], z: f64) -> bool {

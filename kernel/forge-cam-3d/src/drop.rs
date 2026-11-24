@@ -59,6 +59,50 @@ pub trait DropCutter {
     fn extent(&self) -> [[f64; 2]; 2];
 }
 
+/// The band of the maximum CL height along a → b from the trait's own tests: the lower end the
+/// larger of the ends' lower ends (points of the segment); the upper end the lowest height at
+/// which the level move is proven clear (`seg_below`), found by stepping up from the ends' upper
+/// ends and then bisecting to `tol`. None with nothing under the tool at either end.
+pub fn seg_band(dc: &dyn DropCutter, a: [f64; 2], b: [f64; 2], tol: f64) -> Option<Band> {
+    let da = dc.drop(a[0], a[1]);
+    let db = dc.drop(b[0], b[1]);
+    let (lo, start) = match (da, db) {
+        (None, None) => return None,
+        (Some(p), None) | (None, Some(p)) => (p.lo, p.hi),
+        (Some(p), Some(q)) => (p.lo.max(q.lo), p.hi.max(q.hi)),
+    };
+    if dc.seg_below(a, b, start) {
+        return Some(Band { lo, hi: start });
+    }
+    let mut l = start;
+    let mut step = tol.max(1e-6);
+    let mut h = start + step;
+    let mut k = 0;
+    while !dc.seg_below(a, b, h) {
+        l = h;
+        step *= 2.0;
+        h = start + step;
+        k += 1;
+        if k > 60 {
+            return Some(Band {
+                lo,
+                hi: f64::INFINITY,
+            });
+        }
+    }
+    let mut k = 0;
+    while h - l > tol && k < 60 {
+        let m = 0.5 * (l + h);
+        if dc.seg_below(a, b, m) {
+            h = m;
+        } else {
+            l = m;
+        }
+        k += 1;
+    }
+    Some(Band { lo, hi: h })
+}
+
 /// A ball cutter of radius `r` over a union of horizontal planes (each a z over an xy box) and
 /// spheres (centre, radius): exact closed forms. Its CL height over a sphere is
 /// c.z + √((ρ + r)² − d²) − r for xy distance d < ρ + r (the ball's centre is at ρ + r from the

@@ -14,6 +14,7 @@ forge-post = { path = "../forge-post" }
 
 [dev-dependencies]
 forge-tooling = { path = "../forge-tooling" }
+forge-lang = { path = "../../interface/forge-lang" }
 
 [lints]
 workspace = true
