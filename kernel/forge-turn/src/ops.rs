@@ -188,10 +188,21 @@ pub const APPROACH: f64 = 1.0;
 /// A pass's retract, at 45° away from the cut.
 pub const RETRACT: f64 = 0.5;
 
-fn css(t: &TurnTool) -> Spindle {
+/// The G50 top speed when none is asked: the machine's turning spindle's ceiling, or, with no
+/// machine, a generic 3000 rpm.
+pub const DEFAULT_MAX_RPM: f64 = 3000.0;
+
+fn top_rpm(s: &Setup) -> f64 {
+    s.machine
+        .as_ref()
+        .and_then(|m| m.rpm)
+        .map_or(DEFAULT_MAX_RPM, |r| r[1])
+}
+
+fn css(s: &Setup, t: &TurnTool) -> Spindle {
     Spindle::Css {
         vc: t.vc,
-        max_rpm: 3000.0,
+        max_rpm: top_rpm(s),
     }
 }
 
@@ -237,7 +248,7 @@ pub fn face(s: &Setup, tool: &TurnTool, t: u32, z_face: f64, ap: f64) -> Result<
         name: format!("face to z = {z_face}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave: 0.0,
         start,
@@ -396,7 +407,100 @@ pub fn rough(
         name: format!("rough OD, leave {leave}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
+        f: tool.f,
+        leave,
+        start,
+        steps,
+        removal: None,
+    })
+}
+
+/// Roughing up with a left-hand tool: axial passes feeding +z from z_lo (in room already cut, a
+/// neck or groove), at every ap from the bar and at every cylinder of the grown part, each up to
+/// the part grown by the nose radius and leave, or to z_hi, retracting at 45° away from it. For
+/// the stock under a flank that faces the chuck, before `finish_up`. A pass whose start lies
+/// inside the grown part is left out.
+pub fn rough_up(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    leave: f64,
+    ap: f64,
+    z_lo: f64,
+    z_hi: f64,
+) -> Result<OpPath, OpError> {
+    if !(leave >= 0.0) {
+        return Err(OpError::Geometry(format!(
+            "a leave of {leave}: below the part (G1 holds the cutter from P ⊕ B_leave, leave ≥ 0)"
+        )));
+    }
+    if !(tool.kind == Kind::Turn && tool.left) {
+        return Err(OpError::Tool(format!(
+            "roughing up needs a left-hand turning tool, not `{}`",
+            tool.id
+        )));
+    }
+    if !(z_hi > z_lo) {
+        return Err(OpError::Geometry(format!(
+            "from z = {z_lo} up to z = {z_hi}: the end must lie above the start"
+        )));
+    }
+    let re = tool.re;
+    let c = grown(s, re + leave)?;
+    let x_out = s.bar_r + APPROACH + re;
+    let start = [x_out, z_lo];
+    let mut steps = vec![Step::Rapid(start)];
+    let mut xs: Vec<f64> = Vec::new();
+    let mut k = 1;
+    loop {
+        let x = s.bar_r - ap * k as f64 + re;
+        if x - re <= 0.0 {
+            break;
+        }
+        xs.push(x);
+        k += 1;
+    }
+    for sg in &c.segs {
+        if let Seg::Line { a, b } = *sg
+            && a.x == b.x
+            && a.x - re > 0.0
+            && a.x - re < s.bar_r - 1e-6
+        {
+            xs.push(a.x + 1e-7 * (1.0 + a.x.abs()));
+        }
+    }
+    xs.sort_by(|a, b| b.total_cmp(a));
+    xs.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+    for x in xs {
+        let mut zs = Vec::new();
+        for sg in &c.segs {
+            meet_vertical(sg, x, &mut zs);
+        }
+        let above: Vec<f64> = zs.iter().copied().filter(|z| *z > z_lo).collect();
+        // an odd count of crossings above: the start is inside the grown part
+        if above.len() % 2 == 1 {
+            continue;
+        }
+        let z_end = above.iter().copied().fold(f64::INFINITY, f64::min).min(z_hi);
+        if z_end <= z_lo {
+            continue;
+        }
+        // in and back down at feed: the room below (a neck or a groove) is tight against the
+        // band being roughed, with no space for a rapid's clearance
+        steps.push(Step::Feed([x, z_lo]));
+        steps.push(Step::Feed([x, z_end]));
+        steps.push(Step::Feed([x + RETRACT, z_end - RETRACT]));
+        steps.push(Step::Feed([x + RETRACT, z_lo]));
+    }
+    // out of the room at feed too: the column stock (the normal path's superset) cannot hold a
+    // room under an overhang, so a rapid there would be refused against stock that is gone
+    steps.push(Step::Feed(start));
+    Ok(OpPath {
+        name: format!("rough up z {z_lo}..{z_hi}, leave {leave}"),
+        tool: tool.clone(),
+        t,
+        spindle: css(s, tool),
         f: tool.f,
         leave,
         start,
@@ -426,6 +530,12 @@ pub fn bore_rough(
     if tool.kind != Kind::Bore {
         return Err(OpError::Tool(format!(
             "boring needs a boring bar, not `{}`",
+            tool.id
+        )));
+    }
+    if tool.left {
+        return Err(OpError::Tool(format!(
+            "`{}` is a left-hand bar: it feeds +z, not toward the chuck",
             tool.id
         )));
     }
@@ -480,7 +590,7 @@ pub fn bore_rough(
         name: format!("rough bore, leave {leave}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave,
         start,
@@ -655,7 +765,7 @@ pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Resu
         name: format!("finish {}, leave {leave}", if inside { "bore" } else { "OD" }),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave,
         start,
@@ -779,7 +889,7 @@ pub fn finish_up(
         name: format!("finish up z {z_lo}..{z_hi}, leave {leave}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave,
         start,
@@ -829,7 +939,7 @@ pub fn groove(s: &Setup, tool: &TurnTool, t: u32, z0: f64, z1: f64, rho: f64) ->
         name: format!("groove z {z0}..{z1} to radius {rho}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave: 0.0,
         start,
@@ -867,7 +977,7 @@ pub fn part_off(s: &Setup, tool: &TurnTool, t: u32, z_back: f64) -> Result<OpPat
         t,
         spindle: Spindle::Css {
             vc: tool.vc,
-            max_rpm: 2000.0,
+            max_rpm: top_rpm(s).min(2000.0),
         },
         f: tool.f,
         leave: 0.0,
@@ -999,7 +1109,7 @@ pub fn id_groove(
         name: format!("ID groove z {z0}..{z1} to radius {rho}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave: 0.0,
         start,
@@ -1560,18 +1670,23 @@ fn certify_with(
                     at: op.start,
                 })
             };
-            if op.t == 0 || op.t > m.stations {
-                refuse(format!("station {} on a turret of {}", op.t, m.stations));
+            // a value the definition leaves unknown is not checked (listed in rep.g5)
+            if let Some(n) = m.stations
+                && (op.t == 0 || op.t > n)
+            {
+                refuse(format!("station {} on a turret of {n}", op.t));
             }
-            match op.spindle {
-                Spindle::Css { max_rpm, .. } if max_rpm > m.rpm[1] => refuse(format!(
-                    "a top speed of {max_rpm} rpm over the spindle's {}",
-                    m.rpm[1]
-                )),
-                Spindle::Rpm(r) if r < m.rpm[0] || r > m.rpm[1] => {
-                    refuse(format!("{r} rpm outside the spindle's {:?}", m.rpm))
+            if let Some(rpm) = m.rpm {
+                match op.spindle {
+                    Spindle::Css { max_rpm, .. } if max_rpm > rpm[1] => refuse(format!(
+                        "a top speed of {max_rpm} rpm over the spindle's {}",
+                        rpm[1]
+                    )),
+                    Spindle::Rpm(r) if r < rpm[0] || r > rpm[1] => {
+                        refuse(format!("{r} rpm outside the spindle's {rpm:?}"))
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
             if let Some(p) = &s.place {
                 offsets = p.tools.iter().find(|(t, _)| *t == op.t).map(|x| x.1);
@@ -1617,7 +1732,9 @@ fn certify_with(
                         tlo[1].add(Ival::pt(z0)).add(Ival::pt(off[1])).lo,
                         thi[1].add(Ival::pt(z0)).add(Ival::pt(off[1])).hi,
                     ];
-                    if jx[0] < m.x[0] || jx[1] > m.x[1] || jz[0] < m.z[0] || jz[1] > m.z[1] {
+                    let out =
+                        |j: [f64; 2], r: Option<[f64; 2]>| r.is_some_and(|r| j[0] < r[0] || j[1] > r[1]);
+                    if out(jx, m.x) || out(jz, m.z) {
                         rep.refusals.push(Refusal {
                             op: oi,
                             step: si,
@@ -1735,7 +1852,8 @@ fn certify_with(
         }
         if let (Some(m), None) = (&s.machine, offsets)
             && span[0] <= span[1]
-            && (span[1] - span[0] > m.x[1] - m.x[0] || span[3] - span[2] > m.z[1] - m.z[0])
+            && (m.x.is_some_and(|x| span[1] - span[0] > x[1] - x[0])
+                || m.z.is_some_and(|z| span[3] - span[2] > z[1] - z[0]))
         {
             rep.refusals.push(Refusal {
                 op: oi,
@@ -1756,8 +1874,32 @@ fn certify_with(
         }
     }
     rep.g5 = match (&s.machine, &s.place) {
-        (Some(_), Some(_)) => "full".into(),
-        (Some(_), None) => "except G5 (no placement: the spans only)".into(),
+        (Some(m), place) => {
+            // the definition's unknown values: their checks were not made
+            let unknown: Vec<&str> = [
+                (m.x.is_none(), "X travel"),
+                (m.z.is_none(), "Z travel"),
+                (m.rpm.is_none(), "spindle speed range"),
+                (m.stations.is_none(), "turret stations"),
+            ]
+            .iter()
+            .filter(|(u, _)| *u)
+            .map(|(_, w)| *w)
+            .collect();
+            match (place, unknown.is_empty()) {
+                (Some(_), true) => "full".into(),
+                (None, true) => "except G5 (no placement: the spans only)".into(),
+                (p, false) => format!(
+                    "except G5 ({}not checked, unknown in the machine's definition: {})",
+                    if p.is_none() {
+                        "no placement: the spans only; "
+                    } else {
+                        ""
+                    },
+                    unknown.join(", ")
+                ),
+            }
+        }
         (None, _) => "no machine".into(),
     };
     let StockModel::Exact(stock_region) = stock_model else {

@@ -77,7 +77,6 @@ forge-machine = { path = "../../kernel/forge-machine" }
 # writer, levels and check, and the part-in-envelope check
 forge-machine-builder = { path = "../forge-machine-builder" }
 forge-machine-lang = { path = "../forge-machine-lang" }
-forge-tooling = { path = "../../kernel/forge-tooling" }
 forge-tooling-builder = { path = "../forge-tooling-builder" }
 forge-library = { path = "../forge-library" }
 png = "=0.18.1"
