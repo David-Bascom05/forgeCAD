@@ -23,6 +23,8 @@ pub struct HoleInfo {
     /// A counterbore (d, depth) or countersink (d, included angle in degrees).
     pub counterbore: Option<(f64, f64)>,
     pub countersink: Option<(f64, f64)>,
+    /// The ISO 286 hole class the part gives a plain hole (`fit: "H7"`): it is reamed.
+    pub class: Option<&'static str>,
 }
 
 /// Every hole feature of an evaluation, in statement order.
@@ -70,6 +72,7 @@ pub fn hole_infos(ev: &forge_lang::eval::Eval) -> Vec<HoleInfo> {
                 forge_model::Head::Countersink { diameter, angle } => Some((diameter, angle.to_degrees())),
                 _ => None,
             },
+            class: ev.hole_fits.get(&f.id).copied(),
         });
     }
     out

@@ -171,6 +171,7 @@ scope).
 | not-names | `interface/forge-lang/src/harness.rs::CSV_COLUMNS` | | wire-list CSV columns | not a namespace |
 | not-names | `interface/forge-lang/src/harness.rs::PLAIN` | | harness library CSV columns | not a namespace |
 | not-names | `interface/forge-lang/src/holes.rs::HOLE_ARGS` | | keyword arguments of `hole` | not a namespace |
+| not-names | `interface/forge-lang/src/holes.rs::HOLE_CLASSES` | | the ISO 286 hole classes `hole(.., fit:)` takes on a plain hole (string values, recorded for CAM's ream; no geometry) | not a namespace |
 | not-names | `interface/forge-lang/src/holes.rs::THREAD_FORMS` | | keyword arguments of `thread` | not a namespace |
 | not-names | `interface/forge-lang/src/media.rs::FONT_KINDS` | | file extensions | not a namespace |
 | not-names | `interface/forge-lang/src/media.rs::SOLID_KINDS` | | file extensions | not a namespace |
