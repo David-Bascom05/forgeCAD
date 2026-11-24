@@ -93,7 +93,9 @@ reached from the page are covered by the twiggy check above, not by the lint.
 - Fix: the distance kept in units of the near plane's (`p.z / near`, i.e. `1 / depth`: bounded,
   scale-free; the passes compare it only relatively, 1%), `ao_apply_fs` compares the same.
   Where it worked before, the frame is the same (max difference 1 level in the page, 4 natively).
-- Shots: `shots/ao-80mm-before.png`, `shots/ao-80mm-after.png`.
+- Shots: `shots/ao-80mm-before.png`, `shots/ao-80mm-after.png`, `shots/cover-before.png`,
+  `shots/cover-after.png`. Confirmed by CAM-UI (black flange), MACHINE-BUILDER (machine bodies),
+  ENVIRONMENTS/UX-LEAD (thermoform cover.fg 2242 -> 0 black samples, conic boss.fg 2214 -> 0).
 - Test: `interface/forge-render/web/tests/shade.cjs` (30, 80 and 400 mm boxes: old build "the
   80 mm box drawn dark: mean 0.0, 1400 of 1400 black"; new: all shaded).
 
@@ -195,6 +197,13 @@ Measured with `tools/ui-hunt/perf.cjs` (headless Chromium, SwiftShader WebGPU, 4
 - Other numbers (after): open small 0.5 s, rack 2.5 s (threaded) / 16 s single-threaded (longest
   main-thread task 1.4 s single, 123 ms threaded; native: 8 s on 4 threads, 26 s on 1); orbit
   ~20 ms per input event before pacing, adapter-bound after; click to frame 5-25 ms.
+
+## forge-render's full cargo test (lavapipe), ui/bughunt-2
+
+All pass but five, and the same five fail on main 4846170a (none mine): ribbon tips "no tip for
+tools,Machine Builder"; cam_ui `post_process_shows_the_program_and_writes_it`; camsim's three
+flange tests; glyphs "drawn as boxes: '▸' shell/cam/mod.rs, '└' shell/machine.rs" (the same
+list on main: this branch's new strings add none).
 
 ## Open (reported, not fixed here)
 
