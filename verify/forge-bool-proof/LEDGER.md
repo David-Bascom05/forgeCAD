@@ -94,6 +94,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 |---|---|---|---|---|
 | 1a.where | `whereR`, `whereF` | FLAT-SITES | open | — |
 | 1a.classify | `classify_spec`: Ok w ⇒ w = whereR ⟦b⟧ p | FLAT-SITES | open | — |
+| 1a.rays | classify's and point_in_face's degenerate rays: `plane_ray_crossings`' zero denominator (a ray parallel to a line edge), non-finite hit, hit within the margin of an edge's end, `conic_ray`'s tangency, `classify`'s Touching hit, and the uv-polygon fallback after all three planar rays are undecided | FLAT-SITES | open: **no corpus evidence** (coverage-2026-11-23 group 4: none of these branches ran in the gate parts, bench parts or fuzz): the proof must cover them. Unit tests now drive them (classify.rs `degenerate_rays`: each curve case of `plane_ray_crossings`, and 60 star faces with a vertex on every planar ray, checked against the exact even-odd answer); the non-finite hit is still unreached | classify.rs tests |
 | 1a.total | `classify_total_flat`: never refuses on flat bodies | FLAT-SITES | open | — |
 | 1a.pif | `point_in_face_spec`: Ok w ⇒ w = whereF ⟦f⟧ p | FLAT-SITES | open | — |
 | 1a.foot | `foot`, `foot_on`; per probe site, foot ∈ relInterior region | FLAT-SITES | open | — |
@@ -127,7 +128,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | C.unify | unify's curved decisions | CURVED-SITES | open | — |
 | C.poles | poles and seams (`sphere_nearest`'s pole rule, periodic seams) | CURVED-SITES | open | — |
 | G12 | the `decide_once` feature becomes the fallback branch | FALLBACK | open | — |
-| G13 | `face_point`'s unchecked inward step | FLAT-SITES | open | — |
+| G13 | `face_point`'s unchecked inward step | FLAT-SITES | open (GAP, not shipped by decision): the probe is not inside its face by construction (a face narrower than the step puts it off; 1 planar and 6 curved of 6,675 probes on the gate parts and fuzz 1–40). A runtime check sound by argument (first edge a line or a circle wider than the step, every other boundary use's box apart from the step or its carrier provably missed; else `point_in_face`) cost +0.035% on plate seq, over the band; curved faces' `point_in_face` check +1.7% total. Kept for reference on proof/flat-sites-g13 (#43, closed). The class half is proven (`where_const`, FlatSites/G13.lean) | — |
 | G14 | trim_in's box-only accept | FLAT-SITES | proven (hyp: D4's cut completeness, `Sorted`) | verify/forge-curved/ForgeCurved/G14.lean `kept_iff`, `extra_not_end`, `edge_cut_not_kept` |
 | G15 | the stretch whose midpoint is exactly on ∂f_k | FLAT-SITES | open | — |
 | M.ct | forge-geom `meet::intersect`, cylinder × torus (`Form::Poly4`): its events from a sampled discriminant, which lost one of two loops on fuzz295 f69 (a wrong `Ok`) | FALLBACK (fix), CURVED-SITES (#7, certified isolation) | interim fix (PR proof/fix-torus-loops): a root-count scan where the discriminant flags double roots; NOT provably complete (a loop narrower than one sample can be lost): UNKNOWN | kernel/forge-geom/src/meet_tests.rs `thin_torus_on_a_wide_cylinder_both_loops` |
