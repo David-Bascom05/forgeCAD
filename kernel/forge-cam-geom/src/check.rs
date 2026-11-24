@@ -679,12 +679,30 @@ impl Move {
                 // ccw in xy iff the frame is right-handed (x × y = +z) and t increases
                 let up = x[0] * y[1] - x[1] * y[0] > 0.0;
                 let ccw = up == (t1 > t0);
-                let _ = r;
+                let (a, b) = ([e0[0].mid(), e0[1].mid()], [e1[0].mid(), e1[1].mid()]);
+                // the closed forms take arcs proven strictly under a half turn in their sense
+                // (cross(a − c, b − c) of the sign, in intervals: DistArc.lean); a vanishing arc
+                // (a near-tangent corner's, ~1e-17 rad) is not provably so: no planar form, the
+                // branch and bound takes it
+                let (ua, ub) = (
+                    [
+                        Ival::pt(a[0]).sub(Ival::pt(c[0])),
+                        Ival::pt(a[1]).sub(Ival::pt(c[1])),
+                    ],
+                    [
+                        Ival::pt(b[0]).sub(Ival::pt(c[0])),
+                        Ival::pt(b[1]).sub(Ival::pt(c[1])),
+                    ],
+                );
+                let cr = ua[0].mul(ub[1]).sub(ua[1].mul(ub[0]));
+                if !(if ccw { cr.lo > 0.0 } else { cr.hi < 0.0 }) {
+                    return None;
+                }
                 Some(Planar::Arc {
                     c: [c[0], c[1]],
                     r,
-                    a: [e0[0].mid(), e0[1].mid()],
-                    b: [e1[0].mid(), e1[1].mid()],
+                    a,
+                    b,
                     ccw,
                     z: c[2],
                 })
