@@ -191,6 +191,9 @@ pub struct Gui {
     /// The Machine Builder's scene (`gui_machine.rs`).
     pub mach: gui_machine::MachHost,
     pub ctx: egui::Context,
+    /// The UI audit's (tests/ui_audit): when `Some`, each frame's shapes are kept here, the text
+    /// and where it was clipped, for its judge to read. `None` (always, in the app) costs nothing.
+    pub audit_shapes: Option<Vec<egui::epaint::ClippedShape>>,
     /// The Agent tab's backend and its turns (`gui_agent.rs`).
     pub agent: gui_agent::AgentHost,
     /// The agent's app tools' view steps and driven joints (`gui_apptools.rs`).
@@ -349,6 +352,7 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            audit_shapes: None,
             photo: None,
             recording: None,
             studio: None,
@@ -1383,6 +1387,9 @@ impl Gui {
         self.sync_tab();
         let shell = &mut self.shell;
         let mut output = self.ctx.run_ui(raw, |ui| shell.ui(ui));
+        if let Some(a) = &mut self.audit_shapes {
+            a.clone_from(&output.shapes);
+        }
         self.asm_drag_cursor(&mut output.platform_output);
         self.sync_selection();
         self.pixels_per_point = output.pixels_per_point;

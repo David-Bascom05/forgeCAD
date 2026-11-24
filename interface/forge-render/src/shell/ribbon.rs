@@ -632,6 +632,21 @@ impl Shell {
             .collect()
     }
 
+    /// The same with whether each is live (drawn on: an action, and a document where it needs
+    /// one): the UI audit's registry of what there is to click (tests/ui_audit).
+    pub fn ribbon_live(&self) -> Vec<(&'static str, &'static str, bool)> {
+        groups(self)
+            .iter()
+            .flat_map(|g| {
+                g.big
+                    .iter()
+                    .chain(&g.small)
+                    .chain(&g.icons)
+                    .map(move |x| (g.name, x.name, x.action.is_some() && !self.needs_document(x)))
+            })
+            .collect()
+    }
+
     pub(super) fn ribbon(&mut self, ui: &mut Ui, w: f32) {
         let t = self.theme;
         let y = TITLE_H + TABS_H;
