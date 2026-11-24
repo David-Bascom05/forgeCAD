@@ -128,10 +128,12 @@ fn the_panel_docks_in_an_environments_properties() {
     let ctx = egui::Context::default();
     let host = |h: &mut Headless| {
         let mut drawn = false;
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
             let r = egui::Rect::from_min_size(egui::pos2(1000.0, 100.0), egui::vec2(340.0, 700.0));
             drawn = h.gui.shell.camsim_properties(ui, r);
         });
+        // this test's own context: its font atlas is never uploaded (debug builds check)
+        out.textures_delta.clear();
         drawn
     };
     assert!(host(&mut h), "a simulation to host");
