@@ -82,7 +82,7 @@ impl Environment for Manufacture {
         let sheet = s.cam.as_ref().is_some_and(|w| w.op_dlg.is_some() || w.setup_dlg.is_some());
         let sim = s.camsim.is_some();
         // the sheet on top (most of the height while one is open), the simulation under it
-        let split = if sheet && sim { r.top() + r.height() * 0.62 } else if sheet { r.bottom() } else { r.top() };
+        let split = if sheet && sim { r.top() + r.height() * 0.8 } else if sheet { r.bottom() } else { r.top() };
         if let Some(w) = &mut s.cam {
             w.dock = sheet.then(|| Rect::from_min_max(r.min, egui::pos2(r.right(), split)));
         }

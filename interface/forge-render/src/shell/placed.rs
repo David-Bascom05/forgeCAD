@@ -76,11 +76,15 @@ impl Placed for Host<'_> {
                     .show(ctx, |ui| {
                         ui.set_width(r.width());
                         ui.set_max_height(r.height());
+                        // nothing past the rect (what is under it, a section below, keeps its clicks)
+                        ui.set_clip_rect(r);
+                        // the frame's own margins and stroke are inside the rect too
+                        let m = frame.total_margin().sum().y;
                         frame
                             .show(ui, |ui| {
                                 egui::ScrollArea::vertical()
                                     .id_salt(id.with("scroll"))
-                                    .max_height(r.height() - 4.0)
+                                    .max_height((r.height() - m - 2.0).max(40.0))
                                     .auto_shrink([false, true])
                                     .show(ui, |ui| {
                                         sizing = ui.is_sizing_pass();
