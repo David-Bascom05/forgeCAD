@@ -213,7 +213,10 @@ fn a_users_model_is_kept_in_their_library_placed_drawn_and_checked() {
         let sp = m2.split.as_ref().unwrap();
         assert_eq!(sp.parts.len(), 2);
         let (lo, hi) = sp.parts[0].bounds;
-        assert!((hi[0] - lo[0] - 36.0 * 25.4).abs() < 1e-6);
+        // in the units its size read as (inches against this machine's envelope, or as drawn
+        // when the machine's bodies make that ambiguous): 36 of them across
+        let scale = m2.models[i].scale;
+        assert!((hi[0] - lo[0] - 36.0 * scale).abs() < 1e-6, "{scale}");
         assert!(sp.count_line().starts_with("2 parts"), "{}", sp.count_line());
     }
     // in the view: the dialog's first row under the pointer, its part lit
@@ -285,7 +288,8 @@ fn a_users_model_is_kept_in_their_library_placed_drawn_and_checked() {
     let msg = m2.apply_split().unwrap();
     assert!(msg.contains("table") && msg.contains("head"), "{msg}");
     assert_eq!(m2.models.len(), 2, "the table's earlier model is replaced");
-    assert!(m2.models.iter().all(|x| x.body.is_some() && x.scale == 25.4));
+    let scale = m2.models[0].scale;
+    assert!(m2.models.iter().all(|x| x.body.is_some() && x.scale == scale));
     assert!(!kept.join("VF2_table.stl").exists());
     m2.models.clear();
     m2.models_changed();
