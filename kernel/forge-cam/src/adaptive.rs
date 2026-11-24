@@ -511,7 +511,7 @@ pub fn adaptive(
             let (sn, cs) = dmath::sin_cos(prm.sweep.to_radians());
             [cs, sn]
         };
-        let left_area = |f: &Field| -> f64 {
+        let left_area = |f: &Field, d: f64| -> f64 {
             let (lo, hi) = (ip.min, ip.max);
             let h = f.map.h;
             let mut a = 0.0;
@@ -521,7 +521,7 @@ pub fn adaptive(
                 while x <= hi[0] {
                     // (material within a radius of the region's edge is the rings' and the wall
                     // pass's to take)
-                    if f.material(x, y, z) && edge_dist(&f.allowed, x, y) > 4.0 * f.r && f.ok(x, y) {
+                    if f.material(x, y, z) && edge_dist(&f.allowed, x, y) > d && f.ok(x, y) {
                         a += h * h;
                     }
                     x += h;
@@ -539,8 +539,11 @@ pub fn adaptive(
         let mut entries = 0usize;
         macro_rules! next_sweep {
             () => {{
-                let left_far = left_area(&f) > 10.0 * f.r * f.r;
-                if left_far && dir_k >= 3 && crumbs_now {
+                let left_far = left_area(&f, 4.0 * f.r) > 10.0 * f.r * f.r;
+                // with crumbs taken back, any material more than a radius from the walls (beyond
+                // the cleanup rings' reach) sends the level round again with every pass kept
+                let left_near = crumbs_now && dir_k >= 3 && left_area(&f, f.r) > f.r * f.r;
+                if (left_far || left_near) && dir_k >= 3 && crumbs_now {
                     // every direction tried while crumbs were taken back, material still far
                     // from the walls: the sweeps again with every pass kept (complete first)
                     crumbs_now = false;
@@ -1090,6 +1093,26 @@ pub fn adaptive(
             let k0 = mv.len();
             fit_pass(&pts, f.r, feed.0, &mut mv);
             pass_ranges.push((k0, mv.len()));
+            if std::env::var_os("FORGE_ADAPTIVE_DIAG").is_some() {
+                let mut a = pts[0];
+                let mut ls = Vec::new();
+                for m in &mv[k0..] {
+                    let (to, l) = match *m {
+                        PMove::Arc { to, c, cw, .. } => (to, arc_len(a, to, c, cw)),
+                        PMove::Line { to, .. } => {
+                            (to, ((to[0] - a[0]).powi(2) + (to[1] - a[1]).powi(2)).sqrt())
+                        }
+                        _ => continue,
+                    };
+                    ls.push(format!(
+                        "{}{:.1}",
+                        if matches!(m, PMove::Arc { .. }) { "a" } else { "l" },
+                        l
+                    ));
+                    a = to;
+                }
+                eprintln!("pass {} steps: {}", pts.len() - 1, ls.join(" "));
+            }
             // the pass as cut, for a link back along it
             hist.1.extend_from_slice(&mv[k0..]);
             at = Some(if keep > 0 { pass[keep - 1] } else { target });
@@ -1125,7 +1148,7 @@ pub fn adaptive(
         }
         // every sweep has stopped: material left far from the walls (the wall pass and rings
         // take what is nearer) is reported, never left silently
-        let left = left_area(&f);
+        let left = left_area(&f, 4.0 * f.r);
         if left > 10.0 * f.r * f.r {
             notes.push(format!(
                 "adaptive: at z {z:.3} the passes left {left:.0} mm² uncut away from the walls \
@@ -1476,7 +1499,16 @@ pub fn adaptive(
             } else if (to[2] - at[2]).abs() > 1e-9 {
                 "vertical/helix"
             } else {
-                "link/other"
+                match m {
+                    PMove::Line {
+                        phase: Phase::Link, ..
+                    } => "link line",
+                    PMove::Line {
+                        phase: Phase::Cut, ..
+                    } => "cut line (other)",
+                    PMove::Arc { .. } => "arc (other)",
+                    _ => "other",
+                }
             };
             let e = cnt.entry(what).or_default();
             e.0 += 1;
