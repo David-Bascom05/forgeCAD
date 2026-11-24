@@ -594,6 +594,26 @@ impl Run {
         }
     }
 
+    /// The cycle time of these ops on the machine's timeline (forge-cam-quality): the
+    /// guaranteed lower bound `t_min` and the estimate `t_scurve`, shown together, never the
+    /// estimate alone; None while not timed (no quality, or no program posts them).
+    pub fn cycle<'a>(&self, ops: impl IntoIterator<Item = &'a str>) -> Option<(f64, f64)> {
+        let q = self.quality.as_ref()?;
+        let (mut lo, mut est) = (0.0, 0.0);
+        for n in ops {
+            if let Some(o) = q.ops.iter().find(|o| o.name == n) {
+                lo += o.t_min;
+                est += o.t_scurve;
+            }
+        }
+        (lo > 0.0).then_some((lo, est.max(lo)))
+    }
+
+    /// A setup's cycle time (as `cycle`).
+    pub fn setup_cycle(&self, setup: &str) -> Option<(f64, f64)> {
+        self.cycle(self.ops.iter().filter(|o| o.setup == setup).map(|o| o.name.as_str()))
+    }
+
     /// An op's quality, if measured.
     pub fn quality(&self, op: &str) -> Option<&forge_cam_quality::OpQ> {
         self.quality.as_ref()?.ops.iter().find(|q| q.name == op)
@@ -668,6 +688,12 @@ pub fn stale(ran: &[Stmt], now: &[Stmt]) -> Vec<String> {
         }
     }
     out
+}
+
+/// A machine timeline's cycle time: the lower bound `t_min` and the estimate `t_scurve`
+/// (forge-machine counts tool changes, dwells, indexes and pallet changes in both).
+pub fn timeline_cycle(tl: &forge_machine::sim::Timeline) -> (f64, f64) {
+    (tl.t_min, tl.t_scurve.max(tl.t_min))
 }
 
 #[cfg(test)]
@@ -813,3 +839,4 @@ mod tests {
         assert_eq!(r.certification, "refused");
     }
 }
+

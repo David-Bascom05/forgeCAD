@@ -8,6 +8,8 @@ fn main() {
     let mut cfg = Config::default();
     let mut out: Option<PathBuf> = None;
     let mut files: Vec<PathBuf> = Vec::new();
+    // (file, its stock box: min, max)
+    #[allow(clippy::type_complexity)]
     let mut ngc: Vec<(PathBuf, ([f64; 3], [f64; 3]))> = Vec::new();
     let mut flutes: Option<u32> = None;
     let mut part: Option<(PathBuf, [f64; 3])> = None;
