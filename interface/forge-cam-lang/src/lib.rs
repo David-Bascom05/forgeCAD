@@ -5351,6 +5351,8 @@ impl Cam {
                             get_num(a, "leave", Some(0.0))?,
                             ramp,
                             Some(&sbox),
+                            // the roughing rings' convex corners blended (ops::blend_corners)
+                            true,
                         )
                         .map_err(|e| format!("{e:?}"))?;
                         if stepover <= r
