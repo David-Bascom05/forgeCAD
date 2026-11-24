@@ -533,7 +533,7 @@ fn agent_gate(q: &Request, c: &Config, a: &crate::agent_bridge::Agent) -> Result
         return Err(error(403, "a request from another origin"));
     }
     let given = q.header("authorization").and_then(|v| v.strip_prefix("Bearer "));
-    if !given.is_some_and(|g| a.who(g) != crate::agent_bridge::Who::Nobody) {
+    if !given.is_some_and(|g| a.who(g, from(q, c)) != crate::agent_bridge::Who::Nobody) {
         return Err(error(
             401,
             "the agent's token is needed (Authorization: Bearer T, from the URL forgecad web printed)",
@@ -621,6 +621,12 @@ fn allowed_other<'a>(q: &'a Request, c: &Config) -> Option<&'a str> {
     (!own_origin(q, o) && c.origins.iter().any(|a| a.eq_ignore_ascii_case(o))).then_some(o)
 }
 
+/// Whose page a request is from, as a remembered device is bound to it: the allowed other
+/// origin, or this server's own page.
+fn from<'a>(q: &'a Request, c: &Config) -> &'a str {
+    allowed_other(q, c).unwrap_or("this page")
+}
+
 /// What an allowed other origin's page may read of an answer.
 fn cors(r: &mut Response, o: &str) {
     r.headers.push(("Access-Control-Allow-Origin", o.to_string()));
@@ -698,7 +704,7 @@ fn answer_inner(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
             return error(403, "a request from another origin");
         };
         let given = q.header("authorization").and_then(|v| v.strip_prefix("Bearer "));
-        if !given.is_some_and(|g| a.who(g) != crate::agent_bridge::Who::Nobody) {
+        if !given.is_some_and(|g| a.who(g, from(q, c)) != crate::agent_bridge::Who::Nobody) {
             return error(
                 401,
                 "the agent's token is needed (Authorization: Bearer T, from the link forgecad web printed)",
@@ -720,7 +726,7 @@ fn answer_inner(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
             .unwrap_or_default();
         // a remembered device: made only with the pairing's token; forgotten by its own
         match name {
-            "remember" if a.who(given) != crate::agent_bridge::Who::Pairing => {
+            "remember" if a.who(given, from(q, c)) != crate::agent_bridge::Who::Pairing => {
                 return error(
                     403,
                     "a device is remembered from the link forgecad web printed, not from another remembered device",
@@ -728,10 +734,7 @@ fn answer_inner(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
             }
             "remember" => {
                 let days = crate::agent_bridge::DEVICE_DAYS;
-                let (token, until) = a.remember(std::time::Duration::from_secs(days * 86400));
-                eprintln!(
-                    "forgecad web: a page asked to remember this device for {days} days (type `forget` here to forget every one)"
-                );
+                let (token, until) = a.remember(std::time::Duration::from_secs(days * 86400), from(q, c));
                 return json(
                     200,
                     Json::obj(vec![("token", token.into()), ("expires", (until as f64).into())]),

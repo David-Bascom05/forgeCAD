@@ -58,7 +58,7 @@ pub struct Agent {
     pub cross_origin: bool,
     /// Devices a page asked to be remembered on: their tokens and when each lapses. In memory
     /// only: never on disk, gone with the bridge.
-    devices: Mutex<Vec<(String, SystemTime)>>,
+    devices: Mutex<Vec<Device>>,
     s: Mutex<Session>,
     cv: Condvar,
 }
@@ -92,6 +92,17 @@ pub type Answer = (u16, Json);
 
 /// How long a remembered device stays paired.
 pub const DEVICE_DAYS: u64 = 7;
+/// The most devices remembered at once: a new one past it forgets the oldest.
+pub const DEVICES: usize = 4;
+
+/// A remembered device: its token, when it lapses, the page's origin that asked for it (only
+/// that origin's page may use it), and whether it's been used yet (the first use is said).
+struct Device {
+    token: String,
+    until: SystemTime,
+    origin: String,
+    used: bool,
+}
 
 /// Who an agent call comes from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -183,29 +194,47 @@ impl Agent {
 
     /// Who a token is: the pairing (the link printed at start), a remembered device still in
     /// date, or no one.
-    pub fn who(&self, given: &str) -> Who {
+    /// `from`: the page's origin asking (`ORIGIN`, or "this page" for this server's own).
+    pub fn who(&self, given: &str, from: &str) -> Who {
         if same(given, &self.token) {
             return Who::Pairing;
         }
         let now = SystemTime::now();
         let mut d = self.devices.lock().unwrap_or_else(|e| e.into_inner());
-        d.retain(|(_, until)| *until > now);
-        if d.iter().any(|(t, _)| same(given, t)) {
-            Who::Device
-        } else {
-            Who::Nobody
+        d.retain(|x| x.until > now);
+        // a device's token works only from the origin that asked for it
+        match d.iter_mut().find(|x| same(given, &x.token) && x.origin == from) {
+            Some(x) => {
+                if !x.used {
+                    x.used = true;
+                    eprintln!("forgecad web: a remembered device was used for the first time, from {from}");
+                }
+                Who::Device
+            }
+            None => Who::Nobody,
         }
     }
 
     /// A device token for a page that asked to be remembered, good for `for_` (`DEVICE_DAYS`):
     /// the token and when it lapses (seconds since the epoch). Only the pairing may ask.
-    pub fn remember(&self, for_: Duration) -> (String, u64) {
+    pub fn remember(&self, for_: Duration, from: &str) -> (String, u64) {
         let until = SystemTime::now() + for_;
         let t = crate::web::random_token();
-        self.devices
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push((t.clone(), until));
+        let mut d = self.devices.lock().unwrap_or_else(|e| e.into_inner());
+        // at most `DEVICES`: the oldest goes
+        while d.len() >= DEVICES {
+            d.remove(0);
+        }
+        d.push(Device {
+            token: t.clone(),
+            until,
+            origin: from.to_string(),
+            used: false,
+        });
+        drop(d);
+        eprintln!(
+            "forgecad web: a device was remembered for {from}, for 7 days (type `forget` here to forget every one)"
+        );
         let secs = until
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_or(0, |d| d.as_secs());
@@ -217,7 +246,7 @@ impl Agent {
         let mut d = self.devices.lock().unwrap_or_else(|e| e.into_inner());
         let before = d.len();
         match which {
-            Some(t) => d.retain(|(x, _)| !same(x, t)),
+            Some(t) => d.retain(|x| !same(&x.token, t)),
             None => d.clear(),
         }
         before - d.len()
@@ -640,17 +669,12 @@ impl Agent {
                             && s.get("mode").and_then(Json::str) == Some("bypassPermissions"))
                 })
                 .map(|s| match s {
-                    Json::Obj(kv) => Json::Obj(
-                        kv.into_iter()
-                            .map(|(k, v)| {
-                                if k == "destination" {
-                                    (k, "session".into())
-                                } else {
-                                    (k, v)
-                                }
-                            })
-                            .collect(),
-                    ),
+                    // the session, whatever it said (or if it said nothing)
+                    Json::Obj(mut kv) => {
+                        kv.retain(|(k, _)| k != "destination");
+                        kv.push(("destination".into(), "session".into()));
+                        Json::Obj(kv)
+                    }
                     other => other,
                 })
                 .collect(),
@@ -866,16 +890,35 @@ mod tests {
     #[test]
     fn a_device_lapses_when_its_time_is_up() {
         let a = Agent::new(PathBuf::from("/nowhere"), "p".repeat(32), false, false);
-        assert_eq!(a.who(&"p".repeat(32)), Who::Pairing);
-        let (week, _) = a.remember(Duration::from_secs(7 * 86400));
-        let (brief, _) = a.remember(Duration::from_millis(30));
-        assert_eq!(a.who(&week), Who::Device);
-        assert_eq!(a.who(&brief), Who::Device);
+        assert_eq!(a.who(&"p".repeat(32), "this page"), Who::Pairing);
+        let (week, _) = a.remember(Duration::from_secs(7 * 86400), "this page");
+        let (brief, _) = a.remember(Duration::from_millis(30), "this page");
+        assert_eq!(a.who(&week, "this page"), Who::Device);
+        assert_eq!(a.who(&brief, "this page"), Who::Device);
         std::thread::sleep(Duration::from_millis(60));
-        assert_eq!(a.who(&brief), Who::Nobody, "lapsed");
-        assert_eq!(a.who(&week), Who::Device);
-        assert_eq!(a.who("x"), Who::Nobody);
+        assert_eq!(a.who(&brief, "this page"), Who::Nobody, "lapsed");
+        assert_eq!(a.who(&week, "this page"), Who::Device);
+        assert_eq!(a.who("x", "this page"), Who::Nobody);
         assert_eq!(a.forget(None), 1, "the lapsed one already gone");
+    }
+
+    #[test]
+    fn a_device_is_its_origins_only_and_four_at_most() {
+        let a = Agent::new(PathBuf::from("/nowhere"), "p".repeat(32), true, false);
+        let day = Duration::from_secs(86400);
+        let (hosted, _) = a.remember(day, "https://forge.example");
+        // its token, from another origin (or this server's own page): no one
+        assert_eq!(a.who(&hosted, "https://forge.example"), Who::Device);
+        assert_eq!(a.who(&hosted, "https://other.example"), Who::Nobody);
+        assert_eq!(a.who(&hosted, "this page"), Who::Nobody);
+        // a fifth forgets the oldest
+        let more: Vec<String> = (0..4).map(|_| a.remember(day, "this page").0).collect();
+        assert_eq!(
+            a.who(&hosted, "https://forge.example"),
+            Who::Nobody,
+            "the oldest, gone"
+        );
+        assert!(more.iter().all(|t| a.who(t, "this page") == Who::Device));
     }
 
     #[test]
@@ -883,14 +926,15 @@ mod tests {
         let sugg = Json::parse(
             r#"[{"type":"addRules","rules":[{"toolName":"Bash"}],"behavior":"allow","destination":"userSettings"},
                 {"type":"setMode","mode":"bypassPermissions","destination":"localSettings"},
-                {"type":"setMode","mode":"acceptEdits","destination":"session"}]"#,
+                {"type":"setMode","mode":"acceptEdits","destination":"session"},
+                {"type":"addRules","rules":[{"toolName":"Read"}],"behavior":"allow"}]"#,
         )
         .unwrap();
         let other = Agent::new(PathBuf::from("/nowhere"), "p".repeat(32), true, false);
         let Json::Arr(got) = other.always(sugg.clone()) else {
             panic!()
         };
-        assert_eq!(got.len(), 2, "no bypass: {got:?}");
+        assert_eq!(got.len(), 3, "no bypass: {got:?}");
         assert!(
             got.iter()
                 .all(|s| s.get("destination").and_then(Json::str) == Some("session"))
@@ -910,7 +954,7 @@ mod tests {
         let Json::Arr(got) = allowed.always(sugg) else {
             panic!()
         };
-        assert_eq!(got.len(), 3);
+        assert_eq!(got.len(), 4);
         assert!(
             got.iter()
                 .all(|s| s.get("destination").and_then(Json::str) == Some("session"))

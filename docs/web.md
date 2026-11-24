@@ -95,7 +95,9 @@ Or tick **Remember this device for 7 days** in the Agent tab's Claude Code menu:
 gives this browser a token of its own, kept for this page for a week, and a reload pairs again
 by itself. Untick it to forget it (here and at the bridge), or type `forget` in the terminal
 where `forgecad web` runs to forget every remembered device. They're held in memory only, so
-restarting `forgecad web` forgets them too.
+restarting `forgecad web` forgets them too. A device's token works only from the page's origin
+that asked for it; at most 4 are remembered (a fifth forgets the oldest); and the terminal says
+when one is remembered and when each is first used.
 Every agent call needs the token, a localhost Host and the page's own origin; `--agent` is
 served on loopback only (from another machine, use an SSH tunnel). The page never names a
 program, argument, folder or prompt: only messages, answers, a mode (Ask first, Accept edits,
