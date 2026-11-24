@@ -122,6 +122,21 @@ impl Gui {
                 size.0, size.1
             ));
         }
+        // what the live frame draws of the scene itself (gui.rs): the see-through bodies, faded
+        // as they are this frame (the bend simulation's, else Compare's), and the faces' colours;
+        // not the marks, grid or sketches, which are the window's
+        let ghosts: &[crate::render::FaceColour] = if self.bend.showing() {
+            &self.bend.ghosts
+        } else {
+            &self.vers.ghosts
+        };
+        let colours: &[crate::render::FaceColour] = if self.bend.showing() {
+            &[]
+        } else if self.vers.colours.is_empty() {
+            &self.fg_marks_was.1
+        } else {
+            &self.vers.colours
+        };
         let Some(v) = &mut self.view else {
             return Err("nothing in view".into());
         };
@@ -130,6 +145,8 @@ impl Gui {
         v.renderer.resize(size);
         let overlay = Overlay {
             cube: overlays.then(|| (v.nav.cube_place(), None)),
+            face_ghosts: ghosts,
+            face_colours: colours,
             ..Overlay::default()
         };
         let camera = camera.unwrap_or(v.nav.camera);

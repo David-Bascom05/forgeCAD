@@ -170,3 +170,90 @@ fn a_turntable_records_an_mp4_with_ffmpeg() {
         }
     }
 }
+
+const CHANNEL: &str = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\nshared h = 30\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (100, 200))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+right = flange(base.edge(plan.outline[1]), height: h)\n\
+left = flange(base.edge(plan.outline[3]), height: h)\n";
+
+/// A photo's pixels, taken now with the view's camera as it is.
+fn photo_px(h: &mut Headless, dir: &std::path::Path, name: &str) -> Vec<u8> {
+    let c = &mut h.gui.shell.capture;
+    c.photo_size = Size::Custom(480, 270);
+    c.exact_view = true;
+    c.out = Some(dir.join(name).to_string_lossy().into_owned());
+    c.asks.push(Capture::Photo);
+    until_done(h);
+    let mut r = png::Decoder::new(std::io::Cursor::new(std::fs::read(dir.join(name)).unwrap()))
+        .read_info()
+        .unwrap();
+    let mut px = vec![0; r.output_buffer_size().unwrap()];
+    r.next_frame(&mut px).unwrap();
+    px
+}
+
+/// What the bend simulation sees through (a body between the eye and the bend) is in a photo or
+/// a recording as it is in the view: blended at the opacity set, not left out (it was: the
+/// capture's pass drew no ghosts) and not solid. The same instant three times, at opacity 0
+/// (as if left out), 1 (solid) and 0.35: where the first two differ, the body is; there the
+/// third must differ from both.
+#[test]
+fn a_see_through_body_is_blended_in_a_photo() {
+    let Ok(mut h) = Headless::new((1400.0, 860.0), 1.0) else {
+        eprintln!("skipped: no GPU");
+        return;
+    };
+    h.step();
+    let dir = scratch("ghost");
+    let f = dir.join("channel.fg");
+    std::fs::write(&f, CHANNEL).unwrap();
+    h.gui.open(f.to_str().unwrap());
+    assert!(h.until(settled), "never built: {}", h.gui.shell.status);
+    h.gui.env_asked = Some("bendsim".into());
+    for _ in 0..20 {
+        h.step();
+    }
+    // bend 2 forming: the punch stands between the eye and the bend
+    for k in 0..=200u32 {
+        let tl = h
+            .gui
+            .shell
+            .env_timeline()
+            .expect("the bend simulation's timeline");
+        tl.seek(&mut h.gui.shell, k as f64 / 30.0);
+        h.step();
+    }
+    let mut at = |h: &mut Headless, opacity: f32, name: &str| {
+        h.gui.shell.sheet.bend_sim.as_mut().unwrap().opacity = opacity;
+        for _ in 0..20 {
+            h.step();
+        }
+        assert!(!h.gui.bend.ghosts.is_empty(), "nothing seen through");
+        photo_px(h, &dir, name)
+    };
+    let gone = at(&mut h, 0.0, "gone.png");
+    let solid = at(&mut h, 1.0, "solid.png");
+    let ghost = at(&mut h, 0.35, "ghost.png");
+    let differ = |a: &[u8], b: &[u8]| a.iter().zip(b).map(|(x, y)| x.abs_diff(*y)).max().unwrap() > 8;
+    let body: Vec<usize> = (0..gone.len() / 4)
+        .filter(|&i| differ(&gone[i * 4..i * 4 + 3], &solid[i * 4..i * 4 + 3]))
+        .collect();
+    assert!(
+        body.len() > 480 * 270 / 500,
+        "the seen-through body covers {} px",
+        body.len()
+    );
+    let blended = body
+        .iter()
+        .filter(|&&i| {
+            let g = &ghost[i * 4..i * 4 + 3];
+            differ(g, &gone[i * 4..i * 4 + 3]) && differ(g, &solid[i * 4..i * 4 + 3])
+        })
+        .count();
+    assert!(
+        blended * 10 >= body.len() * 9,
+        "{blended} of {} px of the body blended",
+        body.len()
+    );
+}
