@@ -35,3 +35,16 @@ and a badge for where it came from (§6: `from assembly`, `yours`, `unknown`).
 The panel's edits are edits of the robot document's text (`forge_lang::robot::edit`), each
 undoable; Apply to assembly writes the source's joint (`SetArg`, one undo step there) and drops
 the robot's override; Export URDF writes NAME_urdf/ beside the document.
+
+## In the browser
+
+From `interface/forge-render/web/tests/robot_shots.cjs` (the web build, Chromium with WebGPU on
+SwiftShader, 1600×1000), the same document:
+
+    cd interface/forge-render && NO_MESHES=1 sh web/build.sh OUT && FORGE_WEB_SHOTS=../../research/export/urdf-ui node web/tests/robot_shots.cjs OUT
+
+- `web-01-robot-open.png`, `web-02-robot-joint.png` (the elbow selected from the browser),
+  `web-03-robot-link.png` (the forearm): the same layout, sheet, badges, named axis arrows and
+  status line as the native pictures.
+- The parts draw black there: every assembly does in this browser set-up, the robot or not
+  (`arm2.fg` opened alone draws the same; a single part draws lit). Not the Robot environment's.

@@ -37,8 +37,8 @@ s.listen(0, async () => {
         await t.until(p, (s) => s.places.some((x) => x.name === c), c);
         await p.evaluate((x) => window.forgecad.fc.app_click(x, 0, false), c);
       }
-      const st = await t.until(p, ready, name, 60000);
-      await t.frames(p, st, 3);
+      // (an idle app draws no frames of its own: the read-back draws the one kept)
+      await t.until(p, ready, name, 60000);
       const f = await t.pixels(p);
       console.log(`${name} ${t.shot(name, f)} ${((Date.now() - T0) / 1000).toFixed(1)}s`);
     } catch (e) {
