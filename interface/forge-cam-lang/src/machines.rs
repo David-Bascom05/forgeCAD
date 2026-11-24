@@ -231,8 +231,16 @@ pub fn conflict(lib: &Library, name: &str) -> Option<String> {
         });
         return (!same).then(|| {
             format!(
-                "machine `{name}` is defined {} times in the tool libraries (the user's, the project's) and they differ; keep one",
-                all.len()
+                "machine `{name}` is defined {} times in the tool libraries and they differ ({}); keep one",
+                all.len(),
+                all.iter()
+                    .map(|m| if m.source.is_empty() {
+                        "no source given".to_string()
+                    } else {
+                        m.source.clone()
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ")
             )
         });
     };

@@ -176,7 +176,7 @@ fn two_differing_copies_of_an_unrecorded_machine_are_refused() {
     assert!(!cam.ok);
     let e = cam.errors.join("\n");
     assert!(
-        e.contains("`my-vmc` is defined 2 times") && e.contains("differ"),
+        e.contains("`my-vmc` is defined 2 times") && e.contains("differ (mine; mine)"),
         "{e}"
     );
 }
