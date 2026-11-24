@@ -255,29 +255,58 @@ fn const_lists() -> Vec<String> {
     out
 }
 
-/// The words a document's first statement is tested against: `n == "WORD"` on a line that reads
-/// the program's first statement, and an assembly's `l == "WORD"` first line.
-fn headers() -> BTreeSet<String> {
+/// The words a document's first statement is tested against, with the file that tests it:
+/// `n == "WORD"` on a line matching `ExprKind::Name(n)`, the program's `.first()` read on it or
+/// on one of the three lines before (rustfmt breaks a `matches!`), and an assembly's
+/// `l == "WORD"` first line.
+fn headers() -> BTreeSet<(String, String)> {
     let mut files = vec![];
     rs_files(&root().join("interface"), &mut files);
+    // the code that reads documents, not its tests
+    files.retain(|f| f.components().any(|c| c.as_os_str() == "src"));
     let mut out = BTreeSet::new();
     for f in files {
         let src = std::fs::read_to_string(&f).unwrap_or_default();
-        for line in src.lines() {
-            if line.contains(".first()")
+        let lines: Vec<&str> = src.lines().collect();
+        for (k, line) in lines.iter().enumerate() {
+            let first = lines[k.saturating_sub(3)..=k]
+                .iter()
+                .any(|l| l.contains(".first()"));
+            if first
                 && line.contains("ExprKind::Name(n)")
                 && let Some(i) = line.find("n == \"")
             {
-                out.extend(quoted(&line[i..]).into_iter().take(1));
+                out.extend(quoted(&line[i..]).into_iter().take(1).map(|w| (w, rel_of(&f))));
             }
             if line.contains(".is_some_and(|l| l == \"") {
                 let i = line.find("l == \"").unwrap();
-                out.extend(quoted(&line[i..]).into_iter().take(1));
+                out.extend(quoted(&line[i..]).into_iter().take(1).map(|w| (w, rel_of(&f))));
             }
         }
     }
     out
 }
+
+/// The files that recognise a document by its header, each a kind whose built-ins are families
+/// above (or that only reads the header). A new kind of document (a new file here) must register
+/// its families and its header's row.
+const HEADER_FILES: &[(&str, &str)] = &[
+    ("interface/forge-cam-lang/src/lib.rs", "families cam, cam-expr"),
+    ("interface/forge-turn-lang/src/lib.rs", "families turn, turn-expr"),
+    ("interface/forge-lang/src/drawing/doc.rs", "family drawing"),
+    (
+        "interface/forge-lang/src/asm.rs",
+        "families assembly, assembly-part, assembly-kinds",
+    ),
+    (
+        "interface/forge-lang/src/edit_ops.rs",
+        "reads the header only: Rename's `calls_closed`",
+    ),
+    (
+        "interface/forge-render/src/shell/fg.rs",
+        "reads the header only: `is_assembly` (families assembly*)",
+    ),
+];
 
 /// The CamelCase arms of a `from_json`.
 fn json_ops(rel: &str, marker: &str) -> Vec<String> {
@@ -426,13 +455,37 @@ fn every_header_keyword_and_op_has_its_row() {
             .map(|r| r.item.clone())
             .collect()
     };
-    diff("headers", &headers(), &doc("header"), &mut errs);
+    let words: BTreeSet<String> = headers().into_iter().map(|h| h.0).collect();
+    diff("headers", &words, &doc("header"), &mut errs);
     let kw: BTreeSet<String> = syntax::KEYWORDS.iter().map(|s| s.to_string()).collect();
     match row(&rows, "keywords", "syntax::KEYWORDS") {
         None => errs.push("no `keywords` row".into()),
         Some(r) => diff("keywords", &kw, &r.names.iter().cloned().collect(), &mut errs),
     }
     diff("edit ops", &edit_ops(), &doc("op"), &mut errs);
+    fail(errs);
+}
+
+/// Every file that recognises a document by its header is a known kind: a new one (a `robot`
+/// document, say) must put its built-ins in `families()`, its file in `HEADER_FILES`, and its rows
+/// in COVERAGE.md.
+#[test]
+fn every_document_kind_is_registered() {
+    let known: BTreeSet<&str> = HEADER_FILES.iter().map(|h| h.0).collect();
+    let mut errs = vec![];
+    for (w, f) in headers() {
+        if !known.contains(f.as_str()) {
+            errs.push(format!(
+                "`{f}` recognises `{w}` documents: a new kind; its built-ins as families (`families()`), the file in `HEADER_FILES`, its rows"
+            ));
+        }
+    }
+    let found: BTreeSet<String> = headers().into_iter().map(|h| h.1).collect();
+    for k in &known {
+        if !found.contains(*k) {
+            errs.push(format!("`{k}` in HEADER_FILES recognises no header now"));
+        }
+    }
     fail(errs);
 }
 
@@ -502,11 +555,8 @@ fn lean_family_lists_are_the_rusts() {
     assert_eq!(lean(&src, "turnExpr"), rust("turn-expr"), "Families.turnExpr");
     assert_eq!(lean(&weld, "weld"), rust("weld"), "Builtins.weld");
     let hd: BTreeSet<String> = lean(&src, "headers");
-    assert!(
-        hd.is_subset(&headers()),
-        "Families.headers: {hd:?} vs {:?}",
-        headers()
-    );
+    let words: BTreeSet<String> = headers().into_iter().map(|h| h.0).collect();
+    assert!(hd.is_subset(&words), "Families.headers: {hd:?} vs {words:?}");
 }
 
 /// No family's name is a keyword: each lexes as an identifier (`Families.families_not_keywords`
