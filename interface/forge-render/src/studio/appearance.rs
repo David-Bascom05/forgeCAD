@@ -36,6 +36,16 @@ impl Appearance {
         self.sources.iter().find(|s| s.0 == key).map_or(&self.source, |s| &s.1)
     }
 
+    /// What the normal 3D view (raster, not traced) can show of it today: a placement's tint, base
+    /// colour (linear) and metalness, as `scene::Placement::tint` takes it. Other environments
+    /// (bend simulation, the machine views) set their placements' tints from this.
+    pub fn viewport_tint(&self, colour: Option<[u8; 3]>) -> [f32; 4] {
+        let b = self.bsdf_for(colour);
+        // glass shows as its tint, a little grey so it reads as a solid
+        let base = if b.transmission > 0.0 { b.base * 0.8 } else { b.base };
+        [base.x, base.y, base.z, b.metal]
+    }
+
     /// The BSDF, in a part's colour (sRGB bytes) when this appearance takes it.
     pub fn bsdf_for(&self, colour: Option<[u8; 3]>) -> Bsdf {
         let mut b = self.bsdf;
@@ -314,6 +324,16 @@ mod tests {
         let abs = forge_material::find("ABS").unwrap();
         let b = apps.resolve(None, Some(abs), Some([255, 0, 0]));
         assert_eq!(b.base, v3(1.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn other_environments_find_theirs_by_id() {
+        let apps = Appearances::builtin();
+        let tool = apps.find("tool-steel-ground").expect("BEND-SIM's tooling");
+        assert_eq!(tool.name, "Tool steel, ground");
+        let paint = apps.find("paint-machine-gloss").expect("BEND-SIM's frames");
+        assert_eq!(paint.viewport_tint(Some([0, 255, 0]))[1], 1.0);
+        assert_eq!(tool.viewport_tint(None)[3], 1.0);
     }
 
     #[test]

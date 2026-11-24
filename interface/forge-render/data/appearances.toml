@@ -451,3 +451,30 @@ ior = 1.5
 source = "Stand-in: a light grey seamless paper sweep"
 kind_base = "stand-in"
 kind_rough = "stand-in"
+
+# ---------------------------------------------------------------- machines (asked by BEND-SIM)
+
+[[appearance]]
+name = "Tool steel, ground"
+family = "metal"
+base = [0.53, 0.513, 0.494]
+metal = 1
+tint = [0.612, 0.541, 0.422]
+rough = 0.18
+source = "[PB] Iron: tool steel's optical constants taken as iron's (as carbon steel's above)"
+kind_rough = "stand-in"
+note = "A ground press-brake punch or die face; for BEND-SIM's tooling (id tool-steel-ground)."
+
+[[appearance]]
+name = "Paint, machine gloss"
+family = "paint"
+base = [0.5, 0.5, 0.5]
+rough = 0.35
+ior = 1.5
+coat = 1
+coat_rough = 0.08
+part_colour = true
+source = "Stand-in: an enamelled machine frame under a light clear; the colour is the part's"
+kind_rough = "stand-in"
+kind_coat_rough = "stand-in"
+note = "For BEND-SIM's frames (id paint-machine-gloss); pass the frame's colour."
