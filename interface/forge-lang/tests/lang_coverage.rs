@@ -563,7 +563,20 @@ fn every_argument_list_has_its_rows() {
                     ));
                 }
                 let ops: BTreeSet<String> = lists.iter().map(|l| l.0.clone()).collect();
-                let missing: Vec<_> = names.difference(&ops).collect();
+                // a built-in without a list yet: its `args` row says GAP (any keyword is taken,
+                // unchecked), and the row goes when the list comes
+                let mut missing = vec![];
+                for op in names.difference(&ops) {
+                    match row(&rows, "args", &format!("{kind}::{op}")) {
+                        Some(r) if r.lean.contains("GAP") && r.names.is_empty() => {}
+                        _ => missing.push(op),
+                    }
+                }
+                for op in ops.intersection(&names) {
+                    if row(&rows, "args", &format!("{kind}::{op}")).is_some_and(|r| r.lean.contains("GAP no list")) {
+                        errs.push(format!("`{kind}::{op}` has a list now: its row's names are the list's, not GAP"));
+                    }
+                }
                 let extra: Vec<_> = ops.difference(&names).collect();
                 if !missing.is_empty() || !extra.is_empty() {
                     errs.push(format!(

@@ -77,7 +77,8 @@ documents in `examples/machined/` included. Headers that are names add no syntax
 A built-in's arguments are its keywords and positionals (`#0`, `#1`, ..). Where a crate lists
 them (`pub const ARGS: &[(&str, &[&str])]`, the list `named` checks and CAM-UI's dialog schema is
 checked against), each built-in has a row here whose names are its list's; until then the kind
-has one row, a GAP. The check: `FamiliesArgs.checkArgs_ok_iff` (a call is taken exactly when every
+has one row, a GAP; a built-in of a listed kind that has no entry yet has a row saying `GAP no
+list` (its keywords unchecked) until its entry lands. The check: `FamiliesArgs.checkArgs_ok_iff` (a call is taken exactly when every
 argument it gives is listed), `FamiliesArgs.misspelled_refused`, and for an extension
 `FamiliesArgs.checkArgs_extend` (a built-in that gains arguments takes every call it took) and
 `FamiliesArgs.checkArgs_new`.
@@ -105,6 +106,12 @@ argument it gives is listed), `FamiliesArgs.misspelled_refused`, and for an exte
 | args | `cam::tube` | `d`, `id`, `margin`, `below` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
 | args | `cam::solid` | `#0` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
 | args | `cam::vise` | `#0`, `across`, `clamp`, `parallel`, `clearance` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
+| args | `cam::parallel` | | `interface/forge-cam-lang/src/lib.rs` `ARGS`: no entry yet, so `check_args` takes any keyword (a misspelled one is ignored) | GAP no list: CAM-3AXIS's ARGS entry (with the 3D ops' `step`/`sample` naming settled); then this row's names are the list's and `FamiliesArgs.misspelled_refused` covers it |
+| args | `cam::waterline` | | `interface/forge-cam-lang/src/lib.rs` `ARGS`: no entry yet, so `check_args` takes any keyword (a misspelled one is ignored) | GAP no list: CAM-3AXIS's ARGS entry (with the 3D ops' `step`/`sample` naming settled); then this row's names are the list's and `FamiliesArgs.misspelled_refused` covers it |
+| args | `cam::zlevel` | | `interface/forge-cam-lang/src/lib.rs` `ARGS`: no entry yet, so `check_args` takes any keyword (a misspelled one is ignored) | GAP no list: CAM-3AXIS's ARGS entry (with the 3D ops' `step`/`sample` naming settled); then this row's names are the list's and `FamiliesArgs.misspelled_refused` covers it |
+| args | `cam::pencil` | | `interface/forge-cam-lang/src/lib.rs` `ARGS`: no entry yet, so `check_args` takes any keyword (a misspelled one is ignored) | GAP no list: CAM-3AXIS's ARGS entry (with the 3D ops' `step`/`sample` naming settled); then this row's names are the list's and `FamiliesArgs.misspelled_refused` covers it |
+| args | `cam::scallop` | | `interface/forge-cam-lang/src/lib.rs` `ARGS`: no entry yet, so `check_args` takes any keyword (a misspelled one is ignored) | GAP no list: CAM-3AXIS's ARGS entry (with the 3D ops' `step`/`sample` naming settled); then this row's names are the list's and `FamiliesArgs.misspelled_refused` covers it |
+| args | `cam::rest` | | `interface/forge-cam-lang/src/lib.rs` `ARGS`: no entry yet, so `check_args` takes any keyword (a misspelled one is ignored) | GAP no list: CAM-3AXIS's ARGS entry (with the 3D ops' `step`/`sample` naming settled); then this row's names are the list's and `FamiliesArgs.misspelled_refused` covers it |
 | args | `turn` | | `interface/forge-turn-lang/src/lib.rs` `named_args`: no list yet | GAP: as for `cam`; `FamiliesArgs.misspelled_refused` once a list exists |
 
 ## Edit ops
@@ -158,6 +165,8 @@ scope).
 
 | Kind | Item | Names | Why | Lean |
 |---|---|---|---|---|
+| not-names | `interface/forge-cam-lang/src/toollog.rs::FLAGS` | | the `toollog` command's switches (`--json`, ..), command-line words, not .fg | not a namespace |
+| not-names | `interface/forge-cam-lang/src/toollog.rs::VALUED` | | the `toollog` command's options that take a value (`--tool`, ..), command-line words, not .fg | not a namespace |
 | not-names | `interface/forge-lang/src/anchors.rs::FACE_ROLES` | | members a feature's faces are found by (read after `.`), not names in scope | not a namespace |
 | not-names | `interface/forge-lang/src/asm.rs::METRICS` | | an assembly's `expect` metrics: the word after `expect`, not a name in scope | not a namespace |
 | not-names | `interface/forge-lang/src/asm.rs::PLACES` | | calls that make a file an assembly (`has_components`), a subset of the assembly family | not a namespace |
