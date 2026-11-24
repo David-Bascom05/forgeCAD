@@ -62,8 +62,13 @@ pub struct Policy {
     /// What the bounds may be off by beyond their own rounding (e.g. a lowered face's error):
     /// Clear needs `limit + margin`, Hit `limit - margin`.
     pub margin: f64,
-    /// The most cells popped before the search gives up (Undecided).
+    /// The most cells popped before the search gives up.
     pub budget: usize,
+    /// None: the strict rule (CAM): a cell left at the resolution, or the budget spent, is
+    /// Undecided. `Some(res)`: a stated resolution (the press brake's contract, docs/bendsim.md):
+    /// the search may also end Clear when every bound left is at least `limit + margin - res`,
+    /// checked the same way at every exit (the end, and the budget spent).
+    pub resolution: Option<f64>,
 }
 
 /// The answer.
@@ -147,13 +152,20 @@ pub fn certify<S: Search>(s: &S, root: S::Cell, p: &Policy) -> (Verdict<S::Witne
         }
         spent += 1;
         if spent > p.budget {
-            return (
-                Verdict::Undecided {
-                    lower: f64::NEG_INFINITY,
-                    cells: spent,
-                },
-                spent,
-            );
+            let Some(res) = p.resolution else {
+                return (
+                    Verdict::Undecided {
+                        lower: f64::NEG_INFINITY,
+                        cells: spent,
+                    },
+                    spent,
+                );
+            };
+            // every cell left is at least this cell's bound (least first)
+            if key < lower {
+                lower = key;
+            }
+            return (within(lower, lim_clear, res, p.margin, spent), spent);
         }
         let h = s.holds(&c);
         if h == Holds::Out {
@@ -176,7 +188,7 @@ pub fn certify<S: Search>(s: &S, root: S::Cell, p: &Policy) -> (Verdict<S::Witne
             );
         }
         if s.leaf(&c) {
-            undecided = true;
+            undecided |= p.resolution.is_none();
             if sd.lo < lower {
                 lower = sd.lo;
             }
@@ -190,12 +202,27 @@ pub fn certify<S: Search>(s: &S, root: S::Cell, p: &Policy) -> (Verdict<S::Witne
     if undecided {
         return (Verdict::Undecided { lower, cells: spent }, spent);
     }
+    if let Some(res) = p.resolution {
+        return (within(lower, lim_clear, res, p.margin, spent), spent);
+    }
     (
         Verdict::Clear {
             lower: lower - p.margin,
         },
         spent,
     )
+}
+
+/// Under a stated resolution: Clear when `lower` is within it of the bound to prove, else
+/// Undecided. The one check every exit makes.
+fn within<W>(lower: f64, lim_clear: f64, res: f64, margin: f64, spent: usize) -> Verdict<W> {
+    if lower >= lim_clear - res {
+        Verdict::Clear {
+            lower: lower - margin,
+        }
+    } else {
+        Verdict::Undecided { lower, cells: spent }
+    }
 }
 
 #[cfg(test)]
@@ -246,6 +273,7 @@ mod tests {
             limit,
             margin: 0.0,
             budget: 10_000,
+            resolution: None,
         };
         // the target 2 away: clear of 1, proven
         let (v, _) = certify(&Line { x: 3.0, res: 1e-6 }, (0.0, 1.0), &p(1.0));
@@ -275,6 +303,7 @@ mod tests {
                 limit: 1e-300,
                 margin: 0.0,
                 budget: 5,
+                resolution: None,
             },
         );
         assert_eq!(n, 6);
@@ -285,5 +314,25 @@ mod tests {
                 cells: 6
             }
         );
+    }
+
+    /// Under a stated resolution, a target just under the limit but within it is Clear (with
+    /// its true lower bound reported), one further under is not.
+    #[test]
+    fn a_stated_resolution() {
+        let p = |res| Policy {
+            limit: 0.5,
+            margin: 0.0,
+            budget: 10_000,
+            resolution: Some(res),
+        };
+        let (v, _) = certify(&Line { x: 1.4999, res: 1e-3 }, (0.0, 1.0), &p(1e-3));
+        let Verdict::Clear { lower } = v else {
+            panic!("{v:?}")
+        };
+        assert!(lower <= 0.4999 && lower >= 0.5 - 1e-3, "{lower}");
+        // 0.49 away: beyond the resolution under the limit, so not Clear (a Hit here)
+        let (v, _) = certify(&Line { x: 1.49, res: 1e-3 }, (0.0, 1.0), &p(1e-3));
+        assert!(!matches!(v, Verdict::Clear { .. }), "{v:?}");
     }
 }
