@@ -1035,6 +1035,13 @@ pub fn turning(
     })
 }
 
+/// The peck default and its source: PMPA Craftsman Cribsheet #116, "Twist drills for success"
+/// (D. Wynn, 2023-06-01, https://www.pmpa.org/cribsheet-twist-drills-for-success/): pull-outs
+/// once the hole is deeper than 3 to 4 diameters; pecks of 3.5 D, then 2 D, then about 1 D
+/// (1–1.5 D). A canned peck cycle (G83) takes one Q, so every peck is held at PMPA's 1 D (its
+/// first two pecks are deeper: this errs slow), from a depth of 3 D (the low end of 3–4 D).
+pub const PECK_RULE: &str = "PMPA Cribsheet #116 (pmpa.org, 2023): peck past 3-4 D, 3.5 D / 2 D / 1 D; held at 1 D for every peck (one G83 Q; errs slow), from 3 D";
+
 /// The user's drilling values (all optional).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct DrillAsk {
@@ -1090,7 +1097,7 @@ pub struct DrillResolved {
 /// n = 1000 vc/(π Dc), vf = fn n, Q = Dc fn vc/4 cm³/min, Pc = fn vc Dc kc/240e3 kW,
 /// Mc = Pc 30e3/(π n) N·m, kc at the chip fz sin κr (fz = fn/z; the page prints the exponent as
 /// "^mc", read here as Kienzle's −mc, as its milling page has it). Peck: the user's, else
-/// forgeCAD's rule (one diameter per peck past a 3 D depth; no source behind it, labelled).
+/// `PECK_RULE` (PMPA's schedule, held at its 1 D).
 /// None when no speed or feed is known from any layer.
 #[allow(clippy::too_many_arguments)]
 pub fn drilling(
@@ -1245,13 +1252,8 @@ pub fn drilling(
     }
     let peck = match ask.peck {
         Some(p) => Val::new(p, "mm", Source::User, ""),
-        None if depth > 3.0 * d => Val::new(
-            d,
-            "mm",
-            Source::Default,
-            "forgeCAD's rule: one diameter per peck past a 3 D depth; no data behind it",
-        ),
-        None => Val::new(0.0, "mm", Source::Default, "no pecking to 3 D (forgeCAD's rule)"),
+        None if depth > 3.0 * d => Val::new(d, "mm", Source::Default, PECK_RULE),
+        None => Val::new(0.0, "mm", Source::Default, PECK_RULE),
     };
     let (power, power_hi) = match kz.as_ref() {
         Some(g) => {
