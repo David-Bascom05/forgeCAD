@@ -89,6 +89,8 @@ pub struct BendSimUi {
     pub frame: Option<Framing>,
     /// The panel's page shown.
     pub pane: Pane,
+    /// The Axes switch as it was on entry (put back on Finish).
+    pub axes_was: Option<bool>,
     /// Follow bend: each new step framed afresh (off: the eye is the user's).
     pub follow: bool,
     /// See-through: what stands between the eye and the bend being made drawn as a ghost, at
@@ -202,6 +204,7 @@ impl BendSimUi {
             frame: None,
             settle: 0,
             pane: Pane::Program,
+            axes_was: None,
             follow: false,
             see_through: true,
             opacity: 0.25,
@@ -263,6 +266,7 @@ impl BendSimUi {
             frame: None,
             settle: 0,
             pane: Pane::Program,
+            axes_was: None,
             follow: false,
             see_through: true,
             opacity: 0.25,
@@ -1200,7 +1204,7 @@ pub fn sequence_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
                 }
                 ui.horizontal(|ui| {
                     let mut r = rotated[i];
-                    if ui.checkbox(&mut r, "end for end").changed() {
+                    if ui.checkbox(&mut r, "Turn end for end").changed() {
                         op = Some(Op::SetArg {
                             id: ids[i].clone(),
                             arg: "rotate".into(),
@@ -1383,11 +1387,19 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     .color(t.ink),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(
-                    egui::RichText::new(if ok { "passes" } else { "fails" })
-                        .small()
-                        .color(if ok { look::PASS } else { look::FAIL }),
-                );
+                let c = if ok { look::PASS } else { look::FAIL };
+                egui::Frame::new()
+                    .fill(c.gamma_multiply(0.18))
+                    .stroke(egui::Stroke::new(1.0, c))
+                    .corner_radius(9.0)
+                    .inner_margin(egui::Margin::symmetric(8, 2))
+                    .show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(if ok { "Passes" } else { "Fails" })
+                                .color(c)
+                                .size(12.0),
+                        );
+                    });
             });
         });
         ui.label(
@@ -1562,54 +1574,64 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     } else {
                         (look::FAIL, "fail")
                     };
-                    ui.label(egui::RichText::new(cards::rule_label(c.rule)).color(t.ink))
+                    // what each row is about, in words, on hover: why it could not run, or what
+                    // it was against
+                    let why = match (&c.unchecked, &c.tool) {
+                        (Some(u), _) => format!("not checked: {u} unknown"),
+                        (None, Some(x)) => format!("against {}", cards::body_words(cat, x)),
+                        _ => String::new(),
+                    };
+                    let hover = |r: egui::Response| if why.is_empty() { r } else { r.on_hover_text(&why) };
+                    hover(ui.label(egui::RichText::new(cards::rule_label(c.rule)).color(t.ink)))
                         .on_hover_text(c.rule.word());
-                    ui.label(egui::RichText::new(verdict).color(col));
-                    ui.label(match &c.unchecked {
-                        Some(_) => "—".to_string(),
-                        None => format!(
-                            "{} {} {}",
-                            cards::rule_value(c.rule, c.value),
-                            if c.at_most { "≤" } else { "≥" },
-                            cards::rule_value(c.rule, c.limit)
-                        ),
-                    });
+                    // a failure with a place: its verdict locates it (the timeline to its instant,
+                    // the eye on it)
+                    let placed = !c.pass && c.unchecked.is_none() && (c.at.is_some() || c.phi.is_some());
+                    if placed {
+                        let r = ui
+                            .add(
+                                egui::Label::new(
+                                    egui::RichText::new(format!("{verdict} ›")).color(col).underline(),
+                                )
+                                .sense(egui::Sense::click()),
+                            )
+                            .on_hover_text(format!("{why}\nclick: go to the instant and look at it"));
+                        if r.clicked() {
+                            let phimax = s.angle + s.overbend;
+                            let tt = match c.phase {
+                                Some(fb::Phase::Static) => 0.2,
+                                Some(fb::Phase::Approach) => 0.38,
+                                Some(fb::Phase::Return) => 0.84,
+                                _ => {
+                                    0.4 + 0.35 * c.phi.map_or(1.0, |f| (f / phimax.max(1e-9)).clamp(0.0, 1.0))
+                                }
+                            };
+                            locate = Some((tt, c.at));
+                        }
+                    } else {
+                        hover(ui.label(egui::RichText::new(verdict).color(col)));
+                    }
+                    match &c.unchecked {
+                        Some(u) => {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(format!("{u} unknown")).small().color(t.ink2),
+                                )
+                                .wrap(),
+                            );
+                        }
+                        None => {
+                            hover(ui.label(format!(
+                                "{} {} {}",
+                                cards::rule_value(c.rule, c.value),
+                                if c.at_most { "≤" } else { "≥" },
+                                cards::rule_value(c.rule, c.limit)
+                            )));
+                        }
+                    }
                     ui.end_row();
                 }
             });
-        // why a check could not run, and what each failure is against, in words; a failure
-        // with a place can be located (the timeline to its instant, the eye on it)
-        for c in &shown {
-            let why = match (&c.unchecked, &c.tool) {
-                (Some(u), _) => format!("{}: not checked, {u} unknown", cards::rule_label(c.rule)),
-                (None, Some(x)) if !c.pass => {
-                    format!(
-                        "{}: against {}",
-                        cards::rule_label(c.rule),
-                        cards::body_words(cat, x)
-                    )
-                }
-                _ => continue,
-            };
-            ui.add(egui::Label::new(egui::RichText::new(why).small().color(t.ink2)).wrap());
-            if !c.pass
-                && c.unchecked.is_none()
-                && (c.at.is_some() || c.phi.is_some())
-                && ui
-                    .small_button("Locate")
-                    .on_hover_text("go to the instant and look at it")
-                    .clicked()
-            {
-                let phimax = s.angle + s.overbend;
-                let tt = match c.phase {
-                    Some(fb::Phase::Static) => 0.2,
-                    Some(fb::Phase::Approach) => 0.38,
-                    Some(fb::Phase::Return) => 0.84,
-                    _ => 0.4 + 0.35 * c.phi.map_or(1.0, |f| (f / phimax.max(1e-9)).clamp(0.0, 1.0)),
-                };
-                locate = Some((tt, c.at));
-            }
-        }
     }
     ui.add_space(8.0);
     ui.label(
@@ -1691,7 +1713,30 @@ fn transport(ui: &mut egui::Ui, icon: &str, tip: &str) -> egui::Response {
                 );
             }
         }
-        _ => super::icons::draw(&p, at, 16.0, icon, 1.5, ink),
+        // first, step back, step on, last: a triangle and, at an end, a bar
+        _ => {
+            let back = matches!(icon, "first" | "stepback");
+            let tri = |x0: f32, x1: f32| {
+                egui::Shape::convex_polygon(
+                    vec![
+                        at + egui::vec2(x0, 3.0),
+                        at + egui::vec2(x1, 8.0),
+                        at + egui::vec2(x0, 13.0),
+                    ],
+                    ink,
+                    egui::Stroke::NONE,
+                )
+            };
+            p.add(if back { tri(13.0, 5.0) } else { tri(3.0, 11.0) });
+            if matches!(icon, "first" | "last") {
+                let x = if back { 3.0 } else { 11.5 };
+                p.rect_filled(
+                    egui::Rect::from_min_size(at + egui::vec2(x, 3.0), egui::vec2(2.0, 10.0)),
+                    0.5,
+                    ink,
+                );
+            }
+        }
     }
     resp.on_hover_text(tip)
 }
@@ -1700,10 +1745,10 @@ pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
     let n = st.steps();
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
-        if transport(ui, "home", "First bend").clicked() {
+        if transport(ui, "first", "First bend (Home)").clicked() {
             st.go(0);
         }
-        if transport(ui, "backward", "Previous bend (Left arrow)").clicked() {
+        if transport(ui, "stepback", "Previous bend (Left arrow)").clicked() {
             st.go(st.step.saturating_sub(1));
         }
         let (icon, tip) = if st.playing {
@@ -1714,10 +1759,10 @@ pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
         if transport(ui, icon, tip).clicked() {
             st.play();
         }
-        if transport(ui, "forward", "Next bend (Right arrow)").clicked() && n > 0 {
+        if transport(ui, "stepfwd", "Next bend (Right arrow)").clicked() && n > 0 {
             st.go((st.step + 1).min(n - 1));
         }
-        if transport(ui, "end", "Last bend").clicked() && n > 0 {
+        if transport(ui, "last", "Last bend (End)").clicked() && n > 0 {
             st.go(n - 1);
         }
         ui.add_space(10.0);

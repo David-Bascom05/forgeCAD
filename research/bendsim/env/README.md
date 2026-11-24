@@ -30,9 +30,9 @@
   - 10: the view cube's LEFT: down the bend line (the cube is named in the press's frame: LEFT
     and RIGHT along the bed, FRONT the operator's side, BACK the backgauge's; its home the
     framed working zone);
-  - 11: see-through: from the operator's side and above, the part's web and first flange stand
-    between the eye and the second bend and are drawn as ghosts (per body, kept up with the eye;
-    a collision's red is never ghosted).
+  - 11: see-through: from the operator's side and above, the first flange (already bent) stands
+    between the eye and the second bend and is drawn as a ghost (per body, kept up with the eye;
+    never the walls either side of the bend being made, the tools, or a collision's red).
 - `shots/web-*.png`: interface/forge-render/web/tests/bendsim.cjs in Chromium (software WebGPU),
   the wasm32 build (bendsim/env f6763b3a): the same channel on the library's first press with
   its maker's tools, at the start, the first bend and the second; the same layout as native.
@@ -55,6 +55,7 @@
 - The flat-pattern link opens the Flat Pattern with bend lines on and names the bend; it does
   not yet pick that one line out.
 - Livery colours are not in the data: the press is RENDER-STUDIO's neutral machine paint; the
-  bend zone's amber is the panel's annotation colour, not an appearance.
+  bend zone's amber is RENDER-STUDIO's signal colour `highlight-bend`, not a material. A sheet
+  whose material the part does not name is drawn a neutral matte slate (no material claimed).
 - The tool library's "fits" filter uses the rules' own sides (tip angle and radius against
   the sharpest bend, die angle) and the clamping system; open height only where it is checked.

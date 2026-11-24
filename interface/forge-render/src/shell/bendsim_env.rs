@@ -80,14 +80,52 @@ pub(super) fn enter(s: &mut Shell) -> Result<(), String> {
         }
         s.sheet.bend_sim = Some(Box::new(b));
     }
+    // the world's axes cross the whole view at the press's scale (STANDARD.md §2): off while in
+    let axes = s.overlays().axes;
+    if let Some(b) = &mut s.sheet.bend_sim
+        && b.axes_was.is_none()
+    {
+        b.axes_was = Some(axes);
+        s.overlays_mut().axes = false;
+    }
     Ok(())
 }
 
 /// Out of it: play stops, the rest kept.
 pub(super) fn exit(s: &mut Shell) {
+    let mut axes = None;
     if let Some(b) = &mut s.sheet.bend_sim {
         b.playing = false;
+        axes = b.axes_was.take();
     }
+    if let Some(a) = axes {
+        s.overlays_mut().axes = a;
+    }
+}
+
+/// The status bar's line: the machine, how many bends, whether the program is feasible.
+pub(super) fn status(s: &Shell) -> Option<String> {
+    let b = s.sheet.bend_sim.as_deref()?;
+    let sim = b.sim.as_ref().ok()?;
+    let machine = match &b.choice.press {
+        Some(id) => b
+            .catalog
+            .as_ref()
+            .and_then(|c| c.as_ref().ok())
+            .and_then(|c| c.press(id))
+            .map_or(id.clone(), |r| format!("{} {}", r.prov.maker, r.model)),
+        None => "stand-in tooling".into(),
+    };
+    let n = sim.plan.steps.len();
+    Some(format!(
+        "Bend Simulation · {machine} · {n} bend{} · {}",
+        if n == 1 { "" } else { "s" },
+        if sim.plan.feasible {
+            "feasible"
+        } else {
+            "no feasible order"
+        }
+    ))
 }
 
 pub(super) fn groups(s: &Shell) -> Vec<Group> {
@@ -233,15 +271,23 @@ pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
         && !ctx.egui_wants_keyboard_input()
     {
         let n = b.steps();
-        let (space, left, right, f) = ctx.input(|i| {
+        let (space, left, right, f, home, end) = ctx.input(|i| {
             let k = |key| i.key_pressed(key) && i.modifiers.is_none();
             (
                 k(egui::Key::Space),
                 k(egui::Key::ArrowLeft),
                 k(egui::Key::ArrowRight),
                 k(egui::Key::F),
+                k(egui::Key::Home),
+                k(egui::Key::End),
             )
         });
+        if home {
+            b.go(0);
+        }
+        if end {
+            b.go(n.saturating_sub(1));
+        }
         if space {
             b.play();
         }

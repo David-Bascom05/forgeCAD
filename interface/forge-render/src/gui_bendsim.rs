@@ -91,12 +91,19 @@ fn crosses(a: [f32; 3], b: [f32; 3], p: [f32; 3], q: [f32; 3], r: [f32; 3]) -> b
 /// zone itself, the tools, or a body drawn red.
 pub fn see_through(bodies: &[Body], eye: [f32; 3], press: bool) -> Vec<usize> {
     let mut aims: Vec<[f32; 3]> = Vec::new();
-    if let Some((lo, hi)) = bounds(
+    let zone = bounds(
         bodies
             .iter()
             .filter(|x| x.look == Look::BendZone)
             .map(|x| &x.mesh),
-    ) {
+    );
+    // the walls either side of the bend being made are the work itself, not what was bent
+    // before it: a piece touching the zone is never seen through
+    let touches = |m: &Mesh| match (zone, m.bounds()) {
+        (Some((zl, zh)), Some((a, c))) => (0..3).all(|k| a[k] <= zh[k] + 0.5 && c[k] >= zl[k] - 0.5),
+        _ => false,
+    };
+    if let Some((lo, hi)) = zone {
         let mid = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
         aims.push(mid);
         for y in [lo[1], hi[1]] {
@@ -120,7 +127,10 @@ pub fn see_through(bodies: &[Body], eye: [f32; 3], press: bool) -> Vec<usize> {
         .iter()
         .enumerate()
         .filter(|(_, x)| !x.hit)
-        .filter(|(_, x)| x.look == Look::Sheet || (press && matches!(x.look, Look::Frame | Look::Gauge)))
+        .filter(|(_, x)| {
+            (x.look == Look::Sheet && !touches(&x.mesh))
+                || (press && matches!(x.look, Look::Frame | Look::Gauge))
+        })
         .filter(|(_, x)| {
             let m = &x.mesh;
             aims.iter().any(|&aim| {
@@ -194,7 +204,7 @@ fn appearances() -> &'static crate::studio::appearance::Appearances {
 /// A body's tint (linear rgb, metalness) from its appearance (forge_brake::scene::Look's id,
 /// RENDER-STUDIO's library): ground tool steel, machine paint (no maker's livery is in the data:
 /// its neutral default), black-oxide backgauge, concrete floor; the sheet in its forge-material's
-/// appearance, or the panel's part blue when the material is not known; failing bodies red.
+/// appearance, or a neutral matte sheet when the material is not known; failing bodies red.
 pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
     let id = if b.hit {
         "highlight-red"
@@ -207,7 +217,9 @@ pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
         appearances().viewport_tint(Some(id), None, None)
     };
     found.unwrap_or(match b.look {
-        Look::Sheet => [0.07, 0.33, 0.81, 0.35],
+        // no material named: a neutral, matte sheet (not the selection's blue, not a metal
+        // the part was never said to be), apart from the ground steel of the tools
+        Look::Sheet => [0.42, 0.47, 0.53, 0.0],
         Look::Tool => [0.66, 0.67, 0.69, 1.0],
         Look::Frame => [0.46, 0.48, 0.50, 0.15],
         Look::Gauge => [0.16, 0.16, 0.17, 0.6],
