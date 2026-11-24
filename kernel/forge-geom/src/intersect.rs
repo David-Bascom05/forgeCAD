@@ -835,14 +835,13 @@ fn subdivide_pieces(
     // range is kept only where the surface's sign changes across it
     let (mut budget, coarse) = (100_000usize, range.width() / 4096.0);
     let mut leaves: Vec<(f64, f64)> = Vec::new();
-    let mut looked = 0u32;
+    // past the operation's work budget the caller refuses whatever comes back: no search at all
+    // (asked once a search, which is itself bounded below: what ran without end was thousands of
+    // them, on UMC-400's NURBS faces)
+    if crate::budget::over() {
+        stack.clear();
+    }
     while let Some((a, b, lip)) = stack.pop() {
-        // past the operation's work budget the caller refuses whatever comes back: stop (asked
-        // every 256 pieces, so a search that ends soon pays nothing for it)
-        looked = looked.wrapping_add(1);
-        if looked & 255 == 0 && crate::budget::over() {
-            break;
-        }
         let m = 0.5 * (a + b);
         let p = c.eval(m);
         let reach = lip * 0.5 * (b - a) + tol::LINEAR;
