@@ -40,7 +40,7 @@ conclusions.
 | Post/reader dialect coverage | LinuxCNC `nc_files/` (247 programs) + 169 trajectory-planner tests; CAMotics examples (26); cncjs (MIT); UGS arc fixtures | GPL-2+ / GPL-3 / MIT | cncjs **yes**; the rest fetch |
 
 **Not usable, or held:**
-- **Fusion 360 Gallery:** custom licence, non-commercial research only, revocable, no full
+- **Fusion 360 Gallery:** (now decided: fetch-only use, §3) custom licence, non-commercial research only, revocable, no full
   redistribution, and it binds employers. Never store it. Whether forgeCAD's use is allowed is
   **David's decision**.
 - **DeepCAD** states no data licence. **CADParser** has no working link and no licence.
@@ -86,3 +86,50 @@ Myhovych, cncjs (MIT, store), NIST AM artifact (store, CI smoke).
 - It never commits anything.
 - Stored sets go in with their LICENSE and NOTICE files (attribution for CC-BY; acknowledgement
   for NIST).
+
+## 3. Fusion 360 Gallery: what only it gives us, and how we use it (David's decision, 2026-11-24)
+
+**Decision (David, via the coordinator):** use the Fusion 360 Gallery where it has data we can't
+get elsewhere. Keep every file of it OUT of the repository. Commit only our own code and
+aggregate results (counts, pass rates), never models, meshes, labels or per-part derived
+geometry.
+
+**Licence terms** (LICENSE.md at github.com/AutodeskAILab/Fusion360GalleryDataset commit
+1084b881, read 2026-11-24 [R]):
+- **item 1:** use, reproduce and modify "only for non-commercial research purposes";
+- **item 2:** no redistribution of the Dataset in its entirety;
+- **item 3:** portions or modifications only to others who are bound to non-commercial research;
+- **item 4:** no re-identification of creators;
+- **item 9:** Autodesk may terminate the licence or access at any time;
+- **item 11:** if you are employed by a for-profit entity, your employer is bound too.
+
+Our use is research and benchmarking of forgeCAD's import, CAM coverage and certification, as
+decided by David. **Access:** Autodesk's public bucket, linked from the README; no account or
+sign-up [R].
+
+**What it uniquely gives us** (compared with RPTU, MFCAD/MFCAD++, NIST and ABC):
+
+| subset | content [R] | unique for forgeCAD? | verdict |
+|---|---|---|---|
+| **Segmentation, extended STEP** (s2.0.1, 506 MB) | 42,912 human-designed parts as STEP (AP214), with a **per-face label of the modelling operation that made the face**: ExtrudeSide/End, **CutSide/CutEnd, Fillet, Chamfer**, RevolveSide/End. Also per-face timeline info (feature id; start, end or side face) | **Yes.** The only large set of *real* parts where every face says whether it was *cut* (pocket and hole walls and floors), filleted or chamfered. MFCAD/MFCAD++ labels are machining features on *synthetic* parts; ABC has no labels; NIST has 11 cases; RPTU has 10. For CAM this is ground truth for: which faces a 2.5D program must reach (Cut*), what feature-aware ops should pick up (Fillet/Chamfer for edge-break and corner-radius tools), and coverage and leftover (G4) statistics on real designs | **fetch** |
+| **Reconstruction** (r1.0.1, 2.1 GB) | 8,625 sketch+extrude construction sequences (JSON, exact curves), with STEP/SMT/OBJ at each step | **Partly.** Design intent as *programs*: tools/find-parts/fusion.py already turns them into `.fg`, so our holes, pockets and depths are *features*, not recognised shapes. It tests feature-aware CAM (does the machining document pick up every cut from the model?) and regeneration. DeepCAD has the same JSON form, but its licence is unclear | **fetch** (find-parts already uses it) |
+| Segmentation meshes and point clouds (s2.0.1 full, 3.3 GB) | the same parts as meshes and points | No: the STEP subset is enough | skip |
+| Assembly (154,468 parts) / Joint (j1.0.0, 2.8 GB) | assemblies; joints between parts | Not for CAM. Possibly for URDF or assembly work later | skip for CAM |
+
+**How it is used:**
+- `tools/fetch-fusion-gallery.sh [segmentation-step] [reconstruction]` downloads from the official
+  bucket into a **git-ignored cache**: `$FORGECAD_FUSION_GALLERY`, else `<repo>/.cache/fusion-gallery`;
+  `/.cache/` is in .gitignore, and the script refuses a destination in the repo that is not
+  ignored.
+- It checks the **pinned SHA-256** of each archive and refuses on a mismatch, then copies the
+  licence text and a NOTICE into the cache.
+- **CI guard:** `tools/ci/no-fusion-gallery.py`, run by `.github/workflows/data-guard.yml` on every
+  PR and on main. It fails if any tracked file has the dataset's path, file-name pattern
+  (`<digits>_<8hex>_<digits>`), file type (.smt/.seg/.fidx) or STEP export markers.
+- **What may be committed:** aggregate results only, for example:
+  - "STEP import: N of 42,912 valid";
+  - "2.5D-machinable (every Cut* face reachable from +z): N";
+  - "certified programs: N, refusals by reason";
+  - "Fillet faces matched by an edge-break op: N%".
+- **Not to be committed:** per-part repro geometry. If a part exposes a bug, restate the geometry
+  in our own numbers in a test (the find-parts rule).
