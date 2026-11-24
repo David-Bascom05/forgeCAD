@@ -53,9 +53,20 @@ enum Job {
     Measure(u64, Vec<Tgt>),
     /// Bodies meshed ahead, as Measure opens: the first pick's answer doesn't wait for them.
     Warm(Vec<Arc<Body>>),
-    Wall(u64, Arc<Body>, Frame),
+    Wall(u64, Arc<Body>, Frame, Arc<WallCtl>),
     Physical(Arc<forge_lang::asm::AsmOut>),
 }
+
+/// A wall's search on the worker, as the panel follows it: the measurement still wanted (its id;
+/// another, or none, and the worker stops), and how far it is (in thousandths).
+#[derive(Default)]
+struct WallCtl {
+    wanted: std::sync::atomic::AtomicU64,
+    done: std::sync::atomic::AtomicU32,
+}
+
+/// A wall's search stopped before its end: no answer.
+const STOPPED: &str = "stopped";
 
 enum Answer {
     Measure(u64, Result<Reading, String>),
@@ -73,7 +84,7 @@ pub struct Inspector {
     /// The view's click count last seen, and the picks last measured.
     clicks: u32,
     open: bool,
-    measured: Option<(Vec<MPick>, bool)>,
+    measured: Option<(Vec<MPick>, bool, bool)>,
     /// The picks the last job was for, kept across a rebuild.
     asked: Option<(Vec<MPick>, bool)>,
     /// The origin item last chosen in the browser, taken once.
@@ -84,6 +95,11 @@ pub struct Inspector {
     cut: Option<crate::shell::inspect::Cut>,
     /// The section's outline being worked out (`fg query F section ..`).
     outline: Option<Receiver<Result<(String, crate::shell::inspect::Outline), String>>>,
+    /// The worker's wall search, as the panel follows and stops it.
+    wall: Arc<WallCtl>,
+    /// Where jobs run on the page's one thread: the wall's search, stepped a few milliseconds a
+    /// frame (its measurement, the search, where its part stands).
+    walking: Option<(u64, forge_wall::WallSearch<Arc<TriMesh>>, Frame)>,
 }
 
 fn ent(e: Entity) -> Ent {
@@ -199,11 +215,18 @@ fn handle(
             };
             Answer::Measure(id, r)
         }
-        Job::Wall(id, b, at) => {
+        Job::Wall(id, b, at, ctl) => {
+            use std::sync::atomic::Ordering::Relaxed;
             let r = mesh(&b).and_then(|m| {
-                forge_agent::measure::wall(&b, &m)
-                    .map(|(t, p)| (t, at.point_to_world(p)))
-                    .ok_or("no wall: nothing opposite any face".to_string())
+                let mut w = forge_wall::WallSearch::new(&b, &*m);
+                // a few thousand rays at a time: how far, and whether it's still wanted
+                while !w.step(4096) {
+                    if ctl.wanted.load(Relaxed) != id {
+                        return Err(STOPPED.to_string());
+                    }
+                    ctl.done.store((w.done() * 1000.0) as u32, Relaxed);
+                }
+                wall_found(w.found(), at)
             });
             Answer::Wall(id, r)
         }
@@ -510,6 +533,7 @@ impl Gui {
                         m.busy = false;
                     }
                 }
+                Answer::Wall(_, Err(e)) if e == STOPPED => {}
                 Answer::Wall(id, r) if id == self.inspector.seq => {
                     if let Some(m) = &mut s.measure {
                         m.wall_at = Some(r);
@@ -532,6 +556,7 @@ impl Gui {
         self.measure_browser();
         self.measure_hover();
         self.inspect_measure();
+        self.inspect_walk();
         if let Some((p, n)) = self.shell.inspect.want_outline.take() {
             let doc = self.fg.as_ref().map(|s| (s.src.clone(), s.path.clone()));
             let (send, recv) = channel();
@@ -710,11 +735,33 @@ impl Gui {
 
     /// What Measure has picked, highlighted and measured.
     fn inspect_measure(&mut self) {
-        let Some(m) = &self.shell.inspect.measure else {
+        use std::sync::atomic::Ordering::Relaxed;
+        let Some(m) = &mut self.shell.inspect.measure else {
             self.inspector.measured = None;
+            // closed: a wall's search stops
+            self.inspector.wall.wanted.store(0, Relaxed);
+            self.inspector.walking = None;
             return;
         };
+        // the panel's Measure thinnest wall, and Cancel
+        if std::mem::take(&mut m.wall_go) {
+            m.wall_held = false;
+        }
+        if std::mem::take(&mut m.wall_stop) {
+            m.wall_held = true;
+            m.busy = false;
+            m.wall_done = 0.0;
+            self.inspector.wall.wanted.store(0, Relaxed);
+            self.inspector.walking = None;
+        }
+        if m.busy && m.wall {
+            m.wall_done = match &self.inspector.walking {
+                Some((_, w, _)) => w.done(),
+                None => self.inspector.wall.done.load(Relaxed) as f32 / 1000.0,
+            };
+        }
         let (picks, wall) = (m.picks.clone(), m.wall);
+        let held = m.wall_held;
         let marked = m.marked();
         if !self.inspector.warmed
             && let Some(d) = &self.inspector.data
@@ -730,10 +777,10 @@ impl Gui {
             v.nav.selected = marked;
             v.mark_dirty();
         }
-        if self.inspector.measured.as_ref() == Some(&(picks.clone(), wall)) {
+        if self.inspector.measured.as_ref() == Some(&(picks.clone(), wall, held)) {
             return;
         }
-        self.inspector.measured = Some((picks.clone(), wall));
+        self.inspector.measured = Some((picks.clone(), wall, held));
         // an occurrence's mass is from the assembly's materials: worked out once, when asked
         let s = &mut self.shell.inspect;
         if picks.iter().any(|p| matches!(p, MPick::Whole(_)))
@@ -747,7 +794,15 @@ impl Gui {
         self.inspector.seq += 1;
         let id = self.inspector.seq;
         let names: Vec<String> = got.iter().map(|g| g.1.clone()).collect();
-        let job = if wall {
+        // the same picks read again (the part rebuilt): the last reading stands till the new one
+        let again = self.inspector.asked.as_ref() == Some(&(picks.clone(), wall));
+        // other picks, where a search would hold the page: wait to be asked again
+        let held = held || (wall && !again && crate::plat::INLINE_JOBS);
+        self.inspector.walking = None;
+        let mut walking = false;
+        let job = if wall && held {
+            None
+        } else if wall {
             // the part picked, or the part (an assembly's first)
             let first = got.first().and_then(|g| match &g.0 {
                 Tgt::Ent((b, at, _)) | Tgt::Whole(b, at, _) => Some((b.clone(), *at)),
@@ -758,27 +813,82 @@ impl Gui {
                 let &(mesh, at) = d.placed.first()?;
                 Some((d.bodies.get(mesh)?.clone(), at))
             });
-            target.map(|(b, at)| Job::Wall(id, b, at))
+            self.inspector.wall.wanted.store(id, Relaxed);
+            self.inspector.wall.done.store(0, Relaxed);
+            match target {
+                // stepped here, frame by frame (`inspect_walk`): a job would run to its end first
+                Some((b, at)) if crate::plat::INLINE_JOBS => {
+                    let r = forge_mesh::tessellate::tessellate_tolerant(&b, &forge_mesh::Quality::default())
+                        .map_err(|e| forge_lang::error::words(&e));
+                    match r {
+                        Ok(mesh) => {
+                            let w = forge_wall::WallSearch::new(&b, Arc::new(mesh));
+                            self.inspector.walking = Some((id, w, at));
+                            walking = true;
+                        }
+                        Err(e) => {
+                            if let Some(m) = &mut self.shell.inspect.measure {
+                                m.wall_at = Some(Err(e));
+                            }
+                        }
+                    }
+                    None
+                }
+                Some((b, at)) => Some(Job::Wall(id, b, at, self.inspector.wall.clone())),
+                None => None,
+            }
         } else if got.is_empty() {
             None
         } else {
             Some(Job::Measure(id, got.into_iter().map(|g| g.0).collect()))
         };
-        // the same picks read again (the part rebuilt): the last reading stands till the new one
-        let again = self.inspector.asked.as_ref() == Some(&(picks.clone(), wall));
-        self.inspector.asked = Some((picks, wall));
+        self.inspector.asked = Some((picks.clone(), wall));
         if let Some(m) = &mut self.shell.inspect.measure {
             m.names = names;
             if !again {
                 m.reading = None;
                 m.wall_at = None;
             }
-            m.busy = job.is_some();
+            m.wall_held = held;
+            m.busy = job.is_some() || walking;
         }
+        self.inspector.measured = Some((picks, wall, held));
         if let Some(j) = job {
             self.inspect_send(j);
         }
     }
+}
+
+impl Gui {
+    /// Where jobs run on the page's one thread: the wall's search, a few milliseconds of it each
+    /// frame, so the page draws on and Cancel can be clicked.
+    pub(crate) fn inspect_walk(&mut self) {
+        let Some((id, w, at)) = &mut self.inspector.walking else {
+            return;
+        };
+        let t0 = crate::viewer::now_ms();
+        let mut finished = false;
+        // (25 ms of each frame: the page still draws and takes clicks at about 30 a second)
+        while !finished && crate::viewer::now_ms() - t0 < 25.0 {
+            finished = w.step(256);
+        }
+        let (id, found, at) = (*id, w.found(), *at);
+        if !finished || id != self.inspector.seq {
+            return;
+        }
+        self.inspector.walking = None;
+        if let Some(m) = &mut self.shell.inspect.measure {
+            m.wall_at = Some(wall_found(found, at));
+            m.busy = false;
+        }
+    }
+}
+
+/// A wall search's answer, in the world.
+fn wall_found(found: Option<(f64, Point3)>, at: Frame) -> Result<(f64, Point3), String> {
+    found
+        .map(|(t, p)| (t, at.point_to_world(p)))
+        .ok_or("no wall: nothing opposite any face".to_string())
 }
 
 /// An origin item as Measure takes it: in the world, with its name.

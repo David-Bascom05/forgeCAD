@@ -6,13 +6,17 @@ name = "pathpilot"
 extension = "nc"
 decimals = 4
 feed_decimals = 1
+units_mm = "G21"
+units_inch = "G20"
+inch_decimals = 4
+inch_feed_decimals = 2
 point = "always"
 program_open = ["({title})"]
 program_close = ["M30"]
 comment = "({text})"
 comment_strip = "()"
 line_numbers = false
-safe_start = ["G17 G21 G40 G49 G80 G90 G94"]
+safe_start = ["G17 {units} G40 G49 G80 G90 G94"]
 tool_change = ["T{t} M06 G43 H{h}"]
 spindle_cw = "S{rpm} M03"
 spindle_ccw = "S{rpm} M04"
@@ -215,3 +219,31 @@ note = "G84 dwells 0.5 s per 1000 rpm at the bottom when P is left out, and whet
 key = "retract_home"
 status = "refused"
 note = "G28 goes to a user-stored position (G28.1), not a fixed home: refused (end with a rapid to clearance)"
+
+[[dialect.cite]]
+key = "units_mm"
+source = "https://tormach.com/supported-g-codes-reference"
+taken = "2026-11-23"
+where = "Tormach: Supported G-Codes Reference, web page, undated; G-code list"
+note = "G21 (the safe start's)"
+
+[[dialect.cite]]
+key = "units_inch"
+source = "https://tormach.com/machine-codes/length-units-g20-and-g21"
+taken = "2026-11-24"
+where = "Tormach: LENGTH UNITS (G20 AND G21), web page, undated; whole page"
+note = "To set length units to inches, program: G20; near the beginning of a program, before any motion"
+
+[[dialect.cite]]
+key = "inch_decimals"
+source = "https://tormach.com/g-code-formatting-reference"
+taken = "2026-11-23"
+where = "Tormach: G-Code Formatting Reference (PathPilot machine code library), web page, undated; Number format"
+note = "the number format reads decimals (inch increment not stated): 4 written, 0.0001 in"
+
+[[dialect.cite]]
+key = "inch_feed_decimals"
+source = "https://tormach.com/g-code-formatting-reference"
+taken = "2026-11-23"
+where = "Tormach: G-Code Formatting Reference (PathPilot machine code library), web page, undated; Number format"
+note = "the number format reads decimals (inch feed increment not stated): 2 written"

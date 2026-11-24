@@ -46,10 +46,11 @@ fn an_op_before_the_ops_its_stock_assumes_is_refused() {
     assert!(
         p1.error
             .as_deref()
-            .is_some_and(|e| e.contains("posts `top`") && e.contains("fix: post `skim` first")),
+            .is_some_and(|e| e.contains("posts op `top`") && e.contains("Post `skim` first")),
         "{:?}",
         p1.error
     );
+    assert_eq!(p1.code.as_deref(), Some("OutOfOrder"));
     // its ops are then posted by no program: not certified
     assert_eq!(cam.ops[1].status, "unposted");
 }

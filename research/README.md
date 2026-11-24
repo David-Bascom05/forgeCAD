@@ -10,6 +10,8 @@ OpenCascade) never become build dependencies; run them through `fbuild`.
 - `closed-forms/`: quartics and Cardano for surface pairs, quartic root counts, parabolas (text).
   Also `tools/sympy/meet.py`, which generates `kernel/forge-geom/src/meet_gen.rs`.
 - `predicate-bounds/`: the float filters' error bounds in forge-math's exact predicates.
+- `expansion-theory/`: expansion arithmetic in Lean (verify/ieee754): what is proven, the
+  counterexamples to Shewchuk's Theorem 13 and Corollary 22, the W2 invariant and the plan.
 - `mesh-bounds/`: chord-sag step sizes and the measured mesh layout choices.
 - `upto-proofs/`: the exact arguments that prove an end on a surface and the next face.
 - `build-failures/`: the census of what will not build, ranked, and which refusals are right.

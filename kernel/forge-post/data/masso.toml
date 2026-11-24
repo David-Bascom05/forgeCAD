@@ -6,13 +6,17 @@ name = "masso"
 extension = "nc"
 decimals = 4
 feed_decimals = 1
+units_mm = "G21"
+units_inch = "G20"
+inch_decimals = 4
+inch_feed_decimals = 2
 point = "always"
 program_open = ["({title})"]
 program_close = ["M30"]
 comment = "({text})"
 comment_strip = "()"
 line_numbers = false
-safe_start = ["G17 G21 G40 G80 G90 G94"]
+safe_start = ["G17 {units} G40 G80 G90 G94"]
 tool_change = ["T{t} M06"]
 spindle_cw = "S{rpm} M03"
 spindle_ccw = "S{rpm} M04"
@@ -218,3 +222,31 @@ note = "4 decimals written"
 key = "cycle_tap"
 status = "refused"
 note = "G84 is not in MASSO's supported list"
+
+[[dialect.cite]]
+key = "units_mm"
+source = "https://docs.masso.com.au/supported-g-codes/g04-dwell"
+taken = "2026-11-23"
+where = "MASSO Documentation: MASSO docs navigation: Supported G-codes / Supported M-codes list (as on the G04 page sidebar), web page, 'Last updated 5 October 2026'; Supported G-codes list; S3 Invalid Gcode"
+note = "G21 (the safe start's)"
+
+[[dialect.cite]]
+key = "units_inch"
+source = "https://docs.masso.com.au/supported-g-codes/g20-set-machine-units-to-inches"
+taken = "2026-11-24"
+where = "MASSO Documentation: G20 - Set Machine Units To Inches, web page; whole page (G21: the G21 page)"
+note = "G20 sets the machine units to inches. All G-code values after it are read as inches"
+
+[[dialect.cite]]
+key = "inch_decimals"
+source = "https://docs.masso.com.au/supported-g-codes/f-feed-rate"
+taken = "2026-11-23"
+where = "MASSO Documentation: F - Feed rate, web page, 'Last updated 5 October 2026'; whole page"
+note = "the number format reads decimals (inch increment not stated): 4 written, 0.0001 in"
+
+[[dialect.cite]]
+key = "inch_feed_decimals"
+source = "https://docs.masso.com.au/supported-g-codes/f-feed-rate"
+taken = "2026-11-23"
+where = "MASSO Documentation: F - Feed rate, web page, 'Last updated 5 October 2026'; whole page"
+note = "the number format reads decimals (inch feed increment not stated): 2 written"
