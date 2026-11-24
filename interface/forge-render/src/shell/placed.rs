@@ -32,10 +32,18 @@ impl Placed for egui::Window<'_> {
 
     fn show_sizing<R>(self, ctx: &Context, add: impl FnOnce(&mut Ui) -> R) -> (Self::Out<R>, bool) {
         let mut sizing = false;
-        let r = self.show(ctx, |ui| {
-            sizing = ui.is_sizing_pass();
-            add(ui)
-        });
+        // every window the shell opens fits the window it's in (UX-LEAD, the UI audit's 480 px
+        // pass): no bigger than the dialog area less a margin, and kept inside it. (A scroll
+        // area here collapsed the auto-sized dialogs: a window too wide for a narrow window
+        // gets its own narrow layout, theme::NARROW.)
+        let area = super::dialog_area(ctx).shrink(8.0);
+        let r = self
+            .max_size(area.size())
+            .constrain_to(area)
+            .show(ctx, |ui| {
+                sizing = ui.is_sizing_pass();
+                add(ui)
+            });
         (r, sizing)
     }
 }

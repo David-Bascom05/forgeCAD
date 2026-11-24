@@ -263,3 +263,7 @@ pub fn apply(ctx: &egui::Context, t: &Theme) {
         s.interaction.tooltip_delay = 0.5;
     });
 }
+
+/// Below this window width a dialog takes its narrow layout (UX-LEAD: one breakpoint for all):
+/// a master-detail browser drills down, a form stacks, a table scrolls inside itself.
+pub const NARROW: f32 = 720.0;
