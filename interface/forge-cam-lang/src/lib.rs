@@ -691,6 +691,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_feed",
             "ramp",
             "grid",
+            "fit",
         ],
     ),
     (
@@ -726,6 +727,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_feed",
             "ramp",
             "stepover",
+            "fit",
         ],
     ),
     (
@@ -1778,6 +1780,26 @@ fn step_down(a: &BTreeMap<String, V>, default: f64) -> Result<f64, String> {
     } else {
         get_num(a, "down", Some(default))
     }
+}
+
+/// The smallest arc radius a fitter may use at feed `f` (mm/min) on `machine`: a control holds an
+/// arc of radius r to √(a r) (centripetal acceleration) and (j r²)^(1/3) (jerk), so below the
+/// radius where those reach the feed lines are kept, which blend at the feed (a, j: the machine
+/// record's slowest linear axis, else the jerk-limited planner's default assumption set; ×1.5).
+fn arc_min_r(machine: &str, f: f64) -> f64 {
+    let sc = forge_machine::lookahead::SCurve::default();
+    let acc = forge_machine::library::builtin_named(machine)
+        .and_then(|m| {
+            m.joints
+                .iter()
+                .filter(|j| matches!(j.ty, forge_machine::def::JointType::Linear))
+                .map(|j| j.accel.unwrap_or(sc.accel[0]))
+                .reduce(f64::min)
+        })
+        .unwrap_or(sc.accel[0]);
+    let v = f / 60.0;
+    let r = (v * v / acc).max((v * v * v / sc.jerk[0]).sqrt());
+    if r.is_finite() { (1.5 * r).max(0.05) } else { 0.05 }
 }
 
 fn get_num(m: &BTreeMap<String, V>, k: &str, default: Option<f64>) -> Result<f64, String> {
@@ -4532,6 +4554,28 @@ impl Cam {
         let leave = get_num(a, "leave", Some(0.0))?;
         let floor = get_num(a, "floor", Some(part.bbox.0[2]))?;
         let sf = Surfacer::new(&part.faces, body, leave, s.tol, floor).map_err(|e| format!("{e:?}"))?;
+        // parallel and waterline: each run fitted into longer lines and arcs within `fit` (default
+        // tol/4, the chords' own fit to the CL), each piece proven by the generator's gap at
+        // −tol/2 before it is kept; z-level's passes are exact region offsets already
+        let fit_tol = if kind == "zlevel" {
+            0.0
+        } else {
+            get_num(a, "fit", Some(0.25 * s.tol))?
+        };
+        if !(fit_tol >= 0.0 && fit_tol <= 0.5 * s.tol) {
+            return Err(format!(
+                "fit: a chord tolerance in mm, 0 to half the setup's tol ({} mm)",
+                0.5 * s.tol
+            ));
+        }
+        let sf = if fit_tol > 0.0 {
+            sf.with_fit(forge_cam::fit::Fit {
+                min_r: arc_min_r(&s.machine, feed.0),
+                ..forge_cam::fit::Fit::arcs(fit_tol)
+            })
+        } else {
+            sf
+        };
         let area = match a.get("area") {
             // roughing takes the whole stock: tool centres up to a diameter past its sides (so a
             // margin narrower than the tool is cleared), as `clear` does
