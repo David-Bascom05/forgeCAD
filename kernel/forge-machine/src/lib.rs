@@ -18,6 +18,7 @@ pub mod gcode;
 pub mod homing;
 pub mod kin;
 pub mod library;
+pub mod orient;
 pub mod multi;
 pub mod removal;
 pub mod setup;
