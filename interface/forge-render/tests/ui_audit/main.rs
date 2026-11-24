@@ -28,6 +28,42 @@ thread_local! {
     static HOST: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
+thread_local! {
+    /// The tooltip a menu item showed on hover before its click.
+    static TIP: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+/// Rests the pointer on `r` until a tooltip shows (or a while): its words.
+fn hover_tip(h: &mut Headless, r: Rect) -> String {
+    let before = Snap::take(h);
+    h.move_to(r.center().x, r.center().y);
+    for _ in 0..60 {
+        step(h);
+        let tips: Vec<Rect> = h.gui.ctx.memory(|m| {
+            m.areas()
+                .visible_layer_ids()
+                .into_iter()
+                .filter(|l| l.order == egui::Order::Tooltip)
+                .filter_map(|l| m.area_rect(l.id))
+                .collect()
+        });
+        if !tips.is_empty() {
+            for _ in 0..3 {
+                step(h);
+            }
+            let s = Snap::take(h);
+            let words: Vec<String> = judge::new_texts_in(&s, &before, &tips)
+                .iter()
+                .map(|t| t.s.trim().to_string())
+                .collect();
+            if !words.is_empty() {
+                return words.join(" / ");
+            }
+        }
+    }
+    String::new()
+}
+
 fn step(h: &mut Headless) {
     let out = h.step();
     // the window's own asks: its file dialogs, its frame (the rest of `host` is the app's)
@@ -37,7 +73,14 @@ fn step(h: &mut Headless) {
         .map(|a| format!("{a:?}"))
         .filter(|w| {
             [
-                "Open", "SaveAs", "ExportMesh", "Minimize", "Maximize", "Close", "DragWindow", "ResizeWindow",
+                "Open",
+                "SaveAs",
+                "ExportMesh",
+                "Minimize",
+                "Maximize",
+                "Close",
+                "DragWindow",
+                "ResizeWindow",
                 "Sheet(NewPart)",
             ]
             .iter()
@@ -324,7 +367,11 @@ fn start(f: &Fixture, size: (f32, f32)) -> Option<Headless> {
             h.gui.shell.out.push(Action::NewDrawing);
             settled(&mut h, 10.0);
             // its dialog's OK (the dialog places no names: found by its words)
-            let ok = Snap::take(&mut h).texts.iter().find(|t| t.s.trim() == "OK").map(|t| t.rect.center());
+            let ok = Snap::take(&mut h)
+                .texts
+                .iter()
+                .find(|t| t.s.trim() == "OK")
+                .map(|t| t.rect.center());
             if let Some(c) = ok {
                 h.click_at(c.x, c.y);
             }
@@ -413,7 +460,21 @@ fn open_menu(h: &mut Headless, opener: &str, right: bool) -> bool {
 fn do_click(h: &mut Headless, how: &Click, group: &str, tool: &str) -> bool {
     match how {
         Click::Tool => click_tool(h, group, tool),
-        Click::Menu { opener, right, item } => open_menu(h, opener, *right) && click_place(h, item),
+        Click::Menu { opener, right, item } => {
+            if !open_menu(h, opener, *right) {
+                return false;
+            }
+            // what the item's hover says first: an item drawn off says why there, and its click
+            // then rightly does nothing
+            let tip = h
+                .gui
+                .shell
+                .place(item)
+                .map(|r| hover_tip(h, r))
+                .unwrap_or_default();
+            TIP.with(|t| *t.borrow_mut() = tip);
+            click_place(h, item)
+        }
     }
 }
 
@@ -682,7 +743,8 @@ impl Crawl {
             ms: 0,
         };
         let slug = slug(&format!("{}-{}{}-{}", f.name, env, tab, tool));
-        rec.findings.extend(judge::label(tool, matches!(how, Click::Tool), true));
+        rec.findings
+            .extend(judge::label(tool, matches!(how, Click::Tool), true));
         if !live {
             rec.class = Class::Disabled;
             let (why, tip) = disabled_tip(&mut h, group, tool);
@@ -707,6 +769,7 @@ impl Crawl {
         let before = Snap::take(&mut h);
         let pickers = forge_render::plat::PICKERS_ASKED.load(std::sync::atomic::Ordering::Relaxed);
         HOST.with(|x| x.borrow_mut().clear());
+        TIP.with(|t| t.borrow_mut().clear());
         let clicked = catch_unwind(AssertUnwindSafe(|| {
             let hit = do_click(&mut h, how, group, tool);
             let mut host = Vec::new();
@@ -745,6 +808,13 @@ impl Crawl {
         let picked = forge_render::plat::PICKERS_ASKED.load(std::sync::atomic::Ordering::Relaxed) > pickers;
         let screen = Rect::from_min_size(pos2(0.0, 0.0), vec2(self.size.0, self.size.1));
         classify(f, &mut rec, &before, &after, &host, picked, screen, self.noisy);
+        let tip = TIP.with(|t| std::mem::take(&mut *t.borrow_mut()));
+        if rec.class == Class::Nothing && !tip.is_empty() {
+            // drawn off, saying why on hover: what STANDARD §7 asks
+            rec.class = Class::Disabled;
+            rec.detail = format!("off: {}", judge::short(&tip));
+            rec.findings.retain(|f| f.rule != "nothing");
+        }
         // the popup itself, judged; then whether Esc takes it away
         let popup: Vec<Rect> = popup_region(&before, &after);
         if matches!(rec.class, Class::Dialog | Class::Panel | Class::ErrorText) && !popup.is_empty() {
@@ -1027,7 +1097,6 @@ fn classify(
         ));
     }
 }
-
 
 /// Hovers an off tool until its tooltip shows: whether it says why (more than its own name).
 fn disabled_tip(h: &mut Headless, group: &str, tool: &str) -> (String, bool) {
