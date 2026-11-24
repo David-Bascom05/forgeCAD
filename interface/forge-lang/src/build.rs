@@ -848,6 +848,9 @@ impl std::hash::Hasher for NameMix {
 #[inline(always)]
 fn same_surface(a: &forge_geom::Surface, b: &forge_geom::Surface) -> bool {
     use forge_geom::Surface as S;
+    if std::mem::discriminant(a) != std::mem::discriminant(b) {
+        return false;
+    }
     match (a, b) {
         (S::Plane(x), S::Plane(y)) => x == y,
         (S::Cylinder(x), S::Cylinder(y)) => x == y,
