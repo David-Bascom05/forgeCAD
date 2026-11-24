@@ -1,0 +1,13 @@
+# A slot's top rim, a tangent chain of lines and arcs: straight blends and turned ones meeting in a
+# shared conic section where each line runs into its arc.
+shared L = 40
+shared R = 8
+shared H = 10
+param rim.r = 3
+param rim.rho = ratio(0.5)
+
+sketch plan(on: xy) {
+  outline = slot((0, 0), (L, 0), R)
+}
+base = extrude(plan, H)
+rim = fillet(edges(of: base.end), r, conic: rho)

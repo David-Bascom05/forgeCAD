@@ -251,3 +251,41 @@ fn set_arg_names_a_positional_argument_by_its_place() {
     };
     assert_eq!(apply(src, &op).unwrap_err().kind(), "UnknownArg");
 }
+
+/// In a machining document a call names a built-in, never a binding (forge-cam-lang's and
+/// forge-turn-lang's evaluators), so `drill = drill(..)` is legal there; Rename takes the
+/// binding and its reads, never the call's head (it once wrote `holes = holes(..)`).
+#[test]
+fn rename_in_a_machining_document_leaves_call_heads() {
+    use forge_lang::syntax::{ExprKind, StmtKind};
+    let src = "machining\nf = part(\"flange.fg\")\nop1 = setup(f)\ndrill = drill(op1, f.bolts)\nprog = program(op1, after: drill)\n";
+    let op = Op::Rename {
+        from: "drill".into(),
+        to: "holes".into(),
+    };
+    let out = forge_lang::edit::apply(src, &op).unwrap();
+    assert_eq!(
+        out,
+        "machining\nf = part(\"flange.fg\")\nop1 = setup(f)\nholes = drill(op1, f.bolts)\nprog = program(op1, after: holes)\n"
+    );
+    let prog = forge_lang::edit::apply_ast(src, &op).unwrap();
+    let StmtKind::Assign { name, value } = &prog[3].kind else {
+        panic!("an assignment")
+    };
+    assert_eq!(name, "holes");
+    let ExprKind::Call(f, _) = &value.kind else {
+        panic!("a call")
+    };
+    assert!(matches!(&f.kind, ExprKind::Name(n) if n == "drill"));
+    // a part's calls are reads: a function's name is renamed where it is called
+    let part = "fn sq(x) {\n  return x * x\n}\na = sq(2)\n";
+    let out = forge_lang::edit::apply(
+        part,
+        &Op::Rename {
+            from: "sq".into(),
+            to: "sq2".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(out, "fn sq2(x) {\n  return x * x\n}\na = sq2(2)\n");
+}

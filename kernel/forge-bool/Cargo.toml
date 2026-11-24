@@ -16,9 +16,18 @@ forge-bool-core = { path = "../forge-bool-core", optional = true }
 # the decision log (src/decisions.rs): every near-tolerance decision recorded under its entities,
 # contradictions within one boolean counted, and the retry ladder's rungs; off, nothing is compiled
 decisions = ["forge-geom/decisions", "forge-topo/decisions"]
+# the certificate for the proven checker (src/certify.rs, verify/forge-certify); off, nothing is compiled
+certify = []
+# certified surface-surface tracing (forge-geom's `certified_trace`)
+certified_trace = ["forge-geom/certified_trace"]
 # the decide-once flat-face boolean (src/decide_once.rs over forge-bool-core): flat booleans go
 # through the ledger and the combinatorial core; off by default, the old path unchanged
 decide_once = ["dep:forge-bool-core"]
+# the local-imprint column path (src/imprint.rs) chosen at run time by FORGE_IMPRINT or
+# imprint::set_mode (off, on, check against the general boolean): a research and test switch, off in
+# every shipped build, where the boolean reads no environment (old-path-statements.md §G, G8).
+# `cargo test -p forge-model --test imprint --features imprint_column` is the column's check
+imprint_column = []
 
 [dev-dependencies]
 forge-ops = { path = "../forge-ops" }

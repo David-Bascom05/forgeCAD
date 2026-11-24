@@ -9,7 +9,7 @@ import ForgeMath.Types
 
 The `f64` functions (`abs`, `is_nan`, `EPSILON`, `clone`, `Sum for f64`) and the std functions
 Aeneas leaves out (`last`, `copied`, `Iterator::sum`) come from the bridge,
-`verify/aeneas/bridge/AeneasF64/{Std,Core}.lean`. The four functions below are the cold integer
+`verify/aeneas/bridge/AeneasF64/{Std,Core}.lean`. The first three functions below are the cold integer
 fallback (`Big`), run only when a slow path's expansion arithmetic overflows to NaN; translate.conf
 keeps them opaque. They are Lean `opaque` constants: no axiom, and no definition a proof can
 see, so a theorem whose computation reached one could say nothing about its result.
@@ -24,5 +24,10 @@ opaque predicates.cross_big : F64 → F64 → F64 → F64 → Result F64 := fun 
 opaque predicates.orient2d_big : vec.Point2 → vec.Point2 → vec.Point2 → Result F64 :=
   fun _ _ _ => fail .panic
 opaque predicates.dot3_big : vec.Vec3 → vec.Vec3 → Result F64 := fun _ _ => fail .panic
-opaque predicates.incircle_big : vec.Point2 → vec.Point2 → vec.Point2 → vec.Point2 → Result F64 :=
+-- kept opaque by translate.conf for Aeneas limits (verify/aeneas/forge-math/translate.conf):
+-- exact_diffs (`iter_mut().zip(..)`: no `zip`), incircle (`iter().all(..)` in stage B); with
+-- incircle opaque, incircle_big is not reached
+opaque predicates.exact_diffs {N : Std.Usize} : Array (F64 × F64) N → Result (Option (Array F64 N)) :=
+  fun _ => fail .panic
+opaque predicates.incircle : vec.Point2 → vec.Point2 → vec.Point2 → vec.Point2 → Result F64 :=
   fun _ _ _ _ => fail .panic

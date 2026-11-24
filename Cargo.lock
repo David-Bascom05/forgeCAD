@@ -76,14 +76,72 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-cam"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-geom",
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-cam-geom"
+version = "0.1.0"
+
+[[package]]
+name = "forge-cam-import"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-cam-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-dirs",
+ "forge-lang",
+ "forge-machine",
+ "forge-math",
+ "forge-model",
+ "forge-post",
+ "forge-sketch",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-certify"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-exact-fuzz",
+ "forge-geom",
+ "forge-lang",
+ "forge-math",
+ "forge-model",
+ "forge-proof",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-cli"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-cam-lang",
  "forge-dirs",
  "forge-geom",
  "forge-import",
  "forge-lang",
+ "forge-machine-builder",
+ "forge-machine-lang",
  "forge-material",
  "forge-math",
  "forge-mesh",
@@ -91,6 +149,7 @@ dependencies = [
  "forge-ops",
  "forge-step",
  "forge-topo",
+ "forge-turn-lang",
 ]
 
 [[package]]
@@ -139,6 +198,7 @@ dependencies = [
  "forge-geom",
  "forge-lang",
  "forge-math",
+ "forge-mesh",
  "forge-model",
  "forge-ops",
  "forge-proof",
@@ -219,6 +279,7 @@ dependencies = [
  "forge-git",
  "forge-lang",
  "forge-math",
+ "forge-mesh",
  "forge-step",
  "forge-topo",
  "roxmltree",
@@ -254,6 +315,45 @@ dependencies = [
  "forge-units",
  "forge-vendor",
  "forge-weld",
+]
+
+[[package]]
+name = "forge-library"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+]
+
+[[package]]
+name = "forge-machine"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-machine-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-machine",
+ "forge-machine-lang",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-machine-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-lang",
+ "forge-machine",
+ "forge-machine-builder",
+ "forge-math",
+ "forge-mesh",
 ]
 
 [[package]]
@@ -334,6 +434,14 @@ name = "forge-par"
 version = "0.1.0"
 
 [[package]]
+name = "forge-post"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-proof"
 version = "0.1.0"
 dependencies = [
@@ -347,6 +455,23 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-read-fuzz"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-dwg",
+ "forge-font",
+ "forge-git",
+ "forge-import",
+ "forge-lang",
+ "forge-material",
+ "forge-math",
+ "forge-mesh",
+ "forge-step",
  "forge-topo",
 ]
 
@@ -371,6 +496,7 @@ dependencies = [
  "forge-mesh",
  "forge-ops",
  "forge-refold",
+ "forge-sheet-core",
  "forge-topo",
 ]
 
@@ -424,6 +550,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-tooling"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-math",
+]
+
+[[package]]
 name = "forge-topo"
 version = "0.1.0"
 dependencies = [
@@ -449,6 +583,29 @@ dependencies = [
  "forge-math",
  "forge-model",
  "forge-topo",
+]
+
+[[package]]
+name = "forge-turn"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-geom",
+ "forge-math",
+ "forge-ops",
+ "forge-post",
+ "forge-tooling",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-turn-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-cam-geom",
+ "forge-lang",
+ "forge-turn",
 ]
 
 [[package]]

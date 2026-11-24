@@ -131,15 +131,37 @@ structure vec.Point2 where
   x : F64
   y : F64
 
-/-- [forge_math::predicates::incircle_exact_diffs::{closure}]
-    Source: 'kernel/forge-math/src/predicates.rs', lines 754:15-761:5 -/
-@[reducible]
-def predicates.incircle_exact_diffs.closure := Unit
+/-- [forge_math::interval::Interval]
+    Source: 'kernel/forge-math/src/interval.rs', lines 8:0-11:1
+    Visibility: public -/
+structure interval.Interval where
+  lo : F64
+  hi : F64
 
-/-- [forge_math::predicates::incircle_exact_general::{closure}]
-    Source: 'kernel/forge-math/src/predicates.rs', lines 782:15-799:5 -/
+/-- [forge_math::interval::{forge_math::interval::Interval}::atan2::{closure#1}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 134:16-134:32 -/
 @[reducible]
-def predicates.incircle_exact_general.closure := Unit
+def interval.Interval.atan2.closure_1 := Unit
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::atan2::{closure}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 128:57-128:74 -/
+@[reducible]
+def interval.Interval.atan2.closure := Unit
+
+/-- [forge_math::interval::Box3]
+    Source: 'kernel/forge-math/src/interval.rs', lines 291:0-295:1
+    Visibility: public -/
+structure interval.Box3 where
+  x : interval.Interval
+  y : interval.Interval
+  z : interval.Interval
+
+/-- [forge_math::interval::Box2]
+    Source: 'kernel/forge-math/src/interval.rs', lines 357:0-360:1
+    Visibility: public -/
+structure interval.Box2 where
+  u : interval.Interval
+  v : interval.Interval
 
 /-- [forge_math::vec::Vec2]
     Source: 'kernel/forge-math/src/vec.rs', lines 4:0-7:1

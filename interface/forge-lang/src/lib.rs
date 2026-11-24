@@ -47,11 +47,13 @@ pub mod sketch_text;
 pub mod stdparts;
 pub mod store;
 pub mod syntax;
+mod taper_lint;
 pub mod thermo;
 pub mod thermo_kept;
 pub mod tightbox;
 pub mod undo;
 pub mod units;
+pub mod urdf;
 pub mod uses;
 pub mod validity;
 pub mod values;
@@ -186,6 +188,8 @@ pub struct Options {
     /// of part marker); what follows is evaluated (its rows, its errors) but not built, and the
     /// part is the one as it stood there.
     pub until: Option<String>,
+    /// An assembly: its kinematic structure for an export (`AsmOut::kin`, `urdf.rs`).
+    pub kin: bool,
 }
 
 impl Default for Options {
@@ -209,6 +213,7 @@ impl Default for Options {
             comp_anchors: false,
             fit_sizes: false,
             until: None,
+            kin: false,
         }
     }
 }
@@ -382,16 +387,34 @@ fn fit_sizes(src: &str, opts: &Options, run: &mut Run, mut cache: Cache) -> Cach
                 bad = mid;
             }
         }
-        // three figures, rounded down so it still builds
-        let p = 10f64.powi(2 - lo.abs().log10().floor() as i32);
-        let shown = (lo * p).floor() / p;
-        let value = if shown > 0.0 && shown < lo {
-            let (ok, c) = builds(shown, cache);
-            cache = c;
-            if ok { shown } else { lo }
+        // The value offered is the one the reply shows (`forge_agent::short`, so a fix sent back
+        // unchanged is this very number) and is built here first: three figures rounded down,
+        // else the reply's last decimal rounded down, else the search's own. Near the limit the
+        // kernel's yes is not monotone in the size (a smaller one can be refused), and the reply
+        // rounds to nearest, so neither a rounding nor `lo` shown rounded is taken unbuilt.
+        let down = |p: f64| (lo * p).floor() / p;
+        let figures = 10f64.powi(2 - lo.abs().log10().floor() as i32);
+        let decimals = 10f64.powi(if lo.abs() >= 1000.0 {
+            1
+        } else if lo.abs() >= 1.0 {
+            3
         } else {
-            lo
-        };
+            4
+        });
+        let shown_as_is = |v: f64| forge_agent::short(v).parse::<f64>() == Ok(v);
+        let mut value = None;
+        for v in [down(figures), down(decimals), lo] {
+            if !(v > 0.0 && v <= lo && shown_as_is(v)) {
+                continue;
+            }
+            let (ok, c) = if v == lo { (true, cache) } else { builds(v, cache) };
+            cache = c;
+            if ok {
+                value = Some(v);
+                break;
+            }
+        }
+        let Some(value) = value else { continue };
         if let Error::Build { fit, .. } = &mut run.errors[k] {
             *fit = Some(Box::new((key, error::Literal { value, dim })));
         }
@@ -566,16 +589,35 @@ fn run_once(src: &str, opts: Options, mut cache: Cache) -> (Run, Cache) {
         let mass = |b: &forge_topo::Body| forge_topo::mass::mass(b);
         let each_mass =
             || -> Option<Vec<_>> { each.then(|| solids.iter().map(|x| mass(&x.2).ok()).collect()) };
-        // under a budget (spent on this thread), or with one thread to run on, one after another
-        let (w, e, o) = if forge_geom::budget::left() == u64::MAX && forge_math::par::threads() > 1 {
-            forge_math::par::scope(|s| {
-                let w = whole.map(|b| s.spawn(move || mass(b)));
-                let bx = boxed.map(|b| s.spawn(move || tightbox::tight_box(b)));
-                let o: Vec<_> = owed.iter().map(|x| s.spawn(move || mass(&x.2).ok())).collect();
-                let e = each_mass();
-                let w = (w.map(joined), bx.map(joined));
-                (w, e, o.into_iter().map(joined).collect::<Vec<_>>())
-            })
+        // under a budget (spent on this thread) one after another, as before (`limited`, not
+        // `left() == u64::MAX`: what is spent with no limit set counts down from there too)
+        let (w, e, o) = if !forge_geom::budget::limited() && forge_math::par::threads() > 1 {
+            // the whole's mass, its box, each owed mass and the solids' masses as items of one
+            // adaptive map: threads join only where the work pays for them (a small part's
+            // measure stays on this thread), answers in item order
+            enum Job<A, B, C, D> {
+                W(A),
+                B(B),
+                O(C),
+                E(D),
+            }
+            let n = 3 + owed.len();
+            let got = forge_math::par::map_adaptive(n, forge_math::par::threads(), 1, |k| match k {
+                0 => Job::W(whole.map(mass)),
+                1 => Job::B(boxed.map(tightbox::tight_box)),
+                2 => Job::E(each_mass()),
+                k => Job::O(mass(&owed[k - 3].2).ok()),
+            });
+            let (mut w, mut bx, mut e, mut o) = (None, None, None, Vec::with_capacity(owed.len()));
+            for j in got {
+                match j {
+                    Job::W(x) => w = x,
+                    Job::B(x) => bx = x,
+                    Job::E(x) => e = x,
+                    Job::O(x) => o.push(x),
+                }
+            }
+            ((w, bx), e, o)
         } else {
             // in the order they were asked for: the modelled parts' in the run, then the rest
             let o: Vec<_> = owed.iter().map(|x| mass(&x.2).ok()).collect();
@@ -791,10 +833,6 @@ pub fn sketch_view(src: &str, id: &str, opts: Options) -> Option<SketchView> {
 }
 
 /// A scoped thread's answer, its panic carried on.
-fn joined<T>(h: forge_math::par::ScopedJoinHandle<'_, T>) -> T {
-    h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))
-}
-
 /// The finished part's measure; `mass` and `bbox`, its mass and box if worked out already.
 fn measure(
     ev: &mut Eval,

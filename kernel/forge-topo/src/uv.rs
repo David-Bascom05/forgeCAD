@@ -34,7 +34,10 @@ pub const PROC_SAG: f64 = 1e-4;
 pub fn default_segments(e: &Edge) -> usize {
     let n = match e.curve {
         Curve::Line(_) => 2,
-        Curve::Circle(_) | Curve::Ellipse(_) => (e.range.width() / (dmath::PI / 16.0)).ceil() as usize,
+        // (a file's edge can run many turns, or say it does: capped like the others)
+        Curve::Circle(_) | Curve::Ellipse(_) => {
+            ((e.range.width() / (dmath::PI / 16.0)).ceil() as usize).min(1 << 16)
+        }
         Curve::Parabola(_) | Curve::Hyperbola(_) => 16,
         // follow the chain: a sample per chain segment or two
         Curve::Intersection(_) => (e.range.width().ceil() as usize).clamp(4, 256),
@@ -72,7 +75,11 @@ pub fn loop_samples(body: &Body, lp: LoopId, segments: impl Fn(&Edge) -> usize) 
         first.push(pts.len());
         let co = body.coedge(c);
         let e = body.edge(co.edge);
-        for i in 0..n {
+        // (a coedge starts at its vertex, which the one before ends at: drawn there, the two meet;
+        // drawn from each curve's end, within tolerance of it, the loop can zigzag across itself
+        // where it turns back, as at a hairpin's tip)
+        pts.push(body.vertex(body.coedge_start(c)).point);
+        for i in 1..n {
             let k = if co.forward { i } else { n - i };
             let t = (e.range.lo + e.range.width() * (k as f64 / n as f64)).min(e.range.hi);
             pts.push(e.curve.eval(t));
@@ -115,13 +122,39 @@ pub fn draw_loop_near(body: &Body, face: FaceId, samples: &[Point3]) -> (Vec<Poi
 
 /// `draw_loop` from the samples' parameters `raw`.
 fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<usize>) {
-    let surface = &body.face(face).surface;
+    let f = body.face(face);
+    let surface = &f.surface;
     let domain = surface.domain();
     let n = raw.len();
     if !raw.iter().any(|&uv| surface.singular(uv)) {
-        // one run, unwrapped from the first sample
-        for i in 1..n {
-            raw[i] = unwrap_in(&domain, raw[i], raw[i - 1]);
+        // one run, unwrapped from the first sample (as `unwrap_in`, each period apart)
+        let fix = |x: f64, r: f64, p: f64| x + p * ((r - x) / p).round();
+        if let Some(p) = domain.u.period {
+            for i in 1..n {
+                raw[i].x = fix(raw[i].x, raw[i - 1].x, p);
+            }
+        }
+        if let Some(p) = domain.v.period {
+            for i in 1..n {
+                raw[i].y = fix(raw[i].y, raw[i - 1].y, p);
+            }
+        }
+        // a face's only loop bounds a disc: it winds no turn round the surface's period. Where
+        // the unwrapping left it winding (a step of half a period, a tie, taken the long way),
+        // the steps from the most nearly half a turn on are taken the other way round
+        if let Some(period) = domain.u.period
+            && n > 1
+            && f.loops.len() == 1
+        {
+            // (the closing step, unwrapped, is the turns it leaves)
+            let turns = ((raw[n - 1].x - raw[0].x) / period).round();
+            if turns != 0.0 {
+                let step = |i: usize| (raw[i].x - raw[i - 1].x).abs();
+                let at = (1..n).fold(1, |b, i| if step(i) > step(b) { i } else { b });
+                for p in &mut raw[at..] {
+                    p.x -= turns * period;
+                }
+            }
         }
         return (raw, (0..n).collect());
     }
@@ -146,8 +179,13 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
         let i = (start + k) % n;
         if singular[i] {
             let before = prev.expect("loop starts at a regular sample");
-            // (a spindle torus's v is periodic: the pole is where the run has got to)
-            let y = unwrap_in(&domain, raw[i], before).y;
+            // (a spindle torus's v is periodic: the pole is where the run has got to; a sphere's
+            // sample within tolerance of its axis is at its pole, drawn there on the pole's line,
+            // so a jump in u at it runs along the edge of the parameter plane)
+            let y = match surface {
+                forge_geom::Surface::Sphere(_) => dmath::FRAC_PI_2.copysign(raw[i].y),
+                _ => unwrap_in(&domain, raw[i], before).y,
+            };
             runs.last_mut()
                 .expect("at least one run")
                 .push((Point2::new(before.x, y), i));
@@ -174,9 +212,13 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
     if runs.len() > 1
         && let Some(period) = period
     {
-        let want_ccw = body.face(face).same_sense;
+        let want_ccw = f.same_sense;
         let count = 3usize.pow(runs.len() as u32 - 1);
-        let mut best_score = f64::INFINITY;
+        // the least area; where shifts leave it as it is (a run whose two ends are on one pole's
+        // line moves along it at no cost in area: equal to rounding), the shortest walk along the
+        // singular lines, as a loop's walk there covers no stretch of one twice
+        let mut best_score = (f64::INFINITY, f64::INFINITY);
+        let on_pole = |a: Point2, b: Point2| a.y == b.y && surface.singular(a) && surface.singular(b);
         for combo in 0..count {
             let mut c = combo;
             let mut pts: Vec<(Point2, usize)> = runs[0].clone();
@@ -191,8 +233,16 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
             pts.extend(tail.iter().copied());
             let poly: Vec<Point2> = pts.iter().map(|q| q.0).collect();
             let area = signed_area(&poly);
-            if (area > 0.0) == want_ccw && area.abs() < best_score {
-                best_score = area.abs();
+            let walk: f64 = (0..poly.len())
+                .map(|k| (poly[k], poly[(k + 1) % poly.len()]))
+                .filter(|&(a, b)| on_pole(a, b))
+                .map(|(a, b)| (b.x - a.x).abs())
+                .sum();
+            let tie = 1e-9 * area.abs();
+            let better =
+                area.abs() < best_score.0 - tie || (area.abs() <= best_score.0 + tie && walk < best_score.1);
+            if (area > 0.0) == want_ccw && better {
+                best_score = (area.abs(), walk);
                 best = pts;
             }
         }
@@ -499,40 +549,29 @@ pub fn loops_cross_steeply(loops: &[UvLoop], at: &dyn Fn(Point2) -> Point3, band
 }
 
 fn first_cross(loops: &[UvLoop], counts: &dyn Fn((Point2, Point2), (Point2, Point2)) -> bool) -> bool {
-    // swept along u: only segments whose u spans overlap are compared
-    let mut segs: Vec<(f64, f64, Point2, Point2)> =
-        Vec::with_capacity(loops.iter().map(|l| l.points.len()).sum());
-    for l in loops {
-        let n = l.points.len();
-        for i in 0..n {
-            let (p, q) = (l.points[i], l.points[(i + 1) % n]);
-            if p != q {
-                segs.push((p.x.min(q.x), p.x.max(q.x), p, q));
-            }
-        }
-    }
-    segs.sort_unstable_by(|p, q| p.0.total_cmp(&q.0));
+    // only chords whose boxes overlap are compared (`chords::near_pairs`), each once; a point's
+    // id is its place in its loop (the pairs are told by their ends)
     let opposite = |p: f64, q: f64| (p < 0.0 && q > 0.0) || (p > 0.0 && q < 0.0);
     let orient = forge_math::predicates::orient2d;
-    for i in 0..segs.len() {
-        let (_, reach, a, b) = segs[i];
-        let (ylo, yhi) = (a.y.min(b.y), a.y.max(b.y));
-        for &(lo, _, c, d) in &segs[i + 1..] {
-            if lo > reach {
-                break;
-            }
-            if yhi < c.y.min(d.y) || d.y.max(c.y) < ylo || a == c || a == d || b == c || b == d {
-                continue;
+    crate::chords::walk(
+        loops.len(),
+        |i| loops[i].points.len(),
+        |i, k| (k as u32, loops[i].points[k]),
+        |_, _| {},
+        |_, _, (a, b), (c, d)| {
+            if a == c || a == d || b == c || b == d {
+                return Ok(());
             }
             if opposite(orient(a, b, c), orient(a, b, d))
                 && opposite(orient(c, d, a), orient(c, d, b))
                 && counts((a, b), (c, d))
             {
-                return true;
+                return Err(());
             }
-        }
-    }
-    false
+            Ok(())
+        },
+    )
+    .is_err()
 }
 
 #[cfg(test)]

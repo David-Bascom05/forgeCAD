@@ -236,6 +236,7 @@ pub fn with_var_fillet(part: &Part, near: &[(Point3, Radius)]) -> Part {
         edges,
         starts: Vec::new(),
         setbacks: Vec::new(),
+        conic: None,
     });
     out
 }
@@ -257,6 +258,7 @@ pub fn with_fillet_from(part: &Part, body: &Body, picks: &[Pick]) -> Part {
         edges,
         starts: Vec::new(),
         setbacks: Vec::new(),
+        conic: None,
     });
     out
 }
@@ -1607,6 +1609,7 @@ mod tests {
                 edges,
                 starts,
                 setbacks,
+                conic: None,
             });
             p.regenerate()
         };
@@ -1678,6 +1681,7 @@ mod tests {
                     .collect(),
                 starts: vec![],
                 setbacks: vec![],
+                conic: None,
             });
             let b = p.regenerate().expect("a varying fillet round the top");
             mass(&b).expect("mass properties").volume
@@ -1748,6 +1752,7 @@ mod tests {
                 (body.vertex(corner).name, None, 3.0),
                 (body.vertex(corner).name, Some(arc), 6.0),
             ],
+            conic: None,
         });
         let b = p.regenerate().expect("set back");
         assert!(forge_topo::check(&b).is_empty());

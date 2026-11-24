@@ -1,0 +1,16 @@
+machining
+# block_m6.fg: face, profile, drill the M6 tap drill (no tap), and mill the thread. The thread is
+# not in the model, so the op declares it: a cosmetic thread, the ring between the 5 mm bore and
+# the 6 mm major diameter, listed in the reply.
+shared tol = 0.01
+
+f    = part("block_m6.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
+t6   = tool("threadmill-m6-m12-1", t: 6, stickout: 20, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1), below: 2), origin: "top-corner", tol: tol, at: (-20, -20, -250))
+skim = facing(op1, tool: t1, to: 14, step: 1)
+side = clear(op1, tool: t1, from: 14, to: -0.5, step: 3, stepover: 4)
+tapd = drill(op1, f.m6, plan: "drill")
+thr  = thread_mill(op1, f.m6, tool: t6)
+prog = program(op1, post: "fanuc", number: 4001)

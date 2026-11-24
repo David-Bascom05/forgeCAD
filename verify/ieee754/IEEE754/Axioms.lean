@@ -16,6 +16,23 @@ import IEEE754.Dmath.AtanFacts
 import IEEE754.Dmath.AsinAcos
 import IEEE754.Screen.Apart
 import IEEE754.Screen.First
+import IEEE754.Screen.Near
+import IEEE754.Screen.Cross
+import IEEE754.Screen.CrossScale
+import IEEE754.Screen.Interior
+import IEEE754.Screen.Face
+import IEEE754.Screen.FaceB
+import IEEE754.Screen.FaceArea
+import IEEE754.Interval.Sin
+import IEEE754.Exact.Big
+import IEEE754.Exact.QHenrici
+import IEEE754.Exact.DivRem2
+import IEEE754.Exact.Gcd
+import IEEE754.Exact.QBig
+import IEEE754.Exact.QF64
+import IEEE754.Interval.Horner
+import IEEE754.Expansion
+import IEEE754.ExpansionSum
 
 /-!
 # Only the standard axioms
@@ -94,3 +111,44 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Screen.coord_sound IEEE754.Screen.cramer IEEE754.Screen.det_track IEEE754.Screen.meet_sound
   IEEE754.Screen.two_sided IEEE754.Screen.sqrt_close IEEE754.Screen.dist_sound IEEE754.Screen.apart_sound
   IEEE754.Screen.searchF_sound IEEE754.Screen.meetF_sound IEEE754.Screen.tolF_hi IEEE754.Screen.first_meet_f_sound
+  IEEE754.Screen.e_close IEEE754.Screen.r_close IEEE754.Screen.near_f_past IEEE754.Screen.near_f_within
+  IEEE754.Screen.above_sound IEEE754.Screen.d0_close IEEE754.Screen.crosses_f_sound
+  IEEE754.Screen.float_le_round IEEE754.Screen.scale_facts IEEE754.Screen.pf_delta_ok
+  IEEE754.Screen.proj_close IEEE754.Screen.e_nonneg
+  IEEE754.Screen.axis_sound IEEE754.Screen.midpoint_ok IEEE754.Screen.crosses_line_sound IEEE754.Screen.along_sound
+  IEEE754.Screen.orient_e IEEE754.Screen.orient_sound IEEE754.Screen.pt_diff_close IEEE754.Screen.esum_le
+  IEEE754.Screen.angle_sound IEEE754.Screen.wall_close IEEE754.Screen.wall_lo IEEE754.Screen.wall_hi
+  IEEE754.Screen.touches_sound IEEE754.Screen.fold_err IEEE754.Screen.area_sound
+  -- Interval sin/cos
+  IEEE754.Interval.below_round IEEE754.Interval.above_round IEEE754.Interval.crit_counted
+  IEEE754.Interval.sin_encloses IEEE754.Interval.cos_encloses
+  IEEE754.Interval.ivAdd_encl IEEE754.Interval.ivMul_encl IEEE754.Interval.mul_corners IEEE754.Interval.horner_encl
+  IEEE754.Interval.sign_filter_sound IEEE754.Interval.enclose_encl IEEE754.Interval.ivMul_corners
+  IEEE754.Interval.ivAdd_sums IEEE754.Interval.horner_encl_chk IEEE754.Interval.sign_filter_chk
+  -- div.rs gcd
+  IEEE754.Exact.Gcd.tz_or IEEE754.Exact.Gcd.stein_spec IEEE754.Exact.Gcd.gcdU128_spec IEEE754.Exact.Gcd.gcdU128_le
+  IEEE754.Exact.Gcd.step_inv IEEE754.Exact.Gcd.step_bounds IEEE754.Exact.Gcd.run_brk IEEE754.Exact.Gcd.mediant
+  IEEE754.Exact.Gcd.run_euclid IEEE754.Exact.Gcd.cone IEEE754.Exact.Gcd.lehmerStep_fuel IEEE754.Exact.Gcd.lehmerStep_spec
+  IEEE754.Exact.Gcd.gcdL_spec IEEE754.Exact.Gcd.gcdBig_spec
+  -- Q on Big fields
+  IEEE754.Exact.QB.truncDiv_q IEEE754.Exact.QB.divq_spec IEEE754.Exact.QB.ratio_tie IEEE754.Exact.QB.add_tie
+  IEEE754.Exact.QB.neg_tie IEEE754.Exact.QB.sub_tie IEEE754.Exact.QB.mul_tie IEEE754.Exact.QB.div_tie
+  IEEE754.Exact.QB.inv_tie IEEE754.Exact.QB.cmp_tie IEEE754.Exact.QB.qadd_spec IEEE754.Exact.QB.qsub_spec
+  IEEE754.Exact.QB.qmul_spec IEEE754.Exact.QB.ratio_spec' IEEE754.Exact.QB.floor_tie IEEE754.Exact.QB.ediv_eq_floor
+  IEEE754.Exact.QB.qmid_spec IEEE754.Exact.QB.qcmpF_int IEEE754.Exact.QB.cmpF_spec IEEE754.Exact.QB.lo_sound
+  IEEE754.Exact.QB.hi_sound
+  -- exact.rs Big
+  IEEE754.Exact.add_into_spec IEEE754.Exact.sub_into_spec IEEE754.Exact.mul_into_spec IEEE754.Exact.shl_into_spec
+  IEEE754.Exact.trimLen_spec IEEE754.Exact.cmp_mag_spec IEEE754.Exact.Big.fromMag_spec IEEE754.Exact.Big.view_spec
+  IEEE754.Exact.Big.neg_spec IEEE754.Exact.Big.add_spec IEEE754.Exact.Big.sub_spec IEEE754.Exact.Big.mul_spec
+  IEEE754.Exact.Big.shl_spec IEEE754.Exact.Big.signum_spec IEEE754.Exact.Big.isZero_spec IEEE754.Exact.Big.cmpBig_spec IEEE754.Exact.Big.limbs_unique IEEE754.Exact.Big.eq_iff_val
+  IEEE754.Exact.QZ.ratio_spec IEEE754.Exact.QZ.add_spec IEEE754.Exact.QZ.mul_spec IEEE754.Exact.QZ.neg_spec
+  IEEE754.Exact.QZ.normal_unique
+  IEEE754.Exact.shortDiv_spec IEEE754.Exact.Step.corr_spec IEEE754.Exact.dStep_spec IEEE754.Exact.knuthRun_spec
+  IEEE754.Exact.norm_v IEEE754.Exact.rshift_spec IEEE754.Exact.knuthDiv_spec IEEE754.Exact.divremMag_spec
+  IEEE754.Exact.Big.divrem_spec
+  -- Shewchuk expansions (sheet-spec)
+  IEEE754.NO_sublist IEEE754.NO_sum IEEE754.NO_abs_sum IEEE754.NO_top_dominates IEEE754.NO_sign
+  IEEE754.round_mult_grid IEEE754.two_sum_facts IEEE754.grow_step IEEE754.grow_chain_sum IEEE754.grow_chain_finite
+  IEEE754.grow_chain_NO IEEE754.grow_nonoverlapping
+  IEEE754.round_tie_even IEEE754.err_large IEEE754.two_sum_cor8a IEEE754.two_sum_cor8b IEEE754.two_sum_cor9

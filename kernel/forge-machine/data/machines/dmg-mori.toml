@@ -1,0 +1,1323 @@
+# DMG MORI machines: the maker's published specifications, restated (never copied); each record's
+# `source` is the page or catalogue read and `taken` the date. Estimates and UNKNOWNs are named in
+# each record's `note` and beside the field. Bodies are conservative envelopes from published
+# overall dimensions, not the maker's CAD. Format: docs/cam-machine.md.
+
+# ---------------------------------------------------------------------------------------------
+# DMG MORI DMU 50 3rd Generation: DMU.
+# X 650 Y 520 Z 475; 15000 rpm; 30 tools.
+[[machine]]
+name = "dmg-mori-dmu-50-3rd-generation"
+kind = "table-table"
+control = "unknown"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://en.dmgmori.com/products/machines/milling/5-axis-milling/dmu/dmu-50 | https://us.dmgmori.com/products/machines/milling/5-axis-milling/dmu/dmu-50 | https://en.dmgmori.com/media/public/epaper/TEM_1-2023/TEM_2023-1_ENOS/epaper/TEM_2023-1_ENOS.pdf"
+taken = "2026-11-23"
+note = "B tilts the cradle about Y (-35..110 deg, published) and carries C; the sense of +B (which way the table tips) is UNKNOWN: modelled right-handed about +y; B's pivot below the table top UNKNOWN: 150 mm (estimate); which unit carries X/Y/Z: see the header (where not published, all on the head here); the tool-to-part motion is the same either way; rotary table diameter UNKNOWN: 500 (estimate); spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate); spindle power as published: peak/other 21 kW; torque max 111 N.m (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); magazine options: 60, 120, 180 pockets (product page), TEM 1-2023: up to 120 pockets; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; control UNKNOWN (not published)."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-325, 325]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-260, 260]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-475, 0]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, -150]
+range = [-35, 110]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "B"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 575]
+rpm = [1, 15000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [1000, 500]
+interface = "UNKNOWN"
+
+[[machine.changer]]
+pockets = 30
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 99   # UNKNOWN (unpublished): no weight check
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 575]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/dmg-mori/dmg-mori-dmu-50-3rd-generation/bed.fg"
+ignore = ["support-l", "support-r"]
+[[machine.body.box]]
+min = [-625, -560, -898.868904]
+max = [625, 560, -498.868904]
+
+[[machine.body]]
+name = "support-l"
+link = "base"
+part = "parts/dmg-mori/dmg-mori-dmu-50-3rd-generation/support-l.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-310, -490, -550]
+max = [310, -350, 0]
+
+[[machine.body]]
+name = "support-r"
+link = "base"
+part = "parts/dmg-mori/dmg-mori-dmu-50-3rd-generation/support-r.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-310, 350, -550]
+max = [310, 490, 0]
+
+[[machine.body]]
+name = "cradle"
+link = "B"
+part = "parts/dmg-mori/dmg-mori-dmu-50-3rd-generation/cradle.fg"
+ignore = ["rotary", "support-l", "support-r"]
+[[machine.body.box]]
+min = [-270, -330, -200]
+max = [270, 330, -80]
+
+[[machine.body]]
+name = "rotary"
+link = "C"
+part = "parts/dmg-mori/dmg-mori-dmu-50-3rd-generation/rotary.fg"
+ignore = ["cradle"]
+[[machine.body.cyl]]
+base = [0, 0, -80]
+axis = [0, 0, 1]
+r = 250
+h = 80
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/dmg-mori/dmg-mori-dmu-50-3rd-generation/nose.fg"
+[[machine.body.cyl]]
+base = [0, 0, 575]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/dmg-mori/dmg-mori-dmu-50-3rd-generation/head.fg"
+[[machine.body.box]]
+min = [-150, -150, 725]
+max = [150, 150, 1175]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/5-axis-milling/dmu/dmu-50"
+taken = "2026-11-23"
+value = "X stroke 650 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/5-axis-milling/dmu/dmu-50"
+taken = "2026-11-23"
+value = "Y stroke 520 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/5-axis-milling/dmu/dmu-50"
+taken = "2026-11-23"
+value = "Z stroke 475 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/5-axis-milling/dmu/dmu-50"
+taken = "2026-11-23"
+value = "-35..110 deg"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 15000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "unknown"
+value = "max tool length and diameter"
+basis = "max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check)"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/5-axis-milling/dmu/dmu-50"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "unknown"
+basis = "UNKNOWN (unpublished): no weight check"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate)"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the published rotary table diameter; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# DMG MORI NHX 4000: NHX.
+# X 560 Y 560 Z 660; 20000 rpm #40 / HSK-A63 (speedMASTER); 60 tools.
+[[machine]]
+name = "dmg-mori-nhx-4000"
+kind = "vmc4"
+control = "unknown"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-4000 | https://us.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-4000 | https://en.dmgmori.com/resource/blob/406624/46d18fc347d993dab80c1260b46d9df0/j201en-data.pdf"
+taken = "2026-11-23"
+note = "pallets: count UNKNOWN, 400 square, change time UNKNOWN, load 400 kg; the APC is not in the format (FORMAT-GAPS B1): the pallet at the spindle is the part mount, kind vmc4; spindle nose to pallet centre UNKNOWN: 100 to 100 + Z (estimate); Z modelled on the head (X column, Y head, Z ram) because the format needs the length joint on the head side (FORMAT-GAPS B10); the tool-to-part motion is the same either way; spindle centre above the pallet UNKNOWN: 100 to 100 + Y (estimate); spindle power as published: torque max 221 N.m (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); magazine options: wheel magazine 123/183/243/303 pockets (SIEMENS only); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid X, Y 0 = spindle lowest (home at the top), Z 0 = spindle farthest from the pallet; machine zero UNKNOWN; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; control UNKNOWN (not published)."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-280, 280]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 70000
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [0, 560]
+home = 560
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 70000
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-660, 0]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 70000
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 100, 760]
+rpm = [1, 20000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [1000, 500]
+interface = "#40 / HSK-A63 (speedMASTER)"
+
+[[machine.changer]]
+pockets = 60
+change_s = 3   # chip to chip, published
+max_tool_kg = 99   # UNKNOWN (unpublished): no weight check
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 100, 760]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "pallet"
+kind = "part"
+link = "B"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "pallet"
+link = "B"
+part = "parts/dmg-mori/dmg-mori-nhx-4000/pallet.fg"
+ignore = ["table"]
+[[machine.body.box]]
+min = [-200, -120, -200]
+max = [200, 0, 200]
+
+[[machine.body]]
+name = "table"
+link = "base"
+part = "parts/dmg-mori/dmg-mori-nhx-4000/table.fg"
+ignore = ["pallet", "bed"]
+[[machine.body.cyl]]
+base = [0, -370, 0]
+axis = [0, 1, 0]
+r = 284
+h = 249
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/dmg-mori/dmg-mori-nhx-4000/bed.fg"
+ignore = ["table", "column"]
+[[machine.body.box]]
+min = [-680, -770, -584]
+max = [680, -371, 2700]
+
+[[machine.body]]
+name = "column"
+link = "X"
+part = "parts/dmg-mori/dmg-mori-nhx-4000/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-310, -370, 2110]
+max = [310, 1220, 2600]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/dmg-mori/dmg-mori-nhx-4000/nose.fg"
+[[machine.body.cyl]]
+base = [0, 100, 760]
+axis = [0, 0, 1]
+r = 120
+h = 180
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/dmg-mori/dmg-mori-nhx-4000/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-160, -60, 940]
+max = [160, 260, 1440]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-4000"
+taken = "2026-11-23"
+value = "X stroke 560 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-4000"
+taken = "2026-11-23"
+value = "70000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-4000"
+taken = "2026-11-23"
+value = "Y stroke 560 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-4000"
+taken = "2026-11-23"
+value = "70000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-4000"
+taken = "2026-11-23"
+value = "Z stroke 660 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-4000"
+taken = "2026-11-23"
+value = "70000 mm/min"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 20000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "unknown"
+value = "max tool length and diameter"
+basis = "max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check)"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-4000"
+taken = "2026-11-23"
+value = "60"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-4000"
+taken = "2026-11-23"
+value = "3 s (chip to chip, published)"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "unknown"
+basis = "UNKNOWN (unpublished): no weight check"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.pallet.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.pallet"
+status = "estimate"
+basis = "the published pallet; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the B index table under the pallet, a disc covering the pallet's corners (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the bed (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "the moving column behind the head's Z stroke (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head / ram (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# DMG MORI NHX 5000: NHX.
+# X 730 Y 730 Z 880; 20000 rpm #40 / HSK-A63 (speedMASTER); 60 tools.
+[[machine]]
+name = "dmg-mori-nhx-5000"
+kind = "vmc4"
+control = "unknown"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-5000 | https://en.dmgmori.com/resource/blob/406624/46d18fc347d993dab80c1260b46d9df0/j201en-data.pdf"
+taken = "2026-11-23"
+note = "pallets: count UNKNOWN, 500 square, change time UNKNOWN, load 500 kg; the APC is not in the format (FORMAT-GAPS B1): the pallet at the spindle is the part mount, kind vmc4; spindle nose to pallet centre UNKNOWN: 100 to 100 + Z (estimate); Z modelled on the head (X column, Y head, Z ram) because the format needs the length joint on the head side (FORMAT-GAPS B10); the tool-to-part motion is the same either way; spindle centre above the pallet UNKNOWN: 100 to 100 + Y (estimate); spindle power as published: torque max 221 N.m (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); magazine options: wheel magazine 123/183/243/303 pockets (SIEMENS only); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid X, Y 0 = spindle lowest (home at the top), Z 0 = spindle farthest from the pallet; machine zero UNKNOWN; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; control UNKNOWN (not published)."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-365, 365]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 70000
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [0, 730]
+home = 730
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 70000
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-880, 0]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 70000
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 100, 980]
+rpm = [1, 20000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [1000, 500]
+interface = "#40 / HSK-A63 (speedMASTER)"
+
+[[machine.changer]]
+pockets = 60
+change_s = 3   # chip to chip, published
+max_tool_kg = 99   # UNKNOWN (unpublished): no weight check
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 100, 980]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "pallet"
+kind = "part"
+link = "B"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "pallet"
+link = "B"
+part = "parts/dmg-mori/dmg-mori-nhx-5000/pallet.fg"
+ignore = ["table"]
+[[machine.body.box]]
+min = [-250, -120, -250]
+max = [250, 0, 250]
+
+[[machine.body]]
+name = "table"
+link = "base"
+part = "parts/dmg-mori/dmg-mori-nhx-5000/table.fg"
+ignore = ["pallet", "bed"]
+[[machine.body.cyl]]
+base = [0, -370, 0]
+axis = [0, 1, 0]
+r = 355
+h = 249
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/dmg-mori/dmg-mori-nhx-5000/bed.fg"
+ignore = ["table", "column"]
+[[machine.body.box]]
+min = [-765, -770, -655]
+max = [765, -371, 3140]
+
+[[machine.body]]
+name = "column"
+link = "X"
+part = "parts/dmg-mori/dmg-mori-nhx-5000/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-310, -370, 2550]
+max = [310, 1390, 3040]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/dmg-mori/dmg-mori-nhx-5000/nose.fg"
+[[machine.body.cyl]]
+base = [0, 100, 980]
+axis = [0, 0, 1]
+r = 120
+h = 180
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/dmg-mori/dmg-mori-nhx-5000/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-160, -60, 1160]
+max = [160, 260, 1660]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-5000"
+taken = "2026-11-23"
+value = "X stroke 730 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-5000"
+taken = "2026-11-23"
+value = "70000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-5000"
+taken = "2026-11-23"
+value = "Y stroke 730 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-5000"
+taken = "2026-11-23"
+value = "70000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-5000"
+taken = "2026-11-23"
+value = "Z stroke 880 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-5000"
+taken = "2026-11-23"
+value = "70000 mm/min"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 20000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "unknown"
+value = "max tool length and diameter"
+basis = "max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check)"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-5000"
+taken = "2026-11-23"
+value = "60"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-5000"
+taken = "2026-11-23"
+value = "3 s (chip to chip, published)"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "unknown"
+basis = "UNKNOWN (unpublished): no weight check"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.pallet.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.pallet"
+status = "estimate"
+basis = "the published pallet; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the B index table under the pallet, a disc covering the pallet's corners (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the bed (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "the moving column behind the head's Z stroke (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head / ram (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# DMG MORI NLX 2500 | 700: NLX.
+# X 260 Y 120 Z 795; 5000 rpm.
+[[machine]]
+name = "dmg-mori-nlx-2500-700"
+kind = "lathe"
+control = "unknown"
+coolants = ["flood"]
+clearance = 1
+source = "https://en.dmgmori.com/products/machines/turning/universal-turning/nlx/nlx-2500-2nd | https://us.dmgmori.com/products/machines/turning/universal-turning/nlx/nlx-2500-2nd | https://en.dmgmori.com/media/public/epaper/TEM_1_2024/TEM_2024-1_ENOS/epaper/TEM_2024-1_ENOS.pdf | https://en.dmgmori.com/products/machines/turning/universal-turning/nlx/nlx-2500"
+taken = "2026-11-23"
+note = "modelled as its 2-axis lathe: the Y axis, C axis and live tools are not modelled (FORMAT-GAPS B12); swing over bed UNKNOWN: the max turning diameter used; spindle power as published: torque max 843 N.m (no curve: no power check); where each stroke sits relative to the spindle centreline and chuck face is UNKNOWN: X's top end is put at the max turning radius and Z's at the max turning length + 50 mm (estimates); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the base frame is turned so x is the slide's X (a slant bed's angle is not modelled); the tailstock is not modelled; control UNKNOWN (not published)."
+real = true
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-37, 758]
+home = 758
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-77, 183]   # radius; the program's X word is twice it
+home = 183
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+diameter = true
+
+[[machine.spindle]]
+name = "main"
+link = "base"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [1, 5000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [366, 708]
+interface = " (bar 105)"
+
+[[machine.turret]]
+name = "T1"
+link = "X"
+stations = 12
+index_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0)
+center = [384, 0, 0]
+index_axis = [0, 0, 1]
+
+[[machine.mount]]
+name = "turret"
+kind = "tool"
+link = "X"
+at = [224, 0, 0]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "chuck"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/dmg-mori/dmg-mori-nlx-2500-700/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-222, -222, -610]
+max = [222, 222, -110]
+
+[[machine.body]]
+name = "chuck"
+link = "base"
+part = "parts/dmg-mori/dmg-mori-nlx-2500-700/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -110]
+axis = [0, 0, 1]
+r = 142
+h = 110
+
+[[machine.body]]
+name = "turret"
+link = "X"
+part = "parts/dmg-mori/dmg-mori-nlx-2500-700/turret.fg"
+[[machine.body.cyl]]
+base = [384, 0, -45]
+axis = [0, 0, 1]
+r = 160
+h = 90
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/turning/universal-turning/nlx/nlx-2500-2nd"
+taken = "2026-11-23"
+value = "Z stroke 795 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/turning/universal-turning/nlx/nlx-2500-2nd"
+taken = "2026-11-23"
+value = "X stroke 260 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.main.rpm"
+status = "unknown"
+basis = "max 5000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.main.nose"
+status = "estimate"
+basis = "the chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.main.max"
+status = "estimate"
+value = "swing and max turning length"
+basis = "swing over bed UNKNOWN: the max turning diameter used"
+
+[[machine.cite]]
+path = "turret.T1.stations"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/turning/universal-turning/nlx/nlx-2500-2nd"
+taken = "2026-11-23"
+value = "12"
+
+[[machine.cite]]
+path = "turret.T1.index_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0)"
+
+[[machine.cite]]
+path = "turret.T1.center"
+status = "estimate"
+basis = "turret size and position not published: placed so the disc clears the chuck (note)"
+
+[[machine.cite]]
+path = "mount.turret.at"
+status = "estimate"
+basis = "the tool gauge point on the turret/head: not published, placed as the note says"
+
+[[machine.cite]]
+path = "mount.chuck.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.headstock"
+status = "estimate"
+basis = "the headstock behind the chuck (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.chuck"
+status = "estimate"
+basis = "the published chuck size plus jaw stand-out (estimate); length an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.turret"
+status = "estimate"
+basis = "the turret disc (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# DMG MORI CLX 350: CLX, SINUMERIK ONE (en page, ERGOline X 24in).
+# X 242.5 Y 80 Z 540; 5000 rpm.
+[[machine]]
+name = "dmg-mori-clx-350"
+kind = "lathe"
+control = "siemens"
+coolants = ["flood"]
+clearance = 1
+source = "https://en.dmgmori.com/products/machines/turning/universal-turning/clx/clx-350 | https://us.dmgmori.com/products/machines/turning/universal-turning/clx/clx-350"
+taken = "2026-11-23"
+note = "modelled as its 2-axis lathe: the Y axis, C axis and live tools are not modelled (FORMAT-GAPS B12); chuck size UNKNOWN: 254 mm (estimate); swing over bed UNKNOWN: the max turning diameter used; spindle power as published: peak/other 16.5 kW; torque max 168 N.m (no curve: no power check); where each stroke sits relative to the spindle centreline and chuck face is UNKNOWN: X's top end is put at the max turning radius and Z's at the max turning length + 50 mm (estimates); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the base frame is turned so x is the slide's X (a slant bed's angle is not modelled); the tailstock is not modelled; the dialect (siemens) is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [40, 580]
+home = 580
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-82.5, 160]   # radius; the program's X word is twice it
+home = 160
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+diameter = true
+
+[[machine.spindle]]
+name = "main"
+link = "base"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [1, 5000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [320, 530]
+interface = " (bar 65)"
+
+[[machine.turret]]
+name = "T1"
+link = "X"
+stations = 24   # UNKNOWN (unpublished): 24, no T-number check
+index_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0)
+center = [389.5, 0, 0]
+index_axis = [0, 0, 1]
+
+[[machine.mount]]
+name = "turret"
+kind = "tool"
+link = "X"
+at = [229.5, 0, 0]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "chuck"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/dmg-mori/dmg-mori-clx-350/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-222, -222, -610]
+max = [222, 222, -110]
+
+[[machine.body]]
+name = "chuck"
+link = "base"
+part = "parts/dmg-mori/dmg-mori-clx-350/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -110]
+axis = [0, 0, 1]
+r = 142
+h = 110
+
+[[machine.body]]
+name = "turret"
+link = "X"
+part = "parts/dmg-mori/dmg-mori-clx-350/turret.fg"
+[[machine.body.cyl]]
+base = [389.5, 0, -45]
+axis = [0, 0, 1]
+r = 160
+h = 90
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/turning/universal-turning/clx/clx-350"
+taken = "2026-11-23"
+value = "Z stroke 540 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://en.dmgmori.com/products/machines/turning/universal-turning/clx/clx-350"
+taken = "2026-11-23"
+value = "X stroke 242.5 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.main.rpm"
+status = "unknown"
+basis = "max 5000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.main.nose"
+status = "estimate"
+basis = "the chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.main.max"
+status = "estimate"
+value = "swing and max turning length"
+basis = "swing over bed UNKNOWN: the max turning diameter used"
+
+[[machine.cite]]
+path = "turret.T1.stations"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 24, no T-number check"
+
+[[machine.cite]]
+path = "turret.T1.index_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0)"
+
+[[machine.cite]]
+path = "turret.T1.center"
+status = "estimate"
+basis = "turret size and position not published: placed so the disc clears the chuck (note)"
+
+[[machine.cite]]
+path = "mount.turret.at"
+status = "estimate"
+basis = "the tool gauge point on the turret/head: not published, placed as the note says"
+
+[[machine.cite]]
+path = "mount.chuck.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.headstock"
+status = "estimate"
+basis = "the headstock behind the chuck (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.chuck"
+status = "estimate"
+basis = "the published chuck size plus jaw stand-out (estimate); length an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.turret"
+status = "estimate"
+basis = "the turret disc (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"

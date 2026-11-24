@@ -285,6 +285,24 @@ fn groups(s: &Shell) -> Vec<Group> {
     {
         return gs;
     }
+    if s.tab == super::CAM_TAB {
+        return super::cam::groups(s)
+            .into_iter()
+            .map(|(name, big, small)| {
+                let tool = |(name, icon, action, on)| Tool {
+                    name,
+                    icon,
+                    action,
+                    on,
+                };
+                g(
+                    name,
+                    big.into_iter().map(tool).collect(),
+                    small.into_iter().map(tool).collect(),
+                )
+            })
+            .collect();
+    }
     if s.tab == super::THERMO_TAB {
         return super::thermo_ui::groups(s)
             .into_iter()
@@ -561,6 +579,16 @@ fn groups(s: &Shell) -> Vec<Group> {
                 ],
             ),
             g(
+                "Machines",
+                vec![go(
+                    "Machine Builder",
+                    "gear",
+                    Action::MachineBuilder,
+                    s.machine.is_some(),
+                )],
+                vec![],
+            ),
+            g(
                 "Options",
                 vec![go("Settings", "options", Action::Settings, s.prefs.open)],
                 vec![],
@@ -638,7 +666,11 @@ impl Shell {
             return self.sketch_ribbon(ui, w);
         }
         let mut gx = 0.0;
-        let gs = groups(self);
+        let mut gs = groups(self);
+        // the Machine Builder's own commands, on the Manage tab while it is open
+        if self.machine.is_some() && self.tab == 4 {
+            gs.extend(super::machine::groups(self));
+        }
         // too wide for the window: small buttons lose their words, as Inventor's ribbon shrinks
         let full: f32 = gs
             .iter()

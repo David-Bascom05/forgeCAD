@@ -1,0 +1,10 @@
+[package]
+name = "forge-cam-geom"
+description = "ForgeCAD CAM geometry: exact numbers, exact line/arc region offsets, tool shapes as revolved profiles, and the certified tool-part clearance checker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true

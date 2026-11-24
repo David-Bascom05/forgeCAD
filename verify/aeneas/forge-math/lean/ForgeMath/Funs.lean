@@ -1894,6 +1894,1083 @@ def frame.Frame.flipped (self : frame.Frame) : Result frame.Frame := do
   let uv1 ← vec.UnitVec3.Insts.CoreOpsArithNegUnitVec3.neg self.z
   ok { self with y := uv, z := uv1 }
 
+/-- [forge_math::interval::{impl core::clone::Clone for forge_math::interval::Interval}::clone]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 7:9-7:14
+    Visibility: public -/
+def interval.Interval.Insts.CoreCloneClone.clone
+  (self : interval.Interval) : Result interval.Interval := do
+  ok self
+
+/-- Trait implementation: [forge_math::interval::{impl core::clone::Clone for forge_math::interval::Interval}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 7:9-7:14 -/
+@[reducible]
+def interval.Interval.Insts.CoreCloneClone : core.clone.Clone interval.Interval
+  := {
+  clone := interval.Interval.Insts.CoreCloneClone.clone
+}
+
+/-- Trait implementation: [forge_math::interval::{impl core::marker::Copy for forge_math::interval::Interval}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 7:16-7:20 -/
+@[reducible]
+def interval.Interval.Insts.CoreMarkerCopy : core.marker.Copy interval.Interval
+  := {
+  cloneInst := interval.Interval.Insts.CoreCloneClone
+}
+
+/-- [forge_math::interval::{impl core::fmt::Debug for forge_math::interval::Interval}::fmt]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 7:22-7:27
+    Visibility: public -/
+def interval.Interval.Insts.CoreFmtDebug.fmt
+  (self : interval.Interval) (f : core.fmt.Formatter) :
+  Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter)
+  := do
+  let dyn := Dyn.mk _ F64.Insts.CoreFmtDebug self.lo
+  let dyn1 := Dyn.mk _ (core.fmt.DebugShared F64.Insts.CoreFmtDebug) self.hi
+  core.fmt.Formatter.debug_struct_field2_finish f (toStr "Interval") (toStr
+    "lo") dyn (toStr "hi") dyn1
+
+/-- Trait implementation: [forge_math::interval::{impl core::fmt::Debug for forge_math::interval::Interval}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 7:22-7:27 -/
+@[reducible]
+def interval.Interval.Insts.CoreFmtDebug : core.fmt.Debug interval.Interval
+  := {
+  fmt := interval.Interval.Insts.CoreFmtDebug.fmt
+}
+
+/-- Trait implementation: [forge_math::interval::{impl core::marker::StructuralPartialEq for forge_math::interval::Interval}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 7:29-7:38 -/
+@[reducible]
+def interval.Interval.Insts.CoreMarkerStructuralPartialEq :
+  core.marker.StructuralPartialEq interval.Interval := {
+}
+
+/-- [forge_math::interval::{impl core::cmp::PartialEq<forge_math::interval::Interval> for forge_math::interval::Interval}::eq]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 7:29-7:38
+    Visibility: public -/
+def interval.Interval.Insts.CoreCmpPartialEqInterval.eq
+  (self : interval.Interval) (other : interval.Interval) : Result Bool := do
+  if F64.Ops.eq self.lo other.lo
+  then ok (F64.Ops.eq self.hi other.hi)
+  else ok false
+
+/-- Trait implementation: [forge_math::interval::{impl core::cmp::PartialEq<forge_math::interval::Interval> for forge_math::interval::Interval}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 7:29-7:38 -/
+@[reducible]
+def interval.Interval.Insts.CoreCmpPartialEqInterval : core.cmp.PartialEq
+  interval.Interval interval.Interval := {
+  eq := interval.Interval.Insts.CoreCmpPartialEqInterval.eq
+}
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::EMPTY]
+    Source: 'kernel/forge-math/src/interval.rs', lines 14:4-17:6
+    Visibility: public -/
+@[global_simps, irreducible]
+def interval.Interval.EMPTY : Result interval.Interval := do
+  let fl ← core.f64.F64.INFINITY
+  let fl1 ← core.f64.F64.NEG_INFINITY
+  ok { lo := fl, hi := fl1 }
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::new]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 19:4-24:5
+    Visibility: public -/
+def interval.Interval.new
+  (lo : F64) (hi : F64) : Result interval.Interval := do
+  let fl ← core.f64.F64.min lo hi
+  let fl1 ← core.f64.F64.max lo hi
+  ok { lo := fl, hi := fl1 }
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::point]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 26:4-28:5
+    Visibility: public -/
+def interval.Interval.point (v : F64) : Result interval.Interval := do
+  ok { lo := v, hi := v }
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::out]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 30:4-35:5 -/
+def interval.Interval.out
+  (lo : F64) (hi : F64) : Result interval.Interval := do
+  let fl ← core.f64.F64.next_down lo
+  let fl1 ← core.f64.F64.next_up hi
+  ok { lo := fl, hi := fl1 }
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::is_empty]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 36:4-38:5
+    Visibility: public -/
+def interval.Interval.is_empty (self : interval.Interval) : Result Bool := do
+  ok (F64.Ops.gt self.lo self.hi)
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::width]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 39:4-41:5
+    Visibility: public -/
+def interval.Interval.width (self : interval.Interval) : Result F64 := do
+  ok (F64.Ops.sub self.hi self.lo)
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::mid]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 42:4-44:5
+    Visibility: public -/
+def interval.Interval.mid (self : interval.Interval) : Result F64 := do
+  let fl ← lift (F64.Ops.add self.lo self.hi)
+  ok (F64.Ops.mul (F64.Ops.ofBits 4602678819172646912) fl)
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::contains]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 45:4-47:5
+    Visibility: public -/
+def interval.Interval.contains
+  (self : interval.Interval) (v : F64) : Result Bool := do
+  if F64.Ops.le self.lo v
+  then ok (F64.Ops.le v self.hi)
+  else ok false
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::contains_zero]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 48:4-50:5
+    Visibility: public -/
+def interval.Interval.contains_zero
+  (self : interval.Interval) : Result Bool := do
+  interval.Interval.contains self (F64.Ops.ofBits 0)
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::overlaps]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 51:4-53:5
+    Visibility: public -/
+def interval.Interval.overlaps
+  (self : interval.Interval) (o : interval.Interval) : Result Bool := do
+  if F64.Ops.le self.lo o.hi
+  then ok (F64.Ops.le o.lo self.hi)
+  else ok false
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::hull]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 54:4-59:5
+    Visibility: public -/
+def interval.Interval.hull
+  (self : interval.Interval) (o : interval.Interval) :
+  Result interval.Interval
+  := do
+  let fl ← core.f64.F64.min self.lo o.lo
+  let fl1 ← core.f64.F64.max self.hi o.hi
+  ok { lo := fl, hi := fl1 }
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::include]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 60:4-63:5
+    Visibility: public -/
+def interval.Interval.include
+  (self : interval.Interval) (v : F64) : Result interval.Interval := do
+  let fl ← core.f64.F64.min self.lo v
+  let fl1 ← core.f64.F64.max self.hi v
+  ok { lo := fl, hi := fl1 }
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::grow]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 64:4-69:5
+    Visibility: public -/
+def interval.Interval.grow
+  (self : interval.Interval) (d : F64) : Result interval.Interval := do
+  let fl ← lift (F64.Ops.sub self.lo d)
+  let fl1 ← lift (F64.Ops.add self.hi d)
+  ok { lo := fl, hi := fl1 }
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::split]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 70:4-73:5
+    Visibility: public -/
+def interval.Interval.split
+  (self : interval.Interval) :
+  Result (interval.Interval × interval.Interval)
+  := do
+  let m ← interval.Interval.mid self
+  ok ({ self with hi := m }, { self with lo := m })
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::clamp_lo]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 85:4-90:5 -/
+def interval.Interval.clamp_lo
+  (self : interval.Interval) (v : F64) : Result interval.Interval := do
+  let fl ← core.f64.F64.max self.lo v
+  ok { self with lo := fl }
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::sqr]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 74:4-84:5
+    Visibility: public -/
+def interval.Interval.sqr
+  (self : interval.Interval) : Result interval.Interval := do
+  let a ← lift (F64.Ops.mul self.lo self.lo)
+  let b ← lift (F64.Ops.mul self.hi self.hi)
+  let b1 ← interval.Interval.contains_zero self
+  if b1
+  then
+    let fl ← core.f64.F64.max a b
+    let fl1 ← core.f64.F64.next_up fl
+    ok { lo := (F64.Ops.ofBits 0), hi := fl1 }
+  else
+    let fl ← core.f64.F64.min a b
+    let fl1 ← core.f64.F64.max a b
+    let i ← interval.Interval.out fl fl1
+    interval.Interval.clamp_lo i (F64.Ops.ofBits 0)
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::sqrt]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 91:4-93:5
+    Visibility: public -/
+def interval.Interval.sqrt
+  (self : interval.Interval) : Result interval.Interval := do
+  let fl ← core.f64.F64.max self.lo (F64.Ops.ofBits 0)
+  let fl1 ← std.f64.F64.sqrt fl
+  let fl2 ← core.f64.F64.max self.hi (F64.Ops.ofBits 0)
+  let fl3 ← std.f64.F64.sqrt fl2
+  let i ← interval.Interval.out fl1 fl3
+  interval.Interval.clamp_lo i (F64.Ops.ofBits 0)
+
+/-- [forge_math::interval::max4]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 238:0-240:1 -/
+def interval.max4 (c : Array F64 4#usize) : Result F64 := do
+  let fl ← Array.index_usize c 0#usize
+  let fl1 ← Array.index_usize c 1#usize
+  let fl2 ← core.f64.F64.max fl fl1
+  let fl3 ← Array.index_usize c 2#usize
+  let fl4 ← core.f64.F64.max fl2 fl3
+  let fl5 ← Array.index_usize c 3#usize
+  core.f64.F64.max fl4 fl5
+
+/-- [forge_math::interval::min4]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 234:0-236:1 -/
+def interval.min4 (c : Array F64 4#usize) : Result F64 := do
+  let fl ← Array.index_usize c 0#usize
+  let fl1 ← Array.index_usize c 1#usize
+  let fl2 ← core.f64.F64.min fl fl1
+  let fl3 ← Array.index_usize c 2#usize
+  let fl4 ← core.f64.F64.min fl2 fl3
+  let fl5 ← Array.index_usize c 3#usize
+  core.f64.F64.min fl4 fl5
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::div]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 95:4-104:5
+    Visibility: public -/
+def interval.Interval.div
+  (self : interval.Interval) (d : interval.Interval) :
+  Result interval.Interval
+  := do
+  let b ← interval.Interval.contains_zero d
+  if b
+  then
+    let fl ← core.f64.F64.NEG_INFINITY
+    let fl1 ← core.f64.F64.INFINITY
+    ok { lo := fl, hi := fl1 }
+  else
+    let fl ← lift (F64.Ops.div self.lo d.lo)
+    let fl1 ← lift (F64.Ops.div self.lo d.hi)
+    let fl2 ← lift (F64.Ops.div self.hi d.lo)
+    let fl3 ← lift (F64.Ops.div self.hi d.hi)
+    let fl4 ← interval.min4 (Array.make 4#usize [ fl, fl1, fl2, fl3 ])
+    let fl5 ← interval.max4 (Array.make 4#usize [ fl, fl1, fl2, fl3 ])
+    interval.Interval.out fl4 fl5
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::atan2::{impl core::ops::function::Fn<(f64,), f64> for forge_math::interval::{forge_math::interval::Interval}::atan2::{closure#1}}::call]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 134:16-134:32 -/
+def interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+  (c : interval.Interval.atan2.closure_1) (tupled_args : F64) :
+  Result F64
+  := do
+  ok (F64.Ops.add tupled_args (F64.Ops.ofBits 0))
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::atan2::{impl core::ops::function::FnMut<(&'_0 f64,), bool> for forge_math::interval::{forge_math::interval::Interval}::atan2::{closure}<'_0>}::call_mut]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 128:57-128:74 -/
+def
+  interval.Interval.atan2.closure.Insts.CoreOpsFunctionFnMutTupleShared0F64Bool.call_mut
+  (c : interval.Interval.atan2.closure) (tupled_args : F64) :
+  Result (Bool × interval.Interval.atan2.closure)
+  := do
+  let b ← core.f64.F64.is_finite tupled_args
+  ok (b, ())
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::atan2::{impl core::ops::function::FnOnce<(&'_0 f64,), bool> for forge_math::interval::{forge_math::interval::Interval}::atan2::{closure}<'_0>}::call_once]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 128:57-128:74 -/
+def
+  interval.Interval.atan2.closure.Insts.CoreOpsFunctionFnOnceTupleShared0F64Bool.call_once
+  (c : interval.Interval.atan2.closure) (fl : F64) : Result Bool := do
+  let (b, _) ←
+    interval.Interval.atan2.closure.Insts.CoreOpsFunctionFnMutTupleShared0F64Bool.call_mut
+      () fl
+  ok b
+
+/-- Trait implementation: [forge_math::interval::{forge_math::interval::Interval}::atan2::{impl core::ops::function::FnOnce<(&'_0 f64,), bool> for forge_math::interval::{forge_math::interval::Interval}::atan2::{closure}<'_0>}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 128:57-128:74 -/
+@[reducible]
+def
+  interval.Interval.atan2.closure.Insts.CoreOpsFunctionFnOnceTupleShared0F64Bool
+  : core.ops.function.FnOnce interval.Interval.atan2.closure F64 Bool := {
+  call_once :=
+    interval.Interval.atan2.closure.Insts.CoreOpsFunctionFnOnceTupleShared0F64Bool.call_once
+}
+
+/-- Trait implementation: [forge_math::interval::{forge_math::interval::Interval}::atan2::{impl core::ops::function::FnMut<(&'_0 f64,), bool> for forge_math::interval::{forge_math::interval::Interval}::atan2::{closure}<'_0>}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 128:57-128:74 -/
+@[reducible]
+def
+  interval.Interval.atan2.closure.Insts.CoreOpsFunctionFnMutTupleShared0F64Bool
+  : core.ops.function.FnMut interval.Interval.atan2.closure F64 Bool := {
+  FnOnceInst :=
+    interval.Interval.atan2.closure.Insts.CoreOpsFunctionFnOnceTupleShared0F64Bool
+  call_mut :=
+    interval.Interval.atan2.closure.Insts.CoreOpsFunctionFnMutTupleShared0F64Bool.call_mut
+}
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::atan2::ATAN_ERR]
+    Source: 'kernel/forge-math/src/interval.rs', lines 120:8-120:49 -/
+@[global_simps, irreducible]
+def interval.Interval.atan2.ATAN_ERR : Result F64 := do
+  let fl ← core.f64.F64.EPSILON
+  ok (F64.Ops.mul (F64.Ops.ofBits 4616189618054758400) fl)
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::atan2::PI_UP]
+    Source: 'kernel/forge-math/src/interval.rs', lines 118:8-118:51 -/
+@[global_simps, irreducible]
+def interval.Interval.atan2.PI_UP : F64 := F64.Ops.ofBits 4614256656552045849
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::atan2]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 116:4-145:5
+    Visibility: public -/
+def interval.Interval.atan2
+  (y : interval.Interval) (x : interval.Interval) :
+  Result interval.Interval
+  := do
+  let fl ← lift (F64.Ops.neg interval.Interval.atan2.PI_UP)
+  let b ← interval.Interval.is_empty y
+  if b
+  then interval.Interval.EMPTY
+  else
+    let b1 ← interval.Interval.is_empty x
+    if b1
+    then interval.Interval.EMPTY
+    else
+      let s ←
+        lift (Array.to_slice (Array.make 4#usize [ y.lo, y.hi, x.lo, x.hi ]))
+      let i ← core.slice.Slice.iter s
+      let (finite, _) ←
+        core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.all
+          interval.Interval.atan2.closure.Insts.CoreOpsFunctionFnMutTupleShared0F64Bool
+          i ()
+      if finite
+      then
+        if F64.Ops.le x.lo (F64.Ops.ofBits 0)
+        then
+          if F64.Ops.le y.lo (F64.Ops.ofBits 0)
+          then
+            if F64.Ops.le (F64.Ops.ofBits 0) y.hi
+            then ok { lo := fl, hi := interval.Interval.atan2.PI_UP }
+            else
+              let fl1 ←
+                interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+                  () y.lo
+              let fl2 ←
+                interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+                  () x.lo
+              let fl3 ← dmath.atan2 fl1 fl2
+              let fl4 ←
+                interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+                  () x.hi
+              let fl5 ← dmath.atan2 fl1 fl4
+              let fl6 ←
+                interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+                  () y.hi
+              let fl7 ← dmath.atan2 fl6 fl2
+              let fl8 ← dmath.atan2 fl6 fl4
+              let fl9 ←
+                interval.min4 (Array.make 4#usize [ fl3, fl5, fl7, fl8 ])
+              let fl10 ← interval.Interval.atan2.ATAN_ERR
+              let fl11 ← lift (F64.Ops.sub fl9 fl10)
+              let fl12 ← core.f64.F64.next_down fl11
+              let fl13 ← lift (F64.Ops.neg interval.Interval.atan2.PI_UP)
+              let fl14 ← core.f64.F64.max fl12 fl13
+              let fl15 ←
+                interval.max4 (Array.make 4#usize [ fl3, fl5, fl7, fl8 ])
+              let fl16 ← lift (F64.Ops.add fl15 fl10)
+              let fl17 ← core.f64.F64.next_up fl16
+              let fl18 ← core.f64.F64.min fl17 interval.Interval.atan2.PI_UP
+              ok { lo := fl14, hi := fl18 }
+          else
+            let fl1 ←
+              interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+                () y.lo
+            let fl2 ←
+              interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+                () x.lo
+            let fl3 ← dmath.atan2 fl1 fl2
+            let fl4 ←
+              interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+                () x.hi
+            let fl5 ← dmath.atan2 fl1 fl4
+            let fl6 ←
+              interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+                () y.hi
+            let fl7 ← dmath.atan2 fl6 fl2
+            let fl8 ← dmath.atan2 fl6 fl4
+            let fl9 ←
+              interval.min4 (Array.make 4#usize [ fl3, fl5, fl7, fl8 ])
+            let fl10 ← interval.Interval.atan2.ATAN_ERR
+            let fl11 ← lift (F64.Ops.sub fl9 fl10)
+            let fl12 ← core.f64.F64.next_down fl11
+            let fl13 ← lift (F64.Ops.neg interval.Interval.atan2.PI_UP)
+            let fl14 ← core.f64.F64.max fl12 fl13
+            let fl15 ←
+              interval.max4 (Array.make 4#usize [ fl3, fl5, fl7, fl8 ])
+            let fl16 ← lift (F64.Ops.add fl15 fl10)
+            let fl17 ← core.f64.F64.next_up fl16
+            let fl18 ← core.f64.F64.min fl17 interval.Interval.atan2.PI_UP
+            ok { lo := fl14, hi := fl18 }
+        else
+          let fl1 ←
+            interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+              () y.lo
+          let fl2 ←
+            interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+              () x.lo
+          let fl3 ← dmath.atan2 fl1 fl2
+          let fl4 ←
+            interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+              () x.hi
+          let fl5 ← dmath.atan2 fl1 fl4
+          let fl6 ←
+            interval.Interval.atan2.closure_1.Insts.CoreOpsFunctionFnTupleF64F64.call
+              () y.hi
+          let fl7 ← dmath.atan2 fl6 fl2
+          let fl8 ← dmath.atan2 fl6 fl4
+          let fl9 ← interval.min4 (Array.make 4#usize [ fl3, fl5, fl7, fl8 ])
+          let fl10 ← interval.Interval.atan2.ATAN_ERR
+          let fl11 ← lift (F64.Ops.sub fl9 fl10)
+          let fl12 ← core.f64.F64.next_down fl11
+          let fl13 ← lift (F64.Ops.neg interval.Interval.atan2.PI_UP)
+          let fl14 ← core.f64.F64.max fl12 fl13
+          let fl15 ←
+            interval.max4 (Array.make 4#usize [ fl3, fl5, fl7, fl8 ])
+          let fl16 ← lift (F64.Ops.add fl15 fl10)
+          let fl17 ← core.f64.F64.next_up fl16
+          let fl18 ← core.f64.F64.min fl17 interval.Interval.atan2.PI_UP
+          ok { lo := fl14, hi := fl18 }
+      else ok { lo := fl, hi := interval.Interval.atan2.PI_UP }
+
+/-- [forge_math::interval::TRIG_ERR]
+    Source: 'kernel/forge-math/src/interval.rs', lines 231:0-231:35 -/
+@[global_simps, irreducible]
+def interval.TRIG_ERR : Result F64 := core.f64.F64.EPSILON
+
+/-- [forge_math::interval::PI_UP]
+    Source: 'kernel/forge-math/src/interval.rs', lines 227:0-227:43 -/
+@[global_simps, irreducible]
+def interval.PI_UP : F64 := F64.Ops.ofBits 4614256656552045849
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::trig_at]: loop body 0:
+    Source: 'kernel/forge-math/src/interval.rs', lines 211:8-218:9 -/
+@[rust_loop_body]
+def interval.Interval.trig_at_loop.body
+  (last : F64) (lo : F64) (hi : F64) (k : F64) :
+  Result (ControlFlow (F64 × F64 × F64) (F64 × F64))
+  := do
+  if F64.Ops.le k last
+  then
+    let i ← lift (F64.Ops.toIScalar .I64 k)
+    let i1 ← core.num.I64.rem_euclid i 2#i64
+    let (lo1, hi1) ←
+      if i1 = 0#i64
+      then ok (lo, F64.Ops.ofBits 4607182418800017408)
+      else ok (F64.Ops.ofBits 13830554455654793216, hi)
+    let k1 ← lift (F64.Ops.add k (F64.Ops.ofBits 4607182418800017408))
+    ok (cont (lo1, hi1, k1))
+  else ok (done (lo, hi))
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::trig_at]: loop 0:
+    Source: 'kernel/forge-math/src/interval.rs', lines 211:8-218:9 -/
+@[rust_loop]
+def interval.Interval.trig_at_loop
+  (lo : F64) (hi : F64) (k : F64) (last : F64) : Result (F64 × F64) := do
+  loop
+    (fun (lo1, hi1, k1) => interval.Interval.trig_at_loop.body last lo1 hi1 k1)
+    (lo, hi, k)
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::trig_at]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 195:4-223:5 -/
+def interval.Interval.trig_at
+  (self : interval.Interval) (fa : F64) (fb : F64) (half : F64) :
+  Result interval.Interval
+  := do
+  let fl ← core.f64.F64.min fa fb
+  let fl1 ← interval.TRIG_ERR
+  let fl2 ← lift (F64.Ops.sub fl fl1)
+  let lo ← core.f64.F64.next_down fl2
+  let fl3 ← core.f64.F64.max fa fb
+  let fl4 ← lift (F64.Ops.add fl3 fl1)
+  let hi ← core.f64.F64.next_up fl4
+  let fl5 ← dmath.PI
+  let fl6 ← lift (F64.Ops.div self.lo fl5)
+  let fl7 ← lift (F64.Ops.div self.lo interval.PI_UP)
+  let fl8 ← core.f64.F64.min fl6 fl7
+  let qa ← core.f64.F64.next_down fl8
+  let fl9 ← lift (F64.Ops.div self.hi fl5)
+  let fl10 ← lift (F64.Ops.div self.hi interval.PI_UP)
+  let fl11 ← core.f64.F64.max fl9 fl10
+  let qb ← core.f64.F64.next_up fl11
+  let fl12 ← lift (F64.Ops.sub qa half)
+  let k ← std.f64.F64.ceil fl12
+  let fl13 ← lift (F64.Ops.sub qb half)
+  let last ← std.f64.F64.floor fl13
+  let (lo1, hi1) ← interval.Interval.trig_at_loop lo hi k last
+  let fl14 ← core.f64.F64.max lo1 (F64.Ops.ofBits 13830554455654793216)
+  let fl15 ← core.f64.F64.min hi1 (F64.Ops.ofBits 4607182418800017408)
+  ok { lo := fl14, hi := fl15 }
+
+/-- [forge_math::interval::TRIG_MOST]
+    Source: 'kernel/forge-math/src/interval.rs', lines 229:0-229:35 -/
+@[global_simps, irreducible]
+def interval.TRIG_MOST : F64 := F64.Ops.ofBits 4697254411347427328
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::trig_whole]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 173:4-182:5 -/
+def interval.Interval.trig_whole
+  (self : interval.Interval) : Result (Option interval.Interval) := do
+  let b ← interval.Interval.is_empty self
+  if b
+  then ok (some self)
+  else
+    let b1 ← core.f64.F64.is_finite self.lo
+    if b1
+    then
+      let b2 ← core.f64.F64.is_finite self.hi
+      if b2
+      then
+        let fl ← core.f64.F64.abs self.lo
+        let fl1 ← core.f64.F64.abs self.hi
+        let fl2 ← core.f64.F64.max fl fl1
+        if F64.Ops.gt fl2 interval.TRIG_MOST
+        then
+          ok (some
+            {
+              lo := (F64.Ops.ofBits 13830554455654793216),
+              hi := (F64.Ops.ofBits 4607182418800017408)
+            })
+        else
+          let fl3 ← lift (F64.Ops.sub self.hi self.lo)
+          let fl4 ← dmath.TAU
+          if F64.Ops.ge fl3 fl4
+          then
+            ok (some
+              {
+                lo := (F64.Ops.ofBits 13830554455654793216),
+                hi := (F64.Ops.ofBits 4607182418800017408)
+              })
+          else ok none
+      else
+        ok (some
+          {
+            lo := (F64.Ops.ofBits 13830554455654793216),
+            hi := (F64.Ops.ofBits 4607182418800017408)
+          })
+    else
+      ok (some
+        {
+          lo := (F64.Ops.ofBits 13830554455654793216),
+          hi := (F64.Ops.ofBits 4607182418800017408)
+        })
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::sin]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 148:4-153:5
+    Visibility: public -/
+def interval.Interval.sin
+  (self : interval.Interval) : Result interval.Interval := do
+  let o ← interval.Interval.trig_whole self
+  match o with
+  | none =>
+    let fl ← dmath.sin self.lo
+    let fl1 ← dmath.sin self.hi
+    interval.Interval.trig_at self fl fl1 (F64.Ops.ofBits 4602678819172646912)
+  | some w => ok w
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::cos]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 156:4-161:5
+    Visibility: public -/
+def interval.Interval.cos
+  (self : interval.Interval) : Result interval.Interval := do
+  let o ← interval.Interval.trig_whole self
+  match o with
+  | none =>
+    let fl ← dmath.cos self.lo
+    let fl1 ← dmath.cos self.hi
+    interval.Interval.trig_at self fl fl1 (F64.Ops.ofBits 0)
+  | some w => ok w
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::sin_cos]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 164:4-170:5
+    Visibility: public -/
+def interval.Interval.sin_cos
+  (self : interval.Interval) :
+  Result (interval.Interval × interval.Interval)
+  := do
+  let o ← interval.Interval.trig_whole self
+  match o with
+  | none =>
+    let a ← dmath.sin_cos self.lo
+    let b ← dmath.sin_cos self.hi
+    let (fl, fl1) := a
+    let (fl2, fl3) := b
+    let i ←
+      interval.Interval.trig_at self fl fl2 (F64.Ops.ofBits
+        4602678819172646912)
+    let i1 ← interval.Interval.trig_at self fl1 fl3 (F64.Ops.ofBits 0)
+    ok (i, i1)
+  | some w => ok (w, w)
+
+/-- [forge_math::interval::{impl core::ops::arith::Add<forge_math::interval::Interval, forge_math::interval::Interval> for forge_math::interval::Interval}::add]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 245:4-247:5
+    Visibility: public -/
+def interval.Interval.Insts.CoreOpsArithAddIntervalInterval.add
+  (self : interval.Interval) (o : interval.Interval) :
+  Result interval.Interval
+  := do
+  let fl ← lift (F64.Ops.add self.lo o.lo)
+  let fl1 ← lift (F64.Ops.add self.hi o.hi)
+  interval.Interval.out fl fl1
+
+/-- Trait implementation: [forge_math::interval::{impl core::ops::arith::Add<forge_math::interval::Interval, forge_math::interval::Interval> for forge_math::interval::Interval}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 242:0-248:1 -/
+@[reducible]
+def interval.Interval.Insts.CoreOpsArithAddIntervalInterval :
+  core.ops.arith.Add interval.Interval interval.Interval interval.Interval := {
+  add := interval.Interval.Insts.CoreOpsArithAddIntervalInterval.add
+}
+
+/-- [forge_math::interval::{impl core::ops::arith::Sub<forge_math::interval::Interval, forge_math::interval::Interval> for forge_math::interval::Interval}::sub]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 252:4-254:5
+    Visibility: public -/
+def interval.Interval.Insts.CoreOpsArithSubIntervalInterval.sub
+  (self : interval.Interval) (o : interval.Interval) :
+  Result interval.Interval
+  := do
+  let fl ← lift (F64.Ops.sub self.lo o.hi)
+  let fl1 ← lift (F64.Ops.sub self.hi o.lo)
+  interval.Interval.out fl fl1
+
+/-- Trait implementation: [forge_math::interval::{impl core::ops::arith::Sub<forge_math::interval::Interval, forge_math::interval::Interval> for forge_math::interval::Interval}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 249:0-255:1 -/
+@[reducible]
+def interval.Interval.Insts.CoreOpsArithSubIntervalInterval :
+  core.ops.arith.Sub interval.Interval interval.Interval interval.Interval := {
+  sub := interval.Interval.Insts.CoreOpsArithSubIntervalInterval.sub
+}
+
+/-- [forge_math::interval::{impl core::ops::arith::Neg<forge_math::interval::Interval> for forge_math::interval::Interval}::neg]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 259:4-264:5
+    Visibility: public -/
+def interval.Interval.Insts.CoreOpsArithNegInterval.neg
+  (self : interval.Interval) : Result interval.Interval := do
+  let fl ← lift (F64.Ops.neg self.hi)
+  let fl1 ← lift (F64.Ops.neg self.lo)
+  ok { lo := fl, hi := fl1 }
+
+/-- Trait implementation: [forge_math::interval::{impl core::ops::arith::Neg<forge_math::interval::Interval> for forge_math::interval::Interval}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 256:0-265:1 -/
+@[reducible]
+def interval.Interval.Insts.CoreOpsArithNegInterval : core.ops.arith.Neg
+  interval.Interval interval.Interval := {
+  neg := interval.Interval.Insts.CoreOpsArithNegInterval.neg
+}
+
+/-- [forge_math::interval::{impl core::ops::arith::Mul<forge_math::interval::Interval, forge_math::interval::Interval> for forge_math::interval::Interval}::mul]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 269:4-272:5
+    Visibility: public -/
+def interval.Interval.Insts.CoreOpsArithMulIntervalInterval.mul
+  (self : interval.Interval) (o : interval.Interval) :
+  Result interval.Interval
+  := do
+  let fl ← lift (F64.Ops.mul self.lo o.lo)
+  let fl1 ← lift (F64.Ops.mul self.lo o.hi)
+  let fl2 ← lift (F64.Ops.mul self.hi o.lo)
+  let fl3 ← lift (F64.Ops.mul self.hi o.hi)
+  let fl4 ← interval.min4 (Array.make 4#usize [ fl, fl1, fl2, fl3 ])
+  let fl5 ← interval.max4 (Array.make 4#usize [ fl, fl1, fl2, fl3 ])
+  interval.Interval.out fl4 fl5
+
+/-- Trait implementation: [forge_math::interval::{impl core::ops::arith::Mul<forge_math::interval::Interval, forge_math::interval::Interval> for forge_math::interval::Interval}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 266:0-273:1 -/
+@[reducible]
+def interval.Interval.Insts.CoreOpsArithMulIntervalInterval :
+  core.ops.arith.Mul interval.Interval interval.Interval interval.Interval := {
+  mul := interval.Interval.Insts.CoreOpsArithMulIntervalInterval.mul
+}
+
+/-- [forge_math::interval::{impl core::ops::arith::Mul<f64, forge_math::interval::Interval> for forge_math::interval::Interval}::mul]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 277:4-279:5
+    Visibility: public -/
+def interval.Interval.Insts.CoreOpsArithMulF64Interval.mul
+  (self : interval.Interval) (s : F64) : Result interval.Interval := do
+  let i ← interval.Interval.point s
+  interval.Interval.Insts.CoreOpsArithMulIntervalInterval.mul self i
+
+/-- Trait implementation: [forge_math::interval::{impl core::ops::arith::Mul<f64, forge_math::interval::Interval> for forge_math::interval::Interval}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 274:0-280:1 -/
+@[reducible]
+def interval.Interval.Insts.CoreOpsArithMulF64Interval : core.ops.arith.Mul
+  interval.Interval F64 interval.Interval := {
+  mul := interval.Interval.Insts.CoreOpsArithMulF64Interval.mul
+}
+
+/-- [forge_math::interval::{impl core::ops::arith::Add<f64, forge_math::interval::Interval> for forge_math::interval::Interval}::add]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 284:4-286:5
+    Visibility: public -/
+def interval.Interval.Insts.CoreOpsArithAddF64Interval.add
+  (self : interval.Interval) (s : F64) : Result interval.Interval := do
+  let i ← interval.Interval.point s
+  interval.Interval.Insts.CoreOpsArithAddIntervalInterval.add self i
+
+/-- Trait implementation: [forge_math::interval::{impl core::ops::arith::Add<f64, forge_math::interval::Interval> for forge_math::interval::Interval}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 281:0-287:1 -/
+@[reducible]
+def interval.Interval.Insts.CoreOpsArithAddF64Interval : core.ops.arith.Add
+  interval.Interval F64 interval.Interval := {
+  add := interval.Interval.Insts.CoreOpsArithAddF64Interval.add
+}
+
+/-- [forge_math::interval::{impl core::clone::Clone for forge_math::interval::Box3}::clone]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:9-290:14
+    Visibility: public -/
+def interval.Box3.Insts.CoreCloneClone.clone
+  (self : interval.Box3) : Result interval.Box3 := do
+  ok self
+
+/-- Trait implementation: [forge_math::interval::{impl core::clone::Clone for forge_math::interval::Box3}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:9-290:14 -/
+@[reducible]
+def interval.Box3.Insts.CoreCloneClone : core.clone.Clone interval.Box3 := {
+  clone := interval.Box3.Insts.CoreCloneClone.clone
+}
+
+/-- Trait implementation: [forge_math::interval::{impl core::marker::Copy for forge_math::interval::Box3}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:16-290:20 -/
+@[reducible]
+def interval.Box3.Insts.CoreMarkerCopy : core.marker.Copy interval.Box3 := {
+  cloneInst := interval.Box3.Insts.CoreCloneClone
+}
+
+/-- [forge_math::interval::{impl core::fmt::Debug for forge_math::interval::Box3}::fmt]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:22-290:27
+    Visibility: public -/
+def interval.Box3.Insts.CoreFmtDebug.fmt
+  (self : interval.Box3) (f : core.fmt.Formatter) :
+  Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter)
+  := do
+  let dyn := Dyn.mk _ interval.Interval.Insts.CoreFmtDebug self.x
+  let dyn1 := Dyn.mk _ interval.Interval.Insts.CoreFmtDebug self.y
+  let dyn2 :=
+    Dyn.mk _ (core.fmt.DebugShared interval.Interval.Insts.CoreFmtDebug) self.z
+  core.fmt.Formatter.debug_struct_field3_finish f (toStr "Box3") (toStr "x")
+    dyn (toStr "y") dyn1 (toStr "z") dyn2
+
+/-- Trait implementation: [forge_math::interval::{impl core::fmt::Debug for forge_math::interval::Box3}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:22-290:27 -/
+@[reducible]
+def interval.Box3.Insts.CoreFmtDebug : core.fmt.Debug interval.Box3 := {
+  fmt := interval.Box3.Insts.CoreFmtDebug.fmt
+}
+
+/-- Trait implementation: [forge_math::interval::{impl core::marker::StructuralPartialEq for forge_math::interval::Box3}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:29-290:38 -/
+@[reducible]
+def interval.Box3.Insts.CoreMarkerStructuralPartialEq :
+  core.marker.StructuralPartialEq interval.Box3 := {
+}
+
+/-- [forge_math::interval::{impl core::cmp::PartialEq<forge_math::interval::Box3> for forge_math::interval::Box3}::eq]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:29-290:38
+    Visibility: public -/
+def interval.Box3.Insts.CoreCmpPartialEqBox3.eq
+  (self : interval.Box3) (other : interval.Box3) : Result Bool := do
+  let b ← interval.Interval.Insts.CoreCmpPartialEqInterval.eq self.x other.x
+  if b
+  then
+    let b1 ←
+      interval.Interval.Insts.CoreCmpPartialEqInterval.eq self.y other.y
+    if b1
+    then interval.Interval.Insts.CoreCmpPartialEqInterval.eq self.z other.z
+    else ok false
+  else ok false
+
+/-- Trait implementation: [forge_math::interval::{impl core::cmp::PartialEq<forge_math::interval::Box3> for forge_math::interval::Box3}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:29-290:38 -/
+@[reducible]
+def interval.Box3.Insts.CoreCmpPartialEqBox3 : core.cmp.PartialEq interval.Box3
+  interval.Box3 := {
+  eq := interval.Box3.Insts.CoreCmpPartialEqBox3.eq
+}
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::EMPTY]
+    Source: 'kernel/forge-math/src/interval.rs', lines 298:4-302:6
+    Visibility: public -/
+@[global_simps, irreducible]
+def interval.Box3.EMPTY : Result interval.Box3 := do
+  let i ← interval.Interval.EMPTY
+  ok { x := i, y := i, z := i }
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::from_point]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 304:4-310:5
+    Visibility: public -/
+def interval.Box3.from_point (p : vec.Point3) : Result interval.Box3 := do
+  let i ← interval.Interval.point p.x
+  let i1 ← interval.Interval.point p.y
+  let i2 ← interval.Interval.point p.z
+  ok { x := i, y := i1, z := i2 }
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::include]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 318:4-322:5
+    Visibility: public -/
+def interval.Box3.include
+  (self : interval.Box3) (p : vec.Point3) : Result interval.Box3 := do
+  let i ← interval.Interval.include self.x p.x
+  let i1 ← interval.Interval.include self.y p.y
+  let i2 ← interval.Interval.include self.z p.z
+  ok { x := i, y := i1, z := i2 }
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::from_points]: loop body 0:
+    Source: 'kernel/forge-math/src/interval.rs', lines 313:8-315:9
+    Visibility: public -/
+@[rust_loop_body]
+def interval.Box3.from_points_loop.body
+  {T0 : Type _} {Clause0_IntoIter : Type _}
+  (coreitertraitscollectIntoIteratorT0Point3Clause0_IntoIterInst :
+  core.iter.traits.collect.IntoIterator T0 vec.Point3 Clause0_IntoIter)
+  (iter : Clause0_IntoIter) (b : interval.Box3) :
+  Result (ControlFlow (Clause0_IntoIter × interval.Box3) interval.Box3)
+  := do
+  let (o, iter1) ←
+    coreitertraitscollectIntoIteratorT0Point3Clause0_IntoIterInst.iteratorInst.next
+      iter
+  match o with
+  | none => ok (done b)
+  | some p => let b1 ← interval.Box3.include b p
+              ok (cont (iter1, b1))
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::from_points]: loop 0:
+    Source: 'kernel/forge-math/src/interval.rs', lines 313:8-315:9
+    Visibility: public -/
+@[rust_loop]
+def interval.Box3.from_points_loop
+  {T0 : Type _} {Clause0_IntoIter : Type _}
+  (coreitertraitscollectIntoIteratorT0Point3Clause0_IntoIterInst :
+  core.iter.traits.collect.IntoIterator T0 vec.Point3 Clause0_IntoIter)
+  (iter : Clause0_IntoIter) (b : interval.Box3) :
+  Result interval.Box3
+  := do
+  loop
+    (fun (iter1, b1) => interval.Box3.from_points_loop.body
+      coreitertraitscollectIntoIteratorT0Point3Clause0_IntoIterInst iter1 b1)
+    (iter, b)
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::from_points]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 311:4-317:5
+    Visibility: public -/
+def interval.Box3.from_points
+  {T0 : Type _} {Clause0_IntoIter : Type _}
+  (coreitertraitscollectIntoIteratorT0Point3Clause0_IntoIterInst :
+  core.iter.traits.collect.IntoIterator T0 vec.Point3 Clause0_IntoIter)
+  (ps : T0) :
+  Result interval.Box3
+  := do
+  let b ← interval.Box3.EMPTY
+  let iter ←
+    coreitertraitscollectIntoIteratorT0Point3Clause0_IntoIterInst.into_iter ps
+  interval.Box3.from_points_loop
+    coreitertraitscollectIntoIteratorT0Point3Clause0_IntoIterInst iter b
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::is_empty]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 323:4-325:5
+    Visibility: public -/
+def interval.Box3.is_empty (self : interval.Box3) : Result Bool := do
+  let b ← interval.Interval.is_empty self.x
+  if b
+  then ok true
+  else
+    let b1 ← interval.Interval.is_empty self.y
+    if b1
+    then ok true
+    else interval.Interval.is_empty self.z
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::contains]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 326:4-328:5
+    Visibility: public -/
+def interval.Box3.contains
+  (self : interval.Box3) (p : vec.Point3) : Result Bool := do
+  let b ← interval.Interval.contains self.x p.x
+  if b
+  then
+    let b1 ← interval.Interval.contains self.y p.y
+    if b1
+    then interval.Interval.contains self.z p.z
+    else ok false
+  else ok false
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::overlaps]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 329:4-331:5
+    Visibility: public -/
+def interval.Box3.overlaps
+  (self : interval.Box3) (o : interval.Box3) : Result Bool := do
+  let b ← interval.Interval.overlaps self.x o.x
+  if b
+  then
+    let b1 ← interval.Interval.overlaps self.y o.y
+    if b1
+    then interval.Interval.overlaps self.z o.z
+    else ok false
+  else ok false
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::hull]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 332:4-338:5
+    Visibility: public -/
+def interval.Box3.hull
+  (self : interval.Box3) (o : interval.Box3) : Result interval.Box3 := do
+  let i ← interval.Interval.hull self.x o.x
+  let i1 ← interval.Interval.hull self.y o.y
+  let i2 ← interval.Interval.hull self.z o.z
+  ok { x := i, y := i1, z := i2 }
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::grow]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 339:4-345:5
+    Visibility: public -/
+def interval.Box3.grow
+  (self : interval.Box3) (d : F64) : Result interval.Box3 := do
+  let i ← interval.Interval.grow self.x d
+  let i1 ← interval.Interval.grow self.y d
+  let i2 ← interval.Interval.grow self.z d
+  ok { x := i, y := i1, z := i2 }
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::center]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 346:4-348:5
+    Visibility: public -/
+def interval.Box3.center (self : interval.Box3) : Result vec.Point3 := do
+  let fl ← interval.Interval.mid self.x
+  let fl1 ← interval.Interval.mid self.y
+  let fl2 ← interval.Interval.mid self.z
+  vec.Point3.new fl fl1 fl2
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::diagonal]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 349:4-352:5
+    Visibility: public -/
+def interval.Box3.diagonal (self : interval.Box3) : Result F64 := do
+  let a ← interval.Interval.width self.x
+  let b ← interval.Interval.width self.y
+  let c ← interval.Interval.width self.z
+  let fl ← lift (F64.Ops.mul a a)
+  let fl1 ← lift (F64.Ops.mul b b)
+  let fl2 ← lift (F64.Ops.add fl fl1)
+  let fl3 ← lift (F64.Ops.mul c c)
+  let fl4 ← lift (F64.Ops.add fl2 fl3)
+  std.f64.F64.sqrt fl4
+
+/-- [forge_math::interval::{impl core::clone::Clone for forge_math::interval::Box2}::clone]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:9-356:14
+    Visibility: public -/
+def interval.Box2.Insts.CoreCloneClone.clone
+  (self : interval.Box2) : Result interval.Box2 := do
+  ok self
+
+/-- Trait implementation: [forge_math::interval::{impl core::clone::Clone for forge_math::interval::Box2}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:9-356:14 -/
+@[reducible]
+def interval.Box2.Insts.CoreCloneClone : core.clone.Clone interval.Box2 := {
+  clone := interval.Box2.Insts.CoreCloneClone.clone
+}
+
+/-- Trait implementation: [forge_math::interval::{impl core::marker::Copy for forge_math::interval::Box2}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:16-356:20 -/
+@[reducible]
+def interval.Box2.Insts.CoreMarkerCopy : core.marker.Copy interval.Box2 := {
+  cloneInst := interval.Box2.Insts.CoreCloneClone
+}
+
+/-- [forge_math::interval::{impl core::fmt::Debug for forge_math::interval::Box2}::fmt]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:22-356:27
+    Visibility: public -/
+def interval.Box2.Insts.CoreFmtDebug.fmt
+  (self : interval.Box2) (f : core.fmt.Formatter) :
+  Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter)
+  := do
+  let dyn := Dyn.mk _ interval.Interval.Insts.CoreFmtDebug self.u
+  let dyn1 :=
+    Dyn.mk _ (core.fmt.DebugShared interval.Interval.Insts.CoreFmtDebug) self.v
+  core.fmt.Formatter.debug_struct_field2_finish f (toStr "Box2") (toStr "u")
+    dyn (toStr "v") dyn1
+
+/-- Trait implementation: [forge_math::interval::{impl core::fmt::Debug for forge_math::interval::Box2}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:22-356:27 -/
+@[reducible]
+def interval.Box2.Insts.CoreFmtDebug : core.fmt.Debug interval.Box2 := {
+  fmt := interval.Box2.Insts.CoreFmtDebug.fmt
+}
+
+/-- Trait implementation: [forge_math::interval::{impl core::marker::StructuralPartialEq for forge_math::interval::Box2}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:29-356:38 -/
+@[reducible]
+def interval.Box2.Insts.CoreMarkerStructuralPartialEq :
+  core.marker.StructuralPartialEq interval.Box2 := {
+}
+
+/-- [forge_math::interval::{impl core::cmp::PartialEq<forge_math::interval::Box2> for forge_math::interval::Box2}::eq]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:29-356:38
+    Visibility: public -/
+def interval.Box2.Insts.CoreCmpPartialEqBox2.eq
+  (self : interval.Box2) (other : interval.Box2) : Result Bool := do
+  let b ← interval.Interval.Insts.CoreCmpPartialEqInterval.eq self.u other.u
+  if b
+  then interval.Interval.Insts.CoreCmpPartialEqInterval.eq self.v other.v
+  else ok false
+
+/-- Trait implementation: [forge_math::interval::{impl core::cmp::PartialEq<forge_math::interval::Box2> for forge_math::interval::Box2}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:29-356:38 -/
+@[reducible]
+def interval.Box2.Insts.CoreCmpPartialEqBox2 : core.cmp.PartialEq interval.Box2
+  interval.Box2 := {
+  eq := interval.Box2.Insts.CoreCmpPartialEqBox2.eq
+}
+
+/-- [forge_math::interval::{forge_math::interval::Box2}::new]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 363:4-365:5
+    Visibility: public -/
+def interval.Box2.new
+  (u : interval.Interval) (v : interval.Interval) : Result interval.Box2 := do
+  ok { u, v }
+
+/-- [forge_math::interval::{forge_math::interval::Box2}::contains]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 366:4-368:5
+    Visibility: public -/
+def interval.Box2.contains
+  (self : interval.Box2) (p : vec.Point2) : Result Bool := do
+  let b ← interval.Interval.contains self.u p.x
+  if b
+  then interval.Interval.contains self.v p.y
+  else ok false
+
+/-- [forge_math::vec::{forge_math::vec::Point2}::new]:
+    Source: 'kernel/forge-math/src/vec.rs', lines 66:4-68:5
+    Visibility: public -/
+def vec.Point2.new (x : F64) (y : F64) : Result vec.Point2 := do
+  ok { x, y }
+
+/-- [forge_math::interval::{forge_math::interval::Box2}::center]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 369:4-371:5
+    Visibility: public -/
+def interval.Box2.center (self : interval.Box2) : Result vec.Point2 := do
+  let fl ← interval.Interval.mid self.u
+  let fl1 ← interval.Interval.mid self.v
+  vec.Point2.new fl fl1
+
+/-- [forge_math::interval::{forge_math::interval::Box2}::split]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 373:4-381:5
+    Visibility: public -/
+def interval.Box2.split
+  (self : interval.Box2) : Result (interval.Box2 × interval.Box2) := do
+  let fl ← interval.Interval.width self.u
+  let fl1 ← interval.Interval.width self.v
+  if F64.Ops.ge fl fl1
+  then
+    let (a, b) ← interval.Interval.split self.u
+    let b1 ← interval.Box2.new a self.v
+    let b2 ← interval.Box2.new b self.v
+    ok (b1, b2)
+  else
+    let (a, b) ← interval.Interval.split self.v
+    let b1 ← interval.Box2.new self.u a
+    let b2 ← interval.Box2.new self.u b
+    ok (b1, b2)
+
 /-- [forge_math::predicates::EPS]
     Source: 'kernel/forge-math/src/predicates.rs', lines 28:0-28:36 -/
 @[global_simps, irreducible]
@@ -1915,15 +2992,6 @@ def predicates.CCW_BOUND : Result F64 := do
   let fl2 ← lift (F64.Ops.add (F64.Ops.ofBits 4613937818241073152) fl1)
   ok (F64.Ops.mul fl2 fl)
 
-/-- [forge_math::predicates::ICC_BOUND]
-    Source: 'kernel/forge-math/src/predicates.rs', lines 31:0-31:49 -/
-@[global_simps, irreducible]
-def predicates.ICC_BOUND : Result F64 := do
-  let fl ← predicates.EPS
-  let fl1 ← lift (F64.Ops.mul (F64.Ops.ofBits 4636455816377925632) fl)
-  let fl2 ← lift (F64.Ops.add (F64.Ops.ofBits 4621819117588971520) fl1)
-  ok (F64.Ops.mul fl2 fl)
-
 /-- [forge_math::predicates::CCW_BOUND_B]
     Source: 'kernel/forge-math/src/predicates.rs', lines 34:0-34:50 -/
 @[global_simps, irreducible]
@@ -1931,15 +2999,6 @@ def predicates.CCW_BOUND_B : Result F64 := do
   let fl ← predicates.EPS
   let fl1 ← lift (F64.Ops.mul (F64.Ops.ofBits 4622945017495814144) fl)
   let fl2 ← lift (F64.Ops.add (F64.Ops.ofBits 4611686018427387904) fl1)
-  ok (F64.Ops.mul fl2 fl)
-
-/-- [forge_math::predicates::ICC_BOUND_B]
-    Source: 'kernel/forge-math/src/predicates.rs', lines 35:0-35:50 -/
-@[global_simps, irreducible]
-def predicates.ICC_BOUND_B : Result F64 := do
-  let fl ← predicates.EPS
-  let fl1 ← lift (F64.Ops.mul (F64.Ops.ofBits 4631952216750555136) fl)
-  let fl2 ← lift (F64.Ops.add (F64.Ops.ofBits 4616189618054758400) fl1)
   ok (F64.Ops.mul fl2 fl)
 
 /-- [forge_math::predicates::CROSS_BOUND]
@@ -2214,57 +3273,6 @@ def predicates.cross_exact
   let (i, s3) ← predicates.sum_into s s1 s2
   let h1 := to_slice_mut_back s3
   ok (i, h1)
-
-/-- [forge_math::predicates::exact_diffs]: loop body 0:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 401:4-409:5 -/
-@[rust_loop_body]
-def predicates.exact_diffs_loop.body
-  {N : Std.Usize} (pairs : Array (F64 × F64) N) (out : Array F64 N)
-  (exact : Bool) (i : Std.Usize) :
-  Result (ControlFlow ((Array F64 N) × Bool × Std.Usize) ((Array F64 N) ×
-    Bool))
-  := do
-  if exact
-  then
-    if i < N
-    then
-      let (fl, fl1) ← Array.index_usize pairs i
-      let (x, tail) ← predicates.two_diff fl fl1
-      let (out1, exact1) ←
-        if F64.Ops.ne tail (F64.Ops.ofBits 0)
-        then ok (out, false)
-        else do
-             let a ← Array.update out i x
-             ok (a, exact)
-      let i1 ← i + 1#usize
-      ok (cont (out1, exact1, i1))
-    else ok (done (out, exact))
-  else ok (done (out, exact))
-
-/-- [forge_math::predicates::exact_diffs]: loop 0:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 401:4-409:5 -/
-@[rust_loop]
-def predicates.exact_diffs_loop
-  {N : Std.Usize} (pairs : Array (F64 × F64) N) (out : Array F64 N)
-  (exact : Bool) (i : Std.Usize) :
-  Result ((Array F64 N) × Bool)
-  := do
-  loop
-    (fun (out1, exact1, i1) => predicates.exact_diffs_loop.body pairs out1
-      exact1 i1)
-    (out, exact, i)
-
-/-- [forge_math::predicates::exact_diffs]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 398:0-411:1 -/
-def predicates.exact_diffs
-  {N : Std.Usize} (pairs : Array (F64 × F64) N) :
-  Result (Option (Array F64 N))
-  := do
-  let out := Array.repeat N (F64.Ops.ofBits 0)
-  let (out1, exact) ← predicates.exact_diffs_loop pairs out true 0#usize
-  if exact
-  then ok (some out1)
-  else ok none
 
 /-- [forge_math::predicates::mul_small]:
     Source: 'kernel/forge-math/src/predicates.rs', lines 482:0-491:1 -/
@@ -2551,403 +3559,66 @@ def predicates.dot3 (u : vec.Vec3) (v : vec.Vec3) : Result F64 := do
     then predicates.dot3_big u v
     else ok e
 
-/-- [forge_math::predicates::incircle_exact_diffs::{impl core::ops::function::Fn<(f64, f64, &'_0 [f64], &'_1 mut [f64; 32usize]), usize> for forge_math::predicates::incircle_exact_diffs::{closure}}::call]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 754:15-761:5 -/
-def
-  predicates.incircle_exact_diffs.closure.Insts.CoreOpsFunctionFnTupleF64F64Shared0SliceF64Mut1ArrayF6432Usize.call
-  (c : predicates.incircle_exact_diffs.closure)
-  (tupled_args : (F64 × F64 × (Slice F64) × (Array F64 32#usize))) :
-  Result (Std.Usize × (Array F64 32#usize))
-  := do
-  let (x, y, cr, out) := tupled_args
-  let t8 := Array.repeat 8#usize (F64.Ops.ofBits 0)
-  let t16a := Array.repeat 16#usize (F64.Ops.ofBits 0)
-  let t16b := Array.repeat 16#usize (F64.Ops.ofBits 0)
-  let (s, to_slice_mut_back) ← lift (Array.to_slice_mut t8)
-  let (n8, s1) ← predicates.scale_into cr x s
-  let t81 := to_slice_mut_back s1
-  let s2 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) t81 { «end» := n8 }
-  let (s3, to_slice_mut_back1) ← lift (Array.to_slice_mut t16a)
-  let (na, s4) ← predicates.scale_into s2 x s3
-  let (s5, to_slice_mut_back2) ← lift (Array.to_slice_mut t81)
-  let (n81, s6) ← predicates.scale_into cr y s5
-  let t82 := to_slice_mut_back2 s6
-  let s7 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) t82
-      { «end» := n81 }
-  let (s8, to_slice_mut_back3) ← lift (Array.to_slice_mut t16b)
-  let (nb, s9) ← predicates.scale_into s7 y s8
-  let t16a1 := to_slice_mut_back1 s4
-  let s10 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) t16a1
-      { «end» := na }
-  let t16b1 := to_slice_mut_back3 s9
-  let s11 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) t16b1
-      { «end» := nb }
-  let (s12, to_slice_mut_back4) ← lift (Array.to_slice_mut out)
-  let (i, s13) ← predicates.sum_into s10 s11 s12
-  let out1 := to_slice_mut_back4 s13
-  ok (i, out1)
-
-/-- [forge_math::predicates::incircle_exact_diffs]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 753:0-775:1 -/
-def predicates.incircle_exact_diffs (a : Array F64 6#usize) : Result F64 := do
-  let adx ← Array.index_usize a 0#usize
-  let ady ← Array.index_usize a 1#usize
-  let bdx ← Array.index_usize a 2#usize
-  let bdy ← Array.index_usize a 3#usize
-  let cdx ← Array.index_usize a 4#usize
-  let cdy ← Array.index_usize a 5#usize
-  let bc := Array.repeat 4#usize (F64.Ops.ofBits 0)
-  let ca := Array.repeat 4#usize (F64.Ops.ofBits 0)
-  let ab := Array.repeat 4#usize (F64.Ops.ofBits 0)
-  let (nbc, bc1) ← predicates.cross_exact bdx cdy cdx bdy bc
-  let (nca, ca1) ← predicates.cross_exact cdx ady adx cdy ca
-  let (nab, ab1) ← predicates.cross_exact adx bdy bdx ady ab
-  let ta := Array.repeat 32#usize (F64.Ops.ofBits 0)
-  let tb := Array.repeat 32#usize (F64.Ops.ofBits 0)
-  let tc := Array.repeat 32#usize (F64.Ops.ofBits 0)
-  let s ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) bc1
-      { «end» := nbc }
-  let (na, ta1) ←
-    predicates.incircle_exact_diffs.closure.Insts.CoreOpsFunctionFnTupleF64F64Shared0SliceF64Mut1ArrayF6432Usize.call
-      () (adx, ady, s, ta)
-  let s1 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) ca1
-      { «end» := nca }
-  let (nb, tb1) ←
-    predicates.incircle_exact_diffs.closure.Insts.CoreOpsFunctionFnTupleF64F64Shared0SliceF64Mut1ArrayF6432Usize.call
-      () (bdx, bdy, s1, tb)
-  let s2 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) ab1
-      { «end» := nab }
-  let (nc, tc1) ←
-    predicates.incircle_exact_diffs.closure.Insts.CoreOpsFunctionFnTupleF64F64Shared0SliceF64Mut1ArrayF6432Usize.call
-      () (cdx, cdy, s2, tc)
-  let tab := Array.repeat 64#usize (F64.Ops.ofBits 0)
-  let s3 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) ta1 { «end» := na }
-  let s4 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) tb1 { «end» := nb }
-  let (s5, to_slice_mut_back) ← lift (Array.to_slice_mut tab)
-  let (nab2, s6) ← predicates.sum_into s3 s4 s5
-  let fin := Array.repeat 96#usize (F64.Ops.ofBits 0)
-  let tab1 := to_slice_mut_back s6
-  let s7 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) tab1
-      { «end» := nab2 }
-  let s8 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) tc1 { «end» := nc }
-  let (s9, to_slice_mut_back1) ← lift (Array.to_slice_mut fin)
-  let (n, s10) ← predicates.sum_into s7 s8 s9
-  let fin1 := to_slice_mut_back1 s10
-  let s11 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) fin1 { «end» := n }
-  predicates.estimate s11
-
-/-- [forge_math::predicates::incircle_exact_general::{impl core::ops::function::Fn<(&'_0 ([f64; 2usize], usize), &'_1 ([f64; 2usize], usize), &'_2 [f64], &'_3 mut [f64; 512usize]), usize> for forge_math::predicates::incircle_exact_general::{closure}}::call]: loop body 0:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 792:8-797:9 -/
-@[rust_loop_body]
-def
-  predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call_loop.body
-  (cr : Slice F64) (sq : Array F64 16#usize) (nl : Std.Usize)
-  (out : Array F64 512#usize) (acc : Array F64 512#usize) (na : Std.Usize)
-  (part : Array F64 32#usize) (k : Std.Usize) :
-  Result (ControlFlow ((Array F64 512#usize) × (Array F64 512#usize) ×
-    Std.Usize × (Array F64 32#usize) × Std.Usize) (Std.Usize × (Array F64
-    512#usize)))
-  := do
-  let i := Slice.len cr
-  if k < i
-  then
-    let s ←
-      core.array.Array.index (core.ops.index.IndexSlice
-        (core.slice.index.SliceIndexRangeToUsizeSlice F64)) sq
-        { «end» := nl }
-    let fl ← Slice.index_usize cr k
-    let (s1, to_slice_mut_back) ← lift (Array.to_slice_mut part)
-    let (np, s2) ← predicates.scale_into s fl s1
-    let s3 ←
-      core.array.Array.index (core.ops.index.IndexSlice
-        (core.slice.index.SliceIndexRangeToUsizeSlice F64)) acc
-        { «end» := na }
-    let part1 := to_slice_mut_back s2
-    let s4 ←
-      core.array.Array.index (core.ops.index.IndexSlice
-        (core.slice.index.SliceIndexRangeToUsizeSlice F64)) part1
-        { «end» := np }
-    let (s5, to_slice_mut_back1) ← lift (Array.to_slice_mut out)
-    let (na1, s6) ← predicates.sum_into s3 s4 s5
-    let (s7, index_mut_back) ←
-      core.array.Array.index_mut (core.ops.index.IndexMutSlice
-        (core.slice.index.SliceIndexRangeToUsizeSlice F64)) acc
-        { «end» := na1 }
-    let out1 := to_slice_mut_back1 s6
-    let s8 ←
-      core.array.Array.index (core.ops.index.IndexSlice
-        (core.slice.index.SliceIndexRangeToUsizeSlice F64)) out1
-        { «end» := na1 }
-    let s9 ← core.slice.Slice.copy_from_slice F64.Insts.CoreMarkerCopy s7 s8
-    let k1 ← k + 1#usize
-    let acc1 := index_mut_back s9
-    ok (cont (out1, acc1, na1, part1, k1))
-  else ok (done (na, out))
-
-/-- [forge_math::predicates::incircle_exact_general::{impl core::ops::function::Fn<(&'_0 ([f64; 2usize], usize), &'_1 ([f64; 2usize], usize), &'_2 [f64], &'_3 mut [f64; 512usize]), usize> for forge_math::predicates::incircle_exact_general::{closure}}::call]: loop 0:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 792:8-797:9 -/
-@[rust_loop]
-def
-  predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call_loop
-  (cr : Slice F64) (out : Array F64 512#usize) (sq : Array F64 16#usize)
-  (nl : Std.Usize) (acc : Array F64 512#usize) (na : Std.Usize)
-  (part : Array F64 32#usize) (k : Std.Usize) :
-  Result (Std.Usize × (Array F64 512#usize))
-  := do
-  loop
-    (fun (out1, acc1, na1, part1, k1) =>
-      predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call_loop.body
-      cr sq nl out1 acc1 na1 part1 k1)
-    (out, acc, na, part, k)
-
-/-- [forge_math::predicates::incircle_exact_general::{impl core::ops::function::Fn<(&'_0 ([f64; 2usize], usize), &'_1 ([f64; 2usize], usize), &'_2 [f64], &'_3 mut [f64; 512usize]), usize> for forge_math::predicates::incircle_exact_general::{closure}}::call]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 782:15-799:5 -/
-def
-  predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call
-  (c : predicates.incircle_exact_general.closure)
-  (tupled_args : (((Array F64 2#usize) × Std.Usize) × ((Array F64 2#usize) ×
-  Std.Usize) × (Slice F64) × (Array F64 512#usize))) :
-  Result (Std.Usize × (Array F64 512#usize))
-  := do
-  let (x, y, cr, out) := tupled_args
-  let xx := Array.repeat 8#usize (F64.Ops.ofBits 0)
-  let yy := Array.repeat 8#usize (F64.Ops.ofBits 0)
-  let sq := Array.repeat 16#usize (F64.Ops.ofBits 0)
-  let (a, i) := x
-  let s ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) a { «end» := i }
-  let (nx, xx1) ← predicates.mul_small s s xx
-  let (a1, i1) := y
-  let s1 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) a1 { «end» := i1 }
-  let (ny, yy1) ← predicates.mul_small s1 s1 yy
-  let s2 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) xx1 { «end» := nx }
-  let s3 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) yy1 { «end» := ny }
-  let (s4, to_slice_mut_back) ← lift (Array.to_slice_mut sq)
-  let (nl, s5) ← predicates.sum_into s2 s3 s4
-  let acc := Array.repeat 512#usize (F64.Ops.ofBits 0)
-  let part := Array.repeat 32#usize (F64.Ops.ofBits 0)
-  let sq1 := to_slice_mut_back s5
-  predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call_loop
-    cr out sq1 nl acc 0#usize part 0#usize
-
-/-- [forge_math::predicates::incircle_exact_general]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 777:0-813:1 -/
-def predicates.incircle_exact_general
-  (a : vec.Point2) (b : vec.Point2) (c : vec.Point2) (d : vec.Point2) :
-  Result F64
-  := do
-  let adx ← predicates.diff2 a.x d.x
-  let ady ← predicates.diff2 a.y d.y
-  let bdx ← predicates.diff2 b.x d.x
-  let bdy ← predicates.diff2 b.y d.y
-  let cdx ← predicates.diff2 c.x d.x
-  let cdy ← predicates.diff2 c.y d.y
-  let bc := Array.repeat 16#usize (F64.Ops.ofBits 0)
-  let ca := Array.repeat 16#usize (F64.Ops.ofBits 0)
-  let ab := Array.repeat 16#usize (F64.Ops.ofBits 0)
-  let (nbc, bc1) ← predicates.cross_two bdx cdy cdx bdy bc
-  let (nca, ca1) ← predicates.cross_two cdx ady adx cdy ca
-  let (nab, ab1) ← predicates.cross_two adx bdy bdx ady ab
-  let ta := Array.repeat 512#usize (F64.Ops.ofBits 0)
-  let tb := Array.repeat 512#usize (F64.Ops.ofBits 0)
-  let tc := Array.repeat 512#usize (F64.Ops.ofBits 0)
-  let s ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) bc1
-      { «end» := nbc }
-  let (na, ta1) ←
-    predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call
-      () (adx, ady, s, ta)
-  let s1 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) ca1
-      { «end» := nca }
-  let (nb, tb1) ←
-    predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call
-      () (bdx, bdy, s1, tb)
-  let s2 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) ab1
-      { «end» := nab }
-  let (nc, tc1) ←
-    predicates.incircle_exact_general.closure.Insts.CoreOpsFunctionFnTupleShared0PairArrayF642UsizeShared1PairArrayF642UsizeShared2SliceF64Mut3ArrayF64512Usize.call
-      () (cdx, cdy, s2, tc)
-  let tab := Array.repeat 1024#usize (F64.Ops.ofBits 0)
-  let s3 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) ta1 { «end» := na }
-  let s4 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) tb1 { «end» := nb }
-  let (s5, to_slice_mut_back) ← lift (Array.to_slice_mut tab)
-  let (nab2, s6) ← predicates.sum_into s3 s4 s5
-  let fin := Array.repeat 1536#usize (F64.Ops.ofBits 0)
-  let tab1 := to_slice_mut_back s6
-  let s7 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) tab1
-      { «end» := nab2 }
-  let s8 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) tc1 { «end» := nc }
-  let (s9, to_slice_mut_back1) ← lift (Array.to_slice_mut fin)
-  let (n, s10) ← predicates.sum_into s7 s8 s9
-  let fin1 := to_slice_mut_back1 s10
-  let s11 ←
-    core.array.Array.index (core.ops.index.IndexSlice
-      (core.slice.index.SliceIndexRangeToUsizeSlice F64)) fin1 { «end» := n }
-  predicates.estimate s11
-
-/-- [forge_math::predicates::incircle_exact]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 738:0-750:1 -/
-def predicates.incircle_exact
-  (a : vec.Point2) (b : vec.Point2) (c : vec.Point2) (d : vec.Point2) :
-  Result F64
-  := do
-  let o ←
-    predicates.exact_diffs
-      (Array.make 6#usize [
-        (a.x, d.x), (a.y, d.y), (b.x, d.x), (b.y, d.y), (c.x, d.x), (c.y, d.y)
-        ])
-  match o with
-  | none => predicates.incircle_exact_general a b c d
-  | some dx => predicates.incircle_exact_diffs dx
-
-/-- [forge_math::predicates::incircle]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 679:0-714:1
+/-- [forge_math::tol::MODEL_HALF_SIZE]
+    Source: 'kernel/forge-math/src/tol.rs', lines 9:0-9:43
     Visibility: public -/
-def predicates.incircle
-  (a : vec.Point2) (b : vec.Point2) (c : vec.Point2) (d : vec.Point2) :
-  Result F64
-  := do
-  let adx ← lift (F64.Ops.sub a.x d.x)
-  let ady ← lift (F64.Ops.sub a.y d.y)
-  let bdx ← lift (F64.Ops.sub b.x d.x)
-  let bdy ← lift (F64.Ops.sub b.y d.y)
-  let cdx ← lift (F64.Ops.sub c.x d.x)
-  let cdy ← lift (F64.Ops.sub c.y d.y)
-  let bdxcdy ← lift (F64.Ops.mul bdx cdy)
-  let cdxbdy ← lift (F64.Ops.mul cdx bdy)
-  let cdxady ← lift (F64.Ops.mul cdx ady)
-  let adxcdy ← lift (F64.Ops.mul adx cdy)
-  let adxbdy ← lift (F64.Ops.mul adx bdy)
-  let bdxady ← lift (F64.Ops.mul bdx ady)
-  let fl ← lift (F64.Ops.mul adx adx)
-  let fl1 ← lift (F64.Ops.mul ady ady)
-  let alift ← lift (F64.Ops.add fl fl1)
-  let fl2 ← lift (F64.Ops.mul bdx bdx)
-  let fl3 ← lift (F64.Ops.mul bdy bdy)
-  let blift ← lift (F64.Ops.add fl2 fl3)
-  let fl4 ← lift (F64.Ops.mul cdx cdx)
-  let fl5 ← lift (F64.Ops.mul cdy cdy)
-  let clift ← lift (F64.Ops.add fl4 fl5)
-  let fl6 ← lift (F64.Ops.sub bdxcdy cdxbdy)
-  let fl7 ← lift (F64.Ops.mul alift fl6)
-  let fl8 ← lift (F64.Ops.sub cdxady adxcdy)
-  let fl9 ← lift (F64.Ops.mul blift fl8)
-  let fl10 ← lift (F64.Ops.add fl7 fl9)
-  let fl11 ← lift (F64.Ops.sub adxbdy bdxady)
-  let fl12 ← lift (F64.Ops.mul clift fl11)
-  let det ← lift (F64.Ops.add fl10 fl12)
-  let fl13 ← core.f64.F64.abs bdxcdy
-  let fl14 ← core.f64.F64.abs cdxbdy
-  let fl15 ← lift (F64.Ops.add fl13 fl14)
-  let fl16 ← lift (F64.Ops.mul fl15 alift)
-  let fl17 ← core.f64.F64.abs cdxady
-  let fl18 ← core.f64.F64.abs adxcdy
-  let fl19 ← lift (F64.Ops.add fl17 fl18)
-  let fl20 ← lift (F64.Ops.mul fl19 blift)
-  let fl21 ← lift (F64.Ops.add fl16 fl20)
-  let fl22 ← core.f64.F64.abs adxbdy
-  let fl23 ← core.f64.F64.abs bdxady
-  let fl24 ← lift (F64.Ops.add fl22 fl23)
-  let fl25 ← lift (F64.Ops.mul fl24 clift)
-  let permanent ← lift (F64.Ops.add fl21 fl25)
-  let fl26 ← predicates.ICC_BOUND
-  let bound ← lift (F64.Ops.mul fl26 permanent)
-  if F64.Ops.gt det bound
-  then ok det
-  else
-    let fl27 ← lift (F64.Ops.neg det)
-    if F64.Ops.gt fl27 bound
-    then ok det
-    else
-      let det1 ←
-        predicates.incircle_exact_diffs
-          (Array.make 6#usize [ adx, ady, bdx, bdy, cdx, cdy ])
-      let (_, fl28) ← predicates.two_diff a.x d.x
-      let exact ←
-        if F64.Ops.eq fl28 (F64.Ops.ofBits 0)
-        then
-          do
-          let (_, fl29) ← predicates.two_diff a.y d.y
-          if F64.Ops.eq fl29 (F64.Ops.ofBits 0)
-          then
-            let (_, fl30) ← predicates.two_diff b.x d.x
-            if F64.Ops.eq fl30 (F64.Ops.ofBits 0)
-            then
-              let (_, fl31) ← predicates.two_diff b.y d.y
-              if F64.Ops.eq fl31 (F64.Ops.ofBits 0)
-              then
-                let (_, fl32) ← predicates.two_diff c.x d.x
-                if F64.Ops.eq fl32 (F64.Ops.ofBits 0)
-                then
-                  let (_, fl33) ← predicates.two_diff c.y d.y
-                  ok (F64.Ops.eq fl33 (F64.Ops.ofBits 0))
-                else ok false
-              else ok false
-            else ok false
-          else ok false
-        else ok false
-      if exact
-      then ok det1
-      else
-        let fl29 ← predicates.ICC_BOUND_B
-        let fl30 ← lift (F64.Ops.mul fl29 permanent)
-        if F64.Ops.ge det1 fl30
-        then ok det1
-        else
-          let fl31 ← lift (F64.Ops.neg det1)
-          let fl32 ← lift (F64.Ops.mul fl29 permanent)
-          if F64.Ops.ge fl31 fl32
-          then ok det1
-          else
-            let e ← predicates.incircle_exact a b c d
-            let b1 ← core.f64.F64.is_nan e
-            if b1
-            then predicates.incircle_big a b c d
-            else ok e
+@[global_simps, irreducible]
+def tol.MODEL_HALF_SIZE : F64 := F64.Ops.ofBits 4692333547057315840
+
+/-- [forge_math::tol::LINEAR]
+    Source: 'kernel/forge-math/src/tol.rs', lines 12:0-12:29
+    Visibility: public -/
+@[global_simps, irreducible]
+def tol.LINEAR : F64 := F64.Ops.ofBits 4532020583610935537
+
+/-- [forge_math::tol::ANGULAR]
+    Source: 'kernel/forge-math/src/tol.rs', lines 16:0-16:31
+    Visibility: public -/
+@[global_simps, irreducible]
+def tol.ANGULAR : F64 := F64.Ops.ofBits 4442235333156365461
+
+/-- [forge_math::tol::MIN_LENGTH]
+    Source: 'kernel/forge-math/src/tol.rs', lines 20:0-20:35
+    Visibility: public -/
+@[global_simps, irreducible] def tol.MIN_LENGTH : F64 := tol.LINEAR
+
+/-- [forge_math::vec::{forge_math::vec::Point3}::distance_sq]:
+    Source: 'kernel/forge-math/src/vec.rs', lines 149:4-151:5
+    Visibility: public -/
+def vec.Point3.distance_sq
+  (self : vec.Point3) (o : vec.Point3) : Result F64 := do
+  let v ← vec.Point3.Insts.CoreOpsArithSubPoint3Vec3.sub self o
+  vec.Vec3.length_sq v
+
+/-- [forge_math::tol::same_point]:
+    Source: 'kernel/forge-math/src/tol.rs', lines 22:0-24:1
+    Visibility: public -/
+def tol.same_point (a : vec.Point3) (b : vec.Point3) : Result Bool := do
+  let fl ← vec.Point3.distance_sq a b
+  let fl1 ← lift (F64.Ops.mul tol.LINEAR tol.LINEAR)
+  ok (F64.Ops.le fl fl1)
+
+/-- [forge_math::tol::is_zero_length]:
+    Source: 'kernel/forge-math/src/tol.rs', lines 26:0-28:1
+    Visibility: public -/
+def tol.is_zero_length (l : F64) : Result Bool := do
+  let fl ← core.f64.F64.abs l
+  ok (F64.Ops.le fl tol.LINEAR)
+
+/-- [forge_math::tol::in_model_box]:
+    Source: 'kernel/forge-math/src/tol.rs', lines 30:0-32:1
+    Visibility: public -/
+def tol.in_model_box (p : vec.Point3) : Result Bool := do
+  let fl ← core.f64.F64.abs p.x
+  if F64.Ops.le fl tol.MODEL_HALF_SIZE
+  then
+    let fl1 ← core.f64.F64.abs p.y
+    if F64.Ops.le fl1 tol.MODEL_HALF_SIZE
+    then
+      let fl2 ← core.f64.F64.abs p.z
+      ok (F64.Ops.le fl2 tol.MODEL_HALF_SIZE)
+    else ok false
+  else ok false
 
 /-- [forge_math::vec::{impl core::clone::Clone for forge_math::vec::Vec2}::clone]:
     Source: 'kernel/forge-math/src/vec.rs', lines 3:9-3:14
@@ -3348,12 +4019,6 @@ def vec.Vec2.normalize (self : vec.Vec2) : Result (Option vec.Vec2) := do
 def vec.Point2.ORIGIN : vec.Point2 :=
   { x := (F64.Ops.ofBits 0), y := (F64.Ops.ofBits 0) }
 
-/-- [forge_math::vec::{forge_math::vec::Point2}::new]:
-    Source: 'kernel/forge-math/src/vec.rs', lines 66:4-68:5
-    Visibility: public -/
-def vec.Point2.new (x : F64) (y : F64) : Result vec.Point2 := do
-  ok { x, y }
-
 /-- [forge_math::vec::{forge_math::vec::Point2}::to_vec]:
     Source: 'kernel/forge-math/src/vec.rs', lines 69:4-71:5
     Visibility: public -/
@@ -3439,14 +4104,6 @@ def vec.Vec3.is_finite (self : vec.Vec3) : Result Bool := do
 def vec.Point3.distance (self : vec.Point3) (o : vec.Point3) : Result F64 := do
   let v ← vec.Point3.Insts.CoreOpsArithSubPoint3Vec3.sub self o
   vec.Vec3.length v
-
-/-- [forge_math::vec::{forge_math::vec::Point3}::distance_sq]:
-    Source: 'kernel/forge-math/src/vec.rs', lines 149:4-151:5
-    Visibility: public -/
-def vec.Point3.distance_sq
-  (self : vec.Point3) (o : vec.Point3) : Result F64 := do
-  let v ← vec.Point3.Insts.CoreOpsArithSubPoint3Vec3.sub self o
-  vec.Vec3.length_sq v
 
 /-- [forge_math::vec::{forge_math::vec::Point3}::lerp]:
     Source: 'kernel/forge-math/src/vec.rs', lines 152:4-154:5

@@ -1,7 +1,7 @@
 use forge_geom::intersect::{Contact, LineSurface, line_surface};
 use forge_geom::{Curve, CurveGeom, Line, Surface, SurfaceGeom};
 use forge_math::predicates::triple;
-use forge_math::{Box2, Box3, Interval, Point2, Point3, Vec3, tol};
+use forge_math::{Box2, Box3, Interval, Point2, Point3, UnitVec3, Vec3, tol};
 use forge_topo::uv::{UvLoop, face_uv_loops, point_in_loops};
 use forge_topo::{Body, FaceId};
 
@@ -62,6 +62,8 @@ enum Simple {
 const SIMPLE_MARGIN: f64 = 1e-3;
 
 impl Simple {
+    // (out of line: folded into its lazy cell's initialiser it cost every classification more)
+    #[inline(never)]
     fn of(body: &Body, f: FaceId) -> Option<Simple> {
         let face = body.face(f);
         let [l] = face.loops[..] else { return None };
@@ -163,6 +165,9 @@ impl Simple {
     }
 
     /// Where `p`, on the face's surface, lies; None near the boundary.
+    // (inline(always): point_in_face_past and point_in_face_at both call it; out of line it costs
+    // the hot path, coplanar seq +0.11%)
+    #[inline(always)]
     fn place(self, p: Point3) -> Option<Where> {
         let m = SIMPLE_MARGIN;
         match self {
@@ -534,22 +539,29 @@ impl<'a> Index<'a> {
         // nearest boundary point, exactly
         let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
         let mut near: Vec<u32> = Vec::new();
-        let candidates: Box<dyn Iterator<Item = &(forge_topo::CoedgeId, Box3)>> = match &info.bands {
-            Some(bands) => {
-                bands.near(p, info.reach, &mut near);
-                Box::new(near.iter().map(|&i| &info.edges[i as usize]))
-            }
-            None => Box::new(info.edges.iter()),
-        };
-        for &(c, ref b) in candidates {
+        // each candidate in turn (the band rows round p, or every use), the nearest kept
+        let mut try_one = |&(c, ref b): &(forge_topo::CoedgeId, Box3)| {
             if c == GONE || box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
-                continue;
+                return;
             }
             let e = body.edge(body.coedge(c).edge);
             let t = e.curve.closest(p, e.range);
             let d = e.curve.eval(t).distance(p);
             if best.is_none_or(|b| d < b.0) {
                 best = Some((d, c, t));
+            }
+        };
+        match &info.bands {
+            Some(bands) => {
+                bands.near(p, info.reach, &mut near);
+                for &i in &near {
+                    try_one(&info.edges[i as usize]);
+                }
+            }
+            None => {
+                for x in &info.edges {
+                    try_one(x);
+                }
             }
         }
         if let Some((d, c, t)) = best {
@@ -653,6 +665,60 @@ impl<'a> Index<'a> {
         }
     }
 
+    /// As `point_in_face`, with the nearest-edge decision handed to `near` first: where `p` is
+    /// within its nearest edge's reach (the only place `near` is called, and only where no closed
+    /// form has placed it), `near(c, t, d)` with the boundary use `c`, the parameter `t` of the
+    /// edge's nearest point and the f64 distance `d` may answer for the caller's exact point
+    /// (`Some`), or leave `point_in_face` to decide (`None`). Out of line and apart from
+    /// `point_in_face_past`, whose code it leaves as it was: the nearest edge is found twice only
+    /// on this path.
+    #[inline(never)]
+    pub fn point_in_face_at(
+        &self,
+        f: FaceId,
+        p: Point3,
+        near: &dyn Fn(forge_topo::CoedgeId, f64, f64) -> Option<Where>,
+    ) -> Where {
+        let body = self.body;
+        let info = self.info(f);
+        if info
+            .simple
+            .get_or_init(|| Simple::of(body, f))
+            .and_then(|s| s.place(p))
+            .is_none()
+        {
+            // the nearest boundary point, as point_in_face_past finds it
+            let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
+            for &(c, ref b) in &info.edges {
+                if c == GONE || box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
+                    continue;
+                }
+                let e = body.edge(body.coedge(c).edge);
+                let t = e.curve.closest(p, e.range);
+                let d = e.curve.eval(t).distance(p);
+                if best.is_none_or(|b| d < b.0) {
+                    best = Some((d, c, t));
+                }
+            }
+            if let Some((d, c, t)) = best {
+                let e = body.edge(body.coedge(c).edge);
+                let reach = if t <= e.range.lo {
+                    body.vertex(e.start).tol
+                } else if t >= e.range.hi {
+                    body.vertex(e.end).tol
+                } else {
+                    tol::LINEAR
+                };
+                if d <= reach
+                    && let Some(w) = near(c, t, d)
+                {
+                    return w;
+                }
+            }
+        }
+        self.point_in_face(f, p)
+    }
+
     /// Inside, outside or on the solid.
     pub fn classify(&self, p: Point3) -> Where {
         if !self.bbox.contains(p) {
@@ -667,10 +733,7 @@ impl<'a> Index<'a> {
                 return Where::On;
             }
         }
-        'ray: for d in RAYS {
-            let dir = Vec3::new(d[0], d[1], d[2])
-                .normalize()
-                .expect("fixed ray directions are nonzero");
+        'ray: for &dir in &UNIT_RAYS {
             let line = Line::new(p, dir);
             let mut crossings = 0usize;
             for f in self.body.face_ids() {
@@ -707,15 +770,20 @@ impl<'a> Index<'a> {
 /// the face keeps bands).
 pub(crate) fn edges_near(body: &Body, f: FaceId, bx: &Box3, out: &mut Vec<forge_topo::CoedgeId>) {
     let info = info(body, f);
-    let mut near: Vec<u32> = Vec::new();
-    let all: Box<dyn Iterator<Item = &(forge_topo::CoedgeId, Box3)>> = match &info.bands {
+    let keep = |e: &(forge_topo::CoedgeId, Box3)| e.0 != GONE && e.1.overlaps(bx);
+    match &info.bands {
         Some(bands) => {
+            let mut near: Vec<u32> = Vec::new();
             bands.near(bx.center(), bx.diagonal() / 2.0, &mut near);
-            Box::new(near.iter().map(|&i| &info.edges[i as usize]))
+            out.extend(
+                near.iter()
+                    .map(|&i| &info.edges[i as usize])
+                    .filter(|e| keep(e))
+                    .map(|e| e.0),
+            );
         }
-        None => Box::new(info.edges.iter()),
-    };
-    out.extend(all.filter(|e| e.0 != GONE && e.1.overlaps(bx)).map(|e| e.0));
+        None => out.extend(info.edges.iter().filter(|e| keep(e)).map(|e| e.0)),
+    }
 }
 
 /// Whether point `p` of planar face `f`'s plane lies inside the face: ray parity over its
@@ -802,6 +870,7 @@ fn other_turn_inside(body: &Body, f: FaceId, uv: Point2, info: &Drawn) -> bool {
 
 /// Fixed, deliberately irregular ray directions: a ray along one of these
 /// rarely grazes a model edge, and the next one is tried if it does.
+#[cfg(test)]
 const RAYS: [[f64; 3]; 8] = [
     [0.5773, 0.6071, 0.5463],
     [-0.3149, 0.8352, 0.4510],
@@ -812,6 +881,61 @@ const RAYS: [[f64; 3]; 8] = [
     [0.4402, -0.8577, -0.2657],
     [-0.0912, -0.2384, 0.9669],
 ];
+
+/// `RAYS` normalized, worked out once: the bits `Vec3::normalize` gives each
+/// (`unit_rays_are_rays_normalized` holds them to it), not a square root per point classified.
+static UNIT_RAYS: [UnitVec3; 8] = [
+    UnitVec3::new_unchecked(Vec3::new(
+        0.577216485702215,
+        0.6070121747268572,
+        0.5462209702738957,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        -0.3148807849863764,
+        0.8351490365850162,
+        0.450972480244064,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        0.7231184903762014,
+        -0.20170515766682315,
+        0.6606168921899027,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        -0.641769953034182,
+        -0.5527741197215578,
+        0.5315751122358541,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        0.19370319419200857,
+        0.4123067989951736,
+        -0.8902146797611049,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        -0.8835756975846523,
+        0.3090914985552467,
+        -0.35179032414019995,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        0.4401951974965928,
+        -0.8576906426461328,
+        -0.2656971012604378,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        -0.09119782906151849,
+        -0.23839432509063604,
+        0.966876983767349,
+    )),
+];
+
+#[cfg(test)]
+#[test]
+fn unit_rays_are_rays_normalized() {
+    for (d, u) in RAYS.iter().zip(&UNIT_RAYS) {
+        let n = Vec3::new(d[0], d[1], d[2]).normalize().expect("nonzero");
+        let bits = |v: Vec3| [v.x, v.y, v.z].map(f64::to_bits);
+        assert_eq!(bits(n.get()), bits(u.get()));
+    }
+}
 
 /// How far a loop polygon (default sampling, pi/16 per segment) can sit from
 /// a curved edge, plus tolerance.
@@ -842,18 +966,28 @@ fn planar_parity(
     let (sn, cs) = forge_math::dmath::sin_cos(angle);
     let d = plane.frame.x() * cs + plane.frame.y() * sn;
     let mut inside = false;
-    let all: Box<dyn Iterator<Item = &(forge_topo::CoedgeId, Box3)>> = match subset {
-        Some(ix) => Box::new(ix.iter().map(|&i| &edges[i as usize])),
-        None => Box::new(edges.iter()),
-    };
-    for &(c, ref b) in all {
+    // each use of an edge the ray may meet (of `subset`, or all), in order
+    let mut cross = |&(c, ref b): &(forge_topo::CoedgeId, Box3)| -> Option<()> {
         if c == GONE || !ray_hits_box(p, d, b) {
-            continue;
+            return Some(());
         }
         let e = body.edge(body.coedge(c).edge);
         // a seam cannot occur on a plane; each use of an edge here is one crossing set
         if plane_ray_crossings(plane.frame.z().get(), p, d, &e.curve, e.range)? % 2 == 1 {
             inside = !inside;
+        }
+        Some(())
+    };
+    match subset {
+        Some(ix) => {
+            for &i in ix {
+                cross(&edges[i as usize])?;
+            }
+        }
+        None => {
+            for x in edges {
+                cross(x)?;
+            }
         }
     }
     Some(inside)
@@ -869,7 +1003,8 @@ pub(crate) fn plane_ray_crossings(
     curve: &Curve,
     range: Interval,
 ) -> Option<usize> {
-    let hits: Vec<(f64, f64)> = match curve {
+    // (at most two: a line's one, a conic's two)
+    let (hits, nh): ([(f64, f64); 2], usize) = match curve {
         Curve::Line(l) => {
             // ray p + s d against segment o + t dir, t in range
             let w = l.origin - p;
@@ -891,7 +1026,7 @@ pub(crate) fn plane_ray_crossings(
             if !t.is_finite() {
                 return None;
             }
-            vec![(s, t)]
+            ([(s, t), (0.0, 0.0)], 1)
         }
         Curve::Circle(k) => conic_ray(&k.frame, k.radius, k.radius, p, d),
         Curve::Ellipse(el) => conic_ray(&el.frame, el.major, el.minor, p, d),
@@ -899,7 +1034,7 @@ pub(crate) fn plane_ray_crossings(
     };
     let periodic = curve.domain().period;
     let mut n = 0;
-    for (s, t) in hits {
+    for &(s, t) in &hits[..nh] {
         if s <= 0.0 {
             continue;
         }
@@ -1064,7 +1199,7 @@ fn conic_plane(f: &forge_math::Frame, a: f64, b: f64, at: Point3, m: Vec3) -> Op
 /// Where the ray p + s d (s any sign) meets a conic o + a cos t x + b sin t y
 /// lying in a plane that contains the ray: (s, t) pairs. A tangent ray gives
 /// none (it touches without crossing).
-fn conic_ray(f: &forge_math::Frame, a: f64, b: f64, p: Point3, d: Vec3) -> Vec<(f64, f64)> {
+fn conic_ray(f: &forge_math::Frame, a: f64, b: f64, p: Point3, d: Vec3) -> ([(f64, f64); 2], usize) {
     let q = f.point_to_local(p);
     let v = f.vec_to_local(d);
     // ((qx + s vx) / a)^2 + ((qy + s vy) / b)^2 = 1
@@ -1076,14 +1211,12 @@ fn conic_ray(f: &forge_math::Frame, a: f64, b: f64, p: Point3, d: Vec3) -> Vec<(
     );
     let disc = bb * bb - 4.0 * aa * cc;
     if disc <= 1e-12 * (bb * bb + (4.0 * aa * cc).abs()) || aa == 0.0 {
-        return Vec::new();
+        return ([(0.0, 0.0); 2], 0);
     }
     let r = disc.sqrt();
     let qq = -0.5 * (bb + if bb >= 0.0 { r } else { -r });
-    [qq / aa, cc / qq]
-        .into_iter()
-        .map(|s| (s, forge_math::dmath::atan2(qy + s * vy, qx + s * vx)))
-        .collect()
+    let at = |s: f64| (s, forge_math::dmath::atan2(qy + s * vy, qx + s * vx));
+    ([at(qq / aa), at(cc / qq)], 2)
 }
 
 fn box_distance(b: &Box3, p: Point3) -> f64 {
@@ -1328,6 +1461,65 @@ mod tests {
         assert_eq!(ix.classify(Point3::new(10.0, 20.0, 5.0)), Where::On);
         assert_eq!(ix.classify(Point3::new(5.0, 5.0, 2.5)), Where::Inside);
     }
+
+    /// `point_in_face_at` with a hook that declines is `point_in_face`; a hook that answers is
+    /// asked only within its nearest edge's reach, and its answer is the result.
+    #[test]
+    fn point_in_face_at_hook() {
+        let plate = Profile::rectangle(Point2::ORIGIN, 20.0, 20.0, 0);
+        let bodies = [
+            extrude(
+                &Profile {
+                    plane: Frame::WORLD,
+                    loops: vec![plate, Profile::circle(Point2::new(10.0, 10.0), 4.0, 10)],
+                },
+                5.0,
+                1,
+            )
+            .unwrap(),
+            revolve(
+                &Profile {
+                    plane: Frame::WORLD,
+                    loops: vec![Profile::circle(Point2::new(10.0, 0.0), 3.0, 0)],
+                },
+                Y,
+                dmath::TAU,
+                1,
+            )
+            .unwrap(),
+        ];
+        let mut asked = 0;
+        for b in &bodies {
+            let ix = Index::new(b);
+            for f in b.face_ids() {
+                for e in b.edge_ids() {
+                    let e = b.edge(e);
+                    for i in 0..=16 {
+                        let t = e.range.lo + (e.range.hi - e.range.lo) * i as f64 / 16.0;
+                        let q = e.curve.eval(t);
+                        for o in [0.0, 1e-9, -1e-7, 1e-3, -0.5] {
+                            let p = Point3::new(q.x + o, q.y - o, q.z + 0.5 * o);
+                            let want = ix.point_in_face(f, p);
+                            assert_eq!(ix.point_in_face_at(f, p, &|_, _, _| None), want, "{p:?}");
+                            let calls = std::cell::Cell::new(0);
+                            let got = ix.point_in_face_at(f, p, &|_, _, d| {
+                                assert!(d.is_finite() && d >= 0.0, "{d}");
+                                calls.set(calls.get() + 1);
+                                Some(Where::Inside)
+                            });
+                            if calls.get() > 0 {
+                                assert_eq!(got, Where::Inside);
+                                asked += 1;
+                            } else {
+                                assert_eq!(got, want, "{p:?}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(asked > 0);
+    }
 }
 
 #[cfg(test)]
@@ -1463,5 +1655,172 @@ mod simple_vs_polygon {
             }
         }
         assert!(decided > 1000);
+    }
+}
+
+/// classify's degenerate rays (coverage-2026-11-23 group 4: none of these branches ran in the
+/// corpus): a ray parallel to an edge, along it, through a vertex, tangent to a circle, and a
+/// face where all three planar rays pass through vertices (the uv-polygon fallback). Each answer
+/// is checked against the exact even-odd answer of a point far from the boundary.
+#[cfg(test)]
+mod degenerate_rays {
+    use super::*;
+    use forge_geom::{Circle, Line};
+    use forge_math::rng::Rng;
+    use forge_math::{Frame, dmath};
+    use forge_ops::{Profile, ProfileLoop, Segment, extrude};
+
+    fn line(a: Point3, b: Point3) -> (Curve, Interval) {
+        let d = b - a;
+        let l = d.length();
+        (
+            Curve::Line(Line {
+                origin: a,
+                dir: d.normalize().unwrap(),
+            }),
+            Interval::new(0.0, l),
+        )
+    }
+
+    #[test]
+    fn crossings_of_one_curve() {
+        let (n, p, d) = (
+            Vec3::new(0.0, 0.0, 1.0),
+            Point3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+        );
+        let ask = |c: (Curve, Interval)| plane_ray_crossings(n, p, d, &c.0, c.1);
+        // parallel to the ray, off it: never crossed (den == 0)
+        assert_eq!(
+            ask(line(Point3::new(1.0, 2.0, 0.0), Point3::new(5.0, 2.0, 0.0))),
+            Some(0)
+        );
+        // along the ray: undecided
+        assert_eq!(
+            ask(line(Point3::new(1.0, 0.0, 0.0), Point3::new(5.0, 0.0, 0.0))),
+            None
+        );
+        // through an end: undecided
+        assert_eq!(
+            ask(line(Point3::new(3.0, 0.0, 0.0), Point3::new(3.0, 4.0, 0.0))),
+            None
+        );
+        // across: once; behind the ray's start: never
+        assert_eq!(
+            ask(line(Point3::new(3.0, -1.0, 0.0), Point3::new(3.0, 4.0, 0.0))),
+            Some(1)
+        );
+        assert_eq!(
+            ask(line(Point3::new(-3.0, -1.0, 0.0), Point3::new(-3.0, 4.0, 0.0))),
+            Some(0)
+        );
+        // a circle the ray is tangent to: touches, no crossing (even)
+        let circle = |c: Point3, r: f64| {
+            (
+                Curve::Circle(Circle {
+                    frame: Frame::WORLD.with_origin(c),
+                    radius: r,
+                }),
+                Interval::new(0.0, dmath::TAU),
+            )
+        };
+        assert!(ask(circle(Point3::new(5.0, 2.0, 0.0), 2.0)).is_none_or(|k| k % 2 == 0));
+        // a circle round p: once; a circle ahead: twice
+        assert_eq!(
+            ask(circle(Point3::new(0.5, 0.3, 0.0), 2.0)).map(|k| k % 2),
+            Some(1)
+        );
+        assert_eq!(ask(circle(Point3::new(5.0, 0.5, 0.0), 2.0)), Some(2));
+    }
+
+    /// A star polygon round p (or beside it) with a vertex on each of the three planar rays from
+    /// p, so every ray parity is undecided and point_in_face falls back to the uv polygon.
+    #[test]
+    fn all_planar_rays_through_vertices() {
+        let mut rng = Rng::new(11);
+        let mut checked = 0;
+        for k in 0..60 {
+            let p = Point2::new(rng.range(-5.0, 5.0), rng.range(-5.0, 5.0));
+            let outside = k % 2 == 1;
+            // ray k: direction RAY_ANGLES[k] in the face's frame (WORLD for the top face, checked below)
+            let ray = |a: f64, r: f64| {
+                let (sn, cs) = dmath::sin_cos(a);
+                Point2::new(p.x + r * cs, p.y + r * sn)
+            };
+            let mut pts: Vec<(f64, Point2)> = RAY_ANGLES
+                .iter()
+                .map(|&a| (a, ray(a, rng.range(2.0, 6.0))))
+                .collect();
+            // more vertices between, for a star polygon round p
+            for i in 0..5 {
+                let a = 0.3 + i as f64 * 1.2 + rng.range(0.0, 0.5);
+                pts.push((a, ray(a, rng.range(2.0, 6.0))));
+            }
+            if outside {
+                // the polygon moved off p along ray 0 keeps a vertex on ray 0 only; shift it so
+                // p is 1.0 clear outside
+                let (sn, cs) = dmath::sin_cos(RAY_ANGLES[0]);
+                let shift = Point2::new(15.0 * cs, 15.0 * sn);
+                for (_, q) in &mut pts {
+                    *q = Point2::new(q.x + shift.x, q.y + shift.y);
+                }
+            }
+            pts.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let n = pts.len();
+            let segs = (0..n)
+                .map(|i| {
+                    (
+                        Segment::Line {
+                            a: pts[i].1,
+                            b: pts[(i + 1) % n].1,
+                        },
+                        i as u64,
+                    )
+                })
+                .collect();
+            let Ok(body) = extrude(
+                &Profile {
+                    plane: Frame::WORLD,
+                    loops: vec![ProfileLoop::new(segs)],
+                },
+                3.0,
+                1,
+            ) else {
+                continue;
+            };
+            let top = body
+                .face_ids()
+                .find(|&f| match &body.face(f).surface {
+                    Surface::Plane(pl) => pl.frame.origin.z == 3.0 && pl.frame.z().get().z > 0.5,
+                    _ => false,
+                })
+                .expect("the top face");
+            let Surface::Plane(pl) = &body.face(top).surface else {
+                unreachable!()
+            };
+            // the rays are drawn in WORLD's x, y: the top face must share them for the test to mean anything
+            if (pl.frame.x().get() - Vec3::new(1.0, 0.0, 0.0)).length() > 1e-15 {
+                continue;
+            }
+            let q = Point3::new(p.x, p.y, 3.0);
+            // the exact even-odd answer, p being far (>= 1) from every edge in this family's
+            // inside cases and 1+ clear in the outside ones: by winding round the sorted star
+            let want = if outside { Where::Outside } else { Where::Inside };
+            let ix = Index::new(&body);
+            assert_eq!(ix.point_in_face(top, q), want, "case {k} p {p:?}");
+            if !outside {
+                // and every planar ray is in fact undecided there
+                let info = info(&body, top);
+                for a in RAY_ANGLES {
+                    assert_eq!(
+                        planar_parity(&body, pl, q, &info.edges, None, a),
+                        None,
+                        "case {k} angle {a}"
+                    );
+                }
+            }
+            checked += 1;
+        }
+        assert!(checked >= 40, "{checked}");
     }
 }

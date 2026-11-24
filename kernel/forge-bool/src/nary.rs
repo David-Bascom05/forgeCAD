@@ -49,48 +49,17 @@ static PICK: AtomicUsize = AtomicUsize::new(0);
 /// order. The calling thread starts alone and the others join only once the work has run long
 /// enough to pay for starting them (tens of microseconds each).
 fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
-    let threads = threads.min(n / per.max(1));
-    if threads <= 1 || n < 2 {
-        return (0..n).map(f).collect();
-    }
-    let next = AtomicUsize::new(0);
-    let work = || {
-        let mut got = Vec::new();
-        loop {
-            let i = next.fetch_add(1, Ordering::Relaxed);
-            if i >= n {
-                break got;
-            }
-            got.push((i, f(i)));
-        }
-    };
-    let parts: Vec<Vec<(usize, T)>> = forge_math::par::scope(|s| {
-        let start = forge_math::clock::Instant::now();
-        let mut mine = Vec::new();
-        let mut helpers = Vec::new();
-        loop {
-            let i = next.fetch_add(1, Ordering::Relaxed);
-            if i >= n {
-                break;
-            }
-            mine.push((i, f(i)));
-            if helpers.is_empty()
-                && next.load(Ordering::Relaxed) < n
-                && start.elapsed() > std::time::Duration::from_micros(200)
-            {
-                helpers = (1..threads).map(|_| s.spawn(work)).collect();
-            }
-        }
-        let mut parts = vec![mine];
-        parts.extend(helpers.into_iter().map(|w| w.join().expect("worker")));
-        parts
-    });
-    let mut out: Vec<Option<T>> = (0..n).map(|_| None).collect();
-    for (i, t) in parts.into_iter().flatten() {
-        out[i] = Some(t);
-    }
-    out.into_iter().map(|t| t.expect("every item done")).collect()
+    forge_math::par::map_adaptive(n, threads, per, f)
 }
+
+/// An n-ary boolean that has run for less than this by the end of its pairs stage takes its later
+/// stages on one thread. Those stages' items (a face's split, its regions) allocate heavily: their
+/// answers, made in a helper's allocator arena and freed on this thread, plus the helpers' cold
+/// arenas and pages, cost more than the threads save on a small boolean. Measured: hole-grid's,
+/// patterns' and coplanar's n-ary (about 15–25 ms in all) ran 5–23% slower on 4 threads than on
+/// one, and level with no helpers; mixed and shaft, whose pairs (curved) take far longer, gain
+/// 35–50% (research/booleans/speedups.md, "Fastest wins").
+const THREADED_AFTER_PAIRS: std::time::Duration = std::time::Duration::from_millis(20);
 
 /// How far clear of a tool's boundary a point must be for its analytic solid to answer.
 const SHAPE_MARGIN: f64 = tol::LINEAR;
@@ -603,19 +572,23 @@ pub fn nary_with(
     threads: usize,
     root: Name,
 ) -> R<Body> {
+    #[cfg(debug_assertions)]
+    crate::size::debug_check(tools);
     // flat faces: the whole history as one pointwise rule, one call of the decide-once core
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::history(tools, ops)? {
+        #[cfg(feature = "certify")]
+        crate::certify::skipped("the decide-once path");
         return Ok(r);
     }
-    crate::boolean::UNDECIDED.with(|u| u.set(None));
+    let mut undecided = None;
     #[cfg(feature = "decisions")]
     let scope = crate::decisions::scope("n-ary", String::from("plain"));
-    let body = nary_body(tools, ops, shapes, batch, threads, root);
+    let body = nary_noted(tools, ops, shapes, batch, threads, root, &mut undecided);
     #[cfg(feature = "decisions")]
     scope.outcome(crate::decisions::Outcome::of(&body));
     let out = body?;
-    crate::boolean::undecided_touch(&out)?;
+    crate::boolean::undecided_touch(&out, undecided)?;
     crate::boolean::refuse_strays(&out, 0)?;
     // pieces left touching at a point pinch (boolean::pinched): where walking round a vertex from
     // one coedge leaving it (back along its loop, across to the partner) misses some of the others
@@ -676,6 +649,42 @@ pub fn nary_with(
     Ok(out)
 }
 
+/// `boolean::apex::sheets_at` for n tools: whether each side's face, at a cone's apex, is kept in
+/// the result, from its sheet's place against every other tool.
+#[cold]
+#[inline(never)]
+fn apex_kept(
+    tools: &[&Body],
+    index: &[Index],
+    ops: &[Op],
+    any_intersect: bool,
+    t: &Touch,
+) -> R<[Option<bool>; 2]> {
+    let n = tools.len();
+    let mut out = [None; 2];
+    for (k, slot) in out.iter_mut().enumerate() {
+        let (sd, f) = (t.sides[k], t.faces[k]);
+        let Some(sheet) = crate::apex::apex_sheet(tools[sd], f, t.at) else {
+            continue;
+        };
+        let refuse = BoolError::ZeroThickness { at: t.at };
+        let sheet = sheet.ok_or(refuse.clone())?;
+        let mut inner = vec![false; n];
+        inner[sd] = true;
+        for j in (0..n).filter(|&j| j != sd) {
+            match crate::apex::where_sheet(tools[j], &index[j], t.at, &sheet) {
+                Some(Where::Inside) => inner[j] = true,
+                Some(_) => {}
+                None => return Err(refuse),
+            }
+        }
+        let mut outer = inner.clone();
+        outer[sd] = false;
+        *slot = Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect));
+    }
+    Ok(out)
+}
+
 fn nary_body(
     tools: &[&Body],
     ops: &[Op],
@@ -683,9 +692,11 @@ fn nary_body(
     batch: Option<&dyn Batch>,
     threads: usize,
     root: Name,
+    undecided: &mut Option<Point3>,
 ) -> R<Body> {
     assert_eq!(ops.len() + 1, tools.len(), "one op per tool after the first");
     let n = tools.len();
+    let born = forge_math::clock::Instant::now();
     let mut clock = forge_math::clock::Instant::now();
     let index: Vec<Index> = par_map(n, threads, 16, |k| Index::new(tools[k]));
     let debug = crate::boolean::debug_on();
@@ -1059,6 +1070,8 @@ fn nary_body(
                         &mut out.segs,
                         &mut out.imprints,
                         &mut out.touching,
+                        None,
+                        &mut crate::boolean::Tried::default(),
                     )?;
                 }
                 if !whole || out.imprints.len() > imprints_before {
@@ -1152,6 +1165,10 @@ fn nary_body(
         outer[side] = false;
         Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect))
     };
+    decided!(crate::decisions::site(
+        "D3 touch listed (n-ary)",
+        touching.len() as u64
+    ));
     for t in &touching {
         if debug {
             let got: Vec<_> = (0..2)
@@ -1165,12 +1182,24 @@ fn nary_body(
                 t.sides, t.faces, t.at
             );
         }
+        // at a cone's apex the face's sheet is its generators, decided in closed form against
+        // every other tool; one that cannot be read there is refused at the point, never guessed
+        let sheets = if t.dir.is_none() && (0..2).any(|k| crate::apex::is_cone(tools[t.sides[k]], t.faces[k]))
+        {
+            apex_kept(tools, &index, ops, any_intersect, t)?
+        } else {
+            [None; 2]
+        };
         let kept = [0, 1].map(|k| {
+            if let Some(w) = sheets[k] {
+                return Some(w);
+            }
             let (sd, f) = (t.sides[k], t.faces[k]);
             local_class(tools[sd], &index[sd], f, t.at, t.dir, |q| kept_at(sd, q))
         });
         if t.dir.is_none() && kept.contains(&None) {
-            crate::boolean::UNDECIDED.with(|u| u.set(Some(t.at)));
+            decided!(crate::decisions::site("G4 UNDECIDED set (n-ary)", 1));
+            *undecided = Some(t.at);
         }
         let both = kept == [Some(true); 2];
         let flipped = |sd: usize| sd > 0 && ops[sd - 1] == Op::Subtract;
@@ -1188,6 +1217,7 @@ fn nary_body(
                 !flipped(t.sides[0]) && !flipped(t.sides[1]),
             )
         {
+            decided!(crate::decisions::site("D3 touch refused (n-ary)", 1));
             return Err(BoolError::ZeroThickness { at: t.at });
         }
     }
@@ -1232,7 +1262,7 @@ fn nary_body(
         };
         for hit in hits
             .into_iter()
-            .flat_map(|x| crossings_near(&sg.curve, sg.range, s, x))
+            .flat_map(|x| crossings_near(&sg.curve, sg.range, s, x, crate::boolean::Rung::PLAIN))
         {
             if index[k].point_in_face(h, hit.point) != Where::Outside {
                 got.push((hit.t, hit.point, tol::LINEAR, k, Some((k, h))));
@@ -1420,6 +1450,13 @@ fn nary_body(
         }));
     }
     lap(&mut clock, 1);
+    // a small boolean's later stages, on one thread (THREADED_AFTER_PAIRS); the answers are the
+    // same either way
+    let threads = if born.elapsed() < THREADED_AFTER_PAIRS {
+        1
+    } else {
+        threads
+    };
 
     // 3: one vertex per cluster of cut points (an existing tool vertex where a cut sits at an
     // edge's end; vertices of different tools at one place are one)
@@ -1756,7 +1793,8 @@ fn nary_body(
         by_edge: &by_edge,
         cut_vertex: &cut_vertex,
         alias: &alias,
-        list: Vec::new(),
+        // at most a piece per edge and one more per cut: grown once, not doubled up to there
+        list: Vec::with_capacity(tools.iter().map(|b| b.edges.len()).sum::<usize>() + cuts.len()),
         of_edge: tools.iter().map(|b| vec![(0, 0); b.edges.len()]).collect(),
     };
     let mut seg_pieces: Vec<std::ops::Range<usize>> = Vec::with_capacity(segs.len());
@@ -1860,8 +1898,10 @@ fn nary_body(
                 }
             }
         }
-        // on one thread, straight into the list
-        if threads.min(order.len() / 32) <= 1 {
+        // on one thread, straight into the list: below about 512 edges a list per edge, copied
+        // after, costs more than threads save (hole-grid's n-ary ran 9% slower on 4 threads than
+        // on one; research/booleans/speedups.md, "Fastest wins")
+        if threads.min(order.len() / 512) <= 1 {
             for (sd, e) in order {
                 pieces.ensure(sd, e);
             }
@@ -2400,7 +2440,10 @@ fn nary_body(
                 Some(0) => Ok(None),
                 Some(1) => Ok(Some(false)),
                 Some(2) => Ok(Some(true)),
-                _ => full(ri, first[ri]),
+                _ => {
+                    decided!(crate::decisions::site("G10 n-ary verdict 3 (or no point)", 1));
+                    full(ri, first[ri])
+                }
             })
         }
     };
@@ -2590,6 +2633,10 @@ fn nary_body(
             let p = canon[p].map_or(p, |c| c.0);
             uses[p] = uses[p].saturating_add(1);
             if uses[p] > 2 {
+                decided!(crate::decisions::site(
+                    "D9 edge of >2 kept faces refused (n-ary)",
+                    1
+                ));
                 let pc = &list[p];
                 return Err(BoolError::ZeroThickness {
                     at: pc.curve.eval(pc.range.mid()),
@@ -2785,11 +2832,13 @@ fn nary_body(
         let ls = &regs[ri].loops;
         (a.0 + ls.len(), a.1 + ls.iter().map(Vec::len).sum::<usize>())
     });
-    out.faces.reserve_exact(kept.len());
-    out.loops.reserve_exact(loops);
-    out.coedges.reserve_exact(uses);
-    out.edges.reserve_exact(uses / 2);
-    out.vertices.reserve_exact(uses / 2);
+    // (with room: the in-place boolean of the next feature grows it without a copy)
+    let room = forge_topo::body::room;
+    out.faces.reserve_exact(room(kept.len()));
+    out.loops.reserve_exact(room(loops));
+    out.coedges.reserve_exact(room(uses));
+    out.edges.reserve_exact(room(uses / 2));
+    out.vertices.reserve_exact(room(uses / 2));
     for t in tools {
         out.joins.extend(&t.joins);
     }
@@ -3608,4 +3657,24 @@ fn region_points(
         out.extend(step_in(body, f, c, r, fwd, 0.5, step.min(0.05)));
     }
     out
+}
+
+// The certificate's hook (verify/forge-certify), at the end so that with the `certify` feature
+// off every line above is the line it was: off, `nary_noted` is `nary_body`.
+#[cfg(not(feature = "certify"))]
+use self::nary_body as nary_noted;
+
+/// `nary_body`, noting that it gives no certificate.
+#[cfg(feature = "certify")]
+fn nary_noted(
+    tools: &[&Body],
+    ops: &[Op],
+    shapes: Option<&[Shape]>,
+    batch: Option<&dyn Batch>,
+    threads: usize,
+    root: Name,
+    undecided: &mut Option<Point3>,
+) -> R<Body> {
+    crate::certify::skipped("the n-ary boolean");
+    nary_body(tools, ops, shapes, batch, threads, root, undecided)
 }

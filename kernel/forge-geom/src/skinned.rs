@@ -566,7 +566,8 @@ impl Poly {
         if self.arcs {
             for (t, &u) in trig.iter_mut().zip(us) {
                 let ang = u * self.sweep + self.start;
-                *t = (ang.cos(), ang.sin());
+                let (s, c) = ang.sin_cos();
+                *t = (c, s);
             }
         }
         let mut out = [Box3::EMPTY; 4];
@@ -898,11 +899,21 @@ impl Hull {
         (self.pts[3 * n + c] - self.pts[c]).cross(self.pts[2 * n - 1] - self.pts[n])
     }
 
+    /// The points' span along u. Plain comparisons: the dots are finite (a hull of finite points),
+    /// so they find what `Interval::include`'s NaN-aware min and max do, in fewer instructions on a
+    /// loop a lofted part runs millions of times.
     pub(crate) fn extent(&self, u: Vec3) -> Interval {
-        self.rows().iter().fold(Interval::EMPTY, |mut i, p| {
-            i.include(p.to_vec().dot(u));
-            i
-        })
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for p in self.rows() {
+            let d = p.to_vec().dot(u);
+            if d < lo {
+                lo = d;
+            }
+            if d > hi {
+                hi = d;
+            }
+        }
+        Interval { lo, hi }
     }
 
     /// The quadric q.A.q + 2 b.q + c has one sign over the piece: Q(S) w^2 is a polynomial of

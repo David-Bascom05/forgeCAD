@@ -5,13 +5,14 @@
 pub mod cdt;
 pub mod mesh;
 pub mod obj;
+pub mod read;
 pub mod scene;
 pub mod stl;
 pub mod tessellate;
 pub mod threemf;
 pub mod zip;
 
-pub use cdt::{CdtError, Triangulation, triangulate};
+pub use cdt::{CdtError, Fault, Triangulation, triangulate};
 pub use mesh::TriMesh;
 pub use obj::{ObjOptions, read_obj, to_obj};
 pub use scene::{Material, MeshCheck, Object, Scene, Solids, body_objects};

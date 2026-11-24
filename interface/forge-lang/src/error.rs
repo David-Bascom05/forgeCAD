@@ -397,6 +397,10 @@ pub enum SyntaxError {
     AssignToNonName {
         span: Span,
     },
+    /// Expressions or blocks nested deeper than the parser goes (`syntax::fast::MAX_DEPTH`).
+    TooDeep {
+        span: Span,
+    },
     KeywordNotName {
         span: Span,
     },
@@ -716,15 +720,14 @@ pub enum Error {
     },
     /// A tapered extrude whose outline closes up before its depth (a lint): built to where it
     /// closes, the pyramid or ridge its walls make, `at` from its sketch where `depth` was asked.
-    /// The fixes: the param driving the depth set to `at`, or the one driving the taper set to the
-    /// largest angle that reaches the depth.
+    /// The fixes, `[depth, angle]`: the param driving the depth set to `at`, or the one driving
+    /// the taper set to the largest angle that reaches the depth.
     TaperCloses {
         span: Span,
         id: String,
         at: f64,
         depth: f64,
-        depth_fix: Option<Box<(ParamKey, Literal)>>,
-        angle_fix: Option<Box<(ParamKey, Literal)>>,
+        fixes: [Option<Box<(ParamKey, Literal)>>; 2],
     },
     /// A role anchor whose faces the part no longer has.
     NoFace {
@@ -799,6 +802,12 @@ pub enum Error {
         param: ParamKey,
         want: Dim,
         found: Dim,
+    },
+    /// A value no part has: not finite, or past `eval::MAX_MAGNITUDE` (1e12 mm or a count) or
+    /// `eval::MAX_ANGLE` (1e5 radians). The kernel's measures and its loops mean nothing there.
+    TooLarge {
+        span: Span,
+        value: f64,
     },
     /// An edit's value is NaN or infinite: no literal writes it.
     NotFinite {
@@ -883,6 +892,7 @@ impl Error {
                 | SyntaxError::Expected { span, .. }
                 | SyntaxError::ParamWithoutOwner { span, .. }
                 | SyntaxError::AssignToNonName { span }
+                | SyntaxError::TooDeep { span }
                 | SyntaxError::KeywordNotName { span }
                 | SyntaxError::PositionalAfterKeyword { span }
                 | SyntaxError::ReservedWord { span, .. } => *span,
@@ -894,6 +904,7 @@ impl Error {
             | PositionalId { span, .. }
             | PositionalSelection { span, .. }
             | Fuel { span, .. }
+            | TooLarge { span, .. }
             | ParamOutOfScope { span, .. }
             | WrongType { span, .. }
             | DimMismatch { span, .. }
@@ -1016,6 +1027,7 @@ impl Error {
             ShadowsTopLevel { .. } => "ShadowsTopLevel",
             EditDim { .. } => "EditDim",
             NotFinite { .. } => "NotFinite",
+            TooLarge { .. } => "TooLarge",
             Sheet(e) => e.kind(),
             Thermo(e) => e.kind(),
             Weld(e) => e.kind(),
@@ -1083,10 +1095,8 @@ impl Error {
                 value: fit.1,
             }],
             // as deep as it closes, or as steep as reaches the depth
-            TaperCloses {
-                depth_fix, angle_fix, ..
-            } => [depth_fix, angle_fix]
-                .into_iter()
+            TaperCloses { fixes, .. } => fixes
+                .iter()
                 .flatten()
                 .map(|f| Op::SetParam {
                     param: f.0.clone(),
@@ -1129,6 +1139,9 @@ impl Error {
                     format!("param {name} has no owner: `param FEATURE.{name} = ..` or `shared {name} = ..`")
                 }
                 SyntaxError::AssignToNonName { .. } => "only a name can be assigned".into(),
+                SyntaxError::TooDeep { .. } => {
+                    "nested too deep: an expression or block deeper than 400 levels (a chain `a + b + ..` counts each link)".into()
+                }
                 SyntaxError::KeywordNotName { .. } => "a keyword argument is a name".into(),
                 SyntaxError::PositionalAfterKeyword { .. } => {
                     "a positional argument after a keyword one".into()
@@ -1162,7 +1175,11 @@ impl Error {
                 "selection by position (extreme) retargets when unrelated features move; select by role or between faces [{}]",
                 rule.name()
             ),
-            Fuel { func, budget, .. } => format!("{func} ran past its budget of {budget} calls"),
+            Fuel { func, budget, .. } => match func.as_str() {
+                "statements" | "features" => format!("the run makes more than {budget} {func}"),
+                "nested evaluation" => format!("expressions nest more than {budget} deep in evaluation"),
+                _ => format!("{func} ran past its budget of {budget} calls"),
+            },
             UnnamedFeature { kind, rule, .. } => {
                 format!(
                     "a {kind} feature needs a name: `name = {kind}(..)` [{}]",
@@ -1273,6 +1290,9 @@ impl Error {
             EditDim { param, want, found } => format!("{param} is a {want:?}; the value is a {found:?}"),
             NotFinite { param, value } => {
                 format!("{param} cannot be set to {value}: only a finite number is written")
+            }
+            TooLarge { value, .. } => {
+                format!("{value:e} is past any part's size or count (at most 1e12 mm or items, 1e5 radians)")
             }
             Sheet(e) => e.text(),
             Thermo(e) => e.text(),
@@ -1398,6 +1418,7 @@ impl Error {
             NotFinite { param, value } => {
                 vec![("param", s(&param.to_string())), ("value", s(&value.to_string()))]
             }
+            TooLarge { value, .. } => vec![("value", s(&value.to_string()))],
             UnknownFeature { id } | NotAStatement { id } => vec![("id", s(id))],
             StillRead { name, reader, .. } => vec![("name", s(name)), ("reader", s(reader))],
             EntityStillRead {

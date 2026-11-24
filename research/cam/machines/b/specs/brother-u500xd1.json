@@ -1,0 +1,143 @@
+{
+ "vendor": "Brother",
+ "model": "U500Xd1",
+ "family": "SPEEDIO U-Xd1 universal (tilting rotary table)",
+ "source": [
+  "https://machinetool.global.brother/en-eu/all-products/uxd1/u500xd1"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "Vertical BT30 spindle over a tilting rotary table: A tilt -30 to +120 deg (toward the operator) carrying C rotary table dia 260 (jig area dia 500 x H270). Y travel range offset from tilt centre (Y available at A=90: 270 mm). Which unit carries X/Y/Z is not stated on the fetched page (memory says table X on Y saddle with Z head on fixed column for SPEEDIO S/W, unverified).",
+ "control": {
+  "standard": "Brother CNC-D00, 5 axes X,Y,Z,A,C (4-axis linear interpolation)",
+  "options": [
+   "U500Xd1-5AX: CNC-D00v(DB), simultaneous 5-axis"
+  ]
+ },
+ "travel_mm": {
+  "X": 500,
+  "Y": 400,
+  "Z": 300
+ },
+ "rotary": {
+  "A": {
+   "range_deg": [
+    -30,
+    120
+   ],
+   "rapid_rpm": 50,
+   "indexing_or_full": "full (indexing feed 50 rpm); clamp 810 N·m"
+  },
+  "B": null,
+  "C": {
+   "range_deg": [
+    0,
+    360
+   ],
+   "rapid_rpm": 75,
+   "indexing_or_full": "full (75 rpm; 60 in high-inertia mode); clamp 560 N·m"
+  }
+ },
+ "spindle_nose_to_table_mm": [
+  145,
+  445
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 100,
+ "rotary_table_dia_mm": 260,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 10000,
+  "rpm_min": 1,
+  "taper_or_interface": "7/24 No.30 (MAS-BT30, pull stud MAS-P30T-2)",
+  "power_kw": {
+   "cont": 7.1,
+   "30min": null,
+   "peak/other": "10.1 (10-min rating); 18.9 max output"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 40
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 50,
+  "Y": 50,
+  "Z": 56,
+  "A_or_B_rpm": 50,
+  "C_rpm": 75
+ },
+ "max_cutting_feed_m_min": 30,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 14,
+  "options": [
+   21,
+   28
+  ],
+  "tool_to_tool_s": 0.6,
+  "chip_to_chip_s": 1.2,
+  "max_tool_dia_mm": 110,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": 250,
+  "max_tool_kg": 3.0
+ },
+ "coolant": {
+  "through_spindle": "optional",
+  "notes": "CTS optional (BT dual-contact spindle used with CTS)"
+ },
+ "overall_mm": {
+  "W": 1560,
+  "D": 2026,
+  "H": 2748
+ },
+ "weight_kg": 2650,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "spindle_nose_type",
+  "table_height_from_floor_mm",
+  "table_mm"
+ ],
+ "options": [
+  "16,000 rpm spindle (7.4/5.1 kW)",
+  "BIG-PLUS",
+  "CTS",
+  "-5AX version"
+ ],
+ "notes": "Product header labels A:50 C:75 as 'max. turning spindle speed' but spec table gives them as indexing feedrate (min-1); recorded as rotary rapid. Table load inertia 1.8 kg·m² (2.6 high-inertia mode). Continuous power published as 7.1 kW here (7.0 on sibling pages). Rotary accuracy 28 arcsec, repeatability 16 arcsec. Floor space 1,560 x 2,026 (2,864 door open), excludes coolant tank. Successor U500Xd2 also listed on site (not read)."
+}

@@ -37,7 +37,8 @@ oshcut, xometry, jlc, restated from their public guides: verify with the vendor 
 Select in the part's own text: `edges(of: boss, crease: "convex")`, `edges(between: (a, b))`,
 anchors like `base.end`, `base.side(plan.outline[2])`, `hole.bore`; one copy of a pattern or one
 place of a hole: `edges(of: bolts[1], crease: "convex")`. Features: extrude cut revolve
-sweep loft coil thread hole fillet chamfer shell draft rib pattern, text (in a sketch:
+sweep loft coil thread hole fillet (circular, or conic: `fillet(E, r, conic: ratio(0.5))`) chamfer
+shell draft rib pattern, text (in a sketch:
 `label = text("AB-1", at: (x, y), size: s, font: "Open Sans")`, then `extrude(sk.label, h)`), bodies,
 sheet metal, weldments (`members` along a layout's segments with a standard or sketched section,
 `end_trim`, `end_cap`, `corner_plate`), components and assemblies (`help forge`).
@@ -63,6 +64,10 @@ export F stl|3mf|obj [tol MM] [angle DEG] [ascii] [normals] [faces] [flat] [-o F
                             meshes: an object per solid (an assembly's: per part, a 3MF item
                             per occurrence; flat: one each), tol 0.01 mm, angle 15 deg by
                             default; each checked closed and facing out (`watertight`), `manifold`
+export F urdf effort [J] N velocity [J] V [travel MM] [cut J].. [-o DIR|F.zip]
+                            a robot: a link per part or rigid group, mass from materials, joints
+                            at their values; refused, with fixes: a closed loop (cut J), no
+                            effort/velocity (or --placeholder-limits); research/export/urdf.md
 help forge
 ```
 SEL: `faces|edges|verts`, then filters: plane cyl cone .. | line circle | convex concave |

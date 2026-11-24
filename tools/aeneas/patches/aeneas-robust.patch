@@ -1,8 +1,45 @@
+diff --git a/src/extract/Extract.ml b/src/extract/Extract.ml
+--- a/src/extract/Extract.ml
++++ b/src/extract/Extract.ml
+@@ -1186,9 +1186,10 @@
+       let num_fields =
+         match proj.adt_id with
+         | TAdtId id -> (
+-            let d = TypeDeclId.Map.find id ctx.trans_types in
+-            match d.kind with
+-            | Struct fields -> Some (List.length fields)
++            (* forge: a projection of a type whose declaration was not translated (its group
++               failed, or it was cut by --opaque) is extracted as an ordinary projection *)
++            match TypeDeclId.Map.find_opt id ctx.trans_types with
++            | Some { kind = Struct fields; _ } -> Some (List.length fields)
+             | _ -> None)
+         | _ -> None
+       in
+diff --git a/src/llbc/LlbcAstUtils.ml b/src/llbc/LlbcAstUtils.ml
+--- a/src/llbc/LlbcAstUtils.ml
++++ b/src/llbc/LlbcAstUtils.ml
+@@ -194,10 +194,16 @@
+ let block_has_break_continue_return (st : block) : bool =
+   let visitor =
+     object
+-      inherit [_] iter_statement
++      inherit [_] iter_statement as super
+       method! visit_Break _ _ = raise Utils.Found
+       method! visit_Continue _ _ = raise Utils.Found
+       method! visit_Return _ = raise Utils.Found
++
++      (* forge: setting the exit code of a lowered breakable block
++         (PrePasses.lower_breakable_blocks) leaves the block, as a break does *)
++      method! visit_statement env st =
++        if List.mem "forge:exit" st.comments_before then raise Utils.Found
++        else super#visit_statement env st
+     end
+   in
+   try
 diff --git a/src/PrePasses.ml b/src/PrePasses.ml
-index ebe7ae67..959cb0e8 100644
 --- a/src/PrePasses.ml
 +++ b/src/PrePasses.ml
-@@ -2372,6 +2372,203 @@ let fix_anon_const_initializers (crate : crate) (f : fun_decl) : fun_decl =
+@@ -2372,6 +2372,402 @@
      }
    else f
  
@@ -203,22 +240,284 @@ index ebe7ae67..959cb0e8 100644
 +        }
 +  | _ -> f
 +
++(** forge: lower the loop exits [update_loops] cannot take, linearly.
++
++    [update_loops] removes a [return] from a loop when the loop has no [break], or when the
++    statements after the loop end in a [return] or a panic; it takes no [break i] / [continue i]
++    with [i > 0], and no [return] inside a nested loop. Kernel code has all three (an early
++    [return] or [?] inside a [for] with a [break], a [continue 'outer]). For each loop that has
++    one of these exits (innermost loops first), this pass gives the loop an exit code (a fresh
++    [usize] local, 0 before the loop): the exit sets the code and leaves the loop with [break 0],
++    and after the loop a switch on the code performs the exit there, one loop further out
++    ([return], [break (i - 1)], [continue (i - 1)]). An exit that is still not [update_loops]'
++    is lowered again at the enclosing loop. Loops [update_loops] already takes are left alone,
++    so the translations it already gives are unchanged. The program's behaviour is unchanged,
++    and its size grows linearly. *)
++let lower_loop_exits (_crate : crate) (f : fun_decl) : fun_decl =
++  match f.body with
++  | StructuredBody body ->
++      let locals = ref body.locals.locals in
++      let next = ref (List.length !locals) in
++      let changed = ref false in
++      let fresh span : local_id =
++        let id = LocalId.of_int !next in
++        incr next;
++        locals :=
++          !locals
++          @ [
++              {
++                index = id;
++                name = Some "exit";
++                span;
++                local_ty = TypesUtils.mk_usize_ty;
++                is_mutable = true;
++                borrowck_constraints = [];
++                drop_flag_for = None;
++              };
++            ];
++        id
++      in
++      let place id : place = { kind = PlaceLocal id; ty = TypesUtils.mk_usize_ty } in
++      let cst (n : int) : constant_expr =
++        {
++          kind = CInteger (UnsignedInteger (Usize, Z.of_int n));
++          ty = TypesUtils.mk_usize_ty;
++        }
++      in
++      let mk span kind : statement =
++        { span; statement_id = StatementId.zero; kind; comments_before = [] }
++      in
++      let mkb span statements : block =
++        { span; block_id = BlockId.zero; statements }
++      in
++      let assign span x n = mk span (Assign (place x, Use (Constant (cst n), NoRetag))) in
++      let switch span x (cases : (int * block) list) (default : block) : statement =
++        let data : switch_data =
++          {
++            scrutinee = SwitchValue (Read (place x));
++            branches = List.mapi (fun i (n, _) -> (cst n, BranchId.of_int i)) cases;
++            fallback = Some (BranchId.of_int (List.length cases));
++          }
++        in
++        mk span (Switch (data, List.map snd cases @ [ default ]))
++      in
++      (* The structured children of a statement (not the unwind blocks, which
++         [lower_breakable_blocks] has emptied). *)
++      let children (st : statement) : block list =
++        match st.kind with
++        | Switch (_, bs) -> bs
++        | Loop b -> [ b ]
++        | _ -> []
++      in
++      (* Does the body [b] of a loop have, at [d] loops deep inside it (0: the loop's own level):
++         an exit past the loop (break/continue to an enclosing loop), a return, a break of its own? *)
++      let rec scan d (b : block) (acc : bool * bool * bool * bool) : bool * bool * bool * bool =
++        List.fold_left
++          (fun (past, ret0, retn, brk) (st : statement) ->
++            match st.kind with
++            | Break i -> (past || i > d, ret0, retn, true)
++            | Continue i -> (past || i > d, ret0, retn, brk)
++            | Return -> (past, ret0 || d = 0, retn || d > 0, brk)
++            | Loop lb -> scan (d + 1) lb (past, ret0, retn, brk)
++            | _ ->
++                List.fold_left (fun acc c -> scan d c acc) (past, ret0, retn, brk) (children st))
++          acc b.statements
++      in
++      (* Do the statements after a loop end in a return or a panic ([update_loops]'
++         transformations 2 and 3)? *)
++      let ends_out (after : statement list) : bool =
++        List.exists
++          (fun (st : statement) ->
++            match st.kind with
++            | Return | Panic _ | UnwindTerminate _ | UndefinedBehavior -> true
++            | _ -> false)
++          after
++      in
++      (* Lower the loop with body [b] (inner loops lowered already): the statements in its place *)
++      let lower span (b : block) : statement list =
++        let x = fresh span in
++        let codes : (int * statement_kind) list ref = ref [] in
++        let code_of (k : statement_kind) : int =
++          match List.find_opt (fun (_, k') -> k' = k) !codes with
++          | Some (n, _) -> n
++          | None ->
++              let n = 1 + List.length !codes in
++              codes := !codes @ [ (n, k) ];
++              n
++        in
++        let exit (st : statement) (k : statement_kind) : statement list =
++          [ { (assign st.span x (code_of k)) with comments_before = st.comments_before };
++            { st with kind = Break 0; comments_before = [] } ]
++        in
++        let rec tr d (b : block) : block =
++          {
++            b with
++            statements =
++              List.concat_map
++                (fun (st : statement) ->
++                  match st.kind with
++                  | Break i when i > d -> exit st (Break (i - d - 1))
++                  | Continue i when i > d -> exit st (Continue (i - d - 1))
++                  | Loop lb -> [ { st with kind = Loop (tr (d + 1) lb) } ]
++                  | Switch (data, bs) -> [ { st with kind = Switch (data, List.map (tr d) bs) } ]
++                  | _ -> [ st ])
++                b.statements;
++          }
++        in
++        let b = tr 0 b in
++        let dispatch =
++          switch span x
++            (List.map (fun (n, k) -> (n, mkb span [ mk span k ])) !codes)
++            (mkb span [])
++        in
++        changed := true;
++        [ assign span x 0; mk span (Loop b); dispatch ]
++      in
++      (* A loop [update_loops] cannot take because of a return: a return and a break at its own
++         level, and no return or panic after it in its block *)
++      let stuck (b : block) (after : statement list) : bool =
++        let _, ret0, _, brk = scan 0 b (false, false, false, false) in
++        ret0 && brk && not (ends_out after)
++      in
++      (* Is there such a loop in [sts] (outside any other loop)? *)
++      let rec has_stuck (sts : statement list) : bool =
++        match sts with
++        | [] -> false
++        | st :: after -> (
++            match st.kind with
++            | Loop b -> stuck b after || has_stuck after
++            | Switch (_, bs) -> List.exists (fun (b : block) -> has_stuck b.statements) bs || has_stuck after
++            | _ -> has_stuck after)
++      in
++      let terminal (b : block) : bool =
++        match List.rev b.statements with
++        | { kind = Return | Panic _ | Break _ | Continue _ | UnwindTerminate _ | UndefinedBehavior; _ } :: _ -> true
++        | _ -> false
++      in
++      (* [in_loop]: inside an enclosing loop. A switch with a stuck loop inside gets the statements
++         after it copied into each branch (that does not end in a jump), so that the loop's return
++         is followed, in its block, by the function's own [return]: [update_loops]'
++         transformation 2 then applies. *)
++      let rec lower_stmts (in_loop : bool) (sts : statement list) : statement list =
++        match sts with
++        | [] -> []
++        | st :: after -> (
++            match st.kind with
++            | Switch (data, bs)
++              when (not in_loop) && after <> [] && has_stuck [ { st with kind = Switch (data, bs) } ] ->
++                changed := true;
++                let bs =
++                  List.map
++                    (fun (b : block) ->
++                      if terminal b then b else { b with statements = b.statements @ after })
++                    bs
++                in
++                [ { st with kind = Switch (data, List.map (lower_blk in_loop) bs) } ]
++            | _ ->
++                let here =
++                  match st.kind with
++                  | Loop b ->
++                      let b = lower_blk true b in
++                      let past, _, _, _ = scan 0 b (false, false, false, false) in
++                      if past then lower st.span b else [ { st with kind = Loop b } ]
++                  | Switch (data, bs) ->
++                      [ { st with kind = Switch (data, List.map (lower_blk in_loop) bs) } ]
++                  | _ -> [ st ]
++                in
++                here @ lower_stmts in_loop after)
++      and lower_blk in_loop (b : block) : block =
++        { b with statements = lower_stmts in_loop b.statements }
++      in
++      let new_body = lower_blk false body.body in
++      if not !changed then f
++      else
++        {
++          f with
++          body =
++            StructuredBody
++              { body with body = new_body; locals = { body.locals with locals = !locals } };
++        }
++  | _ -> f
++
  let apply_passes (crate : crate) : crate =
    (* Passes that apply to the whole crate *)
    let crate = update_array_default crate in
-@@ -2384,6 +2581,7 @@ let apply_passes (crate : crate) : crate =
+@@ -2384,6 +2780,8 @@
        ("fix_anon_const_initializers", fix_anon_const_initializers);
        ("erase_body_regions", erase_body_regions);
        ("remove_unreachable", remove_unreachable);
 +      ("lower_breakable_blocks", lower_breakable_blocks);
++      ("lower_loop_exits", lower_loop_exits);
        ("update_loop", update_loops);
        ("remove_useless_joins", remove_useless_joins);
        ( "remove_shallow_borrows_storage_live_dead",
+diff --git a/src/pure/PureMicroPassesAnnots.ml b/src/pure/PureMicroPassesAnnots.ml
+--- a/src/pure/PureMicroPassesAnnots.ml
++++ b/src/pure/PureMicroPassesAnnots.ml
+@@ -111,9 +111,30 @@
+                     [%sanity_check] span (List.length generics.types = 1);
+                     Collections.List.repeat (List.length supd.updates)
+                       (List.nth generics.types 0)
+-                | _ ->
+-                    PureTypeCheck.get_adt_field_types span type_decls adt_id
+-                      None generics
++                | _ -> (
++                    (* forge-aeneas: an ADT whose declaration was not translated
++                       (its type group failed) has no field types to look up:
++                       fall back to the updates' own types, as for an unknown
++                       type below, instead of an uncaught [Not_found]. *)
++                    try
++                      PureTypeCheck.get_adt_field_types span type_decls adt_id
++                        None generics
++                    with Not_found ->
++                      let n =
++                        List.fold_left
++                          (fun m ((fid, _) : _ * texpr) ->
++                            max m (FieldId.to_int fid + 1))
++                          0 supd.updates
++                      in
++                      List.init n (fun i ->
++                          match
++                            List.find_opt
++                              (fun ((fid, _) : _ * texpr) ->
++                                FieldId.to_int fid = i)
++                              supd.updates
++                          with
++                          | Some (_, fe) -> fe.ty
++                          | None -> ty))
+               in
+               [%ldebug
+                 "- ty: " ^ ty_to_string ty ^ "\n- field_tys:\n"
+diff --git a/src/symbolic/SymbolicToPure.ml b/src/symbolic/SymbolicToPure.ml
+--- a/src/symbolic/SymbolicToPure.ml
++++ b/src/symbolic/SymbolicToPure.ml
+@@ -251,10 +251,20 @@
+   let methods_to_extract =
+     TraitDeclId.Map.find def_id ctx.trait_methods_to_extract
+   in
++  (* forge-aeneas: a method that cannot be translated (as several of
++     [Iterator]'s cannot: [where Self: Iterator<Item = &T>] constraints) is
++     left out of the trait, with a warning, instead of losing the whole trait
++     declaration, and with it every use of the trait. *)
+   let methods =
+-    List.map
++    List.filter_map
+       (fun ((method_id, m) : TraitMethodId.id * A.trait_method T.binder) ->
+-        translate_trait_method ctx opt_span translate_ty trait_decl method_id m)
++        try
++          Some
++            (translate_trait_method ctx opt_span translate_ty trait_decl
++               method_id m)
++        with Errors.CFailure _ ->
++          [%warn] span ("Left a method out of trait " ^ name ^ ": its signature could not be translated");
++          None)
+       (TraitMethodId.Map.to_list methods_to_extract)
+   in
+   {
 diff --git a/src/Translate.ml b/src/Translate.ml
-index 52e846ba..7dddd073 100644
 --- a/src/Translate.ml
 +++ b/src/Translate.ml
-@@ -412,9 +412,20 @@ let translate_crate_to_pure (crate : crate) (marked_ids : marked_ids) :
+@@ -412,9 +412,20 @@
            TraitDeclId.Map.find trait_decl.def_id
              trans_ctx.trait_methods_to_extract
          in
@@ -241,7 +540,7 @@ index 52e846ba..7dddd073 100644
            (TraitMethodId.Map.to_list methods)
        in
        let entries =
-@@ -1062,20 +1073,25 @@ let trait_impl_is_builtin (ctx : gen_ctx) (id : Pure.trait_impl_id) : bool =
+@@ -1062,20 +1073,25 @@
      [%silent_unwrap_opt_span] None
        (TraitImplId.Map.find_opt id ctx.trans_trait_impls)
    in
@@ -280,7 +579,7 @@ index 52e846ba..7dddd073 100644
  
  (** Export a trait declaration. *)
  let export_trait_decl (fmt : Format.formatter) (_config : gen_config)
-@@ -1104,7 +1120,17 @@ let export_trait_impl (fmt : Format.formatter) (_config : gen_config)
+@@ -1104,7 +1120,17 @@
      [%silent_unwrap_opt_span] None
        (TraitImplId.Map.find_opt trait_impl_id ctx.trans_trait_impls)
    in
@@ -299,108 +598,3 @@ index 52e846ba..7dddd073 100644
      Extract.extract_trait_impl ctx fmt ~is_rec trait_impl;
      EmitJson.record_trait_impl_if_enabled ctx trait_impl)
  
-diff --git a/src/extract/Extract.ml b/src/extract/Extract.ml
-index 6bdfabb7..f1477826 100644
---- a/src/extract/Extract.ml
-+++ b/src/extract/Extract.ml
-@@ -1186,9 +1186,10 @@ and extract_field_projector (span : Meta.span) (ctx : extraction_ctx)
-       let num_fields =
-         match proj.adt_id with
-         | TAdtId id -> (
--            let d = TypeDeclId.Map.find id ctx.trans_types in
--            match d.kind with
--            | Struct fields -> Some (List.length fields)
-+            (* forge: a projection of a type whose declaration was not translated (its group
-+               failed, or it was cut by --opaque) is extracted as an ordinary projection *)
-+            match TypeDeclId.Map.find_opt id ctx.trans_types with
-+            | Some { kind = Struct fields; _ } -> Some (List.length fields)
-             | _ -> None)
-         | _ -> None
-       in
-diff --git a/src/llbc/LlbcAstUtils.ml b/src/llbc/LlbcAstUtils.ml
-index 8e45fbc2..e13bb8bc 100644
---- a/src/llbc/LlbcAstUtils.ml
-+++ b/src/llbc/LlbcAstUtils.ml
-@@ -194,10 +194,16 @@ let statement_has_break_continue_return (st : statement) : bool =
- let block_has_break_continue_return (st : block) : bool =
-   let visitor =
-     object
--      inherit [_] iter_statement
-+      inherit [_] iter_statement as super
-       method! visit_Break _ _ = raise Utils.Found
-       method! visit_Continue _ _ = raise Utils.Found
-       method! visit_Return _ = raise Utils.Found
-+
-+      (* forge: setting the exit code of a lowered breakable block
-+         (PrePasses.lower_breakable_blocks) leaves the block, as a break does *)
-+      method! visit_statement env st =
-+        if List.mem "forge:exit" st.comments_before then raise Utils.Found
-+        else super#visit_statement env st
-     end
-   in
-   try
-diff --git a/src/pure/PureMicroPassesAnnots.ml b/src/pure/PureMicroPassesAnnots.ml
-index 8c63687e..b3db2c5d 100644
---- a/src/pure/PureMicroPassesAnnots.ml
-+++ b/src/pure/PureMicroPassesAnnots.ml
-@@ -111,9 +111,30 @@ let add_type_annotations_to_fun_decl (trans_ctx : trans_ctx)
-                     [%sanity_check] span (List.length generics.types = 1);
-                     Collections.List.repeat (List.length supd.updates)
-                       (List.nth generics.types 0)
--                | _ ->
--                    PureTypeCheck.get_adt_field_types span type_decls adt_id
--                      None generics
-+                | _ -> (
-+                    (* forge-aeneas: an ADT whose declaration was not translated
-+                       (its type group failed) has no field types to look up:
-+                       fall back to the updates' own types, as for an unknown
-+                       type below, instead of an uncaught [Not_found]. *)
-+                    try
-+                      PureTypeCheck.get_adt_field_types span type_decls adt_id
-+                        None generics
-+                    with Not_found ->
-+                      let n =
-+                        List.fold_left
-+                          (fun m ((fid, _) : _ * texpr) ->
-+                            max m (FieldId.to_int fid + 1))
-+                          0 supd.updates
-+                      in
-+                      List.init n (fun i ->
-+                          match
-+                            List.find_opt
-+                              (fun ((fid, _) : _ * texpr) ->
-+                                FieldId.to_int fid = i)
-+                              supd.updates
-+                          with
-+                          | Some (_, fe) -> fe.ty
-+                          | None -> ty))
-               in
-               [%ldebug
-                 "- ty: " ^ ty_to_string ty ^ "\n- field_tys:\n"
-diff --git a/src/symbolic/SymbolicToPure.ml b/src/symbolic/SymbolicToPure.ml
-index 38ec2bba..6429e249 100644
---- a/src/symbolic/SymbolicToPure.ml
-+++ b/src/symbolic/SymbolicToPure.ml
-@@ -251,10 +251,20 @@ let translate_trait_decl (ctx : Contexts.decls_ctx) (trait_decl : A.trait_decl)
-   let methods_to_extract =
-     TraitDeclId.Map.find def_id ctx.trait_methods_to_extract
-   in
-+  (* forge-aeneas: a method that cannot be translated (as several of
-+     [Iterator]'s cannot: [where Self: Iterator<Item = &T>] constraints) is
-+     left out of the trait, with a warning, instead of losing the whole trait
-+     declaration, and with it every use of the trait. *)
-   let methods =
--    List.map
-+    List.filter_map
-       (fun ((method_id, m) : TraitMethodId.id * A.trait_method T.binder) ->
--        translate_trait_method ctx opt_span translate_ty trait_decl method_id m)
-+        try
-+          Some
-+            (translate_trait_method ctx opt_span translate_ty trait_decl
-+               method_id m)
-+        with Errors.CFailure _ ->
-+          [%warn] span ("Left a method out of trait " ^ name ^ ": its signature could not be translated");
-+          None)
-       (TraitMethodId.Map.to_list methods_to_extract)
-   in
-   {

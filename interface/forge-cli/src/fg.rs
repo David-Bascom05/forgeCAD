@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// The tools a part file takes, on the command line and over `serve`/`mcp`.
-pub const COMMANDS: [&str; 8] = [
-    "build", "check", "query", "measure", "render", "export", "edit", "diff",
+pub const COMMANDS: [&str; 9] = [
+    "build", "check", "query", "measure", "render", "export", "edit", "diff", "cam",
 ];
 
 /// A tool's arguments: the file, and its words (a selector, the refs to measure, the view, the
@@ -216,12 +216,105 @@ impl Session {
             "export" => self.export(a),
             "edit" => self.edit(a, params),
             "diff" => self.diff(a),
+            "cam" => self.cam(a),
             _ => Err(format!(
                 "unknown command '{cmd}' ({}; a part changes by edit F OP)",
                 COMMANDS.join(" ")
             )),
         };
         r.unwrap_or_else(fail)
+    }
+
+    /// `cam F [sheet]`: a machining document's reply (`forgecad.cam/1`); the file it carries is
+    /// the program (only when every op is certified) or, with `sheet`, the setup sheet.
+    fn cam(&mut self, a: &Args) -> Result<Reply, String> {
+        let path = self.path(&a.file)?;
+        let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+        if forge_turn_lang::is_turning(&src) {
+            return Ok(Self::cam_turn(&src, &dir, a));
+        }
+        let cam = forge_cam_lang::run(&src, &dir);
+        let mut text = String::new();
+        for e in &cam.errors {
+            text.push_str(&format!("error: {e}\n"));
+        }
+        for o in &cam.ops {
+            text.push_str(&format!(
+                "{} {} {}: {} moves, {}\n",
+                o.name,
+                o.kind,
+                o.status,
+                o.moves,
+                if o.status == "built" {
+                    "certified".to_string()
+                } else {
+                    o.refusal.clone().unwrap_or_default()
+                }
+            ));
+        }
+        text.push_str(&match cam.certification() {
+            "full" => "certification: full (G1-G6, every position within the machine's travel)\n".to_string(),
+            "except G5" => {
+                "certification: except G5 (unchecked: no `at:` on a setup; the spans fit the travel)\n"
+                    .to_string()
+            }
+            c => format!("certification: {c}\n"),
+        });
+        let file = if a.words.first().is_some_and(|w| w == "sheet") {
+            Some(cam.sheet().into_bytes())
+        } else {
+            cam.program_text().map(|(t, _)| t.as_bytes().to_vec())
+        };
+        Ok(Reply {
+            ok: cam.ok,
+            text,
+            json: cam.json(),
+            png: file,
+        })
+    }
+
+    /// `cam F` for a turning document (forge-turn-lang): the same reply schema, its program the
+    /// file when every op is certified. `cam F check`: with the exact in-process stock and the
+    /// G4 leftover (the normal path keeps the stock as columns, sound by construction).
+    fn cam_turn(src: &str, dir: &Path, a: &Args) -> Reply {
+        let check = a.words.first().is_some_and(|w| w == "check");
+        let cam = if check {
+            forge_turn_lang::run_checked(src, dir)
+        } else {
+            forge_turn_lang::run(src, dir)
+        };
+        let mut text = String::new();
+        for e in &cam.errors {
+            text.push_str(&format!("error: {e}\n"));
+        }
+        for o in &cam.ops {
+            text.push_str(&format!(
+                "{} {} {}: {} moves, {}\n",
+                o.name,
+                o.kind,
+                o.status,
+                o.moves,
+                if o.status == "built" {
+                    "certified".to_string()
+                } else {
+                    o.refusal.clone().unwrap_or_default()
+                }
+            ));
+        }
+        text.push_str(&format!("certification: {}\n", cam.certification()));
+        let file = if a.words.first().is_some_and(|w| w == "sheet") {
+            text.push_str("no setup sheet for turning yet\n");
+            None
+        } else {
+            cam.program_text().map(|t| t.as_bytes().to_vec())
+        };
+        Reply {
+            ok: cam.ok,
+            text,
+            json: cam.json(),
+            png: file,
+        }
     }
 
     fn body(run: &Run) -> Result<&Body, String> {
@@ -292,7 +385,7 @@ impl Session {
             .trim_end_matches(')')
             .split_whitespace()
             .collect();
-        let mut origin = HashMap::new();
+        let mut origin = std::collections::BTreeMap::new();
         // a name for several features (a call, a loop) stands for them all: an index of its
         // own, past every feature's, added to the lineage of each face any of them made
         let mut groups: Vec<(String, usize)> = vec![];
@@ -590,6 +683,9 @@ impl Session {
         {
             return self.export_mesh(a);
         }
+        if a.words.first().is_some_and(|w| w == "urdf") {
+            return self.export_urdf(a);
+        }
         let (run, _) = self.built(&a.file)?;
         if let Some(fmt) = a.words.first().filter(|w| *w == "dxf" || *w == "dwg") {
             let dwg = fmt == "dwg";
@@ -780,6 +876,43 @@ impl Session {
             json: Json::obj(j),
             png: Some(e.bytes),
         })
+    }
+
+    /// `urdf [tol MM] [angle DEG] [effort N] [velocity V] [travel MM] [cut J].. [package NAME]`:
+    /// the part or assembly as a URDF robot (research/export/urdf.md). The reply's bytes are a
+    /// ZIP of `NAME.urdf` and `meshes/*.stl`; a refusal is typed (`kind`, `fixes`).
+    fn export_urdf(&mut self, a: &Args) -> Result<Reply, String> {
+        use forge_lang::urdf;
+        let o = urdf::Options::parse(&a.words)?;
+        let (_, src) = self.read(&a.file)?;
+        let path = self.path(&a.file)?;
+        let dir = path.parent().map(Path::to_path_buf);
+        let opts = Options {
+            dir: dir.clone(),
+            root: self.root.clone(),
+            render: true,
+            kin: true,
+            overlap: false,
+            ..Options::default()
+        };
+        let run = forge_lang::run(&src, opts, Default::default()).0;
+        let name = Path::new(&a.file)
+            .file_stem()
+            .map_or_else(|| "part".into(), |n| n.to_string_lossy().into_owned());
+        match urdf::export(&run, &name, dir.as_deref(), &o) {
+            Ok(e) => Ok(Reply {
+                ok: true,
+                text: e.text(),
+                json: e.json(),
+                png: Some(e.zip),
+            }),
+            Err(e) => Ok(Reply {
+                ok: false,
+                text: format!("error {e}"),
+                json: Json::obj(vec![("ok", false.into()), ("error", e.json())]),
+                png: None,
+            }),
+        }
     }
 
     /// What part B changed from part A: features and params added, removed and changed (with

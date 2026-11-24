@@ -79,3 +79,25 @@ def F64.Ops.floor (x : F64) : F64 :=
 /-- `x.floor()`, as Charon names it through `std` -/
 def std.f64.F64.floor (x : F64) : Result F64 := ok (F64.Ops.floor x)
 def core.f64.F64.floor (x : F64) : Result F64 := ok (F64.Ops.floor x)
+
+/-! ## `f64::min`, `f64::max`
+
+Rust's documentation: a NaN argument gives the other argument; otherwise the lesser (greater)
+value. Which zero `min(+0, -0)` returns is left open (LLVM's `minnum` may give either): that one
+choice is `F64.zeroTie`, an `opaque` function. A proof sees no definition of it, so a theorem holds
+whichever zero it gives; both are equal in value. -/
+
+/-- The zero `min`/`max` give for `+0` and `-0` (Rust leaves it open). -/
+opaque F64.zeroTie : F64 → F64 → F64 := fun x _ => x
+
+/-- `x.min(y)` -/
+def core.f64.F64.min (x y : F64) : Result F64 :=
+  ok (if x.isNaN then y else if y.isNaN then x
+    else if IEEE754.FP.lt x y then x else if IEEE754.FP.lt y x then y
+    else if x.isZero && y.isZero then F64.zeroTie x y else x)
+
+/-- `x.max(y)` -/
+def core.f64.F64.max (x y : F64) : Result F64 :=
+  ok (if x.isNaN then y else if y.isNaN then x
+    else if IEEE754.FP.lt y x then x else if IEEE754.FP.lt x y then y
+    else if x.isZero && y.isZero then F64.zeroTie x y else x)

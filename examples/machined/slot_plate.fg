@@ -1,0 +1,27 @@
+# A plate with a straight slot and a round-ended one in its top, the grooves modelled, their
+# centrelines in a sketch of their own (slot_plate_cam.fg cuts them with `slot`).
+
+shared L = 60
+shared W = 40
+shared t = 10
+shared w = 6
+shared depth = 4
+shared x0 = 12
+shared x1 = 48
+shared y0 = 12
+shared y1 = 28
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+plate = extrude(plan, t)
+sketch grooves(on: plate.end) {
+  a = slot((x0, y0), (x1, y0), w / 2)
+  b = slot((x0, y1), (x1, y1), w / 2)
+}
+groove = cut(grooves.a, depth)
+groove2 = cut(grooves.b, depth)
+sketch lines(on: plate.end) {
+  la = line((x0, y0), (x1, y0))
+  lb = line((x0, y1), (x1, y1))
+}

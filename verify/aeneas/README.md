@@ -90,7 +90,9 @@ Nothing else. In particular, no rounding behaviour is assumed: every rounding is
 The proofs say nothing about these, and each one is marked where it occurs:
 - `to_bits` of a NaN (the payload). The bridge gives the canonical quiet NaN.
 - `f64::min`/`max` on `±0`. IEEE leaves the order of `-0` and `+0` open, and LLVM's `minnum`
-  may return either. The bridge leaves them undefined until a crate needs them.
+  may return either. The bridge defines `min`/`max` as Rust documents them, and the one open
+  choice, which zero a `+0`/`-0` pair gives, is `F64.zeroTie`, an `opaque` function: a proof
+  holds whichever zero it is.
 - `powi`, and the libm transcendentals (`sin`, `exp`, `ln`, `powf`, …). These are not correctly
   rounded and differ between platforms. The kernel's deterministic replacements are Rust in
   `forge_math::dmath`, and they translate as ordinary code.

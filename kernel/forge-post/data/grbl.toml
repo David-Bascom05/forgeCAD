@@ -1,0 +1,41 @@
+# GRBL 1.1 (hobby controllers): no tool changer, no canned cycles, no cutter compensation; every
+# cycle is expanded into moves. Restated from GRBL's public command list (facts only).
+[dialect]
+name = "grbl"
+extension = "gcode"
+decimals = 3
+feed_decimals = 0
+point = "never"
+program_open = ["({title})"]
+program_close = ["M2"]
+comment = "({text})"
+comment_strip = "()"
+line_numbers = false
+line_start = 10
+line_step = 10
+safe_start = ["G90 G94 G17", "G21"]
+tool_change = ["(TOOL {t}: {name})", "M0"]
+length_comp = ""
+spindle_cw = "S{rpm} M3"
+spindle_ccw = "S{rpm} M4"
+spindle_stop = "M5"
+wcs = "G{n}"
+wcs_first = 54
+wcs_count = 6
+arc = "ijk"
+retract_home = []
+coolant_flood = "M8"
+coolant_mist = "M7"
+coolant_off = "M9"
+dwell = "G4 P{s}"
+cycle_drill = "expand"
+cycle_dwell = "expand"
+cycle_peck = "expand"
+cycle_chipbreak = "expand"
+cycle_tap = "refuse"
+cycle_ream = "expand"
+cycle_next = ""
+cycle_cancel = ""
+source = "forgecad, restated from the GRBL 1.1 command reference"
+taken = "2026-11-23"
+note = "verify with your firmware"

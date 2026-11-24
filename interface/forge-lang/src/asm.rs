@@ -3298,6 +3298,8 @@ pub struct AsmOut {
     pub occ_anchors: Vec<Option<Arc<crate::anchors::Anchors>>>,
     /// The document's wire harnesses, routed on the solved assembly.
     pub harnesses: Vec<crate::harness::HarnessOut>,
+    /// With `Options::kin`: the bodies, joints and relations as solved, for an export.
+    pub kin: Option<crate::urdf::Kin>,
 }
 
 /// A part or subassembly occurrence, as a browser lists it.
@@ -4533,6 +4535,17 @@ pub fn finish(
                 .collect(),
             free: j.free,
         });
+    }
+    if opts.kin {
+        let name = |m: &BTreeMap<u64, (String, Span)>, id: u64| m.get(&id).map(|x| x.0.clone());
+        out.kin = Some(crate::urdf::kin_of(
+            live_asm,
+            sol,
+            &**checker.parts(),
+            &|id| name(&names.inst, id),
+            &|id| names.link.get(&id).map(|x| x.0.clone()),
+            &|id| name(&names.rel, id),
+        ));
     }
 
     // expects
@@ -6839,6 +6852,13 @@ fn infile_load_in(
     }
     let mut out = empty_load(key);
     out.hash = content_hash(&format!("{key}\n{}", ev.src));
+    // what its solids are made from: the document's text and the component's key (never 0, the
+    // ident of nothing: the checker keeps exact volumes by ident, so two in-file components of
+    // two documents at one pose were one pair to it)
+    out.ident = crate::store::key("part", |h| {
+        h.str(key);
+        h.str(ev.src);
+    });
     match (inst.source, comp) {
         (Source::Inline, Some(k)) => {
             let mut comps = std::mem::take(&mut ev.comps);

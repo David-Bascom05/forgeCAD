@@ -16,6 +16,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A new push to a pull request cancels that pull request's runs still queued or running for its
+# older commits; pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   app:
     strategy:
@@ -131,7 +137,7 @@ jobs:
       - name: the language, its bench parts, and the kernel under its random programs (once forge-agent's history tests)
         if: ${{ !cancelled() }}
         shell: bash
-        run: cargo test --locked -p forge-lang --test bench_ports --test ports --test harness --test fuzz --test kernel_history_repros
+        run: cargo test --locked -p forge-lang --test bench_ports --test ports --test harness --test fuzz --test kernel_history_repros --test hash_inputs
       - name: the one-pass parser against the table parser, answers and errors, with overflow checks on
         if: ${{ !cancelled() }}
         shell: bash

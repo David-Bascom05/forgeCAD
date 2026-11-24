@@ -97,21 +97,35 @@ fn line_procedural(line: &Line, s: &Surface, pr: &crate::surface::Proc) -> LineS
 }
 
 pub fn line_plane(line: &Line, p: &Plane) -> LineSurface {
+    match line_plane_t(line, p) {
+        PlaneMeet::On => LineSurface::OnSurface,
+        PlaneMeet::Apart => LineSurface::Hits(vec![]),
+        PlaneMeet::At(t) => LineSurface::Hits(vec![LineHit {
+            t,
+            point: line.eval(t),
+            contact: Contact::Crossing,
+        }]),
+    }
+}
+
+/// How a line meets a plane: in it, apart from it, or crossing it once at t.
+enum PlaneMeet {
+    On,
+    Apart,
+    At(f64),
+}
+
+fn line_plane_t(line: &Line, p: &Plane) -> PlaneMeet {
     let denom = p.normal_vec().dot(line.dir);
     let d0 = p.signed_distance(line.origin);
     if denom.abs() <= tol::ANGULAR {
         return if d0.abs() <= tol::LINEAR {
-            LineSurface::OnSurface
+            PlaneMeet::On
         } else {
-            LineSurface::Hits(vec![])
+            PlaneMeet::Apart
         };
     }
-    let t = -d0 / denom;
-    LineSurface::Hits(vec![LineHit {
-        t,
-        point: line.eval(t),
-        contact: Contact::Crossing,
-    }])
+    PlaneMeet::At(-d0 / denom)
 }
 
 /// Line origin and direction in a surface's local frame.
@@ -368,6 +382,18 @@ pub fn curve_surface_in(
 }
 
 fn line_in_range(l: &Line, range: Interval, s: &Surface) -> CurveSurface {
+    // a plane: its one hit made in place (line_plane's values, without its list)
+    if let Surface::Plane(p) = s {
+        return match line_plane_t(l, p) {
+            PlaneMeet::On => CurveSurface::OnSurface,
+            PlaneMeet::At(t) if range.contains(t) => CurveSurface::Hits(vec![CurveHit {
+                t,
+                point: l.eval(t),
+                contact: Contact::Crossing,
+            }]),
+            _ => CurveSurface::Hits(Vec::new()),
+        };
+    }
     match line_surface(l, s) {
         LineSurface::OnSurface => CurveSurface::OnSurface,
         LineSurface::Hits(h) => CurveSurface::Hits(
@@ -438,6 +464,16 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
         major: a,
         minor: b,
     });
+    // a conic in a plane's own plane, to within LINEAR everywhere: what the probes below would
+    // find, bounded in closed form (each point o + a cos t x + b sin t y lies within
+    // |n·(o − p0)| + a |n·x| + b |n·y| of the plane), so none need taking
+    if let Surface::Plane(pl) = s {
+        let n = pl.frame.z();
+        let reach = n.dot(f.origin - pl.frame.origin).abs() + a * n.dot(f.x()).abs() + b * n.dot(f.y()).abs();
+        if reach <= tol::LINEAR {
+            return Some(CurveSurface::OnSurface);
+        }
+    }
     let probes = 9;
     let on = (0..probes).all(|i| {
         s.distance(curve.eval(range.lo + range.width() * i as f64 / (probes - 1) as f64)) <= tol::LINEAR

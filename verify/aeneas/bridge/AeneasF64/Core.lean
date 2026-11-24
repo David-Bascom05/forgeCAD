@@ -69,11 +69,6 @@ def core.option.Option.Insts.CoreOpsTry_traitTry.branch {T : Type _} :
 def core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
     (T : Type _) : Option Never → Result (Option T) := fun _ => ok none
 
-/-- `f64::max`: Lean `opaque`. Rust leaves the sign of a zero result unspecified
-(`max(-0.0, 0.0)`), and LLVM's `maxnum` lowers differently on x86-64 and wasm32, so no single
-definition is the shipped one; a theorem cannot use its value. -/
-opaque core.f64.F64.max : F64 → F64 → Result F64 := fun _ _ => fail .panic
-
 /-- `<f64 as Debug>::fmt`: Lean `opaque` (formatting is not part of any feature). -/
 opaque F64.Insts.CoreFmtDebug.fmt :
     F64 → core.fmt.Formatter → Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter) :=
@@ -105,3 +100,121 @@ def alloc.vec.Vec.clear {T : Type _} (A : Type _) (_ : alloc.vec.Vec T) : Result
 process, outside every theorem). -/
 def alloc.vec.Vec.reserve {T : Type _} (A : Type _) (v : alloc.vec.Vec T) (_ : Std.Usize) :
     Result (alloc.vec.Vec T) := ok v
+
+/-- `Iterator::all` on a slice iterator, as std's `try_fold` runs it: each element in turn,
+stopping after the first `false` (that element consumed). -/
+def core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.all {T F : Type _}
+    (inst : core.ops.function.FnMut F T Bool) (it : core.slice.iter.Iter T) (f : F) :
+    Result (Bool × core.slice.iter.Iter T) :=
+  if h : it.i < it.slice.val.length then do
+    let (b, f) ← inst.call_mut f it.slice.val[it.i]
+    if b then
+      core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.all inst
+        { it with i := it.i + 1 } f
+    else ok (false, { it with i := it.i + 1 })
+  else ok (true, it)
+termination_by it.slice.val.length - it.i
+decreasing_by all_goals (simp_wf; omega)
+
+/-- One step of `Iterator::all`'s default method. -/
+def core.iter.traits.iterator.Iterator.allStep {Self F Item : Type _}
+    (inst : core.iter.traits.iterator.Iterator Self Item)
+    (fm : core.ops.function.FnMut F Item Bool)
+    (st : Self × F) : Result (ControlFlow (Self × F) (Bool × Self)) := do
+  let (x, it) ← inst.next st.1
+  match x with
+  | none => ok (done (true, it))
+  | some x =>
+    let (b, f) ← fm.call_mut st.2 x
+    if b then ok (cont (it, f)) else ok (done (false, it))
+
+/-- `Iterator::all`'s default method, over the iterator's own `next` (Aeneas's `loop`). -/
+def core.iter.traits.iterator.Iterator.all.default {Self F Item : Type _}
+    (inst : core.iter.traits.iterator.Iterator Self Item)
+    (fm : core.ops.function.FnMut F Item Bool) :
+    Self → F → Result (Bool × Self) :=
+  fun it f => loop (core.iter.traits.iterator.Iterator.allStep inst fm) (it, f)
+
+/-- `f64::next_up`, std's body over the bits (`library/core/src/num/f64.rs`). -/
+def core.f64.F64.next_up (x : F64) : Result F64 :=
+  let bits := IEEE754.FP.toBits x
+  if x.isNaN || bits == 0x7ff0000000000000 then ok x
+  else
+    let abs := bits % 2 ^ 63
+    let next := if abs == 0 then 1 else if bits == abs then bits + 1 else bits - 1
+    ok (F64.Ops.ofBits next)
+
+/-- `f64::next_down`, std's body over the bits. -/
+def core.f64.F64.next_down (x : F64) : Result F64 :=
+  let bits := IEEE754.FP.toBits x
+  if x.isNaN || bits == 0xfff0000000000000 then ok x
+  else
+    let abs := bits % 2 ^ 63
+    let next :=
+      if abs == 0 then 0x8000000000000001 else if bits == abs then bits - 1 else bits + 1
+    ok (F64.Ops.ofBits next)
+
+/-- `x.ceil()`: `-(-x).floor()`, exact in IEEE 754 (a result `0` from `x ∈ (-1, 0]` is `-0`, as
+roundToIntegralTowardPositive gives). -/
+def std.f64.F64.ceil (x : F64) : Result F64 :=
+  ok (F64.Ops.neg (F64.Ops.floor (F64.Ops.neg x)))
+def core.f64.F64.ceil (x : F64) : Result F64 := std.f64.F64.ceil x
+
+/-- `i64::rem_euclid`, std's body: `%` (which fails on a zero divisor and on `MIN % -1`), then
+the divisor's magnitude added to a negative remainder. -/
+def core.num.I64.rem_euclid (x y : Std.I64) : Result Std.I64 := do
+  let r ← x % y
+  if r < 0#i64 then (if y < 0#i64 then r - y else r + y) else ok r
+
+/-- `[T; N]::map`'s walk: each element in order through the closure, which carries its state. -/
+def core.array.mapList {T F U : Type _} (inst : core.ops.function.FnMut F T U) :
+    List T → F → Result (List U × F)
+  | [], f => ok ([], f)
+  | x :: xs, f => do
+    let (y, f) ← inst.call_mut f x
+    let (ys, f) ← core.array.mapList inst xs f
+    ok (y :: ys, f)
+
+/-- `[T; N]::map(f)`, std's body: a new array of `f` applied to each element in order. (The walk
+gives one element per element, so the length check never fails; a proof that uses `map` shows
+that once.) -/
+def core.array.Array.map {T F U : Type _} {N : Std.Usize} (inst : core.ops.function.FnMut F T U)
+    (a : Array T N) (f : F) : Result (Array U N) := do
+  let (l, _) ← core.array.mapList inst a.val f
+  if h : l.length = N.val then ok (Array.from l h) else fail .panic
+
+/-- `Iterator::any` on a slice iterator, as std's `try_fold` runs it: each element in turn,
+stopping after the first `true` (that element consumed). -/
+def core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.any {T F : Type _}
+    (inst : core.ops.function.FnMut F T Bool) (it : core.slice.iter.Iter T) (f : F) :
+    Result (Bool × core.slice.iter.Iter T) :=
+  if h : it.i < it.slice.val.length then do
+    let (b, f) ← inst.call_mut f it.slice.val[it.i]
+    if b then ok (true, { it with i := it.i + 1 })
+    else
+      core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.any inst
+        { it with i := it.i + 1 } f
+  else ok (false, it)
+termination_by it.slice.val.length - it.i
+decreasing_by all_goals (simp_wf; omega)
+
+/-- `f64::MIN` = `-f64::MAX` -/
+def core.f64.F64.MIN : Result F64 := ok (F64.Ops.ofBits 0xFFEFFFFFFFFFFFFF)
+
+universe u in
+/-- `core::array::IntoIter<T, N>`, `[T; N]`'s by-value iterator: the elements not yet taken, in
+order (std keeps the array and a live range of it). -/
+structure core.array.iter.IntoIter (T : Type u) (N : Std.Usize) : Type u where
+  rest : List T
+
+/-- `<[T; N] as IntoIterator>::into_iter`: every element, in order. -/
+def Array.Insts.CoreIterTraitsCollectIntoIteratorTIntoIter.into_iter {T : Type _} {N : Std.Usize}
+    (a : Array T N) : Result (core.array.iter.IntoIter T N) := ok ⟨a.val⟩
+
+/-- `<array::IntoIter<T, N> as Iterator>::next`: the first element not yet taken. -/
+def core.array.iter.IntoIter.Insts.CoreIterTraitsIteratorIterator.next {T : Type _}
+    {N : Std.Usize} (it : core.array.iter.IntoIter T N) :
+    Result ((Option T) × (core.array.iter.IntoIter T N)) :=
+  match it.rest with
+  | [] => ok (none, it)
+  | x :: xs => ok (some x, ⟨xs⟩)

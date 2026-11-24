@@ -69,6 +69,18 @@ axiom core.iter.traits.iterator.Iterator.sum.default
   core.iter.traits.accum.Sum S Clause0_Item) :
   Self → Result S
 
+/-- [core::iter::traits::iterator::Iterator::all]:
+    Source: '/rustc/library/core/src/iter/traits/iterator.rs', lines 2840:4-2843:64
+    Name pattern: [core::iter::traits::iterator::Iterator::all]
+    Visibility: public -/
+@[trait_default, rust_fun "core::iter::traits::iterator::Iterator::all"]
+axiom core.iter.traits.iterator.Iterator.all.default
+  {Self : Type _} {F : Type _} {Clause0_Item : Type _} (IteratorInst :
+  core.iter.traits.iterator.Iterator Self Clause0_Item)
+  (opsfunctionFnMutFTupleClause0_ItemBoolInst : core.ops.function.FnMut F
+  Clause0_Item Bool) :
+  Self → F → Result (Bool × Self)
+
 /-- [core::iter::traits::accum::{impl core::iter::traits::accum::Sum<&'a f64> for f64}::sum]:
     Source: '/rustc/library/core/src/iter/traits/accum.rs', lines 184:12-184:63; this code is generated from a macro invocation at: '/rustc/library/core/src/iter/traits/accum.rs', lines 208:0-208:39
     Name pattern: [core::iter::traits::accum::{core::iter::traits::accum::Sum<f64, &'a f64>}::sum]
@@ -168,12 +180,33 @@ axiom core.f64.F64.is_finite : F64 → Result Bool
 @[rust_fun "core::f64::{f64}::is_sign_negative"]
 axiom core.f64.F64.is_sign_negative : F64 → Result Bool
 
+/-- [core::f64::{f64}::next_up]:
+    Source: '/rustc/library/core/src/num/f64.rs', lines 889:4-889:38
+    Name pattern: [core::f64::{f64}::next_up]
+    Visibility: public -/
+@[rust_fun "core::f64::{f64}::next_up"]
+axiom core.f64.F64.next_up : F64 → Result F64
+
+/-- [core::f64::{f64}::next_down]:
+    Source: '/rustc/library/core/src/num/f64.rs', lines 941:4-941:40
+    Name pattern: [core::f64::{f64}::next_down]
+    Visibility: public -/
+@[rust_fun "core::f64::{f64}::next_down"]
+axiom core.f64.F64.next_down : F64 → Result F64
+
 /-- [core::f64::{f64}::max]:
     Source: '/rustc/library/core/src/num/f64.rs', lines 1058:4-1058:45
     Name pattern: [core::f64::{f64}::max]
     Visibility: public -/
 @[rust_fun "core::f64::{f64}::max"]
 axiom core.f64.F64.max : F64 → F64 → Result F64
+
+/-- [core::f64::{f64}::min]:
+    Source: '/rustc/library/core/src/num/f64.rs', lines 1085:4-1085:45
+    Name pattern: [core::f64::{f64}::min]
+    Visibility: public -/
+@[rust_fun "core::f64::{f64}::min"]
+axiom core.f64.F64.min : F64 → F64 → Result F64
 
 /-- [core::f64::{f64}::to_bits]:
     Source: '/rustc/library/core/src/num/f64.rs', lines 1319:4-1319:37
@@ -201,6 +234,13 @@ axiom core.f64.F64.clamp : F64 → F64 → F64 → Result F64
     Name pattern: [core::f64::{f64}::abs]
     Visibility: public -/
 @[rust_fun "core::f64::{f64}::abs"] axiom core.f64.F64.abs : F64 → Result F64
+
+/-- [core::num::{i64}::rem_euclid]:
+    Source: '/rustc/library/core/src/num/int_macros.rs', lines 3258:8-3258:56; this code is generated from a macro invocation at: '/rustc/library/core/src/num/mod.rs', lines 455:4-474:5
+    Name pattern: [core::num::{i64}::rem_euclid]
+    Visibility: public -/
+@[rust_fun "core::num::{i64}::rem_euclid"]
+axiom core.num.I64.rem_euclid : Std.I64 → Std.I64 → Result Std.I64
 
 /-- [core::ops::range::{core::ops::range::RangeInclusive<Idx>}::contains]:
     Source: '/rustc/library/core/src/ops/range.rs', lines 539:4-542:44
@@ -243,6 +283,17 @@ axiom
   core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
   (T : Type _) : Option Never → Result (Option T)
 
+/-- [core::slice::iter::{impl core::iter::traits::iterator::Iterator<&'a T> for core::slice::iter::Iter<'a, T>}::all]:
+    Source: '/rustc/library/core/src/slice/iter/macros.rs', lines 304:12-307:45; this code is generated from a macro invocation at: '/rustc/library/core/src/slice/iter.rs', lines 140:0-148:2
+    Name pattern: [core::slice::iter::{core::iter::traits::iterator::Iterator<core::slice::iter::Iter<'a, @T>, &'a @T>}::all]
+    Visibility: public -/
+@[rust_fun
+  "core::slice::iter::{core::iter::traits::iterator::Iterator<core::slice::iter::Iter<'a, @T>, &'a @T>}::all"]
+axiom core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.all
+  {T : Type _} {F : Type _} (opsfunctionFnMutFTupleSharedATBoolInst :
+  core.ops.function.FnMut F T Bool) :
+  core.slice.iter.Iter T → F → Result (Bool × (core.slice.iter.Iter T))
+
 /-- [core::slice::{[T]}::last]:
     Source: '/rustc/library/core/src/slice/mod.rs', lines 283:4-283:42
     Name pattern: [core::slice::{[@T]}::last]
@@ -256,6 +307,12 @@ axiom core.slice.Slice.last {T : Type _} : Slice T → Result (Option T)
     Visibility: public -/
 @[rust_fun "std::f64::{f64}::floor"]
 axiom std.f64.F64.floor : F64 → Result F64
+
+/-- [std::f64::{f64}::ceil]:
+    Source: '/rustc/library/std/src/num/f64.rs', lines 74:4-74:34
+    Name pattern: [std::f64::{f64}::ceil]
+    Visibility: public -/
+@[rust_fun "std::f64::{f64}::ceil"] axiom std.f64.F64.ceil : F64 → Result F64
 
 /-- [std::f64::{f64}::sqrt]:
     Source: '/rustc/library/std/src/num/f64.rs', lines 386:4-386:28
@@ -284,6 +341,11 @@ axiom alloc.vec.Vec.clear
     Source: 'kernel/forge-math/src/predicates.rs', lines 264:0-270:1 -/
 axiom predicates.cross_big : F64 → F64 → F64 → F64 → Result F64
 
+/-- [forge_math::predicates::exact_diffs]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 398:0-411:1 -/
+axiom predicates.exact_diffs
+  {N : Std.Usize} : Array (F64 × F64) N → Result (Option (Array F64 N))
+
 /-- [forge_math::predicates::orient2d_big]:
     Source: 'kernel/forge-math/src/predicates.rs', lines 466:0-474:1 -/
 axiom predicates.orient2d_big
@@ -293,8 +355,9 @@ axiom predicates.orient2d_big
     Source: 'kernel/forge-math/src/predicates.rs', lines 564:0-571:1 -/
 axiom predicates.dot3_big : vec.Vec3 → vec.Vec3 → Result F64
 
-/-- [forge_math::predicates::incircle_big]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 719:0-736:1 -/
-axiom predicates.incircle_big
+/-- [forge_math::predicates::incircle]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 679:0-714:1
+    Visibility: public -/
+axiom predicates.incircle
   : vec.Point2 → vec.Point2 → vec.Point2 → vec.Point2 → Result F64
 

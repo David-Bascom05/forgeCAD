@@ -92,6 +92,8 @@ fn oracle(corpus: &str, input: &str, n: usize) {
         "{corpus}: {} regions, {disagree} disagreements",
         out.lines().filter(|l| l.starts_with("region")).count()
     );
+    // the kernel's answers are the exact rule's, ties and all
+    assert_eq!(disagree, 0, "{corpus}: the kernel and the Lean rule disagree");
     static FILE: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _one = FILE.lock().unwrap_or_else(|e| e.into_inner());
     let have = std::fs::read_to_string(DIGEST_PATH).unwrap_or_default();
@@ -161,6 +163,23 @@ fn holds_against_the_exact_rule() {
                     let l = (t.x * t.x + t.y * t.y).sqrt().max(1e-300);
                     for d in [1e-9, 1e-6, -1e-9, -1e-6] {
                         qs.push(Point2::new(m.x - t.y / l * d, m.y + t.x / l * d));
+                    }
+                }
+            }
+            // exact ties: level with every vertex (on it, and off it along x, where the ray from
+            // the point runs through it), and each arc's centre, and level with it on its circle
+            // and past it
+            for c in &region.parts {
+                for b in c.outer.iter().chain(c.holes.iter().flatten()) {
+                    for dx in [0.0, 1.0, -1.0, 7.5, -7.5] {
+                        qs.push(Point2::new(b.start.x + dx, b.start.y));
+                    }
+                    if let Piece::Arc { c: o, r, .. } = b.piece {
+                        for dx in [0.0, r, -r, 2.0 * r, -2.0 * r] {
+                            qs.push(Point2::new(o.x + dx, o.y));
+                        }
+                        qs.push(Point2::new(o.x, o.y + r));
+                        qs.push(Point2::new(o.x, o.y - r));
                     }
                 }
             }

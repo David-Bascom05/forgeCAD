@@ -1,0 +1,120 @@
+{
+ "vendor": "DN Solutions",
+ "model": "PUMA 2600",
+ "family": "PUMA 2100/2600",
+ "source": [
+  "https://www.dn-solutions.com/eu/product/turning-center/2-axis-horizontal/puma-2600.do"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe",
+ "architecture": "Horizontal 2-axis CNC turning center, single spindle, 12-station turret (carrying arrangement not on fetched page).",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 260,
+  "Z": 830
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 481,
+ "max_turning_length_mm": 790,
+ "chuck_size_in": 10,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 3500,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 30
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 327
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": 12,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 30,
+  "Z": 30
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 1863,
+  "D": 3600,
+  "H": 1900
+ },
+ "weight_kg": 5400,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "bar_capacity_mm",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle_nose_type",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm",
+  "tailstock",
+  "turret_index_s"
+ ],
+ "options": [
+  "PUMA 2600/500: Z 590, 550 mm turning length, 25 kW 386 N·m",
+  "PUMA 2600B: 12 in, 2800 r/min, 26 kW, 1123 N·m",
+  "PUMA 2600L: Z 1350, 1310 mm, 6700 kg",
+  "PUMA 2600LB",
+  "PUMA 2600SB: sub-spindle 4500 r/min 7.5 kW"
+ ],
+ "notes": "From DN Solutions EU product page summary table (the US site does not list a plain PUMA 2600; it lists PUMA GT2600XL and PUMA 2600Y/SY II). Page labels Length/Height/Width; D=Length. Catalogue is email-gated. Not applicable to this machine kind (left null, not listed in unknown): spindle_nose_to_table_mm, spindle_center_to_column_mm, spindle_center_to_pallet_top_mm, table_mm, table_load_kg, rotary_table_dia_mm, pallet, changer, milling_head, rotary, travel_mm.Y, rapid_m_min.Y, rapid_m_min.A_or_B_rpm, rapid_m_min.C_rpm, live_tool, sub_spindle."
+}
