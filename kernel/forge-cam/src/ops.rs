@@ -488,6 +488,24 @@ pub fn certify_with(
                             && *phase != Phase::Rapid
                             && col.holds_or_is(b)
                         {
+                            // the certifier's closed forms first (contact.rs: a ball's line, or
+                            // level arc by its chords, against a curved or sloped face): a Clear
+                            // there is the body's own signed distance, the certifier's measure
+                            // (prisms too: this route has no slab path for them, and a level
+                            // arc against a prism wall is the search's slowest case)
+                            let cf = match f.surf {
+                                forge_cam_geom::check::Surf::Plane { .. } if m.planar().is_some() => None,
+                                _ => match m {
+                                    Move::Arc { .. } => forge_cam_geom::contact::clear_arc(b, f, m, limit),
+                                    _ => forge_cam_geom::contact::clear(b, f, m, limit),
+                                },
+                            };
+                            if let Some(forge_cam_geom::check::Verdict::Clear { lower }) = cf {
+                                if b.part == Part::Cutter {
+                                    o.least = o.least.min(lower);
+                                }
+                                continue;
+                            }
                             let (g, n) = forge_cam_geom::drop::gap_move(col, f, m, limit, tol / 4.0, 200_000);
                             o.cells += n;
                             match g {
