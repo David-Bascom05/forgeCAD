@@ -24,11 +24,11 @@ fix "$out/Types.lean" | sed 's/^import Aeneas$/import Aeneas\nimport AeneasF64/'
   | python3 -c '
 import sys, re
 drop = set(sys.argv[1].split())
-blocks = re.split(r"\n(?=/--|@\[|axiom )", sys.stdin.read())
+blocks = re.split(r"\n(?=/--|@\[|axiom\b)", sys.stdin.read())
 keep = []
 pending = []
 for b in blocks:
-    m = re.match(r"(?:@\[[^\]]*\]\s*)?axiom ([^ \n]+)", b)
+    m = re.match(r"(?:@\[[^\]]*\]\s*)?axiom\s+([^\s]+)", b)
     if b.startswith("/--") or b.startswith("@["):
         if m is None: pending.append(b); continue
     if m and m.group(1) in drop:

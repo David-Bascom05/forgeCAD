@@ -97,6 +97,11 @@ pub struct MachineUi {
     pub today: String,
     /// The Bodies tab's file to attach (a path).
     pub file_in: String,
+    /// The library list's search.
+    pub filter: String,
+    /// Hosted by the Machine Builder environment: the library is drawn in its browser
+    /// (`Shell::machine_side`), not in a floating panel.
+    pub in_env: bool,
 }
 
 fn today() -> String {
@@ -144,6 +149,8 @@ impl MachineUi {
             pick: 0,
             today: today(),
             file_in: String::new(),
+            filter: String::new(),
+            in_env: false,
         };
         if let Some(e) = m.cat.entries.first() {
             let (d, l, f) = (e.def.clone(), e.level, e.file.clone());
@@ -634,7 +641,75 @@ fn rename_joint(d: &mut MachineDef, from: &str, to: &str) {
     }
 }
 
+/// The Machine Builder's commands, as its ribbon groups and the environment send them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MachineCmd {
+    /// A new machine from the chosen template, under the name in the panel.
+    FromTemplate,
+    /// A clone of the machine in the editor, under the name in the panel.
+    Clone,
+    Save,
+    /// The travel check.
+    Check,
+    /// Every joint at home.
+    Home,
+    Close,
+}
+
+/// The Machine Builder's ribbon groups (for the environment's tabs; research/ui/environments.md §5).
+pub(in crate::shell) fn groups(s: &Shell) -> Vec<super::ribbon::Group> {
+    use super::ribbon::{Group, Tool};
+    let m = s.machine.as_ref();
+    let has = m.is_some_and(|m| m.def.is_some());
+    let valid = m.is_some_and(|m| m.def.is_some() && m.problem.is_none());
+    let tool = |name, icon, cmd, on: bool| Tool {
+        name,
+        icon,
+        action: on.then_some(super::Action::Machine(cmd)),
+        on: false,
+    };
+    vec![
+        Group {
+            name: "Machine",
+            big: vec![
+                tool("From Template", "new", MachineCmd::FromTemplate, m.is_some()),
+                tool("Clone Machine", "copy", MachineCmd::Clone, has),
+                tool("Save Machine", "save", MachineCmd::Save, valid),
+            ],
+            small: vec![],
+            icons: vec![],
+        },
+        Group {
+            name: "Motion",
+            big: vec![
+                tool("Home Axes", "home", MachineCmd::Home, valid),
+                tool("Check Travel", "check", MachineCmd::Check, valid),
+            ],
+            small: vec![],
+            icons: vec![],
+        },
+        Group {
+            name: "Exit",
+            big: vec![tool("Close Builder", "close", MachineCmd::Close, m.is_some())],
+            small: vec![],
+            icons: vec![],
+        },
+    ]
+}
+
 impl Shell {
+    /// The environment's browser: the machine library (search, by level and vendor), new and save.
+    pub fn machine_side(&mut self, ui: &mut Ui, r: egui::Rect) {
+        let Some(mut st) = self.machine.take() else { return };
+        let t = self.theme;
+        let mut places = Vec::new();
+        ui.scope_builder(egui::UiBuilder::new().max_rect(r), |ui| {
+            library(ui, &t, &mut st, &mut places);
+        });
+        self.places.extend(places);
+        self.machine = Some(st);
+    }
+
     /// The workspace's panels, while it is open.
     pub fn machine_ui(&mut self, ctx: &egui::Context) {
         let Some(mut st) = self.machine.take() else { return };
@@ -645,29 +720,31 @@ impl Shell {
         let v = self.view_rect;
         let mut close = false;
         let mut places: Vec<(String, egui::Rect)> = Vec::new();
-        // the library
-        egui::Window::new("Machines")
-            .id(egui::Id::unique("machine:library"))
-            .title_bar(false)
-            .resizable(false)
-            .collapsible(false)
-            .fixed_pos(pos2(v.left() + 8.0, v.top() + 8.0))
-            .fixed_size(vec2(250.0, (v.height() - 140.0).max(200.0)))
-            .frame(super::theme::panel_frame(&t))
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new("Machine Builder").font(semi(14.0)).color(t.ink));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let r = ui.button("Close");
-                        places.push(("machine:close".into(), r.rect));
-                        if r.clicked() {
-                            close = true;
-                        }
+        // the library (in the environment's browser instead when it hosts the builder)
+        if !st.in_env {
+            egui::Window::new("Machines")
+                .id(egui::Id::unique("machine:library"))
+                .title_bar(false)
+                .resizable(false)
+                .collapsible(false)
+                .fixed_pos(pos2(v.left() + 8.0, v.top() + 8.0))
+                .fixed_size(vec2(250.0, (v.height() - 140.0).max(200.0)))
+                .frame(super::theme::panel_frame(&t))
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Machine Builder").font(semi(14.0)).color(t.ink));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let r = ui.button("Close");
+                            places.push(("machine:close".into(), r.rect));
+                            if r.clicked() {
+                                close = true;
+                            }
+                        });
                     });
+                    ui.add_space(4.0);
+                    library(ui, &t, &mut st, &mut places);
                 });
-                ui.add_space(4.0);
-                library(ui, &t, &mut st, &mut places);
-            });
+        }
         // the editor
         egui::Window::new("Machine editor")
             .id(egui::Id::unique("machine:editor"))
@@ -697,14 +774,48 @@ impl Shell {
     }
 }
 
+/// An entry's group in the list: its vendor (`builtin/<vendor>.toml`) or its file's name.
+fn group_of(e: &catalog::Entry) -> String {
+    std::path::Path::new(&e.file)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("?")
+        .to_string()
+}
+
 fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    ui.horizontal(|ui| {
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut st.filter)
+                .hint_text("search: name, kind, control, vendor")
+                .desired_width(ui.available_width()),
+        );
+        places.push(("machine:search".into(), r.rect));
+    });
     let mut chosen = None;
     egui::ScrollArea::vertical()
         .id_salt("machine:list")
         .max_height((ui.available_height() - 230.0).max(80.0))
         .show(ui, |ui| {
+            let want = st.filter.trim().to_lowercase();
+            let matches = |e: &catalog::Entry| {
+                want.is_empty()
+                    || [
+                        e.def.name.as_str(),
+                        e.def.kind.name(),
+                        e.def.control.as_str(),
+                        group_of(e).as_str(),
+                    ]
+                    .iter()
+                    .any(|x| x.to_lowercase().contains(&want))
+            };
             for lv in [Level::Project, Level::User, Level::Builtin] {
-                let here: Vec<_> = st.cat.entries.iter().filter(|e| e.level == lv).collect();
+                let here: Vec<_> = st
+                    .cat
+                    .entries
+                    .iter()
+                    .filter(|e| e.level == lv && matches(e))
+                    .collect();
                 ui.label(
                     RichText::new(lv.name().to_uppercase())
                         .font(semi(10.0))
@@ -715,30 +826,51 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
                         t,
                         match lv {
                             Level::Project if st.project.is_none() => "  (no part open: no project folder)",
+                            _ if !want.is_empty() => "  none match",
                             _ => "  none",
                         },
                     ));
                 }
-                for e in here {
-                    let on = st.def.as_ref().is_some_and(|d| d.name == e.def.name)
-                        && st.origin.as_ref().is_some_and(|(l, _)| *l == e.level);
-                    let mut txt = format!("{}  ·  {}", e.def.name, e.def.kind.name());
-                    if !e.hides.is_empty() {
-                        txt.push_str("  (hides ");
-                        txt.push_str(
-                            &e.hides
-                                .iter()
-                                .map(|(l, _)| l.name())
-                                .collect::<Vec<_>>()
-                                .join(", "),
-                        );
-                        txt.push(')');
-                    }
-                    let r = ui.selectable_label(on, RichText::new(txt).font(sans(12.0)));
-                    places.push((format!("machine:pick:{}", e.def.name), r.rect));
-                    if r.clicked() {
-                        chosen = Some((e.def.clone(), e.level, e.file.clone()));
-                    }
+                // by vendor (a built-in file) or by file (the user's, the project's)
+                let mut groups: Vec<String> = here.iter().map(|e| group_of(e)).collect();
+                groups.dedup();
+                for g in groups {
+                    let inner: Vec<_> = here.iter().filter(|e| group_of(e) == g).collect();
+                    let picked = inner.iter().any(|e| {
+                        st.def.as_ref().is_some_and(|d| d.name == e.def.name)
+                            && st.origin.as_ref().is_some_and(|(l, _)| *l == e.level)
+                    });
+                    egui::CollapsingHeader::new(
+                        RichText::new(format!("{g} ({})", inner.len())).font(sans(11.0)),
+                    )
+                    .id_salt(("machine:group", lv.name(), g.as_str()))
+                    .default_open(picked || !want.is_empty() || inner.len() <= 6)
+                    .show(ui, |ui| {
+                        for e in inner {
+                            let on = st.def.as_ref().is_some_and(|d| d.name == e.def.name)
+                                && st.origin.as_ref().is_some_and(|(l, _)| *l == e.level);
+                            let mut txt = format!("{}  ·  {}", e.def.name, e.def.kind.name());
+                            if e.def.real {
+                                txt.push_str("  · real");
+                            }
+                            if !e.hides.is_empty() {
+                                txt.push_str("  (hides ");
+                                txt.push_str(
+                                    &e.hides
+                                        .iter()
+                                        .map(|(l, _)| l.name())
+                                        .collect::<Vec<_>>()
+                                        .join(", "),
+                                );
+                                txt.push(')');
+                            }
+                            let r = ui.selectable_label(on, RichText::new(txt).font(sans(12.0)));
+                            places.push((format!("machine:pick:{}", e.def.name), r.rect));
+                            if r.clicked() {
+                                chosen = Some((e.def.clone(), e.level, e.file.clone()));
+                            }
+                        }
+                    });
                 }
             }
             for (l, f, e) in &st.cat.errors {

@@ -17,6 +17,13 @@
 # `first-errors` the distinct error messages, most frequent first, and `lean` whether the output
 # elaborates (tools/aeneas/leancheck.sh: the templates' axioms stand in for opaque functions). research/aeneas/SURVEY.md is
 # written from survey.tsv.
+#
+# Optional, from the environment:
+#   SURVEY_CHARON_ARGS="--opaque a::b --opaque c::d"   more Charon arguments for every module (e.g. the
+#                                                      opaque markers of a translate.conf)
+#   SURVEY_MODULES="forge_bool::ssi forge_bool::unify"  only these modules
+#   SURVEY_KEEP=1                                        keep each module's Lean under CRATE/MOD.out/
+#   SURVEY_MEM_KB=8000000                                each tool's address-space cap (default 8 GB)
 set -uo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 H=${FORGE_AENEAS:-$HOME/.cache/forge-aeneas}
@@ -42,17 +49,20 @@ for c in "${crates[@]}"; do
   modules "$root/kernel/$c" "$name" | while IFS=$'\t' read -r mod file; do
     tag=${mod//::/.}
     work=$(mktemp -d)
+    if [ -n "${SURVEY_MODULES:-}" ] && ! [[ " $SURVEY_MODULES " == *" $mod "* ]]; then rm -rf "$work"; continue; fi
+    # shellcheck disable=SC2206
+    extra=(${SURVEY_CHARON_ARGS:-})
     start=(--start-from "$mod")
     [ "$mod" = "$name" ] && start=(--start-from "$name" --exclude "$name::*::*")
     # 8 GB per tool: one module once took charon to 13 GB (the OOM killer then takes the culprit,
     # but other work in the same memory group can go first)
-    ( ulimit -v 8000000; cd "$root/kernel/$c" && PATH=$H/charon/bin:$PATH RUSTUP_TOOLCHAIN=$TC \
+    ( ulimit -v "${SURVEY_MEM_KB:-8000000}"; cd "$root/kernel/$c" && PATH=$H/charon/bin:$PATH RUSTUP_TOOLCHAIN=$TC \
         CARGO_TARGET_DIR=$H/target-survey/$c CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true timeout 1800 "$H/charon/bin/charon" cargo --preset=aeneas \
-        "${start[@]}" --dest-file "$work/x.llbc" -- --release ) > "$OUT/$c/$tag.charon.log" 2>&1
+        "${start[@]}" "${extra[@]}" --dest-file "$work/x.llbc" -- --release ) > "$OUT/$c/$tag.charon.log" 2>&1
     fatal=-
     total=0; failed=0
     if [ -f "$work/x.llbc" ]; then
-      ( ulimit -v 8000000; timeout 1800 "$H/aeneas/bin/aeneas" -backend lean -split-files "$work/x.llbc" -dest "$work/out" ) \
+      ( ulimit -v "${SURVEY_MEM_KB:-8000000}"; timeout 1800 "$H/aeneas/bin/aeneas" -backend lean -split-files "$work/x.llbc" -dest "$work/out" ) \
         > "$OUT/$c/$tag.aeneas.log" 2>&1
       sed -i -e 's/\x1b\[[0-9;?]*[a-zA-Z]//g' -e 's/\r/\n/g' "$OUT/$c/$tag.aeneas.log"
       log=$OUT/$c/$tag.aeneas.log
@@ -82,6 +92,7 @@ for c in "${crates[@]}"; do
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$c" "$mod" "$file" "$lines" "${total:-0}" "$failed" "$fatal" "$errs" "$lean" \
       >> "$OUT/survey.tsv"
     printf '%-14s %-48s fns=%-4s failed=%-4s fatal=%s %s\n' "$c" "$mod" "${total:-0}" "$failed" "${fatal:0:50}" "${lean:0:60}"
+    if [ -n "${SURVEY_KEEP:-}" ] && [ -d "$work/out" ]; then rm -rf "$OUT/$c/$tag.out"; mv "$work/out" "$OUT/$c/$tag.out"; fi
     rm -rf "$work"
   done
 done

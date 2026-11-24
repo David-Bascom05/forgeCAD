@@ -2,14 +2,13 @@ name = "forgegeom"
 version = "0.1.0"
 defaultTargets = ["ForgeGeom"]
 
-# The float bridge: Aeneas's library, verify/ieee754, and f64 as binary64.
+# forge-math's translation (the types and functions forge-geom calls), and through it the float bridge.
 [[require]]
-name = "aeneasf64"
-path = "../../bridge"
+name = "forgemath"
+path = "../../forge-math/lean"
 
 [[lean_lib]]
 name = "ForgeGeom"
-
 
 # The spline's binary64 bounds (research/spline-loops/fp), carried to the translation in Refine.lean.
 [[require]]

@@ -127,7 +127,7 @@ theorem back_spec (R : List Row) (n : ℕ) (c : alloc.vec.Vec F64) (d : alloc.ve
     split
     · step*
       simp only [forge_math.vec.Vec3.Insts.CoreOpsArithMulF64Vec3.mul,
-        forge_math.vec.Vec3.Insts.CoreOpsArithSubVec3Vec3.sub, bind_ok]
+        forge_math.vec.Vec3.Insts.CoreOpsArithSubVec3Vec3.sub, lift, bind_ok]
       step*
       have hi2 : i2.val = i1.val + 1 := by scalar_tac
       have hv : v = (fsweep R i1.val).2 := by
@@ -168,8 +168,8 @@ theorem tridiagonal_spec (rows : Slice Row) (hn : 0 < rows.length) :
     spline.tridiagonal rows ⦃ x => x.length = rows.length ∧
       ∀ k, k < rows.length → x.val[k]! = fback rows.val rows.length k ⦄ := by
   unfold spline.tridiagonal
-  simp only [forge_math.vec.Vec3.ZERO, forge_math.vec.Vec3.Insts.CoreOpsArithDivF64Vec3.div,
-    lift, bind_ok]
+  simp only [forge_geom.forge_math.vec.Vec3.ZERO, _root_.forge_math.vec.Vec3.ZERO,
+    forge_math.vec.Vec3.Insts.CoreOpsArithDivF64Vec3.div, lift, bind_ok]
   step*
   · rfl
   · rfl
