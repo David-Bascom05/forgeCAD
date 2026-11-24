@@ -184,11 +184,10 @@ fn post_process_shows_the_program_and_writes_it() {
     h.gui.shell.cam.as_mut().unwrap().allow_uncertified = true;
     assert!(h.click("cam:post:write"));
     // the write lands a few frames on (sooner or later under a loaded machine)
-    for _ in 0..200 {
+    let t0 = std::time::Instant::now();
+    while !file.with_file_name("prog.nc").exists() && t0.elapsed().as_secs() < 30 {
         h.step();
-        if file.with_file_name("prog.nc").exists() {
-            break;
-        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
     let nc = std::fs::read_to_string(file.with_file_name("prog.nc")).expect("written");
     assert!(nc.lines().count() > 100, "{nc}");
