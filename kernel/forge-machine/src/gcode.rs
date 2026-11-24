@@ -81,6 +81,9 @@ pub struct Lex {
     pub dwell_letter: char,
     /// A canned cycle's P counts milliseconds (G82 P250) though G4's dwell is in seconds.
     pub cycle_p_ms: bool,
+    /// The tool change is a comment naming the tool, then M0 (GRBL, which has no M6): the
+    /// comment's text before the number ("TOOL "). The M0 that follows changes the tool.
+    pub tool_comment: Option<String>,
 }
 
 impl Default for Lex {
@@ -92,6 +95,7 @@ impl Default for Lex {
             centre_abs: false,
             dwell_letter: 'P',
             cycle_p_ms: false,
+            tool_comment: None,
         }
     }
 }
@@ -169,6 +173,16 @@ impl Control {
             dwell_letter,
             cycle_p_ms: !dwell.contains("{ms}")
                 && toml::text(d, "cycle_dwell").is_some_and(|t| t.contains("P{ms}")),
+            // `tool_change = ["(TOOL {t}: {name})", "M0"]`: the comment before {t}
+            tool_comment: toml::texts(d, "tool_change").and_then(|tc| {
+                let first = tc.first()?.trim();
+                let last = tc.last()?.trim();
+                if tc.len() < 2 || !first.starts_with('(') || last != "M0" {
+                    return None;
+                }
+                let i = first.find("{t}")?;
+                Some(first[1..i].to_string())
+            }),
         };
         Ok(Control {
             lex,
@@ -316,6 +330,8 @@ pub struct State {
     pub selected: Option<u32>,
     /// The arc centre an absolute I J block set (`Lex::centre_abs`), in program units.
     pub centre: Option<(Q, Q)>,
+    /// A tool a `Lex::tool_comment` comment named, waiting for its M0.
+    pub comment_tool: Option<u32>,
 }
 
 impl State {
@@ -335,6 +351,7 @@ impl State {
             css: false,
             selected: None,
             centre: None,
+            comment_tool: None,
         }
     }
 }
@@ -577,8 +594,16 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
     let mut comments = Vec::new();
     let parsed = words(raw, ln, &mut comments, &c.lex)?;
     let push = |out: &mut Vec<Block>, ev: Ev| out.push(Block { line: ln, ev });
-    for c in comments {
-        push(out, Ev::Comment(c));
+    for cm in comments {
+        if let Some(pre) = &c.lex.tool_comment
+            && let Some(rest) = cm.strip_prefix(pre.as_str())
+        {
+            let n: String = rest.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+            if let Ok(t) = n.parse() {
+                st.comment_tool = Some(t);
+            }
+        }
+        push(out, Ev::Comment(cm));
     }
     let Some(ws) = parsed else { return Ok(()) };
     let Some(ws) = lex_rewrite(ws, ln, c, st)? else {
@@ -794,6 +819,13 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
             m => return Err(ge(ln, format!("M{m} is not in the subset"))),
         }
     }
+    // a manual change by comment (GRBL): the M0 after `(TOOL n: …)` puts tool n in
+    let after_stop: Option<Ev> = match (&stop, c.lex.tool_comment.is_some()) {
+        (Some(Ev::Stop { optional: false }), true) => {
+            st.comment_tool.take().map(|t| Ev::Tool { t, offset: None })
+        }
+        _ => None,
+    };
     // 3. dwell
     let mut nonmodal_used_words = false;
     if has_g(4) {
@@ -848,7 +880,7 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         for (i, _) in mv {
             st.core.pos[i] = None;
         }
-        if let Some(e) = stop {
+        for e in stop.into_iter().chain(after_stop) {
             push(out, e);
         }
         return Ok(());
@@ -879,13 +911,13 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         for i in axes {
             st.core.pos[i] = None;
         }
-        if let Some(e) = stop {
+        for e in stop.into_iter().chain(after_stop) {
             push(out, e);
         }
         return Ok(());
     }
     if nonmodal_used_words && !any_axis {
-        if let Some(e) = stop {
+        for e in stop.into_iter().chain(after_stop) {
             push(out, e);
         }
         return Ok(());
@@ -982,7 +1014,7 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
             },
         );
     }
-    if let Some(e) = stop {
+    for e in stop.into_iter().chain(after_stop) {
         push(out, e);
     }
     Ok(())

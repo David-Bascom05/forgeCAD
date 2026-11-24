@@ -186,7 +186,11 @@ fn the_machine_states_its_peck_parameters_and_the_interpreter_uses_them() {
     let text = format!("{blocks:?}");
     assert!(text.contains("-3000") && !text.contains("-3500"), "{text}");
     // stated (on a record that is not a real machine: an estimate, never unknown)
-    assert!(sim::unchecked_cycles(m, prog).iter().all(|u| u.why == "estimated"));
+    assert!(
+        sim::unchecked_cycles(m, prog)
+            .iter()
+            .all(|u| u.why == "estimated")
+    );
     // not stated: forge-post's numbers, and the reply says so
     let g = &forge_machine::library::builtin_named("generic-vmc3").unwrap();
     let u = sim::unchecked_cycles(
@@ -540,4 +544,37 @@ fn g91_g28_z0_homes_z_without_a_known_position() {
     assert!(sim::simulate("G91 G28 Z5.\n", &s).is_err());
     // and the same word list reads as before where the position is known
     sim::simulate("G90 G0 X0 Y0 Z10.\nG91 G28 Z5.\nG90\n", &s).unwrap();
+}
+
+/// GRBL has no M6: forge-post writes the tool as a comment, then M0. The M0 changes the tool.
+#[test]
+fn grbl_s_tool_comment_and_m0_change_the_tool() {
+    let src = vmc3()
+        .replacen("pockets = 24\n", "kind = \"manual\"\n", 1)
+        .replacen("max_tool_kg = 8\n", "", 1);
+    let m = &MachineDef::parse_all(&src).unwrap()[0];
+    let c = Control::for_dialect(m, "grbl", 1).unwrap();
+    assert_eq!(c.lex.tool_comment.as_deref(), Some("TOOL "));
+    let (blocks, _) = forge_machine::gcode::run("(TOOL 3: 6 mm end mill)\nM0\nG0 X0 Y0\n", &c).unwrap();
+    let evs: Vec<&forge_machine::gcode::Ev> = blocks.iter().map(|b| &b.ev).collect();
+    let stop = evs
+        .iter()
+        .position(|e| **e == forge_machine::gcode::Ev::Stop { optional: false })
+        .unwrap();
+    assert_eq!(
+        evs[stop + 1],
+        &forge_machine::gcode::Ev::Tool { t: 3, offset: None }
+    );
+    // a plain M0 (no tool comment before it) is only a stop
+    let (blocks, _) = forge_machine::gcode::run("(check the clamp)\nM0\n", &c).unwrap();
+    assert!(
+        !blocks
+            .iter()
+            .any(|b| matches!(b.ev, forge_machine::gcode::Ev::Tool { .. }))
+    );
+    // Fanuc does not read comments as tool changes
+    assert_eq!(
+        Control::for_dialect(m, "fanuc", 1).unwrap().lex.tool_comment,
+        None
+    );
 }

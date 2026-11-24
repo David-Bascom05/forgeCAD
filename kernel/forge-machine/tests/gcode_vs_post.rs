@@ -169,7 +169,6 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
     let ix = |l: char| c.letters.iter().position(|x| *x == l).unwrap();
     let (xi, yi, zi) = (ix('X'), ix('Y'), ix('Z'));
     let mut out = Vec::new();
-    let mut last_comment = String::new();
     let full3 = |v: &Vec<Option<i64>>| [v[xi].unwrap(), v[yi].unwrap(), v[zi].unwrap()];
     for e in evs {
         match e {
@@ -215,16 +214,7 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
                     out.push(Motion::Home);
                 }
             }
-            Ev::Comment(c) => last_comment = c.clone(),
-            // grbl: the tool is named in the comment before M0
-            Ev::Stop { optional: false } => {
-                let t = last_comment
-                    .strip_prefix("TOOL ")
-                    .and_then(|r| r.split(':').next())
-                    .and_then(|n| n.parse().ok())
-                    .unwrap_or(0);
-                out.push(Motion::Tool(t));
-            }
+            Ev::Comment(_) => {}
             Ev::Select(_)
             | Ev::Length(_)
             | Ev::Wcs(_)
