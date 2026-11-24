@@ -564,6 +564,7 @@ pub fn ending<T>(r: &Result<T, crate::BoolError>) -> &'static str {
             Unhandled::UntouchedOnOther { .. } => "Unsupported UntouchedOnOther",
             Unhandled::ToolVerticesMeet { .. } => "Unsupported ToolVerticesMeet",
             Unhandled::ProbeOnToolEdge { .. } => "Unsupported ProbeOnToolEdge",
+            Unhandled::TolerancesMeet { .. } => "Unsupported TolerancesMeet",
         },
         Err(crate::BoolError::Internal(l)) => match **l {
             Lost::InconsistentClassification { .. } => "Internal InconsistentClassification",

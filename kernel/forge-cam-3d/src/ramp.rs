@@ -142,17 +142,7 @@ mod tests {
         };
         let lv: Vec<Vec<Loop>> = [9.0, 8.0, 7.0]
             .iter()
-            .map(|&z| {
-                waterline::level(
-                    &dc,
-                    z,
-                    Params {
-                        grid: 2.0,
-                        tol_xy: 0.01,
-                    },
-                )
-                .unwrap()
-            })
+            .map(|&z| waterline::level(&dc, z, Params::new(2.0, 0.01)).unwrap())
             .collect();
         let d = Drape {
             step: 1.0,

@@ -359,6 +359,75 @@ mod tests {
         }
     }
 
+    /// Mutation: non-finite or overflowing data in a torus's or a cone's fields, or in the move,
+    /// never gives a bound (so never Clear): each field in turn set to NaN, ±∞ and ±1e300.
+    #[test]
+    fn nan_inf_and_overflow_are_refused() {
+        let body = ball(6.0);
+        let c = crate::contact::capsule(&body).unwrap();
+        let torus = |o0: f64, ax0: f64, big: f64, r: f64, cm: f64| {
+            Face::new(
+                Surf::Torus {
+                    o: [o0, 0.0, 0.0],
+                    x: [1.0, 0.0, 0.0],
+                    y: [0.0, 1.0, 0.0],
+                    ax: [ax0, 0.0, 1.0],
+                    big,
+                    r,
+                    cm,
+                    sm: 0.0,
+                },
+                Ival::new(-1.0, 1.0),
+                Ival::new(-1.0, 1.0),
+                None,
+                0.0,
+                0,
+            )
+        };
+        let cone = |o0: f64, r0: f64, k: f64| {
+            Face::new(
+                Surf::Cone {
+                    o: [o0, 0.0, 0.0],
+                    x: [1.0, 0.0, 0.0],
+                    y: [0.0, 1.0, 0.0],
+                    ax: [0.0, 0.0, 1.0],
+                    r0,
+                    k,
+                },
+                Ival::new(-1.0, 1.0),
+                Ival::new(0.0, 20.0),
+                None,
+                0.0,
+                1,
+            )
+        };
+        let (a, b) = ([0.0, 0.0, 40.0], [5.0, 0.0, 40.0]);
+        // the clean cases give a bound
+        assert!(crate::contact::lower(&c, &torus(0.0, 0.0, 10.0, 3.0, 1.0), a, b).is_some());
+        assert!(crate::contact::lower(&c, &cone(0.0, 30.0, -0.2), a, b).is_some());
+        for v in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 1e300, -1e300] {
+            let faces = [
+                torus(v, 0.0, 10.0, 3.0, 1.0),
+                torus(0.0, v, 10.0, 3.0, 1.0),
+                torus(0.0, 0.0, v, 3.0, 1.0),
+                torus(0.0, 0.0, 10.0, v, 1.0),
+                torus(0.0, 0.0, 10.0, 3.0, v),
+                cone(v, 30.0, -0.2),
+                cone(0.0, v, -0.2),
+                cone(0.0, 30.0, v),
+            ];
+            for (k, f) in faces.iter().enumerate() {
+                assert!(crate::contact::lower(&c, f, a, b).is_none(), "value {v} face {k}");
+            }
+            for f in [torus(0.0, 0.0, 10.0, 3.0, 1.0), cone(0.0, 30.0, -0.2)] {
+                assert!(
+                    crate::contact::lower(&c, &f, [v, 0.0, 40.0], b).is_none(),
+                    "value {v} move"
+                );
+            }
+        }
+    }
+
     /// A mould-like part (a cone wall with a 1:5 draft, its foot filleted by a concave torus of
     /// radius 3) under ball raster moves at clearances 0.05..3: every pair the branch and bound
     /// decides alone is decided the same here (never Clear where it Hits), and the cells and time
