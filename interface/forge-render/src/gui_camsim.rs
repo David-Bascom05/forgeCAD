@@ -16,7 +16,24 @@ impl Gui {
             self.shell.camsim = None;
             return;
         };
+        // a turning document is not a milling run (its removal comes later, through this
+        // interface): no simulation of it, and none finished for it taken in. Its run says so
+        // (the workspace ran it as turning), else its text does
+        let turning = w.turning()
+            || w.run.as_ref().is_some_and(|r| r.process != "milling")
+            || forge_turn_lang::is_turning(&w.text);
         let job = &mut self.shell.camsim_job;
+        if turning {
+            crate::plat::lock(&job.slot).take();
+            job.running = None;
+            if self.shell.camsim.take().is_some() {
+                self.shell.camsim_job.focus = None;
+                if let Some(v) = &mut self.view {
+                    v.dirty = true;
+                }
+            }
+            return;
+        }
         // a finished simulation
         let done = crate::plat::lock(&job.slot).take();
         if let Some((text, sim)) = done {
@@ -52,7 +69,9 @@ impl Gui {
             // no view to draw in (the workspace's part isn't open): one of the simulation's own
             if self.view.is_none() && self.fg.is_none() {
                 self.camsim_view();
-            } else if first && self.fg.is_none() {
+            } else if first {
+                // entering the simulation frames its subject (the stock and the tool), with the
+                // part's document open or not (STANDARD §2)
                 self.camsim_fit();
             }
             if let Some(v) = &mut self.view {
@@ -60,6 +79,17 @@ impl Gui {
             }
         }
         let Some(w) = &self.shell.cam else { return };
+        // a lathe document: the simulation is milling's (forge-cam-lang): nothing to show, rather
+        // than milling's refusals of every turning built-in (the section view is turning's)
+        if w.turning() {
+            if self.shell.camsim.take().is_some() {
+                self.shell.camsim_job.focus = None;
+                if let Some(v) = &mut self.view {
+                    v.dirty = true;
+                }
+            }
+            return;
+        }
         // the workspace has a run of text the simulation is not of: simulate it
         if let Some(run) = &w.run {
             // keyed by the text and what its run came to: the same text run again with the
@@ -88,6 +118,21 @@ impl Gui {
             self.shell.camsim_job.focus = Some(f);
             if let Some(v) = &mut self.view {
                 v.dirty = true;
+            }
+        }
+        // the toolpath coloured by what the workspace chose, from its run's quality measurement
+        // (forge-cam-quality's per-move MoveQ): again when the choice, the simulation or the
+        // measurement changes (the measurement can arrive after the choice)
+        let q = w.run.as_ref().and_then(|r| r.quality.as_ref());
+        if let Some(st) = self.shell.camsim.as_deref_mut() {
+            let by = w.focus().colour_by;
+            let key = format!("{by:?}\u{1}{}\u{1}{}", st.src, q.is_some());
+            if self.shell.camsim_job.colour.as_deref() != Some(key.as_str()) {
+                st.values = by.map(|c| colour_values(&st.sim, c, q));
+                self.shell.camsim_job.colour = Some(key);
+                if let Some(v) = &mut self.view {
+                    v.dirty = true;
+                }
             }
         }
     }
@@ -124,20 +169,50 @@ impl Gui {
         let Some(st) = self.shell.camsim.as_deref() else {
             return;
         };
+        // the subject: the stock (every setup's) and the tool's tip now
         let (mut lo, mut hi) = ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]);
-        for s in &st.sim.setups {
+        let mut grow = |p: [f64; 3]| {
             for k in 0..3 {
-                lo[k] = lo[k].min(s.stock.min[k] as f32);
-                hi[k] = hi[k].max(s.stock.max[k] as f32);
+                lo[k] = lo[k].min(p[k] as f32);
+                hi[k] = hi[k].max(p[k] as f32);
             }
+        };
+        for s in &st.sim.setups {
+            grow(s.stock.min);
+            grow(s.stock.max);
         }
+        if let Some((_, tip, _)) = st.tool_now() {
+            grow(tip);
+        }
+        // the view not under the panel (right) and the timeline (bottom), as fractions
+        let vr = self.shell.view_rect;
+        let free = self.shell.camsim_free(vr);
+        let fx = ((vr.right() - free.right()) / vr.width().max(1.0)).clamp(0.0, 0.6);
+        let fy = ((vr.bottom() - free.bottom()) / vr.height().max(1.0)).clamp(0.0, 0.6);
         if lo[0].is_finite()
             && let Some(v) = &mut self.view
         {
             let c = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
             let r =
                 0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
-            v.nav.camera = super::view_camera(c, r * 1.25, self.shell.view.parallel, v.size);
+            // the subject's sphere at 70 % of the uncovered area's shorter side (STANDARD §2:
+            // 60–75 %), from the app's 3/4 view
+            let free = (
+                ((v.size.0 as f32) * (1.0 - fx)).max(1.0) as u32,
+                ((v.size.1 as f32) * (1.0 - fy)).max(1.0) as u32,
+            );
+            let mut cam = super::view_camera(c, r, self.shell.view.parallel, free);
+            cam.fit_to(r / 0.7, free.0, free.1);
+            // centred in the uncovered area: the target moved so the subject sits left of the
+            // panel and above the timeline
+            let (_, right, up) = cam.axes();
+            let h_world = 2.0 * cam.dist * (cam.fovy * 0.5).tan();
+            let w_world = h_world * v.size.0 as f32 / v.size.1.max(1) as f32;
+            let (dx, dy) = (0.5 * fx * w_world, 0.5 * fy * h_world);
+            for k in 0..3 {
+                cam.target[k] += right[k] * dx - up[k] * dy;
+            }
+            v.nav.camera = cam;
             v.nav.home_view = Some(v.nav.camera);
             v.dirty = true;
         }
@@ -294,6 +369,8 @@ pub fn geometry(
         played_only: st.played_only,
         width: st.path_width,
         picked: st.picked,
+        values: st.values.as_ref(),
+        selected: st.selected_op,
     };
     draw::toolpath(&st.sim.tl, &eye, &show, world);
     // the leftover regions (G4, exact), once their setup is done
@@ -478,6 +555,11 @@ impl Gui {
                 }),
             ),
             ("markers", n(st.sim.markers.len() as f64)),
+            // a failed check or a machine issue (the rest: what G4 leaves, e.g. under the part)
+            (
+                "severe",
+                n(st.sim.markers.iter().filter(|m| m.severe()).count() as f64),
+            ),
             ("refused", n(refused as f64)),
             ("ok", st.sim.cam.ok.into()),
             ("certification", st.sim.cam.certification().into()),
@@ -499,4 +581,35 @@ impl Gui {
             ),
         ]))
     }
+}
+
+/// The toolpath's colours for `by`: each op's measured feed moves (found by the op's name),
+/// laid onto the moves played; ops not measured stay grey.
+fn colour_values(
+    sim: &crate::camsim::Sim,
+    by: crate::shell::cam::ColourBy,
+    q: Option<&forge_cam_quality::JobQ>,
+) -> crate::camsim::draw::Values {
+    use crate::camsim::draw::Values;
+    use crate::shell::cam::ColourBy;
+    let (name, unit, bands) = match by {
+        ColourBy::ChipLoad => ("chip load", "mm, against the op's fz", Values::chip_bands()),
+        ColourBy::Engagement => ("engagement", "degrees", Values::engagement_bands()),
+    };
+    let cam = &sim.cam;
+    Values::of_feeds(cam, &sim.tl, name, unit, bands, &|i| {
+        let o = q?.ops.iter().find(|o| o.name == cam.ops[i].name)?;
+        Some(
+            o.moves_q
+                .iter()
+                .map(|m| {
+                    let v = match by {
+                        ColourBy::ChipLoad => m.load,
+                        ColourBy::Engagement => m.phi,
+                    };
+                    (m.path, v as f32, 1.0)
+                })
+                .collect(),
+        )
+    })
 }

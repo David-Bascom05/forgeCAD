@@ -318,6 +318,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # Makino a61nx: nx-series HMC (500 mm pallet), Makino Professional 6 (Pro6).
 # X 730 Y 650 Z 800; 14000 rpm CAT40 (US) / BT40 (JP); HSK-A63 option; 60 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "makino-a61nx"
 kind = "vmc4"
@@ -630,6 +636,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # Makino D500: D-series vertical 5-axis, Makino Professional 6 (SGI.5).
 # X 550 Y 1000 Z 500; 14000 rpm BT40 (JP); HSK-A63, HSK-F63 options; 40 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "makino-d500"
 kind = "table-table"
@@ -982,3 +994,9 @@ basis = "the spindle housing around the tool: radius an estimate, kept large; on
 path = "body.head"
 status = "estimate"
 basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+

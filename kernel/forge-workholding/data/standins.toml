@@ -1,0 +1,258 @@
+# Stand-ins: a class of device for which no maker publishes the sizes a collision body needs
+# (jaw thickness, base sizes, step increments, ...). Each is `standin = true` with its `basis`:
+# which published values it follows and which numbers are ours. Prefer a real product's record
+# (products.toml), giving it the sizes you measure; use a stand-in only to plan before measuring.
+# Units mm (kPa for vacuum).
+
+[[workholding]]
+name = "standin-vise-150"
+kind = "vise"
+standin = true
+basis = "a stand-in for the 6 in (150 mm) jaw class of machine vise: jaw width, jaw depth, opening and height rounded from the published Kurt DX6 (kurt-dx6: 152.4 / 44.07 / 230.6 / 117.1); jaw thickness and base sizes are ours (no maker publishes them): measure your vise"
+jaw_width = 150
+jaw_height = 50
+jaw_thickness = 20
+max_opening = 160
+body_length = 400
+body_width = 150
+height = 100
+[[workholding.part]]
+body = "base"
+file = "standin-vise-150/base.fg"
+[[workholding.part]]
+body = "fixed jaw"
+file = "standin-vise-150/jaw.fg"
+[[workholding.part]]
+body = "moving jaw"
+file = "standin-vise-150/jaw.fg"
+
+[[workholding]]
+name = "standin-centring-vise-80"
+kind = "self_centring"
+standin = true
+basis = "a stand-in for the small 5-axis self-centring vise class: sizes rounded between LANG Makro-Grip 77 (130 x 77 x 65) and 5th Axis V75100X (100 x 75 x 56); jaw height and thickness ours (not published)"
+jaw_width = 80
+jaw_height = 20
+jaw_thickness = 15
+max_opening = 120
+min_opening = 10
+body_length = 160
+body_width = 80
+height = 70
+grip = 4
+
+[[workholding]]
+name = "standin-dovetail-60"
+kind = "dovetail"
+standin = true
+basis = "a stand-in for a 60° dovetail fixture (5th Axis's are 45°: see 5thaxis-dm25); body sizes ours (5th Axis prints its DM sizes without axes)"
+body_length = 70
+body_width = 50
+height = 50
+grip = 3
+angle = 60
+min_width = 20
+max_width = 50
+
+[[workholding]]
+name = "standin-soft-al-150"
+kind = "soft_jaws"
+standin = true
+basis = "a stand-in soft-jaw blank for the 6 in vise class: width and height match standin-vise-150; thickness ours"
+note = "the blank's material is aluminium 6061; verify with the vendor before ordering"
+width = 150
+height = 50
+thickness = 38
+
+[[workholding]]
+name = "standin-parallels"
+kind = "parallels"
+standin = true
+basis = "a stand-in metric parallel set in 2 mm steps (real sets are inch steps: see fowler-parallels-52-437-125)"
+heights = [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40]
+width = 3
+length = 150
+
+[[workholding]]
+name = "standin-strap-m12"
+kind = "strap_clamp"
+standin = true
+basis = "a stand-in strap clamp on an M12 stud: length 100 as DIN 6314's M12 row (kipp-k1516-12); width, thickness and stud length ours (the table's letters are tied to features only on its drawing)"
+length = 100
+width = 30
+thickness = 16
+stud_d = 12
+stud_above = 25
+slot = 14
+
+[[workholding]]
+name = "standin-step-block-25"
+kind = "step_block"
+standin = true
+basis = "a stand-in step block in 12.5 mm steps: no maker's increments were reachable (Jergens refused)"
+step = 12.5
+steps = 6
+tread = 12.5
+width = 30
+
+[[workholding]]
+name = "standin-toe-clamp"
+kind = "toe_clamp"
+standin = true
+basis = "a stand-in low-profile toe clamp: no maker's body sizes were reachable"
+body_length = 40
+body_width = 30
+height = 15
+range_min = 0.5
+range_max = 6
+
+[[workholding]]
+name = "standin-edge-clamp-m8"
+kind = "edge_clamp"
+standin = true
+basis = "a stand-in edge clamp on an M8 screw: 25 mm body as Mitee-Bite's 25.4 mm class (mitee-bite-pitbull-m10 C 25.40); height and length ours"
+body_length = 25
+body_width = 25
+height = 12
+range_min = 1.5
+range_max = 5.5
+
+[[workholding]]
+name = "standin-plate-50"
+kind = "fixture_plate"
+standin = true
+basis = "a stand-in fixture plate on a 50 mm grid: no maker's grid pitch was reachable (Jergens refused)"
+length = 400
+width = 300
+thickness = 25
+pitch = 50
+hole_d = 12
+hole_offset = 25
+dowel_d = 12
+dowel_h = 15
+
+[[workholding]]
+name = "standin-zero-point-52"
+kind = "zero_point"
+standin = true
+basis = "a stand-in zero-point module on the published 52 mm grid with 16 mm studs (LANG Quick-Point 52, 5th Axis RockLock 52); module Ø 90 and height ours"
+pitch = 52
+module_d = 90
+module_h = 30
+stud_d = 16
+
+[[workholding]]
+name = "standin-zero-point-96"
+kind = "zero_point"
+standin = true
+basis = "a stand-in zero-point module on the published 96 mm grid with 20 mm studs (LANG Quick-Point 96); module Ø 140 and height ours"
+pitch = 96
+module_d = 140
+module_h = 35
+stud_d = 20
+
+[[workholding]]
+name = "standin-riser-100"
+kind = "riser"
+standin = true
+basis = "a stand-in round 5-axis riser 100 high: sizes ours"
+d = 90
+height = 100
+
+[[workholding]]
+name = "standin-tombstone-4"
+kind = "tombstone"
+standin = true
+basis = "a stand-in four-face tombstone for a 400 mm pallet: sizes ours (no maker's tombstone table was reachable)"
+width = 300
+height = 500
+depth = 75
+faces = 4
+
+[[workholding]]
+name = "standin-vacuum-300"
+kind = "vacuum"
+standin = true
+basis = "a stand-in vacuum plate: 80 kPa is Schmalz's example and in DATRON's 84.7-98.2 kPa band's neighbourhood (measure your pump); plate size and 5 mm gasket inset ours"
+length = 400
+width = 300
+thickness = 30
+vacuum = 80
+seal_inset = 5
+
+[[workholding]]
+name = "standin-angle-plate"
+kind = "custom"
+standin = true
+basis = "an example of a user's own fixture (an angle plate) given as bodies"
+[[workholding.body]]
+name = "foot"
+role = "base"
+[[workholding.body.box]]
+min = [-60, -100, -20]
+max = [60, 0, 0]
+[[workholding.body]]
+name = "upright"
+role = "plate"
+[[workholding.body.box]]
+min = [-60, 0, -20]
+max = [60, 20, 140]
+
+# lathe stand-ins
+
+[[workholding]]
+name = "standin-chuck-200"
+kind = "chuck"
+standin = true
+basis = "a stand-in 200 mm three-jaw power chuck: diameter and gripping range near the published Kitagawa B-208 (209.95, 13-210); body length and jaw sizes ours (Kitagawa does not publish them on reachable pages)"
+jaws = 3
+body_d = 200
+body_len = 80
+jaw_height = 35
+jaw_len = 30
+grip_min = 15
+grip_max = 165
+[[workholding.part]]
+body = "body"
+file = "standin-chuck-200/body.fg"
+
+[[workholding]]
+name = "standin-collet-er32"
+kind = "collet"
+standin = true
+basis = "a stand-in ER32 collet nose: range 2-20 within REGO-FIX's ER32 1-22, nose Ø 50 x 30 near the REGO-FIX Hi-Q nut (50 x 22.5)"
+range_min = 2
+range_max = 20
+nose_d = 50
+nose_len = 30
+collet_len = 40
+
+[[workholding]]
+name = "standin-face-driver"
+kind = "face_driver"
+standin = true
+basis = "a stand-in face driver: range 20-60 between NEIDLEIN FSB 2 and FSB 4; body sizes ours"
+body_d = 80
+body_len = 70
+range_min = 20
+range_max = 60
+pins = 5
+
+[[workholding]]
+name = "standin-live-centre"
+kind = "centre"
+standin = true
+basis = "a stand-in 60° live centre (60° as Royal's standard point); body Ø and point length ours"
+angle = 60
+body_d = 60
+point_len = 20
+
+[[workholding]]
+name = "standin-steady-rest"
+kind = "steady_rest"
+standin = true
+basis = "a stand-in steady rest for 10-100 mm (Röhm SLZ 08105 takes 8-105); frame and width ours (not published)"
+range_min = 10
+range_max = 100
+frame_r = 160
+width = 40

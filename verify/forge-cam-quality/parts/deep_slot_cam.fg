@@ -1,0 +1,11 @@
+machining
+# Benchmark (verify/forge-cam-quality): the deep slot as a pocket with a 6 mm end mill.
+shared tol = 0.01
+
+f    = part("deep_slot.fg", group: "N")
+m    = machine("generic-vmc3")
+t2   = tool("flat-6", t: 2, stickout: 30, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol)
+skim = facing(op1, tool: t2, to: 20, step: 1)
+slot = pocket(op1, tool: t2, from: 20, to: 5, stepover: 2.4, step: 3, ramp: 3)
+prog = program(op1, post: "fanuc", number: 5003)

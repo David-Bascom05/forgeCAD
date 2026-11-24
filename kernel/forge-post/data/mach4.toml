@@ -1,0 +1,229 @@
+# Mach4 Mill: restated from the "Mach4 Mill G-code Programming Guide" v1.1 build 3775
+# (machsupport.com); every code is cited below. The guide does not state the comment syntax, so the
+# post writes no comments.
+[dialect]
+name = "mach4"
+extension = "tap"
+decimals = 4
+feed_decimals = 1
+point = "always"
+program_open = []
+program_close = ["M30", "%"]
+line_numbers = false
+safe_start = ["G90 G17 G40 G49 G80", "G21 G94", "G91.1"]
+tool_change = ["T{t} M06"]
+length_comp = "G43 H{h}"
+spindle_cw = "S{rpm} M03"
+spindle_ccw = "S{rpm} M04"
+spindle_stop = "M05"
+wcs = "G{n}"
+wcs_first = 54
+wcs_count = 6
+arc = "ijk"
+retract_home = ["G53 G00 Z0"]
+coolant_flood = "M08"
+coolant_mist = "M07"
+coolant_off = "M09"
+dwell = "G04 P{ms}"
+cycle_drill = "G98 G81 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_dwell = "expand"
+cycle_peck = "expand"
+cycle_chipbreak = "expand"
+cycle_tap = "G98 G84 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_ream = "G98 G85 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_next = "X{x} Y{y}"
+cycle_cancel = "G80"
+read_g_ignore = [91.1]
+source = "Mach4 Mill G-code Programming Guide v1.1 (cited per code)"
+taken = "2026-11-23"
+note = "comments are not written (the guide gives no comment syntax); a trailing % guarantees the last end-of-block"
+cite_required = true
+
+[[dialect.cite]]
+key = "program_open"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.1 Format p9-10"
+note = "no start code required: none written"
+
+[[dialect.cite]]
+key = "program_close"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.1 Format p9-10; Ch.5 M02 p82, M30 p84"
+note = "M30, then % so the last block has its EOB"
+
+[[dialect.cite]]
+key = "line_numbers"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.1 Glossary p8"
+note = "N optional: not written"
+
+[[dialect.cite]]
+key = "safe_start"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.1 Format p9-10; G20/G21 p35; G94 p54"
+note = "the guide's safe-start codes (its G00 left out: G00 and G80 are two motion-group codes in one block), G21 G94, G91.1 incremental arc centres"
+
+[[dialect.cite]]
+key = "tool_change"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.5 M06 p83"
+note = "T M06"
+
+[[dialect.cite]]
+key = "length_comp"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; G43/G44, G49 p42; Ch.3 examples p58"
+note = "G43 H"
+
+[[dialect.cite]]
+key = "spindle_cw"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.5 p83; G97 p54"
+note = "S M03"
+
+[[dialect.cite]]
+key = "spindle_ccw"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.5 p83; G97 p54"
+note = "S M04"
+
+[[dialect.cite]]
+key = "spindle_stop"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.5 p83; G97 p54"
+note = "M05"
+
+[[dialect.cite]]
+key = "wcs"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; G54-G59, G54.1 p45"
+note = "G54..G59"
+
+[[dialect.cite]]
+key = "arc"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; G02/G03 p15-16; G90.1/G91.1 p52"
+note = "I J incremental under G91.1"
+
+[[dialect.cite]]
+key = "retract_home"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; G28 p36; G53 p45; G30 p37"
+note = "G53 Z0: the guide's safer way home"
+
+[[dialect.cite]]
+key = "coolant_flood"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.5 p83-84"
+note = "M08"
+
+[[dialect.cite]]
+key = "coolant_mist"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.5 p83-84"
+note = "M07"
+
+[[dialect.cite]]
+key = "coolant_off"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.5 p83-84"
+note = "M09"
+
+[[dialect.cite]]
+key = "dwell"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; G04 p17; Glossary p7-8"
+note = "G04 P without a point = milliseconds"
+
+[[dialect.cite]]
+key = "cycle_drill"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.3 G81 p59"
+note = "G81"
+
+[[dialect.cite]]
+key = "cycle_dwell"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.3 G82 p60"
+note = "posted as moves with G04 P ms: the guide's cycle P units contradict its example"
+
+[[dialect.cite]]
+key = "cycle_peck"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.3 G83 p61"
+note = "G83 retract clearance is parameter 5115: posted as moves: the control's peck retract/clearance is a parameter (or fixed differently) and forge-post's cycle model would not match it"
+
+[[dialect.cite]]
+key = "cycle_chipbreak"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.3 G73 p63"
+note = "G73 retract is parameter 5114: posted as moves: the control's peck retract/clearance is a parameter (or fixed differently) and forge-post's cycle model would not match it"
+
+[[dialect.cite]]
+key = "cycle_tap"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.3 G84 p65; G84.2/G84.3 p67"
+note = "G84 F = rpm x pitch under G94"
+
+[[dialect.cite]]
+key = "cycle_ream"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.3 G85 p70"
+note = "G85"
+
+[[dialect.cite]]
+key = "cycle_next"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.3 G81 p59"
+note = "cycles modal: further holes as X Y"
+
+[[dialect.cite]]
+key = "cycle_cancel"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.3 G80 p58"
+note = "G80"
+
+[[dialect.cite]]
+key = "point"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.1 Format p10"
+note = "a point is not required but recommended: always written"
+
+[[dialect.cite]]
+key = "decimals"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; G94/G95 p54"
+note = "4 decimals written"
+
+[[dialect.cite]]
+key = "read_g_ignore"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; G02/G03 p15-16; G90.1/G91.1 p52"
+note = "G91.1 carries no motion"

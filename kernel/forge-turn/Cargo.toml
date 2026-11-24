@@ -13,6 +13,7 @@ forge-geom = { path = "../forge-geom" }
 forge-topo = { path = "../forge-topo" }
 forge-tooling = { path = "../forge-tooling" }
 forge-post = { path = "../forge-post" }
+forge-machine = { path = "../forge-machine" }
 
 [dev-dependencies]
 forge-ops = { path = "../forge-ops" }

@@ -1,0 +1,927 @@
+{
+ "maker": "Tungaloy",
+ "records": [
+  {
+   "kind": "parting_blade",
+   "id": "CGP32-3D",
+   "name": "TungCut CGP external deep grooving and parting blade CGP32-3D (General Catalogue 2023-2024, F Parting-Grooving)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229",
+   "taken": "2026-11-24",
+   "values": {
+    "cw": {
+     "v": 3,
+     "unit": "mm",
+     "stated": "CW 3"
+    },
+    "seat_size": {
+     "v": "3",
+     "unit": "text",
+     "stated": "Seat size 3"
+    },
+    "cutdia": {
+     "v": 100,
+     "unit": "mm",
+     "stated": "CUTDIA 100"
+    },
+    "h": {
+     "v": 32,
+     "unit": "mm",
+     "stated": "H 32"
+    },
+    "b": {
+     "v": 2.4,
+     "unit": "mm",
+     "stated": "B 2.4"
+    },
+    "lf": {
+     "v": 150,
+     "unit": "mm",
+     "stated": "LF 150"
+    },
+    "hf": {
+     "v": 24.8,
+     "unit": "mm",
+     "stated": "HF 24.8"
+    },
+    "fig": {
+     "v": "2",
+     "unit": "text",
+     "stated": "Fig. 2"
+    },
+    "clamp": {
+     "v": "self-clamping (elastic upper jaw); wrench CRW33 (optional), clamping screw -",
+     "unit": "text",
+     "stated": "Spare parts CGP**-2/3/4/5/6: Clamping screw -, Wrench -, Wrench (Optional) CRW33; 'Insert is clamped by the elastic deformation of upper jaw.'"
+    },
+    "compatible_inserts": {
+     "v": [
+      "SGM3-020",
+      "DGM3-020"
+     ],
+     "unit": "text",
+     "stated": "Reference pages: Inserts F236 - F245 (seat size 3); 'When depth is deeper than (insert length - 1.5mm), 1 corner type is recommended.'"
+    },
+    "tool_block": {
+     "v": "CTBU20-32, CTBU25-32, CTBU32-32",
+     "unit": "text",
+     "stated": "F230 CTBU \"Tool block for CGP blade\": CTBU20-32, CTBU25-32, CTBU32-32, Blade (Optional) CGP32... (CTBF takes CGP45... only)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "max depth of cut / reach as a separate figure: only CUTDIA (max cut-off diameter) 100 is printed",
+    "blade handedness: CGP is a double-ended neutral blade per figure, not stated as R/L in the table",
+    "vc/f: per insert grade, see the insert records (F246)"
+   ],
+   "notes": "CUTDIA 100 = max cut-off diameter, i.e. bar to about 100 mm (>= the 80 mm needed). H = blade height, B = blade width (thickness below the seat), LF = blade length, HF = functional height (per Fig. 2 drawing on F229). PDF page number = catalogue page F229. Blade CGP26-3S (H 26, CUTDIA 50) is too short for the 80 mm requirement."
+  },
+  {
+   "kind": "grooving_insert",
+   "id": "SGM3-020",
+   "name": "TungCut SGM external deep grooving and parting insert, 1 corner, SGM3-020 (neutral)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240",
+   "taken": "2026-11-24",
+   "values": {
+    "cw": {
+     "v": 3,
+     "unit": "mm",
+     "stated": "CW±0.05 3"
+    },
+    "cw_tol": {
+     "v": "±0.05",
+     "unit": "text",
+     "stated": "CW±0.05"
+    },
+    "re": {
+     "v": 0.2,
+     "unit": "mm",
+     "stated": "RE 0.2"
+    },
+    "seat_size": {
+     "v": "3",
+     "unit": "text",
+     "stated": "Seat size 3"
+    },
+    "hand": {
+     "v": "N",
+     "unit": "text",
+     "stated": "HAND N"
+    },
+    "insl": {
+     "v": 20,
+     "unit": "mm",
+     "stated": "INSL 20"
+    },
+    "h": {
+     "v": 5,
+     "unit": "mm",
+     "stated": "h 5"
+    },
+    "psirl": {
+     "v": 0,
+     "unit": "deg",
+     "stated": "PSIRL 0º"
+    },
+    "psirr": {
+     "v": 0,
+     "unit": "deg",
+     "stated": "PSIRR 0º"
+    },
+    "corners": {
+     "v": "1",
+     "unit": "text",
+     "stated": "SGM type (1 corner)"
+    },
+    "grades_available": {
+     "v": [
+      "AH7025",
+      "AH725",
+      "AH8005",
+      "GH130",
+      "AH6235",
+      "KS05F"
+     ],
+     "unit": "text",
+     "stated": "line-up dots on SGM3-020 row"
+    },
+    "grade_first_choice_P": {
+     "v": [
+      "AH7025",
+      "AH8005",
+      "AH6235"
+     ],
+     "unit": "text",
+     "stated": "P Steel row: ★ (First choice) under AH7025, AH8005, AH6235"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "Steel S45C, SCM435, etc. C45, 34CrMo4, etc. < 300 HB; First choice AH7025, AH725",
+     "vc": {
+      "v": [
+       50,
+       180
+      ],
+      "unit": "m/min",
+      "stated": "Vc (m/min) 50 - 180"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=246"
+    },
+    {
+     "iso_group": "M",
+     "material_stated": "Stainless steel SUS303, SUS304, etc. < 200 HB; First choice AH7025, AH725",
+     "vc": {
+      "v": [
+       50,
+       120
+      ],
+      "unit": "m/min",
+      "stated": "Vc (m/min) 50 - 120"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=246"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "Grey cast iron FC250 etc.; Impact resistance AH8005, AH7025, AH6235, GH130",
+     "vc": {
+      "v": [
+       50,
+       180
+      ],
+      "unit": "m/min",
+      "stated": "Vc (m/min) 50 - 180"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=246"
+    },
+    {
+     "iso_group": "N",
+     "material_stated": "Aluminium alloys Si < 12%; First choice KS05F",
+     "vc": {
+      "v": [
+       100,
+       600
+      ],
+      "unit": "m/min",
+      "stated": "Vc (m/min) 100 - 600"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=246"
+    }
+   ],
+   "unknown": [
+    "feed f: printed only as a bar chart ('Standard feed', F236; 'Please see page F236, F237 for feed'), no numeric values to cite",
+    "cutting-edge geometry other than RE/PSIR not tabulated"
+   ],
+   "notes": "Recommended over DGM3-020 for the CGP32-3D blade at depths beyond INSL-1.5 = 18.5 mm (F229 note). vc from 'Standard cutting conditions' F246 (applies to DGM/SGM/DGS/SGS external grooving and parting inserts)."
+  },
+  {
+   "kind": "grooving_insert",
+   "id": "DGM3-020",
+   "name": "TungCut DGM external grooving and parting insert, 2 corners, DGM3-020 (neutral)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239",
+   "taken": "2026-11-24",
+   "values": {
+    "cw": {
+     "v": 3,
+     "unit": "mm",
+     "stated": "CW±0.05 3"
+    },
+    "re": {
+     "v": 0.2,
+     "unit": "mm",
+     "stated": "RE 0.2"
+    },
+    "seat_size": {
+     "v": "3",
+     "unit": "text",
+     "stated": "Seat size 3"
+    },
+    "hand": {
+     "v": "N",
+     "unit": "text",
+     "stated": "HAND N"
+    },
+    "insl": {
+     "v": 20,
+     "unit": "mm",
+     "stated": "INSL 20"
+    },
+    "h": {
+     "v": 5,
+     "unit": "mm",
+     "stated": "h 5"
+    },
+    "psirl": {
+     "v": 0,
+     "unit": "deg",
+     "stated": "PSIRL 0º"
+    },
+    "psirr": {
+     "v": 0,
+     "unit": "deg",
+     "stated": "PSIRR 0º"
+    },
+    "corners": {
+     "v": "2",
+     "unit": "text",
+     "stated": "DGM type (2 corners)"
+    },
+    "grades_available": {
+     "v": [
+      "T9225",
+      "AH7025",
+      "AH725",
+      "AH8005",
+      "AH905",
+      "GH130",
+      "AH6235",
+      "NS9530",
+      "KS05F"
+     ],
+     "unit": "text",
+     "stated": "line-up dots on DGM3-020 row"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "Steel S45C, SCM435, etc. C45, 34CrMo4, etc. < 300 HB; First choice AH7025, AH725",
+     "vc": {
+      "v": [
+       50,
+       180
+      ],
+      "unit": "m/min",
+      "stated": "Vc (m/min) 50 - 180"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=246"
+    },
+    {
+     "iso_group": "M",
+     "material_stated": "Stainless steel SUS303, SUS304, etc. < 200 HB; First choice AH7025, AH725",
+     "vc": {
+      "v": [
+       50,
+       120
+      ],
+      "unit": "m/min",
+      "stated": "Vc (m/min) 50 - 120"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=246"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "Grey cast iron FC250 etc.; Impact resistance AH8005, AH7025, AH6235, GH130",
+     "vc": {
+      "v": [
+       50,
+       180
+      ],
+      "unit": "m/min",
+      "stated": "Vc (m/min) 50 - 180"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=246"
+    },
+    {
+     "iso_group": "N",
+     "material_stated": "Aluminium alloys Si < 12%; First choice KS05F",
+     "vc": {
+      "v": [
+       100,
+       600
+      ],
+      "unit": "m/min",
+      "stated": "Vc (m/min) 100 - 600"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=246"
+    }
+   ],
+   "unknown": [
+    "feed f: bar chart only (F236)"
+   ],
+   "notes": "Alternative 2-corner insert for the same seat; per F229 note, 1-corner SGM preferred when depth > INSL - 1.5 mm."
+  },
+  {
+   "kind": "indexable_drill",
+   "id": "TDX260F25-4",
+   "name": "TungDrillTwisted TDX-F L/D=4 indexable drill, flat cotter, TDX260F25-4",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=72",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 26,
+     "unit": "mm",
+     "stated": "DC 26"
+    },
+    "dconms": {
+     "v": 25,
+     "unit": "mm",
+     "stated": "DCONMS 25"
+    },
+    "dcsfms": {
+     "v": 37,
+     "unit": "mm",
+     "stated": "DCSFMS 37"
+    },
+    "lu": {
+     "v": 104.6,
+     "unit": "mm",
+     "stated": "LU 104.6"
+    },
+    "ls": {
+     "v": 54,
+     "unit": "mm",
+     "stated": "LS 54"
+    },
+    "lcf": {
+     "v": 108.6,
+     "unit": "mm",
+     "stated": "LCF 108.6"
+    },
+    "lf": {
+     "v": 128,
+     "unit": "mm",
+     "stated": "LF 128"
+    },
+    "oal": {
+     "v": 182.6,
+     "unit": "mm",
+     "stated": "OAL 182.6"
+    },
+    "max_radial_offset": {
+     "v": 0.2,
+     "unit": "mm",
+     "stated": "Max. offset (radial) 0.2"
+    },
+    "weight_kg": {
+     "v": 0.6,
+     "unit": "text",
+     "stated": "WT(kg) 0.6"
+    },
+    "insert": {
+     "v": "XPMT07H308R-D*",
+     "unit": "text",
+     "stated": "Insert XPMT07H308R-D*"
+    },
+    "ld": {
+     "v": "4",
+     "unit": "text",
+     "stated": "L/D = 4"
+    },
+    "shank": {
+     "v": "flat cotter",
+     "unit": "text",
+     "stated": "Indexable drill, L/D = 4, flat cotter"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "Low carbon steels (C < 0.3) SS400, SM490, S25C, etc. -200 HB; Series 4D,5D; ø17.5 ~ ø26",
+     "vc": {
+      "v": [
+       160,
+       320
+      ],
+      "unit": "m/min",
+      "stated": "160 - 320"
+     },
+     "f": {
+      "v": [
+       0.04,
+       0.1
+      ],
+      "unit": "mm/rev",
+      "stated": "0.04 - 0.1"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "Carbon steels (C > 0.3) S45C, S55C, etc. C45, C55, etc. -300 HB; 4D,5D; ø17.5 ~ ø26",
+     "vc": {
+      "v": [
+       80,
+       250
+      ],
+      "unit": "m/min",
+      "stated": "80 - 250"
+     },
+     "f": {
+      "v": [
+       0.06,
+       0.1
+      ],
+      "unit": "mm/rev",
+      "stated": "0.06 - 0.1"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "Low alloy steels SCM415, etc. -200 HB; 4D,5D; ø17.5 ~ ø26",
+     "vc": {
+      "v": [
+       160,
+       250
+      ],
+      "unit": "m/min",
+      "stated": "160 - 250"
+     },
+     "f": {
+      "v": [
+       0.06,
+       0.12
+      ],
+      "unit": "mm/rev",
+      "stated": "0.06 - 0.12"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
+    },
+    {
+     "iso_group": "M",
+     "material_stated": "Stainless steels (Austenitic) SUS304, SUS316, etc. -200 HB; 4D,5D; ø17.5 ~ ø26",
+     "vc": {
+      "v": [
+       100,
+       200
+      ],
+      "unit": "m/min",
+      "stated": "100 - 200"
+     },
+     "f": {
+      "v": [
+       0.04,
+       0.1
+      ],
+      "unit": "mm/rev",
+      "stated": "0.04 - 0.1"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "Grey cast irons FC250, etc. 150-250 HB; 4D,5D; ø17.5 ~ ø26",
+     "vc": {
+      "v": [
+       80,
+       250
+      ],
+      "unit": "m/min",
+      "stated": "80 - 250"
+     },
+     "f": {
+      "v": [
+       0.06,
+       0.12
+      ],
+      "unit": "mm/rev",
+      "stated": "0.06 - 0.12"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
+    },
+    {
+     "iso_group": "N",
+     "material_stated": "Aluminium alloy A2017, ADC12, etc.; 4D,5D; ø17.5 ~ ø26",
+     "vc": {
+      "v": [
+       200,
+       400
+      ],
+      "unit": "m/min",
+      "stated": "200 - 400"
+     },
+     "f": {
+      "v": [
+       0.12,
+       0.16
+      ],
+      "unit": "mm/rev",
+      "stated": "0.12 - 0.16"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
+    }
+   ],
+   "unknown": [
+    "shank Ø32 not offered at DC 26 in this series (DCONMS 25 printed); see Sumitomo WDX 260D4S32 for a Ø32 shank"
+   ],
+   "notes": "LU = usable length (drilling depth) 104.6 mm. Feed note F078: 'When using the smaller side of the diameter range, the feed rate should be set lower'; 26 is the top of the ø17.5~ø26 column. PDF page = catalogue page J072/J078."
+  },
+  {
+   "kind": "drill_insert",
+   "id": "XPMT07H308R-DJ",
+   "name": "TungDrillTwisted insert XPMT07H308R-DJ (fits TDX220-TDX260)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=76",
+   "taken": "2026-11-24",
+   "values": {
+    "ic": {
+     "v": 7,
+     "unit": "mm",
+     "stated": "IC 7"
+    },
+    "le": {
+     "v": 8.2,
+     "unit": "mm",
+     "stated": "LE 8.2"
+    },
+    "s": {
+     "v": 3.6,
+     "unit": "mm",
+     "stated": "S 3.6"
+    },
+    "d1": {
+     "v": 2.8,
+     "unit": "mm",
+     "stated": "D1 2.8"
+    },
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8"
+    },
+    "dcn": {
+     "v": 22,
+     "unit": "mm",
+     "stated": "DCN 22"
+    },
+    "dcx": {
+     "v": 26,
+     "unit": "mm",
+     "stated": "DCX 26"
+    },
+    "clearance": {
+     "v": 11,
+     "unit": "deg",
+     "stated": "11°"
+    },
+    "grades_available": {
+     "v": [
+      "AH725",
+      "T1115",
+      "AH6030",
+      "AH9030"
+     ],
+     "unit": "text",
+     "stated": "line-up dots on XPMT07H308R-DJ row"
+    },
+    "first_choice_P": {
+     "v": "DJ, AH6030",
+     "unit": "text",
+     "stated": "Recommended insert J078: Carbon steels (C > 0.3%) Alloy steels -300 HB, First choice DJ, AH6030"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "vc/f given per drill body (TDX260F25-4 record, J078)"
+   ],
+   "notes": "DS chipbreaker variant XPMT07H308R-DS (AH725, AH6030) is first choice for low carbon / low alloy / stainless per J078."
+  },
+  {
+   "kind": "thread_mill",
+   "id": "MTEC0807C171.5ISO",
+   "name": "SolidThread MTEC-ISO solid carbide internal threading endmill, ISO metric, pitch 1.5, MTEC0807C171.5ISO",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_I_EndMill.pdf#page=108",
+   "taken": "2026-11-24",
+   "values": {
+    "pitch": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "TP 1.5"
+    },
+    "application_range": {
+     "v": "≥ M10",
+     "unit": "text",
+     "stated": "Application range ≥ M10"
+    },
+    "dc": {
+     "v": 7,
+     "unit": "mm",
+     "stated": "DC 7"
+    },
+    "dconms": {
+     "v": 8,
+     "unit": "mm",
+     "stated": "DCONMS 8"
+    },
+    "flutes": {
+     "v": 3,
+     "unit": "text",
+     "stated": "NOF 3"
+    },
+    "apmx": {
+     "v": 17.3,
+     "unit": "mm",
+     "stated": "APMX 17.3"
+    },
+    "lf": {
+     "v": 64,
+     "unit": "mm",
+     "stated": "LF 64"
+    },
+    "coolant": {
+     "v": "without",
+     "unit": "text",
+     "stated": "Coolant hole Without"
+    },
+    "grade": {
+     "v": "AH725",
+     "unit": "text",
+     "stated": "Grade AH725"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "Solid carbide internal threading endmill, for ISO metric profile"
+    },
+    "profile_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "60° (profile drawing)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "Non-alloy steel and cast steel, free cutting steel < 0.25 %C Annealed 420 N/mm2 125 HB; Tool dia. DC ø6 column",
+     "vc": {
+      "v": [
+       100,
+       250
+      ],
+      "unit": "m/min",
+      "stated": "Vc AH725 100-250"
+     },
+     "fz": {
+      "v": 0.06,
+      "unit": "mm/tooth",
+      "stated": "Feed: f (mm/t) ø6 0.06"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_I_EndMill.pdf#page=120"
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "same row; Tool dia. DC ø8 column",
+     "vc": {
+      "v": [
+       100,
+       250
+      ],
+      "unit": "m/min",
+      "stated": "Vc AH725 100-250"
+     },
+     "fz": {
+      "v": 0.07,
+      "unit": "mm/tooth",
+      "stated": "Feed: f (mm/t) ø8 0.07"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_I_EndMill.pdf#page=121"
+    },
+    {
+     "iso_group": "M",
+     "material_stated": "Stainless steel Austenitic 600 N/mm2 180 HB; DC ø6 / ø8 columns",
+     "vc": {
+      "v": [
+       85,
+       100
+      ],
+      "unit": "m/min",
+      "stated": "85-100"
+     },
+     "fz": {
+      "v": [
+       0.03,
+       0.04
+      ],
+      "unit": "mm/tooth",
+      "stated": "ø6 0.03, ø8 0.04"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_I_EndMill.pdf#page=121"
+    },
+    {
+     "iso_group": "N",
+     "material_stated": "Aluminum- wrought alloy Not cureable 60 HB; DC ø6 / ø8 columns",
+     "vc": {
+      "v": [
+       160,
+       300
+      ],
+      "unit": "m/min",
+      "stated": "160-300"
+     },
+     "fz": {
+      "v": [
+       0.06,
+       0.07
+      ],
+      "unit": "mm/tooth",
+      "stated": "ø6 0.06, ø8 0.07"
+     },
+     "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_I_EndMill.pdf#page=121"
+    }
+   ],
+   "unknown": [
+    "feed for DC 7 exactly: table has columns ø6 and ø8 only (values bracket it)",
+    "whether this 17.3 mm APMX tool counts as 'long edge type' (I121: feed reduced to 40% for long edge tools) is not stated",
+    "shank length / neck dims not tabulated"
+   ],
+   "notes": "Feed is per tooth (mm/t), not per rev: f_rev = fz x 3 flutes. Conditions table spans I120 (vc) and I121 (fz by DC). MTEC0807C241.5ISO is the longer (APMX 24.8, LF 76) sibling."
+  },
+  {
+   "kind": "tool_block",
+   "id": "CTBU20-32",
+   "name": "CTBU Tool block for CGP blade",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 20,
+     "unit": "mm",
+     "stated": "H 20 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "b": {
+     "v": 19,
+     "unit": "mm",
+     "stated": "B 19 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "oal": {
+     "v": 100,
+     "unit": "mm",
+     "stated": "OAL 100 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "hfassy": {
+     "v": 20,
+     "unit": "mm",
+     "stated": "HFASSY 20 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "hbh": {
+     "v": 13,
+     "unit": "mm",
+     "stated": "HBH 13 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "oah": {
+     "v": 50,
+     "unit": "mm",
+     "stated": "OAH 50 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "oaw": {
+     "v": 38,
+     "unit": "mm",
+     "stated": "OAW 38 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "blade": {
+     "v": "CGP32...",
+     "unit": "text",
+     "stated": "Blade (Optional) CGP32..."
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "read 2026-11-24 from GC F section page F230 (PDF page 230)"
+  },
+  {
+   "kind": "tool_block",
+   "id": "CTBU25-32",
+   "name": "CTBU Tool block for CGP blade",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 25,
+     "unit": "mm",
+     "stated": "H 25 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "b": {
+     "v": 23,
+     "unit": "mm",
+     "stated": "B 23 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "oal": {
+     "v": 110,
+     "unit": "mm",
+     "stated": "OAL 110 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "hfassy": {
+     "v": 25,
+     "unit": "mm",
+     "stated": "HFASSY 25 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "hbh": {
+     "v": 8,
+     "unit": "mm",
+     "stated": "HBH 8 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "oah": {
+     "v": 50,
+     "unit": "mm",
+     "stated": "OAH 50 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "oaw": {
+     "v": 42,
+     "unit": "mm",
+     "stated": "OAW 42 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "blade": {
+     "v": "CGP32...",
+     "unit": "text",
+     "stated": "Blade (Optional) CGP32..."
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "read 2026-11-24 from GC F section page F230 (PDF page 230)"
+  },
+  {
+   "kind": "tool_block",
+   "id": "CTBU32-32",
+   "name": "CTBU Tool block for CGP blade",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 32,
+     "unit": "mm",
+     "stated": "H 32 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "b": {
+     "v": 29,
+     "unit": "mm",
+     "stated": "B 29 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "oal": {
+     "v": 110,
+     "unit": "mm",
+     "stated": "OAL 110 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "hfassy": {
+     "v": 32,
+     "unit": "mm",
+     "stated": "HFASSY 32 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "hbh": {
+     "v": 5,
+     "unit": "mm",
+     "stated": "HBH 5 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "oah": {
+     "v": 54,
+     "unit": "mm",
+     "stated": "OAH 54 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "oaw": {
+     "v": 48,
+     "unit": "mm",
+     "stated": "OAW 48 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "blade": {
+     "v": "CGP32...",
+     "unit": "text",
+     "stated": "Blade (Optional) CGP32..."
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "read 2026-11-24 from GC F section page F230 (PDF page 230)"
+  }
+ ],
+ "blocked": []
+}

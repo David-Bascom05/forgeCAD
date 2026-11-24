@@ -1,4 +1,5 @@
 import Mathlib.Topology.MetricSpace.Basic
+import Mathlib.Analysis.Calculus.LocalExtr.Rolle
 
 /-!
 # C.place: `place_cuts` merging cuts within tolerance, and §E's δ-faithfulness
@@ -38,9 +39,45 @@ theorem merge_within {p q p' q' v : α} {η reach ρ δ : ℝ}
       _ ≤ ρ + reach + η := by linarith
       _ ≤ δ := hδ
 
-/-- K1's open hypothesis, stated: the root of the surface along the edge is unique within the
-cluster's reach, so two computed hits within it are one exact point. -/
+/-- K1's hypothesis: the root of the surface along the edge is unique within the cluster's reach,
+so two computed hits within it are one exact point. -/
 def RootUnique (roots : Set α) (reach : ℝ) : Prop :=
   ∀ x ∈ roots, ∀ y ∈ roots, dist x y ≤ reach → x = y
+
+open Set in
+/-- **At most one root where the derivative does not vanish** (Rolle): g, the other surface's
+implicit along the edge's parameter, differentiable on `[lo, hi]` with g' ≠ 0 there, has at most
+one zero in it. `krawczyk1`'s test (forge-geom isolate.rs; the oracle's rim_cert) encloses g' over
+the interval away from 0, which is this hypothesis. -/
+theorem zero_unique_of_deriv_ne {g g' : ℝ → ℝ} {lo hi : ℝ}
+    (hg : ∀ x ∈ Icc lo hi, HasDerivAt g (g' x) x) (hne : ∀ x ∈ Icc lo hi, g' x ≠ 0)
+    {s t : ℝ} (hs : s ∈ Icc lo hi) (ht : t ∈ Icc lo hi) (h0s : g s = 0) (h0t : g t = 0) :
+    s = t := by
+  by_contra hst
+  rcases lt_or_gt_of_ne hst with h | h
+  · obtain ⟨c, hc, hc0⟩ := exists_hasDerivAt_eq_zero (f := g) (f' := g') h
+      (fun x hx => (hg x ⟨hs.1.trans hx.1, hx.2.trans ht.2⟩).continuousAt.continuousWithinAt)
+      (by rw [h0s, h0t])
+      (fun x hx => hg x ⟨hs.1.trans hx.1.le, hx.2.le.trans ht.2⟩)
+    exact hne c ⟨hs.1.trans hc.1.le, hc.2.le.trans ht.2⟩ hc0
+  · obtain ⟨c, hc, hc0⟩ := exists_hasDerivAt_eq_zero (f := g) (f' := g') h
+      (fun x hx => (hg x ⟨ht.1.trans hx.1, hx.2.trans hs.2⟩).continuousAt.continuousWithinAt)
+      (by rw [h0t, h0s])
+      (fun x hx => hg x ⟨ht.1.trans hx.1.le, hx.2.le.trans hs.2⟩)
+    exact hne c ⟨ht.1.trans hc.1.le, hc.2.le.trans hs.2⟩ hc0
+
+open Set in
+/-- **RootUnique from the parameter.** An edge curve `γ`, the roots its points of the surface,
+`g = F ∘ γ` with g' ≠ 0 on the parameter interval `[lo, hi]` that holds every root within the
+reach (the oracle's interval: the reach over the curve's speed either side of the hit): then the
+roots within the reach are one point. -/
+theorem rootUnique_of_param {γ : ℝ → α} {g g' : ℝ → ℝ} {lo hi reach : ℝ}
+    (hg : ∀ x ∈ Icc lo hi, HasDerivAt g (g' x) x) (hne : ∀ x ∈ Icc lo hi, g' x ≠ 0)
+    (roots : Set α) (hroot : ∀ x ∈ roots, ∃ t ∈ Icc lo hi, γ t = x ∧ g t = 0) :
+    RootUnique roots reach := by
+  intro x hx y hy _
+  obtain ⟨s, hs, rfl, h0s⟩ := hroot x hx
+  obtain ⟨t, ht, rfl, h0t⟩ := hroot y hy
+  rw [zero_unique_of_deriv_ne hg hne hs ht h0s h0t]
 
 end ForgeCurved.PlaceMerge

@@ -25,6 +25,9 @@ pub struct BendSimUi {
     pub playing: bool,
     /// Tooling asked for (a set id or a file beside the part).
     pub tooling: String,
+    /// The part's text and file it simulated: stale once either differs.
+    pub source: String,
+    pub path: String,
 }
 
 impl BendSimUi {
@@ -44,6 +47,32 @@ impl BendSimUi {
             t: 0.0,
             playing: false,
             tooling: tooling.into(),
+            source: source.into(),
+            path: path.into(),
+        }
+    }
+
+    /// Where `was` stood, kept where it still is a step of this one.
+    pub fn resume(&mut self, was: &BendSimUi) {
+        let n = self.sim.as_ref().map_or(0, |s| s.plan.steps.len());
+        if was.step < n {
+            self.step = was.step;
+            self.t = was.t;
+        }
+    }
+
+    /// To step `k`, at its start.
+    pub fn go(&mut self, k: usize) {
+        self.step = k;
+        self.t = 0.0;
+    }
+
+    /// Play or pause; from the start again once played through.
+    pub fn play(&mut self) {
+        let n = self.sim.as_ref().map_or(0, |s| s.plan.steps.len());
+        self.playing = !self.playing;
+        if self.playing && self.t >= 1.0 && self.step + 1 >= n {
+            self.go(0);
         }
     }
 
@@ -168,8 +197,9 @@ pub fn paint(ui: &egui::Ui, rect: egui::Rect, ui_state: &BendSimUi) {
     );
 }
 
-/// The panel's body: the order, the steps, play and scrub, the section, the step's checks.
-pub fn body(ui: &mut egui::Ui, st: &mut BendSimUi) {
+/// The panel's body: the order, the steps, play and scrub, the section (unless the view shows
+/// it, as the Bend Simulation environment's does), the step's checks.
+pub fn body(ui: &mut egui::Ui, st: &mut BendSimUi, section: bool) {
     let sim = match &st.sim {
         Ok(s) => s,
         Err(e) => {
@@ -225,8 +255,10 @@ pub fn body(ui: &mut egui::Ui, st: &mut BendSimUi) {
                 }
             });
         });
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 300.0), egui::Sense::hover());
-    paint(ui, rect, st);
+    if section {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 300.0), egui::Sense::hover());
+        paint(ui, rect, st);
+    }
     if let Some(s) = plan.steps.get(st.step) {
         ui.label(format!(
             "{}: {:.1}° (+{:.1}°)  {} on {}{}{}",

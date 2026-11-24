@@ -1,0 +1,20 @@
+# Two wells of different depths in a plate, for CAM's section pocket (forge-cam-lang
+# tests/sections.rs): between z 12 and 4 a section at mid-height shows both, but only the deep
+# one reaches z 4; the shallow one ends at z 7.
+shared L = 60
+shared W = 40
+shared t = 12
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+plate = extrude(plan, t)
+sketch pk(on: plate.end) {
+  dw = rect(corner: (6, 6), size: (20, 28))
+  sw = rect(corner: (34, 6), size: (20, 28))
+}
+deep = cut(pk.dw, 8)
+shal = cut(pk.sw, 5)
+
+expect valid
+expect bodies = 1

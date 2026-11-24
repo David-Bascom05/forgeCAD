@@ -110,12 +110,30 @@ fn studio(r: vec3f) -> vec3f {
     return mix(floor, sky, smoothstep(-0.04, 0.04, r.z)) + band;
 }
 
+// A tint's w: below 2, how metal (the look as it always was); from 2, an appearance's packed
+// (studio::appearance::pack_tint): 2 + metal + 2 coat + 4 round(roughness x 1000).
+struct Look {
+    metal: f32,
+    // -1: no roughness given
+    rough: f32,
+    coat: f32,
+}
+
+fn look_of(w: f32) -> Look {
+    if w < 2.0 {
+        return Look(w, -1.0, 0.0);
+    }
+    let k = u32(round(w - 2.0));
+    return Look(f32(k & 1u), f32(k >> 2u) / 1000.0, f32((k >> 1u) & 1u));
+}
+
 fn shade(in: Shaded) -> vec4f {
     let n = normalize(in.n);
     let v = normalize(g.eye.xyz - in.p);
     let nv = max(dot(n, v), 0.0);
     var base = in.tint.rgb;
-    let metal = in.tint.a;
+    let look = look_of(in.tint.a);
+    let metal = look.metal;
     if g.style.x > 2.5 {
         return illustrate(n, v, base);
     }
@@ -124,7 +142,7 @@ fn shade(in: Shaded) -> vec4f {
         base = vec3f(0.18 + 0.62 * dot(base, vec3f(0.2126, 0.7152, 0.0722)) / 0.6);
     }
     if g.style.x > 0.5 && g.style.x < 1.5 {
-        return realistic(n, v, base, metal, in.p);
+        return realistic(n, v, base, look, in.p);
     }
     // the lighting style's key and fill, the room's light from above; objects' shadows fall where
     // the sun reaches, so a face turned from it keeps the eye's key
@@ -199,7 +217,27 @@ fn filmic(x: vec3f) -> vec3f {
     return saturate((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14));
 }
 
-fn realistic(n: vec3f, v: vec3f, base: vec3f, metal: f32, p: vec3f) -> vec4f {
+// the studio as a rough surface sees it: its floor, sky and lights spread over the lobe
+fn studio_blurred(r: vec3f) -> vec3f {
+    let sky = mix(g.sky_low.rgb, g.sky_high.rgb, smoothstep(-0.2, 1.0, r.z));
+    let floor = mix(g.ground_low.rgb, g.ground_high.rgb, 0.6);
+    let lights = (0.25 * g.env_lights.x + 0.18 * g.env_lights.y + 0.12 * g.env_lights.z) * smoothstep(-0.3, 0.6, r.z);
+    return mix(floor, sky, smoothstep(-0.45, 0.45, r.z)) + lights;
+}
+
+// Karis's analytic fit to the split-sum's environment BRDF (Karis 2014, "Physically Based Shading
+// on Mobile"): what of F0 and of white a GGX lobe of this roughness reflects at this angle
+fn env_brdf(f0: vec3f, rough: f32, nv: f32) -> vec3f {
+    let c0 = vec4f(-1.0, -0.0275, -0.572, 0.022);
+    let c1 = vec4f(1.0, 0.0425, 1.04, -0.04);
+    let r = rough * c0 + c1;
+    let a004 = min(r.x * r.x, exp2(-9.28 * nv)) * r.x + r.y;
+    let ab = vec2f(-1.04, 1.04) * a004 + r.zw;
+    return f0 * ab.x + ab.y;
+}
+
+fn realistic(n: vec3f, v: vec3f, base: vec3f, look: Look, p: vec3f) -> vec4f {
+    let metal = look.metal;
     let nv = max(dot(n, v), 1e-3);
     // the environment's sun, as the floor's shadow has it
     let sun = normalize(g.sun_dir.xyz);
@@ -208,17 +246,31 @@ fn realistic(n: vec3f, v: vec3f, base: vec3f, metal: f32, p: vec3f) -> vec4f {
     // a fill from the eye's side so nothing goes flat black
     let fill = max(dot(n, v), 0.0) * 0.25;
     let diffuse = base * (1.0 - metal) * (sky * 0.6 + nl * g.sun_col.rgb * g.sun_dir.w + fill);
-    // GGX for the sun, Schlick's Fresnel on the studio's reflection
-    let rough = mix(0.38, 0.22, metal);
+    // GGX for the sun
+    let given = look.rough >= 0.0;
+    let rough = select(mix(0.38, 0.22, metal), max(look.rough, 0.03), given);
     let a2 = rough * rough * rough * rough;
     let h = normalize(sun + v);
     let nh = max(dot(n, h), 0.0);
     let d = nh * nh * (a2 - 1.0) + 1.0;
     let ggx = a2 / (3.14159 * d * d);
     let f0 = mix(vec3f(0.04), base, metal);
-    let fresnel = f0 + (vec3f(1.0) - f0) * pow(1.0 - nv, 5.0);
-    let env = studio_sharp(reflect(-v, n));
-    let spec = fresnel * env * mix(0.45, 1.0, metal) + f0 * ggx * nl * 0.25;
+    var spec: vec3f;
+    let rr = reflect(-v, n);
+    if given {
+        // the appearance's own roughness: the studio sharp or spread, weighted by the split sum
+        let env = mix(studio_sharp(rr), studio_blurred(rr), smoothstep(0.05, 0.6, rough));
+        spec = env_brdf(f0, rough, nv) * env + f0 * ggx * nl * 0.25;
+        if look.coat > 0.0 {
+            let fc = 0.04 + 0.96 * pow(1.0 - nv, 5.0);
+            spec = spec * (1.0 - fc) + fc * studio_sharp(rr);
+        }
+    } else {
+        // Schlick's Fresnel on the studio's reflection
+        let fresnel = f0 + (vec3f(1.0) - f0) * pow(1.0 - nv, 5.0);
+        let env = studio_sharp(rr);
+        spec = fresnel * env * mix(0.45, 1.0, metal) + f0 * ggx * nl * 0.25;
+    }
     return vec4f(filmic((diffuse + spec) * g.sun_col.w), 1.0);
 }
 
