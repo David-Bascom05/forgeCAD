@@ -918,6 +918,34 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                     }
                     op_of[i + 1] = cur;
                 }
+                // FORGE_QUALITY_BREAKDOWN=OP: where that op's time goes, by kind of move
+                if let Ok(want) = std::env::var("FORGE_QUALITY_BREAKDOWN") {
+                    let mut acc: std::collections::BTreeMap<&str, (usize, f64, f64, f64)> = Default::default();
+                    for (si, sg) in tl.segments.iter().enumerate() {
+                        let Some(Some(k)) = op_of.get(sg.line) else { continue };
+                        if job.ops[*k].name != want {
+                            continue;
+                        }
+                        let dz = (sg.q1.get(2).copied().unwrap_or(0.0) - sg.q0.get(2).copied().unwrap_or(0.0)).abs();
+                        let dxy = ((sg.q1[0] - sg.q0[0]).powi(2) + (sg.q1[1] - sg.q0[1]).powi(2)).sqrt();
+                        let cat = match sg.kind {
+                            forge_machine::sim::SegKind::Rapid => "rapid",
+                            forge_machine::sim::SegKind::Arc => "arc",
+                            forge_machine::sim::SegKind::Feed if dz > 1e-6 && dxy < 1e-6 => "feed z",
+                            forge_machine::sim::SegKind::Feed if dxy < 1.0 => "feed xy <1",
+                            forge_machine::sim::SegKind::Feed if dxy < 5.0 => "feed xy 1-5",
+                            forge_machine::sim::SegKind::Feed => "feed xy >5",
+                        };
+                        let e = acc.entry(cat).or_default();
+                        e.0 += 1;
+                        e.1 += sg.t_min;
+                        e.2 += seg_la.get(si).copied().unwrap_or(sg.t_stop);
+                        e.3 += dxy + dz;
+                    }
+                    for (c, (n, tm, tl, l)) in acc {
+                        eprintln!("breakdown {want} {c:12} n {n:6} len {l:8.0} t_min {tm:7.1} t_plan {tl:7.1} over {:6.1}", tl - tm);
+                    }
+                }
                 for (si, sg) in tl.segments.iter().enumerate() {
                     if let Some(Some(k)) = op_of.get(sg.line) {
                         job.ops[*k].t_min += sg.t_min;

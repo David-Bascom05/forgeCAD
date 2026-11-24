@@ -8,8 +8,14 @@
 //!    feed set for that load, and no step ever slots. Steps are final once made: the path is the
 //!    simulation's output, so what is certified is what was simulated.
 //! 2. Passes are joined by a fixed link rule: stay down on a straight move that lies in the cleared
-//!    area, else go back along the last pass and then straight (below), else retract. Staying down
-//!    saves the retract/plunge pair that dominates cycle time on small pockets.
+//!    area, else go back along the last pass and then straight (below), else back along it and
+//!    through the cleared area by the shortest way the height map allows, each leg tested as a
+//!    straight link is; else retract. A link at depth is taken only when it is no longer than the
+//!    vertical moves the retract would make plus a margin (`LINK_MARGIN_R`). On a machine with
+//!    jerk limits a retract is the costliest thing in the path (two feed moves the level's depth
+//!    and short rapids that never reach speed), so links run through cleared air at the link feed
+//!    (just under the machine's limit), and a retract crosses just over the stock as it stood
+//!    before the op rather than at the setup's retract height.
 //! 3. Feed is not set here; forge_cam::engage sets it per fixed-length sample from the measured
 //!    engagement.
 //! 4. Islands are met by the same simulation as they come; the engagement cap holds round them.
@@ -60,19 +66,20 @@ pub struct Adaptive {
     /// or of its reverse, the starts still taken across the sweep from one side to the other
     /// (a zigzag); off: every pass the same way.
     pub two_way: bool,
+    /// The feed (mm/min) of the links through cleared air: up out of the tool's own cleared
+    /// column, down into air, and every link at depth (0: the cutting feed). Nothing is cut on
+    /// them, so they need not crawl at the cutting feed; the language sets it just under the
+    /// machine's `max_feed`.
+    pub link_feed: f64,
 }
 
-/// A link at depth back along what was cut is taken only within k times the straight distance
-/// plus d tool radii (a fixed geometric cap, cheap to test and the same for every link): one-way
-/// passes (k, d) = CAP_ONE_WAY, two-way CAP_TWO_WAY (whose passes end near the next start, so a
-/// longer retrace still saves the climb). Provenance: picked once, by trying (3, 4), (6, 10),
-/// (10, 20), (20, 40), (40, 80), (100, 200) on verify/forge-cam-quality's deep_boss_{n,p}_*,
-/// boss_adaptive and rptu3_* parts (2026-11-24); a pure length test, never computed from rates
-/// or times, the same for every link.
-pub const CAP_ONE_WAY: (f64, f64) = (10.0, 20.0);
+/// The margin, in tool radii, a link at depth may run past the feed moves the retract it
+/// replaces would make (`Field::link_budget`): a retract also adds rapids that stop and start
+/// short of their speed. Provenance: 4, 10, 20 and 40 tried on verify/forge-cam-quality's
+/// deep_boss_{n,p} under the jerk-limited planner (2026-11-24); 4 was quickest one-way.
+pub const LINK_MARGIN_R: f64 = 4.0;
 /// How many starts, in order, are tried for reach at depth before a retract (P1).
 pub const REACH_N: usize = 30;
-pub const CAP_TWO_WAY: (f64, f64) = (20.0, 40.0);
 
 /// The most a pass's heading may turn from the sweep direction (either way).
 pub const PEEL: f64 = 75.0;
@@ -271,6 +278,23 @@ impl Field {
     ) {
         const CLEAR: f64 = 0.5;
         let rr = self.r + CLEAR + self.map0.h;
+        // the height to cross at: just over the stock as it stood before the op along the whole
+        // way across (the same disk test as the rapids' check), never above the retract height;
+        // over a flat top that is one rapid across instead of up, across and down
+        let mut way: Vec<[f64; 2]> = vec![[cur[0], cur[1]]];
+        way.extend_from_slice(via);
+        way.push([target[0], target[1]]);
+        let mut top = cur[2].max(target[2]);
+        for w in way.windows(2) {
+            let l = ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt();
+            let n = (l / self.map0.h).ceil().max(1.0) as usize;
+            for k in 0..=n {
+                let t = k as f64 / n as f64;
+                let (x, y) = (w[0][0] + t * (w[1][0] - w[0][0]), w[0][1] + t * (w[1][1] - w[0][1]));
+                top = top.max(self.top0(x, y, rr) + CLEAR);
+            }
+        }
+        let retract = top.min(retract);
         if cur[2] < retract {
             let up = (self.top0(cur[0], cur[1], rr) + CLEAR).clamp(cur[2], retract);
             if up > cur[2] {
@@ -309,6 +333,20 @@ impl Field {
             f: if air { feed.0 } else { feed.1 },
             phase: if air { Phase::Link } else { Phase::Plunge },
         });
+    }
+
+    /// The longest link at depth worth taking from `a` to `b` at z instead of a retract: the
+    /// vertical way the retract would go (up from a and down to b through the height the stock
+    /// stood at, as `retract_link` makes them) plus `margin`, for the stops and starts a retract
+    /// adds. Not the way across: a retract crosses at rapid, while a link at depth that runs
+    /// along a wall it just cut is held to the chip rule by the feed scheduler, so a long one
+    /// costs more than the retract it replaces.
+    fn link_budget(&self, a: [f64; 2], b: [f64; 2], z: f64, margin: f64) -> f64 {
+        const CLEAR: f64 = 0.5;
+        let rr = self.r + CLEAR + self.map0.h;
+        let up = (self.top0(a[0], a[1], rr) + CLEAR - z).max(0.0);
+        let down = (self.top0(b[0], b[1], rr) + CLEAR - z).max(0.0);
+        up + down + margin
     }
 
     /// The fixed link rule: the straight move a → b at z lies in the cleared area (no material
@@ -387,6 +425,9 @@ pub fn adaptive(
         [cs, sn]
     };
     let peel_cos = dmath::cos(PEEL.to_radians());
+    let link_margin = LINK_MARGIN_R * 0.5 * tool.tool.dc;
+    // the feed of links through cleared air
+    let lf = if prm.link_feed > 0.0 { prm.link_feed } else { feed.0 };
     // the direction the last pass went along the sweep (+1 with it, −1 against it)
     let mut last_sign = 1.0f64;
     let mut rings_log: Vec<RingRun> = Vec::new();
@@ -433,6 +474,18 @@ pub fn adaptive(
             }
             y += g;
         }
+        let mut grid = {
+            let n = |a: f64, b: f64| (((b - a) + 4.0 * f.r) / g).floor() as usize + 1;
+            let (nx, ny) = (n(lo[0], hi[0]), n(lo[1], hi[1]));
+            Grid {
+                o: [lo[0] - 2.0 * f.r, lo[1] - 2.0 * f.r],
+                g,
+                nx,
+                ny,
+                free: vec![false; nx * ny],
+                last_searched: false,
+            }
+        };
         let mut entered = false;
         // first, a start from the open side (cleared air next to material ahead), no entry
         let mut open_try = true;
@@ -505,11 +558,18 @@ pub fn adaptive(
                 // ends each pass near the next start; P1 there costs more reversals than it saves)
                 if let Some(c) = at.filter(|c| retrace_ok && c[2] == z && !prm.two_way) {
                     order.sort_by(|u, v| u.1.total_cmp(&v.1));
-                    let (k, dd) = if prm.two_way { CAP_TWO_WAY } else { CAP_ONE_WAY };
                     if let Some(q) = order.iter().take(REACH_N).find(|(q, ..)| {
                         f.link_clear([c[0], c[1]], *q, z)
-                            || retrace_link(c, *q, &hist, z, &|a, b| f.link_clear(a, b, z), k, dd * f.r)
-                                .is_some()
+                            || retrace_link(
+                                c,
+                                *q,
+                                &hist,
+                                z,
+                                &|a, b| f.link_clear(a, b, z),
+                                0.0,
+                                f.link_budget([c[0], c[1]], *q, z, link_margin),
+                            )
+                            .is_some()
                     }) {
                         best = Some(*q);
                     }
@@ -559,7 +619,7 @@ pub fn adaptive(
                 {
                     mv.push(PMove::Line {
                         to: [c[0], c[1], h.retract],
-                        f: feed.0,
+                        f: lf,
                         phase: Phase::Link,
                     });
                 }
@@ -691,8 +751,8 @@ pub fn adaptive(
                     &hist,
                     z,
                     &|a, b| f.link_clear(a, b, z),
-                    if prm.two_way { CAP_TWO_WAY.0 } else { CAP_ONE_WAY.0 },
-                    (if prm.two_way { CAP_TWO_WAY.1 } else { CAP_ONE_WAY.1 }) * f.r,
+                    0.0,
+                    f.link_budget([cur[0], cur[1]], p, z, link_margin),
                 )
             } else {
                 None
@@ -700,15 +760,15 @@ pub fn adaptive(
             if cur[2] == z && f.link_clear([cur[0], cur[1]], p, z) {
                 let l = PMove::Line {
                     to: target,
-                    f: feed.0,
+                    f: lf,
                     phase: Phase::Link,
                 };
                 mv.push(l);
                 hist.1.push(l);
-            } else if let Some(back_moves) = retrace {
+            } else if let Some(back_moves) = retrace.map(|m| at_feed(m, lf)) {
                 let l = PMove::Line {
                     to: target,
-                    f: feed.0,
+                    f: lf,
                     phase: Phase::Link,
                 };
                 retraces_log.push((mv.len(), mv.len() + back_moves.len()));
@@ -716,6 +776,17 @@ pub fn adaptive(
                 mv.push(l);
                 hist.1.extend(back_moves);
                 hist.1.push(l);
+            } else if let Some(legs) = (cur[2] == z && retrace_ok)
+                .then(|| {
+                    let cap = f.link_budget([cur[0], cur[1]], p, z, link_margin);
+                    retrace_path_link(&f, &mut grid, cur, p, &hist, z, cap, &|a, b| f.link_clear(a, b, z))
+                })
+                .flatten()
+                .map(|m| at_feed(m, lf))
+            {
+                retraces_log.push((mv.len(), mv.len() + legs.len()));
+                mv.extend_from_slice(&legs);
+                hist.1.extend(legs);
             } else {
                 if cur[2] == z && std::env::var_os("FORGE_ADAPTIVE_DIAG").is_some() {
                     // what blocks the straight link: the highest material over the tool's disk
@@ -750,7 +821,7 @@ pub fn adaptive(
                     let reach = near.iter().take(40).any(|c| f.link_clear(a, **c, z));
                     eprintln!("diag retract len={l:.2} block={block:.3} other_reachable={reach}");
                 }
-                f.retract_link(&mut mv, cur, target, h.retract, feed, &back);
+                f.retract_link(&mut mv, cur, target, h.retract, (lf, feed.1), &back);
                 // down at the start: the history at depth begins here
                 hist = (target, Vec::new());
             }
@@ -975,11 +1046,11 @@ pub fn adaptive(
                             if cur[2] == z && f.link_clear([cur[0], cur[1]], [target[0], target[1]], z) {
                                 mv.push(PMove::Line {
                                     to: target,
-                                    f: feed.0,
+                                    f: lf,
                                     phase: Phase::Link,
                                 });
                             } else {
-                                f.retract_link(&mut mv, cur, target, h.retract, feed, &[]);
+                                f.retract_link(&mut mv, cur, target, h.retract, (lf, feed.1), &[]);
                             }
                             // straight stretches as one move each (within 2 µm of the ring,
                             // which runs at least 2r from every wall), then arcs fitted
@@ -1071,11 +1142,11 @@ pub fn adaptive(
                     if cur[2] == z && f.link_clear([cur[0], cur[1]], [s0.x, s0.y], z) {
                         mv.push(PMove::Line {
                             to: target,
-                            f: feed.0,
+                            f: lf,
                             phase: Phase::Link,
                         });
                     } else {
-                        f.retract_link(&mut mv, cur, target, h.retract, feed, &[]);
+                        f.retract_link(&mut mv, cur, target, h.retract, (lf, feed.1), &[]);
                     }
                     let first = mv.len();
                     let mut a = target;
@@ -1122,7 +1193,7 @@ pub fn adaptive(
         if let Some(p) = at {
             mv.push(PMove::Line {
                 to: [p[0], p[1], h.retract],
-                f: feed.0,
+                f: lf,
                 phase: Phase::Link,
             });
             at = Some([p[0], p[1], h.retract]);
@@ -1150,6 +1221,251 @@ pub fn adaptive(
         retraces: retraces_log,
         notes,
     })
+}
+
+/// The grid of candidate tool centres at a level (spacing g from `o`), and which of them are
+/// known to be parked in cleared air (a disk once clear at a level stays clear: the stock only
+/// loses material).
+struct Grid {
+    o: [f64; 2],
+    g: f64,
+    nx: usize,
+    ny: usize,
+    free: Vec<bool>,
+    /// Whether the last `path_link` got as far as the search (a way in was found).
+    last_searched: bool,
+}
+
+impl Grid {
+    fn at(&self, i: usize, j: usize) -> [f64; 2] {
+        [self.o[0] + i as f64 * self.g, self.o[1] + j as f64 * self.g]
+    }
+    fn near(&self, p: [f64; 2]) -> Option<(usize, usize)> {
+        let i = ((p[0] - self.o[0]) / self.g).round();
+        let j = ((p[1] - self.o[1]) / self.g).round();
+        (i >= 0.0 && j >= 0.0 && (i as usize) < self.nx && (j as usize) < self.ny)
+            .then_some((i as usize, j as usize))
+    }
+}
+
+/// A link at depth through the cleared area when neither a straight move nor a retrace reaches:
+/// the shortest chain of grid centres whose tool disks are clear of material (and allowed),
+/// from a's grid neighbour to b's, then pulled tight into straight legs, each one tested by
+/// `clear` (the same exact test as every link at depth) so the tool meets no material on any of
+/// them. A link at depth beside the work costs far less on a real machine than a retract (two
+/// moves of the level's whole depth, each with its own accelerations), and on an open level the
+/// cleared area round the stock is connected. Within `cap` in length, else None (a retract).
+fn path_link(
+    f: &Field,
+    grid: &mut Grid,
+    a: [f64; 2],
+    b: [f64; 2],
+    z: f64,
+    cap: f64,
+    clear: &dyn Fn([f64; 2], [f64; 2]) -> bool,
+) -> Option<Vec<[f64; 2]>> {
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
+    let (sa, sb) = (grid.near(a)?, grid.near(b)?);
+    let idx = |(i, j): (usize, usize)| j * grid.nx + i;
+    let n = grid.nx * grid.ny;
+    // within this search a blocked centre stays blocked (0 unknown, 1 free, 2 blocked)
+    let mut state: Vec<u8> = grid.free.iter().map(|&fr| if fr { 1 } else { 0 }).collect();
+    let is_free = |st: &mut Vec<u8>, gr: &Grid, c: (usize, usize)| -> bool {
+        let k = idx(c);
+        if st[k] == 0 {
+            let p = gr.at(c.0, c.1);
+            st[k] = if f.ok(p[0], p[1]) && !f.disk_has_material(p[0], p[1], z) { 1 } else { 2 };
+        }
+        st[k] == 1
+    };
+    grid.last_searched = false;
+    if !is_free(&mut state, grid, sb) {
+        return None;
+    }
+    // the way in: the clear centres within three cells of a that a straight leg reaches (the
+    // tool ends a pass against material, its own grid centre is seldom clear)
+    let mut seeds: Vec<((usize, usize), u64)> = Vec::new();
+    for dj in -3i64..=3 {
+        for di in -3i64..=3 {
+            let (ni, nj) = (sa.0 as i64 + di, sa.1 as i64 + dj);
+            if ni < 0 || nj < 0 || ni as usize >= grid.nx || nj as usize >= grid.ny {
+                continue;
+            }
+            let q = (ni as usize, nj as usize);
+            if !is_free(&mut state, grid, q) {
+                continue;
+            }
+            let pq = grid.at(q.0, q.1);
+            if clear(a, pq) {
+                let d = ((pq[0] - a[0]).powi(2) + (pq[1] - a[1]).powi(2)).sqrt();
+                seeds.push((q, (d / grid.g * 1000.0) as u64));
+            }
+        }
+    }
+    if seeds.is_empty() {
+        return None;
+    }
+    grid.last_searched = true;
+    // A*: cost in grid steps (√2 diagonals), scaled to integers
+    let hcost = |c: (usize, usize)| {
+        let (dx, dy) = (c.0.abs_diff(sb.0) as f64, c.1.abs_diff(sb.1) as f64);
+        ((dx.max(dy) + (std::f64::consts::SQRT_2 - 1.0) * dx.min(dy)) * 1000.0) as u64
+    };
+    let limit = (cap / grid.g * 1000.0) as u64;
+    let mut dist = vec![u64::MAX; n];
+    let mut prev = vec![usize::MAX; n];
+    let mut heap = BinaryHeap::new();
+    for &(q, d0) in &seeds {
+        if d0 < dist[idx(q)] {
+            dist[idx(q)] = d0;
+            heap.push(Reverse((d0 + hcost(q), d0, q)));
+        }
+    }
+    let mut found = false;
+    while let Some(Reverse((_, d, c))) = heap.pop() {
+        if c == sb {
+            found = true;
+            break;
+        }
+        if d > dist[idx(c)] {
+            continue;
+        }
+        for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)] {
+            let (ni, nj) = (c.0 as i64 + di, c.1 as i64 + dj);
+            if ni < 0 || nj < 0 || ni as usize >= grid.nx || nj as usize >= grid.ny {
+                continue;
+            }
+            let q = (ni as usize, nj as usize);
+            let nd = d + if di != 0 && dj != 0 { 1414 } else { 1000 };
+            if nd >= dist[idx(q)] || nd + hcost(q) > limit {
+                continue;
+            }
+            if !is_free(&mut state, grid, q) {
+                continue;
+            }
+            dist[idx(q)] = nd;
+            prev[idx(q)] = idx(c);
+            heap.push(Reverse((nd + hcost(q), nd, q)));
+        }
+    }
+    // remember what was found clear for the next search at this level
+    for (k, st) in state.iter().enumerate() {
+        if *st == 1 {
+            grid.free[k] = true;
+        }
+    }
+    if !found {
+        if std::env::var_os("FORGE_ADAPTIVE_DIAG").is_some() {
+            eprintln!("diag path: none within cap {cap:.1}");
+        }
+        return None;
+    }
+    let mut chain = vec![b];
+    let mut k = idx(sb);
+    while k != usize::MAX {
+        chain.push(grid.at(k % grid.nx, k / grid.nx));
+        k = prev[k];
+    }
+    chain.push(a);
+    chain.reverse();
+    // pulled tight: from each kept point, the farthest point of the chain in straight reach
+    let mut out = vec![a];
+    let mut i = 0;
+    let mut len = 0.0;
+    while i + 1 < chain.len() {
+        let mut j = chain.len() - 1;
+        while j > i + 1 && !clear(chain[i], chain[j]) {
+            j -= 1;
+        }
+        if !clear(chain[i], chain[j]) {
+            return None;
+        }
+        len += ((chain[j][0] - chain[i][0]).powi(2) + (chain[j][1] - chain[i][1]).powi(2)).sqrt();
+        out.push(chain[j]);
+        i = j;
+    }
+    (len <= cap).then_some(out)
+}
+
+/// A link at depth back along the last pass as it was cut (the retrace lemma, as in
+/// `retrace_link`), to the first point from which a clear grid centre is in straight reach, then
+/// through the cleared area by `path_link`. The whole within `cap` in length, else None.
+#[allow(clippy::too_many_arguments)]
+fn retrace_path_link(
+    f: &Field,
+    grid: &mut Grid,
+    cur: [f64; 3],
+    b: [f64; 2],
+    last: &([f64; 3], Vec<PMove>),
+    z: f64,
+    cap: f64,
+    clear: &dyn Fn([f64; 2], [f64; 2]) -> bool,
+) -> Option<Vec<PMove>> {
+    let (start, moves) = last;
+    let feed = |m: &PMove| match *m {
+        PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
+        _ => 0.0,
+    };
+    let leg = |q: [f64; 2], fd: f64| PMove::Line {
+        to: [q[0], q[1], z],
+        f: fd,
+        phase: Phase::Link,
+    };
+    let fd0 = moves.last().map(feed).unwrap_or(0.0);
+    if let Some(legs) = path_link(f, grid, [cur[0], cur[1]], b, z, cap, clear) {
+        return Some(legs[1..].iter().map(|q| leg(*q, fd0)).collect());
+    }
+    if moves.is_empty() || start[2] != z {
+        return None;
+    }
+    let mut pts = vec![*start];
+    for m in moves {
+        match *m {
+            PMove::Line { to, .. } | PMove::Arc { to, .. } => pts.push(to),
+            _ => return None,
+        }
+    }
+    if *pts.last().unwrap() != cur || pts.iter().any(|p| p[2] != z) {
+        return None;
+    }
+    let mut out = Vec::new();
+    let mut len = 0.0;
+    let mut tries = 0;
+    for i in (0..moves.len()).rev() {
+        let (from, to) = (pts[i + 1], pts[i]);
+        let back = match moves[i] {
+            PMove::Line { f, .. } => {
+                len += ((to[0] - from[0]).powi(2) + (to[1] - from[1]).powi(2)).sqrt();
+                PMove::Line {
+                    to,
+                    f,
+                    phase: Phase::Link,
+                }
+            }
+            PMove::Arc { c, cw, f, .. } => {
+                len += arc_len(to, from, c, cw);
+                PMove::Arc { to, c, cw: !cw, f }
+            }
+            _ => return None,
+        };
+        if len >= cap {
+            return None;
+        }
+        out.push(back);
+        if let Some(legs) = path_link(f, grid, [to[0], to[1]], b, z, cap - len, clear) {
+            out.extend(legs[1..].iter().map(|q| leg(*q, feed(&moves[i]))));
+            return Some(out);
+        }
+        // a search that found a way in but no way through: try a few more points, then give up
+        if grid.last_searched {
+            tries += 1;
+            if tries > 3 {
+                return None;
+            }
+        }
+    }
+    None
 }
 
 /// A link at depth back along the last pass as it was cut, then
@@ -1204,9 +1520,7 @@ fn retrace_link(
                 }
             }
             PMove::Arc { c, cw, f, .. } => {
-                let r = ((from[0] - c[0]).powi(2) + (from[1] - c[1]).powi(2)).sqrt();
-                // the arc's length bounded by a half turn's (fitted arcs are under 170°)
-                len += std::f64::consts::PI * r;
+                len += arc_len(to, from, c, cw);
                 PMove::Arc { to, c, cw: !cw, f }
             }
             _ => return None,
@@ -1220,6 +1534,29 @@ fn retrace_link(
         }
     }
     None
+}
+
+/// Link moves at the feed `lf` (they run through cleared air: nothing is cut on them).
+fn at_feed(mut moves: Vec<PMove>, lf: f64) -> Vec<PMove> {
+    for m in &mut moves {
+        match m {
+            PMove::Line { f, .. } | PMove::Arc { f, .. } => *f = lf,
+            _ => {}
+        }
+    }
+    moves
+}
+
+/// The length of the arc from `a` to `b` about `c` (clockwise or not), in the plane.
+fn arc_len(a: [f64; 3], b: [f64; 3], c: [f64; 2], cw: bool) -> f64 {
+    let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+    let t0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
+    let t1 = dmath::atan2(b[1] - c[1], b[0] - c[0]);
+    let mut d = if cw { t0 - t1 } else { t1 - t0 };
+    while d < 0.0 {
+        d += std::f64::consts::TAU;
+    }
+    r * d
 }
 
 /// A polyline simplified (Douglas–Peucker): every dropped point within `tol` of the kept chord.
@@ -1698,6 +2035,7 @@ mod tests {
                 wall_pass: wall,
                 sweep,
                 two_way,
+                link_feed: 0.0,
             };
             let out = adaptive(
                 &rg,
@@ -1756,6 +2094,7 @@ mod tests {
                 wall_pass: true,
                 sweep: 0.0,
                 two_way,
+                link_feed: 0.0,
             };
             let out = adaptive(
                 &rg,
@@ -1877,6 +2216,7 @@ mod tests {
                 wall_pass: true,
                 sweep: 0.0,
                 two_way,
+                link_feed: 0.0,
             };
             let out = adaptive(
                 &rg,
@@ -1962,6 +2302,7 @@ mod tests {
                 wall_pass: false,
                 sweep,
                 two_way: false,
+                link_feed: 0.0,
             };
             let out = adaptive(
                 &rg,
@@ -2040,6 +2381,7 @@ mod tests {
             wall_pass: false,
             sweep: 0.0,
             two_way: false,
+            link_feed: 0.0,
         };
         let out = adaptive(
             &rg,
