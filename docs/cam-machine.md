@@ -74,6 +74,13 @@ joint that positions this spindle as a C axis).
 `name`, `link`, `stations`, `index_s` (seconds per station), `center`, `index_axis`; optional `live`
 (the milling spindle that drives live tools).
 
+## `[[machine.toolpost]]`
+
+A manual tool post (quick-change holders; a Sherline's or a Tormach 8L's post): `name`, `link`,
+`center` (the holder's datum, home pose); optional `change_s` (the operator's swap, seconds; absent:
+0 in `t_min`, reported not checked). A lathe takes it instead of a turret. Any T number; a T that
+changes the tool is a program stop for the swap.
+
 ## `[[machine.changer]]` (at most one)
 
 `pockets`, `change_s` (chip to chip), `max_tool_kg`. Optional: `kind = "manual"` (M6 stops the

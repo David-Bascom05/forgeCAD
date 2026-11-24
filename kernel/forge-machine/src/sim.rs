@@ -570,7 +570,19 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                                 max: stations,
                             });
                         }
+                        let swap = tu.manual && tool != Some(*tn);
+                        if swap {
+                            // a manual tool post: the operator swaps the holder
+                            mark(&mut tl, t, Happening::Stop { optional: false });
+                        }
                         let sec = match (tu.stations, tu.index_s) {
+                            _ if tu.manual => {
+                                if swap {
+                                    tu.index_s.unwrap_or(0.0)
+                                } else {
+                                    0.0
+                                }
+                            }
                             (Some(stations), Some(index_s)) => {
                                 let from = tool.unwrap_or(1) as i64;
                                 let d = (*tn as i64 - from).rem_euclid(stations as i64);
@@ -1386,7 +1398,7 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
                 if let Some(tu) = def.turrets.first() {
                     note(
                         format!("turret.{}.stations", tu.name),
-                        tu.stations.is_some(),
+                        tu.stations.is_some() || tu.manual,
                         m.line,
                         "station count",
                     );

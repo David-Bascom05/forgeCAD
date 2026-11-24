@@ -207,6 +207,9 @@ pub struct Turret {
     pub index_axis: [f64; 3],
     /// Live tooling: the milling spindle that drives it, if any.
     pub live: Option<String>,
+    /// A manual tool post (`[[machine.toolpost]]`: quick-change holders, a Sherline's post): one
+    /// station, every T a swap by the operator (a program stop), any T number.
+    pub manual: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -837,6 +840,25 @@ impl MachineDef {
                 center: need_vec::<3>(s, &rec, "center", "give `center`")?,
                 index_axis: unit(s, &rec, "index_axis", "give `index_axis`")?,
                 live: text(s, "live").map(str::to_string),
+                manual: false,
+                name: tn,
+            });
+        }
+        for s in tables(t, "toolpost") {
+            let tn = need_text(s, &format!("{m} toolpost"), "name", "give `name`")?.to_string();
+            let rec = format!("{m} toolpost `{tn}`");
+            turrets.push(Turret {
+                link: need_text(s, &rec, "link", "give `link`")?.to_string(),
+                stations: None,
+                // the operator's swap: given, or 0 in t_min (and reported not checked)
+                index_s: match num(s, "change_s") {
+                    Some(v) => Some(positive(&rec, "change_s", v)?),
+                    None => None,
+                },
+                center: need_vec::<3>(s, &rec, "center", "give `center`, the holder's datum")?,
+                index_axis: [0.0, 0.0, 1.0],
+                live: None,
+                manual: true,
                 name: tn,
             });
         }
@@ -1182,7 +1204,12 @@ impl MachineDef {
             }
         }
         for t in &self.turrets {
-            for f in ["stations", "index_s", "center"] {
+            let fs: &[&str] = if t.manual {
+                &["center"]
+            } else {
+                &["stations", "index_s", "center"]
+            };
+            for f in fs {
                 out.push(format!("turret.{}.{f}", t.name));
             }
         }

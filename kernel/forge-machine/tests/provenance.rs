@@ -272,3 +272,54 @@ fn a_manual_changer_has_no_pockets_and_stops_for_the_swap() {
             .is_err()
     );
 }
+
+/// generic-lathe's record, as text.
+fn lathe() -> String {
+    let all = include_str!("../data/machines/generic.toml");
+    let a = all.find("name = \"generic-lathe\"").unwrap();
+    let a = all[..a].rfind("[[machine]]").unwrap();
+    let b = a + 1 + all[a + 1..].find("[[machine]]").unwrap();
+    all[a..b].to_string()
+}
+
+#[test]
+fn a_manual_tool_post_swaps_by_hand() {
+    let src = lathe();
+    let a = src.find("[[machine.turret]]").unwrap();
+    let b = a + src[a..].find("index_axis").unwrap();
+    let b = b + src[b..].find('\n').unwrap() + 1;
+    let src = format!(
+        "{}[[machine.toolpost]]\nname = \"QC\"\nlink = \"X\"\ncenter = [270, 0, 0]\nchange_s = 20\n{}",
+        &src[..a],
+        &src[b..]
+    );
+    let m = &MachineDef::parse_all(&src).unwrap()[0];
+    let tp = &m.turrets[0];
+    assert!(tp.manual && tp.stations.is_none() && tp.index_s == Some(20.0));
+    let d = "[dialect]\nname = \"t\"\ndecimals = 3\nfeed_decimals = 3\ndwell = \"G04 P{ms}\"\n";
+    let mut s = Setup::new(m, Control::for_machine(m, d, 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![100.0, -120.0])];
+    s.geo = vec![(1, vec![0.0, 0.0]), (2, vec![0.0, 0.0]), (40, vec![0.0, 0.0])];
+    s.start_tool = Some(1);
+    let tl = sim::simulate("T0101\nT0202\nT4040\n", &s).unwrap();
+    // T40 is no pocket error on a tool post; T01 (already in) is no swap; T02 and T40 are
+    assert!(
+        !tl.violations
+            .iter()
+            .any(|v| matches!(v, Violation::Pocket { .. })),
+        "{:?}",
+        tl.violations
+    );
+    let stops: Vec<usize> = tl
+        .marks
+        .iter()
+        .filter(|mk| mk.what == sim::Happening::Stop { optional: false })
+        .map(|mk| mk.line)
+        .collect();
+    assert_eq!(stops, vec![2, 3]);
+    assert!(
+        !sim::unchecked(m, &tl)
+            .iter()
+            .any(|u| u.path.ends_with(".stations"))
+    );
+}
