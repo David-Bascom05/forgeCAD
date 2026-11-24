@@ -180,6 +180,11 @@ speed (buffers, stats)  @ forge-bool/src/boolean.rs|static|static PHASES: std::c
 speed (buffers, stats)  @ forge-bool/src/boolean.rs|static|static SCRATCH: std::cell::RefCell<Scratch> = std::cell::RefCell::default();
 speed (buffers: split_face's lists, cleared before each use; bool-speed S2)  @ forge-bool/src/boolean.rs|static|static SPLIT: std::cell::Cell<SplitScratch> = std::cell::Cell::new(SplitScratch::default());
 no-output (SCRATCH and SPLIT speed; PHASES stats; the retry flags are boolean::Rung arguments since G2)  @ forge-bool/src/boolean.rs|thread_local|thread_local! {  x 3
+no-output (certificate sink, feature `certify` only, off in every build: records the plan's pieces when asked, never read by the boolean)  @ forge-bool/src/certify.rs|static|static DONE: RefCell<Vec<Record>> = const { RefCell::new(Vec::new()) };
+no-output (certificate sink, feature `certify` only, off in every build: records the plan's pieces when asked, never read by the boolean)  @ forge-bool/src/certify.rs|static|static ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+no-output (certificate sink, feature `certify` only, off in every build: records the plan's pieces when asked, never read by the boolean)  @ forge-bool/src/certify.rs|static|static OPEN: RefCell<Option<Record>> = const { RefCell::new(None) };
+no-output (certificate sink, feature `certify` only, off in every build: records the plan's pieces when asked, never read by the boolean)  @ forge-bool/src/certify.rs|static|static SKIPPED: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
+no-output (certificate sink, feature `certify` only, off in every build: records the plan's pieces when asked, never read by the boolean)  @ forge-bool/src/certify.rs|thread_local|thread_local! {
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|boxes: std::sync::OnceLock::new(),
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|boxes: std::sync::OnceLock<Vec<Box3>>,
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|drawn: std::sync::OnceLock::new(),

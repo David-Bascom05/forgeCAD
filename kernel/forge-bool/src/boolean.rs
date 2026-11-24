@@ -450,6 +450,8 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     // flat faces: the part read by reference and the result written fresh, with no copy first
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::boolean(a, b, op)? {
+        #[cfg(feature = "certify")]
+        crate::certify::skipped("the decide-once path");
         return Ok(r);
     }
     let mut out = a.clone_roomy();
@@ -468,15 +470,17 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::boolean(target, b, op)? {
         *target = r;
+        #[cfg(feature = "certify")]
+        crate::certify::skipped("the decide-once path");
         return Ok(());
     }
     // (uncompacted, so the faces a boolean leaves alone keep what was worked out of them, as the
     // target does from one boolean to the next: a face's drawing is the cost of the check)
     #[cfg(debug_assertions)]
     let before = target.clone();
-    if !imprinted(target, b, || std::borrow::Cow::Borrowed(b), op) {
+    if !took_imprint(target, b, || std::borrow::Cow::Borrowed(b), op) {
         let first = target.edges.len();
-        let r = general(target, b, op).and_then(|()| refuse_strays(target, first));
+        let r = general_into(target, b, op).and_then(|()| refuse_strays(target, first));
         decided!(crate::decisions::end("seq", &r));
         r?;
     }
@@ -584,14 +588,16 @@ pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R
         let tool = b.clone().into_body();
         if let Some(r) = crate::decide_once::boolean(target, &tool, op)? {
             *target = r;
+            #[cfg(feature = "certify")]
+            crate::certify::skipped("the decide-once path");
             return Ok(());
         }
     }
-    if imprinted(target, &b, || std::borrow::Cow::Owned(b.clone().into_body()), op) {
+    if took_imprint(target, &b, || std::borrow::Cow::Owned(b.clone().into_body()), op) {
         return Ok(());
     }
     let first = target.edges.len();
-    let r = general(target, &b.into_body(), op).and_then(|()| refuse_strays(target, first));
+    let r = general_into(target, &b.into_body(), op).and_then(|()| refuse_strays(target, first));
     decided!(crate::decisions::end("seq", &r));
     r
 }
@@ -645,7 +651,7 @@ fn imprinted<'b, S: crate::imprint::Src>(
 fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     let mut tried = Tried::default();
     let mut scratch = SCRATCH.with(|s| s.take());
-    let plan = plan(target, b, op, &mut scratch, &mut tried)?;
+    let plan = planned(target, b, op, &mut scratch, &mut tried)?;
     let mut clock = phases_on().then(forge_math::clock::Instant::now);
     let (loops, verts) = (target.loops.len(), target.vertices.len());
     let touched = touched_old(&plan);
@@ -7642,4 +7648,44 @@ pub(crate) mod log {
             reach,
         );
     }
+}
+
+// The certificate's hooks (verify/forge-certify), here at the end so that with the `certify`
+// feature off every line above is the line it was and the build is the same binary: the calls
+// above name these, which off are the plain functions.
+#[cfg(not(feature = "certify"))]
+use self::{general as general_into, imprinted as took_imprint, plan as planned};
+
+/// `plan`, its regions recorded for the certificate.
+#[cfg(feature = "certify")]
+fn planned(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, tried: &mut Tried) -> R<Plan> {
+    crate::certify::begin(a, b, op);
+    let plan = plan(a, b, op, scratch, tried)?;
+    crate::certify::pieces(a, b, &plan);
+    Ok(plan)
+}
+
+/// `general` and the stray check after it (pure: its caller runs it again), the result recorded
+/// for the certificate.
+#[cfg(feature = "certify")]
+fn general_into(target: &mut Body, b: &Body, op: Op) -> R<()> {
+    let first = target.edges.len();
+    let r = general(target, b, op).and_then(|()| refuse_strays(target, first));
+    crate::certify::finish(r.is_ok().then_some(&*target));
+    r
+}
+
+/// `imprinted`, noting a boolean that path did: it gives no certificate.
+#[cfg(feature = "certify")]
+fn took_imprint<'b, S: crate::imprint::Src>(
+    target: &mut Body,
+    src: &S,
+    body: impl FnOnce() -> std::borrow::Cow<'b, Body>,
+    op: Op,
+) -> bool {
+    let done = imprinted(target, src, body, op);
+    if done {
+        crate::certify::skipped("the local-imprint path");
+    }
+    done
 }
