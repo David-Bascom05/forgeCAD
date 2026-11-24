@@ -54,6 +54,7 @@ per_doc!(
         fg: Option<super::fg::FgPanel>,
         fg_dim: Option<super::fgdim::FgDim>,
         sheet: super::sheet::SheetUi,
+        env: Option<super::env::EnvId>,
         inspect: super::inspect::Inspect,
         drawing: Option<super::drawing::DrawingEnv>,
         new_drawing: Option<super::drawing::NewDrawing>,
@@ -64,7 +65,7 @@ per_doc!(
     ],
     app [
         theme, view, out, view_rect, places, cube_menu, cube_menu_fresh, cube_region, marking, window_box,
-        view_blocks, side_px, overlays, file_menu, style_set, settings,
+        view_blocks, view_owned, side_px, overlays, file_menu, style_set, settings,
         prefs, doc_tabs, active_doc, close_ask, open_paths, open_blocks, doc_scroll, doc_drag, agent,
         machine,
     ]
@@ -103,6 +104,7 @@ impl ShellDoc {
             fg: None,
             fg_dim: None,
             sheet: super::sheet::SheetUi::new(),
+            env: None,
             inspect: Default::default(),
             drawing: None,
             new_drawing: None,
