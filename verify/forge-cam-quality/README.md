@@ -82,14 +82,14 @@ tests/pinned.txt re-pinned for it (well_island 81.0 → 78.4 s, deep_slot 92.7 �
 
 Changes (cam/quality): stay-down linking between pocket/clear passes (greedy ready-innermost
 order, links tested exactly against the tool-centre region); feeds from engagement
-(forge_cam::engage, GE US 5,828,574-style, expired 2017-05-19); honest planned ae for base feeds; contours
+(forge_cam::engage, offline feed optimisation from a stock model); honest planned ae for base feeds; contours
 climb and cut each loop through its levels; feeds held ≥ D/2 per move.
 
 Still to do: air in
 `clear` (its outer ring is in air by design: a lemma that air rings may be dropped); retracts at
 the cut feed (G0 would need G3 against the op's own cleared voids); contour lead-in/out arcs;
-rest machining; scallop for 3-axis; engagement-controlled clearing (design in research/cam/
-engagement-clearing.md).
+rest machining; scallop for 3-axis; engagement-controlled clearing (built since: forge_cam::adaptive;
+first design in research/cam/engagement-clearing.md).
 
 ## Foreign programs: the same parts, another CAM system (rptu-10.txt)
 
@@ -183,7 +183,7 @@ at vf 1000 with `--feeds well=1000,1000`; their ramp feed is not stated): t_stop
 theirs: their Cavity Mill path is not published, so this is a check of magnitude, not of our
 timing model (+7.6 % on 327 s, the paths differing). generic-vmc3's acceleration is a
 placeholder and there is no DMU 50 record. Adaptive: forge-cam's adaptive does not take closed
-pockets, so their Adaptive run has no counterpart here.
+pockets (one-direction peels cannot open an entry hole under the cap), so their Adaptive run has no counterpart here.
 
 Ward et al. 2021 (arXiv 2102.02062): its timed pockets (cases 1–2, Table 1) are not dimensioned
 in the paper; the dimensioned pocket (case 4, 40 × 60 × 10 open) has forces, not a time. Not

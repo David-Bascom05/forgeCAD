@@ -1,7 +1,8 @@
 # CAM Phase 3: 3-axis surfacing (2026-11-24)
 
 Branch cam/3axis, stacked on claude/repo-review-mbdrlj-cam-lean (#15/#16). User doc: docs/cam.md.
-Design: design.md §7 phase 3. Not built here: adaptive / constant-engagement clearing; z-level roughing here is offset clearing.
+Design: design.md §7 phase 3. Not built here: adaptive / constant-engagement clearing (built
+later as forge_cam::adaptive); z-level roughing here is offset clearing.
 
 ## Built
 

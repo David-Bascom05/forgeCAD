@@ -37,6 +37,8 @@ pub struct Config {
     /// Straight-down feed moves take the plunge feed, every other feed move the cut feed; the
     /// planned moves and the posted text alike (to compare paths at another program's feeds).
     pub feeds: Vec<(String, f64, f64)>,
+    /// The lookahead planner's settings for t_la (None: forge-machine's grbl defaults).
+    pub lookahead: Option<forge_machine::lookahead::LookAhead>,
 }
 
 /// `moves` with every feed set from (cut, plunge): straight-down moves the plunge feed.
@@ -205,6 +207,8 @@ pub struct OpQ {
     /// Timeline times of the op's blocks (s), tool change included.
     pub t_min: f64,
     pub t_stop: f64,
+    /// The lookahead planner's estimate (forge-machine lookahead: grbl's planner), op's blocks.
+    pub t_la: f64,
     pub retracts: usize,
     pub plunges: usize,
     pub ramps: usize,
@@ -261,6 +265,7 @@ pub struct ProgQ {
     pub machine: String,
     pub t_min: f64,
     pub t_stop: f64,
+    pub t_la: f64,
     pub tool_changes: usize,
     pub accel_missing: bool,
     pub violations: usize,
@@ -885,6 +890,13 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
             Ok(tl) => {
                 pq.t_min = tl.t_min;
                 pq.t_stop = tl.t_stop;
+                // the lookahead estimate: the timeline's (grbl defaults), or re-planned with the
+                // settings asked for
+                let (seg_la, t_la) = match (&cfg.lookahead, mlib.get(&mname)) {
+                    (Some(la), Ok(def)) => forge_machine::lookahead::plan(def, &tl, la),
+                    _ => (tl.seg_la.clone(), tl.t_la),
+                };
+                pq.t_la = t_la;
                 pq.accel_missing = tl.accel_missing;
                 pq.violations = tl.violations.len();
                 // text line (1-based) → op: the op whose comment "(name kind)" came last
@@ -903,10 +915,11 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                     }
                     op_of[i + 1] = cur;
                 }
-                for sg in &tl.segments {
+                for (si, sg) in tl.segments.iter().enumerate() {
                     if let Some(Some(k)) = op_of.get(sg.line) {
                         job.ops[*k].t_min += sg.t_min;
                         job.ops[*k].t_stop += sg.t_stop;
+                        job.ops[*k].t_la += seg_la.get(si).copied().unwrap_or(sg.t_stop);
                     }
                 }
                 for mk in &tl.marks {
@@ -921,6 +934,7 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                     if let Some(Some(k)) = op_of.get(mk.line) {
                         job.ops[*k].t_min += secs;
                         job.ops[*k].t_stop += secs;
+                        job.ops[*k].t_la += secs;
                     }
                 }
             }
@@ -1020,10 +1034,11 @@ pub fn table(jobs: &[JobQ]) -> String {
                 None => {
                     let _ = writeln!(
                         o,
-                        "{stem}: program {} on {}: t_stop {} s, t_min {} s, {} tool changes, {} violations{}",
+                        "{stem}: program {} on {}: t_stop {} s, t_la {} s, t_min {} s, {} tool changes, {} violations{}",
                         p.name,
                         p.machine,
                         f(p.t_stop, 1),
+                        f(p.t_la, 1),
                         f(p.t_min, 1),
                         p.tool_changes,
                         p.violations,
@@ -1090,7 +1105,7 @@ pub fn json(jobs: &[JobQ]) -> String {
             let _ = write!(
                 o,
                 "{{\"name\":{},\"setup\":{},\"kind\":{},\"status\":{},\"tool\":{},\"d\":{},\"flutes\":{},\"rpm\":{},\"moves\":{},\
-\"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\
+\"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\
 \"retracts\":{},\"plunges\":{},\"ramps\":{},\"cycles\":{},\"corners30\":{},\"corners90\":{},\"turn_max\":{},\
 \"side\":{},\"phi_max\":{},\"phi_mean\":{},\"phi_hist\":[{}],\"climb\":{},\"conventional\":{},\"slotting\":{},\
 \"fz_target\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
@@ -1111,6 +1126,7 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(q.t_air),
                 jn(q.t_min),
                 jn(q.t_stop),
+                jn(q.t_la),
                 q.retracts,
                 q.plunges,
                 q.ramps,
@@ -1148,7 +1164,7 @@ pub fn json(jobs: &[JobQ]) -> String {
             }
             let _ = write!(
                 o,
-                "{{\"name\":{},\"setups\":[{}],\"machine\":{},\"t_min\":{},\"t_stop\":{},\"tool_changes\":{},\"accel_missing\":{},\"violations\":{},\"error\":{}}}",
+                "{{\"name\":{},\"setups\":[{}],\"machine\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"tool_changes\":{},\"accel_missing\":{},\"violations\":{},\"error\":{}}}",
                 js(&p.name),
                 p.setups
                     .iter()
@@ -1158,6 +1174,7 @@ pub fn json(jobs: &[JobQ]) -> String {
                 js(&p.machine),
                 jn(p.t_min),
                 jn(p.t_stop),
+                jn(p.t_la),
                 p.tool_changes,
                 p.accel_missing,
                 p.violations,
