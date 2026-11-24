@@ -13,6 +13,9 @@ use crate::arr::{self, Curve, Piece, Pt};
 use crate::real::{Ctx, R};
 use std::cell::Cell;
 use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::Mutex;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct P2 {
@@ -251,8 +254,61 @@ pub fn elem_tangent(cx: &mut Ctx, e: &Elem, at_end: bool) -> Pt {
     arr::tangent(cx, &e.piece, x)
 }
 
+/// Regions already validated in this process, by content: validation is a function of the
+/// region's numbers alone (each decision an exact sign of expressions built from them), so a
+/// region equal to one that passed passes again, and only its exact pieces need making. The
+/// booleans and offsets take the same regions again and again (a stock's section, a fixture's
+/// pocket). Bounded: emptied when full.
+static VALID: Mutex<Option<HashMap<u64, Vec<Region>>>> = Mutex::new(None);
+const VALID_MAX: usize = 4096;
+
+fn content_hash(rg: &Region) -> u64 {
+    let mut h = std::hash::DefaultHasher::new();
+    for l in &rg.loops {
+        l.segs.len().hash(&mut h);
+        for sg in &l.segs {
+            match *sg {
+                Seg::Line { a, b } => {
+                    0u8.hash(&mut h);
+                    [a.x, a.y, b.x, b.y].map(f64::to_bits).hash(&mut h);
+                }
+                Seg::Arc { a, b, c, ccw } => {
+                    1u8.hash(&mut h);
+                    [a.x, a.y, b.x, b.y, c.x, c.y].map(f64::to_bits).hash(&mut h);
+                    ccw.hash(&mut h);
+                }
+            }
+        }
+    }
+    h.finish()
+}
+
 /// Checks that a region is valid (module doc). Returns its exact form.
 pub fn validate(cx: &mut Ctx, rg: &Region) -> Result<Exact, RegionError> {
+    let key = content_hash(rg);
+    let known = VALID
+        .lock()
+        .map(|g| {
+            g.as_ref()
+                .and_then(|m| m.get(&key))
+                .is_some_and(|v| v.contains(rg))
+        })
+        .unwrap_or(false);
+    if known {
+        return exact(cx, rg);
+    }
+    let ex = validate_anew(cx, rg)?;
+    if let Ok(mut g) = VALID.lock() {
+        let m = g.get_or_insert_with(HashMap::new);
+        if m.len() >= VALID_MAX {
+            m.clear();
+        }
+        m.entry(key).or_default().push(rg.clone());
+    }
+    Ok(ex)
+}
+
+fn validate_anew(cx: &mut Ctx, rg: &Region) -> Result<Exact, RegionError> {
     if rg.loops.is_empty() {
         return Err(RegionError::Empty);
     }
