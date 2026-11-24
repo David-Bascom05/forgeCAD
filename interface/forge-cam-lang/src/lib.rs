@@ -5944,13 +5944,13 @@ impl Cam {
             Some(V::Tool(j)) => self.tools.get(*j).map(cutter),
             _ => None,
         };
-        // (the machine too: the fitter's smallest arc is its accelerations' at the feed)
+        // (and the fitter's smallest arc, the value it reads from the machine at the feed)
         let key = format!(
             "finish3d/3 {:?}",
             (
                 kind,
                 (a, &part.faces, part.bbox, &t.tool, cutter(t), after),
-                (s.tol, ti, h, feed, &s.machine)
+                (s.tol, ti, h, feed, arc_min_r(&s.machine, feed.0))
             )
         );
         let (paths, plan, finish) = FINISHED.get_or(key, || {
