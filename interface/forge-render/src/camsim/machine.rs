@@ -12,7 +12,6 @@ use crate::origin::WorldVert;
 use forge_cam_lang::Cam;
 use forge_cam_lang::sim::MachineRun;
 use forge_machine::collide::Verdict;
-use forge_machine::def::Prim;
 use forge_machine::kin::{self, Rigid};
 use forge_machine::sim::{Happening, Path, SegKind, Violation};
 use forge_math::dmath;
@@ -389,8 +388,18 @@ impl MachineView {
                     _ => crate::viewcube::rgb(0x6A7380),
                 }
             };
-            for p in &b.prims {
-                prim(&m, p, base, out);
+            // its real part where the record gives one that builds (the Machine Builder's own
+            // meshing: a built-in machine's embedded part), else its primitives
+            let tr = crate::machine_mesh::body_tris(def, b, None);
+            out.reserve(tr.tri.len() * 3);
+            for tri in &tr.tri {
+                for &k in tri {
+                    let (q, n) = (tr.pos[k as usize], tr.nrm[k as usize]);
+                    out.push(WorldVert {
+                        at: f3(m.apply(q)),
+                        colour: super::draw::shade_pub(base, f3(m.dir(n))),
+                    });
+                }
             }
         }
     }
@@ -398,163 +407,4 @@ impl MachineView {
 
 fn f3(p: [f64; 3]) -> [f32; 3] {
     [p[0] as f32, p[1] as f32, p[2] as f32]
-}
-
-/// One primitive placed by m, shaded.
-fn prim(m: &Rigid, p: &Prim, c: [f32; 3], out: &mut Vec<WorldVert>) {
-    let quad = |q: [[f64; 3]; 4], n: [f64; 3], out: &mut Vec<WorldVert>| {
-        let col = super::draw::shade_pub(c, f3(m.dir(n)));
-        let v = q.map(|x| f3(m.apply(x)));
-        for k in [0, 1, 2, 0, 2, 3] {
-            out.push(WorldVert {
-                at: v[k],
-                colour: col,
-            });
-        }
-    };
-    match *p {
-        Prim::Box { min: a, max: b } => {
-            let v = |x: bool, y: bool, z: bool| {
-                [
-                    if x { b[0] } else { a[0] },
-                    if y { b[1] } else { a[1] },
-                    if z { b[2] } else { a[2] },
-                ]
-            };
-            quad(
-                [
-                    v(false, false, true),
-                    v(true, false, true),
-                    v(true, true, true),
-                    v(false, true, true),
-                ],
-                [0.0, 0.0, 1.0],
-                out,
-            );
-            quad(
-                [
-                    v(false, false, false),
-                    v(false, true, false),
-                    v(true, true, false),
-                    v(true, false, false),
-                ],
-                [0.0, 0.0, -1.0],
-                out,
-            );
-            quad(
-                [
-                    v(true, false, false),
-                    v(true, true, false),
-                    v(true, true, true),
-                    v(true, false, true),
-                ],
-                [1.0, 0.0, 0.0],
-                out,
-            );
-            quad(
-                [
-                    v(false, false, false),
-                    v(false, false, true),
-                    v(false, true, true),
-                    v(false, true, false),
-                ],
-                [-1.0, 0.0, 0.0],
-                out,
-            );
-            quad(
-                [
-                    v(false, true, false),
-                    v(false, true, true),
-                    v(true, true, true),
-                    v(true, true, false),
-                ],
-                [0.0, 1.0, 0.0],
-                out,
-            );
-            quad(
-                [
-                    v(false, false, false),
-                    v(true, false, false),
-                    v(true, false, true),
-                    v(false, false, true),
-                ],
-                [0.0, -1.0, 0.0],
-                out,
-            );
-        }
-        Prim::OBox { o, axes, size } => {
-            // corners o + Σ f_k size_k axes_k (f_k 0 or 1); each face's normal ± its axis,
-            // its corners counter-clockwise seen from outside (as the Box faces above)
-            let v = |f: [u8; 3]| Prim::obox_at(&o, &axes, &size, f.map(f64::from));
-            let neg = |a: [f64; 3]| a.map(|x| -x);
-            for (k, i, j) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)] {
-                let at = |side: u8, a: u8, b: u8| {
-                    let mut f = [0u8; 3];
-                    f[k] = side;
-                    f[i] = a;
-                    f[j] = b;
-                    v(f)
-                };
-                quad([at(1, 0, 0), at(1, 1, 0), at(1, 1, 1), at(1, 0, 1)], axes[k], out);
-                quad(
-                    [at(0, 0, 0), at(0, 0, 1), at(0, 1, 1), at(0, 1, 0)],
-                    neg(axes[k]),
-                    out,
-                );
-            }
-        }
-        Prim::Cyl { base, axis, r, h } => {
-            // a frame about the axis
-            let u = if axis[2].abs() < 0.9 {
-                [0.0, 0.0, 1.0]
-            } else {
-                [1.0, 0.0, 0.0]
-            };
-            let cr = |a: [f64; 3], b: [f64; 3]| {
-                [
-                    a[1] * b[2] - a[2] * b[1],
-                    a[2] * b[0] - a[0] * b[2],
-                    a[0] * b[1] - a[1] * b[0],
-                ]
-            };
-            let e1 = cr(axis, u);
-            let l = (e1[0] * e1[0] + e1[1] * e1[1] + e1[2] * e1[2]).sqrt();
-            let e1 = [e1[0] / l, e1[1] / l, e1[2] / l];
-            let e2 = cr(axis, e1);
-            let top = [
-                base[0] + axis[0] * h,
-                base[1] + axis[1] * h,
-                base[2] + axis[2] * h,
-            ];
-            let n = 32;
-            let at = |o: [f64; 3], k: usize| {
-                let (s, c) = dmath::sin_cos(std::f64::consts::TAU * k as f64 / n as f64);
-                [
-                    o[0] + r * (c * e1[0] + s * e2[0]),
-                    o[1] + r * (c * e1[1] + s * e2[1]),
-                    o[2] + r * (c * e1[2] + s * e2[2]),
-                ]
-            };
-            for k in 0..n {
-                let (s, c) = dmath::sin_cos(std::f64::consts::TAU * (k as f64 + 0.5) / n as f64);
-                let nn = [
-                    c * e1[0] + s * e2[0],
-                    c * e1[1] + s * e2[1],
-                    c * e1[2] + s * e2[2],
-                ];
-                quad(
-                    [at(base, k), at(base, k + 1), at(top, k + 1), at(top, k)],
-                    nn,
-                    out,
-                );
-                // the caps as thin fans (two triangles per step, the second degenerate)
-                quad([top, top, at(top, k), at(top, k + 1)], axis, out);
-                quad(
-                    [base, base, at(base, k + 1), at(base, k)],
-                    [-axis[0], -axis[1], -axis[2]],
-                    out,
-                );
-            }
-        }
-    }
 }

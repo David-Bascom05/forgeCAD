@@ -822,3 +822,33 @@ fn the_checks_line_is_in_words() {
 /// The flange's bolt holes drilled alone under a clear height below the stock's top: rapids into
 /// it, and the material drilling leaves.
 pub const BROKEN: &str = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01, clear: -0.5, retract: -1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
+
+/// The played stock's mesh, built each time the playhead moves: its time and size at the mould
+/// core's end (the most cut there is), at the default cells and four times as many.
+#[test]
+fn the_stock_mesh_is_quick_to_build() {
+    use forge_render::camsim::draw::{self, StockColour};
+    let src = std::fs::read_to_string(machined().join("mold_core_finish_cam.fg")).unwrap();
+    let mut sim = Sim::open(&src, &machined());
+    for cells in [forge_render::camsim::CELLS, 4 * forge_render::camsim::CELLS] {
+        sim.set_cells(cells);
+        let end = sim.tl.total;
+        sim.stock_at(end).unwrap();
+        let (z, _) = sim.stock_shown().unwrap();
+        let mut out = vec![];
+        let t0 = std::time::Instant::now();
+        let n = 5;
+        for _ in 0..n {
+            out.clear();
+            draw::stock(z, None, StockColour::Material, 0.01, &mut out);
+        }
+        let ms = t0.elapsed().as_secs_f64() * 1e3 / n as f64;
+        eprintln!(
+            "stock mesh, {} cells ({:.3} mm): {ms:.1} ms, {} triangles",
+            z.nx * z.ny,
+            z.cell,
+            out.len() / 3
+        );
+        assert!(!out.is_empty());
+    }
+}

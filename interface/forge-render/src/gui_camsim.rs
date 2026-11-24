@@ -541,6 +541,11 @@ impl Gui {
                 }
                 "rapids" => st.rapids = on()?,
                 "played" => st.played_only = on()?,
+                // every op's path shown or not (the Display tab's per-op boxes, all at once)
+                "paths" => {
+                    let v = on()?;
+                    st.show_ops.iter_mut().for_each(|s| *s = v);
+                }
                 "stock" => st.stock = on()?,
                 "tool" => st.tool = on()?,
                 "fold" => st.folded = on()?,

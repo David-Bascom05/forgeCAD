@@ -264,3 +264,23 @@ fn issues_of_two_kinds_in_the_checks() {
     assert_eq!(st.issue, Some(k));
     assert!(!st.issue_new, "opened and scrolled to once");
 }
+
+/// The cut surface as played (task 2 of the realistic simulation): the mould core's ball-end
+/// finishing at its end, the stock alone, close. The top is lit through the columns' corners,
+/// so a ball's cusps and the stepover show. `FORGE_UI_SHOTS` keeps it.
+#[test]
+fn the_mould_cores_cut_surface() {
+    let dir = copied("surface", &["mold_core.fg", "mold_core_finish_cam.fg"]);
+    let Some(mut h) = open(&dir.join("mold_core_finish_cam.fg"), (1400.0, 860.0), true) else {
+        return;
+    };
+    for _ in 0..20 {
+        h.step();
+    }
+    h.gui
+        .camsim_command("at=1;colour=material;part=hidden;paths=0;tool=0;follow=0;fit=stock")
+        .unwrap();
+    let t0 = std::time::Instant::now();
+    shot(&mut h, "native-surface-01-mould-finish-1400x860");
+    eprintln!("stock drawn and shot: {:.0} ms", t0.elapsed().as_secs_f64() * 1e3);
+}
