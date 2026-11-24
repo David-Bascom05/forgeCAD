@@ -750,7 +750,11 @@ impl Crawl {
             .extend(judge::label(tool, matches!(how, Click::Tool), true));
         if !live {
             rec.class = Class::Disabled;
+            TIP_SHOT.with(|t| t.borrow_mut().take());
             let (why, tip) = disabled_tip(&mut h, group, tool);
+            if tip && let Some(png) = TIP_SHOT.with(|t| t.borrow_mut().take()) {
+                rec.thumb = self.write(&format!("{slug}.hover.png"), &png);
+            }
             rec.detail = why.clone();
             if !tip {
                 rec.findings.push(judge::finding(
@@ -1139,6 +1143,7 @@ fn disabled_tip(h: &mut Headless, group: &str, tool: &str) -> (String, bool) {
         });
         if !tips.is_empty() {
             let s = Snap::take(h);
+            TIP_SHOT.with(|t| *t.borrow_mut() = s.png());
             let rects: Vec<Rect> = tips.iter().map(|x| x.1).collect();
             words = judge::new_texts_in(&s, &before, &rects)
                 .iter()
