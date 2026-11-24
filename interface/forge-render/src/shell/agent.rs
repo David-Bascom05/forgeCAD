@@ -68,6 +68,13 @@ pub enum Event {
     Mode(String),
     /// The slash commands the backend takes in a message (Claude Code's `init` says them).
     Commands(Vec<String>),
+    /// What a turn took: seconds, tokens in and out, and what the API would charge for them.
+    Usage {
+        secs: f64,
+        tokens_in: u64,
+        tokens_out: u64,
+        cost: f64,
+    },
     /// A Forge file in the folder changed or appeared while the agent ran; what it held before.
     FileChanged {
         path: String,
@@ -293,6 +300,12 @@ pub struct AgentTab {
     pub mode_menu: bool,
     /// The backend's own slash commands (Claude Code's: compact, context, skills...).
     pub commands: Vec<String>,
+    /// The last turn's time, tokens in and out, and API-equivalent cost, said under it.
+    pub usage: Option<(f64, u64, u64, f64)>,
+    /// When the running turn began (the frame clock's seconds), for its time so far.
+    pub turn_started: Option<f64>,
+    /// ↑ in the box: which earlier message it holds now, counted back from the last.
+    pub recall: Option<usize>,
     /// Scroll the chat to its end next frame ("Jump to latest").
     pub jump: bool,
     /// The waiting question's buttons are in sight (or none waits): Enter may answer it.
@@ -515,6 +528,12 @@ impl AgentTab {
                 state: Asked::Waiting,
             }),
             Event::Commands(c) => self.commands = c,
+            Event::Usage {
+                secs,
+                tokens_in,
+                tokens_out,
+                cost,
+            } => self.usage = Some((secs, tokens_in, tokens_out, cost)),
             Event::Mode(m) => match Mode::from_flag(&m) {
                 Some(m) => {
                     self.mode = m;
@@ -667,6 +686,8 @@ impl AgentTab {
         });
         self.input.clear();
         self.problem = None;
+        self.usage = None;
+        self.recall = None;
         self.running = true;
         self.markup.shown = None;
         self.markup.sending = markup;
@@ -1152,16 +1173,13 @@ pub fn tool_summary(name: &str, input: &Json) -> (String, String) {
 fn rich(text: &str, width: f32, ink: Color32, code_ink: Color32) -> LayoutJob {
     let mut job = LayoutJob::default();
     job.wrap.max_width = width;
-    let plain = TextFormat {
-        font_id: sans(13.0),
-        color: ink,
+    let fmt = |font: FontId, color: Color32| TextFormat {
+        font_id: font,
+        color,
         ..Default::default()
     };
-    let code = TextFormat {
-        font_id: mono(12.0),
-        color: code_ink,
-        ..Default::default()
-    };
+    let plain = fmt(sans(13.0), ink);
+    let code = fmt(mono(12.0), code_ink);
     let mut fence = false;
     for (k, line) in text.split('\n').enumerate() {
         if k > 0 {
@@ -1175,14 +1193,86 @@ fn rich(text: &str, width: f32, ink: Color32, code_ink: Color32) -> LayoutJob {
             job.append(line, 0.0, code.clone());
             continue;
         }
-        let line = line.replace("**", "");
-        for (n, part) in line.split('`').enumerate() {
-            if !part.is_empty() {
-                job.append(part, 0.0, if n % 2 == 1 { code.clone() } else { plain.clone() });
-            }
+        for (part, f) in md_line(line, ink, code_ink) {
+            job.append(&part, 0.0, f);
         }
     }
     job
+}
+
+/// One line of Markdown as runs of text and their look: a heading in bold, a bullet as •, a
+/// quote dimmed, a table's row in mono (its columns line up), `code`, **bold**.
+fn md_line(line: &str, ink: Color32, code_ink: Color32) -> Vec<(String, TextFormat)> {
+    let fmt = |font: FontId, color: Color32| TextFormat {
+        font_id: font,
+        color,
+        ..Default::default()
+    };
+    let t = line.trim_start();
+    let indent = &line[..line.len() - t.len()];
+    // a table's row, or its rule: as it is, in mono
+    if t.starts_with('|') {
+        // its rule (|---|:--|) faint: the rows are what's read
+        let rule = t.chars().all(|c| "|-: ".contains(c));
+        return vec![(
+            line.to_string(),
+            fmt(mono(12.0), if rule { ink.gamma_multiply(0.35) } else { ink }),
+        )];
+    }
+    if let Some(h) = ["### ", "## ", "# "].iter().find_map(|p| t.strip_prefix(p)) {
+        return inline(h, fmt(semi(14.0), ink), code_ink);
+    }
+    if let Some(q) = t.strip_prefix("> ").or_else(|| (t == ">").then_some("")) {
+        return inline(q, fmt(sans(13.0), ink.gamma_multiply(0.7)), code_ink);
+    }
+    if t == "---" || t == "***" {
+        return vec![("────────".into(), fmt(sans(13.0), ink.gamma_multiply(0.4)))];
+    }
+    let mut out = vec![];
+    let body = match t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")) {
+        Some(b) => {
+            out.push((format!("{indent}• "), fmt(sans(13.0), ink)));
+            b
+        }
+        None => {
+            out.push((indent.to_string(), fmt(sans(13.0), ink)));
+            t
+        }
+    };
+    out.extend(inline(body, fmt(sans(13.0), ink), code_ink));
+    out
+}
+
+/// A line's `code` and **bold** runs, the rest in `base`.
+fn inline(text: &str, base: TextFormat, code_ink: Color32) -> Vec<(String, TextFormat)> {
+    let mut out = vec![];
+    for (n, part) in text.split('`').enumerate() {
+        if part.is_empty() {
+            continue;
+        }
+        if n % 2 == 1 {
+            out.push((
+                part.to_string(),
+                TextFormat {
+                    font_id: mono(12.0),
+                    color: code_ink,
+                    ..Default::default()
+                },
+            ));
+            continue;
+        }
+        for (m, run) in part.split("**").enumerate() {
+            if run.is_empty() {
+                continue;
+            }
+            let mut f = base.clone();
+            if m % 2 == 1 {
+                f.font_id = semi(f.font_id.size);
+            }
+            out.push((run.to_string(), f));
+        }
+    }
+    out
 }
 
 /// A reply cut into prose and fenced code blocks, in order: `(is code, text)`.
@@ -1604,6 +1694,12 @@ impl Shell {
         let chat = Rect::from_min_max(pos2(area.left(), top), pos2(area.right(), input.top()));
         self.agent_chat(ui, chat);
         self.agent_input(ui, input);
+        // the running turn's start, for its time so far
+        if !self.agent.running {
+            self.agent.turn_started = None;
+        } else if self.agent.turn_started.is_none() {
+            self.agent.turn_started = Some(ui.input(|i| i.time));
+        }
         if self.agent.running {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(120));
@@ -2025,19 +2121,19 @@ impl Shell {
                             places.push((format!("agent:tool:{id}"), r));
                             places.push((format!("agent:tool#{tools_seen}"), r));
                             if open {
+                                let mut more = None;
                                 let mut body = input.trim_end().to_string();
                                 if !output.trim().is_empty() {
                                     if !body.is_empty() {
                                         body.push_str("\n---\n");
                                     }
-                                    let out: Vec<&str> = output.trim_end().lines().take(40).collect();
+                                    // the first 40 lines, or all of them once asked
+                                    let all = a.open.contains(&format!("all:{id}"));
+                                    let n = output.lines().count();
+                                    let out: Vec<&str> =
+                                        output.trim_end().lines().take(if all { n } else { 40 }).collect();
                                     body.push_str(&out.join("\n"));
-                                    if output.lines().count() > 40 {
-                                        body.push_str(&format!(
-                                            "\n… {} more lines",
-                                            output.lines().count() - 40
-                                        ));
-                                    }
+                                    more = (n > 40).then_some((n, all));
                                 }
                                 let g = ui.fonts_mut(|f| f.layout_job(diff_job(&body, &t, inner - 12.0)));
                                 let (r, _) =
@@ -2048,6 +2144,23 @@ impl Shell {
                                 );
                                 ui.painter().rect_filled(card, 4.0, t.field);
                                 selectable(ui, pos2(card.left() + 6.0, card.top() + 4.0), g);
+                                ui.advance_cursor_after_rect(r);
+                                if let Some((n, all)) = more {
+                                    let word = if all {
+                                        "Show the first 40 lines".to_string()
+                                    } else {
+                                        format!("Show all {n} lines")
+                                    };
+                                    let (rr, resp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::click());
+                                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &word));
+                                    let ink = if resp.hovered() { t.ink } else { t.focus };
+                                    ui.painter()
+                                        .text(pos2(PAD + 6.0, rr.center().y), Align2::LEFT_CENTER, word, sans(11.0), ink);
+                                    places.push((format!("agent:tool-all:{id}"), rr));
+                                    if resp.clicked() {
+                                        toggles.push(format!("all:{id}"));
+                                    }
+                                }
                             }
                         }
                         Entry::Diff {
@@ -2272,19 +2385,45 @@ impl Shell {
                     trust_card(ui, &t, dir, w, &mut places);
                 }
                 if a.running && a.trust_ask.is_none() {
-                    let dots = ".".repeat(1 + (ui.input(|i| i.time) * 3.0) as usize % 3);
+                    let now = ui.input(|i| i.time);
+                    let dots = ".".repeat(1 + (now * 3.0) as usize % 3);
+                    // its time so far and its tools, as a terminal's spinner says them
+                    let secs = a.turn_started.map_or(0.0, |t0| now - t0);
+                    let tools = a
+                        .entries
+                        .iter()
+                        .rev()
+                        .take_while(|e| !matches!(e, Entry::User { .. }))
+                        .filter(|e| matches!(e, Entry::Tool { .. }))
+                        .count();
+                    let mut said = format!("Working{dots} {}", duration(secs));
+                    if tools > 0 {
+                        said.push_str(&format!(" · {tools} tool{}", if tools == 1 { "" } else { "s" }));
+                    }
+                    if a.queued > 0 {
+                        said.push_str(&format!(" · {} queued", a.queued));
+                    }
                     let (r, _) = ui.allocate_exact_size(vec2(w, 22.0), Sense::hover());
+                    ui.painter()
+                        .text(pos2(PAD, r.center().y), Align2::LEFT_CENTER, said, sans(12.0), t.ink2);
+                    places.push(("agent:working".into(), r));
+                } else if let Some((secs, tin, tout, cost)) = a.usage
+                    && !a.entries.is_empty()
+                {
+                    // what the last turn took, faint; what the API would charge, on hover
+                    let said = format!("{} · {} tokens in · {} out", duration(secs), thousands(tin), thousands(tout));
+                    let (r, resp) = ui.allocate_exact_size(vec2(w, 18.0), Sense::hover());
+                    resp.on_hover_text(format!(
+                        "What the API would charge for this turn: ${cost:.2}. A Claude plan isn't charged per turn; /usage says where you are in its limits."
+                    ));
                     ui.painter().text(
                         pos2(PAD, r.center().y),
                         Align2::LEFT_CENTER,
-                        if a.queued == 0 {
-                            format!("Working{dots}")
-                        } else {
-                            format!("Working{dots} · {} queued", a.queued)
-                        },
-                        sans(12.0),
-                        t.ink2,
+                        said,
+                        sans(11.0),
+                        t.ink2.gamma_multiply(0.8),
                     );
+                    places.push(("agent:usage".into(), r));
                 }
                 ui.add_space(10.0);
                 // "Jump to latest": to the end, where it sticks again
@@ -2706,6 +2845,49 @@ impl Shell {
                 run = enter && command;
                 took = enter || i.consume_key(Modifiers::NONE, Key::Tab);
             });
+        }
+        // ↑ and ↓ in an empty box (or one holding a message they brought back): the messages
+        // sent before, as in a terminal; anything typed and they're the cursor's again
+        if focused && !listing {
+            let sent: Vec<&str> = self
+                .agent
+                .entries
+                .iter()
+                .filter_map(|e| match e {
+                    Entry::User { text, .. } if !text.is_empty() => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect();
+            let holding = match self.agent.recall {
+                None => self.agent.input.is_empty(),
+                Some(k) => sent.len() > k && sent[sent.len() - 1 - k] == self.agent.input,
+            };
+            if holding && !sent.is_empty() {
+                let (up, down) = ui.input_mut(|i| {
+                    (
+                        i.consume_key(Modifiers::NONE, Key::ArrowUp),
+                        i.consume_key(Modifiers::NONE, Key::ArrowDown),
+                    )
+                });
+                let next = match (up, down, self.agent.recall) {
+                    (true, _, None) => Some(Some(0)),
+                    (true, _, Some(k)) => Some(Some((k + 1).min(sent.len() - 1))),
+                    (_, true, Some(0)) => Some(None),
+                    (_, true, Some(k)) => Some(Some(k - 1)),
+                    _ => None,
+                };
+                if let Some(next) = next {
+                    self.agent.recall = next;
+                    self.agent.input = next.map_or(String::new(), |k| sent[sent.len() - 1 - k].to_string());
+                    if let Some(mut st) = egui::TextEdit::load_state(ui.ctx(), id) {
+                        let end = egui::text::CCursor::new(self.agent.input.chars().count());
+                        st.cursor.set_char_range(Some(egui::text::CCursorRange::one(end)));
+                        st.store(ui.ctx(), id);
+                    }
+                }
+            } else {
+                self.agent.recall = None;
+            }
         }
         if took {
             self.agent.take_mention();
@@ -3146,6 +3328,25 @@ fn down_chevron(p: &egui::Painter, c: egui::Pos2, ink: Color32) {
     p.line_segment([c + vec2(0.0, 2.0), c + vec2(4.0, -2.0)], s);
 }
 
+/// A time as a person reads it: "8 s", "2 min 5 s".
+pub fn duration(secs: f64) -> String {
+    let s = secs.max(0.0).round() as u64;
+    if s < 60 {
+        format!("{s} s")
+    } else {
+        format!("{} min {} s", s / 60, s % 60)
+    }
+}
+
+/// A count, short: "340", "21.3k", "1.2M".
+pub fn thousands(n: u64) -> String {
+    match n {
+        0..1000 => n.to_string(),
+        1000..1_000_000 => format!("{:.1}k", n as f64 / 1000.0),
+        _ => format!("{:.1}M", n as f64 / 1e6),
+    }
+}
+
 /// The diff's colours in this theme: added ink and fill, removed ink and fill.
 fn diff_inks(t: &Theme) -> (Color32, Color32, Color32, Color32) {
     if t.dark {
@@ -3416,6 +3617,28 @@ fn problem_card(ui: &mut Ui, t: &Theme, pr: &Problem, w: f32, places: &mut Vec<(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn markdown_lines_read_as_markdown() {
+        let ink = Color32::WHITE;
+        let code = Color32::RED;
+        let runs = |l: &str| md_line(l, ink, code);
+        let words = |l: &str| runs(l).iter().map(|r| r.0.clone()).collect::<String>();
+        // a bullet's mark, a heading's hashes, a quote's mark: gone; what's left is the text
+        assert_eq!(words("- one `two` **three**"), "• one two three");
+        assert_eq!(words("  * nested"), "  • nested");
+        assert_eq!(words("## Changes"), "Changes");
+        assert_eq!(words("> said"), "said");
+        // bold in the bold face, code in mono and its ink, a heading in the bold face
+        let r = runs("a **b** `c`");
+        assert_eq!(r.iter().find(|x| x.0 == "b").unwrap().1.font_id, semi(13.0));
+        let c = r.iter().find(|x| x.0 == "c").unwrap();
+        assert_eq!((c.1.font_id.clone(), c.1.color), (mono(12.0), code));
+        assert_eq!(runs("# Title")[0].1.font_id, semi(14.0));
+        // a table's row whole, in mono: its columns line up
+        let t = runs("| a | b |");
+        assert_eq!((t.len(), t[0].1.font_id.clone()), (1, mono(12.0)));
+    }
 
     #[test]
     fn a_reply_is_cut_into_prose_and_its_code_blocks() {

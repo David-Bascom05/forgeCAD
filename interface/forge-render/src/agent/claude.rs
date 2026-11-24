@@ -263,7 +263,47 @@ impl Parser {
                     self.session = Some(s.to_string());
                 }
                 self.failed = false;
+                // what the turn took: its time and tokens (its cost, what the API would charge)
+                if let Some(ms) = d.get("duration_ms").and_then(Json::num) {
+                    let u = get(&d, "usage");
+                    let n = |k: &str| u.and_then(|u| u.get(k)).and_then(Json::num).unwrap_or(0.0) as u64;
+                    out.push(Event::Usage {
+                        secs: ms / 1000.0,
+                        tokens_in: n("input_tokens")
+                            + n("cache_read_input_tokens")
+                            + n("cache_creation_input_tokens"),
+                        tokens_out: n("output_tokens"),
+                        cost: d.get("total_cost_usd").and_then(Json::num).unwrap_or(0.0),
+                    });
+                }
                 out.push(Event::Done { error, stopped });
+            }
+            // the plan's limit, said when it's not simply allowed
+            "rate_limit_event" => {
+                let info = get(&d, "rate_limit_info");
+                let status = info.map_or("", |i| str_of(i, "status"));
+                if !status.is_empty() && status != "allowed" {
+                    let resets = info.and_then(|i| i.get("resetsAt")).and_then(Json::num);
+                    let when = resets.map_or(String::new(), |at| {
+                        let mins = ((at as i64 - forge_history::now()) / 60).max(0);
+                        if mins >= 120 {
+                            format!("; it resets in about {} hours", mins / 60)
+                        } else {
+                            format!("; it resets in about {mins} minutes")
+                        }
+                    });
+                    out.push(Event::Note {
+                        text: format!(
+                            "Your Claude plan's limit: {}{when}",
+                            if status == "allowed_warning" {
+                                "close to it"
+                            } else {
+                                "reached"
+                            }
+                        ),
+                        error: status != "allowed_warning",
+                    });
+                }
             }
             _ => {}
         }

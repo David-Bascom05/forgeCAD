@@ -41,7 +41,7 @@ fn parse(name: &str) -> (Vec<Event>, Parser) {
     let evs = fixture(name)
         .lines()
         .flat_map(|l| p.line(l))
-        .filter(|e| !matches!(e, Event::Mode(_) | Event::Commands(_)))
+        .filter(|e| !matches!(e, Event::Mode(_) | Event::Commands(_) | Event::Usage { .. }))
         .collect();
     (evs, p)
 }
