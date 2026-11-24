@@ -766,6 +766,90 @@ theorem inner_spec (cl : alloc.vec.Vec (Usize × Usize)) (c : Usize) (P : List (
   · have h0 : j0.val - j0.val = 0 := by omega
     refine ⟨le_refl _, hje, Or.inr ⟨rfl, by rw [h0]; simp⟩⟩
 
+theorem find_seg_at (L : List (Nat × List (Nat × Nat))) (hn : (L.map (·.1)).Nodup) (c k : Nat)
+    (hk : k < L.length) :
+    ((L.filter (fun x => x.1 == L[k].1)).flatMap (·.2)).find? (·.1 == c) = L[k].2.find? (·.1 == c) := by
+  rw [filter_face_nodup L hn k hk]; simp
+
+theorem find_seg_none (L : List (Nat × List (Nat × Nat))) (f c : Nat) (hf : f ∉ L.map (·.1)) :
+    ((L.filter (fun x => x.1 == f)).flatMap (·.2)).find? (·.1 == c) = none := by
+  rw [filter_face_none L f hf]; rfl
+
+theorem outer_spec (cf : alloc.vec.Vec Usize) (cl : alloc.vec.Vec (Usize × Usize)) (cs : alloc.vec.Vec Usize)
+    (L : List (Nat × List (Nat × Nat))) (hR : CRep cf cl cs L) (c f nf : Usize) (hnf : nf.val = cf.val.length) :
+    topo_fans.before_loop0 cf cl cs c 0#usize false f nf 0#usize ⦃ r =>
+      (r.2 = true ∧ ((L.filter (fun x => x.1 == f.val)).flatMap (·.2)).find? (·.1 == c.val) = some (c.val, r.1.val)) ∨
+      (r.2 = false ∧ ((L.filter (fun x => x.1 == f.val)).flatMap (·.2)).find? (·.1 == c.val) = none) ⦄ := by
+  have hcfl : cf.val.length = L.length := by have := congrArg List.length hR.cf; simpa using this
+  have hcll : cl.val.length = (L.flatMap (·.2)).length := by have := congrArg List.length hR.cl; simpa using this
+  have hcfk : ∀ k (hk : k < L.length), (cf.val[k]'(by omega)).val = L[k].1 := by
+    intro k hk; have := congrArg (fun l => l[k]?) hR.cf
+    simp [List.getElem?_eq_getElem hk, List.getElem?_eq_getElem (show k < cf.val.length by omega)] at this
+    exact this
+  have hlen : nf.val = L.length := by omega
+  have hnfm := le_max nf
+  unfold topo_fans.before_loop0
+  apply loop.spec_decr_nat
+    (fun (y : Usize × Bool × Usize) => L.length - y.2.2.val)
+    (fun y => y.2.2.val ≤ L.length ∧
+      ((y.2.2.val = L.length ∧ ((y.2.1 = true ∧ ((L.filter (fun x => x.1 == f.val)).flatMap (·.2)).find? (·.1 == c.val) = some (c.val, y.1.val)) ∨
+        (y.2.1 = false ∧ ((L.filter (fun x => x.1 == f.val)).flatMap (·.2)).find? (·.1 == c.val) = none))) ∨
+       (y.2.1 = false ∧ f.val ∉ (L.take y.2.2.val).map (·.1))))
+  · rintro ⟨into0, found, k⟩ ⟨hle, hinv⟩
+    simp only at hle hinv ⊢
+    unfold topo_fans.before_loop0.body
+    split
+    · rename_i hlt
+      have hlt' : k.val < L.length := by rw [← hlen]; scalar_tac
+      rcases hinv with ⟨hkl, -⟩ | ⟨hf0, hnot⟩
+      · omega
+      step as ⟨fk, hfk⟩
+      have hfkv : fk.val = L[k.val].1 := by rw [hfk]; exact hcfk k.val hlt'
+      have htake : (L.take (k.val + 1)).map (·.1) = (L.take k.val).map (·.1) ++ [L[k.val].1] := by
+        rw [List.take_succ_eq_append_getElem hlt']; simp only [List.map_append, List.map_cons, List.map_nil]
+      split
+      · rename_i hff
+        have hffv : L[k.val].1 = f.val := by rw [← hfkv, hff]
+        have hcsl := hR.cs_len
+        step as ⟨j0, hj0⟩
+        have h1 : (1#usize).val = 1 := rfl
+        step with usize_add_wspec k 1#usize (by rw [h1]; omega) as ⟨k1, hk1⟩
+        have hk1v : k1.val = k.val + 1 := by rw [hk1]; exact add_val k 1#usize (lt_size_of_le_max _ (by rw [h1]; omega))
+        step as ⟨e, he⟩
+        have hj0v : j0.val = ((L.take k.val).flatMap (·.2)).length := by
+          rw [hj0, ← getElem!_pos cs.val k.val (by omega)]; exact hR.cs k.val (by omega)
+        have hev : e.val = ((L.take (k.val + 1)).flatMap (·.2)).length := by
+          rw [he, ← getElem!_pos cs.val k1.val (by omega), hR.cs k1.val (by omega), hk1v]
+        have hlen2 : e.val = j0.val + L[k.val].2.length := by
+          rw [hev, hj0v, List.take_succ_eq_append_getElem hlt', List.flatMap_append, List.length_append]; simp
+        have hseg : ((cl.val.map (fun p => (p.1.val, p.2.val))).drop j0.val).take (e.val - j0.val) = L[k.val].2 := by
+          rw [hR.cl, hj0v, show e.val - _ = L[k.val].2.length by omega]; exact seg_flatMap L k.val hlt'
+        have hcl2 : e.val ≤ cl.val.length := by
+          rw [hcll, hev]
+          conv_rhs => rw [← List.take_append_drop (k.val + 1) L]
+          rw [List.flatMap_append, List.length_append]; omega
+        rw [hf0]
+        step with inner_spec cl c L[k.val].2 j0 e hseg (by omega) hcl2 into0 as ⟨into1, found1, hr⟩
+        refine ⟨by omega, Or.inl ⟨by omega, ?_⟩, by omega⟩
+        rw [← hffv, find_seg_at L hR.nodup c.val k.val hlt']
+        exact hr
+      · rename_i hff
+        have h1 : (1#usize).val = 1 := rfl
+        step with usize_add_wspec k 1#usize (by rw [h1]; omega) as ⟨k1, hk1⟩
+        have hk1v : k1.val = k.val + 1 := by rw [hk1]; exact add_val k 1#usize (lt_size_of_le_max _ (by rw [h1]; omega))
+        rw [hk1v]
+        refine ⟨by omega, Or.inr ⟨hf0, ?_⟩, by omega⟩
+        rw [htake]; simp only [List.mem_append, List.mem_singleton, not_or]
+        exact ⟨hnot, fun h => hff (UScalar.eq_of_val_eq (by rw [hfkv, h]))⟩
+    · rename_i hlt
+      have hk : k.val = L.length := by rw [← hlen]; scalar_tac
+      simp only [WP.spec_ok]
+      rcases hinv with ⟨-, h⟩ | ⟨hf0, hnot⟩
+      · exact h
+      · rw [hk, List.take_length] at hnot
+        exact Or.inr ⟨hf0, find_seg_none L f.val c.val hnot⟩
+  · simp
+
 end before
 
 end forge_topo
