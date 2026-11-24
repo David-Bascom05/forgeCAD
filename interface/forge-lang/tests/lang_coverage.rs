@@ -149,7 +149,8 @@ fn families() -> Vec<(&'static str, Vec<String>, Model)> {
     use forge_lang::*;
     const CAM: &str = "interface/forge-cam-lang/src/lib.rs";
     const TURN: &str = "interface/forge-turn-lang/src/lib.rs";
-    const ROBOT: &str = "interface/forge-lang/src/robot.rs";
+    // the robot reader (forge-urdf); its word lists are forge_lang::robot's
+    const ROBOT: &str = "interface/forge-urdf/src/robot.rs";
     vec![
         ("core", owned(builtins::BUILTINS), Model::Shadow),
         ("shapes", owned(shapes::NAMES), Model::Shadow),
@@ -194,7 +195,7 @@ fn families() -> Vec<(&'static str, Vec<String>, Model)> {
             arms(ROBOT, "fn value(&self, f: &str"),
             Model::Closed,
         ),
-        ("robot-constants", const_list(ROBOT, "RESERVED"), Model::Own),
+        ("robot-constants", owned(&robot::RESERVED), Model::Own),
     ]
 }
 
@@ -216,6 +217,9 @@ const FAMILY_CONSTS: &[&str] = &[
     "interface/forge-lang/src/drawing/doc.rs::FUNCTIONS",
     "interface/forge-lang/src/syntax.rs::KEYWORDS",
     "interface/forge-lang/src/robot.rs::RESERVED",
+    // the robot families' words, the reader's arms (`lean_family_lists_are_the_rusts`)
+    "interface/forge-lang/src/robot.rs::STATEMENTS",
+    "interface/forge-lang/src/robot.rs::VALUES",
 ];
 
 /// The crates whose sources define what a document may say.
@@ -223,6 +227,7 @@ const LANG_DIRS: &[&str] = &[
     "interface/forge-lang/src",
     "interface/forge-cam-lang/src",
     "interface/forge-turn-lang/src",
+    "interface/forge-urdf/src",
 ];
 
 fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -279,8 +284,8 @@ fn const_lists() -> Vec<String> {
 
 /// The words a document's first statement is tested against, with the file that tests it:
 /// `n == "WORD"` on a line matching `ExprKind::Name(n)`, the program's `.first()` read on it or
-/// on one of the three lines before (rustfmt breaks a `matches!`), and an assembly's
-/// `l == "WORD"` first line.
+/// on one of the three lines before (rustfmt breaks a `matches!`), or `n == HEADER` with the file's
+/// `const HEADER: &str = "WORD"`, and an assembly's `l == "WORD"` first line.
 fn headers() -> BTreeSet<(String, String)> {
     let mut files = vec![];
     rs_files(&root().join("interface"), &mut files);
@@ -299,6 +304,14 @@ fn headers() -> BTreeSet<(String, String)> {
                 && let Some(i) = line.find("n == \"")
             {
                 out.extend(quoted(&line[i..]).into_iter().take(1).map(|w| (w, rel_of(&f))));
+            }
+            if first && line.contains("ExprKind::Name(n)") && line.contains("n == HEADER") {
+                let w = src
+                    .lines()
+                    .find_map(|l| l.trim_start().strip_prefix("pub const HEADER: &str = "))
+                    .or_else(|| src.lines().find_map(|l| l.trim_start().strip_prefix("const HEADER: &str = ")))
+                    .expect("`n == HEADER` and no `const HEADER: &str`");
+                out.extend(quoted(w).into_iter().take(1).map(|w| (w, rel_of(&f))));
             }
             if line.contains(".is_some_and(|l| l == \"") {
                 let i = line.find("l == \"").unwrap();
@@ -378,7 +391,7 @@ fn edit_ops() -> BTreeSet<String> {
     ));
     // a document kind's own edits, outside `Op`: `robot::edit`'s
     out.extend(
-        enum_variants("interface/forge-lang/src/robot.rs", "pub enum Edit {")
+        enum_variants("interface/forge-urdf/src/robot.rs", "pub enum Edit {")
             .into_iter()
             .map(|v| format!("robot::{v}")),
     );
@@ -712,6 +725,12 @@ fn lean_family_lists_are_the_rusts() {
         "Families.robotValue"
     );
     assert_eq!(lean(&src, "drawingFns"), rust("drawing"), "Families.drawingFns");
+    // forge_lang::robot's word lists are the reader's arms: STATEMENTS the statement calls (an
+    // assignment's or a bare one's, `shared` read as its own statement kind), VALUES the values'
+    let arm: BTreeSet<String> = rust("robot-assign").union(&rust("robot-stmt")).cloned().collect();
+    let stmts: BTreeSet<String> = owned(&forge_lang::robot::STATEMENTS).into_iter().filter(|w| w != "shared").collect();
+    assert_eq!(stmts, arm, "robot::STATEMENTS vs the reader's statement arms");
+    assert_eq!(owned(&forge_lang::robot::VALUES).into_iter().collect::<BTreeSet<_>>(), rust("robot-value"), "robot::VALUES");
     let hd: BTreeSet<String> = lean(&src, "headers");
     let words: BTreeSet<String> = headers().into_iter().map(|h| h.0).collect();
     assert!(hd.is_subset(&words), "Families.headers: {hd:?} vs {words:?}");
