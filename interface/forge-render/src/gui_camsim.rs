@@ -421,7 +421,7 @@ pub fn geometry(
             })
             .flat_map(|c| [c.a.clone(), c.b.clone()])
             .collect();
-        mv.draw(st.t, &hit, &mut solid);
+        mv.draw_with(st.t, &hit, &mut solid, world);
     }
     // the toolpath
     let show = PathShow {

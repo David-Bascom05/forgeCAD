@@ -8,6 +8,7 @@
 
 use super::Marker;
 use super::timeline::{ArcOf, Kind, OpSpan, Seg, Timeline};
+use crate::machine_mesh::Tris;
 use crate::origin::WorldVert;
 use forge_cam_lang::Cam;
 use forge_cam_lang::sim::MachineRun;
@@ -368,41 +369,127 @@ impl MachineView {
         out
     }
 
-    /// The machine's bodies at time t, in the part's frame (shaded); `hit` names drawn red.
+    /// The machine's bodies at time t, in the part's frame (shaded); `hit` names drawn red. A
+    /// body the user attached a model to (forge_machine_builder::models: a maker's model, read
+    /// from their own library, never shipped) is drawn as that model, moving with its link; a
+    /// whole-machine model on the base. An enclosure is drawn see-through into `glass`, so it never
+    /// hides the cut. The checks keep the record's envelopes either way.
     pub fn draw(&self, t: f64, hit: &[String], out: &mut Vec<WorldVert>) {
+        self.draw_with(t, hit, out, &mut Vec::new());
+    }
+
+    /// `draw`, the see-through bodies (an enclosure) into `glass`.
+    pub fn draw_with(&self, t: f64, hit: &[String], out: &mut Vec<WorldVert>, glass: &mut Vec<WorldVert>) {
         let def = &self.run.def;
         let q = self.q_at(t);
         let pose = kin::pose(def, &q);
         let w = self.to_part(&q);
+        let models = attached(&def.name);
+        let colour = |name: &str| match name {
+            n if n.contains("table") || n.contains("bed") || n.contains("base") => {
+                crate::viewcube::rgb(0x4A5260)
+            }
+            n if n.contains("spindle") || n.contains("head") => crate::viewcube::rgb(0x8C939E),
+            _ => crate::viewcube::rgb(0x6A7380),
+        };
+        let put = |tr: &Tris,
+                   m: &Rigid,
+                   base: [f32; 3],
+                   see: bool,
+                   out: &mut Vec<WorldVert>,
+                   glass: &mut Vec<WorldVert>| {
+            let dst = if see { glass } else { out };
+            dst.reserve(tr.tri.len() * 3);
+            for tri in &tr.tri {
+                for &k in tri {
+                    let (q, n) = (tr.pos[k as usize], tr.nrm[k as usize]);
+                    let mut c = super::draw::shade_pub(base, f3(m.dir(n)));
+                    if see {
+                        c[3] = 0.12;
+                    }
+                    dst.push(WorldVert {
+                        at: f3(m.apply(q)),
+                        colour: c,
+                    });
+                }
+            }
+        };
         for b in &def.bodies {
             let l = kin::link(def, &pose, &b.link);
             let m = w.then(l);
             let base = if hit.iter().any(|h| h == &b.name) {
                 super::draw::look::FAIL
             } else {
-                match b.name.as_str() {
-                    n if n.contains("table") || n.contains("bed") || n.contains("base") => {
-                        crate::viewcube::rgb(0x4A5260)
-                    }
-                    n if n.contains("spindle") || n.contains("head") => crate::viewcube::rgb(0x8C939E),
-                    _ => crate::viewcube::rgb(0x6A7380),
-                }
+                colour(&b.name)
             };
-            // its real part where the record gives one that builds (the Machine Builder's own
-            // meshing: a built-in machine's embedded part), else its primitives
-            let tr = crate::machine_mesh::body_tris(def, b, None);
-            out.reserve(tr.tri.len() * 3);
-            for tri in &tr.tri {
-                for &k in tri {
-                    let (q, n) = (tr.pos[k as usize], tr.nrm[k as usize]);
-                    out.push(WorldVert {
-                        at: f3(m.apply(q)),
-                        colour: super::draw::shade_pub(base, f3(m.dir(n))),
-                    });
-                }
+            let see = b.name.contains("enclosure");
+            match models
+                .iter()
+                .find(|(body, _)| body.as_deref() == Some(b.name.as_str()))
+            {
+                // the user's model of it, placed in the base frame at home: moved by its link
+                Some((_, tr)) => put(tr, &m, base, see, out, glass),
+                // its real part where the record gives one that builds (the Machine Builder's
+                // own meshing: a built-in machine's embedded part), else its primitives
+                None => put(
+                    &crate::machine_mesh::body_tris(def, b, None),
+                    &m,
+                    base,
+                    see,
+                    out,
+                    glass,
+                ),
             }
         }
+        // a whole-machine model: on the base, still
+        for (_, tr) in models.iter().filter(|(body, _)| body.is_none()) {
+            put(tr, &w, colour("base"), false, out, glass);
+        }
     }
+}
+
+/// The models the user attached to a machine (their own library: `forgecad machine model
+/// attach` / `split`), each placed in the base frame at home, with the body it is drawn as (None:
+/// the whole machine). Read once per change of the machine's models.toml; none where it has none
+/// or a file does not read (the record's bodies are drawn then).
+fn attached(machine: &str) -> std::sync::Arc<Vec<(Option<String>, std::sync::Arc<Tris>)>> {
+    use std::sync::{Arc, Mutex, OnceLock};
+    type Kept = Mutex<
+        std::collections::HashMap<
+            String,
+            (
+                Option<std::time::SystemTime>,
+                Arc<Vec<(Option<String>, Arc<Tris>)>>,
+            ),
+        >,
+    >;
+    static KEPT: OnceLock<Kept> = OnceLock::new();
+    let Some(dir) = forge_machine_builder::models::dir(machine) else {
+        return Arc::new(vec![]);
+    };
+    let index = dir.join(forge_machine_builder::models::INDEX);
+    let stamp = forge_dirs::fs::metadata(&index)
+        .ok()
+        .and_then(|m| m.modified().ok());
+    let kept = KEPT.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    if let Some((s, v)) = kept.lock().expect("no panics while held").get(machine)
+        && *s == stamp
+    {
+        return v.clone();
+    }
+    let v: Vec<(Option<String>, Arc<Tris>)> = forge_machine_builder::models::load_in(&dir)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|md| {
+            let t = crate::machine_model::file_tris(&dir.join(&md.file)).ok()?;
+            Some((md.body.clone(), Arc::new(crate::machine_model::placed(&t, md))))
+        })
+        .collect();
+    let v = Arc::new(v);
+    kept.lock()
+        .expect("no panics while held")
+        .insert(machine.to_string(), (stamp, v.clone()));
+    v
 }
 
 fn f3(p: [f64; 3]) -> [f32; 3] {
