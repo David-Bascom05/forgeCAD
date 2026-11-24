@@ -24,7 +24,7 @@
 use crate::toml::{Table, num, nums, text};
 use crate::{Cite, LibError, cite};
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default)]
 pub struct Group {
     /// P M K N S H.
     pub group: String,
@@ -53,6 +53,36 @@ pub struct Group {
     /// Every value cited (cite.rs): `real = true` records must cite all of them.
     pub real: bool,
     pub cites: Vec<Cite>,
+}
+
+/// Equal field for field, the numbers by their bits: an absent value (NaN, unknown) equals
+/// another absent one, as two libraries read from the same files must compare equal.
+impl PartialEq for Group {
+    fn eq(&self, o: &Group) -> bool {
+        let b = |x: f64| x.to_bits();
+        let bv = |v: &[f64]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+        let br = |r: Option<[f64; 2]>| r.map(|r| [r[0].to_bits(), r[1].to_bits()]);
+        self.group == o.group
+            && self.name == o.name
+            && [
+                self.vc_carbide,
+                self.vc_hss,
+                self.fz_d1,
+                self.fz_d20,
+                self.kc1_1,
+                self.mc,
+            ]
+            .map(b)
+                == [o.vc_carbide, o.vc_hss, o.fz_d1, o.fz_d20, o.kc1_1, o.mc].map(b)
+            && br(self.kc1_1_range) == br(o.kc1_1_range)
+            && br(self.mc_range) == br(o.mc_range)
+            && bv(&self.fz_d_rows) == bv(&o.fz_d_rows)
+            && bv(&self.fz_rows) == bv(&o.fz_rows)
+            && self.source == o.source
+            && self.note == o.note
+            && self.real == o.real
+            && self.cites == o.cites
+    }
 }
 
 impl Group {
@@ -84,10 +114,17 @@ impl Group {
             }
         };
         let (kc1_1_range, mc_range) = (range("kc1_1_range")?, range("mc_range")?);
-        let mut required: Vec<String> = ["vc_carbide", "vc_hss", "fz_d1", "fz_d20", "kc1_1", "mc"]
+        // vc_hss, kc1_1 and mc may be absent (plastics: no Kienzle data published; no HSS
+        // speed): NaN, read as unknown (no generic speed; power not checked), never as 0
+        let mut required: Vec<String> = ["vc_carbide", "fz_d1", "fz_d20"]
             .iter()
             .map(|s| s.to_string())
             .collect();
+        for k in ["vc_hss", "kc1_1", "mc"] {
+            if num(t, k).is_some() {
+                required.push(k.to_string());
+            }
+        }
         if kc1_1_range.is_some() {
             required.push("kc1_1_range".into());
         }
@@ -119,11 +156,11 @@ impl Group {
             cites,
             name: text(t, "name").unwrap_or("").to_string(),
             vc_carbide: n("vc_carbide")?,
-            vc_hss: n("vc_hss")?,
+            vc_hss: num(t, "vc_hss").unwrap_or(f64::NAN),
             fz_d1: n("fz_d1")?,
             fz_d20: n("fz_d20")?,
-            kc1_1: n("kc1_1")?,
-            mc: n("mc")?,
+            kc1_1: num(t, "kc1_1").unwrap_or(f64::NAN),
+            mc: num(t, "mc").unwrap_or(f64::NAN),
             source: text(t, "source").unwrap_or("").to_string(),
             note: text(t, "note").unwrap_or("").to_string(),
             group: g,
@@ -198,7 +235,8 @@ impl Substrate {
 
 /// The ISO 513 group of a forge-material family, by the standard's own classes (P steel,
 /// M stainless steel, K cast iron, N non-ferrous, S heat-resistant alloys and titanium,
-/// H hardened steel). None for families ISO 513 does not class (plastics, rubber, wood).
+/// H hardened steel), and O for plastics (not an ISO 513 class: the makers' own grouping).
+/// None for rubber and wood.
 /// A hardened steel's H, or a superalloy filed under another family, comes from a `[[stock]]`
 /// record, never from this.
 pub fn iso_group_of_family(family: &str) -> Option<&'static str> {
@@ -208,6 +246,8 @@ pub fn iso_group_of_family(family: &str) -> Option<&'static str> {
         "iron" => Some("K"),
         "aluminium" | "copper" => Some("N"),
         "titanium" => Some("S"),
+        // ISO 513's classes stop at H; makers file plastics apart (cutting.toml group O)
+        "plastic" => Some("O"),
         _ => None,
     }
 }
@@ -275,7 +315,11 @@ impl Stock {
         };
         let (lo, hi) = (self.vc_rows[0], self.vc_rows[n - 1]);
         let (kc, mc, how) = if n == 1 && lo == 0.0 {
-            (self.kc1_1_rows[0], self.mc_rows[0], "a single value (no cutting speed stated)".to_string())
+            (
+                self.kc1_1_rows[0],
+                self.mc_rows[0],
+                "a single value (no cutting speed stated)".to_string(),
+            )
         } else if vc <= lo || n == 1 {
             (
                 self.kc1_1_rows[0],

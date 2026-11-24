@@ -1106,7 +1106,7 @@ mod tests {
     #[test]
     fn builtin_reads_and_shapes() {
         let l = Library::builtin();
-        assert!(l.tools.len() >= 15 && l.holders.len() >= 3 && l.machines.len() == 2 && l.cutting.len() == 6);
+        assert!(l.tools.len() >= 15 && l.holders.len() >= 3 && l.machines.len() == 2 && l.cutting.len() == 7);
         let m = l.machine("generic-vmc3").unwrap();
         assert_eq!(m.joints.len(), 3);
         assert_eq!(m.power_at(750.0), Some(5.5));

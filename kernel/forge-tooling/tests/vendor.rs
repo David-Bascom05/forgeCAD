@@ -184,10 +184,23 @@ fn builtin_files_are_named_by_vendor() {
 #[test]
 fn cutting_data_is_cited_per_value() {
     let lib = Library::builtin();
-    assert_eq!(lib.cutting.len(), 6);
+    assert_eq!(lib.cutting.len(), 7);
     for g in &lib.cutting {
         assert!(g.real, "group {}", g.group);
-        for f in ["vc_carbide", "vc_hss", "fz_d1", "fz_d20", "kc1_1", "mc"] {
+        // a value the record holds is cited; plastics (O) hold no Kienzle data and no HSS speed
+        let held = |f: &str| match f {
+            "vc_hss" => g.vc_hss.is_finite(),
+            "kc1_1" => g.kc1_1.is_finite(),
+            "mc" => g.mc.is_finite(),
+            _ => true,
+        };
+        if g.group == "O" {
+            assert!(!g.kc1_1.is_finite() && !g.mc.is_finite());
+        }
+        for f in ["vc_carbide", "vc_hss", "fz_d1", "fz_d20", "kc1_1", "mc"]
+            .into_iter()
+            .filter(|f| held(f))
+        {
             let c = g
                 .cites
                 .iter()
@@ -242,7 +255,8 @@ fn stock_kienzle_rows() {
             .is_none()
     );
     assert_eq!(forge_tooling::feeds::iso_group_of_family("aluminium"), Some("N"));
-    assert_eq!(forge_tooling::feeds::iso_group_of_family("plastic"), None);
+    assert_eq!(forge_tooling::feeds::iso_group_of_family("plastic"), Some("O"));
+    assert_eq!(forge_tooling::feeds::iso_group_of_family("rubber"), None);
     use forge_tooling::feeds::Substrate;
     assert_eq!(Substrate::of("Solid Carbide"), Substrate::Carbide);
     assert_eq!(Substrate::of("Micrograin Carbide"), Substrate::Carbide);

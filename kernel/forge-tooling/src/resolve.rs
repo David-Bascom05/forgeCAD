@@ -350,6 +350,9 @@ pub fn milling_on(
                 Substrate::Hss => g.vc_hss,
                 Substrate::Other | Substrate::Unknown => return None,
             };
+            if !v.is_finite() {
+                return None;
+            }
             let coat = if tool.coating.is_empty() {
                 String::new()
             } else {
@@ -686,6 +689,15 @@ pub fn milling_on(
                 limit: avail.unwrap_or(f64::NAN),
                 unit,
                 why: "no cutting-force data (kc1.1, mc) for the part's material".into(),
+            },
+            // a group with no Kienzle data (plastics): not checked, never a pass
+            (Some(_), _) if !have.is_finite() => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: f64::NAN,
+                limit: avail.unwrap_or(f64::NAN),
+                unit,
+                why: "no cutting-force data (kc1.1, mc) published for this material group".into(),
             },
             (Some(_), None) => Check {
                 what,
@@ -1034,6 +1046,14 @@ pub fn turning(
                 limit: f64::NAN,
                 unit,
                 why: "no cutting-force data (kc1.1, mc) for the part's material".into(),
+            },
+            (Some(_), Some((have, _, _))) if !have.is_finite() => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: f64::NAN,
+                limit: f64::NAN,
+                unit,
+                why: "no cutting-force data (kc1.1, mc) published for this material group".into(),
             },
             (Some(_), Some((have, Some(lim), p))) if at.iter().all(|q| q.power_avail.is_some()) => Check {
                 what,

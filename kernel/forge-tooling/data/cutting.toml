@@ -693,3 +693,48 @@ value = "Modulus of elasticity 219 x 10^3 N/mm2 at 20 C (S705 HSS-Co: 224)"
 path = "de_ratio"
 status = "unknown"
 basis = "as for carbide: Kops and Vo 1990 (CIRP Annals 39(1):93-96), 'approximately 80%', read only as a search-engine snippet of the abstract; unverified"
+
+# Plastics: not an ISO 513 class (the makers group them apart; forge-material family plastic -> O).
+# No Kienzle data is published for them, so kc1_1 and mc are absent: power and torque read
+# 'not checked'. Heat is the limit (melting, chip re-welding): the speed is to be supervised.
+
+[[group]]
+group = "O"
+name = "plastics (unfilled: acrylic, acetal, nylon, PEEK, PSU, PEI ...)"
+real = true
+vc_carbide = 304.8
+fz_d1 = 0.02872
+fz_d20 = 0.48771
+fz_d_rows = [3.175, 6.35, 9.525, 12.7, 19.05, 25.4]
+fz_rows = [0.09119, 0.18212, 0.23216, 0.30963, 0.46457, 0.61925]
+source = "per value: see the cites"
+note = "speed to be supervised: plastics melt (Harvey prints the warning); no HSS speed, no Kienzle data"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+source = "Harvey Tool, Speeds and Feeds: End Mills for Plastics - Finishers - Square Upcut - 3 Flute - High Helix (902131), https://ecomm.productivity.com/customer/docs/skudocs/HAT2_Speeds_Feeds_902131.pdf"
+taken = "2026-11-24"
+value = "Acrylic, Acetal, Delrin, Lucite, Nylon 6, Nylon 6/6, PAI, PI, PEEK, Plexiglas, PS, PSU, Torlon 4203, Ultem 1000; Unfilled; 100 > 150 Rr; SFM 800 - 1200"
+basis = "the middle of the printed range (1000 SFM); the HDPE/PTFE/UHMW group prints 1200-1600 SFM, held to this one (slower); 'Since the melting point varies greatly from plastic to plastic, the speed (RPM) used should be closely supervised' (same sheet)"
+[[group.cite]]
+path = "fz_d_rows"
+status = "estimate"
+source = "Harvey Tool, Speeds and Feeds: End Mills for Plastics - Finishers - Square Upcut - 3 Flute - High Helix (902131), https://ecomm.productivity.com/customer/docs/skudocs/HAT2_Speeds_Feeds_902131.pdf"
+taken = "2026-11-24"
+value = "diameter columns .125, .250, .375, .500, .750, 1.000 in"
+basis = "the sheet's diameter columns, converted exactly"
+[[group.cite]]
+path = "fz_rows"
+status = "estimate"
+source = "Harvey Tool, Speeds and Feeds: End Mills for Plastics - Finishers - Square Upcut - 3 Flute - High Helix (902131), https://ecomm.productivity.com/customer/docs/skudocs/HAT2_Speeds_Feeds_902131.pdf"
+taken = "2026-11-24"
+value = "Semi-Roughing (.35 x Dia radial, 1 x Dia axial), acrylic/acetal/nylon/PEEK group: .00359 .00717 .00914 .01219 .01829 .02438 in"
+basis = "a 3-flute plastics finisher's semi-roughing chip load at 0.35 D, held as the group's chip (thinning at 0.35 D is 0.95: near a slot's); the HDPE group prints slightly larger chips"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "the 1/8 in row scaled by diameter to 1 mm (only used if the rows were absent)"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "the rows interpolated to 20 mm (only used if the rows were absent)"

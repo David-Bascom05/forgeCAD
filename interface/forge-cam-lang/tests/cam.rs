@@ -1424,3 +1424,33 @@ fn material_group_kienzle_value() {
     );
     assert!(p.why.contains("group S"), "{}", p.why);
 }
+
+/// Plastics: the family's group O (Harvey's plastics sheet: speed and chip by diameter), no
+/// Kienzle data, so power and torque are 'not checked', never a pass.
+#[test]
+fn plastics_have_their_own_group_and_no_power_check() {
+    use forge_tooling::resolve::{Source, Verdict};
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace(
+            "part(\"flange.fg\", group: \"N\")",
+            "part(\"flange.fg\", material: \"PEEK\")",
+        );
+    let cam = forge_cam_lang::run(&src, &dir);
+    let top = cam
+        .ops
+        .iter()
+        .find(|o| o.name == "top")
+        .unwrap()
+        .resolved
+        .clone()
+        .unwrap();
+    assert_eq!((top.vc.v, top.vc.source), (304.8, Source::Material));
+    assert!(top.chip.note.contains("group O"), "{}", top.chip.note);
+    for w in ["power", "torque"] {
+        let c = top.checks.iter().find(|c| c.what == w).unwrap();
+        assert_eq!(c.verdict, Verdict::NotChecked, "{w}: {}", c.why);
+    }
+    assert!(top.deflection.is_nan());
+}

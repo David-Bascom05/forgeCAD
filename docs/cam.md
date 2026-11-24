@@ -123,6 +123,11 @@ speed column; cermet, ceramic, CBN and PCD have none, so the maker's preset or t
 is needed; a coating moves no generic number (the maker's preset carries it). With no speed or
 chip from any layer the op is refused, with the fix.
 
+Plastics (forge-material family `plastic`) are group O: not an ISO 513 class, the makers' own
+grouping. Its speed and chip by diameter are Harvey's plastics finisher sheet (acrylic, acetal,
+nylon, PEEK ... unfilled), cited; no Kienzle data is published, so power and torque read `not
+checked`, and no HSS speed (an HSS tool needs the user's speed). Plastics melt: supervise the speed.
+
 Each value is resolved in layers, each over the one before: `default` → `material` (the
 stock's data, else its group in cutting.toml) → `library` (the tool's `[[tool.preset]]` for the group, with its cite) →
 `user`. Then only two things lower a value, and both are reported with the reason:
