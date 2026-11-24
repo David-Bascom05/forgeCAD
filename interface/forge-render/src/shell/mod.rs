@@ -27,6 +27,7 @@ mod dwgdoc_ui;
 pub mod dwgprops;
 mod empty;
 pub mod env;
+pub mod studio_env;
 pub mod fg;
 pub mod fgasm;
 pub mod fgdialog;
@@ -387,6 +388,8 @@ pub struct Shell {
     pub sheet: sheet::SheetUi,
     /// The environment the document is in (`env/`), if any.
     pub env: Option<env::EnvId>,
+    /// The Render Studio's choices (`studio_env.rs`): appearances, light, camera, output.
+    pub studio: studio_env::StudioUi,
     /// This frame, the environment draws the view itself: the view's own chrome (its toolbar,
     /// the cube's words, the navigation bar) stands down.
     pub view_owned: bool,
@@ -464,6 +467,7 @@ impl Default for Shell {
             file_menu: false,
             sheet: sheet::SheetUi::new(),
             env: None,
+            studio: Default::default(),
             view_owned: false,
             style_set: None,
             inspect: Default::default(),

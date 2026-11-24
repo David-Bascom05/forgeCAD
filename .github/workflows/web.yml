@@ -217,6 +217,11 @@ jobs:
           node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/idle.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/cam.cjs "$GITHUB_WORKSPACE/target/web"
+      # the Render Studio's tracer on WebGPU against the native golden picture
+      - name: render studio
+        if: matrix.test == 'e2e' && !matrix.threaded
+        working-directory: interface/forge-render
+        run: node web/tests/studio.cjs "$GITHUB_WORKSPACE/target/web"
       - name: parity (shard ${{ matrix.test }} of 3)
         if: matrix.test != 'e2e'
         working-directory: interface/forge-render

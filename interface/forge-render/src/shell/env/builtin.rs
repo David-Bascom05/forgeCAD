@@ -5,14 +5,14 @@
 use super::super::ribbon::{Group, Tool};
 use super::super::sheet::SheetCmd;
 use super::super::{Action, FLAT_TAB, Shell, THERMO_TAB};
-use super::{Entered, EnvId, Environment, RENDER_TAB};
+use super::{Entered, EnvId, Environment};
 
 pub(super) fn of(id: EnvId) -> &'static dyn Environment {
     match id {
         EnvId::Thermoform => &Thermoform,
         EnvId::FlatPattern => &FlatPattern,
         EnvId::BendSim => &super::bendsim::BendSim,
-        EnvId::RenderStudio => &RenderStudio,
+        EnvId::RenderStudio => &super::render::RenderStudio,
         EnvId::Drawing => &Drawing,
         EnvId::Manufacture => &super::workspaces::Manufacture,
         EnvId::MachineBuilder => &super::workspaces::MachineBuilder,
@@ -41,24 +41,6 @@ fn as_groups(gs: Vec<(&'static str, Vec<Button>, Vec<Button>)>) -> Vec<Group> {
             icons: vec![],
         })
         .collect()
-}
-
-fn group(name: &'static str, big: Vec<Tool>, small: Vec<Tool>) -> Group {
-    Group {
-        name,
-        big,
-        small,
-        icons: vec![],
-    }
-}
-
-fn tool(name: &'static str, icon: &'static str, action: Option<Action>, on: bool) -> Tool {
-    Tool {
-        name,
-        icon,
-        action,
-        on,
-    }
 }
 
 /// A Forge part (not an assembly) is open.
@@ -161,65 +143,6 @@ impl Environment for FlatPattern {
 
     fn still(&self, s: &Shell) -> bool {
         s.sheet.flat_env && s.fg.is_some()
-    }
-}
-
-/// The look of the picture: style, ground, shadows, camera. Its content (materials, lights,
-/// environments, render output) is the Render Studio worker's.
-struct RenderStudio;
-
-impl Environment for RenderStudio {
-    /// It works on the part: the part's tree stays.
-    fn keeps_tree(&self) -> bool {
-        true
-    }
-
-    fn id(&self) -> EnvId {
-        EnvId::RenderStudio
-    }
-
-    fn available(&self, s: &Shell) -> Result<(), String> {
-        match s.fg {
-            Some(_) => Ok(()),
-            None => Err("open a part or an assembly first".into()),
-        }
-    }
-
-    fn enter(&self, _s: &mut Shell) -> Result<Entered, String> {
-        Ok(Entered::Mode)
-    }
-
-    fn tabs(&self) -> &'static [(usize, &'static str)] {
-        &[(RENDER_TAB, "Render Studio")]
-    }
-
-    fn groups(&self, s: &Shell, _tab: usize) -> Vec<Group> {
-        let v = s.view;
-        vec![
-            group(
-                "Scene",
-                vec![tool(
-                    super::super::visual_style::BUTTON,
-                    "lines",
-                    Some(Action::VisualStyle(v.style)),
-                    false,
-                )],
-                super::super::visual_style::ground_tools(&s.settings),
-            ),
-            group(
-                "Camera",
-                vec![tool(
-                    "Perspective",
-                    "eye",
-                    Some(Action::Parallel(!v.parallel)),
-                    !v.parallel,
-                )],
-                vec![
-                    tool("Fit All", "fit", Some(Action::FitAll), false),
-                    tool("Home", "home", Some(Action::Home), false),
-                ],
-            ),
-        ]
     }
 }
 
