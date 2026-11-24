@@ -752,6 +752,19 @@ fn feed_over(q: i64, k: u32, max_feed: f64) -> bool {
     (q as f64) > fmax || fmax.is_nan()
 }
 
+/// The refusal for a hole that is not drilled along −z in this setup: one that points up opens
+/// on the other side (a setup that holds the part that way up drills it); any other direction
+/// needs a setup of its own.
+fn not_down(hn: &str, dir: [f64; 3]) -> String {
+    if dir[0] == 0.0 && dir[1] == 0.0 && dir[2] > 0.0 {
+        format!(
+            "the hole `{hn}` opens on the other side: it is drilled from the side it opens on, in a setup that holds the part that way up"
+        )
+    } else {
+        format!("the hole `{hn}` is not drilled along −z: it needs its own setup")
+    }
+}
+
 fn dist_pts(a: forge_cam_geom::region::P2, b: forge_cam_geom::region::P2) -> f64 {
     ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt()
 }
@@ -984,6 +997,13 @@ impl Cam {
         Ok(out)
     }
 
+    /// Whether setup su holds part p: p itself, or p turned over (a hole of p is then read from
+    /// the turned part, which carries p's holes in its frame).
+    fn holds(&self, su: usize, p: usize) -> bool {
+        let sp = self.setups[su].part;
+        sp == p || self.parts[sp].turn_of == Some(p)
+    }
+
     /// The part turned over about x, made once.
     fn turned_part(&mut self, i: usize) -> Result<usize, String> {
         if let Some(k) = self.parts.iter().position(|p| p.turn_of == Some(i)) {
@@ -1001,8 +1021,19 @@ impl Cam {
             turn_of: Some(i),
             file: p.file.clone(),
             faces,
-            // a hole is drilled from the side it opens on, in the setup that sees it so
-            holes: vec![],
+            // the holes in the turned frame, (x, y, z) -> (x, -y, h - z), their direction
+            // turned too: one drilled from below is now drilled from above, and one from
+            // above is refused here as before (a hole is drilled from the side it opens on)
+            holes: p
+                .holes
+                .iter()
+                .map(|hl| {
+                    let mut t = hl.clone();
+                    t.places = hl.places.iter().map(|q| [q[0], -q[1], h - q[2]]).collect();
+                    t.dir = [hl.dir[0], -hl.dir[1], -hl.dir[2]];
+                    t
+                })
+                .collect(),
             bbox: ([lo[0], -hi[1], h - hi[2]], [hi[0], -lo[1], h - lo[2]]),
             group: p.group.clone(),
         };
@@ -2520,7 +2551,7 @@ impl Cam {
     ) -> Result<Vec<OpPath>, String> {
         use forge_cam_geom::check::Surf;
         let (pi, hn) = match a.get("#1") {
-            Some(V::Holes(p, n)) if *p == self.setups[su].part => (*p, n.clone()),
+            Some(V::Holes(p, n)) if self.holds(su, *p) => (self.setups[su].part, n.clone()),
             Some(V::Holes(..)) => {
                 return Err("the hole is milled from the side it opens on: in a setup that holds the part that way up".into());
             }
@@ -2534,7 +2565,7 @@ impl Cam {
             ));
         };
         if hole.dir != [0.0, 0.0, -1.0] {
-            return Err(format!("the hole `{hn}` is not along −z: it needs its own setup"));
+            return Err(not_down(&hn, hole.dir));
         }
         if t.tool.kind != Kind::ThreadMill {
             return Err(format!("thread_mill: `{}` is not a thread mill", t.tool.id));
@@ -3641,25 +3672,51 @@ impl Cam {
                             let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                             let leave = get_num(a, "leave", Some(0.0))?;
                             let mut paths = vec![];
+                            // a hole the tool does not fit (a drilled hole in the section) is left
+                            // to its own op: skipped, said, and G4 lists what it leaves
+                            let total = pockets.len();
+                            let mut skipped: Vec<[f64; 4]> = vec![];
                             for rg in pockets {
-                                paths.push(
-                                    ops::pocket(
-                                        &rg,
-                                        ops::Cut {
-                                            tool: t,
-                                            tidx: ti,
-                                            h,
-                                            feed: (vf, vp),
-                                            ramp_feed: None,
-                                            lead_feed: None,
-                                        },
-                                        ops::Span { top, bottom, step },
-                                        stepover,
-                                        leave,
-                                        ramp,
-                                    )
-                                    .map_err(|e| format!("{e:?}"))?,
+                                let p = ops::pocket(
+                                    &rg,
+                                    ops::Cut {
+                                        tool: t,
+                                        tidx: ti,
+                                        h,
+                                        feed: (vf, vp),
+                                        ramp_feed: None,
+                                        lead_feed: None,
+                                    },
+                                    ops::Span { top, bottom, step },
+                                    stepover,
+                                    leave,
+                                    ramp,
                                 );
+                                match p {
+                                    Ok(p) => paths.push(p),
+                                    Err(ops::OpError::ToolTooBig { .. }) => {
+                                        let mut b = [
+                                            f64::INFINITY,
+                                            f64::INFINITY,
+                                            f64::NEG_INFINITY,
+                                            f64::NEG_INFINITY,
+                                        ];
+                                        for l in &rg.loops {
+                                            for sg in &l.segs {
+                                                let q = sg.start();
+                                                b = [
+                                                    b[0].min(q.x),
+                                                    b[1].min(q.y),
+                                                    b[2].max(q.x),
+                                                    b[3].max(q.y),
+                                                ];
+                                            }
+                                        }
+                                        skipped.push(b);
+                                        continue;
+                                    }
+                                    Err(e) => return Err(format!("{e:?}")),
+                                }
                                 let o = if stepover <= 0.5 * d {
                                     opening(&rg, 0.5 * d)
                                 } else {
@@ -3669,10 +3726,26 @@ impl Cam {
                                     voids.push((Some(o), bottom));
                                 }
                             }
+                            if paths.is_empty() {
+                                return Err(format!(
+                                    "pocket: the {d} mm tool fits none of the section's {total} holes between z {top} and {bottom}"
+                                ));
+                            }
+                            if !skipped.is_empty() {
+                                self.warnings.push(format!(
+                                    "{name}: {} of {total} holes in the section are too small for the {d} mm tool and are left uncut (G4 lists them): {}",
+                                    skipped.len(),
+                                    skipped
+                                        .iter()
+                                        .map(|b| format!("x {:.2}..{:.2} y {:.2}..{:.2}", b[0], b[2], b[1], b[3]))
+                                        .collect::<Vec<_>>()
+                                        .join("; ")
+                                ));
+                            }
                             Ok(paths)
                         } else {
                             let (pi, hn) = match a.get("#1") {
-                            Some(V::Holes(p, n)) if *p == self.setups[su].part => (*p, n.clone()),
+                            Some(V::Holes(p, n)) if self.holds(su, *p) => (self.setups[su].part, n.clone()),
                             Some(V::Holes(..)) => return Err("the hole is drilled from the side it opens on: in a setup that holds the part that way up".into()),
                             _ => return Err("pocket(SETUP, PART.HOLE, tool: ..) or pocket(SETUP, from:, to:, tool: ..)".into()),
                         };
@@ -3683,9 +3756,7 @@ impl Cam {
                                 .unwrap()
                                 .clone();
                             if hole.dir != [0.0, 0.0, -1.0] {
-                                return Err(format!(
-                                    "the hole `{hn}` is not drilled along −z: it needs its own setup"
-                                ));
+                                return Err(not_down(&hn, hole.dir));
                             }
                             let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                             let mut paths = vec![];
@@ -3906,7 +3977,7 @@ impl Cam {
         voids: &mut Vec<(Option<Region>, f64)>,
     ) -> Result<Vec<OpPath>, String> {
         let (pi, hn) = match a.get("#1") {
-            Some(V::Holes(p, n)) if *p == self.setups[su].part => (*p, n.clone()),
+            Some(V::Holes(p, n)) if self.holds(su, *p) => (self.setups[su].part, n.clone()),
             Some(V::Holes(..)) => {
                 return Err("the hole is drilled from the side it opens on: in a setup that holds the part that way up".into());
             }
@@ -3919,9 +3990,7 @@ impl Cam {
             .unwrap()
             .clone();
         if hole.dir != [0.0, 0.0, -1.0] {
-            return Err(format!(
-                "the hole `{hn}` is not drilled along −z: it needs its own setup"
-            ));
+            return Err(not_down(&hn, hole.dir));
         }
         let through = hole.depth.is_none();
         let depth = match hole.depth {
@@ -4658,13 +4727,21 @@ fn thread_params(a: &BTreeMap<String, V>) -> Result<ThreadParams, String> {
     })
 }
 
+/// The section's outer boundary (its loops inside no other: the outline) or its holes (the
+/// loops directly inside an outer one), as a region. An island standing in a hole (a loop two
+/// deep, counter-clockwise like an outline) is neither: taken as an outline it made the region
+/// refused (a sense at the wrong depth), and a hole in such an island is not the part's hole.
 fn outer_or_inner(sec: &Region, outer: bool) -> Result<Region, String> {
     let mut cx = forge_cam_geom::real::Ctx::new();
     let ex = forge_cam_geom::region::validate(&mut cx, sec).map_err(|e| format!("{e:?}"))?;
     let mut loops = vec![];
     for l in 0..sec.loops.len() {
-        let ccw = forge_cam_geom::region::loop_ccw(&mut cx, &ex, l);
-        if ccw == outer {
+        // its depth: how many other loops hold a point of it (its first vertex)
+        let q = ex.elems[ex.loops[l].0].piece.s;
+        let depth = (0..sec.loops.len())
+            .filter(|&k| k != l && forge_cam_geom::region::inside_loop(&mut cx, &ex, k, q))
+            .count();
+        if depth == if outer { 0 } else { 1 } {
             loops.push(if outer {
                 sec.loops[l].clone()
             } else {
