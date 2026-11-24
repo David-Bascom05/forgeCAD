@@ -30,6 +30,8 @@ impl Tab {
 pub enum Kind {
     /// A length in mm (a number, a name or an expression).
     Len,
+    /// Forge text as written (a tuple: `area: (x0, y0, x1, y1)`).
+    Text,
     /// An angle in degrees.
     Deg,
     /// One of these words (written quoted).
@@ -92,7 +94,7 @@ pub struct OpSpec {
     pub fields: &'static [Field],
 }
 
-use Kind::{Choice, Count, Deg, Hole, Len, Sketch, Z};
+use Kind::{Choice, Count, Deg, Hole, Len, Sketch, Text, Z};
 use Tab::{Geometry, Heights, Linking, Passes};
 
 const TOOL: Field = req("tool", "Tool", Tab::Tool, Kind::Tool);
@@ -287,6 +289,104 @@ pub const OPS: &[OpSpec] = &[
             f("sweep", "Pass direction", Passes, Deg, "0 (from +x)"),
             f("leave", "Radial stock to leave", Passes, Len, "0 (walls)"),
             f("step_length", "Step length", Linking, Len, "the engine's"),
+        ],
+    },
+    // 3D (forge-cam-3d's surfacing, docs/cam.md): rough by levels, then finish
+    OpSpec {
+        func: "zlevel",
+        label: "3D Rough",
+        group: "3D",
+        icon: "cam_3d_rough",
+        what: "3-axis roughing by levels: offset passes clearing what the tool reaches at each level",
+        fields: &[
+            TOOL,
+            f("area", "Area (x0, y0, x1, y1)", Geometry, Text, "the stock"),
+            f("from", "Top height", Heights, Len, "the stock's top"),
+            f("to", "Bottom height", Heights, Len, "the language's default"),
+            f("step", "Max stepdown", Passes, Len, "the language's default"),
+            f("stepover", "Stepover", Passes, Len, "the language's default"),
+            f("leave", "Stock to leave", Passes, Len, "the language's default"),
+            f("grid", "Grid", Passes, Len, "the language's default"),
+        ],
+    },
+    OpSpec {
+        func: "parallel",
+        label: "Parallel",
+        group: "3D",
+        icon: "cam_3d_parallel",
+        what: "3-axis finishing: zig-zag rows dropped onto the part, each move proven",
+        fields: &[
+            TOOL,
+            f("area", "Area (x0, y0, x1, y1)", Geometry, Text, "the stock"),
+            f("stepover", "Stepover", Passes, Len, "the language's default"),
+            f("angle", "Row angle", Passes, Deg, "the language's default"),
+            f("sample", "Max sample spacing", Passes, Len, "the language's default"),
+            f("leave", "Stock to leave", Passes, Len, "the language's default"),
+        ],
+    },
+    OpSpec {
+        func: "waterline",
+        label: "Waterline",
+        group: "3D",
+        icon: "cam_3d_waterline",
+        what: "Constant-z contours where the tool reaches the part, level by level (steep walls)",
+        fields: &[
+            TOOL,
+            f("area", "Area (x0, y0, x1, y1)", Geometry, Text, "the stock"),
+            f("from", "Top height", Heights, Len, "the language's default"),
+            f("to", "Bottom height", Heights, Len, "the language's default"),
+            f("step", "Stepdown", Passes, Len, "the language's default"),
+            f("grid", "Grid", Passes, Len, "the language's default"),
+        ],
+    },
+    OpSpec {
+        func: "pencil",
+        label: "Pencil",
+        group: "3D",
+        icon: "cam_3d_pencil",
+        what: "Along the part's creases: concave corners and fillets tighter than the tool",
+        fields: &[
+            TOOL,
+            f("area", "Area (x0, y0, x1, y1)", Geometry, Text, "the stock"),
+            f("grid", "Grid", Passes, Len, "the language's default"),
+            f("kink", "Crease threshold (1/mm)", Passes, Len, "1 / the tool's diameter"),
+            f("min_len", "Shortest run kept", Passes, Len, "the language's default"),
+        ],
+    },
+    OpSpec {
+        func: "scallop",
+        label: "Scallop",
+        group: "3D",
+        icon: "cam_3d_scallop",
+        what: "Constant stepover measured along the part: parallels from the area's edge or steep walls",
+        fields: &[
+            TOOL,
+            f("area", "Area (x0, y0, x1, y1)", Geometry, Text, "the stock"),
+            f("cusp", "Cusp height", Passes, Len, "the language's default"),
+            f("stepover", "Stepover (or a cusp)", Passes, Len, "the language's default"),
+            f("walls", "Walls steeper than", Passes, Deg, "the language's default"),
+            f("from", "Top height", Heights, Len, "the language's default"),
+            f("to", "Bottom height", Heights, Len, "the language's default"),
+            f("grid", "Grid", Passes, Len, "the language's default"),
+        ],
+    },
+    OpSpec {
+        func: "rest",
+        label: "Rest Finish",
+        group: "3D",
+        icon: "cam_3d_rest",
+        what: "Rows only where an earlier tool left material this one reaches",
+        fields: &[
+            TOOL,
+            req("after", "After tool", Geometry, Kind::Tool),
+            f("area", "Area (x0, y0, x1, y1)", Geometry, Text, "the stock"),
+            f("after_leave", "Stock the earlier tool left", Passes, Len, "the language's default"),
+            f("min", "Least material to cut", Passes, Len, "0.05"),
+            f("stepover", "Stepover", Passes, Len, "the language's default"),
+            f("cusp", "Cusp height", Passes, Len, "the language's default"),
+            f("margin", "Grow by", Passes, Len, "the language's default"),
+            f("angle", "Row angle", Passes, Deg, "the language's default"),
+            f("grid", "Grid", Passes, Len, "the language's default"),
         ],
     },
 ];
