@@ -3504,8 +3504,59 @@ impl Cam {
                 .find(|t| t.kind == k && (t.dc - d).abs() < 1e-9)
                 .cloned()
         };
-        let drill = find(&self.lib, Kind::Drill, (drill_d * 100.0).round() / 100.0)
-            .or_else(|| find(&self.lib, Kind::Drill, drill_d));
+        // a hole with an ISO class (`fit: "H7"`) is drilled under its size and reamed: the
+        // library's drill 0.1 to 0.4 under it nearest 0.2 under (the usual reaming allowance),
+        // then a reamer of its size
+        let ream = match hole.class {
+            Some(class) if hole.thread.is_none() => {
+                let reamer = self
+                    .lib
+                    .tools
+                    .iter()
+                    .find(|t| t.kind == Kind::Reamer && (t.dc - hole.d).abs() < 1e-9)
+                    .cloned();
+                let Some(reamer) = reamer else {
+                    out.fix = Some(format!(
+                        "add a {} mm {class} reamer to the project's cam/*.tools.toml",
+                        hole.d
+                    ));
+                    return Err(format!("NeedTool: no {} mm reamer for `{hn}` ({class})", hole.d));
+                };
+                Some((reamer, class))
+            }
+            _ => None,
+        };
+        let drill = match ream {
+            Some(_) => self
+                .lib
+                .tools
+                .iter()
+                .filter(|t| {
+                    t.kind == Kind::Drill && t.dc <= hole.d - 0.1 + 1e-9 && t.dc >= hole.d - 0.4 - 1e-9
+                })
+                .min_by(|a, b| {
+                    (a.dc - (hole.d - 0.2))
+                        .abs()
+                        .total_cmp(&(b.dc - (hole.d - 0.2)).abs())
+                })
+                .cloned(),
+            None => find(&self.lib, Kind::Drill, (drill_d * 100.0).round() / 100.0)
+                .or_else(|| find(&self.lib, Kind::Drill, drill_d)),
+        };
+        let drill_d = if ream.is_some() { hole.d - 0.2 } else { drill_d };
+        // a plain hole of a dowel's size with no class: said (the part may want `fit: "H7"`)
+        if ream.is_none()
+            && hole.thread.is_none()
+            && hole.screw.is_none()
+            && hole.counterbore.is_none()
+            && hole.countersink.is_none()
+            && [3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 16.0, 20.0].contains(&hole.d)
+        {
+            self.warnings.push(format!(
+                "{}: `{hn}` is a dowel's size ({} mm) with no fit: if it locates a pin, give it one in the part (hole(.., fit: \"H7\")) and it is drilled under size and reamed",
+                out.name, hole.d
+            ));
+        }
         let Some(drill) = drill else {
             out.fix = Some(format!(
                 "add a drill of {drill_d} mm to the project's cam/*.tools.toml"
@@ -3691,6 +3742,46 @@ impl Cam {
             }
         ));
         out.tool = Some(ti);
+        // the ream, after the drill, to the hole's depth (a reamer cuts no point)
+        if let Some((reamer, class)) = ream {
+            let ti = add(self, reamer, base_t + 5)?;
+            let t = &self.tools[ti];
+            let f = self
+                .feeds_for(su, t, t.tool.dc, t.tool.dc)
+                .map(|x| 0.1 * x.vf.min(2000.0))
+                .unwrap_or(100.0);
+            paths.push(ops::holes(
+                &hole.places,
+                CycleKind::Ream,
+                ops::Cut {
+                    tool: t,
+                    tidx: ti,
+                    h,
+                    feed: (f, f),
+                    ramp_feed: None,
+                    lead_feed: None,
+                },
+                depth,
+                0.0,
+            ));
+            for p in &hole.places {
+                let st = p2(p[0] + 0.5 * hole.d, p[1]);
+                voids.push((
+                    Some(Region {
+                        loops: vec![Loop {
+                            segs: vec![Seg::Arc {
+                                a: st,
+                                b: st,
+                                c: p2(p[0], p[1]),
+                                ccw: true,
+                            }],
+                        }],
+                    }),
+                    p[2] - depth,
+                ));
+            }
+            plan.push(format!("ream {} ({class})", self.tools[ti].tool.id));
+        }
         // the counterbore, after the drill: a counterbore tool of its diameter plunged to its
         // depth, else the largest end mill under its diameter pocketing its circle (a helical
         // entry, which the drilled hole leaves in air)

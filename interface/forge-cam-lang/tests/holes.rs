@@ -85,3 +85,33 @@ fn a_through_hole_stops_short_of_the_support_or_says_what_stock_it_needs() {
         "{r}"
     );
 }
+
+#[test]
+fn a_hole_with_an_iso_class_is_drilled_under_size_and_reamed() {
+    let cam = forge_cam_lang::run(&doc("h = drill(op1, f.pin, plan: \"auto\")"), &dir());
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    let o = cam.ops.iter().find(|o| o.name == "h").unwrap();
+    assert_eq!(o.status, "built", "{:?}", o.refusal);
+    assert!(
+        o.plan.iter().any(|p| p.starts_with("drill drill-9.8")),
+        "{:?}",
+        o.plan
+    );
+    assert!(
+        o.plan.iter().any(|p| p == "ream reamer-10h7 (H7)"),
+        "{:?}",
+        o.plan
+    );
+}
+
+#[test]
+fn a_dowel_sized_hole_with_no_class_is_said() {
+    let cam = forge_cam_lang::run(&doc("h = drill(op1, f.pointed, plan: \"drill\")"), &dir());
+    assert!(
+        cam.warnings
+            .iter()
+            .any(|w| w.starts_with("h: `pointed` is a dowel's size (5 mm) with no fit")),
+        "{:?}",
+        cam.warnings
+    );
+}
