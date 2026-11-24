@@ -3458,11 +3458,11 @@ impl Cam {
                 .filter_map(|c| Some(ends.get(c.move_index)?[2].min(ends.get(c.move_index + 1)?[2])))
                 .fold(f64::INFINITY, f64::min);
             let op = &mut self.ops[oi];
-            op.deepest = op.deepest.min(low);
             if op.posted.len() <= pi {
                 op.posted.resize(pi + 1, posted.clone());
             }
             op.posted[pi] = posted.clone();
+            op.deepest = op.deepest.min(low);
             op.moves += posted.moves.len();
             op.pairs += sum.pairs;
             op.cells += sum.cells;

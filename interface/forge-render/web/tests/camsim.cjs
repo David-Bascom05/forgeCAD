@@ -21,9 +21,10 @@ prog = program(op1)
 async function sim(p, cmd) {
   await p.evaluate((c) => window.forgecad.fc.app_camsim(c), cmd);
   // the words are taken on the app's next turn; a frame read after them draws them
-  await t.pixels(p);
-  await t.pixels(p);
-  return p.evaluate(() => window.forgecad.state());
+  const frame = await t.pixels(p);
+  const st = await p.evaluate(() => window.forgecad.state());
+  st.frame = frame;
+  return st;
 }
 
 (async () => {
@@ -57,7 +58,7 @@ async function sim(p, cmd) {
     for (const [name, cmd] of shots) {
       st = await sim(p, cmd);
       t.check(p);
-      const f = await t.pixels(p);
+      const f = st.frame;
       assert.ok(f.colours > 40, `${name}: ${f.colours} colours`);
       if (last >= 0) assert.notEqual(f.changed, 0, `${name}: nothing changed`);
       last = f.colours;
@@ -75,10 +76,10 @@ async function sim(p, cmd) {
     st = await sim(p, "source=machine;tab=program;at=0.3;colour=material;part=ghost;fit=machine");
     assert.equal(st.camsim.source, "generic-vmc3", JSON.stringify(st.camsim));
     assert.ok(st.camsim.markers > 0, "the machine run's contacts are markers");
-    let f9 = await t.pixels(p);
+    let f9 = st.frame;
     console.log(`ok - posted code on ${st.camsim.source}: ${st.camsim.total.toFixed(1)} s, ${st.camsim.markers} markers (${t.shot("sim-09-machine.png", f9)})`);
     st = await sim(p, "marker=0;tab=checks");
-    f9 = await t.pixels(p);
+    f9 = st.frame;
     console.log(`ok - at the machine's first issue: t ${st.camsim.t.toFixed(2)} (${t.shot("sim-10-machine-issue.png", f9)})`);
     await sim(p, "source=toolpath;fit=stock");
 
@@ -87,7 +88,7 @@ async function sim(p, cmd) {
     st = await t.until(p, (s) => s.camsim && s.camsim.refused > 0, "the refused document");
     assert.ok(st.camsim.markers > 0);
     st = await sim(p, "marker=0;tab=checks");
-    const f = await t.pixels(p);
+    const f = st.frame;
     console.log(`ok - refused: ${st.camsim.refused} op, ${st.camsim.markers} markers, at the first: t ${st.camsim.t.toFixed(2)} (${t.shot("sim-08-refused-checks.png", f)})`);
     t.check(p);
   } finally {
