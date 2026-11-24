@@ -21,12 +21,12 @@ pub fn narrow(screen_w: f32) -> bool {
     screen_w > 0.0 && screen_w < 1280.0
 }
 pub mod run;
-pub mod schema;
 pub mod toollib;
+pub mod schema;
 pub mod turnview;
 mod ui;
-pub use ui::{CYCLE_TIP, certified_words, check_lines, cycle_words, text_panel_h};
-pub use ui::{groups, status_line};
+pub use ui::{CYCLE_TIP, alt_clear_words, certified_words, check_lines, cycle_words, text_panel_h};
+pub use ui::{Blocked, disabled_why, groups, release_block, release_words, status_fix, status_line};
 
 use doc::{Edit, Role, Stmt};
 use std::path::PathBuf;
@@ -89,6 +89,8 @@ pub enum Ask {
     AutoGenerate,
     CheckNow,
     SectionView,
+    /// The unplaced setup's dialog (a refusal's fix: G5 needs its `at:`).
+    PlaceSetup,
     /// NC Programs: every program's files with the host's Save As.
     ExportNc,
     /// The setup sheet and tool list with the host's Save As.
@@ -117,6 +119,7 @@ impl From<Ask> for Cmd {
             Ask::AutoGenerate => Cmd::AutoGenerate,
             Ask::CheckNow => Cmd::CheckNow,
             Ask::SectionView => Cmd::SectionView,
+            Ask::PlaceSetup => Cmd::PlaceSetup,
             Ask::ExportNc => Cmd::ExportNc(None),
             Ask::ExportSheet => Cmd::ExportSheet,
             Ask::RepostStale => Cmd::RepostStale,
@@ -160,6 +163,8 @@ pub enum Cmd {
     CheckNow,
     /// The turning view, shown or not.
     SectionView,
+    /// The unplaced setup's dialog.
+    PlaceSetup,
     /// Post program NAME (or all) into the document's folder.
     PostNc(Option<String>),
     /// The Post Process dialog at the K-th program.
@@ -322,6 +327,10 @@ pub struct CamWs {
     pub view_w: f32,
     /// The view's bottom the panels cover (the timeline, Document Text) when last framed.
     pub view_cover: f32,
+    /// The turning Section window where it was drawn last frame (it covers the view's bottom
+    /// right), and the right and bottom insets it was framed around.
+    pub section_at: Option<egui::Rect>,
+    pub view_side: [f32; 2],
     pub framed: Option<crate::camera::Camera>,
     pub posted_cache: Option<(u64, Vec<nc::PostedRow>)>,
 }
@@ -392,6 +401,8 @@ impl CamWs {
             sim_tab: false,
             view_w: 0.0,
             view_cover: 0.0,
+            section_at: None,
+            view_side: [0.0, 0.0],
             framed: None,
             prog_field: None,
         };
@@ -515,6 +526,8 @@ impl CamWs {
     }
 
     fn reread(&mut self) {
+        // what was said is about the text before
+        self.said = None;
         if let Some(s) = doc::read(&self.text) {
             self.stmts = s;
         }
@@ -555,6 +568,7 @@ impl CamWs {
 
     /// A run finished (the host's).
     pub fn ran(&mut self, r: run::Run) {
+        self.said = None;
         if self.running.as_deref() == Some(r.text.as_str()) {
             self.running = None;
         }
@@ -716,6 +730,17 @@ impl CamWs {
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
             Cmd::SectionView => self.turnview.open = !self.turnview.open,
+            // the first setup with no `at:` (its work offset in machine coordinates), opened
+            Cmd::PlaceSetup => {
+                let su = self
+                    .stmts
+                    .iter()
+                    .find(|s| s.role == Role::Setup && s.arg("at").is_none())
+                    .map(|s| s.name.clone());
+                if let Some(su) = su {
+                    self.command(Cmd::Edit(su));
+                }
+            }
             Cmd::PostNc(n) => self.post_programs(n.as_deref()),
             Cmd::PostAt(k) => {
                 self.close_windows();
@@ -1266,9 +1291,7 @@ impl CamWs {
         let file = dir.join("tools.toml");
         let mut text = forge_dirs::fs::read_to_string(&file).unwrap_or_default();
         if text.is_empty() {
-            text.push_str(
-                "# The project's own tools (the Manufacture workspace's tool library writes here).\n",
-            );
+            text.push_str("# The project's own tools (the Manufacture workspace's tool library writes here).\n");
         }
         text.push('\n');
         text.push_str(toml);
@@ -1358,9 +1381,7 @@ fn call_args(inner: &str) -> Vec<(Option<String>, String)> {
         }
         // `key: value` when the text before the first colon is a name
         match piece.split_once(':') {
-            Some((k, v))
-                if k.trim().chars().all(|c| c.is_alphanumeric() || c == '_') && !k.trim().is_empty() =>
-            {
+            Some((k, v)) if k.trim().chars().all(|c| c.is_alphanumeric() || c == '_') && !k.trim().is_empty() => {
                 out.push((Some(k.trim().to_string()), v.trim().to_string()))
             }
             _ => out.push((None, piece.to_string())),
@@ -1389,9 +1410,7 @@ pub fn setup_args(s: &Stmt) -> Vec<(String, String)> {
         let Some(k) = &x.key else { continue };
         if k == "stock" {
             let t = x.text.trim();
-            let Some((head, inner)) = t.split_once('(') else {
-                continue;
-            };
+            let Some((head, inner)) = t.split_once('(') else { continue };
             let inner = inner.strip_suffix(')').unwrap_or(inner);
             let kws = call_args(inner);
             let kind = match head.trim() {
@@ -1448,12 +1467,7 @@ mod tests {
                 lathe: false,
             };
             let kw = CamWs::setup_kw(&d);
-            assert_eq!(
-                kw.iter().find(|k| k.0 == "stock").unwrap().1,
-                stock,
-                "{:?}",
-                d.args
-            );
+            assert_eq!(kw.iter().find(|k| k.0 == "stock").unwrap().1, stock, "{:?}", d.args);
         }
     }
 

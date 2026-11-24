@@ -430,3 +430,60 @@ fn the_record_keys_parse_and_refuse() {
         assert!(forge_machine::MachineDef::parse_all(&with(bad)).is_err(), "{bad}");
     }
 }
+
+// ---- G0 blending (record `rapid_blend`)
+
+/// A retract as rapids (up, across, down) between cuts. UNKNOWN: `t_scurve` stops at every G0
+/// block and `t_scurve_blend` gives the blended time beside it; a record that states it gets one.
+#[test]
+fn rapid_blending_follows_the_record_and_unknown_reports_both() {
+    let prog = "G1 X20. F3000.\nG0 Z5.\nG0 X60.\nG0 Z0.5\nG1 Z0. F500.\nG1 X80. F3000.\n";
+    let (m, tl) = run(prog);
+    assert_eq!(m.rapid_blend, None, "the generic machine states no rapid blending");
+    let stopped = tl.t_scurve;
+    let blended = tl.t_scurve_blend.expect("UNKNOWN reports the blended time too");
+    assert!(stopped > blended + 1e-3, "{stopped} vs {blended}");
+    assert!(tl.t_min <= blended + 1e-9);
+    // each G0 block from rest to rest: its time is its own S-curve, whatever surrounds it
+    let p = |rapid_stop| lookahead::SCurve {
+        rapid_stop,
+        ..lookahead::SCurve::for_machine(&m)
+    };
+    let (per_stop, _) = lookahead::plan_scurve(&m, &tl, &p(true));
+    let (per_blend, _) = lookahead::plan_scurve(&m, &tl, &p(false));
+    for (g, (a, b)) in tl.segments.iter().zip(per_stop.iter().zip(&per_blend)) {
+        if matches!(g.kind, forge_machine::sim::SegKind::Rapid) && g.line >= 5 {
+            assert!(*a >= *b - 1e-12, "line {}: {a} < {b}", g.line);
+        }
+    }
+    // a record that says: one time, no alternative
+    for (says, want) in [(true, blended), (false, stopped)] {
+        let mut m2 = m.clone();
+        m2.rapid_blend = Some(says);
+        let mut s = Setup::new(&m2, Control::for_dialect(&m2, "fanuc", 1).unwrap()).unwrap();
+        s.wcs = vec![(54, vec![0.0, 0.0, -300.0])];
+        s.h = vec![(1, 100.0)];
+        s.tools = vec![SimTool {
+            t: 1,
+            name: "e10".into(),
+            tip: [0.0, 0.0, -100.0],
+            body: vec![(5.0, 0.0, 25.0), (12.0, 25.0, 80.0)],
+            cut: Cut::Mill { r: 5.0, corner: 0.0 },
+        }];
+        s.start_tool = Some(1);
+        let t2 = sim::simulate(&format!("G43 H1\nG0 X0 Y0 Z10.\nG4 P100\n{prog}"), &s).unwrap();
+        assert_eq!(t2.t_scurve_blend, None);
+        assert!(close(t2.t_scurve, want), "rapid_blend {says}: {} vs {want}", t2.t_scurve);
+    }
+}
+
+#[test]
+fn the_rapid_blend_key_parses() {
+    let src = include_str!("../data/machines/generic.toml");
+    let i = src.find("name = \"generic-vmc3\"").unwrap();
+    let with = |extra: &str| format!("{}{}\n{}", &src[..i], extra, &src[i..]);
+    for (k, v) in [("rapid_blend = true", Some(true)), ("rapid_blend = false", Some(false))] {
+        assert_eq!(forge_machine::MachineDef::parse_all(&with(k)).unwrap()[0].rapid_blend, v);
+    }
+    assert!(forge_machine::MachineDef::parse_all(&with("rapid_blend = \"yes\"")).is_err());
+}

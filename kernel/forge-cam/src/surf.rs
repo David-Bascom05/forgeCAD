@@ -148,6 +148,9 @@ pub struct Surfacer<'a> {
     /// The op's tolerance (the cutter may come within it of the part).
     pub tol: f64,
     pub budget: usize,
+    /// Fitting each run of cutting points into longer lines and arcs before it is emitted
+    /// (crate::fit); None (the default from `new`): the points as moves.
+    pub fit: Option<crate::fit::Fit>,
 }
 
 impl<'a> Surfacer<'a> {
@@ -181,7 +184,161 @@ impl<'a> Surfacer<'a> {
             floor,
             tol,
             budget: 200_000,
+            fit: None,
         })
+    }
+
+    /// This surfacer, its runs fitted within `f` (`crate::fit`).
+    pub fn with_fit(mut self, f: crate::fit::Fit) -> Surfacer<'a> {
+        self.fit = Some(f);
+        self
+    }
+
+    /// Whether the checker's moves `mvs` (over the xy box [lo, hi]) are proven clear at `limit`
+    /// for a fitted piece: per face near them, the cutter's closed form (`contact::clear`), else
+    /// the column's gap on a small budget; undecided is not proven (the fitter backs off to a
+    /// shorter piece, which the generator's own pieces already are).
+    fn fit_clear(&self, mvs: &[Move], lo: [f64; 2], hi: [f64; 2], limit: f64) -> bool {
+        let r = self.check.r;
+        let idx = self.grid.near(lo[0] - r, lo[1] - r, hi[0] + r, hi[1] + r);
+        for mv in mvs {
+            for &i in &idx {
+                let f = &self.faces[i as usize];
+                if matches!(
+                    forge_cam_geom::contact::clear(&self.cutter, f, mv, limit),
+                    Some(forge_cam_geom::check::Verdict::Clear { .. })
+                ) {
+                    continue;
+                }
+                match drop::gap_move(&self.check, f, mv, limit, self.res, FIT_BUDGET).0 {
+                    Gap::Clear { .. } => {}
+                    _ => return false,
+                }
+            }
+        }
+        true
+    }
+
+    /// A fitted line a → b proven clear at `limit` (`fit_clear`).
+    pub fn fit_line(&self, a: [f64; 3], b: [f64; 3], limit: f64) -> bool {
+        self.fit_clear(
+            &[Move::Line { a, b }],
+            [a[0].min(b[0]), a[1].min(b[1])],
+            [a[0].max(b[0]), a[1].max(b[1])],
+            limit,
+        )
+    }
+
+    /// A fitted arc from a to `to` about c (xy; height linear in the angle) proven clear at
+    /// `limit`, by its chords. The cutter's signed distance to a face is 1-Lipschitz in the
+    /// tool's position, and each point of the arc is within `s` of its chord's point at the same
+    /// fraction (the arc's sweep cut into n equal angles, s ≤ r Δ²/8 widened, at most tol/8).
+    /// So each chord proven, against every face near the arc, by the closed form
+    /// (`contact::clear`) at `limit + s`, or by the column grown by s (`Column::grow`: it holds
+    /// the cutter anywhere within s) at `limit`, proves the arc at `limit`. Undecided: not proven
+    /// (the fitter backs off).
+    pub fn fit_arc(&self, a: [f64; 3], to: [f64; 3], c: [f64; 2], cw: bool, limit: f64) -> bool {
+        let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+        if !(r.is_finite() && r > 0.0 && to.iter().all(|v| v.is_finite()) && limit.is_finite()) {
+            return false;
+        }
+        let tau = std::f64::consts::TAU;
+        let a0 = forge_math::dmath::atan2(a[1] - c[1], a[0] - c[0]);
+        let mut a1 = forge_math::dmath::atan2(to[1] - c[1], to[0] - c[0]);
+        if cw {
+            while a1 >= a0 {
+                a1 -= tau;
+            }
+        } else {
+            while a1 <= a0 {
+                a1 += tau;
+            }
+        }
+        let sweep = a1 - a0;
+        // chords of at most Δ = √(tol / r) (sagitta ≤ tol/8), at least one per quarter turn
+        let dmax = (self.tol / r).sqrt().min(0.5 * std::f64::consts::PI);
+        let n = ((sweep.abs() / dmax).ceil() as usize).max(1);
+        if n > 4096 {
+            return false;
+        }
+        let d = sweep.abs() / n as f64;
+        let sag = 1.01 * r * d * d / 8.0 + 1e-12 * (1.0 + r + c[0].abs().max(c[1].abs()));
+        let at = |k: usize| -> [f64; 3] {
+            if k == 0 {
+                return a;
+            }
+            if k == n {
+                return to;
+            }
+            let t = k as f64 / n as f64;
+            let (sn, cs) = forge_math::dmath::sin_cos(a0 + sweep * t);
+            [c[0] + r * cs, c[1] + r * sn, a[2] + (to[2] - a[2]) * t]
+        };
+        // the column grown by the sagitta (its Minkowski sum with a ball of that radius) holds
+        // the cutter anywhere within it of the chord's point: its gap along the chord bounds the
+        // arc's from below
+        let Some(grown) = self.check.grow(sag) else {
+            return false;
+        };
+        let w = r + grown.r;
+        let idx = self.grid.near(c[0] - w, c[1] - w, c[0] + w, c[1] + w);
+        // outward-rounded, as `contact::clear_arc`
+        let lim = forge_cam_geom::ival::Ival::pt(limit)
+            .add(forge_cam_geom::ival::Ival::pt(sag))
+            .hi;
+        for k in 0..n {
+            let mv = Move::Line {
+                a: at(k),
+                b: at(k + 1),
+            };
+            for &i in &idx {
+                let f = &self.faces[i as usize];
+                if matches!(
+                    forge_cam_geom::contact::clear(&self.cutter, f, &mv, lim),
+                    Some(forge_cam_geom::check::Verdict::Clear { .. })
+                ) {
+                    continue;
+                }
+                match drop::gap_move(&grown, f, &mv, limit, self.res, FIT_BUDGET).0 {
+                    Gap::Clear { .. } => {}
+                    _ => return false,
+                }
+            }
+        }
+        true
+    }
+
+    /// A run of cutting points, from its first, as cutting moves at feed `f`: fitted when `fit`
+    /// is set, each fitted piece proven as the generator proves a piece (the column's gap at
+    /// −tol/2; an arc by `gap_arc`) before it is kept; else a line to each point after the first.
+    fn cut_moves(&self, pts: &[[f64; 3]], f: f64) -> Vec<PMove> {
+        match self.fit {
+            None => pts[1..]
+                .iter()
+                .map(|&to| PMove::Line {
+                    to,
+                    f,
+                    phase: Phase::Cut,
+                })
+                .collect(),
+            Some(fit) => {
+                let lim = -0.5 * self.tol;
+                // in pieces of FIT_CHUNK points on all cores (forge_math::par, in order), each
+                // piece's end the next one's start: a piece never spans two chunks
+                let n = pts.len() - 1;
+                let chunks = n.div_ceil(FIT_CHUNK);
+                let parts = forge_math::par::map(chunks, |k| {
+                    let s = k * FIT_CHUNK;
+                    let e = (s + FIT_CHUNK).min(n);
+                    crate::fit::fit(&pts[s..=e], fit, &mut |a, pc| match *pc {
+                        crate::fit::Piece::Line { to } => self.fit_line(a, to, lim),
+                        crate::fit::Piece::Arc { to, c, cw } => self.fit_arc(a, to, c, cw, lim),
+                    })
+                });
+                let ps: Vec<crate::fit::Piece> = parts.into_iter().flatten().collect();
+                crate::fit::to_moves(&ps, f, Phase::Cut)
+            }
+        }
     }
 
     /// The certified CL height of the generating column at (x, y), at least the floor.
@@ -390,8 +547,20 @@ impl<'a> Surfacer<'a> {
     }
 }
 
+/// The gap budget of one face in a fitted piece's proof (cells): undecided is not proven.
+const FIT_BUDGET: usize = 2_000;
+
+/// Points per chunk a run is fitted in (the chunks on all cores).
+const FIT_CHUNK: usize = 256;
+
 /// A path of cutting points as an op: rapid to above the first, plunge, cut through them, retract.
-fn as_path(c: Cut, pts: &[[f64; 3]]) -> OpPath {
+fn as_path(sf: &Surfacer, c: Cut, pts: &[[f64; 3]]) -> OpPath {
+    let cuts = sf.cut_moves(pts, c.feed.0);
+    as_path_cuts(c, pts, cuts)
+}
+
+/// `as_path` with the run's cutting moves made already.
+fn as_path_cuts(c: Cut, pts: &[[f64; 3]], cuts: Vec<PMove>) -> OpPath {
     let Cut { tidx, h, feed, .. } = c;
     let p0 = pts[0];
     let mut mv = vec![
@@ -404,13 +573,7 @@ fn as_path(c: Cut, pts: &[[f64; 3]]) -> OpPath {
             phase: Phase::Plunge,
         },
     ];
-    for p in &pts[1..] {
-        mv.push(PMove::Line {
-            to: *p,
-            f: feed.0,
-            phase: Phase::Cut,
-        });
-    }
+    mv.extend(cuts);
     let pl = pts[pts.len() - 1];
     mv.push(PMove::Line {
         to: [pl[0], pl[1], h.retract],
@@ -430,14 +593,16 @@ fn as_path(c: Cut, pts: &[[f64; 3]]) -> OpPath {
 }
 
 /// Several cutting polylines as one op, each entered from the retract height.
-fn as_paths(c: Cut, runs: &[Vec<[f64; 3]>]) -> Option<OpPath> {
+fn as_paths(sf: &Surfacer, c: Cut, runs: &[Vec<[f64; 3]>]) -> Option<OpPath> {
     let runs: Vec<&Vec<[f64; 3]>> = runs.iter().filter(|r| !r.is_empty()).collect();
     if runs.is_empty() {
         return None;
     }
-    let mut p = as_path(c, runs[0]);
+    // every run's cutting moves on all cores (in order): a run's fit is its own
+    let mut cuts = forge_math::par::map(runs.len(), |k| sf.cut_moves(runs[k], c.feed.0)).into_iter();
+    let mut p = as_path_cuts(c, runs[0], cuts.next().expect("a run"));
     for r in &runs[1..] {
-        let q = as_path(c, r);
+        let q = as_path_cuts(c, r, cuts.next().expect("a run"));
         // drop the previous run's final rapid to clear: link at the retract height instead
         p.moves.pop();
         p.moves.extend(q.moves);
@@ -523,7 +688,7 @@ pub fn parallel(
         }
         pts.extend(part);
     }
-    Ok(as_path(c, &pts))
+    Ok(as_path(sf, c, &pts))
 }
 
 /// A certified push-cutter along a fibre at tool-tip height z: on the segment a → b (xy), the
@@ -630,7 +795,7 @@ pub fn waterline(sf: &Surfacer, c: Cut, area: [f64; 4], zs: &[f64], h: f64) -> R
         .into_iter()
         .filter(|r| !r.is_empty())
         .collect();
-    as_paths(c, &runs).ok_or(OpError::ToolTooBig {
+    as_paths(sf, c, &runs).ok_or(OpError::ToolTooBig {
         tool_d: 2.0 * sf.check.r,
         why: "no waterline at these heights".into(),
     })
@@ -1088,7 +1253,8 @@ pub fn zlevel(
 /// Each level's blocked tool-centre region bounded by its traced contours (`trace`: vertices on
 /// the free side of the CL = z crossing to within res, pieces proven at tol/2), each loop turned
 /// so the blocked side is on its left. None for a level where a contour reaches the grid's
-/// edge or traces to fewer than three vertices (that level takes the grid's cells).
+/// edge or traces to fewer than three vertices, or where every node is blocked (no contour at
+/// all): that level takes the grid's cells.
 fn traced_blocked(
     sf: &Surfacer,
     g: &ClGrid,
@@ -1101,7 +1267,11 @@ fn traced_blocked(
     let mut ok = vec![true; zs.len()];
     for (li, &z) in zs.iter().enumerate() {
         let cs = contours_closed(g, z);
-        if cs.iter().any(|(_, closed)| !closed) {
+        // no contour: every node on one side. All free is an empty blocked region; all blocked
+        // (the level under the part's floor, or the whole area over it) is the grid's cells,
+        // every one blocked. A node decides which.
+        let all_blocked = cs.is_empty() && g.hi.first().is_some_and(|&h| h > z);
+        if all_blocked || cs.iter().any(|(_, closed)| !closed) {
             ok[li] = false;
             of.push(Vec::new());
             continue;

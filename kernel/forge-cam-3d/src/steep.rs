@@ -227,6 +227,12 @@ pub struct Params {
     pub grid: f64,
     /// Tolerances: waterline xy, drape slack and leave.
     pub tol: f64,
+    /// How far the shallow passes' chords may lie above the CL surface at their midpoints (the
+    /// drape's leave): `tol` for the plain op, less a fitter's tolerance.
+    pub leave: f64,
+    /// The waterline contours' accuracy in xy (vertices and chord sag), at most `tol`: `tol`
+    /// for the plain op, finer for a fitter (the proofs keep `tol`'s slack).
+    pub contour: f64,
     /// The xy box the parallel passes span (None: the part's extent).
     pub area: Option<[[f64; 2]; 2]>,
 }
@@ -246,7 +252,9 @@ pub fn steep_and_shallow(dc: &dyn DropCutter, p: Params) -> Result<(Vec<Pass>, V
         && p.dz > 0.0
         && p.stepover > 0.0
         && p.grid > 0.0
-        && p.tol > 0.0)
+        && p.tol > 0.0
+        && p.contour > 0.0
+        && p.leave > 0.0)
     {
         return Err(SteepError::Bad("params"));
     }
@@ -261,7 +269,8 @@ pub fn steep_and_shallow(dc: &dyn DropCutter, p: Params) -> Result<(Vec<Pass>, V
         &zs,
         waterline::Params {
             grid: p.grid,
-            tol_xy: p.tol,
+            tol_xy: p.contour.min(p.tol),
+            slack: 0.5 * p.tol,
         },
     )
     .map_err(SteepError::Waterline)?;
@@ -272,10 +281,13 @@ pub fn steep_and_shallow(dc: &dyn DropCutter, p: Params) -> Result<(Vec<Pass>, V
         }
     }
     let [lo, hi] = p.area.unwrap_or(dc.extent());
+    // the chords' dip below the CL surface at most half the tolerance, as every other drape: the
+    // rest is the posted program's room (its coordinates rounded to the control's last digit
+    // move a chord by up to half a digit at each end), so the certified path keeps tol
     let d = Drape {
         step: p.grid,
-        slack: p.tol,
-        leave: p.tol,
+        slack: 0.5 * p.tol,
+        leave: p.leave.min(p.tol),
         zmin: p.bottom,
     };
     let mut hp = Vec::new();
@@ -312,6 +324,8 @@ mod tests {
             bottom: 0.0,
             grid: 1.0,
             tol: 0.01,
+            leave: 0.01,
+            contour: 0.01,
             area: None,
         };
         let (steep, shallow) = steep_and_shallow(&dc, p).unwrap();
@@ -331,5 +345,48 @@ mod tests {
                 assert!(r <= r45 + 1.0 + 1.5 || r >= 30.33 - 1.0 - 1.5, "shallow at r={r}");
             }
         }
+    }
+
+    /// The shallow rows keep room for the posted program: every chord, its ends rounded to a
+    /// 0.001 mm grid about an origin off that grid (as a control's last digit and a work offset
+    /// taken from a part's box leave them), still dips at most `tol` below the CL surface. A
+    /// drape at the whole `tol` leaves none (the mould core 2% wider was refused that way).
+    #[test]
+    fn the_rows_keep_tol_when_posted() {
+        let dc = Analytic {
+            r: 3.0,
+            planes: vec![(0.0, [-16.0, -16.0], [16.0, 16.0])],
+            spheres: vec![([0.0, 0.0, -5.0], 14.0)],
+        };
+        let h = std::f64::consts::FRAC_1_SQRT_2;
+        let tol = 0.01;
+        let p = Params {
+            sin0: h,
+            cos0: h,
+            overlap: 1.0,
+            dz: 2.0,
+            stepover: 0.5,
+            angle_deg: 0.0,
+            top: 12.0,
+            bottom: 0.0,
+            grid: 1.0,
+            tol,
+            leave: tol,
+            contour: tol,
+            area: None,
+        };
+        let (_, shallow) = steep_and_shallow(&dc, p).unwrap();
+        let o = [0.000_312, -0.000_417, -0.000_037];
+        let post =
+            |q: [f64; 3]| -> [f64; 3] { [0, 1, 2].map(|k| ((q[k] - o[k]) * 1000.0).round() / 1000.0 + o[k]) };
+        let mut n = 0;
+        for pass in &shallow {
+            for w in pass.windows(2) {
+                n += 1;
+                let (a, b) = (post(w[0]), post(w[1]));
+                assert!(dc.seg3_below(a, b, tol), "posted chord {a:?} -> {b:?} under tol");
+            }
+        }
+        assert!(n > 300, "{n} chords");
     }
 }

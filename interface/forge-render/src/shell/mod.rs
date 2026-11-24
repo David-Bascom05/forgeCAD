@@ -14,7 +14,6 @@ pub mod bendsim;
 mod bendsim_cards;
 mod bendsim_env;
 pub mod cam;
-pub mod capture;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -28,6 +27,7 @@ mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
 mod empty;
+pub mod capture;
 pub mod env;
 pub mod fg;
 pub mod fgasm;
@@ -587,9 +587,9 @@ impl Shell {
         // short of the view cube: a narrow view (a small window, the properties column open)
         // shows the switches that fit left of it (all of them stay in Settings)
         let ppp = ctx.pixels_per_point();
-        let limit = self.cube_place.map_or(self.view_rect.right(), |c| {
-            self.view_rect.min.x + c.at.0 / ppp - 8.0
-        });
+        let limit = self
+            .cube_place
+            .map_or(self.view_rect.right(), |c| self.view_rect.min.x + c.at.0 / ppp - 8.0);
         let r = egui::Area::new(egui::Id::unique("view-toolbar"))
             .fixed_pos(at)
             .order(egui::Order::Middle)
@@ -1197,19 +1197,45 @@ impl Shell {
         // an environment owns the status bar too
         let env_line = self.env_status();
         let status = shown(&self.status);
-        let said = p.text(
-            pos2(x + 4.0, st.center().y),
-            Align2::LEFT_CENTER,
-            if let Some(l) = &env_line {
-                l
-            } else if self.status.is_empty() && self.unshown {
-                "This part built but some of it can't be drawn: fix or delete what the tree marks"
-            } else {
-                &status
-            },
-            sans(12.0),
-            Color32::WHITE,
-        );
+        let line: &str = if let Some(l) = &env_line {
+            l
+        } else if self.status.is_empty() && self.unshown {
+            "This part built but some of it can't be drawn: fix or delete what the tree marks"
+        } else {
+            &status
+        };
+        // a refusal's fix a click away (Manufacture: the unplaced setup's dialog): always seen,
+        // the words before it cut to fit (the whole on hover), never under the markup toggle
+        let fix = if self.tab == CAM_TAB { self.cam.as_ref().and_then(cam::status_fix) } else { None };
+        let fix_g = fix.as_ref().map(|(label, _)| ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), sans(12.0), Color32::WHITE)));
+        let room = (s.width() - 330.0 - 12.0 - fix_g.as_ref().map_or(0.0, |g| g.size().x + 28.0) - (x + 4.0)).max(40.0);
+        let mut job = egui::text::LayoutJob::simple_singleline(line.to_string(), sans(12.0), Color32::WHITE);
+        job.wrap = egui::text::TextWrapping { max_width: room, max_rows: 1, break_anywhere: true, overflow_character: Some('\u{2026}') };
+        let g = ui.fonts_mut(|f| f.layout_job(job));
+        let elided = g.size().x >= room - 1.0;
+        let said = Rect::from_min_size(pos2(x + 4.0, st.center().y - g.size().y * 0.5), g.size());
+        p.galley(said.min, g, Color32::WHITE);
+        // the whole line on hover when cut; a release refusal's detail (its rule, the syntax) too
+        let detail = if self.tab == CAM_TAB { self.cam.as_ref().and_then(cam::release_words).map(|b| b.detail) } else { None };
+        if elided || detail.is_some() {
+            let r = ui.interact(said, ui.scope_id().with("status-line"), Sense::hover());
+            r.on_hover_text(match (elided, detail) {
+                (true, Some(d)) => format!("{line}\n\n{d}"),
+                (false, Some(d)) => d,
+                _ => line.to_string(),
+            });
+        }
+        if let (Some((label, action)), Some(g)) = (fix, fix_g) {
+            let fr = Rect::from_min_size(pos2(said.right() + 12.0, st.top() + 2.0), vec2(g.size().x + 16.0, STATUS_H - 4.0));
+            let r = ui.interact(fr, ui.scope_id().with("status-fix"), Sense::click());
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+            p.rect_filled(fr, 3.0, Color32::from_white_alpha(if r.hovered() { 56 } else { 36 }));
+            p.galley(pos2(fr.left() + 8.0, fr.center().y - g.size().y * 0.5), g, Color32::WHITE);
+            self.note("status:fix", fr);
+            if r.clicked() {
+                self.out.push(action);
+            }
+        }
         // markup for the agent, on or off
         let mr = Rect::from_min_size(
             pos2(s.width() - 330.0, st.top() + 2.0),
