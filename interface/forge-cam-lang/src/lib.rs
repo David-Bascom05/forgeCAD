@@ -1661,14 +1661,14 @@ impl Cam {
                 let body = run.body.ok_or("the stock has no body")?;
                 let faces = forge_cam::lower::lower(&body)
                     .map_err(|e| e.refusal(&format!("The stock `{file}` cannot be used")))?;
-                let mut lo = [f64::INFINITY; 3];
-                let mut hi = [f64::NEG_INFINITY; 3];
-                for fc in &faces {
-                    for k in 0..3 {
-                        lo[k] = lo[k].min(fc.bbox[k].lo + fc.mu);
-                        hi[k] = hi[k].max(fc.bbox[k].hi - fc.mu);
-                    }
-                }
+                // the body's exact box (forge-topo's extent: its edges' extremes and the points in
+                // its faces that reach further), not the lowered faces' enclosures: those are loose
+                // on curved faces (a surfacing superset, a torus patch's box) and gave stocks
+                // larger than asked (the mould's top 6 mm, the manifold's side 1.757 mm)
+                let (lo, hi) = {
+                    let b = forge_lang::tightbox::tight_box(&body);
+                    ([b.x.lo, b.y.lo, b.z.lo], [b.x.hi, b.y.hi, b.z.hi])
+                };
                 // a prism along z: walls over its whole height, flat faces only at its ends
                 let mu = 1e-6 * (1.0 + hi[2].abs().max(lo[2].abs()));
                 for fc in &faces {
@@ -2899,14 +2899,14 @@ impl Cam {
                         .map(|x| x.0)
                         .map_err(|_| e.refusal("The part cannot be machined yet"))?,
                 };
-                let mut lo = [f64::INFINITY; 3];
-                let mut hi = [f64::NEG_INFINITY; 3];
-                for fc in &faces {
-                    for k in 0..3 {
-                        lo[k] = lo[k].min(fc.bbox[k].lo + fc.mu);
-                        hi[k] = hi[k].max(fc.bbox[k].hi - fc.mu);
-                    }
-                }
+                // the body's exact box (forge-topo's extent: its edges' extremes and the points in
+                // its faces that reach further), not the lowered faces' enclosures: those are loose
+                // on curved faces (a surfacing superset, a torus patch's box) and gave stocks
+                // larger than asked (the mould's top 6 mm, the manifold's side 1.757 mm)
+                let (lo, hi) = {
+                    let b = forge_lang::tightbox::tight_box(&body);
+                    ([b.x.lo, b.y.lo, b.z.lo], [b.x.hi, b.y.hi, b.z.hi])
+                };
                 self.parts.push(PartIn {
                     src: src.clone(),
                     pdir: path.parent().map(|p| p.to_path_buf()).unwrap_or_default(),
