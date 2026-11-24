@@ -293,3 +293,49 @@ fn the_cube_looks_down_the_bend_and_what_hides_it_is_seen_through() {
     }
     assert!(h.gui.bend.ghosts.is_empty(), "off: everything solid");
 }
+
+/// A seen-through body is drawn at its opacity (the coordinator, after RENDER-STUDIO found the
+/// punch's drawn not at all): the same view at 0.13 and at 0.8 differs wherever a ghost is.
+#[test]
+fn a_ghost_is_drawn_at_its_opacity() {
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "ghost", "trumpf-trubend-5130", None);
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.step = 1;
+        b.t = 0.7;
+    }
+    frame(&mut h, Framing::Work);
+    for _ in 0..4 {
+        h.step();
+    }
+    let v = h.gui.view.as_mut().unwrap();
+    let mut c = v.nav.camera;
+    c.yaw = 240f32.to_radians();
+    c.pitch = 25f32.to_radians();
+    v.nav.jump_to(c);
+    let at = |h: &mut Headless, o: f32| {
+        h.gui.shell.sheet.bend_sim.as_mut().unwrap().opacity = o;
+        for _ in 0..20 {
+            h.step();
+        }
+        assert!(!h.gui.bend.ghosts.is_empty(), "something seen through at {o}");
+        h.ppm()
+    };
+    let lo = at(&mut h, 0.13);
+    let hi = at(&mut h, 0.8);
+    assert_eq!(lo.len(), hi.len());
+    let differ = lo
+        .chunks(3)
+        .zip(hi.chunks(3))
+        .filter(|(a, b)| a.iter().zip(b.iter()).any(|(x, y)| x.abs_diff(*y) > 8))
+        .count();
+    // a two-hundredth of the view: the ghost drawn only where something opaque stood in front
+    // of it (the depth compared the wrong way round) differed in some 250 pixels, drawn it
+    // differs in some 13 000
+    let floor = 1400 * 860 / 200;
+    assert!(
+        differ > floor,
+        "the ghost drawn at its opacity: {differ} pixels differ, under {floor}"
+    );
+}
