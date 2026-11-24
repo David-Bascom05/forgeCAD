@@ -30,9 +30,10 @@ A later round adds match arms: tables `M` after the old ones (a `match` takes it
   the old tables already had) runs exactly as before, errors and state included.
 * `stmt_new_refused`: a statement calling a name the old statement table lacks failed before.
 * `run_ext_accepted`: so every document accepted before runs exactly as before after.
-  `cam_conservative` and `turn_conservative` are this for the CAM and the turning built-ins.
-* `families_not_keywords`: none of the built-ins, nor the document headers `machining` and
-  `assembly`, is one of the lexer's keywords (`Impl.keywords`): each lexes as an identifier, so
+  `cam_conservative`, `turn_conservative` and `bending_conservative` are this for the CAM, the
+  turning and the bending built-ins.
+* `families_not_keywords`: none of the built-ins, nor the document headers `machining`,
+  `assembly` and `bending`, is one of the lexer's keywords (`Impl.keywords`): each lexes as an identifier, so
   the documents are sentences of the one grammar the LL(1) proofs cover (`LL1/Documents.lean`).
 
 Not modelled: what a built-in computes (the toolpaths, the checks: forge-cam's own proofs); named
@@ -455,8 +456,13 @@ def turnStmt : List Name :=
 /-- forge-turn-lang: `Turn::eval`'s built-ins. -/
 def turnExpr : List Name := ["chuck"]
 
+/-- forge-bend-lang: `Reader::call`'s arms (a bending document's statement built-ins; no
+built-in nests in an expression: `eval` has no call, so its table is empty). -/
+def bendStmt : List Name :=
+  ["part", "press", "tooling", "station", "bend", "setup_sheet", "program"]
+
 /-- The document headers that are names, not keywords (`drawing` and `harness` are keywords). -/
-def headers : List Name := ["machining", "assembly"]
+def headers : List Name := ["machining", "assembly", "bending"]
 
 /-- A table of a family: each of its names with what it does. -/
 def tab {β : Type} (names : List Name) (impl : Name → β) : List (Name × β) :=
@@ -482,6 +488,16 @@ theorem turn_conservative (ie : Name → S → List α → Except Err α)
   have := run_ext_accepted P _ ME _ MT [] [] sts s ρ s' ρ' rs h ha
   simpa using this
 
+/-- The bending built-ins (forge-bend-lang), extended by a later round's: every bending document
+accepted before means what it meant. The expression table is empty: a nested call is refused
+(`eval`: "a value this document does not take"). -/
+theorem bending_conservative (is : Name → S → List α → S × Except Err α) (ME : ETab S α)
+    (MT : TTab S α) (sts : List St) (s s' : S) (ρ ρ' : Env α) (rs : List (Except Err Unit))
+    (h : run P [] (tab bendStmt is) [] s ρ sts = (s', ρ', rs)) (ha : Accepted rs) :
+    run P ME (tab bendStmt is ++ MT) [] s ρ sts = (s', ρ', rs) := by
+  have := run_ext_accepted P [] ME _ MT [] [] sts s ρ s' ρ' rs h ha
+  simpa using this
+
 /-- forge-lang's drawing document (`drawing/doc.rs`): `x = f(..)` and a nested `f(..)` both call
 from `FUNCTIONS`, nothing else is callable, and a read is a binding's (closed). -/
 def drawingFns : List Name :=
@@ -500,7 +516,7 @@ theorem drawing_conservative (ie : Name → S → List α → Except Err α)
 /-- No built-in of the machining families, and no header word, is a keyword: each lexes as an
 identifier, so the grammar and the proven parser are unchanged by them. -/
 theorem families_not_keywords :
-    ∀ n ∈ camStmt ++ camExpr ++ turnStmt ++ turnExpr ++ headers, codes n ∉ LL1.Impl.keywords := by
+    ∀ n ∈ camStmt ++ camExpr ++ turnStmt ++ turnExpr ++ bendStmt ++ headers, codes n ∉ LL1.Impl.keywords := by
   decide
 
 end Families
