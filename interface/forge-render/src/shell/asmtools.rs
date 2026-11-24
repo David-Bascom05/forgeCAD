@@ -813,7 +813,8 @@ fn origin_row(
         Align2::CENTER_CENTER,
         (k + 1).to_string(),
         semi(11.0),
-        Color32::WHITE,
+        // near-black on the amber of the step being waited for (white on it was 2.2:1)
+        if waiting { super::theme::ON_FOCUS } else { Color32::WHITE },
     );
     let (label, ink) = match p {
         Some(Pick {
