@@ -2332,11 +2332,21 @@ impl Cam {
         .map_err(|e| format!("{e:?}"))
     }
 
-    /// The milling ops' feeds set from the engagement each piece meets (forge_cam::engage): the
-    /// chip held at the cutting data's feed per tooth, the in-process stock as the ops so far
-    /// left it the model. The paths' geometry is unchanged; they are posted and certified after.
-    fn feeds_from_engagement(&self, su: usize, kind: &str, out: &OpOut, paths: Vec<OpPath>) -> Vec<OpPath> {
-        use forge_cam::engage::{HeightMap, Profile, Sched, schedule};
+    /// The milling ops' feeds set from the engagement each FIXED-LENGTH sample meets
+    /// (forge_cam::engage::schedule_samples, TOOLPATH-QUALITY's measurement on the in-process
+    /// stock): the resolved chip held through radial thinning, then the feed (only the feed)
+    /// lowered so the sample's power and torque stay within the user's max_power/max_torque and
+    /// the spindle's power at the rpm (P ∝ fz^(1 − mc): exact). Samples are joined only when
+    /// both sit at the same clamp, never by engagement band; no abrasion term
+    /// (fto-adaptive.md D). The paths' geometry is unchanged; they are posted and certified after.
+    fn feeds_from_engagement(
+        &mut self,
+        su: usize,
+        kind: &str,
+        out: &OpOut,
+        paths: Vec<OpPath>,
+    ) -> Vec<OpPath> {
+        use forge_cam::engage::{HeightMap, Profile, Sched, schedule_samples};
         if !matches!(kind, "facing" | "pocket" | "clear" | "contour" | "slot") {
             return paths;
         }
@@ -2366,13 +2376,6 @@ impl Cam {
             (_, Some(m)) => m,
             (_, None) => r.feed.v,
         };
-        // a feed the user's power or torque limit lowered is not raised again (those limits
-        // are met at the op's nominal engagement; per-sample power is not computed yet)
-        let f_max = if r.feed.source == resolve::Source::Limited {
-            f_max.min(r.feed.v)
-        } else {
-            f_max
-        };
         let cell = (t.tool.dc / 30.0).clamp(0.05, 0.25);
         let sc = Sched {
             fz: r.chip.v,
@@ -2392,7 +2395,152 @@ impl Cam {
             sample: t.tool.dc,
         };
         let mut map = HeightMap::of_stock(&s.ip, cell);
-        paths.iter().map(|p| schedule(p, &mut map, &prof, &sc)).collect()
+        // the cutting force at the actual speed: the stock's rows, else the group's
+        let part = &self.parts[s.part];
+        let kg = self.lib.group(&part.group).map(|g| {
+            match part.material.as_deref().and_then(|m| self.lib.stock(m)) {
+                Some(st) => st.apply(g, r.vc.v),
+                None => g.clone(),
+            }
+        });
+        let spindle_kw = self
+            .lib
+            .machine(&s.machine)
+            .ok()
+            .and_then(|m| resolve::power_at(&m.power, r.rpm.v));
+        let caps: Vec<(f64, &str)> = [
+            (r.max_power_ask, "max_power"),
+            (
+                r.max_torque_ask
+                    .map(|t| t * std::f64::consts::PI * r.rpm.v / 30.0e3),
+                "max_torque",
+            ),
+            (spindle_kw, "the spindle's power"),
+        ]
+        .into_iter()
+        .filter_map(|(c, w)| c.map(|c| (c, w)))
+        .collect();
+        let (d, re) = (
+            t.tool.dc,
+            match t.tool.kind {
+                Kind::Ball => 0.5 * t.tool.dc,
+                Kind::Bull => t.tool.re,
+                _ => 0.0,
+            },
+        );
+        let z = t.tool.nof.max(1);
+        let mut lowered = 0usize;
+        let mut short = 0usize;
+        let out_paths: Vec<OpPath> = paths
+            .iter()
+            .map(|p| {
+                let samples = schedule_samples(p, &mut map, &prof, &sc);
+                let n = samples.len();
+                let want = |e: &Option<forge_cam::engage::Engage>| -> (f64, bool) {
+                    match e {
+                        Some(g) if g.cos_max * sc.cap > 1.0 => (sc.fz / g.cos_max, false),
+                        _ => (sc.cap * sc.fz, true),
+                    }
+                };
+                let mut feed: Vec<(f64, bool)> = Vec::with_capacity(n);
+                for k in 0..n {
+                    let (mut fz, mut clamp) = want(&samples[k].engage);
+                    let mut capped = false;
+                    // no faster than the next sample (the engagement it runs into)
+                    if let Some(nx) = samples.get(k + 1) {
+                        let (f2, c2) = want(&nx.engage);
+                        if f2 < fz {
+                            fz = f2;
+                            clamp = c2;
+                        }
+                    }
+                    // power and torque: the feed lowered to the tightest cap, exactly
+                    if let (Some(g), Some(e)) = (kg.as_ref(), samples[k].engage) {
+                        let cut = feeds::Cut {
+                            d,
+                            flutes: z,
+                            ball: re >= 0.5 * d,
+                            carbide: false,
+                            ap: e.ap.max(0.0),
+                            ae: e.ae.max(0.0),
+                        };
+                        let ct = feeds::contact(d, re, cut.ap, 0.0);
+                        let dr = if re >= 0.5 * d { ct.d_eff } else { d };
+                        let pw = feeds::at_contact(g, &cut, fz, r.rpm.v, ct, dr).power;
+                        if pw > 0.0 && g.mc < 1.0 {
+                            for (cap, _) in &caps {
+                                let now = feeds::at_contact(g, &cut, fz, r.rpm.v, ct, dr).power;
+                                if now > *cap {
+                                    fz *= forge_math::dmath::powf(cap / now, 1.0 / (1.0 - g.mc));
+                                    clamp = true;
+                                    capped = true;
+                                    lowered += 1;
+                                }
+                            }
+                        }
+                    }
+                    let mut f = fz * sc.flutes * sc.rpm;
+                    if f >= sc.f_max {
+                        f = sc.f_max;
+                        clamp = true;
+                    } else if f <= sc.f_min {
+                        if capped {
+                            short += 1;
+                        }
+                        f = sc.f_min;
+                        clamp = true;
+                    }
+                    feed.push((f, clamp));
+                }
+                let mut moves = Vec::with_capacity(p.moves.len() + n);
+                let mut k = 0;
+                for (mi, mv) in p.moves.iter().enumerate() {
+                    let start = k;
+                    while k < n && samples[k].mv == mi {
+                        k += 1;
+                    }
+                    if start == k {
+                        moves.push(*mv);
+                        continue;
+                    }
+                    let mut i = start;
+                    while i < k {
+                        let mut j = i;
+                        while j + 1 < k && feed[j + 1].1 && feed[i].1 && feed[j + 1].0 == feed[i].0 {
+                            j += 1;
+                        }
+                        let (end, f) = (samples[j].end, feed[i].0);
+                        moves.push(match *mv {
+                            PMove::Line { phase, .. } => PMove::Line { to: end, f, phase },
+                            PMove::Arc { c, cw, .. } => PMove::Arc { to: end, c, cw, f },
+                            other => other,
+                        });
+                        i = j + 1;
+                    }
+                }
+                OpPath {
+                    tool: p.tool,
+                    start: p.start,
+                    moves,
+                    rpm: p.rpm,
+                    coolant: p.coolant,
+                }
+            })
+            .collect();
+        if lowered > 0 {
+            self.warnings.push(format!(
+                "{}: the feed was lowered on {lowered} sample(s) to hold power/torque ({})",
+                out.name,
+                caps.iter().map(|c| c.1).collect::<Vec<_>>().join(", ")
+            ));
+        }
+        if short > 0 {
+            self.warnings.push(format!(
+                "{}: the user's min_feed holds {short} sample(s) above the power/torque cap",
+                out.name
+            ));
+        }
+        out_paths
     }
 
     /// A drilling tool's feeds and speeds: the user's over the drill's preset over the group's

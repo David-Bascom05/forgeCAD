@@ -1311,3 +1311,50 @@ fn a_bare_operation_is_refused_with_its_named_form() {
     assert!(cam.errors.is_empty(), "{:?}", cam.errors);
     assert_eq!(cam.ops.len(), 1);
 }
+
+/// Engagement feed holds the user's power limit per fixed-length sample (feed only): with
+/// `max_power:` the clear's cutting feeds are never above the uncapped ones, some are lower, and
+/// the run says so.
+#[test]
+fn engagement_feed_holds_max_power_per_sample() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let feeds = |cam: &forge_cam_lang::Cam| -> Vec<f64> {
+        let o = cam.ops.iter().find(|o| o.name == "top").unwrap();
+        o.paths
+            .iter()
+            .flat_map(|p| p.moves.iter())
+            .filter_map(|m| match m {
+                forge_cam::ops::PMove::Line { f, phase, .. } if *phase == forge_cam::ops::Phase::Cut => {
+                    Some(*f)
+                }
+                forge_cam::ops::PMove::Arc { f, .. } => Some(*f),
+                _ => None,
+            })
+            .collect()
+    };
+    let free = forge_cam_lang::run(&src, &dir);
+    let capped = forge_cam_lang::run(
+        &src.replace("step: 3, stepover: 4)", "step: 3, stepover: 4, max_power: 0.15)"),
+        &dir,
+    );
+    assert!(
+        capped.ok,
+        "{:?}",
+        capped.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    let (a, b) = (feeds(&free), feeds(&capped));
+    // air samples carry no power and keep their feed; the engaged ones come down
+    let low_free = a.iter().copied().fold(f64::INFINITY, f64::min);
+    let low_capped = b.iter().copied().fold(f64::INFINITY, f64::min);
+    assert!(low_capped < low_free, "{low_capped} {low_free}");
+    assert!(b.iter().copied().fold(0.0, f64::max) <= a.iter().copied().fold(0.0, f64::max));
+    assert!(
+        capped
+            .warnings
+            .iter()
+            .any(|w| w.starts_with("top: the feed was lowered on")),
+        "{:?}",
+        capped.warnings
+    );
+}

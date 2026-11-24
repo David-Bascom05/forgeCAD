@@ -91,6 +91,14 @@ every `tool(..)` takes these args; an op's value wins over its tool's (kernel/fo
 | `max_power:`, `max_torque:` | kW, N·m | limits: the feed (only the feed) is lowered to meet them; P ∝ fz^(1−mc), so exactly |
 | `min_feed:`, `max_feed:` | mm/min | the feed range (engagement feed stays in it) |
 
+Engagement feed (clear, pocket, contour, slot, facing; not when the user programmed `fz:`/`feed:`):
+TOOLPATH-QUALITY's measurement on the in-process stock gives each FIXED-LENGTH sample (one tool
+diameter) its engaged angle, ap and ae; the feed holds the resolved chip through radial thinning,
+then is lowered (only the feed) so the sample's power and torque stay within `max_power:`,
+`max_torque:` and the spindle's power at the rpm, inside [`min_feed:`, `max_feed:`]. Samples are
+joined only at the same clamp, never by engagement band; no material-abrasion term
+(research/cam/toolpath-quality/fto-adaptive.md, design-around D).
+
 The stock material is `part(.., material:)` (a forge-material name; stock is often not the
 part's own record), else the part document's material. Its ISO 513 group is `part(.., group:)`,
 else its `[[stock]]` record's in cutting.toml, else its family's class (steel P, stainless M,

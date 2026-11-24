@@ -200,6 +200,10 @@ pub struct Resolved {
     pub held_chip: bool,
     /// Material removal rate, cm³/min.
     pub mrr: f64,
+    /// The user's own power and torque limits (kW, N·m), as asked: engagement feed holds them
+    /// per sample.
+    pub max_power_ask: Option<f64>,
+    pub max_torque_ask: Option<f64>,
     /// Power and torque at the upper ends of the material's cited kc1.1/mc ranges (the nominal
     /// values where it cites none).
     pub power_hi: f64,
@@ -718,6 +722,8 @@ pub fn milling_on(
         max_feed,
         feeds: derived,
         held_chip: ask.feed.is_none() && ask.fz.is_none(),
+        max_power_ask: ask.max_power,
+        max_torque_ask: ask.max_torque,
         mrr,
         power_hi,
         torque_hi,
