@@ -45,6 +45,7 @@ spheres and tori about it. Any other face (a flat, a cross hole) is refused by n
 | `turn_face(op, tool:, to: Z, step:)` | face from the bar's front to Z, the nose centre to the centre line |
 | `turn_rough(op, tool:, leave:, step:, to: Z, top:)` | axial passes at every `step` and at every diameter of the part, down to the part grown by the nose radius and `leave`, or to Z |
 | `turn_finish(op, tool:, leave: 0, to: Z)` | the profile, the nose centre on the exact offset of the part by the nose radius (compensation done exactly; posted as the imaginary tip with G40) |
+| `turn_rough(op, tool: LEFT, leave:, step:, from: Z0, to: Z1)` | with a left-hand tool: axial passes up (+z) from Z0 (room already cut) to the part grown by the nose and leave, or Z1 |
 | `turn_finish(op, tool: LEFT, leave: 0, from: Z0, to: Z1)` | with a left-hand tool: up the profile (+z) from Z0 to Z1, for the flanks that face the chuck (a collar's back chamfer, reached from a neck cut first) |
 | `bore_rough(op, tool:, leave:, step:, to: Z, from: D)` | boring: the drilled hole (diameter D) opened outward in axial passes down to the bore grown by the nose radius and `leave`, or to Z; `turn_finish` with a boring tool then finishes the bore |
 | `turn_groove(op, tool:, from: Z0, to: Z1, r: R)` | a groove between Z0 and Z1 to radius R, by plunges; with an ID grooving bar also `bore: D` (the smallest diameter on the way in): an internal groove, the blade entering along the axis and plunging outward |

@@ -405,6 +405,99 @@ pub fn rough(
     })
 }
 
+/// Roughing up with a left-hand tool: axial passes feeding +z from z_lo (in room already cut, a
+/// neck or groove), at every ap from the bar and at every cylinder of the grown part, each up to
+/// the part grown by the nose radius and leave, or to z_hi, retracting at 45° away from it. For
+/// the stock under a flank that faces the chuck, before `finish_up`. A pass whose start lies
+/// inside the grown part is left out.
+pub fn rough_up(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    leave: f64,
+    ap: f64,
+    z_lo: f64,
+    z_hi: f64,
+) -> Result<OpPath, OpError> {
+    if !(leave >= 0.0) {
+        return Err(OpError::Geometry(format!(
+            "a leave of {leave}: below the part (G1 holds the cutter from P ⊕ B_leave, leave ≥ 0)"
+        )));
+    }
+    if !(tool.kind == Kind::Turn && tool.left) {
+        return Err(OpError::Tool(format!(
+            "roughing up needs a left-hand turning tool, not `{}`",
+            tool.id
+        )));
+    }
+    if !(z_hi > z_lo) {
+        return Err(OpError::Geometry(format!(
+            "from z = {z_lo} up to z = {z_hi}: the end must lie above the start"
+        )));
+    }
+    let re = tool.re;
+    let c = grown(s, re + leave)?;
+    let x_out = s.bar_r + APPROACH + re;
+    let start = [x_out, z_lo];
+    let mut steps = vec![Step::Rapid(start)];
+    let mut xs: Vec<f64> = Vec::new();
+    let mut k = 1;
+    loop {
+        let x = s.bar_r - ap * k as f64 + re;
+        if x - re <= 0.0 {
+            break;
+        }
+        xs.push(x);
+        k += 1;
+    }
+    for sg in &c.segs {
+        if let Seg::Line { a, b } = *sg
+            && a.x == b.x
+            && a.x - re > 0.0
+            && a.x - re < s.bar_r - 1e-6
+        {
+            xs.push(a.x + 1e-7 * (1.0 + a.x.abs()));
+        }
+    }
+    xs.sort_by(|a, b| b.total_cmp(a));
+    xs.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+    for x in xs {
+        let mut zs = Vec::new();
+        for sg in &c.segs {
+            meet_vertical(sg, x, &mut zs);
+        }
+        let above: Vec<f64> = zs.iter().copied().filter(|z| *z > z_lo).collect();
+        // an odd count of crossings above: the start is inside the grown part
+        if above.len() % 2 == 1 {
+            continue;
+        }
+        let z_end = above.iter().copied().fold(f64::INFINITY, f64::min).min(z_hi);
+        if z_end <= z_lo {
+            continue;
+        }
+        // in and back down at feed: the room below (a neck or a groove) is tight against the
+        // band being roughed, with no space for a rapid's clearance
+        steps.push(Step::Feed([x, z_lo]));
+        steps.push(Step::Feed([x, z_end]));
+        steps.push(Step::Feed([x + RETRACT, z_end - RETRACT]));
+        steps.push(Step::Feed([x + RETRACT, z_lo]));
+    }
+    // out of the room at feed too: the column stock (the normal path's superset) cannot hold a
+    // room under an overhang, so a rapid there would be refused against stock that is gone
+    steps.push(Step::Feed(start));
+    Ok(OpPath {
+        name: format!("rough up z {z_lo}..{z_hi}, leave {leave}"),
+        tool: tool.clone(),
+        t,
+        spindle: css(tool),
+        f: tool.f,
+        leave,
+        start,
+        steps,
+        removal: None,
+    })
+}
+
 /// Boring, rough: a hole of radius r0 (drilled) opened outward in axial passes at every ap and
 /// at every bore diameter of the part, each down to the part grown by the nose radius and leave
 /// (from inside), or to z_lo, retracting at 45° toward the axis.

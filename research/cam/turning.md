@@ -90,7 +90,7 @@ What the checks caught while the examples were written (each now a test, tests/r
    the ops that feed toward the chuck; `finish_up` walks the grown profile up (+z) from z_lo to
    z_hi (examples/machined/collar_turn.fg: a back chamfer, certified in full; caught: the
    right-hand VBMT on down the chamfer, and the left-hand one started 1 mm over the shoulder,
-   its insert hanging 9 mm toward the chuck). Left-hand bars decode (the R twin mirrored) and are refused by the ops that feed toward the chuck. Left: left-hand roughing, a left-hand bore op. tests/vendor_codes.rs (CAM-HAAS): 75 real catalogue codes decode to their makers' stated IC, s, re, l, κr, hand, shank and length, and an undecodable code fails.
+   its insert hanging 9 mm toward the chuck). Left-hand bars decode (the R twin mirrored) and are refused by the ops that feed toward the chuck. Left-hand roughing: `rough_up` (axial passes up from room already cut; its moves inside that room are feeds, since the column stock, a height per ρ, cannot hold a room under an overhang and would refuse a rapid there against stock that is gone: sound, conservative; `cam F check`'s exact stock has no such limit). Left: a left-hand bore op. tests/vendor_codes.rs (CAM-HAAS): 75 real catalogue codes decode to their makers' stated IC, s, re, l, κr, hand, shank and length, and an undecodable code fails.
    Other workholding: `Setup.fixtures`, named envelopes of revolution (a tailstock's centre and
    quill, a steady rest), checked as the chuck is (G2); a live centre refuses facing to the
    centre line and finishing from over it (tests/refuse.rs). The .fg records come from
