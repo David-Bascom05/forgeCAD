@@ -406,7 +406,14 @@ pub(crate) fn procedural_box(body: &Body, f: FaceId, pr: &forge_geom::surface::P
     if pr.whole_box() {
         return pr.bbox(whole);
     }
-    if d.u.period.is_some() != d.v.period.is_some() {
+    // closed one way and open the other as far as the model reaches (a closed extrusion): the
+    // whole domain is a box of +-1e6 mm, so bound the open way by the face's loops. (A sweep's
+    // finite spine keeps the whole domain: tight enough, and the loops' cost is the frame bench
+    // part's 9%)
+    let open = |i: Interval| !(i.width() < forge_math::tol::MODEL_HALF_SIZE);
+    if (d.u.period.is_some() && d.v.period.is_none() && open(whole.v))
+        || (d.v.period.is_some() && d.u.period.is_none() && open(whole.u))
+    {
         return closed_one_way_box(body, f, pr, whole);
     }
     let loops = if d.u.period.is_none() && d.v.period.is_none() {
