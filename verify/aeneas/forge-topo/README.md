@@ -17,6 +17,7 @@ shipped code for each test moved here.
 | edge uses (`check_edges`) | `topo_edges::edges` | `forge_topo.edges_refines` | L4 |
 | loops (`check_loops`) | `topo_edges::loops` | `forge_topo.loops_refines` | L4 |
 | shell Euler counts (`check_shell_euler`) | `topo_euler::shell_euler` | `forge_topo.shell_euler_refines` | L4 |
+| fans (`check_fans`) | `topo_fans::fans` | `forge_topo.fans_refines` | L4 |
 
 `strays_refines`: for any `Topo` instance whose counts and edge ends are the model body's, and
 any `Sink` that appends the problem it is handed, the translated `strays` returns (no panic, no
@@ -68,6 +69,17 @@ does (`distinct_snoc`). Hypothesis `EulerSmall`: each shell's listed faces, loop
 counts as a face with no loops, as the model reads it (until this test moved here, `check`
 panicked on such a body before `check_shell_faces` could report it).
 
+`fans_refines` (`lean/ForgeTopo/Fans.lean`): for a body with sound links, an instance that
+`FanReads` it and a sink that appends what it is handed, the translated `fans` appends exactly
+`Body.checkFans corners`, where `corners` is what the view's `corners` returns (geometry: the
+corner table, taken as given). The leaving coedges of each vertex are built by a counting sort
+(`CountInv`, `vpre`, `PlaceInv`: the coedges of vertex `w` are `items[vpre w .. vpre (w+1)]`, in
+the model's order); each fan walk keeps its seen coedges in a reused buffer whose first `sl`
+entries are the model's `seen` (`walk_spec`; the model's fuel is past every use, `walk_fuel`).
+Hypotheses: `CornersOK` (the corner table's entries pair distinct coedges of the face with a use
+that closes the corner, as body.rs `corners` builds them), `nf_lt` (face ids below `u32::MAX`),
+`FansSmall` (the vertex count plus one and the number of edge uses fit `usize`).
+
 `lean/ForgeTopo/Axioms.lean` fails the build if a theorem uses more than `propext`,
 `Classical.choice` and `Quot.sound`.
 
@@ -75,5 +87,4 @@ Build: `cd lean && lake build` (shares Mathlib and Aeneas's library with
 `verify/forge-mass/lean/.lake/packages`; the f64 bridge `verify/aeneas/bridge` is required but
 unused, the topology has no floats).
 
-Next: the fans move the same way, until `check`'s whole topological
-part is translated.
+Next: `check_known`'s combinatorial part composed from these (T.all).

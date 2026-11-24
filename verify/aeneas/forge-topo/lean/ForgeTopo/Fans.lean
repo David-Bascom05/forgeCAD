@@ -1929,6 +1929,47 @@ theorem vertices_spec {S : Type} (FS : topo_fans.FanSink S) (P : S → List Prob
   · have h0 : (0#usize).val = 0 := rfl
     simp [h0]
 
+/-- The sizes `fans` allocates fit `usize`: the vertex count plus one, and all edge uses. -/
+def FansSmall (b : Body) : Prop := b.nv < Usize.max ∧ (allUses b).length < Usize.max
+
+/-- **The shipped `check_fans` refines the model.** For a body whose links are sound (as
+`check_known` runs it), any `FanTopo` view that reads it (`FanReads`; its `corners` is the model's
+corner table, meeting `CornersOK`), sizes that fit `usize` (`FansSmall`) and any sink that appends
+what it is handed, the translated Rust `fans` terminates without panic or overflow and appends
+exactly `Model.checkFans corners`. -/
+theorem fans_refines {S : Type} (FS : topo_fans.FanSink S) (P : S → List Problem) (hS : AppendsF FS P)
+    (R : FanReads FI t b corners) (hL : b.checkLinks = []) (hC : CornersOK b corners) (hsm : FansSmall b)
+    (out : S) :
+    topo_fans.fans FI FS t out ⦃ r => P r = P out ++ b.checkFans corners ⦄ := by
+  have H := sound_of b hL
+  have W := b.links_ok hL
+  have hnvA := vpre_all (b := b) H W
+  obtain ⟨hnvs, hsmall⟩ := hsm
+  unfold topo_fans.fans
+  have rnv := R.base.nv
+  have rne := R.base.ne
+  step with rnv as ⟨nv, hnv⟩
+  step with rne as ⟨ne, hne⟩
+  have h1 : (1#usize).val = 1 := rfl
+  step with usize_add_wspec nv 1#usize (by rw [h1]; omega) as ⟨nv1, hnv1⟩
+  have hnv1v : nv1.val = b.nv + 1 := by rw [hnv1, add_val nv 1#usize (lt_size_of_le_max _ (by rw [h1]; omega)), hnv, h1]
+  step as ⟨off, hoff, hoff2⟩
+  have hI : CountInv b [] off := by
+    refine ⟨by rw [hoff]; simp [hnv1v], by rw [hoff, getElem!_pos _ 0 (by simp [hnv1v])]; simp, fun w hw => ?_⟩
+    rw [hoff, getElem!_pos _ (w + 1) (by simp [hnv1v]; omega)]; simp [cntQ]
+  step with count_all_spec FI t R H W hsmall ne hne off hI as ⟨off1, hI1⟩
+  step as ⟨atv, hatv, hatv2⟩
+  step with prefix_spec hsmall nv hnv off1 atv hI1 (by rw [hatv]; simp [hnv]) as ⟨off2, at1, ho2l, ha1l, ho2, ha1⟩
+  step as ⟨tot, htot⟩
+  have htotv : tot.val = (allUses b).length := by
+    rw [htot, ← getElem!_pos off2.val nv.val (by omega), hnv, ho2 b.nv (le_refl _), hnvA]
+  step as ⟨items, hitems, hitems2⟩
+  have hP : PlaceInv b (allUses b) [] at1.val items.val := by
+    refine ⟨ha1l, by rw [hitems]; simp [htotv], fun w hw => by rw [ha1 w hw]; simp [cntQ], fun w _ j hj => ?_⟩
+    simp [cntQ] at hj
+  step with place_all_spec FI t R H W hsmall hnvA ne hne at1 items hP as ⟨items1, hil, hit⟩
+  exact vertices_spec FI t FS P hS R H W hC hnvA nv hnv off2 items1 ho2l ho2 hil hit out _
+
 end sort
 
 end forge_topo
