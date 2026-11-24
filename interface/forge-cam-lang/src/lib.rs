@@ -4330,7 +4330,11 @@ impl Cam {
                 });
                 let chosen = |k: usize| -> f64 {
                     match (&rough_feed, samples[k].engage) {
-                        (Some((rf, _)), Some(g)) if g.phi < std::f64::consts::FRAC_PI_2 && g.cos_max < 1.0 => rf[k],
+                        (Some((rf, _)), Some(g))
+                            if g.phi < std::f64::consts::FRAC_PI_2 && g.cos_max < 1.0 =>
+                        {
+                            rf[k]
+                        }
                         (Some((_, sf)), _) => sf[k],
                         (None, _) => base[k],
                     }
@@ -4549,7 +4553,10 @@ impl Cam {
     fn stock_hardness(name: &str, dir: &Path) -> Option<&'static str> {
         let libs = forge_material::Libraries::cached(Some(dir));
         let (_, m) = libs.find(name)?;
-        let hb = match (m.extra("machining.hardness_hb"), m.extra("machining.hardness_hrc")) {
+        let hb = match (
+            m.extra("machining.hardness_hb"),
+            m.extra("machining.hardness_hrc"),
+        ) {
             (Some(forge_material::Value::Num(hb)), _) => *hb,
             (_, Some(forge_material::Value::Num(hrc))) => feeds::hb_of_hrc(*hrc),
             _ => return None,
@@ -4688,9 +4695,31 @@ impl Cam {
             (None, Some(c)) => Some((c.name.as_str(), c.chip_factor, class_src)),
             _ => None,
         };
+        // hardness unknown where the group's classes split by hardness: the pooled class is
+        // the conservative default, and the note says what would sharpen it (coordinator's rule)
+        let pooled_note = gu
+            .filter(|_| self.parts[self.setups[su].part].hardness.is_none())
+            .and_then(|u| {
+                let banded = ["soft", "21-36HRC", "36-50HRC"].into_iter().any(|b| {
+                    let tc = feeds::ToolClass {
+                        family: self.parts[self.setups[su].part].family.as_deref(),
+                        hardness: Some(b),
+                        tier: None,
+                        flutes: Some(t.tool.nof.max(1)),
+                        coated: feeds::ToolClass::coated(&t.tool.coating),
+                        helix: None,
+                    };
+                    self.lib
+                        .generic(group_name, class, &tc)
+                        .is_some_and(|g| g.hardness == b && g.vc.p10 != u.op.vc.p10)
+                });
+                banded.then_some(
+                    "; hardness unknown: pooled over the hardness classes (conservative) — name the alloy and condition (e.g. material: \"1045 cold drawn\") for realistic speeds",
+                )
+            });
         let part = &self.parts[self.setups[su].part];
         let stock = part.stock.as_ref();
-        resolve::milling_on(
+        let mut r = resolve::milling_on(
             &asked,
             &resolve::ToolData {
                 d: t.tool.dc,
@@ -4712,7 +4741,11 @@ impl Cam {
                 power: &m.power,
             },
             nominal,
-        )
+        )?;
+        if let Some(n) = pooled_note {
+            r.vc.note.push_str(n);
+        }
+        Some(r)
     }
 
     /// A probing op: `probe_wcs` (a feature's position for a work offset) or `inspect` (one
