@@ -31,3 +31,89 @@
 #   { file = "kernel/<crate>/src/<file>.rs", name = "<test fn>", kind = "mutation" },
 # ]
 # owed = ["code = model"]
+
+# CURVED-SITES: the blend node (LEDGER C.node). No check removed: the marching trace near a
+# tangent node of two tubes is replaced (cut within 2 steps, each stretch walked back to the node
+# exactly by towards_touch, a second stretch along a kept branch dropped); the geometric dedup
+# still runs as a guard. Called from forge-bool ssi::search.
+[[check]]
+id = "blend-node-mend"
+owner = "CURVED-SITES"
+removed = "the marching trace near a tangent node of two tubes, replaced by mend (gating helpers tube, spring, one_plane_fits, nodes, crossings, reach_of in the same file)"
+rust = { file = "kernel/forge-geom/src/node.rs", fn = "mend" }
+reviewed_at = "1dfc2dc6a152339f"
+level = "L1"
+hyp = "LEDGER C.node: the face is its tube's whole cap within reach; towards_touch's points exact to its tolerance only"
+lemmas = [
+  { project = "verify/forge-curved", name = "ForgeCurved.BlendNode.one_branch" },
+  { project = "verify/forge-curved", name = "ForgeCurved.BlendNode.tubes_one_branch" },
+  { project = "verify/forge-curved", name = "ForgeCurved.BlendNode.branch_increasing" },
+  { project = "verify/forge-curved", name = "ForgeCurved.BlendNode.branch_meets_springs_only_at_node" },
+  { project = "verify/forge-curved", name = "ForgeCurved.BlendNode.cap_section" },
+  { project = "verify/forge-curved", name = "ForgeCurved.BlendNode.h_strictMonoOn" },
+  { project = "verify/forge-curved", name = "ForgeCurved.BlendNode.h_zero" },
+]
+tests = [
+  { file = "interface/forge-lang/tests/round_node.rs", name = "every_radius_once_refused_builds", kind = "sampling" },
+  { file = "interface/forge-lang/tests/round_node.rs", name = "the_volume_falls_smoothly_through_the_two_rounds_range", kind = "sampling" },
+  { file = "interface/forge-lang/tests/round_node.rs", name = "past_the_corners_limit_every_radius_is_refused", kind = "unit" },
+  { file = "kernel/forge-geom/src/node.rs", name = "a_spring_needs_the_spine_a_radius_under_the_plane", kind = "mutation" },
+  { file = "kernel/forge-geom/src/node.rs", name = "a_line_crosses_a_circle_where_its_chord_ends", kind = "unit" },
+  { file = "kernel/forge-geom/src/node.rs", name = "two_circles_cross_on_their_common_chord", kind = "unit" },
+]
+owed = ["code = model"]
+
+[[check]]
+id = "blend-node-mended"
+owner = "CURVED-SITES"
+removed = "as blend-node-mend: the mended curves of a node (mend's worker)"
+rust = { file = "kernel/forge-geom/src/node.rs", fn = "mended" }
+reviewed_at = "fad1b6cfa9f1860b"
+level = "L1"
+hyp = "LEDGER C.node"
+lemmas = [
+  { project = "verify/forge-curved", name = "ForgeCurved.BlendNode.one_branch" },
+  { project = "verify/forge-curved", name = "ForgeCurved.BlendNode.branch_meets_springs_only_at_node" },
+]
+tests = [
+  { file = "interface/forge-lang/tests/round_node.rs", name = "every_radius_once_refused_builds", kind = "sampling" },
+  { file = "kernel/forge-geom/src/node.rs", name = "a_spring_needs_the_spine_a_radius_under_the_plane", kind = "mutation" },
+]
+owed = ["code = model"]
+
+# CAM-3D-FINISH: a closed-form lower bound first in certify_shared (a ball cutter on a line move
+# against a sphere, a non-prism cylinder, a non-prism plane on a non-planar move); where it proves
+# Clear the branch and bound is skipped for that pair, else the existing paths run unchanged. Not
+# yet proven: hypothesis H.contact (verify/forge-cam/RESUME.md).
+[[check]]
+id = "contact-ball-quadric-lower"
+owner = "CAM-3D-FINISH"
+removed = "certify_bb (via check.rs certify_shared's fast gate) skipped where the closed-form bound proves Clear: the bound"
+rust = { file = "kernel/forge-cam-geom/src/contact.rs", fn = "lower" }
+reviewed_at = "61360b08f6e52e02"
+level = "L1"
+hyp = "H.contact (verify/forge-cam/RESUME.md): sd_K <= sd_B for B in capsule K; the shell step; the tangent-plane bound of a convex quadratic over a box; the full surface bounds the trimmed patch"
+lemmas = []
+tests = [
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "never_above_the_true_minimum", kind = "sampling" },
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "nan_inf_and_overflow_are_refused", kind = "mutation" },
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "degenerate_moves_and_the_inside_case", kind = "unit" },
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "exact_on_a_sphere_touching_from_above", kind = "unit" },
+]
+owed = ["lemma", "code = model"]
+
+[[check]]
+id = "contact-ball-quadric-clear"
+owner = "CAM-3D-FINISH"
+removed = "as contact-ball-quadric-lower: the gate that takes the bound's Clear"
+rust = { file = "kernel/forge-cam-geom/src/contact.rs", fn = "clear" }
+reviewed_at = "4a1ea82824d98a9d"
+level = "L1"
+hyp = "H.contact (verify/forge-cam/RESUME.md)"
+lemmas = []
+tests = [
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "never_above_the_true_minimum", kind = "sampling" },
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "nan_inf_and_overflow_are_refused", kind = "mutation" },
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "a_ball_cutter_has_a_capsule_and_a_flat_does_not", kind = "unit" },
+]
+owed = ["lemma", "code = model"]
