@@ -240,6 +240,7 @@ jobs:
           node web/tests/wall.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/deeplink.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/import.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/clipboard.cjs "$GITHUB_WORKSPACE/target/web"
       - name: parity (shard ${{ matrix.test }} of 3)
         if: matrix.test != 'e2e'
         working-directory: interface/forge-render

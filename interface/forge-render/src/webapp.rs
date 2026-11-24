@@ -418,7 +418,14 @@ impl Host {
             if let egui::OutputCommand::CopyText(t) = c
                 && let Some(w) = web_sys::window()
             {
-                let _ = w.navigator().clipboard().write_text(t);
+                // the browser may refuse (no permission, the page not focused): said, not a
+                // rejected promise no one awaited (a page error, and nothing told)
+                let written = w.navigator().clipboard().write_text(t);
+                wasm_bindgen_futures::spawn_local(async move {
+                    if wasm_bindgen_futures::JsFuture::from(written).await.is_err() {
+                        ask(Ask::Say("Couldn't copy: the browser didn't allow it.".into()));
+                    }
+                });
             }
         }
         self.next = None;

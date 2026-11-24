@@ -352,6 +352,22 @@ list on main: this branch's new strings add none).
 - Swept fine in the page: Markup (draw, text with typing, Esc, Done); DWG open (layers,
   properties, its command line).
 
+## 22. Copy in the page: a refused clipboard was a page error and said nothing (ui/bughunt-3)
+
+- Measure's Copy / Copy all (and every egui copy) went to `navigator.clipboard.writeText`, its
+  promise dropped. Where the browser refuses (no permission, the page not focused: a headless
+  browser always), that was an unhandled rejection ("PAGEERROR Failed to execute 'writeText' on
+  'Clipboard': Write permission denied", seen in the driver on Measure > Copy all), and the
+  person was told nothing. The promise is awaited now; refused, the status says "Couldn't copy:
+  the browser didn't allow it."
+- Test: `web/tests/clipboard.cjs` (refused: said, no page error; allowed with permission: the
+  measurement is on the clipboard, "Area 1800.000 mm²…").
+- Swept fine: Inspect > Measure in the page (face to the XY plane: 6.000 mm; the readout in the
+  view).
+- Reported to CAM-UI (not mine): Manufacture > Export NC / Setup Sheet / Post Process on the
+  bundled flange_cam.fg do nothing visible: refused as "certified except G5", the reason only in
+  the CAM state's `said`, never on screen.
+
 ## Open (reported, not fixed here)
 
 
