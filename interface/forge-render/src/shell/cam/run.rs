@@ -1,0 +1,468 @@
+//! The document generated: forge-cam-lang's run of the text, and what the workspace shows of it
+//! per setup and per operation. Read from the reply `forgecad.cam/1` (the data contract the
+//! CLI and the agents get) and from the run's public paths, never re-derived.
+
+use super::doc::{self, Role, Stmt};
+use forge_agent::json::Json;
+use std::path::Path;
+
+/// A check as the reply gives it (a failure or an undecided one).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Check {
+    pub rule: String,
+    pub verdict: String,
+    pub value: f64,
+    pub limit: f64,
+    /// The witness, in the setup's WCS.
+    pub at: [f64; 3],
+    pub tool_part: String,
+    pub other: String,
+    pub phase: String,
+    /// The move of the op's path it is on.
+    pub mov: usize,
+}
+
+/// How an op's path is known to be safe (David, 2026-11-23: the generators are to be proven,
+/// the checker kept as an oracle and an on-demand command).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Assurance {
+    /// Proven by construction: its generator is proven (Lean, Aeneas L4); nothing checked.
+    Proven,
+    /// Checked on demand: the certified checker ran on it when asked (Check Now).
+    CheckedOnDemand,
+    /// Interim: the certified checker runs on every generate (forge-cam-lang today).
+    #[default]
+    CheckedAtGenerate,
+}
+
+impl Assurance {
+    pub fn words(self) -> &'static str {
+        match self {
+            Assurance::Proven => "proven by construction",
+            Assurance::CheckedOnDemand => "checked on demand",
+            Assurance::CheckedAtGenerate => "checked at generate (interim)",
+        }
+    }
+}
+
+/// One op as generated.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OpRes {
+    pub name: String,
+    pub kind: String,
+    pub setup: String,
+    /// built | refused | unposted
+    pub status: String,
+    /// How its path is known safe.
+    pub assurance: Assurance,
+    pub tool: Option<String>,
+    pub tool_t: Option<u32>,
+    pub tool_d: Option<f64>,
+    pub refusal: Option<String>,
+    pub fix: Option<String>,
+    pub checks: Vec<Check>,
+    pub plan: Vec<String>,
+    pub removals: Vec<String>,
+    pub moves: usize,
+    pub length_cut: f64,
+    pub length_rapid: f64,
+    pub time_s: f64,
+    /// The least cutter distance the certificate found.
+    pub least: Option<f64>,
+    pub pairs: usize,
+    pub rpm: Option<f64>,
+    pub feed: Option<f64>,
+    pub fz: Option<f64>,
+    pub hex: Option<f64>,
+    pub vc: Option<f64>,
+    pub power_kw: Option<f64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SetupRes {
+    pub name: String,
+    pub part: String,
+    pub machine: String,
+    pub origin: [f64; 3],
+    pub offset: u32,
+    pub stock_min: [f64; 3],
+    pub stock_max: [f64; 3],
+    pub tol: f64,
+    pub clearance: f64,
+    pub at: Option<[f64; 3]>,
+    pub clear_h: f64,
+    pub retract_h: f64,
+    pub fixture: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ProgRes {
+    pub name: String,
+    pub post: String,
+    pub lines: usize,
+    pub round_trip: bool,
+    pub certified: String,
+    pub error: Option<String>,
+    pub text: Option<String>,
+}
+
+/// A left-over region (G4).
+#[derive(Clone, Debug, PartialEq)]
+pub struct LeftRes {
+    pub setup: String,
+    pub z: [f64; 2],
+    pub boxes: Vec<[f64; 4]>,
+    pub why: String,
+}
+
+/// A whole run.
+pub struct Run {
+    /// The text it ran on.
+    pub text: String,
+    /// The statements of that text (what is stale is what changed since).
+    pub stmts: Vec<Stmt>,
+    pub ok: bool,
+    pub certification: String,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+    pub setups: Vec<SetupRes>,
+    pub ops: Vec<OpRes>,
+    pub programs: Vec<ProgRes>,
+    pub leftover: Vec<LeftRes>,
+    pub leftover_done: bool,
+    /// The reply, as `forgecad cam --json` prints it.
+    pub json: String,
+    /// The setup sheet (HTML).
+    pub sheet: String,
+    /// The run itself: the ops' paths for the views.
+    pub cam: forge_cam_lang::Cam,
+}
+
+fn s(j: &Json, k: &str) -> String {
+    j.get(k).and_then(Json::str).unwrap_or_default().to_string()
+}
+fn n(j: &Json, k: &str) -> Option<f64> {
+    j.get(k).and_then(Json::num)
+}
+fn v3(j: Option<&Json>) -> Option<[f64; 3]> {
+    match j? {
+        Json::Arr(a) if a.len() == 3 => Some([a[0].num()?, a[1].num()?, a[2].num()?]),
+        _ => None,
+    }
+}
+fn arr(j: &Json, k: &str) -> Vec<Json> {
+    match j.get(k) {
+        Some(Json::Arr(a)) => a.clone(),
+        _ => vec![],
+    }
+}
+fn strs(j: &Json, k: &str) -> Vec<String> {
+    arr(j, k)
+        .iter()
+        .filter_map(|x| x.str().map(str::to_string))
+        .collect()
+}
+
+/// Generates `text` (its files beside it in `dir`).
+pub fn run(text: &str, dir: &Path) -> Run {
+    let cam = forge_cam_lang::run(text, dir);
+    let j = cam.json();
+    let mut json = String::new();
+    j.write(&mut json);
+    let setups = arr(&j, "setups")
+        .iter()
+        .map(|x| {
+            let wcs = x.get("wcs");
+            let st = x.get("stock");
+            let h = x.get("heights");
+            SetupRes {
+                name: s(x, "name"),
+                part: s(x, "part"),
+                machine: s(x, "machine"),
+                origin: v3(wcs.and_then(|w| w.get("origin"))).unwrap_or_default(),
+                offset: wcs.and_then(|w| n(w, "offset")).unwrap_or(0.0) as u32,
+                stock_min: v3(st.and_then(|w| w.get("min"))).unwrap_or_default(),
+                stock_max: v3(st.and_then(|w| w.get("max"))).unwrap_or_default(),
+                tol: n(x, "tol").unwrap_or(0.0),
+                clearance: n(x, "clearance").unwrap_or(0.0),
+                at: v3(x.get("at")),
+                clear_h: h.and_then(|h| n(h, "clear")).unwrap_or(0.0),
+                retract_h: h.and_then(|h| n(h, "retract")).unwrap_or(0.0),
+                fixture: x
+                    .get("fixture")
+                    .and_then(|f| f.get("name"))
+                    .and_then(Json::str)
+                    .map(str::to_string),
+            }
+        })
+        .collect();
+    let ops = arr(&j, "ops")
+        .iter()
+        .zip(&cam.ops)
+        .map(|(x, o)| {
+            let t = x.get("tool");
+            let f = x.get("feeds");
+            let p = x.get("path");
+            let c = x.get("certificate");
+            OpRes {
+                name: s(x, "name"),
+                kind: s(x, "kind"),
+                setup: s(x, "setup"),
+                status: s(x, "status"),
+                // every op of forge-cam-lang is certified on the posted path when generated
+                assurance: Assurance::CheckedAtGenerate,
+                tool: t
+                    .and_then(|t| t.get("id"))
+                    .and_then(Json::str)
+                    .map(str::to_string),
+                tool_t: t.and_then(|t| n(t, "T")).map(|v| v as u32),
+                tool_d: t.and_then(|t| n(t, "d")),
+                refusal: o.refusal.clone(),
+                fix: o.fix.clone(),
+                checks: arr(x, "checks")
+                    .iter()
+                    .map(|c| Check {
+                        rule: s(c, "rule"),
+                        verdict: s(c, "verdict"),
+                        value: n(c, "value").unwrap_or(f64::NAN),
+                        limit: n(c, "limit").unwrap_or(f64::NAN),
+                        at: v3(c.get("at")).unwrap_or_default(),
+                        tool_part: s(c, "tool_part"),
+                        other: s(c, "other"),
+                        phase: s(c, "phase"),
+                        mov: n(c, "move").unwrap_or(0.0) as usize,
+                    })
+                    .collect(),
+                plan: strs(x, "plan"),
+                removals: strs(x, "removals"),
+                moves: p.and_then(|p| n(p, "moves")).unwrap_or(0.0) as usize,
+                length_cut: p.and_then(|p| n(p, "length_cut")).unwrap_or(0.0),
+                length_rapid: p.and_then(|p| n(p, "length_rapid")).unwrap_or(0.0),
+                time_s: p.and_then(|p| n(p, "time_s")).unwrap_or(0.0),
+                least: c.and_then(|c| n(c, "least_cutter_distance")),
+                pairs: c.and_then(|c| n(c, "pairs")).unwrap_or(0.0) as usize,
+                rpm: f.and_then(|f| n(f, "rpm")),
+                feed: f.and_then(|f| n(f, "f")),
+                fz: f.and_then(|f| n(f, "fz")),
+                hex: f.and_then(|f| n(f, "hex")),
+                vc: f.and_then(|f| n(f, "vc")),
+                power_kw: f.and_then(|f| n(f, "power_kw")),
+            }
+        })
+        .collect();
+    let programs = arr(&j, "programs")
+        .iter()
+        .zip(&cam.programs)
+        .map(|(x, p)| ProgRes {
+            name: s(x, "name"),
+            post: s(x, "post"),
+            lines: n(x, "lines").unwrap_or(0.0) as usize,
+            round_trip: matches!(x.get("round_trip"), Some(Json::Bool(true))),
+            certified: s(x, "certified"),
+            error: p.error.clone(),
+            text: p.text.clone(),
+        })
+        .collect();
+    let lo = j.get("leftover");
+    let leftover = lo
+        .map(|l| arr(l, "regions"))
+        .unwrap_or_default()
+        .iter()
+        .map(|r| LeftRes {
+            setup: s(r, "setup"),
+            z: match r.get("z") {
+                Some(Json::Arr(a)) if a.len() == 2 => [a[0].num().unwrap_or(0.0), a[1].num().unwrap_or(0.0)],
+                _ => [0.0, 0.0],
+            },
+            boxes: arr(r, "boxes")
+                .iter()
+                .filter_map(|b| match b {
+                    Json::Arr(a) if a.len() == 4 => {
+                        Some([a[0].num()?, a[1].num()?, a[2].num()?, a[3].num()?])
+                    }
+                    _ => None,
+                })
+                .collect(),
+            why: s(r, "why"),
+        })
+        .collect();
+    Run {
+        text: text.to_string(),
+        stmts: doc::read(text).unwrap_or_default(),
+        ok: cam.ok,
+        certification: cam.certification().to_string(),
+        errors: cam.errors.clone(),
+        warnings: cam.warnings.clone(),
+        setups,
+        ops,
+        programs,
+        leftover,
+        leftover_done: matches!(lo.and_then(|l| l.get("computed")), Some(Json::Bool(true))),
+        json,
+        sheet: cam.sheet(),
+        cam,
+    }
+}
+
+impl Run {
+    pub fn op(&self, name: &str) -> Option<&OpRes> {
+        self.ops.iter().find(|o| o.name == name)
+    }
+    pub fn setup(&self, name: &str) -> Option<&SetupRes> {
+        self.setups.iter().find(|o| o.name == name)
+    }
+}
+
+/// The ops of `now` whose result is out of date against `ran` (the statements a run used):
+/// an op is stale when it, any statement it is built on (part, machine, tool, setup, fixture,
+/// shared values), or an earlier op of its setup changed. A new op is stale until generated.
+pub fn stale(ran: &[Stmt], now: &[Stmt]) -> Vec<String> {
+    let same = |s: &Stmt| ran.iter().any(|r| r == s);
+    let mut out = vec![];
+    let mut base_changed = false;
+    let mut setup_changed: Vec<String> = vec![];
+    for s in now {
+        if s.suppressed {
+            continue;
+        }
+        match &s.role {
+            Role::Op(_) => {
+                let setup = s.setup.clone().unwrap_or_default();
+                if base_changed || setup_changed.contains(&setup) || !same(s) {
+                    setup_changed.push(setup);
+                    out.push(s.name.clone());
+                }
+            }
+            Role::Setup => {
+                if !same(s) {
+                    setup_changed.push(s.name.clone());
+                }
+            }
+            Role::Program => {}
+            _ => {
+                if !same(s) {
+                    base_changed = true;
+                }
+            }
+        }
+    }
+    // a statement taken out (or suppressed) changes what every later op starts from
+    for r in ran {
+        if !now.iter().any(|s| s.name == r.name && !s.suppressed) && r.is_op() {
+            let su = r.setup.clone().unwrap_or_default();
+            let mut after = false;
+            for s in now {
+                if s.name == r.name {
+                    after = true;
+                }
+                if s.is_op() && s.setup.as_deref() == Some(su.as_str()) && after && !out.contains(&s.name) {
+                    out.push(s.name.clone());
+                }
+            }
+            // where it was: every op of its setup after its position in the run
+            let pos = ran.iter().position(|x| x.name == r.name).unwrap_or(0);
+            for x in &ran[pos..] {
+                if x.is_op()
+                    && x.setup == r.setup
+                    && now.iter().any(|s| s.name == x.name && !s.suppressed)
+                    && !out.contains(&x.name)
+                {
+                    out.push(x.name.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn flange() -> (String, std::path::PathBuf) {
+        let dir = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+        (
+            std::fs::read_to_string(dir.join("flange_cam.fg")).expect("the example"),
+            dir,
+        )
+    }
+
+    #[test]
+    fn the_flange_generates_and_every_op_is_certified() {
+        let (text, dir) = flange();
+        let r = run(&text, &dir);
+        assert!(r.errors.is_empty(), "{:?}", r.errors);
+        let names: Vec<&str> = r.ops.iter().map(|o| o.name.as_str()).collect();
+        assert_eq!(names, ["skim", "top", "prof", "bore", "bolts"]);
+        assert!(
+            r.ops.iter().all(|o| o.status == "built"),
+            "{:?}",
+            r.ops
+                .iter()
+                .map(|o| (&o.name, &o.status, &o.refusal))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(r.setups.len(), 1);
+        assert!(r.setups[0].stock_max[2] > r.setups[0].stock_min[2]);
+        let p = &r.programs[0];
+        assert!(
+            p.round_trip && p.text.as_ref().is_some_and(|t| t.lines().count() == p.lines),
+            "{p:?}"
+        );
+        assert!(r.ops[0].tool_t == Some(1) && r.ops[0].rpm.is_some());
+        assert!(r.ops.iter().all(|o| o.moves > 0 && o.time_s > 0.0));
+        assert!(r.sheet.contains("<html>"));
+        // nothing is stale against the text it ran on
+        assert!(stale(&r.stmts, &r.stmts).is_empty());
+    }
+
+    #[test]
+    fn an_edit_makes_that_op_and_later_ones_of_its_setup_stale() {
+        let (text, _) = flange();
+        let was = doc::read(&text).unwrap();
+        let t = doc::apply(
+            &text,
+            &doc::Edit::Set {
+                id: "prof".into(),
+                arg: "step".into(),
+                text: "3".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(stale(&was, &doc::read(&t).unwrap()), ["prof", "bore", "bolts"]);
+        // a tool changed: every op after it
+        let t = doc::apply(
+            &text,
+            &doc::Edit::Set {
+                id: "t1".into(),
+                arg: "stickout".into(),
+                text: "40".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            stale(&was, &doc::read(&t).unwrap()),
+            ["skim", "top", "prof", "bore", "bolts"]
+        );
+    }
+
+    #[test]
+    fn a_refusal_comes_back_with_its_check_and_fix() {
+        let (text, dir) = flange();
+        // a tool too short for the bore: its shank goes into the stock
+        let t = text.replace(
+            "t1   = tool(\"flat-10\", t: 1, stickout: 32",
+            "t1   = tool(\"flat-10\", t: 1, stickout: 12",
+        );
+        assert_ne!(t, text);
+        let r = run(&t, &dir);
+        let bad: Vec<&OpRes> = r.ops.iter().filter(|o| o.status == "refused").collect();
+        assert!(
+            !bad.is_empty(),
+            "{:?}",
+            r.ops.iter().map(|o| (&o.name, &o.status)).collect::<Vec<_>>()
+        );
+        assert!(bad.iter().any(|o| o.refusal.is_some()));
+        assert_eq!(r.certification, "refused");
+    }
+}

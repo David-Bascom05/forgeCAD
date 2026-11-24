@@ -1,0 +1,22 @@
+# tormach-1100m head: nose cylinder and housing back to the column (sizes unpublished)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared ax = 228.5
+shared ay = 139.5
+shared nz = 438
+shared nr = 54
+shared nh = 119
+shared x0 = 109.5
+shared y0 = 20.5
+shared z0 = 557
+shared lx = 238
+shared ly = 363
+shared lz = 299
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+housing = extrude(plan, lz)
+sketch nk(on: offset(xy, nz)) {
+  c = circle((ax, ay), nr)
+}
+nose = extrude(nk.c, nh)

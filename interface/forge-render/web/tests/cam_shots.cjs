@@ -1,0 +1,41 @@
+// The Manufacture workspace's pictures for research/cam/ui, one fresh page each (a page left
+// running spins on an unanswered view pick in the offscreen software adapter; see cam.cjs):
+//   FORGE_WEB_SHOTS=DIR node web/tests/cam_shots.cjs OUT [NAME]   (OUT served as static files)
+const path = require("node:path"), http = require("node:http"), fs = require("node:fs");
+const t = require("./lib.cjs");
+const root = process.argv[2];
+const SHOTS = [
+  ["cam-3-op-dialog.png", ["select prof", "edit prof"], (s) => s.cam.dialogs.includes("op")],
+  ["cam-4-op-passes.png", ["select prof", "edit prof", "tab 3", "set leave 0.2"], (s) => s.cam.dialogs.includes("op")],
+  ["cam-5-drill-geometry.png", ["select bolts", "edit bolts", "tab 0"], (s) => s.cam.dialogs.includes("op")],
+  ["cam-6-post.png", ["select prog", "post"], (s) => s.cam.dialogs.includes("post")],
+  ["cam-7-tools.png", ["tools"], (s) => s.cam.dialogs.includes("tools")],
+  ["cam-8-setup.png", ["new-setup"], (s) => s.cam.dialogs.includes("setup")],
+  ["cam-9-setup-stock.png", ["new-setup", "tab 1"], (s) => s.cam.dialogs.includes("setup")],
+  ["cam-10-checks.png", ["select op1", "checks"], (s) => s.cam.dialogs.includes("checks")],
+  ["cam-11-new-pocket.png", ["select bore", "new-op pocket", "tab 1"], (s) => s.cam.dialogs.includes("op")],
+];
+const only = process.argv[3];
+const s = http.createServer((q, r) => { const u = decodeURIComponent(new URL(q.url, "http://x").pathname); const f = path.join(root, u === "/" ? "index.html" : u);
+  if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404); return r.end(); }
+  r.writeHead(200, { "content-type": { ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm" }[path.extname(f)] ?? "application/octet-stream" }); fs.createReadStream(f).pipe(r); });
+s.listen(0, async () => {
+  const b = await t.browser();
+  for (const [name, cmds, ready] of SHOTS) {
+    if (only && !name.includes(only)) continue;
+    const T0 = Date.now();
+    const p = await t.page(b, `http://127.0.0.1:${s.address().port}/?offscreen=1440x900&storage=memory`);
+    try {
+      await t.until(p, (s) => s.ready, "ready");
+      await p.evaluate(() => window.forgecad.loaded);
+      await p.evaluate(() => window.forgecad.fc.app_open("/project/examples/machined/flange_cam.fg"));
+      await t.until(p, (s) => s.cam && s.cam.generated && !s.cam.generating, "gen");
+      for (const c of cmds) await p.evaluate((x) => window.forgecad.fc.app_cam(x), c);
+      await t.until(p, ready, name, 60000);
+      const f = await t.pixels(p);
+      console.log(`${name} ${t.shot(name, f)} ${((Date.now() - T0) / 1000).toFixed(1)}s`);
+    } catch (e) { console.log(`${name} FAILED ${e.message.slice(0, 200)}`); }
+    await p.close();
+  }
+  await b.close(); s.close();
+});

@@ -894,6 +894,12 @@ impl Blocks {
     fn rank(&self, sys: &System, b: usize, drop: &[usize], pin: &[usize], scale: f64) -> usize {
         let cols = &self.cols[b];
         let n = cols.len();
+        // a block past DENSE_MOST entries (a file's sketch of thousands of tied entities) is taken
+        // as of full rank: its dense matrix would take gigabytes and its elimination minutes
+        let m_all = self.rows[b].len() + pin.len();
+        if m_all.saturating_mul(n) > DENSE_MOST {
+            return m_all.min(n);
+        }
         let local = |c: usize| cols.binary_search(&c).ok();
         let mut a = Vec::new();
         let mut m = 0;
@@ -914,6 +920,9 @@ impl Blocks {
         rank(&a, m, n, scale)
     }
 }
+
+/// The most entries a block's dense matrix may have for its rank (2^21: 16 MB, a second or two).
+const DENSE_MOST: usize = 1 << 21;
 
 /// Numerical rank by Gaussian elimination with complete pivoting.
 /// `scale` is the largest entry of the matrix the tolerance is taken from.

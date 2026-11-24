@@ -1,0 +1,8 @@
+# A hole's circle made radius 1e6 on a part of size 300: the edge lies far off its cylinder, the
+# face's grid ran to millions of points and the tolerant mesh took 50 s with no budget at all (what
+# was spent outside a scope counted down from u64::MAX, so `left() == u64::MAX` never saw "none
+# set"). Now `budget::limited`, the point walk counted, and the mesh refuses within the file budget.
+from: examples/rack18u/asm/order/RACK-121_base_pan.step
+replace: #2808=CIRCLE('',#2807,7.322741248587754);
+with: #2808=CIRCLE('',#2807,1000000.);
+max-ms: 15000

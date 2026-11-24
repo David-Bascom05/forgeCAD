@@ -226,7 +226,13 @@ fn punch_refusals_and_violations() {
             "punch(\"R6\"",
             &format!("punch((\"C\", \"cluster\", 0.5, 1, 1, {counts})"),
         );
-        assert_eq!(first_error(&s).kind(), "PunchSize", "{counts}");
+        // a number past any part's (1e400 is infinite) is refused where it is written
+        let want = if counts.contains("1e400") {
+            "TooLarge"
+        } else {
+            "PunchSize"
+        };
+        assert_eq!(first_error(&s).kind(), want, "{counts}");
     }
     assert!(
         r.warnings

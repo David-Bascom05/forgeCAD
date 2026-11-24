@@ -1,0 +1,14 @@
+# hermle-c-32-u bed: the base under the cradle's swing (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -625
+shared y0 = -625
+shared z0 = -966.198086
+shared L = 1250
+shared W = 1250
+shared H = 400
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

@@ -1,0 +1,144 @@
+{
+ "vendor": "Matsuura",
+ "model": "MX-520",
+ "family": "MX series 5-axis VMC",
+ "source": [
+  "https://www.matsuurausa.com/model/mx-520/",
+  "https://www.matsuurausa.com/wp-content/uploads/Tech-MX-520.pdf"
+ ],
+ "source_secondary": [
+  "https://www.matsuura.de/produkte/detail/matsuura-mx-520",
+  "https://www.matsuura.de/fileadmin/user_upload/dokumente/MX-520.pdf"
+ ],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "Vertical 40-taper spindle; trunnion table-table 5-axis: tilt axis A (+10 to -125 deg) carries a 360-deg C rotary table. Published as A/C; by ISO convention A turns about X (trunnion orientation not explicitly stated). Linear-axis carriers not stated on fetched pages.",
+ "control": {
+  "standard": "Matsuura G-Tech 31i (FANUC based; DE: G-Tech 31iB)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 630,
+  "Y": 560,
+  "Z": 510
+ },
+ "rotary": {
+  "A": {
+   "range_deg": [
+    -125,
+    10
+   ],
+   "rapid_rpm": 17,
+   "indexing_or_full": "full simultaneous 5-axis"
+  },
+  "B": null,
+  "C": {
+   "range_deg": [
+    0,
+    360
+   ],
+   "rapid_rpm": 33,
+   "indexing_or_full": "full"
+  }
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 200,
+ "rotary_table_dia_mm": 300,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 12000,
+  "rpm_min": 40,
+  "taper_or_interface": "CAT40/BT40 std; HSK-A63 option",
+  "power_kw": {
+   "cont": 11,
+   "30min": null,
+   "peak/other": "25 (DE sheet '11 / 25 kW', durations not stated)"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 159
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 40,
+  "Y": 40,
+  "Z": 40,
+  "A_or_B_rpm": 17,
+  "C_rpm": 33
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 60,
+  "options": [
+   "90 (US)",
+   "up to 120 (DE web)"
+  ],
+  "tool_to_tool_s": 1.1,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": 80,
+  "max_tool_dia_empty_adjacent_mm": 150,
+  "max_tool_len_mm": 300,
+  "max_tool_kg": 10
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.torque_nm.cont",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "weight_kg"
+ ],
+ "options": [
+  "dia 500 table",
+  "dia 300 + flat table",
+  "12,000 TorqueUp BT40",
+  "20,000 rpm BT40",
+  "HSK-A63",
+  "90 tools",
+  "MX-520 PC4 (4 pallets) / PC7 variants"
+ ],
+ "notes": "US tech sheet (image PDF, read visually): max work dia 520 x H350 (dia 710 x H350 with conditions), table dia 300 std / 500 opt, 200 kg, A/C rapid 17/33 rpm. Matsuura Europe sheet (4-pallet config) gives A/C rapid 33/50 rpm (web page labels A as 'B-Achse'), spindle 40-12,000 rpm 11/25 kW, 159 N·m at 1,500 rpm, tool change 1.1 s, tool dia 80/150, length 300, 10 kg; those spindle/tool numbers recorded in fields as the only published ones."
+}

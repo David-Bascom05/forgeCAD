@@ -53,7 +53,7 @@ structure cdt.Triangulation where
   triangles : alloc.vec.Vec (Array Std.U32 3#usize)
 
 /-- [forge_mesh::cdt::Fault]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 65:0-81:1
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 65:0-88:1
     Visibility: public -/
 @[discriminant isize]
 inductive cdt.Fault where
@@ -72,6 +72,13 @@ inductive cdt.Fault where
 | EdgeTooFine : cdt.Fault
 | CrossingsTooFine : cdt.Fault
 | FaceTooFine : cdt.Fault
+| OnHull : cdt.Fault
+| InsertedTwice : cdt.Fault
+| OffHull : cdt.Fault
+| FaceTooLong : cdt.Fault
+| Subnormal : cdt.Fault
+| FarFromOrigin : cdt.Fault
+| StaircaseOffNodes : cdt.Fault
 
 /-- [forge_mesh::cdt::CdtError]
     Source: 'kernel/forge-mesh/src/cdt.rs', lines 20:0-60:1
@@ -89,14 +96,14 @@ inductive cdt.CdtError where
 | Internal : cdt.Fault → cdt.CdtError
 
 /-- [forge_mesh::cdt::Tri]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 122:0-128:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 136:0-142:1 -/
 structure cdt.Tri where
   v : Array Std.U32 3#usize
   n : Array Std.U32 3#usize
   c : Array Bool 3#usize
 
 /-- [forge_mesh::cdt::Mesh]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 130:0-144:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 144:0-161:1 -/
 structure cdt.Mesh where
   pts : alloc.vec.Vec forge_math.vec.Point2
   tris : alloc.vec.Vec cdt.Tri
@@ -105,9 +112,10 @@ structure cdt.Mesh where
   inside : alloc.vec.Vec Bool
   stack : alloc.vec.Vec (Std.U32 × Std.Usize)
   hit : (Std.U32 × Std.U32)
+  walked : Std.U64
 
 /-- [forge_mesh::cdt::Location]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 146:0-150:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 163:0-167:1 -/
 @[discriminant isize]
 inductive cdt.Location where
 | Inside : Std.U32 → cdt.Location
@@ -115,14 +123,14 @@ inductive cdt.Location where
 | Vertex : Std.U32 → cdt.Location
 
 /-- [forge_mesh::cdt::Need]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1191:0-1194:1
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1253:0-1256:1
     Visibility: public -/
 structure cdt.Need where
   chord : F64
   points : Std.U64
 
 /-- Trait declaration: [forge_mesh::cdt::Refine]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1175:0-1186:1
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1237:0-1248:1
     Visibility: public -/
 structure cdt.Refine (Self : Type _) where
   edge : Self → Std.U32 → Std.U32 → forge_math.vec.Point2 →

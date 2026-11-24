@@ -1,0 +1,129 @@
+{
+ "vendor": "Brother",
+ "model": "F600X1",
+ "family": "SPEEDIO F high-rigidity compact machining center (discontinued)",
+ "source": [
+  "https://machinetool.global.brother/en-us/all-products/f600x1"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "vmc3",
+ "architecture": "Vertical BT30 spindle; table moves in Y only, column moves in X and Z (per Brother page).",
+ "control": {
+  "standard": "Brother CNC-C00",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 600,
+  "Y": 400,
+  "Z": 350
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": [
+  200,
+  550
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  800,
+  400
+ ],
+ "table_load_kg": 400,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 10000,
+  "rpm_min": 1,
+  "taper_or_interface": "7/24 No.30 (MAS-BT30)",
+  "power_kw": {
+   "cont": 9.2,
+   "30min": null,
+   "peak/other": "12.8 (10-min rating); 26.2 max output"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 92
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 50,
+  "Y": 50,
+  "Z": 50,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": 30,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 14,
+  "options": [
+   22
+  ],
+  "tool_to_tool_s": 0.7,
+  "chip_to_chip_s": 1.6,
+  "max_tool_dia_mm": 110,
+  "max_tool_dia_empty_adjacent_mm": 125,
+  "max_tool_len_mm": 250,
+  "max_tool_kg": 3.0
+ },
+ "coolant": {
+  "through_spindle": "optional",
+  "notes": "CTS optional (BT dual-contact spindle used with CTS)"
+ },
+ "overall_mm": {
+  "W": 1800,
+  "D": 2465,
+  "H": 2750
+ },
+ "weight_kg": 3600,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rotary_table_dia_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "spindle_nose_type",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "22-tool magazine (0.8 / 1.7 s)",
+  "BIG-PLUS",
+  "CTS"
+ ],
+ "notes": "Marked 'Discontinued Product' on Brother en-us site; not listed on en-eu. Still BT30 (no 40-taper Brother found). Table load 400 kg (500 with Y accel adjust). Spindle standard is the 10,000 rpm high-torque type; 92 N·m is momentary max. Cutting feed 30 m/min in mode B (else 10 m/min XY, 20 m/min Z). Floor space 1,800 x 2,465 (3,162 door open)."
+}
