@@ -3404,6 +3404,13 @@ impl Cam {
             sample: t.tool.dc,
         };
         let mut map = HeightMap::of_stock(&s.ip, cell);
+        // adaptive's passes are long arcs and lines: one feed each, never split
+        if kind == "adaptive" {
+            return paths
+                .iter()
+                .map(|p| forge_cam::engage::schedule_per_move(p, &mut map, &prof, &sc))
+                .collect();
+        }
         paths.iter().map(|p| schedule(p, &mut map, &prof, &sc)).collect()
     }
 
