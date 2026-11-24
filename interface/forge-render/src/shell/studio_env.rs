@@ -132,7 +132,7 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
             "Render",
             vec![
                 tool("Render Image", "file", RENDER_IMAGE, false),
-                tool("Turntable", "rotate", TURNTABLE, false),
+                tool("Render Turntable", "rotate", TURNTABLE, false),
             ],
             vec![Tool {
                 name: "Cancel",
