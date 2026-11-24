@@ -15,7 +15,9 @@ import ForgeBoolProof.Seeded
   carrier's extension past its face, off `J`), `Φ_u` does not change: it is constant off the
   incident carriers near there;
 * (d) **D8.cells**: `Z \ J` is preconnected (crossings are generic: through pieces of one carrier,
-  not where carriers meet), and some incident face has a point there.
+  not where carriers meet), and some incident face has a point there. `J`: where two incident
+  carriers with different zero sets vanish, and the zone's edge points (two incident faces may lie
+  on one plane: 18 vertices of the suite's `coplanar` part; their regions meet only on edges).
 
 `(c)` and `(c')` together are the code's half of H.abs (D8.cone): what the translated `Φ_u` must
 mean. The L-block's inside corner (three planar faces bounding the one missing octant, the other
@@ -85,8 +87,12 @@ theorem local_formula_of_cone {Rs : BodyModel E} {S : Set E} (hS : IsClosed S) (
     {u : Nat} {Φ : SForm} (hΦ : Rs.formulas[u]? = some Φ) {Z : Set E} (hZ : IsOpen Z)
     -- the points where two incident carriers vanish
     (J : Set E)
-    (hJ : J = {y | ∃ (i j : Nat) (F G : FaceModel E), i ≠ j ∧ Rs.faces[i]? = some F ∧ Rs.faces[j]? = some G ∧
-      IncV Rs u F ∧ IncV Rs u G ∧ F.carrier y = 0 ∧ G.carrier y = 0})
+    (hJ : J = {y | ∃ (i j : Nat) (F G : FaceModel E), i ≠ j ∧ Rs.faces[i]? = some F ∧
+      Rs.faces[j]? = some G ∧ IncV Rs u F ∧ IncV Rs u G ∧
+      {x | F.carrier x = 0} ≠ {x | G.carrier x = 0} ∧ F.carrier y = 0 ∧ G.carrier y = 0} ∪
+      (Z ∩ ⋃ e ∈ Rs.edges, e.curve))
+    -- every edge is used by a face (the combinatorial check: `EdgeUses`)
+    (hused : ∀ (i : Nat) (e : EdgeModel E), Rs.edges[i]? = some e → ∃ f ∈ Rs.faces, IncE f i)
     -- (a) D8.iso: the faces meeting the zone are incident; the frontier is on the faces
     (hiso : ∀ F ∈ Rs.faces, ∀ y ∈ F.region, y ∈ Z → IncV Rs u F)
     (hfrR : frontier S ⊆ Faces Rs)
@@ -144,12 +150,15 @@ theorem local_formula_of_cone {Rs : BodyModel E} {S : Set E} (hS : IsClosed S) (
     intro y hy G hG hinc hyG
     have hal : Alone Rs G y := by
       refine ⟨hyG, fun H hH hne hyH => hy.2 ?_⟩
+      -- two faces' regions meet only on edges (`WellFormed`)
       obtain ⟨i, hi⟩ := List.mem_iff_getElem?.mp hG
       obtain ⟨j, hj⟩ := List.mem_iff_getElem?.mp hH
+      obtain ⟨hil, hiG⟩ := List.getElem?_eq_some_iff.mp hi
+      obtain ⟨hjl, hjH⟩ := List.getElem?_eq_some_iff.mp hj
+      have hij : i ≠ j := fun hij => hne (by subst hij; rw [← hiG, ← hjH])
+      have hy' := hwf.meet_on_edges i j hil hjl hij ⟨by rw [hiG]; exact hyG, by rw [hjH]; exact hyH⟩
       rw [hJ]
-      refine ⟨i, j, G, H, fun hij => hne ?_, hi, hj, hinc, hiso H hH y hyH hy.1,
-        G.on_carrier y hyG, H.on_carrier y hyH⟩
-      subst hij; rw [hi] at hj; exact (Option.some.inj hj).symm
+      exact Or.inr ⟨hy.1, hy'⟩
     obtain ⟨hin, hout⟩ := hor G hG y hal
     filter_upwards [hin, hout, hcone G hG hinc y hy hyG] with z h1 h2 ⟨h3, h4⟩ hz
     rcases inSide_or_outSide G.sense (hz.2 G hG hinc) with hs | hs
@@ -206,8 +215,18 @@ theorem local_formula_of_cone {Rs : BodyModel E} {S : Set E} (hS : IsClosed S) (
       rw [hdis] at this; exact this
   intro x hxZ hoff
   have hxJ : x ∉ J := by
-    rw [hJ]; rintro ⟨i, j, F, G, -, hi, -, hinc, -, h0, -⟩
-    exact hoff F (List.mem_of_getElem? hi) hinc h0
+    rw [hJ]; rintro (⟨i, j, F, G, -, hi, -, hinc, -, -, h0, -⟩ | ⟨-, hxe⟩)
+    · exact hoff F (List.mem_of_getElem? hi) hinc h0
+    · -- an edge point is on the closure of a face using it, which meets the zone
+      obtain ⟨e, he, hxe⟩ := mem_iUnion₂.mp hxe
+      obtain ⟨i, hi⟩ := List.mem_iff_getElem?.mp he
+      obtain ⟨f, hf, l, hl, c, hc, hci⟩ := hused i e hi
+      have hcl := hwf.edge_in_face f hf l hl c hc e (by rw [hci]; exact hi) hxe
+      obtain ⟨y, hyZ, hyf⟩ := mem_closure_iff.mp hcl Z hZ hxZ
+      have hinc := hiso f hf y hyf hyZ
+      have h0 : f.carrier x = 0 :=
+        closure_minimal (fun z hz => f.on_carrier z hz) (isClosed_eq f.cont continuous_const) hcl
+      exact hoff f hf hinc h0
   exact (hallG ⟨hxZ, hxJ⟩).self_of_nhds ⟨hxZ, hoff⟩
 
 end ForgeBoolProof

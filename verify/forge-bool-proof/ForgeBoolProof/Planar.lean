@@ -270,7 +270,11 @@ two incident planes that are not parallel meet on one). -/
 theorem local_formula_planar {Rs : BodyModel E} {S : Set E} (hS : IsClosed S) (hwf : WellFormed Rs)
     {u : Nat} {Φ : SForm} (hΦ : Rs.formulas[u]? = some Φ) (v : E) (r : ℝ) (J : Set E)
     (hJ : J = {y | ∃ (i j : Nat) (F G : FaceModel E), i ≠ j ∧ Rs.faces[i]? = some F ∧
-      Rs.faces[j]? = some G ∧ IncV Rs u F ∧ IncV Rs u G ∧ F.carrier y = 0 ∧ G.carrier y = 0})
+      Rs.faces[j]? = some G ∧ IncV Rs u F ∧ IncV Rs u G ∧
+      {x | F.carrier x = 0} ≠ {x | G.carrier x = 0} ∧ F.carrier y = 0 ∧ G.carrier y = 0} ∪
+      (Metric.ball v r ∩ ⋃ e ∈ Rs.edges, e.curve))
+    -- every edge is used by a face (the combinatorial check: `EdgeUses`)
+    (hused : ∀ (i : Nat) (e : EdgeModel E), Rs.edges[i]? = some e → ∃ f ∈ Rs.faces, IncE f i)
     (L : List (Meet E)) (hind : ∀ M ∈ L, M.Indep) (hJL : J ⊆ ⋃ M ∈ L, M.pts)
     (hiso : ∀ F ∈ Rs.faces, ∀ y ∈ F.region, y ∈ Metric.ball v r → IncV Rs u F)
     (hfrR : frontier S ⊆ Faces Rs)
@@ -285,7 +289,7 @@ theorem local_formula_planar {Rs : BodyModel E} {S : Set E} (hS : IsClosed S) (h
     (hbase : ∃ F ∈ Rs.faces, IncV Rs u F ∧ ∃ y ∈ F.region, y ∈ Metric.ball v r \ J) :
     ∀ x ∈ Metric.ball v r, (∀ F ∈ Rs.faces, IncV Rs u F → F.carrier x ≠ 0) →
       (x ∈ S ↔ Φ.den (carriers Rs) x) :=
-  local_formula_of_cone hS hwf hΦ Metric.isOpen_ball J hJ hiso hfrR hor hcone hext
+  local_formula_of_cone hS hwf hΦ Metric.isOpen_ball J hJ hused hiso hfrR hor hcone hext
     (cells_planar v r L hind hJL) hbase
 
 end ForgeBoolProof
