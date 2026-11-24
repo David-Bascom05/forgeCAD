@@ -1026,7 +1026,7 @@ pub fn certify_shared(
         Surf::Sphere { .. } => true,
         Surf::Cyl { .. } => f.prism.is_none(),
         Surf::Plane { .. } => f.prism.is_none() && mv.planar().is_none(),
-        _ => false,
+        Surf::Torus { .. } | Surf::Cone { .. } => f.prism.is_none(),
     };
     if fast && let Some(v) = crate::contact::clear(body, f, mv, limit) {
         return (v, 0);

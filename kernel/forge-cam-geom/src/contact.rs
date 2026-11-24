@@ -104,15 +104,15 @@ fn scl(a: [Ival; 3], k: Ival) -> [Ival; 3] {
     [a[0].mul(k), a[1].mul(k), a[2].mul(k)]
 }
 
-const CORNERS: [(f64, f64); 4] = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)];
+pub(crate) const CORNERS: [(f64, f64); 4] = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)];
 
 /// Q(s, t) = |w(s, t)|² − (w·ax)²/(ax·ax) (with ax: the squared distance to the line through
 /// the origin along ax; without: the squared length), w = w0 + s d + t e. Convex in (s, t).
-struct Quad {
-    w0: [Ival; 3],
-    d: [Ival; 3],
-    e: [Ival; 3],
-    ax: Option<([Ival; 3], Ival)>,
+pub(crate) struct Quad {
+    pub(crate) w0: [Ival; 3],
+    pub(crate) d: [Ival; 3],
+    pub(crate) e: [Ival; 3],
+    pub(crate) ax: Option<([Ival; 3], Ival)>,
 }
 
 impl Quad {
@@ -206,7 +206,7 @@ impl Quad {
         best
     }
     /// A proven lower bound on min Q over [0, 1]² (the tangent plane at the guess).
-    fn min_lo(&self) -> f64 {
+    pub(crate) fn min_lo(&self) -> f64 {
         let (s0, t0) = self.guess();
         let (si, ti) = (Ival::pt(s0), Ival::pt(t0));
         let q0 = self.q(si, ti);
@@ -226,7 +226,7 @@ impl Quad {
         lo.max(0.0)
     }
     /// A proven upper bound on max Q over [0, 1]² (a convex function's maximum is at a corner).
-    fn max_hi(&self) -> f64 {
+    pub(crate) fn max_hi(&self) -> f64 {
         let mut hi = 0.0f64;
         let mut k = 0;
         while k < 4 {
@@ -264,7 +264,7 @@ fn frame_k(x: V3, y: V3, ax: Option<V3>) -> (f64, f64) {
 
 /// A lower bound on the distance from a point set whose distances to the reference lie in
 /// [dmin, dmax] (squared: q_lo, q_hi) to a shell of radii [s_lo, s_hi].
-fn shell(q_lo: f64, q_hi: f64, s_lo: f64, s_hi: f64) -> f64 {
+pub(crate) fn shell(q_lo: f64, q_hi: f64, s_lo: f64, s_hi: f64) -> f64 {
     let dmin = Ival::pt(q_lo).sqrt().lo;
     let dmax = Ival::pt(q_hi).sqrt().hi;
     if dmin > s_hi {
@@ -353,7 +353,8 @@ pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
                 0.0
             }
         }
-        _ => return None,
+        // tori and cones: contact_rev.rs
+        Surf::Torus { o, .. } | Surf::Cone { o, .. } => crate::contact_rev::dist(f, sub(base, iv(o)), d, e)?,
     };
     Some(Ival::pt(dist).sub(Ival::pt(c.rho)).lo)
 }
