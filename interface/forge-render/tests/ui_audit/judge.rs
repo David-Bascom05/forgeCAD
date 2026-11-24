@@ -68,7 +68,9 @@ pub fn new_texts_in<'a>(s: &'a Snap, before: &Snap, region: &[Rect]) -> Vec<&'a 
 pub fn popup(s: &Snap, before: &Snap, region: &[Rect], screen: Rect) -> Vec<Finding> {
     let mut out = Vec::new();
     for r in region {
-        if !screen.expand(0.5).contains_rect(*r) {
+        // an area's rect carries its margin and shadow: off-screen is more than that out
+        let out = r.area() - r.intersect(screen).area();
+        if !screen.expand(16.0).contains_rect(*r) || out > 0.1 * r.area() {
             out.push(f(
                 "off-screen",
                 true,
