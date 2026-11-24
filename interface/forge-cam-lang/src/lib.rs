@@ -4758,6 +4758,8 @@ impl Cam {
             time_s: 0.0,
             least: f64::INFINITY,
             plan: vec![],
+            resolved: None,
+            drilled: vec![],
             leave: 0.0,
             target: None,
             removals: vec![],
