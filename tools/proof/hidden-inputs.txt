@@ -342,6 +342,8 @@ no-output (prints only)  @ forge-math/src/trace.rs|env|*ON.get_or_init(|| std::e
 no-output (prints only)  @ forge-math/src/trace.rs|lazy|static ON: OnceLock<bool> = OnceLock::new();
 no-output (prints only)  @ forge-math/src/trace.rs|lazy|use std::sync::OnceLock;
 no-output (prints only)  @ forge-math/src/trace.rs|static|static ON: OnceLock<bool> = OnceLock::new();
+no-output (prints only: FORGE_CAM_DEBUG traces each sign refinement to stderr)  @ forge-num/src/real.rs|env|let dbg = std::env::var("FORGE_CAM_DEBUG").is_ok();
+no-output (lookups only: get/insert/remove, never iterated; a fixed unseeded hasher, Fx)  @ forge-num/src/real.rs|hash-order|struct Memo(std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>);
 no-output (Weld: entry() lookups only, never iterated; vertices numbered in file order)  @ forge-mesh/src/read.rs|hash-order|at: HashMap<[u64; 3], u32>,
 no-output (prints only)  @ forge-mesh/src/tessellate.rs|env|if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {
 no-output (no iteration order reaches an output; audit)  @ forge-mesh/src/tessellate.rs|hash-order|let mut placed: std::collections::HashMap<(u32, u64, u64), u32> = std::collections::HashMap::new();
