@@ -36,19 +36,17 @@ impl Dy {
         if mag.is_zero() {
             return Dy::zero();
         }
-        // strip trailing zero bits
-        let mut k = 0u64;
-        while !mag.bit(k) {
-            k += 1;
-        }
+        // strip trailing zero bits (counted a limb at a time, shifted in place)
+        let k = mag.trailing_zeros();
+        let mut mag = mag;
         if k > 0 {
-            return Dy {
-                neg,
-                mag: mag.shr(k),
-                exp: exp + k as i64,
-            };
+            mag.shr_assign(k);
         }
-        Dy { neg, mag, exp }
+        Dy {
+            neg,
+            mag,
+            exp: exp + k as i64,
+        }
     }
 
     /// The exact value of a finite f64.
@@ -84,18 +82,31 @@ impl Dy {
         }
     }
 
-    fn add_mag(a: &Dy, b: &Dy) -> Dy {
-        // same sign assumed by the caller when used for magnitudes
+    /// a + b, with b's sign flipped when `flip` (a − b without negating a copy of b).
+    fn add_mag(a: &Dy, b: &Dy, flip: bool) -> Dy {
+        let bneg = b.neg != flip;
         let e = if a.exp < b.exp { a.exp } else { b.exp };
-        let am = a.mag.shl((a.exp - e) as u64);
-        let bm = b.mag.shl((b.exp - e) as u64);
-        if a.neg == b.neg {
-            return Dy::norm(a.neg, am.add(&bm), e);
+        // only the operand with the larger exponent is shifted (the other is used as it is)
+        let (sa, sb);
+        let am: &Nat = if a.exp == e {
+            &a.mag
+        } else {
+            sa = a.mag.shl((a.exp - e) as u64);
+            &sa
+        };
+        let bm: &Nat = if b.exp == e {
+            &b.mag
+        } else {
+            sb = b.mag.shl((b.exp - e) as u64);
+            &sb
+        };
+        if a.neg == bneg {
+            return Dy::norm(a.neg, am.add(bm), e);
         }
-        match am.cmp(&bm) {
+        match am.cmp(bm) {
             Ordering::Equal => Dy::zero(),
-            Ordering::Greater => Dy::norm(a.neg, am.sub(&bm), e),
-            Ordering::Less => Dy::norm(b.neg, bm.sub(&am), e),
+            Ordering::Greater => Dy::norm(a.neg, am.sub(bm), e),
+            Ordering::Less => Dy::norm(bneg, bm.sub(am), e),
         }
     }
 
@@ -106,11 +117,17 @@ impl Dy {
         if o.is_zero() {
             return self.clone();
         }
-        Dy::add_mag(self, o)
+        Dy::add_mag(self, o, false)
     }
 
     pub fn sub(&self, o: &Dy) -> Dy {
-        self.add(&o.neg())
+        if o.is_zero() {
+            return self.clone();
+        }
+        if self.is_zero() {
+            return o.neg();
+        }
+        Dy::add_mag(self, o, true)
     }
 
     pub fn mul(&self, o: &Dy) -> Dy {
@@ -776,24 +793,28 @@ impl Ctx {
     /// The node evaluated in big-float intervals at `p` bits.
     pub fn eval(&self, a: R, p: u64) -> BigIval {
         let order = self.closure(a);
-        let mut slot: Vec<Option<BigIval>> = vec![None; a as usize + 1];
+        self.eval_in(&order, p)
+    }
+
+    /// The last node of `order` (a closure, increasing) evaluated at `p` bits. Each value is
+    /// kept at its place in `order` (an operand found by binary search there: it is in the
+    /// closure), not at its node number, so the work is the subgraph's, not every node's below.
+    fn eval_in(&self, order: &[u32], p: u64) -> BigIval {
+        let mut slot: Vec<Option<BigIval>> = vec![None; order.len()];
+        let at = |x: &u32| order.binary_search(x).expect("an operand is in the closure");
         let mut k = 0;
         while k < order.len() {
             let i = order[k] as usize;
             let v = match &self.nodes[i].op {
                 Op::Lit(d) => BigIval::pt(d),
-                Op::Add(x, y) => badd(
-                    slot[*x as usize].as_ref().unwrap(),
-                    slot[*y as usize].as_ref().unwrap(),
-                    p,
-                ),
+                Op::Add(x, y) => badd(slot[at(x)].as_ref().unwrap(), slot[at(y)].as_ref().unwrap(), p),
                 Op::Sub(x, y) => {
-                    let ny = bneg(slot[*y as usize].as_ref().unwrap());
-                    badd(slot[*x as usize].as_ref().unwrap(), &ny, p)
+                    let ny = bneg(slot[at(y)].as_ref().unwrap());
+                    badd(slot[at(x)].as_ref().unwrap(), &ny, p)
                 }
                 Op::Mul(x, y) => {
                     if x == y {
-                        let s = slot[*x as usize].as_ref().unwrap();
+                        let s = slot[at(x)].as_ref().unwrap();
                         let m = bmul(s, s, p);
                         // a square is never negative
                         let lo = match (&m.lo, s.contains_zero()) {
@@ -803,30 +824,21 @@ impl Ctx {
                         };
                         BigIval { lo, hi: m.hi }
                     } else {
-                        bmul(
-                            slot[*x as usize].as_ref().unwrap(),
-                            slot[*y as usize].as_ref().unwrap(),
-                            p,
-                        )
+                        bmul(slot[at(x)].as_ref().unwrap(), slot[at(y)].as_ref().unwrap(), p)
                     }
                 }
-                Op::Div(x, y) => bdiv(
-                    slot[*x as usize].as_ref().unwrap(),
-                    slot[*y as usize].as_ref().unwrap(),
-                    p,
-                ),
-                Op::Sqrt(x) => bsqrt(slot[*x as usize].as_ref().unwrap(), p),
-                Op::Neg(x) => bneg(slot[*x as usize].as_ref().unwrap()),
+                Op::Div(x, y) => bdiv(slot[at(x)].as_ref().unwrap(), slot[at(y)].as_ref().unwrap(), p),
+                Op::Sqrt(x) => bsqrt(slot[at(x)].as_ref().unwrap(), p),
+                Op::Neg(x) => bneg(slot[at(x)].as_ref().unwrap()),
             };
-            slot[i] = Some(v);
+            slot[k] = Some(v);
             k += 1;
         }
-        slot[a as usize].take().unwrap()
+        slot[order.len() - 1].take().unwrap()
     }
 
-    /// The number of distinct square-root nodes `a` depends on.
-    fn radicals(&self, a: R) -> u32 {
-        let order = self.closure(a);
+    /// The number of distinct square-root nodes in a closure.
+    fn radicals(&self, order: &[u32]) -> u32 {
         let mut k = 0;
         let mut c = 0u32;
         while k < order.len() {
@@ -858,7 +870,9 @@ impl Ctx {
         }
         self.exact_evals += 1;
         // the separation bound, in bits: (D-1) lu + ll
-        let k = self.radicals(a);
+        // the closure once, for the bound and every precision tried
+        let order = self.closure(a);
+        let k = self.radicals(&order);
         let node = &self.nodes[a as usize];
         let d = if k >= 60 {
             f64::INFINITY
@@ -877,7 +891,7 @@ impl Ctx {
             if dbg {
                 eprintln!("sign: node {a} radicals {k} bound {need} bits, p {p}");
             }
-            let v = self.eval(a, p);
+            let v = self.eval_in(&order, p);
             if let Some(lo) = &v.lo
                 && !lo.is_zero()
                 && !lo.neg
@@ -927,9 +941,10 @@ impl Ctx {
             let m = Dy::from_f64(ia.hi).add(&Dy::from_f64(ib.lo)).half();
             return m;
         }
+        let (oa, ob) = (self.closure(a), self.closure(b));
         let mut p = 128u64;
         loop {
-            let (va, vb) = (self.eval(a, p), self.eval(b, p));
+            let (va, vb) = (self.eval_in(&oa, p), self.eval_in(&ob, p));
             if let (Some(ah), Some(bl)) = (&va.hi, &vb.lo)
                 && ah.cmp(bl) == Ordering::Less
             {
@@ -946,9 +961,10 @@ impl Ctx {
         if iv.lo == iv.hi {
             return iv.lo;
         }
+        let order = self.closure(a);
         let mut p = 96u64;
         loop {
-            let v = self.eval(a, p);
+            let v = self.eval_in(&order, p);
             if let (Some(l), Some(h)) = (&v.lo, &v.hi) {
                 // both ends round to the same nearest f64: that is the answer
                 let (a1, b1) = (nearest(l), nearest(h));
