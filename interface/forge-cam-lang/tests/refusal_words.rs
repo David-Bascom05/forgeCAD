@@ -92,3 +92,52 @@ fn a_tool_too_short_says_which_lengths() {
         cam.errors
     );
 }
+
+#[test]
+fn program_errors_read_for_a_person() {
+    let base = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01, at: (0, 0, -250))\nskim = facing(op1, tool: t1, to: 18, step: 1)\n";
+    // a post that does not exist: the posts named
+    let cam = forge_cam_lang::run(
+        &format!("{base}p = program(op1, post: \"nope\", number: 1)\n"),
+        &dir(),
+    );
+    let p = &cam.programs[0];
+    assert_eq!(p.code.as_deref(), Some("UnknownPost"));
+    let e = p.error.as_deref().unwrap();
+    assert!(
+        e.starts_with("There is no post `nope`; the posts are `") && e.contains("`fanuc`"),
+        "{e}"
+    );
+    // a refused op: the program is not released, the op named
+    let cam = forge_cam_lang::run(
+        &format!(
+            "{}bolts = drill(op1, f.bolts, plan: \"auto\")\np = program(op1, post: \"fanuc\", number: 1)\n",
+            base.replace("at: (0, 0, -250))", "at: (0, 0, -250), clear: -2.5, retract: -3)")
+        ),
+        &dir(),
+    );
+    let p = &cam.programs[0];
+    assert_eq!(p.code.as_deref(), Some("NotReleased"), "{:?}", p.error);
+    assert!(
+        p.error
+            .as_deref()
+            .unwrap()
+            .starts_with("Program `p` is not released: "),
+        "{:?}",
+        p.error
+    );
+    assert!(p.error.as_deref().unwrap().contains("`bolts`"), "{:?}", p.error);
+}
+
+#[test]
+fn an_argument_hint_names_the_op_and_the_unit() {
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: -1), origin: \"top-center\", tol: 0.01)\n";
+    let cam = forge_cam_lang::run(src, &dir());
+    assert!(
+        cam.errors
+            .iter()
+            .any(|e| e == "line 5, `op1` (setup): `below` must be a length ≥ 0 mm"),
+        "{:?}",
+        cam.errors
+    );
+}

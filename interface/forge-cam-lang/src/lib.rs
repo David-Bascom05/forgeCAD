@@ -244,7 +244,11 @@ pub struct ProgramOut {
     pub post: String,
     pub text: Option<String>,
     pub lines: usize,
+    /// Why it is not released, for a person.
     pub error: Option<String>,
+    /// The error's typed code, for a program (`UnknownPost`, `OutOfRange`, `NotReleased`,
+    /// `OutOfOrder`, ..).
+    pub code: Option<String>,
     pub round_trip: bool,
 }
 
@@ -1104,7 +1108,7 @@ impl Cam {
                         let below = match named.get("below") {
                             None => 0.0,
                             Some(V::Num(b)) if *b >= 0.0 => *b,
-                            Some(_) => return Err("box: below: a length ≥ 0".into()),
+                            Some(_) => return Err("`below` must be a length ≥ 0 mm".into()),
                         };
                         return Ok(V::Stock(StockSpec::Margin(m, below)));
                     }
@@ -1122,32 +1126,32 @@ impl Cam {
                         match a.get(k) {
                             None => Ok(None),
                             Some(V::Num(x)) if *x > 0.0 && x.is_finite() => Ok(Some(*x)),
-                            Some(_) => Err(format!("{fname}: {k}: a length over 0")),
+                            Some(_) => Err(format!("`{k}` must be a length over 0 mm")),
                         }
                     };
                     let (radial, above) = match a.get("margin") {
                         None => (0.0, 0.0),
                         Some(V::Tuple(t)) if t.len() == 2 => match (num(&t[0]), num(&t[1])) {
                             (Some(r), Some(z)) if r >= 0.0 && z >= 0.0 => (r, z),
-                            _ => return Err(format!("{fname}: margin: (radial, above), lengths ≥ 0")),
+                            _ => return Err("`margin` must be (radial, above), lengths ≥ 0 mm".to_string()),
                         },
-                        Some(_) => return Err(format!("{fname}: margin: (radial, above), lengths ≥ 0")),
+                        Some(_) => return Err("`margin` must be (radial, above), lengths ≥ 0 mm".to_string()),
                     };
                     let below = match a.get("below") {
                         None => 0.0,
                         Some(V::Num(b)) if *b >= 0.0 => *b,
-                        Some(_) => return Err(format!("{fname}: below: a length ≥ 0")),
+                        Some(_) => return Err("`below` must be a length ≥ 0 mm".to_string()),
                     };
                     let d = len("d")?;
                     let id = len("id")?;
                     if d.is_some() && a.contains_key("margin") && radial > 0.0 {
-                        return Err(format!("{fname}: d: or a radial margin, not both"));
+                        return Err("give `d` or a radial `margin`, not both".to_string());
                     }
                     if fname == "tube" && id.is_none() {
-                        return Err("tube: id: the bore's diameter".into());
+                        return Err("`id` must be the bore's diameter in mm".into());
                     }
                     if fname == "cylinder" && id.is_some() {
-                        return Err("cylinder: no id: (a bored bar is a tube)".into());
+                        return Err("a cylinder takes no `id` (a bored bar is a tube)".into());
                     }
                     return Ok(V::Stock(StockSpec::Round {
                         d,
@@ -1241,7 +1245,7 @@ fn get_num(m: &BTreeMap<String, V>, k: &str, default: Option<f64>) -> Result<f64
     match m.get(k) {
         Some(V::Num(x)) => Ok(*x),
         Some(_) => Err(format!("`{k}` must be a number")),
-        None => default.ok_or_else(|| format!("missing `{k}:`")),
+        None => default.ok_or_else(|| format!("`{k}:` is missing")),
     }
 }
 fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<String, String> {
@@ -1250,7 +1254,7 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
         Some(_) => Err(format!("`{k}` must be a string")),
         None => default
             .map(str::to_string)
-            .ok_or_else(|| format!("missing `{k}:`")),
+            .ok_or_else(|| format!("`{k}:` is missing")),
     }
 }
 
@@ -1369,8 +1373,19 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
         })();
         if let Err(e) = r {
             cam.ok = false;
+            // the statement by its name and its built-in: `bolts` (drill)
+            let who = match &st.kind {
+                StmtKind::Assign { name, value } => match &value.kind {
+                    ExprKind::Call(f, _) => match &f.kind {
+                        ExprKind::Name(fname) => format!(", `{name}` ({fname})"),
+                        _ => format!(", `{name}`"),
+                    },
+                    _ => format!(", `{name}`"),
+                },
+                _ => String::new(),
+            };
             cam.errors
-                .push(format!("line {}: {e}", line_of(src, st.span.lo as usize)));
+                .push(format!("line {}{who}: {e}", line_of(src, st.span.lo as usize)));
         }
     }
     // each op was certified on the stock every earlier op of its setup, and every op of the
@@ -1403,9 +1418,10 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
         if let Some((oi, j)) = missing {
             let p = &mut cam.programs[pi];
             let e = format!(
-                "program `{}` posts `{}`, certified on the stock `{}` leaves, which no program posts before it; fix: post `{}` first (an earlier program, or in this one's `ops:`)",
-                p.name, cam.ops[oi].name, cam.ops[j].name, cam.ops[j].name
+                "Program `{}` posts op `{}`, which was certified on the stock op `{}` leaves, but no program posts `{}` before it. Post `{}` first (in an earlier program, or earlier in this one's `ops:`).",
+                p.name, cam.ops[oi].name, cam.ops[j].name, cam.ops[j].name, cam.ops[j].name
             );
+            p.code = Some("OutOfOrder".into());
             p.error = Some(e.clone());
             p.text = None;
             p.lines = 0;
@@ -1926,7 +1942,7 @@ impl Cam {
                     match a.get(k) {
                         None => Ok(None),
                         Some(V::Num(x)) if x.fract() == 0.0 && *x >= 0.0 && *x <= most => Ok(Some(*x as u32)),
-                        Some(_) => Err(format!("{k}: a whole number from 0 to {most}")),
+                        Some(_) => Err(format!("`{k}` must be a whole number from 0 to {most}")),
                     }
                 };
                 let coolant = match a.get("coolant") {
@@ -2355,7 +2371,7 @@ impl Cam {
         let depth = get_num(a, "depth", None)?;
         // a NaN depth is refused too
         if depth.is_nan() || depth <= 0.0 {
-            return Err(format!("{what}: depth > 0"));
+            return Err("`depth` must be over 0 mm".to_string());
         }
         let bottom = o[2] - depth;
         let mut mv = vec![];
@@ -2658,7 +2674,7 @@ impl Cam {
         const E: f64 = 0.2;
         let c = r0 + E;
         if s.is_nan() || s <= 0.0 {
-            return Err("edge_break: size must be over 0".into());
+            return Err("`size` must be over 0 mm".into());
         }
         if c + s >= rt {
             out.fix = Some(format!("a chamfer mill over {:.3} mm across", 2.0 * (c + s)));
@@ -3058,7 +3074,7 @@ impl Cam {
             _ => {
                 let ti = match a.get("tool") {
                     Some(V::Tool(i)) => *i,
-                    _ => return Err(format!("{kind}: missing `tool:`")),
+                    _ => return Err("`tool:` is missing".to_string()),
                 };
                 out.tool = Some(ti);
                 let t = &self.tools[ti];
@@ -3066,7 +3082,7 @@ impl Cam {
                 // by it; `leave` stays the radial stock, on walls
                 let ax = get_num(a, "leave_axial", Some(0.0))?;
                 if !ax.is_finite() {
-                    return Err("leave_axial: a length".into());
+                    return Err("`leave_axial` must be a length in mm".into());
                 }
 
                 let d = t.tool.dc;
@@ -3075,7 +3091,7 @@ impl Cam {
                 let ramp = match a.get("ramp") {
                     None => None,
                     Some(V::Num(x)) if *x > 0.0 && *x <= 30.0 => Some(*x),
-                    Some(_) => return Err("ramp: an angle in degrees, over 0 and at most 30".into()),
+                    Some(_) => return Err("`ramp` must be an angle over 0° and at most 30°".into()),
                 };
                 let fd = match kind {
                     "facing" => self.feeds_for(su, t, 0.7 * d, step.min(t.tool.lcf)),
@@ -4686,6 +4702,49 @@ fn tool_words(
     }
 }
 
+/// A sentence's first letter in capitals.
+fn cap(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        None => String::new(),
+    }
+}
+
+/// A post's error for a person, and its typed code.
+fn post_words(e: &forge_post::PostError, post: &str) -> (&'static str, String) {
+    use forge_post::PostError;
+    match e {
+        PostError::Dialect(why) => (
+            "BadDialect",
+            format!("The `{post}` post's table cannot be read: {why}."),
+        ),
+        PostError::UnknownDialect { name, known } => (
+            "UnknownPost",
+            format!(
+                "There is no post `{name}`; the posts are {}.",
+                known
+                    .iter()
+                    .map(|k| format!("`{k}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        ),
+        PostError::Unsupported { what, fix } => (
+            "PostUnsupported",
+            format!("The `{post}` post cannot do this: {what}. {}.", cap(fix)),
+        ),
+        PostError::Range { what, value } => (
+            "OutOfRange",
+            format!(
+                "{} is {}, more than the `{post}` post's words can hold.",
+                cap(what),
+                mm(*value)
+            ),
+        ),
+    }
+}
+
 /// A refusal's typed code and its words: an error that starts `Code: ` with a code in
 /// CamelCase (`NeedTool: no 6 mm reamer ..`) gives that code and the rest; any other has no code.
 fn split_code(e: &str) -> (Option<String>, String) {
@@ -4927,7 +4986,7 @@ fn contour_passes(a: &BTreeMap<String, V>, d: f64) -> Result<ops::Passes, String
     let count = |k: &str, default: f64, least: f64| -> Result<usize, String> {
         let x = get_num(a, k, Some(default))?;
         if x.fract() != 0.0 || x < least || x > 100.0 {
-            return Err(format!("{k}: a whole number from {least} to 100"));
+            return Err(format!("`{k}` must be a whole number from {least} to 100"));
         }
         Ok(x as usize)
     };
@@ -4939,7 +4998,7 @@ fn contour_passes(a: &BTreeMap<String, V>, d: f64) -> Result<ops::Passes, String
     };
     let finish_step = get_num(a, "finish_step", Some(0.1 * d))?;
     if !(finish_step > 0.0 && finish_step.is_finite()) {
-        return Err("finish_step: a length over 0".into());
+        return Err("`finish_step` must be a length over 0 mm".into());
     }
     Ok(ops::Passes {
         climb,
@@ -5467,12 +5526,15 @@ impl Cam {
             text: None,
             lines: 0,
             error: None,
+            code: None,
             round_trip: false,
         };
         let mut d = match forge_post::Dialect::get(post) {
             Ok(d) => d,
             Err(e) => {
-                po.error = Some(format!("{e:?}"));
+                let (c, w) = post_words(&e, post);
+                po.code = Some(c.into());
+                po.error = Some(w);
                 return po;
             }
         };
@@ -5619,7 +5681,9 @@ impl Cam {
         let q = match forge_post::quantize(&program, &d) {
             Ok(q) => q,
             Err(e) => {
-                po.error = Some(format!("{e:?}"));
+                let (c, w) = post_words(&e, post);
+                po.code = Some(c.into());
+                po.error = Some(w);
                 return po;
             }
         };
@@ -5630,7 +5694,10 @@ impl Cam {
                 po.text = Some(txt);
             }
             Err(e) => {
-                po.error = Some(e);
+                po.code = Some("RoundTrip".into());
+                po.error = Some(format!(
+                    "The posted text does not read back as the path it was made from ({e}): a fault in the `{post}` post, not in the document; please report it."
+                ));
                 return po;
             }
         }
@@ -5876,12 +5943,27 @@ impl Cam {
                 });
             }
         }
-        if self
+        let refused: Vec<&str> = self
             .ops
             .iter()
-            .any(|o| setups.contains(&o.setup) && o.status != "built")
-        {
-            po.error = Some("an operation was refused: the program is not released".into());
+            .filter(|o| setups.contains(&o.setup) && o.status != "built")
+            .map(|o| o.name.as_str())
+            .collect();
+        if !refused.is_empty() {
+            po.code = Some("NotReleased".into());
+            po.error = Some(format!(
+                "Program `{name}` is not released: {} refused ({}).",
+                if refused.len() == 1 {
+                    "an operation was"
+                } else {
+                    "operations were"
+                },
+                refused
+                    .iter()
+                    .map(|n| format!("`{n}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
             po.text = None;
         }
         po
@@ -6140,6 +6222,7 @@ impl Cam {
                         ),
                     ),
                     ("error", p.error.clone().map(Json::Str).unwrap_or(Json::Null)),
+                    ("code", p.code.clone().map(Json::Str).unwrap_or(Json::Null)),
                 ])
             })
             .collect();
