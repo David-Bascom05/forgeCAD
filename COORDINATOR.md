@@ -306,3 +306,7 @@ urdf-export, machines/builder, posts/dialects.
 - CAM fuzz/reliability session: WAIT until the forge-num rebuild lands (David).
 - FreeCAD/Kiri baselines blocked: this session's sandbox refuses running third-party binaries; David's options
   pending (permission rule for /opt/bench, run them himself, or skip).
+- CAM SCOPE CAPPED AT 3D (David, 2026-11-24): no 3+2 or 5-axis generation. 840D/TRAORI reading+sim stays for validation only.
+- FEA: research only for now (FEA-RESEARCH session_01WJtawwqWL5HTwiC8HTrB6k, branch research/fea). Build waits on forge-num; needs orient3d/insphere in the shared core.
+- Cycle time UI: always t_min (bound) beside t_scurve (estimate), never the estimate alone.
+- CAM-UI adaptive entry: blocked until David retires "no adaptive until counsel" in CAM-UI's own session.
