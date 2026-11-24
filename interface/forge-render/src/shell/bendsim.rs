@@ -1369,6 +1369,41 @@ fn prop(ui: &mut egui::Ui, t: &Theme, label: &str, value: String, key: Option<&s
 /// press's part in it, and its checks as a table (Check, Result, Measured, Limit) with human
 /// names and units; failures and checks that could not run first, the passes on asking.
 /// Returns the bend's name when its "flat pattern" link is clicked.
+/// A step's checks that are not passes, counted by kind, worst first, each in its colour: "1 fail",
+/// "2 warnings", "1 not checked", "1 near" (UX-LEAD: nothing that is not a pass goes uncounted).
+fn tally(checks: &[fb::Check]) -> Vec<(String, egui::Color32)> {
+    let n = |f: &dyn Fn(&fb::Check) -> bool| checks.iter().filter(|c| !c.pass && f(c)).count();
+    let fail = n(&|c| c.severity == fb::Severity::Error);
+    let warn = n(&|c| c.severity == fb::Severity::Warning && c.unchecked.is_none() && c.near.is_none());
+    let unchecked = n(&|c| c.unchecked.is_some());
+    let near = n(&|c| c.near.is_some());
+    let plural = |k: usize, w: &str| {
+        if k == 1 {
+            format!("{k} {w}")
+        } else {
+            format!("{k} {w}s")
+        }
+    };
+    [
+        (
+            fail,
+            if fail == 1 {
+                "1 fail".to_string()
+            } else {
+                format!("{fail} fail")
+            },
+            look::FAIL,
+        ),
+        (warn, plural(warn, "warning"), look::WARN),
+        (unchecked, format!("{unchecked} not checked"), look::MUTED),
+        (near, format!("{near} near"), look::NEAR),
+    ]
+    .into_iter()
+    .filter(|x| x.0 > 0)
+    .map(|x| (x.1, x.2))
+    .collect()
+}
+
 pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<String> {
     let mut flat = None;
     let all = st.all_checks;
@@ -1393,7 +1428,20 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     .color(t.ink),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let c = if ok { look::PASS } else { look::FAIL };
+                // the outline amber once anything warns (UX-LEAD); a pass's green otherwise
+                let warns = s.checks.iter().any(|c| {
+                    !c.pass
+                        && c.severity == fb::Severity::Warning
+                        && c.unchecked.is_none()
+                        && c.near.is_none()
+                });
+                let c = if !ok {
+                    look::FAIL
+                } else if warns {
+                    look::WARN
+                } else {
+                    look::PASS
+                };
                 egui::Frame::new()
                     .fill(c.gamma_multiply(0.18))
                     .stroke(egui::Stroke::new(1.0, c))
@@ -1403,18 +1451,15 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                         // laid out right to left (the badge's row): the near after the word
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 4.0;
-                            // a near is not hidden behind a pass (UX-LEAD)
-                            let near = s.checks.iter().filter(|c| c.near.is_some()).count();
-                            if near > 0 {
-                                ui.label(
-                                    egui::RichText::new(format!("· {near} near"))
-                                        .color(look::NEAR)
-                                        .size(12.0),
-                                );
+                            // nothing that is not a pass hidden behind the word (UX-LEAD), the
+                            // worst first: right to left, so the last first
+                            for (w, col) in tally(&s.checks).into_iter().rev() {
+                                ui.label(egui::RichText::new(format!("· {w}")).color(col).size(12.0));
                             }
+                            // the word in its own colour (a feasible step passes), the outline warning
                             ui.label(
                                 egui::RichText::new(if ok { "Passes" } else { "Fails" })
-                                    .color(c)
+                                    .color(if ok { look::PASS } else { look::FAIL })
                                     .size(12.0),
                             );
                         });
@@ -1552,7 +1597,7 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
             });
         // the checks: what failed and what could not be checked; the passes on asking
         let passing = s.checks.iter().filter(|c| c.pass).count();
-        let near = s.checks.iter().filter(|c| c.near.is_some()).count();
+        let kinds = tally(&s.checks);
         // failures first, then warnings and what could not be checked, then the nears (seen,
         // not shouting), then the passes (UX-LEAD)
         let rank = |c: &fb::Check| {
@@ -1598,11 +1643,12 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     .color(t.ink),
             );
             ui.label(
-                egui::RichText::new(if near > 0 {
-                    format!("{passing} of {} pass · {near} near", s.checks.len())
-                } else {
-                    format!("{passing} of {} pass", s.checks.len())
-                })
+                egui::RichText::new(
+                    std::iter::once(format!("{passing} of {} pass", s.checks.len()))
+                        .chain(kinds.iter().map(|k| k.0.clone()))
+                        .collect::<Vec<_>>()
+                        .join(" · "),
+                )
                 .small()
                 .color(t.ink2),
             );
@@ -1691,14 +1737,25 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                                 .wrap(),
                             );
                         }
-                        None if c.near.is_some() => {
+                        // only a lower bound is known (near, undecided): what was proven, the limit
+                        None if c.near.is_some() || c.undecided => {
                             hover(ui.label(format!("≥ {} · {}", len_down(c.value), len(c.limit))));
                         }
+                        // no limit to hold it to: the value alone, the rule on hover (UX-LEAD)
+                        None if c.limit == 0.0 && !c.at_most => {
+                            hover(ui.label(cards::rule_value(c.rule, c.value)));
+                        }
+                        // the relation as it is: a failing row's is the other way (UX-LEAD)
                         None => {
+                            let rel = match (c.at_most, c.pass) {
+                                (true, true) => "≤",
+                                (true, false) => ">",
+                                (false, true) => "≥",
+                                (false, false) => "<",
+                            };
                             hover(ui.label(format!(
-                                "{} {} {}",
+                                "{} {rel} {}",
                                 cards::rule_value(c.rule, c.value),
-                                if c.at_most { "≤" } else { "≥" },
                                 cards::rule_value(c.rule, c.limit)
                             )));
                         }
