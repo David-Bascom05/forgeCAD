@@ -31,10 +31,14 @@ patent counsel first); z-level roughing here is offset clearing.
 | mould core machining document, five ops, 15.4k moves, every move certified (G1–G6, full) | 222 s | 34 s |
 | drop-cutter, mould core, 775 points | — | 0.15 s (≈ 0.2 ms/point, most in one cell) |
 | mould core document, the generators' self-check (CPU, all ops) | 6.06 s (5.46 s of it dome cylinders: fillets) | 0.79 s (dome cylinders 0.05 s) |
-| mould core machining document, wall | 17.5 s (after main's merge) | 13.2 s (the certifier uses gap_move too) |
+| mould core machining document, wall | 17.5 s (after main's merge) | 13.2 s (the certifier uses gap_move too), then 6.1 s (below) |
+| the in-process stock's faces, per later op (z-level's voids) | 1.8 s (9 voids, 170 faces) | 0.52 s (5 voids: a level's void equal to the one above it is that one's floor lowered, exactly the same stock) |
+| waterline on the mould core (7 levels, grid 0.5), wall | 4.9 s | 2.1 s (the push-cutter's probes stop once CL is proven above or below z: `drop_decide`) |
 
-The 34 s of the document: z-level roughing 13.7 s (exact offsets of the staircase free regions,
-one per level), the rest under 8 s each. The checker's share is small.
+The document now (6.1 s wall, the posted program byte-identical to the 13.2 s run's): waterline
+2.1 s, rest 1.1 s, parallel 0.5 s, z-level 0.45 s (its grid 0.09 s, offsets 0.26 s), the stock's
+faces 3 × 0.52 s, the certificates 0.13 s in all. The earlier 13.7 s put on z-level was mostly
+the stock built from its voids, not its own offsets.
 
 ## L6
 

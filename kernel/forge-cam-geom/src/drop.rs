@@ -792,7 +792,27 @@ pub fn drop_above(
     res: f64,
     budget: usize,
 ) -> Cl {
-    search(col, faces, idx, x, y, floor, res, budget, true)
+    search(col, faces, idx, x, y, floor, f64::INFINITY, res, budget, true)
+}
+
+/// Whether CL at (x, y) is above z: `drop`'s search, stopped as soon as the answer is proven
+/// either way (hi ≤ z: the column at z misses the faces; lo > z: it meets one), else run to
+/// `res`. Its bounds hold CL as `drop`'s do, so a decided answer is true: `drop` can only agree
+/// with it or leave it within `res` of z.
+#[allow(clippy::too_many_arguments)]
+pub fn drop_decide(
+    col: &Column,
+    faces: &[Face],
+    idx: &[u32],
+    x: f64,
+    y: f64,
+    z: f64,
+    floor: f64,
+    res: f64,
+    budget: usize,
+) -> Cl {
+    let f = if floor > z { floor } else { z };
+    search(col, faces, idx, x, y, f, z, res, budget, true)
 }
 
 /// The branch and bound alone, without the closed forms: the reference the closed forms are
@@ -806,7 +826,18 @@ pub fn drop_general(
     res: f64,
     budget: usize,
 ) -> Cl {
-    search(col, faces, idx, x, y, f64::NEG_INFINITY, res, budget, false)
+    search(
+        col,
+        faces,
+        idx,
+        x,
+        y,
+        f64::NEG_INFINITY,
+        f64::INFINITY,
+        res,
+        budget,
+        false,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -817,6 +848,7 @@ fn search(
     x: f64,
     y: f64,
     floor: f64,
+    stop: f64,
     res: f64,
     budget: usize,
     closed_forms: bool,
@@ -888,7 +920,7 @@ fn search(
         if hi < done {
             hi = done;
         }
-        if hi - lo <= res || cells >= budget || hi <= floor {
+        if hi - lo <= res || cells >= budget || hi <= floor || lo > stop {
             break;
         }
         let Some((u, ki, c)) = heap.pop() else {

@@ -10,8 +10,9 @@ Main merged (#15/#16 in). Details, measurements and open items: research/cam/pha
   - interval branch and bound: everything else (tilted tori, cones, tilted cylinders).
 - Gap check of a move (`gap_move`): certified, refuse-only.
 - Ops in kernel/forge-cam/src/surf.rs, wired into the machining document (forge-cam-lang).
-- examples/machined/mold_core_cam.fg: 5 ops, 15.4k moves, every move certified, 13.2 s (17.5 s
-  before the dome cylinder's exact form; G4 not computed for 3D parts).
+- examples/machined/mold_core_cam.fg: 5 ops, 15.4k moves, every move certified, 6.1 s (17.5 s
+  before the dome cylinder's exact form, the merged voids and the deciding push; the posted
+  program unchanged by the last two; G4 not computed for 3D parts).
 - A dome cylinder's move is bounded exactly (`cyl_chord`, Concave.lean): the generators'
   self-check on the mould core 6.06 s → 0.79 s CPU. The check is not dropped: a face entering the
   rim between two drops is invisible to the ends (phase3.md).
@@ -60,6 +61,8 @@ Main merged (#15/#16 in). Details, measurements and open items: research/cam/pha
   now ≈ 6 ms of it (exact form).
 - Drops: ≈ 15%.
 - Certifying the emitted path: ≈ 0.1 s per op.
-- Whole document, 13.2 s wall (was 34 s, then 17.5 s after main's merge):
-  - zlevel the largest share: the exact offsets of staircase regions (next: from the slice's
-    exact arcs).
+- Whole document, 6.1 s wall (was 34 s, 17.5 s after main's merge, 13.2 s):
+  - waterline 2.1 s, rest 1.1 s, parallel 0.5 s, zlevel 0.45 s;
+  - the in-process stock's faces 3 × 0.52 s (stock.rs, built once per later op: a cache across
+    ops would save 1 s; CAM-CORE's code);
+  - certificates 0.13 s in all.
