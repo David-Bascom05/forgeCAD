@@ -92,8 +92,9 @@ circular arc tangent to it (G1-continuous) of `lead_radius:` (default half the t
 through `lead_sweep:` degrees (default 90, at most 180), preceded by a tangent line of
 `lead_length:` (default 0), and leaves it the same way; `lead: "line"` is the tangent line alone
 (`lead_length:`, default half the tool's diameter). Leads lie on the air side (with climb, the
-tool's left). With leads each level comes down at the lead-in's start, off the wall, and goes up at
-the lead-out's end. `entry: (x, y)` starts each loop at its point nearest that point (the piece
+tool's left). With leads the tool comes down at the lead-in's start, off the wall; after each level's
+lead-out it goes back at that level to the lead-in's start and down to the next (staying down
+through the levels), and up at the end. `entry: (x, y)` starts each loop at its point nearest that point (the piece
 there split); `overlap:` cuts on past the start by that length before the lead-out, to hide the
 witness mark. Default `lead: "none"`: the path is the one without these. Every lead is certified as
 any move is; a lead that does not fit (an arc bigger than the hole it is in) is refused with the

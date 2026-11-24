@@ -625,12 +625,22 @@ impl Default for Passes {
 /// Contour: the region's boundary, offset by the tool radius plus `leave` (outside for the
 /// part's outline: `outside` true), climb, each loop through all its levels in turn.
 pub fn contour(rg: &Region, c: Cut, sp: Span, leave: f64, outside: bool) -> Result<OpPath, OpError> {
-    contour_passes(rg, c, sp, leave, outside, Passes::default())
+    contour_passes(rg, c, sp, leave, outside, Passes::default(), &Finish2d::default())
+}
+
+/// A contour's 2D finishing (leads.rs, tabs.rs): each loop's entry, leads and overlap, and its
+/// holding tabs. The default is none: the path is the contour's passes alone.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Finish2d {
+    pub leads: Leads,
+    pub tabs: Option<Tabs>,
 }
 
 /// `contour` with its passes: the radial passes from the farthest in to the contour's own,
 /// then the spring passes, each loop of each through all its levels; every loop in the
-/// direction asked.
+/// direction asked. With `fin`'s leads, each level comes down at the lead-in's start, runs the
+/// lead-in, the loop, the overlap and the lead-out; with its tabs, the levels below the tabs'
+/// top lift over each tab.
 pub fn contour_passes(
     rg: &Region,
     c: Cut,
@@ -638,24 +648,7 @@ pub fn contour_passes(
     leave: f64,
     outside: bool,
     ps: Passes,
-) -> Result<OpPath, OpError> {
-    contour_leads(rg, c, sp, leave, outside, ps, &Leads::default(), None)
-}
-
-/// `contour_passes` with each loop's entry position, leads and overlap (leads.rs). With no
-/// leads the path is `contour_passes`' own; with them, each level comes down at the lead-in's
-/// start, runs the lead-in, the loop, the overlap and the lead-out, and goes up at the
-/// lead-out's end. With `tabs`, the levels below the tabs' top lift over each tab (tabs.rs).
-#[allow(clippy::too_many_arguments)]
-pub fn contour_leads(
-    rg: &Region,
-    c: Cut,
-    sp: Span,
-    leave: f64,
-    outside: bool,
-    ps: Passes,
-    ld: &Leads,
-    tabs: Option<&Tabs>,
+    fin: &Finish2d,
 ) -> Result<OpPath, OpError> {
     let Cut { tool, tidx, h, feed } = c;
     let Span { top, bottom, step } = sp;
@@ -691,8 +684,18 @@ pub fn contour_leads(
     for _ in 0..ps.spring {
         passes.push(passes[n - 1].clone());
     }
-    if !ld.is_none() || tabs.is_some() {
-        return led(&passes, tidx, tool.tool.dc, h, sp, feed, ps.climb, ld, tabs);
+    if !fin.leads.is_none() || fin.tabs.is_some() {
+        return led(
+            &passes,
+            tidx,
+            tool.tool.dc,
+            h,
+            sp,
+            feed,
+            ps.climb,
+            &fin.leads,
+            fin.tabs.as_ref(),
+        );
     }
     let mut mv = Vec::new();
     let first = passes[0][0][0].start();
@@ -733,10 +736,12 @@ pub fn contour_leads(
     })
 }
 
-/// The contour's passes with leads and tabs: per loop, per level, down at the lead-in's start
-/// (in the air), lead-in, loop (lifting over each tab on the levels below the tabs' top),
-/// overlap, lead-out, up at the lead-out's end at feed, across at the retract height to the
-/// next start.
+/// The contour's passes with leads and tabs: per loop, down at the lead-in's start (in the air)
+/// from the retract height, then per level: lead-in, loop (lifting over each tab on the levels
+/// below the tabs' top), overlap, lead-out, and across at that level from the lead-out's end
+/// back to the lead-in's start (both off the wall, on the air side) and down to the next level
+/// there; up once at the end. The loop stays down through its levels, as without leads. The
+/// link back is certified as every move is.
 #[allow(clippy::too_many_arguments)]
 fn led(
     passes: &[Vec<Vec<Seg>>],
@@ -767,10 +772,19 @@ fn led(
                 }
                 None => None,
             };
-            for z in levels(sp.top, sp.bottom, sp.step) {
-                mv.push(PMove::Rapid {
-                    to: [s.x, s.y, h.retract],
-                });
+            mv.push(PMove::Rapid {
+                to: [s.x, s.y, h.retract],
+            });
+            let zs = levels(sp.top, sp.bottom, sp.step);
+            for (k, &z) in zs.iter().enumerate() {
+                if k > 0 {
+                    // back to the lead-in's start at the level just cut
+                    mv.push(PMove::Line {
+                        to: [s.x, s.y, zs[k - 1]],
+                        f: feed.0,
+                        phase: Phase::Link,
+                    });
+                }
                 mv.push(PMove::Line {
                     to: [s.x, s.y, z],
                     f: feed.1,
@@ -790,12 +804,12 @@ fn led(
                     _ => push_loop(&mut mv, &body, z, feed.0),
                 }
                 push_loop(&mut mv, &tail, z, feed.0);
-                mv.push(PMove::Line {
-                    to: [e.x, e.y, h.retract],
-                    f: feed.0,
-                    phase: Phase::Link,
-                });
             }
+            mv.push(PMove::Line {
+                to: [e.x, e.y, h.retract],
+                f: feed.0,
+                phase: Phase::Link,
+            });
         }
     }
     let first = first.unwrap_or(P2 { x: 0.0, y: 0.0 });

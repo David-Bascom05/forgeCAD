@@ -3213,8 +3213,10 @@ impl Cam {
                         let side = get_str(a, "side", Some("outside"))?;
                         let leave = get_num(a, "leave", Some(0.0))?;
                         let passes = contour_passes(a, d)?;
-                        let leads = contour_leads(a, d)?;
-                        let tabs = contour_tabs(a, d, top - bottom)?;
+                        let fin = ops::Finish2d {
+                            leads: contour_leads(a, d)?,
+                            tabs: contour_tabs(a, d, top - bottom)?,
+                        };
                         let zmid = 0.5 * (top + bottom);
                         let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
                             .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
@@ -3239,11 +3241,11 @@ impl Cam {
                                 ) {
                                     // tabs keep a bridge standing: the band counts as cleared only down to their
                                     // top (less than is cut between them: conservative)
-                                    let floor = bottom + tabs.as_ref().map_or(0.0, |t| t.height);
+                                    let floor = bottom + fin.tabs.as_ref().map_or(0.0, |t| t.height);
                                     voids.push((Some(forge_cam_geom::boolean::region_of(&band)), floor));
                                 }
                             }
-                            ops::contour_leads(
+                            ops::contour_passes(
                                 &rg,
                                 ops::Cut {
                                     tool: t,
@@ -3255,13 +3257,12 @@ impl Cam {
                                 leave,
                                 true,
                                 passes,
-                                &leads,
-                                tabs.as_ref(),
+                                &fin,
                             )
                             .map(|p| vec![p])
                             .map_err(|e| format!("{e:?}"))
                         } else {
-                            ops::contour_leads(
+                            ops::contour_passes(
                                 &rg,
                                 ops::Cut {
                                     tool: t,
@@ -3273,8 +3274,7 @@ impl Cam {
                                 leave,
                                 false,
                                 passes,
-                                &leads,
-                                tabs.as_ref(),
+                                &fin,
                             )
                             .map(|p| vec![p])
                             .map_err(|e| format!("{e:?}"))
