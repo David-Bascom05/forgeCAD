@@ -61,6 +61,8 @@ pub struct Sim {
     pub setups: Vec<SimSetup>,
     /// Per tool (`Cam::sim_tools` index): its cutting envelope, if its profile has one.
     pub cutters: Vec<Option<Cutter>>,
+    /// Per tool: its shank and holder's lowest envelope (the non-cutting bodies).
+    pub holders: Vec<Option<Cutter>>,
     /// Per setup: the part's triangles in that setup's frame (empty if it could not be built).
     pub part_tris: Vec<Vec<[[f64; 3]; 3]>>,
     /// Per setup: the part as columns on that setup's grid.
@@ -94,11 +96,17 @@ impl Sim {
         let tl = Timeline::of(&cam);
         let setups = cam.sim_setups();
         let cutters = cam.sim_tools().iter().map(|t| Cutter::of(&t.shape)).collect();
+        let holders = cam
+            .sim_tools()
+            .iter()
+            .map(|t| Cutter::of_part(&t.shape, forge_cam_geom::tool::Part::NonCutting))
+            .collect();
         let mut sim = Sim {
             cam,
             tl,
             setups,
             cutters,
+            holders,
             part_tris,
             part_maps: vec![],
             markers: vec![],
@@ -188,29 +196,71 @@ impl Sim {
                 }
                 mk.push(m);
             }
-            mk.sort_by(|a, b| a.t.total_cmp(&b.t));
             let own_tl = std::mem::replace(&mut self.tl, tl);
             let own_mk = std::mem::replace(&mut self.markers, mk);
             self.own = Some((own_tl, own_mk));
             self.source = Some(i);
+            // the posted code's rapids and holders against the stock as it cuts it
+            let issues = self.stock_issues();
+            self.markers.extend(issues);
+            self.markers.sort_by(|a, b| a.t.total_cmp(&b.t));
         }
         let cells = self.cells();
         self.set_cells(cells);
         Ok(())
     }
 
-    /// Runs the playing machine run's removal check (the stock as the posted code cuts it:
-    /// rapids and holders into material) on a grid of `step` mm, and shows its findings.
-    pub fn check_removal(&mut self, step: f64) -> Result<(), String> {
-        let i = self.source.ok_or("no machine run plays")?;
-        match self.machines.get_mut(i) {
-            Some(Ok(m)) => m.check_removal(step),
-            Some(Err(e)) => return Err(e.clone()),
-            None => return Err("no such machine run".into()),
+    /// The stock as the playing timeline cuts it, checked on the grid: each rapid's cutter
+    /// before it cuts, and each move's shank and holder after, against the material there is
+    /// (a display-grid check, as fine as the stock's cells: the toolpath's own are the certified
+    /// checker's; this is for the posted code on a machine). Markers, worst per move.
+    pub fn stock_issues(&self) -> Vec<Marker> {
+        let cells = self.cells();
+        let mut out = vec![];
+        let mut cur: Option<(usize, ZMap)> = None;
+        for g in &self.tl.segs {
+            let s = self.tl.ops[g.op as usize].setup;
+            if cur.as_ref().is_none_or(|c| c.0 != s) {
+                cur = Some((s, self.blank(s, cells)));
+            }
+            let Some((_, z)) = cur.as_mut() else { continue };
+            let tool = g.tool as usize;
+            let (Some(Some(c)), h) = (self.cutters.get(tool), self.holders.get(tool).and_then(|h| h.as_ref()))
+            else {
+                continue;
+            };
+            let name = &self.tl.ops[g.op as usize].name;
+            if g.kind == timeline::Kind::Rapid
+                && let Some((d, at)) = z.depth(g, c)
+            {
+                out.push(Marker {
+                    op: Some(g.op as usize),
+                    setup: s,
+                    rule: "rapid_into_stock".into(),
+                    verdict: "fail".into(),
+                    at,
+                    t: g.t0,
+                    text: format!("{name}: a rapid goes {d:.3} mm into the stock as cut (move {})", g.mv),
+                    region: None,
+                });
+            }
+            z.cut(g, 0.0, 1.0, c);
+            if let Some(h) = h
+                && let Some((d, at)) = z.depth(g, h)
+            {
+                out.push(Marker {
+                    op: Some(g.op as usize),
+                    setup: s,
+                    rule: "holder_into_stock".into(),
+                    verdict: "fail".into(),
+                    at,
+                    t: g.t0,
+                    text: format!("{name}: the shank or holder goes {d:.3} mm into the stock as cut (move {})", g.mv),
+                    region: None,
+                });
+            }
         }
-        // its markers again, with the toolpath's placed on the machine's time
-        self.set_source(None)?;
-        self.set_source(Some(i))
+        out
     }
 
     /// The machine run playing, if one is.

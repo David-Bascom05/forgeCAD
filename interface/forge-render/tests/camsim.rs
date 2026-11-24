@@ -338,8 +338,12 @@ fn the_flanges_posted_program_on_its_machine() {
         m.contacts.contacts.iter().find(|c| matches!(c.verdict, forge_machine::collide::Verdict::Hit { .. }))
     );
     assert!(mv.markers.iter().all(|k| k.verdict != "fail"), "{:?}", mv.markers.first());
-    // the removal check (the stock as cut) is on demand: not run until asked
-    assert!(m.removal.is_none());
+    // the posted code's rapids and holders against the stock as it cuts it: none
+    assert!(
+        sim.markers.iter().all(|k| k.rule != "rapid_into_stock" && k.rule != "holder_into_stock"),
+        "{:?}",
+        sim.markers.iter().find(|k| k.rule.ends_with("_into_stock"))
+    );
     // played as the source: the machine's time, the same stock at the end
     let end_tp = {
         let total = sim.tl.total;
@@ -381,4 +385,26 @@ fn moves_coloured_by_a_measured_value() {
     assert_eq!(v.colour(0.8, 1.0), look::GOOD);
     assert_eq!(v.colour(1.2, 1.0), look::HIGH);
     assert_eq!(v.colour(3.0, 1.0), look::OVER);
+}
+
+/// Rapids and holders against the stock as cut, on the grid: none on the certified flange
+/// (milliseconds, the whole program); the bolt holes drilled before the plate's top is cleared
+/// rapid into the stock, as the certified checker also says.
+#[test]
+fn rapids_and_holders_against_the_stock_as_cut() {
+    let sim = flange();
+    let t0 = std::time::Instant::now();
+    let issues = sim.stock_issues();
+    eprintln!("stock issues over the flange: {:.1} ms", t0.elapsed().as_secs_f64() * 1e3);
+    assert!(issues.is_empty(), "{:?}", issues.first());
+    let dir = machined();
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
+    let sim = Sim::open(src, &dir);
+    let b = sim.cam.ops.iter().position(|o| o.name == "bolts").unwrap();
+    assert_eq!(sim.cam.ops[b].status, "refused");
+    let issues = sim.stock_issues();
+    assert!(
+        issues.iter().any(|m| m.rule == "rapid_into_stock" && m.op == Some(b)),
+        "{issues:?}"
+    );
 }

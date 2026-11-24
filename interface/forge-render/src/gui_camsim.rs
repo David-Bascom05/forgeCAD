@@ -171,12 +171,6 @@ impl Gui {
         let now = crate::viewer::now_ms();
         let dt = st.last_ms.map_or(0.0, |t| (now - t) / 1000.0).min(0.1);
         st.last_ms = Some(now);
-        if std::mem::take(&mut st.removal_asked) {
-            if let Err(e) = st.sim.check_removal(0.5) {
-                self.shell.status = e;
-            }
-            st.drawn_key = None;
-        }
         let moved = st.tick(dt);
         if let Some(v) = &mut self.view {
             if st.follow
@@ -402,11 +396,6 @@ impl Gui {
                     st.jump(f * total);
                 }
                 "machine" => st.machine = on()?,
-                "removal" => {
-                    let step = if v.is_empty() { 0.5 } else { num()? };
-                    st.sim.check_removal(step)?;
-                    st.drawn_key = None;
-                }
                 "fit" => {
                     // the view on the stock, or on the whole machine about it
                     let mut tris = vec![];
