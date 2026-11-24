@@ -180,15 +180,15 @@ pub struct OpOut {
     target: Option<Vec<Face>>,
     /// Declared removals (Δ): what each is and where.
     pub removals: Vec<String>,
+    /// The paths as the posted text means them (read back from the program, in the part's
+    /// frame), one per path once a program posts the op: what the checks' `move_index` counts.
+    pub posted: Vec<OpPath>,
     /// The stock this op starts from (G2, G3 are checked against it).
     stock_before: Option<forge_cam::stock::InProcess>,
     /// What the op provably clears: (region, or the whole box; its final floor).
     voids: Vec<(Option<Region>, f64)>,
     /// The lowest tool tip of its posted paths, as the text reads back (∞ until posted).
     pub deepest: f64,
-    /// Its paths as the posted text reads back (what was certified; `Cam::check` checks them
-    /// again on demand).
-    pub posted: Vec<OpPath>,
 }
 
 /// `Cam::check`'s answer for one op: clear only if it was posted and every check passed.
@@ -206,6 +206,9 @@ pub struct ProgramOut {
     pub setups: Vec<usize>,
     /// The ops it posts, in order (every op of its setups, or those `ops:` names).
     pub ops: Vec<usize>,
+    /// With `split: "setup"`: the one setup this part of the program posts (its name is then
+    /// `PROGRAM/SETUP`).
+    pub setup: Option<String>,
     pub post: String,
     pub text: Option<String>,
     pub lines: usize,
@@ -218,9 +221,35 @@ pub struct ProgramOut {
 /// research/forge-lang/lean/COVERAGE.md lists it (lang_coverage). A reader of a new keyword adds
 /// it here in the same change.
 pub const ARGS: &[(&str, &[&str])] = &[
-    ("part", &["#0", "group"]),
+    // FEEDS-SPEEDS' keywords (feeds/model) are listed with each built-in that takes them
+    ("part", &["#0", "group", "material"]),
     ("machine", &["#0"]),
-    ("tool", &["#0", "t", "stickout", "holder"]),
+    (
+        "tool",
+        &[
+            "#0",
+            "t",
+            "stickout",
+            "holder",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
     (
         "setup",
         &[
@@ -238,7 +267,33 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "from",
         ],
     ),
-    ("facing", &["#0", "tool", "to", "step", "leave_axial"]),
+    (
+        "facing",
+        &[
+            "#0",
+            "tool",
+            "to",
+            "step",
+            "leave_axial",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
     (
         "clear",
         &[
@@ -251,6 +306,23 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "leave",
             "leave_axial",
             "ramp",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
         ],
     ),
     (
@@ -268,6 +340,23 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "finish",
             "finish_step",
             "spring",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
         ],
     ),
     (
@@ -283,13 +372,151 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "leave",
             "leave_axial",
             "ramp",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
         ],
     ),
-    ("drill", &["#0", "#1", "plan"]),
-    ("engrave", &["#0", "#1", "tool", "depth", "step", "from"]),
-    ("slot", &["#0", "#1", "tool", "depth", "step", "from", "ramp"]),
-    ("thread_mill", &["#0", "#1", "tool", "length"]),
-    ("edge_break", &["#0", "tool", "at", "size"]),
+    (
+        "drill",
+        &[
+            "#0",
+            "#1",
+            "plan",
+            "vc",
+            "rpm",
+            "f",
+            "feed",
+            "peck",
+            "max_power",
+            "max_torque",
+            "tap_vc",
+            "tap_rpm",
+        ],
+    ),
+    (
+        "engrave",
+        &[
+            "#0",
+            "#1",
+            "tool",
+            "depth",
+            "step",
+            "from",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "slot",
+        &[
+            "#0",
+            "#1",
+            "tool",
+            "depth",
+            "step",
+            "from",
+            "ramp",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "thread_mill",
+        &[
+            "#0",
+            "#1",
+            "tool",
+            "length",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "edge_break",
+        &[
+            "#0",
+            "tool",
+            "at",
+            "size",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
     (
         "soft_jaw",
         &[
@@ -310,6 +537,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "post",
             "number",
             "ops",
+            "split",
             "decimals",
             "feed_decimals",
             "coolant",
@@ -1041,12 +1269,8 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
                     env.insert(name.clone(), v);
                 }
                 StmtKind::Param { owner, name, value } => {
-                    let o = owner
-                        .iter()
-                        .map(|s| format!("{s:?}"))
-                        .collect::<Vec<_>>()
-                        .join(".");
-                    let o = o.trim_matches('"').to_string();
+                    // the owner's id as text (`a.b`, `a[0]`): a statement's id is its name
+                    let o = forge_lang::error::path_text(owner);
                     params.entry(o).or_default().insert(name.clone(), value.clone());
                 }
                 StmtKind::Assign { name, value } => {
@@ -1060,12 +1284,11 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
                     };
                     // the statement's own params, by their short names
                     let mut local = env.clone();
-                    for (owner, ps) in &params {
-                        if owner.ends_with(name.as_str()) {
-                            for (k, e) in ps {
-                                let v = cam.eval(e, &env)?;
-                                local.insert(k.clone(), v);
-                            }
+                    // (its id exactly: `param xop1.d` is not `op1`'s)
+                    if let Some(ps) = params.get(name.as_str()) {
+                        for (k, e) in ps {
+                            let v = cam.eval(e, &env)?;
+                            local.insert(k.clone(), v);
                         }
                     }
                     let a = cam.named_of(fname, args, &local)?;
@@ -1674,8 +1897,29 @@ impl Cam {
                     feed_decimals: digits("feed_decimals", 4.0)?,
                     coolant,
                 };
-                let out = self.post(name, &su, sel.as_deref(), &post, number, &opts);
-                self.programs.push(out);
+                // `split: "setup"`: one program per setup, `NAME/SETUP`, numbered on from `number`
+                match a.get("split") {
+                    None => {
+                        let out = self.post(name, &su, sel.as_deref(), &post, number, &opts);
+                        self.programs.push(out);
+                    }
+                    Some(V::Str(x)) if x == "setup" => {
+                        for (k, &si) in su.iter().enumerate() {
+                            let sname = self.setups[si].name.clone();
+                            let mut out = self.post(
+                                &format!("{name}/{sname}"),
+                                &[si],
+                                sel.as_deref(),
+                                &post,
+                                number + k as u32,
+                                &opts,
+                            );
+                            out.setup = Some(sname);
+                            self.programs.push(out);
+                        }
+                    }
+                    Some(_) => return Err("split: \"setup\" (one program per setup)".into()),
+                }
                 Ok(V::Num(0.0))
             }
             _ => Err(format!(
@@ -2741,6 +2985,8 @@ impl Cam {
                 tidx: ti,
                 h,
                 feed,
+                ramp_feed: None,
+                lead_feed: None,
             },
             ops::Span {
                 top: zt,
@@ -2873,6 +3119,8 @@ impl Cam {
                                 tidx: ti,
                                 h,
                                 feed: (vf, vp),
+                                ramp_feed: None,
+                                lead_feed: None,
                             },
                             ops::Span {
                                 top: s.stock.max[2],
@@ -2923,6 +3171,8 @@ impl Cam {
                                 tidx: ti,
                                 h,
                                 feed: (vf, vp),
+                                ramp_feed: None,
+                                lead_feed: None,
                             },
                             ops::Span { top, bottom, step },
                             stepover,
@@ -2975,6 +3225,8 @@ impl Cam {
                                     tidx: ti,
                                     h,
                                     feed: (vf, vp),
+                                    ramp_feed: None,
+                                    lead_feed: None,
                                 },
                                 ops::Span { top, bottom, step },
                                 leave,
@@ -2991,6 +3243,8 @@ impl Cam {
                                     tidx: ti,
                                     h,
                                     feed: (vf, vp),
+                                    ramp_feed: None,
+                                    lead_feed: None,
                                 },
                                 ops::Span { top, bottom, step },
                                 leave,
@@ -3023,6 +3277,8 @@ impl Cam {
                                             tidx: ti,
                                             h,
                                             feed: (vf, vp),
+                                            ramp_feed: None,
+                                            lead_feed: None,
                                         },
                                         ops::Span { top, bottom, step },
                                         stepover,
@@ -3085,6 +3341,8 @@ impl Cam {
                                             tidx: ti,
                                             h,
                                             feed: (vf, vp),
+                                            ramp_feed: None,
+                                            lead_feed: None,
                                         },
                                         ops::Span {
                                             top: p[2],
@@ -3249,6 +3507,8 @@ impl Cam {
                     tidx: ti,
                     h,
                     feed: (f, f),
+                    ramp_feed: None,
+                    lead_feed: None,
                 },
                 0.0,
                 0.0,
@@ -3277,6 +3537,8 @@ impl Cam {
                 tidx: ti,
                 h,
                 feed: (f, f),
+                ramp_feed: None,
+                lead_feed: None,
             },
             depth,
             if peck { t.tool.dc } else { 0.0 },
@@ -3324,6 +3586,8 @@ impl Cam {
                     tidx: ti,
                     h,
                     feed: (f, f),
+                    ramp_feed: None,
+                    lead_feed: None,
                 },
                 depth.min(hole.depth.unwrap_or(depth)),
                 0.0,
@@ -4084,6 +4348,7 @@ impl Cam {
         let mut po = ProgramOut {
             setups: setups.to_vec(),
             ops: vec![],
+            setup: None,
             name: name.into(),
             post: post.into(),
             text: None,
@@ -4419,7 +4684,6 @@ impl Cam {
             }
             let mut sum =
                 self.certify_posted(oi, &posted, FULL_STOCK.load(std::sync::atomic::Ordering::Relaxed));
-            self.ops[oi].posted.push(posted.clone());
             // G5: every position the posted path reaches, as the machine's joints see it
             if let Some(c) = self.axis_limits(oi, &posted) {
                 sum.clear = false;
@@ -4450,6 +4714,10 @@ impl Cam {
                 .filter_map(|c| Some(ends.get(c.move_index)?[2].min(ends.get(c.move_index + 1)?[2])))
                 .fold(f64::INFINITY, f64::min);
             let op = &mut self.ops[oi];
+            if op.posted.len() <= pi {
+                op.posted.resize(pi + 1, posted.clone());
+            }
+            op.posted[pi] = posted.clone();
             op.deepest = op.deepest.min(low);
             op.moves += posted.moves.len();
             op.pairs += sum.pairs;

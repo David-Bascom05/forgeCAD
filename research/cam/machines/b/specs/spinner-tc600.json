@@ -1,0 +1,137 @@
+{
+ "vendor": "SPINNER",
+ "model": "TC600",
+ "family": "TC universal lathes",
+ "source": [
+  "https://www.spinner.eu.com/en/cnc-lathes/universal-turning/tc600",
+  "https://www.spinner.eu.com/uploads/assets/downloads/LP-e-2026_07.pdf"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe-c-live",
+ "architecture": "Horizontal spindle universal lathe; monoblock cast bed with hardened & ground sliding (box) guideways; single disc/star servo turret (X, Z; Y option). CNC tailstock or sub-spindle. Built-in water-cooled motor spindle, beltless, with angle encoder on spindle for C axis.",
+ "control": {
+  "standard": null,
+  "options": [
+   "Siemens SINUMERIK ONE",
+   "FANUC 32i-B 15in"
+  ]
+ },
+ "travel_mm": {
+  "X": 275,
+  "Y": 90,
+  "Z": 700
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 400,
+ "max_turning_length_mm": 650,
+ "chuck_size_in": 9.8,
+ "bar_capacity_mm": 65,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 4000,
+  "rpm_min": 0,
+  "taper_or_interface": "built-in motor spindle, hollow hydraulic clamping",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 34
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 325
+  },
+  "curve_points": null
+ },
+ "sub_spindle": "option (sub-spindle or CNC tailstock); sub-spindle data not published",
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": 16,
+ "turret_index_s": null,
+ "tailstock": "CNC-controlled tailstock (or sub-spindle)",
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "control.standard",
+  "coolant.through_spindle",
+  "live_tool.power_kw",
+  "live_tool.rpm_max",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.torque_nm.cont",
+  "spindle_nose_type",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm",
+  "turret_index_s",
+  "weight_kg"
+ ],
+ "options": [
+  "Spindle 65 mm / 5,000 rpm hybrid bearings (34 kW, 325 Nm max)",
+  "Spindle 85 mm / 3,400 rpm (34 kW, 325 Nm max)",
+  "Spindle 85 mm / 4,000 rpm hybrid",
+  "Turrets: 16-pos VDI30 axial, 12-pos VDI40 axial, 16-pos VDI30 radial, 16-pos BMT45 radial; up to all stations driven",
+  "Y axis (90 mm travel)",
+  "sub-spindle",
+  "Robobox automation"
+ ],
+ "notes": "chuck_size_in 9.8 = 250 mm chuck from brochure table (orig '250 mm'). Page 'Turning diameter 400 mm' taken as max turning dia; page text says workpieces 'up to approx. 250 mm in diameter'. Y travel 90 mm is for the Y-axis option. Spindle 'Maximum power 34 kW / Maximum torque 325 Nm' -- duty type not stated, put in peak. Standard spindle taken as 65 mm / 4,000 rpm (first listed); page range 3,400-5,000 rpm. Swing over bed, rapids, live tool rpm/kW, turret index, weight, dims not on maker page. TTC not researched (TC600 listed by maker as covering ~80% of turned parts)."
+}

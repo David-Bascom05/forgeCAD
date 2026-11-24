@@ -1,0 +1,6 @@
+# a hull of 3000 discs: the sketch's freedom took a dense rank of one block, 4.7 GB asked at once.
+# A block past 2^21 entries is taken as of full rank.
+from: examples/thermoform/validation/buntinx2014_tray75.fg
+replace: outline = hull(disc((-80.775476, -51.775476), 14.224524), disc((80.775476, -51.775476), 14.224524),\n
+with: outline = hull(disc((-80.775476, -51.775476), 14.224524), disc((80.775476, -51.775476), 14.224524),\nrepeat 1000:                  disc((80.775476, 51.775476), 14.224524), disc((-800.775476, -51.775476), 14.224524), disc((80.775476, -51.775476), 14.224524),\n
+max-ms: 10000

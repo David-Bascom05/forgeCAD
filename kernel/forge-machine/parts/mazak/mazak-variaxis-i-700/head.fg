@@ -1,0 +1,14 @@
+# mazak-variaxis-i-700 head: the spindle head (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -150
+shared y0 = -150
+shared z0 = 861.2
+shared L = 300
+shared W = 300
+shared H = 450
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

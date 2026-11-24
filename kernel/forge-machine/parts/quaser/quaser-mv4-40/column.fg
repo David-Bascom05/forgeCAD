@@ -1,0 +1,14 @@
+# quaser-mv4-40 column: a conservative envelope solid from published dimensions (see the
+# machine's [[machine.cite]] for body.column); not the maker's CAD.
+# frame: the machine's base frame at the home pose.
+shared b0x0 = -419.5
+shared b0y0 = 750.5
+shared b0z0 = -179.5
+shared b0sx = 839
+shared b0sy = 299
+shared b0h = 1474
+
+sketch sb0(on: offset(xy, b0z0)) {
+  outline = rect(corner: (b0x0, b0y0), size: (b0sx, b0sy))
+}
+b0 = extrude(sb0, b0h)

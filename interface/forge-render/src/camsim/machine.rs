@@ -273,7 +273,11 @@ impl MachineView {
                 } else {
                     "near".into()
                 },
-                at: tip_at(c.segment, s),
+                // a hit's witness is in the machine's base frame at s: into the part's
+                at: match c.verdict {
+                    Verdict::Hit { witness, .. } => self.to_part(&g.at(s)).apply(witness),
+                    _ => tip_at(c.segment, s),
+                },
                 t,
                 text: format!(
                     "line {}: {} {word} {} (posted program on {})",

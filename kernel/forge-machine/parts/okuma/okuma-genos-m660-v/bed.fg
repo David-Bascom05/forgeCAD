@@ -1,0 +1,14 @@
+# okuma-genos-m660-v bed: the base under the saddle; from the floor (estimate) to the saddle ways.
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -765
+shared y0 = -760
+shared z0 = -700
+shared L = 1530
+shared W = 1930
+shared H = 300
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

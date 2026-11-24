@@ -542,13 +542,18 @@ pub struct Heights {
 }
 
 /// What an op cuts with: the tool, its slot, the heights it links at, and its feeds (cut,
-/// plunge).
+/// plunge; the ramp's and the lead-in's where they are their own, else None: the ramp's helix
+/// is cut at the cut feed, a lead at the cut feed).
 #[derive(Clone, Copy)]
 pub struct Cut<'a> {
     pub tool: &'a ToolUse,
     pub tidx: usize,
     pub h: Heights,
     pub feed: (f64, f64),
+    /// A helical or linear ramp's feed (FEEDS-SPEEDS' `ramp_feed`).
+    pub ramp_feed: Option<f64>,
+    /// A lead-in's (and lead-out's) feed (FEEDS-SPEEDS' `lead_in_feed`).
+    pub lead_feed: Option<f64>,
 }
 
 /// Levels from `top` down to `bottom`, at most `step` apart.
@@ -640,7 +645,9 @@ pub fn contour_passes(
     outside: bool,
     ps: Passes,
 ) -> Result<OpPath, OpError> {
-    let Cut { tool, tidx, h, feed } = c;
+    let Cut {
+        tool, tidx, h, feed, ..
+    } = c;
     let Span { top, bottom, step } = sp;
     let n = ps.finish.max(1);
     // the loops of each radial pass, the contour's own last
@@ -725,7 +732,9 @@ pub fn pocket(
     leave: f64,
     ramp: Option<f64>,
 ) -> Result<OpPath, OpError> {
-    let Cut { tool, tidx, h, feed } = c;
+    let Cut {
+        tool, tidx, h, feed, ..
+    } = c;
     let Span { top, bottom, step } = sp;
     let r = 0.5 * tool.tool.dc + leave;
     let mut passes = Vec::new();
@@ -1029,7 +1038,9 @@ fn pass_order(
 /// overhanging the stock by its radius each side.
 /// `sp.bottom` is the faced height.
 pub fn facing(st: &Stock, c: Cut, sp: Span) -> OpPath {
-    let Cut { tool, tidx, h, feed } = c;
+    let Cut {
+        tool, tidx, h, feed, ..
+    } = c;
     let Span { top, bottom: z, step } = sp;
     let d = tool.tool.dc;
     let over = 0.7 * d;
@@ -1094,7 +1105,9 @@ pub fn holes(
     depth_below_mouth: f64,
     q: f64,
 ) -> OpPath {
-    let Cut { tool, tidx, h, feed } = c;
+    let Cut {
+        tool, tidx, h, feed, ..
+    } = c;
     let f = feed.0;
     let mut mv = Vec::new();
     let start = [places[0][0], places[0][1], h.clear];

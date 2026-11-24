@@ -67,6 +67,8 @@ enum Ask {
     Type(String, bool),
     /// A Manufacture workspace command, as words (`app_cam`).
     Cam(String),
+    /// A Machine Builder command (`Gui::machine_command`).
+    Machine(String),
 }
 
 thread_local! {
@@ -438,6 +440,9 @@ impl Host {
                 Ask::Open(p) => self.gui.open(&p),
                 Ask::SaveAs(p) => self.gui.save_as(&p),
                 Ask::Save => self.gui.fg_save(),
+                Ask::Machine(c) => {
+                    let _ = self.gui.machine_command(&c);
+                }
                 Ask::Rebuild => {
                     if let Some(s) = &mut self.gui.fg {
                         s.rebuild();
@@ -1062,6 +1067,13 @@ pub fn app_type(text: String, enter: bool) {
 #[wasm_bindgen]
 pub fn app_pixels(then: js_sys::Function) {
     ask(Ask::Pixels(then));
+}
+
+/// A Machine Builder command (`Gui::machine_command`: open, template KIND NAME, jog J V, check,
+/// save project, ...); its answer is the state's `status`, prefixed `machine:`.
+#[wasm_bindgen]
+pub fn app_machine(cmd: String) {
+    ask(Ask::Machine(cmd));
 }
 
 /// The app's state as JSON: see `state_json`.

@@ -130,6 +130,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-certify"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-exact-fuzz",
+ "forge-geom",
+ "forge-lang",
+ "forge-math",
+ "forge-model",
+ "forge-proof",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-cli"
 version = "0.1.0"
 dependencies = [
@@ -139,6 +153,7 @@ dependencies = [
  "forge-geom",
  "forge-import",
  "forge-lang",
+ "forge-machine-builder",
  "forge-machine-lang",
  "forge-material",
  "forge-math",
@@ -277,6 +292,7 @@ dependencies = [
  "forge-git",
  "forge-lang",
  "forge-math",
+ "forge-mesh",
  "forge-step",
  "forge-topo",
  "roxmltree",
@@ -324,11 +340,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-machine-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-machine",
+ "forge-machine-lang",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-machine-lang"
 version = "0.1.0"
 dependencies = [
  "forge-lang",
  "forge-machine",
+ "forge-machine-builder",
  "forge-math",
  "forge-mesh",
 ]
@@ -432,6 +460,23 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-read-fuzz"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-dwg",
+ "forge-font",
+ "forge-git",
+ "forge-import",
+ "forge-lang",
+ "forge-material",
+ "forge-math",
+ "forge-mesh",
+ "forge-step",
  "forge-topo",
 ]
 

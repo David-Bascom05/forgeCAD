@@ -280,6 +280,13 @@ pub fn count(a: &Args, k: &'static str) -> R<Option<(usize, Num)>> {
                     value: n.v,
                 });
             }
+            // a count is a size
+            if n.v > crate::eval::MAX_COUNT as f64 {
+                return Err(crate::error::Error::TooLarge {
+                    span: a.span(k),
+                    value: n.v,
+                });
+            }
             Ok(Some((n.v.round() as usize, n)))
         }
     }

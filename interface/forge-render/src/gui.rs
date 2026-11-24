@@ -36,6 +36,8 @@ mod gui_explode;
 mod gui_fgmarks;
 #[path = "gui_inspect.rs"]
 pub mod gui_inspect;
+#[path = "gui_machine.rs"]
+pub mod gui_machine;
 #[path = "gui_markup.rs"]
 pub mod gui_markup;
 #[path = "gui_overlay.rs"]
@@ -123,6 +125,8 @@ pub(crate) type PartAnchors = (String, Result<Vec<String>, String>);
 
 pub struct Gui {
     pub vers: gui_versions::VersState,
+    /// The Machine Builder's scene (`gui_machine.rs`).
+    pub mach: gui_machine::MachHost,
     pub ctx: egui::Context,
     /// The Agent tab's backend and its turns (`gui_agent.rs`).
     pub agent: gui_agent::AgentHost,
@@ -280,6 +284,7 @@ impl Gui {
         warm_shell.out.clear();
         Gui {
             vers: Default::default(),
+            mach: Default::default(),
             agent: Default::default(),
             apps: Default::default(),
             speech: Default::default(),
@@ -926,6 +931,7 @@ impl Gui {
                 continue;
             }
             match a {
+                Action::MachineBuilder => self.machine_toggle(),
                 Action::Versions(c) => {
                     use crate::shell::versions::{VersionsAct, VersionsCmd};
                     let v = &mut self.shell.versions;
@@ -1298,6 +1304,7 @@ impl Gui {
         self.save_settings();
         self.inspect_tick();
         self.sheet_frame();
+        self.machine_frame();
         self.fg_hole_guess();
         self.fg_preview();
         if self.explode_tick() {
