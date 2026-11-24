@@ -135,6 +135,7 @@ name = "forge-cli"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-cam-import",
  "forge-cam-lang",
  "forge-dirs",
  "forge-geom",
