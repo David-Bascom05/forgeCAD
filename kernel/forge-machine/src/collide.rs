@@ -613,6 +613,96 @@ pub fn check_pose(def: &MachineDef, q: &[f64]) -> Vec<(String, String, Verdict)>
     out
 }
 
+/// What `check_box` found for a pair over a box of joint values.
+#[derive(Clone, Debug, PartialEq)]
+pub enum BoxVerdict {
+    /// The gap is at least the clearance for every joint value in the box: proven, as `Clear`
+    /// is for a segment (interval kinematics and separating-axis lower bounds).
+    Clear,
+    /// At these joint values a point of one body lies inside the other (a witness, as `Hit`).
+    Hit { q: Vec<f64>, witness: V3 },
+    /// Not proven clear down to the resolution and no witness: within the clearance near here.
+    Near { q: Vec<f64>, gap_lo: f64 },
+    /// The budget of boxes ran out before every box was decided.
+    Undecided { gap_lo: f64 },
+}
+
+/// Bodies `a` and `b` checked for every joint value in the box `q` (one interval per def.joints;
+/// a joint that does not move is a point interval), splitting the box in half across its
+/// relatively widest joint until each piece is proven clear, a witness is found, or the
+/// primitives' enclosures are narrower than `RES`. At most `budget` boxes; returns the verdict
+/// and the boxes evaluated. A Hit anywhere wins over a Near found elsewhere.
+pub fn check_box(
+    def: &MachineDef,
+    a: &CBody,
+    b: &CBody,
+    q: &[Interval],
+    clearance: f64,
+    budget: usize,
+) -> (BoxVerdict, usize) {
+    let w0: Vec<f64> = q.iter().map(|x| x.width()).collect();
+    let mut stack: Vec<Vec<Interval>> = vec![q.to_vec()];
+    let mut boxes = 0;
+    let mut near: Option<BoxVerdict> = None;
+    // the least gap bound among boxes not proven clear
+    let mut open = f64::INFINITY;
+    while let Some(qb) = stack.pop() {
+        if boxes == budget {
+            return (BoxVerdict::Undecided { gap_lo: open }, boxes);
+        }
+        boxes += 1;
+        let pose = kin::ipose(def, &qb);
+        let (ta, tb) = (ilink(&pose, a.link), ilink(&pose, b.link));
+        let pa: Vec<IPrim> = a.prims.iter().map(|p| place(p, &ta)).collect();
+        let pb: Vec<IPrim> = b.prims.iter().map(|p| place(p, &tb)).collect();
+        let mut worst = f64::INFINITY;
+        let mut wide = 0.0f64;
+        for x in &pa {
+            for y in &pb {
+                let g = gap_lo(x, y);
+                worst = worst.min(g);
+                if g < clearance {
+                    wide = wide.max(width(x) + width(y));
+                }
+            }
+        }
+        if worst >= clearance {
+            continue;
+        }
+        open = open.min(worst);
+        let k = (0..qb.len())
+            .filter(|&j| w0[j] > 0.0)
+            .max_by(|&i, &j| (qb[i].width() / w0[i]).total_cmp(&(qb[j].width() / w0[j])));
+        let mid: Vec<f64> = qb.iter().map(|x| 0.5 * (x.lo + x.hi)).collect();
+        if wide <= RES || k.is_none_or(|j| qb[j].width() <= RES * 1e-3) {
+            let p = kin::pose(def, &mid);
+            if let Some(w) = witness(a, b, &p) {
+                return (BoxVerdict::Hit { q: mid, witness: w }, boxes);
+            }
+            if near.is_none() {
+                near = Some(BoxVerdict::Near {
+                    q: mid,
+                    gap_lo: worst,
+                });
+            }
+            continue;
+        }
+        // a witness at the middle ends the search early
+        let p = kin::pose(def, &mid);
+        if let Some(w) = witness(a, b, &p) {
+            return (BoxVerdict::Hit { q: mid, witness: w }, boxes);
+        }
+        let j = k.unwrap();
+        let m = mid[j];
+        let (mut lo, mut hi) = (qb.clone(), qb);
+        lo[j] = Interval::new(lo[j].lo, m);
+        hi[j] = Interval::new(m, hi[j].hi);
+        stack.push(hi);
+        stack.push(lo);
+    }
+    (near.unwrap_or(BoxVerdict::Clear), boxes)
+}
+
 /// A dense sampling test for overlap (tests only: a grid of points through each primitive of a,
 /// checked inside b, and the other way). Not a proof of anything; the soundness test uses it to
 /// look for a contradiction of `Clear`.
