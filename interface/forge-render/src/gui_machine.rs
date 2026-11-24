@@ -134,6 +134,20 @@ fn link_tint(def: &MachineDef, link: &str) -> [f32; 4] {
     }
 }
 
+/// A machine's bodies at home (their primitives are in the home pose).
+fn machine_bounds(def: &forge_machine::def::MachineDef) -> Option<crate::frame::Bounds> {
+    use forge_machine::def::Prim;
+    let pts = def
+        .bodies
+        .iter()
+        .flat_map(|b| b.prims.iter())
+        .flat_map(|p| match p {
+            Prim::Box { min, max } => vec![*min, *max],
+            Prim::Cyl { base, axis, r, h } => crate::shell::lib_form::cyl_pts(*base, *axis, *r, *h),
+        });
+    crate::frame::Bounds::of(pts.map(|p| p.map(|x| x as f32)))
+}
+
 /// A library preview framed (docs/ux/STANDARD.md §2, `crate::frame`): its bounds, ghosts
 /// included, at the standard fill from the 3/4 view; a long tool (a punch or die set) by its near
 /// end's stretch, seen along its length, so its section reads (the inset shows it to scale).
@@ -152,8 +166,9 @@ fn frame_preview(p: &crate::library_mesh::Preview, size: (u32, u32)) -> crate::c
     }
     let how = if p.operator {
         Framing {
-            // front-right 3/4, lower than the iso: the housings' C (the throat) shows on their side
-            dir: crate::frame::Dir::Custom(-38.0, 18.0),
+            // front-right, well round to the side and low: a housing's side face, with its C
+            // (the throat) cut, is what you see
+            dir: crate::frame::Dir::Custom(-25.0, 14.0),
             ..Framing::default()
         }
     } else {
@@ -352,10 +367,22 @@ impl Gui {
                         self.mach.fit = m.fit;
                         v.nav.camera = match preview.as_ref() {
                             Some(p) => frame_preview(p, v.size),
-                            None => {
-                                let (c, r) = v.scene.bounds();
-                                super::view_camera(c, r, self.shell.view.parallel, v.size)
-                            }
+                            None => match machine_bounds(&def) {
+                                // a machine: its bodies at home, framed from the front 3/4
+                                Some(b) => {
+                                    crate::frame::frame(
+                                        b,
+                                        crate::frame::ViewRect::full(v.size.0 as f32, v.size.1 as f32),
+                                        crate::frame::Framing::default(),
+                                        &[],
+                                    )
+                                    .camera
+                                }
+                                None => {
+                                    let (c, r) = v.scene.bounds();
+                                    super::view_camera(c, r, self.shell.view.parallel, v.size)
+                                }
+                            },
                         };
                     }
                     v.dirty = true;
