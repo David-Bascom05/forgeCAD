@@ -188,6 +188,26 @@ impl Gui {
         for e in got {
             match e {
                 Event::FileChanged { path, before, text } => self.agent_file(path, before, text),
+                Event::Permission {
+                    id,
+                    tool,
+                    tool_use,
+                    summary,
+                    input,
+                    always,
+                    raw,
+                } => {
+                    let input = self.agent_edit_preview(&tool, &raw).unwrap_or(input);
+                    self.shell.agent.take(Event::Permission {
+                        id,
+                        tool,
+                        tool_use,
+                        summary,
+                        input,
+                        always,
+                        raw,
+                    })
+                }
                 Event::Done { .. } | Event::Problem { .. } => {
                     let error = match &e {
                         Event::Done { error, stopped } => error
@@ -404,6 +424,47 @@ impl Gui {
         if let Some(b) = &mut self.agent.backend {
             b.set_file(Path::new(path));
         }
+    }
+
+    /// An edit the agent asks to make, as its card shows it: the file as it is with the change
+    /// made, -/+ lines with a line around them, so the card says what changes where (a param's
+    /// name, not just "= 12" to "= 14"). None when it isn't an edit, or its file can't be read.
+    fn agent_edit_preview(&self, tool: &str, raw: &str) -> Option<String> {
+        use forge_agent::json::Json;
+        let input = Json::parse(raw).ok()?;
+        let path = input.get("file_path").and_then(Json::str)?;
+        let file = self.agent_edit_file(path);
+        let now = file
+            .as_ref()
+            .and_then(|f| forge_dirs::fs::read_to_string(f).ok())
+            .unwrap_or_default();
+        if file.is_none() && tool != "Write" {
+            return None;
+        }
+        let new = crate::shell::agent::edited(tool, &input, &now)?;
+        Some(crate::shell::agent::diff_text(&crate::shell::agent::diff(
+            &now, &new, 1,
+        )))
+    }
+
+    /// The file an edit names, here: as given if it's here, else from where the agent runs (its
+    /// paths are relative to that), else (the page, whose project is mounted elsewhere than it
+    /// is on the machine) the longest tail of it found under the project.
+    fn agent_edit_file(&self, path: &str) -> Option<PathBuf> {
+        let p = Path::new(path);
+        // has_root, not is_absolute: in a page (wasm32-unknown) no path is absolute
+        if p.has_root() && forge_dirs::fs::is_file(p) {
+            return Some(p.to_path_buf());
+        }
+        let bases = [self.agent.cwd.clone(), self.agent_root()];
+        let parts: Vec<_> = p.components().collect();
+        let tails = if !p.has_root() { 0..1 } else { 1..parts.len() };
+        bases.iter().flatten().find_map(|base| {
+            tails
+                .clone()
+                .map(|i| base.join(parts[i..].iter().collect::<PathBuf>()))
+                .find(|f| forge_dirs::fs::is_file(f))
+        })
     }
 
     fn agent_root(&self) -> Option<PathBuf> {
@@ -829,6 +890,11 @@ impl Gui {
                 AgentAct::Mode(m) => {
                     if let Some(b) = &mut self.agent.backend {
                         b.set_mode(m);
+                    }
+                }
+                AgentAct::OwnMode(m) => {
+                    if let Some(b) = &mut self.agent.backend {
+                        b.set_own_mode(&m);
                     }
                 }
                 AgentAct::ListConversations => self.agent_list_conversations(),

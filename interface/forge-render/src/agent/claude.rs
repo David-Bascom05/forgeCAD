@@ -155,6 +155,7 @@ impl Parser {
                         id: id.clone(),
                         tool,
                         tool_use: str_of(r, "tool_use_id").to_string(),
+                        raw: input.to_string(),
                         summary,
                         input: whole,
                         always: always_words(&suggestions),
@@ -600,6 +601,26 @@ impl Backend for ClaudeCode {
             ),
         ]);
         self.write(&msg);
+    }
+
+    fn set_own_mode(&mut self, flag: &str) {
+        // started again, it starts as their settings say: no `--permission-mode`
+        self.mode = None;
+        self.stops += 1;
+        let req = Json::obj(vec![
+            ("type", "control_request".into()),
+            ("request_id", format!("mode-{}", self.stops).into()),
+            (
+                "request",
+                Json::obj(vec![
+                    ("subtype", "set_permission_mode".into()),
+                    ("mode", flag.into()),
+                ]),
+            ),
+        ]);
+        if *self.alive.lock().expect("no panics while held") {
+            self.write(&req);
+        }
     }
 
     fn set_mode(&mut self, m: Mode) {

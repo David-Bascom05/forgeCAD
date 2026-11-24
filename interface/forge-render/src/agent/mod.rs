@@ -51,6 +51,9 @@ pub trait Backend: Send {
     fn answer(&mut self, _id: &str, _a: crate::shell::agent::Answer) {}
     /// What may run without asking, from now on.
     fn set_mode(&mut self, _m: crate::shell::agent::Mode) {}
+    /// Back to the mode the person's own settings give (`bypassPermissions`, `auto`...), after
+    /// choosing another here. Not in the page: a page may not turn a bypass back on.
+    fn set_own_mode(&mut self, _flag: &str) {}
 }
 
 /// The project's source files, read recursively after each tool: changed or new since last

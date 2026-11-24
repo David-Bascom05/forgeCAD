@@ -63,6 +63,8 @@ pub enum Event {
         summary: String,
         input: String,
         always: Option<String>,
+        /// The tool's input as sent (JSON): the host reads an edit's file to show it whole.
+        raw: String,
     },
     /// The backend's permission mode is now this (`Mode::flag`), however it changed.
     Mode(String),
@@ -246,6 +248,8 @@ pub enum AgentAct {
     Answer(String, Answer),
     /// The permission mode changed in the tab.
     Mode(Mode),
+    /// Back to the person's own settings' mode (its flag): `AgentTab::own_mode`.
+    OwnMode(String),
     /// The answer to "Trust this folder for the agent?".
     Trust {
         dir: String,
@@ -313,6 +317,9 @@ pub struct AgentTab {
     /// A mode the backend said that the tab has no name for (`bypassPermissions`, `auto`): shown
     /// as it is, instead of `mode`.
     pub mode_other: Option<String>,
+    /// The mode the person's own settings gave the chat at its start, when the tab has no name
+    /// for it (a bypass, `auto`): the mode menu offers it back after another is chosen.
+    pub own_mode: Option<String>,
     /// A selection the person took off the next message (its chip's ×): not suggested again
     /// until something else is selected.
     pub dismissed: Option<String>,
@@ -518,6 +525,7 @@ impl AgentTab {
                 summary,
                 input,
                 always,
+                ..
             } => self.entries.push(Entry::Permission {
                 id,
                 tool,
@@ -539,7 +547,12 @@ impl AgentTab {
                     self.mode = m;
                     self.mode_other = None;
                 }
-                None => self.mode_other = Some(m),
+                None => {
+                    if !self.mode_chosen {
+                        self.own_mode = Some(m.clone());
+                    }
+                    self.mode_other = Some(m)
+                }
             },
             Event::FileChanged { .. } => {}
         }
@@ -582,6 +595,27 @@ impl AgentTab {
             self.mode_other = None;
             self.mode_chosen = true;
             self.out.push(AgentAct::Mode(m));
+        }
+    }
+
+    /// Back to the person's own settings' mode (`own_mode`), chosen in the mode menu.
+    pub fn set_own_mode(&mut self) {
+        if let Some(m) = self.own_mode.clone()
+            && self.mode_other.as_ref() != Some(&m)
+        {
+            self.mode_other = Some(m.clone());
+            self.mode_chosen = false;
+            self.out.push(AgentAct::OwnMode(m));
+        }
+    }
+
+    /// The person's own settings' mode, in words: the chip's and the menu's.
+    pub fn mode_word(flag: &str) -> &str {
+        match flag {
+            "bypassPermissions" => "Permissions bypassed",
+            "dontAsk" => "Don't ask",
+            "auto" => "Auto",
+            o => o,
         }
     }
 
@@ -732,6 +766,7 @@ impl AgentTab {
         self.mode = Mode::Ask;
         self.mode_chosen = false;
         self.mode_other = None;
+        self.own_mode = None;
         self.out.push(AgentAct::NewChat);
     }
 
@@ -1509,38 +1544,12 @@ impl Shell {
         #[cfg(not(target_arch = "wasm32"))]
         let bridged = true;
         if !bridged {
+            let mut places = std::mem::take(&mut self.places);
             ui.scope_builder(
                 egui::UiBuilder::new().max_rect(area.shrink2(vec2(PAD, 12.0))),
-                |ui| {
-                    ui.label(
-                        egui::RichText::new("Use your own Claude Code here")
-                            .font(medium(13.0))
-                            .color(t.ink),
-                    );
-                    ui.add_space(6.0);
-                    ui.label(
-                        egui::RichText::new(
-                            "In the browser, the agent is Claude Code running on your computer, with \
-                             your own Claude plan and settings. On that computer, run this in the \
-                             project folder, then open the link it prints:",
-                        )
-                        .font(sans(12.0))
-                        .color(t.ink2),
-                    );
-                    ui.add_space(4.0);
-                    ui.label(
-                        egui::RichText::new("forgecad web . --agent")
-                            .font(mono(12.0))
-                            .color(t.ink),
-                    );
-                    ui.add_space(4.0);
-                    ui.label(
-                        egui::RichText::new("Or open the project in the ForgeCAD desktop app.")
-                            .font(sans(11.0))
-                            .color(t.ink2),
-                    );
-                },
+                |ui| no_bridge(ui, &t, &mut places),
             );
+            self.places = places;
             return;
         }
         self.agent.selection = self.agent_selection();
@@ -1605,27 +1614,28 @@ impl Shell {
             let m = self.agent.mode;
             let other = self.agent.mode_other.clone();
             // a mode from the person's own settings the tab doesn't set, in words
-            let word = match other.as_deref() {
-                Some("bypassPermissions") => "Permissions bypassed",
-                Some("dontAsk") => "Don't ask",
-                Some("auto") => "Auto",
-                Some(o) => o,
-                None => m.word(),
-            };
-            let g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), sans(11.0), t.ink));
+            let full = other.as_deref().map_or(m.word(), AgentTab::mode_word);
+            // narrow: a bypass still says so, in a word
+            let room = chats.left() - 6.0 - (br.right() + 4.0);
+            let mut word = full;
+            let mut g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), sans(11.0), t.ink));
+            if g.size().x + 14.0 > room && other.as_deref() == Some("bypassPermissions") {
+                word = "Bypassed";
+                g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), sans(11.0), t.ink));
+            }
             let mw = g.size().x + 14.0;
             let mr = Rect::from_min_size(pos2(chats.left() - 6.0 - mw, bar.top() + 6.0), vec2(mw, 18.0));
             // only where it doesn't cover the backend's name
             if mr.left() > br.right() + 4.0 {
                 let tip = match other.as_deref() {
-                    Some("bypassPermissions") => "Your Claude settings bypass permissions: the agent runs every tool without asking. Click to ask first, for this chat".to_string(),
-                    Some(o) => format!("Your Claude Code settings' mode, {o} (click for Ask first)"),
+                    Some("bypassPermissions") => "Your Claude settings bypass permissions: the agent runs every tool without asking. Click to choose another mode for this chat".to_string(),
+                    Some(o) => format!("Your Claude Code settings' mode, {o} (click to choose another)"),
                     None => m.tip().to_string(),
                 };
                 let resp = ui
                     .interact(mr, ui.scope_id().with("agent-mode"), Sense::click())
                     .on_hover_text(tip);
-                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, word));
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, full));
                 let (fill, ink) = match m {
                     _ if other.is_some() => (t.warn.gamma_multiply(0.25), t.ink),
                     Mode::Ask => (t.field, t.ink2),
@@ -2386,7 +2396,6 @@ impl Shell {
                 }
                 if a.running && a.trust_ask.is_none() {
                     let now = ui.input(|i| i.time);
-                    let dots = ".".repeat(1 + (now * 3.0) as usize % 3);
                     // its time so far and its tools, as a terminal's spinner says them
                     let secs = a.turn_started.map_or(0.0, |t0| now - t0);
                     let tools = a
@@ -2396,16 +2405,23 @@ impl Shell {
                         .take_while(|e| !matches!(e, Entry::User { .. }))
                         .filter(|e| matches!(e, Entry::Tool { .. }))
                         .count();
-                    let mut said = format!("Working{dots} {}", duration(secs));
+                    let mut said = format!("Working · {}", duration(secs));
                     if tools > 0 {
                         said.push_str(&format!(" · {tools} tool{}", if tools == 1 { "" } else { "s" }));
                     }
                     if a.queued > 0 {
                         said.push_str(&format!(" · {} queued", a.queued));
                     }
-                    let (r, _) = ui.allocate_exact_size(vec2(w, 22.0), Sense::hover());
-                    ui.painter()
-                        .text(pos2(PAD, r.center().y), Align2::LEFT_CENTER, said, sans(12.0), t.ink2);
+                    // §7's loading state: a spinner and what it's doing
+                    let r = ui
+                        .scope_builder(
+                            egui::UiBuilder::new()
+                                .max_rect(Rect::from_min_size(pos2(PAD, ui.cursor().top() + 4.0), vec2(w - PAD, 18.0))),
+                            |ui| super::ux::loading(ui, &t, &said),
+                        )
+                        .response
+                        .rect;
+                    ui.advance_cursor_after_rect(r.expand2(vec2(0.0, 4.0)));
                     places.push(("agent:working".into(), r));
                 } else if let Some((secs, tin, tout, cost)) = a.usage
                     && !a.entries.is_empty()
@@ -2560,16 +2576,24 @@ impl Shell {
     fn mode_menu(&mut self, ctx: &egui::Context, under: Rect) {
         let t = self.theme;
         let mut picked = None;
+        let mut own_picked = false;
+        // the person's own settings' mode, to go back to (not in a page: it may not turn a
+        // bypass back on)
+        let own = if cfg!(target_arch = "wasm32") {
+            None
+        } else {
+            self.agent
+                .own_mode
+                .clone()
+                .map(|f| (format!("Your settings: {}", AgentTab::mode_word(&f)), f))
+        };
+        const OWN_MEANS: &str = "As your Claude Code settings say";
         // as wide as its longest line
         let w = Mode::ALL
             .iter()
-            .map(|m| {
-                ctx.fonts_mut(|f| {
-                    f.layout_no_wrap(m.means().to_string(), sans(11.0), t.ink)
-                        .size()
-                        .x
-                })
-            })
+            .map(|m| m.means().to_string())
+            .chain(own.iter().flat_map(|(w, _)| [w.clone(), OWN_MEANS.to_string()]))
+            .map(|line| ctx.fonts_mut(|f| f.layout_no_wrap(line, sans(11.0), t.ink).size().x))
             .fold(0.0, f32::max)
             + 28.0;
         let at = pos2((under.right() - w).max(4.0), under.bottom() + 4.0);
@@ -2578,7 +2602,8 @@ impl Shell {
             .fixed_pos(at)
             .show(ctx, |ui| {
                 let row = 40.0;
-                let r = Rect::from_min_size(at, vec2(w, row * 3.0 + 8.0));
+                let rows = 3 + own.is_some() as usize;
+                let r = Rect::from_min_size(at, vec2(w, row * rows as f32 + 8.0));
                 let (_, resp) = ui.allocate_exact_size(r.size(), Sense::hover());
                 let p = ui.painter();
                 p.rect_filled(r, 6.0, t.raised);
@@ -2623,9 +2648,50 @@ impl Shell {
                         picked = Some(m);
                     }
                 }
+                if let Some((word, flag)) = &own {
+                    let rr = Rect::from_min_size(
+                        pos2(r.left() + 4.0, r.top() + 4.0 + 3.0 * row),
+                        vec2(w - 8.0, row),
+                    );
+                    let on = self.agent.mode_other.as_ref() == Some(flag);
+                    let hit = ui.interact(rr, ui.scope_id().with("agent-mode-own"), Sense::click());
+                    hit.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, on, word));
+                    if on {
+                        p.rect_filled(rr, 4.0, t.on);
+                    } else if hit.hovered() {
+                        p.rect_filled(rr, 4.0, t.hover);
+                    }
+                    let ink = if on { t.on_ink } else { t.ink };
+                    p.line_segment(
+                        [
+                            pos2(rr.left() + 6.0, rr.top() - 0.5),
+                            pos2(rr.right() - 6.0, rr.top() - 0.5),
+                        ],
+                        Stroke::new(1.0, t.line),
+                    );
+                    p.text(
+                        pos2(rr.left() + 10.0, rr.top() + 12.0),
+                        Align2::LEFT_CENTER,
+                        word,
+                        medium(12.0),
+                        ink,
+                    );
+                    p.text(
+                        pos2(rr.left() + 10.0, rr.top() + 28.0),
+                        Align2::LEFT_CENTER,
+                        OWN_MEANS,
+                        sans(11.0),
+                        if on { ink } else { t.ink2 },
+                    );
+                    self.places.push(("agent:mode:own".into(), rr));
+                    own_picked = hit.clicked();
+                }
                 resp
             });
-        if let Some(m) = picked {
+        if own_picked {
+            self.agent.set_own_mode();
+            self.agent.mode_menu = false;
+        } else if let Some(m) = picked {
             self.agent.set_mode(m);
             self.agent.mode_menu = false;
         } else if area.inner.clicked_elsewhere()
@@ -3389,6 +3455,89 @@ fn diff_job(text: &str, t: &Theme, width: f32) -> LayoutJob {
         );
     }
     job
+}
+
+/// An edit's lines as a card shows them: `- ` taken out, `+ ` put in, `  ` around them, `…` for
+/// the unchanged runs left out.
+pub fn diff_text(lines: &[Line]) -> String {
+    lines
+        .iter()
+        .map(|l| match l {
+            Line::Same(s) => format!("  {s}"),
+            Line::Add(s) => format!("+ {s}"),
+            Line::Del(s) => format!("- {s}"),
+            Line::Skip(_) => "  …".to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// What an edit tool would make of a file's text: Edit's replacement (every one with
+/// `replace_all`), MultiEdit's in turn, Write's whole. None when it isn't one of those or its
+/// text isn't in the file (Claude Code would refuse it too).
+pub fn edited(tool: &str, input: &forge_agent::json::Json, now: &str) -> Option<String> {
+    use forge_agent::json::Json;
+    let one = |text: &str, e: &Json| -> Option<String> {
+        let old = e.get("old_string").and_then(Json::str)?;
+        let new = e.get("new_string").and_then(Json::str)?;
+        if old.is_empty() || !text.contains(old) {
+            return None;
+        }
+        Some(if e.get("replace_all") == Some(&Json::Bool(true)) {
+            text.replace(old, new)
+        } else {
+            text.replacen(old, new, 1)
+        })
+    };
+    match tool {
+        "Edit" => one(now, input),
+        "MultiEdit" => match input.get("edits") {
+            Some(Json::Arr(es)) => es.iter().try_fold(now.to_string(), |t, e| one(&t, e)),
+            _ => None,
+        },
+        "Write" => input.get("content").and_then(Json::str).map(str::to_string),
+        _ => None,
+    }
+}
+
+/// What starts the page's agent: the command, to copy.
+pub const BRIDGE_COMMAND: &str = "forgecad web . --agent";
+
+/// The Agent tab in a page with no bridge (§7's empty state): what the agent is here, the command
+/// that starts it (mono, with Copy), and the desktop app as the other way.
+fn no_bridge(ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
+    use super::theme;
+    ui.vertical_centered(|ui| {
+        ui.add_space(theme::S3);
+        ui.label(
+            egui::RichText::new("Use your own Claude Code here")
+                .font(theme::title())
+                .color(t.ink),
+        );
+        ui.label(
+            egui::RichText::new(
+                "In the browser, the agent is Claude Code on your computer, with your own plan and \
+                 settings. Run this in the project folder there, then open the link it prints.",
+            )
+            .font(theme::small())
+            .color(t.ink2),
+        );
+        ui.add_space(theme::S2);
+        let cmd = ui.label(egui::RichText::new(BRIDGE_COMMAND).font(mono(12.0)).color(t.ink));
+        places.push(("agent:bridge:command".into(), cmd.rect));
+        ui.add_space(theme::S1);
+        let copy = ui.button("Copy command");
+        places.push(("agent:bridge:copy".into(), copy.rect));
+        if copy.clicked() {
+            ui.ctx().copy_text(BRIDGE_COMMAND.into());
+        }
+        ui.add_space(theme::S2);
+        ui.label(
+            egui::RichText::new("Or open the project in the ForgeCAD desktop app.")
+                .font(theme::small())
+                .color(t.ink2),
+        );
+    });
 }
 
 /// One param's change in an edit's -/+ lines (`param KEY = OLD` → `param KEY = NEW`): the key,

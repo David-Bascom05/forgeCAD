@@ -22,7 +22,7 @@ const INJECT = `Done. <script>window.pwned=1</script> <img src=x onerror="window
 /// The stand-in: for each message, an Edit asked about, made if allowed, then a reply.
 function fake(dir) {
   const tool = JSON.stringify({ type: "assistant", message: { id: "m-1", content: [{ type: "tool_use", id: "t-1", name: "Edit", input: { file_path: "plate.fg", old_string: "= 12", new_string: "= 14" } }] }, parent_tool_use_id: null });
-  const ask = JSON.stringify({ type: "control_request", request_id: "req-1", request: { subtype: "can_use_tool", tool_name: "Edit", input: { file_path: "plate.fg", old_string: "= 12", new_string: "= 14" }, permission_suggestions: [{ type: "setMode", mode: "acceptEdits", destination: "session" }], tool_use_id: "t-1" } });
+  const ask = JSON.stringify({ type: "control_request", request_id: "req-1", request: { subtype: "can_use_tool", tool_name: "Edit", input: { file_path: path.join(dir, "proj", "plate.fg"), old_string: "= 12", new_string: "= 14" }, permission_suggestions: [{ type: "setMode", mode: "acceptEdits", destination: "session" }], tool_use_id: "t-1" } });
   const res = JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t-1", content: "ok" }] }, parent_tool_use_id: null });
   const said = JSON.stringify({ type: "assistant", message: { id: "m-2", content: [{ type: "text", text: INJECT }] }, parent_tool_use_id: null });
   const end = JSON.stringify({ type: "result", subtype: "success", session_id: "s" });
@@ -100,6 +100,10 @@ const agentState = (s) => s.agent ?? { entries: [] };
     let st = await t.until(p, (s) => agentState(s).entries.some((e) => e.kind === "permission" && e.state === "Waiting"), "the question");
     const tool = agentState(st).entries.find((e) => e.kind === "tool");
     assert.ok(tool, "the Edit's row");
+    // Claude Code sends the snippet and the machine's path: the card shows it against the page's
+    // copy of the file, so the param's name is in it
+    const card = agentState(st).entries.find((e) => e.kind === "permission");
+    assert.match(card.input, /- param extrude1\.d = 12\n\+ param extrude1\.d = 14/, card.input);
     if (process.env.FORGE_WEB_SHOTS) t.shot("agent-web-waiting.png", await t.pixels(p));
     console.log("ok - Claude Code's question is a card in the page");
 
@@ -129,6 +133,23 @@ const agentState = (s) => s.agent ?? { entries: [] };
     assert.deepEqual(csp, [], "nothing the page needs is refused by its CSP");
     t.check(p);
     console.log("ok - the page asked nothing of any host but its own; its CSP refused nothing it needs");
+
+    // no bridge (`forgecad web` without --agent): the tab says how to start one, and copies it
+    const plain = await t.serve(dir, app, []);
+    try {
+      const q = await t.page(b, `${plain.url.split("#")[0]}?open=plate.fg&offscreen=1280x800`);
+      await q.waitForFunction(() => window.forgecad?.loaded, null, { timeout: 600000 });
+      await t.loaded(q);
+      await click(q, "side:tab:Agent");
+      await t.until(q, (s) => s.places?.some((x) => x.name === "agent:bridge:copy"), "the command to copy");
+      const said = await t.until(q, (s) => s.places?.some((x) => x.name === "agent:bridge:command"), "the command");
+      assert.ok(!said.places.some((x) => x.name === "agent:input"), "no input box to type into for nothing");
+      if (process.env.FORGE_WEB_SHOTS) t.shot("agent-web-no-bridge.png", await t.pixels(q));
+      t.check(q);
+      console.log("ok - with no bridge, the tab says the command that starts one");
+    } finally {
+      plain.proc.kill();
+    }
   } finally {
     await b.close();
     proc.kill();

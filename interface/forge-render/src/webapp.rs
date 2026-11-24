@@ -818,10 +818,17 @@ fn agent_json(a: &crate::shell::agent::AgentTab) -> Json {
                 ("text", text.clone().into()),
                 ("error", (*error).into()),
             ]),
-            Entry::Permission { id, summary, state, .. } => Json::obj(vec![
+            Entry::Permission {
+                id,
+                summary,
+                input,
+                state,
+                ..
+            } => Json::obj(vec![
                 ("kind", "permission".into()),
                 ("id", id.clone().into()),
                 ("text", summary.clone().into()),
+                ("input", input.clone().into()),
                 ("state", format!("{state:?}").into()),
             ]),
         })

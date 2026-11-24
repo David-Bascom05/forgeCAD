@@ -78,6 +78,7 @@ fn a_permission_request_reads_as_a_card_with_what_always_would_allow() {
                 summary,
                 input,
                 always,
+                ..
             } => {
                 assert!(tool_use.starts_with("toolu_perm_"), "its tool call: {tool_use}");
                 Some((
@@ -204,7 +205,7 @@ fn claude_code_asks_the_app_and_keeps_the_persons_own_mode_unless_they_choose() 
 /// first message to `heard.jsonl`; it makes the edit only if the answer allowed it.
 fn fake_claude(dir: &Path) -> PathBuf {
     let init = r#"{"type":"system","subtype":"init","session_id":"s-1","model":"claude-haiku-5-5","permissionMode":"default"}"#;
-    let ask = r#"{"type":"control_request","request_id":"req-1","request":{"subtype":"can_use_tool","tool_name":"Edit","input":{"file_path":"plate.fg","old_string":"param extrude1.d = 12","new_string":"param extrude1.d = 14"},"permission_suggestions":[{"type":"setMode","mode":"acceptEdits","destination":"session"}],"tool_use_id":"t-1"}}"#;
+    let ask = r#"{"type":"control_request","request_id":"req-1","request":{"subtype":"can_use_tool","tool_name":"Edit","input":{"file_path":"/elsewhere/proj/plate.fg","old_string":"= 12","new_string":"= 14"},"permission_suggestions":[{"type":"setMode","mode":"acceptEdits","destination":"session"}],"tool_use_id":"t-1"}}"#;
     let tool = r#"{"type":"assistant","message":{"id":"m-1","content":[{"type":"tool_use","id":"t-1","name":"Edit","input":{"file_path":"plate.fg","old_string":"param extrude1.d = 12","new_string":"param extrude1.d = 14"}}]},"parent_tool_use_id":null}"#;
     let script = dir.join("claude");
     std::fs::write(
@@ -249,6 +250,15 @@ fn app(name: &str) -> Option<(forge_render::gui::Headless, PathBuf)> {
 #[test]
 fn allow_runs_the_edit_and_the_answer_carries_its_input() {
     let Some((mut h, dir)) = app("allow") else { return };
+    // Claude Code sends only the snippet ("= 12"): the card shows it against the file, so the
+    // line it's on, and the param's name, are in it
+    let card = h.gui.shell.agent.entries.iter().find_map(|e| match e {
+        Entry::Permission { input, .. } => Some(input.clone()),
+        _ => None,
+    });
+    let card = card.unwrap();
+    assert!(card.contains("- param extrude1.d = 12"), "{card}");
+    assert!(card.contains("+ param extrude1.d = 14"), "{card}");
     // the question can't be missed from the Model tab either
     assert!(h.gui.shell.place("agent:perm:req-1:allow").is_some());
     assert!(h.gui.shell.place("agent:perm:req-1:always").is_some());
@@ -271,7 +281,8 @@ fn allow_runs_the_edit_and_the_answer_carries_its_input() {
             .get("updatedInput")
             .and_then(|i| i.get("new_string"))
             .and_then(Json::str),
-        Some("param extrude1.d = 14")
+        Some("= 14"),
+        "the input as Claude Code sent it, not the card's"
     );
     assert!(h.gui.shell.agent.entries.iter().any(|e| matches!(
         e,
@@ -607,4 +618,82 @@ fn polish_pictures() {
         drop(h);
         let _ = std::fs::remove_dir_all(dir);
     }
+}
+
+#[test]
+fn an_edit_is_shown_against_the_file_as_it_is() {
+    use forge_render::shell::agent::{diff, diff_text, edited};
+    let now = "param a = 12\nparam b = 12\nparam c = 3\n";
+    let edit = |s: &str| edited("Edit", &Json::parse(s).unwrap(), now);
+    // the first of it, or every one with replace_all
+    assert_eq!(
+        edit(r#"{"old_string":"= 12","new_string":"= 14"}"#).as_deref(),
+        Some("param a = 14\nparam b = 12\nparam c = 3\n")
+    );
+    assert_eq!(
+        edit(r#"{"old_string":"= 12","new_string":"= 14","replace_all":true}"#).as_deref(),
+        Some("param a = 14\nparam b = 14\nparam c = 3\n")
+    );
+    // not in the file: nothing to show (Claude Code refuses it too)
+    assert_eq!(edit(r#"{"old_string":"= 99","new_string":"= 1"}"#), None);
+    let multi = Json::parse(r#"{"edits":[{"old_string":"a = 12","new_string":"a = 1"},{"old_string":"c = 3","new_string":"c = 4"}]}"#).unwrap();
+    let after = edited("MultiEdit", &multi, now).unwrap();
+    assert_eq!(after, "param a = 1\nparam b = 12\nparam c = 4\n");
+    let write = Json::parse(r#"{"content":"param z = 1\n"}"#).unwrap();
+    assert_eq!(edited("Write", &write, now).as_deref(), Some("param z = 1\n"));
+    assert_eq!(edited("Bash", &write, now), None);
+    let shown = diff_text(&diff(now, &after, 0));
+    assert!(shown.contains("- param a = 12\n+ param a = 1"), "{shown}");
+    assert!(shown.contains("- param c = 3\n+ param c = 4"), "{shown}");
+}
+
+#[test]
+fn a_bypass_from_the_persons_settings_can_be_left_and_gone_back_to() {
+    let Some((mut h, dir)) = app("own") else { return };
+    assert!(h.click("agent:perm:req-1:allow"));
+    assert!(wait(&mut h, |g| !g.shell.agent.running));
+    // their settings bypass permissions (as Claude Code's status says it)
+    h.gui.shell.agent.take(Event::Mode("bypassPermissions".into()));
+    h.step();
+    if let Ok(shots) = std::env::var("FORGE_UI_SHOTS") {
+        for _ in 0..6 {
+            h.step();
+        }
+        std::fs::create_dir_all(&shots).unwrap();
+        std::fs::write(
+            Path::new(&shots).join("approvals-1400-dark-bypassed.png"),
+            h.png().unwrap(),
+        )
+        .unwrap();
+    }
+    // said even in the narrow panel ("Bypassed"), and a click opens the menu, never switches
+    assert!(h.click("agent:mode"), "the bypass in sight");
+    h.step();
+    assert!(h.click("agent:mode:default"));
+    h.step();
+    assert_eq!(h.gui.shell.agent.mode, Mode::Ask);
+    assert_eq!(h.gui.shell.agent.mode_other, None);
+    // and back: the menu's last row, their settings' own
+    assert!(h.click("agent:mode"));
+    h.step();
+    if let Ok(shots) = std::env::var("FORGE_UI_SHOTS") {
+        for _ in 0..12 {
+            h.step();
+        }
+        std::fs::create_dir_all(&shots).unwrap();
+        std::fs::write(
+            Path::new(&shots).join("approvals-1400-dark-own-mode.png"),
+            h.png().unwrap(),
+        )
+        .unwrap();
+    }
+    assert!(h.click("agent:mode:own"));
+    h.step();
+    assert_eq!(h.gui.shell.agent.mode_other.as_deref(), Some("bypassPermissions"));
+    assert!(wait(&mut h, |_| heard(&dir).iter().any(|j| j
+        .get("request")
+        .and_then(|r| r.get("mode"))
+        .and_then(Json::str)
+        == Some("bypassPermissions"))));
+    let _ = std::fs::remove_dir_all(dir);
 }
