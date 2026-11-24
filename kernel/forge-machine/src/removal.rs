@@ -195,28 +195,48 @@ fn convex_min(f: &dyn Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
 }
 
 /// Least of f over [0, 1] for any continuous f: dense samples, then a local refinement.
-/// The least u in [0, 1] with f(u) <= level, f(0) > level allowed: 256 samples, then bisection
-/// of the first bracket to 1e-12 (0 if already at or under the level at the start).
+/// The least u in [0, 1] with f(u) <= level, for an f that reaches the level somewhere (the
+/// caller saw its minimum under it): 256 samples; the first sample at or under the level, or
+/// else the minimiser (sampled, then golden-section refined in its neighbourhood: a contact
+/// between two samples lies before it), brackets the crossing, which bisection finds to 1e-12.
 fn first_contact(f: &dyn Fn(f64) -> f64, level: f64) -> f64 {
     if f(0.0) <= level {
         return 0.0;
     }
     let n = 256;
-    let mut prev = 0.0;
+    let bisect = |mut a: f64, mut b: f64| {
+        while b - a > 1e-12 {
+            let m = 0.5 * (a + b);
+            if f(m) <= level { b = m } else { a = m }
+        }
+        b
+    };
+    let mut best = (f64::INFINITY, 0usize);
     for k in 1..=n {
         let u = k as f64 / n as f64;
-        if f(u) <= level {
-            let (mut a, mut b) = (prev, u);
-            while b - a > 1e-12 {
-                let m = 0.5 * (a + b);
-                if f(m) <= level { b = m } else { a = m }
-            }
-            return b;
+        let v = f(u);
+        if v <= level {
+            return bisect((k - 1) as f64 / n as f64, u);
         }
-        prev = u;
+        if v < best.0 {
+            best = (v, k);
+        }
     }
-    // between samples only: the least sample's neighbourhood
-    1.0
+    // the minimum falls between samples: refine it in the samples around the least one
+    let (mut a, mut b) = (
+        (best.1 as f64 - 1.0).max(0.0) / n as f64,
+        (best.1 as f64 + 1.0).min(n as f64) / n as f64,
+    );
+    let g = 0.5 * (5f64.sqrt() - 1.0);
+    for _ in 0..80 {
+        let (c, d) = (b - g * (b - a), a + g * (b - a));
+        if f(c) <= level {
+            return bisect(a, c);
+        }
+        if f(c) < f(d) { b = d } else { a = c }
+    }
+    let m = 0.5 * (a + b);
+    if f(m) <= level { bisect(a, m) } else { m }
 }
 
 fn sampled_min(f: &dyn Fn(f64) -> f64, n: usize) -> f64 {

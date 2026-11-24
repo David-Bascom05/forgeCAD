@@ -213,7 +213,10 @@ fn the_trigger_is_the_balls_first_contact_with_the_stock_as_cut() {
             |m| matches!(m.what, Happening::Skip { stop: Some(u), .. } if (u - 5.0 / 15.0).abs() < 1e-6)
         )
     );
-    assert!(sim::unchecked(&m, &tl).iter().all(|u| u.path != "skip.end"));
+    // the stop is the stock model's: the moves after it stay reported, as estimated
+    let un = sim::unchecked(&m, &tl);
+    let se = un.iter().find(|u| u.path == "skip.end").unwrap();
+    assert_eq!(se.why, "estimated");
     assert_eq!(r.triggers.len(), 1);
     assert_eq!(r.probe_hits.len(), 1, "{:?}", r.probe_hits);
     assert!((r.probe_hits[0].depth - 2.0).abs() < 1e-6, "{:?}", r.probe_hits);

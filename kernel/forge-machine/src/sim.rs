@@ -80,7 +80,9 @@ pub struct Setup<'a> {
     /// The tool in the spindle (or the turret station) at the start.
     pub start_tool: Option<u32>,
     /// Where skip moves stop: (line, path parameter), from a removal pass's triggers
-    /// (`removal::mill_probing`). A skip move with no entry is taken to its end.
+    /// (`removal::mill_probing`): a simulation-level estimate against the stock model, not the
+    /// machine's stop (the moves after a skip are still reported not checked, `skip.end`,
+    /// estimated). A skip move with no entry is taken to its end.
     pub skip_stops: Vec<(usize, f64)>,
 }
 
@@ -1606,6 +1608,8 @@ pub struct Unchecked {
 pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
     use crate::def::CiteStatus;
     let mut out: Vec<Unchecked> = Vec::new();
+    // skip moves: (line, whether a model trigger set its stop)
+    let mut skips: Vec<(usize, bool)> = Vec::new();
     let mut note = |path: String, known: bool, line: usize, check: &'static str| {
         let why = if !known {
             "unknown"
@@ -1721,15 +1725,26 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
                     );
                 }
             }
-            // where a skip move stops is not known here: the moves after it start from its end
-            Happening::Skip { stop: None, .. } => {
-                note("skip.end".into(), false, m.line, "moves after a skip move")
-            }
+            // where a skip move stops is never known here (the real part's position is what the
+            // probing is for): the moves after it are checked from one stop only
+            Happening::Skip { stop, .. } => skips.push((m.line, stop.is_some())),
             _ => {}
         }
     }
     for b in &def.bodies {
         note(format!("body.{}", b.name), !b.prims.is_empty(), 0, "collision");
+    }
+    if let Some(&(line, model)) = skips.first() {
+        out.push(Unchecked {
+            path: "skip.end".into(),
+            why: if model { "estimated" } else { "unknown" },
+            line,
+            check: if model {
+                "moves after a skip move, from the stock model's trigger (the part's may differ)"
+            } else {
+                "moves after a skip move, from its programmed end"
+            },
+        });
     }
     out
 }
