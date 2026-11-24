@@ -368,6 +368,15 @@ impl Body {
         }
     }
 
+    /// Coedge `c` is no longer a use of its edge; an edge left with none dies.
+    fn drop_use(&mut self, c: CoedgeId) {
+        let e = self.coedges[c.index()].edge;
+        self.edges[e.index()].coedges.retain(|&x| x != c);
+        if self.edges[e.index()].coedges.is_empty() {
+            self.edges[e.index()].alive = false;
+        }
+    }
+
     /// Removes a face (and its loops) in place. Edges left with no uses die
     /// with it; vertices are left for `compact` to drop.
     pub fn kill_face(&mut self, f: FaceId) {
@@ -384,12 +393,7 @@ impl Body {
         for li in 0..self.faces[f.index()].loops.len() {
             let l = self.faces[f.index()].loops[li];
             for c in self.loops[l.index()].coedges() {
-                let e = self.coedges[c.index()].edge;
-                let edge = &mut self.edges[e.index()];
-                edge.coedges.retain(|&x| x != c);
-                if edge.coedges.is_empty() {
-                    edge.alive = false;
-                }
+                self.drop_use(c);
             }
         }
     }
