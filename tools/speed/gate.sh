@@ -110,6 +110,12 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   bin=$gatedir
 fi
 now=$(mktemp)
+# each binary's process alone (its start, std's runtime and the loader's work, nothing built):
+# band.py takes it off that binary's whole-process lines, so a strict line is not charged with
+# start-up work that moves with the binary's layout (glibc reading /proc/self/maps for the main
+# thread's stack guard, say), which on the smallest lines is several hundredths of a percent
+echo "noop regen1 $(count "$bin/regen1" noop)" >> "$now"
+echo "noop benchparts $(count "$bin/benchparts" noop)" >> "$now"
 for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do
   for m in seq nary1; do
     n=$(count "$bin/regen1" $p $m)

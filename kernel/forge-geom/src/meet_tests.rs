@@ -351,7 +351,17 @@ fn closed_loops_have_no_link_of_nothing() {
             let (lo, hi) = speeds
                 .iter()
                 .fold((f64::INFINITY, 0.0f64), |m, &v| (m.0.min(v), m.1.max(v)));
-            assert!(lo > 1e-2 * hi, "speed {lo:e} of {hi:e}");
+            // (a link of nothing gives a speed of rounding: 3.5e-10 of 0.2 here before the fix. A
+            // short link the walk keeps where the curve turns, a thousandth of the step, still gives
+            // a tangent, and is the meet's own rule)
+            assert!(lo > 1e-6 * hi, "speed {lo:e} of {hi:e}");
+            if let Curve::Intersection(ic) = k {
+                let n = ic.pts.len();
+                for i in 0..n {
+                    let g = ic.pts[i].distance(ic.pts[(i + 1) % n]);
+                    assert!(g > forge_math::tol::LINEAR, "link {i} of {n}: {g:e}");
+                }
+            }
         }
     }
 }
