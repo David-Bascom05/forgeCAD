@@ -188,9 +188,12 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     assert.equal(dl.suggestedFilename(), "prog.nc");
     const got = fs.readFileSync(await dl.path(), "utf8");
     assert.equal(got, posted, "the download is the posted program");
+    // said when it was done, as it was done: a download, not "Exported" before the user chose
+    st = await t.until(p, (s) => s.cam.said === "Downloaded prog.nc", "the download said", 30000);
     // several files: one zip (the setup sheet and the tool list)
     const [z] = await Promise.all([p.waitForEvent("download", { timeout: 30000 }), cam("export-sheet")]);
     assert.equal(z.suggestedFilename(), "shaft_turn-sheet.zip");
+    await t.until(p, (s) => s.cam.said === "Downloaded shaft_turn-sheet.zip", "the sheet's download said", 30000);
     const zb = fs.readFileSync(await z.path());
     assert.equal(zb.readUInt32LE(0), 0x04034b50, "a zip");
     assert.ok(zb.includes(Buffer.from("shaft_turn-tools.txt")), "the tool list in it");

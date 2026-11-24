@@ -53,6 +53,8 @@ extern "C" {
 
 /// What the page asked of the app between frames.
 enum Ask {
+    /// What the page did with an export (`window.forge_export`): its words for the status.
+    Exported(String),
     Open(String),
     SaveAs(String),
     Save,
@@ -457,14 +459,9 @@ impl Host {
         if let Some(w) = &mut self.gui.shell.cam
             && let Some(x) = w.export.take()
         {
+            // what was done is said when the page has done it (`app_exported`): the picker's
+            // save, a download, a cancel; until then the click's "choose where…" stands
             page_export(&crate::shell::cam::nc::page_json(&x));
-            let n = x.files.len();
-            w.said = Some(if n == 1 {
-                format!("Exported {}", crate::shell::cam::nc::base(&x.files[0].path))
-            } else {
-                format!("Exported {n} files in {}", x.zip)
-            });
-            w.exported += 1;
         }
         STATE.with(|s| *s.borrow_mut() = state_json(&self.gui, self.canvas_json()));
     }
@@ -523,6 +520,14 @@ impl Host {
                 Ask::Pixels(f) => self.pixels(f),
                 Ask::StoreFailed(path, why) => self.gui.store_failed(&path, &why),
                 Ask::Say(text) => self.gui.shell.status = text,
+                Ask::Exported(text) => {
+                    if let Some(w) = &mut self.gui.shell.cam {
+                        if !text.contains("cancelled") {
+                            w.exported += 1;
+                        }
+                        w.said = Some(text);
+                    }
+                }
                 Ask::CamSim(c) => {
                     if let Err(e) = self.gui.camsim_command(&c) {
                         self.gui.shell.status = e;
@@ -1293,6 +1298,13 @@ pub fn app_sketches_kept() -> usize {
 
 /// Says `text` in the app's status line: what the page refused (a link's file outside the
 /// project, a name to save as that isn't a project path).
+/// What the page did with the files the app asked it to export: "Exported prog.nc" (the
+/// browser's save picker), "Downloaded prog.nc", "Export cancelled".
+#[wasm_bindgen]
+pub fn app_exported(text: String) {
+    ask(Ask::Exported(text));
+}
+
 #[wasm_bindgen]
 pub fn app_say(text: String) {
     ask(Ask::Say(text));
