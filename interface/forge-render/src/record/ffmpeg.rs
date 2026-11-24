@@ -1,6 +1,6 @@
-//! Video natively: ffmpeg as a separate program (bundled beside the app by the installers,
-//! research/render/record.md), the frames piped in as raw RGBA, H.264 out in MP4. Nothing of
-//! ffmpeg is linked; without it, recordings are PNG frames and the caller says so.
+//! Video natively: ffmpeg as a separate program (a pinned public build put beside the app by the
+//! installers, research/render/record.md), the frames piped in as raw RGBA, H.264 out in MP4.
+//! Nothing of ffmpeg is linked; without it, recordings are PNG frames and the caller says so.
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -27,8 +27,8 @@ pub fn locate() -> Option<PathBuf> {
     })
 }
 
-/// The H.264 encoder this ffmpeg has, best first: openh264 (BSD; what the bundled LGPL build
-/// carries), then the platform's own, then x264 (only in a user's own build), else MPEG-4 part 2.
+/// The H.264 encoder this ffmpeg has, best first: x264 (the bundled GPL builds carry it), then
+/// openh264, then the platform's own, else MPEG-4 part 2.
 pub fn encoder(ffmpeg: &std::path::Path) -> Result<&'static str, String> {
     let out = Command::new(ffmpeg)
         .args(["-hide_banner", "-encoders"])
@@ -36,7 +36,7 @@ pub fn encoder(ffmpeg: &std::path::Path) -> Result<&'static str, String> {
         .map_err(|e| format!("{}: {e}", ffmpeg.display()))?;
     let list = String::from_utf8_lossy(&out.stdout);
     let has = |name: &str| list.lines().any(|l| l.split_whitespace().nth(1) == Some(name));
-    for e in ["libopenh264", "h264_videotoolbox", "h264_mf", "libx264", "mpeg4"] {
+    for e in ["libx264", "libopenh264", "h264_videotoolbox", "h264_mf", "mpeg4"] {
         if has(e) {
             return Ok(e);
         }
@@ -150,7 +150,7 @@ pub fn no_ffmpeg_note(frames_dir: &str, fps: u32) -> String {
     format!(
         "no ffmpeg found (install it with forgecad-update, or set FORGE_FFMPEG): the frames are in \
          {frames_dir}; make the video with: ffmpeg -framerate {fps} -i {frames_dir}/frame_%05d.png \
-         -c:v libopenh264 -pix_fmt yuv420p video.mp4"
+         -c:v libx264 -pix_fmt yuv420p video.mp4"
     )
 }
 

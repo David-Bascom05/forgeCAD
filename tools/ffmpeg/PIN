@@ -1,18 +1,33 @@
-# The ffmpeg ForgeCAD records video with (research/render/record.md): built by
-# .github/workflows/ffmpeg.yml from these sources, LGPL (no GPL parts), published as release assets
-# of this repository, fetched by tools/fetch-ffmpeg.sh / .ps1. Bumping a version or BUILD here runs
-# the workflow (on main); then fill the ASSET_* hashes from its summary.
-FFMPEG_VERSION=7.1.1
-FFMPEG_URL=https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz
-FFMPEG_SHA256=733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1
-OPENH264_VERSION=2.5.0
-OPENH264_URL=https://github.com/cisco/openh264/archive/refs/tags/v2.5.0.tar.gz
-# not yet pinned: this was set up where github.com's archives were out of reach; fill it with
-#   curl -sL "$OPENH264_URL" | sha256sum
-# and the workflow refuses to build until it is
-OPENH264_SHA256=
-BUILD=1
-# the published builds, filled after the workflow's first run; empty: none published yet
-ASSET_LINUX_X86_64_SHA256=
-ASSET_WINDOWS_X86_64_SHA256=
-ASSET_MACOS_ARM64_SHA256=
+# The ffmpeg ForgeCAD records video with (research/render/record.md): public prebuilt release
+# builds, each pinned by its exact, versioned (archived, not "latest") URL and the sha256 of that
+# file as downloaded, and fetched by tools/fetch-ffmpeg.sh / .ps1 into the install's bin/. They are
+# GPL builds; ForgeCAD runs ffmpeg as a separate program over a pipe and links none of it, and ships
+# the build's licence and the link to its exact source version beside it (bin/ffmpeg-THIRD-PARTY.md).
+# A platform with no pin gets none: the user's own (FORGE_FFMPEG, PATH), else PNG frames.
+# Fields per platform: VERSION, URL, SHA256 (computed from the real download; never guessed), the
+# archive's ffmpeg and ffprobe paths, its licence file, who built it.
+
+LINUX_X86_64_VERSION=6.0.1
+LINUX_X86_64_URL=https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-6.0.1-amd64-static.tar.xz
+LINUX_X86_64_SHA256=28268bf402f1083833ea269331587f60a242848880073be8016501d864bd07a5
+LINUX_X86_64_BIN=ffmpeg-6.0.1-amd64-static
+LINUX_X86_64_LICENSE=ffmpeg-6.0.1-amd64-static/GPLv3.txt
+LINUX_X86_64_BUILDER="John Van Sickle's static builds (GPLv3), https://johnvansickle.com/ffmpeg/"
+
+LINUX_ARM64_VERSION=6.0.1
+LINUX_ARM64_URL=https://johnvansickle.com/ffmpeg/old-releases/ffmpeg-6.0.1-arm64-static.tar.xz
+LINUX_ARM64_SHA256=7dbd8e2f47bd83de591b9d6ea70e67d32d9aa97e7d47ae402b60c2fe3fd4d0ab
+LINUX_ARM64_BIN=ffmpeg-6.0.1-arm64-static
+LINUX_ARM64_LICENSE=ffmpeg-6.0.1-arm64-static/GPLv3.txt
+LINUX_ARM64_BUILDER="John Van Sickle's static builds (GPLv3), https://johnvansickle.com/ffmpeg/"
+
+WINDOWS_X86_64_VERSION=9.0.2
+WINDOWS_X86_64_URL=https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip
+WINDOWS_X86_64_SHA256=60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba
+WINDOWS_X86_64_BIN=ffmpeg-9.0.2-essentials_build/bin
+WINDOWS_X86_64_LICENSE=ffmpeg-9.0.2-essentials_build/LICENSE
+WINDOWS_X86_64_BUILDER="gyan.dev release essentials build (GPLv3), https://www.gyan.dev/ffmpeg/builds/"
+
+# macOS (arm64, x86_64): UNKNOWN, none pinned. Martin Riedl's versioned builds are configured
+# --enable-nonfree (not redistributable); evermeet.cx (x86_64 only) could not be downloaded where
+# this was set up. Until one is chosen and its sha256 computed, macOS uses the user's own ffmpeg.

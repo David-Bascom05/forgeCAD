@@ -46,27 +46,25 @@ GUI tick, so the window stays live and Cancel works.
 |---|---|---|
 | Still | PNG (`png`, in tree) | the same (the project's files, downloadable) |
 | PNG frames | a folder of `frame_NNNNN.png` | a zip, our own stored-zip writer (`record/zip.rs`) |
-| MP4 (H.264) | ffmpeg as a **subprocess** (`record/ffmpeg.rs`): raw RGBA on stdin, `libopenh264` first, else the platform's encoder, `libx264` only in a user's own ffmpeg, else `mpeg4`; found at `FORGE_FFMPEG`, beside the app (the installers put the bundled LGPL build there), then PATH; nothing of ffmpeg is linked | WebCodecs `VideoEncoder` (`avc1`) into our own MP4 muxer (`record/mp4.rs`, checked by ffmpeg decoding what it writes); no `avc1` → PNG zip |
+| MP4 (H.264) | ffmpeg as a **subprocess** (`record/ffmpeg.rs`): raw RGBA on stdin, `libx264` first, else `libopenh264`, the platform's encoder, `mpeg4`; found at `FORGE_FFMPEG`, beside the app (the installers put the pinned build there), then PATH; nothing of ffmpeg is linked | WebCodecs `VideoEncoder` (`avc1`) into our own MP4 muxer (`record/mp4.rs`, checked by ffmpeg decoding what it writes); no `avc1` → PNG zip |
 | no ffmpeg | PNG frames and the exact ffmpeg command to make the video | — |
 Each recording says which path made it (`Video saved: … (N frames, ENCODER)`). GIF and WebM are
 out (no second encoder, no new compiled dependency).
 
-**The bundled ffmpeg** (the coordinator's ruling, 2026-11-24: build it ourselves). `tools/ffmpeg/PIN`
-pins the ffmpeg.org tarball and OpenH264's source by sha256; `tools/ffmpeg/build.sh` builds OpenH264
-(BSD-2-Clause) static, then ffmpeg with `--disable-gpl --disable-nonfree --disable-autodetect
---disable-everything` and only what recording needs (rawvideo in; libopenh264, mpeg4, png out; mp4
-and image2 muxers; scale/pad/format filters), static. `.github/workflows/ffmpeg.yml` runs it on
-linux-x86_64, macos-arm64 and windows-x86_64 (MSYS2), checks the result says `--disable-gpl` and
-has `libopenh264`, and publishes release `ffmpeg-<version>-<build>` of this repository; it runs only
-by hand or when PIN changes on main. Each archive carries `THIRD-PARTY.md` (versions, source URLs
-with their sha256 as the LGPL's source offer, the exact configure line) and both licences.
-`tools/fetch-ffmpeg.sh` / `.ps1` take the release asset pinned in PIN (`ASSET_*_SHA256`, filled after
-the first run), refuse a mismatch, and put `ffmpeg`, `ffprobe`, `ffmpeg-THIRD-PARTY.md` and
-`ffmpeg-LICENSE.*` in the install's `bin` beside forge-app, with `ffmpeg.pin` so an update fetches
-again only when the pin changes. `install.sh`, `install.ps1` and `forgecad-update` run it; a failed
-fetch never fails the install, and says that recording saves PNG frames until `forgecad-update`
-succeeds. No GPL build is shipped anywhere (macOS x86_64 and Linux arm64 get none: PATH's, if any).
-The binary is never committed.
+**The bundled ffmpeg** (David's plan, 2026-11-24: public prebuilt builds; no build or release of
+our own). `tools/ffmpeg/PIN` pins one per platform by its exact versioned URL and the sha256 of the
+file as downloaded (computed, never guessed): Linux x86_64 and arm64, John Van Sickle's static
+6.0.1 (GPLv3; his archived old-releases, the newest there); Windows x86_64, gyan.dev's 9.0.2
+essentials (GPLv3; the sha256 matches gyan.dev's own). macOS: none yet, UNKNOWN (Martin Riedl's
+versioned builds are `--enable-nonfree`, which is not redistributable; evermeet.cx, x86_64 only,
+could not be downloaded where this was set up). GPL is fine: ffmpeg runs as a separate program over
+a pipe and nothing of it is linked. `tools/fetch-ffmpeg.sh` / `.ps1` download, check the sha256,
+unpack ffmpeg and ffprobe into the install's `bin` beside forge-app, with the build's licence
+(`ffmpeg-LICENSE.txt`) and `ffmpeg-THIRD-PARTY.md` (version, builder, URL, sha256, the link to that
+version's source), and an `ffmpeg.pin` stamp so an update fetches again only when the pin changes.
+`install.sh`, `install.ps1` and `forgecad-update` run it; a failed fetch never fails the install.
+Without one: the user's own (`FORGE_FFMPEG`, PATH), else PNG frames and the command to make the
+video. The encoder: libx264 when the ffmpeg has it, else openh264, the platform's, mpeg4.
 
 **The browser**: web/app.js's `forge_video_*` drive WebCodecs' `VideoEncoder` (constrained
 baseline, the least level the size and rate fit, AVCC output, no B-frames); the app grows odd sides
@@ -86,6 +84,5 @@ to even ones, takes the encoded frames and avcC back, and writes the MP4 with `r
 ## 5. Order of work
 1. Done: photo, record (timeline or turntable) to PNG frames and MP4, natively and in the browser;
    the CLI; the ffmpeg build, fetch and installers.
-2. Next: the first run of the ffmpeg workflow (David's go), then PIN's asset hashes; the
-   environments' timelines (bend simulation first) and a recorded clip of each.
+2. Next: a macOS ffmpeg pin; the environments' timelines (CAM, thermoform) and a clip of each.
 3. Then: traced (path-tracer) photos and recordings; camera paths; overlays (time, step label).
