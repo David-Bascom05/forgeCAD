@@ -318,6 +318,10 @@ impl MachineView {
                     *line,
                     format!("line {line}: T{t} beyond the changer's {max} pockets"),
                 ),
+                Violation::Zone { line, zone, .. } => (
+                    *line,
+                    format!("line {line}: enters the machine's forbidden zone `{zone}`"),
+                ),
             };
             let Some(i) = at_line(line) else { continue };
             let t = segs[i].t0;

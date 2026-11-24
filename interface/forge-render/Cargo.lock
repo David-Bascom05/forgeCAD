@@ -1213,10 +1213,15 @@ dependencies = [
 name = "forge-machine"
 version = "0.1.0"
 dependencies = [
+ "forge-machine-core",
  "forge-math",
  "forge-post",
  "forge-tooling",
 ]
+
+[[package]]
+name = "forge-machine-core"
+version = "0.1.0"
 
 [[package]]
 name = "forge-material"
