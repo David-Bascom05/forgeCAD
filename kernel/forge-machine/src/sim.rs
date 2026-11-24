@@ -474,10 +474,25 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 // the circle in joint values is the program's circle; I J K are in radius units
                 let (sa, sb) = (q[ja], q[jb]);
                 let (ea, eb) = (q1[ja], q1[jb]);
+                for (j, jt) in def.joints.iter().enumerate() {
+                    if jt.ty == JointType::Rotary && q[j] != q1[j] {
+                        return Err(SimError::At {
+                            line: ln,
+                            what: "a rotary axis moving during an arc is not modelled".into(),
+                        });
+                    }
+                }
                 let (ca, cb, r) = match centre {
-                    // I J K are incremental from the start and in radius units (a lathe's I too)
-                    Centre::Offset([i, j]) => {
-                        let (ca, cb) = (sa + q_to_f(*i, k), sb + q_to_f(*j, k));
+                    // the centre in program units, to joint values as a position's words are
+                    Centre::Abs([wa, wb]) => {
+                        let wj = |i: usize, w: i64| {
+                            let mut v = q_to_f(w, k);
+                            if s.control.diameter == Some(s.control.letters[i]) {
+                                v *= 0.5;
+                            }
+                            v + wcs[i] + toff[i]
+                        };
+                        let (ca, cb) = (wj(ia, *wa), wj(ib, *wb));
                         let r = ((sa - ca).powi(2) + (sb - cb).powi(2)).sqrt();
                         (ca, cb, r)
                     }
@@ -1060,6 +1075,12 @@ fn feed_seg(
 ) -> Result<Segment, SimError> {
     let def = s.def;
     let n = q0.len();
+    if f.is_nan() || f <= 0.0 {
+        return Err(SimError::At {
+            line: ln,
+            what: "a feed move with F0".into(),
+        });
+    }
     check_range(s, ln, q1, tl);
     // each joint's travel over the segment (an arc's plane joints: their path lengths)
     let mut travel: Vec<f64> = (0..n).map(|j| (q1[j] - q0[j]).abs()).collect();
