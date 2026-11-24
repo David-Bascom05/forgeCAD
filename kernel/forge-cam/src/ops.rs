@@ -478,8 +478,7 @@ pub fn certify_with(
                             && *phase != Phase::Rapid
                             && col.holds_or_is(b)
                         {
-                            let (g, n) =
-                                forge_cam_geom::drop::gap_move(col, f, m, limit, tol / 4.0, 200_000);
+                            let (g, n) = forge_cam_geom::drop::gap_move(col, f, m, limit, tol / 4.0, 200_000);
                             o.cells += n;
                             match g {
                                 forge_cam_geom::drop::Gap::Clear { lower } => {
@@ -491,7 +490,10 @@ pub fn certify_with(
                                 forge_cam_geom::drop::Gap::Over { s, p, q, .. } => {
                                     // the column's witness: this body's own signed distance there,
                                     // proven below the limit (by mu more), is a real violation
-                                    let (pi, qi) = (forge_cam_geom::ival::Ival::pt(p), forge_cam_geom::ival::Ival::pt(q));
+                                    let (pi, qi) = (
+                                        forge_cam_geom::ival::Ival::pt(p),
+                                        forge_cam_geom::ival::Ival::pt(q),
+                                    );
                                     let y = f.surf.eval(pi, qi);
                                     let t = m.at(forge_cam_geom::ival::Ival::pt(s));
                                     let sd = b.sd(y[0].sub(t[0]), y[1].sub(t[1]), y[2].sub(t[2]));
@@ -500,12 +502,20 @@ pub fn certify_with(
                                         let at = [y[0].mid(), y[1].mid(), y[2].mid()];
                                         o.fails.push((
                                             CheckOut {
-                                                rule: if b.part == Part::Cutter { "gouge" } else { "holder_collision" },
+                                                rule: if b.part == Part::Cutter {
+                                                    "gouge"
+                                                } else {
+                                                    "holder_collision"
+                                                },
                                                 verdict: "fail",
                                                 value: d,
                                                 limit,
                                                 at,
-                                                tool_part: if b.part == Part::Cutter { "cutter" } else { "shank/holder" },
+                                                tool_part: if b.part == Part::Cutter {
+                                                    "cutter"
+                                                } else {
+                                                    "shank/holder"
+                                                },
                                                 other: format!("{what} face {}", f.id),
                                                 phase: phase.name(),
                                                 move_index: *idx,

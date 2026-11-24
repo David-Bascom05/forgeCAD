@@ -44,7 +44,12 @@ pub enum CSeg {
     Line { a: [f64; 2], b: [f64; 2] },
     /// The lower-right quarter of a circle about c of radius r: z = c.z − √(r² − (ρ − c.ρ)²),
     /// with a.ρ ≥ c.ρ and b.z ≤ c.z.
-    Arc { a: [f64; 2], b: [f64; 2], c: [f64; 2], r: f64 },
+    Arc {
+        a: [f64; 2],
+        b: [f64; 2],
+        c: [f64; 2],
+        r: f64,
+    },
 }
 
 impl CSeg {
@@ -79,12 +84,21 @@ fn solid_of(segs: &[CSeg], r: f64) -> Option<Body> {
     while i < segs.len() {
         ch.push(match segs[i] {
             CSeg::Line { a, b } => PSeg::Line { a, b },
-            CSeg::Arc { a, b, c, r } => PSeg::Arc { a, b, c, r, ccw: true },
+            CSeg::Arc { a, b, c, r } => PSeg::Arc {
+                a,
+                b,
+                c,
+                r,
+                ccw: true,
+            },
         });
         i += 1;
     }
     let top = segs[segs.len() - 1].b();
-    ch.push(PSeg::Line { a: top, b: [r, top[1] + TALL] });
+    ch.push(PSeg::Line {
+        a: top,
+        b: [r, top[1] + TALL],
+    });
     ch.push(PSeg::Line {
         a: [r, top[1] + TALL],
         b: [0.0, top[1] + TALL],
@@ -247,7 +261,18 @@ impl Column {
                     let rr = r + d;
                     let ga = [c[0] + rr * na[0], c[1] + rr * na[1]];
                     let gb = [c[0] + rr * nb[0], c[1] + rr * nb[1]];
-                    (a, na, b, nb, CSeg::Arc { a: ga, b: gb, c, r: rr })
+                    (
+                        a,
+                        na,
+                        b,
+                        nb,
+                        CSeg::Arc {
+                            a: ga,
+                            b: gb,
+                            c,
+                            r: rr,
+                        },
+                    )
                 }
             };
             if let Some((q, nq)) = prev_end {
@@ -293,6 +318,107 @@ impl Column {
         Some(Column { r, segs: out, solid })
     }
 
+    /// The column cut back to radius r (0 < r ≤ R): the profile up to r, its last piece shortened
+    /// (a line's end interpolated, an arc's end on its circle). For making paths only: a tool
+    /// placed by it may reach R − r further sideways than its column says, which the path's own
+    /// check (with the full column) bounds. None if r is out of range.
+    pub fn trimmed(&self, r: f64) -> Option<Column> {
+        if !(r > 0.0 && r <= self.r) {
+            return None;
+        }
+        if r == self.r {
+            return Some(self.clone());
+        }
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < self.segs.len() {
+            let sg = self.segs[i];
+            let (a, b) = (sg.a(), sg.b());
+            if b[0] < r {
+                out.push(sg);
+                i += 1;
+                continue;
+            }
+            if a[0] < r {
+                let e = match sg {
+                    CSeg::Line { a, b } => {
+                        let t = (r - a[0]) / (b[0] - a[0]);
+                        [r, a[1] + t * (b[1] - a[1])]
+                    }
+                    CSeg::Arc { c, r: rr, .. } => {
+                        let d = r - c[0];
+                        [r, c[1] - (rr * rr - d * d).max(0.0).sqrt()]
+                    }
+                };
+                out.push(match sg {
+                    CSeg::Line { a, .. } => CSeg::Line { a, b: e },
+                    CSeg::Arc { a, c, r: rr, .. } => CSeg::Arc { a, b: e, c, r: rr },
+                });
+            }
+            break;
+        }
+        if out.is_empty() {
+            return None;
+        }
+        let rr = out[out.len() - 1].b()[0];
+        let solid = solid_of(&out, rr)?;
+        Some(Column {
+            r: rr,
+            segs: out,
+            solid,
+        })
+    }
+
+    /// The column widened past its rim by ε > 0 with a 45° lip (from (R, b(R)) to
+    /// (R + ε, b(R) + ε)): for making paths only, so a tool is not placed exactly tangent to a
+    /// wall (where the footprint's closed rim makes the drop jump, and a move grazing the wall
+    /// cannot be proven by intervals); it keeps about ε off walls instead. (Any face point inside
+    /// the widened footprint blocks; the lip's slope only sets how high, and a gentle one keeps
+    /// the search well conditioned.)
+    pub fn widened(&self, eps: f64) -> Option<Column> {
+        if !(eps > 0.0) {
+            return None;
+        }
+        let top = self.segs[self.segs.len() - 1].b();
+        let mut segs = self.segs.clone();
+        segs.push(CSeg::Line {
+            a: top,
+            b: [top[0] + eps, top[1] + eps],
+        });
+        let r = top[0] + eps;
+        let solid = solid_of(&segs, r)?;
+        Some(Column { r, segs, solid })
+    }
+
+    /// Whether the column is convex: its profile's slope never falls along ρ (each line's slope,
+    /// each arc's from its start to its end, no larger than the next piece's at the joint). The
+    /// sphere bound in `gap_move` needs it.
+    pub fn convex(&self) -> bool {
+        // slopes as (dρ, dz) directions, compared by cross product (no division)
+        let dir_start = |sg: &CSeg| -> [f64; 2] {
+            match *sg {
+                CSeg::Line { a, b } => [b[0] - a[0], b[1] - a[1]],
+                CSeg::Arc { a, c, .. } => [c[1] - a[1], a[0] - c[0]],
+            }
+        };
+        let dir_end = |sg: &CSeg| -> [f64; 2] {
+            match *sg {
+                CSeg::Line { a, b } => [b[0] - a[0], b[1] - a[1]],
+                CSeg::Arc { b, c, .. } => [c[1] - b[1], b[0] - c[0]],
+            }
+        };
+        let mut i = 0;
+        while i + 1 < self.segs.len() {
+            let (u, v) = (dir_end(&self.segs[i]), dir_start(&self.segs[i + 1]));
+            // turning left (counter-clockwise) or straight in (ρ, z): the slope does not fall
+            if u[0] * v[1] - u[1] * v[0] < 0.0 {
+                return false;
+            }
+            i += 1;
+        }
+        true
+    }
+
     /// The profile's top: b(R).
     pub fn top(&self) -> f64 {
         self.segs[self.segs.len() - 1].b()[1]
@@ -324,7 +450,9 @@ fn seg_b(s: &CSeg, rho: Ival) -> Ival {
             if a[1] == b[1] {
                 return Ival::pt(a[1]);
             }
-            let k = Ival::pt(b[1]).sub(Ival::pt(a[1])).div(Ival::pt(b[0]).sub(Ival::pt(a[0])));
+            let k = Ival::pt(b[1])
+                .sub(Ival::pt(a[1]))
+                .div(Ival::pt(b[0]).sub(Ival::pt(a[0])));
             Ival::pt(a[1]).add(k.mul(rho.sub(Ival::pt(a[0]))))
         }
         CSeg::Arc { c, r, .. } => {
@@ -342,7 +470,9 @@ fn seg_u<T: NumS>(s: &CSeg, r2: T, yz: T, tz: T) -> T {
             if a[1] == b[1] {
                 return yz.sub(T::c(a[1])).sub(tz);
             }
-            let k = Ival::pt(b[1]).sub(Ival::pt(a[1])).div(Ival::pt(b[0]).sub(Ival::pt(a[0])));
+            let k = Ival::pt(b[1])
+                .sub(Ival::pt(a[1]))
+                .div(Ival::pt(b[0]).sub(Ival::pt(a[0])));
             let rho = r2.sqrt();
             let bz = T::c(a[1]).add(T::iv(k).mul(rho.sub(T::c(a[0]))));
             yz.sub(bz).sub(tz)
@@ -387,7 +517,12 @@ fn cell_upper_side(col: &Column, f: &Face, mv: &Move, c: &Cell, side: bool) -> O
     let bb = col.b(rho)?;
     let mut best = y[2].sub(bb).sub(g[2]).hi;
     if side {
-        let rad = Ival::pt(col.r).sub(Ival { lo: rho.lo, hi: rho.lo }).hi;
+        let rad = Ival::pt(col.r)
+            .sub(Ival {
+                lo: rho.lo,
+                hi: rho.lo,
+            })
+            .hi;
         if rad < best {
             best = rad;
         }
@@ -545,7 +680,11 @@ impl Heap {
         top
     }
     fn top(&self) -> f64 {
-        if self.v.is_empty() { f64::NEG_INFINITY } else { self.v[0].0 }
+        if self.v.is_empty() {
+            f64::NEG_INFINITY
+        } else {
+            self.v[0].0
+        }
     }
 }
 
@@ -622,13 +761,30 @@ pub fn drop(col: &Column, faces: &[Face], idx: &[u32], x: f64, y: f64, res: f64,
 /// (the caller lifts the tool to the floor anyway), so the search stops as soon as that is
 /// proven.
 #[allow(clippy::too_many_arguments)]
-pub fn drop_above(col: &Column, faces: &[Face], idx: &[u32], x: f64, y: f64, floor: f64, res: f64, budget: usize) -> Cl {
+pub fn drop_above(
+    col: &Column,
+    faces: &[Face],
+    idx: &[u32],
+    x: f64,
+    y: f64,
+    floor: f64,
+    res: f64,
+    budget: usize,
+) -> Cl {
     search(col, faces, idx, x, y, floor, res, budget, true)
 }
 
 /// The branch and bound alone, without the closed forms: the reference the closed forms are
 /// tested against (L6).
-pub fn drop_general(col: &Column, faces: &[Face], idx: &[u32], x: f64, y: f64, res: f64, budget: usize) -> Cl {
+pub fn drop_general(
+    col: &Column,
+    faces: &[Face],
+    idx: &[u32],
+    x: f64,
+    y: f64,
+    res: f64,
+    budget: usize,
+) -> Cl {
     search(col, faces, idx, x, y, f64::NEG_INFINITY, res, budget, false)
 }
 
@@ -818,7 +974,9 @@ fn disk_drop<T: NumS>(col: &Column, sr: f64, d: T) -> Option<(T, f64)> {
                         keep(&mut best, &mut bestf, &mut arg, v, at);
                     }
                 } else {
-                    let k = Ival::pt(b[1]).sub(Ival::pt(a[1])).div(Ival::pt(b[0]).sub(Ival::pt(a[0])));
+                    let k = Ival::pt(b[1])
+                        .sub(Ival::pt(a[1]))
+                        .div(Ival::pt(b[0]).sub(Ival::pt(a[0])));
                     let w = Ival::pt(1.0).add(k.sqr()).sqrt();
                     // ρ* = d − k sr / √(1 + k²); value sr √(1 + k²) − (a.z − k a.ρ) − k d
                     let shift = k.mul(Ival::pt(sr)).div(w);
@@ -876,7 +1034,11 @@ fn bowl_drop<T: NumS>(col: &Column, sr: f64, d: T, xa: f64, xb: f64) -> Option<(
             return None;
         }
         let under = T::iv(s2).sub(x.sqr());
-        if under.val().hi >= 0.0 { Some(under.sqrt().neg_t()) } else { None }
+        if under.val().hi >= 0.0 {
+            Some(under.sqrt().neg_t())
+        } else {
+            None
+        }
     };
     let mut side = 0;
     while side < 2 {
@@ -899,10 +1061,18 @@ fn bowl_drop<T: NumS>(col: &Column, sr: f64, d: T, xa: f64, xb: f64) -> Option<(
                         let rho = dv.neg().mul(Ival::pt(sg));
                         if rho.hi >= a[0] && rho.lo <= b[0] && inr(Ival::pt(0.0)) {
                             let v = T::c(-sr).sub(T::c(a[1]));
-                            keep(&mut best, &mut bestf, &mut arg, v, (-dv.mid()).clamp(sg.min(0.0) * b[0], sg.max(0.0) * b[0]));
+                            keep(
+                                &mut best,
+                                &mut bestf,
+                                &mut arg,
+                                v,
+                                (-dv.mid()).clamp(sg.min(0.0) * b[0], sg.max(0.0) * b[0]),
+                            );
                         }
                     } else {
-                        let k = Ival::pt(b[1]).sub(Ival::pt(a[1])).div(Ival::pt(b[0]).sub(Ival::pt(a[0])));
+                        let k = Ival::pt(b[1])
+                            .sub(Ival::pt(a[1]))
+                            .div(Ival::pt(b[0]).sub(Ival::pt(a[0])));
                         let w = Ival::pt(1.0).add(k.sqr()).sqrt();
                         // on side sg, b'(|ρ|) = k: x/√(sr² − x²) = sg k, x = sg k sr / w
                         let x = Ival::pt(sg).mul(k).mul(Ival::pt(sr)).div(w);
@@ -913,7 +1083,13 @@ fn bowl_drop<T: NumS>(col: &Column, sr: f64, d: T, xa: f64, xb: f64) -> Option<(
                             let absr = xr.sub(d).mul(T::c(sg));
                             let bz = T::c(a[1]).add(T::iv(k).mul(absr.sub(T::c(a[0]))));
                             let v = T::iv(Ival::pt(-sr).div(w)).sub(bz);
-                            keep(&mut best, &mut bestf, &mut arg, v, sg * rho.mid().max(a[0]).min(b[0]));
+                            keep(
+                                &mut best,
+                                &mut bestf,
+                                &mut arg,
+                                v,
+                                sg * rho.mid().max(a[0]).min(b[0]),
+                            );
                         }
                     }
                 }
@@ -947,8 +1123,19 @@ fn bowl_drop<T: NumS>(col: &Column, sr: f64, d: T, xa: f64, xb: f64) -> Option<(
             && let Some(bz) = col.b(rho.abs())
         {
             let h = Ival::pt(sr).sqr().sub(Ival::pt(xe).sqr());
-            let h = Ival { lo: h.lo.max(0.0), hi: h.hi.max(0.0) }.sqrt().neg();
-            keep(&mut best, &mut bestf, &mut arg, T::iv(h.sub(bz)), rho.mid().clamp(-col.r, col.r));
+            let h = Ival {
+                lo: h.lo.max(0.0),
+                hi: h.hi.max(0.0),
+            }
+            .sqrt()
+            .neg();
+            keep(
+                &mut best,
+                &mut bestf,
+                &mut arg,
+                T::iv(h.sub(bz)),
+                rho.mid().clamp(-col.r, col.r),
+            );
         }
         side += 1;
     }
@@ -985,6 +1172,9 @@ fn keep<T: NumS>(best: &mut Option<T>, bestf: &mut f64, arg: &mut f64, v: T, at:
 /// out of reach) and a face parameter where the column touches it (in f64, for the evaluated
 /// lower bound), or None for a surface without one here.
 pub fn closed(col: &Column, f: &Face, x: f64, y: f64) -> Option<(f64, Option<(f64, f64)>)> {
+    if let Some(crate::slab::Prism::Wall { sec, z1, gap, .. }) = &f.prism {
+        return Some(wall_drop(col, f, sec, *z1, *gap, x, y));
+    }
     let eta = bowl_eta(f);
     let bowl = eta.is_some();
     let lift = Ival::pt(eta.unwrap_or(0.0)).scale(2.0).hi;
@@ -1001,7 +1191,13 @@ pub fn closed(col: &Column, f: &Face, x: f64, y: f64) -> Option<(f64, Option<(f6
             }
             None
         }
-        Surf::Sphere { o, x: fx, y: fy, ax, r } => {
+        Surf::Sphere {
+            o,
+            x: fx,
+            y: fy,
+            ax,
+            r,
+        } => {
             let dx = Ival::pt(x).sub(Ival::pt(o[0]));
             let dy = Ival::pt(y).sub(Ival::pt(o[1]));
             let d = dx.sqr().add(dy.sqr()).sqrt();
@@ -1013,7 +1209,11 @@ pub fn closed(col: &Column, f: &Face, x: f64, y: f64) -> Option<(f64, Option<(f6
                 let ub = Ival::pt(o[2]).add(v).add(Ival::pt(lift)).hi;
                 // the contact: lateral d + ρ along the centre-to-tool direction, on the lower half
                 let dm = d.mid();
-                let (ex, ey) = if dm > 1e-12 { (dx.mid() / dm, dy.mid() / dm) } else { (1.0, 0.0) };
+                let (ex, ey) = if dm > 1e-12 {
+                    (dx.mid() / dm, dy.mid() / dm)
+                } else {
+                    (1.0, 0.0)
+                };
                 let xl = dm + rho;
                 let h = (r * r - xl * xl).max(0.0).sqrt();
                 let w = [xl * ex, xl * ey, -h];
@@ -1037,7 +1237,13 @@ pub fn closed(col: &Column, f: &Face, x: f64, y: f64) -> Option<(f64, Option<(f6
             let at = sphere_param(w, fx, fy, ax, r);
             Some((ub, at))
         }
-        Surf::Cyl { o, x: fx, y: fy, ax, r } => {
+        Surf::Cyl {
+            o,
+            x: fx,
+            y: fy,
+            ax,
+            r,
+        } => {
             if ax[2] != 0.0 {
                 return None;
             }
@@ -1053,7 +1259,11 @@ pub fn closed(col: &Column, f: &Face, x: f64, y: f64) -> Option<(f64, Option<(f6
             let foot = [o[0] + t * ax[0], o[1] + t * ax[1]];
             let (fxv, fyv) = (foot[0] - x, foot[1] - y);
             let dm = (fxv * fxv + fyv * fyv).sqrt();
-            let (ux, uy) = if dm > 1e-12 { (fxv / dm, fyv / dm) } else { (1.0, 0.0) };
+            let (ux, uy) = if dm > 1e-12 {
+                (fxv / dm, fyv / dm)
+            } else {
+                (1.0, 0.0)
+            };
             let (ub, w) = if bowl {
                 // lateral places along n = (a.y, −a.x) / |a|: the tool's, signed, and the arc's
                 let ds = rx.mul(a[1]).sub(ry.mul(a[0])).div(len);
@@ -1065,7 +1275,10 @@ pub fn closed(col: &Column, f: &Face, x: f64, y: f64) -> Option<(f64, Option<(f6
                 let (nx, ny) = (ax[1] / al, -ax[0] / al);
                 let xl = ds.mid() + rho;
                 let h = (r * r - xl * xl).max(0.0).sqrt();
-                (Ival::pt(o[2]).add(v).add(Ival::pt(lift)).hi, [xl * nx, xl * ny, -h])
+                (
+                    Ival::pt(o[2]).add(v).add(Ival::pt(lift)).hi,
+                    [xl * nx, xl * ny, -h],
+                )
             } else {
                 let Some((v, rho)) = disk_drop(col, r, d) else {
                     return Some((f64::NEG_INFINITY, None));
@@ -1074,7 +1287,10 @@ pub fn closed(col: &Column, f: &Face, x: f64, y: f64) -> Option<(f64, Option<(f6
                 // the contact: the foot on the axis, ρ toward it
                 let off = rho - dm;
                 let h = (r * r - off * off).max(0.0).sqrt();
-                (Ival::pt(o[2]).add(v).hi, [x + rho * ux - foot[0], y + rho * uy - foot[1], h])
+                (
+                    Ival::pt(o[2]).add(v).hi,
+                    [x + rho * ux - foot[0], y + rho * uy - foot[1], h],
+                )
             };
             // across the axis: (c, s) in the frame (x, y)
             let cx = (w[0] * fx[0] + w[1] * fx[1] + w[2] * fx[2]) / r;
@@ -1084,7 +1300,16 @@ pub fn closed(col: &Column, f: &Face, x: f64, y: f64) -> Option<(f64, Option<(f6
             }
             Some((ub, Some((cy / (1.0 + cx), t))))
         }
-        Surf::Torus { o, x: fx, y: fy, ax, big, r, cm, sm } if level_torus(&f.surf) => {
+        Surf::Torus {
+            o,
+            x: fx,
+            y: fy,
+            ax,
+            big,
+            r,
+            cm,
+            sm,
+        } if level_torus(&f.surf) => {
             let ub = closed_t::<Ival>(col, f, Ival::pt(x), Ival::pt(y))?;
             let Some(ub) = ub else {
                 return Some((f64::NEG_INFINITY, None));
@@ -1093,7 +1318,11 @@ pub fn closed(col: &Column, f: &Face, x: f64, y: f64) -> Option<(f64, Option<(f6
             // the contact, from the 2D problem's argument
             let (ex0, ey0) = (x - o[0], y - o[1]);
             let dd = (ex0 * ex0 + ey0 * ey0).sqrt();
-            let (ex, ey) = if dd > 1e-12 { (ex0 / dd, ey0 / dd) } else { (1.0, 0.0) };
+            let (ex, ey) = if dd > 1e-12 {
+                (ex0 / dd, ey0 / dd)
+            } else {
+                (1.0, 0.0)
+            };
             let d = dd - big;
             let (xr, hw) = if bowl {
                 let (xa, xb) = tube_lateral(f);
@@ -1135,13 +1364,112 @@ fn inside(col: &Column, rho: f64) -> f64 {
     if rho > col.r - hair { col.r - hair } else { rho }
 }
 
-/// `inside` for a signed radius.
-fn inside_signed(col: &Column, rho: f64) -> f64 {
-    if rho < 0.0 { -inside(col, -rho) } else { inside(col, rho) }
+/// A vertical wall over a section curve up to z1: every point is at least D (slab.rs's distance
+/// from (x, y) to the section, an arc's stored ends lowered by twice their gap) across from the
+/// tool's axis and at most z1 high, and b is non-decreasing, so z1 − b(D) bounds its CL (−∞ when
+/// D > R). The witness: the section's nearest point, a hair under the top.
+fn wall_drop(
+    col: &Column,
+    f: &Face,
+    sec: &crate::slab::Sec,
+    z1: f64,
+    gap: f64,
+    x: f64,
+    y: f64,
+) -> (f64, Option<(f64, f64)>) {
+    let d = crate::slab::pt_sec([x, y], sec);
+    let dl = Ival::pt(d.lo).sub(Ival::pt(gap).scale(2.0)).lo;
+    let dl = if dl > 0.0 { dl } else { 0.0 };
+    let Some(bz) = col.b(Ival::pt(dl)) else {
+        return (f64::NEG_INFINITY, None);
+    };
+    let ub = Ival::pt(z1).sub(Ival::pt(bz.lo)).hi;
+    // the nearest point of the section, in f64
+    let near = match *sec {
+        crate::slab::Sec::Seg { a, b } => {
+            let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+            let dd = dx * dx + dy * dy;
+            let t = if dd > 0.0 {
+                (((x - a[0]) * dx + (y - a[1]) * dy) / dd).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            [a[0] + t * dx, a[1] + t * dy]
+        }
+        crate::slab::Sec::Arc { c, r, a, b, ccw } => {
+            let (vx, vy) = (x - c[0], y - c[1]);
+            let l = (vx * vx + vy * vy).sqrt();
+            let p = if l > 0.0 {
+                [c[0] + r * vx / l, c[1] + r * vy / l]
+            } else {
+                a
+            };
+            // on the arc if between its ends in its sense, else the nearer end
+            let cr = |u: [f64; 2], w: [f64; 2]| (u[0] - c[0]) * (w[1] - c[1]) - (u[1] - c[1]) * (w[0] - c[0]);
+            let within = if ccw {
+                cr(a, p) >= 0.0 && cr(p, b) >= 0.0
+            } else {
+                cr(a, p) <= 0.0 && cr(p, b) <= 0.0
+            };
+            if within {
+                p
+            } else {
+                let da = (a[0] - x).powi(2) + (a[1] - y).powi(2);
+                let db = (b[0] - x).powi(2) + (b[1] - y).powi(2);
+                if da <= db { a } else { b }
+            }
+        }
+    };
+    let zt = z1 - 4.0 * f.mu.max(1e-12) * (1.0 + z1.abs());
+    let at = match f.surf {
+        Surf::Plane { o, u, v } => {
+            // least squares for o + p u + q v = (near, zt)
+            let w = [near[0] - o[0], near[1] - o[1], zt - o[2]];
+            let (uu, uv, vv) = (dot3(u, u), dot3(u, v), dot3(v, v));
+            let (wu, wv) = (dot3(w, u), dot3(w, v));
+            let det = uu * vv - uv * uv;
+            if det.abs() > 0.0 {
+                Some(((wu * vv - wv * uv) / det, (uu * wv - uv * wu) / det))
+            } else {
+                None
+            }
+        }
+        Surf::Cyl {
+            o,
+            x: fx,
+            y: fy,
+            ax,
+            r,
+        } => {
+            let (vx, vy) = ((near[0] - o[0]) / r, (near[1] - o[1]) / r);
+            let (cx, cy) = (vx * fx[0] + vy * fx[1], vx * fy[0] + vy * fy[1]);
+            if 1.0 + cx > 1e-12 {
+                Some((cy / (1.0 + cx), (zt - o[2]) / ax[2]))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+    (ub, at)
 }
 
-/// A sphere or a cylinder with a horizontal axis whose face lies at or below its centre (or
-/// axis) but for η ≤ 1e-6 (the enclosure's rounding at a quarter's end): a bowl, whose drop is
+fn dot3(a: V3, b: V3) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+/// `inside` for a signed radius.
+fn inside_signed(col: &Column, rho: f64) -> f64 {
+    if rho < 0.0 {
+        -inside(col, -rho)
+    } else {
+        inside(col, rho)
+    }
+}
+
+/// A sphere, a cylinder with a horizontal axis or a torus about a vertical axis whose face lies at
+/// or below its centre (axis, tube centre) but for η ≤ 2e-4 (the lowering pads a face's parameter
+/// box by its mu, which lifts a quarter's end that much): a bowl, whose drop is
 /// the lower half's (`bowl_drop`) plus 2η (a point of the face above the centre by δ ≤ η is
 /// within 2δ above the lower half's point at the same lateral place). None: not a bowl.
 fn bowl_eta(f: &Face) -> Option<f64> {
@@ -1199,7 +1527,7 @@ fn bowl_eta(f: &Face) -> Option<f64> {
     };
     if rise <= 0.0 {
         Some(0.0)
-    } else if rise <= 1e-6 {
+    } else if rise <= 2e-4 {
         Some(rise)
     } else {
         None
@@ -1280,7 +1608,15 @@ fn cross(u: V3, v: V3) -> [Ival; 3] {
 
 /// A plane with normal n (n.z > 0) through o: CL = z_plane(x, y) − min over ρ of b(ρ) − τ ρ,
 /// τ = |n_xy| / n_z, the column's lowest support against the slope (it touches uphill).
-fn plane_drop(col: &Column, o: V3, u: V3, v: V3, n: [Ival; 3], x: f64, y: f64) -> Option<(f64, Option<(f64, f64)>)> {
+fn plane_drop(
+    col: &Column,
+    o: V3,
+    u: V3,
+    v: V3,
+    n: [Ival; 3],
+    x: f64,
+    y: f64,
+) -> Option<(f64, Option<(f64, f64)>)> {
     let dx = Ival::pt(x).sub(Ival::pt(o[0]));
     let dy = Ival::pt(y).sub(Ival::pt(o[1]));
     let zp = Ival::pt(o[2]).sub(n[0].mul(dx).add(n[1].mul(dy)).div(n[2]));
@@ -1329,7 +1665,9 @@ fn plane_support(col: &Column, n: [Ival; 3]) -> (Ival, f64) {
             let ds = Ival::pt(r).mul(tau).div(w);
             let rs = Ival::pt(c[0]).add(ds);
             if rs.hi >= a[0] && rs.lo <= b[0] {
-                let g = Ival::pt(c[1]).sub(tau.mul(Ival::pt(c[0]))).sub(Ival::pt(r).mul(w));
+                let g = Ival::pt(c[1])
+                    .sub(tau.mul(Ival::pt(c[0])))
+                    .sub(Ival::pt(r).mul(w));
                 m = m.min(g);
                 if g.mid() < mf - 1e-15 {
                     mf = g.mid();
@@ -1351,7 +1689,11 @@ fn plane_param(o: V3, u: V3, v: V3, x: f64, y: f64) -> Option<(f64, f64)> {
     let (rx, ry) = (x - o[0], y - o[1]);
     let p = (rx * v[1] - ry * v[0]) / det;
     let q = (u[0] * ry - u[1] * rx) / det;
-    if p.is_finite() && q.is_finite() { Some((p, q)) } else { None }
+    if p.is_finite() && q.is_finite() {
+        Some((p, q))
+    } else {
+        None
+    }
 }
 
 /// A sphere's parameters for a point w (relative to the centre): p = tan(azimuth / 2) in the
@@ -1374,7 +1716,11 @@ fn sphere_param(w: V3, fx: V3, fy: V3, ax: V3, r: f64) -> Option<(f64, f64)> {
         return None;
     }
     let q = sz / (1.0 + cz);
-    if p.is_finite() && q.is_finite() { Some((p, q)) } else { None }
+    if p.is_finite() && q.is_finite() {
+        Some((p, q))
+    } else {
+        None
+    }
 }
 
 /// What the vertical-gap check proved for a move against a face.
@@ -1419,21 +1765,60 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
         let d = crate::slab::dist(&path, sec).lo;
         let d = Ival::pt(d).sub(Ival::pt(*gap).scale(2.0)).lo;
         let d = if d > 0.0 { d } else { 0.0 };
-        let depth = Ival::pt(col.r).sub(Ival::pt(d)).hi;
+        let mut depth = Ival::pt(col.r).sub(Ival::pt(d)).hi;
+        // and the vertical way: no point of the wall is above its top z1, nor nearer than D, so
+        // none is more than z1 − b(D) − tip above the profile (the tip's lowest over the move)
+        if let (Some(bz), Some(crate::slab::Prism::Wall { z1, .. })) = (col.b(Ival::pt(d)), &f.prism) {
+            let tip = mv.at(Ival::new(0.0, 1.0))[2].lo;
+            let v = Ival::pt(*z1).sub(Ival::pt(bz.lo)).sub(Ival::pt(tip)).hi;
+            if v < depth {
+                depth = v;
+            }
+        }
         if depth <= need {
             let v = Ival::pt(depth).add(Ival::pt(f.mu)).neg().lo;
-            return (Gap::Clear { lower: if v < 0.0 { v } else { 0.0 } }, 1);
+            return (
+                Gap::Clear {
+                    lower: if v < 0.0 { v } else { 0.0 },
+                },
+                1,
+            );
         }
     }
     let mut cells = 0usize;
     let mut worst = f64::NEG_INFINITY;
     let mut rest: Vec<Ival> = Vec::new();
+    let convex = col.convex();
     if has_closed(&f.surf) {
         let mut st: Vec<Ival> = vec![Ival::new(0.0, 1.0)];
         while let Some(si) = st.pop() {
             cells += 1;
             if cells > budget {
                 return (Gap::Unknown, cells);
+            }
+            // a sphere against a convex column: no point of it is deeper than S − sd(centre)
+            // (the column's supporting half-space at the centre's nearest point)
+            let mut sphere_may = false;
+            if let Surf::Sphere { o, r, .. } = f.surf
+                && convex
+            {
+                let g = mv.at(si);
+                let rel = [
+                    Ival::pt(o[0]).sub(g[0]),
+                    Ival::pt(o[1]).sub(g[1]),
+                    Ival::pt(o[2]).sub(g[2]),
+                ];
+                let rho = rel[0].sqr().add(rel[1].sqr()).sqrt();
+                let sd = col.solid.sd_rz(rho, rel[2]);
+                let depth = Ival::pt(r).sub(sd).hi;
+                if depth <= need {
+                    if depth > worst {
+                        worst = depth;
+                    }
+                    continue;
+                }
+                // a smaller piece of s may clear it only if the bound's other end would
+                sphere_may = Ival::pt(r).sub(sd).lo <= need;
             }
             match closed_u(col, f, mv, si) {
                 Some(None) => continue,
@@ -1449,7 +1834,8 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
             // closed form is the face's own there (then split s); else the face's edge decides
             let sm = si.mid();
             let g = mv.at(Ival::pt(sm));
-            let mut own = false;
+            // a sphere's bound against a convex column tightens as s shrinks: split for it too
+            let mut own = sphere_may;
             if let Some((_, Some((p, q)))) = closed(col, f, g[0].mid(), g[1].mid())
                 && f.holds(Ival::pt(p), Ival::pt(q)) == 1
             {
@@ -1557,7 +1943,12 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
     } else {
         Ival::pt(worst).add(Ival::pt(f.mu)).neg().lo
     };
-    (Gap::Clear { lower: if v < 0.0 { v } else { 0.0 } }, cells)
+    (
+        Gap::Clear {
+            lower: if v < 0.0 { v } else { 0.0 },
+        },
+        cells,
+    )
 }
 
 /// A move's path in xy as a section curve: a line's (a point for a vertical move), or a planar
@@ -1634,7 +2025,11 @@ fn closed_t<T: NumS>(col: &Column, f: &Face, x: T, y: T) -> Option<Option<T>> {
             let dx = x.sub(T::c(o[0]));
             let dy = y.sub(T::c(o[1]));
             let d = dx.sqr().add(dy.sqr()).sqrt();
-            let v = if bowl { bowl_drop(col, r, d, -r, r) } else { disk_drop(col, r, d) };
+            let v = if bowl {
+                bowl_drop(col, r, d, -r, r)
+            } else {
+                disk_drop(col, r, d)
+            };
             Some(v.map(|(v, _)| T::c(o[2]).add(v).add(T::c(lift))))
         }
         Surf::Cyl { o, ax, r, .. } => {
@@ -1696,13 +2091,32 @@ mod tests {
     fn plane_face(o: [f64; 3], u: [f64; 3], v: [f64; 3], w: f64, h: f64) -> Face {
         let trim = Trim {
             segs: vec![
-                TSeg::Line { a: [0.0, 0.0], b: [w, 0.0] },
-                TSeg::Line { a: [w, 0.0], b: [w, h] },
-                TSeg::Line { a: [w, h], b: [0.0, h] },
-                TSeg::Line { a: [0.0, h], b: [0.0, 0.0] },
+                TSeg::Line {
+                    a: [0.0, 0.0],
+                    b: [w, 0.0],
+                },
+                TSeg::Line {
+                    a: [w, 0.0],
+                    b: [w, h],
+                },
+                TSeg::Line {
+                    a: [w, h],
+                    b: [0.0, h],
+                },
+                TSeg::Line {
+                    a: [0.0, h],
+                    b: [0.0, 0.0],
+                },
             ],
         };
-        Face::new(Surf::Plane { o, u, v }, Ival::new(0.0, w), Ival::new(0.0, h), Some(trim), 0.0, 0)
+        Face::new(
+            Surf::Plane { o, u, v },
+            Ival::new(0.0, w),
+            Ival::new(0.0, h),
+            Some(trim),
+            0.0,
+            0,
+        )
     }
 
     #[test]
@@ -1726,7 +2140,13 @@ mod tests {
         // a 30° slope rising along x: z = x tan 30°; ball r = 3: CL = x t + r (sec − 1)
         let t = 0.5773502691896257f64;
         let n = (1.0 + t * t).sqrt();
-        let f = plane_face([-50.0, -50.0, -50.0 * t], [1.0 / n, 0.0, t / n], [0.0, 1.0, 0.0], 100.0 * n, 100.0);
+        let f = plane_face(
+            [-50.0, -50.0, -50.0 * t],
+            [1.0 / n, 0.0, t / n],
+            [0.0, 1.0, 0.0],
+            100.0 * n,
+            100.0,
+        );
         let col = Column::of(&cutter(Cutter::Ball { d: 6.0 })).unwrap();
         let cl = drop(&col, &[f], &[0], 2.0, 1.0, 1e-6, 100_000);
         let want = 2.0 * t + 3.0 * (n - 1.0);
@@ -1753,7 +2173,7 @@ mod tests {
         );
         let col = Column::of(&cutter(Cutter::Ball { d: 6.0 })).unwrap();
         for d in [0.5f64, 3.0, 6.0] {
-            let cl = drop(&col, &[f.clone()], &[0], d, 0.0, 1e-5, 200_000);
+            let cl = drop(&col, std::slice::from_ref(&f), &[0], d, 0.0, 1e-5, 200_000);
             let want = (169.0 - d * d).sqrt() - 3.0;
             assert!(cl.lo <= want + 1e-9 && cl.hi >= want - 1e-9, "{d} {cl:?} {want}");
             assert!(cl.hi - cl.lo <= 1e-5, "{d} {cl:?}");
@@ -1764,7 +2184,13 @@ mod tests {
     fn flat_on_ridge_and_gap() {
         // two planes meeting at a ridge along y at x = 0, z = 0, each falling 1:1 away
         let s = std::f64::consts::FRAC_1_SQRT_2;
-        let l = plane_face([-20.0, -20.0, -20.0], [s, 0.0, s], [0.0, 1.0, 0.0], 20.0 / s, 40.0);
+        let l = plane_face(
+            [-20.0, -20.0, -20.0],
+            [s, 0.0, s],
+            [0.0, 1.0, 0.0],
+            20.0 / s,
+            40.0,
+        );
         let r = plane_face([0.0, -20.0, 0.0], [s, 0.0, -s], [0.0, 1.0, 0.0], 20.0 / s, 40.0);
         let faces = vec![l, r];
         let col = Column::of(&cutter(Cutter::Flat { d: 6.0 })).unwrap();

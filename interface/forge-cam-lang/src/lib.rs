@@ -2351,9 +2351,17 @@ impl Cam {
                 }
                 p
             }
-            "pencil" => surf::pencil(&sf, c, area, get_num(a, "grid", Some(0.1 * d))?, get_num(a, "kink", Some(0.02))?)
-                .map_err(e)?,
-            "scallop" => surf::scallop(&sf, c, area, get_num(a, "stepover", Some(0.1 * d))?, grid).map_err(e)?,
+            "pencil" => surf::pencil(
+                &sf,
+                c,
+                area,
+                get_num(a, "grid", Some(0.1 * d))?,
+                get_num(a, "kink", Some(0.02))?,
+            )
+            .map_err(e)?,
+            "scallop" => {
+                surf::scallop(&sf, c, area, get_num(a, "stepover", Some(0.1 * d))?, grid).map_err(e)?
+            }
             _ => {
                 let bj = match a.get("after") {
                     Some(V::Tool(j)) => *j,
@@ -2365,8 +2373,14 @@ impl Cam {
                     .iter()
                     .find(|b| b.part == forge_cam_geom::tool::Part::Cutter)
                     .ok_or("the earlier tool has no cutter")?;
-                let before = Surfacer::new(&part.faces, bb, get_num(a, "after_leave", Some(0.0))?, s.tol, floor)
-                    .map_err(|x| format!("{x:?}"))?;
+                let before = Surfacer::new(
+                    &part.faces,
+                    bb,
+                    get_num(a, "after_leave", Some(0.0))?,
+                    s.tol,
+                    floor,
+                )
+                .map_err(|x| format!("{x:?}"))?;
                 surf::rest(
                     &sf,
                     &before,

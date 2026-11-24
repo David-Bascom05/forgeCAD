@@ -8,9 +8,21 @@ fn main() {
     let body = run.body.unwrap();
     let t0 = std::time::Instant::now();
     let (faces, whole) = forge_cam::lower3d::lower_surfacing(&body).unwrap();
-    println!("lowered {} faces ({} whole) in {:?}", faces.len(), whole.len(), t0.elapsed());
+    println!(
+        "lowered {} faces ({} whole) in {:?}",
+        faces.len(),
+        whole.len(),
+        t0.elapsed()
+    );
     for (i, f) in faces.iter().enumerate() {
-        println!("  {i} id {} {:?} p {:?} q {:?} trim {}", f.id, std::mem::discriminant(&f.surf), f.p, f.q, f.trim.is_some());
+        println!(
+            "  {i} id {} {:?} p {:?} q {:?} trim {}",
+            f.id,
+            std::mem::discriminant(&f.surf),
+            f.p,
+            f.q,
+            f.trim.is_some()
+        );
     }
     let lib = Library::builtin();
     let tl = lib.tool("ball-6").unwrap().clone();
@@ -30,9 +42,27 @@ fn main() {
         }
     }
     println!("775 drops {:?}, cells {cells}, worst {worst:?}", t0.elapsed());
-    let tool = forge_cam::ops::ToolUse { t: 1, tool: tl, holder: None, stickout: 40.0, shape };
-    let c = forge_cam::ops::Cut { tool: &tool, tidx: 0, h: forge_cam::ops::Heights { clear: 50.0, retract: 40.0 }, feed: (1000.0, 300.0) };
+    let tool = forge_cam::ops::ToolUse {
+        t: 1,
+        tool: tl,
+        holder: None,
+        stickout: 40.0,
+        shape,
+    };
+    let c = forge_cam::ops::Cut {
+        tool: &tool,
+        tidx: 0,
+        h: forge_cam::ops::Heights {
+            clear: 50.0,
+            retract: 40.0,
+        },
+        feed: (1000.0, 300.0),
+    };
     let t0 = std::time::Instant::now();
     let r = surf::parallel(&sf, c, [-30.0, -24.0, 30.0, 24.0], 4.0, 0.0, 0.5);
-    println!("parallel (4 mm rows): {:?} {:?}", r.as_ref().map(|p| p.moves.len()), t0.elapsed());
+    println!(
+        "parallel (4 mm rows): {:?} {:?}",
+        r.as_ref().map(|p| p.moves.len()),
+        t0.elapsed()
+    );
 }

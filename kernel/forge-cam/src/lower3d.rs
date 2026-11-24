@@ -53,7 +53,8 @@ fn quarters(x: V3, y: V3) -> ([(V3, V3); 4], f64) {
         );
     }
     // the map's t is tan(angle / 2), the angle up to π/4 either side of the middle: tan(π/8)
-    let th = dmath::sin(std::f64::consts::FRAC_PI_8) / dmath::cos(std::f64::consts::FRAC_PI_8) * (1.0 + 1e-12);
+    let th =
+        dmath::sin(std::f64::consts::FRAC_PI_8) / dmath::cos(std::f64::consts::FRAC_PI_8) * (1.0 + 1e-12);
     (fr, th)
 }
 
@@ -80,7 +81,13 @@ fn superset(body: &Body, fid: forge_topo::FaceId, k: usize, out: &mut Vec<Face>)
             // elevation over the whole sphere: q = tan(el / 2) ∈ [−1, 1]
             for (xm, ym) in qs {
                 out.push(Face::new(
-                    Surf::Sphere { o, x: xm, y: ym, ax: fz, r: s.radius },
+                    Surf::Sphere {
+                        o,
+                        x: xm,
+                        y: ym,
+                        ax: fz,
+                        r: s.radius,
+                    },
                     p,
                     Ival::new(-1.0 - 1e-12, 1.0 + 1e-12),
                     None,
@@ -95,7 +102,16 @@ fn superset(body: &Body, fid: forge_topo::FaceId, k: usize, out: &mut Vec<Face>)
                 for j in 0..4 {
                     let (sm, cm) = dmath::sin_cos(std::f64::consts::FRAC_PI_2 * j as f64);
                     out.push(Face::new(
-                        Surf::Torus { o, x: xm, y: ym, ax: fz, big: t.major, r: t.minor, cm, sm },
+                        Surf::Torus {
+                            o,
+                            x: xm,
+                            y: ym,
+                            ax: fz,
+                            big: t.major,
+                            r: t.minor,
+                            cm,
+                            sm,
+                        },
                         p,
                         Ival::new(-th, th),
                         None,
@@ -120,15 +136,28 @@ fn superset(body: &Body, fid: forge_topo::FaceId, k: usize, out: &mut Vec<Face>)
                     }
                 }
             }
-            if !(lo <= hi) {
+            if lo.is_nan() || hi.is_nan() || lo > hi {
                 return Ok(false);
             }
             let pad = m + 1e-9 * (1.0 + scale);
             let q = Ival::new(lo - pad, hi + pad);
             for (xm, ym) in qs {
                 let surf = match &f.surface {
-                    Surface::Cylinder(c) => Surf::Cyl { o, x: xm, y: ym, ax: fz, r: c.radius },
-                    Surface::Cone(c) => Surf::Cone { o, x: xm, y: ym, ax: fz, r0: c.radius, k: c.tan_a() },
+                    Surface::Cylinder(c) => Surf::Cyl {
+                        o,
+                        x: xm,
+                        y: ym,
+                        ax: fz,
+                        r: c.radius,
+                    },
+                    Surface::Cone(c) => Surf::Cone {
+                        o,
+                        x: xm,
+                        y: ym,
+                        ax: fz,
+                        r0: c.radius,
+                        k: c.tan_a(),
+                    },
                     _ => unreachable!(),
                 };
                 out.push(Face::new(surf, p, q, None, m, k as u32));

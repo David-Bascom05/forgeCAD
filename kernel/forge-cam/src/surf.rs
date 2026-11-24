@@ -151,12 +151,24 @@ pub struct Surfacer<'a> {
 }
 
 impl<'a> Surfacer<'a> {
-    pub fn new(faces: &'a [Face], cutter: &forge_cam_geom::tool::Body, leave: f64, tol: f64, floor: f64) -> Result<Surfacer<'a>, SurfError> {
+    pub fn new(
+        faces: &'a [Face],
+        cutter: &forge_cam_geom::tool::Body,
+        leave: f64,
+        tol: f64,
+        floor: f64,
+    ) -> Result<Surfacer<'a>, SurfError> {
         let check = Column::of(cutter).ok_or(SurfError::NoColumn)?;
-        let make = check.grow(leave).ok_or(SurfError::Bad("leave"))?;
-        if !(tol > 0.0) {
+        if tol.is_nan() || tol <= 0.0 {
             return Err(SurfError::Bad("tol"));
         }
+        // the path is made with the cutter grown by the leave and widened a quarter of the
+        // tolerance past its rim: a tool exactly tangent to a wall would make the drop jump (the
+        // footprint is closed at R, and intervals cannot tell ρ = R) and its moves along the wall
+        // unprovable; this keeps it a little off tall walls instead
+        let grown = check.grow(leave).ok_or(SurfError::Bad("leave"))?;
+        // (an off-round width, so grids laid out from round numbers do not land on its rim)
+        let make = grown.widened(0.2371 * tol).ok_or(SurfError::Bad("tol"))?;
         let grid = XyGrid::new(faces, make.r);
         Ok(Surfacer {
             faces,
@@ -176,7 +188,18 @@ impl<'a> Surfacer<'a> {
     pub fn cl(&self, x: f64, y: f64) -> Cl {
         let r = self.make.r;
         let idx = self.grid.near(x - r, y - r, x + r, y + r);
-        let mut c = drop::drop_above(&self.make, self.faces, &idx, x, y, self.floor, self.res, self.budget);
+        // a drop left unresolved keeps its upper bound: safe, at worst high (a rim exactly
+        // tangent to a wall, which intervals cannot settle)
+        let mut c = drop::drop_above(
+            &self.make,
+            self.faces,
+            &idx,
+            x,
+            y,
+            self.floor,
+            self.res,
+            self.budget / 10,
+        );
         if c.hi < self.floor {
             c.hi = self.floor;
         }
@@ -194,7 +217,12 @@ impl<'a> Surfacer<'a> {
     /// `gap`, and the face that decided it (the first not proven clear).
     pub fn gap_at(&self, a: [f64; 3], b: [f64; 3], limit: f64) -> (Gap, Option<usize>) {
         let r = self.check.r;
-        let idx = self.grid.near(a[0].min(b[0]) - r, a[1].min(b[1]) - r, a[0].max(b[0]) + r, a[1].max(b[1]) + r);
+        let idx = self.grid.near(
+            a[0].min(b[0]) - r,
+            a[1].min(b[1]) - r,
+            a[0].max(b[0]) + r,
+            a[1].max(b[1]) + r,
+        );
         let mv = Move::Line { a, b };
         let mut least = 0.0f64;
         for &i in &idx {
@@ -208,7 +236,16 @@ impl<'a> Surfacer<'a> {
                 Gap::Unknown => {
                     // the cutter's own signed distance, as the certifier then checks it, on a
                     // tenth of the budget
-                    match forge_cam_geom::check::certify(&self.cutter, f, &mv, limit, self.res, self.budget / 10).0 {
+                    match forge_cam_geom::check::certify(
+                        &self.cutter,
+                        f,
+                        &mv,
+                        limit,
+                        self.res,
+                        self.budget / 10,
+                    )
+                    .0
+                    {
                         forge_cam_geom::check::Verdict::Clear { lower } => least = least.min(lower),
                         _ => return (g, Some(i as usize)),
                     }
@@ -222,7 +259,7 @@ impl<'a> Surfacer<'a> {
     /// at its middle (a new drop) until its chord is within tol/4 of the surface at the middle
     /// and its own vertical gap is proven at tol/2.
     pub fn drop_polyline(&self, pts: &[[f64; 2]], step: f64) -> Result<Vec<[f64; 3]>, SurfError> {
-        if !(step > 0.0) {
+        if step.is_nan() || step <= 0.0 {
             return Err(SurfError::Bad("step"));
         }
         let mut out: Vec<[f64; 3]> = Vec::new();
@@ -253,7 +290,13 @@ impl<'a> Surfacer<'a> {
         Ok(out)
     }
 
-    fn refine(&self, a: [f64; 3], b: [f64; 3], depth: usize, out: &mut Vec<[f64; 3]>) -> Result<(), SurfError> {
+    fn refine(
+        &self,
+        a: [f64; 3],
+        b: [f64; 3],
+        depth: usize,
+        out: &mut Vec<[f64; 3]>,
+    ) -> Result<(), SurfError> {
         let m2 = [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1])];
         let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
         let small = len <= self.tol || depth >= 24;
@@ -270,7 +313,11 @@ impl<'a> Surfacer<'a> {
         // at the lower end, then level, or level then straight down), which the column proves
         // where it touches only from the side
         if (b[2] - a[2]).abs() > 4.0 * len && len <= 4.0 * self.tol {
-            let mid = if b[2] > a[2] { [a[0], a[1], b[2]] } else { [b[0], b[1], a[2]] };
+            let mid = if b[2] > a[2] {
+                [a[0], a[1], b[2]]
+            } else {
+                [b[0], b[1], a[2]]
+            };
             if matches!(self.gap(a, mid, -0.5 * self.tol), Gap::Clear { .. })
                 && matches!(self.gap(mid, b, -0.5 * self.tol), Gap::Clear { .. })
             {
@@ -293,7 +340,11 @@ impl<'a> Surfacer<'a> {
             _ => {
                 // a cliff (a vertical wall between the ends): straight up at the lower end, then
                 // across at the higher height (or across, then straight down)
-                let mid = if b[2] > a[2] { [a[0], a[1], b[2]] } else { [b[0], b[1], a[2]] };
+                let mid = if b[2] > a[2] {
+                    [a[0], a[1], b[2]]
+                } else {
+                    [b[0], b[1], a[2]]
+                };
                 if matches!(self.gap(a, mid, -0.5 * self.tol), Gap::Clear { .. })
                     && matches!(self.gap(mid, b, -0.5 * self.tol), Gap::Clear { .. })
                 {
@@ -303,7 +354,10 @@ impl<'a> Surfacer<'a> {
                 }
                 if std::env::var("FORGE_CAM_DEBUG").is_ok() {
                     let (g, fi) = self.gap_at(a, b, -0.5 * self.tol);
-                    eprintln!("stuck {a:?} -> {b:?}: {g:?} face {:?}", fi.map(|i| &self.faces[i]));
+                    eprintln!(
+                        "stuck {a:?} -> {b:?}: {g:?} face {:?}",
+                        fi.map(|i| &self.faces[i])
+                    );
                 }
                 Err(SurfError::Stuck { at: b, len })
             }
@@ -369,7 +423,7 @@ fn as_paths(c: Cut, runs: &[Vec<[f64; 3]>]) -> Option<OpPath> {
 /// The rows of a raster over an xy box: along the direction at `angle_deg`, `stepover` apart,
 /// zig-zag, each joined to the next along the box's edge.
 pub fn raster(area: [f64; 4], stepover: f64, angle_deg: f64) -> Result<Vec<[f64; 2]>, SurfError> {
-    if !(stepover > 0.0) {
+    if stepover.is_nan() || stepover <= 0.0 {
         return Err(SurfError::Bad("stepover"));
     }
     let (s, c) = forge_math::dmath::sin_cos(angle_deg.to_radians());
@@ -381,7 +435,8 @@ pub fn raster(area: [f64; 4], stepover: f64, angle_deg: f64) -> Result<Vec<[f64;
         [area[2], area[3]],
         [area[0], area[3]],
     ];
-    let (mut u0, mut u1, mut v0, mut v1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    let (mut u0, mut u1, mut v0, mut v1) =
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
     for p in corners {
         let u = p[0] * d[0] + p[1] * d[1];
         let v = p[0] * n[0] + p[1] * n[1];
@@ -404,15 +459,26 @@ pub fn raster(area: [f64; 4], stepover: f64, angle_deg: f64) -> Result<Vec<[f64;
     }
     // keep within the box where the rotation's rounding strays
     for p in out.iter_mut() {
-        p[0] = p[0].max(area[0].min(area[2]) - 1e-9 * (1.0 + area[0].abs())).min(area[2].max(area[0]) + 1e-9 * (1.0 + area[2].abs()));
-        p[1] = p[1].max(area[1].min(area[3]) - 1e-9 * (1.0 + area[1].abs())).min(area[3].max(area[1]) + 1e-9 * (1.0 + area[3].abs()));
+        p[0] = p[0]
+            .max(area[0].min(area[2]) - 1e-9 * (1.0 + area[0].abs()))
+            .min(area[2].max(area[0]) + 1e-9 * (1.0 + area[2].abs()));
+        p[1] = p[1]
+            .max(area[1].min(area[3]) - 1e-9 * (1.0 + area[1].abs()))
+            .min(area[3].max(area[1]) + 1e-9 * (1.0 + area[3].abs()));
     }
     Ok(out)
 }
 
 /// Parallel (raster) finishing over `area` (x0, y0, x1, y1: tool centres), rows `stepover`
 /// apart along `angle_deg`, samples at most `step` apart along them.
-pub fn parallel(sf: &Surfacer, c: Cut, area: [f64; 4], stepover: f64, angle_deg: f64, step: f64) -> Result<OpPath, OpError> {
+pub fn parallel(
+    sf: &Surfacer,
+    c: Cut,
+    area: [f64; 4],
+    stepover: f64,
+    angle_deg: f64,
+    step: f64,
+) -> Result<OpPath, OpError> {
     let rows = raster(area, stepover, angle_deg)?;
     // each row and the link after it dropped on its own (on all cores), joined in order
     let n = rows.len() / 2;
@@ -488,7 +554,7 @@ pub struct ClGrid {
 
 impl ClGrid {
     pub fn new(sf: &Surfacer, area: [f64; 4], h: f64) -> Result<ClGrid, SurfError> {
-        if !(h > 0.0) {
+        if h.is_nan() || h <= 0.0 {
             return Err(SurfError::Bad("grid"));
         }
         let nx = (((area[2] - area[0]) / h).ceil() as usize).max(1) + 1;
@@ -528,28 +594,40 @@ impl ClGrid {
 /// generator, split where not).
 pub fn waterline(sf: &Surfacer, c: Cut, area: [f64; 4], zs: &[f64], h: f64) -> Result<OpPath, OpError> {
     let g = ClGrid::new(sf, area, h)?;
-    let mut runs: Vec<Vec<[f64; 3]>> = Vec::new();
+    // every loop of every level traced on its own (on all cores), kept in order
+    let mut jobs: Vec<(f64, Contour)> = Vec::new();
     for &z in zs {
         for lp in contours(&g, z) {
-            // each vertex: the crossing on its grid edge, bisected to the free side
-            let mut pts: Vec<[f64; 3]> = Vec::new();
-            for (a, b) in lp {
-                let p = match push(sf, a, b, z, h) {
-                    Some((s, _)) => [a[0] + s * (b[0] - a[0]), a[1] + s * (b[1] - a[1])],
-                    None => a,
-                };
-                pts.push([p[0], p[1], z]);
-            }
-            if pts.len() < 3 {
-                continue;
-            }
-            let first = pts[0];
-            pts.push(first);
-            let mut run = vec![pts[0]];
-            for k in 1..pts.len() {
-                level_refine(sf, run[run.len() - 1], pts[k], 0, &mut run).map_err(OpError::from)?;
-            }
-            runs.push(run);
+            jobs.push((z, lp));
+        }
+    }
+    let traced: Vec<Result<Option<Vec<[f64; 3]>>, SurfError>> = forge_math::par::map(jobs.len(), |j| {
+        let (z, lp) = &jobs[j];
+        let z = *z;
+        // each vertex: the crossing on its grid edge, bisected to the free side
+        let mut pts: Vec<[f64; 3]> = Vec::new();
+        for &(a, b) in lp {
+            let p = match push(sf, a, b, z, h) {
+                Some((s, _)) => [a[0] + s * (b[0] - a[0]), a[1] + s * (b[1] - a[1])],
+                None => a,
+            };
+            pts.push([p[0], p[1], z]);
+        }
+        if pts.len() < 3 {
+            return Ok(None);
+        }
+        let first = pts[0];
+        pts.push(first);
+        let mut run = vec![pts[0]];
+        for &p in &pts[1..] {
+            level_refine(sf, run[run.len() - 1], p, 0, &mut run)?;
+        }
+        Ok(Some(run))
+    });
+    let mut runs: Vec<Vec<[f64; 3]>> = Vec::new();
+    for t in traced {
+        if let Some(r) = t? {
+            runs.push(r);
         }
     }
     as_paths(c, &runs).ok_or(OpError::ToolTooBig {
@@ -558,9 +636,18 @@ pub fn waterline(sf: &Surfacer, c: Cut, area: [f64; 4], zs: &[f64], h: f64) -> R
     })
 }
 
+/// A traced contour: its grid edges as (free node, blocked node).
+type Contour = Vec<([f64; 2], [f64; 2])>;
+
 /// A constant-z piece proven at tol/2, else split at its middle pushed out to the free side
 /// (along the piece's normal, toward lower CL).
-fn level_refine(sf: &Surfacer, a: [f64; 3], b: [f64; 3], depth: usize, out: &mut Vec<[f64; 3]>) -> Result<(), SurfError> {
+fn level_refine(
+    sf: &Surfacer,
+    a: [f64; 3],
+    b: [f64; 3],
+    depth: usize,
+    out: &mut Vec<[f64; 3]>,
+) -> Result<(), SurfError> {
     let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
     // the middle pushed out to the free side's boundary (along the piece's normal, toward lower
     // CL): split there when the boundary strays from the chord, before any proof is tried
@@ -607,12 +694,18 @@ fn contours(g: &ClGrid, z: f64) -> Vec<Vec<([f64; 2], [f64; 2])>> {
     // directed segments between edge midpoints, keyed by edge id; an edge id is
     // (node a, node b) with a < b in index order
     let node = |ix: usize, iy: usize| iy * nx + ix;
-    let mut next: std::collections::BTreeMap<(usize, usize), (usize, usize)> = std::collections::BTreeMap::new();
+    let mut next: std::collections::BTreeMap<(usize, usize), (usize, usize)> =
+        std::collections::BTreeMap::new();
     let ekey = |a: usize, b: usize| if a < b { (a, b) } else { (b, a) };
     for iy in 0..ny.saturating_sub(1) {
         for ix in 0..nx.saturating_sub(1) {
             // corners counter-clockwise: 0 (ix,iy) 1 (ix+1,iy) 2 (ix+1,iy+1) 3 (ix,iy+1)
-            let cs = [node(ix, iy), node(ix + 1, iy), node(ix + 1, iy + 1), node(ix, iy + 1)];
+            let cs = [
+                node(ix, iy),
+                node(ix + 1, iy),
+                node(ix + 1, iy + 1),
+                node(ix, iy + 1),
+            ];
             let bs = [
                 blocked(ix, iy),
                 blocked(ix + 1, iy),
@@ -711,7 +804,16 @@ pub fn pencil(sf: &Surfacer, c: Cut, area: [f64; 4], h: f64, kink: f64) -> Resul
         loop {
             let (cx, cy) = ((cur % g.nx) as i64, (cur / g.nx) as i64);
             let mut found = None;
-            for (dx, dy) in [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (1, -1), (-1, -1)] {
+            for (dx, dy) in [
+                (1, 0),
+                (0, 1),
+                (-1, 0),
+                (0, -1),
+                (1, 1),
+                (-1, 1),
+                (1, -1),
+                (-1, -1),
+            ] {
                 let (x, y) = (cx + dx, cy + dy);
                 if x < 0 || y < 0 || x >= g.nx as i64 || y >= g.ny as i64 {
                     continue;
@@ -804,13 +906,17 @@ pub fn rest(
     min_rest: f64,
 ) -> Result<OpPath, OpError> {
     // the grid covers the area grown by the larger reach, so every envelope over it is whole
-    let pad = before.make.r.max(sf.make.r);
+    // (whole millimetres: a grid laid from the reach itself lands its nodes on the widened
+    // rims of tools beside walls at round coordinates)
+    let pad = before.make.r.max(sf.make.r).ceil();
     let big = [area[0] - pad, area[1] - pad, area[2] + pad, area[3] + pad];
     let ga = ClGrid::new(before, big, h)?;
     let gb = ClGrid::new(sf, big, h)?;
     let ea = envelope(&ga, &before.make);
     let eb = envelope(&gb, &sf.make);
-    let rest: Vec<bool> = (0..ea.len()).map(|i| ea[i] - eb[i] > min_rest && eb[i] > sf.floor).collect();
+    let rest: Vec<bool> = (0..ea.len())
+        .map(|i| ea[i] - eb[i] > min_rest && eb[i] > sf.floor)
+        .collect();
     // a tool position is wanted when a rest node lies within its reach
     let k = (sf.make.r / h).ceil() as i64;
     let wanted = |x: f64, y: f64| -> bool {
@@ -856,7 +962,12 @@ pub fn rest(
                 i += 1;
             }
             let s1 = (i - 1).max(s0);
-            let at = |j: usize| [a[0] + j as f64 / n as f64 * (b[0] - a[0]), a[1] + j as f64 / n as f64 * (b[1] - a[1])];
+            let at = |j: usize| {
+                [
+                    a[0] + j as f64 / n as f64 * (b[0] - a[0]),
+                    a[1] + j as f64 / n as f64 * (b[1] - a[1]),
+                ]
+            };
             if s1 > s0 {
                 runs.push(sf.drop_polyline(&[at(s0), at(s1)], step)?);
             }
@@ -874,7 +985,7 @@ pub fn rest(
 /// with each grid step's 3D length) from the area's boundary, each traced by marching squares
 /// and dropped.
 pub fn scallop(sf: &Surfacer, c: Cut, area: [f64; 4], stepover: f64, h: f64) -> Result<OpPath, OpError> {
-    if !(stepover > 0.0) {
+    if stepover.is_nan() || stepover <= 0.0 {
         return Err(SurfError::Bad("stepover").into());
     }
     let g = ClGrid::new(sf, area, h)?;
@@ -895,7 +1006,16 @@ pub fn scallop(sf: &Surfacer, c: Cut, area: [f64; 4], stepover: f64, h: f64) -> 
             continue;
         }
         let (ix, iy) = ((k % nx) as i64, (k / nx) as i64);
-        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] {
+        for (dx, dy) in [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+        ] {
             let (x, y) = (ix + dx, iy + dy);
             if x < 0 || y < 0 || x >= nx as i64 || y >= ny as i64 {
                 continue;
@@ -929,7 +1049,11 @@ pub fn scallop(sf: &Surfacer, c: Cut, area: [f64; 4], stepover: f64, h: f64) -> 
                 let ia = node_of(&g, a);
                 let ib = node_of(&g, b);
                 let (da, db) = (dist[ia], dist[ib]);
-                let t = if db != da { ((level - da) / (db - da)).clamp(0.0, 1.0) } else { 0.5 };
+                let t = if db != da {
+                    ((level - da) / (db - da)).clamp(0.0, 1.0)
+                } else {
+                    0.5
+                };
                 pts.push([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]);
             }
             if pts.len() < 3 {
@@ -1003,8 +1127,14 @@ impl ZMap {
         let x = Ival::pt(self.x0).add(Ival::pt(ix as f64).mul(Ival::pt(self.h)));
         let y = Ival::pt(self.y0).add(Ival::pt(iy as f64).mul(Ival::pt(self.h)));
         [
-            Ival { lo: x.lo, hi: x.add(Ival::pt(self.h)).hi },
-            Ival { lo: y.lo, hi: y.add(Ival::pt(self.h)).hi },
+            Ival {
+                lo: x.lo,
+                hi: x.add(Ival::pt(self.h)).hi,
+            },
+            Ival {
+                lo: y.lo,
+                hi: y.add(Ival::pt(self.h)).hi,
+            },
         ]
     }
 
@@ -1020,7 +1150,10 @@ impl ZMap {
         let iy0 = (((ya - self.y0) / self.h).floor().max(0.0)) as usize;
         let ix1 = ((((xb - self.x0) / self.h).ceil()).max(0.0) as usize).min(self.nx);
         let iy1 = ((((yb - self.y0) / self.h).ceil()).max(0.0) as usize).min(self.ny);
-        let (dx, dy) = (Ival::pt(b[0]).sub(Ival::pt(a[0])), Ival::pt(b[1]).sub(Ival::pt(a[1])));
+        let (dx, dy) = (
+            Ival::pt(b[0]).sub(Ival::pt(a[0])),
+            Ival::pt(b[1]).sub(Ival::pt(a[1])),
+        );
         let dd = dx.sqr().add(dy.sqr());
         for iy in iy0..iy1 {
             for ix in ix0..ix1 {
@@ -1037,7 +1170,10 @@ impl ZMap {
                         (rx.sqr().add(ry.sqr()).sqrt(), Ival::pt(0.0))
                     } else {
                         let t = rx.mul(dx).add(ry.mul(dy)).div(dd);
-                        let t = Ival { lo: t.lo.clamp(0.0, 1.0), hi: t.hi.clamp(0.0, 1.0) };
+                        let t = Ival {
+                            lo: t.lo.clamp(0.0, 1.0),
+                            hi: t.hi.clamp(0.0, 1.0),
+                        };
                         let ex = rx.sub(t.mul(dx));
                         let ey = ry.sub(t.mul(dy));
                         (ex.sqr().add(ey.sqr()).sqrt(), t)
@@ -1048,7 +1184,7 @@ impl ZMap {
                     let z = Ival::pt(a[2]).add(s.mul(Ival::pt(b[2]).sub(Ival::pt(a[2]))));
                     tz = if tz.lo == f64::NEG_INFINITY { z } else { tz.hull(z) };
                 }
-                if !(far.hi <= r) {
+                if far.hi.is_nan() || far.hi > r {
                     continue;
                 }
                 let Some(bz) = col.b(Ival { lo: 0.0, hi: far.hi }) else {
@@ -1085,10 +1221,22 @@ impl ZMap {
         let mut out = Vec::new();
         let rect = |w: f64, h: f64| Trim {
             segs: vec![
-                TSeg::Line { a: [0.0, 0.0], b: [w, 0.0] },
-                TSeg::Line { a: [w, 0.0], b: [w, h] },
-                TSeg::Line { a: [w, h], b: [0.0, h] },
-                TSeg::Line { a: [0.0, h], b: [0.0, 0.0] },
+                TSeg::Line {
+                    a: [0.0, 0.0],
+                    b: [w, 0.0],
+                },
+                TSeg::Line {
+                    a: [w, 0.0],
+                    b: [w, h],
+                },
+                TSeg::Line {
+                    a: [w, h],
+                    b: [0.0, h],
+                },
+                TSeg::Line {
+                    a: [0.0, h],
+                    b: [0.0, 0.0],
+                },
             ],
         };
         let mut id = id0;
@@ -1131,7 +1279,14 @@ impl ZMap {
                 }
                 let w = nb(ixs + 1, iys);
                 if w < t {
-                    mk([x + h, y, w], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], h, t - w, &mut out);
+                    mk(
+                        [x + h, y, w],
+                        [0.0, 1.0, 0.0],
+                        [0.0, 0.0, 1.0],
+                        h,
+                        t - w,
+                        &mut out,
+                    );
                 }
                 let w = nb(ixs, iys - 1);
                 if w < t {
@@ -1139,7 +1294,14 @@ impl ZMap {
                 }
                 let w = nb(ixs, iys + 1);
                 if w < t {
-                    mk([x, y + h, w], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0], h, t - w, &mut out);
+                    mk(
+                        [x, y + h, w],
+                        [1.0, 0.0, 0.0],
+                        [0.0, 0.0, 1.0],
+                        h,
+                        t - w,
+                        &mut out,
+                    );
                 }
             }
         }
@@ -1255,8 +1417,11 @@ pub fn zlevel_voids(
         // area's edge is free: the area is the tool centres' bound) as a directed edge with
         // the blocked cell on its left, chained
         let corner = |ix: usize, iy: usize| (ix, iy);
-        let mut edges: std::collections::BTreeMap<(usize, usize), (usize, usize)> = std::collections::BTreeMap::new();
-        let b = |ix: i64, iy: i64| ix >= 0 && iy >= 0 && ix < cx as i64 && iy < cy as i64 && grown[iy as usize * cx + ix as usize];
+        let mut edges: std::collections::BTreeMap<(usize, usize), (usize, usize)> =
+            std::collections::BTreeMap::new();
+        let b = |ix: i64, iy: i64| {
+            ix >= 0 && iy >= 0 && ix < cx as i64 && iy < cy as i64 && grown[iy as usize * cx + ix as usize]
+        };
         for iy in 0..cy as i64 {
             for ix in 0..cx as i64 {
                 if !b(ix, iy) {
@@ -1316,10 +1481,22 @@ pub fn zlevel_voids(
         let outer = Region {
             loops: vec![Loop {
                 segs: vec![
-                    Seg::Line { a: p2(area[0], area[1]), b: p2(area[2], area[1]) },
-                    Seg::Line { a: p2(area[2], area[1]), b: p2(area[2], area[3]) },
-                    Seg::Line { a: p2(area[2], area[3]), b: p2(area[0], area[3]) },
-                    Seg::Line { a: p2(area[0], area[3]), b: p2(area[0], area[1]) },
+                    Seg::Line {
+                        a: p2(area[0], area[1]),
+                        b: p2(area[2], area[1]),
+                    },
+                    Seg::Line {
+                        a: p2(area[2], area[1]),
+                        b: p2(area[2], area[3]),
+                    },
+                    Seg::Line {
+                        a: p2(area[2], area[3]),
+                        b: p2(area[0], area[3]),
+                    },
+                    Seg::Line {
+                        a: p2(area[0], area[3]),
+                        b: p2(area[0], area[1]),
+                    },
                 ],
             }],
         };
@@ -1344,7 +1521,8 @@ pub fn zlevel_voids(
             let loops: Vec<Vec<Seg>> = if k == 0 {
                 free.loops.iter().map(|l| l.segs.clone()).collect()
             } else {
-                let (o, _) = offset(&free, k as f64 * stepover).map_err(|e| OpError::Region(format!("{e:?}")))?;
+                let (o, _) =
+                    offset(&free, k as f64 * stepover).map_err(|e| OpError::Region(format!("{e:?}")))?;
                 o.into_iter()
                     .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b)))
                     .map(|l| l.segs)
@@ -1432,6 +1610,7 @@ mod tests {
         let r = raster([0.0, 0.0, 10.0, 4.0], 1.0, 0.0).unwrap();
         assert_eq!(r.len(), 10);
         assert_eq!(r[0], [0.0, 0.0]);
-        assert_eq!(r[9], [0.0, 4.0]);
+        assert_eq!(r[8], [0.0, 4.0]);
+        assert_eq!(r[9], [10.0, 4.0]);
     }
 }
