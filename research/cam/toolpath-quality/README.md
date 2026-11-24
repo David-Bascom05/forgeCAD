@@ -19,6 +19,7 @@ opensource.md, fusion-*.md); they do not repeat them.
 | [fusion-benchmark.md](fusion-benchmark.md) | What Fusion offers per area, with its parameters; user-reported weaknesses; competitors; **a testable 69-item "Fusion-level" checklist** (17 items go beyond Fusion); benchmark parts |
 | [gap-tables.md](gap-tables.md) | **The whole Fusion 2D / 3D-rough / 3D-finish / common / turning set**: one row per toolpath (forgeCAD on main, on a branch, or absent, from the code; Fusion; best known method; metrics; impact; effort; patent gate), a ranked top 15, 8 hand-off packets |
 | [unclaimed-methods.md](unclaimed-methods.md) | Methods that are free because they were never claimed, or the patent expired, lapsed or was abandoned, ranked by toolpath quality; vendor trade-secret behaviour inferred from public material only |
+| | (top free methods, ranked: engagement-capped offsets on the exact cleared region with per-move feed (Ibaraki, Stori & Wright, GE, Kakino); Bieterman & Sandstrom morphed spiral; Held & Spielberger spiral; iso-scallop and geodesic finishing; local corner smoothing; corner looping) |
 | [opensource-oracles.md](opensource-oracles.md) | FreeCAD Adaptive (from its source), OCL, Kiri:Moto, libactp, Clipper2, cavalier_contours, Boost Voronoi, Ruckig, CAMotics, LinuxCNC tp, Grbl: licences with file evidence, what we may read or port, and **five oracles for verify/** (two already run here) |
 
 **Source marks**, as in every CAM note: **[R]** read this session; **[S]** search snippet only;
@@ -285,6 +286,16 @@ read; counsel confirms.
 | **9,892,215** | MERL | 2035 | the **live adaptive-feed** claim: split the path where engagement varies beyond a range, then a feed per segment from an engagement function with a material "abrasive resistance" parameter |
 | 12,663,778 | CNC Software | — | the CAM pipeline as an ordered graph (architecture) |
 | 12,485,511 | OPEN MIND | 2044 | multi-axis links |
+
+**Found later** (unclaimed-methods.md; fto-adaptive.md §7):
+- **New live:** Boeing **US 9,164,503** (to 2034; a medial-axis slot with circular end
+  recesses, then an outward constant-depth spiral, close to Fusion's slot clearing) and Surfware
+  US 9,317,030 (stepped helical entry, to 2031).
+- **New free:**
+  - Boeing US 6,591,158 (Bieterman & Sandstrom morphed spiral; lapsed 2015);
+  - Ibaraki's JP 2005-050255 (refused in 2005, Japan only; prior art against Delcam '339);
+  - Kakino US 6,942,436 and 6,772,039 (constant-chip spiral, force-model feed; expired);
+  - EPFL corner looping, US 2014/0297021 (abandoned).
 
 **Candidate design that avoids at least one required element of every live independent claim
 that was read** (claim-element matrix in fto-adaptive.md §3). Open gaps: the SolidCAM spiral-loop

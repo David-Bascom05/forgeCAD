@@ -499,3 +499,42 @@ architecture.
 - Papers were not read in full (citations from search snippets).
 - ModuleWorks, CloudNC (only GB201801021D0 found), Sandvik and Kennametal milling-path patents:
   no relevant US grants surfaced in the searches run; the searches were not exhaustive.
+
+## 7. Addendum (2026-11-24, from unclaimed-methods.md)
+
+Found by the unclaimed-methods search after this note was written. Read on Google Patents; see that
+note for queries and sources.
+
+**New live claims to add to the §3 matrix:**
+- **Boeing US 9,164,503 (to 2034).** Cut a slot along the medial axis with a circular recess at
+  each end, then spiral outward at constant radial depth. This is close to Fusion's slot
+  clearing.
+  - Design rule: don't combine an end-recessed medial-axis slot with an outward constant-depth
+    spiral.
+  - Read its independent claims before building any slot-first clearing. **Not yet read claim by
+    claim.**
+- **Surfware US 9,317,030 (to 2031).** Stepped helical entry. Check before building stepped
+  helices; a plain single helix at the tool's ramp limit is the default.
+- **Now granted, from published applications:**
+  - Truemill 9,931,703 (two-hole entry);
+  - DP 10,877,463 (multi-axis jerk limit, to 2039);
+  - Siemens 8,923,999 (claims not read);
+  - Autodesk 12,427,615 (machine wear).
+
+**Free, and new prior art against the live claims:**
+- **JP 2005-050255** (Yamaji, Ibaraki). It claims Ibaraki's constant-engagement method; Japan
+  refused it in 2005, and it was filed only in Japan. It is dated prior art against Delcam/Autodesk
+  9,489,339 cl.18.
+- **Boeing US 6,591,158** (Bieterman & Sandstrom morphed spiral): fee-lapsed 2015.
+- **Kakino US 6,942,436** (constant-chip spiral; trochoid with the feed varied within a turn):
+  fee-expired.
+- **Kakino US 6,772,039** (feed per tooth from a force model): expired 2023.
+- **Abandoned in the US:** EPFL US 2014/0297021 (corner looping); Hexagon 2021/0026327; Autodesk
+  2020/0201284; Siemens 2014/0316751; MERL 2013/0262066.
+
+**Design note.** To keep engagement-capped offsets clear of Delcam '339 cl.18, reshape the current
+pass (move its points along the normal, or round it at a user radius). Never enlarge the
+*preceding* pass's corner radius in response to a predicted engagement.
+
+**Counsel question 13.** US 9,164,503: does a slot-clearing mode that cuts along a medial axis
+and then offsets outward read on it if the slot ends are not recessed circles?
