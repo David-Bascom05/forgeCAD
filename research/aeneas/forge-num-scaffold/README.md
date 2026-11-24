@@ -9,8 +9,8 @@ research/aeneas/NEW-CRATE.md.
 
 1. `git mv research/aeneas/forge-num-scaffold verify/aeneas/forge-num`, and drop this README or turn
    it into the package's notes.
-2. Fill in translate.conf's `--start-from` roots: the modules that exist (`forge_num::nat`,
-   `forge_num::big` are placeholders; use the real paths).
+2. Fill in translate.conf's `--start-from` roots: the modules that exist (set to
+   exact-core/num-cam's layout: nat, int, dy, ival; real.rs left out until it translates).
 3. `tools/aeneas/translate.sh forge-num` writes lean/ForgeNum/{Types,Funs}.lean and the two
    `*_Template.lean` files. If it names an opaque with no definition, define it in
    lean/ForgeNum/FunsExternal.lean (`unsigned_abs` and `trailing_zeros` are the two Std lacks; see
