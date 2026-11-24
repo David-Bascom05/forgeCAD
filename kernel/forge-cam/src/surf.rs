@@ -1352,6 +1352,195 @@ pub fn zlevel(
     zlevel_voids(sf, c, area, top, bottom, down, stepover, h).map(|x| x.0)
 }
 
+/// The tool-centre region blocked at level z on the CL grid: every cell with a corner not proven
+/// free, grown by a cell, saddles closed, as loops of cell sides (a staircase inside the truly
+/// blocked region's complement: conservative by up to two cells).
+fn grid_blocked(g: &ClGrid, z: f64) -> forge_cam_geom::region::Region {
+    use forge_cam_geom::region::{Loop, Region, Seg, p2};
+    // blocked cells: a cell any of whose corners is not proven free
+    let (cx, cy) = (g.nx - 1, g.ny - 1);
+    let mut blk = vec![false; cx * cy];
+    for iy in 0..cy {
+        for ix in 0..cx {
+            let k = |x: usize, y: usize| g.hi[y * g.nx + x] > z;
+            blk[iy * cx + ix] = k(ix, iy) || k(ix + 1, iy) || k(ix, iy + 1) || k(ix + 1, iy + 1);
+        }
+    }
+    // grown by a cell, and saddles closed, so the boundary is a set of simple loops
+    let mut grown = blk.clone();
+    for iy in 0..cy {
+        for ix in 0..cx {
+            if !blk[iy * cx + ix] {
+                continue;
+            }
+            for dy in -1i64..=1 {
+                for dx in -1i64..=1 {
+                    let (x, y) = (ix as i64 + dx, iy as i64 + dy);
+                    if x >= 0 && y >= 0 && x < cx as i64 && y < cy as i64 {
+                        grown[y as usize * cx + x as usize] = true;
+                    }
+                }
+            }
+        }
+    }
+    loop {
+        let mut changed = false;
+        for iy in 0..cy.saturating_sub(1) {
+            for ix in 0..cx.saturating_sub(1) {
+                let a = grown[iy * cx + ix];
+                let b = grown[iy * cx + ix + 1];
+                let c2 = grown[(iy + 1) * cx + ix];
+                let d = grown[(iy + 1) * cx + ix + 1];
+                if (a && d && !b && !c2) || (b && c2 && !a && !d) {
+                    grown[iy * cx + ix] = true;
+                    grown[iy * cx + ix + 1] = true;
+                    grown[(iy + 1) * cx + ix] = true;
+                    grown[(iy + 1) * cx + ix + 1] = true;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    // the blocked cells' union as loops: every cell side between blocked and free (or the
+    // area's edge is free: the area is the tool centres' bound) as a directed edge with
+    // the blocked cell on its left, chained
+    let corner = |ix: usize, iy: usize| (ix, iy);
+    let mut edges: std::collections::BTreeMap<(usize, usize), (usize, usize)> =
+        std::collections::BTreeMap::new();
+    let b = |ix: i64, iy: i64| {
+        ix >= 0 && iy >= 0 && ix < cx as i64 && iy < cy as i64 && grown[iy as usize * cx + ix as usize]
+    };
+    for iy in 0..cy as i64 {
+        for ix in 0..cx as i64 {
+            if !b(ix, iy) {
+                continue;
+            }
+            let (x, y) = (ix as usize, iy as usize);
+            if !b(ix, iy - 1) {
+                edges.insert(corner(x, y), corner(x + 1, y));
+            }
+            if !b(ix + 1, iy) {
+                edges.insert(corner(x + 1, y), corner(x + 1, y + 1));
+            }
+            if !b(ix, iy + 1) {
+                edges.insert(corner(x + 1, y + 1), corner(x, y + 1));
+            }
+            if !b(ix - 1, iy) {
+                edges.insert(corner(x, y + 1), corner(x, y));
+            }
+        }
+    }
+    let pt = |c: (usize, usize)| p2(g.x0 + c.0 as f64 * g.h, g.y0 + c.1 as f64 * g.h);
+    let mut blocked = Region { loops: Vec::new() };
+    while let Some((&s, _)) = edges.iter().next() {
+        let mut cs = vec![s];
+        let mut e = s;
+        while let Some(n) = edges.remove(&e) {
+            if n == s {
+                break;
+            }
+            cs.push(n);
+            e = n;
+        }
+        // merge collinear runs
+        let mut keep = Vec::new();
+        let m = cs.len();
+        for i in 0..m {
+            let (p, q, r) = (cs[(i + m - 1) % m], cs[i], cs[(i + 1) % m]);
+            let d1 = (q.0 as i64 - p.0 as i64, q.1 as i64 - p.1 as i64);
+            let d2 = (r.0 as i64 - q.0 as i64, r.1 as i64 - q.1 as i64);
+            if d1.0 * d2.1 - d1.1 * d2.0 != 0 {
+                keep.push(q);
+            }
+        }
+        let n = keep.len();
+        if n < 4 {
+            continue;
+        }
+        blocked.loops.push(Loop {
+            segs: (0..n)
+                .map(|i| Seg::Line {
+                    a: pt(keep[i]),
+                    b: pt(keep[(i + 1) % n]),
+                })
+                .collect(),
+        });
+    }
+    blocked
+}
+
+/// The part's bands above a height where every face reaching above it is a prism (a vertical
+/// wall or a level flat): for each band between consecutive face heights, (its bottom, its top,
+/// the section there). None when such a face is neither, or a section is refused.
+fn prism_bands(faces: &[Face], above: f64) -> Option<Vec<(f64, f64, forge_cam_geom::region::Region)>> {
+    use forge_cam_geom::slab::Prism;
+    // the faces' own heights (their boxes are widened by mu)
+    let mut hs: Vec<f64> = Vec::new();
+    for f in faces {
+        // a face wholly below the lowest level is no part of any band
+        if f.bbox[2].hi <= above {
+            continue;
+        }
+        let pair = match &f.prism {
+            Some(Prism::Wall { z0, z1, .. }) => [*z0, *z1],
+            Some(Prism::Flat { z, .. }) => [*z, *z],
+            None => return None,
+        };
+        for h in pair {
+            if h > above {
+                hs.push(h);
+            }
+        }
+    }
+    hs.sort_by(|a, b| a.total_cmp(b));
+    hs.dedup_by(|a, b| (*a - *b).abs() <= 1e-6);
+    let mut out = Vec::new();
+    let mut lo = above;
+    for &hi in &hs {
+        // (a band thinner than the section's own tolerance holds no section of its own)
+        if hi - lo > 1e-4 {
+            let sec = crate::section::section(faces, 0.5 * (lo + hi), 1e-5).ok()?;
+            out.push((lo, hi, sec));
+        }
+        lo = hi;
+    }
+    Some(out)
+}
+
+/// The tool-centre region blocked at a level (material above `z`): the union of the sections of
+/// the bands reaching above z, grown by the column's radius `r` (exact for a flat end: a point of
+/// material above z within r of the axis lifts it; conservative for other profiles).
+fn exact_blocked(
+    bands: &[(f64, f64, forge_cam_geom::region::Region)],
+    z: f64,
+    r: f64,
+) -> Result<forge_cam_geom::region::Region, OpError> {
+    use forge_cam_geom::boolean::{Op, boolean, region_of};
+    use forge_cam_geom::offset::offset;
+    use forge_cam_geom::region::Region;
+    let err = |e: String| OpError::Region(e);
+    let mut acc: Option<Region> = None;
+    for (_, hi, sec) in bands {
+        if *hi <= z || sec.loops.is_empty() {
+            continue;
+        }
+        acc = Some(match acc {
+            None => sec.clone(),
+            Some(a) => region_of(&boolean(&a, sec, Op::Union).map_err(|e| err(format!("{e:?}")))?),
+        });
+    }
+    match acc {
+        None => Ok(Region { loops: Vec::new() }),
+        Some(a) => {
+            let (o, _) = offset(&a, -r).map_err(|e| err(format!("{e:?}")))?;
+            Ok(region_of(&o))
+        }
+    }
+}
+
 /// `zlevel`, and what each level provably cleared, for the in-process stock: where the cutter
 /// has a flat bottom of radius rf ≥ stepover, the level's free tool-centre region C grown by rf,
 /// down to the level (the passes, k·stepover apart, cover it: passes_cover).
@@ -1374,7 +1563,14 @@ pub fn zlevel_voids(
     if !(stepover > 0.0 && stepover <= sf.check.r && down > 0.0) {
         return Err(SurfError::Bad("stepover").into());
     }
-    let g = ClGrid::new(sf, area, h)?;
+    // the part's material above each level exactly, where its faces are prisms (each band
+    // between face heights one section); else the CL grid's cells
+    let bands = prism_bands(sf.faces, bottom - sf.leave);
+    let g = if bands.is_some() {
+        None
+    } else {
+        Some(ClGrid::new(sf, area, h)?)
+    };
     let mut runs: Vec<([f64; 3], Vec<PMove>)> = Vec::new();
     let mut voids = Vec::new();
     // the cutter's flat bottom: its first profile piece, if level
@@ -1385,124 +1581,21 @@ pub fn zlevel_voids(
     // the levels, and the part's own top within them (its highest CL), so the stock above the
     // part's top is taken down to it
     let mut zs = crate::ops::levels(top, bottom, down);
-    let peak = g.hi.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let peak = match (&g, &bands) {
+        (Some(g), _) => g.hi.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+        (None, Some(b)) => b.iter().map(|x| x.1).fold(f64::NEG_INFINITY, f64::max) + sf.leave,
+        (None, None) => f64::NEG_INFINITY,
+    };
     if peak > bottom && peak < top && !zs.iter().any(|&z| (z - peak).abs() <= sf.tol) {
         zs.push(peak);
         zs.sort_by(|a, b| b.total_cmp(a));
     }
     for z in zs {
-        // blocked cells: a cell any of whose corners is not proven free
-        let (cx, cy) = (g.nx - 1, g.ny - 1);
-        let mut blk = vec![false; cx * cy];
-        for iy in 0..cy {
-            for ix in 0..cx {
-                let k = |x: usize, y: usize| g.hi[y * g.nx + x] > z;
-                blk[iy * cx + ix] = k(ix, iy) || k(ix + 1, iy) || k(ix, iy + 1) || k(ix + 1, iy + 1);
-            }
-        }
-        // grown by a cell, and saddles closed, so the boundary is a set of simple loops
-        let mut grown = blk.clone();
-        for iy in 0..cy {
-            for ix in 0..cx {
-                if !blk[iy * cx + ix] {
-                    continue;
-                }
-                for dy in -1i64..=1 {
-                    for dx in -1i64..=1 {
-                        let (x, y) = (ix as i64 + dx, iy as i64 + dy);
-                        if x >= 0 && y >= 0 && x < cx as i64 && y < cy as i64 {
-                            grown[y as usize * cx + x as usize] = true;
-                        }
-                    }
-                }
-            }
-        }
-        loop {
-            let mut changed = false;
-            for iy in 0..cy.saturating_sub(1) {
-                for ix in 0..cx.saturating_sub(1) {
-                    let a = grown[iy * cx + ix];
-                    let b = grown[iy * cx + ix + 1];
-                    let c2 = grown[(iy + 1) * cx + ix];
-                    let d = grown[(iy + 1) * cx + ix + 1];
-                    if (a && d && !b && !c2) || (b && c2 && !a && !d) {
-                        grown[iy * cx + ix] = true;
-                        grown[iy * cx + ix + 1] = true;
-                        grown[(iy + 1) * cx + ix] = true;
-                        grown[(iy + 1) * cx + ix + 1] = true;
-                        changed = true;
-                    }
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-        // the blocked cells' union as loops: every cell side between blocked and free (or the
-        // area's edge is free: the area is the tool centres' bound) as a directed edge with
-        // the blocked cell on its left, chained
-        let corner = |ix: usize, iy: usize| (ix, iy);
-        let mut edges: std::collections::BTreeMap<(usize, usize), (usize, usize)> =
-            std::collections::BTreeMap::new();
-        let b = |ix: i64, iy: i64| {
-            ix >= 0 && iy >= 0 && ix < cx as i64 && iy < cy as i64 && grown[iy as usize * cx + ix as usize]
+        let blocked = match (&bands, &g) {
+            (Some(b), _) => exact_blocked(b, z - sf.leave, sf.make.r)?,
+            (None, Some(g)) => grid_blocked(g, z),
+            (None, None) => Region { loops: Vec::new() },
         };
-        for iy in 0..cy as i64 {
-            for ix in 0..cx as i64 {
-                if !b(ix, iy) {
-                    continue;
-                }
-                let (x, y) = (ix as usize, iy as usize);
-                if !b(ix, iy - 1) {
-                    edges.insert(corner(x, y), corner(x + 1, y));
-                }
-                if !b(ix + 1, iy) {
-                    edges.insert(corner(x + 1, y), corner(x + 1, y + 1));
-                }
-                if !b(ix, iy + 1) {
-                    edges.insert(corner(x + 1, y + 1), corner(x, y + 1));
-                }
-                if !b(ix - 1, iy) {
-                    edges.insert(corner(x, y + 1), corner(x, y));
-                }
-            }
-        }
-        let pt = |c: (usize, usize)| p2(g.x0 + c.0 as f64 * g.h, g.y0 + c.1 as f64 * g.h);
-        let mut blocked = Region { loops: Vec::new() };
-        while let Some((&s, _)) = edges.iter().next() {
-            let mut cs = vec![s];
-            let mut e = s;
-            while let Some(n) = edges.remove(&e) {
-                if n == s {
-                    break;
-                }
-                cs.push(n);
-                e = n;
-            }
-            // merge collinear runs
-            let mut keep = Vec::new();
-            let m = cs.len();
-            for i in 0..m {
-                let (p, q, r) = (cs[(i + m - 1) % m], cs[i], cs[(i + 1) % m]);
-                let d1 = (q.0 as i64 - p.0 as i64, q.1 as i64 - p.1 as i64);
-                let d2 = (r.0 as i64 - q.0 as i64, r.1 as i64 - q.1 as i64);
-                if d1.0 * d2.1 - d1.1 * d2.0 != 0 {
-                    keep.push(q);
-                }
-            }
-            let n = keep.len();
-            if n < 4 {
-                continue;
-            }
-            blocked.loops.push(Loop {
-                segs: (0..n)
-                    .map(|i| Seg::Line {
-                        a: pt(keep[i]),
-                        b: pt(keep[(i + 1) % n]),
-                    })
-                    .collect(),
-            });
-        }
         let outer = Region {
             loops: vec![Loop {
                 segs: vec![

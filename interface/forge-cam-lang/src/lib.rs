@@ -2455,6 +2455,14 @@ impl Cam {
         let floor = get_num(a, "floor", Some(part.bbox.0[2]))?;
         let sf = Surfacer::new(&part.faces, body, leave, s.tol, floor).map_err(|e| format!("{e:?}"))?;
         let area = match a.get("area") {
+            // roughing takes the whole stock: tool centres up to a diameter past its sides (so a
+            // margin narrower than the tool is cleared), as `clear` does
+            None if kind == "zlevel" => [
+                s.stock.min[0] - d,
+                s.stock.min[1] - d,
+                s.stock.max[0] + d,
+                s.stock.max[1] + d,
+            ],
             None => [part.bbox.0[0], part.bbox.0[1], part.bbox.1[0], part.bbox.1[1]],
             Some(V::Tuple(v)) if v.len() == 4 => {
                 let mut r = [0.0; 4];
