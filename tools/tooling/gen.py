@@ -11,6 +11,7 @@ many and why.
     python3 tools/tooling/gen.py
 """
 import collections
+import glob
 import json
 import os
 import re
@@ -795,7 +796,7 @@ def shop_presets(r, kind):
         basis = [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "low end" in h]
         notes = ["of the maker's materials for this group, the first printed"]
         notes += [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "optimum" in h]
-        if kind == "drill":
+        if kind in ("drill", "reamer", "counterbore"):
             notes.append("fz is the feed per revolution, mm/rev")
         if re.search(r"column", str(c.get("material_stated", ""))):
             basis.append("the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed")
@@ -836,8 +837,8 @@ def shop(vendor, r, outs, skips):
         base["note"] = (base["note"] + "; grades " + ", ".join(V("grades_available") or [])
                         + "; no preset: the maker prints vc but its feed only as a bar chart (F236)").strip("; ")
         outs["turning"].rec("groove_insert", {"id": rid, **f, **base}, cites)
-    elif k in ("indexable_drill", "drill", "thread_mill"):
-        ty = "thread_mill" if k == "thread_mill" else "drill"
+    elif k in ("indexable_drill", "drill", "thread_mill", "reamer", "counterbore"):
+        ty = {"thread_mill": "thread_mill", "reamer": "reamer", "counterbore": "counterbore"}.get(k, "drill")
         dcon = V("dcon") if V("dcon") is not None else V("dconms")
         dk = "dcon" if V("dcon") is not None else "dconms"
         f = dict(type=ty, dc=V("dc"), dcon=dcon, oal=V("oal") or V("lf"))
@@ -856,9 +857,19 @@ def shop(vendor, r, outs, skips):
             cites += [P("lcf", "lcf"), P("sig", "sig")]
             if isinstance(V("flutes"), (int, float)):
                 f["nof"] = V("flutes"); cites.append(P("nof", "flutes"))
-        else:
+        elif k == "thread_mill":
             f["lcf"], f["tp"], f["nof"] = V("apmx"), V("pitch"), V("flutes")
             cites += [P("lcf", "apmx"), P("tp", "pitch"), P("nof", "flutes")]
+        else:  # reamer, counterbore
+            f["lcf"] = V("lcf")
+            cites.append(P("lcf", "lcf"))
+            nk = "nof" if V("nof") is not None else "flutes"
+            if isinstance(V(nk), (int, float)):
+                f["nof"] = V(nk)
+                cites.append(P("nof", nk))
+            extra = [f"{kk} {S(kk)}" for kk in ("tolerance", "pilot_d", "screw", "coolant") if V(kk) is not None]
+            if extra:
+                base["note"] = (base["note"] + "; " + "; ".join(extra)).strip("; ")
         mat = V("material")
         if isinstance(mat, str):
             f["material"] = "carbide" if "carbide" in mat.lower() else ("hss" if "hs" in mat.lower() else mat)
@@ -1034,10 +1045,11 @@ def main():
             for k, o in outs.items():
                 if len(o.lines) > n0[k]:
                     counts[k] += 1
-        rp = os.path.join(REAL_TOOLS, f"{vendor}.json")
-        for r in (json.load(open(rp))["records"] if os.path.exists(rp) else []):
-            shop(vendor, r, outs, skips)
-            counts["shop tools"] += 1
+        for rp in sorted(glob.glob(os.path.join(REAL_TOOLS, f"{vendor}.json"))
+                         + glob.glob(os.path.join(REAL_TOOLS, f"reamers-{vendor}.json"))):
+            for r in json.load(open(rp))["records"]:
+                shop(vendor, r, outs, skips)
+                counts["shop tools"] += 1
         for k, o in outs.items():
             path = os.path.join(DATA, k, f"{vendor}.toml")
             if o.lines:
