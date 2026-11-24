@@ -170,3 +170,5 @@ import ForgeCurved
 #print axioms ForgeCurved.G14.extra_not_end
 #print axioms ForgeCurved.G14.edge_cut_not_kept
 #print axioms ForgeCurved.PlaceMerge.merge_within
+#print axioms ForgeCurved.PlaceMerge.zero_unique_of_deriv_ne
+#print axioms ForgeCurved.PlaceMerge.rootUnique_of_param
