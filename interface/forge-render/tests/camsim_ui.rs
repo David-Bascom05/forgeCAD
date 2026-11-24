@@ -144,6 +144,78 @@ fn the_panel_docks_in_an_environments_properties() {
     // the next frame: the Manufacture environment's properties column hosts it (CAM-UI's
     // adapter, every frame it is in Manufacture), so it stays docked, not floating
     h.step();
-    assert!(h.gui.shell.camsim.as_ref().unwrap().docked, "docked by the environment");
+    assert!(
+        h.gui.shell.camsim.as_ref().unwrap().docked,
+        "docked by the environment"
+    );
     assert!(h.placed("env:manufacture:properties").is_some());
+}
+
+/// The tools as they are drawn (fluted from their records, holders turned), close up: the flange
+/// mid-contour, a drill and a tap on the manifold, ball-nose surfacing on the mould.
+/// `FORGE_UI_SHOTS=DIR` keeps them.
+#[test]
+fn realistic_tools_close_up() {
+    // (document, files it needs, (op, shot name) per close-up)
+    type Shots<'a> = (&'a str, &'a [&'a str], &'a [(&'a str, &'a str)]);
+    let shots: [Shots; 3] = [
+        (
+            "flange_cam.fg",
+            &["flange.fg", "flange_cam.fg"],
+            &[("prof", "native-tools-01-flange-contour")],
+        ),
+        (
+            "manifold_cam.fg",
+            &["manifold.fg", "manifold_cam.fg"],
+            &[
+                ("bored", "native-tools-02-manifold-drill"),
+                ("tap", "native-tools-03-manifold-tap"),
+            ],
+        ),
+        (
+            "mold_core_finish_cam.fg",
+            &["mold_core.fg", "mold_core_finish_cam.fg"],
+            &[("", "native-tools-04-mould-ball")],
+        ),
+    ];
+    for (doc, files, at) in shots {
+        let dir = copied(&format!("tools-{doc}"), files);
+        let Some(mut h) = open(&dir.join(doc), (1400.0, 860.0), true) else {
+            return;
+        };
+        // the part's own view loads after the run: let it, before the camera is set
+        for _ in 0..20 {
+            h.step();
+        }
+        for (op, name) in at {
+            let st = h.gui.shell.camsim.as_ref().unwrap();
+            let ops = &st.sim.tl.ops;
+            // the named op, or the one with a ball cutter
+            let k = ops
+                .iter()
+                .position(|o| o.name == *op)
+                .or_else(|| {
+                    ops.iter().position(|o| {
+                        o.tools.iter().any(|&t| {
+                            st.sim.cam.sim_tools()[t as usize].tool.kind == forge_tooling::Kind::Ball
+                        })
+                    })
+                })
+                .unwrap_or_else(|| panic!("{doc}: no op {op}"));
+            // the start of its first feed: the cutter just over the material, in full view
+            let sp = &ops[k];
+            let at = st.sim.tl.segs[sp.first..sp.end]
+                .iter()
+                .find(|g| g.kind != forge_render::camsim::timeline::Kind::Rapid)
+                .map_or(sp.t0, |g| g.t0 + 1e-6);
+            h.gui
+                .camsim_command(&format!("t={at};part=hidden;fit=tool"))
+                .unwrap();
+            let st = h.gui.shell.camsim.as_ref().unwrap();
+            let (tool, _, _) = st.tool_now().unwrap();
+            let lk = &st.sim.looks[tool];
+            assert!(lk.tris > 1000, "{doc} {op}: a fluted tool");
+            shot(&mut h, name);
+        }
+    }
 }

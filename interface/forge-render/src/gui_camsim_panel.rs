@@ -89,6 +89,8 @@ pub struct CamSimUi {
     pub hosted: bool,
     /// Docked last frame: the panel is in the environment's properties column, not over the view.
     pub docked: bool,
+    /// The drawn tool's turn about its axis, radians (advanced while playing).
+    pub spin: f64,
     /// The op the workspace selected (its path drawn in the selection's blue).
     pub selected_op: Option<usize>,
     /// Every problem of the document listed, not the first few.
@@ -131,6 +133,7 @@ impl CamSimUi {
             folded: false,
             all_errors: false,
             selected_op: None,
+            spin: 0.0,
             hosted: false,
             docked: false,
             drawn_key: None,
@@ -193,6 +196,16 @@ impl CamSimUi {
         if !self.playing {
             return false;
         }
+        // the flutes turn with the spindle of the op playing (slowed to read as turning)
+        let rpm = self
+            .sim
+            .tl
+            .op_at(self.t)
+            .and_then(|o| self.sim.cam.ops.get(o))
+            .and_then(|o| o.feeds.as_ref())
+            .map_or(0.0, |f| f.rpm);
+        let turns = crate::camsim::tools::turns_per_s(rpm, self.speed, true);
+        self.spin = (self.spin + std::f64::consts::TAU * turns * dt).rem_euclid(std::f64::consts::TAU);
         let was = self.t;
         let to = (self.t + dt * self.speed).min(self.total());
         // a marker passed: stop on it
@@ -493,6 +506,22 @@ impl Shell {
             }
             if let Some(tm) = jump {
                 st.jump(tm);
+            }
+            // what the tool's drawing leaves out, said beside its top (the holder's interface)
+            if st.tool
+                && let Some((tool, p, _)) = st.tool_now()
+                && let Some((at, note)) = st.sim.looks.get(tool).and_then(|l| l.note.as_ref())
+                && let Some(a) = to_px([p[0] - at[0], p[1], p[2] + at[1]])
+                && v.contains(a)
+            {
+                // leftwards from it, so it never runs under the panel; kept inside the view
+                let at = pos2((a.x - 14.0).max(v.left() + 8.0), (a.y - 10.0).max(v.top() + 64.0));
+                painter.line_segment([a, at], Stroke::new(1.0, t.ink2));
+                let galley = painter.layout_no_wrap(note.clone(), FontId::proportional(11.0), t.ink);
+                let r = Align2::RIGHT_BOTTOM.anchor_size(at, galley.size());
+                let r = r.translate(vec2((v.left() + 8.0 - r.left()).max(0.0), 0.0));
+                painter.rect_filled(r.expand(3.0), 3.0, t.surface.gamma_multiply(0.9));
+                painter.galley(r.min, galley, t.ink);
             }
         }
         if st.playing {

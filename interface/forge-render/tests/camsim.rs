@@ -565,3 +565,86 @@ fn the_flanges_measured_chip_load_colours_its_moves() {
     }
     assert!(measured > 0, "the flange's ops measured per move");
 }
+
+/// The tools as drawn: every tool of a document meshed once from its record (a fluted cutter
+/// with the record's flute count, then neck, shank and holder); a tap's thread cut in; drawing
+/// one is well within a frame. Display only: the checks keep the revolved profiles.
+#[test]
+fn tools_are_drawn_from_their_records() {
+    use forge_render::camsim::tools;
+    let dir = machined();
+    for doc in ["flange_cam.fg", "manifold_cam.fg", "mold_core_finish_cam.fg"] {
+        let src = std::fs::read_to_string(dir.join(doc)).unwrap();
+        let t0 = std::time::Instant::now();
+        let sim = Sim::open(&src, &dir);
+        let open_ms = t0.elapsed().as_secs_f64() * 1e3;
+        assert_eq!(sim.looks.len(), sim.cam.sim_tools().len(), "{doc}");
+        let t1 = std::time::Instant::now();
+        let helix = tools::helices();
+        let built: Vec<_> = sim
+            .cam
+            .sim_tools()
+            .iter()
+            .map(|t| tools::build(t, helix.get(&t.tool.id).copied()))
+            .collect();
+        let build_ms = t1.elapsed().as_secs_f64() * 1e3;
+        for (tu, lk) in sim.cam.sim_tools().iter().zip(&built) {
+            assert!(lk.tris > 0, "{doc} {}", tu.tool.id);
+            // a fluted cutter's flutes are the builder's: one cutting edge per flute
+            if tu.tool.nof > 0 && !tu.probe {
+                let edges = lk.pieces.first().map_or(0, |p| p.tris.edges.len());
+                assert!(
+                    edges > tu.tool.nof as usize,
+                    "{doc} {}: {edges} edges",
+                    tu.tool.id
+                );
+            }
+            if tu.holder.is_some() {
+                assert!(
+                    lk.pieces.iter().any(|p| !p.spins),
+                    "{doc} {}: a holder",
+                    tu.tool.id
+                );
+            }
+        }
+        // drawing the biggest, turned
+        let big = built.iter().max_by_key(|l| l.tris).unwrap();
+        let mut out = vec![];
+        let t2 = std::time::Instant::now();
+        for k in 0..20 {
+            out.clear();
+            tools::draw(big, [1.0, 2.0, 3.0], k as f64 * 0.3, false, &mut out);
+        }
+        let draw_ms = t2.elapsed().as_secs_f64() * 1e3 / 20.0;
+        eprintln!(
+            "{doc}: {} tools, meshed in {build_ms:.1} ms (sim opened in {open_ms:.0} ms), the largest {} triangles drawn in {draw_ms:.2} ms",
+            built.len(),
+            big.tris
+        );
+        assert!(draw_ms < 8.0, "{doc}: {draw_ms} ms a frame for a tool");
+    }
+    // a tap: its thread at its pitch, cut into the fluted length
+    let sim = Sim::open(
+        &std::fs::read_to_string(dir.join("manifold_cam.fg")).unwrap(),
+        &dir,
+    );
+    if let Some((tu, lk)) = sim
+        .cam
+        .sim_tools()
+        .iter()
+        .zip(&sim.looks)
+        .find(|(t, _)| t.tool.kind == forge_tooling::Kind::Tap)
+    {
+        let p = &lk.pieces[0].tris.pos;
+        let r: Vec<f64> = p.iter().map(|q| (q[0] * q[0] + q[1] * q[1]).sqrt()).collect();
+        let (lo, hi) = r
+            .iter()
+            .fold((f64::INFINITY, 0.0f64), |a, &x| (a.0.min(x), a.1.max(x)));
+        assert!(
+            hi - lo > 0.5 * tu.tool.tp,
+            "{}: thread depth {}",
+            tu.tool.id,
+            hi - lo
+        );
+    }
+}

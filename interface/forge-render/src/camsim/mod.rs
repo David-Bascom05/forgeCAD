@@ -10,6 +10,7 @@
 pub mod draw;
 pub mod machine;
 pub mod timeline;
+pub mod tools;
 pub mod zmap;
 
 use forge_cam_lang::Cam;
@@ -61,6 +62,8 @@ pub struct Sim {
     pub setups: Vec<SimSetup>,
     /// Per tool (`Cam::sim_tools` index): its cutting envelope, if its profile has one.
     pub cutters: Vec<Option<Cutter>>,
+    /// Each tool as drawn (fluted cutter, neck, shank, holder), meshed once: display only.
+    pub looks: Vec<tools::ToolLook>,
     /// Per tool: its shank and holder's lowest envelope (the non-cutting bodies).
     pub holders: Vec<Option<Cutter>>,
     /// Per setup: the part's triangles in that setup's frame (empty if it could not be built).
@@ -96,6 +99,12 @@ impl Sim {
         let tl = Timeline::of(&cam);
         let setups = cam.sim_setups();
         let cutters = cam.sim_tools().iter().map(|t| Cutter::of(&t.shape)).collect();
+        let helix = tools::helices();
+        let looks = cam
+            .sim_tools()
+            .iter()
+            .map(|t| tools::build(t, helix.get(&t.tool.id).copied()))
+            .collect();
         let holders = cam
             .sim_tools()
             .iter()
@@ -106,6 +115,7 @@ impl Sim {
             tl,
             setups,
             cutters,
+            looks,
             holders,
             part_tris,
             part_maps: vec![],
