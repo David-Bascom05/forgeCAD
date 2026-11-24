@@ -39,6 +39,10 @@ extern "C" {
     /// The page's: File > Save As, a name asked for.
     #[wasm_bindgen(js_namespace = window, js_name = forge_save_as)]
     fn page_save_as(name: &str);
+    /// The page's: save files the app exports (NC programs): its save picker, else a download;
+    /// several in one zip. `json`: {name, files: [{path, text}]}.
+    #[wasm_bindgen(js_namespace = window, js_name = forge_export)]
+    fn page_export(json: &str);
     #[wasm_bindgen(js_namespace = performance, js_name = now)]
     fn perf_now() -> f64;
     #[wasm_bindgen(js_namespace = Date, js_name = now)]
@@ -59,6 +63,8 @@ enum Ask {
     Pixels(js_sys::Function),
     /// An environment by name (`?env=`), entered once the document has built.
     Env(String),
+    /// The Bend Simulation at a step and an instant in it.
+    BendAt(u32, f64),
     /// Words for the toolpath simulation (`app_camsim`).
     CamSim(String),
     /// A click on what the shell noted by this name (`app_click`): the tests' hand. The button
@@ -425,6 +431,18 @@ impl Host {
                 _ => {}
             }
         }
+        if let Some(w) = &mut self.gui.shell.cam
+            && let Some(x) = w.export.take()
+        {
+            page_export(&crate::shell::cam::nc::page_json(&x));
+            let n = x.files.len();
+            w.said = Some(if n == 1 {
+                format!("Exported {}", crate::shell::cam::nc::base(&x.files[0].path))
+            } else {
+                format!("Exported {n} files in {}", x.zip)
+            });
+            w.exported += 1;
+        }
         STATE.with(|s| *s.borrow_mut() = state_json(&self.gui, self.canvas_json()));
     }
 
@@ -458,6 +476,13 @@ impl Host {
                 Ask::SaveAs(p) => self.gui.save_as(&p),
                 Ask::Save => self.gui.fg_save(),
                 Ask::Env(e) => self.gui.env_asked = Some(e),
+                Ask::BendAt(k, t) => {
+                    if let Some(b) = &mut self.gui.shell.sheet.bend_sim {
+                        b.step = (k as usize).min(b.steps().saturating_sub(1));
+                        b.t = t.clamp(0.0, 1.0);
+                        b.playing = false;
+                    }
+                }
                 Ask::Machine(c) => {
                     let _ = self.gui.machine_command(&c);
                 }
@@ -844,8 +869,24 @@ fn cam_words(g: &mut Gui, words: &str) -> Result<(), String> {
         }
         "post" => w.command(Cmd::PostProcess),
         "tools" => w.command(Cmd::ToolLibrary),
+        "programs" => w.command(Cmd::Programs),
+        "quality" => w.command(Cmd::Quality),
         "checks" => w.command(Cmd::Checks),
         "generate" => w.command(Cmd::Generate),
+        // NC export: post into the project, export with the page's save (a download), re-post
+        "post-nc" => w.command(Cmd::PostNc((!rest.is_empty()).then(|| rest.to_string()))),
+        "export" => w.command(Cmd::ExportNc((!rest.is_empty()).then(|| rest.to_string()))),
+        "export-sheet" => w.command(Cmd::ExportSheet),
+        "repost" => w.command(Cmd::RepostStale),
+        "colour" => {
+            use crate::shell::cam::ColourBy;
+            w.focus.colour_by = match rest {
+                "chip" => Some(ColourBy::ChipLoad),
+                "engagement" => Some(ColourBy::Engagement),
+                _ => None,
+            }
+        }
+        "allow-uncertified" => w.allow_uncertified = rest != "off",
         "close" => {
             w.op_dlg = None;
             w.setup_dlg = None;
@@ -853,6 +894,8 @@ fn cam_words(g: &mut Gui, words: &str) -> Result<(), String> {
             w.tools_open = false;
             w.checks_open = false;
             w.text_open = false;
+            w.programs_open = false;
+            w.quality_open = false;
         }
         _ => return Err(format!("unknown `{verb}`")),
     }
@@ -875,6 +918,35 @@ fn cam_json(g: &Gui) -> Json {
         ("selected", w.selected.clone().map_or(Json::Null, Json::from)),
         ("dirty", w.dirty().into()),
         ("text", w.text.clone().into()),
+        ("said", w.said.clone().map_or(Json::Null, Json::from)),
+        ("exported", (w.exported as f64).into()),
+        ("colour_by", w.focus.colour_by.map_or(Json::Null, |c| format!("{c:?}").into())),
+        // each program's file as last read: name, state, path
+        (
+            "posted",
+            Json::Arr(
+                w.posted_cache
+                    .as_ref()
+                    .map(|(_, v)| v.as_slice())
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|(n, s, p)| {
+                        Json::obj(vec![
+                            ("name", n.clone().into()),
+                            ("state", format!("{s:?}").to_lowercase().into()),
+                            ("path", p.clone().into()),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+        // the op dialog's statement as it stands (what OK would write)
+        (
+            "op_text",
+            w.op_dlg
+                .as_ref()
+                .map_or(Json::Null, |d| crate::shell::cam::CamWs::op_text(d).into()),
+        ),
         (
             "ops",
             Json::Arr(
@@ -901,6 +973,8 @@ fn cam_json(g: &Gui) -> Json {
                     ("tools", w.tools_open),
                     ("checks", w.checks_open),
                     ("text", w.text_open),
+                    ("programs", w.programs_open),
+                    ("quality", w.quality_open),
                 ]
                 .into_iter()
                 .filter(|x| x.1)
@@ -1024,6 +1098,12 @@ pub fn app_rebuild() {
 #[wasm_bindgen]
 pub fn app_env(name: String) {
     ask(Ask::Env(name));
+}
+
+/// The Bend Simulation environment to step `step` at `t` (0..1) of it: what its timeline sets.
+#[wasm_bindgen]
+pub fn app_bendsim_at(step: u32, t: f64) {
+    ask(Ask::BendAt(step, t));
 }
 
 #[wasm_bindgen]

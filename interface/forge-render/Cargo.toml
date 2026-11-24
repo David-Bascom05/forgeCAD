@@ -38,6 +38,7 @@ egui = { version = "=0.37.0", default-features = false }
 egui-wgpu = { version = "=0.37.0", default-features = false }
 forge-agent = { path = "../forge-agent" }
 forge-lang = { path = "../forge-lang" }
+forge-bend-lang = { path = "../forge-bend-lang" }
 forge-harness = { path = "../../kernel/forge-harness" }
 forge-history = { path = "../forge-history" }
 forge-git = { path = "../../kernel/forge-git" }
@@ -63,9 +64,16 @@ forge-vendor = { path = "../../kernel/forge-vendor" }
 forge-step = { path = "../../kernel/forge-step" }
 # the Manufacture workspace: the machining document's run (forgecad.cam/1), its libraries and posts
 forge-cam-lang = { path = "../forge-cam-lang" }
+# a Fusion tool library brought into the project's cam/*.toml
+forge-cam-import = { path = "../forge-cam-import" }
+# toolpath quality per op (cycle time on the machine, engagement, chip load, air cutting)
+forge-cam-quality = { path = "../../verify/forge-cam-quality" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
 forge-post = { path = "../../kernel/forge-post" }
 forge-cam = { path = "../../kernel/forge-cam" }
+# turning: the lathe document (forgecad.cam/1, "process": "turning"), its tools, lathes and posts
+forge-turn-lang = { path = "../forge-turn-lang" }
+forge-turn = { path = "../../kernel/forge-turn" }
 # the tools' revolved profiles (the simulation's tool and stock)
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 # the machine simulation: machines as data, the posted text on them (forge-machine)

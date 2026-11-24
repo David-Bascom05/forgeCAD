@@ -216,6 +216,7 @@ jobs:
         run: |
           node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/idle.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/cam.cjs "$GITHUB_WORKSPACE/target/web"
       # the Render Studio's tracer on WebGPU against the native golden picture
       - name: render studio
         if: matrix.test == 'e2e' && !matrix.threaded

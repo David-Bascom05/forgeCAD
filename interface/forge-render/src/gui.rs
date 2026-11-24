@@ -24,6 +24,8 @@ pub mod gui_apptools;
 mod gui_asm;
 #[path = "gui_asmdrag.rs"]
 mod gui_asmdrag;
+#[path = "gui_bendsim.rs"]
+pub mod gui_bendsim;
 #[path = "gui_cam.rs"]
 mod gui_cam;
 #[path = "gui_camsim.rs"]
@@ -34,8 +36,6 @@ pub mod gui_docs;
 mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
-#[path = "gui_studio.rs"]
-mod gui_studio;
 #[path = "gui_record.rs"]
 pub mod gui_record;
 #[path = "gui_fgmarks.rs"]
@@ -52,6 +52,8 @@ mod gui_overlay;
 mod gui_sheet;
 #[path = "gui_speech.rs"]
 pub mod gui_speech;
+#[path = "gui_studio.rs"]
+mod gui_studio;
 #[path = "gui_thermo.rs"]
 mod gui_thermo;
 #[path = "gui_versions.rs"]
@@ -137,6 +139,7 @@ pub struct Gui {
     /// The Render Studio's tracer and queue while its environment is open (`gui_studio.rs`).
     studio: Option<gui_studio::StudioHost>,
     pub vers: gui_versions::VersState,
+    pub bend: gui_bendsim::BendView,
     /// An environment asked by name (a deep link, `--env`): entered once the document built.
     pub env_asked: Option<String>,
     /// The Machine Builder's scene (`gui_machine.rs`).
@@ -301,6 +304,7 @@ impl Gui {
             recording: None,
             studio: None,
             vers: Default::default(),
+            bend: Default::default(),
             env_asked: None,
             mach: Default::default(),
             agent: Default::default(),
@@ -966,6 +970,7 @@ impl Gui {
             }
             match a {
                 Action::MachineBuilder => self.machine_toggle(),
+                Action::Machine(c) => self.machine_cmd(c),
                 Action::Versions(c) => {
                     use crate::shell::versions::{VersionsAct, VersionsCmd};
                     let v = &mut self.shell.versions;
@@ -1339,6 +1344,7 @@ impl Gui {
         self.inspect_tick();
         self.sheet_frame();
         self.env_frame();
+        self.bendsim_frame();
         self.machine_frame();
         self.fg_hole_guess();
         self.fg_preview();
@@ -1531,11 +1537,17 @@ impl Gui {
                     selected: true,
                     second: false,
                 }));
+                // the bend simulation's bodies are not the design's: none of its marks
+                if self.bend.showing() {
+                    m.clear();
+                }
                 m
             };
             // the build's flags on the faces of what they're of; Compare's colours over them
             let flagged;
-            let colours: &[crate::render::FaceColour] = if self.vers.colours.is_empty() {
+            let colours: &[crate::render::FaceColour] = if self.bend.showing() {
+                &[]
+            } else if self.vers.colours.is_empty() {
                 flagged = self.fg_marks_was.1.clone();
                 &flagged
             } else {
@@ -1545,7 +1557,11 @@ impl Gui {
                 hud: None,
                 cube: Some((v.nav.cube_place(), v.nav.cube_hover)),
                 face_colours: colours,
-                face_ghosts: &self.vers.ghosts,
+                face_ghosts: if self.bend.showing() {
+                    &self.bend.ghosts
+                } else {
+                    &self.vers.ghosts
+                },
                 marks: &marks,
                 world: &world,
                 behind: &behind,
@@ -1637,7 +1653,11 @@ impl Gui {
             .next()
             .map(|v| v.repaint_delay)
             .unwrap_or(std::time::Duration::MAX);
-        let again_in = if animating || studio_busy || self.capture_busy() || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
+        let again_in = if animating
+            || studio_busy
+            || self.capture_busy()
+            || self.mark_held.is_some()
+            || self.view.as_ref().is_some_and(|v| v.dirty)
         {
             Some(std::time::Duration::ZERO)
         } else if delay == std::time::Duration::MAX {

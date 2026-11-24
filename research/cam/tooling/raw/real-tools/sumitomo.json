@@ -1,0 +1,251 @@
+{
+ "maker": "Sumitomo Electric Hardmetal",
+ "records": [
+  {
+   "kind": "indexable_drill",
+   "id": "WDX 260D4S32",
+   "name": "SumiDrill WDX series for 4D (Internal Coolant Supply), WDX 260D4S32",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/j.pdf#page=198",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "Dia. DC 26.0"
+    },
+    "lux": {
+     "v": 107,
+     "unit": "mm",
+     "stated": "Neck Length LUX 107"
+    },
+    "lpr": {
+     "v": 127,
+     "unit": "mm",
+     "stated": "Overhang Length LPR 127"
+    },
+    "oal": {
+     "v": 187,
+     "unit": "mm",
+     "stated": "Overall Length OAL 187"
+    },
+    "ls": {
+     "v": 60,
+     "unit": "mm",
+     "stated": "Shank Length LS 60"
+    },
+    "dcsfms": {
+     "v": 41.0,
+     "unit": "mm",
+     "stated": "Flange Dia. DCSFMS 41.0"
+    },
+    "dcon": {
+     "v": 32,
+     "unit": "mm",
+     "stated": "Shank Dia. DCON 32"
+    },
+    "radial_offset_max": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "Radial Offset Amount (Max) 0.40"
+    },
+    "insert": {
+     "v": "WDXT073506",
+     "unit": "text",
+     "stated": "Applicable Insert WDXT 073506"
+    },
+    "fig": {
+     "v": "2",
+     "unit": "text",
+     "stated": "Fig 2"
+    },
+    "coolant": {
+     "v": "internal",
+     "unit": "text",
+     "stated": "Internal Coolant Supply"
+    },
+    "drilling_tolerance": {
+     "v": "0 to +0.25mm",
+     "unit": "text",
+     "stated": "Drilling tolerance: 0 to +0.25mm"
+    },
+    "screw": {
+     "v": "BFTX02506N, 1.5 N·m; wrench TRD08",
+     "unit": "text",
+     "stated": "WDX230D4S25 to WDX285D4S32 BFTX02506N 1.5 — TRD08"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "Steel, Carbon Steel SS400 125 HB, chipbreaker G, ACP300; ø18.5 to ø29.0 (Min-Optimum-Max)",
+     "vc": {
+      "v": [
+       120,
+       180,
+       240
+      ],
+      "unit": "m/min",
+      "stated": "120-180-240"
+     },
+     "f": {
+      "v": [
+       0.05,
+       0.06,
+       0.1
+      ],
+      "unit": "mm/rev",
+      "stated": "0.05-0.06-0.10"
+     },
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/j.pdf#page=199"
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "S45C 190 HB, G, ACP300; ø18.5 to ø29.0",
+     "vc": {
+      "v": [
+       100,
+       150,
+       200
+      ],
+      "unit": "m/min",
+      "stated": "100-150-200"
+     },
+     "f": {
+      "v": [
+       0.08,
+       0.11,
+       0.17
+      ],
+      "unit": "mm/rev",
+      "stated": "0.08-0.11-0.17"
+     },
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/j.pdf#page=199"
+    },
+    {
+     "iso_group": "M",
+     "material_stated": "SUS304, SUS316 (Austenitic) 180 HB, M, ACS3000/ACM300; ø18.5 to ø29.0",
+     "vc": {
+      "v": [
+       120,
+       150,
+       180
+      ],
+      "unit": "m/min",
+      "stated": "120-150-180"
+     },
+     "f": {
+      "v": [
+       0.06,
+       0.08,
+       0.13
+      ],
+      "unit": "mm/rev",
+      "stated": "0.06-0.08-0.13"
+     },
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/j.pdf#page=199"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "Cast Iron, G, ACK300; ø18.5 to ø29.0",
+     "vc": {
+      "v": [
+       120,
+       160,
+       200
+      ],
+      "unit": "m/min",
+      "stated": "120-160-200"
+     },
+     "f": {
+      "v": [
+       0.1,
+       0.19,
+       0.26
+      ],
+      "unit": "mm/rev",
+      "stated": "0.10-0.19-0.26"
+     },
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/j.pdf#page=199"
+    },
+    {
+     "iso_group": "N",
+     "material_stated": "Aluminum Alloy, G, DL1500; ø18.5 to ø29.0",
+     "vc": {
+      "v": [
+       200,
+       260,
+       320
+      ],
+      "unit": "m/min",
+      "stated": "200-260-320"
+     },
+     "f": {
+      "v": [
+       0.05,
+       0.1,
+       0.15
+      ],
+      "unit": "mm/rev",
+      "stated": "0.05-0.10-0.15"
+     },
+     "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/j.pdf#page=199"
+    }
+   ],
+   "unknown": [
+    "flute length as such: catalogue gives LUX (neck length 107) and LPR (overhang 127), not a separately named flute length / max drilling depth"
+   ],
+   "notes": "Best fit for drill-26-4d (shank 32, LUX 107 ~ usable depth). Footnote J167: for P and K grades, if ACP300/ACK300 are first recommendations, ACP100 is second; then set vc to 130% and f to 75% of the table. Catalogue page J166/J167 = PDF pages 198/199."
+  },
+  {
+   "kind": "drill_insert",
+   "id": "WDXT073506-G",
+   "name": "SumiDrill WDX insert WDXT 073506-G (general purpose), for WDX230D4S25 to WDX285D4S32",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/j.pdf#page=199",
+   "taken": "2026-11-24",
+   "values": {
+    "w1": {
+     "v": 7.5,
+     "unit": "mm",
+     "stated": "Width W1 7.5"
+    },
+    "s": {
+     "v": 3.5,
+     "unit": "mm",
+     "stated": "Thickness S 3.5"
+    },
+    "re1": {
+     "v": 0.6,
+     "unit": "mm",
+     "stated": "Corner Radius RE1 0.6"
+    },
+    "re2": {
+     "v": 0.6,
+     "unit": "mm",
+     "stated": "Corner Radius RE2 0.6"
+    },
+    "chipbreaker": {
+     "v": "G",
+     "unit": "text",
+     "stated": "Fig 2 General-purpose G type"
+    },
+    "grades_available": {
+     "v": [
+      "ACP100",
+      "ACP300",
+      "ACK300",
+      "DL1500"
+     ],
+     "unit": "text",
+     "stated": "dots on WDXT 073506-G row (grade columns ACP100 ACP300 ACS3000 ACM300 ACK300 DL1500)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "vc/f given per drill body record (J167)",
+    "grade column of each dot read from the rendered table; verify ACS3000/ACM300 absence"
+   ],
+   "notes": "-L (low feed), -H (strong edge), -M (stainless; RE2 1.6) variants exist on the same row block."
+  }
+ ],
+ "blocked": []
+}

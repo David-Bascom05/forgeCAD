@@ -566,7 +566,8 @@ impl Poly {
         if self.arcs {
             for (t, &u) in trig.iter_mut().zip(us) {
                 let ang = u * self.sweep + self.start;
-                *t = (ang.cos(), ang.sin());
+                let (s, c) = ang.sin_cos();
+                *t = (c, s);
             }
         }
         let mut out = [Box3::EMPTY; 4];

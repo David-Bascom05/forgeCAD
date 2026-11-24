@@ -11,6 +11,7 @@ pub mod asmpart;
 pub mod asmtools;
 mod banner;
 pub mod bendsim;
+mod bendsim_cards;
 mod bendsim_env;
 pub mod cam;
 pub mod content;
@@ -28,7 +29,6 @@ pub mod dwgprops;
 mod empty;
 pub mod capture;
 pub mod env;
-pub mod studio_env;
 pub mod fg;
 pub mod fgasm;
 pub mod fgdialog;
@@ -54,6 +54,7 @@ pub mod settings;
 pub mod sheet;
 mod sheetui;
 pub mod sketching;
+pub mod studio_env;
 pub mod theme;
 pub mod thermo;
 pub mod thermo_material;
@@ -194,6 +195,8 @@ pub enum Action {
     Versions(versions::VersionsCmd),
     /// The Machine Builder workspace (shell/machine.rs), opened or closed.
     MachineBuilder,
+    /// A Machine Builder command (its ribbon groups, the environment).
+    Machine(machine::MachineCmd),
     /// Measure, Section, iProperties and the centre of gravity.
     Inspect(inspect::InspectCmd),
     /// A sheet metal command, from the Sheet Metal or Flat Pattern tab.
