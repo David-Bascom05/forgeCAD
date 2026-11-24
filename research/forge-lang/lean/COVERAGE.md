@@ -158,6 +158,8 @@ scope).
 
 | Kind | Item | Names | Why | Lean |
 |---|---|---|---|---|
+| not-names | `interface/forge-cam-lang/src/toollog.rs::FLAGS` | | the `toollog` command's switches (`--json`, ..), command-line words, not .fg | not a namespace |
+| not-names | `interface/forge-cam-lang/src/toollog.rs::VALUED` | | the `toollog` command's options that take a value (`--tool`, ..), command-line words, not .fg | not a namespace |
 | not-names | `interface/forge-lang/src/anchors.rs::FACE_ROLES` | | members a feature's faces are found by (read after `.`), not names in scope | not a namespace |
 | not-names | `interface/forge-lang/src/asm.rs::METRICS` | | an assembly's `expect` metrics: the word after `expect`, not a name in scope | not a namespace |
 | not-names | `interface/forge-lang/src/asm.rs::PLACES` | | calls that make a file an assembly (`has_components`), a subset of the assembly family | not a namespace |
