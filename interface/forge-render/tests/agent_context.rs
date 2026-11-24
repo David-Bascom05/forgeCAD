@@ -280,13 +280,36 @@ fn context_pictures() {
                 });
             }
             h.gui.shell.agent.restore_entries(long);
-            // a face picked in the view (a selected feature at 480 px trips fgdim.rs's clamp
-            // on main: reported to UI-BUGHUNT)
-            h.gui.shell.fg.as_mut().unwrap().picked = Some(Ok("extrude1.end".into()));
+            // a face picked in the view, by a click on the part's top (the pick path, so the view
+            // shows it picked); a selected feature at 480 px trips fgdim.rs's clamp on main
+            let top = if tag == "1400" {
+                (835.0, 450.0)
+            } else {
+                (378.0, 478.0)
+            };
+            h.click_at(top.0, top.1);
+            for _ in 0..4 {
+                h.step();
+            }
+            let picked = h.gui.shell.agent_selection();
+            assert!(
+                picked.as_deref().is_some_and(|p| p.starts_with("extrude1")),
+                "{picked:?}"
+            );
             let theme = if dark { "dark" } else { "light" };
             assert!(h.click("agent:input"));
             h.text("thicken ");
             shot(&mut h, &format!("context-{tag}-{theme}-selection-offered"));
+            // the pointer on the chip: the view lights what it names
+            let chip = h.gui.shell.place("agent:offered").unwrap();
+            h.move_to(chip.center().x, chip.center().y);
+            for _ in 0..4 {
+                h.step();
+            }
+            assert_eq!(h.gui.shell.agent.hover_ref, picked);
+            assert!(!h.gui.fg_lit_faces().is_empty(), "the chip's faces lit");
+            shot(&mut h, &format!("context-{tag}-{theme}-chip-hover"));
+            assert!(h.click("agent:input"));
             h.text("@e");
             shot(&mut h, &format!("context-{tag}-{theme}-at-list"));
             drop(h);
@@ -305,4 +328,13 @@ fn shot(h: &mut forge_render::gui::Headless, name: &str) {
             std::fs::write(Path::new(&dir).join(format!("{name}.png")), png).unwrap();
         }
     }
+}
+
+#[test]
+fn a_chip_says_in_words_what_it_names() {
+    use forge_render::shell::agent::describe;
+    assert_eq!(describe("extrude1.end"), "End face of extrude1");
+    assert_eq!(describe("cover.body.start"), "Start face of cover.body");
+    assert_eq!(describe("extrude1"), "extrude1");
+    assert_eq!(describe("rack/ear.weird"), "rack/ear.weird");
 }

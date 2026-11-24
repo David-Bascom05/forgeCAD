@@ -184,6 +184,9 @@ pub struct AgentTab {
     pub mention: Option<Mention>,
     /// The box as it was when Esc closed the `@` list: it stays closed until the text changes.
     pub mention_off: Option<String>,
+    /// The id of the chip the pointer is on (in the box or a sent message): the view lights what
+    /// it names. Set each frame.
+    pub hover_ref: Option<String>,
 }
 
 /// One thing `@` can name: what goes in the message, and what it is.
@@ -964,6 +967,8 @@ impl Shell {
 
     /// The Agent tab: the backend's switcher, what it's working on, the chat, the input.
     pub(super) fn agent_ui(&mut self, ui: &mut Ui, area: Rect) {
+        // the chip the pointer is on, found again each frame
+        self.agent.hover_ref = None;
         let t = self.theme;
         // in a page no agent can run (Claude Code and Codex are programs on the computer, speech
         // its engine; an endpoint isn't reached from the page yet): said plainly, no Send to fail
@@ -1277,6 +1282,7 @@ impl Shell {
         let mut acts: Vec<AgentAct> = Vec::new();
         let mut toggles: Vec<String> = Vec::new();
         let mut places: Vec<(String, Rect)> = Vec::new();
+        let mut hovered: Option<String> = None;
         let code_ink = if t.dark {
             Color32::from_rgb(0xC9, 0xD7, 0xF0)
         } else {
@@ -1367,16 +1373,19 @@ impl Shell {
                             if !refs.is_empty() {
                                 let mut x = card.left() + 8.0;
                                 for id in refs {
-                                    x += chip(
+                                    let cr = chip(
                                         ui,
                                         &t,
                                         pos2(x, card.bottom() - 25.0),
                                         id,
                                         card.right() - 8.0 - x,
                                         false,
-                                    )
-                                    .width()
-                                        + 4.0;
+                                    );
+                                    // the pointer on it lights what it names in the view
+                                    if ui.rect_contains_pointer(cr) {
+                                        hovered = Some(id.clone());
+                                    }
+                                    x += cr.width() + 4.0;
                                 }
                             }
                             places.push((format!("agent:user:{k}"), card));
@@ -1716,6 +1725,9 @@ impl Shell {
                 }
                 ui.add_space(10.0);
             });
+        if hovered.is_some() {
+            self.agent.hover_ref = hovered;
+        }
         for id in toggles {
             if !self.agent.open.remove(&id) {
                 self.agent.open.insert(id);
@@ -1813,6 +1825,9 @@ impl Shell {
             let mut drop = None;
             for (k, r) in self.agent.refs.iter().enumerate() {
                 let cr = chip(ui, &t, pos2(x, y), r, box_r.right() - 6.0 - x, true);
+                if ui.rect_contains_pointer(cr) {
+                    self.agent.hover_ref = Some(r.clone());
+                }
                 let xr = Rect::from_min_size(pos2(cr.right() - 16.0, cr.top()), vec2(16.0, cr.height()));
                 if ui
                     .interact(xr, ui.scope_id().with(("agent-unref", k)), Sense::click())
@@ -1832,7 +1847,13 @@ impl Shell {
                 let xr = Rect::from_min_size(pos2(cr.right() - 16.0, cr.top()), vec2(16.0, cr.height()));
                 let resp = ui
                     .interact(cr, ui.scope_id().with("agent-offered"), Sense::hover())
-                    .on_hover_text("The selection goes with your message; × to leave it out");
+                    .on_hover_text(format!(
+                        "{} · goes with your message; × to leave it out",
+                        describe(s)
+                    ));
+                if resp.hovered() {
+                    self.agent.hover_ref = Some(s.clone());
+                }
                 resp.widget_info(|| {
                     egui::WidgetInfo::labeled(egui::Role::Button, true, format!("Selected: {s}"))
                 });
@@ -2112,7 +2133,7 @@ impl Shell {
             Align2::CENTER_CENTER,
             word,
             medium(12.0),
-            if can { Color32::WHITE } else { t.ink2 },
+            if can { super::theme::ON_FOCUS } else { t.ink2 },
         );
         self.note("agent:send", sr);
         let mut mic_right = sr.left();
@@ -2171,6 +2192,24 @@ fn chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, id: &str, room: f32, removable: 
     r
 }
 
+/// An id in words, for a chip's hover: "End face of extrude1" for `extrude1.end`; the id as it
+/// is otherwise.
+pub fn describe(id: &str) -> String {
+    let Some((feat, role)) = id.rsplit_once('.') else {
+        return id.to_string();
+    };
+    let what = match role {
+        "end" => "End face",
+        "start" => "Start face",
+        "side" | "sides" => "Side faces",
+        "bore" => "Bore",
+        "faces" => "Faces",
+        "axis" => "Axis",
+        _ => return id.to_string(),
+    };
+    format!("{what} of {feat}")
+}
+
 /// The selection offered for the next message: outlined, not filled, until it's sent.
 fn offered_chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, id: &str, room: f32) -> Rect {
     let g = ui.fonts_mut(|f| f.layout_no_wrap(format!("@{id}"), mono(11.0), t.ink2));
@@ -2227,7 +2266,7 @@ fn trust_card(ui: &mut Ui, t: &Theme, dir: &str, w: f32, places: &mut Vec<(Strin
         Align2::CENTER_CENTER,
         "Trust",
         medium(12.0),
-        Color32::WHITE,
+        super::theme::ON_FOCUS,
     );
     p.rect_filled(no, 4.0, t.field);
     p.rect_stroke(no, 4.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
