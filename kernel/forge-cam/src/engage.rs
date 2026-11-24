@@ -444,20 +444,25 @@ pub fn schedule_samples(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &
                 let dxy = ((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1])).sqrt();
                 if sched && dxy > 0.0 {
                     let u = [(b[0] - a[0]) / dxy, (b[1] - a[1]) / dxy];
-                    if let Some(e) = map.engage(b, u, r, EPS_Z) {
-                        worst = Some(match worst {
-                            Some(w) if w.cos_max > e.cos_max => Engage {
-                                ap: w.ap.max(e.ap),
-                                ae: w.ae.max(e.ae),
-                                ..w
-                            },
-                            Some(w) => Engage {
-                                ap: w.ap.max(e.ap),
-                                ae: w.ae.max(e.ae),
-                                ..e
-                            },
-                            None => e,
-                        });
+                    // the piece's own cut is what lies ahead of its start (read before it is
+                    // swept); its end reads what lies ahead of it: both count, so a sample never
+                    // takes the air feed for a piece that cuts (a short move into material)
+                    for c in [a, b] {
+                        if let Some(e) = map.engage(c, u, r, EPS_Z) {
+                            worst = Some(match worst {
+                                Some(w) if w.cos_max > e.cos_max => Engage {
+                                    ap: w.ap.max(e.ap),
+                                    ae: w.ae.max(e.ae),
+                                    ..w
+                                },
+                                Some(w) => Engage {
+                                    ap: w.ap.max(e.ap),
+                                    ae: w.ae.max(e.ae),
+                                    ..e
+                                },
+                                None => e,
+                            });
+                        }
                     }
                 }
                 map.sweep(a, b, prof);
