@@ -13,7 +13,8 @@ type Read = Mutex<HashMap<(PathBuf, u64, Option<std::time::SystemTime>), Result<
 /// A model file's triangles in its own coordinates and units.
 pub fn file_tris(path: &Path) -> Result<Arc<Tris>, String> {
     static READ: OnceLock<Read> = OnceLock::new();
-    let meta = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    // through the app's filesystem: std's has no files in a page
+    let meta = forge_dirs::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let key = (path.to_path_buf(), meta.len(), meta.modified().ok());
     let c = READ.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(r) = c.lock().expect("no panics while held").get(&key) {

@@ -224,7 +224,7 @@ fn a_see_through_body_is_blended_in_a_photo() {
         tl.seek(&mut h.gui.shell, k as f64 / 30.0);
         h.step();
     }
-    let mut at = |h: &mut Headless, opacity: f32, name: &str| {
+    let at = |h: &mut Headless, opacity: f32, name: &str| {
         h.gui.shell.sheet.bend_sim.as_mut().unwrap().opacity = opacity;
         for _ in 0..20 {
             h.step();
