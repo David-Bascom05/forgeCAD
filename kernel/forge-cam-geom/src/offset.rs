@@ -62,7 +62,8 @@ type Offsets = Result<(Vec<OLoop>, Stats), OffsetError>;
 /// them), so the same region at the same distance has the same result, counters included. A
 /// pocket's first pass and the opening that records what it cleared are the same offset.
 /// Bounded: emptied when full.
-static MADE: Mutex<Option<HashMap<(u64, u64), Vec<(Region, Offsets)>>>> = Mutex::new(None);
+type Made = HashMap<(u64, u64), Vec<(Region, Offsets)>>;
+static MADE: Mutex<Option<Made>> = Mutex::new(None);
 const MADE_MAX: usize = 512;
 
 /// The offset of a validated region (see the module doc), with its counters.
