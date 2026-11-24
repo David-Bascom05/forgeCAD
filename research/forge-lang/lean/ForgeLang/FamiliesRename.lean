@@ -42,6 +42,7 @@ end
 def renSt (a b : Name) : St → St
   | .bind x e => .bind (ren a b x) (renE a b e)
   | .bindCall x ps f as => .bindCall (ren a b x) (ps.map fun p => (p.1, renE a b p.2)) f (renL a b as)
+  | .exec f as => .exec f (renL a b as)
   | .skip => .skip
 
 mutual
@@ -61,6 +62,7 @@ end
 def Fresh (a b : Name) : St → Prop
   | .bind x e => x ≠ b ∧ b ∉ readsE e
   | .bindCall x ps _ as => x ≠ b ∧ (∀ p ∈ ps, p.1 ≠ a ∧ p.1 ≠ b ∧ b ∉ readsE p.2) ∧ b ∉ readsL as
+  | .exec _ as => b ∉ readsL as
   | .skip => True
 
 /-- The renamed environment reads `ren x` as the old one reads `x`, for every `x` but `b`. -/
@@ -195,13 +197,26 @@ theorem locals_ren (E : ETab S α) (s : S) {a b : Name} {ρ ρ' : Env α} (hr : 
     · rw [g1, g2]; exact .inr ⟨⟨_, rfl⟩, ⟨_, rfl⟩⟩
 
 /-- One statement, renamed: the same state, related environments, the same success. -/
-theorem stmt_ren (E : ETab S α) (T : TTab S α) (s : S) {a b : Name} {ρ ρ' : Env α}
+theorem stmt_ren (E : ETab S α) (T X : TTab S α) (s : S) {a b : Name} {ρ ρ' : Env α}
     (hr : Rel a b ρ ρ') (st : St) (hf : Fresh a b st) :
-    (stmt P E T s ρ' (renSt a b st)).1 = (stmt P E T s ρ st).1 ∧
-      Rel a b (stmt P E T s ρ st).2.1 (stmt P E T s ρ' (renSt a b st)).2.1 ∧
-      Same (stmt P E T s ρ' (renSt a b st)).2.2 (stmt P E T s ρ st).2.2 := by
+    (stmt P E T X s ρ' (renSt a b st)).1 = (stmt P E T X s ρ st).1 ∧
+      Rel a b (stmt P E T X s ρ st).2.1 (stmt P E T X s ρ' (renSt a b st)).2.1 ∧
+      Same (stmt P E T X s ρ' (renSt a b st)).2.2 (stmt P E T X s ρ st).2.2 := by
   cases st with
   | skip => exact ⟨rfl, hr, .ok _⟩
+  | exec f as =>
+    simp only [renSt, stmt]
+    rcases (evalL_ren P E s hr as hf).elim with ⟨vs, g1, g2⟩ | ⟨e1, e2, g1, g2⟩
+    · simp only [g1, g2]
+      cases X.lookup f with
+      | none => exact ⟨rfl, hr, .err _ _⟩
+      | some g =>
+        simp only
+        rcases g s vs with ⟨s', r⟩
+        cases r with
+        | ok v => exact ⟨rfl, hr, .ok _⟩
+        | error e => exact ⟨rfl, hr, .err _ _⟩
+    · simp only [g1, g2]; exact ⟨trivial, hr, .err _ _⟩
   | bind x e =>
     obtain ⟨hx, he⟩ := hf
     simp only [renSt, stmt]
@@ -229,26 +244,26 @@ theorem stmt_ren (E : ETab S α) (T : TTab S α) (s : S) {a b : Name} {ρ ρ' : 
 
 /-- The renamed document runs as the original: the same state after it, related environments,
 and statement by statement the same success. -/
-theorem rename_run (E : ETab S α) (T : TTab S α) {a b : Name} :
+theorem rename_run (E : ETab S α) (T X : TTab S α) {a b : Name} :
     ∀ (sts : List St) (s : S) {ρ ρ' : Env α}, Rel a b ρ ρ' → (∀ st ∈ sts, Fresh a b st) →
-      (run P E T s ρ' (sts.map (renSt a b))).1 = (run P E T s ρ sts).1 ∧
-        Rel a b (run P E T s ρ sts).2.1 (run P E T s ρ' (sts.map (renSt a b))).2.1 ∧
-        All2 Same (run P E T s ρ' (sts.map (renSt a b))).2.2 (run P E T s ρ sts).2.2
+      (run P E T X s ρ' (sts.map (renSt a b))).1 = (run P E T X s ρ sts).1 ∧
+        Rel a b (run P E T X s ρ sts).2.1 (run P E T X s ρ' (sts.map (renSt a b))).2.1 ∧
+        All2 Same (run P E T X s ρ' (sts.map (renSt a b))).2.2 (run P E T X s ρ sts).2.2
   | [], s, ρ, ρ', hr, _ => ⟨rfl, hr, .nil⟩
   | st :: sts, s, ρ, ρ', hr, hf => by
-    obtain ⟨h1, h2, h3⟩ := stmt_ren P E T s hr st (hf st List.mem_cons_self)
-    obtain ⟨g1, g2, g3⟩ := rename_run E T sts (stmt P E T s ρ st).1 h2
+    obtain ⟨h1, h2, h3⟩ := stmt_ren P E T X s hr st (hf st List.mem_cons_self)
+    obtain ⟨g1, g2, g3⟩ := rename_run E T X sts (stmt P E T X s ρ st).1 h2
       (fun t ht => hf t (List.mem_cons_of_mem _ ht))
     simp only [List.map_cons, run]
     rw [h1]
     exact ⟨g1, g2, .cons h3 g3⟩
 
 /-- An accepted machining document stays accepted when renamed, to the same state. -/
-theorem rename_accepted (E : ETab S α) (T : TTab S α) {a b : Name} (sts : List St) (s : S)
-    (hf : ∀ st ∈ sts, Fresh a b st) (ha : Accepted (run P E T s [] sts).2.2) :
-    (run P E T s [] (sts.map (renSt a b))).1 = (run P E T s [] sts).1 ∧
-      Accepted (run P E T s [] (sts.map (renSt a b))).2.2 := by
-  obtain ⟨h1, -, h3⟩ := rename_run P E T sts s (rel_nil a b) hf
+theorem rename_accepted (E : ETab S α) (T X : TTab S α) {a b : Name} (sts : List St) (s : S)
+    (hf : ∀ st ∈ sts, Fresh a b st) (ha : Accepted (run P E T X s [] sts).2.2) :
+    (run P E T X s [] (sts.map (renSt a b))).1 = (run P E T X s [] sts).1 ∧
+      Accepted (run P E T X s [] (sts.map (renSt a b))).2.2 := by
+  obtain ⟨h1, -, h3⟩ := rename_run P E T X sts s (rel_nil a b) hf
   refine ⟨h1, ?_⟩
   intro r hr
   obtain ⟨r0, hr0, hs⟩ := All2.mem_right h3 r hr
