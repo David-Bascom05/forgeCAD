@@ -455,7 +455,7 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
         if b(ui, "camsim:start", Glyph::Start, "To the start (Home)") {
             st.jump(0.0);
         }
-        if b(ui, "camsim:back", Glyph::Back, "Back a move (←)") {
+        if b(ui, "camsim:back", Glyph::Back, "Back a move (Left arrow)") {
             let to = st.sim.tl.step(st.t, true);
             st.jump(to);
         }
@@ -467,7 +467,7 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
         if b(ui, "camsim:play", g, tip) {
             st.toggle_play();
         }
-        if b(ui, "camsim:fwd", Glyph::Forward, "On a move (→)") {
+        if b(ui, "camsim:fwd", Glyph::Forward, "On a move (Right arrow)") {
             let to = st.sim.tl.step(st.t, false);
             st.jump(to);
         }
