@@ -1383,6 +1383,41 @@ fn a_replan_keeps_the_users_stations() {
         "the station stays where the user put it:\n{now}"
     );
     assert!(b.sim.as_ref().is_ok_and(|s| s.plan.feasible), "{:?}", b.note);
+    // a bend locked where it cannot pass (its station's stacks cut to 10 mm): refused, by name,
+    // nothing written (BENDSIM-TOOLS' replan)
+    let line = now
+        .lines()
+        .find(|l| l.contains("= bend("))
+        .expect("a bend")
+        .to_string();
+    let st = line
+        .split("at: ")
+        .nth(1)
+        .and_then(|r| r.split([',', ')']).next())
+        .expect("its station")
+        .trim()
+        .to_string();
+    let sline = now
+        .lines()
+        .find(|l| l.starts_with(&format!("{st} = station(")))
+        .expect("the station")
+        .to_string();
+    let short = cut_lengths(&sline);
+    let locked = now
+        .replace(&line, &line.replacen(')', ", lock: true)", 1))
+        .replace(&sline, &short);
+    std::fs::write(&file, &locked).unwrap();
+    b.reload();
+    let (c, t) = (b.choice.clone(), b.tooling.clone());
+    b.redo(c, &t);
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), locked, "nothing written");
+    let note = b.note.clone().unwrap_or_default();
+    assert!(
+        note.contains("locked") && note.contains("unlock"),
+        "{note}\n{locked}"
+    );
+    std::fs::write(&file, &now).unwrap();
+    b.reload();
     // stations laid out afresh: asked first, nothing written until the user says so
     let mut c = b.choice.clone();
     c.stations_auto = true;
@@ -1584,4 +1619,20 @@ fn shots_for_ux_lead() {
     b.reload();
     b.pending_replace = Some((b.choice.clone(), b.tooling.clone()));
     shot(&mut h, "ux-replan-question");
+}
+
+/// A station's line with every stack length (`length: N`, `punch_length: N`, `die_length: N`)
+/// cut to 10 mm.
+fn cut_lengths(line: &str) -> String {
+    let mut out = String::new();
+    let mut rest = line;
+    while let Some(i) = rest.find("length: ") {
+        out.push_str(&rest[..i + 8]);
+        rest = &rest[i + 8..];
+        let end = rest.find([',', ')']).unwrap_or(rest.len());
+        out.push_str("10");
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
 }

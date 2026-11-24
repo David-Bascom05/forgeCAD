@@ -412,29 +412,18 @@ impl BendSimUi {
         self.note = None;
         let Some(d) = self.doc.as_ref() else { return };
         let dir = dir_of(&self.path);
-        let run = forge_bend_lang::run_with(&d.src, &self.source, dir.as_deref());
-        let mut ask = run.doc.ask();
-        ask.sequence = None;
-        ask.steps = Vec::new();
-        ask.programs = None;
-        let part = std::path::Path::new(&self.path)
-            .file_name()
-            .map(|f| f.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        match simulate(&self.source, dir, None, &ask) {
-            Ok(sim) if sim.plan.feasible => {
-                let text = forge_bend_lang::document(&part, None, self.choice.press.as_deref(), &self.tooling, &sim);
+        // BENDSIM-TOOLS' replan: the order planned around the document's stations and locks,
+        // the document rewritten (its stations, comments and locks kept); refused, nothing written
+        match forge_bend_lang::replan(&d.src, &self.source, dir.as_deref()) {
+            Ok((text, _)) => {
                 if let Err(e) = self.commit_doc(text) {
                     self.note = Some(e);
                 }
             }
-            Ok(_) => {
-                self.note = Some(
-                    "no feasible order with the document's stations: the program is kept; Plan Stations lays out new ones"
-                        .into(),
-                )
+            Err(why) => {
+                let lines: Vec<String> = why.iter().map(|(at, w)| format!("{at}: {w}")).collect();
+                self.note = Some(format!("The program is kept. {}", lines.join("; ")));
             }
-            Err(a) => self.note = Some(a.text),
         }
     }
 
