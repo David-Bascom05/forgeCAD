@@ -748,8 +748,8 @@ pub fn clean(p: &str) -> Result<PathBuf, String> {
 }
 
 /// A file of the served project: as `clean`, and the project's own git repository too (the
-/// page's Versions keep its history there): `.git/...` at the root (not its hooks, which git
-/// would run) and the root's `.gitignore`. No other dot path.
+/// page's Versions keep its history there): the root's `.gitignore`, and in the root's `.git`
+/// only what forge-git keeps (`GIT_FILES`, `GIT_DIRS`). No other dot path.
 pub fn clean_project(p: &str) -> Result<PathBuf, String> {
     let refused = || Err(format!("{p}: not a project path"));
     if p == ".gitignore" {
@@ -759,10 +759,56 @@ pub fn clean_project(p: &str) -> Result<PathBuf, String> {
         return clean(p);
     };
     let rest = clean(rest)?;
-    if rest.starts_with("hooks") {
+    if !git_allowed(&rest) {
         return refused();
     }
     Ok(Path::new(".git").join(rest))
+}
+
+/// The files in `.git` forge-git reads and writes, and so the page may: anything else there
+/// (`commondir`, `gitdir`, `config.worktree`, `modules/`, `worktrees/`, `hooks/`,
+/// `objects/info/alternates`, ...) can make the machine's own `git` run a program or read
+/// elsewhere, and is refused. An allowlist: what git adds later is refused until it's here.
+const GIT_FILES: [&str; 8] = [
+    "HEAD",
+    "index",
+    "config",
+    "description",
+    "packed-refs",
+    "ORIG_HEAD",
+    "COMMIT_EDITMSG",
+    "info/exclude",
+];
+/// The folders in `.git` whose every file is data: objects (not `objects/info`), refs, reflogs,
+/// and ForgeCAD's own (`forgecad/history-v1`, forge-history's saves list), which git never reads.
+const GIT_DIRS: [&str; 4] = ["objects", "refs", "logs", "forgecad"];
+
+/// `rel` (inside `.git`, already `clean`) is one of forge-git's own.
+fn git_allowed(rel: &Path) -> bool {
+    let parts: Vec<String> = rel
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    let whole = parts.join("/");
+    if GIT_FILES.contains(&whole.as_str()) {
+        return true;
+    }
+    // forge-git's own passing files beside them, which git never runs: a file's lock
+    // (`index.lock`, renamed over `index` on the page's side; here each is written whole, the
+    // config through its check, and nothing in .git is renamed) and a new file's temporary
+    // (`tmp_obj_…`)
+    if let [one] = parts.as_slice()
+        && (one.strip_suffix(".lock").is_some_and(|f| GIT_FILES.contains(&f))
+            || one
+                .strip_prefix("tmp_obj_")
+                .is_some_and(|t| !t.is_empty() && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')))
+    {
+        return true;
+    }
+    match parts.as_slice() {
+        [dir, _, ..] if GIT_DIRS.contains(&dir.as_str()) => !(dir == "objects" && parts[1] == "info"),
+        _ => false,
+    }
 }
 
 /// What a page may write as the repository's `.git/config`: what forge-git writes, keys git
@@ -839,11 +885,31 @@ fn walk(c: &Config) -> Vec<(String, Vec<u8>)> {
             let name = e.file_name().to_string_lossy().into_owned();
             // the project's own repository (its history), as `clean_project` allows
             let git = d == c.root && (name == ".gitignore" || (name == ".git" && git_small(&e.path())));
-            if name.starts_with('.') && !git || (name == "hooks" && d == c.root.join(".git")) {
+            if name.starts_with('.') && !git {
                 continue;
             }
-            let Ok(ft) = e.file_type() else { continue };
+            // in .git, only forge-git's own files, as `clean_project` allows (a folder is
+            // walked if anything in it can be)
             let p = e.path();
+            if let Ok(rel) = p.strip_prefix(c.root.join(".git")) {
+                let file = e.file_type().is_ok_and(|t| t.is_file());
+                let rel = rel.to_string_lossy();
+                let fine = if rel.is_empty() {
+                    true
+                } else if file {
+                    clean_project(&format!(".git/{rel}")).is_ok()
+                } else {
+                    GIT_DIRS
+                        .iter()
+                        .any(|g| rel == *g || rel.starts_with(&format!("{g}/")))
+                        && !rel.starts_with("objects/info")
+                        || GIT_FILES.iter().any(|f| f.starts_with(&format!("{rel}/")))
+                };
+                if !fine {
+                    continue;
+                }
+            }
+            let Ok(ft) = e.file_type() else { continue };
             if ft.is_dir() {
                 dirs.push(p);
             } else if ft.is_file()
@@ -1066,6 +1132,11 @@ fn rename(c: &Config, body: &[u8]) -> Response {
         (Ok(a), Ok(b)) => (a, b),
         (Err(e), _) | (_, Err(e)) => return error(400, &e),
     };
+    // the repository's files are written whole, never renamed: a rename onto `.git/config`
+    // would skip the check its writes get
+    if from.starts_with(".git") || to.starts_with(".git") {
+        return error(400, "a file in .git is written, not renamed");
+    }
     let (a, b) = match (place(c, &from), place(c, &to)) {
         (Ok(a), Ok(b)) => (a, b),
         (Err(r), _) | (_, Err(r)) => return r,
@@ -1165,7 +1236,38 @@ mod tests {
         ] {
             assert!(clean_project(ok).is_ok(), "{ok}");
         }
+        for ok in [
+            ".git/index.lock",
+            ".git/HEAD.lock",
+            ".git/config.lock",
+            ".git/tmp_obj_123_0_456",
+            ".git/HEAD",
+            ".git/index",
+            ".git/packed-refs",
+            ".git/logs/HEAD",
+            ".git/logs/refs/heads/main",
+            ".git/objects/pack/pack-1.pack",
+            ".git/info/exclude",
+            ".git/forgecad/history-v1",
+        ] {
+            assert!(clean_project(ok).is_ok(), "{ok}");
+        }
+        // anything else in .git can make the machine's git run a program, or read elsewhere
         for bad in [
+            ".git/commondir",
+            ".git/gitdir",
+            ".git/config.worktree",
+            ".git/modules/sub/config",
+            ".git/modules/sub/hooks/post-checkout",
+            ".git/worktrees/w/commondir",
+            ".git/objects/info/alternates",
+            ".git/info/attributes",
+            ".git/commondir.lock",
+            ".git/tmp_obj_",
+            ".git/info",
+            ".git/refs",
+            ".git/hooks",
+            ".git/HEAD/x",
             ".git/hooks/pre-commit",
             ".git/../x",
             ".git/a/.b",
@@ -1246,6 +1348,73 @@ mod tests {
         );
         assert_eq!(s, 400);
         assert!(!root.join(".git/hooks/post-commit").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The review's attack: `.git/commondir` pointing at a folder whose `config` sets
+    /// `core.fsmonitor`, so the machine's next `git status` runs it. Nothing in `.git` but
+    /// forge-git's own files is written, renamed to, or even listed.
+    #[test]
+    fn nothing_in_git_but_its_data_is_written_or_listed() {
+        let (at, root) = started(None, true);
+        for path in [
+            ".git/commondir",
+            ".git/gitdir",
+            ".git/config.worktree",
+            ".git/modules/sub/config",
+            ".git/modules/sub/hooks/post-checkout",
+            ".git/worktrees/w/commondir",
+            ".git/objects/info/alternates",
+            ".git/info/attributes",
+        ] {
+            let (s, _, _) = call(
+                at,
+                "PUT",
+                &format!("/api/files/{path}"),
+                &[("If-None-Match", "*")],
+                b"../evil\n",
+            );
+            assert_eq!(s, 400, "{path}");
+            assert!(!root.join(path).exists(), "{path}");
+            // nor by a rename onto it
+            let body = format!("{{\"from\":\"part.fg\",\"to\":\"{path}\"}}");
+            let (s, _, _) = call(at, "POST", "/api/rename", &[], body.as_bytes());
+            assert_eq!(s, 400, "rename to {path}");
+        }
+        assert!(root.join("part.fg").exists());
+        // a written config is checked, so it can't come by a rename either
+        let (s, _, _) = call(
+            at,
+            "PUT",
+            "/api/files/.git/HEAD.lock",
+            &[("If-None-Match", "*")],
+            b"x",
+        );
+        assert_eq!(s, 200, "a lock beside HEAD, as forge-git makes");
+        let (s, _, _) = call(
+            at,
+            "POST",
+            "/api/rename",
+            &[],
+            br#"{"from":".git/HEAD.lock","to":".git/config"}"#,
+        );
+        assert_eq!(s, 400);
+        // the attack's second half, a config elsewhere in the project, is just a file: inert
+        // without commondir; and planted on disk by other means, none is listed or read
+        std::fs::write(root.join(".git/commondir"), "../evil\n").unwrap();
+        std::fs::create_dir_all(root.join(".git/modules/sub")).unwrap();
+        std::fs::write(root.join(".git/modules/sub/config"), "[core]\n\tfsmonitor = x\n").unwrap();
+        std::fs::write(root.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+        let (_, _, b) = call(at, "GET", "/api/files", &[], b"");
+        let listed = String::from_utf8_lossy(&b);
+        assert!(listed.contains("\".git/HEAD\""), "{listed}");
+        for hidden in ["commondir", "modules", "hooks"] {
+            assert!(!listed.contains(hidden), "{hidden} listed: {listed}");
+        }
+        let (s, _, _) = call(at, "GET", "/api/files/.git/commondir", &[], b"");
+        assert_eq!(s, 400);
+        let (_, _, b) = call(at, "GET", "/api/bundle", &[], b"");
+        assert!(!String::from_utf8_lossy(&b).contains("commondir"));
         let _ = std::fs::remove_dir_all(&root);
     }
 
