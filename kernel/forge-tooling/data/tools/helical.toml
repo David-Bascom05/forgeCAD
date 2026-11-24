@@ -18,7 +18,7 @@ product_id = "00015"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-00015"
 taken = "2026-11-23"
-note = "2 Flute, Square - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "2 Flute, Square - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -264,7 +264,7 @@ product_id = "00090"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-00090"
 taken = "2026-11-23"
-note = "2 Flute, Square - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "2 Flute, Square - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -510,7 +510,7 @@ product_id = "00150"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-00150"
 taken = "2026-11-23"
-note = "2 Flute, Square - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "2 Flute, Square - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -756,7 +756,7 @@ product_id = "00330"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-00330"
 taken = "2026-11-23"
-note = "2 Flute, Square - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "2 Flute, Square - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -1002,7 +1002,7 @@ product_id = "00435"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-00435"
 taken = "2026-11-23"
-note = "2 Flute, Square - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "2 Flute, Square - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -1248,7 +1248,7 @@ product_id = "17150"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-17150"
 taken = "2026-11-23"
-note = "2 Flute, Ball - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "2 Flute, Ball - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -1494,7 +1494,7 @@ product_id = "17330"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-17330"
 taken = "2026-11-23"
-note = "2 Flute, Ball - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "2 Flute, Ball - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -1740,7 +1740,7 @@ product_id = "17435"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-17435"
 taken = "2026-11-23"
-note = "2 Flute, Ball - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "2 Flute, Ball - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -2240,7 +2240,7 @@ product_id = "82353"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-82353"
 taken = "2026-11-23"
-note = "2 Flute - Corner Radius - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "2 Flute - Corner Radius - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -2493,7 +2493,7 @@ product_id = "82365"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-82365"
 taken = "2026-11-23"
-note = "2 Flute - Corner Radius - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "2 Flute - Corner Radius - 45° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -2745,7 +2745,7 @@ product_id = "01015"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-01015"
 taken = "2026-11-23"
-note = "3 Flute, Square - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "3 Flute, Square - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -2991,7 +2991,7 @@ product_id = "01090"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-01090"
 taken = "2026-11-23"
-note = "3 Flute, Square - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "3 Flute, Square - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -3237,7 +3237,7 @@ product_id = "01150"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-01150"
 taken = "2026-11-23"
-note = "3 Flute, Square - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "3 Flute, Square - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -3483,7 +3483,7 @@ product_id = "01330"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-01330"
 taken = "2026-11-23"
-note = "3 Flute, Square - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "3 Flute, Square - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -3729,7 +3729,7 @@ product_id = "01435"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-01435"
 taken = "2026-11-23"
-note = "3 Flute, Square - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "3 Flute, Square - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -4714,7 +4714,7 @@ product_id = "59038"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-59038"
 taken = "2026-11-23"
-note = "3 Flute, Corner Radius - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "3 Flute, Corner Radius - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -4967,7 +4967,7 @@ product_id = "59086"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-59086"
 taken = "2026-11-23"
-note = "3 Flute, Corner Radius - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "3 Flute, Corner Radius - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -5220,7 +5220,7 @@ product_id = "59116"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-59116"
 taken = "2026-11-23"
-note = "3 Flute, Corner Radius - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "3 Flute, Corner Radius - 35° Helix, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -5472,7 +5472,7 @@ product_id = "59690"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-59690"
 taken = "2026-11-23"
-note = "3 Flute, Square - 35° Helix, Metric, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "3 Flute, Square - 35° Helix, Metric, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -5538,7 +5538,7 @@ product_id = "59702"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-59702"
 taken = "2026-11-23"
-note = "3 Flute, Square - 35° Helix, Metric, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "3 Flute, Square - 35° Helix, Metric, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -5604,7 +5604,7 @@ product_id = "59708"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-59708"
 taken = "2026-11-23"
-note = "3 Flute, Square - 35° Helix, Metric, End Mills for Aluminum Alloys & Non-Ferrous Materials"
+note = "3 Flute, Square - 35° Helix, Metric, End Mills for Aluminum Alloys & Non-Ferrous Materials; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -5669,7 +5669,7 @@ product_id = "30017"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-30017"
 taken = "2026-11-23"
-note = "4 Flute, Square - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Square - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -7828,7 +7828,7 @@ product_id = "30077"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-30077"
 taken = "2026-11-23"
-note = "4 Flute, Square - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Square - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -9987,7 +9987,7 @@ product_id = "30137"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-30137"
 taken = "2026-11-23"
-note = "4 Flute, Square - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Square - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -12146,7 +12146,7 @@ product_id = "30317"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-30317"
 taken = "2026-11-23"
-note = "4 Flute, Square - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Square - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -14305,7 +14305,7 @@ product_id = "30497"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-30497"
 taken = "2026-11-23"
-note = "4 Flute, Square - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Square - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -16464,7 +16464,7 @@ product_id = "56137"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-56137"
 taken = "2026-11-23"
-note = "4 Flute, Ball - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Ball - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -18623,7 +18623,7 @@ product_id = "56317"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-56317"
 taken = "2026-11-23"
-note = "4 Flute, Ball - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Ball - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -20782,7 +20782,7 @@ product_id = "56497"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-56497"
 taken = "2026-11-23"
-note = "4 Flute, Ball - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Ball - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -22942,7 +22942,7 @@ product_id = "43137"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-43137"
 taken = "2026-11-23"
-note = "4 Flute, Corner Radius - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Corner Radius - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -25108,7 +25108,7 @@ product_id = "43317"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-43317"
 taken = "2026-11-23"
-note = "4 Flute, Corner Radius - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Corner Radius - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -27274,7 +27274,7 @@ product_id = "31497"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-31497"
 taken = "2026-11-23"
-note = "4 Flute, Corner Radius - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Corner Radius - Variable Pitch (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -29439,7 +29439,7 @@ product_id = "59458"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-59458"
 taken = "2026-11-23"
-note = "4 Flute, Square - Variable Pitch - Metric (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Square - Variable Pitch - Metric (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -29498,7 +29498,7 @@ product_id = "59464"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-59464"
 taken = "2026-11-23"
-note = "4 Flute, Square - Variable Pitch - Metric (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Square - Variable Pitch - Metric (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -29557,7 +29557,7 @@ product_id = "59467"
 real = true
 source = "https://www.helicaltool.com/products/tool-details-59467"
 taken = "2026-11-23"
-note = "4 Flute, Square - Variable Pitch - Metric (Aplus), End Mills for Steels, Tool Steels, & Cast Iron"
+note = "4 Flute, Square - Variable Pitch - Metric (Aplus), End Mills for Steels, Tool Steels, & Cast Iron; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"

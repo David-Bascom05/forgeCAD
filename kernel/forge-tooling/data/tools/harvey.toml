@@ -1230,7 +1230,7 @@ product_id = "942316"
 real = true
 source = "https://www.harveytool.com/products/tool-details-942316"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific End Mills"
+note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -1836,7 +1836,7 @@ product_id = "942324"
 real = true
 source = "https://www.harveytool.com/products/tool-details-942324"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific End Mills"
+note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -2442,7 +2442,7 @@ product_id = "942332"
 real = true
 source = "https://www.harveytool.com/products/tool-details-942332"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific End Mills"
+note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -3048,7 +3048,7 @@ product_id = "900457"
 real = true
 source = "https://www.harveytool.com/products/tool-details-900457"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific End Mills"
+note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -3114,7 +3114,7 @@ product_id = "900466"
 real = true
 source = "https://www.harveytool.com/products/tool-details-900466"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific End Mills"
+note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -3180,7 +3180,7 @@ product_id = "989808"
 real = true
 source = "https://www.harveytool.com/products/tool-details-989808"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Aluminum Alloys - Ball, Material Specific End Mills"
+note = "Variable Helix End Mills for Aluminum Alloys - Ball, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -3786,7 +3786,7 @@ product_id = "989816"
 real = true
 source = "https://www.harveytool.com/products/tool-details-989816"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Aluminum Alloys - Ball, Material Specific End Mills"
+note = "Variable Helix End Mills for Aluminum Alloys - Ball, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -5605,7 +5605,7 @@ product_id = "904208"
 real = true
 source = "https://www.harveytool.com/products/tool-details-904208"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Aluminum Alloys - Corner Radius, Material Specific End Mills"
+note = "Variable Helix End Mills for Aluminum Alloys - Corner Radius, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -6218,7 +6218,7 @@ product_id = "904216"
 real = true
 source = "https://www.harveytool.com/products/tool-details-904216"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Aluminum Alloys - Corner Radius, Material Specific End Mills"
+note = "Variable Helix End Mills for Aluminum Alloys - Corner Radius, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -6831,7 +6831,7 @@ product_id = "904224"
 real = true
 source = "https://www.harveytool.com/products/tool-details-904224"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Aluminum Alloys - Corner Radius, Material Specific End Mills"
+note = "Variable Helix End Mills for Aluminum Alloys - Corner Radius, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N slot"
 group = "N"
@@ -8056,7 +8056,7 @@ product_id = "958608-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-958608-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -8347,7 +8347,7 @@ product_id = "958612-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-958612-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -8638,7 +8638,7 @@ product_id = "958616-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-958616-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -9220,7 +9220,7 @@ product_id = "958624-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-958624-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -9802,7 +9802,7 @@ product_id = "945957-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-945957-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -9868,7 +9868,7 @@ product_id = "945972-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-945972-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -9934,7 +9934,7 @@ product_id = "971908-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-971908-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Ball, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Ball, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -10225,7 +10225,7 @@ product_id = "971912-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-971912-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Ball, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Ball, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -10516,7 +10516,7 @@ product_id = "971916-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-971916-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Ball, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Ball, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -10807,7 +10807,7 @@ product_id = "927908-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-927908-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Corner Radius, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Corner Radius, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -11098,7 +11098,7 @@ product_id = "45716-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-45716-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Corner Radius, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Corner Radius, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -11389,7 +11389,7 @@ product_id = "45724-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-45724-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Corner Radius, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Corner Radius, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -11680,7 +11680,7 @@ product_id = "52732-c3"
 real = true
 source = "https://www.harveytool.com/products/tool-details-52732-c3"
 taken = "2026-11-23"
-note = "Variable Helix End Mills for Medium Alloy Steels - Corner Radius, Material Specific End Mills"
+note = "Variable Helix End Mills for Medium Alloy Steels - Corner Radius, Material Specific End Mills; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P slot"
 group = "P"
@@ -11971,7 +11971,7 @@ product_id = "816108"
 real = true
 source = "https://www.harveytool.com/products/tool-details-816108"
 taken = "2026-11-23"
-note = "Miniature Drills - Spotting Drills, Holemaking & Threading"
+note = "Miniature Drills - Spotting Drills, Holemaking & Threading; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -12037,7 +12037,7 @@ product_id = "803916"
 real = true
 source = "https://www.harveytool.com/products/tool-details-803916"
 taken = "2026-11-23"
-note = "Miniature Drills - Spotting Drills, Holemaking & Threading"
+note = "Miniature Drills - Spotting Drills, Holemaking & Threading; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -12235,7 +12235,7 @@ product_id = "20375"
 real = true
 source = "https://www.harveytool.com/products/tool-details-20375"
 taken = "2026-11-23"
-note = "Miniature Drills, Holemaking & Threading"
+note = "Miniature Drills, Holemaking & Threading; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -12301,7 +12301,7 @@ product_id = "20498"
 real = true
 source = "https://www.harveytool.com/products/tool-details-20498"
 taken = "2026-11-23"
-note = "Miniature Drills, Holemaking & Threading"
+note = "Miniature Drills, Holemaking & Threading; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"

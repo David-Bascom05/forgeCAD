@@ -316,6 +316,31 @@ def preset(vendor, ty, f, r, x, name, how):
     return dict(name=name, group=g, vc=vc, fz=fz, ap=ap, ae=ae, cite=cite)
 
 
+CROSSCHECK = os.path.join(os.path.dirname(RAW), "crosscheck.toml")
+
+
+def crosscheck():
+    """(conflicts {(vendor, product id): [field]}, agreed {(vendor, product id)}) from
+    tools/tooling/crosscheck.py's output: our own words, no library value."""
+    conf, agree, cur = collections.defaultdict(list), set(), None
+    if os.path.exists(CROSSCHECK):
+        for line in open(CROSSCHECK):
+            line = line.strip()
+            if line in ("[[conflict]]", "[[agree]]"):
+                cur = {"kind": line}
+            elif " = " in line and cur is not None:
+                k, v = line.split(" = ", 1)
+                cur[k] = json.loads(v)
+                if cur["kind"] == "[[conflict]]" and "field" in cur:
+                    conf[(cur["vendor"], cur["product_id"])].append(cur["field"])
+                elif cur["kind"] == "[[agree]]" and "product_id" in cur:
+                    agree.add((cur["vendor"], cur["product_id"]))
+    return conf, agree
+
+
+CONFLICTS, AGREED = crosscheck()
+
+
 def tool(vendor, r, out, skips):
     vals = r["values"]
     ty = TOOL_TYPES.get(r["kind"])
@@ -395,8 +420,16 @@ def tool(vendor, r, out, skips):
         cites.append(pub("helix", r, stated(r, "helix")))
     presets = make_presets(vendor, ty, f, r, skips)
     tid = f"{vendor}-{r['id']}"
+    note = r.get("name", "")[:140]
+    if (vendor, r["id"]) in AGREED:
+        note += "; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
+    for fld in CONFLICTS.get((vendor, r["id"]), []):
+        cites.append(dict(path=fld, status="conflict", source=r["url"], taken=r.get("taken", TAKEN),
+                          value=next((c["value"] for c in cites if c["path"] == fld), ""),
+                          note="the maker's own Fusion tool library (cross-checked 2026-11-24) disagrees with this "
+                               "catalogue page; the record holds the catalogue's value: verify with the maker"))
     head = dict(id=tid, type=ty, **f, vendor=VENDORS[vendor], product_id=r["id"], real=True,
-                source=r["url"], taken=r.get("taken", TAKEN), note=r.get("name", "")[:140])
+                source=r["url"], taken=r.get("taken", TAKEN), note=note)
     out.lines.append("[[tool]]")
     for k, v in head.items():
         if v is not None and v != "":

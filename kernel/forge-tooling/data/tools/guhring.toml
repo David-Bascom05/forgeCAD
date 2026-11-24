@@ -17,7 +17,7 @@ product_id = "9055100030000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 3.00 mm"
+note = "3xD Ratio drills, Series 5510, 3.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -76,7 +76,7 @@ product_id = "9055100060000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 6.00 mm"
+note = "3xD Ratio drills, Series 5510, 6.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -135,7 +135,7 @@ product_id = "9055100063500"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 6.35 mm"
+note = "3xD Ratio drills, Series 5510, 6.35 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N general"
 group = "N"
@@ -337,7 +337,7 @@ product_id = "9055100065300"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 6.53 mm"
+note = "3xD Ratio drills, Series 5510, 6.53 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -396,7 +396,7 @@ product_id = "9055100068000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 6.80 mm"
+note = "3xD Ratio drills, Series 5510, 6.80 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -455,7 +455,7 @@ product_id = "9055100040000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 4.00 mm"
+note = "3xD Ratio drills, Series 5510, 4.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -514,7 +514,7 @@ product_id = "9055100079400"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 7.94 mm"
+note = "3xD Ratio drills, Series 5510, 7.94 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -573,7 +573,7 @@ product_id = "9055100050000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 5.00 mm"
+note = "3xD Ratio drills, Series 5510, 5.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -632,7 +632,7 @@ product_id = "9055100080000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 8.00 mm"
+note = "3xD Ratio drills, Series 5510, 8.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -691,7 +691,7 @@ product_id = "9055100051100"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 5.11 mm"
+note = "3xD Ratio drills, Series 5510, 5.11 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -750,7 +750,7 @@ product_id = "9055100085000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 8.50 mm"
+note = "3xD Ratio drills, Series 5510, 8.50 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -809,7 +809,7 @@ product_id = "9055100095200"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 9.52 mm"
+note = "3xD Ratio drills, Series 5510, 9.52 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N general"
 group = "N"
@@ -1011,7 +1011,7 @@ product_id = "9055100100000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 10.00 mm"
+note = "3xD Ratio drills, Series 5510, 10.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1070,7 +1070,7 @@ product_id = "9055100102000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 10.20 mm"
+note = "3xD Ratio drills, Series 5510, 10.20 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1129,7 +1129,7 @@ product_id = "9055100120000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
 taken = "2026-11-23"
-note = "3xD Ratio drills, Series 5510, 12.00 mm"
+note = "3xD Ratio drills, Series 5510, 12.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1188,7 +1188,7 @@ product_id = "9006510030000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 3.00 mm"
+note = "Jobber length drills, Series 651, 3.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1247,7 +1247,7 @@ product_id = "9006510040000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 4.00 mm"
+note = "Jobber length drills, Series 651, 4.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1306,7 +1306,7 @@ product_id = "9006510050000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 5.00 mm"
+note = "Jobber length drills, Series 651, 5.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1365,7 +1365,7 @@ product_id = "9006510079400"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 7.94 mm"
+note = "Jobber length drills, Series 651, 7.94 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1424,7 +1424,7 @@ product_id = "9006510080000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 8.00 mm"
+note = "Jobber length drills, Series 651, 8.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1483,7 +1483,7 @@ product_id = "9006510051100"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 5.11 mm"
+note = "Jobber length drills, Series 651, 5.11 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1542,7 +1542,7 @@ product_id = "9006510085000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 8.50 mm"
+note = "Jobber length drills, Series 651, 8.50 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1601,7 +1601,7 @@ product_id = "9006510060000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 6.00 mm"
+note = "Jobber length drills, Series 651, 6.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1660,7 +1660,7 @@ product_id = "9006510095200"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 9.52 mm"
+note = "Jobber length drills, Series 651, 9.52 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P general"
 group = "P"
@@ -1784,7 +1784,7 @@ product_id = "9006510063500"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 6.35 mm"
+note = "Jobber length drills, Series 651, 6.35 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "P general"
 group = "P"
@@ -1908,7 +1908,7 @@ product_id = "9006510065300"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 6.53 mm"
+note = "Jobber length drills, Series 651, 6.53 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1967,7 +1967,7 @@ product_id = "9006510100000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 10.00 mm"
+note = "Jobber length drills, Series 651, 10.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2026,7 +2026,7 @@ product_id = "9006510068000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 6.80 mm"
+note = "Jobber length drills, Series 651, 6.80 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2085,7 +2085,7 @@ product_id = "9006510102000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 10.20 mm"
+note = "Jobber length drills, Series 651, 10.20 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2144,7 +2144,7 @@ product_id = "9006510120000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
 taken = "2026-11-23"
-note = "Jobber length drills, Series 651, 12.00 mm"
+note = "Jobber length drills, Series 651, 12.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2202,7 +2202,7 @@ product_id = "9005570030000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)"
 taken = "2026-11-23"
-note = "90° NC spot drills, Series 557, 3.00 mm"
+note = "90° NC spot drills, Series 557, 3.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2254,7 +2254,7 @@ product_id = "9005570040000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)"
 taken = "2026-11-23"
-note = "90° NC spot drills, Series 557, 4.00 mm"
+note = "90° NC spot drills, Series 557, 4.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2306,7 +2306,7 @@ product_id = "9005570050000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)"
 taken = "2026-11-23"
-note = "90° NC spot drills, Series 557, 5.00 mm"
+note = "90° NC spot drills, Series 557, 5.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2358,7 +2358,7 @@ product_id = "9005570060000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)"
 taken = "2026-11-23"
-note = "90° NC spot drills, Series 557, 6.00 mm"
+note = "90° NC spot drills, Series 557, 6.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2410,7 +2410,7 @@ product_id = "9005570063500"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)"
 taken = "2026-11-23"
-note = "90° NC spot drills, Series 557, 6.35 mm"
+note = "90° NC spot drills, Series 557, 6.35 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N general"
 group = "N"
@@ -2579,7 +2579,7 @@ product_id = "9005570080000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)"
 taken = "2026-11-23"
-note = "90° NC spot drills, Series 557, 8.00 mm"
+note = "90° NC spot drills, Series 557, 8.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2631,7 +2631,7 @@ product_id = "9005570095200"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)"
 taken = "2026-11-23"
-note = "90° NC spot drills, Series 557, 9.52 mm"
+note = "90° NC spot drills, Series 557, 9.52 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.preset]]
 name = "N general"
 group = "N"
@@ -2800,7 +2800,7 @@ product_id = "9005570100000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)"
 taken = "2026-11-23"
-note = "90° NC spot drills, Series 557, 10.00 mm"
+note = "90° NC spot drills, Series 557, 10.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2852,7 +2852,7 @@ product_id = "9005570120000"
 real = true
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)"
 taken = "2026-11-23"
-note = "90° NC spot drills, Series 557, 12.00 mm"
+note = "90° NC spot drills, Series 557, 12.00 mm; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
 [[tool.cite]]
 path = "dc"
 status = "published"

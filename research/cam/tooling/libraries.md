@@ -43,6 +43,17 @@ no sign-up, login, email form or bot-challenge bypass.
   master catalogue.
 - The "local path" column refers to the survey's download directory (not in the repository).
 
+## Cross-check of our catalogue-cited records (2026-11-24)
+
+`tools/tooling/crosscheck.py` against the cached libraries, matched by product id; compared dc,
+lcf, dcon (SFDM), oal, nof and re (bull) after exact inch conversion, 0.01 mm tolerance:
+- matched: Guhring 46, Helical 35, Harvey 27, Tormach 2; not in the libraries: Harvey 11,
+  Helical 7, Tormach 15, OSG 40 (our OSG records are drills; the OSG library is end mills);
+- 473 compared values agree, 0 disagree: no conflict cites. 110 records are noted "cross-checked"
+  (research/cam/tooling/crosscheck.toml, our ids only);
+- drill flute lengths are not compared: Fusion's LCF on a drill runs to the point (the libraries'
+  own descriptions give the flute length our records hold), 50 values.
+
 ---
 
 
