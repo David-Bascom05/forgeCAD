@@ -163,6 +163,22 @@ pub fn pick_file(title: Option<&str>, kind: &str, exts: &[&str]) -> Option<Strin
     }
 }
 
+/// A folder, by the system's picker (natively; the browser's downloads have no folder: None).
+pub fn pick_folder(title: &str) -> Option<String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        rfd::FileDialog::new()
+            .set_title(title)
+            .pick_folder()
+            .map(|p| p.to_string_lossy().into_owned())
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = title;
+        None
+    }
+}
+
 /// A small value kept between sessions (settings, an endpoint's key): natively in the config
 /// directory; in the browser in the page's `localStorage`, under `forgecad:KEY`.
 pub fn kv_get(key: &str) -> Option<String> {

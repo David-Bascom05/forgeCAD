@@ -133,6 +133,8 @@ fn a_body_with_no_envelope_is_left_out_and_reported() {
         seg_la: Vec::new(),
         t_scurve: 0.0,
         seg_scurve: Vec::new(),
+        after_skip: Vec::new(),
+        skip_unmodelled: Vec::new(),
     };
     let u = sim::unchecked(m, &tl);
     assert!(
@@ -548,4 +550,290 @@ fn g91_g28_z0_homes_z_without_a_known_position() {
     assert!(sim::simulate("G91 G28 Z5.\n", &s).is_err());
     // and the same word list reads as before where the position is known
     sim::simulate("G90 G0 X0 Y0 Z10.\nG91 G28 Z5.\nG90\n", &s).unwrap();
+}
+
+/// GRBL has no M6: forge-post writes the tool as a comment, then M0. The M0 changes the tool.
+#[test]
+fn grbl_s_tool_comment_and_m0_change_the_tool() {
+    let src = vmc3()
+        .replacen("pockets = 24\n", "kind = \"manual\"\n", 1)
+        .replacen("max_tool_kg = 8\n", "", 1);
+    let m = &MachineDef::parse_all(&src).unwrap()[0];
+    let c = Control::for_dialect(m, "grbl", 1).unwrap();
+    assert_eq!(c.lex.tool_comment.as_deref(), Some("TOOL "));
+    let (blocks, _) = forge_machine::gcode::run("(TOOL 3: 6 mm end mill)\nM0\nG0 X0 Y0\n", &c).unwrap();
+    let evs: Vec<&forge_machine::gcode::Ev> = blocks.iter().map(|b| &b.ev).collect();
+    let stop = evs
+        .iter()
+        .position(|e| **e == forge_machine::gcode::Ev::Stop { optional: false })
+        .unwrap();
+    assert_eq!(
+        evs[stop + 1],
+        &forge_machine::gcode::Ev::Tool { t: 3, offset: None }
+    );
+    // a plain M0 (no tool comment before it) is only a stop
+    let (blocks, _) = forge_machine::gcode::run("(check the clamp)\nM0\n", &c).unwrap();
+    assert!(
+        !blocks
+            .iter()
+            .any(|b| matches!(b.ev, forge_machine::gcode::Ev::Tool { .. }))
+    );
+    // Fanuc does not read comments as tool changes
+    assert_eq!(
+        Control::for_dialect(m, "fanuc", 1).unwrap().lex.tool_comment,
+        None
+    );
+}
+
+#[test]
+fn fixtures_are_named_bodies_of_boxes_and_cylinders() {
+    use forge_machine::setup::SetupSpec;
+    let src = r#"
+[setup]
+machine = "generic-vmc3"
+dialect = "fanuc"
+program = "p.nc"
+
+[[setup.wcs]]
+n = 54
+z = -500
+
+[[setup.fixture]]
+min = [-60, -50, -20]
+max = [60, -40, 5]
+
+[[setup.fixture]]
+name = "vise"
+[[setup.fixture.box]]
+min = [-80, -60, -60]
+max = [80, -45, 10]
+[[setup.fixture.box]]
+min = [-80, 45, -60]
+max = [80, 60, 10]
+
+[[setup.fixture]]
+name = "strap clamp"
+[[setup.fixture.cyl]]
+base = [70, 0, 0]
+axis = [0, 0, 1]
+r = 8
+h = 25
+"#;
+    let spec = SetupSpec::parse(src).unwrap();
+    let names: Vec<(&str, usize)> = spec
+        .fixture
+        .iter()
+        .map(|f| (f.name.as_str(), f.prims.len()))
+        .collect();
+    assert_eq!(names, vec![("fixture 1", 1), ("vise", 2), ("strap clamp", 1)]);
+    let m = forge_machine::library::builtin_named("generic-vmc3").unwrap();
+    let dsrc = Control::dialect_src("fanuc").unwrap();
+    let s = spec.build(&m, dsrc).unwrap();
+    let bodies: Vec<String> = spec.work_bodies(&s).into_iter().map(|b| b.name).collect();
+    assert_eq!(bodies, vec!["fixture 1", "vise", "strap clamp"]);
+    // two fixtures with one name, or one with nothing in it, are refused
+    assert!(SetupSpec::parse(&src.replace("name = \"strap clamp\"", "name = \"vise\"")).is_err());
+    assert!(SetupSpec::parse(&(src.to_string() + "\n[[setup.fixture]]\nname = \"empty\"\n")).is_err());
+}
+
+#[test]
+fn ratings_torque_ref_and_the_table_load() {
+    use forge_machine::setup::SetupSpec;
+    let src = vmc3()
+        .replacen("interface = \"BT40\"", "interface = \"BT40\"\nratings_kw = [11, 15]\nratings_duty = [\"cont\", \"30min\"]\ntorque_nm = [95, 70]", 1)
+        .replacen("name = \"table\"\nkind = \"part\"", "name = \"table\"\nmax_kg = 300\nkind = \"part\"", 1)
+        .replacen("range = [-300, 300]", "range = [-300, 300]\nref = \"plus\"", 1);
+    let m = &MachineDef::parse_all(&src).unwrap_or_else(|e| panic!("{e}"))[0];
+    let sp = &m.spindles[0];
+    assert_eq!(
+        sp.ratings,
+        vec![(11.0, "cont".to_string()), (15.0, "30min".to_string())]
+    );
+    assert_eq!(sp.torque_nm, Some([95.0, 70.0]));
+    assert_eq!(m.joint("X").unwrap().reference, Some(1));
+    assert_eq!(m.mount("table").unwrap().max_kg, Some(300.0));
+    // the published curve stays; without one the continuous rating and torque make one
+    assert_eq!(m.to_tooling().unwrap().power, sp.power);
+    let mut m2 = m.clone();
+    m2.spindles[0].power.clear();
+    let p = m2.to_tooling().unwrap().power;
+    let base = 11_000.0 * 60.0 / (2.0 * std::f64::consts::PI * 70.0);
+    assert_eq!(p.len(), 3);
+    assert!(
+        (p[1][0] - base).abs() < 1e-9 && p[1][1] == 11.0 && p[2] == [12000.0, 11.0],
+        "{p:?}"
+    );
+    let setup = |kg: &str| {
+        SetupSpec::parse(&format!(
+            "[setup]\nmachine = \"m\"\ndialect = \"fanuc\"\nprogram = \"p.nc\"\n{kg}\n[[setup.wcs]]\nn = 54\nz = -500\n"
+        ))
+        .unwrap()
+    };
+    let dsrc = Control::dialect_src("fanuc").unwrap();
+    let over = setup("work_kg = 350");
+    let s = over.build(m, dsrc).unwrap();
+    let (r, u) = over.check_load(&s);
+    assert_eq!(r, Err((350.0, 300.0)));
+    // the record is not a real machine: its 300 kg is an estimate, and the reply says so
+    assert_eq!(u.map(|u| u.why), Some("estimated"));
+    let ok = setup("work_kg = 120");
+    assert_eq!(ok.check_load(&ok.build(m, dsrc).unwrap()).0, Ok(()));
+    let none = setup("");
+    let (r, u) = none.check_load(&none.build(m, dsrc).unwrap());
+    assert_eq!(
+        (r, u.map(|u| u.path)),
+        (Ok(()), Some("setup.work_kg".to_string()))
+    );
+}
+
+#[test]
+fn an_oriented_box_is_exact_where_its_bound_is_not() {
+    use forge_machine::collide::{self, Role, Verdict};
+    use forge_machine::def::Prim;
+    let m = &forge_machine::library::builtin_named("generic-vmc3").unwrap();
+    let mut s = Setup::new(m, Control::for_dialect(m, "fanuc", 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -500.0])];
+    s.h = vec![(1, 100.0)];
+    s.tools = vec![sim::SimTool {
+        t: 1,
+        name: "e10".into(),
+        tip: [0.0, 0.0, -100.0],
+        body: vec![(5.0, 0.0, 40.0)],
+        cut: sim::Cut::Mill { r: 5.0, corner: 0.0 },
+    }];
+    s.start_tool = Some(1);
+    // a 40 x 40 x 20 block centred on (100, 0), turned 45° about z
+    let h = std::f64::consts::FRAC_1_SQRT_2;
+    let (u, v) = ([h, h, 0.0], [-h, h, 0.0]);
+    let side = 40.0;
+    let o = [
+        100.0 - side * (u[0] + v[0]) * 0.5,
+        -side * (u[1] + v[1]) * 0.5,
+        0.0,
+    ];
+    let blk = Prim::OBox {
+        o,
+        axes: [u, v, [0.0, 0.0, 1.0]],
+        size: [side, side, 20.0],
+    };
+    let body = collide::part_body(&s, "clamp", &[blk], Role::Fixture);
+    // a pass along the block's face dx + dy = 20√2, `off` mm outside it, at z 5
+    let run = |off: f64| {
+        let c = side * std::f64::consts::SQRT_2 * 0.5 + off * std::f64::consts::SQRT_2;
+        let prog = format!(
+            "G43 H1\nG0 X{:.3} Y60. Z50.\nZ5.\nG1 X{:.3} Y-60. F500.\nG0 Z50.\n",
+            100.0 + c - 60.0,
+            100.0 + c + 60.0
+        );
+        let tl = sim::simulate(&prog, &s).unwrap();
+        collide::check(&s, &tl, std::slice::from_ref(&body)).contacts
+    };
+    // 10 mm off the face (tool radius 5, clearance 1): clear, though inside the block's bound
+    let c = run(10.0);
+    assert!(c.iter().all(|c| c.b != "clamp" && c.a != "clamp"), "{c:?}");
+    // 3 mm off: the tool's side cuts into the block
+    let c = run(3.0);
+    assert!(
+        c.iter()
+            .any(|c| (c.a == "clamp" || c.b == "clamp") && matches!(c.verdict, Verdict::Hit { .. })),
+        "{c:?}"
+    );
+}
+
+#[test]
+fn a_guide_bushing_passes_the_stock_and_keeps_its_own_clearance() {
+    use forge_machine::collide::{self, Role};
+    use forge_machine::def::Prim;
+    // a static ring-like body on the base around the part (a guide bushing stand-in), and a
+    // block on Z 0.5 mm from it at home
+    let extra = |passes: &str, cl: &str| {
+        format!(
+            "\n[[machine.body]]\nname = \"bushing\"\nlink = \"base\"\nignore = [\"bed\", \"column\", \"saddle\", \"table\", \"head\"]\n{passes}{cl}[[machine.body.box]]\nmin = [-30, -30, 50]\nmax = [30, 30, 60]\n\n[[machine.body]]\nname = \"post\"\nlink = \"Z\"\nignore = [\"bed\", \"column\", \"saddle\", \"table\", \"head\"]\n[[machine.body.box]]\nmin = [30.5, -5, 50]\nmax = [40, 5, 60]\n"
+        )
+    };
+    let def = |passes: &str, cl: &str| {
+        MachineDef::parse_all(&(vmc3() + &extra(passes, cl)))
+            .unwrap()
+            .remove(0)
+    };
+    let stock_hits = |m: &MachineDef| {
+        let mut s = Setup::new(m, Control::for_dialect(m, "fanuc", 1).unwrap()).unwrap();
+        s.wcs = vec![(54, vec![0.0, 0.0, -500.0])];
+        // the stock as a bar standing through the bushing (part frame = base at home)
+        let stock = collide::part_body(
+            &s,
+            "stock",
+            &[Prim::Box {
+                min: [-10.0, -10.0, 0.0],
+                max: [10.0, 10.0, 100.0],
+            }],
+            Role::Stock,
+        );
+        let tl = sim::simulate("G0 X0 Y0 Z200.\n", &s).unwrap();
+        collide::check(&s, &tl, &[stock])
+            .contacts
+            .into_iter()
+            .filter(|c| c.a == "stock" || c.b == "stock")
+            .count()
+    };
+    assert!(stock_hits(&def("", "")) > 0);
+    assert_eq!(stock_hits(&def("passes = \"stock\"\n", "")), 0);
+    // bushing and post 0.5 apart: not proven clear at the machine's 1 mm; clear at its own 0.2
+    let gap = |m: &MachineDef| {
+        let q: Vec<f64> = m.joints.iter().map(|j| j.home).collect();
+        collide::check_pose(m, &q)
+    };
+    assert!(
+        gap(&def("", ""))
+            .iter()
+            .any(|(a, b, _)| a == "bushing" && b == "post")
+    );
+    assert!(gap(&def("", "clearance = 0.2\n")).is_empty());
+    assert!(MachineDef::parse_all(&(vmc3() + &extra("passes = \"chips\"\n", ""))).is_err());
+}
+
+#[test]
+fn a_gang_post_mounts_each_tool_at_its_station() {
+    let src = lathe();
+    let a = src.find("[[machine.turret]]").unwrap();
+    let b = a + src[a..].find("index_axis").unwrap();
+    let b = b + src[b..].find('\n').unwrap() + 1;
+    let src = format!(
+        "{}[[machine.gang]]\nname = \"G\"\nlink = \"X\"\nt = [1, 2, 3]\nat = [120, 0, 0, 120, 40, 0, 120, 80, 0]\ndir = [-1, 0, 0, -1, 0, 0, -1, 0, 0]\n{}",
+        &src[..a],
+        &src[b..]
+    );
+    let m = &MachineDef::parse_all(&src).unwrap_or_else(|e| panic!("{e}"))[0];
+    assert!(m.turrets.is_empty());
+    assert_eq!(m.gang_mount(2).unwrap().at, [120.0, 40.0, 0.0]);
+    assert!(m.gang_mount(4).is_none());
+    let d = "[dialect]\nname = \"t\"\ndecimals = 3\nfeed_decimals = 3\ndwell = \"G04 P{ms}\"\n";
+    let mut s = Setup::new(m, Control::for_machine(m, d, 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![100.0, -120.0])];
+    s.geo = vec![(1, vec![0.0, 0.0]), (3, vec![0.0, 0.0])];
+    let tool = |t: u32| sim::SimTool {
+        t,
+        name: format!("T{t}"),
+        tip: [-10.0, 0.0, 0.0],
+        body: vec![(6.0, 0.0, 30.0)],
+        cut: sim::Cut::Nose {
+            rn: 0.8,
+            centre: [0.8, 0.8],
+        },
+    };
+    s.tools = vec![tool(1), tool(3)];
+    let tl = sim::simulate("T0101\nG0 X80. Z5.\nT0303\nG0 X80. Z6.\n", &s).unwrap();
+    // the same programmed X lands 80 mm apart in Y: the stations' offset (no geometry offsets)
+    let last = |line: usize| tl.segments.iter().rev().find(|sg| sg.line == line).unwrap();
+    let (p1, _) = s.tip_in_part(&last(2).q1, 1).unwrap();
+    let (p3, _) = s.tip_in_part(&last(4).q1, 3).unwrap();
+    assert!(
+        (p3[1] - p1[1]).abs() - 80.0 < 1e-9 && (p3[1] - p1[1]).abs() > 79.999,
+        "{p1:?} {p3:?}"
+    );
+    // no index time or stop for a gang
+    assert!(!tl.marks.iter().any(|mk| matches!(
+        mk.what,
+        sim::Happening::Index { .. } | sim::Happening::Stop { .. }
+    )));
 }

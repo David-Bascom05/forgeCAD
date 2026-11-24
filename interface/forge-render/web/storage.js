@@ -313,7 +313,7 @@ export class Mirror {
           }
         }
       })
-      .catch((e) => this.onError(e))
+      .catch((e) => this.onError(e, `${this.mount}/${rel}`))
       .finally(() => (this.pending -= 1));
   }
   /// Resolves when every change so far is kept.

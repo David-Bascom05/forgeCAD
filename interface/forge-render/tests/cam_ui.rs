@@ -179,8 +179,13 @@ fn post_process_shows_the_program_and_writes_it() {
     assert!(said.contains("Allow uncertified"), "{said}");
     h.gui.shell.cam.as_mut().unwrap().allow_uncertified = true;
     assert!(h.click("cam:post:write"));
-    h.step();
-    h.step();
+    // the write lands a few frames on (sooner or later under a loaded machine)
+    for _ in 0..200 {
+        h.step();
+        if file.with_file_name("prog.nc").exists() {
+            break;
+        }
+    }
     let nc = std::fs::read_to_string(file.with_file_name("prog.nc")).expect("written");
     assert!(nc.lines().count() > 100, "{nc}");
     assert!(nc.contains("(NOT CERTIFIED IN FULL: except G5"), "stamped");
@@ -526,4 +531,43 @@ fn cycle_time_is_the_bound_and_the_estimate_together() {
     assert!(line.contains('\u{2265}') && line.contains("est."), "{line}");
     let words = forge_render::shell::cam::cycle_words((lo, est));
     assert!(words.starts_with('\u{2265}') && words.contains(" est. "), "{words}");
+}
+
+/// Adaptive is opt-in: a small button after the 2D group's three big ones (never Clear's place),
+/// and the fields its form writes generate.
+#[test]
+fn adaptive_is_an_opt_in_op_whose_fields_generate() {
+    use forge_render::shell::cam::schema::OPS;
+    let two_d: Vec<&str> = OPS.iter().filter(|o| o.group == "2D").map(|o| o.func).collect();
+    let at = two_d.iter().position(|f| *f == "adaptive").expect("adaptive in 2D");
+    assert!(at >= 3, "adaptive is a big (default-looking) button: {two_d:?}");
+    assert_eq!(at, two_d.len() - 1, "adaptive is not last of 2D: {two_d:?}");
+    let ex = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+    let src = std::fs::read_to_string(ex.join("flange_cam.fg")).unwrap();
+    let top = src.lines().find(|l| l.starts_with("top")).unwrap();
+    let src = src.replace(
+        top,
+        "top = adaptive(op1, tool: t1, to: 12, step: 4, engagement: 50, passes: \"two_way\", sweep: 90, leave: 0.2)",
+    );
+    let cam = forge_cam_lang::run(&src, ex);
+    let op = cam.ops.iter().find(|o| o.name == "top").expect("top");
+    assert!(op.refusal.is_none(), "{:?}", op.refusal);
+    assert!(op.moves > 0, "adaptive made no moves");
+}
+
+/// Suppressing an op generates again (Generate as I edit): the ops after it are made, not left
+/// stale.
+#[test]
+fn suppressing_an_op_generates_again() {
+    use forge_render::shell::cam::Cmd;
+    let Some((mut h, _)) = open("suppress") else { return };
+    h.gui.shell.cam.as_mut().unwrap().command(Cmd::Suppress("top".into()));
+    settle(&mut h);
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert_eq!(w.status("top"), "suppressed");
+    // made again (bolts may be refused: its drill now meets the stock top would have cleared)
+    for op in ["prof", "bore", "bolts"] {
+        assert!(["built", "refused"].contains(&w.status(op)), "{op}: {}", w.status(op));
+    }
+    assert_eq!(w.status("prof"), "built");
 }

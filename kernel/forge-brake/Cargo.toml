@@ -10,6 +10,8 @@ repository.workspace = true
 forge-math = { path = "../forge-math" }
 forge-ops = { path = "../forge-ops" }
 forge-sheet = { path = "../forge-sheet" }
+forge-vendor = { path = "../forge-vendor" }
+forge-mesh = { path = "../forge-mesh" }
 
 [lints]
 workspace = true

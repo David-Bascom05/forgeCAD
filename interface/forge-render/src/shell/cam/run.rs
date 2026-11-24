@@ -660,9 +660,10 @@ pub fn stale(ran: &[Stmt], now: &[Stmt]) -> Vec<String> {
             }
         }
     }
-    // a statement taken out (or suppressed) changes what every later op starts from
+    // a statement taken out (or suppressed) changes what every later op starts from; one
+    // already suppressed in the run changed nothing
     for r in ran {
-        if !now.iter().any(|s| s.name == r.name && !s.suppressed) && r.is_op() {
+        if !r.suppressed && !now.iter().any(|s| s.name == r.name && !s.suppressed) && r.is_op() {
             let su = r.setup.clone().unwrap_or_default();
             let mut after = false;
             for s in now {
@@ -689,24 +690,10 @@ pub fn stale(ran: &[Stmt], now: &[Stmt]) -> Vec<String> {
     out
 }
 
-/// A machine timeline's cycle time: the lower bound `t_min` and the estimate (the segments'
-/// `seg_scurve` and the timeline's tool changes, indexes, dwells and pallet changes, as `t_min`
-/// counts them; forge-machine's own `t_scurve` is the segments' alone).
+/// A machine timeline's cycle time: the lower bound `t_min` and the estimate `t_scurve`
+/// (forge-machine counts tool changes, dwells, indexes and pallet changes in both).
 pub fn timeline_cycle(tl: &forge_machine::sim::Timeline) -> (f64, f64) {
-    use forge_machine::sim::Happening;
-    let marks: f64 = tl
-        .marks
-        .iter()
-        .map(|m| match m.what {
-            Happening::ToolChange { seconds, .. }
-            | Happening::Index { seconds, .. }
-            | Happening::Dwell { seconds }
-            | Happening::PalletChange { seconds } => seconds,
-            _ => 0.0,
-        })
-        .sum();
-    let est = tl.seg_scurve.iter().sum::<f64>() + marks;
-    (tl.t_min, est.max(tl.t_min))
+    (tl.t_min, tl.t_scurve.max(tl.t_min))
 }
 
 #[cfg(test)]

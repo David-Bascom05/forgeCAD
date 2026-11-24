@@ -1452,7 +1452,7 @@ fn nary_body(
     lap(&mut clock, 1);
     // a small boolean's later stages, on one thread (THREADED_AFTER_PAIRS); the answers are the
     // same either way
-    let threads = if born.elapsed() < THREADED_AFTER_PAIRS {
+    let threads = if born.elapsed() < THREADED_AFTER_PAIRS && !forge_math::par::forced() {
         1
     } else {
         threads

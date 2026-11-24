@@ -44,14 +44,16 @@ pub fn mass(m: &TriMesh) -> Mass {
 /// the ray leaves the solid through. The thickness and where it is.
 pub fn wall(body: &Body, m: &TriMesh) -> Option<(f64, Point3)> {
     // faces meeting at an edge make a wedge there, not a wall
-    let mut touching = std::collections::HashSet::new();
+    let mut touching: std::collections::HashMap<u32, Vec<u32>> = Default::default();
     for e in body.edge_ids() {
         let fs = select::faces_of_edge(body, e);
         for &a in &fs {
-            for &b in &fs {
-                touching.insert((a.0, b.0));
-            }
+            touching.entry(a.0).or_default().extend(fs.iter().map(|b| b.0));
         }
+    }
+    for t in touching.values_mut() {
+        t.sort_unstable();
+        t.dedup();
     }
     let tri = |t: &[u32; 3]| t.map(|i| m.positions[i as usize]);
     let normals: Vec<Option<Vec3>> = m
@@ -59,21 +61,34 @@ pub fn wall(body: &Body, m: &TriMesh) -> Option<(f64, Point3)> {
         .iter()
         .map(|t| m.triangle_normal(*t).normalize().map(|n| n.get()))
         .collect();
+    // each ray tries only the triangles whose boxes it passes through before the thinnest wall
+    // so far (every triangle against every other took minutes on a welded frame); the same
+    // tests on those, so the same answer: a triangle left out could not have been nearer
+    let tree = Tree::new(&m.triangles.iter().map(tri).collect::<Vec<_>>());
     let mut best: Option<(f64, Point3)> = None;
+    let (mut near, mut stack) = (vec![], vec![]);
+    let mut seen = vec![u32::MAX; m.triangles.len()];
     for (i, t) in m.triangles.iter().enumerate() {
         let Some(n) = normals[i] else { continue };
         let [a, b, c] = tri(t);
         let o = a + ((b - a) + (c - a)) * (1.0 / 3.0);
         let d = -n;
-        for (j, u) in m.triangles.iter().enumerate() {
+        let wedge = touching.get(&m.face_of[i]).map_or(&[][..], |t| &t[..]);
+        tree.along(
+            (o, d, best.map(|b| b.0)),
+            (&mut near, &mut stack),
+            (&mut seen, i as u32),
+        );
+        for &j in &near {
+            let j = j as usize;
             // only the far side: a face the ray leaves through looks along it
             if j == i
                 || normals[j].is_none_or(|nj| nj.dot(d) <= 1e-9)
-                || touching.contains(&(m.face_of[i], m.face_of[j]))
+                || wedge.binary_search(&m.face_of[j]).is_ok()
             {
                 continue;
             }
-            if let Some(s) = hit(o, d, tri(u))
+            if let Some(s) = hit(o, d, tri(&m.triangles[j]))
                 && s > 1e-7
                 && best.is_none_or(|b| s < b.0)
             {
@@ -84,7 +99,176 @@ pub fn wall(body: &Body, m: &TriMesh) -> Option<(f64, Point3)> {
     best
 }
 
-/// Where the ray o + s d meets the triangle, if it does.
+/// Triangles' boxes in a tree, to find those a ray may hit.
+struct Tree {
+    /// (box min, box max, first, count): a leaf's triangles (a long one's pieces each name it)
+    /// are `order[first..first + count]`;
+    /// an inner node's children are the next node and node `first`.
+    nodes: Vec<([f64; 3], [f64; 3], u32, u32)>,
+    order: Vec<u32>,
+}
+
+impl Tree {
+    const LEAF: usize = 4;
+
+    fn new(tris: &[[Point3; 3]]) -> Tree {
+        let extent = |lo: [f64; 3], hi: [f64; 3]| (0..3).map(|k| hi[k] - lo[k]).fold(0.0, f64::max);
+        let box_of = |t: &[Point3; 3]| {
+            let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
+            for p in t {
+                for (k, x) in [p.x, p.y, p.z].into_iter().enumerate() {
+                    lo[k] = lo[k].min(x);
+                    hi[k] = hi[k].max(x);
+                }
+            }
+            (lo, hi)
+        };
+        // a long sliver's box (a member's side, on the slant) lies across every ray near it: such
+        // a triangle goes in as pieces no longer than some typical triangles, each its own box
+        let mut sizes: Vec<f64> = tris
+            .iter()
+            .map(|t| {
+                let (lo, hi) = box_of(t);
+                extent(lo, hi)
+            })
+            .collect();
+        let longest = if sizes.is_empty() {
+            f64::INFINITY
+        } else {
+            let mid = sizes.len() / 2;
+            16.0 * *sizes.select_nth_unstable_by(mid, f64::total_cmp).1
+        };
+        let mut boxes: Vec<([f64; 3], [f64; 3])> = vec![];
+        let mut of: Vec<u32> = vec![];
+        let mut pieces = vec![];
+        for (k, t) in tris.iter().enumerate() {
+            let (lo, hi) = box_of(t);
+            // a little wider than the triangle: `hit` takes points just outside its edges
+            let pad: [f64; 3] = std::array::from_fn(|x| 1e-6 * (hi[x] - lo[x]).abs().max(1.0));
+            pieces.clear();
+            pieces.push((*t, 0));
+            while let Some((p, depth)) = pieces.pop() {
+                let (lo, hi) = box_of(&p);
+                if depth < 8 && extent(lo, hi) > longest {
+                    // halved across its longest side
+                    let side = (0..3)
+                        .max_by(|&a, &b| {
+                            let l = |e: usize| (p[(e + 1) % 3] - p[e]).length();
+                            l(a).total_cmp(&l(b))
+                        })
+                        .unwrap_or(0);
+                    let (a, b, c) = (p[side], p[(side + 1) % 3], p[(side + 2) % 3]);
+                    let m = a + (b - a) * 0.5;
+                    pieces.push(([a, m, c], depth + 1));
+                    pieces.push(([m, b, c], depth + 1));
+                    continue;
+                }
+                boxes.push((
+                    std::array::from_fn(|x| lo[x] - pad[x]),
+                    std::array::from_fn(|x| hi[x] + pad[x]),
+                ));
+                of.push(k as u32);
+            }
+        }
+        let mut t = Tree {
+            nodes: Vec::with_capacity(2 * boxes.len() / Self::LEAF + 1),
+            order: (0..boxes.len() as u32).collect(),
+        };
+        if !boxes.is_empty() {
+            t.split(&boxes, 0, boxes.len());
+        }
+        // the leaves name triangles, not pieces
+        for k in &mut t.order {
+            *k = of[*k as usize];
+        }
+        t
+    }
+
+    fn split(&mut self, boxes: &[([f64; 3], [f64; 3])], from: usize, to: usize) {
+        let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
+        for &k in &self.order[from..to] {
+            let (a, b) = boxes[k as usize];
+            for x in 0..3 {
+                lo[x] = lo[x].min(a[x]);
+                hi[x] = hi[x].max(b[x]);
+            }
+        }
+        let me = self.nodes.len();
+        self.nodes.push((lo, hi, from as u32, (to - from) as u32));
+        if to - from <= Self::LEAF {
+            return;
+        }
+        let axis = (0..3)
+            .max_by(|&a, &b| (hi[a] - lo[a]).total_cmp(&(hi[b] - lo[b])))
+            .unwrap_or(0);
+        let mid = (from + to) / 2;
+        let centre = |k: u32| boxes[k as usize].0[axis] + boxes[k as usize].1[axis];
+        self.order[from..to].select_nth_unstable_by(mid - from, |&a, &b| centre(a).total_cmp(&centre(b)));
+        self.split(boxes, from, mid);
+        let second = self.nodes.len() as u32;
+        self.split(boxes, mid, to);
+        self.nodes[me].2 = second;
+        self.nodes[me].3 = 0;
+    }
+
+    /// Into `out`, the triangles whose boxes the ray from `o` along `d` meets, no further than
+    /// `upto` (with a margin) when given; each once (`seen` marks those taken for ray `ray`).
+    fn along(
+        &self,
+        (o, d, upto): (Point3, Vec3, Option<f64>),
+        (out, stack): (&mut Vec<u32>, &mut Vec<usize>),
+        (seen, ray): (&mut [u32], u32),
+    ) {
+        out.clear();
+        if self.nodes.is_empty() {
+            return;
+        }
+        let far = upto.map_or(f64::INFINITY, |s| s * (1.0 + 1e-9) + 1e-9);
+        // plain arrays: the vectors' indexing was a third of the time, not inlined
+        let (o, d) = ([o.x, o.y, o.z], [d.x, d.y, d.z]);
+        let inv = d.map(|x| 1.0 / x);
+        let meets = |lo: &[f64; 3], hi: &[f64; 3]| {
+            let (mut t0, mut t1) = (0.0f64, far);
+            for k in 0..3 {
+                if d[k].abs() < 1e-300 {
+                    if o[k] < lo[k] || o[k] > hi[k] {
+                        return false;
+                    }
+                    continue;
+                }
+                let (a, b) = ((lo[k] - o[k]) * inv[k], (hi[k] - o[k]) * inv[k]);
+                let (a, b) = if a <= b { (a, b) } else { (b, a) };
+                t0 = t0.max(a);
+                t1 = t1.min(b);
+                if t0 > t1 {
+                    return false;
+                }
+            }
+            true
+        };
+        stack.clear();
+        stack.push(0);
+        while let Some(n) = stack.pop() {
+            let (lo, hi, first, count) = &self.nodes[n];
+            if !meets(lo, hi) {
+                continue;
+            }
+            if *count > 0 {
+                // a triangle met in more than one of its pieces, taken once
+                for &k in &self.order[*first as usize..(*first + *count) as usize] {
+                    if seen[k as usize] != ray {
+                        seen[k as usize] = ray;
+                        out.push(k);
+                    }
+                }
+            } else {
+                stack.push(*first as usize);
+                stack.push(n + 1);
+            }
+        }
+    }
+}
+
 fn hit(o: Point3, d: Vec3, [a, b, c]: [Point3; 3]) -> Option<f64> {
     let (e1, e2) = (b - a, c - a);
     let p = d.cross(e2);
@@ -1403,4 +1587,86 @@ fn body_box(b: &Body, mesh: &TriMesh) -> forge_math::Box3 {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use forge_math::{Frame, Point2};
+    use forge_ops::{Profile, extrude};
+
+    /// The thinnest wall as it was found before the tree: every triangle against every other.
+    fn every_pair(body: &Body, m: &TriMesh) -> Option<(f64, Point3)> {
+        let mut touching = std::collections::HashSet::new();
+        for e in body.edge_ids() {
+            let fs = select::faces_of_edge(body, e);
+            for &a in &fs {
+                for &b in &fs {
+                    touching.insert((a.0, b.0));
+                }
+            }
+        }
+        let tri = |t: &[u32; 3]| t.map(|i| m.positions[i as usize]);
+        let normals: Vec<Option<Vec3>> = m
+            .triangles
+            .iter()
+            .map(|t| m.triangle_normal(*t).normalize().map(|n| n.get()))
+            .collect();
+        let mut best: Option<(f64, Point3)> = None;
+        for (i, t) in m.triangles.iter().enumerate() {
+            let Some(n) = normals[i] else { continue };
+            let [a, b, c] = tri(t);
+            let o = a + ((b - a) + (c - a)) * (1.0 / 3.0);
+            let d = -n;
+            for (j, u) in m.triangles.iter().enumerate() {
+                if j == i
+                    || normals[j].is_none_or(|nj| nj.dot(d) <= 1e-9)
+                    || touching.contains(&(m.face_of[i], m.face_of[j]))
+                {
+                    continue;
+                }
+                if let Some(s) = hit(o, d, tri(u))
+                    && s > 1e-7
+                    && best.is_none_or(|b| s < b.0)
+                {
+                    best = Some((s, o + d * (s / 2.0)));
+                }
+            }
+        }
+        best
+    }
+
+    fn bits(w: Option<(f64, Point3)>) -> Option<[u64; 4]> {
+        w.map(|(t, p)| [t.to_bits(), p.x.to_bits(), p.y.to_bits(), p.z.to_bits()])
+    }
+
+    #[test]
+    fn the_tree_finds_the_wall_every_pair_does_bit_for_bit() {
+        let parts = [
+            // a plate with two holes: its 6 mm thickness
+            Profile {
+                plane: Frame::WORLD,
+                loops: vec![
+                    Profile::rectangle(Point2::new(0.0, 0.0), 60.0, 40.0, 0),
+                    Profile::circle(Point2::new(15.0, 20.0), 2.5, 100),
+                    Profile::circle(Point2::new(45.0, 20.0), 4.0, 200),
+                ],
+            },
+            // a tube: its 1.5 mm wall between round faces
+            Profile {
+                plane: Frame::WORLD,
+                loops: vec![
+                    Profile::circle(Point2::new(0.0, 0.0), 10.0, 0),
+                    Profile::circle(Point2::new(0.0, 0.0), 8.5, 100),
+                ],
+            },
+        ];
+        for (k, p) in parts.iter().enumerate() {
+            let b = extrude(p, 6.0, 1).expect("a part");
+            let m = forge_mesh::tessellate(&b, &forge_mesh::Quality::default()).expect("a mesh");
+            let (fast, slow) = (wall(&b, &m), every_pair(&b, &m));
+            assert!(fast.is_some(), "part {k}: no wall");
+            assert_eq!(bits(fast), bits(slow), "part {k}: {fast:?} vs {slow:?}");
+        }
+    }
 }

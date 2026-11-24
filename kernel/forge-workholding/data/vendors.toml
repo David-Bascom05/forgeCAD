@@ -7,8 +7,9 @@ name = "haas-vise-05-0404"
 kind = "vise"
 vendor = "Haas"
 product = "6 in single-station CrossOver vise, 9 in opening (PN 05-0404, Haas Workholding by Kurt: the DX6)"
-note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading; height unknown: the page gives OAH 110.74 but BH 73.03 + JH 44.07 = 117.10 (and Penn Tool lists 117.09 for the Kurt DX6): measure it; VO 225.0 is the rated opening, J1 0-230.6 the jaws' range (used); OAL with handle 463.75"
-unknown = ["jaw_thickness", "height"]
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading; height in conflict: the page gives OAH 110.74 but BH 73.03 + JH 44.07 = 117.10 (and Penn Tool lists 117.09 for the Kurt DX6): measure it; VO 225.0 is the rated opening, J1 0-230.6 the jaws' range (used); OAL with handle 463.75"
+unknown = ["jaw_thickness"]
+conflict = ["height"]
 jaw_width = 150
 jaw_height = 44.07
 max_opening = 230.6
@@ -774,8 +775,9 @@ name = "kurt-d688"
 kind = "vise"
 vendor = "Kurt"
 product = "D688 (6 in)"
-note = "height unknown: 'vise height 4.375 in' vs bed 2.875 + jaw 1.735 = 4.61 in: measure it"
-unknown = ["jaw_thickness", "height"]
+note = "height in conflict: 'vise height 4.375 in' vs bed 2.875 + jaw 1.735 = 4.61 in: measure it"
+unknown = ["jaw_thickness"]
+conflict = ["height"]
 jaw_width = 152.4
 max_opening = 223.52
 jaw_height = 44.07
