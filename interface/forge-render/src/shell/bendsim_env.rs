@@ -283,7 +283,7 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
             );
             use super::bendsim::Pane;
             // the panel's width: long lines wrap within it
-            ui.set_max_width(r.width() - 24.0);
+            ui.set_max_width((r.width() - 24.0).max(0.0));
             ui.spacing_mut().item_spacing.x = ui.spacing().item_spacing.x.max(6.0);
             ui.add_space(4.0);
             ui.horizontal(|ui| {
@@ -321,7 +321,7 @@ pub(super) fn dock(s: &mut Shell, ui: &mut Ui, r: Rect) {
     egui::ScrollArea::vertical()
         .id_salt("env-bendsim-dock")
         .show(&mut child, |ui| {
-            ui.set_max_width(r.width() - 40.0);
+            ui.set_max_width((r.width() - 40.0).max(0.0));
             flat = super::bendsim::bend_sheet(ui, &t, &mut b);
         });
     s.sheet.bend_sim = Some(b);
@@ -412,6 +412,12 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
         ),
         egui::pos2(view.right() - 12.0, view.bottom() - 8.0),
     );
+    // a view too narrow for the bar (BUTTON-AUDITOR's 480 px window: a view ~200 px, or none):
+    // no bar; the ribbon's Play group still steps through the program
+    s.places.push(("env:bendsim:view".into(), view));
+    if band.width() < MIN_BAR {
+        return false;
+    }
     egui::Area::new(egui::Id::unique("env-bendsim-timeline"))
         .fixed_pos(band.min)
         .order(egui::Order::Foreground)
@@ -421,14 +427,16 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
                 .corner_radius(6.0)
                 .inner_margin(6.0)
                 .show(ui, |ui| {
-                    ui.set_width(band.width() - 12.0);
+                    ui.set_width((band.width() - 12.0).max(0.0));
                     super::bendsim::timeline_ui(ui, b, bar);
                 });
         });
-    s.places.push(("env:bendsim:view".into(), view));
     s.places.push(("env:bendsim:timeline".into(), band));
     false
 }
+
+/// The narrowest band the timeline bar is drawn in (its transport, the stage strip).
+pub const MIN_BAR: f32 = 240.0;
 
 pub(super) fn command(s: &mut Shell, c: u16) {
     let Some(b) = s.sheet.bend_sim.as_deref_mut() else {

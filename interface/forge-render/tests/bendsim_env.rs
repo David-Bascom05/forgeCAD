@@ -1715,3 +1715,35 @@ fn the_overview_labels_its_stations_and_a_chip_selects_one() {
     assert_eq!(b.step, want);
     assert!(!b.overview, "the overview left for the station");
 }
+
+/// A 480 px window (BUTTON-AUDITOR: the view some 200 px, or less): entering Bend Simulation
+/// does not panic; a bar too narrow to draw is left out, and stepping still works.
+#[test]
+fn a_480_px_window_enters_without_a_panic() {
+    let Ok(mut h) = Headless::new((480.0, 860.0), 1.0) else {
+        return;
+    };
+    h.step();
+    let part = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/sheetmetal/load_tray.fg");
+    open(&mut h, part);
+    // the ribbon folds at this width: into the environment as its button would
+    h.gui
+        .shell
+        .out
+        .push(forge_render::shell::Action::EnterEnv(EnvId::BendSim));
+    for _ in 0..10 {
+        h.step();
+    }
+    let b = h.gui.shell.sheet.bend_sim.as_mut().expect("in the simulation");
+    b.go(1);
+    b.t = 0.5;
+    for _ in 0..10 {
+        h.step();
+    }
+    if let Some(view) = h.gui.shell.place("env:bendsim:view") {
+        // the bar's narrowest band (MIN_BAR, 240 px)
+        if view.width() - 24.0 < 240.0 {
+            assert!(h.gui.shell.place("env:bendsim:timeline").is_none());
+        }
+    }
+}
