@@ -813,26 +813,6 @@ impl Body {
         self.bound_vertex_tol(t);
     }
 
-    /// A vertex with tolerance `tol` (at least LINEAR), for a caller that has already raised the
-    /// bound to `tol` with `note_vertex_tol` (once for many vertices, where they are made by the
-    /// thousand): `add_tolerant_vertex` without its compare.
-    pub fn add_vertex_within(&mut self, point: Point3, tol: f64, name: Name) -> VertexId {
-        let tol = tol.max(forge_math::tol::LINEAR);
-        debug_assert!(
-            tol <= self.vertex_tol().max(forge_math::tol::LINEAR),
-            "note_vertex_tol first"
-        );
-        self.vertices.push(Vertex { point, name, tol });
-        VertexId(self.vertices.len() as u32 - 1)
-    }
-
-    /// The bound raised to at least `tol` (for vertices to come through `add_vertex_within`).
-    pub fn note_vertex_tol(&mut self, tol: f64) {
-        if tol > forge_math::tol::LINEAR {
-            self.bound_vertex_tol(tol);
-        }
-    }
-
     /// The bound at least `tol` (an f32 at or above it).
     fn bound_vertex_tol(&mut self, tol: f64) {
         if tol > f64::from(self.vertex_tol) {

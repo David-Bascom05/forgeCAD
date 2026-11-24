@@ -2139,25 +2139,17 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
         .unwrap_or_else(|| a.add_shell());
     let other_shell =
         a.shells.len() > 1 && specs.iter().any(|s| s.side == 0 && a.face(s.from).shell != shell);
-    // the bound of every vertex's tolerance, once, for every vertex made below (B's, grown or not,
-    // and the new points')
-    a.note_vertex_tol(
-        tols.iter()
-            .copied()
-            .chain(grown.iter().map(|g| g.1))
-            .fold(b.vertex_tol(), f64::max),
-    );
     let mut vertex = |a: &mut Body, v: VKey| -> VertexId {
         let v = alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
         match v {
             VKey::Old(0, id) => id,
             VKey::Old(_, id) => *b_vertex[id.index()].get_or_insert_with(|| {
                 let (point, tol, name) = b.vertex(id);
-                a.add_vertex_within(point, grown_tol(grown, v, tol), renamed(v, name))
+                a.add_tolerant_vertex(point, grown_tol(grown, v, tol), renamed(v, name))
             }),
             VKey::New(i) => *new_vertex[i as usize].get_or_insert_with(|| {
                 let i = i as usize;
-                a.add_vertex_within(points[i], tols[i], vnames[i])
+                a.add_tolerant_vertex(points[i], tols[i], vnames[i])
             }),
         }
     };
