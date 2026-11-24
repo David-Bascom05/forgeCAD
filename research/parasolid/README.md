@@ -6,10 +6,21 @@ part file, the Import tool). This directory holds what it was built and checked 
 
 ## The format
 
-Siemens publishes the *Parasolid XT Format Reference* openly (no sign-up): the V35 edition (2022)
-at `q-solid.com/Parasolid_Docs_V35/pdf/xt.pdf`, older ones (2006, 2008) mirrored widely. It gives
-the text and binary encodings (ch. 3), the embedded schema (2.1.2), every node's fields as of V35
-(ch. 5), node types and classes (ch. 6) and the system attributes (appendix A).
+The source is Siemens' own *Parasolid XT Format Reference* (Siemens Digital Industries Software,
+the V35 edition of 2022, and the 2006 and 2008 editions before it). Siemens calls XT "the open,
+published Parasolid XT data format" (blogs.sw.siemens.com/plm-components/parasolid-data-exchange),
+but no Siemens site we could reach without an account hosts the document (checked 2026-11:
+siemens.com/en-us/products/plm-components/parasolid, the PLM Components blog, and the support
+knowledge base, which needs a Siemens login). Its IANA registration
+(iana.org/assignments/media-types/model/vnd.parasolid.transmit.text, filed by Siemens' predecessor
+UGS) says the reference is "available in PDF on request". Cite it by title, edition and chapter,
+not by any copy's URL, and commit no copy. It gives the text and binary encodings (ch. 3), the
+embedded schema (2.1.2), every node's fields as of V35 (ch. 5), node types and classes (ch. 6),
+and the system attributes (appendix A).
+
+Provenance: while building, the edition consulted was a copy on a third-party site. Everything
+the reader depends on is also checked against the corpus file by file (below), and where the
+files and the printed reference disagree, the files win.
 
 What it does not give, and what was worked out here:
 
@@ -44,11 +55,19 @@ Text files from SolidWorks wrap their records at 80 characters and never end one
 | Application | Kernel | Exports .x_t / .x_b | Best route |
 |---|---|---|---|
 | SolidWorks | Parasolid | yes (Save As) — the whole corpus | .x_t |
-| Onshape | Parasolid | yes (Export) | .x_t |
+| Onshape | Parasolid | yes (Export): v25 to v37, latest by default | .x_t |
 | Siemens NX | Parasolid | yes | .x_t |
 | Solid Edge | Parasolid | yes (Save As) | .x_t |
 | Autodesk Inventor | ShapeManager | reported (Save Copy As), not verified here | STEP |
 | Autodesk Fusion | ShapeManager | not in Autodesk's own list; one third-party page says yes | STEP |
+
+Onshape (its help, *Exporting Files* and *Supported File Formats*, read 2026-11): parts, Part
+Studios and Assemblies export as "Parasolid B-rep (.x_t or .x_b) from v25.0 to v37.0", the version
+chosen by unticking "Use latest version". Several parts go as one file unless "Export unique parts
+as individual files" is ticked (then a zip of one file each). An Assembly exports as one file or
+as individual files; suppressed instances are left out. The help does not say whether an
+assembly keeps its instances or is flattened, nor whether names and colours go with the parts:
+that needs a real export (no Onshape account was made for this).
 
 The native files (`.sldprt`, `.ipt`, `.f3d`, Onshape documents) are each application's own
 container, not transmit files. A `.sldprt` embeds a Parasolid stream; reading it is a separate
