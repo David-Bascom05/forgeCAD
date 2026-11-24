@@ -82,6 +82,29 @@ pub enum Verdict<W> {
     Undecided { lower: f64, cells: usize },
 }
 
+/// How a search's caller wants its answer built: [`Verdict`] itself, or the caller's own type, so
+/// that no conversion is compiled between the search and its caller.
+pub trait Outcome<W> {
+    fn clear(lower: f64) -> Self;
+    fn hit(d: f64, witness: W) -> Self;
+    fn undecided(lower: f64, cells: usize) -> Self;
+}
+
+impl<W> Outcome<W> for Verdict<W> {
+    #[inline(always)]
+    fn clear(lower: f64) -> Self {
+        Verdict::Clear { lower }
+    }
+    #[inline(always)]
+    fn hit(d: f64, witness: W) -> Self {
+        Verdict::Hit { d, witness }
+    }
+    #[inline(always)]
+    fn undecided(lower: f64, cells: usize) -> Self {
+        Verdict::Undecided { lower, cells }
+    }
+}
+
 /// A binary min-heap of cells by their lower bound (ties kept in push order as a binary heap
 /// keeps them: the same order on every target).
 struct Heap<C> {
@@ -135,7 +158,7 @@ impl<C> Heap<C> {
 /// The search, least bound first, from `root`; the verdict and the cells popped. Inlined into
 /// its caller, so each search's loop is compiled with its evaluator, as a hand-written one is.
 #[inline(always)]
-pub fn certify<S: Search>(s: &S, root: S::Cell, p: &Policy) -> (Verdict<S::Witness>, usize) {
+pub fn certify<S: Search, O: Outcome<S::Witness>>(s: &S, root: S::Cell, p: &Policy) -> (O, usize) {
     let lim_clear = p.limit + p.margin;
     let lim_hit = p.limit - p.margin;
     let (budget, margin, resolution) = (p.budget, p.margin, p.resolution);
@@ -157,19 +180,16 @@ pub fn certify<S: Search>(s: &S, root: S::Cell, p: &Policy) -> (Verdict<S::Witne
         spent += 1;
         if spent > budget {
             let Some(res) = resolution else {
-                return (
-                    Verdict::Undecided {
-                        lower: f64::NEG_INFINITY,
-                        cells: spent,
-                    },
-                    spent,
-                );
+                return (O::undecided(f64::NEG_INFINITY, spent), spent);
             };
             // every cell left is at least this cell's bound (least first)
             if key < lower {
                 lower = key;
             }
-            return (within(lower, lim_clear, res, margin, spent), spent);
+            return (
+                within::<S::Witness, O>(lower, lim_clear, res, margin, spent),
+                spent,
+            );
         }
         let h = s.holds(&c);
         if h == Holds::Out {
@@ -183,13 +203,7 @@ pub fn certify<S: Search>(s: &S, root: S::Cell, p: &Policy) -> (Verdict<S::Witne
             continue;
         }
         if let Some((up, w)) = s.witness(&c, lim_hit) {
-            return (
-                Verdict::Hit {
-                    d: up + margin,
-                    witness: w,
-                },
-                spent,
-            );
+            return (O::hit(up + margin, w), spent);
         }
         if s.leaf(&c) {
             undecided |= strict;
@@ -205,28 +219,25 @@ pub fn certify<S: Search>(s: &S, root: S::Cell, p: &Policy) -> (Verdict<S::Witne
         heap.push(bb, b);
     }
     if undecided {
-        return (Verdict::Undecided { lower, cells: spent }, spent);
+        return (O::undecided(lower, spent), spent);
     }
     if let Some(res) = resolution {
-        return (within(lower, lim_clear, res, margin, spent), spent);
+        return (
+            within::<S::Witness, O>(lower, lim_clear, res, margin, spent),
+            spent,
+        );
     }
-    (
-        Verdict::Clear {
-            lower: lower - margin,
-        },
-        spent,
-    )
+    (O::clear(lower - margin), spent)
 }
 
 /// Under a stated resolution: Clear when `lower` is within it of the bound to prove, else
 /// Undecided. The one check every exit makes.
-fn within<W>(lower: f64, lim_clear: f64, res: f64, margin: f64, spent: usize) -> Verdict<W> {
+#[inline(always)]
+fn within<W, O: Outcome<W>>(lower: f64, lim_clear: f64, res: f64, margin: f64, spent: usize) -> O {
     if lower >= lim_clear - res {
-        Verdict::Clear {
-            lower: lower - margin,
-        }
+        O::clear(lower - margin)
     } else {
-        Verdict::Undecided { lower, cells: spent }
+        O::undecided(lower, spent)
     }
 }
 
@@ -281,24 +292,24 @@ mod tests {
             resolution: None,
         };
         // the target 2 away: clear of 1, proven
-        let (v, _) = certify(&Line { x: 3.0, res: 1e-6 }, (0.0, 1.0), &p(1.0));
+        let (v, _): (Verdict<f64>, _) = certify(&Line { x: 3.0, res: 1e-6 }, (0.0, 1.0), &p(1.0));
         assert_eq!(v, Verdict::Clear { lower: 2.0 });
         // the target inside: a hit, at a real point closer than the limit
-        let (v, _) = certify(&Line { x: 0.3, res: 1e-6 }, (0.0, 1.0), &p(0.1));
+        let (v, _): (Verdict<f64>, _) = certify(&Line { x: 0.3, res: 1e-6 }, (0.0, 1.0), &p(0.1));
         let Verdict::Hit { d, witness } = v else {
             panic!("{v:?}")
         };
         assert!(d < 0.1 && (witness - 0.3).abs() == d);
         // exactly at the limit: proven (the distance is at least the limit)
-        let (v, _) = certify(&Line { x: 1.5, res: 1e-3 }, (0.0, 1.0), &p(0.5));
+        let (v, _): (Verdict<f64>, _) = certify(&Line { x: 1.5, res: 1e-3 }, (0.0, 1.0), &p(0.5));
         assert_eq!(v, Verdict::Clear { lower: 0.5 });
         // just under the limit, closer than the resolution, and no midpoint below it: never a
         // Clear "within the resolution", but Undecided
-        let (v, _) = certify(&Line { x: 1.4999, res: 1e-3 }, (0.0, 1.0), &p(0.5));
+        let (v, _): (Verdict<f64>, _) = certify(&Line { x: 1.4999, res: 1e-3 }, (0.0, 1.0), &p(0.5));
         assert!(matches!(v, Verdict::Undecided { .. }), "{v:?}");
         // a target no midpoint reaches, a limit below every split's reach: the budget is spent,
         // Undecided with no bound
-        let (v, n) = certify(
+        let (v, n): (Verdict<f64>, _) = certify(
             &Line {
                 x: 1.0 / 3.0,
                 res: 0.0,
@@ -331,13 +342,13 @@ mod tests {
             budget: 10_000,
             resolution: Some(res),
         };
-        let (v, _) = certify(&Line { x: 1.4999, res: 1e-3 }, (0.0, 1.0), &p(1e-3));
+        let (v, _): (Verdict<f64>, _) = certify(&Line { x: 1.4999, res: 1e-3 }, (0.0, 1.0), &p(1e-3));
         let Verdict::Clear { lower } = v else {
             panic!("{v:?}")
         };
         assert!((0.5 - 1e-3..=0.4999).contains(&lower), "{lower}");
         // 0.49 away: beyond the resolution under the limit, so not Clear (a Hit here)
-        let (v, _) = certify(&Line { x: 1.49, res: 1e-3 }, (0.0, 1.0), &p(1e-3));
+        let (v, _): (Verdict<f64>, _) = certify(&Line { x: 1.49, res: 1e-3 }, (0.0, 1.0), &p(1e-3));
         assert!(!matches!(v, Verdict::Clear { .. }), "{v:?}");
     }
 }

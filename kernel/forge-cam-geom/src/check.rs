@@ -1151,16 +1151,22 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
         budget,
         resolution: None,
     };
-    let (v, spent) = forge_bb::certify(&search, root, &policy);
-    let v = match v {
-        forge_bb::Verdict::Clear { lower } => Verdict::Clear { lower },
-        forge_bb::Verdict::Hit {
-            d,
-            witness: (p, q, s, at),
-        } => Verdict::Hit { d, p, q, s, at },
-        forge_bb::Verdict::Undecided { lower, cells } => Verdict::Undecided { lower, cells },
-    };
-    (v, spent)
+    forge_bb::certify(&search, root, &policy)
+}
+
+impl forge_bb::Outcome<(f64, f64, f64, V3)> for Verdict {
+    #[inline(always)]
+    fn clear(lower: f64) -> Verdict {
+        Verdict::Clear { lower }
+    }
+    #[inline(always)]
+    fn hit(d: f64, (p, q, s, at): (f64, f64, f64, V3)) -> Verdict {
+        Verdict::Hit { d, p, q, s, at }
+    }
+    #[inline(always)]
+    fn undecided(lower: f64, cells: usize) -> Verdict {
+        Verdict::Undecided { lower, cells }
+    }
 }
 
 /// One face against one move, as a forge-bb search over (p, q, s) cells.
@@ -1179,12 +1185,12 @@ impl forge_bb::Search for FaceSearch<'_> {
     type Cell = Cell;
     type Witness = (f64, f64, f64, V3);
 
-    #[inline]
+    #[inline(always)]
     fn bound(&self, c: &Cell) -> Ival {
         cell_sd(self.body, self.f, self.mv, self.pl, c, self.pg)
     }
 
-    #[inline]
+    #[inline(always)]
     fn holds(&self, c: &Cell) -> forge_bb::Holds {
         match self.f.holds(c.p, c.q) {
             h if h < 0 => forge_bb::Holds::Out,
@@ -1193,7 +1199,7 @@ impl forge_bb::Search for FaceSearch<'_> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn refine(&self, c: &Cell, h: forge_bb::Holds, sd: Ival, clear: f64) -> Ival {
         let (body, f, mv, pl, pg) = (self.body, self.f, self.mv, self.pl, self.pg);
         if self.show_cells {
@@ -1234,7 +1240,7 @@ impl forge_bb::Search for FaceSearch<'_> {
         sd
     }
 
-    #[inline]
+    #[inline(always)]
     fn witness(&self, c: &Cell, below: f64) -> Option<(f64, (f64, f64, f64, V3))> {
         let (body, f, mv, pl, pg) = (self.body, self.f, self.mv, self.pl, self.pg);
         // the cell's centre, if it is surely on the face
@@ -1266,7 +1272,7 @@ impl forge_bb::Search for FaceSearch<'_> {
         Some((w.hi, (pm, qm, sm, [y[0].mid(), y[1].mid(), y[2].mid()])))
     }
 
-    #[inline]
+    #[inline(always)]
     fn leaf(&self, c: &Cell) -> bool {
         // too small to split: the image of the cell (face point plus tool position)
         let img = self.f.surf.eval(c.p, c.q);
@@ -1274,7 +1280,7 @@ impl forge_bb::Search for FaceSearch<'_> {
         diam(&[img[0].add(mvb[0]), img[1].add(mvb[1]), img[2].add(mvb[2])]) <= self.res
     }
 
-    #[inline]
+    #[inline(always)]
     fn split(&self, c: &Cell) -> (Cell, Cell) {
         // split the parameter that moves the image most
         let smear = cell_eval(self.body, self.f, self.mv, self.pl, c, self.pg, true).1;
