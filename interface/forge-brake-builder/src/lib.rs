@@ -96,9 +96,10 @@ macro_rules! kinds {
             impl Kind for $ty {
                 type Record = Rec;
                 const WORD: &'static str = $word;
-                // under the project's and the user's cam/ until forge-library takes a root of
-                // its own (bend/tooling, as forge-lang's search reads)
-                const FOLDER: &'static str = concat!("bend-", $word, "s");
+                // the project's and the user's bend/tooling, as forge-lang's search reads: one
+                // folder for the three kinds (each kind's parse reads only its own records)
+                const ROOT: &'static str = "bend";
+                const FOLDER: &'static str = "tooling";
                 fn builtin() -> Vec<(String, String)> {
                     builtin_of($word)
                 }

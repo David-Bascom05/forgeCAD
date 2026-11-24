@@ -57,3 +57,13 @@ fn forms_templates_checks_previews() {
     assert!(fs.iter().all(|f| f.not_checked), "{fs:?}");
     assert!(preview(&press).unwrap().iter().any(|(n, _, _)| n == "ram"));
 }
+
+#[test]
+fn one_folder_for_three_kinds() {
+    // a file of dies reads as no punches (not as a broken file), and the other way about
+    let dies = &Dies::builtin()[0].1;
+    assert!(Punches::parse(dies).unwrap().is_empty());
+    assert!(!Dies::parse(dies).unwrap().is_empty());
+    assert_eq!(Punches::ROOT, "bend");
+    assert_eq!(Punches::FOLDER, "tooling");
+}
