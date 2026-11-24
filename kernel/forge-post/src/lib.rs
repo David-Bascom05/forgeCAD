@@ -656,6 +656,7 @@ fn expand_hole(
     dwell: Q,
     f: Q,
     k: u32,
+    params: (f64, f64),
     out: &mut Vec<Motion>,
 ) {
     let (x, y) = (h[0], h[1]);
@@ -673,8 +674,8 @@ fn expand_hole(
         }
         CycleKind::Peck | CycleKind::ChipBreak => {
             let step = if q > 0 { q } else { r - z };
-            let pc = quant(PECK_CLEAR, k).unwrap_or(0);
-            let lift = quant(CHIP_LIFT, k).unwrap_or(0);
+            let pc = quant(params.0, k).unwrap_or(0);
+            let lift = quant(params.1, k).unwrap_or(0);
             let mut depth = r;
             while depth > z {
                 let next = if depth - step > z { depth - step } else { z };
@@ -696,6 +697,12 @@ fn expand_hole(
 
 /// What the program does (cycles expanded), in integer units.
 pub fn motions(p: &QProgram) -> Vec<Motion> {
+    motions_with(p, (PECK_CLEAR, CHIP_LIFT))
+}
+
+/// `motions` for a control whose peck cycle retracts to `params.0` above the depth reached and
+/// whose chip-break cycle lifts `params.1` (mm): each control sets these as a parameter.
+pub fn motions_with(p: &QProgram, params: (f64, f64)) -> Vec<Motion> {
     let mut out = Vec::new();
     for r in &p.recs {
         match r {
@@ -724,7 +731,7 @@ pub fn motions(p: &QProgram) -> Vec<Motion> {
                 f,
             } => {
                 for h in holes {
-                    expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, &mut out);
+                    expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, params, &mut out);
                 }
             }
             QRec::Dwell(ms) => out.push(Motion::Dwell(*ms)),
@@ -980,7 +987,7 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 if tpl == "expand" {
                     let mut ms = Vec::new();
                     for h in holes {
-                        expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, k, &mut ms);
+                        expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, k, (PECK_CLEAR, CHIP_LIFT), &mut ms);
                     }
                     for m in ms {
                         let rr = match m {
@@ -1436,7 +1443,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             Some(80) => {
                 let (kind, z, r, q, dw, clear) = cycle.unwrap();
                 let (x, y) = (to[0].unwrap_or(0), to[1].unwrap_or(0));
-                expand_hole(kind, [x, y], z, r, clear, q, dw, feed, k, &mut out);
+                expand_hole(kind, [x, y], z, r, clear, q, dw, feed, k, (PECK_CLEAR, CHIP_LIFT), &mut out);
                 pos = [Some(x), Some(y), Some(clear)];
                 continue;
             }
