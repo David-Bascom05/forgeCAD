@@ -307,6 +307,52 @@ impl HeightMap {
     /// r + h/2, a little outside the tool, so the cells' error errs toward more engagement.
     /// None: the edge meets nothing.
     pub fn engage(&self, c: [f64; 3], u: [f64; 2], r: f64, eps: f64) -> Option<Engage> {
+        self.engage_in(c, u, r, eps, None)
+    }
+
+    /// `engage`, first asking `tiles` (`Tiles::of` this map, kept by `sweep_in`): where every
+    /// tile the edge can read is at or below c[2] + eps, no point of it stands above the tip by
+    /// more than eps (each read is a cell of one of those tiles, or −∞ off the map), so the
+    /// answer is None without reading the edge. Otherwise the edge is read as `engage` does.
+    pub fn engage_in(
+        &self,
+        c: [f64; 3],
+        u: [f64; 2],
+        r: f64,
+        eps: f64,
+        tiles: Option<&Tiles>,
+    ) -> Option<Engage> {
+        if let Some(t) = tiles {
+            let rr = r + 0.5 * self.h;
+            let thr = c[2] + eps;
+            // the cells `top` can read for points within rr of c: their indices, a cell wider
+            let i0 = ((c[0] - rr - self.x0) / self.h).floor() - 1.0;
+            let i1 = ((c[0] + rr - self.x0) / self.h).floor() + 1.0;
+            let j0 = ((c[1] - rr - self.y0) / self.h).floor() - 1.0;
+            let j1 = ((c[1] + rr - self.y0) / self.h).floor() + 1.0;
+            if i0.is_finite() && i1.is_finite() && j0.is_finite() && j1.is_finite() {
+                let clamp = |v: f64, n: usize| v.max(0.0).min(n.saturating_sub(1) as f64) as usize;
+                let (a0, a1) = (clamp(i0, self.nx) / TILE, clamp(i1, self.nx) / TILE);
+                let (b0, b1) = (clamp(j0, self.ny) / TILE, clamp(j1, self.ny) / TILE);
+                let mut low = true;
+                'tiles: for tj in b0..=b1 {
+                    for ti in a0..=a1 {
+                        // at or below (a NaN is neither: the edge is read)
+                        let below = matches!(
+                            t.max[tj * t.ntx + ti].partial_cmp(&thr),
+                            Some(std::cmp::Ordering::Less | std::cmp::Ordering::Equal)
+                        );
+                        if !below {
+                            low = false;
+                            break 'tiles;
+                        }
+                    }
+                }
+                if low {
+                    return None;
+                }
+            }
+        }
         let rr = r + 0.5 * self.h;
         let n = EDGE_N;
         let step = std::f64::consts::PI / (n - 1) as f64;
@@ -569,7 +615,7 @@ pub fn schedule_samples(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &
                 let dxy = ((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1])).sqrt();
                 if sched && dxy > 0.0 {
                     let u = [(b[0] - a[0]) / dxy, (b[1] - a[1]) / dxy];
-                    if let Some(e) = map.engage(b, u, r, EPS_Z) {
+                    if let Some(e) = map.engage_in(b, u, r, EPS_Z, Some(&tiles)) {
                         worst = Some(match worst {
                             Some(w) if w.cos_max > e.cos_max => Engage {
                                 ap: w.ap.max(e.ap),
@@ -803,6 +849,7 @@ mod tests {
         let mut b = HeightMap::new([0.0, 0.0, 0.0], [37.3, 29.1, 10.0], 0.1);
         let mut tiles = Tiles::of(&b);
         let mut skipped = 0usize;
+        let mut nones = 0usize;
         for k in 0..400 {
             let p = &profs[k % profs.len()];
             let z0 = 10.5 - 11.0 * rnd();
@@ -825,7 +872,26 @@ mod tests {
                 a.z.iter().zip(&b.z).all(|(x, y)| x.to_bits() == y.to_bits()),
                 "move {k}: the maps differ"
             );
+            // the edge read through the tiles is the edge read cell by cell, at the move's end
+            // and at random places and heights, inside the map and over its edges
+            for q in 0..6 {
+                let c = if q == 0 {
+                    e
+                } else {
+                    [rnd() * 49.0 - 6.0, rnd() * 41.0 - 6.0, 11.0 - 12.0 * rnd()]
+                };
+                let th = rnd() * std::f64::consts::TAU;
+                let (sn, cs) = dmath::sin_cos(th);
+                let r = p.r();
+                let want = b.engage(c, [cs, sn], r, 1e-3);
+                let got = b.engage_in(c, [cs, sn], r, 1e-3, Some(&tiles));
+                if want.is_none() {
+                    nones += 1;
+                }
+                assert_eq!(format!("{want:?}"), format!("{got:?}"), "move {k}, place {q}");
+            }
         }
+        assert!(nones > 50, "too few places with nothing engaged: {nones}");
         assert!(
             skipped > 0,
             "no tile was ever passed over: the test shows nothing"
