@@ -80,6 +80,40 @@ pub fn body_words(cat: Option<&fb::catalog::Catalog>, name: &str) -> String {
     out
 }
 
+/// A check's name as an engineer says it (its key on hover).
+pub fn rule_label(r: fb::Rule) -> &'static str {
+    use fb::Rule::*;
+    match r {
+        ToolCollision => "Tool collision",
+        ClosesOnPunch => "Closes on punch",
+        SelfCollision => "Part on itself",
+        MinFlange => "Minimum flange",
+        VTooNarrow => "V too narrow",
+        VDepth => "V depth",
+        DieAngle => "Die angle",
+        PunchAngle => "Punch angle",
+        PunchRadius => "Punch radius",
+        BackgaugeReach => "Backgauge reach",
+        OpenHeight => "Open height",
+        Stroke => "Stroke",
+        BedLength => "Bed length",
+        Segments => "Stack segments",
+        Tonnage => "Tonnage",
+        Withdraw => "Punch withdrawal",
+        Handling => "Operator handling",
+    }
+}
+
+/// A check's value with its unit: angles in degrees, force in kN, the rest in mm.
+pub fn rule_value(r: fb::Rule, x: f64) -> String {
+    match r {
+        fb::Rule::DieAngle | fb::Rule::PunchAngle => format!("{:.1}°", x.to_degrees()),
+        fb::Rule::Tonnage => format!("{x:.1} kN"),
+        // a clearance at zero is zero, not "-0.00"
+        _ => format!("{:.2} mm", if x.abs() < 0.005 { 0.0 } else { x }),
+    }
+}
+
 fn num(x: f64) -> String {
     let s = format!("{x:.1}");
     s.strip_suffix(".0").map(str::to_string).unwrap_or(s)

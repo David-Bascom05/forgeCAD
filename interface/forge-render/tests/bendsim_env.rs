@@ -115,6 +115,10 @@ fn a_channel_on_a_trubend_in_3d() {
     // the view holds the press: the design's part put aside
     assert!(h.gui.bend.showing());
     assert!(h.gui.shell.place("env:bendsim:timeline").is_some());
+    assert!(
+        h.gui.shell.place("env:bendsim:properties").is_some(),
+        "the bend's sheet docked"
+    );
     let n = h.gui.view.as_ref().unwrap().scene.placements.len();
     assert!(n > 6, "press, tools and part: {n} bodies");
     shot(&mut h, "00-trubend-default-view");
