@@ -316,3 +316,5 @@ urdf-export, machines/builder, posts/dialects.
 - δ-ACCUMULATION (David): prove honest per-entity bound (each merge ≤ edge.tol), measure drift on long chains + ADVERSARIAL worst case (FLAT-SITES, research/booleans/drift.md); snap-to-exact-meet at merge sites only if creep shows, at zero speed cost.
 - Adaptive: no micro-moves (David) — arcs/long lines from generation, min block length test, one F per arc; chip-load guard (hex_max ≤ fz) harness-wide.
 - macOS ffmpeg: unpinned pending David (Riedl builds are --enable-nonfree: not redistributable).
+- ZERO-SPEED RULE, judged LAYOUT exception (coordinator ruling): allowed only with per-function callgrind showing zero increase in any forge-* fn own cost, identical call counts, excess solely glibc maps parse / std generics codegen / memcmp alignment; 0 regen1 lines over; strict total <= main; bits identical; analysis in PR band section.
+- Line/circle merge (forge-num step 5): awaiting David; recommended (5b) one formula+exact classifier, judged bits per client, weld first.
