@@ -94,6 +94,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 |---|---|---|---|---|
 | 1a.where | `whereR`, `whereF` | FLAT-SITES | open | — |
 | 1a.classify | `classify_spec`: Ok w ⇒ w = whereR ⟦b⟧ p | FLAT-SITES | open | — |
+| 1a.rays | classify's and point_in_face's degenerate rays: `plane_ray_crossings`' zero denominator (a ray parallel to a line edge), non-finite hit, hit within the margin of an edge's end, `conic_ray`'s tangency, `classify`'s Touching hit, and the uv-polygon fallback after all three planar rays are undecided | FLAT-SITES | open: **no corpus evidence** (coverage-2026-11-23 group 4: none of these branches ran in the gate parts, bench parts or fuzz): the proof must cover them. Unit tests now drive them (classify.rs `degenerate_rays`: each curve case of `plane_ray_crossings`, and 60 star faces with a vertex on every planar ray, checked against the exact even-odd answer); the non-finite hit is still unreached | classify.rs tests |
 | 1a.total | `classify_total_flat`: never refuses on flat bodies | FLAT-SITES | open | — |
 | 1a.pif | `point_in_face_spec`: Ok w ⇒ w = whereF ⟦f⟧ p | FLAT-SITES | open | — |
 | 1a.foot | `foot`, `foot_on`; per probe site, foot ∈ relInterior region | FLAT-SITES | open | — |
