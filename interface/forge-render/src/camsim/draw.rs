@@ -29,6 +29,12 @@ pub mod look {
     pub const PART: [f32; 3] = rgb(0x8FA6BF);
     pub const LEFTOVER: [f32; 3] = rgb(0xF08A24);
     pub const FAIL: [f32; 3] = rgb(0xF03A3A);
+    pub const NO_VALUE: [f32; 3] = rgb(0x6B7078);
+    /// A measured value's bands: too little, right, too much.
+    pub const LOW: [f32; 3] = rgb(0x4C8FE0);
+    pub const GOOD: [f32; 3] = rgb(0x46B55A);
+    pub const HIGH: [f32; 3] = rgb(0xE5A23A);
+    pub const OVER: [f32; 3] = rgb(0xE0453A);
 }
 
 /// A piece's colour.
@@ -121,6 +127,34 @@ pub struct PathShow<'a> {
     pub width: f32,
     /// A piece drawn wider (the move list's selection).
     pub picked: Option<usize>,
+    /// Colour cutting pieces by a measured value instead of by kind (`Values`).
+    pub values: Option<&'a Values>,
+}
+
+/// A measured value per piece of the timeline (chip load, engagement, ..) and how it is
+/// coloured: each piece's value as a fraction of its scale, mapped through the bands.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Values {
+    /// What it is, and its unit (the legend's words).
+    pub name: String,
+    pub unit: String,
+    /// Per piece (`Timeline::segs`): the value and the scale it is read against (None: no
+    /// value, drawn grey).
+    pub per_piece: Vec<Option<(f32, f32)>>,
+    /// Bands of value / scale: upper ends, with each band's colour and word.
+    pub bands: Vec<(f32, [f32; 3], String)>,
+}
+
+impl Values {
+    /// The colour of a value against its scale.
+    pub fn colour(&self, v: f32, scale: f32) -> [f32; 3] {
+        let f = if scale > 0.0 { v / scale } else { v };
+        self.bands
+            .iter()
+            .find(|b| f <= b.0)
+            .or(self.bands.last())
+            .map_or(look::CUT, |b| b.1)
+    }
 }
 
 /// The toolpath's ribbons.
@@ -137,7 +171,13 @@ pub fn toolpath(tl: &Timeline, eye: &Eye, show: &PathShow, out: &mut Vec<WorldVe
         if ahead && show.played_only {
             continue;
         }
-        let c = colour_of(g);
+        let c = match show.values.filter(|_| g.kind != Kind::Rapid) {
+            Some(vals) => match vals.per_piece.get(i).copied().flatten() {
+                Some((v, sc)) => vals.colour(v, sc),
+                None => look::NO_VALUE,
+            },
+            None => colour_of(g),
+        };
         let alpha = if ahead { 0.28 } else { 0.95 };
         let w = if show.picked == Some(i) {
             show.width * 3.0
@@ -564,4 +604,89 @@ pub fn part(tris: &[[[f64; 3]; 3]], alpha: f32, out: &mut Vec<WorldVert>) {
 pub fn lin(hex: u32, a: f32) -> [f32; 4] {
     let c = rgb(hex);
     [c[0], c[1], c[2], a]
+}
+
+impl Values {
+    /// Values per (op, path, move of the posted path) laid onto the timeline's pieces: every
+    /// piece of that move takes it.
+    pub fn of_moves(
+        tl: &Timeline,
+        name: &str,
+        unit: &str,
+        bands: Vec<(f32, [f32; 3], String)>,
+        value: &dyn Fn(usize, usize, usize) -> Option<(f32, f32)>,
+    ) -> Values {
+        Values {
+            name: name.into(),
+            unit: unit.into(),
+            per_piece: tl
+                .segs
+                .iter()
+                .map(|g| value(g.op as usize, g.path as usize, g.mv as usize))
+                .collect(),
+            bands,
+        }
+    }
+
+    /// Values measured per feed move of an op's planned paths (forge-cam-quality's `MoveQ`:
+    /// rapids and hole cycles skipped), laid onto the moves the simulation plays. `per_op(i)`
+    /// gives op i's values as (path, value, scale) in move order. The played path is the posted
+    /// one where a program posted it, which can differ from the planned one by rounding: the
+    /// k-th feed move (line or arc) of a played path takes the k-th value of that path, and a
+    /// path whose count of feed moves differs from its count of values is left grey (not
+    /// measured) rather than coloured by a guess.
+    pub fn of_feeds(
+        cam: &forge_cam_lang::Cam,
+        tl: &Timeline,
+        name: &str,
+        unit: &str,
+        bands: Vec<(f32, [f32; 3], String)>,
+        per_op: &dyn Fn(usize) -> Option<Vec<(usize, f32, f32)>>,
+    ) -> Values {
+        use forge_cam::ops::PMove;
+        let mut at = std::collections::HashMap::new();
+        for i in 0..cam.ops.len() {
+            let Some(q) = per_op(i) else { continue };
+            for (p, path) in cam.sim_paths(i).iter().enumerate() {
+                let feeds: Vec<usize> = path
+                    .moves
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, m)| matches!(m, PMove::Line { .. } | PMove::Arc { .. }))
+                    .map(|(k, _)| k)
+                    .collect();
+                let vals: Vec<(f32, f32)> = q.iter().filter(|x| x.0 == p).map(|x| (x.1, x.2)).collect();
+                if feeds.len() != vals.len() {
+                    continue;
+                }
+                for (mv, v) in feeds.into_iter().zip(vals) {
+                    at.insert((i, p, mv), v);
+                }
+            }
+        }
+        Self::of_moves(tl, name, unit, bands, &|op, path, mv| {
+            at.get(&(op, path, mv)).copied()
+        })
+    }
+
+    /// Chip thickness against the op's target feed per tooth: rubbing below half, overload
+    /// above 1.25 (the quality measurement's own thresholds).
+    pub fn chip_bands() -> Vec<(f32, [f32; 3], String)> {
+        vec![
+            (0.5, look::LOW, "rubbing (< 0.5 fz)".into()),
+            (1.0, look::GOOD, "0.5 – 1 fz".into()),
+            (1.25, look::HIGH, "1 – 1.25 fz".into()),
+            (f32::INFINITY, look::OVER, "overload (> 1.25 fz)".into()),
+        ]
+    }
+
+    /// Engagement angle (degrees, scale 1): light, half, heavy, slotting.
+    pub fn engagement_bands() -> Vec<(f32, [f32; 3], String)> {
+        vec![
+            (30.0, look::LOW, "< 30°".into()),
+            (90.0, look::GOOD, "30 – 90°".into()),
+            (150.0, look::HIGH, "90 – 150°".into()),
+            (f32::INFINITY, look::OVER, "> 150° (slotting)".into()),
+        ]
+    }
 }

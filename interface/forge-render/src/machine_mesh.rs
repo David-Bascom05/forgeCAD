@@ -128,6 +128,46 @@ pub fn prim_tris(p: &Prim, out: &mut Tris) {
     out.patch(t0, v0);
 }
 
+/// A turned outline revolved about +z: (z, radius) points in order (an end on the axis closes
+/// it), `ROUND` segments around; edges at every ring.
+pub fn revolve(outline: &[[f64; 2]]) -> Tris {
+    let mut t = Tris::default();
+    let ring = |z: f64, r: f64, k: usize| {
+        let th = 2.0 * std::f64::consts::PI * (k % ROUND) as f64 / ROUND as f64;
+        let (sn, cs) = forge_math::dmath::sin_cos(th);
+        ([r * cs, r * sn, z], [cs, sn])
+    };
+    for w in outline.windows(2) {
+        let ([z0, r0], [z1, r1]) = (w[0], w[1]);
+        let (dz, dr) = (z1 - z0, r1 - r0);
+        let len = (dz * dz + dr * dr).sqrt();
+        if len == 0.0 {
+            continue;
+        }
+        // the outward normal of the generator in (radial, z): (dz, -dr) / len, facing out
+        let (nr, nz) = (dz / len, -dr / len);
+        for k in 0..ROUND {
+            let (p0, c0) = ring(z0, r0, k);
+            let (p1, c1) = ring(z0, r0, k + 1);
+            let (q1, _) = ring(z1, r1, k + 1);
+            let (q0, _) = ring(z1, r1, k);
+            let n0 = [c0[0] * nr, c0[1] * nr, nz];
+            let n1 = [c1[0] * nr, c1[1] * nr, nz];
+            let b = t.pos.len() as u32;
+            t.pos.extend_from_slice(&[p0, p1, q1, q0]);
+            t.nrm.extend_from_slice(&[n0, n1, n1, n0]);
+            t.tri.push([b, b + 1, b + 2]);
+            t.tri.push([b, b + 2, b + 3]);
+        }
+        if r1 > 0.0 {
+            t.edges.push((0..=ROUND).map(|k| ring(z1, r1, k).0).collect());
+        }
+    }
+    let (nt, nv) = (t.tri.len(), t.pos.len());
+    t.patches.push((0, nt as u32, 0, nv as u32));
+    t
+}
+
 /// A body's primitives.
 pub fn prims_tris(prims: &[Prim]) -> Tris {
     let mut t = Tris::default();
@@ -319,6 +359,26 @@ mod tests {
             let [a, b, cc] = tri.map(|i| c.pos[i as usize]);
             let n = kin::cross(kin::sub(b, a), kin::sub(cc, a));
             assert!(kin::dot(n, c.nrm[tri[0] as usize]) > -1e-12);
+        }
+    }
+
+    #[test]
+    fn a_revolved_outline_faces_out() {
+        let t = revolve(&[
+            [0.0, 0.0],
+            [0.0, 5.0],
+            [20.0, 5.0],
+            [20.0, 3.0],
+            [50.0, 3.0],
+            [50.0, 0.0],
+        ]);
+        assert!(!t.tri.is_empty());
+        for tri in &t.tri {
+            let [a, b, c] = tri.map(|i| t.pos[i as usize]);
+            let n = kin::cross(kin::sub(b, a), kin::sub(c, a));
+            if kin::norm(n) > 1e-12 {
+                assert!(kin::dot(n, t.nrm[tri[0] as usize]) > 0.0, "{tri:?}");
+            }
         }
     }
 

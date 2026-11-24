@@ -61,6 +61,12 @@ impl Gui {
         }
         let Some(w) = &self.shell.cam else { return };
         // the workspace has a run of text the simulation is not of: simulate it
+        // a turning document is not a milling run (its removal comes later, through this
+        // interface): no simulation of it
+        if forge_turn_lang::is_turning(&w.text) {
+            self.shell.camsim = None;
+            return;
+        }
         if let Some(run) = &w.run {
             // keyed by the text and what its run came to: the same text run again with the
             // files it reads now there (a browser page's arrive after it opens) is simulated again
@@ -85,6 +91,23 @@ impl Gui {
             && let Some(st) = self.shell.camsim.as_deref_mut()
         {
             st.take_focus(&f);
+            // the toolpath coloured by what the workspace chose (its run's quality measurement)
+            st.values = f.colour_by.map(|c| {
+                use crate::camsim::draw::Values;
+                let (name, unit, bands) = match c {
+                    crate::shell::cam::ColourBy::ChipLoad => {
+                        ("chip load", "mm, against the op's fz", Values::chip_bands())
+                    }
+                    crate::shell::cam::ColourBy::Engagement => {
+                        ("engagement", "degrees", Values::engagement_bands())
+                    }
+                };
+                // per feed move, from forge-cam-quality's measurement of the run (w.run.quality):
+                // its per-move values (MoveQ) are not on this branch yet, so every cutting move is
+                // grey, "not measured" in the legend; with them, per_op is op i's OpQ (by name)
+                // mapped to (path, load or phi, 1.0) per moves_q entry
+                Values::of_feeds(&st.sim.cam, &st.sim.tl, name, unit, bands, &|_| None)
+            });
             self.shell.camsim_job.focus = Some(f);
             if let Some(v) = &mut self.view {
                 v.dirty = true;
@@ -294,6 +317,7 @@ pub fn geometry(
         played_only: st.played_only,
         width: st.path_width,
         picked: st.picked,
+        values: st.values.as_ref(),
     };
     draw::toolpath(&st.sim.tl, &eye, &show, world);
     // the leftover regions (G4, exact), once their setup is done

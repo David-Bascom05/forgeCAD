@@ -1089,6 +1089,14 @@ name = "forge-cam-geom"
 version = "0.1.0"
 
 [[package]]
+name = "forge-cam-import"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-cam-lang"
 version = "0.1.0"
 dependencies = [
@@ -1102,6 +1110,19 @@ dependencies = [
  "forge-model",
  "forge-post",
  "forge-sketch",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-cam-quality"
+version = "0.1.0"
+dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-cam-lang",
+ "forge-machine",
+ "forge-math",
+ "forge-post",
  "forge-tooling",
 ]
 
@@ -1324,7 +1345,9 @@ dependencies = [
  "forge-brake",
  "forge-cam",
  "forge-cam-geom",
+ "forge-cam-import",
  "forge-cam-lang",
+ "forge-cam-quality",
  "forge-dirs",
  "forge-draw",
  "forge-dwg",
@@ -1349,6 +1372,8 @@ dependencies = [
  "forge-thermo",
  "forge-tooling",
  "forge-topo",
+ "forge-turn",
+ "forge-turn-lang",
  "forge-vendor",
  "js-sys",
  "keyring-core",
@@ -1429,6 +1454,28 @@ version = "0.1.0"
 dependencies = [
  "forge-geom",
  "forge-math",
+]
+
+[[package]]
+name = "forge-turn"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-geom",
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-turn-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-cam-geom",
+ "forge-lang",
+ "forge-turn",
 ]
 
 [[package]]
