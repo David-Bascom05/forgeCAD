@@ -11,6 +11,7 @@ pub mod asmpart;
 pub mod asmtools;
 mod banner;
 pub mod bendsim;
+mod bendsim_cards;
 mod bendsim_env;
 pub mod cam;
 pub mod content;

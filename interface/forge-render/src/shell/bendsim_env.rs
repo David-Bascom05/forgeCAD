@@ -15,6 +15,8 @@ const BACK: u16 = 101;
 const PLAY: u16 = 102;
 const NEXT: u16 = 103;
 const AGAIN: u16 = 104;
+const OVERVIEW: u16 = 105;
+const WORK: u16 = 106;
 
 fn tool(name: &'static str, icon: &'static str, action: Option<Action>, on: bool) -> Tool {
     Tool {
@@ -117,6 +119,11 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
             ],
         ),
         group(
+            "View",
+            vec![tool("Press Overview", "zoom", cmd(OVERVIEW), false)],
+            vec![tool("Part and Tools", "eye", cmd(WORK), false)],
+        ),
+        group(
             "Simulate",
             vec![tool(
                 "Simulate Again",
@@ -146,11 +153,26 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                     .font(super::theme::semi(13.0))
                     .color(t.ink),
             );
-            super::bendsim::setup_ui(ui, &mut b);
-            ui.separator();
-            super::bendsim::sequence_ui(ui, &mut b);
-            ui.separator();
-            flat = super::bendsim::results_ui(ui, &mut b);
+            use super::bendsim::Pane;
+            // the panel's width: long lines wrap within it
+            ui.set_max_width(r.width() - 24.0);
+            ui.spacing_mut().item_spacing.x = ui.spacing().item_spacing.x.max(6.0);
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                for (pane, word) in [(Pane::Program, "Program"), (Pane::Setup, "Machine & Tools")] {
+                    if ui.selectable_label(b.pane == pane, word).clicked() {
+                        b.pane = pane;
+                    }
+                }
+            });
+            match b.pane {
+                Pane::Setup => super::bendsim::setup_ui(ui, &t, &mut b),
+                Pane::Program => {
+                    super::bendsim::sequence_ui(ui, &t, &mut b);
+                    ui.separator();
+                    flat = super::bendsim::results_ui(ui, &mut b);
+                }
+            }
         });
     s.places.push(("env:bendsim:browser".into(), r));
     s.sheet.bend_sim = Some(b);
@@ -225,6 +247,8 @@ pub(super) fn command(s: &mut Shell, c: u16) {
         BACK => b.go(b.step.saturating_sub(1)),
         NEXT => b.go((b.step + 1).min(n.saturating_sub(1))),
         PLAY => b.play(),
+        OVERVIEW => b.frame = Some(super::bendsim::Framing::Overview),
+        WORK => b.frame = Some(super::bendsim::Framing::Work),
         AGAIN => {
             if let Some(fg) = s.fg.as_ref() {
                 let tooling = b.tooling.clone();

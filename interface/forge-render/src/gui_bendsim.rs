@@ -7,6 +7,7 @@ use super::Gui;
 use crate::mesh::{FaceRange, Lod, PartMesh};
 use crate::render::Renderer;
 use crate::scene::{Placement, Scene};
+use crate::shell::bendsim::Framing;
 use crate::shell::env::EnvId;
 use forge_brake::scene::{Body, Look, Mesh};
 
@@ -26,6 +27,9 @@ pub struct BendView {
     ours: Option<u64>,
     /// The camera framed on the press once per entry.
     framed: bool,
+    /// The working station's place along the bed when framed: the part moved to another
+    /// station, the eye follows it there.
+    station: Option<u64>,
 }
 
 /// Unit normal to octahedral i16x2 (as tess.rs packs them).
@@ -102,7 +106,63 @@ pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
         Look::Gauge => [0.16, 0.16, 0.17, 0.6],
         Look::Floor => [0.30, 0.30, 0.29, 0.0],
         Look::Witness => [0.95, 0.10, 0.08, 0.0],
+        // the bend being made: an annotation colour of the panel's, not a material
+        Look::BendZone => [0.98, 0.60, 0.10, 0.0],
     })
+}
+
+/// The eye for a framing: `Work` holds the part and the working station's punch and die (their
+/// length cut to the part's, plus a margin), seen nearly end on from the bed's near end, a little
+/// from the operator's side and above: the punch's and die's sections, the part folding between
+/// them; `Overview` the whole press, from the operator's side and above.
+pub fn framing(bodies: &[Body], how: Framing, size: (u32, u32)) -> Option<crate::camera::Camera> {
+    let grow = |lo: &mut [f32; 3], hi: &mut [f32; 3], a: [f32; 3], c: [f32; 3]| {
+        for k in 0..3 {
+            lo[k] = lo[k].min(a[k]);
+            hi[k] = hi[k].max(c[k]);
+        }
+    };
+    let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+    for x in bodies.iter().filter(|x| x.look.is_sheet()) {
+        if let Some((a, c)) = x.mesh.bounds() {
+            grow(&mut lo, &mut hi, a, c);
+        }
+    }
+    if lo[0] > hi[0] {
+        return None;
+    }
+    let (ylo, yhi) = (lo[1] - 80.0, hi[1] + 80.0);
+    for x in bodies {
+        let on = match how {
+            Framing::Work => {
+                x.look == Look::Tool && (x.name.starts_with("punch:") || x.name.starts_with("die:"))
+            }
+            Framing::Overview => !matches!(x.look, Look::Floor),
+        };
+        if let (true, Some((mut a, mut c))) = (on, x.mesh.bounds()) {
+            if how == Framing::Work {
+                a[1] = a[1].max(ylo);
+                c[1] = c[1].min(yhi);
+            }
+            grow(&mut lo, &mut hi, a, c);
+        }
+    }
+    let center = [
+        0.5 * (lo[0] + hi[0]),
+        0.5 * (lo[1] + hi[1]),
+        0.5 * (lo[2] + hi[2]),
+    ];
+    let radius = 0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
+    // a perspective eye of its own (the design's may be parallel)
+    let mut cam = crate::camera::Camera::fit(center, radius);
+    let (yaw, pitch, room) = match how {
+        Framing::Work => (250f32, 12f32, 0.85),
+        Framing::Overview => (225f32, 18f32, 1.0),
+    };
+    cam.yaw = yaw.to_radians();
+    cam.pitch = pitch.to_radians();
+    cam.dist = room * cam.fit_dist(radius, size.0.max(1), size.1.max(1));
+    Some(cam)
 }
 
 impl BendView {
@@ -140,7 +200,7 @@ impl Gui {
         }
         let step = b.step.min(n - 1);
         let key = (sim as *const _ as usize, step, b.t.to_bits());
-        if self.bend.shown == Some(key) {
+        if self.bend.shown == Some(key) && b.frame.is_none() {
             return;
         }
         let mut sc = forge_brake::scene::Scene::new(&sim.model, &sim.tooling, &sim.plan);
@@ -196,27 +256,16 @@ impl Gui {
             }
             self.bend.names = names;
         }
-        if !self.bend.framed {
-            // the part on the working station, seen along the bed from its near end and a
-            // little in front (the operator's side) and above: the punch, the V and the part's
-            // section in view, the ram and frame behind
-            let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
-            for x in bodies.iter().filter(|x| x.look == Look::Sheet) {
-                if let Some((a, c)) = x.mesh.bounds() {
-                    for k in 0..3 {
-                        lo[k] = lo[k].min(a[k]);
-                        hi[k] = hi[k].max(c[k]);
-                    }
-                }
-            }
-            if lo[0] <= hi[0] {
-                let center = [0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1]), 40.0];
-                let reach = (hi[0] - lo[0]).max(hi[1] - lo[1]).max(hi[2] - lo[2]);
-                // a perspective eye of its own (the design's may be parallel)
-                let mut cam = crate::camera::Camera::fit(center, reach);
-                cam.yaw = 262f32.to_radians();
-                cam.pitch = 12f32.to_radians();
-                cam.dist = (2.6 * reach).max(450.0);
+        let at = {
+            let st = &sim.plan.steps[step].setup;
+            sim.tooling.station(st.punch, st.die).map(|x| x.y.to_bits())
+        };
+        let ask = self.shell.sheet.bend_sim.as_mut().and_then(|b| b.frame.take());
+        let moved = self.bend.framed && self.bend.station != at;
+        self.bend.station = at;
+        if !self.bend.framed || ask.is_some() || moved {
+            let how = ask.unwrap_or(Framing::Work);
+            if let Some(cam) = framing(&bodies, how, v.size) {
                 v.nav.jump_to(cam);
             }
             self.bend.framed = true;

@@ -7,7 +7,7 @@
 //! `BENDSIM_SHOTS=DIR` writes the frames (PPM) for research/bendsim/env/.
 
 use forge_render::gui::{Gui, Headless};
-use forge_render::shell::bendsim::Choice;
+use forge_render::shell::bendsim::{Choice, Framing, Pane};
 use forge_render::shell::env::EnvId;
 use std::path::PathBuf;
 
@@ -64,20 +64,11 @@ fn click(h: &mut Headless, name: &str) {
     h.step();
 }
 
-/// The eye close on the tools, from the operator's side.
-fn close(h: &mut Headless, yaw: f32, dist: f32) {
-    let v = h.gui.view.as_mut().unwrap();
-    let mut c = v.nav.camera;
-    c.parallel = false;
-    c.target = [0.0, 0.0, 40.0];
-    c.yaw = yaw.to_radians();
-    c.pitch = 12f32.to_radians();
-    c.dist = dist;
-    v.nav.jump_to(c);
-    // the view redraws on a change of instant: nudge it
-    if let Some(b) = h.gui.shell.sheet.bend_sim.as_mut() {
-        b.t = (b.t + 1e-6).min(1.0);
-    }
+/// The view framed as the ribbon's View tools frame it.
+fn frame(h: &mut Headless, how: Framing) {
+    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+    b.frame = Some(how);
+    b.t = (b.t + 1e-6).min(1.0);
 }
 
 fn shot(h: &mut Headless, name: &str) {
@@ -127,9 +118,30 @@ fn a_channel_on_a_trubend_in_3d() {
     let n = h.gui.view.as_ref().unwrap().scene.placements.len();
     assert!(n > 6, "press, tools and part: {n} bodies");
     shot(&mut h, "00-trubend-default-view");
-    close(&mut h, 225.0, 4200.0);
+    // the machine and its tools: the library as cards
+    h.gui.shell.sheet.bend_sim.as_mut().unwrap().pane = Pane::Setup;
+    shot(&mut h, "07-machine-and-tools");
+    h.gui.shell.sheet.bend_sim.as_mut().unwrap().pane = Pane::Program;
+    // the bend being made is marked on the part
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.step = 0;
+        b.t = 0.6;
+    }
+    for _ in 0..3 {
+        h.step();
+    }
+    let v = h.gui.view.as_ref().unwrap();
+    assert!(
+        v.scene
+            .placements
+            .iter()
+            .any(|p| p.tint[0] > 0.9 && (0.5..0.7).contains(&p.tint[1]) && p.tint[2] < 0.2),
+        "the bend zone in amber"
+    );
+    assert!(h.click("tool:Press Overview"), "the ribbon's overview");
     shot(&mut h, "00-trubend-whole-press");
-    close(&mut h, 262.0, 560.0);
+    frame(&mut h, Framing::Work);
     for (step, t, name) in [
         (0, 0.3, "01-trubend-approach"),
         (0, 0.6, "02-trubend-bend-1"),
@@ -151,6 +163,10 @@ fn a_channel_on_a_trubend_in_3d() {
         b.t = 0.6;
     }
     shot(&mut h, "06-program-editor");
+    // its stations on the bed, dragged to place
+    h.gui.shell.sheet.bend_sim.as_mut().unwrap().pane = Pane::Setup;
+    shot(&mut h, "08-stations-on-the-bed");
+    assert!(h.gui.shell.place("env:bendsim:browser").is_some());
     // scrub to the end: the part folded, the design back on Finish
     click(&mut h, "tool:Finish Bend Simulation");
     h.step();
@@ -167,7 +183,6 @@ fn a_flange_closing_on_a_straight_punch_shows_in_red() {
         "bystronic-xpert-pro-100-3100",
         Some(&["bystronic/P6_RF-A_H175_R1.0"]),
     );
-    close(&mut h, 262.0, 640.0);
     let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
     assert!(b.as_given, "no feasible order: the part's own shown");
     let sim = b.sim.as_ref().expect("simulated");
@@ -183,6 +198,7 @@ fn a_flange_closing_on_a_straight_punch_shows_in_red() {
     let phimax = sim.plan.steps[k].angle + sim.plan.steps[k].overbend;
     b.step = k;
     b.t = 0.4 + 0.35 * (phi / phimax).clamp(0.0, 1.0);
+    frame(&mut h, Framing::Work);
     shot(&mut h, "05-bystronic-collision");
     let v = h.gui.view.as_ref().unwrap();
     assert!(
