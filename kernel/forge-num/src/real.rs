@@ -1500,6 +1500,47 @@ mod tests {
         }
     }
 
+    /// The hand model of the field route (verify/forge-cam/ForgeCam/Quad.lean), on values where
+    /// each rule decides: the product keeps b1·b2·c (`quad_mul`: (1 + √2)² = 3 + 2√2), the
+    /// quotient is by the conjugate over the norm (`quad_div`: 1 / (1 + √2) = −1 + √2), and the
+    /// sign of a + b√c with a, b of opposite signs is a's where a² > b²c, b's where a² < b²c, and
+    /// 0 where they are equal (`quad_sign_opp`, `quad_sign_opp'`). Mutation (REMOVED-CHECKS
+    /// cam-real-quad): dropping the b1·b2·c term, or swapping the opposite-sign rule, fails it.
+    #[test]
+    fn the_field_route_follows_its_hand_model() {
+        let q = |x: f64| Q::dy(Dy::from_f64(x));
+        let quad = |a: f64, b: f64| Quad { a: q(a), b: q(b) };
+        let two = q(2.0);
+        let c = Some(&two);
+        // the exact value of a pair as (a, b), compared by the sign of the difference
+        let same = |x: &Quad, a: f64, b: f64| {
+            let d = x.add(&quad(a, b).neg());
+            d.a.sign() == Ordering::Equal && d.b.sign() == Ordering::Equal
+        };
+        let p = quad(1.0, 1.0).mul(&quad(1.0, 1.0), c);
+        assert!(same(&p, 3.0, 2.0), "(1 + √2)² is 3 + 2√2: {p:?}");
+        let p = quad(3.0, -2.0).mul(&quad(5.0, 7.0), c);
+        assert!(same(&p, 15.0 - 28.0, 21.0 - 10.0), "(3 − 2√2)(5 + 7√2): {p:?}");
+        let r = quad(1.0, 0.0).div(&quad(1.0, 1.0), c).expect("the norm is −1");
+        assert!(same(&r, -1.0, 1.0), "1 / (1 + √2) is −1 + √2: {r:?}");
+        // the signs: no root part; a = 0; the same signs; opposite signs either way, and equal
+        let cases: [(f64, f64, f64, Ordering); 9] = [
+            (-3.0, 0.0, 2.0, Ordering::Less),
+            (0.0, -1.0, 2.0, Ordering::Less),
+            (1.0, 1.0, 2.0, Ordering::Greater),
+            (3.0, -2.0, 2.0, Ordering::Greater), // 9 > 8
+            (1.0, -1.0, 2.0, Ordering::Less),    // 1 < 2
+            (-3.0, 2.0, 2.0, Ordering::Less),    // 9 > 8
+            (-1.0, 1.0, 2.0, Ordering::Greater), // 1 < 2
+            (2.0, -1.0, 4.0, Ordering::Equal),   // 4 = 4
+            (-2.0, 1.0, 4.0, Ordering::Equal),
+        ];
+        for (a, b, cv, want) in cases {
+            let cq = q(cv);
+            assert_eq!(quad(a, b).sign(Some(&cq)), want, "{a} + {b}√{cv}");
+        }
+    }
+
     /// The field route (`exact_sign`, at most one distinct root) gives the sign the doubling gives,
     /// on random expressions over small literals and one root, and on zeros built so the filter
     /// cannot see them: (x + y)(x − y) − (x² − y²), (x / y)·y − x, x·√c·√c − x·c, and the norm
