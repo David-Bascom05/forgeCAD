@@ -79,6 +79,8 @@ struct Session {
     last_read: Option<Instant>,
     mode: Option<String>,
     file: Option<String>,
+    /// When the process started (a session no page ever read is ended after `IDLE` too).
+    started: Option<Instant>,
     /// Bumped at each start: a reader of an ended session's stream stops.
     run: u64,
     stops: u64,
@@ -265,6 +267,10 @@ impl Agent {
         a.push(mcp);
         a.push("--append-system-prompt".into());
         a.push(system_prompt(&self.root));
+        // a page on another origin without --allow-bypass: a mode is always said, so the
+        // person's settings' bypass is never what the session starts in (the ending of one that
+        // says it's bypassed stays, behind this)
+        let mode = mode.or((self.cross_origin && !self.allow_bypass).then_some("default"));
         if let Some(m) = mode {
             a.extend(["--permission-mode".into(), m.to_string()]);
         }
@@ -373,6 +379,7 @@ impl Agent {
         let errs = child.stderr.take().expect("piped");
         st.stdin = child.stdin.take();
         st.child = Some(child);
+        st.started = Some(Instant::now());
         st.run += 1;
         st.busy = false;
         st.asked.clear();
@@ -586,7 +593,7 @@ impl Agent {
             "always" => Json::obj(vec![
                 ("behavior", "allow".into()),
                 ("updatedInput", input),
-                ("updatedPermissions", sugg),
+                ("updatedPermissions", self.always(sugg)),
             ]),
             "deny" => Json::obj(vec![
                 ("behavior", "deny".into()),
@@ -613,6 +620,41 @@ impl Agent {
         } else {
             err(409, "no session running")
         }
+    }
+
+    /// What an "always" answer may change. For a page on another origin: this session only,
+    /// never the person's settings files, and never into a bypass (unless --allow-bypass). For
+    /// this server's own page, what Claude Code offered, as a terminal would.
+    pub fn always(&self, sugg: Json) -> Json {
+        if !self.cross_origin {
+            return sugg;
+        }
+        let Json::Arr(all) = sugg else {
+            return Json::Arr(vec![]);
+        };
+        Json::Arr(
+            all.into_iter()
+                .filter(|s| {
+                    self.allow_bypass
+                        || !(s.get("type").and_then(Json::str) == Some("setMode")
+                            && s.get("mode").and_then(Json::str) == Some("bypassPermissions"))
+                })
+                .map(|s| match s {
+                    Json::Obj(kv) => Json::Obj(
+                        kv.into_iter()
+                            .map(|(k, v)| {
+                                if k == "destination" {
+                                    (k, "session".into())
+                                } else {
+                                    (k, v)
+                                }
+                            })
+                            .collect(),
+                    ),
+                    other => other,
+                })
+                .collect(),
+        )
     }
 
     fn control(st: &mut Session, subtype: &str, more: Vec<(&str, Json)>) -> bool {
@@ -710,7 +752,12 @@ impl Agent {
     /// Ends a session no page has read for `IDLE`. Called now and then.
     pub fn reap(&self) {
         let mut st = self.lock();
-        let idle = st.readers == 0 && st.last_read.is_some_and(|t| t.elapsed() > IDLE);
+        // no page reading it for a while, or none ever since it started
+        let idle = st.readers == 0
+            && match st.last_read {
+                Some(t) => t.elapsed() > IDLE,
+                None => st.started.is_some_and(|t| t.elapsed() > IDLE),
+            };
         if idle && let Some(mut c) = st.child.take() {
             let _ = c.kill();
             st.stdin = None;
@@ -829,5 +876,44 @@ mod tests {
         assert_eq!(a.who(&week), Who::Device);
         assert_eq!(a.who("x"), Who::Nobody);
         assert_eq!(a.forget(None), 1, "the lapsed one already gone");
+    }
+
+    #[test]
+    fn another_origins_always_is_this_session_only_and_never_a_bypass() {
+        let sugg = Json::parse(
+            r#"[{"type":"addRules","rules":[{"toolName":"Bash"}],"behavior":"allow","destination":"userSettings"},
+                {"type":"setMode","mode":"bypassPermissions","destination":"localSettings"},
+                {"type":"setMode","mode":"acceptEdits","destination":"session"}]"#,
+        )
+        .unwrap();
+        let other = Agent::new(PathBuf::from("/nowhere"), "p".repeat(32), true, false);
+        let Json::Arr(got) = other.always(sugg.clone()) else {
+            panic!()
+        };
+        assert_eq!(got.len(), 2, "no bypass: {got:?}");
+        assert!(
+            got.iter()
+                .all(|s| s.get("destination").and_then(Json::str) == Some("session"))
+        );
+        // and the session starts in a said mode, not the settings' (a bypass, perhaps)
+        let args = other.args(None);
+        assert!(
+            args.windows(2).any(|w| w == ["--permission-mode", "default"]),
+            "{args:?}"
+        );
+        // this server's own page: as Claude Code offered, as a terminal; its mode the person's
+        let own = Agent::new(PathBuf::from("/nowhere"), "p".repeat(32), false, false);
+        assert_eq!(own.always(sugg.clone()), sugg);
+        assert!(!own.args(None).iter().any(|a| a == "--permission-mode"));
+        // --allow-bypass: a bypass may be chosen, still not saved to their files
+        let allowed = Agent::new(PathBuf::from("/nowhere"), "p".repeat(32), true, true);
+        let Json::Arr(got) = allowed.always(sugg) else {
+            panic!()
+        };
+        assert_eq!(got.len(), 3);
+        assert!(
+            got.iter()
+                .all(|s| s.get("destination").and_then(Json::str) == Some("session"))
+        );
     }
 }

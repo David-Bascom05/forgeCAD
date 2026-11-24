@@ -32,6 +32,8 @@ use std::sync::{Arc, Mutex};
 
 /// The most a request's body may hold.
 const MAX_BODY: usize = 64 << 20;
+/// The most connections served at once.
+const MAX_CONNECTIONS: usize = 128;
 /// The most a request's head may hold.
 const MAX_HEAD: usize = 64 << 10;
 /// The most an agent call's body may hold (a message with a picture).
@@ -151,20 +153,51 @@ fn parse(args: &[String]) -> Result<Config, String> {
 /// An `--allow-origin` value as browsers send it in `Origin`: http(s), a host, a port if any;
 /// no path, no wildcard, not `null`.
 fn origin(v: &str) -> Result<String, String> {
-    let bad = || {
-        format!("--allow-origin {v}: an origin, as https://host or http://host:port (no path, no wildcard)")
-    };
+    let bad = |why: &str| format!("--allow-origin {v}: {why}");
+    let shape = "an origin, as https://host or https://host:port (no path, no wildcard)";
     let v = v.trim_end_matches('/').to_ascii_lowercase();
-    let (scheme, rest) = v.split_once("://").ok_or_else(bad)?;
-    let fine = matches!(scheme, "http" | "https")
-        && !rest.is_empty()
-        && rest
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || ".-:[]".contains(c));
-    if !fine {
-        return Err(bad());
+    let (scheme, rest) = v.split_once("://").ok_or_else(|| bad(shape))?;
+    if !matches!(scheme, "http" | "https") {
+        return Err(bad(shape));
     }
-    Ok(v)
+    // host, and port if any: a bracketed IPv6 address keeps its colons
+    let (host, port) = match rest.rsplit_once(':') {
+        Some((h, p)) if !p.contains(']') => (h, Some(p)),
+        _ => (rest, None),
+    };
+    let fine_host = !host.is_empty()
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || ".-[]:".contains(c))
+        && (host.contains(':') == host.starts_with('['));
+    if !fine_host {
+        return Err(bad(shape));
+    }
+    let port = match port {
+        None => None,
+        Some(p) => Some(
+            p.parse::<u16>()
+                .ok()
+                .filter(|n| *n > 0)
+                .ok_or_else(|| bad("the port is a number, 1 to 65535"))?,
+        ),
+    };
+    // plain http lets anyone on the network rewrite the page and take the token: https only,
+    // but for this machine
+    let loopback =
+        host == "localhost" || host == "[::1]" || host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback());
+    if scheme == "http" && !loopback {
+        return Err(bad(
+            "http only for this machine (localhost, 127.0.0.1); a page elsewhere must be https",
+        ));
+    }
+    // as browsers send it: the scheme's own port left out
+    Ok(match port {
+        Some(443) if scheme == "https" => format!("{scheme}://{host}"),
+        Some(80) if scheme == "http" => format!("{scheme}://{host}"),
+        Some(p) => format!("{scheme}://{host}:{p}"),
+        None => format!("{scheme}://{host}"),
+    })
 }
 
 /// The built app beside the installed binary (`share/forgecad/web`), or `FORGECAD_WEB`.
@@ -177,8 +210,20 @@ fn default_app() -> Option<PathBuf> {
     d.join("index.html").is_file().then_some(d)
 }
 
-/// 128 bits from the OS's randomness (std seeds each `RandomState` from it), as hex.
+/// 128 bits from the OS's random source, as hex: its CSPRNG device where there is one; else
+/// (Windows) SipHash keyed by std's per-process key, itself from the OS's randomness.
 pub(crate) fn random_token() -> String {
+    #[cfg(unix)]
+    {
+        use std::io::Read;
+        let mut b = [0u8; 16];
+        if std::fs::File::open("/dev/urandom")
+            .and_then(|mut f| f.read_exact(&mut b))
+            .is_ok()
+        {
+            return b.iter().map(|x| format!("{x:02x}")).collect();
+        }
+    }
     let mut s = String::new();
     for i in 0..2u64 {
         let mut h = RandomState::new().build_hasher();
@@ -228,8 +273,16 @@ pub fn serve(c: Config, ready: impl FnOnce(&Path, &str)) -> Result<(), String> {
         eprintln!("forgecad web: no built app (FORGECAD_WEB, --app): only the API is served");
     }
     ready(&c.root, &url);
-    // a page on another origin: the same token, and where this bridge is
+    // a page on another origin: the same token, and where this bridge is; and what that allows
     if let Some(a) = &c.agent {
+        if !c.origins.is_empty() {
+            eprintln!(
+                "forgecad web: a page from {} holding the token can do what Claude Code can do as you in {}: \
+                 read and write files and run commands, within your permission settings and the cards you answer",
+                c.origins.join(", "),
+                c.root.display()
+            );
+        }
         for o in &c.origins {
             // not println!: nothing reading stdout any more mustn't end the server
             let _ = writeln!(
@@ -247,11 +300,21 @@ pub fn serve(c: Config, ready: impl FnOnce(&Path, &str)) -> Result<(), String> {
 pub fn run(l: TcpListener, c: Arc<Config>) -> Result<(), String> {
     // one writer at a time: a check-then-write is whole
     let lock = Arc::new(Mutex::new(()));
+    // a thread a connection, so a cap on them: past it a new one is closed at once; one left
+    // idle is closed after a while (an agent's event stream is never idle: it's written to)
+    let open = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     for s in l.incoming() {
         let Ok(s) = s else { continue };
-        let (c, lock) = (c.clone(), lock.clone());
+        if open.load(std::sync::atomic::Ordering::SeqCst) >= MAX_CONNECTIONS {
+            drop(s);
+            continue;
+        }
+        let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(120)));
+        open.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let (c, lock, open) = (c.clone(), lock.clone(), open.clone());
         std::thread::spawn(move || {
             let _ = connection(s, &c, &lock);
+            open.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         });
     }
     Ok(())
@@ -320,7 +383,7 @@ fn reason(s: u16) -> &'static str {
     }
 }
 
-fn read_request(r: &mut BufReader<TcpStream>) -> Result<Option<Request>, Response> {
+fn read_request(r: &mut BufReader<TcpStream>, c: &Config) -> Result<Option<Request>, Response> {
     let mut head = Vec::new();
     loop {
         let mut line = Vec::new();
@@ -358,6 +421,30 @@ fn read_request(r: &mut BufReader<TcpStream>) -> Result<Option<Request>, Respons
         .map_err(|_| error(400, "a bad Content-Length"))?;
     if len > MAX_BODY {
         return Err(error(413, "the file is too large"));
+    }
+    // refused before its body is read: a Host that isn't this machine's, an Origin that isn't
+    // this page's or one allowed, an agent call larger than any it takes
+    let (path, _) = target.split_once('?').unwrap_or((target, ""));
+    let header = |k: &str| {
+        headers
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(k))
+            .map(|(_, v)| v.as_str())
+    };
+    if c.bind.is_loopback() && !header("host").is_some_and(is_loopback_name) {
+        return Err(error(421, "this server answers to localhost only"));
+    }
+    if let Some(o) = header("origin") {
+        let own = o
+            .split_once("://")
+            .map_or(o, |x| x.1)
+            .eq_ignore_ascii_case(header("host").unwrap_or_default());
+        if !own && !c.origins.iter().any(|a| a.eq_ignore_ascii_case(o)) {
+            return Err(error(403, "a request from another origin"));
+        }
+    }
+    if path.starts_with("/api/agent/") && len > MAX_AGENT_BODY {
+        return Err(error(413, "too large"));
     }
     let mut body = vec![0; len];
     r.read_exact(&mut body)
@@ -401,7 +488,7 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
     let mut out = s.try_clone()?;
     let mut r = BufReader::new(s);
     loop {
-        let (resp, keep, head) = match read_request(&mut r) {
+        let (resp, keep, head) = match read_request(&mut r, c) {
             Ok(None) => return Ok(()),
             Ok(Some(q)) => {
                 // the agent's events: a streamed answer, the connection's last
@@ -1206,6 +1293,39 @@ fn static_file(c: &Config, path: &str) -> Response {
 // a TCP server and its clients: WASI listens on nothing, so native only
 #[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
+    use super::origin;
+
+    #[test]
+    fn an_allowed_origin_is_one_origin_as_browsers_send_it() {
+        assert_eq!(origin("https://Forge.Example/").unwrap(), "https://forge.example");
+        assert_eq!(
+            origin("https://forge.example:443").unwrap(),
+            "https://forge.example"
+        );
+        assert_eq!(
+            origin("https://forge.example:8443").unwrap(),
+            "https://forge.example:8443"
+        );
+        assert_eq!(origin("http://127.0.0.1:5173").unwrap(), "http://127.0.0.1:5173");
+        assert_eq!(origin("http://localhost:80").unwrap(), "http://localhost");
+        assert_eq!(origin("http://[::1]:3000").unwrap(), "http://[::1]:3000");
+        for (bad, says) in [
+            ("http://forge.example", "must be https"),
+            ("http://192.168.1.4:8080", "must be https"),
+            ("https://forge.example:http", "port is a number"),
+            ("https://forge.example:0", "port is a number"),
+            ("https://forge.example:99999", "port is a number"),
+            ("https://*.example", "an origin"),
+            ("https://forge.example/app", "an origin"),
+            ("null", "an origin"),
+            ("ftp://forge.example", "an origin"),
+            ("https://", "an origin"),
+        ] {
+            let e = origin(bad).unwrap_err();
+            assert!(e.contains(says), "{bad}: {e}");
+        }
+    }
+
     use super::*;
 
     #[test]

@@ -790,3 +790,102 @@ fn a_remembered_device_pairs_for_a_week_until_forgotten() {
     drop(srv);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A request's head only, its body never sent: the answer comes all the same.
+fn head_only(port: u16, head: &str) -> Reply {
+    let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    s.write_all(head.as_bytes()).unwrap();
+    let mut all = String::new();
+    let _ = s.read_to_string(&mut all);
+    let (head, body) = all.split_once("\r\n\r\n").unwrap_or((&all, ""));
+    Reply {
+        status: head.split(' ').nth(1).and_then(|x| x.parse().ok()).unwrap_or(0),
+        head: head.to_string(),
+        body: body.to_string(),
+    }
+}
+
+#[test]
+fn the_reviews_gaps_every_door_is_shut_to_the_wrong_caller() {
+    let dir = scratch("gaps");
+    std::fs::write(dir.join("proj/plate.fg"), PART).unwrap();
+    let srv = serve_with(&dir, &fake(&dir, "default", false), &["--allow-origin", HOSTED]);
+    let auth = format!("Bearer {}", srv.token);
+    // the event stream: another Host (DNS rebinding), another origin, even with the token
+    for (h, v) in [("Host", "evil.example"), ("Origin", "https://evil.example")] {
+        let r = request(
+            srv.port,
+            "GET",
+            "/api/agent/events?from=0",
+            &[(h, v), ("Authorization", &auth)],
+            "",
+        );
+        assert!(r.status == 421 || r.status == 403, "{h}: {v}: {}", r.status);
+        assert!(!r.body.contains("system"), "nothing of the stream");
+    }
+    // every agent call from an origin not allowed, with the token: 403, no CORS
+    for call in ["start", "send", "answer", "mode", "stop", "remember", "forget"] {
+        let r = request(
+            srv.port,
+            "POST",
+            &format!("/api/agent/{call}"),
+            &[
+                ("Origin", "https://evil.example"),
+                ("Authorization", &auth),
+                ("Content-Type", "application/json"),
+            ],
+            "{}",
+        );
+        assert_eq!(r.status, 403, "{call}");
+        assert!(!r.head.to_ascii_lowercase().contains("access-control"), "{call}");
+    }
+    // the allowed host on another port is another origin
+    let r = request(
+        srv.port,
+        "GET",
+        "/api/files",
+        &[("Origin", "https://forge.example:8443"), ("Authorization", &auth)],
+        "",
+    );
+    assert_eq!(r.status, 403);
+    // what is allowed never lets the browser send its own credentials (cookies) along
+    let ok = request(
+        srv.port,
+        "GET",
+        "/api/files",
+        &[("Origin", HOSTED), ("Authorization", &auth)],
+        "",
+    );
+    assert_eq!(ok.status, 200);
+    assert!(
+        !ok.head
+            .to_ascii_lowercase()
+            .contains("access-control-allow-credentials")
+    );
+    // a body larger than any agent call takes: refused on its head, the body never read
+    let t = Instant::now();
+    let r = head_only(
+        srv.port,
+        &format!(
+            "POST /api/agent/send HTTP/1.1\r\nHost: localhost:{}\r\nAuthorization: {auth}\r\nContent-Type: application/json\r\nContent-Length: 30000000\r\n\r\n",
+            srv.port
+        ),
+    );
+    assert_eq!(r.status, 413);
+    assert!(
+        t.elapsed() < Duration::from_secs(5),
+        "answered without waiting for the body"
+    );
+    // and a stranger's huge body, refused for who it is before it's read
+    let r = head_only(
+        srv.port,
+        &format!(
+            "PUT /api/files/x.fg HTTP/1.1\r\nHost: localhost:{}\r\nOrigin: https://evil.example\r\nContent-Length: 60000000\r\n\r\n",
+            srv.port
+        ),
+    );
+    assert_eq!(r.status, 403);
+    drop(srv);
+    let _ = std::fs::remove_dir_all(dir);
+}

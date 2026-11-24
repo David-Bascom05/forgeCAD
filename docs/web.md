@@ -74,7 +74,13 @@ in a terminal. What would ask you in a terminal asks you in the page (a card: Al
 Deny), and each turn's edits show as diffs you can undo. Claude Code gets ForgeCAD's tools from
 `forgecad mcp --root DIR --writable`.
 
-The URL it prints ends `#agent=TOKEN`: open that link. The page keeps the token in memory only
+Claude Code runs headless (`claude -p`) in `DIR`, which skips its "do you trust this folder?"
+question: use `--agent` only on folders you trust, as you would running `claude` there.
+
+The URL it prints ends `#agent=TOKEN`: open that link. The token is in the terminal's
+scrollback, and the link may be in the browser's history (the page takes it off the address
+bar, but a history entry can keep the URL first opened): anyone who can read those while
+`forgecad web` runs can pair with it. Stop `forgecad web` to end the token. The page keeps the token in memory only
 (it takes it off the address bar and stores it nowhere), so after a reload, open the link again.
 Or tick **Remember this device for 7 days** in the Agent tab's Claude Code menu: the bridge
 gives this browser a token of its own, kept for this page for a week, and a reload pairs again
@@ -96,11 +102,21 @@ For the app served from somewhere else (a static host), this machine's `forgecad
 bridge: the page reads the project from `DIR` and drives Claude Code through it. It prints a
 second link, `https://forge.example/#bridge=http://127.0.0.1:PORT&agent=TOKEN`: open that one.
 
+**What you're allowing.** A page from that origin, holding the token, can do what Claude Code
+can do as you in `DIR`, within your permission settings and the cards you answer: read and write
+files, run commands. Allow only an origin you trust as you'd trust a program you run.
+
 - Only the origins you name may use it, compared whole (scheme, host and port; no wildcards,
-  no paths, never `null`). Any other page is refused, and its browser is told nothing.
+  no paths, never `null`; a scheme's own port is left out, as browsers send it). Plain `http`
+  only for this machine (`localhost`, `127.0.0.1`): a page elsewhere must be `https`, or anyone
+  on the network could rewrite it and take the token. Any other page is refused, before its
+  request's body is read, and its browser is told nothing.
 - From that origin every call, the files' as well as the agent's, needs the token.
-- If your Claude settings bypass permissions, a page on another origin runs that way only if
-  you also give `--allow-bypass`. Without it the session ends and the page says why.
+- The session always starts in a stated mode (Ask first unless the page chose another), so a
+  bypass in your Claude settings doesn't apply, unless you also give `--allow-bypass`. If the
+  session reports a bypass anyway, it's ended and the page says why.
+- "Always" from that page applies to the chat's session only: it's never written to your
+  Claude settings files, and never turns on a bypass (without `--allow-bypass`).
 - The page's own Content-Security-Policy lets it reach loopback (127.0.0.1 and localhost)
   and nothing else. Chrome may ask you to allow a public page to reach this machine; that's
   the browser's own check, kept.
