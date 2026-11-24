@@ -689,6 +689,12 @@ pub fn pocket(
 /// the kept passes from k inward then still cover (Rₖ ⊕ r) ∩ S (induction), so the opening the
 /// op claims is cleared within S, and outside S there is no stock. (A clear's region reaches
 /// 2r past the stock, so its outer passes run in air.)
+/// How far the tool's disk keeps from the stock's box for a side entry (mm): rapids are
+/// certified 0.1 mm clear of the stock.
+const SIDE_CLEAR: f64 = 0.6;
+/// The last part of a side entry's way down, at the plunge feed (mm).
+const SIDE_IN: f64 = 1.0;
+
 /// The way down from the retract height to `to`, the level above the one being entered. Below
 /// the first level (`cleared`) it is air: the passes are entered in the same order and the same
 /// way at every level, so at the level above the tool stood at this very point at that depth (the
@@ -851,6 +857,87 @@ pub fn pocket_in(
             Ok(d) if d.is_empty()
         )
     };
+    // a point the tool's centre may stand at: a square of half-width LINK_EPS about it inside
+    // the tool centres' region (exact)
+    let point_ok = |q: forge_cam_geom::region::P2| -> bool {
+        let c = [
+            forge_cam_geom::region::p2(q.x - LINK_EPS, q.y - LINK_EPS),
+            forge_cam_geom::region::p2(q.x + LINK_EPS, q.y - LINK_EPS),
+            forge_cam_geom::region::p2(q.x + LINK_EPS, q.y + LINK_EPS),
+            forge_cam_geom::region::p2(q.x - LINK_EPS, q.y + LINK_EPS),
+        ];
+        let sq = Region {
+            loops: vec![forge_cam_geom::region::Loop {
+                segs: (0..4)
+                    .map(|i| Seg::Line {
+                        a: c[i],
+                        b: c[(i + 1) % 4],
+                    })
+                    .collect(),
+            }],
+        };
+        matches!(
+            forge_cam_geom::boolean::boolean(&sq, &c0, forge_cam_geom::boolean::Op::Diff),
+            Ok(d) if d.is_empty()
+        )
+    };
+    // an entry from beside the stock (a clear's open region): the stock and the part lie within
+    // the box of `within` (its loops all lines: then that box bounds them). From q, straight out
+    // along x or y from the pass's start s with the tool's disk SIDE_CLEAR beyond the box, the
+    // tool comes down rapid to SIDE_IN above the level and feeds in sideways to s, instead of
+    // plunging into the stock. The way in: up to e, where the centre is r inside the box's
+    // outline grown by r, the disk meets nothing in the box (it is beyond it); from e to s, a
+    // link the tool centres' region holds (exact, as at depth). The nearest such q within 4r.
+    let sbox = within.filter(|sx| {
+        sx.loops
+            .iter()
+            .all(|l| l.segs.iter().all(|sg| matches!(sg, Seg::Line { .. })))
+    });
+    let side_entry = |s: forge_cam_geom::region::P2| -> Option<forge_cam_geom::region::P2> {
+        let (blo, bhi) = region_box(sbox?);
+        let m = r + SIDE_CLEAR;
+        // q, and e a hair (1e-3) inside the box grown by r, along each of the four ways out
+        let ways = [
+            (
+                [blo[0] - m, s.y],
+                [blo[0] - r + 1e-3, s.y],
+                s.x > blo[0] - r + 1e-3,
+            ),
+            (
+                [bhi[0] + m, s.y],
+                [bhi[0] + r - 1e-3, s.y],
+                s.x < bhi[0] + r - 1e-3,
+            ),
+            (
+                [s.x, blo[1] - m],
+                [s.x, blo[1] - r + 1e-3],
+                s.y > blo[1] - r + 1e-3,
+            ),
+            (
+                [s.x, bhi[1] + m],
+                [s.x, bhi[1] + r - 1e-3],
+                s.y < bhi[1] + r - 1e-3,
+            ),
+        ];
+        let mut best: Option<(f64, forge_cam_geom::region::P2)> = None;
+        for (q, e, beyond) in ways {
+            if !beyond {
+                continue;
+            }
+            let (q, e) = (
+                forge_cam_geom::region::p2(q[0], q[1]),
+                forge_cam_geom::region::p2(e[0], e[1]),
+            );
+            let d = ((q.x - s.x) * (q.x - s.x) + (q.y - s.y) * (q.y - s.y)).sqrt();
+            if d > 4.0 * r || best.is_some_and(|(bd, _)| bd <= d) {
+                continue;
+            }
+            if point_ok(e) && link_ok(e, s) {
+                best = Some((d, q));
+            }
+        }
+        best.map(|(_, q)| q)
+    };
     let fits: Vec<Vec<bool>> = passes
         .iter()
         .map(|ls| {
@@ -930,6 +1017,29 @@ pub fn pocket_in(
                     f: feed.0,
                     phase: Phase::Cut,
                 });
+            } else if let Some(q) = side_entry(s) {
+                // beside the stock: rapid down clear of it, the last SIDE_IN at the plunge feed,
+                // then in sideways
+                mv.push(PMove::Rapid {
+                    to: [q.x, q.y, h.retract],
+                });
+                if z + SIDE_IN < h.retract {
+                    mv.push(PMove::Rapid {
+                        to: [q.x, q.y, z + SIDE_IN],
+                    });
+                }
+                mv.push(PMove::Line {
+                    to: [q.x, q.y, z],
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+                if q != s {
+                    mv.push(PMove::Line {
+                        to: [s.x, s.y, z],
+                        f: feed.0,
+                        phase: Phase::Cut,
+                    });
+                }
             } else {
                 mv.push(PMove::Rapid {
                     to: [s.x, s.y, h.retract],

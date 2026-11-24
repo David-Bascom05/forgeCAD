@@ -69,7 +69,10 @@ to the level above at the cutting feed as a link, not at the plunge feed (the to
 very point at that depth one level up: ops.rs `air_down`). The 15 programs of latest.txt
 (boss_adaptive and open_step included): 2407.4 → 2335.9 s (−3.0%); plate_break −19.1 s,
 bracket −22.2 s over its three programs; tests/pinned.txt re-pinned for it (well_island 81.0 →
-78.4 s, deep_slot 92.7 → 88.2 s).
+78.4 s, deep_slot 92.7 → 88.2 s). Then `clear` enters from beside the stock where it can (rapid
+down clear of the stock's box, the last mm at the plunge feed, then in sideways; ops.rs
+`side_entry`): straight plunges into material in clear ops 55 → 0, 2335.9 → 2327.6 s; the chip
+is unchanged (hex max, p99, 0% overload), φmax rises at those entries (the feed follows it).
 
 Changes (cam/quality): stay-down linking between pocket/clear passes (greedy ready-innermost
 order, links tested exactly against the tool-centre region); feeds from engagement
@@ -101,15 +104,15 @@ ops and the same tool: face 1 mm, the surrounding step (`clear` or `adaptive`), 
 pockets (`pocket`), all certified. Part 1 is refused: its side walls are notched by the through
 slot (`NotPrism`, as open_step; with CAM-CORE). Parts 7–10 have freeform (3-axis finishing).
 
-Whole program, t_stop on generic-vmc3 (2026-11-24, with `air_down`):
+Whole program, t_stop on generic-vmc3 (2026-11-24, with `air_down` and side entries):
 
 | part | Autodesk | ours, step by `clear` | ours, step by `adaptive` |
 |---|---|---|---|
 | 2 (4 holes) | 315.7 s | 102.6 s | – |
-| 3 (+ rectangular step) | 474.4 s | 150.9 s | 316.3 s |
-| 4 (+ circular step) | 514.7 s | 214.3 s | 194.2 s |
-| 5 (+ mixed step) | 463.8 s | 195.5 s | 189.5 s |
-| 6 (+ circular pocket) | 681.8 s | 252.7 s | 417.9 s |
+| 3 (+ rectangular step) | 474.4 s | 149.5 s | 316.3 s |
+| 4 (+ circular step) | 514.7 s | 213.5 s | 194.2 s |
+| 5 (+ mixed step) | 463.8 s | 194.9 s | 189.5 s |
+| 6 (+ circular pocket) | 681.8 s | 251.2 s | 417.9 s |
 
 Read with care: the feeds differ as well as the paths. Theirs: S18000 (generic-vmc3 stops at
 12000: one `Rpm` violation, the timeline runs the programmed F), F2000 side cutting (0.111
