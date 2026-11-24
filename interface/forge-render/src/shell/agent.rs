@@ -310,6 +310,8 @@ pub struct AgentTab {
     pub open: std::collections::HashSet<String>,
     /// What the selection is, as the agent names it, if anything's selected.
     pub selection: Option<String>,
+    /// Everything selected, when it's more than one: offered as one chip, attached together.
+    pub selection_all: Vec<String>,
     /// A folder outside the projects tree, asked about once; the message waiting on it.
     pub trust_ask: Option<String>,
     pub pending: Option<(String, Vec<String>, Vec<crate::agent::Picture>)>,
@@ -755,8 +757,10 @@ impl AgentTab {
         }
         self.attach_view = false;
         // what's selected goes with it unless its chip was taken off
-        if let Some(s) = self.suggested().map(str::to_string) {
-            self.refs.push(s);
+        for s in self.suggested_all() {
+            if !self.refs.contains(&s) {
+                self.refs.push(s);
+            }
         }
         let refs = std::mem::take(&mut self.refs);
         let pictures = std::mem::take(&mut self.pictures);
@@ -854,6 +858,16 @@ impl AgentTab {
     }
 
     /// The selection, offered for the next message: not already attached, not taken off.
+    /// What the offered chip attaches: everything selected, or the one.
+    pub fn suggested_all(&self) -> Vec<String> {
+        let Some(s) = self.suggested() else { return vec![] };
+        if self.selection_all.len() > 1 && self.selection_all.iter().any(|x| x == s) {
+            self.selection_all.clone()
+        } else {
+            vec![s.to_string()]
+        }
+    }
+
     pub fn suggested(&self) -> Option<&str> {
         let s = self.selection.as_deref()?;
         (!self.refs.iter().any(|r| r == s) && self.dismissed.as_deref() != Some(s)).then_some(s)
@@ -1728,6 +1742,10 @@ impl Shell {
             return;
         }
         self.agent.selection = self.agent_selection();
+        self.agent.selection_all = match (&self.drawing, self.fg.as_ref()) {
+            (None, Some(fg)) if fg.asm.is_none() => fg.picked_all.clone(),
+            _ => Vec::new(),
+        };
         let drawing = self.drawing.as_ref().map(|d| d.name());
         self.agent.file = drawing
             .or_else(|| self.fg.as_ref().map(|f| base(&f.file).to_string()))
@@ -3160,14 +3178,26 @@ impl Shell {
             }
             if let Some(s) = &offered {
                 let room = box_r.right() - 6.0 - x;
-                let cr = offered_chip(ui, &t, pos2(x, y), s, room);
+                // several selected: one chip saying how many, each named on its hover
+                let all = self.agent.suggested_all();
+                let label = match all.len() {
+                    0 | 1 => format!("@{s}"),
+                    n => format!("{n} selected"),
+                };
+                let cr = offered_chip(ui, &t, pos2(x, y), &label, room);
                 let xr = Rect::from_min_size(pos2(cr.right() - 16.0, cr.top()), vec2(16.0, cr.height()));
+                let tip = if all.len() > 1 {
+                    format!(
+                        "{} selected · go with your message; × to leave them out:\n{}",
+                        all.len(),
+                        all.iter().map(|a| describe(a)).collect::<Vec<_>>().join("\n")
+                    )
+                } else {
+                    format!("{} · goes with your message; × to leave it out", describe(s))
+                };
                 let resp = ui
                     .interact(cr, ui.scope_id().with("agent-offered"), Sense::hover())
-                    .on_hover_text(format!(
-                        "{} · goes with your message; × to leave it out",
-                        describe(s)
-                    ));
+                    .on_hover_text(tip);
                 if resp.hovered() {
                     self.agent.hover_ref = Some(s.clone());
                 }
@@ -3505,7 +3535,15 @@ impl Shell {
         if ar_resp.clicked()
             && let Some(s) = sel
         {
-            self.agent.attach(&s);
+            // everything selected, when it's more than one
+            let all = if self.agent.selection_all.contains(&s) {
+                self.agent.selection_all.clone()
+            } else {
+                vec![s]
+            };
+            for s in all {
+                self.agent.attach(&s);
+            }
         }
 
         // markup: drawn on the window, sent with the message
@@ -3700,8 +3738,8 @@ pub fn describe_lower(id: &str) -> String {
 }
 
 /// The selection offered for the next message: outlined, not filled, until it's sent.
-fn offered_chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, id: &str, room: f32) -> Rect {
-    let g = ui.fonts_mut(|f| f.layout_no_wrap(format!("@{id}"), mono(11.0), t.ink2));
+fn offered_chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, label: &str, room: f32) -> Rect {
+    let g = ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), mono(11.0), t.ink2));
     let w = (g.size().x + 26.0).min(room.max(40.0));
     let r = Rect::from_min_size(at, vec2(w, 20.0));
     let p = ui.painter().with_clip_rect(r.expand(1.0));
@@ -3711,7 +3749,10 @@ fn offered_chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, id: &str, room: f32) -> 
         Stroke::new(1.0, t.focus.gamma_multiply(0.7)),
         StrokeKind::Inside,
     );
-    p.galley(pos2(r.left() + 7.0, r.center().y - g.size().y * 0.5), g, t.ink2);
+    // the text stops short of the ×
+    ui.painter()
+        .with_clip_rect(Rect::from_min_max(r.min, pos2(r.right() - 18.0, r.bottom())))
+        .galley(pos2(r.left() + 7.0, r.center().y - g.size().y * 0.5), g, t.ink2);
     p.text(
         pos2(r.right() - 9.0, r.center().y),
         Align2::CENTER_CENTER,
