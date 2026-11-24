@@ -2877,8 +2877,9 @@ fn along_whole(body: &Body, e: EdgeId, curve: &Curve, range: Interval) -> bool {
 /// it, is another branch: where that surface is the other face's plane, `e` lies in both surfaces,
 /// a branch of their meeting itself, and another branch only meets it (a torus's outer equator
 /// in the plane through its inner one). Along it, with none of its cuts on `e`, `e` was imprinted
-/// whole by its middle, out past the plane face. Out of line: asked only of edges taken as along
-/// (in `trim`, at the test that takes them, any change cost up to 0.6% in code alone).
+/// whole by its middle, out past the plane face: the face's split crossed itself. Asked only on
+/// the retry a crossed split takes (NO_RUN_ON), of edges taken as along, out of line: at the test
+/// that takes them any change cost up to 0.6% in code alone, and on every try 0.03%.
 #[cold]
 #[inline(never)]
 fn other_branch(body: &Body, e: EdgeId, other: &Surface, curve: &Curve, range: Interval) -> bool {
@@ -3562,13 +3563,15 @@ fn trim_in(
     // sides kept is material meeting itself); along a seam the curve adds no edge at all
     if !along.is_empty() {
         for &(k, e, _) in &along {
-            if other_branch(
-                bodies[k],
-                e,
-                &bodies[1 - k].face(faces[1 - k]).surface,
-                &curve,
-                range,
-            ) {
+            if rung.no_run_on
+                && other_branch(
+                    bodies[k],
+                    e,
+                    &bodies[1 - k].face(faces[1 - k]).surface,
+                    &curve,
+                    range,
+                )
+            {
                 continue;
             }
             let (body, side) = (bodies[k], sides[k]);
