@@ -255,9 +255,20 @@ x = 120
 min = [-50, -40, 0]
 max = [50, 40, 10]
 
-[[setup.fixture]]          # boxes, part frame
+[[setup.fixture]]          # workholding, part frame: one box given here ...
 min = [-60, -50, -20]
 max = [60, -40, 5]
+
+[[setup.fixture]]          # ... or a named body of boxes and cylinders (reported by name)
+name = "vise"
+[[setup.fixture.box]]
+min = [-80, -60, -60]
+max = [80, -45, 10]
+[[setup.fixture.cyl]]
+base = [70, 0, 0]
+axis = [0, 0, 1]
+r = 8
+h = 25
 ```
 
 Examples: examples/machine (a slot, the same with a crash at N130, a faced and turned bar).

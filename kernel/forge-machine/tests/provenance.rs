@@ -578,3 +578,54 @@ fn grbl_s_tool_comment_and_m0_change_the_tool() {
         None
     );
 }
+
+#[test]
+fn fixtures_are_named_bodies_of_boxes_and_cylinders() {
+    use forge_machine::setup::SetupSpec;
+    let src = r#"
+[setup]
+machine = "generic-vmc3"
+dialect = "fanuc"
+program = "p.nc"
+
+[[setup.wcs]]
+n = 54
+z = -500
+
+[[setup.fixture]]
+min = [-60, -50, -20]
+max = [60, -40, 5]
+
+[[setup.fixture]]
+name = "vise"
+[[setup.fixture.box]]
+min = [-80, -60, -60]
+max = [80, -45, 10]
+[[setup.fixture.box]]
+min = [-80, 45, -60]
+max = [80, 60, 10]
+
+[[setup.fixture]]
+name = "strap clamp"
+[[setup.fixture.cyl]]
+base = [70, 0, 0]
+axis = [0, 0, 1]
+r = 8
+h = 25
+"#;
+    let spec = SetupSpec::parse(src).unwrap();
+    let names: Vec<(&str, usize)> = spec
+        .fixture
+        .iter()
+        .map(|f| (f.name.as_str(), f.prims.len()))
+        .collect();
+    assert_eq!(names, vec![("fixture 1", 1), ("vise", 2), ("strap clamp", 1)]);
+    let m = forge_machine::library::builtin_named("generic-vmc3").unwrap();
+    let dsrc = Control::dialect_src("fanuc").unwrap();
+    let s = spec.build(&m, dsrc).unwrap();
+    let bodies: Vec<String> = spec.work_bodies(&s).into_iter().map(|b| b.name).collect();
+    assert_eq!(bodies, vec!["fixture 1", "vise", "strap clamp"]);
+    // two fixtures with one name, or one with nothing in it, are refused
+    assert!(SetupSpec::parse(&src.replace("name = \"strap clamp\"", "name = \"vise\"")).is_err());
+    assert!(SetupSpec::parse(&(src.to_string() + "\n[[setup.fixture]]\nname = \"empty\"\n")).is_err());
+}

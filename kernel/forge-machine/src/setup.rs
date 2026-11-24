@@ -40,6 +40,14 @@ pub enum Stock {
     Bar { r0: f64, z0: f64, z1: f64 },
 }
 
+/// A named workholding body in the part frame: one or more boxes and cylinders, collision-checked
+/// with the part and reported by name.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fixture {
+    pub name: String,
+    pub prims: Vec<Prim>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct SetupSpec {
     pub machine: String,
@@ -57,8 +65,8 @@ pub struct SetupSpec {
     pub h: Vec<(u32, f64)>,
     pub geo: Vec<(u32, Vec<(char, f64)>)>,
     pub stock: Option<Stock>,
-    /// Fixture boxes, part frame.
-    pub fixture: Vec<Prim>,
+    /// Workholding (vises, clamps, plates, chucks), part frame.
+    pub fixture: Vec<Fixture>,
     pub start_tool: Option<u32>,
 }
 
@@ -85,6 +93,14 @@ fn need_vec<const N: usize>(t: &Table, rec: &str, k: &str) -> Result<[f64; N], S
     let mut a = [0.0; N];
     a.copy_from_slice(&v);
     Ok(a)
+}
+
+fn fixture_box(t: &Table, rec: &str) -> Result<Prim, String> {
+    let (min, max) = (need_vec::<3>(t, rec, "min")?, need_vec::<3>(t, rec, "max")?);
+    if (0..3).any(|k| min[k] >= max[k]) {
+        return Err(format!("{rec}: a box needs min < max on every axis"));
+    }
+    Ok(Prim::Box { min, max })
 }
 
 fn whole(v: f64, rec: &str, k: &str) -> Result<u32, String> {
@@ -189,12 +205,43 @@ impl SetupSpec {
             _ => return Err("one [[setup.stock]] at most".into()),
         };
         let mut fixture = Vec::new();
-        for f in tables(s, "fixture") {
-            let r = "[[setup.fixture]]";
-            fixture.push(Prim::Box {
-                min: need_vec::<3>(f, r, "min")?,
-                max: need_vec::<3>(f, r, "max")?,
-            });
+        for (i, f) in tables(s, "fixture").iter().enumerate() {
+            let name = text(f, "name")
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("fixture {}", i + 1));
+            let r = format!("[[setup.fixture]] `{name}`");
+            let mut prims = Vec::new();
+            // the short form: one box given on the fixture itself
+            if f.contains_key("min") || f.contains_key("max") {
+                prims.push(fixture_box(f, &r)?);
+            }
+            for b in tables(f, "box") {
+                prims.push(fixture_box(b, &r)?);
+            }
+            for c in tables(f, "cyl") {
+                let base = need_vec::<3>(c, &r, "base")?;
+                let axis = need_vec::<3>(c, &r, "axis")?;
+                let n = (axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]).sqrt();
+                let (rad, h) = (need_num(c, &r, "r")?, need_num(c, &r, "h")?);
+                if !(n > 0.0 && rad > 0.0 && h > 0.0) {
+                    return Err(format!("{r}: a cyl needs a non-zero axis and r, h > 0"));
+                }
+                prims.push(Prim::Cyl {
+                    base,
+                    axis: [axis[0] / n, axis[1] / n, axis[2] / n],
+                    r: rad,
+                    h,
+                });
+            }
+            if prims.is_empty() {
+                return Err(format!(
+                    "{r}: give `min`/`max`, or [[setup.fixture.box]] / [[setup.fixture.cyl]]"
+                ));
+            }
+            if fixture.iter().any(|x: &Fixture| x.name == name) {
+                return Err(format!("{r}: two fixtures with one name"));
+            }
+            fixture.push(Fixture { name, prims });
         }
         let channel = num(s, "channel").unwrap_or(1.0);
         Ok(SetupSpec {
@@ -294,13 +341,8 @@ impl SetupSpec {
             )),
             None => {}
         }
-        for (i, f) in self.fixture.iter().enumerate() {
-            out.push(crate::collide::part_body(
-                s,
-                &format!("fixture {}", i + 1),
-                std::slice::from_ref(f),
-                Role::Fixture,
-            ));
+        for f in &self.fixture {
+            out.push(crate::collide::part_body(s, &f.name, &f.prims, Role::Fixture));
         }
         out
     }
