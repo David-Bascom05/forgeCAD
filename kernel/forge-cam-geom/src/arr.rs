@@ -570,52 +570,47 @@ pub fn rep_point(cx: &mut Ctx, pc: &Piece, a: Pt, b: Pt) -> Pt {
                     }
                 }
             };
-            // a dyadic direction near w, checked strictly inside (a, b)
-            let mut prec = 53u64;
-            loop {
-                let (wx, wy) = (dy_near(cx, w.x, prec), dy_near(cx, w.y, prec));
-                let mk = cx.mark();
-                let (nx, ny) = (cx.dy(wx.clone()), cx.dy(wy.clone()));
-                let nv = Pt { x: nx, y: ny };
-                let n2 = norm2(cx, nv);
-                let ok = sgn(cx, n2) > 0 && {
-                    let after_a = angle_cmp(cx, ua, ua, nv, ccw) == Ordering::Less;
-                    let before_b = same(cx, a, b) || angle_cmp(cx, ua, nv, ub, ccw) == Ordering::Less;
-                    after_a && before_b
-                };
-                cx.release(mk);
-                if ok {
-                    let (nx, ny) = (cx.dy(wx), cx.dy(wy));
-                    let nv = Pt { x: nx, y: ny };
-                    let n2 = norm2(cx, nv);
-                    let n = cx.sqrt(n2);
-                    let k = cx.div(rad, n);
-                    let off = scale(cx, nv, k);
-                    return add(cx, c, off);
-                }
-                prec *= 2;
-                assert!(prec < (1 << 20), "rep_point: empty sub-span");
-            }
+            // a dyadic direction near w (from the f64 enclosures, a low-degree point), checked
+            // strictly inside (a, b)
+            let (wx, wy) = (dy_near(cx, w.x), dy_near(cx, w.y));
+            let mk = cx.mark();
+            let (nx, ny) = (cx.dy(wx.clone()), cx.dy(wy.clone()));
+            let nv = Pt { x: nx, y: ny };
+            let n2 = norm2(cx, nv);
+            let ok = sgn(cx, n2) > 0 && {
+                let after_a = angle_cmp(cx, ua, ua, nv, ccw) == Ordering::Less;
+                let before_b = same(cx, a, b) || angle_cmp(cx, ua, nv, ub, ccw) == Ordering::Less;
+                after_a && before_b
+            };
+            cx.release(mk);
+            // else w itself: strictly inside by construction (the bisector of a sub-span short
+            // of a half turn, its opposite for one beyond, the perpendicular in the sense of
+            // travel for a half turn, the opposite of a for the whole circle; w ≠ 0 in each),
+            // where a tiny sub-span (a near-tangent corner's arc) would take a dyadic of
+            // ever more bits
+            let nv = if ok {
+                let (nx, ny) = (cx.dy(wx), cx.dy(wy));
+                Pt { x: nx, y: ny }
+            } else {
+                w
+            };
+            let n2 = norm2(cx, nv);
+            let n = cx.sqrt(n2);
+            let k = cx.div(rad, n);
+            let off = scale(cx, nv, k);
+            add(cx, c, off)
         }
     }
 }
 
-/// A dyadic near the node's value: at prec ≤ 53, its f64 enclosure's midpoint (no big-float
-/// evaluation; rep_point checks the direction it makes and asks again, more precisely, if it
-/// falls outside the sub-span), else within about 2^-prec (relative).
-fn dy_near(cx: &mut Ctx, a: R, prec: u64) -> Dy {
-    if prec <= 53 {
-        let iv = cx.iv(a);
-        if iv.lo.is_finite() && iv.hi.is_finite() {
-            return Dy::from_f64(iv.mid());
-        }
-        return Dy::from_f64(cx.approx(a));
+/// A dyadic near the node's value: its f64 enclosure's midpoint (no big-float evaluation; the
+/// caller checks what it makes), or the nearest f64 if the enclosure is unbounded.
+fn dy_near(cx: &mut Ctx, a: R) -> Dy {
+    let iv = cx.iv(a);
+    if iv.lo.is_finite() && iv.hi.is_finite() {
+        return Dy::from_f64(iv.mid());
     }
-    let v = cx.eval(a, prec);
-    match (v.lo, v.hi) {
-        (Some(l), Some(h)) => l.add(&h).half().round(prec, false),
-        _ => Dy::from_f64(cx.approx(a)),
-    }
+    Dy::from_f64(cx.approx(a))
 }
 
 /// The unit tangent's direction (not normalised) at a point of the piece's curve.
