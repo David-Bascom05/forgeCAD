@@ -328,19 +328,8 @@ impl Gui {
             self.shell.machine = None;
             return;
         }
-        let Some(m) = &mut self.shell.machine else { return };
-        match c {
-            C::FromTemplate => m.make_template(),
-            C::Clone => m.make_clone(),
-            C::Save => m.save(),
-            C::Check => m.run_check(),
-            C::Home => {
-                if let Some(d) = &m.def {
-                    m.q = d.joints.iter().map(|j| j.home).collect();
-                    m.jogged();
-                }
-            }
-            C::Close => {}
+        if let Some(m) = &mut self.shell.machine {
+            m.command(c);
         }
     }
 

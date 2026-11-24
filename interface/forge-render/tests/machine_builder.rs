@@ -84,7 +84,7 @@ fn make_jog_check_save_and_close() {
     h.gui.shell.machine.as_mut().unwrap().filter.clear();
     h.step();
     assert!(
-        h.gui.shell.place("tool:Check Travel").is_some(),
+        h.gui.shell.place("tool:Check").is_some(),
         "the builder's ribbon group"
     );
     {

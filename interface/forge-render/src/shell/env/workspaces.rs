@@ -94,9 +94,28 @@ impl Environment for MachineBuilder {
         &[(MACHINE_TAB, "Machine Builder")]
     }
 
-    /// Its tools are in its own windows (`machine_ui`); the ribbon holds its way out.
-    fn groups(&self, _s: &Shell, _tab: usize) -> Vec<Group> {
-        vec![]
+    /// Library (new, derive, save), Check and, for machines, Motion; then Finish.
+    fn groups(&self, s: &Shell, _tab: usize) -> Vec<Group> {
+        super::super::machine::groups(s)
+    }
+
+    /// The library (kind switcher, search, records by level and maker) is its browser.
+    fn browser(&self, s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
+        s.machine_side(ui, r);
+        true
+    }
+
+    /// The chosen record's sheet, docked right at full height.
+    fn properties_width(&self, s: &Shell) -> Option<f32> {
+        s.machine.as_ref().map(|_| 430.0)
+    }
+
+    fn properties(&self, s: &mut Shell, ui: &mut Ui, r: Rect) {
+        s.machine_props(ui, r);
+    }
+
+    fn status(&self, s: &Shell) -> Option<String> {
+        s.machine.as_ref().map(super::super::machine::status_line)
     }
 
     fn still(&self, s: &Shell) -> bool {
