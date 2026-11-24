@@ -49,13 +49,28 @@ impl Stock {
             ],
         };
         let (dx, dy, dz) = (b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+        // mu 0 when the faces are the box exactly: each is spanned by two coordinate axes from a
+        // corner, out to corner + (max − min); that sum is max exactly when the difference is
+        // (its rounding error, by TwoSum, is 0). Then a tool exactly at a fixture's clearance, or
+        // touching a modelled plate, can be proven (axisplane.rs). Otherwise 1e-9 covers the ulp
+        let exact = |hi: f64, lo: f64| {
+            let s = hi - lo;
+            let bv = s - hi;
+            let av = s - bv;
+            (hi - av) + (-lo - bv) == 0.0 && s.is_finite()
+        };
+        let mu = if (0..3).all(|i| exact(b[i], a[i])) {
+            0.0
+        } else {
+            1e-9
+        };
         let mk = |o: [f64; 3], u: [f64; 3], v: [f64; 3], w: f64, h: f64, id: u32| {
             Face::new(
                 Surf::Plane { o, u, v },
                 Ival::new(0.0, w),
                 Ival::new(0.0, h),
                 Some(rect(w, h)),
-                1e-9,
+                mu,
                 id,
             )
         };
