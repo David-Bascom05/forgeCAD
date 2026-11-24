@@ -192,8 +192,14 @@ def dflts (ps args : List (Name × Expr)) : List (Name × Expr) := ps.filter fun
 /-- Every argument names a param. -/
 def argsOK (ps args : List (Name × Expr)) : Bool := args.all fun a => (ps.lookup a.1).isSome
 
-/-- An index read from a number: negative is an error, never a wrap or a clamp. -/
-def toIx (v : Int) : R Nat := if v < 0 then .error .range else .ok v.toNat
+/-- The most items a range (or a list it indexes) may hold: the Rust `eval::MAX_LIST`, 2^20. -/
+def maxList : Int := 1048576
+
+/-- An index read from a number: negative is an error, never a wrap or a clamp; nor past what a
+list may hold (a range past it is
+the typed error `range`, as in Rust, where it is `TooLarge`). Its value is observed where it is
+used, so the bound adds no new dependence on unobserved literals. -/
+def toIx (v : Int) : R Nat := if v < 0 ∨ maxList < v then .error .range else .ok v.toNat
 
 mutual
 

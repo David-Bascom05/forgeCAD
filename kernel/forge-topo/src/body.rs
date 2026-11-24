@@ -82,6 +82,10 @@ impl Loop {
             end: self.first + self.len,
         }
     }
+    /// The loop's first coedge's index and its count (as stored: `check` tests them).
+    pub fn span(&self) -> (u32, u32) {
+        (self.first, self.len)
+    }
     /// The loop's `i`th coedge.
     pub fn coedge(&self, i: usize) -> CoedgeId {
         assert!(i < self.len as usize);
@@ -1165,6 +1169,26 @@ impl Body {
     pub fn partner(&self, c: CoedgeId) -> Option<CoedgeId> {
         let e = self.edge(self.coedge(c).edge);
         e.coedges.iter().copied().find(|&o| o != c)
+    }
+
+    /// The face's outward normal at its point `p`: `face_normal` there, and at a ball's pole,
+    /// where the chart is singular (du = 0) but the sphere is not, its geometric normal
+    /// (p - c) / r. None only where the surface itself has no tangent plane (a cone's apex).
+    pub fn face_normal_at(&self, f: FaceId, p: Point3) -> Option<UnitVec3> {
+        self.face_normal(f, self.face(f).surface.project(p))
+            .or_else(|| self.pole_normal(f, p))
+    }
+
+    /// A ball's geometric normal at `p` (where its chart, not it, is singular); None off a ball.
+    #[cold]
+    #[inline(never)]
+    fn pole_normal(&self, f: FaceId, p: Point3) -> Option<UnitVec3> {
+        let face = self.face(f);
+        let Surface::Sphere(s) = &face.surface else {
+            return None;
+        };
+        let n = (p - s.frame.origin).normalize()?;
+        Some(if face.same_sense { n } else { -n })
     }
 
     /// The face's outward normal at surface parameters `uv`.

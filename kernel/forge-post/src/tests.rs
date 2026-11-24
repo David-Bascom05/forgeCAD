@@ -349,3 +349,58 @@ fn round_trip_compares_what_the_control_executes() {
     let e = round_trip(&q, &d).unwrap_err();
     assert!(e.contains("differs"), "{e}");
 }
+
+/// Haas (research/cam/machines/haas-dialect-audit.md): dwell P in whole milliseconds (a P with a
+/// decimal point would be seconds on Haas), through-tool coolant M88/M89, and mist refused: no
+/// Haas M-code list has M07.
+#[test]
+fn haas_dwell_coolant_and_no_mist() {
+    let h = Dialect::get("haas").unwrap();
+    let mut p = prog(false);
+    p.recs.push(Rec::Dwell(0.5));
+    p.recs.push(Rec::Coolant(Coolant::Through));
+    p.recs.push(Rec::Coolant(Coolant::Off));
+    let txt = print(&quantize(&p, &h).unwrap(), &h).unwrap();
+    assert!(txt.contains("G04 P500\n"), "{txt}");
+    assert!(txt.contains("M88\n"), "{txt}");
+    p.recs.push(Rec::Coolant(Coolant::Mist));
+    match print(&quantize(&p, &h).unwrap(), &h) {
+        Err(PostError::Unsupported { what, fix }) => {
+            assert_eq!(what, "coolant Mist");
+            assert!(fix.contains("haas") && fix.contains("coolant_mist"), "{fix}");
+        }
+        r => panic!("{r:?}"),
+    }
+}
+
+/// G187 is opt-in: `haas` posts none (an option-less control may alarm on it), `haas-hsm` posts
+/// G187 P2 and is otherwise the same dialect line for line.
+#[test]
+fn g187_only_with_the_hsm_option() {
+    let (h, s) = (Dialect::get("haas").unwrap(), Dialect::get("haas-hsm").unwrap());
+    let p = prog(false);
+    let th = print(&quantize(&p, &h).unwrap(), &h).unwrap();
+    let ts = print(&quantize(&p, &s).unwrap(), &s).unwrap();
+    assert!(!th.contains("G187"), "{th}");
+    assert!(ts.contains("G187 P2\n"), "{ts}");
+    // the same program apart from that block (and the line numbers after it)
+    let strip = |t: &str| -> Vec<String> {
+        t.lines()
+            .filter(|l| !l.contains("G187"))
+            .map(|l| {
+                l.split_once(' ')
+                    .map_or(l, |(n, rest)| if n.starts_with('N') { rest } else { l })
+                    .to_string()
+            })
+            .collect()
+    };
+    assert_eq!(strip(&th), strip(&ts));
+    let src = |n: &str| DIALECTS.iter().find(|d| d.0 == n).unwrap().1;
+    let keys = |t: &str| -> Vec<String> {
+        t.lines()
+            .filter(|l| !l.starts_with('#') && !l.starts_with("name") && !l.starts_with("safe_start"))
+            .map(str::to_string)
+            .collect()
+    };
+    assert_eq!(keys(src("haas")), keys(src("haas-hsm")));
+}

@@ -1,0 +1,17 @@
+# tormach-8l turret / tool post (unpublished, stand-in)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared cx = 90
+shared cy = 0
+shared z0 = -34
+shared R = 59
+shared H = 68
+shared rb = 15
+
+sketch plan(on: offset(xy, z0)) {
+  outline = circle((cx, cy), R)
+}
+body = extrude(plan.outline, H)
+sketch bb(on: body.end) {
+  c = circle((cx, cy), rb)
+}
+through = cut(bb.c, H)

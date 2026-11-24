@@ -57,6 +57,7 @@ jobs:
         if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: verify/sheet
         run: |
+          set -o pipefail
           lake build 2>&1 | tee build.txt
           if [ "$GITHUB_EVENT_NAME" = push ]; then exit 0; fi  # main: the build above is what is saved; the checks below ran on the pull request
           ! grep -E "declaration uses [\`']sorry|sorryAx|ofReduceBool" build.txt

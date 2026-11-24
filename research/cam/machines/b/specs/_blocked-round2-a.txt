@@ -1,0 +1,3 @@
+# blocked_hosts (group round2-a, 2026-11-23); plain curl, no UA spoofing
+(none) - machinetool.global.brother and www.hermle.de served all pages/PDFs with 200.
+Note: brother F600X1 is absent from the en-eu product list; read from en-us page (marked Discontinued).

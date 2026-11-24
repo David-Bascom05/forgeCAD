@@ -1,0 +1,147 @@
+{
+ "vendor": "Okuma",
+ "model": "MU-4000V",
+ "family": "MU-V",
+ "source": [
+  "https://www.okuma.eu/products/by-process/milling/mu-v-series/mu-4000v/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "Trunnion table 5-axis (series prose); turning on table optional (L). Carriers and tilt range not on page.",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 740,
+  "Y": 460,
+  "Z": 460
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": 400,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 15000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": 18.5,
+   "30min": null,
+   "peak/other": "22 kW (rating period not stated)"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 32,
+  "options": [
+   48,
+   64,
+   98,
+   132,
+   160,
+   200,
+   234,
+   268
+  ],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "rotary.B",
+  "rotary.C",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_center_to_column_mm",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "table_load_kg",
+  "weight_kg"
+ ],
+ "options": [
+  "12000/20000/25000 rpm spindles",
+  "30/22 or 15/11 kW motors",
+  "L turning function",
+  "APC"
+ ],
+ "notes": "okuma.eu summary only."
+}

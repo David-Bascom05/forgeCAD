@@ -1,0 +1,161 @@
+{
+ "vendor": "DMG MORI",
+ "model": "NHX 5000 4th Generation",
+ "family": "NHX",
+ "source": [
+  "https://en.dmgmori.com/products/machines/milling/horizontal-milling/nhx/nhx-5000",
+  "https://en.dmgmori.com/resource/blob/406624/46d18fc347d993dab80c1260b46d9df0/j201en-data.pdf"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "hmc",
+ "architecture": "Horizontal machining centre, B-axis pallet table, 2-pallet changer; same platform text as NHX 4000.",
+ "control": {
+  "standard": null,
+  "options": [
+   "CELOS with MAPPS on FANUC",
+   "CELOS with SIEMENS"
+  ]
+ },
+ "travel_mm": {
+  "X": 730,
+  "Y": 730,
+  "Z": 880
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 500,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": [
+   500,
+   500
+  ],
+  "change_s": null,
+  "load_kg": 500
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 20000,
+  "rpm_min": null,
+  "taper_or_interface": "#40 / HSK-A63 (speedMASTER)",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 221
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": 70,
+ "accel_g_or_m_s2": "1.2 g",
+ "changer": {
+  "pockets": 60,
+  "options": [
+   "wheel magazine 123/183/243/303 pockets (SIEMENS only)"
+  ],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": 3,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "milling_head",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "pallet.change_s",
+  "pallet.count",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "rotary.A",
+  "rotary.B",
+  "rotary.C",
+  "rotary_table_dia_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "table_mm",
+  "weight_kg"
+ ],
+ "options": [
+  "pallet load 700 kg option",
+  "spindle option 15,000 rpm 250 Nm"
+ ],
+ "notes": "Max workpiece dia 800 x 1,000 mm, 500 kg. NHX table from DMG MORI TECHNOLOGY EXCELLENCE 01-2020 (public PDF, 3rd-gen era): may differ for the current 4th Generation; product page itself says speedMASTER 20,000 rpm standard. DMG MORI's full technical data and brochures (PDF) are behind a DMG MORI Account registration (download URL returns 'Download - Registrierung erforderlich' HTML); not used. Only data printed on the public product page (and public TECHNOLOGY EXCELLENCE magazine PDFs) recorded.",
+ "_not_applicable": [
+  "swing_over_bed_mm",
+  "max_turning_dia_mm",
+  "max_turning_length_mm",
+  "chuck_size_in",
+  "bar_capacity_mm",
+  "spindle_nose_type",
+  "sub_spindle",
+  "live_tool",
+  "turret_stations",
+  "turret_index_s",
+  "tailstock"
+ ]
+}
