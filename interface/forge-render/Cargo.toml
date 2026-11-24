@@ -66,6 +66,10 @@ forge-cam = { path = "../../kernel/forge-cam" }
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 # the machine simulation: machines as data, the posted text on them (forge-machine)
 forge-machine = { path = "../../kernel/forge-machine" }
+# the Machine Builder: machine definitions, their kinematics and collision, the builder's
+# writer, levels and check, and the part-in-envelope check
+forge-machine-builder = { path = "../forge-machine-builder" }
+forge-machine-lang = { path = "../forge-machine-lang" }
 png = "=0.18.1"
 # a background image's file (zune: MIT OR Apache-2.0 OR Zlib), already in the lock
 zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std"] }

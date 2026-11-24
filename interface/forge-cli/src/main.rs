@@ -28,7 +28,8 @@ fn usage() -> ExitCode {
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, parts under DIR, default .; edits only if --writable)\n       \
          forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only]   (the browser app on DIR's files)\n       \
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
-         forgecad machine SETUP.toml [--json] | list   (posted G-code on a machine: timeline, collisions, removal)\n       \
+         forgecad machine SETUP.toml [--json]   (posted G-code on a machine: timeline, collisions, removal)\n       \
+         forgecad machine list [--json] | new NAME (--from M | --template T) [--project] | check FILE|NAME [--json]   (your own machines)\n       \
          forgecad mesh FILE.stl|obj|3mf [--json]        (a mesh read and measured: not a B-rep)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
@@ -338,6 +339,22 @@ fn mesh(argv: &[String]) -> ExitCode {
 
 /// Posted G-code simulated on a machine (forge-machine): `list` the machines, or run a setup file.
 fn machine(argv: &[String]) -> ExitCode {
+    let envelopes = |def: &forge_machine_lang::MachineDefRef, dir: &std::path::Path| {
+        forge_machine_lang::envelope_checks(def, dir)
+    };
+    let env = forge_machine_builder::cli::Env {
+        project: std::path::PathBuf::from("."),
+        user: forge_machine_builder::catalog::user_dir(),
+        today: forge_machine_builder::cli::today_utc(),
+        envelopes: &envelopes,
+    };
+    if let Some(o) = forge_machine_builder::cli::run(&env, argv) {
+        let _ = write!(std::io::stdout(), "{}", o.out);
+        if !o.err.is_empty() {
+            eprintln!("{}", o.err.trim_end());
+        }
+        return ExitCode::from(o.code);
+    }
     if argv[0] == "list" {
         let lib = match forge_machine_lang::library(std::path::Path::new(".")) {
             Ok(l) => l,

@@ -9,6 +9,7 @@ pub mod dwgview;
 pub mod explode;
 pub mod livegpu;
 pub mod look;
+pub mod machine_mesh;
 pub mod mesh;
 pub mod nav;
 pub mod origin;
