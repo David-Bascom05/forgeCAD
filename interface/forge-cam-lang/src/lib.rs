@@ -5867,14 +5867,15 @@ impl Cam {
         // and box, the cutter's body and diameter (surf.rs reads no other part of the tool: not
         // its stickout or holder, which only the certification sees; surfacing_memo_tests::
         // the_generators_read_no_other_part_of_the_tool fails if one starts to), the tool's
-        // index, the heights and feeds, the stock box, the setup's tolerance), see memo.rs.
+        // index, the heights and feeds, the machine, the stock box, the setup's tolerance), see memo.rs.
         // A generator that starts reading the in-process stock (s.ip, stock_before) must put it
         // in this key: the voids it returns feed later ops' stock stages.
+        // (the machine too: the fitter's smallest arc is its accelerations' at the feed)
         let key = format!(
-            "surfacing/3 {:?}",
+            "surfacing/4 {:?}",
             (
                 kind,
-                (a, &part.faces, body, d, ti, h, feed, leave),
+                (a, &part.faces, body, d, ti, h, feed, leave, &s.machine),
                 (
                     s.tol,
                     floor,
