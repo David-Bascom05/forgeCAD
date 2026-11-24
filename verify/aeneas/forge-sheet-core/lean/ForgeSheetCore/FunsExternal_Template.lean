@@ -19,6 +19,26 @@ set_option maxHeartbeats 1000000
 set_option maxRecDepth 2048
 open forge_sheet_core
 
+/-- [core::clone::impls::{impl core::clone::Clone for f64}::clone]:
+    Source: '/rustc/library/core/src/clone.rs', lines 715:20-715:43; this code is generated from a macro invocation at: '/rustc/library/core/src/clone.rs', lines 728:4-733:5
+    Name pattern: [core::clone::impls::{core::clone::Clone<f64>}::clone]
+    Visibility: public -/
+@[rust_fun "core::clone::impls::{core::clone::Clone<f64>}::clone"]
+axiom F64.Insts.CoreCloneClone.clone : F64 → Result F64
+
+/-- [core::f64::{f64}::EPSILON]
+    Source: '/rustc/library/core/src/num/f64.rs', lines 441:4-441:26
+    Name pattern: [core::f64::{f64}::EPSILON]
+    Visibility: public -/
+@[rust_const "core::f64::{f64}::EPSILON"]
+axiom core.f64.F64.EPSILON : Result F64
+
+/-- [core::f64::{f64}::abs]:
+    Source: '/rustc/library/core/src/num/f64.rs', lines 1744:4-1744:33
+    Name pattern: [core::f64::{f64}::abs]
+    Visibility: public -/
+@[rust_fun "core::f64::{f64}::abs"] axiom core.f64.F64.abs : F64 → Result F64
+
 /-- [std::f64::{f64}::sqrt]:
     Source: '/rustc/library/std/src/num/f64.rs', lines 386:4-386:28
     Name pattern: [std::f64::{f64}::sqrt]
