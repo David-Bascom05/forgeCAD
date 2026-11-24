@@ -214,3 +214,39 @@ fn coplanar_part_has_coplanar_incident_faces() {
         .count();
     assert!(exact > 0, "no coplanar incident faces left in the coplanar part: J's refinement can be revisited");
 }
+
+/// For the coplanar pairs at a vertex: do the two faces share an edge (which `unify` should have
+/// merged), or meet only at vertices?
+#[test]
+#[ignore]
+fn coplanar_pairs_share_an_edge() {
+    let b = suite::part("coplanar").expect("the coplanar part").regenerate().expect("it builds");
+    let inc = incident(&b);
+    let faces_of_edge = |e: usize| -> Vec<FaceId> {
+        b.edges[e].coedges.iter().map(|&c| b.coedge_face(c)).collect()
+    };
+    let mut pairs: Vec<(usize, FaceId, FaceId)> = Vec::new();
+    for (vi, fs) in inc.iter().enumerate() {
+        for i in 0..fs.len() {
+            for j in i + 1..fs.len() {
+                if let (Some(p), Some(q)) = (plane_of(&b, fs[i]), plane_of(&b, fs[j]))
+                    && same_plane_exact(p, q)
+                {
+                    pairs.push((vi, fs[i], fs[j]));
+                }
+            }
+        }
+    }
+    for (vi, f, g) in &pairs {
+        let shared: Vec<usize> = (0..b.edges.len())
+            .filter(|&e| b.edges[e].alive)
+            .filter(|&e| {
+                let fs = faces_of_edge(e);
+                fs.contains(f) && fs.contains(g)
+            })
+            .collect();
+        let same_sense = b.faces[f.index()].same_sense == b.faces[g.index()].same_sense;
+        let n = plane_of(&b, *f).unwrap().0.dot(plane_of(&b, *g).unwrap().0);
+        println!("vertex {vi}: faces {f:?} {g:?}, normals dot {n}, same_sense equal {same_sense}, shared edges {shared:?}");
+    }
+}
