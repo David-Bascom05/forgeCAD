@@ -152,7 +152,7 @@ const HEAD: &str = "N10 G17 G710 G94 G90\nN20 T=\"SCHAFT_D8_N_AP20\"\nN30 M6\n";
 #[test]
 fn what_is_outside_the_subset_is_refused_by_name() {
     for (body, word) in [
-        ("N40 TRAORI\n", "TRAORI"),
+        ("N40 TRAORI(1)\n", "TRAORI"),
         ("N40 AROT Z30.\n", "AROT"),
         ("N40 TRANS X10.\n", "TRANS"),
         ("N40 D1\nN50 G1 X=10.+_A F100.\n", "10.+_A"),

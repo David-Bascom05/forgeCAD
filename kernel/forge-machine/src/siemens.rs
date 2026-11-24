@@ -44,6 +44,32 @@ pub struct S840 {
     pub corner: Option<bool>,
     /// Cutter radius compensation on (G41/G42).
     pub comp: bool,
+    /// TRAORI on (3+2: the rotary axes held) and the programmable frame's rotation.
+    pub traori: bool,
+    pub frame: Option<[[f64; 3]; 3]>,
+}
+
+const I3: [[f64; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+/// a · b (3 × 3).
+fn mat_mul(a: &[[f64; 3]; 3], b: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
+    let mut o = [[0.0; 3]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            o[i][j] = (0..3).map(|k| a[i][k] * b[k][j]).sum();
+        }
+    }
+    o
+}
+
+/// A right-handed rotation by `deg` about a coordinate axis (exact at multiples of 90°).
+fn axis_rot(axis: char, deg: f64) -> [[f64; 3]; 3] {
+    let (s, c) = crate::kin::sin_cos_deg(deg);
+    match axis {
+        'X' => [[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]],
+        'Y' => [[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]],
+        _ => [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]],
+    }
 }
 
 fn err(line: usize, what: impl Into<String>) -> GError {
@@ -191,6 +217,77 @@ pub fn block(
         }
         return Ok(());
     }
+    // TRAORI / TRAFOOF alone in a block; frames (TRANS, AROT), each in its own block (PGsl 12.2)
+    match toks[0].as_str() {
+        "TRAORI" if toks.len() == 1 => {
+            // PGAsl 6.2: the orientation transformation; read with the rotary axes held (3+2)
+            if s.traori {
+                return Err(err(ln, "TRAORI while TRAORI is on"));
+            }
+            if s.comp {
+                return Err(err(ln, "TRAORI with cutter compensation on is not modelled"));
+            }
+            s.traori = true;
+            s.frame = Some(I3);
+            push(out, Ev::Frame(Some(I3)));
+            return Ok(());
+        }
+        "TRAFOOF" if toks.len() == 1 => {
+            if s.traori {
+                s.traori = false;
+                s.frame = None;
+                push(out, Ev::Frame(None));
+            }
+            return Ok(());
+        }
+        "TRANS" | "AROT" => {
+            if !s.traori {
+                return Err(err(
+                    ln,
+                    format!(
+                        "`{}` outside TRAORI: frames are read only for 3+2 (TRAORI) machining",
+                        toks[0]
+                    ),
+                ));
+            }
+            let f = s.frame.unwrap_or(I3);
+            let f = if toks[0] == "TRANS" {
+                // TRANS resets every component of the programmable frame (PGsl 12.3.1 p. 329): only
+                // TRANS X0 Y0 Z0 (no offset) is read
+                for t in &toks[1..] {
+                    let mut ch = t.chars();
+                    let ok = matches!(ch.next(), Some('X' | 'Y' | 'Z'))
+                        && is_number(ch.as_str())
+                        && ch.as_str().parse::<f64>().is_ok_and(|v| v == 0.0);
+                    if !ok {
+                        return Err(err(
+                            ln,
+                            format!("`TRANS {t}`: only TRANS X0 Y0 Z0 (a reset) is read"),
+                        ));
+                    }
+                }
+                I3
+            } else {
+                // AROT: additive, about the current frame's axis (PGsl 12.4 pp. 333-334); one axis per
+                // block (several in one block turn in RPY order, not read)
+                if toks.len() != 2 {
+                    return Err(err(ln, "AROT with other than one axis in a block is not read"));
+                }
+                let t = &toks[1];
+                let mut ch = t.chars();
+                let axis = ch.next().filter(|a| matches!(a, 'X' | 'Y' | 'Z'));
+                let deg = ch.as_str();
+                let (Some(axis), true) = (axis, is_number(deg)) else {
+                    return Err(err(ln, format!("`AROT {t}`: an axis X Y Z and a number")));
+                };
+                mat_mul(&f, &axis_rot(axis, deg.parse::<f64>().unwrap_or(0.0)))
+            };
+            s.frame = Some(f);
+            push(out, Ev::Frame(Some(f)));
+            return Ok(());
+        }
+        _ => {}
+    }
     // a block of assignments to declared variables
     let declared: Vec<String> = s.vars.iter().map(|(n, _)| n.clone()).collect();
     let assign = |t: &str| -> Option<(String, String)> {
@@ -326,15 +423,22 @@ pub fn block(
             }
             // no effect here: no compressor (COMPOF), no transformation active (TRAFOOF), the
             // default feed characteristic (FNORM), exact stop (what t_stop models)
-            "COMPOF" | "TRAFOOF" | "FNORM" | "G60" | "G601" => continue,
+            "COMPOF" | "FNORM" | "G60" | "G601" => continue,
+            "TRAFOOF" if !s.traori => continue,
             "G710" => {
                 words.push("G21".into());
                 continue;
             }
             "TURN=0" => continue,
-            "TRAORI" | "TRANS" | "ATRANS" | "AROT" | "ROT" | "AROTS" | "MIRROR" | "SCALE" | "COMPON"
-            | "COMPCURV" | "COMPCAD" | "G64" | "G641" | "G642" | "G645" | "FFWON" | "FFWOF" | "SOFT"
-            | "BRISK" | "TRAANG" | "TRACYL" | "TRANSMIT" | "ORIWKS" | "ORIMKS" => {
+            "TRAORI" | "TRAFOOF" | "TRANS" | "AROT" => {
+                return Err(err(
+                    ln,
+                    format!("`{t}` with other words in its block is not read"),
+                ));
+            }
+            "ATRANS" | "ROT" | "AROTS" | "MIRROR" | "SCALE" | "COMPON" | "COMPCURV" | "COMPCAD" | "G64"
+            | "G641" | "G642" | "G645" | "FFWON" | "FFWOF" | "SOFT" | "BRISK" | "TRAANG" | "TRACYL"
+            | "TRANSMIT" | "ORIWKS" | "ORIMKS" => {
                 return Err(err(ln, format!("`{t}` is not in the 840D subset read here")));
             }
             _ => {}
@@ -438,6 +542,31 @@ pub fn block(
             ln,
             "SUPA with Z and a tool offset in force: SUPA suppresses frames, not the offset (PGsl 12.9); not modelled",
         ));
+    }
+    if s.traori {
+        // 3+2 only: the rotary axes held, no machine-coordinate moves, no change of tool or
+        // compensation under the transformation
+        let rotary = words.iter().any(|w| {
+            w.chars()
+                .next()
+                .is_some_and(|l| c.letters.contains(&l) && !matches!(l, 'X' | 'Y' | 'Z'))
+        });
+        let why = if rotary {
+            Some("a rotary axis moving under TRAORI (simultaneous 5-axis) is not modelled")
+        } else if supa {
+            Some("SUPA under TRAORI is not modelled")
+        } else if m6 {
+            Some("a tool change under TRAORI is not modelled")
+        } else if comp_set.is_some() {
+            Some("cutter compensation under TRAORI is not modelled")
+        } else if mcall_set.is_some() {
+            Some("a modal cycle call under TRAORI is not modelled")
+        } else {
+            None
+        };
+        if let Some(w) = why {
+            return Err(err(ln, w));
+        }
     }
     if s.comp && (d_word.is_some_and(|d| d != s.d) || m6) {
         return Err(err(
