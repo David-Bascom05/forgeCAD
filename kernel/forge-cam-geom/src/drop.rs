@@ -656,6 +656,37 @@ fn side_lower(col: &Column, f: &Face, mv: &Move, c: &Cell) -> f64 {
     -col.solid.sd_rz(rho, y[2].sub(g[2])).hi
 }
 
+/// `side_lower` with the face's trim test through `held`.
+fn side_lower_held(col: &Column, f: &Face, mv: &Move, c: &Cell, held: &mut Held) -> f64 {
+    let (p, q) = (Ival::pt(c.p.mid()), Ival::pt(c.q.mid()));
+    if held.holds(f, p, q) != 1 {
+        return f64::NEG_INFINITY;
+    }
+    let y = f.surf.eval(p, q);
+    let g = mv.at(c.s);
+    let rho = y[0].sub(g[0]).sqr().add(y[1].sub(g[1]).sqr()).sqrt();
+    -col.solid.sd_rz(rho, y[2].sub(g[2])).hi
+}
+
+/// One search's trim tests by their parameter box (`Face::holds`, a pure function of it): the
+/// cells split in s share their (p, q), and so their centre, with their parent.
+#[derive(Default)]
+struct Held {
+    m: std::collections::HashMap<[u64; 4], i32>,
+}
+
+impl Held {
+    fn holds(&mut self, f: &Face, p: Ival, q: Ival) -> i32 {
+        if f.trim.is_none() {
+            return f.holds(p, q);
+        }
+        *self
+            .m
+            .entry([p.lo.to_bits(), p.hi.to_bits(), q.lo.to_bits(), q.hi.to_bits()])
+            .or_insert_with(|| f.holds(p, q))
+    }
+}
+
 /// A binary max-heap of (bound, face index, cell).
 /// The search's cells by bound, largest first: (bound, face, cell, the parameter to split it
 /// on), the split as `cell_upper` gave it with the bound (so a popped cell needs no second
@@ -2083,6 +2114,7 @@ fn gap_search(
         i += 1;
     }
     let mut unknown = false;
+    let mut held = Held::default();
     while let Some((u, _, c, kk)) = heap.pop() {
         if u <= need {
             if u > worst {
@@ -2102,7 +2134,9 @@ fn gap_search(
             q: c.q,
             s: Ival::pt(sm),
         };
-        let w = Ival::pt(side_lower(col, f, mv, &at)).sub(Ival::pt(f.mu)).lo;
+        let w = Ival::pt(side_lower_held(col, f, mv, &at, &mut held))
+            .sub(Ival::pt(f.mu))
+            .lo;
         if w > -limit {
             return (
                 Gap::Over {
@@ -2126,7 +2160,7 @@ fn gap_search(
         let (a, b) = split(&c, kk);
         for h in [a, b] {
             cells += 1;
-            if f.holds(h.p, h.q) == -1 {
+            if held.holds(f, h.p, h.q) == -1 {
                 continue;
             }
             if let Some((u2, k2)) = cell_upper_side(col, f, mv, &h, true) {

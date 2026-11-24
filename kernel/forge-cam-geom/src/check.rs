@@ -277,18 +277,14 @@ impl TrimRef<'_> {
 
     /// 1: the box is inside the trim region; -1: outside; 0: unknown.
     pub fn classify(&self, p: Ival, q: Ival) -> i32 {
-        // the box misses the boundary: then all of it is on the side of its centre
-        let mut lo = f64::INFINITY;
+        // the box misses the boundary: then all of it is on the side of its centre (a piece
+        // the box may touch decides it: 0, the rest unseen)
         let mut i = 0;
         while i < self.segs.len() {
-            let d = tseg_dist(&self.segs[i], p, q, self.gap(i));
-            if d < lo {
-                lo = d;
+            if tseg_dist(&self.segs[i], p, q, self.gap(i)) <= 0.0 {
+                return 0;
             }
             i += 1;
-        }
-        if !(lo > 0.0) {
-            return 0;
         }
         let (cp, cq) = (p.mid(), q.mid());
         self.point_side(cp, cq)
