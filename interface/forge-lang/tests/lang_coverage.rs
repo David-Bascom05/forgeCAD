@@ -121,7 +121,8 @@ fn expr_builtins(rel: &str) -> Vec<String> {
     let src = read(rel);
     let mut out = vec![];
     for line in src.lines() {
-        if let Some(i) = line.find("fname == \"") {
+        // every `fname == "x"` of the line (`fname == "cylinder" || fname == "tube"`)
+        for (i, _) in line.match_indices("fname == \"") {
             out.extend(quoted(&line[i..]).into_iter().take(1));
         }
     }
@@ -535,6 +536,87 @@ fn every_document_kind_is_registered() {
     for k in &known {
         if !found.contains(*k) {
             errs.push(format!("`{k}` in HEADER_FILES recognises no header now"));
+        }
+    }
+    fail(errs);
+}
+
+/// A crate's per-built-in argument lists, `pub const ARGS: &[(&str, &[&str])] = &[("op", &["a",
+/// ..]), ..]` (keywords, `#0`.. for positionals), if it has one.
+fn arg_lists(rel: &str) -> Option<Vec<(String, Vec<String>)>> {
+    let src = read(rel);
+    let at = src.find("pub const ARGS: &[(&str, &[&str])]")?;
+    let body = &src[at..];
+    let body = &body[body.find("= &[").expect("= &[") + 4..];
+    let body = &body[..body.find("\n];").expect("];")];
+    let mut out = vec![];
+    let mut rest = body;
+    while let Some(i) = rest.find("(\"") {
+        rest = &rest[i + 1..];
+        let op = quoted(rest).into_iter().next().unwrap_or_default();
+        let open = rest.find("&[").expect("&[");
+        let close = rest[open..].find(']').expect("]") + open;
+        out.push((op, quoted(&rest[open..close])));
+        rest = &rest[close..];
+    }
+    Some(out)
+}
+
+/// Each document kind whose built-ins take named arguments: its families and where its argument
+/// lists would be.
+const ARG_KINDS: &[(&str, &str, &[&str])] = &[
+    ("cam", "interface/forge-cam-lang/src/lib.rs", &["cam", "cam-expr"]),
+    (
+        "turn",
+        "interface/forge-turn-lang/src/lib.rs",
+        &["turn", "turn-expr"],
+    ),
+];
+
+/// The arguments each built-in takes: with an `ARGS` list, one `args` row per built-in, its
+/// names the list's, and the list's built-ins exactly the families'; without one, an `args` row
+/// for the kind saying GAP (an argument no list holds is read by nothing: silently ignored).
+#[test]
+fn every_argument_list_has_its_rows() {
+    let rows = coverage();
+    let fams = families();
+    let mut errs = vec![];
+    for (kind, file, fam_names) in ARG_KINDS {
+        let names: BTreeSet<String> = fams
+            .iter()
+            .filter(|f| fam_names.contains(&f.0))
+            .flat_map(|f| f.1.iter().cloned())
+            .collect();
+        match arg_lists(file) {
+            None => match row(&rows, "args", kind) {
+                Some(r) if r.lean.contains("GAP") => {}
+                _ => errs.push(format!(
+                    "`{kind}`: no argument list in {file}: an `args` row for `{kind}` saying GAP"
+                )),
+            },
+            Some(lists) => {
+                if row(&rows, "args", kind).is_some() {
+                    errs.push(format!(
+                        "`{kind}`: {file} has ARGS now: replace the `args` `{kind}` row by one per built-in"
+                    ));
+                }
+                let ops: BTreeSet<String> = lists.iter().map(|l| l.0.clone()).collect();
+                let missing: Vec<_> = names.difference(&ops).collect();
+                let extra: Vec<_> = ops.difference(&names).collect();
+                if !missing.is_empty() || !extra.is_empty() {
+                    errs.push(format!(
+                        "`{kind}` ARGS: built-ins without a list {missing:?}; lists of no built-in {extra:?}"
+                    ));
+                }
+                for (op, args) in &lists {
+                    let item = format!("{kind}::{op}");
+                    let want: BTreeSet<String> = args.iter().cloned().collect();
+                    match row(&rows, "args", &item) {
+                        None => errs.push(format!("`{item}`: no `args` row; its arguments: {want:?}")),
+                        Some(r) => diff(&item, &want, &r.names.iter().cloned().collect(), &mut errs),
+                    }
+                }
+            }
         }
     }
     fail(errs);

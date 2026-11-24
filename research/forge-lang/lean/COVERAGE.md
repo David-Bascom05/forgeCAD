@@ -78,6 +78,21 @@ documents in `examples/machined/` included. Headers that are names add no syntax
 | header | `robot` | | forge-lang `robot::is_robot` (first statement the bare name) | `LL1.Documents.robot_doc_accepted` (its own example lexes and parses), `Families.families_not_keywords`; semantics `Families.robot_conservative`; the grammar is the one parse_diff checks on every file |
 | keywords | `syntax::KEYWORDS` | `shared`, `param`, `fn`, `for`, `in`, `if`, `else`, `return`, `expect`, `and`, `or`, `not`, `true`, `false`, `sketch`, `path`, `at`, `component`, `drawing`, `harness` | `interface/forge-lang/src/syntax.rs` (`RESERVED`: `at`, a keyword that texts used as a name) | `LL1.Impl.grammar_ll1`, `LL1.Impl.impl_unambiguous`, `LL1.Impl.source_to_tree`, `LL1.Impl.impl_roundtrip`, `LL1.Driver.rd_eq_run`, `LL1.Lex.word_maximal`, `LL1.Lex.lex_lossless`, `LL1.LexUnits.in_keyword_after_number` |
 
+## Arguments
+
+A built-in's arguments are its keywords and positionals (`#0`, `#1`, ..). Where a crate lists
+them (`pub const ARGS: &[(&str, &[&str])]`, the list `named` checks and CAM-UI's dialog schema is
+checked against), each built-in has a row here whose names are its list's; until then the kind
+has one row, a GAP. The check: `FamiliesArgs.checkArgs_ok_iff` (a call is taken exactly when every
+argument it gives is listed), `FamiliesArgs.misspelled_refused`, and for an extension
+`FamiliesArgs.checkArgs_extend` (a built-in that gains arguments takes every call it took) and
+`FamiliesArgs.checkArgs_new`.
+
+| Kind | Item | Names | Rust site | Lean |
+|---|---|---|---|---|
+| args | `cam` | | `interface/forge-cam-lang/src/lib.rs` `named`: no list yet | GAP: a keyword no built-in reads is ignored (`stepovr:` runs on the default); the check, once a list exists, is `FamiliesArgs.misspelled_refused` |
+| args | `turn` | | `interface/forge-turn-lang/src/lib.rs` `named_args`: no list yet | GAP: as for `cam`; `FamiliesArgs.misspelled_refused` once a list exists |
+
 ## Edit ops
 
 The theorems are about the core model of a part document (`Core.lean`). The text-level ones
@@ -97,17 +112,17 @@ ops); the text-level theorems (`Print`, `Suppress.suppress_text_closure`) are th
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
 | op | `SetParam` | | `edit.rs` `apply`; text: `syntax::reparse_number` | `Edits.setParam_roundtrip`, `Edits.setParam_ids`, `Edits.sole_driver`, `Print.setLit_text`, `LL1.Lex.num_literal`, `LL1.ReparseModel.reparse_number_correct`, `LL1.Reparse.reparse_parse`; observed literal: a re-run (`Loops.count_prefix`, `Loops.keyed_insert`) |
-| op | `AddLocalParam` | | `edit.rs` (`param F.name = v`) | a name nothing reads (a new param no statement yet uses): adding its binding is `Complete.add_complete` (a literal binding adds no fragment: the same model; `Scoped.addParam_occ` for a component's). GAP: a name the feature already reads (a local param over a shared one of that name: that feature's value changes, a value edit, not stated); the local scope itself is not in the core |
+| op | `AddLocalParam` | | `edit.rs` (`param F.name = v`) | a name nothing reads: adding its binding is `Complete.add_complete` (a literal binding adds no fragment: the same model; `Scoped.addParam_occ` for a component's). A name `F` already reads (a local param over a shared one of that name): `F` now reads `v`, a ReplaceFeature of `F` keeping its name, so `EditClosure.edit_closure` (everything outside the closure of `F`'s name unchanged). GAP: the local scope itself (one feature's params) is not in the core; that the edited document evaluates |
 | op | `MakeShared` | | `edit.rs` | `Shared.makeShared_complete`, `Shared.makeShared_sound`, `Shared.makeShared_nums` |
 | op | `SplitInstance` | | `edit.rs` | `Split.split_doc`, `Sites.split_independent`, `Sites.split_edit_one`; counterexample `Counter.ValueEdit.split_edit_one` |
 | op | `AddFeature` | | `edit.rs` | `Complete.add_complete`, `Scoped.scopedAdd_ok`, `Print.body_text_insert`, `Scoped.scoped_text_insert`; sound half `Struct.execS_append` |
 | op | `DeleteFeature` | | `edit.rs` | `Struct.delete_sound`, `Complete.delete_complete`, `Scoped.scopedDelete_ok`; Counter/Rebind.lean shows single assignment is needed |
 | op | `ReplaceFeature` | | `edit.rs` | `ScopedMore.replace_complete`, `ScopedMore.scopedReplace_ok` (the statement keeps its name and nothing after it reads it: complete, every other fragment unchanged); a statement that is read: `EditClosure.edit_closure` (both documents evaluate: every fragment before it, and after it outside the closure of its name, unchanged; `EditClosure.closure_runs`). GAP: that the edited document evaluates when the closure's readers accept the new value (a re-run); in a component's block (scoped) |
 | op | `MoveFeature` | | `edit.rs` | `Struct.move_sound`, `Complete.move_complete`, `ScopedMore.move_down`, `ScopedMore.move_up`, `ScopedMore.scopedMove_ok`, `Print.body_text_swap` |
-| op | `LiftLiteral` | | `edit.rs` | shared scope: `LiftLiteral.liftLiteral_body` (if the document evaluates, the lifted one evaluates to the same model and log: every id, trace and observed site as it was, the literal's site now the param's), `LiftLiteral.lift_nested`. GAP: `Local` scope (a param one feature sees: with a fresh name, the same reads; not stated), the text splice |
+| op | `LiftLiteral` | | `edit.rs` | shared scope: `LiftLiteral.liftLiteral_body` (if the document evaluates, the lifted one evaluates to the same model and log: every id, trace and observed site as it was, the literal's site now the param's), `LiftLiteral.lift_nested`; `Local` scope: `LiftLiteral.liftLiteral_at` (the binding right before the feature that holds the literal, the statements before it untouched; a fresh name, so seen by that feature alone or by every later one reads the same). GAP: the text splice |
 | op | `SetArg` | | `edit_ops.rs` `apply_set_arg` (a call's argument, or `arg: text` added), `apply_component_arg` | a literal argument or component default set to a literal: SetParam on its site (`Edits.setParam_roundtrip`, as Scoped.lean notes); any text: a ReplaceFeature keeping the name, so `ScopedMore.replace_complete` (nothing reads it) and `EditClosure.edit_closure` (it is read: everything outside the closure of its name unchanged). GAP: that the edited document evaluates (a re-run of the closure); the text splice parsing back to the one-argument change (checked by reparsing at run time, not proven); machining documents (see above) |
 | op | `Rename` | | `edit_ops.rs` `precheck_rename`, `apply_rename`, `ast_rename` (token-level: the binding and its reads, not members, labels or params' names; in a machining or robot document, `calls_closed`, not a call's head) | part documents: `RenamePart.rename_body` (the renamed document evaluates at the same fuel to the same traces and log, every binding renamed and every feature's id renamed in its first segment, `a`'s features becoming `b`'s), `RenamePart.renFirst_keep` (no other id changes), `RenamePart.ren_nested`, `RenamePart.ren_top`. Machining and robot documents: `FamiliesRename.rename_run`, `FamiliesRename.rename_accepted`. GAP: a name a function, procedure or component body reads (Rust renames there too; the theorem assumes none does), a name bound inside a loop's body (Rust's `bound` lists those at top level), the run's duplicate-id check after renaming, and the text splice parsing back |
-| op | `SetProperty` | | `props.rs` | GAP: document properties (metadata) are not in the model; that they change no feature is unproven |
+| op | `SetProperty` | | `props.rs` `apply_set` (a value reading no name, in the one `properties(..)` statement, which binds nothing and makes no feature) | as a ReplaceFeature of a statement nothing reads: `ScopedMore.replace_complete` and `EditClosure.edit_closure` (every feature's id, trace and log unchanged). GAP: what the properties feed (title block, BOM, the material's density in `Run::physical`) is outside the core |
 | op | `Suppress` | | `edit_ops.rs` `apply_suppress` | `Suppress.suppress_complete`, `Suppress.suppress_stmts`, `Suppress.suppress_text_closure`, `Suppress.suppress_live`; ids `HistoryId.historyId_stable` |
 | op | `Unsuppress` | | `edit_ops.rs` | `Suppress.unsuppress_suppress` |
 | op | `Respell` | | `edit_ops.rs` `apply_respell` | `Respell.respell_read_binders`, `Respell.respell_text`, `Respell.respellChecked_read`, `Respell.respell_refuses_binder` |
