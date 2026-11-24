@@ -309,6 +309,11 @@ pub struct Timeline {
     /// segment, in the order of `segments`. `lookahead::plan` gives it for other parameters.
     pub t_la: f64,
     pub seg_la: Vec<f64>,
+    /// The cycle-time ESTIMATE (s): the jerk-limited planner (lookahead::plan_scurve) with
+    /// `SCurve::default()`, the stated assumption set (records' accel where they have it); per
+    /// segment in `seg_scurve`. Not a prediction; `t_min` is the guaranteed lower bound beside it.
+    pub t_scurve: f64,
+    pub seg_scurve: Vec<f64>,
 }
 
 fn q_to_f(v: i64, k: u32) -> f64 {
@@ -355,6 +360,8 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
         accel_missing: false,
         t_la: 0.0,
         seg_la: Vec::new(),
+        t_scurve: 0.0,
+        seg_scurve: Vec::new(),
     };
     let mut wcs: Vec<f64> = s
         .wcs
@@ -799,6 +806,9 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
     let (per, total) = crate::lookahead::plan(def, &tl, &crate::lookahead::LookAhead::default());
     tl.seg_la = per;
     tl.t_la = total;
+    let (per, total) = crate::lookahead::plan_scurve(def, &tl, &crate::lookahead::SCurve::default());
+    tl.seg_scurve = per;
+    tl.t_scurve = total;
     for sg in &tl.segments {
         for z in &def.zones {
             if let Some(sv) = zone_entry(def, z, sg) {
@@ -1267,10 +1277,11 @@ pub fn timeline_json(tl: &Timeline) -> String {
             .join(",")
     ));
     o.push_str(&format!(
-        "\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"accel_missing\":{},",
+        "\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"t_scurve\":{},\"accel_missing\":{},",
         num(tl.t_min),
         num(tl.t_stop),
         num(tl.t_la),
+        num(tl.t_scurve),
         tl.accel_missing
     ));
     o.push_str("\"segments\":[");

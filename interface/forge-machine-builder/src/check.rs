@@ -251,6 +251,8 @@ fn pair_travel(def: &MachineDef, ai: usize, bi: usize) -> (Vec<usize>, Travel) {
             accel_missing: false,
             t_la: 0.0,
             seg_la: Vec::new(),
+            t_scurve: 0.0,
+            seg_scurve: Vec::new(),
         };
         let rep = collide::check(&s, &tl, &[]);
         for c in &rep.contacts {
@@ -334,6 +336,8 @@ fn prove_box(
         accel_missing: false,
         t_la: 0.0,
         seg_la: Vec::new(),
+        t_scurve: 0.0,
+        seg_scurve: Vec::new(),
     };
     let rep = collide::check(s, &tl, &[]);
     if rep.pairs_checked == 1 && rep.spans == 1 && rep.contacts.is_empty() {
