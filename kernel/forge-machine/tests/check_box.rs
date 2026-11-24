@@ -33,28 +33,69 @@ fn vmc3_table_and_head_are_clear_through_all_travel() {
     assert_eq!(v, BoxVerdict::Clear, "after {n} boxes");
 }
 
+/// Every pair of every built-in machine over all its travel outside its zones: proven Clear,
+/// except the pairs listed with why they are not decided (UNKNOWN: neither proven clear nor
+/// found to touch within the budget).
 #[test]
-fn trunnion_head_comes_within_clearance_of_its_cradle_inside_travel() {
+fn builtin_pairs_are_proven_clear_over_all_travel_outside_their_zones() {
+    // (machine, a, b): not decided within 200 000 boxes (the coarse gap bound is negative and
+    // bisection does not reach the resolution: a contact surface by construction or a zone
+    // boundary the pair touches at). Each is UNKNOWN, not clear; the data owner (CAM-MACHINE) has
+    // the list.
+    const UNDECIDED: &[(&str, &str, &str)] = &[
+        ("generic-trunnion-bc", "support-l", "cradle"),
+        ("generic-trunnion-bc", "support-r", "cradle"),
+        ("generic-mill-turn", "headstock", "subchuck"),
+        ("generic-mill-turn", "headstock", "bhead"),
+        ("generic-mill-turn", "chuck", "subchuck"),
+        ("generic-mill-turn", "chuck", "bhead"),
+        ("generic-mill-turn", "subchuck", "bhead"),
+        ("generic-mill-turn", "subhead", "bhead"),
+    ];
+    let mut proven = 0;
+    for m in builtin() {
+        let bs = collide::machine_bodies(&m);
+        for i in 0..bs.len() {
+            for k in i + 1..bs.len() {
+                let (a, b) = (&bs[i], &bs[k]);
+                let listed = UNDECIDED.iter().any(|(mm, x, y)| {
+                    *mm == m.name && ((*x == a.name && *y == b.name) || (*x == b.name && *y == a.name))
+                });
+                // a listed pair gets a small budget: it must not turn out to touch
+                let budget = if listed { 2_000 } else { 200_000 };
+                let (v, n) = collide::check_box(&m, a, b, &travel(&m), budget, true);
+                match v {
+                    BoxVerdict::NotChecked => {}
+                    BoxVerdict::Clear => {
+                        assert!(
+                            !listed,
+                            "{} {} / {} is now Clear: take it off the list",
+                            m.name, a.name, b.name
+                        );
+                        proven += 1;
+                    }
+                    BoxVerdict::Undecided { .. } if listed => {}
+                    v => panic!("{} {} / {}: {v:?} after {n} boxes", m.name, a.name, b.name),
+                }
+            }
+        }
+    }
+    assert!(proven >= 15, "{proven} pairs proven");
+}
+
+#[test]
+fn trunnion_head_is_clear_of_its_cradle_over_all_travel() {
     let m = builtin_named("generic-trunnion-bc").unwrap();
     let bs = collide::machine_bodies(&m);
-    let (a, b) = (body(&bs, "cradle"), body(&bs, "head"));
-    let (v, n) = collide::check_box(&m, a, b, &travel(&m), 65536, false);
-    let q = match &v {
-        BoxVerdict::Hit { q, .. } => {
-            assert!(collide::dense_overlap(a, b, &forge_machine::kin::pose(&m, q)));
-            q.clone()
-        }
-        BoxVerdict::Near { q, gap_lo } => {
-            let c = collide::pair_rule(&m, a, b, forge_machine::sim::SegKind::Rapid).unwrap();
-            assert!(*gap_lo < c, "{gap_lo} >= {c}");
-            q.clone()
-        }
-        v => panic!("{v:?} after {n} boxes"),
-    };
-    for (x, j) in q.iter().zip(&m.joints) {
-        let r = j.range.unwrap();
-        assert!(r[0] <= *x && *x <= r[1], "{x} outside {r:?}");
-    }
+    let (v, n) = collide::check_box(
+        &m,
+        body(&bs, "cradle"),
+        body(&bs, "head"),
+        &travel(&m),
+        200_000,
+        true,
+    );
+    assert_eq!(v, BoxVerdict::Clear, "after {n} boxes");
 }
 
 /// Clear over a box is never contradicted by a sample inside it; a budget of one box that is not
