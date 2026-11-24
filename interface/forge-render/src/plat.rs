@@ -7,11 +7,20 @@ pub use std::time::Instant;
 #[cfg(target_arch = "wasm32")]
 pub use web_time::Instant;
 
+/// Jobs run on the caller's thread, before `spawn` returns: the single-threaded browser build. A
+/// long one there blocks the page for its whole length.
+pub const INLINE_JOBS: bool = cfg!(all(target_arch = "wasm32", not(target_feature = "atomics")));
+
 /// Runs `f` off the caller's thread where there are threads: natively a named thread; in the
 /// threaded browser build a Web Worker on the page's memory (`threads`); in the single-threaded
 /// browser build right away, before this returns. A job's result goes back through a channel
 /// either way, so the caller reads it the same.
 pub fn spawn(name: &str, f: impl FnOnce() + Send + 'static) {
+    // a job's forge-lang runs' sketches freed as it ends (`release_sketches`: on its own thread)
+    let f = move || {
+        f();
+        release_sketches();
+    };
     #[cfg(not(target_arch = "wasm32"))]
     {
         std::thread::Builder::new()
@@ -163,6 +172,22 @@ pub fn pick_file(title: Option<&str>, kind: &str, exts: &[&str]) -> Option<Strin
     }
 }
 
+/// A folder, by the system's picker (natively; the browser's downloads have no folder: None).
+pub fn pick_folder(title: &str) -> Option<String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        rfd::FileDialog::new()
+            .set_title(title)
+            .pick_folder()
+            .map(|p| p.to_string_lossy().into_owned())
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = title;
+        None
+    }
+}
+
 /// A small value kept between sessions (settings, an endpoint's key): natively in the config
 /// directory; in the browser in the page's `localStorage`, under `forgecad:KEY`.
 pub fn kv_get(key: &str) -> Option<String> {
@@ -254,7 +279,10 @@ pub fn serve<J: Send + 'static>(
     {
         spawn(name, move || {
             while let Ok(j) = rx.recv() {
-                if !f(j, &rx) {
+                let go_on = f(j, &rx);
+                // each job's sketches freed as it ends, not only the thread's last
+                release_sketches();
+                if !go_on {
                     return;
                 }
             }
@@ -286,6 +314,7 @@ impl<J> Server<J> {
             let (rx, f, live) = &mut *r;
             while *live && let Ok(j) = rx.try_recv() {
                 *live = f(j, rx);
+                release_sketches();
             }
             return *live;
         }
@@ -325,5 +354,22 @@ pub fn par_map<T: Sync, R: Send>(items: &[T], threads: usize, f: impl Fn(&T) -> 
     {
         let _ = threads;
         items.iter().map(f).collect()
+    }
+}
+
+/// Frees the sketches forge-lang's runs on this thread kept (`forge_keep`): each lets go of its
+/// names, the cycle through them broken (a sketch with a named entity is an `Rc` cycle: its
+/// `named` holds `Value::Ent`s of itself). A run frees none itself, so the speed gate's builds do
+/// what they did; between builds, never during one, on the thread that ran them. Without it every
+/// run kept its sketches (5.5 KB a run of a small part natively, ~30 KB an edit in the browser).
+/// A process that never calls it (the speed gate's benchparts, a one-shot CLI command) keeps them
+/// till it exits, as every process did before. Its own cost: the freeing a run paid before, about
+/// 5,500 instructions a run of a small one-sketch part.
+pub fn release_sketches() {
+    for x in forge_keep::take_all() {
+        if let Ok(sk) = x.downcast::<std::cell::RefCell<forge_lang::sketch::Sk>>() {
+            let named = std::mem::take(&mut sk.borrow_mut().named);
+            drop(named);
+        }
     }
 }

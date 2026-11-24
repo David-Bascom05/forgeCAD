@@ -1,0 +1,8 @@
+# A two-channel dialect for the generic mill-turn's example: the head (channel 1) and the
+# sub-spindle (channel 2) wait for each other at M100-M199 (Fanuc's multi-path waits).
+[dialect]
+name = "millturn-2ch"
+decimals = 3
+feed_decimals = 3
+dwell = "G04 P{ms}"
+wait_m = [100, 199]

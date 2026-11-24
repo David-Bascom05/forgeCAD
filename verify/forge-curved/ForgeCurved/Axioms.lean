@@ -175,3 +175,10 @@ import ForgeCurved
 #print axioms ForgeCurved.PlaceMerge.merge_within
 #print axioms ForgeCurved.PlaceMerge.zero_unique_of_deriv_ne
 #print axioms ForgeCurved.PlaceMerge.rootUnique_of_param
+#print axioms ForgeCurved.BlendNode.h_zero
+#print axioms ForgeCurved.BlendNode.cap_section
+#print axioms ForgeCurved.BlendNode.h_strictMonoOn
+#print axioms ForgeCurved.BlendNode.one_branch
+#print axioms ForgeCurved.BlendNode.branch_increasing
+#print axioms ForgeCurved.BlendNode.branch_meets_springs_only_at_node
+#print axioms ForgeCurved.BlendNode.tubes_one_branch

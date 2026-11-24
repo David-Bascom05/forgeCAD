@@ -50,6 +50,10 @@ pub enum Qty {
     Accel,
     /// rev/min
     Rpm,
+    /// rad/s (a joint's velocity limit), the same in both systems
+    AngVel,
+    /// N (a linear joint's effort)
+    ForceN,
     /// kW
     Power,
     /// kN/m (a die's load per length)
@@ -97,6 +101,9 @@ pub fn convert(v: f64, q: Qty, sys: System) -> (f64, &'static str) {
         (Qty::Accel, Metric) => (v, "mm/s²"),
         (Qty::Accel, Inch) => (v / 25.4, "in/s²"),
         (Qty::Rpm, _) => (v, "rpm"),
+        (Qty::AngVel, _) => (v, "rad/s"),
+        (Qty::ForceN, Metric) => (v, "N"),
+        (Qty::ForceN, Inch) => (v / 4.448_221_615_260_5, "lbf"),
         (Qty::Power, Metric) => (v, "kW"),
         (Qty::Power, Inch) => (v / 0.745_699_872, "hp"),
         (Qty::LoadPerLength, Metric) => (v, "kN/m"),
@@ -211,6 +218,8 @@ pub enum Source {
     Unknown,
     /// The user's own value: when, and what it replaced.
     User(String),
+    /// Linked to another document's value (a robot's joint limit from its assembly): which one.
+    Linked(String),
     /// Given without a source.
     Uncited,
 }
@@ -223,13 +232,14 @@ impl Source {
             Source::Conflict(_) => "conflict",
             Source::Unknown => "unknown",
             Source::User(_) => "yours",
+            Source::Linked(_) => "linked",
             Source::Uncited => "uncited",
         }
     }
 
     pub fn colour(&self, t: &Theme) -> Color32 {
         match self {
-            Source::Published(_) => t.on_ink,
+            Source::Published(_) | Source::Linked(_) => t.on_ink,
             Source::Estimate(_) => t.warn,
             Source::Conflict(_) => t.error,
             Source::Unknown | Source::Uncited => t.ink2,
@@ -239,7 +249,11 @@ impl Source {
 
     pub fn detail(&self) -> &str {
         match self {
-            Source::Published(s) | Source::Estimate(s) | Source::Conflict(s) | Source::User(s) => s,
+            Source::Published(s)
+            | Source::Estimate(s)
+            | Source::Conflict(s)
+            | Source::User(s)
+            | Source::Linked(s) => s,
             Source::Unknown => "Not published in any source we read.",
             Source::Uncited => "Given without a source.",
         }
@@ -685,6 +699,8 @@ mod tests {
         assert_eq!(show(30.0, Qty::Angle, System::Metric), "30°");
         assert_eq!(show(3.0, Qty::Count, System::Inch), "3");
         assert_eq!(show(25.0, Qty::Speed, System::Metric), "25 m/min");
+        assert_eq!(show(1.0, Qty::AngVel, System::Metric), "1 rad/s");
+        assert_eq!(Source::Linked("arm2.fg".into()).word(), "linked");
         let back = unconvert(
             convert(150.0, Qty::Length, System::Inch).0,
             Qty::Length,

@@ -194,6 +194,16 @@ fn hole_options_that_cannot_apply_are_errors() {
     );
     assert_eq!(e("screw: \"M6\", thread: \"M6\", depth: thru"), vec!["Conflict"]);
     assert_eq!(e("d: 6, depth: sym(4)"), vec!["WrongType"]);
+    // on a hole of its own d, `fit:` is an ISO 286 hole class
+    assert_eq!(e("d: 6, fit: \"Q9\", depth: thru"), vec!["UnknownWord"]);
+}
+
+#[test]
+fn a_plain_hole_records_its_iso_hole_class() {
+    // the geometry is the nominal d; the class is what CAM reams to
+    let src = format!("{BASE}{TOP}h = hole(at: top.p, d: 6, depth: 8, fit: \"H7\")\n");
+    let plain = format!("{BASE}{TOP}h = hole(at: top.p, d: 6, depth: 8)\n");
+    assert!((vol(&ok(&src)) - vol(&ok(&plain))).abs() < 1e-9);
 }
 
 // ---- threads ----------------------------------------------------------------------------------

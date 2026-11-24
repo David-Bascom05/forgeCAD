@@ -112,6 +112,18 @@ pub fn derive(
     id: &str,
     overrides: &[(String, Val)],
 ) -> Result<Record, DeriveError> {
+    derive_table(lib, kind, from, id, overrides).map(|(_, r)| r)
+}
+
+/// As `derive`, with the derived record's table as well (what a library file holds: a caller
+/// writes it under `[[kind]]`).
+pub fn derive_table(
+    lib: &Library,
+    kind: &str,
+    from: &str,
+    id: &str,
+    overrides: &[(String, Val)],
+) -> Result<(Table, Record), DeriveError> {
     if !KINDS.contains(&kind) {
         return Err(DeriveError::Kind(kind.to_string()));
     }
@@ -209,7 +221,7 @@ pub fn derive(
         "tool_block" => ToolBlock::from_table(&t).map(Record::ToolBlock),
         _ => TurnHolder::from_table(&t).map(Record::TurnHolder),
     };
-    rec.map_err(DeriveError::Bad)
+    rec.map(|r| (t, r)).map_err(DeriveError::Bad)
 }
 
 /// How a finding stands: an error is a record that cannot be right; a warning is one the check
