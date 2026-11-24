@@ -1048,6 +1048,33 @@ impl CamWs {
         }
     }
 
+    /// Whether Esc has a level here to back out of: a dialog or a floating window.
+    pub fn escape_level(&self) -> bool {
+        self.op_dlg.is_some()
+            || self.setup_dlg.is_some()
+            || self.post_dlg.is_some()
+            || self.tools_open
+            || self.programs_open
+            || self.quality_open
+            || self.checks_open
+            || self.text_open
+            || self.renaming.is_some()
+    }
+
+    /// Esc: one level out. A rename or a dialog is cancelled (nothing written), else the
+    /// floating window closes.
+    pub fn escape(&mut self) {
+        if self.renaming.is_some() {
+            self.renaming = None;
+        } else if self.op_dlg.is_some() {
+            self.op_dlg = None;
+        } else if self.setup_dlg.is_some() {
+            self.setup_dlg = None;
+        } else {
+            self.close_windows();
+        }
+    }
+
     /// Every floating window closed (the dialogs of an op or a setup stay: they are edits).
     pub fn close_windows(&mut self) {
         self.post_dlg = None;

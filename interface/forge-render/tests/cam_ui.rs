@@ -416,3 +416,32 @@ fn a_turning_document_docks_its_section_and_windows_take_turns() {
     let w = h.gui.shell.cam.as_ref().unwrap();
     assert!(w.tools_open && !w.programs_open, "one floating window at a time");
 }
+
+/// The op dialog's keys: Esc cancels (the text unchanged), Enter is OK (the edit written).
+#[test]
+fn the_op_dialog_answers_enter_and_escape() {
+    use forge_render::shell::cam::schema::{Tab, spec, tabs};
+    let Some((mut h, _)) = open("keys") else { return };
+    let before = text(&h);
+    h.gui.shell.cam.as_mut().unwrap().auto = false;
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Edit("prof".into()));
+    h.step();
+    assert!(h.placed("cam:op:ok").is_some());
+    h.key(egui::Key::Escape);
+    h.step();
+    assert!(h.gui.shell.cam.as_ref().unwrap().op_dlg.is_none(), "Esc closes it");
+    assert_eq!(text(&h), before);
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Edit("prof".into()));
+    h.step();
+    let k = tabs(spec("contour").unwrap()).iter().position(|t| *t == Tab::Passes).unwrap();
+    assert!(h.click(&format!("cam:op:tab:{k}")));
+    h.step();
+    assert!(h.click("cam:op:arg:leave"));
+    h.text("0.3");
+    h.step();
+    h.key(egui::Key::Enter);
+    h.step();
+    h.step();
+    assert!(text(&h).contains("leave: 0.3"), "Enter is OK: {}", text(&h));
+    assert!(h.gui.shell.cam.as_ref().unwrap().op_dlg.is_none());
+}
