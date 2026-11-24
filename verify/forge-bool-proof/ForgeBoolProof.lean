@@ -11,3 +11,4 @@ import ForgeBoolProof.Assembly
 import ForgeBoolProof.Orient
 import ForgeBoolProof.Seeded
 import ForgeBoolProof.Formula
+import ForgeBoolProof.KeepOf

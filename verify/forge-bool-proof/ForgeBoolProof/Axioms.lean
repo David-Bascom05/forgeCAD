@@ -38,3 +38,5 @@ import ForgeBoolProof
 #print axioms ForgeBoolProof.compl_preconnected
 #print axioms ForgeBoolProof.seeded_result
 #print axioms ForgeBoolProof.local_formula_of_cone
+#print axioms ForgeBoolProof.keepOf_spec
+#print axioms ForgeBoolProof.written_eq
