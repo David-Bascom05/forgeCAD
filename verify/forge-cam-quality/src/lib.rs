@@ -556,113 +556,28 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
     job
 }
 
-/// Each program on the machine: its timeline, the ops' shares by their blocks.
+/// Each program on the machine: its timeline, the ops' shares by their blocks (forge-cam-lang's
+/// `cycle_times`, the one sum the setup sheet shows too).
 fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job: &mut JobQ) {
-    use forge_machine::sim::{self, Cut, Happening, Setup, SimTool};
-    for p in &cam.programs {
-        let mut pq = ProgQ {
-            name: p.name.clone(),
+    let ct = cam.cycle_times(mlib, cfg.machine.as_deref());
+    for (q, t) in job.ops.iter_mut().zip(&ct.ops) {
+        q.t_min += t.t_min;
+        q.t_stop += t.t_stop;
+        q.t_scurve += t.t_scurve;
+    }
+    for (p, t) in cam.programs.iter().zip(ct.progs) {
+        job.progs.push(ProgQ {
+            name: t.name,
             setups: p.setups.clone(),
-            ..ProgQ::default()
-        };
-        let Some(text) = p.text.as_deref() else {
-            pq.error = Some(p.error.clone().unwrap_or_else(|| "no program text".into()));
-            job.progs.push(pq);
-            continue;
-        };
-        let mname = cfg.machine.clone().unwrap_or_else(|| {
-            p.setups
-                .first()
-                .and_then(|&s| cam.setup_view(s))
-                .map(|v| v.machine.to_string())
-                .unwrap_or_default()
+            machine: t.machine,
+            t_min: t.t_min,
+            t_stop: t.t_stop,
+            t_scurve: t.t_scurve,
+            tool_changes: t.tool_changes,
+            accel_missing: t.accel_missing,
+            violations: t.violations,
+            error: t.error,
         });
-        pq.machine = mname.clone();
-        let res = (|| -> Result<sim::Timeline, String> {
-            let def = mlib.get(&mname).map_err(|e| e.to_string())?;
-            let dsrc = forge_machine::gcode::Control::dialect_src(&p.post)
-                .ok_or_else(|| format!("no dialect `{}`", p.post))?;
-            let control =
-                forge_machine::gcode::Control::for_machine(def, dsrc, 1).map_err(|e| e.to_string())?;
-            let mut s = Setup::new(def, control).map_err(|e| e.to_string())?;
-            let letters = s.control.letters.clone();
-            // G54..G59: word 0 at the machine's tip 500 − Z − H above its zero (as the generic
-            // VMC's example setup); travel limits do not bear on the time
-            for n in 54..=59 {
-                let v = letters
-                    .iter()
-                    .map(|&l| if l == 'Z' { -500.0 } else { 0.0 })
-                    .collect();
-                s.wcs.push((n, v));
-            }
-            for tu in cam.tool_uses() {
-                let r = 0.5 * tu.tool.dc;
-                s.tools.push(SimTool {
-                    t: tu.t,
-                    name: tu.tool.id.clone(),
-                    tip: [0.0, 0.0, -100.0],
-                    body: vec![(r, 0.0, tu.tool.lcf.max(1.0))],
-                    cut: Cut::Mill {
-                        r,
-                        corner: tu.tool.re.min(r),
-                    },
-                });
-                s.h.push((tu.t, 100.0));
-            }
-            sim::simulate(text, &s).map_err(|e| e.to_string())
-        })();
-        match res {
-            Ok(tl) => {
-                pq.t_min = tl.t_min;
-                pq.t_stop = tl.t_stop;
-                pq.accel_missing = tl.accel_missing;
-                pq.violations = tl.violations.len();
-                // text line (1-based) → op: the op whose comment "(name kind)" came last
-                let names: Vec<(String, usize)> = job
-                    .ops
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, _)| p.setups.contains(&cam.ops[*i].setup))
-                    .map(|(i, o)| (format!("({} {})", o.name, o.kind), i))
-                    .collect();
-                let mut op_of = vec![None; text.lines().count() + 2];
-                let mut cur = None;
-                for (i, line) in text.lines().enumerate() {
-                    if let Some((_, k)) = names.iter().find(|(n, _)| line.contains(n.as_str())) {
-                        cur = Some(*k);
-                    }
-                    op_of[i + 1] = cur;
-                }
-                pq.t_scurve = tl.seg_scurve.iter().sum();
-                for (i, sg) in tl.segments.iter().enumerate() {
-                    if let Some(Some(k)) = op_of.get(sg.line) {
-                        job.ops[*k].t_min += sg.t_min;
-                        job.ops[*k].t_stop += sg.t_stop;
-                        job.ops[*k].t_scurve += tl.seg_scurve.get(i).copied().unwrap_or(sg.t_min);
-                    }
-                }
-                for mk in &tl.marks {
-                    let secs = match mk.what {
-                        Happening::ToolChange { seconds, .. } => {
-                            pq.tool_changes += 1;
-                            seconds
-                        }
-                        Happening::Index { seconds, .. }
-                        | Happening::Dwell { seconds }
-                        | Happening::PalletChange { seconds } => seconds,
-                        _ => 0.0,
-                    };
-                    pq.t_scurve += secs;
-                    if let Some(Some(k)) = op_of.get(mk.line) {
-                        job.ops[*k].t_min += secs;
-                        job.ops[*k].t_stop += secs;
-                        job.ops[*k].t_scurve += secs;
-                    }
-                }
-            }
-            Err(e) => pq.error = Some(e),
-        }
-        job.progs.push(pq);
     }
 }
 
