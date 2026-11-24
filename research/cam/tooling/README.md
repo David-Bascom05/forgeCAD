@@ -65,7 +65,8 @@ by the test, not failed.
   "medium" cast iron; S Ti-6Al-4V/titanium, then nickel; H the lowest stated hardness from 45
   HRC); with none of them in the source, the group's lowest-vc row, cited so. Every row is also
   kept as "<group> <class> <maker's material>", for an exact material match. A diameter on the
-  boundary of two diameter columns (Lakeshore) keeps the lower feed. "Up to" depths are the
+  boundary of two diameter columns (Lakeshore) keeps the column whose lower edge is the
+  diameter (the low end of its range, which the preset takes, is the value for that diameter). "Up to" depths are the
   source's upper limit, noted.
   Helical's finishing column is a programmed feed at the stated RDOC: the preset sets ae to it
   and notes "programmed at ae".
