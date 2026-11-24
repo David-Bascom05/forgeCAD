@@ -1,0 +1,5 @@
+# a flange leg of 2^63: the sheet region's vertex grid overflowed i64.
+from: interface/forge-lang/parts/sheet/hems.fg
+replace: param edge.leg = 10
+with: param edge.leg = 9223372036854775807
+expect: refused

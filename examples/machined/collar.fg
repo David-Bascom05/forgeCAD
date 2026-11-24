@@ -1,0 +1,15 @@
+# A collar with a back chamfer for turning: Ø16 from the front face to z = -10, a Ø24 collar to
+# -16, its back a 45° chamfer facing the chuck down to the Ø16 neck at -20, the neck to -30, a Ø24
+# shoulder to the back face at -40. Frame: z along the axis, Z0 on the front face.
+shared d = 16
+shared dc = 24
+shared l = 40
+
+sketch prof(on: xz) {
+  o = poly([(0, -l), (dc / 2, -l), (dc / 2, -30), (d / 2, -30), (d / 2, -20), (dc / 2, -16), (dc / 2, -10), (d / 2, -10), (d / 2, 0), (0, 0)])
+  zax = line((0, -l), (0, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+
+expect valid
+expect bodies = 1

@@ -1,0 +1,168 @@
+{
+ "vendor": "DMG MORI",
+ "model": "CMX 600 V",
+ "family": "CMX V",
+ "source": [
+  "https://en.dmgmori.com/products/machines/milling/vertical-milling/cmx-v/cmx-600-v",
+  "https://us.dmgmori.com/products/machines/milling/vertical-milling/cmx-v/cmx-600-v"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "vmc3",
+ "architecture": "C-frame vertical machining centre; table moves in X ('movable table as X-axis'); maker states rigid Y-axis concept over whole travel; which unit carries Y and Z not stated (memory: Y on saddle/column side, Z head on column, unverified). Vertical spindle.",
+ "control": {
+  "standard": null,
+  "options": [
+   "SIEMENS (19in DMG MORI SLIMline)",
+   "HEIDENHAIN (19in SLIMline)",
+   "MAPPS on FANUC (15in SLIMline)"
+  ]
+ },
+ "travel_mm": {
+  "X": 600,
+  "Y": 560,
+  "Z": 510
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  900,
+  560
+ ],
+ "table_load_kg": 600,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": null,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "changer.pockets",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "milling_head",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "rotary.A",
+  "rotary.B",
+  "rotary.C",
+  "rotary_table_dia_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_max",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "weight_kg"
+ ],
+ "options": [
+  "direct measuring systems now standard",
+  "automation: PH Cell, Robo2Go Milling, AMR"
+ ],
+ "notes": "table_mm from US page 'Huge table with 35.4 x 22.0 in' (orig inches; equals published max workpiece length/width 900 x 560 mm). Max workpiece height 630 mm, weight 600 kg. Positioning accuracy 6 um (ISO 230-2) without linear scales per US page. Footprint 63.5 ft2 (US page). Spindle, magazine, rapids not on public page; memory says 12,000 rpm SK40 inline spindle and 30-pocket magazine, unverified. DMG MORI's full technical data and brochures (PDF) are behind a DMG MORI Account registration (download URL returns 'Download - Registrierung erforderlich' HTML); not used. Only data printed on the public product page (and public TECHNOLOGY EXCELLENCE magazine PDFs) recorded.",
+ "_not_applicable": [
+  "swing_over_bed_mm",
+  "max_turning_dia_mm",
+  "max_turning_length_mm",
+  "chuck_size_in",
+  "bar_capacity_mm",
+  "spindle_nose_type",
+  "sub_spindle",
+  "live_tool",
+  "turret_stations",
+  "turret_index_s",
+  "tailstock"
+ ]
+}

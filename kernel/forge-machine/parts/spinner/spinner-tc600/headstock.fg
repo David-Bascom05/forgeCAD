@@ -1,0 +1,14 @@
+# spinner-tc600 headstock: the headstock behind the chuck (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -219.46
+shared y0 = -219.46
+shared z0 = -610
+shared L = 438.92
+shared W = 438.92
+shared H = 500
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

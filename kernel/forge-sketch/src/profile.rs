@@ -162,20 +162,64 @@ pub fn profiles_among(
 
 /// Joins open segments end to end into closed loops.
 fn chain_loops(open: &[(Segment, EntityId)]) -> Result<Vec<ProfileLoop>, ExtractError> {
+    // the first node within the tolerance, found through a grid of cells that size (a search
+    // of every node was quadratic: minutes on a sketch of tens of thousands of segments)
     let mut nodes: Vec<Point2> = Vec::new();
+    if open.len() <= 64 {
+        // few: a search of every node, as before (the grid costs more than it saves)
+        let mut node_of = |p: Point2| -> usize {
+            match nodes.iter().position(|q| q.distance(p) <= tol::LINEAR) {
+                Some(i) => i,
+                None => {
+                    nodes.push(p);
+                    nodes.len() - 1
+                }
+            }
+        };
+        let ends: Vec<(usize, usize)> = open
+            .iter()
+            .map(|(s, _)| (node_of(s.start()), node_of(s.end())))
+            .collect();
+        return chain_ends(open, &ends);
+    }
+    let mut grid: std::collections::HashMap<(i64, i64), Vec<usize>> = std::collections::HashMap::new();
+    let cell = |p: Point2| {
+        (
+            (p.x / tol::LINEAR).floor() as i64,
+            (p.y / tol::LINEAR).floor() as i64,
+        )
+    };
     let mut node_of = |p: Point2| -> usize {
-        match nodes.iter().position(|q| q.distance(p) <= tol::LINEAR) {
-            Some(i) => i,
-            None => {
-                nodes.push(p);
-                nodes.len() - 1
+        let (i, j) = cell(p);
+        let mut best: Option<usize> = None;
+        for a in i.saturating_sub(1)..=i.saturating_add(1) {
+            for b in j.saturating_sub(1)..=j.saturating_add(1) {
+                for &k in grid.get(&(a, b)).into_iter().flatten() {
+                    if nodes[k].distance(p) <= tol::LINEAR && best.is_none_or(|x| k < x) {
+                        best = Some(k);
+                    }
+                }
             }
         }
+        best.unwrap_or_else(|| {
+            nodes.push(p);
+            grid.entry((i, j)).or_default().push(nodes.len() - 1);
+            nodes.len() - 1
+        })
     };
     let ends: Vec<(usize, usize)> = open
         .iter()
         .map(|(s, _)| (node_of(s.start()), node_of(s.end())))
         .collect();
+    chain_ends(open, &ends)
+}
+
+/// `chain_loops` once each segment's two ends are numbered.
+#[inline(always)]
+fn chain_ends(
+    open: &[(Segment, EntityId)],
+    ends: &[(usize, usize)],
+) -> Result<Vec<ProfileLoop>, ExtractError> {
     let mut incident: Vec<Vec<usize>> = Vec::new();
     for (k, &(a, b)) in ends.iter().enumerate() {
         for v in [a, b] {
@@ -463,36 +507,65 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
         .collect();
     let shapes: Vec<Shape> = all.iter().map(|(s, ..)| shape(s)).collect();
     let mut meets_itself: Vec<Option<(u64, u64)>> = vec![None; loops.len()];
-    for i in 0..all.len() {
-        for j in i + 1..all.len() {
-            let (si, sj) = (&all[i].0, &all[j].0);
-            let ends = [si.start(), si.end(), sj.start(), sj.end()];
-            let shared: Vec<Point2> = ends[..2]
-                .iter()
-                .copied()
-                .filter(|p| ends[2..].iter().any(|q| q.distance(*p) <= tol::LINEAR))
-                .collect();
-            // a tangent joint solved to ~1e-9 mm still splits into two roots up to sqrt(2 r delta) apart
-            let near = 1e-6 + (2.0 * radius(&shapes[i]).max(radius(&shapes[j])) * 1e-8).sqrt();
-            let same = all[i].2 == all[j].2;
-            let bad = match hits(&shapes[i], &shapes[j]) {
-                Hit::Overlap => true,
-                Hit::Points(ps) => ps.iter().any(|p| {
-                    !shared.iter().any(|q| q.distance(*p) <= near)
-                        && (same || crosses(&shapes[i], &shapes[j], *p, &ends, near))
-                }),
-            };
-            if !bad {
-                continue;
+    // few: every pair, as before (the boxes cost more than they save); else only segments whose
+    // boxes come within a margin can meet: a sweep finds those pairs (every pair was quadratic),
+    // then they are judged in the order every pair was
+    let n = all.len();
+    let pairs = if n <= 64 {
+        Pairs::Every { i: 0, j: 1, n }
+    } else {
+        Pairs::Listed(crossing_candidates(&all).into_iter())
+    };
+    for (i, j) in pairs {
+        let (si, sj) = (&all[i].0, &all[j].0);
+        let ends = [si.start(), si.end(), sj.start(), sj.end()];
+        // the ends of the first the second shares (at most two: no list made for them)
+        let mut both = [ends[0]; 2];
+        let mut nb = 0;
+        for p in &ends[..2] {
+            if ends[2..].iter().any(|q| q.distance(*p) <= tol::LINEAR) {
+                both[nb] = *p;
+                nb += 1;
             }
-            if same {
-                meets_itself[all[i].2].get_or_insert((all[i].1, all[j].1));
-            } else {
-                return Err(ExtractError::SelfIntersection {
-                    a: EntityId(all[i].1),
-                    b: EntityId(all[j].1),
-                });
-            }
+        }
+        let shared = &both[..nb];
+        // a tangent joint solved to ~1e-9 mm still splits into two roots up to sqrt(2 r delta) apart
+        let near = 1e-6 + (2.0 * radius(&shapes[i]).max(radius(&shapes[j])) * 1e-8).sqrt();
+        let same = all[i].2 == all[j].2;
+        let hit = hits(&shapes[i], &shapes[j]);
+        let bad = match &hit {
+            Hit::Overlap => true,
+            Hit::Points(ps) => ps.iter().any(|p| {
+                !shared.iter().any(|q| q.distance(*p) <= near)
+                    && (same || crosses(&shapes[i], &shapes[j], *p, &ends, near))
+            }),
+        };
+        if !bad {
+            continue;
+        }
+        // two curves of one loop that cross at an angle away from their ends and part by more
+        // than tolerance before they meet again at their shared end make the loop cross itself,
+        // however small the lobe between (a sampled outline's chords can pass a lobe narrower
+        // than their sag). One that only meets itself (a touch), or whose lobe is within
+        // tolerance (a knife edge's sides, a hair off tangent), is asked of the loop's outline
+        let crossing = || match &hit {
+            Hit::Points(ps) => ps.iter().any(|p| {
+                !shared.iter().any(|q| q.distance(*p) <= near)
+                    && crosses(&shapes[i], &shapes[j], *p, &ends, near)
+                    && shared.iter().any(|&q| {
+                        apart(&shapes[i], &shapes[j], *p, q).max(apart(&shapes[j], &shapes[i], *p, q))
+                            > tol::LINEAR
+                    })
+            }),
+            Hit::Overlap => false,
+        };
+        if same && !crossing() {
+            meets_itself[all[i].2].get_or_insert((all[i].1, all[j].1));
+        } else {
+            return Err(ExtractError::SelfIntersection {
+                a: EntityId(all[i].1),
+                b: EntityId(all[j].1),
+            });
         }
     }
     for (l, m) in loops.iter().zip(meets_itself) {
@@ -508,6 +581,80 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
     Ok(())
 }
 
+/// The pairs `check_crossings` judges, in order: every one of `n` segments' (`i < j`), or a list.
+enum Pairs {
+    Every { i: usize, j: usize, n: usize },
+    Listed(std::vec::IntoIter<(usize, usize)>),
+}
+
+impl Iterator for Pairs {
+    type Item = (usize, usize);
+
+    #[inline]
+    fn next(&mut self) -> Option<(usize, usize)> {
+        match self {
+            Pairs::Every { i, j, n } => {
+                if *j >= *n {
+                    *i += 1;
+                    *j = *i + 1;
+                    if *j >= *n {
+                        return None;
+                    }
+                }
+                let p = (*i, *j);
+                *j += 1;
+                Some(p)
+            }
+            Pairs::Listed(l) => l.next(),
+        }
+    }
+}
+
+/// The pairs of segments whose boxes come within a margin, in the order every pair is judged:
+/// only those can meet.
+fn crossing_candidates(all: &[(Segment, u64, usize)]) -> Vec<(usize, usize)> {
+    let boxes: Vec<[f64; 4]> = all
+        .iter()
+        .map(|(s, ..)| {
+            let pts = s.samples(16);
+            // the samples' box, grown by the longest step between them: a curve strays from its
+            // chords by less than that
+            // (a meeting point lies on both segments, so the margin is only rounding's)
+            let gap = pts.windows(2).map(|w| w[0].distance(w[1])).fold(0.0, f64::max);
+            let g = gap + 1e-6;
+            let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+            for p in &pts {
+                b = [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)];
+            }
+            [b[0] - g, b[1] - g, b[2] + g, b[3] + g]
+        })
+        .collect();
+    let mut order: Vec<usize> = (0..all.len()).collect();
+    order.sort_by(|&a, &b| boxes[a][0].total_cmp(&boxes[b][0]));
+    let mut pairs: Vec<(usize, usize)> = Vec::new();
+    for (k, &a) in order.iter().enumerate() {
+        for &b in &order[k + 1..] {
+            if boxes[b][0] > boxes[a][2] {
+                break;
+            }
+            // a box with no finite extent is kept with every one: judged as before
+            let apart = boxes[b][1] > boxes[a][3] || boxes[a][1] > boxes[b][3];
+            if !apart || boxes[a].iter().chain(&boxes[b]).any(|v| !v.is_finite()) {
+                pairs.push((a.min(b), a.max(b)));
+            }
+        }
+    }
+    let unbounded: Vec<usize> = (0..all.len())
+        .filter(|&i| boxes[i].iter().any(|v| !v.is_finite()))
+        .collect();
+    for &u in &unbounded {
+        pairs.extend((0..all.len()).filter(|&o| o != u).map(|o| (u.min(o), u.max(o))));
+    }
+    pairs.sort_unstable();
+    pairs.dedup();
+    pairs
+}
+
 /// Whether two shapes of different loops cross at `p`, where they meet: through each other at an
 /// angle, away from either one's ends. Meeting tangentially, or at a corner, is a touch.
 fn crosses(a: &Shape, b: &Shape, p: Point2, ends: &[Point2; 4], near: f64) -> bool {
@@ -517,6 +664,49 @@ fn crosses(a: &Shape, b: &Shape, p: Point2, ends: &[Point2; 4], near: f64) -> bo
     match (direction(a, p), direction(b, p)) {
         (Some(u), Some(v)) => u.cross(v).abs() > 1e-3,
         _ => false,
+    }
+}
+
+/// How far shape `a`, between two of its points `p` and `q`, gets from shape `b`: from the point of
+/// `a` halfway between them.
+fn apart(a: &Shape, b: &Shape, p: Point2, q: Point2) -> f64 {
+    let m = match a {
+        Shape::Line(..) => p.lerp(q, 0.5),
+        Shape::Arc { c, r, start, .. } => {
+            let at = |x: Point2| dmath::wrap_tau(dmath::atan2(x.y - c.y, x.x - c.x) - start);
+            let w = *start + 0.5 * (at(p) + at(q));
+            let (sn, cs) = dmath::sin_cos(w);
+            Point2::new(c.x + r * cs, c.y + r * sn)
+        }
+        Shape::Curve(e) => {
+            let c = &e.c;
+            let t = |x: Point2| c.closest(forge_math::Point3::new(x.x, x.y, 0.0), c.domain());
+            let m = c.deriv(0.5 * (t(p) + t(q))).p;
+            Point2::new(m.x, m.y)
+        }
+    };
+    match b {
+        Shape::Line(u, v) => {
+            let d = *v - *u;
+            let k = ((m - *u).dot(d) / d.dot(d)).clamp(0.0, 1.0);
+            m.distance(*u + d * k)
+        }
+        Shape::Arc { c, r, start, sweep } => {
+            if on_arc(*c, *start, *sweep, m) {
+                (m.distance(*c) - r).abs()
+            } else {
+                let end = |w: f64| {
+                    let (sn, cs) = dmath::sin_cos(w);
+                    Point2::new(c.x + r * cs, c.y + r * sn)
+                };
+                m.distance(end(*start)).min(m.distance(end(start + sweep)))
+            }
+        }
+        Shape::Curve(e) => {
+            let c = &e.c;
+            let x = forge_math::Point3::new(m.x, m.y, 0.0);
+            c.deriv(c.closest(x, c.domain())).p.distance(x)
+        }
     }
 }
 

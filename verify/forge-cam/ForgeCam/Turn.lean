@@ -17,6 +17,8 @@ half-profile. forge-turn's checker works in the plane:
   smeared swept core lies in the hull of the swept vertices and their own smears), and a slab
   shrunk past the nose radius (the core eroded by e: every axis gap gains e, the smear taken e
   nearer the axis).
+* `rect_in_convex`: the in-process stock as columns (stair.rs) loses only rectangles that lie in
+  a cut's swept outline, so it stays a superset of the stock (G3 against it is sound).
 * `turn_clear`: the assembly, by `clear_of_frontier`: a connected swept set Z (convex) whose
   frontier pieces of Hf all keep `c > 0` from Z, with one point of Z outside Hf, keeps `c` from
   all of Hf; its r-neighbourhood keeps `c − r` (`turn_clear_ball`).
@@ -294,6 +296,61 @@ theorem eroded_gap {K : Set (ℝ × ℝ)} {g : ℝ → ℝ} {w p : ℝ × ℝ} {
     nlinarith [mul_le_mul_of_nonneg_left hgg h1]
   · have := hK q hq
     nlinarith [mul_nonneg_of_nonpos_of_nonpos h1.le (by linarith : -δ ≤ 0)]
+
+/-- The column update (stair.rs `clear_poly`): Q convex; at x0 and x1 its slices reach down to
+l0, l1 and up to h0, h1. Then the rectangle [x0, x1] × [max l, min h] lies in Q: at x between,
+the two points (x, (1−λ) l0 + λ l1) and (x, (1−λ) h0 + λ h1) are in Q, and z lies between them.
+So a cut's swept outline holds the rectangle, and where the rectangle reaches a column's top the
+column's material above its bottom is gone: the columns stay a superset of the stock. -/
+theorem rect_in_convex {Q : Set (ℝ × ℝ)} (hQ : Convex ℝ Q) {x0 x1 l0 l1 h0 h1 : ℝ}
+    (hx : x0 ≤ x1) (a0 : (x0, l0) ∈ Q) (b0 : (x0, h0) ∈ Q) (a1 : (x1, l1) ∈ Q) (b1 : (x1, h1) ∈ Q) :
+    ∀ x z, x0 ≤ x → x ≤ x1 → max l0 l1 ≤ z → z ≤ min h0 h1 → (x, z) ∈ Q := by
+  intro x z hx0 hx1 hzl hzh
+  -- λ along x
+  rcases eq_or_lt_of_le hx with he | hlt
+  · -- a single column: x = x0 = x1, z between l0 and h0
+    have hxx : x = x0 := by linarith
+    subst hxx
+    have hl : l0 ≤ z := le_trans (le_max_left _ _) hzl
+    have hh : z ≤ h0 := le_trans hzh (min_le_left _ _)
+    rcases eq_or_lt_of_le (le_trans hl hh) with heq | hlt2
+    · have : z = l0 := by linarith
+      subst this; exact a0
+    · set t := (z - l0) / (h0 - l0)
+      have ht0 : 0 ≤ t := div_nonneg (by linarith) (by linarith)
+      have ht1 : t ≤ 1 := (div_le_one (by linarith)).mpr (by linarith)
+      have := hQ a0 b0 (by linarith : 0 ≤ 1 - t) ht0 (by ring)
+      convert this using 1
+      ext <;> simp [smul_eq_mul, t] <;> field_simp <;> ring
+  · set t := (x - x0) / (x1 - x0)
+    have ht0 : 0 ≤ t := div_nonneg (by linarith) (by linarith)
+    have ht1 : t ≤ 1 := (div_le_one (by linarith)).mpr (by linarith)
+    have hA := hQ a0 a1 (by linarith : 0 ≤ 1 - t) ht0 (by ring)
+    have hB := hQ b0 b1 (by linarith : 0 ≤ 1 - t) ht0 (by ring)
+    have hxt : (1 - t) * x0 + t * x1 = x := by simp only [t]; field_simp; ring
+    set L := (1 - t) * l0 + t * l1
+    set H := (1 - t) * h0 + t * h1
+    have hL : L ≤ z := by
+      have : L ≤ max l0 l1 := by
+        simp only [L]; nlinarith [le_max_left l0 l1, le_max_right l0 l1]
+      linarith
+    have hH : z ≤ H := by
+      have : min h0 h1 ≤ H := by
+        simp only [H]; nlinarith [min_le_left h0 h1, min_le_right h0 h1]
+      linarith
+    have hA' : (x, L) ∈ Q := by
+      convert hA using 1; ext <;> simp [smul_eq_mul, L] <;> linarith [hxt]
+    have hB' : (x, H) ∈ Q := by
+      convert hB using 1; ext <;> simp [smul_eq_mul, H] <;> linarith [hxt]
+    rcases eq_or_lt_of_le (le_trans hL hH) with heq | hlt2
+    · have : z = L := by linarith
+      rw [this]; exact hA'
+    · set u := (z - L) / (H - L)
+      have hu0 : 0 ≤ u := div_nonneg (by linarith) (by linarith)
+      have hu1 : u ≤ 1 := (div_le_one (by linarith)).mpr (by linarith)
+      have := hQ hA' hB' (by linarith : 0 ≤ 1 - u) hu0 (by ring)
+      convert this using 1
+      ext <;> simp [smul_eq_mul, u] <;> field_simp <;> ring
 
 section assembly
 

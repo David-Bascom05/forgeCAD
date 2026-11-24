@@ -160,7 +160,8 @@ pub struct Sig {
 impl Sig {
     pub fn parse(v: &[u8]) -> Option<Sig> {
         let lt = v.iter().position(|&c| c == b'<')?;
-        let gt = v.iter().rposition(|&c| c == b'>')?;
+        // the last '>' after the '<': "a> <b" has none
+        let gt = lt + v[lt..].iter().rposition(|&c| c == b'>')?;
         let name = String::from_utf8_lossy(v[..lt].strip_suffix(b" ").unwrap_or(&v[..lt])).to_string();
         let email = String::from_utf8_lossy(&v[lt + 1..gt]).to_string();
         let rest = std::str::from_utf8(&v[gt + 1..]).ok()?.trim();
@@ -363,6 +364,13 @@ impl Tag {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_signature_with_its_brackets_backwards_is_none() {
+        // '>' before '<': once a slice that ran backwards
+        assert_eq!(super::Sig::parse(b"a> <b 1700000000 +0000"), None);
+        assert!(super::Sig::parse(b"A <a@b> 1700000000 +0100").is_some());
+    }
+
     use super::*;
 
     #[test]

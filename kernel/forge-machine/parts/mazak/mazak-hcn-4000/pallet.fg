@@ -1,0 +1,14 @@
+# mazak-hcn-4000 pallet: the published pallet; thickness an estimate.
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -200
+shared y0 = -120
+shared z0 = -200
+shared L = 400
+shared W = 120
+shared H = 400
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

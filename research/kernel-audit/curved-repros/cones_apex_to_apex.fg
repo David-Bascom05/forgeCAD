@@ -1,0 +1,17 @@
+# cone_cone/apex_to_apex/Add (scoreboard degen_cone_cone/2).
+# Two coaxial cones meeting at their apexes, one pointing up, one down.
+# Exact reference: non-manifold at the apex (the two caps C and −C meet only there). Kernel:
+# builds 4 188.8 mm³ (2 × 2 094.4), one valid body; it must refuse ZeroThickness.
+shared R = 10
+shared H = 20
+
+sketch low(on: xz) {
+  tri = poly([(0, 0), (R, -H), (0, -H)])
+  ax = line((0, 0), (0, -H), construction: true)
+}
+base = revolve(low.tri, axis: low.ax, angle: 360deg)
+sketch high(on: xz) {
+  tri = poly([(0, 0), (R, H), (0, H)])
+  ax = line((0, 0), (0, H), construction: true)
+}
+tool = revolve(high.tri, axis: high.ax, angle: 360deg)

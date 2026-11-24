@@ -4,8 +4,10 @@ use std::path::Path;
 #[test]
 fn builtin_parts_lie_in_their_envelopes() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kernel/forge-machine");
+    // bodies in generic.toml; other vendor files are checked the same way but not counted here,
+    // so adding a vendor touches no shared number
     let mut n = 0;
-    for m in forge_machine::library::builtin() {
+    for (m, file) in forge_machine::library::builtin_files() {
         assert!(
             m.bodies.iter().all(|b| b.part.is_some()),
             "{}: a body without its part",
@@ -39,7 +41,9 @@ fn builtin_parts_lie_in_their_envelopes() {
                 c.volume,
                 c.envelope
             );
-            n += 1;
+            if file == "builtin/generic.toml" {
+                n += 1;
+            }
         }
     }
     assert_eq!(n, 19);

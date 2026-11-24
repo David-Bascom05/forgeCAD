@@ -1,0 +1,11 @@
+blocked_hosts (group misc, taken 2026-11-23):
+www.spinner-machines.com      proxy CONNECT 502 (no connection)
+www.spinner.eu / spinner.eu / www.spinner-machines.de / www.spinner-usa.com   no connection (000)
+www.spinnerusa.com            200 but parked domain (GoDaddy lander), no content
+www.hardinge.com              301 -> kellenberger.com (Hardinge lathes/Bridgeport VMC pages gone; /en-us/ 404)
+asia.hardinge.com             DNS not resolvable from session (ENOTFOUND) - hosts 1330-1E-GS-Series.pdf, 1431-1E-V480-V710.pdf
+europe.hardinge.com           no connection (000) - hosts 1433_BridgeportV480APC_A4_EN-2.pdf
+www.bridgeport.com / us.hardinge.com / www.hardinge.co.uk   no connection (000)
+pdf.directindustry.com        403 (GS-series catalog mirror)
+www.machinetools.com          403
+www.nakamura-tome.com / .co.jp  reachable; detailed catalogs behind lead form (not used)

@@ -59,8 +59,10 @@ round = fillet(edges(of: boss, crease: "convex"), r)
     const v1 = st.built.volume;
     assert.ok(v1 > n0.volume, `thicker is more: ${v1} > ${n0.volume}`);
     console.log(`ok - t = 9 rebuilt: volume ${v1}`);
-    // drawn: frames after the rebuild's word (the whole mesh follows its first faces), then one
-    await t.frames(p, st);
+    // drawn: the frame that took the rebuild in drew it (Gui::frame takes the build's result, then
+    // draws the view, then the state is written), so no frame after it is owed: the page draws only
+    // when something asks, and waiting for more (two here, then one) was a race that hung CI's e2e
+    // for its whole timeout when egui asked for fewer repaints. The pixels show it's the new part.
     const f1 = await t.pixels(p);
     const changed = f1.changed;
     assert.ok(changed > 1000, `the thicker part drawn differently: ${changed} bytes changed`);

@@ -1,0 +1,352 @@
+//! Draping: an xy polyline dropped onto the cutter-location surface, as 3D passes whose every
+//! chord is proven free of gouges (beyond `slack`) by the drop-cutter.
+//!
+//! Parallel, radial, spiral, scallop and flat-area finishing differ only in the xy pattern they
+//! drape (pattern.rs). This is generation, not a later fix-up stage: each point is a drop-cutter
+//! CL point (the upper end of its certified band, so never below the true CL height), and the
+//! samples are refined until every chord is proven within tolerance before it is emitted.
+//!
+//! - A sample with nothing under the tool ends the pass (the pattern left the part).
+//! - A chord is accepted when (1) the CL height is proven ≤ the chord + `slack` all along it
+//!   (`seg3_below`: it gouges by at most slack, slack ≤ the op's inner tolerance), and (2) at its
+//!   midpoint the chord is at most `leave` above the CL height (it does not air-cut the surface
+//!   by more than the outer tolerance there). Otherwise it is split at the xy midpoint.
+//! - `zmin` raises every point to at least that height (a floor the op must not go below);
+//!   raising a point never makes a move gouge.
+
+use crate::drop::DropCutter;
+use crate::steep::Mask;
+
+/// A 3D pass: tool-tip points, joined by straight cutting moves.
+pub type Pass = Vec<[f64; 3]>;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Drape {
+    /// The largest xy spacing of the first samples.
+    pub step: f64,
+    /// How far a chord may dip below the CL surface (≤ the inner tolerance).
+    pub slack: f64,
+    /// How far a chord's midpoint may lie above the CL surface (the outer tolerance).
+    pub leave: f64,
+    /// No point below this height.
+    pub zmin: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum DrapeError {
+    Bad(&'static str),
+    /// A chord could not be proven within the tolerance: where (xy).
+    Unproven {
+        at: [f64; 2],
+    },
+}
+
+fn cl(dc: &dyn DropCutter, p: [f64; 2], zmin: f64) -> Option<[f64; 3]> {
+    dc.drop(p[0], p[1]).map(|b| [p[0], p[1], b.hi.max(zmin)])
+}
+
+/// Drapes the polyline `xy` (open) onto the CL surface.
+pub fn drape(dc: &dyn DropCutter, xy: &[[f64; 2]], d: Drape) -> Result<Vec<Pass>, DrapeError> {
+    drape_in(dc, xy, d, None)
+}
+
+/// Whether the xy segment a–b may come near a node of `m` that is on: the nodes whose cells
+/// (the points `Mask::at` rounds to them) meet the segment's box grown by a cell, so never false
+/// where a point of the segment is in the mask.
+fn near(m: &Mask, a: [f64; 3], b: [f64; 3]) -> bool {
+    let fx = |x: f64| (x - m.x0) / m.g;
+    let fy = |y: f64| (y - m.y0) / m.g;
+    let (i0, i1) = (fx(a[0].min(b[0])).floor() - 2.0, fx(a[0].max(b[0])).ceil() + 2.0);
+    let (j0, j1) = (fy(a[1].min(b[1])).floor() - 2.0, fy(a[1].max(b[1])).ceil() + 2.0);
+    if !(i0.is_finite() && i1.is_finite() && j0.is_finite() && j1.is_finite()) {
+        return true;
+    }
+    let (i0, i1) = (
+        i0.max(0.0) as usize,
+        (i1.max(-1.0) + 1.0).min(m.nx as f64) as usize,
+    );
+    let (j0, j1) = (
+        j0.max(0.0) as usize,
+        (j1.max(-1.0) + 1.0).min(m.ny as f64) as usize,
+    );
+    let mut j = j0;
+    while j < j1 {
+        if m.on[j * m.nx + i0.min(i1)..j * m.nx + i1].iter().any(|x| *x) {
+            return true;
+        }
+        j += 1;
+    }
+    false
+}
+
+/// `drape`, for a pass that will be cut to the vertices in `keep` (`steep::clip_open`): a chord
+/// whose two ends are outside `keep` and whose xy segment comes near no node of it is not
+/// refined. Every point refining would add lies on that segment, so outside `keep`, and a split
+/// it would make falls between two points outside `keep`; `clip_open` removes those points and
+/// cuts the pass there anyway, so the clipped passes are those of `drape`'s passes, point for
+/// point. (Only a chord `drape` could not prove, its error, is not found there: a chord that is
+/// never posted.)
+pub fn drape_in(
+    dc: &dyn DropCutter,
+    xy: &[[f64; 2]],
+    d: Drape,
+    keep: Option<&Mask>,
+) -> Result<Vec<Pass>, DrapeError> {
+    if !(d.step > 0.0 && d.slack >= 0.0 && d.leave > 0.0) {
+        return Err(DrapeError::Bad("step/slack/leave"));
+    }
+    let mut out: Vec<Pass> = Vec::new();
+    let mut cur: Pass = Vec::new();
+    let mut k = 0;
+    while k + 1 < xy.len() || (k == 0 && xy.len() == 1) {
+        let a = xy[k];
+        let b = if xy.len() == 1 { a } else { xy[k + 1] };
+        let dx = b[0] - a[0];
+        let dy = b[1] - a[1];
+        let len = (dx * dx + dy * dy).sqrt();
+        let n = ((len / d.step).ceil() as usize).max(1);
+        // the first piece of the first segment includes its start
+        let first = if k == 0 { 0 } else { 1 };
+        let mut i = first;
+        while i <= n {
+            let t = (i as f64) / (n as f64);
+            let p = [a[0] + dx * t, a[1] + dy * t];
+            match cl(dc, p, d.zmin) {
+                None => {
+                    if cur.len() > 1 {
+                        out.push(core::mem::take(&mut cur));
+                    } else {
+                        cur.clear();
+                    }
+                }
+                Some(q) => {
+                    // a chord that leaves the part between samples ends the pass there
+                    if let Some(&prev) = cur.last()
+                        && keep.is_none_or(|m| {
+                            m.at([prev[0], prev[1]]) || m.at([q[0], q[1]]) || near(m, prev, q)
+                        })
+                        && !refine(dc, prev, q, d, 0, &mut cur)?
+                    {
+                        if cur.len() > 1 {
+                            out.push(core::mem::take(&mut cur));
+                        } else {
+                            cur.clear();
+                        }
+                    }
+                    cur.push(q);
+                }
+            }
+            i += 1;
+        }
+        k += 1;
+        if xy.len() == 1 {
+            break;
+        }
+    }
+    if cur.len() > 1 {
+        out.push(cur);
+    }
+    Ok(out)
+}
+
+/// After this many halvings a piece that is still not proven becomes a step (see `refine`).
+const STEP_DEPTH: u32 = 8;
+
+/// `drape` of each polyline, on all cores (forge_math::par), the answers in the lines' order (so
+/// the result never depends on the threads); the first error in that order is returned.
+pub fn drape_all(
+    dc: &dyn DropCutter,
+    lines: &[Vec<[f64; 2]>],
+    d: Drape,
+) -> Result<Vec<Vec<Pass>>, DrapeError> {
+    drape_all_in(dc, lines, d, None)
+}
+
+/// `drape_in` of each polyline, on all cores, in the lines' order.
+pub fn drape_all_in(
+    dc: &dyn DropCutter,
+    lines: &[Vec<[f64; 2]>],
+    d: Drape,
+    keep: Option<&Mask>,
+) -> Result<Vec<Vec<Pass>>, DrapeError> {
+    let out = forge_math::par::map(lines.len(), |k| drape_in(dc, &lines[k], d, keep));
+    let mut v = Vec::with_capacity(out.len());
+    for r in out {
+        v.push(r?);
+    }
+    Ok(v)
+}
+
+/// After this many halvings that make every chord acceptable. False when a
+/// midpoint has nothing under the tool (the caller breaks the pass).
+fn refine(
+    dc: &dyn DropCutter,
+    a: [f64; 3],
+    b: [f64; 3],
+    d: Drape,
+    depth: u32,
+    out: &mut Pass,
+) -> Result<bool, DrapeError> {
+    let m = [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1])];
+    let mz = 0.5 * (a[2] + b[2]);
+    // the cheap test first: one drop at the middle
+    let close = match dc.drop(m[0], m[1]) {
+        None => return Ok(false),
+        Some(band) => mz - band.lo.max(d.zmin) <= d.leave,
+    };
+    let below = close && dc.seg3_below(a, b, d.slack);
+    if below {
+        return Ok(true);
+    }
+    // a piece split this often lies across a cliff (a wall steeper than the chords can follow):
+    // a step instead, as a vertical move and a level one. Up then across when b is higher, across
+    // then down when a is: each vertical leg is free (its lower end is at or above its CL
+    // height, so is the line above it), the level leg is proven by seg_below at the higher end's
+    // height
+    if depth >= STEP_DEPTH {
+        let (ab, bb) = ([a[0], a[1]], [b[0], b[1]]);
+        if b[2] >= a[2] {
+            if dc.seg_below(ab, bb, b[2]) {
+                out.push([a[0], a[1], b[2]]);
+                return Ok(true);
+            }
+        } else if dc.seg_below(ab, bb, a[2]) {
+            out.push([b[0], b[1], a[2]]);
+            return Ok(true);
+        }
+    }
+    if depth > 40 {
+        return Err(DrapeError::Unproven { at: m });
+    }
+    let Some(q) = cl(dc, m, d.zmin) else {
+        return Ok(false);
+    };
+    if !refine(dc, a, q, d, depth + 1, out)? {
+        return Ok(false);
+    }
+    out.push(q);
+    refine(dc, q, b, d, depth + 1, out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::drop::Analytic;
+
+    fn dome() -> Analytic {
+        Analytic {
+            r: 3.0,
+            planes: vec![(0.0, [-50.0, -50.0], [50.0, 50.0])],
+            spheres: vec![([0.0, 0.0, -10.0], 30.0)],
+        }
+    }
+
+    #[test]
+    fn a_line_over_the_dome() {
+        let dc = dome();
+        let d = Drape {
+            step: 2.0,
+            slack: 0.005,
+            leave: 0.005,
+            zmin: f64::NEG_INFINITY,
+        };
+        let ps = drape(&dc, &[[-49.0, 0.0], [49.0, 0.0]], d).unwrap();
+        assert_eq!(ps.len(), 1);
+        let p = &ps[0];
+        // every chord within tolerance, every point on or above the CL surface
+        let mut k = 0;
+        while k + 1 < p.len() {
+            assert!(dc.seg3_below(p[k], p[k + 1], 0.005));
+            let b = dc.drop(p[k][0], p[k][1]).unwrap();
+            assert!(p[k][2] >= b.lo && p[k][2] - b.hi <= 1e-12);
+            k += 1;
+        }
+        // the top
+        let top = p.iter().map(|q| q[2]).fold(f64::NEG_INFINITY, f64::max);
+        assert!((top - 20.0).abs() < 0.01, "{top}");
+        // fewer points on the flat floor than on the dome
+        assert!(p.len() < 400, "{}", p.len());
+    }
+
+    #[test]
+    fn leaving_the_part_splits_the_pass() {
+        let dc = Analytic {
+            r: 3.0,
+            planes: vec![
+                (0.0, [-10.0, -10.0], [10.0, 10.0]),
+                (0.0, [30.0, -10.0], [40.0, 10.0]),
+            ],
+            spheres: vec![],
+        };
+        let d = Drape {
+            step: 1.0,
+            slack: 0.005,
+            leave: 0.005,
+            zmin: f64::NEG_INFINITY,
+        };
+        let ps = drape(&dc, &[[-20.0, 0.0], [50.0, 0.0]], d).unwrap();
+        assert_eq!(ps.len(), 2);
+    }
+
+    /// `drape_in` with a mask, cut to the mask, is `drape` cut to the mask, point for point:
+    /// raster lines over the dome at a long step and a tight tolerance (so chords on its flank
+    /// are refined deeply), across masks of islands smaller than the step. Fails if `near`
+    /// misses a chord that comes near the mask (`near` always false fails it).
+    #[test]
+    fn a_masked_drape_cut_to_its_mask_is_the_drape_cut_to_it() {
+        use crate::steep::clip_open;
+        let dc = dome();
+        let d = Drape {
+            step: 5.0,
+            slack: 0.002,
+            leave: 0.002,
+            zmin: f64::NEG_INFINITY,
+        };
+        let (x0, y0, g, n) = (-50.0, -50.0, 0.5, 201usize);
+        let mut seed = 7u64;
+        let mut rnd = || {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((seed >> 11) as f64) / ((1u64 << 53) as f64)
+        };
+        let mut skipped_any = false;
+        for case in 0..6 {
+            let mut on = vec![false; n * n];
+            // islands smaller than the step, mostly on the dome (where chords are refined)
+            for _ in 0..(20 + 10 * case) {
+                let (a, rr) = (rnd() * std::f64::consts::TAU, 32.0 * rnd().sqrt());
+                let (sn, cs) = forge_math::dmath::sin_cos(a);
+                let (cx, cy, r) = (rr * cs, rr * sn, 0.3 + rnd() * 0.5 * (case % 3) as f64);
+                for j in 0..n {
+                    for i in 0..n {
+                        let (x, y) = (x0 + g * i as f64, y0 + g * j as f64);
+                        if (x - cx).powi(2) + (y - cy).powi(2) <= r * r {
+                            on[j * n + i] = true;
+                        }
+                    }
+                }
+            }
+            let m = Mask {
+                x0,
+                y0,
+                g,
+                nx: n,
+                ny: n,
+                on,
+            };
+            let mut y = -45.0;
+            while y < 45.0 {
+                let xy = [[-49.0, y], [49.0, y + 0.3 * case as f64]];
+                let cut = |ps: Vec<Pass>| ps.iter().flat_map(|p| clip_open(p, &m)).collect::<Vec<_>>();
+                let full = drape(&dc, &xy, d).unwrap();
+                let some = drape_in(&dc, &xy, d, Some(&m)).unwrap();
+                let pts = |ps: &Vec<Pass>| ps.iter().map(|p| p.len()).sum::<usize>();
+                skipped_any |= pts(&some) < pts(&full);
+                assert_eq!(cut(full), cut(some), "case {case}, line at y = {y}");
+                y += 3.7;
+            }
+        }
+        assert!(skipped_any, "no chord was left unrefined: the test shows nothing");
+    }
+}

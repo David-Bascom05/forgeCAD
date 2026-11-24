@@ -366,3 +366,376 @@ fn coincident_walls_1_stage_is_non_manifold() {
     part.features.truncate(11);
     agrees(&part);
 }
+
+// ---- The curved reference (ForgeExact/QRef): research/kernel-audit/exact-comparison-curved.md.
+// Each is a degenerate pair of the reliability scoreboard (two features), judged under the snap
+// rule. All agree now; the ball repros were kernel disagreements until the pole and apex rule.
+
+fn degenerate_curved(name: &str) -> Part {
+    let part = forge_model::adversarial::degenerate_parts()
+        .into_iter()
+        .find(|(n, _)| n == name)
+        .unwrap_or_else(|| panic!("no degenerate part {name}"))
+        .1;
+    forge_model::adversarial::canonical(&part)
+}
+
+/// The part's sequential and n-ary regens judged under the snap rule: every one must agree.
+fn agrees_curved(part: &Part) {
+    let mut reference = Reference::start();
+    let mut bad = Vec::new();
+    for (path, c, ans) in forge_exact_fuzz::curved::judge_curved(&mut reference, part, "snap") {
+        if !matches!(c, Class::Agree) {
+            bad.push(format!("{path}: {} {}\nreference: {ans:?}", c.key(), c.detail()));
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+/// Two parallel cylinders touching along a line (plane_cylinder/tangent_wall_outside/Add): the
+/// union is non-manifold along it (the reference proves the touch with a sum-of-squares
+/// certificate), and the kernel refuses with ZeroThickness.
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn cylinder_touching_a_wall_union_is_refused() {
+    agrees_curved(&degenerate_curved("plane_cylinder/tangent_wall_outside/Add"));
+}
+
+/// A cylinder cut by an identical one: empty, and the kernel says so.
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn identical_cylinder_cut_is_empty() {
+    agrees_curved(&degenerate_curved("cylinder_cylinder/identical/Cut"));
+}
+
+/// A ball resting on the base's top face, touching it at one point (plane_sphere/tangent_top_above
+/// /Add). The union is non-manifold at (0, 0, 0): the two solids meet at a point. The kernel
+/// built a body of 32 523.6 mm³ that passed `forge_topo::check`, as it did for a cube on a
+/// corner vertex (exact-comparison.md): the ball's pole had no normal, so the touch went
+/// undecided. Now ZeroThickness there.
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn ball_resting_on_the_top_is_non_manifold() {
+    agrees_curved(&degenerate_curved("plane_sphere/tangent_top_above/Add"));
+}
+
+/// A ball inside the base touching its top face from below, cut away
+/// (plane_sphere/tangent_top_inside/Cut). What is left pinches to nothing at (0, 0, 0): the
+/// material between the cavity and the top is a cusp ring. The kernel built 31 476.4 mm³; now
+/// ZeroThickness.
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn cavity_touching_the_top_from_inside_is_non_manifold() {
+    agrees_curved(&degenerate_curved("plane_sphere/tangent_top_inside/Cut"));
+}
+
+/// Two balls touching from outside (sphere_sphere/tangent_outside/Add): the union is two
+/// solids meeting at a point. The kernel built 4 712.4 mm³; now ZeroThickness.
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn balls_touching_at_a_point_are_non_manifold() {
+    agrees_curved(&degenerate_curved("sphere_sphere/tangent_outside/Add"));
+}
+
+/// A ball centred on the cylinder's top rim (cylinder_sphere/centre_on_rim/Add). The union is
+/// an ordinary solid (the reference certifies interior boxes, finds no contact, and its volume
+/// estimate is 6 806.8 mm³). The kernel refused Unsupported(SplitThroughSingular) on the sphere,
+/// whose pole lies on the rim (a hair off it, `normal` refused for a ball this small); it builds.
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn ball_centred_on_a_rim_builds() {
+    agrees_curved(&degenerate_curved("cylinder_sphere/centre_on_rim/Add"));
+}
+
+/// The band's worst: the ball of cylinder_sphere/tangent_wall_equator moved 3·LINEAR along x
+/// pokes through the wall in a lens with hairpin tips a radius 3·LINEAR round. The closed form's
+/// chain dropped one tip, so the common part built 4190.78 mm³ (4188.79 exact) and the cut's
+/// volume did not settle (NaN). Fixed in forge-geom meet: no link turns past 30 degrees. (The cut
+/// now measures 2094.395120, the exact volume; the reference calls it non-manifold, the ball's
+/// poles touching both caps at a point: a point contact, judged with those.)
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn ball_a_hair_through_the_wall_measures_exactly() {
+    for op in ["Keep", "Add"] {
+        let part = degenerate_curved(&format!("cylinder_sphere/tangent_wall_equator/{op}"));
+        let moved = forge_exact_fuzz::curved::tool_moved(
+            &part,
+            forge_math::Vec3::X * (3.0 * forge_math::tol::LINEAR),
+        )
+        .expect("a moved ball");
+        agrees_curved(&forge_model::adversarial::canonical(&moved));
+    }
+}
+
+/// The band's invalid bodies and refusals fixed alongside: a cone's apex 3·LINEAR through a face
+/// (VertexTolerance: a revolve's poles had a blanket 3·LINEAR ball), two identical cylinders
+/// 3·LINEAR apart joined (NotClosed: a strip no probe step clears was probed past its far side),
+/// and a ball 3·LINEAR off a cylinder's cap (NotClosed, SplitCrossed and InconsistentClassification
+/// from the closed form's dropped tips). Each agrees with the reference, on both paths.
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn band_hairs_through_faces_agree() {
+    let (x, y, z) = (forge_math::Vec3::X, forge_math::Vec3::Y, forge_math::Vec3::Z);
+    for (name, d) in [
+        ("cylinder_cone/apex_on_cap_centre/Add", z),
+        ("plane_cone/apex_on_top_from_inside/Add", z),
+        ("cone_cone/identical/Add", x),
+        ("cone_cone/tip_shares_surface/Cut", x),
+        ("cylinder_sphere/centre_on_rim/Add", x),
+        ("cylinder_cylinder/identical/Add", z),
+        ("cylinder_cylinder/identical_revolved/Add", z),
+        ("cylinder_sphere/dome_on_cap/Keep", x),
+        ("cylinder_sphere/dome_on_cap/Cut", y),
+        ("cone_sphere/inscribed_tangent_circle/Keep", x),
+    ] {
+        let part = degenerate_curved(name);
+        let moved = forge_exact_fuzz::curved::tool_moved(&part, d * (3.0 * forge_math::tol::LINEAR))
+            .expect("a moved tool");
+        agrees_curved(&forge_model::adversarial::canonical(&moved));
+    }
+}
+
+/// Known, kept until curved decide-once covers rims: a whole circle of tangency within 0.9·LINEAR,
+/// a rim lying on the other surface (a ball's equator on a cylinder's top rim; a cylinder's wall on
+/// another's from inside; a cone's rim on a face). The flood crosses the rim as though it were not
+/// on the other body, and the union or cut is left open (NotClosed) where the reference gives a
+/// solid. (perpendicular_tangent_inside was HoleOutside before the closed form kept its tips.)
+#[test]
+#[ignore = "exact curved reference: a rim within 0.9·LINEAR of the other surface leaves the body open (NotClosed)"]
+fn band_rims_within_tolerance_close() {
+    let (y, z) = (forge_math::Vec3::Y, forge_math::Vec3::Z);
+    for (name, d) in [
+        ("cylinder_sphere/dome_on_cap/Add", z * -0.9),
+        ("cylinder_sphere/dome_on_cap/Keep", z * -0.9),
+        ("cylinder_cylinder/perpendicular_tangent_inside/Add", y * -0.9),
+        ("plane_cone/base_on_top/Add", z * -0.9),
+        ("plane_cone/countersink_rim_in_top/Cut", z * 0.9),
+        ("plane_cone/countersink_rim_in_top/Keep", z * 0.9),
+    ] {
+        let part = degenerate_curved(name);
+        let moved =
+            forge_exact_fuzz::curved::tool_moved(&part, d * forge_math::tol::LINEAR).expect("a moved tool");
+        agrees_curved(&forge_model::adversarial::canonical(&moved));
+    }
+}
+
+/// A ball over a tapered pocket (from the importer's ball_over_tapered_pocket.fg, by the trace
+/// session): the pocket's far top edge is tangent to the ball at P = (0, -13, 18), a pole of the
+/// ball's parameters (its axis is y). The top face's circle and the 1° wall's small circle (radius
+/// 13 sin 1°) leave P along one tangent. The split walk tells such ways apart by chords, but a
+/// chord at a pole had no direction, so the tie stood and the cycle did not close (SplitCrossed).
+/// At a pole the chord is taken in the tangent plane the pole's directions are.
+/// (The reference leaves this one ambiguous: the top edge touching the ball at its pole is an
+/// edge-on-surface contact it does not decide yet, exact-comparison-curved.md "Still open". The
+/// kernel builds; the test waits on the reference.)
+#[test]
+#[ignore = "exact reference ambiguous: edge-on-surface contact at the pole (a reference gap)"]
+fn ball_tangent_to_a_pocket_edge_at_its_pole_builds() {
+    let src = "param block.d = 18
+sketch base(on: xy) {
+  r = rect(center: (0, 0), size: (100, 60))
+}
+block = extrude(base, d)
+param pocket.d = 13
+param pocket.a = 1deg
+sketch way(on: block.end) {
+  o = rect(center: (0, -8), size: (30, 10))
+}
+pocket = cut(way, d, taper: a)
+param bowl.r = 13
+sketch top(on: block.end) {
+  c = pt(0, 0)
+}
+bowl = ball(top.c, r, cut: true)
+";
+    let part = forge_exact_fuzz::curved::curved_part(&forge_lang::fuzz::build(src).part());
+    assert_eq!(
+        part.features
+            .iter()
+            .filter(|f| !matches!(
+                f,
+                forge_model::Feature::Sketch(_) | forge_model::Feature::Param(_)
+            ))
+            .count(),
+        3,
+        "every feature is a quadric solid"
+    );
+    agrees_curved(&part);
+}
+
+/// Cone apexes touching another solid at the point, united: two solids meeting there, decided
+/// non-manifold exactly by the reference (`apexDecide`, curved-l2-proofs.md §3). The kernel built
+/// each (the apex had no normal, so the touch went undecided); its apex sheet now decides them in
+/// closed form and refuses ZeroThickness. On a box's vertex and edge, a cylinder's wall, another
+/// cone's wall, and a ball's pole on the apex.
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn cone_apex_on_a_box_vertex_is_non_manifold() {
+    agrees_curved(&degenerate_curved("plane_cone/apex_on_vertex/Add"));
+}
+
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn cone_apex_on_a_box_edge_is_non_manifold() {
+    agrees_curved(&degenerate_curved("plane_cone/apex_on_edge/Add"));
+}
+
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn cone_apex_on_a_cylinder_wall_is_non_manifold() {
+    agrees_curved(&degenerate_curved("cylinder_cone/apex_on_wall/Add"));
+}
+
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn cone_apex_on_a_cone_is_non_manifold() {
+    agrees_curved(&degenerate_curved("cone_cone/apex_on_surface/Add"));
+}
+
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn ball_pole_on_a_cone_apex_is_non_manifold() {
+    agrees_curved(&degenerate_curved("cone_sphere/pole_on_apex/Add"));
+}
+
+/// A degenerate pair with its tool moved by `delta` LINEARs along axis `axis` (0, 1, 2): the
+/// curved band (exact-curved's `band` source).
+fn band_curved(name: &str, axis: usize, delta: f64) -> Part {
+    let d = [forge_math::Vec3::X, forge_math::Vec3::Y, forge_math::Vec3::Z][axis]
+        * (delta * forge_math::tol::LINEAR);
+    forge_exact_fuzz::curved::tool_moved(&degenerate_curved(name), d).expect("a movable tool")
+}
+
+/// A ball inside the base cylinder, tangent to its wall along the equator, its tool moved
+/// 3 LINEAR along x and cut (cylinder_sphere/tangent_wall_equator/Cut, x 3). The reference finds
+/// the ball's pole touching the base's bottom cap at (3e-5, 0, −20) (non-manifold); both regens
+/// build a body whose volume is NaN.
+#[test]
+#[ignore = "exact curved reference: a body of volume NaN is built"]
+fn band_ball_on_wall_cut_has_a_volume() {
+    agrees_curved(&band_curved("cylinder_sphere/tangent_wall_equator/Cut", 0, 3.0));
+}
+
+/// The same ball kept (Keep, x 3): the intersection is the ball less a sliver, 4 188.79 mm³ by the
+/// reference's estimate; both regens build 4 190.78 mm³, more than the whole ball.
+#[test]
+#[ignore = "exact curved reference: the kept volume exceeds the ball's"]
+fn band_ball_on_wall_keep_volume() {
+    agrees_curved(&band_curved("cylinder_sphere/tangent_wall_equator/Keep", 0, 3.0));
+}
+
+/// Two identical cylinders, the tool moved 3 LINEAR up (cylinder_cylinder/identical/Add, z 3):
+/// one solid 3e-5 taller. Both regens refuse NotClosed: the rim edge at (10, 0, 0) is on one
+/// face.
+#[test]
+#[ignore = "exact curved reference: NotClosed on a rim moved within the band"]
+fn band_identical_cylinders_moved_close() {
+    agrees_curved(&band_curved("cylinder_cylinder/identical/Add", 2, 3.0));
+}
+
+/// Two identical cones, the tool moved 3 LINEAR along x (cone_cone/identical/Add, x 3): both
+/// regens build an invalid body (VertexTolerance 3e-5).
+#[test]
+#[ignore = "exact curved reference: an invalid body (VertexTolerance) from nearly identical cones"]
+fn band_identical_cones_valid() {
+    agrees_curved(&band_curved("cone_cone/identical/Add", 0, 3.0));
+}
+
+/// A ball centred on the base box's top edge, moved 0.9 LINEAR along x
+/// (plane_sphere/centre_on_edge/Add, x 0.9): an ordinary union. The kernel refuses
+/// Internal(SplitCrossed) on the sphere face (all three ops, ±0.9 and 3; centre_on_vertex and
+/// centre_on_wall_tangent_top alike).
+#[test]
+#[ignore = "exact curved reference: SplitCrossed on a sphere centred on a box edge, nudged"]
+fn band_ball_on_an_edge_splits() {
+    agrees_curved(&band_curved("plane_sphere/centre_on_edge/Add", 0, 0.9));
+}
+
+/// A ball centred on the base's wall, its top on the top face's edge, moved 0.9 LINEAR along −x
+/// and cut (plane_sphere/centre_on_wall_tangent_top/Cut, x −0.9): the reference finds the ball's
+/// top touching the top face at (19.999991, 0, 0), 0.9 LINEAR inside its edge, and calls it
+/// non-manifold; the kernel builds once the SplitCrossed is fixed (fix-curved 19e1b6c). The touch
+/// is within LINEAR of the wall, so the ball's sheet there straddles it and the touch rule leaves
+/// it undecided; the x +0.9 mirror, alike within tolerance, the reference calls a solid, and y ±0.9
+/// ambiguous (on an edge of a third). Decided by the tolerant-edge rule of curved decide-once,
+/// with the rim tangencies; both paths alike.
+#[test]
+#[ignore = "curved decide-once: a point touch within LINEAR of a third solid's edge (tolerant-edge rule)"]
+fn band_ball_touching_the_top_beside_its_edge_is_non_manifold() {
+    agrees_curved(&band_curved(
+        "plane_sphere/centre_on_wall_tangent_top/Cut",
+        0,
+        -0.9,
+    ));
+}
+
+/// A cylinder tangent to the base cylinder's wall from inside, moved 0.9 LINEAR along −y
+/// (cylinder_cylinder/perpendicular_tangent_inside/Add, y −0.9): the kernel refuses
+/// Internal(HoleOutside) on the cylinder face (Add, Cut and Keep).
+#[test]
+#[ignore = "exact curved reference: HoleOutside on a cylinder nudged off an inside tangency"]
+fn band_tangent_inside_cylinder_holes() {
+    agrees_curved(&band_curved(
+        "cylinder_cylinder/perpendicular_tangent_inside/Add",
+        1,
+        -0.9,
+    ));
+}
+
+/// Cone apexes on a face that lies on the nappe's axis-normal plane, and two cones sharing an
+/// apex. The reference read the face as the nappe's selector and skipped the apex; it now cuts
+/// the apex's link into the caps C, −C and the tangent planes' sectors, and finds the kept cells
+/// are not a disc. Each result touches itself at the apex, and the kernel builds every one.
+/// fix-touch refuses them.
+#[test]
+#[ignore = "exact curved reference: a cone apex on a face normal to its axis touches it at a point"]
+fn cone_apex_on_a_face_normal_to_its_axis_is_non_manifold() {
+    for name in [
+        "plane_cone/apex_on_top_from_above/Add",
+        "plane_cone/apex_on_top_from_inside/Cut",
+        "cylinder_cone/apex_on_cap_centre/Cut",
+        "cone_cone/apex_to_apex/Add",
+        "cone_cone/inverted_overlap/Cut",
+    ] {
+        agrees_curved(&degenerate_curved(name));
+    }
+}

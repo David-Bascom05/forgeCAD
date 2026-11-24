@@ -1,0 +1,14 @@
+# sherline-8580 column: a conservative envelope solid from published dimensions (see the
+# machine's [[machine.cite]] for body.column); not the maker's CAD.
+# frame: the machine's base frame at the home pose.
+shared b0x0 = -136.6
+shared b0y0 = 205
+shared b0z0 = -139.5
+shared b0sx = 273.2
+shared b0sy = 299
+shared b0h = 779
+
+sketch sb0(on: offset(xy, b0z0)) {
+  outline = rect(corner: (b0x0, b0y0), size: (b0sx, b0sy))
+}
+b0 = extrude(sb0, b0h)

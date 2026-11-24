@@ -64,6 +64,12 @@ structure topo_edges.EdgeTopo (Self : Type _) where
   coedge_forward : Self → Std.Usize → Result Bool
   edge_degenerate : Self → Std.Usize → Result Bool
 
+/-- Trait declaration: [forge_topo::topo_euler::EulerSink]
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 8:0-11:1
+    Visibility: public -/
+structure topo_euler.EulerSink (Self : Type _) where
+  shell_euler : Self → Std.Usize → Std.I64 → Result Self
+
 /-- Trait declaration: [forge_topo::topo_shell::ShellTopo]
     Source: 'kernel/forge-topo/src/topo_shell.rs', lines 8:0-15:1
     Visibility: public -/
@@ -73,5 +79,27 @@ structure topo_shell.ShellTopo (Self : Type _) where
   n_shells : Self → Result Std.Usize
   shell_n_faces : Self → Std.Usize → Result Std.Usize
   shell_face : Self → Std.Usize → Std.Usize → Result Std.Usize
+
+/-- Trait declaration: [forge_topo::topo_fans::FanTopo]
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 12:0-18:1
+    Visibility: public -/
+structure topo_fans.FanTopo (Self : Type _) where
+  topoTopoInst : topo.Topo Self
+  coedge_forward : Self → Std.Usize → Result Bool
+  corners : Self → Std.Usize → Std.Usize → Result (alloc.vec.Vec
+    (Std.Usize × Std.Usize))
+
+/-- Trait declaration: [forge_topo::topo_fans::FanSink]
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 21:0-24:1
+    Visibility: public -/
+structure topo_fans.FanSink (Self : Type _) where
+  vertex_fans : Self → Std.Usize → Std.Usize → Result Self
+
+/-- [forge_topo::topo_fans::Closes]
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 90:0-94:1 -/
+structure topo_fans.Closes where
+  cf : alloc.vec.Vec Std.Usize
+  cl : alloc.vec.Vec (Std.Usize × Std.Usize)
+  cs : alloc.vec.Vec Std.Usize
 
 end forge_topo

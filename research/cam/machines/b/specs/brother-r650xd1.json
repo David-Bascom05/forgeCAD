@@ -1,0 +1,134 @@
+{
+ "vendor": "Brother",
+ "model": "R650Xd1",
+ "family": "SPEEDIO R-Xd1 two-face quick-turn-table machining center",
+ "source": [
+  "https://machinetool.global.brother/en-eu/all-products/rxd1/r650xd1"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "vmc3",
+ "architecture": "Vertical BT30 spindle over a 0/180 deg quick turn table (two faces, worm-gear driven by 0.82 kW servo, 1/60). Which unit carries X/Y/Z is not stated on the fetched page (memory says table X on Y saddle with Z head on fixed column for SPEEDIO S/W, unverified).",
+ "control": {
+  "standard": "Brother CNC-D00",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 650,
+  "Y": 400,
+  "Z": 305
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": [
+  250,
+  555
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  800,
+  400
+ ],
+ "table_load_kg": 200,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": 2,
+  "size_mm": [
+   800,
+   535
+  ],
+  "change_s": 3.1,
+  "load_kg": 200
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 10000,
+  "rpm_min": 1,
+  "taper_or_interface": "7/24 No.30 (MAS-BT30, pull stud MAS-P30T-2)",
+  "power_kw": {
+   "cont": 7.0,
+   "30min": null,
+   "peak/other": "10.1 (10-min rating); 18.9 max output"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 40
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 50,
+  "Y": 50,
+  "Z": 50,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": 30,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 14,
+  "options": [
+   22,
+   28,
+   "40 (double-arm, Z 435, nose-to-table 250-685, tool dia 55/125, 4 kg, tool-to-tool 0.9 s, chip-to-chip 2.5 s, 4,150 kg)"
+  ],
+  "tool_to_tool_s": 0.6,
+  "chip_to_chip_s": 1.4,
+  "max_tool_dia_mm": 80,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": 200,
+  "max_tool_kg": 3.0
+ },
+ "coolant": {
+  "through_spindle": "optional",
+  "notes": "CTS optional (BT dual-contact spindle used with CTS)"
+ },
+ "overall_mm": {
+  "W": 1830,
+  "D": 3029,
+  "H": 2704
+ },
+ "weight_kg": 3550,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rotary_table_dia_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "spindle_nose_type",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "16,000 rpm spindle (7.4/5.1 kW)",
+  "10,000 rpm high-torque spindle (12.8/9.2 kW, 92 N·m, 26.2 kW max output)",
+  "BIG-PLUS",
+  "CTS",
+  "low table (raises nose-to-table range)",
+  "40-tool magazine version"
+ ],
+ "notes": "Pallet = two faces of turn table; per face 800 x 535, work area 800 x 400; position time 3.1 s at 200 kg/face. Max turning dia D1,250 (D1,300 low table); max jig height 350 (450 low table). Load 200 kg/face (300 by parameter). Low table nose-to-table 350-655. Tool-to-tool 0.6/0.8 s (14 / 22-28), chip-to-chip 1.4/1.5. Height 2,704 assumed to apply to both R650 columns (one value shown after R450's 2,584)."
+}

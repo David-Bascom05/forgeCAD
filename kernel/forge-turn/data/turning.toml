@@ -29,6 +29,15 @@ f = 0.08
 ap = 0.5
 
 [[lathe_tool]]
+id = "od-profile-vbmt-left"
+kind = "turn"
+insert = "VBMT160404"
+holder = "SVJBL2525M16"
+vc = 250.0
+f = 0.08
+ap = 0.5
+
+[[lathe_tool]]
 id = "id-bore-ccmt"
 kind = "bore"
 insert = "CCMT09T304"
@@ -56,11 +65,39 @@ vc = 100.0
 f = 0.05
 
 [[lathe_tool]]
+id = "part-3-deep"
+kind = "part"
+width = 3.0
+corner = 0.2
+reach = 40.0
+vc = 90.0
+f = 0.05
+source = "a generic 3 mm parting blade for bars up to about Ø78 (deep blade, as catalogues list in the 3 mm series): verify with the vendor"
+
+[[lathe_tool]]
 id = "thread-60"
 kind = "thread"
 tip_radius = 0.05
 pitch = [0.5, 3.0]
 vc = 100.0
+
+[[lathe_tool]]
+id = "id-groove-2"
+kind = "id_groove"
+width = 2.0
+corner = 0.1
+reach = 3.0
+bar_diameter = 16.0
+vc = 100.0
+f = 0.04
+
+[[lathe_tool]]
+id = "id-thread-60"
+kind = "id_thread"
+tip_radius = 0.05
+pitch = [0.5, 2.0]
+bar_diameter = 16.0
+vc = 80.0
 
 [[lathe_tool]]
 id = "drill-8"
@@ -81,3 +118,14 @@ shank_diameter = 32.0
 vc = 150.0
 f = 0.08
 source = "a generic indexable drill (U-drill): verify with the vendor"
+
+[[lathe_tool]]
+id = "drill-26-4d"
+kind = "drill"
+diameter = 26.0
+point = 140.0
+flute = 110.0
+shank_diameter = 32.0
+vc = 150.0
+f = 0.08
+source = "a generic indexable drill (U-drill), 4 x D: verify with the vendor"

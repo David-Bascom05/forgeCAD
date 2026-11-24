@@ -1,0 +1,17 @@
+# hurco-tm8i turret disc (unpublished, stand-in)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared cx = 230
+shared cy = 0
+shared z0 = -54
+shared R = 174
+shared H = 108
+shared rb = 25
+
+sketch plan(on: offset(xy, z0)) {
+  outline = circle((cx, cy), R)
+}
+body = extrude(plan.outline, H)
+sketch bb(on: body.end) {
+  c = circle((cx, cy), rb)
+}
+through = cut(bb.c, H)

@@ -16,6 +16,10 @@ forge-bool-core = { path = "../forge-bool-core", optional = true }
 # the decision log (src/decisions.rs): every near-tolerance decision recorded under its entities,
 # contradictions within one boolean counted, and the retry ladder's rungs; off, nothing is compiled
 decisions = ["forge-geom/decisions", "forge-topo/decisions"]
+# the certificate for the proven checker (src/certify.rs, verify/forge-certify); off, nothing is compiled
+certify = []
+# certified surface-surface tracing (forge-geom's `certified_trace`)
+certified_trace = ["forge-geom/certified_trace"]
 # the decide-once flat-face boolean (src/decide_once.rs over forge-bool-core): flat booleans go
 # through the ledger and the combinatorial core; off by default, the old path unchanged
 decide_once = ["dep:forge-bool-core"]

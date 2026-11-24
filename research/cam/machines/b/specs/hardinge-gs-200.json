@@ -1,0 +1,138 @@
+{
+ "vendor": "Hardinge",
+ "model": "GS 200",
+ "family": "GS-Series performance turning centers",
+ "source": [],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe",
+ "architecture": null,
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": null,
+  "Y": null,
+  "Z": null
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": null,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "architecture",
+  "bar_capacity_mm",
+  "chuck_size_in",
+  "control.standard",
+  "coolant.through_spindle",
+  "live_tool.power_kw",
+  "live_tool.rpm_max",
+  "max_cutting_feed_m_min",
+  "max_turning_dia_mm",
+  "max_turning_length_mm",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_max",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_type",
+  "sub_spindle",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm",
+  "tailstock",
+  "travel_mm.X",
+  "travel_mm.Z",
+  "turret_index_s",
+  "turret_stations",
+  "weight_kg"
+ ],
+ "options": [],
+ "notes": "No maker page reachable: hardinge.com redirects to kellenberger.com (grinding/hard-turning only, no GS series); asia.hardinge.com and europe.hardinge.com (which host 1330-1E-GS-Series.pdf) fail to resolve from this session; pdf.directindustry.com 403. Nothing filled. Search snippets (unverified, not a source) mention A2-6 nose, 5,000 rpm, 18.5 kW -- memory/snippet only, unverified."
+}

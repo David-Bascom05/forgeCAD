@@ -1,0 +1,14 @@
+# okuma-ma-500hii pallet: the published pallet; thickness an estimate.
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -250
+shared y0 = -120
+shared z0 = -250
+shared L = 500
+shared W = 120
+shared H = 500
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

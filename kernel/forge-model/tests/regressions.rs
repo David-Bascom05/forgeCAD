@@ -3890,6 +3890,176 @@ fn a_plane_torus_curve_does_not_fold_at_a_turn() {
     }
 }
 
+/// The ball of cylinder_sphere/tangent_wall_equator moved 3·LINEAR along x (the curved reference's
+/// band): it pokes e = 3·LINEAR through the wall, so the two meet in one thin loop with hairpin tips
+/// a radius e round. The common part built 4190.78 mm³ (its mass error 2.8, under the gate) and the
+/// cut's mass did not settle: the closed form's chain dropped a tip. The volumes are the ball's less
+/// the cap outside the wall, 1.712719606e-5 mm³ (by quadrature of its z sections, 30 digits).
+/// The cut leaves the ball's pole touching the bottom cap at a point (non-manifold, as the exact
+/// reference decides): refused ZeroThickness there.
+#[test]
+fn ball_a_hair_through_a_cylinder_wall_measures_exactly() {
+    let cap = 1.712719606e-5;
+    let ball = 4.0 / 3.0 * forge_math::dmath::PI * 1000.0;
+    let cyl = forge_math::dmath::PI * 100.0 * 20.0;
+    let cut = "cylinder_sphere/tangent_wall_equator/Cut";
+    for b in degenerate_moved(cut, forge_math::Vec3::X * (3.0 * forge_math::tol::LINEAR)) {
+        assert!(
+            matches!(
+                b,
+                Err(forge_model::RegenError::Boolean {
+                    error: forge_bool::BoolError::ZeroThickness { .. },
+                    ..
+                })
+            ),
+            "{cut}: {:?}",
+            b.map(|_| ())
+        );
+    }
+    for (op, want) in [("Keep", ball - cap), ("Add", cyl + cap)] {
+        let name = format!("cylinder_sphere/tangent_wall_equator/{op}");
+        let (_, part) = forge_model::adversarial::degenerate_parts()
+            .into_iter()
+            .find(|p| p.0 == name)
+            .expect("the part");
+        let mut part = forge_model::adversarial::canonical(&part);
+        let last = part.features.len() - 1;
+        part.features[last] = forge_model::names::moved(
+            &part.features[last],
+            forge_math::Vec3::X * (3.0 * forge_math::tol::LINEAR),
+        )
+        .expect("a moved ball");
+        for b in [part.regenerate(), part.regenerate_nary(1)] {
+            let b = b.unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            assert!(
+                forge_topo::check(&b).is_empty(),
+                "{name}: {:?}",
+                forge_topo::check(&b)
+            );
+            let m = forge_topo::mass::mass(&b).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(
+                (m.volume - want).abs() <= 1e-6,
+                "{name}: {} where {want}",
+                m.volume
+            );
+            assert!(m.err[0] <= 1e-4, "{name}: error bound {}", m.err[0]);
+        }
+    }
+}
+
+/// A degenerate pair of the scoreboard with its tool moved by `d` LINEARs: both regens.
+fn degenerate_moved(
+    name: &str,
+    d: forge_math::Vec3,
+) -> [Result<forge_topo::Body, forge_model::RegenError>; 2] {
+    let (_, part) = forge_model::adversarial::degenerate_parts()
+        .into_iter()
+        .find(|p| p.0 == name)
+        .expect("the part");
+    let mut part = forge_model::adversarial::canonical(&part);
+    let last = part.features.len() - 1;
+    part.features[last] =
+        forge_model::names::moved(&part.features[last], d * forge_math::tol::LINEAR).expect("a moved tool");
+    [part.regenerate(), part.regenerate_nary(1)]
+}
+
+/// A cone's apex 3·LINEAR through a face (the curved reference's band): what pokes through is a cone
+/// 3e-5 tall, its one ruling 3.4e-5 long. A revolve gave every pole a ball of 3·LINEAR whatever its
+/// edges needed, which reached past half that ruling (VertexTolerance). A pole's tolerance is what its
+/// edges and faces need, at least LINEAR.
+#[test]
+fn apex_a_hair_through_a_face_is_valid() {
+    let z = forge_math::Vec3::Z;
+    for (name, d) in [
+        ("cylinder_cone/apex_on_cap_centre/Add", z * 3.0),
+        ("plane_cone/apex_on_top_from_inside/Add", z * 3.0),
+        ("cone_cone/tip_shares_surface/Cut", forge_math::Vec3::X * 3.0),
+        (
+            "sphere_sphere/through_pole_on_seam/Add",
+            forge_math::Vec3::X * 3.0,
+        ),
+    ] {
+        for b in degenerate_moved(name, d) {
+            let b = b.unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            assert!(
+                forge_topo::check(&b).is_empty(),
+                "{name}: {:?}",
+                forge_topo::check(&b)
+            );
+        }
+    }
+}
+
+/// Two identical cylinders, the second 3·LINEAR up the axis, joined: the union's wall runs 3e-5 past
+/// the first's top rim. That strip of the second's wall was classified by a probe a default step
+/// (0.05) off its top rim, past its far side on the first's wall, and dropped as coincident with it:
+/// the rims were left open (NotClosed). A region no step clears is probed at its middle across.
+#[test]
+fn identical_cylinders_a_hair_apart_join_closed() {
+    let want = forge_math::dmath::PI * 100.0 * (20.0 + 3.0 * forge_math::tol::LINEAR);
+    for name in [
+        "cylinder_cylinder/identical/Add",
+        "cylinder_cylinder/identical_revolved/Add",
+    ] {
+        for b in degenerate_moved(name, forge_math::Vec3::Z * 3.0) {
+            let b = b.unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            assert!(
+                forge_topo::check(&b).is_empty(),
+                "{name}: {:?}",
+                forge_topo::check(&b)
+            );
+            let v = forge_topo::mass::mass(&b).expect("measures").volume;
+            assert!((v - want).abs() <= 1e-7, "{name}: {v} where {want}");
+        }
+    }
+}
+
+/// A ball inscribed in a cone, 3·LINEAR off along x, kept: their thin lens has hairpin tips, and an
+/// edge holds both arms of one. The check probed off the middle of that edge (an arm 1e-4 from the
+/// tip) by steps wider than the lens there, short only of the face's other edges, and called the
+/// face wrong-sided. Its probe is short of the edge's own far stretches too.
+#[test]
+fn inscribed_ball_a_hair_off_keeps_a_valid_lens() {
+    for b in degenerate_moved(
+        "cone_sphere/inscribed_tangent_circle/Keep",
+        forge_math::Vec3::X * 3.0,
+    ) {
+        let b = b.expect("regenerates");
+        assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+    }
+}
+
+/// Two cones apex to apex 0.9·LINEAR apart: they meet in a loop shorter than 10·LINEAR, a point.
+/// Taken a hair past one apex onto its other nappe, a densely marched loop there was refused as
+/// running through the apex before it was taken for the point it is.
+#[test]
+fn cones_apex_to_apex_within_tolerance_meet_at_a_point() {
+    for d in [forge_math::Vec3::X * 0.9, forge_math::Vec3::Z * 0.9] {
+        for b in degenerate_moved("cone_cone/perpendicular_apex_to_apex/Add", d) {
+            let b = b.expect("regenerates");
+            assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+        }
+    }
+}
+
+/// Two identical balls 3·LINEAR apart, joined: the circle they meet in passes 1.5·LINEAR from the
+/// poles of both, leaving stubs of meridian 1.5e-5 long there. A loop's sample within tolerance of
+/// a sphere's axis is singular (its u says nothing) but was drawn at its own v, a hair below the
+/// pole's line: the jump in u there cut across the meridian into the pole (LoopsCross), on a body
+/// whose volume is exact. It is drawn at the pole.
+#[test]
+fn identical_balls_a_hair_apart_join_valid() {
+    use forge_math::dmath::PI;
+    let (r, d) = (10.0, 3.0 * forge_math::tol::LINEAR);
+    let want = 2.0 * 4.0 / 3.0 * PI * r * r * r - PI * (4.0 * r + d) * (2.0 * r - d) * (2.0 * r - d) / 12.0;
+    for b in degenerate_moved("sphere_sphere/identical/Add", forge_math::Vec3::X * 3.0) {
+        let b = b.expect("regenerates");
+        assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+        let v = forge_topo::mass::mass(&b).expect("measures").volume;
+        assert!((v - want).abs() <= 1e-6, "{v} where {want}");
+    }
+}
+
 /// Fuzz seed 295, feature 69 (a tilted cylinder added through a thin torus ring on a cylinder wall):
 /// the cylinder × torus meet lost one of its two loops, the ring was dropped whole and its edge on
 /// the wall was left on one face, an `Ok` that `check` faults. Both evaluators.

@@ -155,12 +155,14 @@ pub fn read_map(buf: &[u8], at: usize, len: usize) -> R<Vec<(u32, usize)>> {
             let (dh, q) = read_mc(buf, p, false)?;
             let (dl, q) = read_mc(buf, q, true)?;
             p = q;
-            h += dh;
-            loc += dl;
+            h = h.wrapping_add(dh);
+            loc = loc.wrapping_add(dl);
             out.push((h as u32, loc as usize));
         }
-        let crc = u16::from_be_bytes([buf[p], buf[p + 1]]);
-        if crc16(0xC0C1, &buf[start..p]) != crc {
+        let (Some(&[c0, c1]), Some(run)) = (buf.get(p..p + 2), buf.get(start..p)) else {
+            return bad("object map past the end");
+        };
+        if crc16(0xC0C1, run) != u16::from_be_bytes([c0, c1]) {
             return bad("object map CRC");
         }
         p += 2;

@@ -753,7 +753,7 @@ impl Shell {
 }
 
 /// The thinnest wall's rows.
-fn wall_rows(ui: &mut Ui, t: &Theme, m: &super::inspect::MeasurePanel, places: &mut Vec<(String, Rect)>) {
+fn wall_rows(ui: &mut Ui, t: &Theme, m: &mut super::inspect::MeasurePanel, places: &mut Vec<(String, Rect)>) {
     ui.label(
         egui::RichText::new("The thinnest wall of the part picked, or of the part")
             .font(sans(11.0))
@@ -787,6 +787,42 @@ fn wall_rows(ui: &mut Ui, t: &Theme, m: &super::inspect::MeasurePanel, places: &
         }
         Some(Err(e)) => {
             ui.label(egui::RichText::new(e).font(sans(11.0)).color(t.error));
+        }
+        None if m.busy => {
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new(format!("Measuring\u{2026} {:.0}%", m.wall_done * 100.0))
+                        .font(sans(11.0))
+                        .color(t.ink2),
+                );
+                let c = ui.button(egui::RichText::new("Cancel").font(sans(11.0)));
+                places.push(("measure:wall:cancel".into(), c.rect));
+                if c.clicked() {
+                    m.wall_stop = true;
+                }
+            });
+            // a thin bar under it: 0% reads as started, not stuck
+            let (bar, _) = ui.allocate_exact_size(vec2(ui.available_width(), 3.0), egui::Sense::hover());
+            ui.painter().rect_filled(bar, 1.5, t.line);
+            let done = Rect::from_min_size(
+                bar.min,
+                vec2(bar.width() * m.wall_done.clamp(0.0, 1.0), bar.height()),
+            );
+            ui.painter().rect_filled(done, 1.5, t.accent);
+            places.push(("measure:wall:bar".into(), bar));
+            // its progress, as it comes: stepped each frame where jobs run on the page's thread
+            ui.ctx().request_repaint_after(if crate::plat::INLINE_JOBS {
+                std::time::Duration::ZERO
+            } else {
+                std::time::Duration::from_millis(100)
+            });
+        }
+        None if m.wall_held => {
+            let b = ui.button(egui::RichText::new("Measure thinnest wall").font(sans(12.0)));
+            places.push(("measure:wall:go".into(), b.rect));
+            if b.clicked() {
+                m.wall_go = true;
+            }
         }
         None => {
             ui.label(

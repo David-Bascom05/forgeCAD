@@ -1,0 +1,13 @@
+# akira-seiki-sl30 chuck: a conservative envelope solid from published dimensions (see the
+# machine's [[machine.cite]] for body.chuck); not the maker's CAD.
+# frame: the machine's base frame at the home pose.
+shared c0x = 0
+shared c0y = 0
+shared c0z0 = -89.5
+shared c0r = 101.1
+shared c0h = 89
+
+sketch sc0(on: offset(xy, c0z0)) {
+  c = circle((c0x, c0y), c0r)
+}
+c0 = extrude(sc0.c, c0h)

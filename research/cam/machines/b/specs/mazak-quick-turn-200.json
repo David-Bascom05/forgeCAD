@@ -1,0 +1,137 @@
+{
+ "vendor": "Mazak",
+ "model": "QUICK TURN 200",
+ "family": "QUICK TURN",
+ "source": [
+  "https://www.mazak.com/us-en/detail/usa/turning/us-qt2002eky/",
+  "https://www.mazak.com/us-en/products/quick-turn/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe",
+ "architecture": null,
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 203.2,
+  "Y": null,
+  "Z": 558.8
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": 609.6,
+ "max_turning_dia_mm": 355.6,
+ "max_turning_length_mm": 508.0,
+ "chuck_size_in": 8,
+ "bar_capacity_mm": 76.2,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 5000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": 26,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": 12,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "architecture",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_type",
+  "table_height_from_floor_mm",
+  "tailstock",
+  "turret_index_s",
+  "weight_kg"
+ ],
+ "options": [
+  "QT-200M (milling)",
+  "QT-200MY (Y axis)",
+  "QT-200MS/MSY (second spindle)"
+ ],
+ "notes": "US-built QT-200 (Universal type '20' printed). The spec page prints a 'Y-axis 21.13\"' row on this non-Y model; it is not recorded as Y travel (likely mislabelled). Product listing gives Φ13.78\" max machining dia and 20.16\" length, slightly different from the spec page. No live tool on the plain 200 (M variants add it). Tailstock, rapids, weight, footprint, control not on page. Memory says QTN-200 is the older name, unverified.",
+ "orig": {
+  "swing": "Φ24\"",
+  "max_machining_dia": "Φ14\"",
+  "max_machining_length": "20\"",
+  "bar": "Φ3\"",
+  "travel": "X 8\", 'Y-axis' 21.13\" (as printed), Z 22\"",
+  "power": "26 kW (35 HP) 30 min"
+ }
+}

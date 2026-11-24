@@ -16,6 +16,8 @@ use crate::offset::{OLoop, OffsetError};
 use crate::real::Ctx;
 use crate::region::{self, Exact, Region, RegionError};
 use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Op {
@@ -137,8 +139,40 @@ fn reversed(cx: &mut Ctx, p: &Piece) -> Piece {
     }
 }
 
+type Made = HashMap<(u64, u64, u8), Vec<(Region, Region, Result<Vec<OLoop>, OffsetError>)>>;
+
+/// Booleans already made in this process, by the operands' content and the operation: a
+/// function of those numbers alone (each decision an exact sign), so a repeat has the same
+/// result. The in-process stock's material at a height is made again for its faces and for the
+/// leftover. Bounded: emptied when full.
+static MADE: Mutex<Option<Made>> = Mutex::new(None);
+const MADE_MAX: usize = 512;
+
 /// The boolean of two valid regions (their loops with the region on the left), as loops.
 pub fn boolean(a: &Region, b: &Region, op: Op) -> Result<Vec<OLoop>, OffsetError> {
+    let key = (region::content_hash(a), region::content_hash(b), op as u8);
+    let known = MADE.lock().ok().and_then(|g| {
+        g.as_ref()?
+            .get(&key)?
+            .iter()
+            .find(|(x, y, _)| x == a && y == b)
+            .map(|(_, _, o)| o.clone())
+    });
+    if let Some(o) = known {
+        return o;
+    }
+    let o = boolean_anew(a, b, op);
+    if let Ok(mut g) = MADE.lock() {
+        let m = g.get_or_insert_with(HashMap::new);
+        if m.len() >= MADE_MAX {
+            m.clear();
+        }
+        m.entry(key).or_default().push((a.clone(), b.clone(), o.clone()));
+    }
+    o
+}
+
+fn boolean_anew(a: &Region, b: &Region, op: Op) -> Result<Vec<OLoop>, OffsetError> {
     let mut cx = Ctx::new();
     let ea = region::validate(&mut cx, a).map_err(OffsetError::Region)?;
     let eb = region::validate(&mut cx, b).map_err(OffsetError::Region)?;

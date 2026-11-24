@@ -1,6 +1,6 @@
 //! (scratch, not committed) fuzz 295's torus against its two cylinders, by meet::intersect
 use forge_geom::intersect::SurfaceSurface;
-use forge_geom::{CurveGeom, Cylinder, Surface, SurfaceGeom, Torus};
+use forge_geom::{CurveGeom, Cylinder, Surface, Torus};
 use forge_math::{Box3, Frame, Point3, Vec3};
 
 fn frame(o: [f64; 3], x: [f64; 3], y: [f64; 3], z: [f64; 3]) -> Frame {
@@ -50,7 +50,8 @@ fn main() {
                     let d = cv.domain();
                     let p = cv.eval(d.lo + 0.3 * (d.hi - d.lo));
                     let q = p - c;
-                    let u = (-q.y).atan2(q.x).to_degrees().rem_euclid(360.0);
+                    let u = (forge_math::dmath::atan2(-q.y, q.x) * 180.0 / forge_math::dmath::PI)
+                        .rem_euclid(360.0);
                     println!(
                         "  {k} {ct:?} closed {:?} u {u:.1} at {p:?} off {:.1e} {:.1e}",
                         d.period,

@@ -10,6 +10,7 @@
 //! * a box where F excludes 0 holds no point of the curve;
 //! * a box where ∂F/∂s excludes 0 holds no event: every root there is simple, so the root count
 //!   cannot change inside it;
+//! * a box where the mean-value form of F or of ∂F/∂s excludes 0 holds no event either;
 //! * every other box is split until its u-width is under `W_EVENT`. What is left encloses every
 //!   event (every (u, s) with F = ∂F/∂s = 0), and nothing else is certain about it.
 //!
@@ -200,6 +201,21 @@ fn krawczyk(d: &Data, u: Interval, s: Interval) -> bool {
     ku.lo > u.lo && ku.hi < u.hi && ks.lo > s.lo && ks.hi < s.hi
 }
 
+/// The mean-value form of G = (F, ∂F/∂s) on the box: G(X) ⊂ G(m) + J(X)(X − m) for the box's
+/// middle m (the mean value theorem on each component, J(X) enclosing the Jacobian over the convex
+/// box). `false` proves one of F, ∂F/∂s has no zero there, so the box holds no event; tighter than
+/// the natural enclosure on small boxes.
+fn mean_value_has_zero(d: &Data, u: Interval, s: Interval) -> bool {
+    let (um, sm) = (u.mid(), s.mid());
+    let (g0, g1) = enclose(d, Interval::point(um), Interval::point(sm));
+    let j = jacobian(d, u, s);
+    let du = u - Interval::point(um);
+    let ds = s - Interval::point(sm);
+    let f = g0 + j[0][0] * du + j[0][1] * ds;
+    let fs = g1 + j[1][0] * du + j[1][1] * ds;
+    f.contains_zero() && fs.contains_zero()
+}
+
 /// The events of F(u, .) on a torus–cylinder pair against `found` (u in [0, 2π)).
 pub(crate) fn certify(eq: &Eqn, found: &[(f64, bool)]) -> Verdict {
     let Some(d) = data(eq) else {
@@ -207,7 +223,8 @@ pub(crate) fn certify(eq: &Eqn, found: &[(f64, bool)]) -> Verdict {
     };
     let tau = dmath::TAU;
     let mut stack: Vec<(Interval, Interval)> = Vec::new();
-    let (nu, ns) = (64, 8);
+    // (a coarse start: the mean-value test prunes as well from wide boxes, and fewer are examined)
+    let (nu, ns) = (8, 2);
     for i in 0..nu {
         let u = Interval::new(tau * i as f64 / nu as f64, tau * (i + 1) as f64 / nu as f64);
         for j in 0..ns {
@@ -225,7 +242,7 @@ pub(crate) fn certify(eq: &Eqn, found: &[(f64, bool)]) -> Verdict {
             return Verdict::Undecided { boxes };
         }
         let (f, fs) = enclose(&d, u, s);
-        if !f.contains_zero() || !fs.contains_zero() {
+        if !f.contains_zero() || !fs.contains_zero() || !mean_value_has_zero(&d, u, s) {
             continue;
         }
         if u.width() < W_KRAWCZYK && krawczyk(&d, u, s) {

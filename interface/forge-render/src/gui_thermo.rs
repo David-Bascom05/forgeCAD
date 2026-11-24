@@ -104,6 +104,9 @@ impl Gui {
                 .collect();
             if !new.is_empty() {
                 list.extend(new.iter().map(|op| (op.json().to_string(), None)));
+                // let go before the job starts: in the single-threaded page it runs right here,
+                // and takes the same lock (a second lock on one thread panics there)
+                drop(list);
                 let waker = self.waker.clone();
                 crate::plat::spawn("forge-job", move || {
                     for op in new {
@@ -188,6 +191,8 @@ impl Gui {
             p.thermo.check = false;
             if let Some(f) = file.clone() {
                 let waker = self.waker.clone();
+                // let go while the job runs, as above (in the page it runs before `spawn` returns)
+                drop(got);
                 crate::plat::spawn("forge-job", move || {
                     let rows = forge_dirs::fs::read_to_string(&f).ok().map(|text| {
                         let opts = forge_lang::Options {
@@ -204,6 +209,7 @@ impl Gui {
                     drop(got);
                     waker();
                 });
+                got = ASM_PART.lock().unwrap_or_else(|e| e.into_inner());
             }
         }
         p.thermo.asm_part = got.as_ref().map(|g| g.0.clone());

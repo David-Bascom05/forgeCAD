@@ -1,0 +1,14 @@
+# roland-mdx-50 bridge: a conservative envelope solid from published dimensions (see the
+# machine's [[machine.cite]] for body.bridge); not the maker's CAD.
+# frame: the machine's base frame at the home pose.
+shared b0x0 = -499.5
+shared b0y0 = 325.5
+shared b0z0 = -19.5
+shared b0sx = 599
+shared b0sy = 59
+shared b0h = 414
+
+sketch sb0(on: offset(xy, b0z0)) {
+  outline = rect(corner: (b0x0, b0y0), size: (b0sx, b0sy))
+}
+b0 = extrude(sb0, b0h)

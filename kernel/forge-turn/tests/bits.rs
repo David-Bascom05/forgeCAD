@@ -3,6 +3,7 @@
 //! posted text in every lathe dialect, pinned here and checked on both targets (cargo test
 //! --target wasm32-wasip1 -p forge-turn --test bits).
 mod common;
+// the shaft (an OD job) and the threaded bush (boring, an ID groove, an ID thread)
 use forge_cam_geom::region::Seg;
 use forge_turn::ops::{self, Step};
 use forge_turn::post;
@@ -32,18 +33,33 @@ fn segs(h: &mut u64, ss: &[Seg]) {
     }
 }
 
-const PINNED: u64 = 0x79c1d6fad7dfed47;
+const PINNED: u64 = 0x090b01ba435f80d4;
+/// The threaded bush: boring, an ID groove and an ID thread.
+const PINNED_NUT: u64 = 0xa77a8e918924fedd;
 
 #[test]
 fn the_same_bits_everywhere() {
-    let mut h = 0xcbf29ce484222325u64;
     let s = common::setup();
+    let job = common::job(&s);
+    let h = digest(&s, &job, "shaft");
+    assert_eq!(h, PINNED, "digest {h:#018x}");
+}
+
+#[test]
+fn the_same_bits_everywhere_inside() {
+    let s = common::nut();
+    let job = common::nut_job(&s);
+    let h = digest(&s, &job, "nut");
+    assert_eq!(h, PINNED_NUT, "digest {h:#018x}");
+}
+
+fn digest(s: &ops::Setup, job: &[ops::OpPath], title: &str) -> u64 {
+    let mut h = 0xcbf29ce484222325u64;
     for l in &s.part.region.loops {
         segs(&mut h, &l.segs);
     }
     f(&mut h, s.part.mu);
-    let job = common::job(&s);
-    for op in &job {
+    for op in job {
         for st in &op.steps {
             match *st {
                 Step::Rapid(p) | Step::Feed(p) => {
@@ -64,7 +80,7 @@ fn the_same_bits_everywhere() {
             }
         }
     }
-    let rep = ops::certify(&s, &job, None).unwrap();
+    let rep = ops::certify(s, job, None).unwrap();
     fnv(&mut h, &(rep.checks as u64).to_le_bytes());
     f(&mut h, rep.least);
     fnv(&mut h, &(rep.refusals.len() as u64).to_le_bytes());
@@ -75,9 +91,9 @@ fn the_same_bits_everywhere() {
     }
     for (name, _) in post::DIALECTS {
         let d = post::Dialect::get(name).unwrap();
-        let q = post::quantize(&job, 1, "shaft", &d).unwrap();
+        let q = post::quantize(job, 1, title, &d).unwrap();
         let (text, _) = post::round_trip(&q, &d).unwrap();
         fnv(&mut h, text.as_bytes());
     }
-    assert_eq!(h, PINNED, "digest {h:#018x}");
+    h
 }

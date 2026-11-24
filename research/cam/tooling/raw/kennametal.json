@@ -1,0 +1,12 @@
+{
+ "vendor": "Kennametal",
+ "records": [],
+ "blocked": [
+  "https://www.kennametal.com/us/en/products/p.4075305.html (CNMG120408MP KCP25, per web-search snippet) and other p.<id>.html product pages -- SAP Spartacus single-page app; static HTML has no product content (WebFetch also returned an empty page). Applies to inserts, turning holders and boring bars.",
+  "Kennametal OCC/commerce API behind the app -- not used (internal API; see Sandvik note).",
+  "https://kennametal.com/content/dam/final/kennametal/docs/application-data/kcu25b/kcu25b-application-data_en.pdf -- HTTP 404 (search-indexed link no longer served)."
+ ],
+ "notes": [
+  "No records. Kennametal master catalogues found only on third-party hosts (productivity.com, pdf.directindustry.com, acomee.com.mx); not used because they are not on kennametal.com and are dated 2012-2018."
+ ]
+}

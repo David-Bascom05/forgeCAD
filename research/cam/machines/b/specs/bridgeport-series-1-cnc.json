@@ -1,0 +1,142 @@
+{
+ "vendor": "Bridgeport (now InCompass)",
+ "model": "Series 1 CNC",
+ "family": "Series 1 knee mill",
+ "source": [
+  "https://bridgeportmachinetools.com/product/milling/series-1/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "vmc3",
+ "architecture": "Knee-type turret mill: X table on Y saddle on vertical knee (knee travel 406 mm, manual), ram (306 mm) and quill (Z, 102 mm CNC) in the 2J head. CNC version: 3-axis CNC (X, Y, quill).",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 838,
+  "Y": 306,
+  "Z": 102,
+  "knee": 406,
+  "ram": 306
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": [
+  64,
+  463
+ ],
+ "spindle_center_to_column_mm": [
+  171,
+  476
+ ],
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  1245,
+  299
+ ],
+ "table_load_kg": 340,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 4200,
+  "rpm_min": 60,
+  "taper_or_interface": "R-8 (NMTB30 option)",
+  "power_kw": {
+   "cont": 1.5,
+   "30min": 2.2,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": 2.54,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 3048,
+  "D": 2140,
+  "H": 2210
+ },
+ "weight_kg": 875,
+ "table_height_from_floor_mm": 1200,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "changer.pockets",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "milling_head",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "rotary_table_dia_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.peak/other",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_center_to_pallet_top_mm"
+ ],
+ "options": [
+  "NMTB30 spindle taper",
+  "manual Series 1 (X 914 mm without power feed)"
+ ],
+ "notes": "Manual-class machine; maybe out of scope. Orig inches: X 33 in (838) CNC; Y 12 in; quill 4.03 in (CNC) / 5 in manual; knee 16 in; throat 6.75-18.75 in; nose-to-table 2.5-18.25 in; table 9 x 49 in; table max height above floor 47.25 in; 750 lb on table; motor 3 HP 30-min / 2 HP cont (converted 2.2 / 1.5 kW); speeds 60-500 and 500-4200 rpm in two ranges; CNC feedrate 0-100 IPM (2.54 m/min); floor 84 x 120 in, height 87 in; net 1930 lb. Control model not published. table_height_from_floor_mm is the MAX (knee up)."
+}

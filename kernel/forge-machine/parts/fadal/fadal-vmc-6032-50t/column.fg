@@ -1,0 +1,13 @@
+# fadal-vmc-6032-50t column: face at the published spindle-centre distance; size unpublished
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -449
+shared y0 = 1280.525
+shared z0 = 6
+shared lx = 898
+shared ly = 398
+shared lz = 1842
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)

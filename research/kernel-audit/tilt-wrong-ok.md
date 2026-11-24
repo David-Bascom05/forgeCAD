@@ -39,9 +39,39 @@ The refusals are not `RefusalTrue`: the reference says the exact result is a man
   calls that case ambiguous). In a local experiment only (not committed), with the parallel test
   at 1e-14 instead of ANGULAR, B1 becomes Internal(SplitCrossed) refusals on all three ops: the
   Empty verdict leads to the wrong Ok there, and changing it alone does not make B1 agree.
-- **B2 (confirmed wrong Ok, exact reference).** `plane_plane` returns the right line, yet
-  intersect returns an invalid body at L = 1e5 … 2e6 (well inside 1e6). **Root cause UNKNOWN**,
-  downstream of D2 (trim, classification or assembly: D4–D8 in verify/forge-bool-proof/LEDGER.md).
+- **B2 (confirmed wrong Ok, exact reference): fixed (FLAT-SITES, 2026-11-24).** `plane_plane`
+  returns the right line. The fault was in `imprint` (D4): B's bottom face is coplanar with A's,
+  so B's edge along its tilted wall (z = 0, from the crossing at x = L/2 to (L, 1.2e-5)) must be
+  imprinted into A's bottom face to split off the wedge's triangle. `imprint` decides each stretch
+  of the edge by `point_in_face` at 0.5, 0.382 and 0.618 of it; all three lie within LINEAR of A's
+  y = 0 edge (gaps 0.46e-5 … 0.74e-5), so the stretch read On, and its fallback
+  `on_to_its_vertex` (coverage G5a) skips an end that is a crossing: here the far end is B's
+  vertex (L, 1.2e-5), exactly on A's x = L edge. The stretch was taken as running along A's
+  boundary and dropped; without the triangles the wedge's faces are classed by flooding from
+  outside (Out), leaving the end cap alone (V4 E4 F1, the wrong Ok), refusing union and subtract,
+  and at L = 1e3, 1e4 classifying inconsistently. That also explains why failure tracks gap/LINEAR:
+  with ends 2·LINEAR apart the midpoint sample is 1·LINEAR off the edge.
+  The fix (`off_near_ends`, called from `on_to_its_vertex` only when its vertex test leaves the
+  stretch On): two lines at an angle part linearly, so a straight stretch leaving the edge it began
+  beside is farthest from it near an end; a point 4·LINEAR in from each end decides, where it is
+  off the boundary. Evidence: every B2 case (L = 1e3 … 2e6, all three ops) now agrees with the
+  reference (tilt_repros.rs, no longer ignored); the controls still agree; exact-fuzz totals
+  unchanged (agree 463, wrong 0); the callgrind band passes (strict total +0.0006%), bits.txt
+  identical; forge-bool's `tilted_wedge_thinner_than_two_tolerances` checks validity and the
+  exact volumes without the reference.
+- **B1's second half (FLAT-SITES, 2026-11-24): `line_plane_t`, the same flaw one level down.**
+  With TRANSLATE's plane_plane fix (proof/b1-plane-parallel) B1 refused Internal(SplitCrossed)
+  on A's z = 0 face. Cause: `imprint` asks `curve_surface` whether B's tilted bottom edge (z = 0,
+  (0, -2e-5) to (1.6e7, 6e-5), 5e-12 rad to A's y = 0 wall) crosses A's y = 0 edge, and forge-geom's
+  `line_plane_t` takes |n·dir| ≤ ANGULAR as parallel and decides Apart by the distance at the
+  line's origin alone (2e-5): the crossing at x = 4e6 is lost, the whole edge is imprinted Inside,
+  its y < 0 part dangles off the face at (0, -2e-5), and the face's split walk fails. Fix:
+  `line_in_range` re-decides that branch over the edge's range (`near_parallel_in`, cold): the
+  signed distance is affine along the line, so both ends within LINEAR is On, opposite signs
+  beyond LINEAR a crossing at the affine zero, one sign beyond LINEAR Apart, else the origin's
+  answer. With both fixes and B2's, all seven tilt repros agree with the reference (B1 at 1.6e7
+  and its sibling at 4e6 too); this fix alone leaves B1 refusing ZeroThickness (plane_plane's
+  Empty), so B1 needs TRANSLATE's fix with it.
 - The two cases share the shape: a slot between the walls that closes to zero thickness at the
   crossing, with the walls ~1–2 LINEAR apart at the far ends.
 

@@ -1,0 +1,14 @@
+# mazak-variaxis-c-600 support-r: trunnion support (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -360
+shared y0 = 400
+shared z0 = -550
+shared L = 720
+shared W = 140
+shared H = 550
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

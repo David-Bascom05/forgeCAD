@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// The tools a part file takes, on the command line and over `serve`/`mcp`.
-pub const COMMANDS: [&str; 9] = [
-    "build", "check", "query", "measure", "render", "export", "edit", "diff", "cam",
+pub const COMMANDS: [&str; 10] = [
+    "build", "check", "query", "measure", "render", "export", "edit", "diff", "cam", "bend",
 ];
 
 /// A tool's arguments: the file, and its words (a selector, the refs to measure, the view, the
@@ -205,6 +205,13 @@ impl Session {
             return fail("--base goes with edit");
         }
         let r = match cmd {
+            "build"
+                if self
+                    .read(&a.file)
+                    .is_ok_and(|(_, src)| forge_lang::robot::is_robot(&src)) =>
+            {
+                self.build_robot(a)
+            }
             "build" => self.built(&a.file).map(|(run, src)| Self::report(&run, &src)),
             "check" => self.read(&a.file).map(|(p, src)| {
                 let run = self.run_src(&p, &src, false);
@@ -217,12 +224,78 @@ impl Session {
             "edit" => self.edit(a, params),
             "diff" => self.diff(a),
             "cam" => self.cam(a),
+            "bend" => self.bend(a),
             _ => Err(format!(
                 "unknown command '{cmd}' ({}; a part changes by edit F OP)",
                 COMMANDS.join(" ")
             )),
         };
         r.unwrap_or_else(fail)
+    }
+
+    /// `bend F [sheet]`: a bending document's reply (`forgecad.bending/1`): the press-brake
+    /// program simulated as it states; with `sheet`, the setup sheet (HTML) is the file.
+    fn bend(&mut self, a: &Args) -> Result<Reply, String> {
+        let path = self.path(&a.file)?;
+        let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+        let b = forge_bend_lang::run(&src, &dir);
+        let mut text = String::new();
+        for (at, e) in &b.errors {
+            text.push_str(&format!("error {at}: {e}\n"));
+        }
+        if let Some(sim) = &b.sim {
+            text.push_str(&format!(
+                "{} on {}\n",
+                if sim.plan.feasible {
+                    "feasible"
+                } else {
+                    "not feasible"
+                },
+                sim.tooling.press.id
+            ));
+            for (i, st) in sim.plan.steps.iter().enumerate() {
+                let fails: Vec<&str> = st.failures().iter().map(|c| c.rule.word()).collect();
+                text.push_str(&format!(
+                    "{}. {} {} on {}: {}\n",
+                    i + 1,
+                    sim.names[st.bend],
+                    st.punch,
+                    st.die,
+                    if fails.is_empty() {
+                        "pass".to_string()
+                    } else {
+                        fails.join(", ")
+                    }
+                ));
+            }
+        }
+        // `sheet`: the setup sheet; `program`: the press-brake program the document asks for
+        let file = match a.words.first().map(String::as_str) {
+            Some("sheet") => Some(b.sheet().into_bytes()),
+            Some("program") => match b.program_text() {
+                Some(Ok((t, _, notes))) => {
+                    for n in notes {
+                        text.push_str(&format!("program: {n}\n"));
+                    }
+                    Some(t.into_bytes())
+                }
+                Some(Err(e)) => return Err(e),
+                None => {
+                    return Err(
+                        "the document asks for no program: add `prog = program(format: \"cincinnati\")`"
+                            .into(),
+                    );
+                }
+            },
+            _ => None,
+        };
+        Ok(Reply {
+            ok: b.ok && b.sim.as_ref().is_some_and(|s| s.plan.feasible),
+            text,
+            json: b.json(),
+            png: file,
+        })
     }
 
     /// `cam F [sheet]`: a machining document's reply (`forgecad.cam/1`); the file it carries is
@@ -256,8 +329,19 @@ impl Session {
         text.push_str(&match cam.certification() {
             "full" => "certification: full (G1-G6, every position within the machine's travel)\n".to_string(),
             "except G5" => {
-                "certification: except G5 (unchecked: no `at:` on a setup; the spans fit the travel)\n"
-                    .to_string()
+                let unplaced: Vec<String> = cam
+                    .warnings
+                    .iter()
+                    .filter(|w| w.contains("is not placed"))
+                    .cloned()
+                    .collect();
+                format!(
+                    "certification: except G5 (unchecked: no `at:` on a setup; the spans fit the travel)\n{}",
+                    unplaced.iter().map(|w| format!("  {w}\n")).collect::<String>()
+                )
+            }
+            "full except G4 (leftover not computed)" => {
+                "certification: full except G4 (G1-G3, G5, G6; the leftover was not computed)\n".to_string()
             }
             c => format!("certification: {c}\n"),
         });
@@ -274,10 +358,47 @@ impl Session {
         })
     }
 
+    /// `cam F post [PROGRAM]`: the programs' files as the app exports them
+    /// (forge_cam_lang::export), named and placed by their statements, relative to the
+    /// document's folder; refused (typed) when a program is not certified in full, unless
+    /// `allow_uncertified`, which stamps each file's header.
+    pub fn cam_post(
+        path: &Path,
+        which: Option<&str>,
+        allow_uncertified: bool,
+    ) -> Result<Vec<forge_cam_lang::export::NcFile>, String> {
+        let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+        let progs = if forge_turn_lang::is_turning(&src) {
+            let cam = forge_turn_lang::run(&src, &dir);
+            let cert = cam.certification().to_string();
+            cam.programs
+                .iter()
+                .map(|p| forge_cam_lang::export::ProgIn {
+                    name: p.name.clone(),
+                    post: p.post.clone(),
+                    text: p.text.clone(),
+                    error: p.error.clone(),
+                    certified: if p.text.is_none() { "no".into() } else { cert.clone() },
+                    setup: None,
+                })
+                .collect()
+        } else {
+            forge_cam_lang::run(&src, &dir).export_programs()
+        };
+        forge_cam_lang::export::files(&src, &progs, which, allow_uncertified).map_err(|e| e.text())
+    }
+
     /// `cam F` for a turning document (forge-turn-lang): the same reply schema, its program the
-    /// file when every op is certified.
+    /// file when every op is certified. `cam F check`: with the exact in-process stock and the
+    /// G4 leftover (the normal path keeps the stock as columns, sound by construction).
     fn cam_turn(src: &str, dir: &Path, a: &Args) -> Reply {
-        let cam = forge_turn_lang::run(src, dir);
+        let check = a.words.first().is_some_and(|w| w == "check");
+        let cam = if check {
+            forge_turn_lang::run_checked(src, dir)
+        } else {
+            forge_turn_lang::run(src, dir)
+        };
         let mut text = String::new();
         for e in &cam.errors {
             text.push_str(&format!("error: {e}\n"));
@@ -602,7 +723,7 @@ impl Session {
                     ("i3", m.principal[2]),
                 ]
             }
-            ["wall"] => match measure::wall(body, &mesh) {
+            ["wall"] => match forge_wall::wall(body, &mesh) {
                 Some((t, p)) => vec![("wall", t), ("x", p.x), ("y", p.y), ("z", p.z)],
                 None => return Err("no wall found".into()),
             },
@@ -676,6 +797,9 @@ impl Session {
             .is_some_and(|w| forge_lang::meshfile::Format::of(w).is_some())
         {
             return self.export_mesh(a);
+        }
+        if a.words.first().is_some_and(|w| w == "urdf") {
+            return self.export_urdf(a);
         }
         let (run, _) = self.built(&a.file)?;
         if let Some(fmt) = a.words.first().filter(|w| *w == "dxf" || *w == "dwg") {
@@ -866,6 +990,101 @@ impl Session {
             text,
             json: Json::obj(j),
             png: Some(e.bytes),
+        })
+    }
+
+    /// `urdf [tol MM] [angle DEG] [effort N] [velocity V] [travel MM] [cut J].. [package NAME]`:
+    /// the part or assembly as a URDF robot (research/export/urdf.md). The reply's bytes are a
+    /// ZIP of `NAME.urdf` and `meshes/*.stl`; a refusal is typed (`kind`, `fixes`).
+    fn export_urdf(&mut self, a: &Args) -> Result<Reply, String> {
+        use forge_urdf as urdf;
+        let o = urdf::Options::parse(&a.words)?;
+        let (path, src) = self.read(&a.file)?;
+        let name = Path::new(&a.file)
+            .file_stem()
+            .map_or_else(|| "part".into(), |n| n.to_string_lossy().into_owned());
+        let r = self.urdf_of(&path, &src, &name, &o)?;
+        Ok(match r {
+            Ok(e) => Reply {
+                ok: true,
+                text: e.text(),
+                json: e.json(),
+                png: Some(e.zip),
+            },
+            Err(e) => Reply {
+                ok: false,
+                text: format!("error {e}"),
+                json: Json::obj(vec![("ok", false.into()), ("error", e.json())]),
+                png: None,
+            },
+        })
+    }
+
+    /// A part, an assembly or a robot document (`forge_lang::robot`) as URDF: a robot document's
+    /// source is built and its overrides applied. The outer error is the session's (a file it
+    /// cannot read), the inner the export's typed refusal.
+    fn urdf_of(
+        &mut self,
+        path: &Path,
+        src: &str,
+        name: &str,
+        o: &forge_urdf::Options,
+    ) -> Result<Result<forge_urdf::Exported, forge_urdf::UrdfError>, String> {
+        use forge_urdf::{self as urdf, robot};
+        let doc_dir = path.parent().map(Path::to_path_buf);
+        let (robot, src_path, src_text) = if robot::is_robot(src) {
+            let r = match robot::read(src, doc_dir.as_deref()) {
+                Ok(r) => r,
+                Err(es) => {
+                    let t: Vec<String> = es.iter().map(ToString::to_string).collect();
+                    return Ok(Err(urdf::UrdfError::Robot(t.join("; "))));
+                }
+            };
+            let Some(sp) = r.source_path.clone() else {
+                return Ok(urdf::export_unlinked(name, o, &r));
+            };
+            let (sp, text) = self.read(&sp.to_string_lossy())?;
+            (Some(r), sp, text)
+        } else {
+            (None, path.to_path_buf(), src.to_string())
+        };
+        let dir = src_path.parent().map(Path::to_path_buf);
+        let opts = Options {
+            dir: dir.clone(),
+            root: self.root.clone(),
+            render: true,
+            kin: true,
+            overlap: false,
+            ..Options::default()
+        };
+        let run = forge_lang::run(&src_text, opts, Default::default()).0;
+        Ok(urdf::export_robot(&run, name, dir.as_deref(), o, robot.as_ref()))
+    }
+
+    /// `build` of a robot document: the export's report, no file.
+    fn build_robot(&mut self, a: &Args) -> Result<Reply, String> {
+        let (path, src) = self.read(&a.file)?;
+        let name = Path::new(&a.file)
+            .file_stem()
+            .map_or_else(|| "robot".into(), |n| n.to_string_lossy().into_owned());
+        // a build reports what is missing without refusing on it
+        let o = forge_urdf::Options {
+            placeholder: true,
+            ..Default::default()
+        };
+        Ok(match self.urdf_of(&path, &src, &name, &o)? {
+            Ok(e) => Reply {
+                ok: true,
+                text: e.text(),
+                json: e.json(),
+                png: None,
+            },
+            Err(e) => Reply {
+                ok: false,
+                text: format!("error {e}"),
+                json: Json::obj(vec![("ok", false.into()), ("error", e.json())]),
+                png: None,
+            },
         })
     }
 

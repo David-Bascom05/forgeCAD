@@ -1,0 +1,1853 @@
+{
+ "source": "Sumitomo Electric Hardmetal (sumitool.com General Catalogue 2025-2026 PDFs)",
+ "blocked": [],
+ "records": [
+  {
+   "kind": "insert",
+   "iso_code": "CCMT09T304",
+   "id": "CCMT 09T304N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert CCMT 09T304N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=73",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 9.7,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 9.7"
+    },
+    "s": {
+     "v": 3.97,
+     "unit": "mm",
+     "stated": "Thickness S 3.97"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 9.525"
+    },
+    "hole_d": {
+     "v": 4.4,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 4.4"
+    },
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.4"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8115P": "D",
+      "AC8020P": "D",
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CCMT09T308",
+   "id": "CCMT 09T308N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert CCMT 09T308N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=73",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 9.7,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 9.7"
+    },
+    "s": {
+     "v": 3.97,
+     "unit": "mm",
+     "stated": "Thickness S 3.97"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 9.525"
+    },
+    "hole_d": {
+     "v": 4.4,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 4.4"
+    },
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.8"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8115P": "D",
+      "AC8020P": "D",
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CNMG120404",
+   "id": "CNMG 120404N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert CNMG 120404N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=15",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 12.9,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 12.9"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "Thickness S 4.76"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 12.7"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 5.16"
+    },
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.4"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8115P": "D",
+      "AC8020P": "D",
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC810P": "F",
+      "AC820P": "F",
+      "AC830P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC630M": "D",
+      "AC4010K": "D",
+      "AC4015K": "D",
+      "AC4125K": "D",
+      "AC5005S": "D",
+      "AC5015S": "D",
+      "AC5025S": "D",
+      "AC9115T": "D",
+      "AC9125T": "D",
+      "AC520U": "D",
+      "AC530U": "D",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CNMG120408",
+   "id": "CNMG 120408N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert CNMG 120408N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=15",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 12.9,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 12.9"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "Thickness S 4.76"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 12.7"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 5.16"
+    },
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.8"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8115P": "D",
+      "AC8020P": "D",
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC810P": "F",
+      "AC820P": "F",
+      "AC830P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC630M": "D",
+      "AC4010K": "D",
+      "AC4015K": "D",
+      "AC4125K": "D",
+      "AC5005S": "D",
+      "AC5015S": "D",
+      "AC5025S": "D",
+      "AC9115T": "D",
+      "AC9125T": "D",
+      "AC520U": "D",
+      "AC530U": "D",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DCMT11T304",
+   "id": "DCMT 11T304N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert DCMT 11T304N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=84",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 11.6,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 11.6"
+    },
+    "s": {
+     "v": 3.97,
+     "unit": "mm",
+     "stated": "Thickness S 3.97"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 9.525"
+    },
+    "hole_d": {
+     "v": 4.4,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 4.4"
+    },
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.4"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC9115T": "D",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DCMT11T308",
+   "id": "DCMT 11T308N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert DCMT 11T308N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=84",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 11.6,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 11.6"
+    },
+    "s": {
+     "v": 3.97,
+     "unit": "mm",
+     "stated": "Thickness S 3.97"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 9.525"
+    },
+    "hole_d": {
+     "v": 4.4,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 4.4"
+    },
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.8"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC9115T": "D",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150404",
+   "id": "DNMG 150404N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert DNMG 150404N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=26",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 15.5,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 15.5"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "Thickness S 4.76"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 12.7"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 5.16"
+    },
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.4"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC810P": "F",
+      "AC820P": "F",
+      "AC830P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC630M": "D",
+      "AC4010K": "D",
+      "AC4015K": "D",
+      "AC4125K": "D",
+      "AC5005S": "D",
+      "AC5015S": "D",
+      "AC5025S": "D",
+      "AC520U": "D",
+      "AC530U": "D",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150408",
+   "id": "DNMG 150408N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert DNMG 150408N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=26",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 15.5,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 15.5"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "Thickness S 4.76"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 12.7"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 5.16"
+    },
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.8"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC810P": "F",
+      "AC820P": "F",
+      "AC830P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC630M": "D",
+      "AC4010K": "D",
+      "AC4015K": "D",
+      "AC4125K": "D",
+      "AC5005S": "D",
+      "AC5015S": "D",
+      "AC5025S": "D",
+      "AC520U": "D",
+      "AC530U": "D",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150604",
+   "id": "DNMG 150604N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert DNMG 150604N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=29",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 15.5,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 15.5"
+    },
+    "s": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Thickness S 6.35"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 12.7"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 5.16"
+    },
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.4"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8115P": "D",
+      "AC8020P": "D",
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC820P": "F",
+      "AC830P": "F",
+      "AC4010K": "D",
+      "AC4015K": "D",
+      "AC4125K": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150608",
+   "id": "DNMG 150608N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert DNMG 150608N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=29",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 15.5,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 15.5"
+    },
+    "s": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Thickness S 6.35"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 12.7"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 5.16"
+    },
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.8"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8115P": "D",
+      "AC8020P": "D",
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC810P": "F",
+      "AC820P": "F",
+      "AC830P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC630M": "D",
+      "AC4010K": "D",
+      "AC4015K": "D",
+      "AC4125K": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "TNMG160404",
+   "id": "TNMG 160404N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert TNMG 160404N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=50",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 16.5,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 16.5"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "Thickness S 4.76"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 9.525"
+    },
+    "hole_d": {
+     "v": 3.81,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 3.81"
+    },
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.4"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC810P": "F",
+      "AC820P": "F",
+      "AC830P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC630M": "D",
+      "AC4010K": "D",
+      "AC4015K": "D",
+      "AC4125K": "D",
+      "AC5005S": "D",
+      "AC5015S": "D",
+      "AC5025S": "D",
+      "AC520U": "D",
+      "AC530U": "D",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "TNMG160408",
+   "id": "TNMG 160408N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert TNMG 160408N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=50",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 16.5,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 16.5"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "Thickness S 4.76"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 9.525"
+    },
+    "hole_d": {
+     "v": 3.81,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 3.81"
+    },
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.8"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC810P": "F",
+      "AC820P": "F",
+      "AC830P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC630M": "D",
+      "AC4010K": "D",
+      "AC4015K": "D",
+      "AC4125K": "D",
+      "AC5005S": "D",
+      "AC5015S": "D",
+      "AC5025S": "D",
+      "AC520U": "D",
+      "AC530U": "D",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "VBMT160404",
+   "id": "VBMT 160404N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert VBMT 160404N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=118",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 16.6,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 16.6"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "Thickness S 4.76"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 9.525"
+    },
+    "hole_d": {
+     "v": 4.4,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 4.4"
+    },
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.4"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "VNMG160404",
+   "id": "VNMG 160404N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert VNMG 160404N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=59",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 16.6,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 16.6"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "Thickness S 4.76"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 9.525"
+    },
+    "hole_d": {
+     "v": 3.81,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 3.81"
+    },
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.4"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8115P": "D",
+      "AC8020P": "D",
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC810P": "F",
+      "AC820P": "F",
+      "AC830P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC630M": "D",
+      "AC4010K": "D",
+      "AC4015K": "D",
+      "AC4125K": "D",
+      "AC5005S": "D",
+      "AC5015S": "D",
+      "AC5025S": "D",
+      "AC520U": "D",
+      "AC530U": "D",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "VNMG160408",
+   "id": "VNMG 160408N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert VNMG 160408N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=59",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 16.6,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 16.6"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "Thickness S 4.76"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 9.525"
+    },
+    "hole_d": {
+     "v": 3.81,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 3.81"
+    },
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.8"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8115P": "D",
+      "AC8020P": "D",
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC810P": "F",
+      "AC820P": "F",
+      "AC830P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC630M": "D",
+      "AC4010K": "D",
+      "AC4015K": "D",
+      "AC4125K": "D",
+      "AC5005S": "D",
+      "AC5015S": "D",
+      "AC5025S": "D",
+      "AC520U": "D",
+      "AC530U": "D",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "WNMG080404",
+   "id": "WNMG 080404N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert WNMG 080404N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=64",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 8.7,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 8.7"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "Thickness S 4.76"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 12.7"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 5.16"
+    },
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.4"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC810P": "F",
+      "AC820P": "F",
+      "AC830P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC630M": "D",
+      "AC4010K": "D",
+      "AC4015K": "D",
+      "AC4125K": "D",
+      "AC5005S": "D",
+      "AC5015S": "D",
+      "AC5025S": "D",
+      "AC520U": "D",
+      "AC530U": "D",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "WNMG080408",
+   "id": "WNMG 080408N-GU",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "IGETALLOY indexable insert WNMG 080408N-GU (General Catalogue 2025-2026, ch. B)",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/b.pdf#page=64",
+   "taken": "2026-11-24",
+   "values": {
+    "l": {
+     "v": 8.7,
+     "unit": "mm",
+     "stated": "Cutting Edge Length L 8.7"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "Thickness S 4.76"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Inscribed Circle IC 12.7"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "Hole Dia. D1 5.16"
+    },
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "Corner Radius RE 0.8"
+    },
+    "chipbreaker": {
+     "v": "GU",
+     "unit": "text",
+     "stated": "GU"
+    },
+    "grade_marks": {
+     "v": {
+      "AC8025P": "D",
+      "AC8035P": "D",
+      "AC8015P": "F",
+      "AC810P": "F",
+      "AC820P": "F",
+      "AC830P": "F",
+      "AC6020M": "D",
+      "AC6030M": "D",
+      "AC6135M": "D",
+      "AC6145M": "D",
+      "AC6040M": "F",
+      "AC630M": "D",
+      "AC4010K": "D",
+      "AC4015K": "D",
+      "AC4125K": "D",
+      "AC5005S": "D",
+      "AC5015S": "D",
+      "AC5025S": "D",
+      "AC520U": "D",
+      "AC530U": "D",
+      "T1500Z": "D",
+      "T2500Z": "D",
+      "T1500A": "D"
+     },
+     "unit": "text",
+     "stated": "stock-mark glyphs as extracted by pdftotext from the grade columns; catalogue legend (B1): \"Standard stocked item\" and \"To be replaced with the new item\" both extract as D, \"F mark: To be replaced by a new product, made to order, or discontinued\", \"Q mark: Not available\", blank = made-to-order"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "grade availability: per-grade marks kept raw (glyph letters); meaning of D is ambiguous in the extracted legend",
+    "clearance angle and recommended vc/f/ap not stated in this table row"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "PCLNR/L2020K12",
+   "id": "PCLN R/L2020K12",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "SEC lever-lock external holder PCLN type",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/c.pdf#page=11",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "H 20"
+    },
+    "b": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "B 20"
+    },
+    "l1": {
+     "v": 125.0,
+     "unit": "mm",
+     "stated": "LF 125"
+    },
+    "f": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "WF 25"
+    },
+    "hf": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "HF 20"
+    },
+    "lh": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "LH 28"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (approach angle shown in the table figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R L (both hands listed in one row)"
+    },
+    "insert": {
+     "v": "CN¨¨1204",
+     "unit": "text",
+     "stated": "CN¨¨1204"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "insert assigned from the row group printed beside PCLN R/L2525M12"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "PCLNR/L2525M12",
+   "id": "PCLN R/L2525M12",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "SEC lever-lock external holder PCLN type",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/c.pdf#page=11",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "H 25"
+    },
+    "b": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "B 25"
+    },
+    "l1": {
+     "v": 150.0,
+     "unit": "mm",
+     "stated": "LF 150"
+    },
+    "f": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "WF 32"
+    },
+    "hf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "HF 25"
+    },
+    "lh": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "LH 28"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (approach angle shown in the table figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R L (both hands listed in one row)"
+    },
+    "insert": {
+     "v": "CN¨¨1204",
+     "unit": "text",
+     "stated": "CN¨¨1204"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "DDJNR/L2525M15",
+   "id": "DDJN R/L2525M15",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "SEC double-clamp external holder DDJN type",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/c.pdf#page=14",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "H 25"
+    },
+    "b": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "B 25"
+    },
+    "l1": {
+     "v": 150.0,
+     "unit": "mm",
+     "stated": "LF 150"
+    },
+    "f": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "WF 32"
+    },
+    "hf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "HF 25"
+    },
+    "lh": {
+     "v": 38.0,
+     "unit": "mm",
+     "stated": "LH 38"
+    },
+    "kr": {
+     "v": 93,
+     "unit": "deg",
+     "stated": "93° (approach angle shown in the table figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R L (both hands listed in one row)"
+    },
+    "insert": {
+     "v": "DN¨¨1504 (row group; DDJN R/L2525M15E takes DN¨¨1506)",
+     "unit": "text",
+     "stated": "DN¨¨1504 (row group; DDJN R/L2525M15E takes DN¨¨1506)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "insert size assignment read from layout grouping, not certain"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "PDJNR/L2525M15",
+   "id": "PDJN R/L2525M1504",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "SEC lever-lock external holder PDJN type",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/c.pdf#page=16",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "H 25"
+    },
+    "b": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "B 25"
+    },
+    "l1": {
+     "v": 150.0,
+     "unit": "mm",
+     "stated": "LF 150"
+    },
+    "f": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "WF 32"
+    },
+    "hf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "HF 25"
+    },
+    "lh": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "LH 35"
+    },
+    "kr": {
+     "v": 93,
+     "unit": "deg",
+     "stated": "93° (approach angle shown in the table figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R L (both hands listed in one row)"
+    },
+    "insert": {
+     "v": "DN¨¨1504",
+     "unit": "text",
+     "stated": "DN¨¨1504"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "Sumitomo designation carries insert thickness (1504); a 1506 variant PDJN R/L2525M1506 is also listed"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "SVJCR/L2020K16",
+   "id": "SVJC R/L2020K16",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "SEC screw-on external holder SVJC type",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/c.pdf#page=40",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "H 20"
+    },
+    "b": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "B 20"
+    },
+    "l1": {
+     "v": 125.0,
+     "unit": "mm",
+     "stated": "LF 125"
+    },
+    "f": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "WF 25"
+    },
+    "hf": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "HF 20"
+    },
+    "lh": {
+     "v": 41.0,
+     "unit": "mm",
+     "stated": "LH 41"
+    },
+    "wf2": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "WF2 5"
+    },
+    "kr": {
+     "v": 93,
+     "unit": "deg",
+     "stated": "93° (approach angle shown in the table figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R L (both hands listed in one row)"
+    },
+    "insert": {
+     "v": "VC¨¨1604",
+     "unit": "text",
+     "stated": "VC¨¨1604"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "SVJC (7° positive VC insert) listed; Sumitomo has no SVJB in this chapter",
+    "WF2 meaning not defined in extracted text"
+   ]
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "S16R-SCLCR/L09",
+   "id": "S16R-SCLC R/L09T3-18",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "SEC-Boring Bar S-SCLC type",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/e.pdf#page=18",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "DMIN 18"
+    },
+    "dmm": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "DCON 16"
+    },
+    "h": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "H 15"
+    },
+    "l1": {
+     "v": 200.0,
+     "unit": "mm",
+     "stated": "LF 200"
+    },
+    "f": {
+     "v": 9.0,
+     "unit": "mm",
+     "stated": "WF 9.0"
+    },
+    "lhd": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "LHD 30"
+    },
+    "gamf": {
+     "v": -10.0,
+     "unit": "deg",
+     "stated": "GAMF -10°"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (approach angle shown in the table figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R L (both hands listed in one row)"
+    },
+    "insert": {
+     "v": "CC¨¨09T3",
+     "unit": "text",
+     "stated": "CC¨¨09T3"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "S20S-SCLCR/L09",
+   "id": "S20S-SCLC R/L09T3-22",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "SEC-Boring Bar S-SCLC type",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/e.pdf#page=18",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 22.0,
+     "unit": "mm",
+     "stated": "DMIN 22"
+    },
+    "dmm": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "DCON 20"
+    },
+    "h": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "H 18"
+    },
+    "l1": {
+     "v": 250.0,
+     "unit": "mm",
+     "stated": "LF 250"
+    },
+    "f": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "WF 11.0"
+    },
+    "lhd": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "LHD 30"
+    },
+    "gamf": {
+     "v": -8.0,
+     "unit": "deg",
+     "stated": "GAMF -8°"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (approach angle shown in the table figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R L (both hands listed in one row)"
+    },
+    "insert": {
+     "v": "CC¨¨09T3",
+     "unit": "text",
+     "stated": "CC¨¨09T3"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "S25T-SCLCR/L09",
+   "id": "S25T-SCLC R/L09T3-27",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "SEC-Boring Bar S-SCLC type",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/e.pdf#page=18",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 27.0,
+     "unit": "mm",
+     "stated": "DMIN 27"
+    },
+    "dmm": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "DCON 25"
+    },
+    "h": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "H 23"
+    },
+    "l1": {
+     "v": 300.0,
+     "unit": "mm",
+     "stated": "LF 300"
+    },
+    "f": {
+     "v": 13.5,
+     "unit": "mm",
+     "stated": "WF 13.5"
+    },
+    "lhd": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "LHD 35"
+    },
+    "gamf": {
+     "v": -6.0,
+     "unit": "deg",
+     "stated": "GAMF -6°"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (approach angle shown in the table figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R L (both hands listed in one row)"
+    },
+    "insert": {
+     "v": "CC¨¨09T3",
+     "unit": "text",
+     "stated": "CC¨¨09T3"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "S32S-PCLNR/L12",
+   "id": "S32S-PCLN R/L1204-40",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "SEC-Boring Bar S-PCLN type",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/e.pdf#page=24",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "DMIN 40"
+    },
+    "dmm": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "DCON 32"
+    },
+    "h": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "H 30"
+    },
+    "l1": {
+     "v": 250.0,
+     "unit": "mm",
+     "stated": "LF 250"
+    },
+    "f": {
+     "v": 22.0,
+     "unit": "mm",
+     "stated": "WF 22.0"
+    },
+    "lhd": {
+     "v": 29.0,
+     "unit": "mm",
+     "stated": "LHD 29"
+    },
+    "e1": {
+     "v": 7.0,
+     "unit": "mm",
+     "stated": "E1 7.0"
+    },
+    "gamf": {
+     "v": -10.0,
+     "unit": "deg",
+     "stated": "GAMF -10°"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (approach angle shown in the table figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R L (both hands listed in one row)"
+    },
+    "insert": {
+     "v": "CN¨¨1204",
+     "unit": "text",
+     "stated": "CN¨¨1204"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "E1 (offset) kept as stated"
+   ]
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "S16Q-SDUCR/L07",
+   "id": "S16Q-SDUC R/L0702-20",
+   "maker": "Sumitomo Electric Hardmetal",
+   "name": "SEC-Boring Bar S-SDUC type",
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/e.pdf#page=26",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "DMIN 20"
+    },
+    "dmm": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "DCON 16"
+    },
+    "h": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "H 15"
+    },
+    "l1": {
+     "v": 180.0,
+     "unit": "mm",
+     "stated": "LF 180"
+    },
+    "f": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "WF 11.0"
+    },
+    "e1": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "E1 4.0"
+    },
+    "gamf": {
+     "v": -6.0,
+     "unit": "deg",
+     "stated": "GAMF -6°"
+    },
+    "kr": {
+     "v": 93,
+     "unit": "deg",
+     "stated": "93° (approach angle shown in the table figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R L (both hands listed in one row)"
+    },
+    "insert": {
+     "v": "DC¨¨0702",
+     "unit": "text",
+     "stated": "DC¨¨0702"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "LHD cell is an unreadable glyph (extracted as Q); not recorded"
+   ]
+  }
+ ],
+ "notes": [
+  "Catalogue chapters B (inserts), C (external holders), E (boring bars) from https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/",
+  "One chipbreaker per ISO size chosen (preference GU, SU, LU, MU, GE, SE, EG, FL).",
+  "'¨¨' in insert codes is the catalogue's placeholder for the omitted tolerance/chipbreaker letters, kept as printed."
+ ]
+}

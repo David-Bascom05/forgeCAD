@@ -1,0 +1,20 @@
+# plane_cone/apex_on_top_from_above/Add (scoreboard degen_plane_cone/0).
+# A cone standing on its apex at the centre of a box's top. The cone's nappe plane is the top.
+# Exact reference: non-manifold at the apex (its link is not a disc: the cone's cap and the
+# box's half-space meet only at the apex). Kernel: builds 32 261.8 mm³ (box 32 000 + cone
+# 261.8), one valid body; it must refuse ZeroThickness.
+shared L = 40
+shared H = 20
+shared r = 5
+shared h = 10
+
+sketch plan(on: xy) {
+  outline = rect(corner: (-L / 2, -L / 2), size: (L, L))
+}
+base = extrude(plan, H)
+centre = workplane(offset: base.side(plan.outline[0]), d: -L / 2)
+sketch prof(on: centre) {
+  tri = poly([(L / 2, H), (L / 2 + r, H + h), (L / 2, H + h)])
+  ax = line((L / 2, H), (L / 2, H + h), construction: true)
+}
+tip = revolve(prof.tri, axis: prof.ax, angle: 360deg)

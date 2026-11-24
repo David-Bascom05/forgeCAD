@@ -153,6 +153,12 @@ impl AppTools {
 /// Each tool: its name, what it does, its parameters (JSON Schema properties) and the required ones.
 pub const NAMES: &[(&str, &str, &str, &[&str])] = &[
     (
+        "environment",
+        "Enter an environment of the open document (manufacture, machine-builder, thermoform, flat-pattern, bendsim, robot, render, drawing, simulation) by key or name, or `exit` to go back to the design. With no name: the one active and each one's availability (and why not). An environment replaces the ribbon with its own tabs; one at a time.",
+        r#"{"name":{"type":"string"}}"#,
+        &[],
+    ),
+    (
         "tree",
         "The browser of the open document: each row's id, kind and whether it's shown. An assembly lists its top-level parts, subassemblies and patterns; `filter` lists every row (at any depth) whose id or name has it; `relationships: true` adds joints and constraints.",
         r#"{"filter":{"type":"string"},"relationships":{"type":"boolean"}}"#,

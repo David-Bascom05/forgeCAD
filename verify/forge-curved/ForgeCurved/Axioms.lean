@@ -152,7 +152,6 @@ import ForgeCurved
 #print axioms ForgeCurved.BodyModel.room_in_or_out
 #print axioms ForgeCurved.BodyModel.denote_refines
 #print axioms ForgeCurved.BodyModel.bounds_unique
-#print axioms ForgeCurved.BodyModel.exactOf_isolated
 #print axioms ForgeCurved.OnEdge.branch_of_sep
 #print axioms ForgeCurved.OnEdge.branch_of_sep_delta
 #print axioms ForgeCurved.OnEdge.branch_of_empty
@@ -169,3 +168,17 @@ import ForgeCurved
 #print axioms ForgeCurved.G14.kept_iff
 #print axioms ForgeCurved.G14.extra_not_end
 #print axioms ForgeCurved.G14.edge_cut_not_kept
+#print axioms ForgeCurved.PifNear.whole_of_outside
+#print axioms ForgeCurved.PifNear.touch_inside_on_eq_outside
+#print axioms ForgeCurved.PifNear.touch_inside_inside_differs
+#print axioms ForgeCurved.PifNear.touch_inside_on_ne_outside
+#print axioms ForgeCurved.PlaceMerge.merge_within
+#print axioms ForgeCurved.PlaceMerge.zero_unique_of_deriv_ne
+#print axioms ForgeCurved.PlaceMerge.rootUnique_of_param
+#print axioms ForgeCurved.BlendNode.h_zero
+#print axioms ForgeCurved.BlendNode.cap_section
+#print axioms ForgeCurved.BlendNode.h_strictMonoOn
+#print axioms ForgeCurved.BlendNode.one_branch
+#print axioms ForgeCurved.BlendNode.branch_increasing
+#print axioms ForgeCurved.BlendNode.branch_meets_springs_only_at_node
+#print axioms ForgeCurved.BlendNode.tubes_one_branch

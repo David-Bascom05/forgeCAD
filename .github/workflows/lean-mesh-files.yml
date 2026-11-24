@@ -52,6 +52,7 @@ jobs:
       - name: build and axioms
         if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         run: |
+          set -o pipefail
           lake build
           if [ "$GITHUB_EVENT_NAME" = push ]; then exit 0; fi  # main: the build above is what is saved; the checks below ran on the pull request
           lake env lean Axioms.lean | tee axioms.txt

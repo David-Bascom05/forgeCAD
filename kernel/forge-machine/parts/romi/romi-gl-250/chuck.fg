@@ -1,0 +1,13 @@
+# romi-gl-250 chuck: the published chuck size plus jaw stand-out (estimate); length an estimate.
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared d = -110
+shared u = 0
+shared v = 0
+shared r = 97.55
+shared h = 110
+
+sketch plan(on: offset(xy, d)) {
+  outline = circle((u, v), r)
+}
+body = extrude(plan.outline, h)

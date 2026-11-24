@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 forge-lang = { path = "../forge-lang" }
 forge-machine = { path = "../../kernel/forge-machine" }
+forge-machine-builder = { path = "../forge-machine-builder" }
 forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-math = { path = "../../kernel/forge-math" }
 

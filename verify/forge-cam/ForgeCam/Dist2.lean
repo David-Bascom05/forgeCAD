@@ -88,8 +88,17 @@ def oneSide (a u c v : K × K) : Prop :=
 
 instance (a u c v : K × K) : Decidable (oneSide a u c v) := by unfold oneSide; infer_instance
 
+/-- Both ends of the segment (c, c + v) strictly beyond the segment (a, a + u) along u: past
+its end (⟨u, · − a⟩ > |u|²) or before its start (< 0). A line across u separates them; this is
+what decides collinear segments, where `oneSide` cannot. -/
+def beyond (a u c v : K × K) : Prop :=
+  (nsq u < dot u (c - a) ∧ nsq u < dot u (c + v - a)) ∨ (dot u (c - a) < 0 ∧ dot u (c + v - a) < 0)
+
+instance (a u c v : K × K) : Decidable (beyond a u c v) := by unfold beyond; infer_instance
+
 /-- slab.rs's `apart`. -/
-def apart (a u c v : K × K) : Prop := oneSide a u c v ∨ oneSide c v a u
+def apart (a u c v : K × K) : Prop :=
+  oneSide a u c v ∨ oneSide c v a u ∨ beyond a u c v ∨ beyond c v a u
 
 instance (a u c v : K × K) : Decidable (apart a u c v) := by unfold apart; infer_instance
 
@@ -119,11 +128,39 @@ theorem disjoint_of_oneSide {a u c v : K × K} (h : oneSide a u c v) {τ σ : K}
     · nlinarith
     · nlinarith [mul_neg_of_pos_of_neg hσ q, mul_nonpos_of_nonneg_of_nonpos (sub_nonneg.mpr hσ1) p.le]
 
+theorem dot_pt (a u : K × K) (c v : K × K) (τ : K) :
+    dot u (pt c v τ - a) = (1 - τ) * dot u (c - a) + τ * dot u (c + v - a) := by
+  simp only [dot, pt, Prod.fst_sub, Prod.snd_sub, Prod.fst_add, Prod.snd_add]; ring
+
+/-- Segments one beyond the other share no point. -/
+theorem disjoint_of_beyond {a u c v : K × K} (h : beyond a u c v) {τ σ : K} (hτ0 : 0 ≤ τ)
+    (hτ1 : τ ≤ 1) (hσ0 : 0 ≤ σ) (hσ1 : σ ≤ 1) : pt a u τ ≠ pt c v σ := by
+  intro he
+  have h1 : dot u (pt a u τ - a) = τ * nsq u := by
+    simp only [dot, nsq, pt, Prod.fst_sub, Prod.snd_sub]; ring
+  have hn : 0 ≤ nsq u := nsq_nonneg u
+  rw [he, dot_pt] at h1
+  have hs : 0 ≤ 1 - σ := sub_nonneg.mpr hσ1
+  rcases h with ⟨p, q⟩ | ⟨p, q⟩
+  · -- the far side: (1 − σ)·d₁ + σ·d₂ > |u|² ≥ τ|u|²
+    have : nsq u < (1 - σ) * dot u (c - a) + σ * dot u (c + v - a) := by
+      nlinarith [mul_le_mul_of_nonneg_left p.le hs, mul_le_mul_of_nonneg_left q.le hσ0,
+        mul_lt_mul_of_pos_left p (lt_of_le_of_ne hs (Ne.symm (by intro h0; nlinarith))),
+        mul_lt_mul_of_pos_left q (lt_of_le_of_ne hσ0 (Ne.symm (by intro h0; nlinarith)))]
+    nlinarith [mul_le_mul_of_nonneg_right hτ1 hn]
+  · have : (1 - σ) * dot u (c - a) + σ * dot u (c + v - a) < 0 := by
+      rcases hσ0.eq_or_lt with rfl | hσ
+      · nlinarith
+      · nlinarith [mul_neg_of_pos_of_neg hσ q, mul_nonpos_of_nonneg_of_nonpos hs p.le]
+    nlinarith [mul_nonneg hτ0 hn]
+
 theorem disjoint_of_apart {a u c v : K × K} (h : apart a u c v) {τ σ : K} (hτ0 : 0 ≤ τ)
     (hτ1 : τ ≤ 1) (hσ0 : 0 ≤ σ) (hσ1 : σ ≤ 1) : pt a u τ ≠ pt c v σ := by
-  rcases h with h | h
+  rcases h with h | h | h | h
   · exact disjoint_of_oneSide h hσ0 hσ1
   · exact fun he => disjoint_of_oneSide h hτ0 hτ1 (τ := σ) he.symm
+  · exact disjoint_of_beyond h hτ0 hτ1 hσ0 hσ1
+  · exact fun he => disjoint_of_beyond h hσ0 hσ1 hτ0 hτ1 he.symm
 
 end field
 
@@ -433,5 +470,10 @@ def segSegLoQ (a u c v : ℚ × ℚ) : ℚ := segSegLo a u c v
 #guard segSegLoQ (0, 0) (1, 0) (0, 3) (1, 0) = 9
 #guard segSegLoQ (0, 0) (2, 2) (0, 2) (2, -2) = 0
 #guard segSegLoQ (0, 0) (1, 0) (2, 1) (0, 1) = 2
+-- Collinear and apart (CAM-TURN's case): the gap, squared, where the low end was 0.
+#guard segSegLoQ (0, 0) (1, 0) (3, 0) (1, 0) = 4
+#guard segSegLoQ (0, 0) (1, 0) (-3, 0) (1, 0) = 4
+-- Collinear and overlapping: 0.
+#guard segSegLoQ (0, 0) (2, 0) (1, 0) (2, 0) = 0
 
 end ForgeCam.Dist2

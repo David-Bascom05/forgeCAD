@@ -31,7 +31,8 @@ async function browser() {
 }
 
 /// A page with its console kept (and any panic or page error failing the test at once).
-async function page(b, url) {
+/// A page at `url`, its problems kept; `prepare(p)` runs before it loads (a route to hold, say).
+async function page(b, url, prepare) {
   const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
   p.problems = [];
   const heard = (m) => {
@@ -43,6 +44,7 @@ async function page(b, url) {
   // the threaded build's Web Workers: a panic or a death on one is the page's too
   p.on("worker", (w) => w.on?.("console", heard));
   p.on("pageerror", (e) => p.problems.push(`page error: ${e.message}`));
+  await prepare?.(p);
   await p.goto(url);
   return p;
 }
