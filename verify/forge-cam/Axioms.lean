@@ -4,6 +4,8 @@ import ForgeCam
 #print axioms ForgeCam.sd_hyp_eq_sdRZ
 #print axioms ForgeCam.clear_of_frontier
 #print axioms ForgeCam.clearFace_sound
+#print axioms ForgeCam.clearFace_subset
+#print axioms ForgeCam.wall_hull_mem
 #print axioms ForgeCam.hyp_preconnected
 #print axioms ForgeCam.certified_clear
 #print axioms ForgeCam.sd_le_sd_add_dist
@@ -107,4 +109,12 @@ import ForgeCam
 #print axioms ForgeCam.Turn.zono_eq_hull
 #print axioms ForgeCam.Turn.smear_hull
 #print axioms ForgeCam.Turn.eroded_gap
+#print axioms ForgeCam.sd_ge_of_halfspace
 #print axioms ForgeCam.Turn.rect_in_convex
+#print axioms ForgeCam.Quad.quad_mul
+#print axioms ForgeCam.Quad.quad_div
+#print axioms ForgeCam.Quad.quad_sign_rat
+#print axioms ForgeCam.Quad.quad_sign_root
+#print axioms ForgeCam.Quad.quad_sign_same
+#print axioms ForgeCam.Quad.quad_sign_opp
+#print axioms ForgeCam.Quad.quad_sign_opp'

@@ -14,3 +14,5 @@ import ForgeCam.Shadow
 import ForgeCam.PathEnds
 import ForgeCam.Heights
 import ForgeCam.Turn
+import ForgeCam.Halfspace
+import ForgeCam.Quad

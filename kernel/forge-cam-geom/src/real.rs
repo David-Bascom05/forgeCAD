@@ -36,19 +36,17 @@ impl Dy {
         if mag.is_zero() {
             return Dy::zero();
         }
-        // strip trailing zero bits
-        let mut k = 0u64;
-        while !mag.bit(k) {
-            k += 1;
-        }
+        // strip trailing zero bits (counted a limb at a time, shifted in place)
+        let k = mag.trailing_zeros();
+        let mut mag = mag;
         if k > 0 {
-            return Dy {
-                neg,
-                mag: mag.shr(k),
-                exp: exp + k as i64,
-            };
+            mag.shr_assign(k);
         }
-        Dy { neg, mag, exp }
+        Dy {
+            neg,
+            mag,
+            exp: exp + k as i64,
+        }
     }
 
     /// The exact value of a finite f64.
@@ -84,18 +82,31 @@ impl Dy {
         }
     }
 
-    fn add_mag(a: &Dy, b: &Dy) -> Dy {
-        // same sign assumed by the caller when used for magnitudes
+    /// a + b, with b's sign flipped when `flip` (a − b without negating a copy of b).
+    fn add_mag(a: &Dy, b: &Dy, flip: bool) -> Dy {
+        let bneg = b.neg != flip;
         let e = if a.exp < b.exp { a.exp } else { b.exp };
-        let am = a.mag.shl((a.exp - e) as u64);
-        let bm = b.mag.shl((b.exp - e) as u64);
-        if a.neg == b.neg {
-            return Dy::norm(a.neg, am.add(&bm), e);
+        // only the operand with the larger exponent is shifted (the other is used as it is)
+        let (sa, sb);
+        let am: &Nat = if a.exp == e {
+            &a.mag
+        } else {
+            sa = a.mag.shl((a.exp - e) as u64);
+            &sa
+        };
+        let bm: &Nat = if b.exp == e {
+            &b.mag
+        } else {
+            sb = b.mag.shl((b.exp - e) as u64);
+            &sb
+        };
+        if a.neg == bneg {
+            return Dy::norm(a.neg, am.add(bm), e);
         }
-        match am.cmp(&bm) {
+        match am.cmp(bm) {
             Ordering::Equal => Dy::zero(),
-            Ordering::Greater => Dy::norm(a.neg, am.sub(&bm), e),
-            Ordering::Less => Dy::norm(b.neg, bm.sub(&am), e),
+            Ordering::Greater => Dy::norm(a.neg, am.sub(bm), e),
+            Ordering::Less => Dy::norm(bneg, bm.sub(am), e),
         }
     }
 
@@ -106,11 +117,17 @@ impl Dy {
         if o.is_zero() {
             return self.clone();
         }
-        Dy::add_mag(self, o)
+        Dy::add_mag(self, o, false)
     }
 
     pub fn sub(&self, o: &Dy) -> Dy {
-        self.add(&o.neg())
+        if o.is_zero() {
+            return self.clone();
+        }
+        if self.is_zero() {
+            return o.neg();
+        }
+        Dy::add_mag(self, o, true)
     }
 
     pub fn mul(&self, o: &Dy) -> Dy {
@@ -238,6 +255,171 @@ impl Dy {
 }
 
 /// The f64 nearest a dyadic (ties to even, by choosing between the two directed roundings).
+/// An exact rational n / d, d > 0 (`Ctx::exact_sign`).
+#[derive(Clone, Debug)]
+struct Q {
+    n: Dy,
+    d: Dy,
+}
+
+impl Q {
+    fn zero() -> Q {
+        Q::dy(Dy::zero())
+    }
+    fn one() -> Q {
+        Q::dy(Dy::from_f64(1.0))
+    }
+    fn dy(n: Dy) -> Q {
+        Q {
+            n,
+            d: Dy::from_f64(1.0),
+        }
+    }
+    fn is_zero(&self) -> bool {
+        self.n.is_zero()
+    }
+    fn sign(&self) -> Ordering {
+        if self.n.is_zero() {
+            Ordering::Equal
+        } else if self.n.neg {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }
+    }
+    fn neg(&self) -> Q {
+        Q {
+            n: self.n.neg(),
+            d: self.d.clone(),
+        }
+    }
+    fn add(&self, o: &Q) -> Q {
+        if self.d == o.d {
+            return Q {
+                n: self.n.add(&o.n),
+                d: self.d.clone(),
+            };
+        }
+        Q {
+            n: self.n.mul(&o.d).add(&o.n.mul(&self.d)),
+            d: self.d.mul(&o.d),
+        }
+    }
+    fn mul(&self, o: &Q) -> Q {
+        Q {
+            n: self.n.mul(&o.n),
+            d: self.d.mul(&o.d),
+        }
+    }
+    /// None for a zero divisor.
+    fn div(&self, o: &Q) -> Option<Q> {
+        if o.n.is_zero() {
+            return None;
+        }
+        // keep the denominator positive
+        let (n, d) = (self.n.mul(&o.d), self.d.mul(&o.n));
+        Some(if d.neg {
+            Q {
+                n: n.neg(),
+                d: d.neg(),
+            }
+        } else {
+            Q { n, d }
+        })
+    }
+    fn bits(&self) -> u64 {
+        self.n.mag.bits().max(self.d.mag.bits())
+    }
+}
+
+/// a + b√c, c the one radicand of `Ctx::exact_sign` (b is 0 until its root is met).
+#[derive(Clone, Debug)]
+struct Quad {
+    a: Q,
+    b: Q,
+}
+
+impl Quad {
+    fn rat(a: Q) -> Quad {
+        Quad { a, b: Q::zero() }
+    }
+    fn neg(&self) -> Quad {
+        Quad {
+            a: self.a.neg(),
+            b: self.b.neg(),
+        }
+    }
+    fn add(&self, o: &Quad) -> Quad {
+        Quad {
+            a: self.a.add(&o.a),
+            b: if self.b.is_zero() {
+                o.b.clone()
+            } else if o.b.is_zero() {
+                self.b.clone()
+            } else {
+                self.b.add(&o.b)
+            },
+        }
+    }
+    /// (a1 + b1√c)(a2 + b2√c) = a1 a2 + b1 b2 c + (a1 b2 + a2 b1)√c.
+    fn mul(&self, o: &Quad, c: Option<&Q>) -> Quad {
+        match c {
+            Some(c) if !(self.b.is_zero() && o.b.is_zero()) => Quad {
+                a: self.a.mul(&o.a).add(&self.b.mul(&o.b).mul(c)),
+                b: self.a.mul(&o.b).add(&o.a.mul(&self.b)),
+            },
+            _ => Quad::rat(self.a.mul(&o.a)),
+        }
+    }
+    /// x / y = x (a2 − b2√c) / (a2² − b2² c); None where that norm is 0 (y is 0, or √c is
+    /// rational and y a multiple of a2 − b2√c's conjugate).
+    fn div(&self, o: &Quad, c: Option<&Q>) -> Option<Quad> {
+        if o.b.is_zero() {
+            return Some(Quad {
+                a: self.a.div(&o.a)?,
+                b: if self.b.is_zero() {
+                    Q::zero()
+                } else {
+                    self.b.div(&o.a)?
+                },
+            });
+        }
+        let c = c?;
+        let norm = o.a.mul(&o.a).add(&o.b.mul(&o.b).mul(c).neg());
+        let conj = Quad {
+            a: o.a.clone(),
+            b: o.b.neg(),
+        };
+        let num = self.mul(&conj, Some(c));
+        Some(Quad {
+            a: num.a.div(&norm)?,
+            b: num.b.div(&norm)?,
+        })
+    }
+    /// The exact sign of a + b√c (√c ≥ 0).
+    fn sign(&self, c: Option<&Q>) -> Ordering {
+        let (sa, sb) = (self.a.sign(), self.b.sign());
+        let sc = c.map_or(Ordering::Equal, |c| c.sign());
+        if sb == Ordering::Equal || sc == Ordering::Equal {
+            return sa;
+        }
+        if sa == Ordering::Equal || sa == sb {
+            return sb;
+        }
+        // opposite signs: the term with the larger square wins
+        let c = c.expect("a root was met");
+        let t = self.a.mul(&self.a).add(&self.b.mul(&self.b).mul(c).neg());
+        match t.sign() {
+            Ordering::Greater => sa,
+            Ordering::Less => sb,
+            Ordering::Equal => Ordering::Equal,
+        }
+    }
+    fn bits(&self) -> u64 {
+        self.a.bits().max(self.b.bits())
+    }
+}
+
 fn nearest(d: &Dy) -> f64 {
     let (lo, hi) = (d.to_f64(false), d.to_f64(true));
     if lo == hi {
@@ -436,8 +618,25 @@ pub struct Ctx {
     pub nodes: Vec<Node>,
     /// How many exact (big-float) evaluations were needed: for tracing the filter's rate.
     pub exact_evals: u64,
-    memo: std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>,
+    memo: Memo,
     keys: Vec<Key>,
+}
+
+/// The node memo: key to node, lookups only. It must never be iterated (a hash map's order is
+/// not a result to depend on), so it offers get, insert and remove and nothing else.
+#[derive(Clone, Debug, Default)]
+struct Memo(std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>);
+
+impl Memo {
+    fn get(&self, k: &Key) -> Option<&R> {
+        self.0.get(k)
+    }
+    fn insert(&mut self, k: Key, r: R) {
+        self.0.insert(k, r);
+    }
+    fn remove(&mut self, k: &Key) {
+        self.0.remove(k);
+    }
 }
 
 /// A fixed (unseeded) multiplicative hasher for the memo.
@@ -759,24 +958,28 @@ impl Ctx {
     /// The node evaluated in big-float intervals at `p` bits.
     pub fn eval(&self, a: R, p: u64) -> BigIval {
         let order = self.closure(a);
-        let mut slot: Vec<Option<BigIval>> = vec![None; a as usize + 1];
+        self.eval_in(&order, p)
+    }
+
+    /// The last node of `order` (a closure, increasing) evaluated at `p` bits. Each value is
+    /// kept at its place in `order` (an operand found by binary search there: it is in the
+    /// closure), not at its node number, so the work is the subgraph's, not every node's below.
+    fn eval_in(&self, order: &[u32], p: u64) -> BigIval {
+        let mut slot: Vec<Option<BigIval>> = vec![None; order.len()];
+        let at = |x: &u32| order.binary_search(x).expect("an operand is in the closure");
         let mut k = 0;
         while k < order.len() {
             let i = order[k] as usize;
             let v = match &self.nodes[i].op {
                 Op::Lit(d) => BigIval::pt(d),
-                Op::Add(x, y) => badd(
-                    slot[*x as usize].as_ref().unwrap(),
-                    slot[*y as usize].as_ref().unwrap(),
-                    p,
-                ),
+                Op::Add(x, y) => badd(slot[at(x)].as_ref().unwrap(), slot[at(y)].as_ref().unwrap(), p),
                 Op::Sub(x, y) => {
-                    let ny = bneg(slot[*y as usize].as_ref().unwrap());
-                    badd(slot[*x as usize].as_ref().unwrap(), &ny, p)
+                    let ny = bneg(slot[at(y)].as_ref().unwrap());
+                    badd(slot[at(x)].as_ref().unwrap(), &ny, p)
                 }
                 Op::Mul(x, y) => {
                     if x == y {
-                        let s = slot[*x as usize].as_ref().unwrap();
+                        let s = slot[at(x)].as_ref().unwrap();
                         let m = bmul(s, s, p);
                         // a square is never negative
                         let lo = match (&m.lo, s.contains_zero()) {
@@ -786,30 +989,21 @@ impl Ctx {
                         };
                         BigIval { lo, hi: m.hi }
                     } else {
-                        bmul(
-                            slot[*x as usize].as_ref().unwrap(),
-                            slot[*y as usize].as_ref().unwrap(),
-                            p,
-                        )
+                        bmul(slot[at(x)].as_ref().unwrap(), slot[at(y)].as_ref().unwrap(), p)
                     }
                 }
-                Op::Div(x, y) => bdiv(
-                    slot[*x as usize].as_ref().unwrap(),
-                    slot[*y as usize].as_ref().unwrap(),
-                    p,
-                ),
-                Op::Sqrt(x) => bsqrt(slot[*x as usize].as_ref().unwrap(), p),
-                Op::Neg(x) => bneg(slot[*x as usize].as_ref().unwrap()),
+                Op::Div(x, y) => bdiv(slot[at(x)].as_ref().unwrap(), slot[at(y)].as_ref().unwrap(), p),
+                Op::Sqrt(x) => bsqrt(slot[at(x)].as_ref().unwrap(), p),
+                Op::Neg(x) => bneg(slot[at(x)].as_ref().unwrap()),
             };
-            slot[i] = Some(v);
+            slot[k] = Some(v);
             k += 1;
         }
-        slot[a as usize].take().unwrap()
+        slot[order.len() - 1].take().unwrap()
     }
 
-    /// The number of distinct square-root nodes `a` depends on.
-    fn radicals(&self, a: R) -> u32 {
-        let order = self.closure(a);
+    /// The number of distinct square-root nodes in a closure.
+    fn radicals(&self, order: &[u32]) -> u32 {
         let mut k = 0;
         let mut c = 0u32;
         while k < order.len() {
@@ -841,7 +1035,94 @@ impl Ctx {
         }
         self.exact_evals += 1;
         // the separation bound, in bits: (D-1) lu + ll
-        let k = self.radicals(a);
+        // the closure once, for the bound and every precision tried
+        let order = self.closure(a);
+        let k = self.radicals(&order);
+        // no square root: the value is a quotient of dyadics, computed exactly in one pass (a
+        // zero, which refinement proves only at the separation bound, is then immediate)
+        if k == 0
+            && let Some(s) = self.rational_sign(&order)
+        {
+            return s;
+        }
+        self.sign_refined(a, &order, k, true)
+    }
+
+    /// The sign by refinement alone (big-float enclosures up to the separation bound), as
+    /// `sign` decides any value with a square root: for tests against `rational_sign`.
+    #[doc(hidden)]
+    pub fn sign_by_refinement(&mut self, a: R) -> Ordering {
+        let s = self.nodes[a as usize].iv.sign();
+        if s != 0 {
+            return if s > 0 { Ordering::Greater } else { Ordering::Less };
+        }
+        let order = self.closure(a);
+        let k = self.radicals(&order);
+        self.sign_refined(a, &order, k, false)
+    }
+
+    /// The exact value of a closure with no square root, as a numerator and denominator of
+    /// dyadics (the dyadics' sum, difference and product are exact; a quotient keeps both
+    /// parts), and its sign. None where a denominator is zero (the caller's refinement then
+    /// decides as before) or the numbers grow past RATIONAL_BITS.
+    fn rational_sign(&self, order: &[u32]) -> Option<Ordering> {
+        const RATIONAL_BITS: u64 = 1 << 16;
+        let mut slot: Vec<(Dy, Dy)> = Vec::with_capacity(order.len());
+        let at = |x: &u32| order.binary_search(x).expect("an operand is in the closure");
+        let one = Dy::from_f64(1.0);
+        let mut k = 0;
+        while k < order.len() {
+            let i = order[k] as usize;
+            let v = match &self.nodes[i].op {
+                Op::Lit(d) => (d.clone(), one.clone()),
+                Op::Add(x, y) | Op::Sub(x, y) => {
+                    let (a, b) = (&slot[at(x)], &slot[at(y)]);
+                    let (l, r) = (a.0.mul(&b.1), b.0.mul(&a.1));
+                    let n = if matches!(self.nodes[i].op, Op::Add(..)) {
+                        l.add(&r)
+                    } else {
+                        l.sub(&r)
+                    };
+                    (n, a.1.mul(&b.1))
+                }
+                Op::Mul(x, y) => {
+                    let (a, b) = (&slot[at(x)], &slot[at(y)]);
+                    (a.0.mul(&b.0), a.1.mul(&b.1))
+                }
+                Op::Div(x, y) => {
+                    let (a, b) = (&slot[at(x)], &slot[at(y)]);
+                    if b.0.is_zero() {
+                        return None;
+                    }
+                    (a.0.mul(&b.1), a.1.mul(&b.0))
+                }
+                Op::Neg(x) => {
+                    let a = &slot[at(x)];
+                    (a.0.neg(), a.1.clone())
+                }
+                Op::Sqrt(_) => return None,
+            };
+            if v.0.mag.bits() > RATIONAL_BITS || v.1.mag.bits() > RATIONAL_BITS {
+                return None;
+            }
+            slot.push(v);
+            k += 1;
+        }
+        let (n, d) = slot.pop()?;
+        if n.is_zero() {
+            return Some(Ordering::Equal);
+        }
+        Some(if n.neg == d.neg {
+            Ordering::Greater
+        } else {
+            Ordering::Less
+        })
+    }
+
+    /// With `exact`, an expression with one root is decided in its field past the first precision
+    /// (`exact_sign`); without, by refinement alone (`sign_by_refinement`, for the tests).
+    fn sign_refined(&mut self, a: R, order: &[u32], k: u32, exact: bool) -> Ordering {
+        let order = order.to_vec();
         let node = &self.nodes[a as usize];
         let d = if k >= 60 {
             f64::INFINITY
@@ -860,7 +1141,7 @@ impl Ctx {
             if dbg {
                 eprintln!("sign: node {a} radicals {k} bound {need} bits, p {p}");
             }
-            let v = self.eval(a, p);
+            let v = self.eval_in(&order, p);
             if let Some(lo) = &v.lo
                 && !lo.is_zero()
                 && !lo.neg
@@ -882,9 +1163,63 @@ impl Ctx {
                     return Ordering::Equal;
                 }
             }
+            // past the first precision, an expression with at most one distinct square root is
+            // decided exactly in its field Q(√c) (`exact_sign`), which gives the same sign the
+            // doubling below would reach: most of these are zeros, which the doubling proves only
+            // at the separation bound (thousands of bits, each precision evaluated in turn)
+            if exact
+                && p == 128
+                && k <= 1
+                && let Some(o) = self.exact_sign(&order, (2 * need).max(4096) as u64)
+            {
+                return o;
+            }
             p *= 2;
             assert!(p < (1u64 << 26), "precision out of reach");
         }
+    }
+
+    /// The exact sign of the last node of `order` (a closure, increasing), when its closure has
+    /// at most one distinct square root: every value is then a + b√c with a, b, c rational and
+    /// √c that one root's value (c ≥ 0: its operand, rational, the only radical below it), and
+    /// +, −, ×, ÷ stay in that field exactly. The sign of a + b√c: of a where b or c is 0, of b
+    /// where a is 0, their common sign where they agree, else of a's or b's term, whichever has
+    /// the larger square (a² against b²c, exactly). None (the caller goes on as before) where a
+    /// number grows past `cap` bits, a divisor's norm is 0, or the radicand is negative: never a
+    /// wrong sign, only no answer.
+    fn exact_sign(&self, order: &[u32], cap: u64) -> Option<Ordering> {
+        let mut val: Vec<Quad> = Vec::with_capacity(order.len());
+        let at = |x: &u32| order.binary_search(x).expect("an operand is in the closure");
+        // the radicand c, once its root is met
+        let mut c: Option<Q> = None;
+        for &i in order {
+            let v = match &self.nodes[i as usize].op {
+                Op::Lit(d) => Quad::rat(Q::dy(d.clone())),
+                Op::Add(x, y) => val[at(x)].add(&val[at(y)]),
+                Op::Sub(x, y) => val[at(x)].add(&val[at(y)].neg()),
+                Op::Neg(x) => val[at(x)].neg(),
+                Op::Mul(x, y) => val[at(x)].mul(&val[at(y)], c.as_ref()),
+                Op::Div(x, y) => val[at(x)].div(&val[at(y)], c.as_ref())?,
+                Op::Sqrt(x) => {
+                    let r = &val[at(x)];
+                    // the one radical: its operand has no root in it, so it is rational
+                    if !r.b.is_zero() || c.is_some() || r.a.sign() == Ordering::Less {
+                        return None;
+                    }
+                    c = Some(r.a.clone());
+                    Quad {
+                        a: Q::zero(),
+                        b: Q::one(),
+                    }
+                }
+            };
+            if v.bits() > cap {
+                return None;
+            }
+            val.push(v);
+        }
+        let v = val.pop()?;
+        Some(v.sign(c.as_ref()))
     }
 
     /// sign(a - b), without keeping the difference.
@@ -910,9 +1245,10 @@ impl Ctx {
             let m = Dy::from_f64(ia.hi).add(&Dy::from_f64(ib.lo)).half();
             return m;
         }
+        let (oa, ob) = (self.closure(a), self.closure(b));
         let mut p = 128u64;
         loop {
-            let (va, vb) = (self.eval(a, p), self.eval(b, p));
+            let (va, vb) = (self.eval_in(&oa, p), self.eval_in(&ob, p));
             if let (Some(ah), Some(bl)) = (&va.hi, &vb.lo)
                 && ah.cmp(bl) == Ordering::Less
             {
@@ -929,9 +1265,10 @@ impl Ctx {
         if iv.lo == iv.hi {
             return iv.lo;
         }
+        let order = self.closure(a);
         let mut p = 96u64;
         loop {
-            let v = self.eval(a, p);
+            let v = self.eval_in(&order, p);
             if let (Some(l), Some(h)) = (&v.lo, &v.hi) {
                 // both ends round to the same nearest f64: that is the answer
                 let (a1, b1) = (nearest(l), nearest(h));
@@ -960,6 +1297,106 @@ mod tests {
         }
         let s = Dy::from_f64(0.1).add(&Dy::from_f64(0.2));
         assert!(s.to_f64(false) <= 0.30000000000000004 && s.to_f64(true) >= 0.30000000000000004);
+    }
+
+    struct Rng(u64);
+    impl Rng {
+        fn u(&mut self, n: u64) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (self.0 >> 33) % n
+        }
+    }
+
+    /// The field route (`exact_sign`, at most one distinct root) gives the sign the doubling gives,
+    /// on random expressions over small literals and one root, and on zeros built so the filter
+    /// cannot see them: (x + y)(x − y) − (x² − y²), (x / y)·y − x, x·√c·√c − x·c, and the norm
+    /// (a + b√c)(a − b√c) − (a² − b²c).
+    #[test]
+    fn the_field_route_agrees_with_the_doubling() {
+        let mut g = Rng(3);
+        let (mut zeros, mut nonzeros, mut routed) = (0, 0, 0);
+        for case in 0..400 {
+            let mut c = Ctx::new();
+            let lit = |c: &mut Ctx, g: &mut Rng| {
+                let v = (g.u(2001) as f64 - 1000.0) / 64.0 + if g.u(2) == 0 { 0.1 } else { 0.0 };
+                c.lit(v)
+            };
+            // the radicand and its root (a square's root folds to a literal: then no radical)
+            let cv = {
+                let v = (g.u(50) + 1) as f64 / 8.0;
+                c.lit(v)
+            };
+            let rad = c.sqrt(cv);
+            let mut pool: Vec<R> = (0..4).map(|_| lit(&mut c, &mut g)).collect();
+            if case % 2 == 0 {
+                pool.push(rad);
+            }
+            for _ in 0..8 {
+                let (x, y) = (
+                    pool[g.u(pool.len() as u64) as usize],
+                    pool[g.u(pool.len() as u64) as usize],
+                );
+                let v = match g.u(4) {
+                    0 => c.add(x, y),
+                    1 => c.sub(x, y),
+                    2 => c.mul(x, y),
+                    _ => {
+                        if c.sign_by_refinement(y) == Ordering::Equal {
+                            continue;
+                        }
+                        c.div(x, y)
+                    }
+                };
+                pool.push(v);
+            }
+            let (x, y) = (pool[pool.len() - 1], pool[pool.len() - 2]);
+            // the zeros
+            let xpy = c.add(x, y);
+            let xmy = c.sub(x, y);
+            let pr = c.mul(xpy, xmy);
+            let (x2, y2) = (c.sqr(x), c.sqr(y));
+            let d2 = c.sub(x2, y2);
+            let z1 = c.sub(pr, d2);
+            let mut tests = vec![x, y, xpy, z1];
+            if c.sign_by_refinement(y) != Ordering::Equal {
+                let q = c.div(x, y);
+                let qy = c.mul(q, y);
+                tests.push(c.sub(qy, x));
+            }
+            let xr = c.mul(x, rad);
+            let xrr = c.mul(xr, rad);
+            let xc = c.mul(x, cv);
+            tests.push(c.sub(xrr, xc));
+            let br = c.mul(y, rad);
+            let (p1, p2) = (c.add(x, br), c.sub(x, br));
+            let nm = c.mul(p1, p2);
+            let yc = c.mul(y2, cv);
+            let n2 = c.sub(x2, yc);
+            tests.push(c.sub(nm, n2));
+            for t in tests {
+                let want = c.sign_by_refinement(t);
+                let order = c.closure(t);
+                if c.radicals(&order) <= 1
+                    && let Some(got) = c.exact_sign(&order, 1 << 20)
+                {
+                    routed += 1;
+                    assert_eq!(got, want, "case {case}");
+                }
+                assert_eq!(c.sign(t), want, "case {case}");
+                if want == Ordering::Equal {
+                    zeros += 1;
+                } else {
+                    nonzeros += 1;
+                }
+            }
+        }
+        assert!(
+            zeros > 800 && nonzeros > 800 && routed > 2000,
+            "{zeros} {nonzeros} {routed}"
+        );
     }
 
     #[test]
