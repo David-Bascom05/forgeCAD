@@ -725,9 +725,10 @@ pub enum BoxVerdict {
 /// with Hit; the first piece at the resolution that is neither proven clear nor witnessed ends it
 /// with Near (a Hit elsewhere is then not looked for).
 ///
-/// With `outside_zones`, a box lying wholly inside one of the machine's zones (every joint of
-/// the zone strictly within its (min, max)) is skipped as the control forbids it, so Clear means
-/// "clear for all travel outside the zones"; a box partly inside is bisected as usual.
+/// With `outside_zones`, the zones' open interiors are left out (the control forbids them) and
+/// their faces kept (they are travel): a box wholly inside a zone is skipped, a box reaching into
+/// one is split at the zone's face, and a piece within the zone's closed box keeps only its
+/// faces. Clear then means "clear for all travel outside the zones' interiors".
 pub fn check_box(
     def: &MachineDef,
     a: &CBody,
@@ -739,18 +740,21 @@ pub fn check_box(
     let Some(clearance) = pair_rule(def, a, b, SegKind::Rapid) else {
         return (BoxVerdict::NotChecked, 0);
     };
-    let in_zone = |qb: &[Interval]| {
-        outside_zones
-            && def.zones.iter().any(|z| {
-                !z.joints.is_empty()
-                    && z.joints
-                        .iter()
-                        .zip(z.min.iter().zip(&z.max))
-                        .all(|(j, (lo, hi))| {
-                            def.joint_index(j)
-                                .is_some_and(|i| qb[i].lo > *lo && qb[i].hi < *hi)
-                        })
+    // a zone's (joint index, min, max) per joint it names
+    let zones: Vec<Vec<(usize, f64, f64)>> = if outside_zones {
+        def.zones
+            .iter()
+            .map(|z| {
+                z.joints
+                    .iter()
+                    .zip(z.min.iter().zip(&z.max))
+                    .filter_map(|(j, (lo, hi))| def.joint_index(j).map(|i| (i, *lo, *hi)))
+                    .collect::<Vec<_>>()
             })
+            .filter(|z| !z.is_empty())
+            .collect()
+    } else {
+        Vec::new()
     };
     let w0: Vec<f64> = q.iter().map(|x| x.width()).collect();
     let mut stack: Vec<Vec<Interval>> = vec![q.to_vec()];
@@ -762,7 +766,43 @@ pub fn check_box(
             return (BoxVerdict::Undecided { gap_lo: open }, boxes);
         }
         boxes += 1;
-        if in_zone(&qb) {
+        // zones are open boxes whose faces are travel: a box inside one is skipped; a box that
+        // reaches into one is split at the zone's face, so the pieces keep the faces and drop
+        // only the open interior
+        if let Some(z) = zones
+            .iter()
+            .find(|z| z.iter().all(|&(i, lo, hi)| qb[i].lo < hi && qb[i].hi > lo))
+        {
+            if z.iter().all(|&(i, lo, hi)| qb[i].lo > lo && qb[i].hi < hi) {
+                continue;
+            }
+            let cut = z.iter().find_map(|&(i, lo, hi)| {
+                [lo, hi]
+                    .into_iter()
+                    .find(|&f| qb[i].lo < f && f < qb[i].hi)
+                    .map(|f| (i, f))
+            });
+            match cut {
+                Some((i, f)) => {
+                    let (mut x, mut y) = (qb.clone(), qb);
+                    x[i] = Interval::new(x[i].lo, f);
+                    y[i] = Interval::new(f, y[i].hi);
+                    stack.push(y);
+                    stack.push(x);
+                }
+                None => {
+                    // within the zone's closed box, touching a face: only the faces are travel
+                    for &(i, lo, hi) in z {
+                        for f in [lo, hi] {
+                            if qb[i].lo == f || qb[i].hi == f {
+                                let mut x = qb.clone();
+                                x[i] = Interval::new(f, f);
+                                stack.push(x);
+                            }
+                        }
+                    }
+                }
+            }
             continue;
         }
         let pose = kin::ipose(def, &qb);

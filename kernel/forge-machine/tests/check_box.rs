@@ -38,16 +38,12 @@ fn vmc3_table_and_head_are_clear_through_all_travel() {
 /// found to touch within the budget).
 #[test]
 fn builtin_pairs_are_proven_clear_over_all_travel_outside_their_zones() {
-    // (machine, a, b): not decided within 200 000 boxes (the coarse gap bound is negative and
-    // bisection does not reach the resolution: a contact surface by construction or a zone
-    // boundary the pair touches at). Each is UNKNOWN, not clear; the data owner (CAM-MACHINE) has
-    // the list.
+    // (machine, a, b): not decided within 200 000 boxes (nor 1 000 000): the mill-turn's B head
+    // against the bodies its zones keep it from, over six or seven joints, with the zones' faces
+    // (travel) about 1 mm from contact. Each is UNKNOWN, not clear; CAM-MACHINE has the list and
+    // is sampling the faces.
     const UNDECIDED: &[(&str, &str, &str)] = &[
-        ("generic-trunnion-bc", "support-l", "cradle"),
-        ("generic-trunnion-bc", "support-r", "cradle"),
-        ("generic-mill-turn", "headstock", "subchuck"),
         ("generic-mill-turn", "headstock", "bhead"),
-        ("generic-mill-turn", "chuck", "subchuck"),
         ("generic-mill-turn", "chuck", "bhead"),
         ("generic-mill-turn", "subchuck", "bhead"),
         ("generic-mill-turn", "subhead", "bhead"),
