@@ -93,6 +93,20 @@ pub struct Held(std::sync::Mutex<std::collections::HashMap<[u64; 4], i32>>);
 
 const HELD_MAX: usize = 1 << 16;
 
+/// Kept answers over every face in the process: past this none is kept (a face's are counted
+/// out when it empties them or is dropped). ~40 MB at most; the answers themselves are the
+/// same either way.
+const HELD_BUDGET: usize = 1 << 20;
+static HELD_TOTAL: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        if let Ok(m) = self.0.get_mut() {
+            HELD_TOTAL.fetch_sub(m.len(), std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
 impl Default for Held {
     fn default() -> Held {
         Held(std::sync::Mutex::new(std::collections::HashMap::new()))
@@ -270,10 +284,14 @@ impl Face {
                             }
                             .classify(p, q);
                             if let Ok(mut m) = self.held.0.lock() {
+                                use std::sync::atomic::Ordering::Relaxed;
                                 if m.len() >= HELD_MAX {
+                                    HELD_TOTAL.fetch_sub(m.len(), Relaxed);
                                     m.clear();
                                 }
-                                m.insert(key, s);
+                                if HELD_TOTAL.load(Relaxed) < HELD_BUDGET && m.insert(key, s).is_none() {
+                                    HELD_TOTAL.fetch_add(1, Relaxed);
+                                }
                             }
                             s
                         }
