@@ -26,6 +26,16 @@ rough = zlevel(op1, tool: t1, leave: 0.5, step: 3, stepover: 4, area: (-45, -35,
 /// (name, the op's arguments with CUSP where the spacing goes, whether it has a step-down)
 const OPS: &[(&str, &str, &str)] = &[
     (
+        "parallel",
+        "parallel(op1, tool: t2, CUSP, stepover: 0.5, area: (-30, -24, 30, 24)",
+        "none",
+    ),
+    (
+        "waterline",
+        "waterline(op1, tool: t2, CUSP, from: 24, to: 12, step: 0.5, area: (-30, -24, 30, 24), grid: 0.5",
+        "none",
+    ),
+    (
         "steep_shallow",
         "steep_shallow(op1, tool: t2, CUSP, threshold: 45, area: (-30, -24, 30, 24), from: 26, to: 10.5, grid: 1",
         "both",
@@ -262,7 +272,11 @@ fn main() {
         if !only.is_empty() && !only.iter().any(|o| o == name) {
             continue;
         }
-        let cusp = if name == "pencil" { "" } else { "cusp: 0.01, " };
+        let cusp = if matches!(name, "pencil" | "parallel" | "waterline") {
+            ""
+        } else {
+            "cusp: 0.01, "
+        };
         let a = run(&op.replace("CUSP, ", &format!("{cusp}fit: 0, ")), &dir);
         // FIT=<mm> overrides the default fit for the second run
         let fit = std::env::var("FIT")
