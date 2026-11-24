@@ -151,7 +151,7 @@ Spinner U5-620's logs (750/2e4, 500/5e4, 3000/1e4, 250/1e6 mm/s², mm/s³), agai
 | deep_islands | aluminium | +46 / +48 / +55 / +67 % | +83 / +89 / +94 / +123 % |
 
 On shallow levels (the RPTU parts, 4 mm) clear is faster. Each pass is posted as long arcs and
-lines with one feed each: on deep_boss 1,075 blocks one-way and 945 two-way (mean move 10.6 and
+lines with one feed each: on deep_boss 1,040 blocks one-way and 941 two-way (mean move 10.9 and
 13.5 mm) against clear's 1,171 (5.5 mm); on deep_open_slot 162 against 389. These are simulations, not machine trials; the planner has
 no block-rate limit.
 
