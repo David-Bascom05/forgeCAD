@@ -148,6 +148,9 @@ pub struct Surfacer<'a> {
     /// The op's tolerance (the cutter may come within it of the part).
     pub tol: f64,
     pub budget: usize,
+    /// Fitting each run of cutting points into longer lines and arcs before it is emitted
+    /// (crate::fit); None (the default from `new`): the points as moves.
+    pub fit: Option<crate::fit::Fit>,
 }
 
 impl<'a> Surfacer<'a> {
@@ -181,7 +184,97 @@ impl<'a> Surfacer<'a> {
             floor,
             tol,
             budget: 200_000,
+            fit: None,
         })
+    }
+
+    /// This surfacer, its runs fitted within `f` (`crate::fit`).
+    pub fn with_fit(mut self, f: crate::fit::Fit) -> Surfacer<'a> {
+        self.fit = Some(f);
+        self
+    }
+
+    /// Whether the checker's moves `mvs` (over the xy box [lo, hi]) are proven clear at `limit`
+    /// for a fitted piece: per face near them, the cutter's closed form (`contact::clear`), else
+    /// the column's gap on a small budget; undecided is not proven (the fitter backs off to a
+    /// shorter piece, which the generator's own pieces already are).
+    fn fit_clear(&self, mvs: &[Move], lo: [f64; 2], hi: [f64; 2], limit: f64) -> bool {
+        let r = self.check.r;
+        let idx = self.grid.near(lo[0] - r, lo[1] - r, hi[0] + r, hi[1] + r);
+        for mv in mvs {
+            for &i in &idx {
+                let f = &self.faces[i as usize];
+                if forge_cam_geom::contact::clear(&self.cutter, f, mv, limit).is_some() {
+                    continue;
+                }
+                match drop::gap_move(&self.check, f, mv, limit, self.res, FIT_BUDGET).0 {
+                    Gap::Clear { .. } => {}
+                    _ => return false,
+                }
+            }
+        }
+        true
+    }
+
+    /// A fitted line a → b proven clear at `limit` (`fit_clear`).
+    pub fn fit_line(&self, a: [f64; 3], b: [f64; 3], limit: f64) -> bool {
+        self.fit_clear(
+            &[Move::Line { a, b }],
+            [a[0].min(b[0]), a[1].min(b[1])],
+            [a[0].max(b[0]), a[1].max(b[1])],
+            limit,
+        )
+    }
+
+    /// A fitted arc from a to `to` about c (xy; height linear in the angle) proven clear at
+    /// `limit`: the checker's own pieces of it (`ops::checker_moves`), each by `fit_clear`.
+    pub fn fit_arc(&self, a: [f64; 3], to: [f64; 3], c: [f64; 2], cw: bool, limit: f64) -> bool {
+        let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+        if !(r.is_finite() && r > 0.0 && to.iter().all(|v| v.is_finite())) {
+            return false;
+        }
+        let p = OpPath {
+            tool: 0,
+            start: a,
+            moves: vec![PMove::Arc { to, c, cw, f: 1.0 }],
+            rpm: 0.0,
+            coolant: forge_post::Coolant::Off,
+        };
+        let mvs: Vec<Move> = crate::ops::checker_moves(&p).into_iter().map(|m| m.0).collect();
+        self.fit_clear(&mvs, [c[0] - r, c[1] - r], [c[0] + r, c[1] + r], limit)
+    }
+
+    /// A run of cutting points, from its first, as cutting moves at feed `f`: fitted when `fit`
+    /// is set, each fitted piece proven as the generator proves a piece (the column's gap at
+    /// −tol/2; an arc by `gap_arc`) before it is kept; else a line to each point after the first.
+    fn cut_moves(&self, pts: &[[f64; 3]], f: f64) -> Vec<PMove> {
+        match self.fit {
+            None => pts[1..]
+                .iter()
+                .map(|&to| PMove::Line {
+                    to,
+                    f,
+                    phase: Phase::Cut,
+                })
+                .collect(),
+            Some(fit) => {
+                let lim = -0.5 * self.tol;
+                // in pieces of FIT_CHUNK points on all cores (forge_math::par, in order), each
+                // piece's end the next one's start: a piece never spans two chunks
+                let n = pts.len() - 1;
+                let chunks = n.div_ceil(FIT_CHUNK);
+                let parts = forge_math::par::map(chunks, |k| {
+                    let s = k * FIT_CHUNK;
+                    let e = (s + FIT_CHUNK).min(n);
+                    crate::fit::fit(&pts[s..=e], fit, &mut |a, pc| match *pc {
+                        crate::fit::Piece::Line { to } => self.fit_line(a, to, lim),
+                        crate::fit::Piece::Arc { to, c, cw } => self.fit_arc(a, to, c, cw, lim),
+                    })
+                });
+                let ps: Vec<crate::fit::Piece> = parts.into_iter().flatten().collect();
+                crate::fit::to_moves(&ps, f, Phase::Cut)
+            }
+        }
     }
 
     /// The certified CL height of the generating column at (x, y), at least the floor.
@@ -390,8 +483,20 @@ impl<'a> Surfacer<'a> {
     }
 }
 
+/// The gap budget of one face in a fitted piece's proof (cells): undecided is not proven.
+const FIT_BUDGET: usize = 2_000;
+
+/// Points per chunk a run is fitted in (the chunks on all cores).
+const FIT_CHUNK: usize = 256;
+
 /// A path of cutting points as an op: rapid to above the first, plunge, cut through them, retract.
-fn as_path(c: Cut, pts: &[[f64; 3]]) -> OpPath {
+fn as_path(sf: &Surfacer, c: Cut, pts: &[[f64; 3]]) -> OpPath {
+    let cuts = sf.cut_moves(pts, c.feed.0);
+    as_path_cuts(c, pts, cuts)
+}
+
+/// `as_path` with the run's cutting moves made already.
+fn as_path_cuts(c: Cut, pts: &[[f64; 3]], cuts: Vec<PMove>) -> OpPath {
     let Cut { tidx, h, feed, .. } = c;
     let p0 = pts[0];
     let mut mv = vec![
@@ -404,13 +509,7 @@ fn as_path(c: Cut, pts: &[[f64; 3]]) -> OpPath {
             phase: Phase::Plunge,
         },
     ];
-    for p in &pts[1..] {
-        mv.push(PMove::Line {
-            to: *p,
-            f: feed.0,
-            phase: Phase::Cut,
-        });
-    }
+    mv.extend(cuts);
     let pl = pts[pts.len() - 1];
     mv.push(PMove::Line {
         to: [pl[0], pl[1], h.retract],
@@ -430,14 +529,16 @@ fn as_path(c: Cut, pts: &[[f64; 3]]) -> OpPath {
 }
 
 /// Several cutting polylines as one op, each entered from the retract height.
-fn as_paths(c: Cut, runs: &[Vec<[f64; 3]>]) -> Option<OpPath> {
+fn as_paths(sf: &Surfacer, c: Cut, runs: &[Vec<[f64; 3]>]) -> Option<OpPath> {
     let runs: Vec<&Vec<[f64; 3]>> = runs.iter().filter(|r| !r.is_empty()).collect();
     if runs.is_empty() {
         return None;
     }
-    let mut p = as_path(c, runs[0]);
+    // every run's cutting moves on all cores (in order): a run's fit is its own
+    let mut cuts = forge_math::par::map(runs.len(), |k| sf.cut_moves(runs[k], c.feed.0)).into_iter();
+    let mut p = as_path_cuts(c, runs[0], cuts.next().expect("a run"));
     for r in &runs[1..] {
-        let q = as_path(c, r);
+        let q = as_path_cuts(c, r, cuts.next().expect("a run"));
         // drop the previous run's final rapid to clear: link at the retract height instead
         p.moves.pop();
         p.moves.extend(q.moves);
@@ -523,7 +624,7 @@ pub fn parallel(
         }
         pts.extend(part);
     }
-    Ok(as_path(c, &pts))
+    Ok(as_path(sf, c, &pts))
 }
 
 /// A certified push-cutter along a fibre at tool-tip height z: on the segment a → b (xy), the
@@ -630,7 +731,7 @@ pub fn waterline(sf: &Surfacer, c: Cut, area: [f64; 4], zs: &[f64], h: f64) -> R
         .into_iter()
         .filter(|r| !r.is_empty())
         .collect();
-    as_paths(c, &runs).ok_or(OpError::ToolTooBig {
+    as_paths(sf, c, &runs).ok_or(OpError::ToolTooBig {
         tool_d: 2.0 * sf.check.r,
         why: "no waterline at these heights".into(),
     })
