@@ -844,11 +844,15 @@ impl std::hash::Hasher for NameMix {
 /// `forge_agent::select::lineage` with nothing copied, into a `Lineage`: each face's making
 /// features after feature `i` built `body`, given those before. A face keeps its origin while its
 /// name lives; a new face on a face before's surface, overlapping it, is that face's.
-/// `a == b`, planes (most faces) compared inline: the derived `Surface::eq` became an
-/// out-of-line call in `lineage` once forge-lang's code around it grew (28,643 calls on the
-/// heatsink gate part, +0.23%), and planes are nearly every comparison here.
+/// `a == b`, kept inline here (codegen: don't "simplify" it back to `==`). The derived
+/// `Surface::eq` became an out-of-line call in `lineage` once forge-lang's code around it grew
+/// (28,643 calls on the heatsink gate part, +0.23%). Most pairs differ in kind, decided by the
+/// variant alone; planes, most of the rest, compare directly; anything else through `==`.
 #[inline(always)]
 fn same_surface(a: &forge_geom::Surface, b: &forge_geom::Surface) -> bool {
+    if std::mem::discriminant(a) != std::mem::discriminant(b) {
+        return false;
+    }
     match (a, b) {
         (forge_geom::Surface::Plane(x), forge_geom::Surface::Plane(y)) => x == y,
         _ => a == b,
