@@ -293,15 +293,21 @@ impl InProcess {
         }
         zs.sort_by(|a, b| a.partial_cmp(b).unwrap());
         zs.dedup();
-        let mut faces = vec![];
-        let mut id = 2000u32;
-        let mut below: Option<Region> = None;
-        for k in 0..zs.len() - 1 {
-            let (z0, z1) = (zs[k], zs[k + 1]);
-            let m = self.material(z0)?;
+        // each level's material, then each level's exposed horizontal faces (the material
+        // below it against its own), are independent of every other level's: made on all cores
+        // (forge_math::par), in level order, then assembled in order as one pass would. The first
+        // error in that order is the one returned, as a single pass stops at it
+        let n = zs.len() - 1;
+        let mats: Vec<Result<Option<Region>, String>> = forge_math::par::map(n, |k| self.material(zs[k]));
+        let exposed_at = |k: usize| -> Result<Vec<Region>, String> {
+            let z0 = zs[k];
+            let (Ok(m), Ok(below)) = (&mats[k], if k == 0 { &Ok(None) } else { &mats[k - 1] }) else {
+                // an earlier error is reported in its place
+                return Ok(vec![]);
+            };
             // the horizontal faces at z0: material below that ends here, and material above that
             // starts here (the box's bottom, or over a void from below)
-            let exposed = match (&below, &m) {
+            Ok(match (below, m) {
                 (None, Some(m)) => vec![m.clone()],
                 (Some(b), Some(m)) => {
                     // what changes at z0: voids whose floor is z0 start, regions cleared from
@@ -348,8 +354,16 @@ impl InProcess {
                 }
                 (Some(b), None) => vec![b.clone()],
                 (None, None) => vec![],
-            };
-            for e in exposed {
+            })
+        };
+        let exposed: Vec<Result<Vec<Region>, String>> = forge_math::par::map(n, exposed_at);
+        let mut faces = vec![];
+        let mut id = 2000u32;
+        let mut below: Option<Region> = None;
+        for (k, (m, ex)) in mats.into_iter().zip(exposed).enumerate() {
+            let (z0, z1) = (zs[k], zs[k + 1]);
+            let m = m?;
+            for e in ex? {
                 faces.push(flat(&e, z0, mu, id));
                 id += 1;
             }
