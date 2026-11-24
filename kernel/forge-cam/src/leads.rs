@@ -319,10 +319,23 @@ pub fn wrap(
     if total <= eps || 2.0 * area(segs).abs() / total <= eps {
         return (vec![], segs.to_vec(), vec![], vec![]);
     }
-    let body = match ld.entry {
+    let mut body = match ld.entry {
         Some(q) => rotate_to(segs, q, eps),
         None => segs.to_vec(),
     };
+    // a lead tangent at a sharp corner swings out past the corner's other side: start a loop
+    // that begins at a corner from the middle of its first piece instead
+    let has_lead = |l: Option<Lead>| l.is_some_and(|l| !l.is_none());
+    if (has_lead(ld.lead_in) || has_lead(ld.lead_out)) && body.len() > 1 {
+        let s0 = body[0].start();
+        let (t0, t1) = (tangent(&body[body.len() - 1], s0), tangent(&body[0], s0));
+        let cross = t0.x * t1.y - t0.y * t1.x;
+        let dot = t0.x * t1.x + t0.y * t1.y;
+        if cross.abs() > 1e-9 || dot < 0.0 {
+            let m = point_at(&body[0], 0.5);
+            body = rotate_to(&body, [m.x, m.y], eps);
+        }
+    }
     let s = body[0].start();
     let t_in = tangent(&body[0], s);
     let li = match ld.lead_in {
@@ -417,6 +430,28 @@ mod tests {
         // the climb sense mirrors it
         let li = lead_in(s, t, true, &ld);
         assert!(li[1].start().y > 1.9);
+    }
+
+    /// A loop starting at a sharp corner is started mid-side when it has leads (a tangent arc at
+    /// the corner would swing out past the other side).
+    #[test]
+    fn a_corner_start_moves_mid_side() {
+        let l = Lead {
+            radius: 1.0,
+            sweep_deg: 90.0,
+            length: 0.0,
+        };
+        let ld = Leads {
+            lead_in: Some(l),
+            lead_out: Some(l),
+            ..Default::default()
+        };
+        let (li, body, _, _) = wrap(&square(), false, &ld, 1e-6);
+        assert!(close(body[0].start(), p2(5.0, 0.0)), "{:?}", body[0]);
+        assert!(close(li[0].end(), p2(5.0, 0.0)));
+        // no leads: the loop as it was
+        let (_, body, _, _) = wrap(&square(), false, &Leads::default(), 1e-6);
+        assert_eq!(body, square());
     }
 
     #[test]
