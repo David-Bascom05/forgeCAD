@@ -489,8 +489,10 @@ impl Gui {
             cut.extend_from_slice(&rgb[(y * w + x0) * 3..][..cw * 3]);
         }
         let png = crate::agent::apptools::png(cw as u32, ch as u32, &cut).ok();
+        // the entities under the marks: waited for natively; a page can't wait for the GPU, so
+        // there the marks go without them (rather than a panic on a read back not in yet)
         let ids = match (&self.shell.drawing, &mut self.view) {
-            (None, Some(v)) => {
+            (None, Some(v)) if !cfg!(target_arch = "wasm32") => {
                 let cam = v.nav.camera;
                 let ids = v.renderer.view_ids(&mut v.scene, &cam);
                 v.dirty = true;

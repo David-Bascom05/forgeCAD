@@ -441,6 +441,7 @@ fn apply_once_made(
     mut solids: Vec<Solid>,
     made: Option<Vec<Tool>>,
 ) -> Result<Vec<Solid>, RegenError> {
+    crate::stepped();
     let f = &plain[i];
     let p = pick(picks, i);
     match f {

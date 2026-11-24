@@ -30,6 +30,8 @@ decide_once = ["forge-bool/decide_once"]
 imprint_column = ["forge-bool/imprint_column"]
 
 [dev-dependencies]
+# nary_threads forces helper threads on (par::force_helpers)
+forge-math = { path = "../forge-math", features = ["force_helpers"] }
 forge-dirs = { path = "../forge-dirs" }
 forge-lang = { path = "../../interface/forge-lang" }
 forge-mesh = { path = "../forge-mesh" }

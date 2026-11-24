@@ -64,23 +64,16 @@ theorem inner_spec (k : Usize) (holds nest : Slice Bool) (o : Usize) (ho : o.val
         step with Slice.index_usize_spec holds j (by simp; omega) as ⟨hb, hhb⟩
         split
         · rename_i hb1
-          step as ⟨m, hm⟩
-          step as ⟨i1, hi1⟩
-          have hmv : m.val = o.val * k.val := by
-            rw [hm, Usize.wrapping_mul_val_eq]; apply Nat.mod_eq_of_lt
-            have : o.val * k.val ≤ k.val * k.val := Nat.mul_le_mul_right _ ho.le
-            have hs : Usize.max + 1 = UScalar.size .Usize := usize_max_succ
-            omega
-          have hi1v : i1.val = o.val * k.val + j.val := by
-            rw [hi1, Usize.wrapping_add_val_eq, hmv]; apply Nat.mod_eq_of_lt
-            have : o.val * k.val + j.val < k.val * k.val := by
-              have : (o.val + 1) * k.val ≤ k.val * k.val := Nat.mul_le_mul_right _ ho
-              rw [Nat.add_mul, one_mul] at this; omega
-            have hs : Usize.max + 1 = UScalar.size .Usize := usize_max_succ
-            omega
+          have hle : o.val * k.val ≤ k.val * k.val := Nat.mul_le_mul_right _ ho.le
           have hlt : o.val * k.val + j.val < k.val * k.val := by
             have : (o.val + 1) * k.val ≤ k.val * k.val := Nat.mul_le_mul_right _ ho
             rw [Nat.add_mul, one_mul] at this; omega
+          have hm1 : o.val * k.val ≤ Usize.max := le_trans hle hkk
+          step with Usize.mul_spec (x := o) (y := k) hm1 as ⟨m, hm⟩
+          have hmv : m.val = o.val * k.val := hm
+          have hm2 : m.val + j.val ≤ Usize.max := by rw [hmv]; omega
+          step with Usize.add_spec (x := m) (y := j) hm2 as ⟨i1, hi1⟩
+          have hi1v : i1.val = o.val * k.val + j.val := by rw [hi1, hmv]
           step with Slice.index_usize_spec nest i1 (by simp; omega) as ⟨nb, hnb⟩
           have e1 : holds.val.getD j.val false = true := by
             rw [List.getD_eq_getElem _ _ (by omega), ← hhb]; exact hb1
@@ -93,24 +86,24 @@ theorem inner_spec (k : Usize) (holds nest : Slice Bool) (o : Usize) (ho : o.val
           split
           · rename_i hnb1
             step as ⟨j1, hj1⟩
-            exact hstep a (by rw [hinner, hnb1]; simp) j1 (by rw [hj1]; exact usize_inc j k hjl)
+            exact hstep a (by rw [hinner, hnb1]; simp) j1 (by scalar_tac)
           · rename_i hnb1
             step as ⟨j1, hj1⟩
             exact hstep false (by rw [hinner]; simp at hnb1; simp [hnb1]) j1
-              (by rw [hj1]; exact usize_inc j k hjl)
+              (by scalar_tac)
         · rename_i hb1
           step as ⟨j1, hj1⟩
           have e1 : holds.val.getD j.val false = false := by
             rw [List.getD_eq_getElem _ _ (by omega), ← hhb]; simpa using hb1
           have hinner : innerOk holds.val nest.val k.val o.val j.val = true := by
             simp only [innerOk]; rw [e1]; simp
-          exact hstep a (by rw [hinner]; simp) j1 (by rw [hj1]; exact usize_inc j k hjl)
+          exact hstep a (by rw [hinner]; simp) j1 (by scalar_tac)
       · rename_i heq
         have heq' : j.val = o.val := by simp at heq; rw [heq]
         step as ⟨j1, hj1⟩
         have hinner : innerOk holds.val nest.val k.val o.val j.val = true := by
           simp [innerOk, heq']
-        exact hstep a (by rw [hinner]; simp) j1 (by rw [hj1]; exact usize_inc j k hjl)
+        exact hstep a (by rw [hinner]; simp) j1 (by scalar_tac)
     · rename_i h
       have : j.val = k.val := by scalar_tac
       simp only [WP.spec_ok]
@@ -166,7 +159,7 @@ theorem owner_spec (k : Usize) (holds nest : Slice Bool) (hH : k.val ≤ holds.v
                 simp [U32.max_eq, UScalarTy.U32_numBits_eq]
               omega
             step as ⟨o1, ho1⟩
-            have ho1v : o1.val = o.val + 1 := by rw [ho1]; exact usize_inc o k hol
+            have ho1v : o1.val = o.val + 1 := by scalar_tac
             have hres : (some c).map (·.val) = (List.range (o.val + 1)).find?
                 (isOwnerB holds.val nest.val k.val) := by
               rw [hfind, if_pos hok]; simp [hcv]
@@ -175,12 +168,12 @@ theorem owner_spec (k : Usize) (holds nest : Slice Bool) (hH : k.val ≤ holds.v
             exact (hext' (o.val + 1) (by omega) o.val (by rw [hfind, if_pos hok])).symm
           · rename_i hok
             step as ⟨o1, ho1⟩
-            have ho1v : o1.val = o.val + 1 := by rw [ho1]; exact usize_inc o k hol
+            have ho1v : o1.val = o.val + 1 := by scalar_tac
             refine ⟨by omega, ?_, fun hs => by rw [hf0] at hs; simp at hs, by omega⟩
             rw [ho1v, hfind, if_neg hok, hf0]; rfl
         · rename_i hb1
           step as ⟨o1, ho1⟩
-          have ho1v : o1.val = o.val + 1 := by rw [ho1]; exact usize_inc o k hol
+          have ho1v : o1.val = o.val + 1 := by scalar_tac
           have hP : isOwnerB holds.val nest.val k.val o.val = false := by
             simp only [isOwnerB]; rw [hHo]; simp at hb1; simp [hb1]
           refine ⟨by omega, ?_, fun hs => by rw [hf0] at hs; simp at hs, by omega⟩

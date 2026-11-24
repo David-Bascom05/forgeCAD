@@ -96,13 +96,16 @@ fn arms(rel: &str, marker: &str) -> Vec<String> {
     for line in f.lines() {
         let lead = line.len() - line.trim_start().len();
         let t = line.trim_start();
-        let starts = t.starts_with('"') && (t.contains("\" =>") || t.contains("\" |"));
+        let starts =
+            t.starts_with('"') && (t.contains("\" =>") || t.contains("\" |") || t.contains("\" if "));
         if indent.is_none() && starts {
             indent = Some(lead);
         }
         let Some(i) = indent else { continue };
         if (lead == i && starts) || (pending && lead >= i && t.starts_with("| \"")) {
+            // the pattern, not a guard's strings (`"link" if a.get("#0").is_none() =>`)
             let pat = t.split("=>").next().unwrap_or("");
+            let pat = pat.split(" if ").next().unwrap_or("");
             out.extend(quoted(pat));
             pending = !t.contains("=>");
         } else {
@@ -146,6 +149,9 @@ fn families() -> Vec<(&'static str, Vec<String>, Model)> {
     use forge_lang::*;
     const CAM: &str = "interface/forge-cam-lang/src/lib.rs";
     const TURN: &str = "interface/forge-turn-lang/src/lib.rs";
+    const BEND: &str = "interface/forge-bend-lang/src/lib.rs";
+    // the robot reader (forge-urdf); its word lists are forge_lang::robot's
+    const ROBOT: &str = "interface/forge-urdf/src/robot.rs";
     vec![
         ("core", owned(builtins::BUILTINS), Model::Shadow),
         ("shapes", owned(shapes::NAMES), Model::Shadow),
@@ -175,6 +181,27 @@ fn families() -> Vec<(&'static str, Vec<String>, Model)> {
         ("cam-expr", expr_builtins(CAM), Model::Closed),
         ("turn", arms(TURN, "fn call(&mut self"), Model::Closed),
         ("turn-expr", expr_builtins(TURN), Model::Closed),
+        (
+            "bend",
+            arms(BEND, "fn call(&mut self, name: &str, f: &str"),
+            Model::Closed,
+        ),
+        (
+            "robot-assign",
+            arms(ROBOT, "match fname.as_str() {"),
+            Model::Closed,
+        ),
+        (
+            "robot-stmt",
+            arms(ROBOT, "fn statement(r: &mut Robot"),
+            Model::Closed,
+        ),
+        (
+            "robot-value",
+            arms(ROBOT, "fn value(&self, f: &str"),
+            Model::Closed,
+        ),
+        ("robot-constants", owned(&robot::RESERVED), Model::Own),
     ]
 }
 
@@ -195,6 +222,11 @@ const FAMILY_CONSTS: &[&str] = &[
     "interface/forge-lang/src/harness.rs::BUILTINS",
     "interface/forge-lang/src/drawing/doc.rs::FUNCTIONS",
     "interface/forge-lang/src/syntax.rs::KEYWORDS",
+    "interface/forge-bend-lang/src/lib.rs::NAMES",
+    "interface/forge-lang/src/robot.rs::RESERVED",
+    // the robot families' words, the reader's arms (`lean_family_lists_are_the_rusts`)
+    "interface/forge-lang/src/robot.rs::STATEMENTS",
+    "interface/forge-lang/src/robot.rs::VALUES",
 ];
 
 /// The crates whose sources define what a document may say.
@@ -202,6 +234,8 @@ const LANG_DIRS: &[&str] = &[
     "interface/forge-lang/src",
     "interface/forge-cam-lang/src",
     "interface/forge-turn-lang/src",
+    "interface/forge-bend-lang/src",
+    "interface/forge-urdf/src",
 ];
 
 fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -258,8 +292,8 @@ fn const_lists() -> Vec<String> {
 
 /// The words a document's first statement is tested against, with the file that tests it:
 /// `n == "WORD"` on a line matching `ExprKind::Name(n)`, the program's `.first()` read on it or
-/// on one of the three lines before (rustfmt breaks a `matches!`), and an assembly's
-/// `l == "WORD"` first line.
+/// on one of the three lines before (rustfmt breaks a `matches!`), or `n == HEADER` with the file's
+/// `const HEADER: &str = "WORD"`, and an assembly's `l == "WORD"` first line.
 fn headers() -> BTreeSet<(String, String)> {
     let mut files = vec![];
     rs_files(&root().join("interface"), &mut files);
@@ -279,6 +313,14 @@ fn headers() -> BTreeSet<(String, String)> {
             {
                 out.extend(quoted(&line[i..]).into_iter().take(1).map(|w| (w, rel_of(&f))));
             }
+            if first && line.contains("ExprKind::Name(n)") && line.contains("n == HEADER") {
+                let w = src
+                    .lines()
+                    .find_map(|l| l.trim_start().strip_prefix("pub const HEADER: &str = "))
+                    .or_else(|| src.lines().find_map(|l| l.trim_start().strip_prefix("const HEADER: &str = ")))
+                    .expect("`n == HEADER` and no `const HEADER: &str`");
+                out.extend(quoted(w).into_iter().take(1).map(|w| (w, rel_of(&f))));
+            }
             if line.contains(".is_some_and(|l| l == \"") {
                 let i = line.find("l == \"").unwrap();
                 out.extend(quoted(&line[i..]).into_iter().take(1).map(|w| (w, rel_of(&f))));
@@ -294,7 +336,12 @@ fn headers() -> BTreeSet<(String, String)> {
 const HEADER_FILES: &[(&str, &str)] = &[
     ("interface/forge-cam-lang/src/lib.rs", "families cam, cam-expr"),
     ("interface/forge-turn-lang/src/lib.rs", "families turn, turn-expr"),
+    ("interface/forge-bend-lang/src/lib.rs", "family bend"),
     ("interface/forge-lang/src/drawing/doc.rs", "family drawing"),
+    (
+        "interface/forge-lang/src/robot.rs",
+        "families robot-assign, robot-stmt, robot-value, robot-constants",
+    ),
     (
         "interface/forge-lang/src/asm.rs",
         "families assembly, assembly-part, assembly-kinds",
@@ -321,6 +368,26 @@ fn json_ops(rel: &str, marker: &str) -> Vec<String> {
         .collect()
 }
 
+/// The variants of an enum: its lines at the first variant's indentation that start with a
+/// capital.
+fn enum_variants(rel: &str, marker: &str) -> Vec<String> {
+    let src = read(rel);
+    let at = src.find(marker).unwrap_or_else(|| panic!("{rel}: no `{marker}`"));
+    let body = &src[at + marker.len()..];
+    let body = &body[..body.find("\n}").unwrap_or(body.len())];
+    body.lines()
+        .filter(|l| l.len() - l.trim_start().len() == 4)
+        .map(str::trim_start)
+        .filter(|t| t.chars().next().is_some_and(|c| c.is_ascii_uppercase()))
+        .map(|t| {
+            t.split(|c: char| !c.is_alphanumeric())
+                .next()
+                .unwrap_or("")
+                .to_string()
+        })
+        .collect()
+}
+
 fn edit_ops() -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     out.extend(json_ops(
@@ -331,6 +398,12 @@ fn edit_ops() -> BTreeSet<String> {
         "interface/forge-lang/src/refactor.rs",
         "pub fn from_json(j: &Json) -> Option<Refactor>",
     ));
+    // a document kind's own edits, outside `Op`: `robot::edit`'s
+    out.extend(
+        enum_variants("interface/forge-urdf/src/robot.rs", "pub enum Edit {")
+            .into_iter()
+            .map(|v| format!("robot::{v}")),
+    );
     // the drawing document's own edits (a drawing file and a drawing block alike)
     out.extend(
         json_ops(
@@ -533,6 +606,7 @@ const ARG_KINDS: &[(&str, &str, &[&str])] = &[
         "interface/forge-turn-lang/src/lib.rs",
         &["turn", "turn-expr"],
     ),
+    ("bend", "interface/forge-bend-lang/src/lib.rs", &["bend"]),
 ];
 
 /// The arguments each built-in takes: with an `ARGS` list, one `args` row per built-in, its
@@ -563,7 +637,26 @@ fn every_argument_list_has_its_rows() {
                     ));
                 }
                 let ops: BTreeSet<String> = lists.iter().map(|l| l.0.clone()).collect();
-                let missing: Vec<_> = names.difference(&ops).collect();
+                // a built-in listed twice: the lookup takes the first, the second is dead
+                if ops.len() != lists.len() {
+                    let mut seen = BTreeSet::new();
+                    let twice: Vec<&String> = lists.iter().map(|l| &l.0).filter(|o| !seen.insert(*o)).collect();
+                    errs.push(format!("`{kind}` ARGS: listed more than once {twice:?} (only the first entry is read)"));
+                }
+                // a built-in without a list yet: its `args` row says GAP (any keyword is taken,
+                // unchecked), and the row goes when the list comes
+                let mut missing = vec![];
+                for op in names.difference(&ops) {
+                    match row(&rows, "args", &format!("{kind}::{op}")) {
+                        Some(r) if r.lean.contains("GAP") && r.names.is_empty() => {}
+                        _ => missing.push(op),
+                    }
+                }
+                for op in ops.intersection(&names) {
+                    if row(&rows, "args", &format!("{kind}::{op}")).is_some_and(|r| r.lean.contains("GAP no list")) {
+                        errs.push(format!("`{kind}::{op}` has a list now: its row's names are the list's, not GAP"));
+                    }
+                }
                 let extra: Vec<_> = ops.difference(&names).collect();
                 if !missing.is_empty() || !extra.is_empty() {
                     errs.push(format!(
@@ -649,7 +742,24 @@ fn lean_family_lists_are_the_rusts() {
     assert_eq!(lean(&src, "turnStmt"), rust("turn"), "Families.turnStmt");
     assert_eq!(lean(&src, "turnExpr"), rust("turn-expr"), "Families.turnExpr");
     assert_eq!(lean(&weld, "weld"), rust("weld"), "Builtins.weld");
+    assert_eq!(
+        lean(&src, "robotAssign"),
+        rust("robot-assign"),
+        "Families.robotAssign"
+    );
+    assert_eq!(lean(&src, "robotStmt"), rust("robot-stmt"), "Families.robotStmt");
+    assert_eq!(
+        lean(&src, "robotValue"),
+        rust("robot-value"),
+        "Families.robotValue"
+    );
     assert_eq!(lean(&src, "drawingFns"), rust("drawing"), "Families.drawingFns");
+    // forge_lang::robot's word lists are the reader's arms: STATEMENTS the statement calls (an
+    // assignment's or a bare one's, `shared` read as its own statement kind), VALUES the values'
+    let arm: BTreeSet<String> = rust("robot-assign").union(&rust("robot-stmt")).cloned().collect();
+    let stmts: BTreeSet<String> = owned(&forge_lang::robot::STATEMENTS).into_iter().filter(|w| w != "shared").collect();
+    assert_eq!(stmts, arm, "robot::STATEMENTS vs the reader's statement arms");
+    assert_eq!(owned(&forge_lang::robot::VALUES).into_iter().collect::<BTreeSet<_>>(), rust("robot-value"), "robot::VALUES");
     let hd: BTreeSet<String> = lean(&src, "headers");
     let words: BTreeSet<String> = headers().into_iter().map(|h| h.0).collect();
     assert!(hd.is_subset(&words), "Families.headers: {hd:?} vs {words:?}");

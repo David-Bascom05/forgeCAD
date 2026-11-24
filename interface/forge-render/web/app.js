@@ -102,8 +102,11 @@ function openDialog() {
     }
     await importFiles(got);
     d.close();
-    const first = got.map((f) => cleanPath(f.path)).find((p) => /\.(fg|dwg)$/i.test(p));
+    const paths = got.map((f) => cleanPath(f.path));
+    const first = paths.find((p) => /\.(fg|dwg)$/i.test(p));
     if (first) fc.app_open(`${MOUNT}/${first}`);
+    // nothing to open (a STEP model, a font: read by a part): said, not silently added
+    else if (paths.length) fc.app_say(`Added ${paths.length > 3 ? `${paths.length} files` : paths.join(", ")} to the project`);
   };
   d.querySelector("#forge-open-file").onchange = (e) => take(e.target, false);
   d.querySelector("#forge-open-dir").onchange = (e) => take(e.target, true);
@@ -138,14 +141,96 @@ let mirror = null;
 const problems = [];
 // the app's own settings and state (`/home`): kept in this browser, whatever serves the files
 const home = store ? new Mirror(await localBackend("_app"), "/home", fc, (e) => console.error(`forge-app: ${e}`)) : null;
+// a file the app made (a photo, a recording, File > Export STL / 3MF / OBJ), to the downloads
+window.forge_download = (name, bytes) => download(name, new Blob([bytes.slice()]));
+
+// MP4 recording (gui_record.rs, record/web.rs): WebCodecs' H.264 encoder, its frames handed back
+// to the app, which writes the MP4 itself (record/mp4.rs). No B-frames, AVCC NAL units, the avcC
+// record from decoderConfig.description. window.forge_avc1: whether this browser has one at all.
+const avcCodec = (w, h, fps) => {
+  // H.264 constrained baseline at the least level the size and rate fit (Table A-1: MaxFS, MaxMBPS)
+  const mbs = Math.ceil(w / 16) * Math.ceil(h / 16);
+  const levels = [[0x1f, 3600, 108000], [0x20, 5120, 216000], [0x28, 8192, 245760], [0x2a, 8704, 522240],
+    [0x32, 22080, 589824], [0x33, 36864, 983040], [0x34, 36864, 2073600]];
+  const l = levels.find(([, fs, mbps]) => mbs <= fs && mbs * fps <= mbps) ?? levels[levels.length - 1];
+  return `avc1.42E0${l[0].toString(16).padStart(2, "0")}`;
+};
+window.forge_avc1 = false;
+if (typeof VideoEncoder === "function") {
+  VideoEncoder.isConfigSupported({ codec: avcCodec(1280, 720, 30), width: 1280, height: 720, avc: { format: "avc" } })
+    .then((s) => (window.forge_avc1 = !!s.supported), () => {});
+}
+const videos = new Map();
+let videoNext = 1;
+window.forge_video_open = (w, h, fps) => {
+  if (!window.forge_avc1) return 0;
+  const v = { chunks: [], avcc: null, state: 0, error: "", fps };
+  try {
+    v.enc = new VideoEncoder({
+      output: (chunk, meta) => {
+        const data = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(data);
+        v.chunks.push([chunk.type === "key", data]);
+        const d = meta?.decoderConfig?.description;
+        if (d) v.avcc = d instanceof ArrayBuffer ? new Uint8Array(d.slice(0))
+          : new Uint8Array(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength));
+      },
+      error: (e) => { v.state = -1; v.error = String(e); },
+    });
+    v.enc.configure({ codec: avcCodec(w, h, fps), width: w, height: h, framerate: fps,
+      bitrate: Math.round(w * h * fps * 0.15), latencyMode: "quality", avc: { format: "avc" } });
+  } catch (e) {
+    return 0;
+  }
+  videos.set(videoNext, v);
+  return videoNext++;
+};
+window.forge_video_frame = (id, rgba, w, h, k) => {
+  const v = videos.get(id);
+  if (!v || v.state < 0) return;
+  try {
+    const f = new VideoFrame(rgba.slice(), { format: "RGBA", codedWidth: w, codedHeight: h,
+      timestamp: Math.round((k * 1e6) / v.fps), duration: Math.round(1e6 / v.fps) });
+    v.enc.encode(f, { keyFrame: k % v.fps === 0 });
+    f.close();
+  } catch (e) { v.state = -1; v.error = String(e); }
+};
+// frames still being encoded: the app waits rather than queue the whole video in memory
+window.forge_video_backlog = (id) => videos.get(id)?.enc.encodeQueueSize ?? 0;
+window.forge_video_finish = (id) => {
+  const v = videos.get(id);
+  if (v && v.state === 0) v.enc.flush().then(() => { if (v.state === 0) v.state = 1; }, (e) => { v.state = -1; v.error = String(e); });
+};
+// 0 encoding, 1 done, -1 failed
+window.forge_video_state = (id) => videos.get(id)?.state ?? -1;
+window.forge_video_error = (id) => videos.get(id)?.error ?? "no such video";
+// what was made: [u32 avcC length][avcC][u32 frames]([u8 key][u32 length][AVCC bytes])..., little-endian
+window.forge_video_take = (id) => {
+  const v = videos.get(id);
+  videos.delete(id);
+  if (!v) return new Uint8Array();
+  try { v.enc.close(); } catch {}
+  const avcc = v.avcc ?? new Uint8Array();
+  const n = 8 + avcc.length + v.chunks.reduce((a, [, d]) => a + 5 + d.length, 0);
+  const out = new Uint8Array(n), dv = new DataView(out.buffer);
+  let at = 0;
+  dv.setUint32(at, avcc.length, true); out.set(avcc, at + 4); at += 4 + avcc.length;
+  dv.setUint32(at, v.chunks.length, true); at += 4;
+  for (const [key, d] of v.chunks) { out[at] = key ? 1 : 0; dv.setUint32(at + 1, d.length, true); out.set(d, at + 5); at += 5 + d.length; }
+  return out;
+};
+window.forge_video_cancel = (id) => { const v = videos.get(id); videos.delete(id); try { v?.enc.close(); } catch {} };
+
 window.forge_fs_changed = (path, bytes) => {
   if (mirror?.owns(path)) mirror.changed(path, bytes);
   else if (home?.owns(path)) home.changed(path, bytes);
 };
 if (store) {
-  mirror = new Mirror(store, MOUNT, fc, (e) => {
+  mirror = new Mirror(store, MOUNT, fc, (e, path) => {
     problems.push(String(e));
     console.error(`forge-app: ${e}`);
+    // the app says so too: never a "saved" or "History is on" over a write that was lost
+    if (path) fc.app_store_failed(path, e.message ?? String(e));
     if (e.name === "StaleBase") alert(`${e.message}\nYour edit is kept in this tab; reload to see the other.`);
   });
 }
@@ -178,16 +263,37 @@ window.forge_export = async (json) => {
 };
 window.forge_save_as = (name) => {
   const n = prompt("Save as (a path in the project)", name || "part.fg");
-  if (n) fc.app_save_as(`${MOUNT}/${cleanPath(n)}`);
+  if (!n) return;
+  // a name outside the project is refused, and the app says so (it threw, and nothing said)
+  try {
+    fc.app_save_as(`${MOUNT}/${cleanPath(n)}`);
+  } catch {
+    // (cleanPath refuses only a path that climbs out with `..`)
+    fc.app_say(`Couldn't save as ${n}: it isn't in this project.`);
+  }
 };
-const asked = q.get("open");
-// the app first, with the part asked for: the project's other files follow behind its first frame
-// (hundreds of them took a round trip each before it showed)
-await Promise.all([home?.load(), asked && mirror?.loadOne(cleanPath(asked))]);
+// the link's file, when it is a path the project may hold; else the app starts with none and
+// says why (`?open=../x` threw here, before the app started: a dead page)
+let asked = null;
+let refused = null;
+if (q.get("open")) {
+  try {
+    asked = cleanPath(q.get("open"));
+  } catch {
+    refused = `Couldn't open ${q.get("open")}: it isn't in this project.`;
+  }
+}
+// the app first: the project's files follow behind its first frame (hundreds of them took a
+// round trip each before it showed). A linked file opens once they have all come: opened before,
+// what it reads (a machining document's part, a drawing's) was missing from its first build
+// ("0/5 ops certified" on a good part, its export refused, until a rebuild)
+await home?.load();
 // ?noapp: the files and the kernel only, no canvas (the parity test)
 if (!q.has("noapp")) {
-  fc.start_app(asked ? `${MOUNT}/${cleanPath(asked)}` : undefined, q.get("offscreen") ?? undefined);
-  if (q.get("env")) fc.app_env(q.get("env"));
+  fc.start_app(undefined, q.get("offscreen") ?? undefined);
+  if (asked) fc.app_say("Loading project…");
+  else if (q.get("env")) fc.app_env(q.get("env"));
+  if (refused) fc.app_say(refused);
 }
 say("started");
 const loaded = (async () => {
@@ -202,9 +308,10 @@ const loaded = (async () => {
   }
   if (q.has("noapp")) return;
   if (asked) {
-    // what the part reads (an assembly's parts, a font) may have come since its first build
-    fc.app_rebuild();
-  } else {
+    fc.app_open(`${MOUNT}/${asked}`);
+    if (q.get("env")) fc.app_env(q.get("env"));
+  } else if (!refused) {
+    // (a link refused: nothing else opened in its place, the status saying why)
     const first = files().filter((p) => p.endsWith(".fg")).sort()[0];
     if (first) fc.app_open(`${MOUNT}/${first}`);
   }

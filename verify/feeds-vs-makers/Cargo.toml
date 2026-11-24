@@ -1,0 +1,14 @@
+[package]
+name = "feeds-vs-makers"
+description = "Our feeds and speeds (forge_tooling::resolve, maker presets off) against tool makers' published rows: ratios, summaries, pinned bands"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-tooling = { path = "../../kernel/forge-tooling" }
+forge-agent = { path = "../../interface/forge-agent" }
+
+[lints]
+workspace = true

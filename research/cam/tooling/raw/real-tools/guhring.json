@@ -849,6 +849,147 @@
     "feed for exactly 18.50 mm: table gives feed by diameter column only (3/4 in.); 18.5 mm is just under the 3/4 in. (19.05 mm) column; the 5/8 in. (15.87 mm) column is lower"
    ],
    "notes": "P, M, K, N, S all marked optimal (•), H limited (○). 'web thinning ≥ Ø 5.000 • relieved cone • Co-alloyed high speed steel'. 'Aluminium and Al-alloys BHN ≤ 120' row is blank for this series; Al cast ≤10% Si row used. Catalogue page = PDF page 170; speeds and feeds p.546."
+  },
+  {
+   "kind": "drill",
+   "id": "9055180058000",
+   "name": "5xD 3-flute drills, Series 5518, 5.80 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=328",
+   "taken": "2026-11-24",
+   "values": {
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "flutes": {
+     "v": 3,
+     "unit": "text",
+     "stated": "5xD 3-flute drills"
+    },
+    "type": {
+     "v": "FT 200 G",
+     "unit": "text",
+     "stated": "Type icon FT 200 G"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "Tolerance on Ø m7"
+    },
+    "coolant": {
+     "v": "without internal coolant",
+     "unit": "text",
+     "stated": "Internal coolant icon: Without"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "Shank form HA"
+    },
+    "cutting_depth": {
+     "v": "5xD",
+     "unit": "text",
+     "stated": "Cutting depth 5xD"
+    },
+    "dc": {
+     "v": 5.8,
+     "unit": "mm",
+     "stated": "d1 5.80 (row: 0.2283 5.80 6.00 82.00 35.30 44.00 9055180058000)"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d2 6.00 (row: 0.2283 5.80 6.00 82.00 35.30 44.00 9055180058000)"
+    },
+    "oal": {
+     "v": 82.0,
+     "unit": "mm",
+     "stated": "l1 82.00 (row: 0.2283 5.80 6.00 82.00 35.30 44.00 9055180058000)"
+    },
+    "lcf": {
+     "v": 44.0,
+     "unit": "mm",
+     "stated": "l2 44.00 (row: 0.2283 5.80 6.00 82.00 35.30 44.00 9055180058000)"
+    },
+    "tmax": {
+     "v": 35.3,
+     "unit": "mm",
+     "stated": "tmax 35.30 (row: 0.2283 5.80 6.00 82.00 35.30 44.00 9055180058000)"
+    },
+    "sig": {
+     "v": 130,
+     "unit": "deg",
+     "stated": "Point angle 130°"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm)",
+     "vc": {
+      "v": 79.248,
+      "unit": "m/min",
+      "stated": "SFM 260"
+     },
+     "f": {
+      "v": 0.0889,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 1/8 in. 0.0035"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "Common structural steels, BHN ≤ 150; feed column 1/4 in. (6.350 mm)",
+     "vc": {
+      "v": 79.248,
+      "unit": "m/min",
+      "stated": "SFM 260"
+     },
+     "f": {
+      "v": 0.127,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 1/4 in. 0.0050"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+    },
+    {
+     "iso_group": "N",
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120; feed column 1/8 in. (3.170 mm)",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "f": {
+      "v": 0.127,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 1/8 in. 0.0050"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+    },
+    {
+     "iso_group": "N",
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120; feed column 1/4 in. (6.350 mm)",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "f": {
+      "v": 0.2032,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 1/4 in. 0.0080"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+    }
+   ],
+   "unknown": [
+    "coating: Surface icon is an empty circle, surface name not printed (presumably bright, not stated)",
+    "feed for exactly 5.80 mm: table gives feed by diameter column only (1/8 in., 1/4 in.); 5.5/6.0 mm lie between the 1/8 in. and 1/4 in. columns, both given"
+   ],
+   "notes": "Page marks: N Aluminum and K Cast iron optimal (•); P Steel not marked optimal although the feed table on p.571 lists steels. 'web thinning ≥ Ø 3.000 • spiro-point • wide flutes • optimal centering • suitable for interrupted cutting'. Catalogue page = PDF page 328; speeds and feeds p.571.; 5.80 mm row added 2026-11-24 from the same page (CAM-CORE: 6H7 dowel pre-drill)"
   }
  ],
  "blocked": [
