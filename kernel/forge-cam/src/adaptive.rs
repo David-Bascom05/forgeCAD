@@ -1892,7 +1892,7 @@ mod tests {
         let pts = travelled_links(path, &out.retraces);
         // (1)
         let mut run: Vec<[f64; 2]> = Vec::new();
-        let mut check = |run: &mut Vec<[f64; 2]>| {
+        let check = |run: &mut Vec<[f64; 2]>| {
             let mut total = 0.0f64;
             let mut last: Option<f64> = None;
             for w in run.windows(2) {
@@ -2182,11 +2182,8 @@ mod tests {
                     "two-way {two_way}: a cleanup run {g:?} removes nothing"
                 );
                 if g.whole {
-                    for i in g.first..g.end {
-                        assert!(
-                            removed[i] > 0.0,
-                            "two-way {two_way}: whole ring {g:?}: move {i} in air"
-                        );
+                    for (i, r) in removed.iter().enumerate().take(g.end).skip(g.first) {
+                        assert!(*r > 0.0, "two-way {two_way}: whole ring {g:?}: move {i} in air");
                     }
                 }
             }
