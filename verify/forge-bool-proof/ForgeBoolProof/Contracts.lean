@@ -111,16 +111,23 @@ structure ArrOK (Aex Bex : BodyModel E) (a : Arr E) : Prop where
     ∃ f ∈ a.regions, a.gf f = g ∧ a.src f = s
   /-- one region per facet and body -/
   inj : ∀ f ∈ a.regions, ∀ f' ∈ a.regions, a.gf f = a.gf f' → a.src f = a.src f' → f = f'
-  /-- a facet on a body's faces is on that solid's frontier. Off the vertex-cluster zones this
-  is `Bounds.faces_sub`; inside a zone (micro-faces of near-concurrent carriers) it is part of the
-  contract: open, with the cluster ruling (ledger row D5.zone) -/
-  on_frontier : ∀ g s, (a.G.facet g).Nonempty → a.G.facet g ⊆ Faces (pick s Aex Bex) →
-    a.G.facet g ⊆ frontier (denoteExact (pick s Aex Bex))
   /-- each region lies on a face of its body, with that face's inside side -/
   on_face : ∀ f ∈ a.regions, ∃ F ∈ (pick (a.src f) Aex Bex).faces, a.G.facet (a.gf f) ⊆ F.region ∧
     ∀ y ∈ a.G.facet (a.gf f), ∀ᶠ z in 𝓝 y,
       (inSide (a.sense f) (a.cf (a.gf f) z) ↔ inSide F.sense (F.carrier z)) ∧
       (outSide (a.sense f) (a.cf (a.gf f) z) ↔ outSide F.sense (F.carrier z))
+
+/-- **A facet on a body's faces is on that solid's frontier** (`Bounds.faces_sub`; inside the
+vertex-cluster zones too since the ruling Z2, ledger D5.zone). -/
+theorem ArrOK.on_frontier {Aex Bex : BodyModel E} {a : Arr E} (_ha : ArrOK Aex Bex a)
+    (hvA : ValidExact Aex) (hvB : ValidExact Bex) (g : Nat) (s : Bool) (_hne : (a.G.facet g).Nonempty)
+    (hsub : a.G.facet g ⊆ Faces (pick s Aex Bex)) :
+    a.G.facet g ⊆ frontier (denoteExact (pick s Aex Bex)) := by
+  have hb : Bounds (pick s Aex Bex) (denoteExact (pick s Aex Bex)) := by
+    cases s
+    · exact bounds_denoteExact hvB
+    · exact bounds_denoteExact hvA
+  exact hsub.trans hb.faces_sub
 
 /-- The exact class of facet `g` of `G` against a solid `Oth`, for a region of solid `Own`: inside
 `Oth`, outside it, or on its boundary with the two solids on the same side of the facet (each of
@@ -181,7 +188,7 @@ bounded, and its frontier lies on the arrangement's faces. -/
 structure BoundsFaces (b : BodyModel E) (FacesG S : Set E) : Prop where
   /-- the frontier, where it is on the arrangement's faces, is on the result's faces -/
   frontier_on : FacesG ∩ frontier S ⊆ Faces b
-  faces_sub : Faces b \ Zones b ⊆ frontier S
+  faces_sub : Faces b ⊆ frontier S
   local_formula : ∀ u Φ z, b.formulas[u]? = some Φ → b.zones[u]? = some z → ∀ x ∈ z,
     (∀ f ∈ b.faces, IncV b u f → f.carrier x ≠ 0) → (x ∈ S ↔ Φ.den (carriers b) x)
   oriented : ∀ f ∈ b.faces, ∀ y, Alone b f y → Oriented f.carrier S f.sense y
@@ -287,7 +294,7 @@ def D7 : Prop := ∀ A B Aex Bex op fs cs, Ctx δ abs Size A B Aex Bex → ArrOK
 def ApplyPost (A B : Body) (op : Op) (a : Arr E) (SA SB : Set E) (R : Body) : Prop :=
   ∃ Rs, exactOf δ (abs R) = some Rs ∧
     (∀ i (h : i < (abs R).edges.length), EdgeIsolated δ (abs R) i (abs R).edges[i]) ∧
-    WellFormed Rs ∧ BoundsFaces Rs a.FacesG (Res a.G (keepRoom a.G SA SB op)) ∧
+    VertexIsolated Rs ∧ WellFormed Rs ∧ BoundsFaces Rs a.FacesG (Res a.G (keepRoom a.G SA SB op)) ∧
     Faithful δ (abs R) ∧ Names A B op R
 
 def D8 : Prop := ∀ A B Aex Bex op fs kp, Ctx δ abs Size A B Aex Bex → ArrOK Aex Bex (V.arr fs) →

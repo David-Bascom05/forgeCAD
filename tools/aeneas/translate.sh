@@ -14,6 +14,8 @@
 #                                  bridge (AeneasF64), and its lakefile requires Aeneas directly
 #   DEPS=(forge-math forge-geom)   the kernel crates this one calls that have their own translation
 #                                  here: their items are defined once, by that translation (below)
+#   SRC_CRATE=forge-bool           the kernel crate, when it is not the directory's name (a second
+#                                  translation of one crate, in a package of its own)
 #   OVERFLOW_CHECKS=false          interim, per crate: translate without overflow checks (integer ops
 #                                  as wrapping). The default, and the target, is true (below); a crate
 #                                  set to false carries a TODO in its translate.conf.
@@ -51,6 +53,7 @@ dir=$root/verify/aeneas/$crate
 conf=$dir/translate.conf
 [ -f "$conf" ] || { echo "no $conf" >&2; exit 2; }
 PKG=
+SRC_CRATE=
 BRIDGE=
 DEPS=()
 OVERFLOW_CHECKS=true
@@ -58,13 +61,14 @@ CHARON_ARGS=()
 # shellcheck source=/dev/null
 . "$conf"
 [ -n "$PKG" ] || { echo "$conf: PKG unset" >&2; exit 2; }
-src=$root/kernel/$crate
+src=$root/kernel/${SRC_CRATE:-$crate}
 [ -d "$src" ] || { echo "no crate $src" >&2; exit 2; }
 
 work=$(mktemp -d)
 # FORGE_KEEP=DIR keeps the scratch translation (logs, raw Aeneas output) there, for debugging
 trap 'if [ -n "${FORGE_KEEP:-}" ]; then rm -rf "$FORGE_KEEP"; cp -a "$work" "$FORGE_KEEP"; fi; rm -rf "$work"' EXIT
-name=${crate//-/_}
+name=${SRC_CRATE:-$crate}
+name=${name//-/_}
 (
   cd "$src"
   PATH=$H/charon/bin:$PATH RUSTUP_TOOLCHAIN=$TC CARGO_TARGET_DIR=$H/target-charon \
