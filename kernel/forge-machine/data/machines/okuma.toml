@@ -1331,6 +1331,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # Okuma MA-600HIII: MA-H.
 # X 1050 Y 900 Z 1000; 6000 rpm; 60 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "okuma-ma-600hiii"
 kind = "vmc4"
@@ -1624,3 +1630,9 @@ basis = "the spindle housing around the tool: radius an estimate, kept large; on
 path = "body.head"
 status = "estimate"
 basis = "the spindle head / ram (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+

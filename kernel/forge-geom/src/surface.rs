@@ -553,12 +553,8 @@ impl SurfaceGeom for Cylinder {
         Point2::new(wrap_angle(l.y, l.x), l.z)
     }
     fn bbox(&self, uv: Box2) -> Box3 {
-        frame_box(
-            &self.frame,
-            uv.u.cos() * self.radius,
-            uv.u.sin() * self.radius,
-            uv.v,
-        )
+        let (s, c) = uv.u.sin_cos();
+        frame_box(&self.frame, c * self.radius, s * self.radius, uv.v)
     }
     fn transformed(&self, f: &Frame) -> Self {
         Cylinder {
@@ -647,7 +643,8 @@ impl SurfaceGeom for Cone {
     }
     fn bbox(&self, uv: Box2) -> Box3 {
         let rho = Interval::point(self.radius) + uv.v * self.tan_a();
-        frame_box(&self.frame, uv.u.cos() * rho, uv.u.sin() * rho, uv.v)
+        let (s, c) = uv.u.sin_cos();
+        frame_box(&self.frame, c * rho, s * rho, uv.v)
     }
     fn transformed(&self, f: &Frame) -> Self {
         Cone {
@@ -697,8 +694,9 @@ impl SurfaceGeom for Sphere {
     }
     fn bbox(&self, uv: Box2) -> Box3 {
         let r = self.radius;
-        let cv = uv.v.cos() * r;
-        frame_box(&self.frame, uv.u.cos() * cv, uv.u.sin() * cv, uv.v.sin() * r)
+        let ((su, cu), (sv, cv)) = (uv.u.sin_cos(), uv.v.sin_cos());
+        let cv = cv * r;
+        frame_box(&self.frame, cu * cv, su * cv, sv * r)
     }
     fn transformed(&self, f: &Frame) -> Self {
         Sphere {
@@ -766,13 +764,9 @@ impl SurfaceGeom for Torus {
         Point2::new(wrap_angle(l.y, l.x), wrap_angle(l.z, rho - self.major))
     }
     fn bbox(&self, uv: Box2) -> Box3 {
-        let rho = Interval::point(self.major) + uv.v.cos() * self.minor;
-        frame_box(
-            &self.frame,
-            uv.u.cos() * rho,
-            uv.u.sin() * rho,
-            uv.v.sin() * self.minor,
-        )
+        let ((su, cu), (sv, cv)) = (uv.u.sin_cos(), uv.v.sin_cos());
+        let rho = Interval::point(self.major) + cv * self.minor;
+        frame_box(&self.frame, cu * rho, su * rho, sv * self.minor)
     }
     fn transformed(&self, f: &Frame) -> Self {
         Torus {

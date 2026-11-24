@@ -29,9 +29,10 @@ fn segs(h: &mut u64, ss: &[Seg]) {
     }
 }
 
-// re-pinned 2026-11-23 on the train-3 merge: main's digest plus the posted-text change of
-// post/haas-audit (haas: no G187 P2; the haas-hsm dialect added); the same value on wasm32-wasip1
-const PINNED: u64 = 0xd2129cced024f3a0;
+// re-pinned on train 4b: the union of two judged changes, the train-3 posted-text change
+// (haas: no G187 P2; haas-hsm added) and cam/machine-train4's seven new dialects (siemens,
+// heidenhain, pathpilot, mach3, mach4, centroid-cnc12, masso); the same value on wasm32-wasip1
+const PINNED: u64 = 0x724230b4ba925167;
 
 #[test]
 fn the_same_bits_everywhere() {

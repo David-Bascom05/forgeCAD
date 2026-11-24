@@ -7,6 +7,8 @@ pub mod camera;
 pub mod camsim;
 pub mod dwgview;
 pub mod explode;
+pub mod frame;
+pub mod ghost;
 pub mod livegpu;
 pub mod look;
 pub mod machine_mesh;
@@ -20,6 +22,7 @@ pub mod plat;
 pub mod render;
 pub mod scene;
 pub mod shell;
+pub mod thumb;
 pub mod viewcube;
 pub mod viewer;
 

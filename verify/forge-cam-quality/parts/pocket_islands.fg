@@ -1,0 +1,23 @@
+# Benchmark: a closed pocket with two islands (a round boss and a rectangular block standing to the
+# top), for engagement round islands and in the pocket's corners.
+
+shared L = 100
+shared W = 70
+shared t = 20
+shared rim = 10
+shared depth = 10
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+plate = extrude(plan, t)
+sketch pk(on: plate.end) {
+  well = rect(corner: (rim, rim), size: (L - 2 * rim, W - 2 * rim))
+}
+pocket = cut(pk.well, depth)
+sketch isl(on: pocket.floor) {
+  c = circle((35, 35), 6)
+  b = rect(corner: (60, 25), size: (12, 20))
+}
+round_isl = extrude(isl.c, depth)
+block_isl = extrude(isl.b, depth)

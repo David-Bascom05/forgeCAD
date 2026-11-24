@@ -1,0 +1,4870 @@
+{
+ "vendor": "Techniks",
+ "blocked": [],
+ "records": [
+  {
+   "kind": "holder",
+   "id": "22225",
+   "name": "CAT40 x ER16 - 2.76\", hex nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 2, printed page 10)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x ER16 - 2.76\", hex nut"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "CAT40 x ER16 - 2.76\", hex nut"
+    },
+    "gauge_length": {
+     "v": 70.104,
+     "unit": "mm",
+     "stated": "l1 = 2.76\""
+    },
+    "nose_d": {
+     "v": 27.432,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.08\""
+    },
+    "nut_part": {
+     "v": "41116",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 10.312,
+     "unit": "mm",
+     "stated": "Max. Shank = .406\""
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 70.104,
+     "d": 27.432,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22235",
+   "name": "CAT40 x ER20 - 2.76\", hex nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 2, printed page 10)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x ER20 - 2.76\", hex nut"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "CAT40 x ER20 - 2.76\", hex nut"
+    },
+    "gauge_length": {
+     "v": 70.104,
+     "unit": "mm",
+     "stated": "l1 = 2.76\""
+    },
+    "nose_d": {
+     "v": 34.036,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.34\""
+    },
+    "nut_part": {
+     "v": "41120",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 13.005,
+     "unit": "mm",
+     "stated": "Max. Shank = .512\""
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 70.104,
+     "d": 34.036,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22243",
+   "name": "CAT40 x ER25 - 2.76\", slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 2, printed page 10)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x ER25 - 2.76\", slotted nut"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "CAT40 x ER25 - 2.76\", slotted nut"
+    },
+    "gauge_length": {
+     "v": 70.104,
+     "unit": "mm",
+     "stated": "l1 = 2.76\""
+    },
+    "nose_d": {
+     "v": 41.91,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.65\""
+    },
+    "nut_part": {
+     "v": "41925",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 16.002,
+     "unit": "mm",
+     "stated": "Max. Shank = .630\""
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 70.104,
+     "d": 41.91,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22253",
+   "name": "CAT40 x ER32 - 2.76\", slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 2, printed page 10)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x ER32 - 2.76\", slotted nut"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "CAT40 x ER32 - 2.76\", slotted nut"
+    },
+    "gauge_length": {
+     "v": 70.104,
+     "unit": "mm",
+     "stated": "l1 = 2.76\""
+    },
+    "nose_d": {
+     "v": 50.038,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.97\""
+    },
+    "nut_part": {
+     "v": "41932",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 20.015,
+     "unit": "mm",
+     "stated": "Max. Shank = .788\""
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 70.104,
+     "d": 50.038,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22255",
+   "name": "CAT40 x ER32 - 4\", slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 2, printed page 10)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x ER32 - 4\", slotted nut"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "CAT40 x ER32 - 4\", slotted nut"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "l1 = 4\""
+    },
+    "nose_d": {
+     "v": 50.038,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.97\""
+    },
+    "nut_part": {
+     "v": "41932",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 20.015,
+     "unit": "mm",
+     "stated": "Max. Shank = .788\""
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 101.6,
+     "d": 50.038,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22257",
+   "name": "CAT40 x ER32 - 6\", slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 2, printed page 10)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x ER32 - 6\", slotted nut"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "CAT40 x ER32 - 6\", slotted nut"
+    },
+    "gauge_length": {
+     "v": 152.4,
+     "unit": "mm",
+     "stated": "l1 = 6\""
+    },
+    "nose_d": {
+     "v": 50.038,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.97\""
+    },
+    "nut_part": {
+     "v": "41932",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 20.015,
+     "unit": "mm",
+     "stated": "Max. Shank = .788\""
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 152.4,
+     "d": 50.038,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22261",
+   "name": "CAT40 x ER40 - 3.15\", slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 2, printed page 10)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x ER40 - 3.15\", slotted nut"
+    },
+    "clamp": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "CAT40 x ER40 - 3.15\", slotted nut"
+    },
+    "gauge_length": {
+     "v": 80.01,
+     "unit": "mm",
+     "stated": "l1 = 3.15\""
+    },
+    "nose_d": {
+     "v": 62.992,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 2.48\""
+    },
+    "nut_part": {
+     "v": "41940",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 25.984,
+     "unit": "mm",
+     "stated": "Max. Shank = 1.023\""
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.01,
+     "d": 62.992,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "16102",
+   "name": "BT30 x ER16 - 60mm, hex nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 12, printed page 20)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 x ER16 - 60mm, hex nut"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "BT30 x ER16 - 60mm, hex nut"
+    },
+    "gauge_length": {
+     "v": 60.0,
+     "unit": "mm",
+     "stated": "l1 = 60mm"
+    },
+    "nose_d": {
+     "v": 27.432,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.08\""
+    },
+    "nut_part": {
+     "v": "41116",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 10.312,
+     "unit": "mm",
+     "stated": "Max. Shank = .406\""
+    }
+   },
+   "profile": [
+    {
+     "z": 60.0,
+     "d": 27.432,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut",
+    "balance"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "16106",
+   "name": "BT30 x ER20 - 70mm, hex nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 12, printed page 20)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 x ER20 - 70mm, hex nut"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "BT30 x ER20 - 70mm, hex nut"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "l1 = 70mm"
+    },
+    "nose_d": {
+     "v": 34.036,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.34\""
+    },
+    "nut_part": {
+     "v": "41120",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 13.005,
+     "unit": "mm",
+     "stated": "Max. Shank = .512\""
+    }
+   },
+   "profile": [
+    {
+     "z": 70.0,
+     "d": 34.036,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut",
+    "balance"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "16109",
+   "name": "BT30 x ER25 - 70mm, slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 12, printed page 20)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 x ER25 - 70mm, slotted nut"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "BT30 x ER25 - 70mm, slotted nut"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "l1 = 70mm"
+    },
+    "nose_d": {
+     "v": 41.91,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.65\""
+    },
+    "nut_part": {
+     "v": "41925",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 16.002,
+     "unit": "mm",
+     "stated": "Max. Shank = .630\""
+    }
+   },
+   "profile": [
+    {
+     "z": 70.0,
+     "d": 41.91,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut",
+    "balance"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "16113",
+   "name": "BT30 x ER32 - 70mm, slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 12, printed page 20)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 x ER32 - 70mm, slotted nut"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "BT30 x ER32 - 70mm, slotted nut"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "l1 = 70mm"
+    },
+    "nose_d": {
+     "v": 50.038,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.97\""
+    },
+    "nut_part": {
+     "v": "41932",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 20.015,
+     "unit": "mm",
+     "stated": "Max. Shank = .788\""
+    }
+   },
+   "profile": [
+    {
+     "z": 70.0,
+     "d": 50.038,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut",
+    "balance"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "16151",
+   "name": "BT40 x ER16 - 70mm, hex nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 14, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x ER16 - 70mm, hex nut"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "BT40 x ER16 - 70mm, hex nut"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "l1 = 70mm"
+    },
+    "nose_d": {
+     "v": 27.432,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.08\""
+    },
+    "nut_part": {
+     "v": "41116",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 10.312,
+     "unit": "mm",
+     "stated": "Max. Shank = .406\""
+    }
+   },
+   "profile": [
+    {
+     "z": 70.0,
+     "d": 27.432,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut",
+    "balance"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "16159",
+   "name": "BT40 x ER20 - 70mm, hex nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 14, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x ER20 - 70mm, hex nut"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "BT40 x ER20 - 70mm, hex nut"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "l1 = 70mm"
+    },
+    "nose_d": {
+     "v": 34.036,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.34\""
+    },
+    "nut_part": {
+     "v": "41120",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 13.005,
+     "unit": "mm",
+     "stated": "Max. Shank = .512\""
+    }
+   },
+   "profile": [
+    {
+     "z": 70.0,
+     "d": 34.036,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut",
+    "balance"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "16169",
+   "name": "BT40 x ER25 - 70mm, slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 14, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x ER25 - 70mm, slotted nut"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "BT40 x ER25 - 70mm, slotted nut"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "l1 = 70mm"
+    },
+    "nose_d": {
+     "v": 41.91,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.65\""
+    },
+    "nut_part": {
+     "v": "41925",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 16.002,
+     "unit": "mm",
+     "stated": "Max. Shank = .630\""
+    }
+   },
+   "profile": [
+    {
+     "z": 70.0,
+     "d": 41.91,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut",
+    "balance"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "16177",
+   "name": "BT40 x ER32 - 70mm, slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 14, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x ER32 - 70mm, slotted nut"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "BT40 x ER32 - 70mm, slotted nut"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "l1 = 70mm"
+    },
+    "nose_d": {
+     "v": 50.038,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.97\""
+    },
+    "nut_part": {
+     "v": "41932",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 20.015,
+     "unit": "mm",
+     "stated": "Max. Shank = .788\""
+    }
+   },
+   "profile": [
+    {
+     "z": 70.0,
+     "d": 50.038,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut",
+    "balance"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "16179",
+   "name": "BT40 x ER32 - 100mm, slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 14, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x ER32 - 100mm, slotted nut"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "BT40 x ER32 - 100mm, slotted nut"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "l1 = 100mm"
+    },
+    "nose_d": {
+     "v": 50.038,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 1.97\""
+    },
+    "nut_part": {
+     "v": "41932",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 20.015,
+     "unit": "mm",
+     "stated": "Max. Shank = .788\""
+    }
+   },
+   "profile": [
+    {
+     "z": 100.0,
+     "d": 50.038,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut",
+    "balance"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "16183",
+   "name": "BT40 x ER40 - 80mm, slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 14, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x ER40 - 80mm, slotted nut"
+    },
+    "clamp": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "BT40 x ER40 - 80mm, slotted nut"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "l1 = 80mm"
+    },
+    "nose_d": {
+     "v": 62.992,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 2.48\""
+    },
+    "nut_part": {
+     "v": "41940",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "max_shank": {
+     "v": 25.984,
+     "unit": "mm",
+     "stated": "Max. Shank = 1.023\""
+    }
+   },
+   "profile": [
+    {
+     "z": 80.0,
+     "d": 62.992,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut",
+    "balance"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "31432",
+   "name": "HSK63A x ER16 - 80mm, hex nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 19, printed page 27)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A x ER16 - 80mm, hex nut"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "HSK63A x ER16 - 80mm, hex nut"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "l1 = 80mm"
+    },
+    "nose_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 28mm"
+    },
+    "nut_part": {
+     "v": "41116",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.0,
+     "d": 28.0,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "31440",
+   "name": "HSK63A x ER20 - 80mm, hex nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 19, printed page 27)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A x ER20 - 80mm, hex nut"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "HSK63A x ER20 - 80mm, hex nut"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "l1 = 80mm"
+    },
+    "nose_d": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 34mm"
+    },
+    "nut_part": {
+     "v": "41120",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.0,
+     "d": 34.0,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "31462",
+   "name": "HSK63A x ER32 - 100mm, slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 19, printed page 27)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A x ER32 - 100mm, slotted nut"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "HSK63A x ER32 - 100mm, slotted nut"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "l1 = 100mm"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 50mm"
+    },
+    "nut_part": {
+     "v": "41932",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 100.0,
+     "d": 50.0,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "31466",
+   "name": "HSK63A x ER32 - 160mm, slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 19, printed page 27)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A x ER32 - 160mm, slotted nut"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "HSK63A x ER32 - 160mm, slotted nut"
+    },
+    "gauge_length": {
+     "v": 160.0,
+     "unit": "mm",
+     "stated": "l1 = 160mm"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 50mm"
+    },
+    "nut_part": {
+     "v": "41932",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 160.0,
+     "d": 50.0,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "31468",
+   "name": "HSK63A x ER40 - 80mm, slotted nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collet_Chucks_Catalog.pdf (PDF page 19, printed page 27)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A x ER40 - 80mm, slotted nut"
+    },
+    "clamp": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "HSK63A x ER40 - 80mm, slotted nut"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "l1 = 80mm"
+    },
+    "nose_d": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "D (nut outside diameter on drawing) = 63mm"
+    },
+    "nut_part": {
+     "v": "41940",
+     "unit": "text",
+     "stated": "Nut"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.0,
+     "d": 63.0,
+     "stated": "D at l1 (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters behind the nut"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22911",
+   "name": "CAT40 x SLN 1/4\" - 3\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 3, printed page 75)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x SLN 1/4\" - 3\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 1/4\"",
+     "unit": "text",
+     "stated": "SLN 1/4\""
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "l1 = 3\""
+    },
+    "bore": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "d1 = 1/4\""
+    },
+    "nose_d": {
+     "v": 19.812,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = .78\""
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 15,000 RPM at G6.3"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 19.812,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22915",
+   "name": "CAT40 x SLN 3/8\" - 3\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 3, printed page 75)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x SLN 3/8\" - 3\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 3/8\"",
+     "unit": "text",
+     "stated": "SLN 3/8\""
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "l1 = 3\""
+    },
+    "bore": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "d1 = 3/8\""
+    },
+    "nose_d": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 1\""
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 15,000 RPM at G6.3"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 25.4,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22917",
+   "name": "CAT40 x SLN 1/2\" - 3\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 3, printed page 75)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x SLN 1/2\" - 3\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 1/2\"",
+     "unit": "text",
+     "stated": "SLN 1/2\""
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "l1 = 3\""
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d1 = 1/2\""
+    },
+    "nose_d": {
+     "v": 31.75,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 1.25\""
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 15,000 RPM at G6.3"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 31.75,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22919",
+   "name": "CAT40 x SLN 5/8\" - 3\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 3, printed page 75)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x SLN 5/8\" - 3\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 5/8\"",
+     "unit": "text",
+     "stated": "SLN 5/8\""
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "l1 = 3\""
+    },
+    "bore": {
+     "v": 15.875,
+     "unit": "mm",
+     "stated": "d1 = 5/8\""
+    },
+    "nose_d": {
+     "v": 38.1,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 1.5\""
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 15,000 RPM at G6.3"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 38.1,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22921",
+   "name": "CAT40 x SLN 3/4\" - 3.5\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 3, printed page 75)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x SLN 3/4\" - 3.5\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 3/4\"",
+     "unit": "text",
+     "stated": "SLN 3/4\""
+    },
+    "gauge_length": {
+     "v": 88.9,
+     "unit": "mm",
+     "stated": "l1 = 3.5\""
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "d1 = 3/4\""
+    },
+    "nose_d": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 1.75\""
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 15,000 RPM at G6.3"
+    }
+   },
+   "profile": [
+    {
+     "z": 88.9,
+     "d": 44.45,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22925",
+   "name": "CAT40 x SLN 1\" - 4\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 3, printed page 75)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x SLN 1\" - 4\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 1\"",
+     "unit": "text",
+     "stated": "SLN 1\""
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "l1 = 4\""
+    },
+    "bore": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "d1 = 1\""
+    },
+    "nose_d": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 2\""
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 15,000 RPM at G6.3"
+    }
+   },
+   "profile": [
+    {
+     "z": 101.6,
+     "d": 50.8,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22969",
+   "name": "CAT40 x SLN 12mm - 63.5mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 3, printed page 75)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x SLN 12mm - 63.5mm"
+    },
+    "clamp": {
+     "v": "side-lock end mill 12mm",
+     "unit": "text",
+     "stated": "SLN 12mm"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "l1 = 63.5mm"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "d1 = 12mm"
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 42mm"
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 15,000 RPM at G6.3"
+    }
+   },
+   "profile": [
+    {
+     "z": 63.5,
+     "d": 42.0,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "22973",
+   "name": "CAT40 x SLN 20mm - 76.2mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 3, printed page 75)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x SLN 20mm - 76.2mm"
+    },
+    "clamp": {
+     "v": "side-lock end mill 20mm",
+     "unit": "text",
+     "stated": "SLN 20mm"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "l1 = 76.2mm"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "d1 = 20mm"
+    },
+    "nose_d": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 44.45mm"
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 15,000 RPM at G6.3"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 44.45,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "17130-1/2",
+   "name": "BT30 x SLN 1/2\" - 2.36\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 18, printed page 90)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 x SLN 1/2\" - 2.36\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 1/2\"",
+     "unit": "text",
+     "stated": "SLN 1/2\""
+    },
+    "gauge_length": {
+     "v": 59.944,
+     "unit": "mm",
+     "stated": "l1 = 2.36\""
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d1 = 1/2\""
+    },
+    "nose_d": {
+     "v": 31.75,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 1.25\""
+    }
+   },
+   "profile": [
+    {
+     "z": 59.944,
+     "d": 31.75,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "balance",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "17130-3/4",
+   "name": "BT30 x SLN 3/4\" - 2.36\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 18, printed page 90)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 x SLN 3/4\" - 2.36\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 3/4\"",
+     "unit": "text",
+     "stated": "SLN 3/4\""
+    },
+    "gauge_length": {
+     "v": 59.944,
+     "unit": "mm",
+     "stated": "l1 = 2.36\""
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "d1 = 3/4\""
+    },
+    "nose_d": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 1.75\""
+    }
+   },
+   "profile": [
+    {
+     "z": 59.944,
+     "d": 44.45,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "balance",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "17140-1/2",
+   "name": "BT40 x SLN 1/2\" - 2.5\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 19, printed page 91)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x SLN 1/2\" - 2.5\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 1/2\"",
+     "unit": "text",
+     "stated": "SLN 1/2\""
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "l1 = 2.5\""
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d1 = 1/2\""
+    },
+    "nose_d": {
+     "v": 31.75,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 1.25\""
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 15,000 RPM at G6.3"
+    }
+   },
+   "profile": [
+    {
+     "z": 63.5,
+     "d": 31.75,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "17140-3/4",
+   "name": "BT40 x SLN 3/4\" - 2.5\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 19, printed page 91)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x SLN 3/4\" - 2.5\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 3/4\"",
+     "unit": "text",
+     "stated": "SLN 3/4\""
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "l1 = 2.5\""
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "d1 = 3/4\""
+    },
+    "nose_d": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 1.75\""
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 15,000 RPM at G6.3"
+    }
+   },
+   "profile": [
+    {
+     "z": 63.5,
+     "d": 44.45,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "17134",
+   "name": "BT40 x SLN 12mm - 63mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 19, printed page 91)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x SLN 12mm - 63mm"
+    },
+    "clamp": {
+     "v": "side-lock end mill 12mm",
+     "unit": "text",
+     "stated": "SLN 12mm"
+    },
+    "gauge_length": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "l1 = 63mm"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "d1 = 12mm"
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 42mm"
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 15,000 RPM at G6.3"
+    }
+   },
+   "profile": [
+    {
+     "z": 63.0,
+     "d": 42.0,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "17136",
+   "name": "BT40 x SLN 20mm - 63mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 19, printed page 91)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x SLN 20mm - 63mm"
+    },
+    "clamp": {
+     "v": "side-lock end mill 20mm",
+     "unit": "text",
+     "stated": "SLN 20mm"
+    },
+    "gauge_length": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "l1 = 63mm"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "d1 = 20mm"
+    },
+    "nose_d": {
+     "v": 52.0,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 52mm"
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced to 15,000 RPM at G6.3"
+    }
+   },
+   "profile": [
+    {
+     "z": 63.0,
+     "d": 52.0,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section",
+    "coolant"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "32954",
+   "name": "HSK63A x SLN 1/2\" - 3\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 16, printed page 88)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A x SLN 1/2\" - 3\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 1/2\"",
+     "unit": "text",
+     "stated": "SLN 1/2\""
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "l1 = 3\""
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d1 = 1/2\""
+    },
+    "nose_d": {
+     "v": 35.052,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 1.38\""
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balance to 15,000 RPM @ G6.3"
+    },
+    "coolant": {
+     "v": "coolant tubes for through-spindle coolant",
+     "unit": "text",
+     "stated": "Features: Coolant tubes for through-spindle coolant"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 35.052,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "32958",
+   "name": "HSK63A x SLN 3/4\" - 3.75\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 16, printed page 88)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A x SLN 3/4\" - 3.75\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 3/4\"",
+     "unit": "text",
+     "stated": "SLN 3/4\""
+    },
+    "gauge_length": {
+     "v": 95.25,
+     "unit": "mm",
+     "stated": "l1 = 3.75\""
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "d1 = 3/4\""
+    },
+    "nose_d": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 1.75\""
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balance to 15,000 RPM @ G6.3"
+    },
+    "coolant": {
+     "v": "coolant tubes for through-spindle coolant",
+     "unit": "text",
+     "stated": "Features: Coolant tubes for through-spindle coolant"
+    }
+   },
+   "profile": [
+    {
+     "z": 95.25,
+     "d": 44.45,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "32962",
+   "name": "HSK63A x SLN 1\" - 3.75\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/End_Mill_Holders_Catalog.pdf (PDF page 16, printed page 88)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A x SLN 1\" - 3.75\""
+    },
+    "clamp": {
+     "v": "side-lock end mill 1\"",
+     "unit": "text",
+     "stated": "SLN 1\""
+    },
+    "gauge_length": {
+     "v": 95.25,
+     "unit": "mm",
+     "stated": "l1 = 3.75\""
+    },
+    "bore": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "d1 = 1\""
+    },
+    "nose_d": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "d2 (front body diameter on drawing) = 2\""
+    },
+    "balance": {
+     "v": "G6.3 at 15,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balance to 15,000 RPM @ G6.3"
+    },
+    "coolant": {
+     "v": "coolant tubes for through-spindle coolant",
+     "unit": "text",
+     "stated": "Features: Coolant tubes for through-spindle coolant"
+    }
+   },
+   "profile": [
+    {
+     "z": 95.25,
+     "d": 50.8,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the d2 section"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "29010",
+   "name": "CAT40 x 1/4\" I.D. - 3\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 2, printed page 96)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x 1/4\" I.D. - 3\""
+    },
+    "clamp": {
+     "v": "shrink 1/4\"",
+     "unit": "text",
+     "stated": "1/4\" I.D."
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "l1 = 3\""
+    },
+    "bore": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "d1 = 1/4\""
+    },
+    "nose_d": {
+     "v": 18.034,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = .71\""
+    },
+    "cone_base_d": {
+     "v": 23.876,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = .94\""
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 36.068,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 1.42\""
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 18.034,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "29020",
+   "name": "CAT40 x 3/8\" I.D. - 3\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 2, printed page 96)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x 3/8\" I.D. - 3\""
+    },
+    "clamp": {
+     "v": "shrink 3/8\"",
+     "unit": "text",
+     "stated": "3/8\" I.D."
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "l1 = 3\""
+    },
+    "bore": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "d1 = 3/8\""
+    },
+    "nose_d": {
+     "v": 23.876,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = .94\""
+    },
+    "cone_base_d": {
+     "v": 29.972,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 1.18\""
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 38.862,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 1.53\""
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 23.876,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "29026",
+   "name": "CAT40 x 1/2\" I.D. - 3\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 2, printed page 96)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x 1/2\" I.D. - 3\""
+    },
+    "clamp": {
+     "v": "shrink 1/2\"",
+     "unit": "text",
+     "stated": "1/2\" I.D."
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "l1 = 3\""
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d1 = 1/2\""
+    },
+    "nose_d": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = 1.10\""
+    },
+    "cone_base_d": {
+     "v": 34.036,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 1.34\""
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 46.99,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 1.85\""
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 27.94,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "29034",
+   "name": "CAT40 x 3/4\" I.D. - 3\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 2, printed page 96)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x 3/4\" I.D. - 3\""
+    },
+    "clamp": {
+     "v": "shrink 3/4\"",
+     "unit": "text",
+     "stated": "3/4\" I.D."
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "l1 = 3\""
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "d1 = 3/4\""
+    },
+    "nose_d": {
+     "v": 36.068,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = 1.42\""
+    },
+    "cone_base_d": {
+     "v": 41.91,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 1.65\""
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 51.816,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 2.04\""
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 36.068,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "29212",
+   "name": "CAT40 x 8mm I.D. - 100mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 3, printed page 97)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x 8mm I.D. - 100mm"
+    },
+    "clamp": {
+     "v": "shrink 8mm",
+     "unit": "text",
+     "stated": "8mm I.D."
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "l1 = 100mm"
+    },
+    "bore": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d1 = 8mm"
+    },
+    "nose_d": {
+     "v": 21.0,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = 21mm"
+    },
+    "cone_base_d": {
+     "v": 27.0,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 27mm"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 36.0,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 36mm"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 100.0,
+     "d": 21.0,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "29220",
+   "name": "CAT40 x 12mm I.D. - 100mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 3, printed page 97)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x 12mm I.D. - 100mm"
+    },
+    "clamp": {
+     "v": "shrink 12mm",
+     "unit": "text",
+     "stated": "12mm I.D."
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "l1 = 100mm"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "d1 = 12mm"
+    },
+    "nose_d": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = 24mm"
+    },
+    "cone_base_d": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 32mm"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 47.0,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 47mm"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 100.0,
+     "d": 24.0,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "29232",
+   "name": "CAT40 x 16mm I.D. - 100mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 3, printed page 97)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x 16mm I.D. - 100mm"
+    },
+    "clamp": {
+     "v": "shrink 16mm",
+     "unit": "text",
+     "stated": "16mm I.D."
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "l1 = 100mm"
+    },
+    "bore": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "d1 = 16mm"
+    },
+    "nose_d": {
+     "v": 27.0,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = 27mm"
+    },
+    "cone_base_d": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 34mm"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 50mm"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 100.0,
+     "d": 27.0,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "29238",
+   "name": "CAT40 x 20mm I.D. - 80mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 3, printed page 97)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x 20mm I.D. - 80mm"
+    },
+    "clamp": {
+     "v": "shrink 20mm",
+     "unit": "text",
+     "stated": "20mm I.D."
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "l1 = 80mm"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "d1 = 20mm"
+    },
+    "nose_d": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = 33mm"
+    },
+    "cone_base_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 42mm"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 52.0,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 52mm"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.0,
+     "d": 33.0,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "67500",
+   "name": "BT30 x 1/2\" I.D. - 3\"",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 12, printed page 106)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 x 1/2\" I.D. - 3\""
+    },
+    "clamp": {
+     "v": "shrink 1/2\"",
+     "unit": "text",
+     "stated": "1/2\" I.D."
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "l1 = 3\""
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "d1 = 1/2\""
+    },
+    "nose_d": {
+     "v": 23.876,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = 0.94\""
+    },
+    "cone_base_d": {
+     "v": 32.004,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 1.26\""
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 46.99,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 1.85\""
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 23.876,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "19142",
+   "name": "BT40 x 12mm I.D. - 90mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 13, printed page 107)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x 12mm I.D. - 90mm"
+    },
+    "clamp": {
+     "v": "shrink 12mm",
+     "unit": "text",
+     "stated": "12mm I.D."
+    },
+    "gauge_length": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "l1 = 90mm"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "d1 = 12mm"
+    },
+    "nose_d": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = 24mm"
+    },
+    "cone_base_d": {
+     "v": 29.0,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 29mm"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 47.0,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 47mm"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 90.0,
+     "d": 24.0,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "19140",
+   "name": "BT40 x 10mm I.D. - 90mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 13, printed page 107)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x 10mm I.D. - 90mm"
+    },
+    "clamp": {
+     "v": "shrink 10mm",
+     "unit": "text",
+     "stated": "10mm I.D."
+    },
+    "gauge_length": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "l1 = 90mm"
+    },
+    "bore": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d1 = 10mm"
+    },
+    "nose_d": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = 24mm"
+    },
+    "cone_base_d": {
+     "v": 29.0,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 29mm"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 36.0,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 36mm"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 90.0,
+     "d": 24.0,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "39138",
+   "name": "HSK63A x 8mm I.D. - 80mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 15, printed page 109)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A x 8mm I.D. - 80mm"
+    },
+    "clamp": {
+     "v": "shrink 8mm",
+     "unit": "text",
+     "stated": "8mm I.D."
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "l1 = 80mm"
+    },
+    "bore": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d1 = 8mm"
+    },
+    "nose_d": {
+     "v": 21.0,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = 21mm"
+    },
+    "cone_base_d": {
+     "v": 27.0,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 27mm"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 36.0,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 36mm"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.0,
+     "d": 21.0,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "39142",
+   "name": "HSK63A x 12mm I.D. - 90mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 15, printed page 109)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A x 12mm I.D. - 90mm"
+    },
+    "clamp": {
+     "v": "shrink 12mm",
+     "unit": "text",
+     "stated": "12mm I.D."
+    },
+    "gauge_length": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "l1 = 90mm"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "d1 = 12mm"
+    },
+    "nose_d": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = 24mm"
+    },
+    "cone_base_d": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 32mm"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 47.0,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 47mm"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 90.0,
+     "d": 24.0,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "39150",
+   "name": "HSK63A x 20mm I.D. - 100mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/ShrinkFIT_Tools_Catalog.pdf (PDF page 15, printed page 109)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A x 20mm I.D. - 100mm"
+    },
+    "clamp": {
+     "v": "shrink 20mm",
+     "unit": "text",
+     "stated": "20mm I.D."
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "l1 = 100mm"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "d1 = 20mm"
+    },
+    "nose_d": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "d2 (nose diameter on drawing) = 33mm"
+    },
+    "cone_base_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "d3 (diameter at the flange end of the 4.5 deg nose cone on drawing) = 42mm"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5˚ (drawing)"
+    },
+    "l2": {
+     "v": 52.0,
+     "unit": "mm",
+     "stated": "l2 (dimensioned at the nose on the drawing; meaning not labelled) = 52mm"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Features: Balanced 25,000 RPM at G2.5"
+    },
+    "coolant": {
+     "v": "coolant-thru stop screw included",
+     "unit": "text",
+     "stated": "Features: Coolant-thru stop screw included"
+    }
+   },
+   "profile": [
+    {
+     "z": 100.0,
+     "d": 33.0,
+     "stated": "d2 at l1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position of d3 (only the 4.5 deg cone angle is given)"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "254750",
+   "name": "CAT40 x 3/4\" - 2.54\" Triton Chuck",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Hydraulic_Chucks_Catalog.pdf (PDF page 4, printed page 124)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x 3/4\" - 2.54\" Triton Chuck"
+    },
+    "clamp": {
+     "v": "hydraulic 3/4\"",
+     "unit": "text",
+     "stated": "d1 3/4\""
+    },
+    "gauge_length": {
+     "v": 64.516,
+     "unit": "mm",
+     "stated": "L = 2.54\""
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "d1 = 3/4\""
+    },
+    "nose_d": {
+     "v": 49.276,
+     "unit": "mm",
+     "stated": "D1 (body diameter, front of flange to nose, on drawing) = 1.94\""
+    },
+    "L1": {
+     "v": 45.466,
+     "unit": "mm",
+     "stated": "L1 (front face of flange to nose on drawing) = 1.79\""
+    },
+    "L2": {
+     "v": 48.006,
+     "unit": "mm",
+     "stated": "L2 (meaning not clear on drawing) = 1.89\""
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 49.276,
+     "stated": "D1 starts at L - L1 (front face of flange)"
+    },
+    {
+     "z": 64.516,
+     "d": 49.276,
+     "stated": "D1 at L (nose; drawing shows a nose chamfer, size not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "balance",
+    "coolant",
+    "nose chamfer size"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "354750",
+   "name": "CAT40 x 3/4\" - 4\" Triton Chuck",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Hydraulic_Chucks_Catalog.pdf (PDF page 4, printed page 124)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x 3/4\" - 4\" Triton Chuck"
+    },
+    "clamp": {
+     "v": "hydraulic 3/4\"",
+     "unit": "text",
+     "stated": "d1 3/4\""
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "L = 4\""
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "d1 = 3/4\""
+    },
+    "nose_d": {
+     "v": 49.276,
+     "unit": "mm",
+     "stated": "D1 (body diameter, front of flange to nose, on drawing) = 1.94\""
+    },
+    "L1": {
+     "v": 82.55,
+     "unit": "mm",
+     "stated": "L1 (front face of flange to nose on drawing) = 3.25\""
+    },
+    "L2": {
+     "v": 48.006,
+     "unit": "mm",
+     "stated": "L2 (meaning not clear on drawing) = 1.89\""
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 49.276,
+     "stated": "D1 starts at L - L1 (front face of flange)"
+    },
+    {
+     "z": 101.6,
+     "d": 49.276,
+     "stated": "D1 at L (nose; drawing shows a nose chamfer, size not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "balance",
+    "coolant",
+    "nose chamfer size"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "254020",
+   "name": "CAT40 x 20mm - 64.5mm Triton Chuck",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Hydraulic_Chucks_Catalog.pdf (PDF page 4, printed page 124)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 x 20mm - 64.5mm Triton Chuck"
+    },
+    "clamp": {
+     "v": "hydraulic 20mm",
+     "unit": "text",
+     "stated": "d1 20mm"
+    },
+    "gauge_length": {
+     "v": 64.5,
+     "unit": "mm",
+     "stated": "L = 64.5mm"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "d1 = 20mm"
+    },
+    "nose_d": {
+     "v": 49.2,
+     "unit": "mm",
+     "stated": "D1 (body diameter, front of flange to nose, on drawing) = 49.2mm"
+    },
+    "L1": {
+     "v": 45.4,
+     "unit": "mm",
+     "stated": "L1 (front face of flange to nose on drawing) = 45.4mm"
+    },
+    "L2": {
+     "v": 48.0,
+     "unit": "mm",
+     "stated": "L2 (meaning not clear on drawing) = 48mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.1,
+     "d": 49.2,
+     "stated": "D1 starts at L - L1 (front face of flange)"
+    },
+    {
+     "z": 64.5,
+     "d": 49.2,
+     "stated": "D1 at L (nose; drawing shows a nose chamfer, size not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "balance",
+    "coolant",
+    "nose chamfer size"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "257020",
+   "name": "HSK63A x 20mm - 80mm Triton Chuck",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Hydraulic_Chucks_Catalog.pdf (PDF page 5, printed page 125)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A x 20mm - 80mm Triton Chuck"
+    },
+    "clamp": {
+     "v": "hydraulic 20mm",
+     "unit": "text",
+     "stated": "d1 20mm"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L = 80mm"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "d1 = 20mm"
+    },
+    "nose_d": {
+     "v": 52.5,
+     "unit": "mm",
+     "stated": "D1 (body diameter, front of flange to nose, on drawing) = 52.5mm"
+    },
+    "L1": {
+     "v": 54.0,
+     "unit": "mm",
+     "stated": "L1 (front face of flange to nose on drawing) = 54mm"
+    },
+    "L2": {
+     "v": 48.0,
+     "unit": "mm",
+     "stated": "L2 (meaning not clear on drawing) = 48mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 52.5,
+     "stated": "D1 starts at L - L1 (front face of flange)"
+    },
+    {
+     "z": 80.0,
+     "d": 52.5,
+     "stated": "D1 at L (nose; drawing shows a nose chamfer, size not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "balance",
+    "coolant",
+    "nose chamfer size"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "253020",
+   "name": "BT30 x 20mm - 90mm Triton Chuck",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Hydraulic_Chucks_Catalog.pdf (PDF page 5, printed page 125)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 x 20mm - 90mm Triton Chuck"
+    },
+    "clamp": {
+     "v": "hydraulic 20mm",
+     "unit": "text",
+     "stated": "d1 20mm"
+    },
+    "gauge_length": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "L = 90mm"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "d1 = 20mm"
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D1 (body diameter, front of flange to nose, on drawing) = 42mm"
+    },
+    "L1": {
+     "v": 68.0,
+     "unit": "mm",
+     "stated": "L1 (front face of flange to nose on drawing) = 68mm"
+    },
+    "L2": {
+     "v": 48.0,
+     "unit": "mm",
+     "stated": "L2 (meaning not clear on drawing) = 48mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 22.0,
+     "d": 42.0,
+     "stated": "D1 starts at L - L1 (front face of flange)"
+    },
+    {
+     "z": 90.0,
+     "d": 42.0,
+     "stated": "D1 at L (nose; drawing shows a nose chamfer, size not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "balance",
+    "coolant",
+    "nose chamfer size"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "256020",
+   "name": "BT40 x 20mm - 72.5mm Triton Chuck",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Hydraulic_Chucks_Catalog.pdf (PDF page 5, printed page 125)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 x 20mm - 72.5mm Triton Chuck"
+    },
+    "clamp": {
+     "v": "hydraulic 20mm",
+     "unit": "text",
+     "stated": "d1 20mm"
+    },
+    "gauge_length": {
+     "v": 72.5,
+     "unit": "mm",
+     "stated": "L = 72.5mm"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "d1 = 20mm"
+    },
+    "nose_d": {
+     "v": 49.2,
+     "unit": "mm",
+     "stated": "D1 (body diameter, front of flange to nose, on drawing) = 49.2mm"
+    },
+    "L1": {
+     "v": 45.5,
+     "unit": "mm",
+     "stated": "L1 (front face of flange to nose on drawing) = 45.5mm"
+    },
+    "L2": {
+     "v": 48.0,
+     "unit": "mm",
+     "stated": "L2 (meaning not clear on drawing) = 48mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 49.2,
+     "stated": "D1 starts at L - L1 (front face of flange)"
+    },
+    {
+     "z": 72.5,
+     "d": 49.2,
+     "stated": "D1 at L (nose; drawing shows a nose chamfer, size not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "balance",
+    "coolant",
+    "nose chamfer size"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "154012",
+   "name": "CAT40 AD/B x HC 12mmS - 80.5mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Hydraulic_Chucks_Catalog.pdf (PDF page 6, printed page 126)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 AD/B x HC 12mmS - 80.5mm"
+    },
+    "clamp": {
+     "v": "hydraulic 12mm",
+     "unit": "text",
+     "stated": "d1 12mm"
+    },
+    "gauge_length": {
+     "v": 80.5,
+     "unit": "mm",
+     "stated": "L = 80.5mm"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "d1 = 12mm"
+    },
+    "nose_d": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D1 (slim front section on drawing) = 32mm"
+    },
+    "body_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D2 (body behind the slim section on drawing) = 50mm"
+    },
+    "L1": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "L1 (length of D1 section on drawing) = 32mm"
+    },
+    "L2": {
+     "v": 37.0,
+     "unit": "mm",
+     "stated": "L2 (meaning not clear on drawing) = 37mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 48.5,
+     "d": 50.0,
+     "stated": "D2 ends at L - L1"
+    },
+    {
+     "z": 48.5,
+     "d": 32.0,
+     "stated": "D1 starts at L - L1"
+    },
+    {
+     "z": 80.5,
+     "d": 32.0,
+     "stated": "D1 at L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "balance",
+    "coolant",
+    "start of D2 behind the flange"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "holder",
+   "id": "154200",
+   "name": "CAT40 AD/B x HC 20mmS - 80.5mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Hydraulic_Chucks_Catalog.pdf (PDF page 6, printed page 126)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 AD/B x HC 20mmS - 80.5mm"
+    },
+    "clamp": {
+     "v": "hydraulic 20mm",
+     "unit": "text",
+     "stated": "d1 20mm"
+    },
+    "gauge_length": {
+     "v": 80.5,
+     "unit": "mm",
+     "stated": "L = 80.5mm"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "d1 = 20mm"
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D1 (slim front section on drawing) = 42mm"
+    },
+    "body_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D2 (body behind the slim section on drawing) = 50mm"
+    },
+    "L1": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "L1 (length of D1 section on drawing) = 34mm"
+    },
+    "L2": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "L2 (meaning not clear on drawing) = 42mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 46.5,
+     "d": 50.0,
+     "stated": "D2 ends at L - L1"
+    },
+    {
+     "z": 46.5,
+     "d": 42.0,
+     "stated": "D1 starts at L - L1"
+    },
+    {
+     "z": 80.5,
+     "d": 42.0,
+     "stated": "D1 at L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "balance",
+    "coolant",
+    "start of D2 behind the flange"
+   ],
+   "note": "z measured from the start of the l1/L dimension as drawn: the flange face on the taper (spindle) side"
+  },
+  {
+   "kind": "collet_nut",
+   "id": "41111",
+   "name": "ER11 PowerCOAT hex nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 20, printed page 62)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER11",
+     "unit": "text",
+     "stated": "ER11 PowerCOAT hex nut"
+    },
+    "od": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "D = 19mm"
+    },
+    "length": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "B = 12mm"
+    },
+    "thread": {
+     "v": "M14 x 0.75",
+     "unit": "text",
+     "stated": "T = M14 x 0.75"
+    },
+    "balance": {
+     "v": "balanced to 25,000 rpm (no grade given)",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "collet_nut",
+   "id": "41116",
+   "name": "ER16 PowerCOAT hex nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 20, printed page 62)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "ER16 PowerCOAT hex nut"
+    },
+    "od": {
+     "v": 27.5,
+     "unit": "mm",
+     "stated": "D = 27.5mm"
+    },
+    "length": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "B = 18mm"
+    },
+    "thread": {
+     "v": "M22 x 1.5",
+     "unit": "text",
+     "stated": "T = M22 x 1.5"
+    },
+    "balance": {
+     "v": "balanced to 25,000 rpm (no grade given)",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "collet_nut",
+   "id": "41120",
+   "name": "ER20 PowerCOAT hex nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 20, printed page 62)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER20 PowerCOAT hex nut"
+    },
+    "od": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "D = 34mm"
+    },
+    "length": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "B = 19mm"
+    },
+    "thread": {
+     "v": "M25 x 1.5",
+     "unit": "text",
+     "stated": "T = M25 x 1.5"
+    },
+    "balance": {
+     "v": "balanced to 25,000 rpm (no grade given)",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "collet_nut",
+   "id": "41925",
+   "name": "ER25 PowerCOAT slot nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 20, printed page 62)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "ER25 PowerCOAT slot nut"
+    },
+    "od": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D = 42mm"
+    },
+    "length": {
+     "v": 21.0,
+     "unit": "mm",
+     "stated": "B = 21mm"
+    },
+    "thread": {
+     "v": "M32 x 1.5",
+     "unit": "text",
+     "stated": "T = M32 x 1.5"
+    },
+    "balance": {
+     "v": "balanced to 25,000 rpm (no grade given)",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "collet_nut",
+   "id": "41932",
+   "name": "ER32 PowerCOAT slot nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 20, printed page 62)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER32 PowerCOAT slot nut"
+    },
+    "od": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D = 50mm"
+    },
+    "length": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "B = 23mm"
+    },
+    "thread": {
+     "v": "M40 x 1.5",
+     "unit": "text",
+     "stated": "T = M40 x 1.5"
+    },
+    "balance": {
+     "v": "balanced to 25,000 rpm (no grade given)",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "collet_nut",
+   "id": "41940",
+   "name": "ER40 PowerCOAT slot nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 20, printed page 62)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "ER40 PowerCOAT slot nut"
+    },
+    "od": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "D = 63mm"
+    },
+    "length": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "B = 26mm"
+    },
+    "thread": {
+     "v": "M50 x 1.5",
+     "unit": "text",
+     "stated": "T = M50 x 1.5"
+    },
+    "balance": {
+     "v": "balanced to 25,000 rpm (no grade given)",
+     "unit": "text",
+     "stated": "Features: Balanced to 25,000 RPM"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "collet_nut",
+   "id": "23116",
+   "name": "ER16 mini nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 21, printed page 63)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "ER16 mini nut"
+    },
+    "od": {
+     "v": 22.0,
+     "unit": "mm",
+     "stated": "D = 22mm"
+    },
+    "length": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "B = 18mm"
+    },
+    "thread": {
+     "v": "M19 x 1.0",
+     "unit": "text",
+     "stated": "T = M19 x 1.0"
+    },
+    "balance": {
+     "v": "G2.5 at 10,000 rpm",
+     "unit": "text",
+     "stated": "ER PowerCOAT mini nuts balanced to 10,000 RPM at G2.5"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "collet_nut",
+   "id": "23120",
+   "name": "ER20 mini nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 21, printed page 63)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER20 mini nut"
+    },
+    "od": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D = 28mm"
+    },
+    "length": {
+     "v": 19.5,
+     "unit": "mm",
+     "stated": "B = 19.5mm"
+    },
+    "thread": {
+     "v": "M24 x 1.0",
+     "unit": "text",
+     "stated": "T = M24 x 1.0"
+    },
+    "balance": {
+     "v": "G2.5 at 10,000 rpm",
+     "unit": "text",
+     "stated": "ER PowerCOAT mini nuts balanced to 10,000 RPM at G2.5"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "collet_nut",
+   "id": "23125",
+   "name": "ER25 mini nut",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 21, printed page 63)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "ER25 mini nut"
+    },
+    "od": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "D = 35mm"
+    },
+    "length": {
+     "v": 21.0,
+     "unit": "mm",
+     "stated": "B = 21mm"
+    },
+    "thread": {
+     "v": "M30 x 1.0",
+     "unit": "text",
+     "stated": "T = M30 x 1.0"
+    },
+    "balance": {
+     "v": "G2.5 at 10,000 rpm",
+     "unit": "text",
+     "stated": "ER PowerCOAT mini nuts balanced to 10,000 RPM at G2.5"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "collet",
+   "id": "04225-06",
+   "name": "ER25 collet metric 6 mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 5, printed page 47)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "ER25 COLLETS METRIC"
+    },
+    "bore": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "part no. suffix / Shank 5.0–6.0"
+    },
+    "clamp_min": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Shank 5.0–6.0"
+    },
+    "clamp_max": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Shank 5.0–6.0"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "04225-10",
+   "name": "ER25 collet metric 10 mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 5, printed page 47)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "ER25 COLLETS METRIC"
+    },
+    "bore": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "part no. suffix / Shank 9.0–10.0"
+    },
+    "clamp_min": {
+     "v": 9.0,
+     "unit": "mm",
+     "stated": "Shank 9.0–10.0"
+    },
+    "clamp_max": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Shank 9.0–10.0"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "04225-16",
+   "name": "ER25 collet metric 16 mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 5, printed page 47)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "ER25 COLLETS METRIC"
+    },
+    "bore": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "part no. suffix / Shank 15.0–16.0"
+    },
+    "clamp_min": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "Shank 15.0–16.0"
+    },
+    "clamp_max": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "Shank 15.0–16.0"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "04232-06",
+   "name": "ER32 collet metric 6 mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 5, printed page 47)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER32 COLLETS METRIC"
+    },
+    "bore": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "part no. suffix / Shank 5.0–6.0"
+    },
+    "clamp_min": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Shank 5.0–6.0"
+    },
+    "clamp_max": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Shank 5.0–6.0"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "04232-12",
+   "name": "ER32 collet metric 12 mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 5, printed page 47)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER32 COLLETS METRIC"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "part no. suffix / Shank 11.0–12.0"
+    },
+    "clamp_min": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "Shank 11.0–12.0"
+    },
+    "clamp_max": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Shank 11.0–12.0"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "04232-20",
+   "name": "ER32 collet metric 20 mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 5, printed page 47)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER32 COLLETS METRIC"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "part no. suffix / Shank 19.0–20.0"
+    },
+    "clamp_min": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "Shank 19.0–20.0"
+    },
+    "clamp_max": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "Shank 19.0–20.0"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "04240-16",
+   "name": "ER40 collet metric 16 mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 5, printed page 47)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "ER40 COLLETS METRIC"
+    },
+    "bore": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "part no. suffix / Shank 15.0–16.0"
+    },
+    "clamp_min": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "Shank 15.0–16.0"
+    },
+    "clamp_max": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "Shank 15.0–16.0"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "04240-26",
+   "name": "ER40 collet metric 26 mm",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Collets_Nuts_Catalog.pdf (PDF page 5, printed page 47)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "ER40 COLLETS METRIC"
+    },
+    "bore": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "part no. suffix / Shank 25.0–26.0"
+    },
+    "clamp_min": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "Shank 25.0–26.0"
+    },
+    "clamp_max": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "Shank 25.0–26.0"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "21003",
+   "name": "CAT retention knob CAT40-ANSI",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf (PDF page 4, printed page 232)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-ANSI"
+    },
+    "thread": {
+     "v": "5/8 - 11",
+     "unit": "text",
+     "stated": "T = 5/8 - 11"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "θ = 45°"
+    },
+    "coolant_hole": {
+     "v": "no (not listed as coolant)",
+     "unit": "text",
+     "stated": "CAT40-ANSI"
+    },
+    "head_d": {
+     "v": 18.796,
+     "unit": "mm",
+     "stated": "d1 (head diameter on drawing) = .740\""
+    },
+    "neck_d": {
+     "v": 12.446,
+     "unit": "mm",
+     "stated": "d2 (diameter under the head on drawing) = .490\""
+    },
+    "d3": {
+     "v": 12.446,
+     "unit": "mm",
+     "stated": "d3 (diameter between collar and thread on drawing) = .490\""
+    },
+    "l1": {
+     "v": 16.256,
+     "unit": "mm",
+     "stated": "l1 (head end to collar face on drawing) = .640\""
+    },
+    "l2": {
+     "v": 11.176,
+     "unit": "mm",
+     "stated": "l2 (under-head to collar face on drawing) = .440\""
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length (overall)"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "21003-C",
+   "name": "CAT retention knob CAT40-ANSI-C",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf (PDF page 4, printed page 232)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-ANSI-C"
+    },
+    "thread": {
+     "v": "5/8 - 11",
+     "unit": "text",
+     "stated": "T = 5/8 - 11"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "θ = 45°"
+    },
+    "coolant_hole": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "CAT40-ANSI-C"
+    },
+    "head_d": {
+     "v": 18.796,
+     "unit": "mm",
+     "stated": "d1 (head diameter on drawing) = .740\""
+    },
+    "neck_d": {
+     "v": 12.446,
+     "unit": "mm",
+     "stated": "d2 (diameter under the head on drawing) = .490\""
+    },
+    "d3": {
+     "v": 12.446,
+     "unit": "mm",
+     "stated": "d3 (diameter between collar and thread on drawing) = .490\""
+    },
+    "l1": {
+     "v": 16.256,
+     "unit": "mm",
+     "stated": "l1 (head end to collar face on drawing) = .640\""
+    },
+    "l2": {
+     "v": 11.176,
+     "unit": "mm",
+     "stated": "l2 (under-head to collar face on drawing) = .440\""
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length (overall)"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "21006-15",
+   "name": "CAT retention knob CAT40-DIN",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf (PDF page 4, printed page 232)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-DIN"
+    },
+    "thread": {
+     "v": "5/8 - 11",
+     "unit": "text",
+     "stated": "T = 5/8 - 11"
+    },
+    "angle": {
+     "v": 15.0,
+     "unit": "deg",
+     "stated": "θ = 15°"
+    },
+    "coolant_hole": {
+     "v": "no (not listed as coolant)",
+     "unit": "text",
+     "stated": "CAT40-DIN"
+    },
+    "head_d": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "d1 (head diameter on drawing) = .750\""
+    },
+    "neck_d": {
+     "v": 13.97,
+     "unit": "mm",
+     "stated": "d2 (diameter under the head on drawing) = .550\""
+    },
+    "d3": {
+     "v": 16.256,
+     "unit": "mm",
+     "stated": "d3 (diameter between collar and thread on drawing) = .640\""
+    },
+    "l1": {
+     "v": 26.01,
+     "unit": "mm",
+     "stated": "l1 (head end to collar face on drawing) = 1.024\""
+    },
+    "l2": {
+     "v": 19.99,
+     "unit": "mm",
+     "stated": "l2 (under-head to collar face on drawing) = .787\""
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length (overall)"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "21006-15C",
+   "name": "CAT retention knob CAT40-DIN Coolant",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf (PDF page 4, printed page 232)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-DIN Coolant"
+    },
+    "thread": {
+     "v": "5/8 - 11",
+     "unit": "text",
+     "stated": "T = 5/8 - 11"
+    },
+    "angle": {
+     "v": 15.0,
+     "unit": "deg",
+     "stated": "θ = 15°"
+    },
+    "coolant_hole": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "CAT40-DIN Coolant"
+    },
+    "head_d": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "d1 (head diameter on drawing) = .750\""
+    },
+    "neck_d": {
+     "v": 13.97,
+     "unit": "mm",
+     "stated": "d2 (diameter under the head on drawing) = .550\""
+    },
+    "d3": {
+     "v": 16.256,
+     "unit": "mm",
+     "stated": "d3 (diameter between collar and thread on drawing) = .640\""
+    },
+    "l1": {
+     "v": 26.01,
+     "unit": "mm",
+     "stated": "l1 (head end to collar face on drawing) = 1.024\""
+    },
+    "l2": {
+     "v": 19.99,
+     "unit": "mm",
+     "stated": "l2 (under-head to collar face on drawing) = .787\""
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length (overall)"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "21003-45",
+   "name": "CAT retention knob CAT40-MAS-I",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf (PDF page 4, printed page 232)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-MAS-I"
+    },
+    "thread": {
+     "v": "5/8 - 11",
+     "unit": "text",
+     "stated": "T = 5/8 - 11"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "θ = 45°"
+    },
+    "coolant_hole": {
+     "v": "no (not listed as coolant)",
+     "unit": "text",
+     "stated": "CAT40-MAS-I"
+    },
+    "head_d": {
+     "v": 14.986,
+     "unit": "mm",
+     "stated": "d1 (head diameter on drawing) = .590\""
+    },
+    "neck_d": {
+     "v": 10.008,
+     "unit": "mm",
+     "stated": "d2 (diameter under the head on drawing) = .394\""
+    },
+    "d3": {
+     "v": 13.005,
+     "unit": "mm",
+     "stated": "d3 (diameter between collar and thread on drawing) = .512\""
+    },
+    "l1": {
+     "v": 32.156,
+     "unit": "mm",
+     "stated": "l1 (head end to collar face on drawing) = 1.266\""
+    },
+    "l2": {
+     "v": 25.146,
+     "unit": "mm",
+     "stated": "l2 (under-head to collar face on drawing) = .990\""
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length (overall)"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "21003-45C",
+   "name": "CAT retention knob CAT40-Coolant-I",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf (PDF page 4, printed page 232)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-Coolant-I"
+    },
+    "thread": {
+     "v": "5/8 - 11",
+     "unit": "text",
+     "stated": "T = 5/8 - 11"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "θ = 45°"
+    },
+    "coolant_hole": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "CAT40-Coolant-I"
+    },
+    "head_d": {
+     "v": 14.986,
+     "unit": "mm",
+     "stated": "d1 (head diameter on drawing) = .590\""
+    },
+    "neck_d": {
+     "v": 10.008,
+     "unit": "mm",
+     "stated": "d2 (diameter under the head on drawing) = .394\""
+    },
+    "d3": {
+     "v": 13.005,
+     "unit": "mm",
+     "stated": "d3 (diameter between collar and thread on drawing) = .512\""
+    },
+    "l1": {
+     "v": 32.156,
+     "unit": "mm",
+     "stated": "l1 (head end to collar face on drawing) = 1.266\""
+    },
+    "l2": {
+     "v": 25.146,
+     "unit": "mm",
+     "stated": "l2 (under-head to collar face on drawing) = .990\""
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length (overall)"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "17801",
+   "name": "BT retention knob BT30 - 45°",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf (PDF page 5, printed page 233)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 - 45°"
+    },
+    "thread": {
+     "v": "M12",
+     "unit": "text",
+     "stated": "T = M12"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "θ (BT30 - 45°)"
+    },
+    "coolant_hole": {
+     "v": "no (not listed as coolant)",
+     "unit": "text",
+     "stated": "BT30 - 45°"
+    },
+    "D": {
+     "v": 16.5,
+     "unit": "mm",
+     "stated": "D = 16.5 (collar diameter on drawing)"
+    },
+    "head_d": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "d1 = 11"
+    },
+    "neck_d": {
+     "v": 7.0,
+     "unit": "mm",
+     "stated": "d2 = 7"
+    },
+    "d3": {
+     "v": 12.5,
+     "unit": "mm",
+     "stated": "d3 = 12.5 (diameter between collar and thread on drawing)"
+    },
+    "l1": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "I1 = 23 (head end to collar face on drawing)"
+    },
+    "l2": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "l2 = 18 (under-head to collar face on drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length (overall)"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "17803",
+   "name": "BT retention knob BT40 - 45°",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf (PDF page 5, printed page 233)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 - 45°"
+    },
+    "thread": {
+     "v": "M16",
+     "unit": "text",
+     "stated": "T = M16"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "θ (BT40 - 45°)"
+    },
+    "coolant_hole": {
+     "v": "no (not listed as coolant)",
+     "unit": "text",
+     "stated": "BT40 - 45°"
+    },
+    "D": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "D = 23 (collar diameter on drawing)"
+    },
+    "head_d": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "d1 = 15"
+    },
+    "neck_d": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d2 = 10"
+    },
+    "d3": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "d3 = 17 (diameter between collar and thread on drawing)"
+    },
+    "l1": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "I1 = 35 (head end to collar face on drawing)"
+    },
+    "l2": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "l2 = 28 (under-head to collar face on drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length (overall)"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "17808",
+   "name": "BT retention knob BT40 - 60°",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf (PDF page 5, printed page 233)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 - 60°"
+    },
+    "thread": {
+     "v": "M16",
+     "unit": "text",
+     "stated": "T = M16"
+    },
+    "angle": {
+     "v": 60.0,
+     "unit": "deg",
+     "stated": "θ (BT40 - 60°)"
+    },
+    "coolant_hole": {
+     "v": "no (not listed as coolant)",
+     "unit": "text",
+     "stated": "BT40 - 60°"
+    },
+    "D": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "D = 23 (collar diameter on drawing)"
+    },
+    "head_d": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "d1 = 15"
+    },
+    "neck_d": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d2 = 10"
+    },
+    "d3": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "d3 = 17 (diameter between collar and thread on drawing)"
+    },
+    "l1": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "I1 = 35 (head end to collar face on drawing)"
+    },
+    "l2": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "l2 = 28 (under-head to collar face on drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length (overall)"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "17817",
+   "name": "BT retention knob BT30 - 45˚ coolant",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf (PDF page 5, printed page 233)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 - 45˚ coolant"
+    },
+    "thread": {
+     "v": "M12",
+     "unit": "text",
+     "stated": "T = M12"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "θ (BT30 - 45˚ coolant)"
+    },
+    "coolant_hole": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "BT30 - 45˚ coolant"
+    },
+    "D": {
+     "v": 16.5,
+     "unit": "mm",
+     "stated": "D = 16.5 (collar diameter on drawing)"
+    },
+    "head_d": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "d1 = 11"
+    },
+    "neck_d": {
+     "v": 7.0,
+     "unit": "mm",
+     "stated": "d2 = 7"
+    },
+    "d3": {
+     "v": 12.5,
+     "unit": "mm",
+     "stated": "d3 = 12.5 (diameter between collar and thread on drawing)"
+    },
+    "l1": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "I1 = 23 (head end to collar face on drawing)"
+    },
+    "l2": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "l2 = 18 (under-head to collar face on drawing)"
+    },
+    "coolant_hole_d": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "d4 = 4"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length (overall)"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "17818",
+   "name": "BT retention knob BT40 - 45˚ coolant",
+   "url": "https://www.techniksusa.com/downloads/catalogs/Retention_Knobs_Catalog.pdf (PDF page 5, printed page 233)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 - 45˚ coolant"
+    },
+    "thread": {
+     "v": "M16",
+     "unit": "text",
+     "stated": "T = M16"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "θ (BT40 - 45˚ coolant)"
+    },
+    "coolant_hole": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "BT40 - 45˚ coolant"
+    },
+    "D": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "D = 23 (collar diameter on drawing)"
+    },
+    "head_d": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "d1 = 15"
+    },
+    "neck_d": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d2 = 10"
+    },
+    "d3": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "d3 = 17 (diameter between collar and thread on drawing)"
+    },
+    "l1": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "I1 = 35 (head end to collar face on drawing)"
+    },
+    "l2": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "l2 = 28 (under-head to collar face on drawing)"
+    },
+    "coolant_hole_d": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "d4 = 4"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length (overall)"
+   ]
+  }
+ ]
+}

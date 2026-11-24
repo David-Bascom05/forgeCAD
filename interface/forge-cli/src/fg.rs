@@ -322,8 +322,19 @@ impl Session {
         text.push_str(&match cam.certification() {
             "full" => "certification: full (G1-G6, every position within the machine's travel)\n".to_string(),
             "except G5" => {
-                "certification: except G5 (unchecked: no `at:` on a setup; the spans fit the travel)\n"
-                    .to_string()
+                let unplaced: Vec<String> = cam
+                    .warnings
+                    .iter()
+                    .filter(|w| w.contains("is not placed"))
+                    .cloned()
+                    .collect();
+                format!(
+                    "certification: except G5 (unchecked: no `at:` on a setup; the spans fit the travel)\n{}",
+                    unplaced.iter().map(|w| format!("  {w}\n")).collect::<String>()
+                )
+            }
+            "full except G4 (leftover not computed)" => {
+                "certification: full except G4 (G1-G3, G5, G6; the leftover was not computed)\n".to_string()
             }
             c => format!("certification: {c}\n"),
         });
@@ -338,6 +349,37 @@ impl Session {
             json: cam.json(),
             png: file,
         })
+    }
+
+    /// `cam F post [PROGRAM]`: the programs' files as the app exports them
+    /// (forge_cam_lang::export), named and placed by their statements, relative to the
+    /// document's folder; refused (typed) when a program is not certified in full, unless
+    /// `allow_uncertified`, which stamps each file's header.
+    pub fn cam_post(
+        path: &Path,
+        which: Option<&str>,
+        allow_uncertified: bool,
+    ) -> Result<Vec<forge_cam_lang::export::NcFile>, String> {
+        let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+        let progs = if forge_turn_lang::is_turning(&src) {
+            let cam = forge_turn_lang::run(&src, &dir);
+            let cert = cam.certification().to_string();
+            cam.programs
+                .iter()
+                .map(|p| forge_cam_lang::export::ProgIn {
+                    name: p.name.clone(),
+                    post: p.post.clone(),
+                    text: p.text.clone(),
+                    error: p.error.clone(),
+                    certified: if p.text.is_none() { "no".into() } else { cert.clone() },
+                    setup: None,
+                })
+                .collect()
+        } else {
+            forge_cam_lang::run(&src, &dir).export_programs()
+        };
+        forge_cam_lang::export::files(&src, &progs, which, allow_uncertified).map_err(|e| e.text())
     }
 
     /// `cam F` for a turning document (forge-turn-lang): the same reply schema, its program the

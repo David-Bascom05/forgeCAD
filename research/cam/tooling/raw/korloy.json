@@ -1,0 +1,1224 @@
+{
+ "source": "Korloy (korloy.com Cutting Tools Turning 25-26 PDF)",
+ "blocked": [],
+ "records": [
+  {
+   "kind": "insert",
+   "iso_code": "CNMG120404",
+   "id": "CNMG 120404-MP",
+   "maker": "Korloy",
+   "name": "Korloy turning insert CNMG 120404-MP (Cutting Tools Turning 25-26)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=74",
+   "taken": "2026-11-24",
+   "values": {
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "re_range": {
+     "v": "0.4~1.6",
+     "unit": "text",
+     "stated": "RE 0.4~1.6 (size row: range over the size, not per insert)"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "l": {
+     "v": 12.896,
+     "unit": "mm",
+     "stated": "LE 12.896"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "MP",
+     "unit": "text",
+     "stated": "MP"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": [
+       0.1,
+       0.4
+      ],
+      "unit": "mm/rev",
+      "stated": "fn (mm/rev) 0.10~0.40"
+     },
+     "ap": {
+      "v": [
+       0.4,
+       4.0
+      ],
+      "unit": "mm",
+      "stated": "ap (mm) 0.40~4.00"
+     }
+    }
+   ],
+   "unknown": [
+    "corner radius per insert not stated in the table (only the size-row RE range)",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CNMG120408",
+   "id": "CNMG 120408-MP",
+   "maker": "Korloy",
+   "name": "Korloy turning insert CNMG 120408-MP (Cutting Tools Turning 25-26)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=74",
+   "taken": "2026-11-24",
+   "values": {
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "re_range": {
+     "v": "0.4~1.6",
+     "unit": "text",
+     "stated": "RE 0.4~1.6 (size row: range over the size, not per insert)"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "l": {
+     "v": 12.896,
+     "unit": "mm",
+     "stated": "LE 12.896"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "MP",
+     "unit": "text",
+     "stated": "MP"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": [
+       0.15,
+       0.45
+      ],
+      "unit": "mm/rev",
+      "stated": "fn (mm/rev) 0.15~0.45"
+     },
+     "ap": {
+      "v": [
+       0.5,
+       4.5
+      ],
+      "unit": "mm",
+      "stated": "ap (mm) 0.50~4.50"
+     }
+    }
+   ],
+   "unknown": [
+    "corner radius per insert not stated in the table (only the size-row RE range)",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CNMG120408",
+   "id": "CNMG 120408-VM",
+   "maker": "Korloy",
+   "name": "Korloy turning insert CNMG 120408-VM (Cutting Tools Turning 25-26)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=74",
+   "taken": "2026-11-24",
+   "values": {
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "re_range": {
+     "v": "0.4~1.6",
+     "unit": "text",
+     "stated": "RE 0.4~1.6 (size row: range over the size, not per insert)"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "l": {
+     "v": 12.896,
+     "unit": "mm",
+     "stated": "LE 12.896"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "VM",
+     "unit": "text",
+     "stated": "VM"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": [
+       0.1,
+       0.5
+      ],
+      "unit": "mm/rev",
+      "stated": "fn (mm/rev) 0.10~0.50"
+     },
+     "ap": {
+      "v": [
+       1.0,
+       5.0
+      ],
+      "unit": "mm",
+      "stated": "ap (mm) 1.00~5.00"
+     }
+    }
+   ],
+   "unknown": [
+    "corner radius per insert not stated in the table (only the size-row RE range)",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CNMG120408",
+   "id": "CNMG 120408-B25",
+   "maker": "Korloy",
+   "name": "Korloy turning insert CNMG 120408-B25 (Cutting Tools Turning 25-26)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=75",
+   "taken": "2026-11-24",
+   "values": {
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "re_range": {
+     "v": "0.4~1.2",
+     "unit": "text",
+     "stated": "RE 0.4~1.2 (size row: range over the size, not per insert)"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "l": {
+     "v": 12.896,
+     "unit": "mm",
+     "stated": "LE 12.896"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "B25",
+     "unit": "text",
+     "stated": "B25"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": [
+       0.23,
+       0.6
+      ],
+      "unit": "mm/rev",
+      "stated": "fn (mm/rev) 0.23~0.60"
+     },
+     "ap": {
+      "v": [
+       1.5,
+       5.0
+      ],
+      "unit": "mm",
+      "stated": "ap (mm) 1.50~5.00"
+     }
+    }
+   ],
+   "unknown": [
+    "corner radius per insert not stated in the table (only the size-row RE range)",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150404",
+   "id": "DNMG 150404-MP",
+   "maker": "Korloy",
+   "name": "Korloy turning insert DNMG 150404-MP (Cutting Tools Turning 25-26)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=82",
+   "taken": "2026-11-24",
+   "values": {
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "re_range": {
+     "v": "0.4~1.6",
+     "unit": "text",
+     "stated": "RE 0.4~1.6 (size row: range over the size, not per insert)"
+    },
+    "s": {
+     "v": "4.76~6.35",
+     "unit": "text",
+     "stated": "S 4.76~6.35"
+    },
+    "l": {
+     "v": 15.504,
+     "unit": "mm",
+     "stated": "LE 15.504"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "MP",
+     "unit": "text",
+     "stated": "MP"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": [
+       0.1,
+       0.4
+      ],
+      "unit": "mm/rev",
+      "stated": "fn (mm/rev) 0.10~0.40"
+     },
+     "ap": {
+      "v": [
+       0.4,
+       4.0
+      ],
+      "unit": "mm",
+      "stated": "ap (mm) 0.40~4.00"
+     }
+    }
+   ],
+   "unknown": [
+    "corner radius per insert not stated in the table (only the size-row RE range)",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table",
+    "thickness stated as a range for the 15 size (covers 1504 and 1506)"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150408",
+   "id": "DNMG 150408-MP",
+   "maker": "Korloy",
+   "name": "Korloy turning insert DNMG 150408-MP (Cutting Tools Turning 25-26)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=82",
+   "taken": "2026-11-24",
+   "values": {
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "re_range": {
+     "v": "0.4~1.6",
+     "unit": "text",
+     "stated": "RE 0.4~1.6 (size row: range over the size, not per insert)"
+    },
+    "s": {
+     "v": "4.76~6.35",
+     "unit": "text",
+     "stated": "S 4.76~6.35"
+    },
+    "l": {
+     "v": 15.504,
+     "unit": "mm",
+     "stated": "LE 15.504"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "MP",
+     "unit": "text",
+     "stated": "MP"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": [
+       0.15,
+       0.45
+      ],
+      "unit": "mm/rev",
+      "stated": "fn (mm/rev) 0.15~0.45"
+     },
+     "ap": {
+      "v": [
+       0.5,
+       4.5
+      ],
+      "unit": "mm",
+      "stated": "ap (mm) 0.50~4.50"
+     }
+    }
+   ],
+   "unknown": [
+    "corner radius per insert not stated in the table (only the size-row RE range)",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table",
+    "thickness stated as a range for the 15 size (covers 1504 and 1506)"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150604",
+   "id": "DNMG 150604-MP",
+   "maker": "Korloy",
+   "name": "Korloy turning insert DNMG 150604-MP (Cutting Tools Turning 25-26)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=82",
+   "taken": "2026-11-24",
+   "values": {
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "re_range": {
+     "v": "0.4~1.6",
+     "unit": "text",
+     "stated": "RE 0.4~1.6 (size row: range over the size, not per insert)"
+    },
+    "s": {
+     "v": "4.76~6.35",
+     "unit": "text",
+     "stated": "S 4.76~6.35"
+    },
+    "l": {
+     "v": 15.504,
+     "unit": "mm",
+     "stated": "LE 15.504"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "MP",
+     "unit": "text",
+     "stated": "MP"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": [
+       0.1,
+       0.4
+      ],
+      "unit": "mm/rev",
+      "stated": "fn (mm/rev) 0.10~0.40"
+     },
+     "ap": {
+      "v": [
+       0.4,
+       4.0
+      ],
+      "unit": "mm",
+      "stated": "ap (mm) 0.40~4.00"
+     }
+    }
+   ],
+   "unknown": [
+    "corner radius per insert not stated in the table (only the size-row RE range)",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table",
+    "thickness stated as a range for the 15 size (covers 1504 and 1506)"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150608",
+   "id": "DNMG 150608-MP",
+   "maker": "Korloy",
+   "name": "Korloy turning insert DNMG 150608-MP (Cutting Tools Turning 25-26)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=82",
+   "taken": "2026-11-24",
+   "values": {
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "re_range": {
+     "v": "0.4~1.6",
+     "unit": "text",
+     "stated": "RE 0.4~1.6 (size row: range over the size, not per insert)"
+    },
+    "s": {
+     "v": "4.76~6.35",
+     "unit": "text",
+     "stated": "S 4.76~6.35"
+    },
+    "l": {
+     "v": 15.504,
+     "unit": "mm",
+     "stated": "LE 15.504"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "MP",
+     "unit": "text",
+     "stated": "MP"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": [
+       0.15,
+       0.45
+      ],
+      "unit": "mm/rev",
+      "stated": "fn (mm/rev) 0.15~0.45"
+     },
+     "ap": {
+      "v": [
+       0.5,
+       4.5
+      ],
+      "unit": "mm",
+      "stated": "ap (mm) 0.50~4.50"
+     }
+    }
+   ],
+   "unknown": [
+    "corner radius per insert not stated in the table (only the size-row RE range)",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table",
+    "thickness stated as a range for the 15 size (covers 1504 and 1506)"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150608",
+   "id": "DNMG 150608-GR",
+   "maker": "Korloy",
+   "name": "Korloy turning insert DNMG 150608-GR (Cutting Tools Turning 25-26)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=83",
+   "taken": "2026-11-24",
+   "values": {
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "re_range": {
+     "v": "0.4~1.6",
+     "unit": "text",
+     "stated": "RE 0.4~1.6 (size row: range over the size, not per insert)"
+    },
+    "s": {
+     "v": "4.76~6.35",
+     "unit": "text",
+     "stated": "S 4.76~6.35"
+    },
+    "l": {
+     "v": 15.504,
+     "unit": "mm",
+     "stated": "LE 15.504"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "GR",
+     "unit": "text",
+     "stated": "GR"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "f": {
+      "v": [
+       0.2,
+       0.5
+      ],
+      "unit": "mm/rev",
+      "stated": "fn (mm/rev) 0.20~0.50"
+     },
+     "ap": {
+      "v": [
+       1.0,
+       7.0
+      ],
+      "unit": "mm",
+      "stated": "ap (mm) 1.00~7.00"
+     }
+    }
+   ],
+   "unknown": [
+    "corner radius per insert not stated in the table (only the size-row RE range)",
+    "grade availability marks are glyphs; not recorded",
+    "vc not stated in this table",
+    "thickness stated as a range for the 15 size (covers 1504 and 1506)"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "PCLNR/L2020K12",
+   "id": "PCLNR/L 2020-K12",
+   "maker": "Korloy",
+   "name": "Korloy PCLNR/L lever-lock external holder",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=165",
+   "taken": "2026-11-24",
+   "values": {
+    "lh": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "LH 28"
+    },
+    "l1": {
+     "v": 125.0,
+     "unit": "mm",
+     "stated": "LF 125"
+    },
+    "f": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "WF 25"
+    },
+    "hf": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "HF 20"
+    },
+    "b": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "B 20"
+    },
+    "h": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "H 20"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "HAND R/L"
+    },
+    "insert": {
+     "v": "CN֎֎1204֎֎",
+     "unit": "text",
+     "stated": "CN֎֎1204֎֎"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "'֎' is the catalogue's placeholder glyph in insert codes, kept as printed"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "PCLNR/L2525M12",
+   "id": "PCLNR/L 2525-M12",
+   "maker": "Korloy",
+   "name": "Korloy PCLNR/L lever-lock external holder",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=165",
+   "taken": "2026-11-24",
+   "values": {
+    "lh": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "LH 28"
+    },
+    "l1": {
+     "v": 150.0,
+     "unit": "mm",
+     "stated": "LF 150"
+    },
+    "f": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "WF 32"
+    },
+    "hf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "HF 25"
+    },
+    "b": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "B 25"
+    },
+    "h": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "H 25"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "HAND R/L"
+    },
+    "insert": {
+     "v": "CN֎֎1204֎֎",
+     "unit": "text",
+     "stated": "CN֎֎1204֎֎"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "'֎' is the catalogue's placeholder glyph in insert codes, kept as printed"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "MCLNR/L2020K12",
+   "id": "MCLNR/L 2020-K12",
+   "maker": "Korloy",
+   "name": "Korloy MCLNR/L external holder",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=175",
+   "taken": "2026-11-24",
+   "values": {
+    "lh": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "LH 30"
+    },
+    "l1": {
+     "v": 125.0,
+     "unit": "mm",
+     "stated": "LF 125"
+    },
+    "f": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "WF 25"
+    },
+    "hf": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "HF 20"
+    },
+    "b": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "B 20"
+    },
+    "h": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "H 20"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "HAND R/L"
+    },
+    "insert": {
+     "v": "CN֎֎1204֎֎",
+     "unit": "text",
+     "stated": "CN֎֎1204֎֎"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "'֎' is the catalogue's placeholder glyph in insert codes, kept as printed"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "DDJNR/L2525M15",
+   "id": "DDJNR/L 2525-M15",
+   "maker": "Korloy",
+   "name": "Korloy DDJNR/L double-clamp external holder",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=160",
+   "taken": "2026-11-24",
+   "values": {
+    "lh": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "LH 35"
+    },
+    "l1": {
+     "v": 150.0,
+     "unit": "mm",
+     "stated": "LF 150"
+    },
+    "f": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "WF 32"
+    },
+    "hf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "HF 25"
+    },
+    "b": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "B 25"
+    },
+    "h": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "H 25"
+    },
+    "kr": {
+     "v": 93,
+     "unit": "deg",
+     "stated": "93° (figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "HAND R/L"
+    },
+    "insert": {
+     "v": "DN֎֎1506֎֎",
+     "unit": "text",
+     "stated": "DN֎֎1506֎֎"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "insert assigned from row group (DDJNR/L 2525-M15-3 takes DN..1504)",
+    "'֎' is the catalogue's placeholder glyph in insert codes, kept as printed"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "PDJNR/L2525M15",
+   "id": "PDJNR/L 2525-M15",
+   "maker": "Korloy",
+   "name": "Korloy PDJNR/L lever-lock external holder",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=165",
+   "taken": "2026-11-24",
+   "values": {
+    "lh": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "LH 35"
+    },
+    "l1": {
+     "v": 150.0,
+     "unit": "mm",
+     "stated": "LF 150"
+    },
+    "f": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "WF 32"
+    },
+    "hf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "HF 25"
+    },
+    "b": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "B 25"
+    },
+    "h": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "H 25"
+    },
+    "kr": {
+     "v": 93,
+     "unit": "deg",
+     "stated": "93° (figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "HAND R/L"
+    },
+    "insert": {
+     "v": "DN֎֎1506֎֎",
+     "unit": "text",
+     "stated": "DN֎֎1506֎֎"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "insert assigned from row group",
+    "'֎' is the catalogue's placeholder glyph in insert codes, kept as printed"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "SVJBR/L2020K16",
+   "id": "SVJBR/L 2020-K16",
+   "maker": "Korloy",
+   "name": "Korloy SVJBR/L screw-on external holder",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=187",
+   "taken": "2026-11-24",
+   "values": {
+    "lh": {
+     "v": 41.0,
+     "unit": "mm",
+     "stated": "LH 41"
+    },
+    "l1": {
+     "v": 125.0,
+     "unit": "mm",
+     "stated": "LF 125"
+    },
+    "f": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "WF 25"
+    },
+    "hf": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "HF 20"
+    },
+    "b": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "B 20"
+    },
+    "h": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "H 20"
+    },
+    "kr": {
+     "v": 93,
+     "unit": "deg",
+     "stated": "93° (figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "HAND R/L"
+    },
+    "insert": {
+     "v": "VB֎T1604֎֎",
+     "unit": "text",
+     "stated": "VB֎T1604֎֎"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "insert assigned from row group",
+    "'֎' is the catalogue's placeholder glyph in insert codes, kept as printed"
+   ]
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "S25T-PCLNR/L12",
+   "id": "S25T-PCLNR/L-12",
+   "maker": "Korloy",
+   "name": "Korloy S-PCLNR/L boring bar (steel shank)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=195",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "DMIN 32"
+    },
+    "ohn": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "OHN 40"
+    },
+    "l1": {
+     "v": 300.0,
+     "unit": "mm",
+     "stated": "LF 300"
+    },
+    "f": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "WF 17"
+    },
+    "h": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "H 23"
+    },
+    "dmm": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "DCON-MS 25"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "HAND R/L"
+    },
+    "insert": {
+     "v": "CN֎֎1204֎֎",
+     "unit": "text",
+     "stated": "CN֎֎1204֎֎"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "insert assigned from row group",
+    "OHN label kept as stated (overhang-related)",
+    "'֎' is the catalogue's placeholder glyph in insert codes, kept as printed"
+   ]
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "S20S-SCLCR/L09",
+   "id": "S20S-SCLCR/L-09",
+   "maker": "Korloy",
+   "name": "Korloy S-SCLCR/L boring bar (steel shank)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=200",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "DMIN 25"
+    },
+    "ohn": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "OHN 32"
+    },
+    "l1": {
+     "v": 250.0,
+     "unit": "mm",
+     "stated": "LF 250"
+    },
+    "f": {
+     "v": 13.0,
+     "unit": "mm",
+     "stated": "WF 13"
+    },
+    "h": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "H 18"
+    },
+    "dmm": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "DCON-MS 20"
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "HAND R/L"
+    },
+    "insert": {
+     "v": "CC֎T09T3֎֎",
+     "unit": "text",
+     "stated": "CC֎T09T3֎֎"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "insert assigned from row group",
+    "OHN label kept as stated",
+    "'֎' is the catalogue's placeholder glyph in insert codes, kept as printed"
+   ]
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "S20S-SDUCR/L11",
+   "id": "S20S-SDUCR/L-11",
+   "maker": "Korloy",
+   "name": "Korloy S-SDUCR/L boring bar (steel shank)",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=203",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "DMIN 25"
+    },
+    "ohn": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "OHN 32"
+    },
+    "l1": {
+     "v": 250.0,
+     "unit": "mm",
+     "stated": "LF 250"
+    },
+    "f": {
+     "v": 13.0,
+     "unit": "mm",
+     "stated": "WF 13"
+    },
+    "h": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "H 18"
+    },
+    "dmm": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "DCON-MS 20"
+    },
+    "kr": {
+     "v": 93,
+     "unit": "deg",
+     "stated": "93° (figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "HAND R/L"
+    },
+    "insert": {
+     "v": "DC֎T11T3֎֎",
+     "unit": "text",
+     "stated": "DC֎T11T3֎֎"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "OHN label kept as stated",
+    "'֎' is the catalogue's placeholder glyph in insert codes, kept as printed"
+   ]
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "A16M-SDUCR/L07",
+   "id": "A16M-SDUCR/L-07",
+   "maker": "Korloy",
+   "name": "Korloy A-SDUCR/L boring bar",
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=203",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "DMIN 20"
+    },
+    "ohn": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "OHN 25"
+    },
+    "l1": {
+     "v": 150.0,
+     "unit": "mm",
+     "stated": "LF 150"
+    },
+    "f": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "WF 11"
+    },
+    "h": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "H 15"
+    },
+    "dmm": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "DCON-MS 16"
+    },
+    "kr": {
+     "v": 93,
+     "unit": "deg",
+     "stated": "93° (figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "HAND R/L"
+    },
+    "insert": {
+     "v": "DC֎T0702֎֎",
+     "unit": "text",
+     "stated": "DC֎T0702֎֎"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "insert assigned from row group",
+    "OHN label kept as stated",
+    "'֎' is the catalogue's placeholder glyph in insert codes, kept as printed"
+   ]
+  }
+ ]
+}
