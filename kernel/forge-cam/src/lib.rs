@@ -4,6 +4,7 @@ pub mod engage;
 pub mod bore;
 pub mod fixture;
 pub mod leads;
+pub mod life;
 pub mod lower;
 pub mod lower3d;
 pub mod ops;

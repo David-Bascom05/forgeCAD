@@ -26,6 +26,7 @@
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
 pub mod export;
 pub mod holes;
+pub mod life;
 pub mod sim;
 
 use forge_agent::json::Json;
@@ -129,6 +130,8 @@ struct PartIn {
     holes: Vec<holes::HoleInfo>,
     bbox: ([f64; 3], [f64; 3]),
     group: String,
+    /// The work material (forge-material name or alias), when `part(.., material:)` names it.
+    material: Option<String>,
 }
 
 struct SetupIn {
@@ -1005,6 +1008,7 @@ impl Cam {
             holes: vec![],
             bbox: ([lo[0], -hi[1], h - hi[2]], [hi[0], -lo[1], h - lo[2]]),
             group: p.group.clone(),
+            material: p.material.clone(),
         };
         self.parts.push(turned);
         Ok(self.parts.len() - 1)
@@ -1708,6 +1712,10 @@ impl Cam {
                     holes,
                     bbox: (lo, hi),
                     group: get_str(a, "group", Some("N"))?,
+                    material: match a.get("material") {
+                        Some(V::Str(m)) => Some(m.clone()),
+                        _ => None,
+                    },
                 });
                 Ok(V::Part(self.parts.len() - 1))
             }
@@ -2184,6 +2192,7 @@ impl Cam {
             holes: vec![],
             bbox: (b.min, b.max),
             group: "N".into(),
+            material: None,
         });
         self.jaws.push(sj);
         Ok(V::Jaws(self.jaws.len() - 1, self.parts.len() - 1))

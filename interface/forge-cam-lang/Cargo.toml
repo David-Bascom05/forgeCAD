@@ -16,6 +16,7 @@ forge-agent = { path = "../forge-agent" }
 forge-cam = { path = "../../kernel/forge-cam" }
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
+forge-material = { path = "../../kernel/forge-material" }
 forge-post = { path = "../../kernel/forge-post" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-math = { path = "../../kernel/forge-math" }

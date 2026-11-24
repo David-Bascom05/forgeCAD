@@ -1,0 +1,156 @@
+# Tool-life data: Taylor's equation v T^n f^a ap^b = C per tool material/coating × work material.
+# Every row cites its published source (source, taken = table/equation/page, value = the source's
+# own statement). A tool × material with no row is "not estimated": no number is guessed.
+# Units: v m/min, T min, f per `feed` (fz | hex | hm mm, f mm/rev), ap mm.
+# Schema: research/cam/toollife/model.md.
+
+# ---- Ti-6Al-4V, coated carbide, milling ----------------------------------------------------
+[[life]]
+id = "ti64-carbide-alti-n-highfeed-vb03"
+op = "milling"
+tool = "carbide"
+coating = "AlTiN"
+work = ["Ti-6Al-4V annealed", "Ti-6Al-4V"]
+group = "S"
+n = 0.336
+c = 204.4
+feed = "fz"
+vb = 0.3
+criterion = "average flank wear VB = 0.3 mm"
+vc_range = [50, 125]
+source = "Albertelli, Mussi, Strano, Monno, 'Experimental investigation of the effects of cryogenic cooling on tool life in Ti6Al4V milling', Int J Adv Manuf Technol (2021), doi:10.1007/s00170-021-07161-9"
+taken = "Eq. 5 (ln TL = b0 + b1 ln vc), conventional (flood) cooling, VB 0.3 mm fit; n = -1/b1, C = exp(-b0/b1)"
+value = "b0 = 15.827, b1 = -2.975 (n = 0.336, C = 204.4 derived)"
+licence = "CC BY 4.0"
+note = "Mitsubishi JOMT06T216ZZER-JL MP9140 (PVD Al-rich (Al,Ti)N) high-feed cutter D20 Z3, down milling, ap 0.4, ae 13, fz 0.7. Narrow fit: a high-feed geometry; extrapolating to end mills is outside the data."
+
+# ---- hardened tool steels, high-speed face milling (V-T only) ---------------------------------
+[[life]]
+id = "h13-58hrc-pcbn-face"
+op = "milling"
+tool = "cbn"
+work = ["1.2344 58 HRC", "H13 58 HRC"]
+group = "H"
+n = 0.969
+c = 5154
+feed = "fz"
+vb = 0.3
+criterion = "mean VB 0.3 mm or max VB 0.6 mm"
+vc_range = [100, 700]
+source = "Er, Aslan, 'A Comparative Study on Cutting Tool Performance in High-Speed Face-Milling of Hardened Tool Steels', Arch. Metall. Mater. 70(1) (2025) 5-12, doi:10.24425/amm.2025.152500"
+taken = "Eq. 1, Table 3"
+value = "n = 0.969, C = 5154"
+licence = "CC BY 4.0"
+note = "f 0.032, ae 75, ap 0.25. The authors' graph fit differs (Table 5: n 0.739, C 1964): n is uncertain."
+
+[[life]]
+id = "h13-58hrc-carbide-cvd-face"
+op = "milling"
+tool = "carbide"
+coating = "TiN-TiCN-Al2O3"
+work = ["1.2344 58 HRC", "H13 58 HRC"]
+group = "H"
+n = 1.005
+c = 2946
+feed = "fz"
+vb = 0.3
+criterion = "mean VB 0.3 mm or max VB 0.6 mm"
+vc_range = [50, 250]
+source = "Er, Aslan, 'A Comparative Study on Cutting Tool Performance in High-Speed Face-Milling of Hardened Tool Steels', Arch. Metall. Mater. 70(1) (2025) 5-12, doi:10.24425/amm.2025.152500"
+taken = "Eq. 1, Table 3"
+value = "n = 1.005, C = 2946"
+licence = "CC BY 4.0"
+note = "CVD TiN+TiCN+Al2O3 carbide; f 0.032, ae 75, ap 0.25. n near 1 is unusual; the source's pairwise-slope method."
+
+[[life]]
+id = "d3-55hrc-pcbn-face"
+op = "milling"
+tool = "cbn"
+work = ["1.2080 55 HRC", "D3 55 HRC"]
+group = "H"
+n = 1.077
+c = 3855
+feed = "fz"
+vb = 0.3
+criterion = "mean VB 0.3 mm or max VB 0.6 mm"
+vc_range = [100, 900]
+source = "Er, Aslan, 'A Comparative Study on Cutting Tool Performance in High-Speed Face-Milling of Hardened Tool Steels', Arch. Metall. Mater. 70(1) (2025) 5-12, doi:10.24425/amm.2025.152500"
+taken = "Eq. 1, Table 3"
+value = "n = 1.077, C = 3855"
+licence = "CC BY 4.0"
+note = "f 0.032, ae 75, ap 0.25."
+
+[[life]]
+id = "d2-56hrc-pcbn-face"
+op = "milling"
+tool = "cbn"
+work = ["1.2379 56 HRC", "D2 56 HRC"]
+group = "H"
+n = 0.986
+c = 2617
+feed = "fz"
+vb = 0.3
+criterion = "mean VB 0.3 mm or max VB 0.6 mm"
+vc_range = [100, 500]
+source = "Er, Aslan, 'A Comparative Study on Cutting Tool Performance in High-Speed Face-Milling of Hardened Tool Steels', Arch. Metall. Mater. 70(1) (2025) 5-12, doi:10.24425/amm.2025.152500"
+taken = "Eq. 1, Table 3"
+value = "n = 0.986, C = 2617"
+licence = "CC BY 4.0"
+note = "f 0.032, ae 75, ap 0.25."
+
+[[life]]
+id = "p20-55hrc-ceramic-face"
+op = "milling"
+tool = "ceramic"
+coating = "TiN"
+work = ["1.2738 55 HRC", "P20 55 HRC"]
+group = "H"
+n = 0.493
+c = 2204
+feed = "fz"
+vb = 0.3
+criterion = "mean VB 0.3 mm or max VB 0.6 mm"
+vc_range = [200, 1000]
+source = "Er, Aslan, 'A Comparative Study on Cutting Tool Performance in High-Speed Face-Milling of Hardened Tool Steels', Arch. Metall. Mater. 70(1) (2025) 5-12, doi:10.24425/amm.2025.152500"
+taken = "Eq. 1, Table 3"
+value = "n = 0.493, C = 2204"
+licence = "CC BY 4.0"
+note = "PVD TiN-coated Al2O3/TiCN ceramic; f 0.032, ae 75, ap 0.25."
+
+[[life]]
+id = "p20-55hrc-pcbn-face"
+op = "milling"
+tool = "cbn"
+work = ["1.2738 55 HRC", "P20 55 HRC"]
+group = "H"
+n = 0.697
+c = 2250
+feed = "fz"
+vb = 0.3
+criterion = "mean VB 0.3 mm or max VB 0.6 mm"
+vc_range = [100, 500]
+source = "Er, Aslan, 'A Comparative Study on Cutting Tool Performance in High-Speed Face-Milling of Hardened Tool Steels', Arch. Metall. Mater. 70(1) (2025) 5-12, doi:10.24425/amm.2025.152500"
+taken = "Eq. 1, Table 3"
+value = "n = 0.697, C = 2250"
+licence = "CC BY 4.0"
+note = "f 0.032, ae 75, ap 0.25."
+
+# ---- AISI 1045, coated carbide, turning -----------------------------------------------------
+[[life]]
+id = "1045-carbide-cvd-turning"
+op = "turning"
+tool = "carbide"
+coating = "TiCN-Al2O3-TiN"
+work = ["AISI 1045", "C45"]
+group = "P"
+n = 0.362
+c = 1085
+feed = "f"
+vb = 0.3
+criterion = "flank wear VB = 0.3 mm"
+vc_range = [300, 400]
+source = "Abeni, Attanasio, Outeiro, Poulachon, 'A novel procedure to predict cumulative tool wear in turning based on experimental analysis', Wear 560-561 (2025) 205607, doi:10.1016/j.wear.2024.205607"
+taken = "Section 4.2.2"
+value = "n = 0.362, C = 1085"
+licence = "Elsevier, all rights reserved (coefficients cited as facts; free author copy at iris.unibs.it)"
+note = "Sandvik VBMT 160404 PM4325, ap 1, f 0.1 mm/rev, wet, 168-190 HB. Same group's Procedia CIRP 2025 paper finds linear (Miner-type) accumulation within ~10% under variable speed for this pair."
