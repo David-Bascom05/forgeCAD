@@ -84,25 +84,41 @@ putting it back in one frame. A fade for the cut-away is the next step.
 Each frame is rendered once, at its own instant, with no clock read, so no frame is duplicated.
 Frames repeat only where nothing in the picture moves.
 
-## Five stations on the TruBend 5130 (BENDSIM-TOOLS' staged program)
+## Stations on the TruBend 5130 (BENDSIM-TOOLS' staged program)
 
 `shots/load-tray-5-stations-trubend.mp4` and its strip: the load tray on a Trumpf TruBend 5130,
-the planner's five stations along the bed. They run from y −335 to 380:
+the planner's stations along the bed, re-rendered at d6a2a5d0 (the file keeps its name). There are
+now four stations, from y −265 to 310:
 
 | station | punch | die | bends |
 |---|---|---|---|
-| 1 | OW300-S | EV004 30 degrees | 1, 2 |
-| 2 | OW300-S | EV004 30 degrees | 3 |
-| 3 | OW300-S | EV001 30 degrees | 4 |
-| 4 | OW222-K | EV001 30 degrees | 5 |
-| 5 | OW222-K | EV001 30 degrees | 6 |
+| 1 | OW202-S | EV004 30 degrees | 1, 2 |
+| 2 | OW202-S | EV004 30 degrees | 3 |
+| 3 | OW222-K | EV001 30 degrees | 4, 5 |
+| 4 | OW222-K | EV001 30 degrees | 6 |
 
-It was rendered from bendsim/next d3ea3f8a with bendsim/tools b359d1be merged (in a scratch
-checkout, BENDSIM-TOOLS' `a_staged_clip`). With the operator's camera, the eye stands still at a
-station and eases along the bed as the part moves to the next. The other stations' tools are seen
-through only where they stand between the eye and the bend.
+The earlier five-station layout put the 300 mm OW300-S on the 100 mm EV dies. That is 400 mm of
+tools against the press's published usable open height of 385 mm, so top dead centre stood at
+−15 mm, 16.5 mm under the sheet. On the approach the punch came up through the part to meet it,
+and on the return it went back down through it (David: "the tool and the part bending do not line
+up"). The open height check had reported "not checked", because the clamps' heights are not
+published. But clamps only take room, so it now fails when the tools alone overfill the daylight,
+and the planner takes the OW202-S. The scene also never draws the punch under the flat sheet. It
+clamps the stroke's top as the checks' own approach and return do.
 
-Jerk, measured the same way: max 8.7, median 0.25, 2 frames over 5, no duplicates.
+Within a step, the punch and the bend are posed from one sample: the turn is phimax × f and the
+tip is ztip(turn). `the_punch_meets_the_bend_every_frame` holds this every frame, on the bench
+tooling and on the stations:
+
+- the drawn tip is the posed tip;
+- the tip is never in the sheet outside handling;
+- the tip is on the sheet within 0.02 mm while the bend turns;
+- the turn grows only as the tip goes down.
+
+`shots/load-tray-punch-on-the-sheet.png` shows the approach and the bend at station 1.
+
+Jerk, measured the same way (160 px YAVG difference, then the change between frames): max 5.2,
+median 0.06, 1 frame over 5 (the first), no duplicates.
 
 ## The cut-away faded, ghosts keeping their shadows
 
