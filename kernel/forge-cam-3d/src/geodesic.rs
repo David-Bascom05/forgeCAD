@@ -222,7 +222,11 @@ pub fn level_sets(f: &Field, level: f64) -> Vec<Vec<[f64; 2]>> {
     let point = |e: usize| -> [f64; 2] {
         let k = e / 2;
         let (i, j) = (k % nx, k / nx);
-        let (i2, j2) = if e.is_multiple_of(2) { (i + 1, j) } else { (i, j + 1) };
+        let (i2, j2) = if e.is_multiple_of(2) {
+            (i + 1, j)
+        } else {
+            (i, j + 1)
+        };
         let va = f.dist[j * nx + i];
         let vb = f.dist[j2 * nx + i2];
         // an outside node sits at distance 0 (the boundary)
