@@ -51,7 +51,7 @@ closes it:
 |---|---|---|
 | Browse built-in + document + project libraries, filter | built-in + project `cam/*.toml`, filter; lathe tools for turning | done |
 | Add a library tool to the document with a T number | Add → `tool(..)` / `lathe_tool(..)` at the next free T | done |
-| Import vendor / Fusion JSON libraries | forge-cam-import exists (CLI-less) | **UI next**: Import… writes `cam/<name>.toml` beside the document |
+| Import vendor / Fusion JSON libraries | Tool Library ▸ Import: a Fusion JSON beside the document → `cam/<name>.toml` (forge-cam-import), library reloaded | done |
 | Edit a tool's geometry, holders, assemblies | read-only | UI (writes the project TOML) — later |
 | Feeds presets per tool | none | LANG + library |
 
@@ -59,10 +59,10 @@ closes it:
 
 | Fusion | here | state |
 |---|---|---|
-| NC program manager: list, which setups, post, number, output folder | post dialog per program (dialect, number, text, Write) | **UI next**: Programs window — every program, its setups, dialect, number, lines, released; new program over chosen setups; post all |
+| NC program manager: list, which setups, post, number, output folder | NC Programs window: every program, its setups (checks), dialect, number, lines, released; New Program; Write All | done |
 | Post preview | NC text in the post dialog | done |
 | Setup sheet (HTML, Excel) | HTML written beside the document; turning: a simple table | done (HTML); Excel not planned |
-| Machining time per op and per setup, feed scale (O4) | per op from the run; status-bar total | **UI next**: per-setup cycle-time summary; QUAL's machine-timeline time (t_min, t_stop) when measured |
+| Machining time per op and per setup, feed scale (O4) | per op; per setup in the browser row and its details; the programs' machine-timeline time in the Quality window | done (feed scale: not yet) |
 | Jerk-limited time, consistent everywhere (O5, O6) | — | QUAL (forge-cam-quality t_stop) shown once wired |
 
 ## Simulation and verification
@@ -73,7 +73,7 @@ closes it:
 | Collisions and gouges marked | certified checks per op, witness located, Check Now (`Cam::check`) | done (BETTER: certified) |
 | Stock comparison colouring | — | SIM |
 | Toolpath coloured by feed / engagement | — | **UI next with QUAL + SIM**: per-move chip load from forge-cam-quality, a colour toggle the sim view reads from `Focus` |
-| Per-op statistics (air cutting, plunges, retracts, engagement, chip load, power) | — (Fusion shows only time and length) | **UI next with QUAL** (BETTER) |
+| Per-op statistics (air cutting, plunges, retracts, engagement, chip load, power) | measured on every milling Generate (forge-cam-quality `measure_cam`): per op in the browser's details, the Quality window (every op, each setup's feed time and air share, the programs' machine-timeline time) | done (BETTER) |
 | Turning section view | done (turnview.rs) | done |
 
 ## Order of work (this branch)

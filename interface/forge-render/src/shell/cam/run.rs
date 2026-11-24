@@ -140,6 +140,9 @@ pub struct Run {
     pub turn: Option<forge_turn_lang::TurnCam>,
     /// "milling" or "turning".
     pub process: &'static str,
+    /// The toolpaths' quality (forge-cam-quality: cycle time on the machine, engagement, chip,
+    /// air cutting), measured on the run; milling only for now.
+    pub quality: Option<forge_cam_quality::JobQ>,
 }
 
 fn s(j: &Json, k: &str) -> String {
@@ -307,6 +310,11 @@ pub fn run(text: &str, dir: &Path) -> Run {
         leftover_done: matches!(lo.and_then(|l| l.get("computed")), Some(Json::Bool(true))),
         json,
         sheet: cam.sheet(),
+        quality: Some(forge_cam_quality::measure_cam(
+            &cam,
+            String::new(),
+            &forge_cam_quality::Config::default(),
+        )),
         cam: Some(cam),
         turn: None,
         process: "milling",
@@ -478,6 +486,7 @@ fn run_turning(text: &str, dir: &Path) -> Run {
         cam: None,
         turn: Some(tc),
         process: "turning",
+        quality: None,
     }
 }
 
@@ -550,6 +559,11 @@ pub fn recheck(mut r: Run) -> Run {
 }
 
 impl Run {
+    /// An op's quality, if measured.
+    pub fn quality(&self, op: &str) -> Option<&forge_cam_quality::OpQ> {
+        self.quality.as_ref()?.ops.iter().find(|q| q.name == op)
+    }
+
     pub fn op(&self, name: &str) -> Option<&OpRes> {
         self.ops.iter().find(|o| o.name == name)
     }

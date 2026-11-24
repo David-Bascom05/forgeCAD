@@ -53,6 +53,7 @@ pub enum Ask {
     SetupSheet,
     ToolLibrary,
     Programs,
+    Quality,
     Checks,
     Undo,
     Redo,
@@ -74,6 +75,7 @@ impl From<Ask> for Cmd {
             Ask::SetupSheet => Cmd::SetupSheet,
             Ask::ToolLibrary => Cmd::ToolLibrary,
             Ask::Programs => Cmd::Programs,
+            Ask::Quality => Cmd::Quality,
             Ask::Checks => Cmd::Checks,
             Ask::Undo => Cmd::Undo,
             Ask::Redo => Cmd::Redo,
@@ -109,6 +111,7 @@ pub enum Cmd {
     SetupSheet,
     ToolLibrary,
     Programs,
+    Quality,
     Checks,
     Undo,
     Redo,
@@ -207,6 +210,8 @@ pub struct CamWs {
     pub tools_open: bool,
     /// The NC programs window.
     pub programs_open: bool,
+    /// The toolpath quality window.
+    pub quality_open: bool,
     /// The tool library's import field: a Fusion tool library's file, beside the document.
     pub import_path: String,
     pub tools_filter: String,
@@ -255,6 +260,7 @@ impl CamWs {
             post_dlg: None,
             tools_open: false,
             programs_open: false,
+            quality_open: false,
             import_path: String::new(),
             tools_filter: String::new(),
             checks_open: false,
@@ -551,6 +557,7 @@ impl CamWs {
             },
             Cmd::ToolLibrary => self.tools_open = !self.tools_open,
             Cmd::Programs => self.programs_open = !self.programs_open,
+            Cmd::Quality => self.quality_open = !self.quality_open,
             Cmd::Checks => self.checks_open = !self.checks_open,
             Cmd::Undo => {
                 if let Some(t) = self.undo.pop() {

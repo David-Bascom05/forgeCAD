@@ -1114,6 +1114,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-cam-quality"
+version = "0.1.0"
+dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-cam-lang",
+ "forge-machine",
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-dirs"
 version = "0.1.0"
 
@@ -1300,6 +1313,7 @@ dependencies = [
  "forge-cam-geom",
  "forge-cam-import",
  "forge-cam-lang",
+ "forge-cam-quality",
  "forge-dirs",
  "forge-draw",
  "forge-dwg",

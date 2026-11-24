@@ -147,6 +147,15 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                     w.post_dlg.is_some(),
                 ),
                 ("NC Programs", "cam_sheet", a(Ask::Programs), w.programs_open),
+                (
+                    "Quality",
+                    "cam_check",
+                    w.run
+                        .as_ref()
+                        .is_some_and(|r| r.quality.is_some())
+                        .then_some(Action::Cam(Ask::Quality)),
+                    w.quality_open,
+                ),
             ],
             vec![
                 (
@@ -199,8 +208,10 @@ fn wcs_word(k: u32) -> String {
 }
 
 fn time(s: f64) -> String {
+    // whole seconds (a 59.6 s rounds to 1:00, not 0:60)
+    let s = s.round();
     if s >= 60.0 {
-        format!("{}:{:02} min", (s / 60.0).floor(), (s % 60.0).round() as u32)
+        format!("{}:{:02} min", (s / 60.0).floor(), (s % 60.0) as u32)
     } else {
         format!("{} s", num(s))
     }
@@ -498,6 +509,9 @@ impl Shell {
         }
         if w.post_dlg.is_some() {
             blocks.extend(post_window(ctx, &t, v, &mut w, &mut places));
+        }
+        if w.quality_open {
+            blocks.extend(quality_window(ctx, &t, v, &mut w, &mut places));
         }
         if w.programs_open {
             blocks.extend(programs_window(ctx, &t, v, &mut w, &mut places));
@@ -916,6 +930,9 @@ fn details(
             if o.pairs > 0 {
                 fact(ui, t, "Certified pairs", &o.pairs.to_string(), width, t.ink);
             }
+            if let Some(q) = run.and_then(|r| r.quality(id)) {
+                quality_facts(ui, t, q, width);
+            }
             for r in &o.removals {
                 note(ui, &format!("Declared removal: {r}"), width, t.ink2);
             }
@@ -945,6 +962,126 @@ fn details(
             }
         }
         _ => {}
+    }
+}
+
+/// A percentage of a share in [0, 1].
+fn pct(x: f64) -> String {
+    if x.is_finite() {
+        format!("{:.0}%", 100.0 * x)
+    } else {
+        "—".into()
+    }
+}
+
+/// An op's toolpath quality (forge-cam-quality): what its path is like to run.
+fn quality_facts(ui: &mut Ui, t: &Theme, q: &forge_cam_quality::OpQ, width: f32) {
+    heading(ui, t, "Toolpath quality", width);
+    let cut_air = q.t_cut + q.t_air;
+    if q.t_stop > 0.0 {
+        fact(ui, t, "Cycle (machine timeline)", &time(q.t_stop), width, t.ink);
+    }
+    if cut_air > 0.0 {
+        let air = q.t_air / cut_air;
+        fact(
+            ui,
+            t,
+            "Feed time · in air",
+            &format!("{} · {}", time(cut_air), pct(air)),
+            width,
+            if air > 0.3 { t.warn } else { t.ink },
+        );
+    }
+    fact(
+        ui,
+        t,
+        "Retracts · plunges · ramps",
+        &format!("{} · {} · {}", q.retracts, q.plunges, q.ramps),
+        width,
+        if q.plunges > 0 { t.warn } else { t.ink },
+    );
+    if q.side {
+        fact(
+            ui,
+            t,
+            "Engagement max · mean",
+            &format!("{}° · {}°", num(q.phi_max.round()), num(q.phi_mean.round())),
+            width,
+            if q.phi_max > 170.0 { t.warn } else { t.ink },
+        );
+        fact(
+            ui,
+            t,
+            "Climb · conv. · slotting",
+            &format!("{} · {} · {}", pct(q.climb), pct(q.conventional), pct(q.slotting)),
+            width,
+            if q.slotting > 0.05 { t.warn } else { t.ink },
+        );
+        fact(
+            ui,
+            t,
+            "Chip (thinned) mean · max",
+            &format!("{} · {} mm", num(q.hex_mean), num(q.hex_max)),
+            width,
+            t.ink,
+        );
+        fact(
+            ui,
+            t,
+            "Feed per tooth target",
+            &format!("{} mm", num(q.fz_target)),
+            width,
+            t.ink2,
+        );
+        fact(
+            ui,
+            t,
+            "Rubbing · overloaded",
+            &format!("{} · {}", pct(q.thin), pct(q.thick)),
+            width,
+            if q.thin > 0.1 || q.thick > 0.1 {
+                t.warn
+            } else {
+                t.ink
+            },
+        );
+    }
+    if q.mrr > 0.0 {
+        fact(
+            ui,
+            t,
+            "Material removal",
+            &format!("{} cm3/min", num(q.mrr / 1000.0)),
+            width,
+            t.ink,
+        );
+    }
+    if q.p_max > 0.0 {
+        let over = q.p_avail > 0.0 && q.p_max > q.p_avail;
+        let avail = if q.p_avail > 0.0 {
+            format!(" of {} kW", num(q.p_avail))
+        } else {
+            String::new()
+        };
+        fact(
+            ui,
+            t,
+            "Spindle power peak",
+            &format!("{} kW{avail}", num(q.p_max)),
+            width,
+            if over { t.error } else { t.ink },
+        );
+    }
+    if q.rapid_cuts > 0 {
+        note(
+            ui,
+            &format!(
+                "{} rapid move(s) meet material in the measure model",
+                q.rapid_cuts
+            ),
+            width,
+            t.warn,
+        );
     }
 }
 
@@ -2145,6 +2282,149 @@ fn programs_window(
     }
     if close {
         w.programs_open = false;
+    }
+    r.map(|r| r.response.rect)
+}
+
+/// Every op's toolpath quality in one table, each setup's totals, and the programs' time on the
+/// machine's timeline (forge-cam-quality).
+fn quality_window(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    places: &mut Places,
+) -> Option<Rect> {
+    let mut close = false;
+    let width = 720.0;
+    let mut select: Option<String> = None;
+    let r = egui::Window::new("cam-quality")
+        .id(egui::Id::unique("cam-quality-window"))
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
+        .fixed_size(vec2(width, 0.0))
+        .frame(frame(t))
+        .constrain_to(crate::shell::dialog_area(ctx))
+        .show_placed(ctx, places, |ui, places| {
+            close = head(ui, t, "cam_check", "Toolpath Quality", width, places, "cam:quality");
+            let Some(run) = &w.run else { return };
+            let Some(job) = &run.quality else {
+                note(ui, "Not measured (turning runs are not yet).", width, t.ink2);
+                return;
+            };
+            let cols: [(&str, f32); 10] = [
+                ("op", 110.0),
+                ("feed time", 70.0),
+                ("air", 50.0),
+                ("plunges", 56.0),
+                ("eng. max", 60.0),
+                ("slot", 48.0),
+                ("chip mean", 70.0),
+                ("rub / over", 80.0),
+                ("MRR cm3/min", 86.0),
+                ("kW", 50.0),
+            ];
+            let header = |ui: &mut Ui| {
+                let (r, _) = ui.allocate_exact_size(vec2(width, 22.0), Sense::hover());
+                let mut x = r.left() + 14.0;
+                for (c, wd) in cols {
+                    ui.painter().text(pos2(x, r.center().y), Align2::LEFT_CENTER, c, sans(11.0), t.ink2);
+                    x += wd;
+                }
+            };
+            for su in w.setups() {
+                let ops: Vec<&forge_cam_quality::OpQ> = job
+                    .ops
+                    .iter()
+                    .filter(|q| run.op(&q.name).is_some_and(|o| o.setup == su.name))
+                    .collect();
+                if ops.is_empty() {
+                    continue;
+                }
+                let feed: f64 = ops.iter().map(|q| q.t_cut + q.t_air).sum();
+                let air: f64 = ops.iter().map(|q| q.t_air).sum();
+                heading(
+                    ui,
+                    t,
+                    &format!("{} · feed time {} · {} in air", su.name, time(feed), if feed > 0.0 { pct(air / feed) } else { "—".into() }),
+                    width,
+                );
+                header(ui);
+                for q in ops {
+                    let (r, resp) = ui.allocate_exact_size(vec2(width, 22.0), Sense::click());
+                    if resp.hovered() {
+                        ui.painter().rect_filled(r, 0.0, t.hover);
+                    }
+                    if resp.clicked() {
+                        select = Some(q.name.clone());
+                    }
+                    places.push((format!("cam:quality:row:{}", q.name), r));
+                    let side = |s: String| if q.side { s } else { "—".into() };
+                    let cells = [
+                        q.name.clone(),
+                        time(q.t_cut + q.t_air),
+                        if q.t_cut + q.t_air > 0.0 { pct(q.t_air / (q.t_cut + q.t_air)) } else { "—".into() },
+                        q.plunges.to_string(),
+                        side(format!("{}°", num(q.phi_max.round()))),
+                        side(pct(q.slotting)),
+                        side(num(q.hex_mean)),
+                        side(format!("{} / {}", pct(q.thin), pct(q.thick))),
+                        if q.mrr > 0.0 { num((q.mrr / 1000.0 * 10.0).round() / 10.0) } else { "—".into() },
+                        if q.p_max > 0.0 { num((q.p_max * 100.0).round() / 100.0) } else { "—".into() },
+                    ];
+                    let warn = [
+                        false,
+                        false,
+                        q.t_cut + q.t_air > 0.0 && q.t_air / (q.t_cut + q.t_air) > 0.3,
+                        q.plunges > 0,
+                        q.side && q.phi_max > 170.0,
+                        q.side && q.slotting > 0.05,
+                        false,
+                        q.side && (q.thin > 0.1 || q.thick > 0.1),
+                        false,
+                        q.p_avail > 0.0 && q.p_max > q.p_avail,
+                    ];
+                    let mut x = r.left() + 14.0;
+                    for ((c, (_, wd)), wn) in cells.iter().zip(cols).zip(warn) {
+                        ui.painter().text(pos2(x, r.center().y), Align2::LEFT_CENTER, c, mono(11.0), if wn { t.warn } else { t.ink });
+                        x += wd;
+                    }
+                }
+            }
+            if !job.progs.is_empty() {
+                heading(ui, t, "Programs on the machine's timeline", width);
+                for p in &job.progs {
+                    let words = match &p.error {
+                        Some(e) => format!("not timed: {e}"),
+                        None => format!(
+                            "{} with stops ({} at least) · {} tool changes{}",
+                            time(p.t_stop),
+                            time(p.t_min),
+                            p.tool_changes,
+                            if p.accel_missing { " · the machine gives no accelerations" } else { "" }
+                        ),
+                    };
+                    fact(ui, t, &format!("{} on {}", p.name, p.machine), &words, width, if p.error.is_some() { t.warn } else { t.ink });
+                }
+            }
+            note(
+                ui,
+                &format!(
+                    "Measured on a height map of {} mm cells (forge-cam-quality): rubbing is a chip under half the feed per tooth, overloaded over 1.25 times it. Amber: worth a look.",
+                    num(job.cell)
+                ),
+                width,
+                t.ink2,
+            );
+            ui.add_space(8.0);
+        });
+    if let Some(op) = select {
+        w.command(Cmd::Select(op));
+    }
+    if close {
+        w.quality_open = false;
     }
     r.map(|r| r.response.rect)
 }

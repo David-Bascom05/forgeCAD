@@ -778,6 +778,7 @@ fn cam_words(g: &mut Gui, words: &str) -> Result<(), String> {
         "post" => w.command(Cmd::PostProcess),
         "tools" => w.command(Cmd::ToolLibrary),
         "programs" => w.command(Cmd::Programs),
+        "quality" => w.command(Cmd::Quality),
         "checks" => w.command(Cmd::Checks),
         "generate" => w.command(Cmd::Generate),
         "close" => {
@@ -788,6 +789,7 @@ fn cam_words(g: &mut Gui, words: &str) -> Result<(), String> {
             w.checks_open = false;
             w.text_open = false;
             w.programs_open = false;
+            w.quality_open = false;
         }
         _ => return Err(format!("unknown `{verb}`")),
     }
@@ -844,6 +846,7 @@ fn cam_json(g: &Gui) -> Json {
                     ("checks", w.checks_open),
                     ("text", w.text_open),
                     ("programs", w.programs_open),
+                    ("quality", w.quality_open),
                 ]
                 .into_iter()
                 .filter(|x| x.1)
