@@ -255,6 +255,7 @@ fn pair_travel(def: &MachineDef, ai: usize, bi: usize) -> (Vec<usize>, Travel) {
             seg_la: Vec::new(),
             t_scurve: 0.0,
             seg_scurve: Vec::new(),
+            t_scurve_blend: None,
             after_skip: Vec::new(),
             skip_unmodelled: Vec::new(),
         };
@@ -342,6 +343,7 @@ fn prove_box(
         seg_la: Vec::new(),
         t_scurve: 0.0,
         seg_scurve: Vec::new(),
+        t_scurve_blend: None,
         after_skip: Vec::new(),
         skip_unmodelled: Vec::new(),
     };
