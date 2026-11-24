@@ -20,6 +20,7 @@ pub mod library;
 pub mod multi;
 pub mod removal;
 pub mod setup;
+pub mod siemens;
 pub mod sim;
 
 pub use def::{DefError, Kind, MachineDef};

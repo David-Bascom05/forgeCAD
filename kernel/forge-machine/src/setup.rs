@@ -7,6 +7,8 @@
 //! [setup]
 //! machine = "generic-vmc3"
 //! dialect = "fanuc"          # a forge-post dialect name
+//! m_no_motion = [27, 29]     # optional: machine-specific M codes this machine's maker documents
+//!                            # as moving nothing (reported as the setup's word, never checked)
 //! units = "inch"             # optional ("mm"): the program posted in inches (G20); offsets,
 //!                            # tools and stock here stay in mm
 //! program = "op1.nc"         # beside the setup file
@@ -57,6 +59,8 @@ pub struct SetupSpec {
     pub program: String,
     /// The program is in inches (`units = "inch"`).
     pub inch: bool,
+    /// Machine-specific M codes the setup names as moving nothing.
+    pub m_no_motion: Vec<u32>,
     pub channel: u8,
     pub tool_mount: Option<String>,
     pub part_mount: Option<String>,
@@ -325,8 +329,14 @@ impl SetupSpec {
             "inch" => true,
             u => return Err(format!("{rec}: units = `{u}` (mm or inch)")),
         };
+        let m_no_motion = nums(s, "m_no_motion")
+            .unwrap_or_default()
+            .into_iter()
+            .map(|m| whole(m, rec, "m_no_motion"))
+            .collect::<Result<Vec<u32>, String>>()?;
         Ok(SetupSpec {
             inch,
+            m_no_motion,
             machine: txt("machine")?,
             dialect: txt("dialect")?,
             program: txt("program")?,
@@ -363,6 +373,7 @@ impl SetupSpec {
         if self.inch {
             control = control.in_inches().map_err(SimError::Setup)?;
         }
+        control.m_no_motion = self.m_no_motion.clone();
         let mut s = crate::sim::Setup::new(def, control)?;
         let per_letter = |vals: &[(char, f64)], what: &str| -> Result<Vec<f64>, SimError> {
             for (l, _) in vals {

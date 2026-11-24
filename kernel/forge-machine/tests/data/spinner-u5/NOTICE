@@ -1,0 +1,12 @@
+These two NC programs are copied unchanged from the dataset
+
+  Production Data Set for Five-Axis CNC Milling with Multiple Changeovers
+  https://github.com/ElMoe/Production-Data-Set-for-Five-Axis-CNC-Milling-with-Multiple-Changeovers
+  commit b800366089c196c22c6eb66c69a1e9cfa781a061, folder NC_code/
+
+  Keychain_Schluesselanhaenger/Keychain_Schluesselanhaenger.mpf
+  Bottle_opener_Flaschenoeffner/Bottle_opener_Flaschenoeffner.txt
+
+They are SINUMERIK 840D programs (NX) for a Spinner U5-620. They are licensed under the
+Creative Commons Attribution 4.0 International licence (LICENCE, copied from the dataset).
+forge-machine reads them in its tests (tests/siemens.rs); no change was made to them.
