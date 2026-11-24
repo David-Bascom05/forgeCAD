@@ -512,11 +512,21 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                 ui.separator();
                 ui.label(RichText::new("Checks").font(semi(12.0)).color(t.ink));
                 for f in &st.findings {
-                    let col = if f.not_checked { t.warn } else { t.error };
+                    // in words: which value, then what to do; the record's own words on hover
+                    let field = super::lib_form::workholding_label(&f.path);
+                    let (line, col) = if f.not_checked && r.conflict.contains(&f.path) {
+                        (format!("Not checked: {field} (its sources disagree)"), t.warn)
+                    } else if f.not_checked {
+                        (format!("Not checked: {field} is unknown"), t.warn)
+                    } else {
+                        (format!("{field}: {}", f.what), t.error)
+                    };
+                    ui.label(RichText::new(line).font(sans(11.0)).color(col))
+                        .on_hover_text(format!("{}: {}", f.path, f.what));
                     ui.label(
-                        RichText::new(format!("{}: {} — {}", f.path, f.what, f.fix))
-                            .font(sans(11.0))
-                            .color(col),
+                        RichText::new(format!("  {}", f.fix))
+                            .font(sans(10.5))
+                            .color(t.ink2),
                     );
                 }
             }

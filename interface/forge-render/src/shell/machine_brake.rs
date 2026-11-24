@@ -1109,15 +1109,19 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
                 );
             }
             for f in &st.findings {
-                let (tag, col) = if f.not_checked {
-                    ("NOT CHECKED", t.warn)
+                // in words: which value, then what to do; the record's own words on hover
+                let field = lf::brake_label(&f.path, "").0;
+                let (line, col) = if f.not_checked {
+                    (format!("Not checked: {field} is unknown"), t.warn)
                 } else {
-                    ("PROBLEM", t.error)
+                    (format!("{field}: {}", f.what), t.error)
                 };
+                ui.label(RichText::new(line).font(sans(11.0)).color(col))
+                    .on_hover_text(format!("{}: {}", f.path, f.what));
                 ui.label(
-                    RichText::new(format!("{tag} {}: {} — {}", f.path, f.what, f.fix))
-                        .font(sans(11.0))
-                        .color(col),
+                    RichText::new(format!("  {}", f.fix))
+                        .font(sans(10.5))
+                        .color(t.ink2),
                 );
             }
         }
