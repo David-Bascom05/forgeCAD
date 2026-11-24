@@ -20,7 +20,7 @@ op1  = setup(f, machine: m, stock: box(margin: (3, 2.5, 1.5), below: 4.5), origi
 
 skim  = facing(op1, tool: t6, to: 32, step: 1)
 rough = clear(op1, tool: t1, from: 32, to: 26, step: 3, stepover: 4)
-prof  = contour(op1, tool: t1, side: "outside", from: 26, to: 3, step: 5, finish: 2, finish_step: 0.3, spring: 1)
+prof  = contour(op1, tool: t1, side: "outside", from: 32, to: 3, step: 5, finish: 2, finish_step: 0.3, spring: 1)
 well  = pocket(op1, tool: t2, from: 26, to: 8, stepover: 2.5, step: 3, ramp: 3)
 crn   = pocket(op1, tool: t3, from: 26, to: 8, stepover: 1, step: 2, ramp: 3)
 shal  = pocket(op1, tool: t2, from: 26, to: 23, stepover: 2.5, step: 1.5)
