@@ -1567,10 +1567,12 @@ impl Gui {
             if self.bend.showing() {
                 world.extend(self.bend.outline_tris(&v.nav.camera, v.size));
             }
+            // the simulation draws the part itself, in each setup's frame (turned over, in soft
+            // jaws): the document's own model, in its own frame, would float in the wrong place
+            let simulating = self.shell.camsim.is_some() && self.shell.tab == crate::shell::CAM_TAB;
+            v.scene.hidden = simulating;
             let solid = match self.shell.camsim.as_deref_mut() {
-                Some(st) if self.shell.tab == crate::shell::CAM_TAB => {
-                    gui_camsim::geometry(st, &v.nav.camera, v.size, &mut world)
-                }
+                Some(st) if simulating => gui_camsim::geometry(st, &v.nav.camera, v.size, &mut world),
                 _ => vec![],
             };
             let behind = extra_behind;
