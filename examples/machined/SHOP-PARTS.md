@@ -59,22 +59,26 @@ certifying it. Holes that end above the bottom are now left to their own ops (bc
 holes and slots the tool only just fits (shal was pocketing the dowels and the groove: 199k cells
 to 103k).)
 
+With CAM-HAAS's catalogue tools (tools/turn-presets @b8d58f49, merged for the run, with t5 the
+Tungaloy MTEC0807C171.5ISO thread mill): 22.4 s, 12 of 15 ops certified. Every refusal left is
+stock that `rough` did not remove.
+
 | op | result | what blocks it |
 |---|---|---|
 | skim | certified | |
-| rough | not built | the 2.5D section at z = 29 meets the boss's foot fillet: `NotPrism { face: 38 }` (no 3D roughing on this branch) |
+| rough | not built | the 2.5D section at z = 29 meets the boss's foot fillet: `NotPrism { face: 38 }`. Needs 3D roughing (CAM-3AXIS's zlevel) |
 | prof | refused | the holder meets stock (−1.43) on a plunge: stock that `rough` would have removed |
 | well | certified | 3,519 cells |
 | crn | certified | 23,302 cells |
 | shal | certified | 103,298 cells: most of the time (the deep well's top, the shallow pocket, the bore's top) |
 | grv | certified | |
-| bored | refused | NeedTool: no 18.5 mm drill in the library |
-| thr | refused | the library's thread mill has pitch 1; the thread is 1.5 |
-| dwl | refused | NeedTool: no 6 mm drill (the reamer's pilot) |
-| tap | refused | a rapid 0.088 into stock: stock that `rough` would have removed |
+| bored | certified | Guhring 18.5 drill (tools/turn-presets); refused NeedTool without it |
+| thr | certified | Tungaloy 1.5-pitch thread mill (tools/turn-presets); refused on pitch without it |
+| dwl | refused | a rapid 0.088 into stock that `rough` would have removed. The plan drills 6 directly: no ream for 6H7, because the hole records no fit |
+| tap | refused | the same rapid into the same unremoved stock |
 | brk | certified | |
 | face2, rel | certified | |
-| cbh | refused | NeedTool: no 5.5 mm drill |
+| cbh | certified | Guhring 5.5 drill. The drill stopped 1.28 mm short of the flat floor (e7b3cd87: it was a −0.52 gouge through the floor). The floor's ring and the Ø10 × 5 counterbore are left uncut, said |
 
 ### hub_turn.fg: certified in full on claude/cam-turn-hub @f8b0152f (14 ops, 1811 checks, 0.58 s)
 
