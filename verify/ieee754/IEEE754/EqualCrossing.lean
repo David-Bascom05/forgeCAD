@@ -295,4 +295,34 @@ theorem sqrt_le_two_pow {x : FP f} (hx : x.isFinite) (hpos : 0 < x.val) {k : ℤ
         exact_mod_cast this
       linarith
 
+/-- A square, from its rounded value: `c² >= ĉ²/2 - (ĉ - c)²`. -/
+lemma sq_ge_half_sub (c d : ℚ) : d ^ 2 / 2 - (d - c) ^ 2 ≤ c ^ 2 := by
+  nlinarith [sq_nonneg (d - 2 * c)]
+
+/-- A zero square root: the f64 square root of a finite zero is zero. -/
+lemma sqrt_val_of_val_zero {x : FP f} (hx : x.isFinite) (h0 : x.val = 0) : x.sqrt.val = 0 := by
+  cases x with
+  | zero s => cases s <;> rfl
+  | inf s => simp [FP.isFinite] at hx
+  | nan => simp [FP.isFinite] at hx
+  | fin s m e h =>
+    exfalso
+    have hm : (0 : ℚ) < m := by exact_mod_cast h.1
+    have he := two_zpow_pos (K := ℚ) e
+    have hm' : m ≠ 0 := by exact_mod_cast hm.ne'
+    cases s <;> simp [FP.val, FP.sgn] at h0 <;> rcases h0 with h0 | h0
+    all_goals first | exact hm' h0 | exact absurd h0 he.ne'
+
+/-- **`len_gt_sq_gt`**: an f64 length `sqrt q` above `2^k` comes from a squared length `q` above
+`2^(2k)` (for `q` finite and non-negative). -/
+theorem len_gt_sq_gt {q : FP f} (hq : q.isFinite) (hq0 : 0 ≤ q.val) {k : ℤ} (hk : f.qmin ≤ k)
+    (hk2 : 2 * k ≤ f.emax) (hL : (2 : ℚ) ^ k < q.sqrt.val) : (2 : ℚ) ^ (2 * k) < q.val := by
+  by_contra hle
+  push_neg at hle
+  rcases eq_or_lt_of_le hq0 with h0 | hpos
+  · rw [sqrt_val_of_val_zero f hq h0.symm] at hL
+    exact absurd hL (not_lt.mpr (two_zpow_pos k).le)
+  · have := (sqrt_le_two_pow f hq hpos hk hk2 hle).2
+    linarith
+
 end IEEE754
