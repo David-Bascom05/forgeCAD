@@ -270,3 +270,11 @@ urdf-export, machines/builder, posts/dialects.
 - UI-BUGHUNT session_01WJtax11GnJCjfyG5XiZG3a: wasm/browser UI bugs. Lag first (measured), then dead clicks, then visual glitches (screenshots). Branch ui/bughunt-*.
 - Adaptive clearing: David rejects a blanket ban. TOOLPATH-RESEARCH is writing a claim-level FTO with design-arounds (research/cam/toolpath-quality/fto-adaptive.md). TOOLPATH-QUALITY may build engagement measurement and engagement-based feed now; it builds the path generator once a design-around is named.
 - tools/test-wasm.sh now runs the test binaries in parallel (train 3).
+
+### §10c (2026-11-24) more workers, rules
+- FEEDS-SPEEDS session_01WJtawvkuz1LZKSnUTEjphE: feeds, speeds and engagement as correct, tunable op parameters. Defaults are layered: library → material → machine clamp → user, with each value's source shown. It also owns the feeds.rs power bug fix (kc at the mean chip) and the limit checks. TOOLPATH-QUALITY owns path geometry, linking and engagement measurement.
+- CAM-UI top priority: NC export, i.e. an NC Program object in the doc, Save As/download, post-all, setup sheet, and CLI `forgecad cam F post -o`.
+- RULE (G9, FALLBACK): never write Body.vertices[..].tol directly in shipped code; use add_tolerant_vertex / Body::grow_vertex_tol.
+- RULE: a change to a source file the Aeneas translations cite (e.g. forge-geom intersect.rs) needs regenerated translations (TRANSLATE runs translate.sh) in the same train.
+- Curved search (#7, M.ct): option 1: keep today's search, run the certifier as a CI oracle, M.ct UNKNOWN.
+- #21: waiting for David's OK on its 52 bits lines.
