@@ -10,7 +10,7 @@ use forge_math::interval::Interval;
 fn travel(m: &forge_machine::MachineDef) -> Vec<Interval> {
     m.joints
         .iter()
-        .map(|j| Interval::new(j.range[0], j.range[1]))
+        .map(|j| Interval::new(j.range.unwrap()[0], j.range.unwrap()[1]))
         .collect()
 }
 
@@ -27,25 +27,34 @@ fn vmc3_table_and_head_are_clear_through_all_travel() {
         body(&bs, "table"),
         body(&bs, "head"),
         &travel(&m),
-        m.clearance,
         4096,
+        false,
     );
     assert_eq!(v, BoxVerdict::Clear, "after {n} boxes");
 }
 
 #[test]
-fn trunnion_head_reaches_its_cradle_inside_travel() {
+fn trunnion_head_comes_within_clearance_of_its_cradle_inside_travel() {
     let m = builtin_named("generic-trunnion-bc").unwrap();
     let bs = collide::machine_bodies(&m);
     let (a, b) = (body(&bs, "cradle"), body(&bs, "head"));
-    let (v, _) = collide::check_box(&m, a, b, &travel(&m), m.clearance, 4096);
-    let BoxVerdict::Hit { q, .. } = v else {
-        panic!("{v:?}")
+    let (v, n) = collide::check_box(&m, a, b, &travel(&m), 65536, false);
+    let q = match &v {
+        BoxVerdict::Hit { q, .. } => {
+            assert!(collide::dense_overlap(a, b, &forge_machine::kin::pose(&m, q)));
+            q.clone()
+        }
+        BoxVerdict::Near { q, gap_lo } => {
+            let c = collide::pair_rule(&m, a, b, forge_machine::sim::SegKind::Rapid).unwrap();
+            assert!(*gap_lo < c, "{gap_lo} >= {c}");
+            q.clone()
+        }
+        v => panic!("{v:?} after {n} boxes"),
     };
     for (x, j) in q.iter().zip(&m.joints) {
-        assert!(j.range[0] <= *x && *x <= j.range[1], "{x} outside {:?}", j.range);
+        let r = j.range.unwrap();
+        assert!(r[0] <= *x && *x <= r[1], "{x} outside {r:?}");
     }
-    assert!(collide::dense_overlap(a, b, &forge_machine::kin::pose(&m, &q)));
 }
 
 /// Clear over a box is never contradicted by a sample inside it; a budget of one box that is not
@@ -75,11 +84,17 @@ fn clear_boxes_are_never_contradicted_by_samples() {
                         .iter()
                         .map(|j| {
                             let (u, v) = (rnd(), rnd());
-                            let w = j.range[1] - j.range[0];
-                            Interval::new(j.range[0] + u.min(v) * w, j.range[0] + u.max(v) * w)
+                            let w = j.range.unwrap()[1] - j.range.unwrap()[0];
+                            Interval::new(
+                                j.range.unwrap()[0] + u.min(v) * w,
+                                j.range.unwrap()[0] + u.max(v) * w,
+                            )
                         })
                         .collect();
-                    let (v, _) = collide::check_box(&m, a, b, &qb, 0.0, 512);
+                    let (v, _) = collide::check_box(&m, a, b, &qb, 512, false);
+                    if v == BoxVerdict::NotChecked {
+                        break;
+                    }
                     if v != BoxVerdict::Clear {
                         continue;
                     }
@@ -106,17 +121,56 @@ fn clear_boxes_are_never_contradicted_by_samples() {
     );
     let m = builtin_named("generic-trunnion-bc").unwrap();
     let bs = collide::machine_bodies(&m);
-    let (v, n) = collide::check_box(
-        &m,
-        body(&bs, "cradle"),
-        body(&bs, "head"),
-        &travel(&m),
-        m.clearance,
-        1,
-    );
+    let (v, n) = collide::check_box(&m, body(&bs, "cradle"), body(&bs, "head"), &travel(&m), 1, false);
     assert!(
         matches!(v, BoxVerdict::Undecided { .. } | BoxVerdict::Hit { .. }),
         "{v:?}"
     );
     assert_eq!(n, 1);
+}
+
+/// A box wholly inside a zone is skipped with `outside_zones` (the control forbids it), and a
+/// pair `pair_rule` never checks is NotChecked.
+#[test]
+fn zones_and_unchecked_pairs() {
+    let m = builtin_named("generic-mill-turn").unwrap();
+    let z = m.zones.first().expect("the generic mill-turn has zones");
+    let bs = collide::machine_bodies(&m);
+    // every joint at home, the zone's joints strictly inside it
+    let mut q: Vec<Interval> = m.joints.iter().map(|j| Interval::new(j.home, j.home)).collect();
+    for (j, (lo, hi)) in z.joints.iter().zip(z.min.iter().zip(&z.max)) {
+        let i = m.joint_index(j).unwrap();
+        let (lo, hi) = (
+            lo.max(m.joints[i].range.unwrap()[0]),
+            hi.min(m.joints[i].range.unwrap()[1]),
+        );
+        let w = hi - lo;
+        q[i] = Interval::new(lo + 0.25 * w, hi - 0.25 * w);
+    }
+    let mut skipped = 0;
+    for i in 0..bs.len() {
+        for k in i + 1..bs.len() {
+            let (v, n) = collide::check_box(&m, &bs[i], &bs[k], &q, 4096, true);
+            match v {
+                BoxVerdict::NotChecked => assert_eq!(n, 0),
+                v => {
+                    assert_eq!(v, BoxVerdict::Clear, "{} / {}", bs[i].name, bs[k].name);
+                    assert_eq!(n, 1, "skipped at once");
+                    skipped += 1;
+                }
+            }
+        }
+    }
+    assert!(skipped > 0);
+    // same-link bodies are never checked
+    let same = bs
+        .iter()
+        .enumerate()
+        .find_map(|(i, a)| bs[i + 1..].iter().find(|b| b.link == a.link).map(|b| (a, b)));
+    if let Some((a, b)) = same {
+        assert_eq!(
+            collide::check_box(&m, a, b, &travel(&m), 16, false),
+            (BoxVerdict::NotChecked, 0)
+        );
+    }
 }

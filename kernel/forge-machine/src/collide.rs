@@ -712,25 +712,49 @@ pub enum BoxVerdict {
     Near { q: Vec<f64>, gap_lo: f64 },
     /// The budget of boxes ran out before every box was decided.
     Undecided { gap_lo: f64 },
+    /// The pair is never checked (`pair_rule`: same link, `ignore`d, an exempt pass).
+    NotChecked,
 }
 
 /// Bodies `a` and `b` checked for every joint value in the box `q` (one interval per def.joints;
 /// a joint that does not move is a point interval), splitting the box in half across its
 /// relatively widest joint until each piece is proven clear, a witness is found, or the
-/// primitives' enclosures are narrower than `RES`. At most `budget` boxes; returns the verdict
-/// and the boxes evaluated. A Hit anywhere wins over a Near found elsewhere.
+/// primitives' enclosures are narrower than `RES`. The clearance is the pair's own
+/// (`pair_rule`, as a rapid); a pair it never checks is `NotChecked`. At most `budget` boxes;
+/// returns the verdict and the boxes evaluated. A witness at any box's middle ends the search
+/// with Hit; the first piece at the resolution that is neither proven clear nor witnessed ends it
+/// with Near (a Hit elsewhere is then not looked for).
+///
+/// With `outside_zones`, a box lying wholly inside one of the machine's zones (every joint of
+/// the zone strictly within its (min, max)) is skipped as the control forbids it, so Clear means
+/// "clear for all travel outside the zones"; a box partly inside is bisected as usual.
 pub fn check_box(
     def: &MachineDef,
     a: &CBody,
     b: &CBody,
     q: &[Interval],
-    clearance: f64,
     budget: usize,
+    outside_zones: bool,
 ) -> (BoxVerdict, usize) {
+    let Some(clearance) = pair_rule(def, a, b, SegKind::Rapid) else {
+        return (BoxVerdict::NotChecked, 0);
+    };
+    let in_zone = |qb: &[Interval]| {
+        outside_zones
+            && def.zones.iter().any(|z| {
+                !z.joints.is_empty()
+                    && z.joints
+                        .iter()
+                        .zip(z.min.iter().zip(&z.max))
+                        .all(|(j, (lo, hi))| {
+                            def.joint_index(j)
+                                .is_some_and(|i| qb[i].lo > *lo && qb[i].hi < *hi)
+                        })
+            })
+    };
     let w0: Vec<f64> = q.iter().map(|x| x.width()).collect();
     let mut stack: Vec<Vec<Interval>> = vec![q.to_vec()];
     let mut boxes = 0;
-    let mut near: Option<BoxVerdict> = None;
     // the least gap bound among boxes not proven clear
     let mut open = f64::INFINITY;
     while let Some(qb) = stack.pop() {
@@ -738,6 +762,9 @@ pub fn check_box(
             return (BoxVerdict::Undecided { gap_lo: open }, boxes);
         }
         boxes += 1;
+        if in_zone(&qb) {
+            continue;
+        }
         let pose = kin::ipose(def, &qb);
         let (ta, tb) = (ilink(&pose, a.link), ilink(&pose, b.link));
         let pa: Vec<IPrim> = a.prims.iter().map(|p| place(p, &ta)).collect();
@@ -766,13 +793,16 @@ pub fn check_box(
             if let Some(w) = witness(a, b, &p) {
                 return (BoxVerdict::Hit { q: mid, witness: w }, boxes);
             }
-            if near.is_none() {
-                near = Some(BoxVerdict::Near {
+            // a piece at the resolution, not proven clear and no witness: the pair is Near. The
+            // search ends here: the leaves along a contact surface are too many to visit, and
+            // one is enough to say the pair is not clear
+            return (
+                BoxVerdict::Near {
                     q: mid,
                     gap_lo: worst,
-                });
-            }
-            continue;
+                },
+                boxes,
+            );
         }
         // a witness at the middle ends the search early
         let p = kin::pose(def, &mid);
@@ -787,7 +817,7 @@ pub fn check_box(
         stack.push(hi);
         stack.push(lo);
     }
-    (near.unwrap_or(BoxVerdict::Clear), boxes)
+    (BoxVerdict::Clear, boxes)
 }
 
 /// A dense sampling test for overlap (tests only: a grid of points through each primitive of a,
