@@ -486,7 +486,7 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
         file: argv[0].clone(),
         ..Args::default()
     };
-    let (mut json, mut out) = (false, None);
+    let (mut json, mut out, mut allow_uncertified) = (false, None, false);
     let mut it = argv[1..].iter();
     while let Some(w) = it.next() {
         match w.as_str() {
@@ -505,14 +505,19 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             // `export F urdf`'s opt-in: 0 for unknown effort and velocity, marked as placeholders
             "--placeholder-limits" => a.words.push("placeholder-limits".into()),
             "-o" => out = it.next().cloned(),
+            "--allow-uncertified" => allow_uncertified = true,
             w if w.starts_with("--") => {
                 eprintln!(
-                    "unknown option {w} (--json --labels --px --at --base -o; bendsim: --vendor --tooling --sequence --sheet --uts; urdf: --placeholder-limits)"
+                    "unknown option {w} (--json --labels --px --at --base -o; bendsim: --vendor --tooling --sequence --sheet --uts; urdf: --placeholder-limits; cam post: --allow-uncertified)"
                 );
                 return ExitCode::from(2);
             }
             _ => a.words.push(w.clone()),
         }
+    }
+    // `cam F post [PROGRAM] [-o FILE|DIR] [--allow-uncertified]`: the NC files, as the app exports them
+    if cmd == "cam" && a.words.first().is_some_and(|w| w == "post") {
+        return cam_post(&a, out.as_deref(), allow_uncertified);
     }
     let r = fg::Session::new(None, true).run(cmd, &a, &forge_agent::json::Json::Null);
     let mut text = if json { r.json.to_string() } else { r.text };
@@ -572,6 +577,43 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     } else {
         ExitCode::FAILURE
     }
+}
+
+/// `cam F post`: each program's file written where its statement says (beside the document), or
+/// under `-o DIR`, or to `-o FILE` when there is one; refused, nothing written, if any is refused.
+fn cam_post(a: &fg::Args, out: Option<&str>, allow_uncertified: bool) -> ExitCode {
+    let doc = std::path::Path::new(&a.file);
+    let files = match fg::Session::cam_post(doc, a.words.get(1).map(String::as_str), allow_uncertified) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("refused: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let base = doc.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+    for f in &files {
+        let path = match out {
+            // one file and a name that is not a folder: that name
+            Some(o) if files.len() == 1 && !o.ends_with('/') && !std::path::Path::new(o).is_dir() => {
+                std::path::PathBuf::from(o)
+            }
+            Some(o) => std::path::Path::new(o).join(f.path.rsplit('/').next().unwrap_or(&f.path)),
+            None => base.join(&f.path),
+        };
+        if let Some(d) = path.parent()
+            && !d.as_os_str().is_empty()
+            && let Err(e) = std::fs::create_dir_all(d)
+        {
+            eprintln!("{}: {e}", d.display());
+            return ExitCode::FAILURE;
+        }
+        if let Err(e) = std::fs::write(&path, &f.text) {
+            eprintln!("writing {}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+        println!("wrote {} ({} lines)", path.display(), f.text.lines().count());
+    }
+    ExitCode::SUCCESS
 }
 
 /// A URDF export's ZIP written out under `dir`.

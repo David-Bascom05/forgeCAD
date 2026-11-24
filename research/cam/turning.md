@@ -97,8 +97,8 @@ What the checks caught while the examples were written (each now a test, tests/r
    WORKHOLDING (forge-workholding), lowered in forge-turn-lang.
 3. Done: the .fg surface (interface/forge-turn-lang, docs/cam-turning.md; forge-cli sends a
    turning document there by one branch on `is_turning`, no change to forge-cam-lang), and the
-   machine in CAM-MACHINE's format (machine.rs reads it; data/machines-lathe.toml is a copy of
-   its generic-lathe until forge-machine is on main). Left: the setup sheet for turning, more
+   machine from CAM-MACHINE's forge-machine (machine.rs converts its MachineDef; the lathes of
+   its built-in library by name, `machine::builtin`). Left: the setup sheet for turning, more
    than one setup per document.
 5. G4 reasons: "nose radius r" (an inside corner: the region misses the free region F_r = box ∖
    (P ⊕ B_r) where a disc's centre can be, and each piece of its boundary is at least r − 2·tol

@@ -40,6 +40,10 @@ pub enum Kind {
     Hole,
     /// The part's sketch (`f.mark`): positional argument 1.
     Sketch,
+    /// A z on the spindle axis, mm (turning: the part's Z0 where the part puts it).
+    Z,
+    /// A count (passes).
+    Count,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -88,7 +92,7 @@ pub struct OpSpec {
     pub fields: &'static [Field],
 }
 
-use Kind::{Choice, Deg, Hole, Len, Sketch};
+use Kind::{Choice, Count, Deg, Hole, Len, Sketch, Z};
 use Tab::{Geometry, Heights, Linking, Passes};
 
 const TOOL: Field = req("tool", "Tool", Tab::Tool, Kind::Tool);
@@ -104,6 +108,7 @@ pub const OPS: &[OpSpec] = &[
             TOOL,
             f("to", "Bottom height", Heights, Len, "the part's top"),
             f("step", "Max stepdown", Passes, Len, "half the tool's diameter"),
+            f("leave_axial", "Axial stock to leave", Passes, Len, "0 (floors)"),
         ],
     },
     OpSpec {
@@ -118,7 +123,8 @@ pub const OPS: &[OpSpec] = &[
             req("to", "Bottom height", Heights, Len),
             f("step", "Max stepdown", Passes, Len, "half the tool's diameter"),
             f("stepover", "Stepover", Passes, Len, "0.4 × the tool's diameter"),
-            f("leave", "Stock to leave", Passes, Len, "0"),
+            f("leave", "Radial stock to leave", Passes, Len, "0 (walls)"),
+            f("leave_axial", "Axial stock to leave", Passes, Len, "0 (floors)"),
             f("ramp", "Helical ramp angle", Linking, Deg, "plunge"),
         ],
     },
@@ -137,10 +143,15 @@ pub const OPS: &[OpSpec] = &[
                 Choice(&["outside", "inside"]),
                 "outside",
             ),
-            f("from", "Top height", Heights, Len, "the part's top"),
-            f("to", "Bottom height", Heights, Len, "the part's bottom"),
+            f("from", "Top height", Heights, Len, "the part's top; or a face: f.boss.end + 0.5"),
+            f("to", "Bottom height", Heights, Len, "the part's bottom; or a face: f.plate.end"),
             f("step", "Max stepdown", Passes, Len, "half the tool's diameter"),
-            f("leave", "Stock to leave", Passes, Len, "0"),
+            f("leave", "Radial stock to leave", Passes, Len, "0 (walls)"),
+            f("leave_axial", "Axial stock to leave", Passes, Len, "0 (floors)"),
+            f("direction", "Direction", Passes, Choice(&["climb", "conventional"]), "climb"),
+            f("finish", "Finishing passes", Passes, Count, "1"),
+            f("finish_step", "Finishing stepover", Passes, Len, "0.1 × the tool's diameter"),
+            f("spring", "Spring passes", Passes, Count, "0"),
         ],
     },
     OpSpec {
@@ -162,7 +173,8 @@ pub const OPS: &[OpSpec] = &[
             f("to", "Bottom height", Heights, Len, "(needed without a hole)"),
             f("step", "Max stepdown", Passes, Len, "half the tool's diameter"),
             f("stepover", "Stepover", Passes, Len, "0.4 × the tool's diameter"),
-            f("leave", "Stock to leave", Passes, Len, "0"),
+            f("leave", "Radial stock to leave", Passes, Len, "0 (walls)"),
+            f("leave_axial", "Axial stock to leave", Passes, Len, "0 (floors)"),
             f("ramp", "Helical ramp angle", Linking, Deg, "plunge"),
         ],
     },
@@ -223,13 +235,124 @@ pub const OPS: &[OpSpec] = &[
     },
 ];
 
+const LTOOL: Field = req("tool", "Tool", Tab::Tool, Kind::Tool);
+
+/// Turning (forge-turn-lang, docs/cam-turning.md): z along the spindle, diameters across it.
+pub const TURN_OPS: &[OpSpec] = &[
+    OpSpec {
+        func: "turn_face",
+        label: "Turn Face",
+        group: "Turning",
+        icon: "cam_face",
+        what: "Face from the bar's front to Z, the nose centre to the centre line",
+        fields: &[
+            LTOOL,
+            req("to", "Face to Z", Geometry, Z),
+            f("step", "Max depth per pass", Passes, Len, "the tool's ap"),
+        ],
+    },
+    OpSpec {
+        func: "turn_rough",
+        label: "Rough",
+        group: "Turning",
+        icon: "cam_clear",
+        what: "Axial passes at every step and every diameter of the part, down to the part grown by the nose radius and the leave",
+        fields: &[
+            LTOOL,
+            f("to", "To Z", Geometry, Z, "the part's back"),
+            f("top", "From diameter", Geometry, Len, "the bar"),
+            f("step", "Depth of cut", Passes, Len, "the tool's ap"),
+            f("leave", "Stock to leave", Passes, Len, "0"),
+        ],
+    },
+    OpSpec {
+        func: "turn_finish",
+        label: "Finish",
+        group: "Turning",
+        icon: "cam_contour",
+        what: "The profile, the nose centre on the exact offset of the part by the nose radius (posted with the imaginary tip, G40)",
+        fields: &[
+            LTOOL,
+            f("to", "To Z", Geometry, Z, "the part's back"),
+            f("leave", "Stock to leave", Passes, Len, "0"),
+        ],
+    },
+    OpSpec {
+        func: "bore_rough",
+        label: "Bore",
+        group: "Turning",
+        icon: "cam_pocket",
+        what: "The drilled hole opened outward in axial passes to the bore grown by the nose radius and the leave; Finish with a boring bar then finishes it",
+        fields: &[
+            LTOOL,
+            req("from", "Drilled diameter", Geometry, Len),
+            f("to", "To Z", Geometry, Z, "the bore's bottom"),
+            f("step", "Depth of cut", Passes, Len, "the tool's ap"),
+            f("leave", "Stock to leave", Passes, Len, "0"),
+        ],
+    },
+    OpSpec {
+        func: "turn_groove",
+        label: "Groove",
+        group: "Turning",
+        icon: "cam_pocket",
+        what: "A groove between two z to a radius, by plunges",
+        fields: &[
+            LTOOL,
+            req("from", "From Z", Geometry, Z),
+            req("to", "To Z", Geometry, Z),
+            req("r", "Bottom radius", Geometry, Len),
+        ],
+    },
+    OpSpec {
+        func: "turn_thread",
+        label: "Thread",
+        group: "Turning",
+        icon: "cam_thread",
+        what: "An ISO metric external thread (60°), radial infeed of equal chip area: a declared removal",
+        fields: &[
+            LTOOL,
+            req("d", "Major diameter", Geometry, Len),
+            req("pitch", "Pitch", Geometry, Len),
+            req("from", "From Z", Geometry, Z),
+            req("to", "To Z", Geometry, Z),
+            f("passes", "Passes", Passes, Count, "8"),
+        ],
+    },
+    OpSpec {
+        func: "turn_drill",
+        label: "Turn Drill",
+        group: "Turning",
+        icon: "cam_drill",
+        what: "A drill on the centre line",
+        fields: &[
+            LTOOL,
+            req("to", "To Z", Geometry, Z),
+            f("peck", "Peck", Passes, Len, "0 (none)"),
+        ],
+    },
+    OpSpec {
+        func: "part_off",
+        label: "Part Off",
+        group: "Turning",
+        icon: "cam_chamfer",
+        what: "The blade's side on the part's back face at Z, through the centre",
+        fields: &[LTOOL, req("at", "At Z", Geometry, Z)],
+    },
+];
+
 pub fn spec(func: &str) -> Option<&'static OpSpec> {
-    OPS.iter().find(|s| s.func == func)
+    OPS.iter().chain(TURN_OPS).find(|s| s.func == func)
+}
+
+/// Whether an op built-in is turning's.
+pub fn is_turning_op(func: &str) -> bool {
+    TURN_OPS.iter().any(|s| s.func == func)
 }
 
 /// The tabs `s` has fields on, in order.
 /// The tabs `s` shows, in order: those it has fields on, and Linking always (the setup's
-/// retract and rapids apply to every op).
+/// retract and rapids apply to every op; a lathe's are its clearances to stock and chuck).
 pub fn tabs(s: &OpSpec) -> Vec<Tab> {
     Tab::ALL
         .into_iter()
