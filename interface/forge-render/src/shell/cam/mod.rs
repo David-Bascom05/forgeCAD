@@ -753,27 +753,10 @@ impl CamWs {
                 let geo_now = get(&d.args, "#1");
                 let geo_was = get(&d.was, "#1");
                 if geo_now.is_empty() != geo_was.is_empty() {
-                    let t = self.text.clone();
-                    let r = doc::apply(
-                        &t,
-                        &Edit::Add {
-                            before: Some(id.clone()),
-                            text: Self::op_text(&OpDlg {
-                                name: "cam_new_".into(),
-                                ..d.clone()
-                            }),
-                        },
-                    )
-                    .and_then(|t| doc::apply(&t, &Edit::Delete { id: id.clone() }))
-                    .and_then(|t| {
-                        doc::apply(
-                            &t,
-                            &Edit::Rename {
-                                from: "cam_new_".into(),
-                                to: id.clone(),
-                            },
-                        )
-                    })?;
+                    // the statement's call written again in place (`ReplaceFeature`)
+                    let full = Self::op_text(d);
+                    let call = full.split_once(" = ").map_or(full.as_str(), |x| x.1).to_string();
+                    let r = doc::replace_call(&self.text, id, &call)?;
                     self.set_text(r);
                 } else {
                     for k in &keys {

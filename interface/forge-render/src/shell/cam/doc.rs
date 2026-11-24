@@ -200,10 +200,16 @@ pub enum Edit {
         arg: String,
         text: String,
     },
-    /// Keyword `arg` of statement `id` taken out (the built-in's default applies).
+    /// Keyword `arg` of statement `id` taken out (the built-in's default applies): sent as
+    /// `ReplaceFeature` of the statement less it.
     Unset {
         id: String,
         arg: String,
+    },
+    /// Statement `id` replaced by `text` (`ReplaceFeature`).
+    Replace {
+        id: String,
+        text: String,
     },
     /// A new statement `text` (`NAME = call(..)`), before statement `before` or at the end.
     Add {
@@ -239,6 +245,10 @@ pub fn apply(src: &str, e: &Edit) -> Result<String, String> {
             text: text.clone(),
         },
         Edit::Unset { id, arg } => return unset(src, id, arg),
+        Edit::Replace { id, text } => Op::ReplaceFeature {
+            id: id.clone(),
+            text: text.clone(),
+        },
         Edit::Add { before, text } => Op::AddFeature {
             before: before.clone(),
             text: text.clone(),
@@ -258,7 +268,8 @@ pub fn apply(src: &str, e: &Edit) -> Result<String, String> {
     forge_lang::edit::apply(src, &op).map_err(|e| e.text())
 }
 
-/// Keyword `arg` of `id`'s call taken out with its comma.
+/// Keyword `arg` of `id`'s call taken out with its comma: the statement replaced by itself less
+/// that argument (forge-lang's `ReplaceFeature`, so the editor sends only the language's own ops).
 fn unset(src: &str, id: &str, arg: &str) -> Result<String, String> {
     let prog = syntax::parse(src).map_err(|e| format!("{e:?}"))?;
     for s in &prog {
@@ -290,10 +301,33 @@ fn unset(src: &str, id: &str, arg: &str) -> Result<String, String> {
                 };
                 (lo, hi + n)
             };
-            return Ok(format!("{}{}", &src[..lo], &src[hi..]));
+            let (slo, shi) = (s.span.lo as usize, s.span.hi as usize);
+            let text = format!("{}{}", &src[slo..lo], &src[hi..shi]);
+            return apply(src, &Edit::Replace { id: id.into(), text });
         }
     }
     Err(format!("no statement `{id}`"))
+}
+
+/// Statement `id`'s call replaced by `call` (`func(args)`), its name and the spacing before the
+/// `=` as written.
+pub fn replace_call(src: &str, id: &str, call: &str) -> Result<String, String> {
+    let prog = syntax::parse(src).map_err(|e| format!("{e:?}"))?;
+    let s = prog
+        .iter()
+        .find(|s| matches!(&s.kind, StmtKind::Assign { name, .. } if name == id))
+        .ok_or_else(|| format!("no statement `{id}`"))?;
+    let StmtKind::Assign { value, .. } = &s.kind else {
+        unreachable!("an assignment")
+    };
+    let head = &src[s.span.lo as usize..value.span.lo as usize];
+    apply(
+        src,
+        &Edit::Replace {
+            id: id.into(),
+            text: format!("{head}{call}"),
+        },
+    )
 }
 
 /// A name not used yet: `base`, else `base2`, `base3`, ...
