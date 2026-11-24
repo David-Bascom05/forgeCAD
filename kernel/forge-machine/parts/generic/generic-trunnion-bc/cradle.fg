@@ -1,6 +1,6 @@
 # generic-trunnion-bc cradle: the tilting body on B (axis along y through z = -50), under the rotary.
 # frame: the machine's base frame at the home pose.
-shared L = 400
+shared L = 320
 shared W = 480
 shared z0 = -150
 shared H = 110

@@ -66,6 +66,9 @@ pub(super) fn scope(s: &Shell) -> &'static str {
             FLAT_TAB => "flat",
             THERMO_TAB => "thermo",
             super::super::WELD_TAB => "weld",
+            super::super::env::ENV_TAB => "env",
+            super::super::env::BENDSIM_TAB => "bendsim",
+            super::super::env::RENDER_TAB => "render",
             super::super::CAM_TAB => "cam",
             _ => "tools",
         }
@@ -91,6 +94,11 @@ pub(in crate::shell) fn key_of(s: &Shell, id: &str) -> Option<String> {
 fn why(s: &Shell, scope: &str, name: &str) -> String {
     if let Some(w) = why_off(name) {
         return w.to_string();
+    }
+    if scope == "env"
+        && let Some(w) = s.env_why_off(name)
+    {
+        return w;
     }
     if s.no_document() && scope != "thermo" {
         return "open or create a part first (File > New, or Open)".into();
@@ -242,7 +250,17 @@ mod tests {
             FLAT_TAB,
             THERMO_TAB,
             super::super::super::WELD_TAB,
+            super::super::super::env::ENV_TAB,
+            super::super::super::env::BENDSIM_TAB,
+            super::super::super::env::RENDER_TAB,
         ] {
+            use super::super::super::env::{BENDSIM_TAB, EnvId, RENDER_TAB};
+            s.env = match tab {
+                THERMO_TAB => Some(EnvId::Thermoform),
+                BENDSIM_TAB => Some(EnvId::BendSim),
+                RENDER_TAB => Some(EnvId::RenderStudio),
+                _ => None,
+            };
             s.tab = tab;
             let scope = scope(&s);
             let names: Vec<&str> = if tab == 1 {
@@ -260,8 +278,13 @@ mod tests {
                     .collect()
             };
             assert!(!names.is_empty(), "tab {tab}");
+            // the Capture group is on every tab: its tips are written once, as "capture"
+            let capture: Vec<&str> = super::super::super::capture::group(&s)
+                .map(|g| g.big.iter().chain(&g.small).map(|t| t.name).collect())
+                .unwrap_or_default();
             for n in names {
-                if !table().iter().any(|r| r.0 == scope && r.1 == n) {
+                let s0 = if capture.contains(&n) { "capture" } else { scope };
+                if !table().iter().any(|r| r.0 == s0 && r.1 == n) {
                     missing.push(format!("{scope},{n}"));
                 }
             }

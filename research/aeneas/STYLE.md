@@ -54,11 +54,16 @@ its order. Speed has to be measured, see "Speed" at the end.
 4. **No derived `PartialOrd` on a tuple or struct used in a comparison.** The derived
    `(u32, u32, u32)::le` became an axiom of the translation (forge-bool-core's `sort_triples`).
    Compare field by field.
-5. **No iterator adaptors.** Aeneas's Lean library models `Iterator` without `zip`, `all`,
-   `any`, `sum`, `map`, `filter`, `rposition`, `enumerate`, `fold` and `collect`. Aeneas accepts
-   the code, and Lean then fails with "`zip` is not a field of structure
-   `core.iter.traits.iterator.Iterator`". Iterating `for x in slice` or `for v in &mut s[..n]`
-   leaves `into_iter`/`IterMut` opaque. Write index loops instead:
+5. **Iterator adaptors: only where the bridge defines them.** Aeneas's Lean library models
+   `Iterator` with `next`, `step_by`, `enumerate` and `take` only. When code calls another
+   default method (`sum`, `all`, `zip`, `map`, `rposition`, `fold`, `collect`) on an iterator
+   type Aeneas does not know, Aeneas generates an instance with that field, and Lean then fails:
+   "`zip` is not a field of structure `core.iter.traits.iterator.Iterator`". Over a slice iterator,
+   which is Aeneas's own type, the call stays an opaque function instead. The bridge can define
+   it as std does. `verify/aeneas/bridge/AeneasF64/Core.lean` does this for `sum` and
+   `Sum for f64`, so `e.iter().sum()` on a slice translates and is proven (forge-math's
+   `estimate`). Iterating `for x in slice` or `for v in &mut s[..n]` leaves `into_iter`/`IterMut`
+   opaque. For anything else, write index loops:
    - `for (o, (a, b)) in out.iter_mut().zip(pairs)` becomes
      `let mut i = 0; while i < N { let (a, b) = pairs[i]; ..; out[i] = ..; i += 1 }`;
    - `e.iter().sum()` becomes a loop that folds in the same order, from the same start value as
@@ -77,9 +82,15 @@ its order. Speed has to be measured, see "Speed" at the end.
    namespace `uf` (forge-bool-core). A local `lift` shadows Aeneas's `lift`, which the
    translation calls after every float operation (forge-math's `incircle_exact_general`). Avoid
    `lift`, `ok`, `fail`, `massert`, `toResult`, and the crate's own module names.
-9. **No trait objects (`dyn Trait`, `Box<dyn Any>`).** "Dynamic trait types are not supported
-   yet" (forge-math's `par::map`, a panic payload). Use an enum, or a generic.
-10. **No `Rc`, `RefCell`, `Cell`, threads or atomics.** Aeneas has no model of shared mutable
+9. **No trait objects (`dyn Trait`, `Box<dyn Any>`, `Arc<dyn Any>`), and not in a type either.**
+   "Dynamic trait types are not supported yet" (forge-math's `par::map`, a panic payload). In a
+   *type* it is worse. `Curve::Procedural` and `Surface::Procedural` hold trait objects, and
+   `Face::query` holds an `Arc<dyn Any>`. Aeneas then cannot translate `Curve`, `Surface`, `Edge`,
+   `Face` or `Body` ("Encountered an error when analyzing the following type declarations
+   group"), and every function that takes a `Body` fails with them. That is most of the kernel
+   (research/aeneas/SURVEY.md). Use an enum, a generic, or an index into a table that the
+   translated code does not open.
+10. **No `Rc`, `Arc`, `RefCell`, `Cell`, `OnceLock` (`forge_topo::Cached`), threads or atomics.** Aeneas has no model of shared mutable
     state. Keep these in a shell around a pure core that takes and returns owned values.
 11. **No `HashMap` or `HashSet` in a core.** They are not modelled, and their iteration order is a
     hidden input anyway (tools/proof/hidden-inputs.txt). Use a sorted `Vec` with binary search,
@@ -112,6 +123,12 @@ core:
 
 A module is ready for L4 when its core and kernels translate with no opaque item a theorem needs.
 
+16. **Aeneas has more limits than the ones above, met in the survey:** "Mixed-recursive
+    declaration groups are not supported", "Early returns inside of loops" and "Returns inside of
+    nested loops are not supported yet" (rule 2), "found an occurrence of a lifetime constraint
+    relating …" (a function whose signature ties two lifetimes), and "Could not match the
+    contexts" (rule 7).
+
 ## Speed
 
 Index loops can add bounds checks that iterator code did not have. To keep speed at or below
@@ -124,3 +141,13 @@ base:
   `GATE_COUNTER=callgrind tools/speed/gate.sh` against a baseline on the base commit.
 
 A rewrite that costs instructions is not kept. Leave that function opaque and say so.
+
+What happened in forge-math (research/aeneas/proposals/predicates.md):
+- Rewriting `estimate`'s `e.iter().sum()` as an index loop was bit-identical, but cost up to
+  +0.40%. The function grew enough in LLVM's eyes that `angle_cmp`, which inlines `cross_sign`
+  and its slow path, stopped being inlined into `split_face`. The fix was not to rewrite it at all
+  (rule 5).
+- The other six rewrites left every kernel line of the gate at or below base. The whole-process
+  lines still moved by a few hundred instructions, all in libc's `memcpy`/`memcmp`, because the
+  binary and heap layout moved. A rewrite should go with a function-level profile
+  (`callgrind_annotate`) that shows where any difference lies.

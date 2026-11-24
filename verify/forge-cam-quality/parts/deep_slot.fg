@@ -1,0 +1,16 @@
+# Benchmark: a closed slot 8 wide and 15 deep, for a narrow, deep pocket (near-slotting).
+
+shared L = 80
+shared W = 40
+shared t = 20
+shared w = 8
+shared depth = 15
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+plate = extrude(plan, t)
+sketch sl(on: plate.end) {
+  s = rect(corner: (10, (W - w) / 2), size: (L - 20, w))
+}
+channel = cut(sl.s, depth)

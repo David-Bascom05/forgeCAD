@@ -1,0 +1,447 @@
+# Our catalogue-cited values that the maker's own Fusion tool library disagrees with
+# (tools/tooling/crosscheck.py, 2026-11-24). Our own words only: no library value is
+# recorded here (the libraries are never committed). gen.py adds a `conflict` cite
+# citing the catalogue page for each.
+
+# Records whose compared values all agree with the maker's library.
+
+[[agree]]
+vendor = "harvey"
+product_id = "942316"
+
+[[agree]]
+vendor = "harvey"
+product_id = "942324"
+
+[[agree]]
+vendor = "harvey"
+product_id = "942332"
+
+[[agree]]
+vendor = "harvey"
+product_id = "900457"
+
+[[agree]]
+vendor = "harvey"
+product_id = "900466"
+
+[[agree]]
+vendor = "harvey"
+product_id = "989808"
+
+[[agree]]
+vendor = "harvey"
+product_id = "989816"
+
+[[agree]]
+vendor = "harvey"
+product_id = "904208"
+
+[[agree]]
+vendor = "harvey"
+product_id = "904216"
+
+[[agree]]
+vendor = "harvey"
+product_id = "904224"
+
+[[agree]]
+vendor = "harvey"
+product_id = "958608-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "958612-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "958616-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "958624-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "945957-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "945972-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "971908-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "971912-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "971916-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "927908-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "45716-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "45724-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "52732-c3"
+
+[[agree]]
+vendor = "harvey"
+product_id = "816108"
+
+[[agree]]
+vendor = "harvey"
+product_id = "803916"
+
+[[agree]]
+vendor = "harvey"
+product_id = "20375"
+
+[[agree]]
+vendor = "harvey"
+product_id = "20498"
+
+[[agree]]
+vendor = "helical"
+product_id = "00015"
+
+[[agree]]
+vendor = "helical"
+product_id = "00090"
+
+[[agree]]
+vendor = "helical"
+product_id = "00150"
+
+[[agree]]
+vendor = "helical"
+product_id = "00330"
+
+[[agree]]
+vendor = "helical"
+product_id = "00435"
+
+[[agree]]
+vendor = "helical"
+product_id = "17150"
+
+[[agree]]
+vendor = "helical"
+product_id = "17330"
+
+[[agree]]
+vendor = "helical"
+product_id = "17435"
+
+[[agree]]
+vendor = "helical"
+product_id = "82353"
+
+[[agree]]
+vendor = "helical"
+product_id = "82365"
+
+[[agree]]
+vendor = "helical"
+product_id = "01015"
+
+[[agree]]
+vendor = "helical"
+product_id = "01090"
+
+[[agree]]
+vendor = "helical"
+product_id = "01150"
+
+[[agree]]
+vendor = "helical"
+product_id = "01330"
+
+[[agree]]
+vendor = "helical"
+product_id = "01435"
+
+[[agree]]
+vendor = "helical"
+product_id = "59038"
+
+[[agree]]
+vendor = "helical"
+product_id = "59086"
+
+[[agree]]
+vendor = "helical"
+product_id = "59116"
+
+[[agree]]
+vendor = "helical"
+product_id = "59690"
+
+[[agree]]
+vendor = "helical"
+product_id = "59702"
+
+[[agree]]
+vendor = "helical"
+product_id = "59708"
+
+[[agree]]
+vendor = "helical"
+product_id = "30017"
+
+[[agree]]
+vendor = "helical"
+product_id = "30077"
+
+[[agree]]
+vendor = "helical"
+product_id = "30137"
+
+[[agree]]
+vendor = "helical"
+product_id = "30317"
+
+[[agree]]
+vendor = "helical"
+product_id = "30497"
+
+[[agree]]
+vendor = "helical"
+product_id = "56137"
+
+[[agree]]
+vendor = "helical"
+product_id = "56317"
+
+[[agree]]
+vendor = "helical"
+product_id = "56497"
+
+[[agree]]
+vendor = "helical"
+product_id = "43137"
+
+[[agree]]
+vendor = "helical"
+product_id = "43317"
+
+[[agree]]
+vendor = "helical"
+product_id = "31497"
+
+[[agree]]
+vendor = "helical"
+product_id = "59458"
+
+[[agree]]
+vendor = "helical"
+product_id = "59464"
+
+[[agree]]
+vendor = "helical"
+product_id = "59467"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100030000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100060000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100063500"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100065300"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100068000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100040000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100079400"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100050000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100080000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100051100"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100085000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100095200"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100100000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100102000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055100120000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510030000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510040000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510050000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510079400"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510080000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510051100"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510085000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510060000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510095200"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510063500"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510065300"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510100000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510068000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510102000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9006510120000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9005570030000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9005570040000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9005570050000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9005570060000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9005570063500"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9005570080000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9005570095200"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9005570100000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9005570120000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055180055000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055180060000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055180185000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9011310055000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9011310060000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9011310185000"
+
+[[agree]]
+vendor = "guhring"
+product_id = "9055180058000"
+
+[[agree]]
+vendor = "tormach"
+product_id = "33748"
+
+[[agree]]
+vendor = "tormach"
+product_id = "33445"
+

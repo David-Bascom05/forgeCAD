@@ -65,6 +65,8 @@ interface = "BT40"
 pockets = 24
 change_s = 2.5
 max_tool_kg = 8
+position_joints = ["Z"]   # M6 sends Z to machine zero first (an assumption for this generic machine)
+position = [0]
 
 [[machine.mount]]
 name = "spindle"
@@ -173,7 +175,7 @@ parent = "Y"
 side = "head"
 type = "linear"
 axis = [0, 0, 1]
-range = [-350, 0]
+range = [-240, 0]       # proven clear of the cradle and rotary at any tilt (collide::check_box)
 rapid = 30000
 max_feed = 12000
 accel = 4000
@@ -222,6 +224,8 @@ interface = "HSK-A63"
 pockets = 30
 change_s = 3.0
 max_tool_kg = 6
+position_joints = ["Z"]   # M6 sends Z to machine zero first (an assumption for this generic machine)
+position = [0]
 
 [[machine.mount]]
 name = "spindle"
@@ -271,8 +275,8 @@ link = "B"
 part = "parts/generic/generic-trunnion-bc/cradle.fg"
 ignore = ["rotary"]
 [[machine.body.box]]
-min = [-200, -240, -150]
-max = [200, 240, -40]
+min = [-160, -240, -150]
+max = [160, 240, -40]
 
 [[machine.body]]
 name = "rotary"
@@ -317,7 +321,7 @@ parent = "base"
 side = "head"
 type = "linear"
 axis = [0, 0, 1]
-range = [-60, 400]
+range = [-30, 400]      # the turret's underside stays above the headstock face
 home = 400
 rapid = 24000
 max_feed = 5000
@@ -498,6 +502,76 @@ rapid = 18000
 max_feed = 7200
 accel = 3600
 
+# Zones the control forbids (stored stroke checks), so the B head cannot reach the headstock,
+# the chuck or the sub-spindle. The head reaches 175 mm from its B pivot (X + 250, Z); each
+# zone keeps it 1 mm clear for every B. The sub-spindle's (Z + Z2 > 724, X < 106) is a staircase
+# of overlapping 50 mm bins in Z.
+[[machine.zone]]
+name = "headstock"
+joints = ["X", "Z"]
+min = [-51, -101]
+max = [146, 86]
+
+[[machine.zone]]
+name = "chuck"
+joints = ["X", "Z"]
+min = [-51, -101]
+max = [31, 176]
+
+[[machine.zone]]
+name = "sub-1"
+joints = ["X", "Z", "Z2"]
+min = [-51, 173, 500]
+max = [106, 225, 501]
+
+[[machine.zone]]
+name = "sub-2"
+joints = ["X", "Z", "Z2"]
+min = [-51, 223, 450]
+max = [106, 275, 501]
+
+[[machine.zone]]
+name = "sub-3"
+joints = ["X", "Z", "Z2"]
+min = [-51, 273, 400]
+max = [106, 325, 501]
+
+[[machine.zone]]
+name = "sub-4"
+joints = ["X", "Z", "Z2"]
+min = [-51, 323, 350]
+max = [106, 375, 501]
+
+[[machine.zone]]
+name = "sub-5"
+joints = ["X", "Z", "Z2"]
+min = [-51, 373, 300]
+max = [106, 425, 501]
+
+[[machine.zone]]
+name = "sub-6"
+joints = ["X", "Z", "Z2"]
+min = [-51, 423, 250]
+max = [106, 475, 501]
+
+[[machine.zone]]
+name = "sub-7"
+joints = ["X", "Z", "Z2"]
+min = [-51, 473, 200]
+max = [106, 525, 501]
+
+[[machine.zone]]
+name = "sub-8"
+joints = ["X", "Z", "Z2"]
+min = [-51, 523, 150]
+max = [106, 575, 501]
+
+[[machine.zone]]
+name = "sub-9"
+joints = ["X", "Z", "Z2"]
+min = [-51, 573, 100]
+max = [106, 625, 501]
+
 [[machine.spindle]]
 name = "main"
 link = "C"
@@ -540,6 +614,8 @@ interface = "Capto C5"
 pockets = 40
 change_s = 4.0
 max_tool_kg = 5
+position_joints = ["X", "Z"]   # M6 sends the head to X and Z home first (an assumption)
+position = [300, 600]
 
 [[machine.mount]]
 name = "bhead"

@@ -10,6 +10,7 @@
 pub mod draw;
 pub mod machine;
 pub mod timeline;
+pub mod tools;
 pub mod zmap;
 
 use forge_cam_lang::Cam;
@@ -61,6 +62,10 @@ pub struct Sim {
     pub setups: Vec<SimSetup>,
     /// Per tool (`Cam::sim_tools` index): its cutting envelope, if its profile has one.
     pub cutters: Vec<Option<Cutter>>,
+    /// Each tool as drawn (fluted cutter, neck, shank, holder), meshed once: display only.
+    pub looks: Vec<tools::ToolLook>,
+    /// Per tool: its shank and holder's lowest envelope (the non-cutting bodies).
+    pub holders: Vec<Option<Cutter>>,
     /// Per setup: the part's triangles in that setup's frame (empty if it could not be built).
     pub part_tris: Vec<Vec<[[f64; 3]; 3]>>,
     /// Per setup: the part as columns on that setup's grid.
@@ -94,11 +99,24 @@ impl Sim {
         let tl = Timeline::of(&cam);
         let setups = cam.sim_setups();
         let cutters = cam.sim_tools().iter().map(|t| Cutter::of(&t.shape)).collect();
+        let helix = tools::helices();
+        let looks = cam
+            .sim_tools()
+            .iter()
+            .map(|t| tools::build(t, helix.get(&t.tool.id).copied()))
+            .collect();
+        let holders = cam
+            .sim_tools()
+            .iter()
+            .map(|t| Cutter::of_part(&t.shape, forge_cam_geom::tool::Part::NonCutting))
+            .collect();
         let mut sim = Sim {
             cam,
             tl,
             setups,
             cutters,
+            looks,
+            holders,
             part_tris,
             part_maps: vec![],
             markers: vec![],
@@ -188,15 +206,79 @@ impl Sim {
                 }
                 mk.push(m);
             }
-            mk.sort_by(|a, b| a.t.total_cmp(&b.t));
             let own_tl = std::mem::replace(&mut self.tl, tl);
             let own_mk = std::mem::replace(&mut self.markers, mk);
             self.own = Some((own_tl, own_mk));
             self.source = Some(i);
+            // the posted code's rapids and holders against the stock as it cuts it
+            let issues = self.stock_issues();
+            self.markers.extend(issues);
+            self.markers.sort_by(|a, b| a.t.total_cmp(&b.t));
         }
         let cells = self.cells();
         self.set_cells(cells);
         Ok(())
+    }
+
+    /// The stock as the playing timeline cuts it, checked on the grid: each rapid's cutter
+    /// before it cuts, and each move's shank and holder after, against the material there is
+    /// (a display-grid check, as fine as the stock's cells: the toolpath's own are the certified
+    /// checker's; this is for the posted code on a machine). Markers, worst per move.
+    pub fn stock_issues(&self) -> Vec<Marker> {
+        let cells = self.cells();
+        let mut out = vec![];
+        let mut cur: Option<(usize, ZMap)> = None;
+        for g in &self.tl.segs {
+            let s = self.tl.ops[g.op as usize].setup;
+            if cur.as_ref().is_none_or(|c| c.0 != s) {
+                cur = Some((s, self.blank(s, cells)));
+            }
+            let Some((_, z)) = cur.as_mut() else { continue };
+            let tool = g.tool as usize;
+            let (Some(Some(c)), h) = (
+                self.cutters.get(tool),
+                self.holders.get(tool).and_then(|h| h.as_ref()),
+            ) else {
+                continue;
+            };
+            let name = &self.tl.ops[g.op as usize].name;
+            if g.kind == timeline::Kind::Rapid
+                && let Some((d, at)) = z.depth(g, c)
+            {
+                out.push(Marker {
+                    op: Some(g.op as usize),
+                    setup: s,
+                    rule: "rapid_into_stock".into(),
+                    verdict: "fail".into(),
+                    at,
+                    t: g.t0,
+                    text: format!(
+                        "{name}: a rapid goes {d:.3} mm into the stock as cut (move {})",
+                        g.mv
+                    ),
+                    region: None,
+                });
+            }
+            z.cut(g, 0.0, 1.0, c);
+            if let Some(h) = h
+                && let Some((d, at)) = z.depth(g, h)
+            {
+                out.push(Marker {
+                    op: Some(g.op as usize),
+                    setup: s,
+                    rule: "holder_into_stock".into(),
+                    verdict: "fail".into(),
+                    at,
+                    t: g.t0,
+                    text: format!(
+                        "{name}: the shank or holder goes {d:.3} mm into the stock as cut (move {})",
+                        g.mv
+                    ),
+                    region: None,
+                });
+            }
+        }
+        out
     }
 
     /// The machine run playing, if one is.
@@ -317,9 +399,12 @@ impl Sim {
 
     /// The certified checks that did not pass, and G4's leftover regions, as markers.
     fn markers_of(&self) -> Vec<Marker> {
-        let mut out = vec![];
+        let mut out: Vec<Marker> = vec![];
         for (oi, op) in self.cam.ops.iter().enumerate() {
             let paths = self.cam.sim_paths(oi);
+            // an op refused before it had moves (planning said no): one marker at its place on
+            // the timeline, over its setup's stock, saying why, so it is never silently absent
+            let had = out.len();
             for c in &op.checks {
                 if c.verdict == "pass" {
                     continue;
@@ -349,14 +434,27 @@ impl Sim {
                     verdict: c.verdict.to_string(),
                     at: c.at,
                     t,
+                    text: format!("{}: {}", op.name, check_sentence(c)),
+                    region: None,
+                });
+            }
+            if op.status == "refused" && out.len() == had {
+                let at = self.setups.get(op.setup).map_or([0.0; 3], |su| {
+                    let (a, b) = (su.stock.min, su.stock.max);
+                    [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1]), b[2]]
+                });
+                out.push(Marker {
+                    op: Some(oi),
+                    setup: op.setup,
+                    rule: "refused".into(),
+                    verdict: "fail".into(),
+                    at,
+                    t: self.tl.ops.get(oi).map_or(0.0, |sp| sp.t0),
                     text: format!(
-                        "{} {} — {} {} at move {} ({}): {:.4} vs {:.4} mm",
-                        op.name, c.rule, c.tool_part, c.verdict, c.move_index, c.phase, c.value, c.limit
-                    ) + &if c.other.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" on {}", c.other)
-                    },
+                        "{} refused: {}",
+                        op.name,
+                        op.refusal.as_deref().unwrap_or("no reason given")
+                    ),
                     region: None,
                 });
             }
@@ -422,4 +520,104 @@ pub fn part_triangles(s: &SimSetup) -> Vec<[[f64; 3]; 3]> {
             v
         })
         .collect()
+}
+
+/// A failed check in words: who meets what, on which motion, how far (rounded, with units).
+/// "Holder hits the stock on the plunge at move 3 (2.75 mm into it)".
+pub fn check_sentence(c: &forge_cam::ops::CheckOut) -> String {
+    let who = match c.tool_part {
+        "" => "The tool".to_string(),
+        p => {
+            let mut w = p.replace('_', " ");
+            if let Some(f) = w.get(0..1) {
+                w = f.to_uppercase() + &w[1..];
+            }
+            w
+        }
+    };
+    let what = {
+        let o = c.other.to_ascii_lowercase();
+        if o.starts_with("stock") {
+            "the stock".to_string()
+        } else if o.starts_with("part") {
+            "the part".to_string()
+        } else if o.contains("fixture")
+            || o.contains("vise")
+            || o.contains("clamp")
+            || o.contains("workholding")
+        {
+            "the workholding".to_string()
+        } else if o.is_empty() {
+            "the part".to_string()
+        } else {
+            c.other.clone()
+        }
+    };
+    let phase = match c.phase {
+        "" => String::new(),
+        p => format!(" on the {}", p.replace('_', " ")),
+    };
+    let mm = |v: f64| format!("{:.2} mm", v.abs());
+    if c.value < -0.005 {
+        format!(
+            "{who} hits {what}{phase} at move {} ({} into it)",
+            c.move_index,
+            mm(c.value)
+        )
+    } else if c.value < 0.005 {
+        format!(
+            "{who} touches {what}{phase} at move {} (needs {} clear)",
+            c.move_index,
+            mm(c.limit)
+        )
+    } else {
+        format!(
+            "{who} comes {} from {what}{phase} at move {} (needs {})",
+            mm(c.value),
+            c.move_index,
+            mm(c.limit)
+        )
+    }
+}
+
+/// A run's message tidied for a person: a parser's `NotPrism { face: 38 }` said in words and
+/// numbers with long tails rounded to 3 decimals. The message itself stays on hover.
+pub fn tidy(msg: &str) -> String {
+    // a leading op key ("thread_mill: ...") is the run's, not a sentence's
+    let msg = match msg.split_once(": ") {
+        Some((k, rest)) if !k.is_empty() && k.chars().all(|c| c.is_ascii_lowercase() || c == '_') => {
+            let mut r = rest.to_string();
+            if let Some(f) = r.get(0..1) {
+                r = f.to_uppercase() + &r[1..];
+            }
+            r
+        }
+        _ => msg.to_string(),
+    };
+    let s = msg
+        .replace("NotPrism { face: ", "isn't a prism (face ")
+        .replace(" }", ")");
+    let mut out = String::with_capacity(s.len());
+    let cs: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < cs.len() {
+        let start = i;
+        let neg = cs[i] == '-' && i + 1 < cs.len() && cs[i + 1].is_ascii_digit();
+        if cs[i].is_ascii_digit() || neg {
+            i += 1;
+            while i < cs.len() && (cs[i].is_ascii_digit() || cs[i] == '.') {
+                i += 1;
+            }
+            let tok: String = cs[start..i].iter().collect();
+            let decimals = tok.split_once('.').map_or(0, |(_, d)| d.len());
+            match tok.parse::<f64>() {
+                Ok(v) if decimals > 3 => out.push_str(&format!("{v:.3}")),
+                _ => out.push_str(&tok),
+            }
+        } else {
+            out.push(cs[i]);
+            i += 1;
+        }
+    }
+    out
 }

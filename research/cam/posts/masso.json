@@ -1,0 +1,380 @@
+{
+ "dialect": "masso",
+ "control": "MASSO G3 (mill)",
+ "sources": [
+  {
+   "id": "S1",
+   "url": "https://docs.masso.com.au/supported-g-codes/comments",
+   "title": "MASSO Documentation: ( ) - Comments",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S2",
+   "url": "https://docs.masso.com.au/supported-g-codes/n-number",
+   "title": "MASSO Documentation: N - Number",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S3",
+   "url": "https://docs.masso.com.au/supported-g-codes/invalid-gcodes",
+   "title": "MASSO Documentation: Invalid Gcode",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S4",
+   "url": "https://docs.masso.com.au/supported-g-codes/g04-dwell",
+   "title": "MASSO Documentation: G04 - Dwell",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S5",
+   "url": "https://docs.masso.com.au/supported-m-codes/m06-tool-change",
+   "title": "MASSO Documentation: M06 - Tool Change",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S6",
+   "url": "https://docs.masso.com.au/supported-g-codes/t-tool-number",
+   "title": "MASSO Documentation: T - Tool Number",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S7",
+   "url": "https://docs.masso.com.au/wiring-and-setup/tool-changers/mill-tool-changers/manual-tool-changer",
+   "title": "MASSO Documentation: Manual Tool Changer",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S8",
+   "url": "https://docs.masso.com.au/supported-g-codes/g02-circular-interpolation-clockwise",
+   "title": "MASSO Documentation: G02 - Circular Interpolation (Clockwise)",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S9",
+   "url": "https://docs.masso.com.au/supported-g-codes/g28-return-to-machine-home",
+   "title": "MASSO Documentation: G28 - Return To Machine Home",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S10",
+   "url": "https://docs.masso.com.au/supported-g-codes/g53-move-in-absolute-machine-coordinates",
+   "title": "MASSO Documentation: G53 - Move In Absolute Machine Coordinates",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S11",
+   "url": "https://docs.masso.com.au/supported-g-codes/g54-to-g59-select-work-offset-coordinate-system",
+   "title": "MASSO Documentation: G54 to G59",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S12",
+   "url": "https://docs.masso.com.au/supported-g-codes/g54.1-extended-work-offsets",
+   "title": "MASSO Documentation: G54.1 - Extended Work Offsets",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S13",
+   "url": "https://docs.masso.com.au/supported-g-codes/g73-high-speed-peck-drilling",
+   "title": "MASSO Documentation: G73 - High Speed Peck Drilling",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S14",
+   "url": "https://docs.masso.com.au/supported-g-codes/g81-drilling-cycle",
+   "title": "MASSO Documentation: G81 - Drilling Cycle",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S15",
+   "url": "https://docs.masso.com.au/supported-g-codes/g82-drilling-canned-cycle-with-dwell",
+   "title": "MASSO Documentation: G82 - Drilling Canned Cycle With Dwell",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S16",
+   "url": "https://docs.masso.com.au/supported-g-codes/g83-peck-drilling-for-deeper-holes",
+   "title": "MASSO Documentation: G83 - Peck Drilling For Deeper Holes",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S17",
+   "url": "https://docs.masso.com.au/supported-g-codes/g98-canned-cycle-retract-back-to-the-initial-z",
+   "title": "MASSO Documentation: G98 - Retract to initial Z",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S18",
+   "url": "https://docs.masso.com.au/supported-g-codes/g80-cancel-modal-motion",
+   "title": "MASSO Documentation: G80 - Cancel Modal Motion",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S19",
+   "url": "https://docs.masso.com.au/supported-m-codes/m30-end-the-program-and-rewind",
+   "title": "MASSO Documentation: M30 - End The Program And Rewind",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S20",
+   "url": "https://docs.masso.com.au/supported-m-codes/m02-program-end",
+   "title": "MASSO Documentation: M02 - Program End",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S21",
+   "url": "https://docs.masso.com.au/supported-m-codes/m07-turn-mist-coolant-on",
+   "title": "MASSO Documentation: M07 - Mist Coolant On",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S22",
+   "url": "https://docs.masso.com.au/supported-m-codes/m08-turn-flood-coolant-on",
+   "title": "MASSO Documentation: M08 - Flood Coolant On",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S23",
+   "url": "https://docs.masso.com.au/supported-g-codes/f-feed-rate",
+   "title": "MASSO Documentation: F - Feed rate",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S24",
+   "url": "https://docs.masso.com.au/supported-g-codes/g21-set-machine-units-to-millimetres",
+   "title": "MASSO Documentation: G21 - Set Machine Units To Millimetres",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S25",
+   "url": "https://docs.masso.com.au/supported-g-codes/g30-Move-to-parking-position",
+   "title": "MASSO Documentation: G30 - Move to Parking Position",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S26",
+   "url": "https://docs.masso.com.au/supported-g-codes/g04-dwell",
+   "title": "MASSO Documentation: MASSO docs navigation: Supported G-codes / Supported M-codes list (as on the G04 page sidebar)",
+   "edition": "web page, 'Last updated 5 October 2026'",
+   "taken": "2026-11-23"
+  }
+ ],
+ "items": {
+  "program_open": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no page on % or program header found."
+  },
+  "program_close": {
+   "value": "M30 = end and rewind (optional L<n> repeats n times; L0 loops forever); M02 = end, later lines not run.",
+   "source": "S19",
+   "where": "whole page",
+   "note": "M02 from S20."
+  },
+  "comment": {
+   "value": "Parentheses (text), not nested. Semicolon comments not mentioned. MSG command exists for on-screen messages.",
+   "source": "S1",
+   "where": "whole page",
+   "note": ""
+  },
+  "line_numbers": {
+   "value": "Optional N, readability only, no effect on execution; no maximum stated.",
+   "source": "S2",
+   "where": "whole page",
+   "note": ""
+  },
+  "block_end": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: newline assumed, not stated."
+  },
+  "safe_start": {
+   "value": "Supported (have pages): G90, G94, G17, G21, G40, G80. G43 and G49 are NOT in the supported G-code list. Any unsupported command or bad syntax makes MASSO skip the WHOLE line and continue.",
+   "source": "S26",
+   "where": "Supported G-codes list; S3 Invalid Gcode",
+   "note": "Never put a needed motion on a line with an unsupported code (e.g. G43 H1 Z5 would be skipped entirely - inferred from S3)."
+  },
+  "tool_change": {
+   "value": "T<n> M06 - T must precede M06 on the line (M06 T5 behaves differently and may load the wrong tool). Stop spindle with M05 before M06. G3 tools T1-T100 for spindle (G2: 0-31).",
+   "source": "S5",
+   "where": "whole page",
+   "note": "S6 same rule."
+  },
+  "tool_change_behaviour": {
+   "value": "Built-in tool changer logics, no user macro needed. Manual tool changer: spindle off, Z to home then XY to change position, waits for operator + Cycle Start, optional tool setter measures the tool (Auto Tool Zero) and applies the length, else uses the F4 tool table Z offset; XY return. Same tool already loaded -> change skipped.",
+   "source": "S7",
+   "where": "Tool change sequence",
+   "note": ""
+  },
+  "tool_length_comp": {
+   "value": "Applied by the control at the tool change (tool table or tool setter); no G43/H word in the supported list.",
+   "source": "S7",
+   "where": "Tool change sequence",
+   "note": "Whether G43 is silently ignored or skips the line: S3 says unsupported commands skip the line."
+  },
+  "spindle": {
+   "value": "S speed, M03 CW, M04 CCW, M05 off (pages exist in supported list).",
+   "source": "S26",
+   "where": "Supported M-codes list",
+   "note": "Page bodies for M03-M05 not read."
+  },
+  "work_offset": {
+   "value": "G54..G59 (6) + G54.1 P1..P100 = 106 offsets (G3).",
+   "source": "S12",
+   "where": "whole page",
+   "note": ""
+  },
+  "arc_format": {
+   "value": "G02/G03 X Y Z with I J K always incremental from start. R allowed only for arcs up to 90 deg; use I/J/K above 90 deg.",
+   "source": "S8",
+   "where": "Parameters / CAUTION",
+   "note": ""
+  },
+  "rapid_linear": {
+   "value": "G00 / G01.",
+   "source": "S26",
+   "where": "Supported G-codes list",
+   "note": ""
+  },
+  "feed": {
+   "value": "F units/min (G94), mm with G21; does not exceed axis max feed.",
+   "source": "S23",
+   "where": "whole page",
+   "note": ""
+  },
+  "decimal_point": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN"
+  },
+  "max_digits": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN"
+  },
+  "retract_home": {
+   "value": "G53 G00 Z0 rapids Z to top of travel (machine coords, non-modal; MASSO's own example before tool change). G28 = rapid to machine home (Z first), G91 G28 Z0 = straight home; machine must be homed. G30 = parking position.",
+   "source": "S10",
+   "where": "whole page; S5 multi-head example",
+   "note": "G28 from S9; G30 from S25."
+  },
+  "coolant": {
+   "value": "M07 mist, M08 flood, M09 all off. No through-spindle code.",
+   "source": "S21",
+   "where": "whole page",
+   "note": "M08 from S22."
+  },
+  "dwell": {
+   "value": "G04 P<milliseconds> (P required; G04 P2000 = 2 s).",
+   "source": "S4",
+   "where": "whole page",
+   "note": ""
+  },
+  "drill_G81": {
+   "value": "G81 X Y Z R K F (R required; K repeats at same spot).",
+   "source": "S14",
+   "where": "whole page",
+   "note": ""
+  },
+  "dwell_drill_G82": {
+   "value": "G82 X Y Z R K P F ; P in milliseconds.",
+   "source": "S15",
+   "where": "whole page",
+   "note": ""
+  },
+  "peck_G83": {
+   "value": "G83 X Y Z R Q K F ; Q incremental peck >0.",
+   "source": "S16",
+   "where": "whole page",
+   "note": ""
+  },
+  "chipbreak_G73": {
+   "value": "G73 X Y Z R Q K F ; fixed 1.0 mm retract between pecks.",
+   "source": "S13",
+   "where": "whole page",
+   "note": ""
+  },
+  "rigid_tap_G84": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: G84 is not in MASSO's supported G-code list (and therefore a line with it would be skipped per S3)."
+  },
+  "bore_G85": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: G85 is not in MASSO's supported G-code list."
+  },
+  "return_level": {
+   "value": "G98 initial Z; G99 R plane.",
+   "source": "S17",
+   "where": "whole page",
+   "note": ""
+  },
+  "cycle_cancel": {
+   "value": "G80 cancels cycle, then G00 mode. Cancel with G80 before starting a different cycle.",
+   "source": "S18",
+   "where": "whole page",
+   "note": ""
+  },
+  "peck_depth_word": {
+   "value": "Q",
+   "source": "S16",
+   "where": "Parameters",
+   "note": ""
+  },
+  "cycle_dwell_units": {
+   "value": "Milliseconds (G82 P1000 = 1 s).",
+   "source": "S15",
+   "where": "Parameters",
+   "note": ""
+  },
+  "native_language": {
+   "value": "Standard-style G-code only (supported subset listed); no mode switch.",
+   "source": "S26",
+   "where": "Supported G-codes list",
+   "note": ""
+  }
+ },
+ "notes": "Subset control: no G43/G49, no G84/G85/G86-89 listed. Unsupported code -> whole line skipped silently. Dwell in ms. Arc R limited to <=90 deg. T before M06 is mandatory.",
+ "unknown": [
+  "program_open",
+  "block_end",
+  "decimal_point",
+  "max_digits",
+  "rigid_tap_G84",
+  "bore_G85"
+ ],
+ "filled": "24/30"
+}

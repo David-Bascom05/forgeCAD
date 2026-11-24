@@ -447,6 +447,8 @@ pub(crate) enum Class {
 pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     #[cfg(debug_assertions)]
     crate::size::debug_check(&[a, b]);
+    #[cfg(debug_assertions)]
+    crate::curve_ok::debug_check(&[a, b]);
     // flat faces: the part read by reference and the result written fresh, with no copy first
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::boolean(a, b, op)? {
@@ -467,6 +469,8 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
     #[cfg(debug_assertions)]
     crate::size::debug_check(&[target, b]);
+    #[cfg(debug_assertions)]
+    crate::curve_ok::debug_check(&[target, b]);
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::boolean(target, b, op)? {
         *target = r;
@@ -583,6 +587,8 @@ fn survivors(a: &Body, b: &Body, op: Op, r: &Body) -> Option<String> {
 pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R<()> {
     #[cfg(debug_assertions)]
     crate::size::debug_check(&[target, &b.clone().into_body()]);
+    #[cfg(debug_assertions)]
+    crate::curve_ok::debug_check(&[target, &b.clone().into_body()]);
     #[cfg(feature = "decide_once")]
     if crate::decide_once::flat(target) {
         let tool = b.clone().into_body();
@@ -2241,9 +2247,11 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
         }
     }
     for &(k, t) in grown {
-        if let VKey::Old(0, v) = k {
-            let x = &mut a.vertices[v.index()];
-            x.tol = x.tol.max(t);
+        if let VKey::Old(0, v) = k
+            && t > a.vertex(v).tol
+        {
+            a.grow_vertex_tol(v, t);
+            crate::classify::grow_query_reach(a, v, t);
         }
     }
     // B kept where no new edge joins it to A: a lump apart (a union of disjoint solids) or a
@@ -4072,6 +4080,7 @@ fn sole_pieces_keep_names(
         while end < kept.len() && key(end) == key(at) {
             end += 1;
         }
+        let mut clash = false;
         for k in at..end {
             let s = &mut specs[kept[k].0];
             if end == at + 1 && !s.whole {
@@ -4096,11 +4105,41 @@ fn sole_pieces_keep_names(
                     s.name = whole.piece(s.name);
                 }
                 wholes.push((s.name, whole));
+                clash |= s.name == whole;
             }
+        }
+        if clash {
+            retell(specs, &kept[at..end], &mut wholes);
         }
         at = end;
     }
     (split, wholes)
+}
+
+/// `sole_pieces_keep_names`' regions of one face whose name came out as the face's own. A piece of
+/// a piece shares the first whole's high half (`Name::piece`), so a region named by the boundary
+/// piece that once named the face can come out as the face's own name, which the piece that keeps
+/// the face in place keeps too: such a region gets a piece name of its own. (Cold: the only names a
+/// face's run of several specs can share with the face are those regions', so `clash` finds them.)
+#[cold]
+#[inline(never)]
+fn retell(specs: &mut [Spec], run: &[(usize, bool)], wholes: &mut Vec<(Name, Name)>) {
+    let Some(kk) = run.iter().position(|&(i, _)| specs[i].extend) else {
+        return;
+    };
+    let whole = specs[run[kk].0].name;
+    for (k, &(i, _)) in run.iter().enumerate() {
+        if k == kk || specs[i].name != whole {
+            continue;
+        }
+        let old = specs[i].name;
+        specs[i].name = whole.piece(old.with_str("again"));
+        if let Some(w) = wholes.iter_mut().find(|w| w.0 == old && w.1 == whole) {
+            w.0 = specs[i].name;
+        } else {
+            wholes.push((specs[i].name, whole));
+        }
+    }
 }
 
 /// An edge of one body kept whole along a face of the other it lay flush on (a block standing on
@@ -4630,10 +4669,7 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
             Curve::Parabola(pa) if n.dot(pa.frame.z()).abs() > 1.0 - 1e-6 => {
                 let h = pa.frame.z() * edge.range.width().max(1.0);
                 let rail = |o: Vec3| forge_geom::ruled::Rail::Parabola {
-                    curve: forge_geom::Parabola {
-                        frame: pa.frame.with_origin(pa.frame.origin + o),
-                        focal: pa.focal,
-                    },
+                    curve: forge_geom::Parabola::new(pa.frame.with_origin(pa.frame.origin + o), pa.focal),
                     range: edge.range,
                 };
                 match forge_geom::ruled::Ruled::new(rail(-h), rail(h)) {
@@ -4883,7 +4919,25 @@ fn on_to_its_vertex(index: &Index, face: FaceId, body: &Body, e: EdgeId, w: [f64
     let hi = w[1] == edge.range.hi && !ts.contains(&w[1]);
     off(lo, edge.start)
         .or_else(|| off(hi, edge.end))
+        .or_else(|| off_near_ends(index, face, &edge.curve, w))
         .unwrap_or(Where::On)
+}
+
+/// A straight stretch On at its samples whose ends are on the boundary too (an end on another edge,
+/// or at a crossing) may still leave the edge it began beside: two lines at an angle part linearly,
+/// so it is farthest from that edge near an end. Decided by a point 4·LINEAR in from each end, off
+/// the boundary there (B2, research/kernel-audit/tilt-wrong-ok.md: a wall's edge crossing another
+/// face's edge at 2.4e-10 rad, 1.2·LINEAR from it at its far end).
+fn off_near_ends(index: &Index, face: FaceId, curve: &Curve, w: [f64; 2]) -> Option<Where> {
+    let len = curve.eval(w[0]).distance(curve.eval(w[1]));
+    if len <= 16.0 * tol::LINEAR {
+        return None;
+    }
+    let f = 4.0 * tol::LINEAR / len;
+    [1.0 - f, f].into_iter().find_map(|g| {
+        let o = index.point_in_face(face, curve.eval(w[0] + (w[1] - w[0]) * g));
+        (o != Where::On).then_some(o)
+    })
 }
 
 pub(crate) fn overlap(a: &forge_math::Box3, b: &forge_math::Box3) -> forge_math::Box3 {

@@ -212,3 +212,53 @@ fn css_facing_to_the_axis_meets_the_clamp() {
         tl.segments.last().unwrap().t_min
     );
 }
+
+/// An inch program (G20, read with `Control::in_inches`) moves the joints in mm: the same
+/// program written in inches and in mm lands within the two quanta, and times agree likewise.
+#[test]
+fn an_inch_program_moves_in_mm() {
+    let m = vmc();
+    let mm = vmc_setup(&m);
+    let mut inch = vmc_setup(&m);
+    inch.control = inch.control.in_inches().unwrap();
+    assert_eq!((inch.control.decimals, inch.control.feed_decimals), (4, 2));
+    // 1 inch = 25.4 mm, exactly: X1. Y2. Z0.2 is X25.4 Y50.8 Z5.08; F25. in/min = 635 mm/min;
+    // an arc of radius 0.5 in = 12.7 mm
+    let pi = "G90 G17 G20\nT1 M06\nG54\nG43 H1\nG0 X1. Y2. Z0.2\nG1 Z-0.04 F25.\nG2 X2. Y2. I0.5 J0.\n";
+    let pm = "G90 G17 G21\nT1 M06\nG54\nG43 H1\nG0 X25.4 Y50.8 Z5.08\nG1 Z-1.016 F635.\nG2 X50.8 Y50.8 I12.7 J0.\n";
+    let (ti, tm) = (sim::simulate(pi, &inch).unwrap(), sim::simulate(pm, &mm).unwrap());
+    assert_eq!(ti.segments.len(), tm.segments.len());
+    for (a, b) in ti.segments.iter().zip(&tm.segments) {
+        for (x, y) in a.q1.iter().zip(&b.q1) {
+            assert!((x - y).abs() <= 1e-9, "{:?} {:?}", a.q1, b.q1);
+        }
+        assert!(
+            (a.t_min - b.t_min).abs() <= 1e-6 * b.t_min.max(1.0),
+            "{} {}",
+            a.t_min,
+            b.t_min
+        );
+    }
+    // the units are the program's own: G21 in an inch program and G20 in a mm one are refused
+    assert!(sim::simulate("G21\nG0 X1.\n", &inch).is_err());
+    assert!(sim::simulate("G20\nG0 X1.\n", &mm).is_err());
+    // a dialect with no cited inch code: no inch control
+    let h = Control::for_dialect(&m, "heidenhain", 1).unwrap();
+    assert!(h.in_inches().is_err());
+}
+
+/// An inch program's F is inches a minute: a feed move that turns a rotary axis (whose F would
+/// mix inches and degrees) is refused, not guessed.
+#[test]
+fn an_inch_feed_turning_a_rotary_is_refused() {
+    let m = builtin().remove(1);
+    let c = Control::for_dialect(&m, "fanuc", 1).unwrap().in_inches().unwrap();
+    let mut s = Setup::new(&m, c).unwrap();
+    s.wcs = vec![(54, vec![0.0; s.control.letters.len()])];
+    s.tools = vec![mill_tool(1, 100.0, 5.0)];
+    s.h = vec![(1, 100.0)];
+    let e = sim::simulate("G20\nT1 M06\nG43 H1\nG0 Z-4.\nG1 C30. F10.\n", &s).unwrap_err();
+    assert!(format!("{e:?}").contains("inch"), "{e:?}");
+    // a rapid turning it is a move at the axes' own rates: taken
+    assert!(sim::simulate("G20\nT1 M06\nG43 H1\nG0 Z-4.\nG0 C30.\n", &s).is_ok());
+}

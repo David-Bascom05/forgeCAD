@@ -1,0 +1,51 @@
+job/op                 kind       tool     t_stop   t_min   cut_s   air rapid retr plng c>90 phiMx phiAv climb  slot  hexMx  hexAv  fzTgt  thin thick     MRR   Fc_N  P_kW
+block_m6_cam/skim      facing     flat-10    14.7    14.1     7.6   27%    74    2    0    0    97    75   57%    0%  0.062  0.060  0.062    4%    0%   10229     87  0.32
+block_m6_cam/side      clear      flat-10    38.6    36.1    18.2   49%    95   10    5    0    68    39   67%    0%  0.095  0.062  0.062   34%   56%   18549    348  0.81
+block_m6_cam/tapd      drill      drill-5    30.8    30.2     0.0     -     0    0    0    0     -     -     -     -      -      -  0.033     -     -       0      -     -
+block_m6_cam/thr       thread_mill threadmi    7.1     6.3     0.1   96%    14    2    0    0     -     -     -     -      -      -  0.032     -     -   38840      -     -
+block_m6_cam: program prog on generic-vmc3: t_stop 91.1 s, t_min 86.7 s, 4 tool changes, 0 violations
+bracket_cam/skim       facing     flat-10    51.2    50.2    38.9   16%   217    3    0    0   103    85   55%    0%  0.062  0.061  0.062    2%    0%   11994     87  0.35
+bracket_cam/side       clear      flat-10    48.5    43.9    21.1   50%   759   15   12    9   171    50   69%    1%  0.104  0.075  0.062   21%   69%   28392    362  2.39
+bracket_cam/bore       pocket     flat-6     63.2    62.0    37.6   35%    22   10    0    0   180   174    6%   94%  0.045  0.016  0.039   93%    0%    1751    198  0.80
+bracket_cam/cutj       pocket     flat-6    306.3   298.0   244.7   16%   701   45   27   72   180    99   73%   15%  0.039  0.025  0.039   49%    0%    4224    124  0.50
+bracket_cam/rest       clear      flat-10    49.8    45.0    22.0   43%   976   15    9   15   171    48   64%    1%  0.104  0.070  0.062   27%   65%   20837    277  1.83
+bracket_cam: program p1 on generic-vmc3: t_stop 163.0 s, t_min 156.0 s, 2 tool changes, 0 violations
+bracket_cam: program pj on generic-vmc3: t_stop 306.3 s, t_min 298.0 s, 1 tool changes, 0 violations
+bracket_cam: program p2 on generic-vmc3: t_stop 49.8 s, t_min 45.0 s, 1 tool changes, 0 violations
+flange_cam/skim        facing     flat-10    84.5    83.2    68.0   14%   186    3    0    0   105    92   43%    0%  0.062  0.061  0.062    2%    0%   13081     87  0.36
+flange_cam/top         clear      flat-10    96.0    88.9    46.7   45%  1956   28   24   20   173    71   86%   10%  0.104  0.096  0.062    2%   92%   47437    383  2.54
+flange_cam/prof        contour    flat-10    29.0    27.9    23.3   17%    14    5    4    0    68    60    0%    0%  0.095  0.091  0.062    1%   91%   31335    375  0.87
+flange_cam/bore        pocket     flat-10    42.9    40.9    12.2   70%    81   21   21    0   180    90   85%   15%  0.072  0.067  0.062    5%    0%   27690    256  1.72
+flange_cam/bolts       drill      drill-6.  123.8   120.7     0.0     -   255    0    0    0     -     -     -     -      -      -  0.042     -     -       0      -     -
+flange_cam: program prog on generic-vmc3: t_stop 376.2 s, t_min 361.6 s, 3 tool changes, 0 violations
+plate_break_cam/skim   facing     flat-6     33.2    32.5    24.0   17%    82    2    0    0   106    89   54%    0%  0.039  0.038  0.039    2%    0%    4641     61  0.15
+plate_break_cam/side   clear      flat-6     92.8    86.7    39.0   54%   943   30   25   25   180    85   83%    1%  0.065  0.059  0.039    4%   89%    8279    153  0.62
+plate_break_cam/bore   pocket     flat-6     11.4    11.0     3.8   65%    14    6    5    0   180   130   61%   39%  0.040  0.037  0.039    6%    0%    9866    106  0.43
+plate_break_cam/brk    edge_break chamfer-    7.1     6.1     2.0   18%    59    2    2    0     -     -     -     -      -      -  0.062     -     -     220      -     -
+plate_break_cam: program prog on generic-vmc3: t_stop 144.4 s, t_min 136.2 s, 2 tool changes, 0 violations
+plate_mark_cam/skim    facing     flat-10    16.6    16.0     9.4   23%    82    2    0    0    98    76   57%    0%  0.062  0.060  0.062    4%    0%   10586     87  0.33
+plate_mark_cam/side    clear      flat-10    23.0    21.5    12.2   43%    61    6    3    0    68    40   66%    0%  0.095  0.062  0.062   34%   57%   11444    220  0.51
+plate_mark_cam/mark    engrave    engrave-   11.6    11.0     4.8   35%    67    2    2    0     -     -     -     -      -      -  0.039     -     -      41      -     -
+plate_mark_cam: program prog on generic-vmc3: t_stop 51.3 s, t_min 48.4 s, 2 tool changes, 0 violations
+slot_plate_cam/skim    facing     flat-10    22.7    22.0    15.1   18%    60    2    0    0   106    85   38%    0%  0.062  0.060  0.062    3%    0%   12103     87  0.36
+slot_plate_cam/slots   slot       flat-6     35.7    34.6    28.4    8%   165    4    0    8   180   180    0%  100%  0.065  0.025  0.039    0%   13%    4135     90  0.36
+slot_plate_cam: program prog on generic-vmc3: t_stop 58.4 s, t_min 56.7 s, 2 tool changes, 0 violations
+well_island_cam/skim   facing     flat-10    22.7    22.0    15.1   18%    60    2    0    0   106    85   38%    0%  0.062  0.060  0.062    3%    0%   12103     87  0.36
+well_island_cam/well   pocket     flat-6    119.0   115.9    96.0   14%   322   12    4   20   180   130   43%   49%  0.041  0.019  0.039   74%    0%    3637    192  0.78
+well_island_cam: program prog on generic-vmc3: t_stop 141.7 s, t_min 138.0 s, 2 tool changes, 0 violations
+boss_cam/skim          facing     flat-10    35.3    34.5    25.9   16%    90    2    0    0   109    93   42%    0%  0.062  0.061  0.062    2%    0%   13397     87  0.37
+boss_cam/rough         clear      flat-10   191.6   178.0    81.1   53%  1959   50   40   25   172    80   77%    7%  0.104  0.096  0.062    2%   92%   53541    378  2.50
+boss_cam/fin           contour    flat-10     5.4     4.8     2.4   35%    14    2    1    0   171   162    0%  100%  0.104  0.100  0.062    2%   95%    7423     26  0.17
+boss_cam: program prog on generic-vmc3: t_stop 232.3 s, t_min 217.3 s, 1 tool changes, 0 violations
+deep_slot_cam/skim     facing     flat-6     55.2    54.6    45.6   11%    60    2    0    0   114    98   42%    0%  0.039  0.038  0.039    1%    0%    5224     61  0.17
+deep_slot_cam/slot     pocket     flat-6     37.0    36.3    25.6   27%    14    6    5    0   180   125   51%   49%  0.040  0.038  0.039    1%    0%   16594    187  0.75
+deep_slot_cam: program prog on generic-vmc3: t_stop 92.2 s, t_min 90.9 s, 1 tool changes, 0 violations
+open_step_cam/skim     facing     flat-10    33.7    32.9    24.3   14%    70    2    0    0   100    85   40%    0%  0.062  0.061  0.062    2%    0%   11935     87  0.33
+open_step_cam: program prog on generic-vmc3: t_stop 33.7 s, t_min 32.9 s, 1 tool changes, 0 violations
+open_step_cam: error: line 10: the part's section at z = 15: NotPrism { face: 4 }
+pocket_islands_cam/skim facing     flat-10    44.9    44.2    35.6   12%    90    2    0    0   109    95   42%    0%  0.062  0.061  0.062    2%    0%   13610     87  0.37
+pocket_islands_cam/well pocket     flat-10   156.1   151.5   129.7   13%   500   16    6   14   180   116   59%   40%  0.063  0.029  0.062   73%    0%   16767    442  2.93
+pocket_islands_cam: program prog on generic-vmc3: t_stop 201.0 s, t_min 195.7 s, 1 tool changes, 0 violations
+thin_wall_cam/skim     facing     flat-6     67.9    67.2    56.9   10%   123    2    0    0   110    98   53%    0%  0.039  0.038  0.039    1%    0%    5094     61  0.16
+thin_wall_cam/wells    pocket     flat-6    618.2   609.7   522.4   14%   269   48    8   40   180   108   61%   20%  0.040  0.019  0.039   70%    0%    3727    187  0.75
+thin_wall_cam: program prog on generic-vmc3: t_stop 686.1 s, t_min 676.9 s, 1 tool changes, 0 violations

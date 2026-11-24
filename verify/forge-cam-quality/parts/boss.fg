@@ -1,0 +1,15 @@
+# Benchmark: a square boss on a base, cleared all round (an outside profile with depth).
+
+shared L = 70
+shared t = 10
+shared b = 30
+shared h = 15
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, L))
+}
+base = extrude(plan, t)
+sketch bs(on: base.end) {
+  sq = rect(corner: ((L - b) / 2, (L - b) / 2), size: (b, b))
+}
+boss = extrude(bs.sq, h)

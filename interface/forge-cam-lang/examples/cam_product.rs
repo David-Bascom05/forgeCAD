@@ -142,6 +142,7 @@ fn main() {
             holder: None,
             stickout: 0.0,
             shape: assemble(&c, 25.0, 6.0, 35.0, Some(&holder)).unwrap(),
+            probe: false,
         };
         let t0 = std::time::Instant::now();
         let (mut mv, mut pairs, mut cells, mut bad) = (0, 0, 0, 0);

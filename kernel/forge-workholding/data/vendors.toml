@@ -1,0 +1,834 @@
+# Machine vendors' own workholding first (what Haas, Tormach, Carbide 3D, DATRON, Sherline,
+# Grizzly, Mazak and DN Solutions sell or ship), then Kurt. Every value cited; read 2026-11-23;
+# sizes the maker does not publish are `unknown`. Units mm, N, rpm.
+
+[[workholding]]
+name = "haas-vise-05-0404"
+kind = "vise"
+vendor = "Haas"
+product = "6 in single-station CrossOver vise, 9 in opening (PN 05-0404, Haas Workholding by Kurt: the DX6)"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading; height in conflict: the page gives OAH 110.74 but BH 73.03 + JH 44.07 = 117.10 (and Penn Tool lists 117.09 for the Kurt DX6): measure it; VO 225.0 is the rated opening, J1 0-230.6 the jaws' range (used); OAL with handle 463.75"
+unknown = ["jaw_thickness"]
+conflict = ["height"]
+jaw_width = 150
+jaw_height = 44.07
+max_opening = 230.6
+body_length = 426.97
+body_width = 187.73
+weight = 35
+[[workholding.cite]]
+fields = ["jaw_width", "jaw_height", "max_opening", "body_length", "body_width", "weight"]
+source = "https://www.haastooling.com/p/05-0404 (JW 150.0, JH 44.07, J1 0.0-230.6, BL 426.97, OAW 187.73, 35.0 kg)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-vise-05-0958"
+kind = "vise"
+vendor = "Haas"
+product = "6 in double-station short TriLock CarveSmart vise (PN 05-0958), one station"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading; a double-station vise placed as one station; BH 78.7 + JH 50.8 = 129.5 vs OAH 130.2 as printed"
+unknown = ["jaw_thickness"]
+jaw_width = 152.4
+max_opening = 96.5
+jaw_height = 50.8
+body_length = 475
+body_width = 152.4
+height = 130.2
+[[workholding.cite]]
+fields = ["jaw_width", "max_opening", "jaw_height", "body_length", "body_width", "height"]
+source = "https://www.haastooling.com/p/05-0958 (152.4; VO 96.5; JH 50.8; BL 475.0; OAW 152.4; OAH 130.2)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-vise-05-0211"
+kind = "vise"
+vendor = "Haas"
+product = "100 mm double-station HD CarvLock vise (PN 05-0211), one station"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading"
+unknown = ["jaw_thickness"]
+jaw_width = 100
+max_opening = 75.7
+jaw_height = 31.37
+body_length = 415.92
+body_width = 101.6
+height = 91.69
+[[workholding.cite]]
+fields = ["jaw_width", "max_opening", "jaw_height", "body_length", "body_width", "height"]
+source = "https://www.haastooling.com/p/05-0211 (100.0; J1 0.0-75.7; JH 31.37; BL 415.92; OAW 101.6; OAH 91.69 = BH 60.32 + JH)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-vise-05-0004"
+kind = "self_centring"
+vendor = "Haas"
+product = "5 in (130 mm) self-centering vise (PN 05-0004)"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading; four zero-point connections"
+unknown = ["jaw_thickness"]
+jaw_width = 125
+max_opening = 132
+min_opening = 12
+jaw_height = 32
+body_length = 210
+body_width = 126
+height = 89
+[[workholding.cite]]
+fields = ["jaw_width", "max_opening", "min_opening", "jaw_height", "body_length", "body_width", "height"]
+source = "https://www.haastooling.com/p/05-0004 (125.0; J1 12.0-132.0; JH 32.0; BL 210.0; OAW 126.0; OAH 89.0 = BH 57.0 + JH)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-jaws-05-0026"
+kind = "soft_jaws"
+vendor = "Haas"
+product = "soft steel 6 x 1-1/2 machinable jaws (PN 05-0026)"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading"
+width = 152.4
+height = 50.8
+thickness = 38.1
+[[workholding.cite]]
+fields = ["width", "height", "thickness"]
+source = "https://www.haastooling.com/p/05-0026 (W 152.4 / H 50.8 / D 38.1 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-jaws-05-0088"
+kind = "soft_jaws"
+vendor = "Haas"
+product = "aluminum 4 x 1-1/2 jaws (PN 05-0088)"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading"
+width = 101.6
+height = 44.5
+thickness = 38.1
+[[workholding.cite]]
+fields = ["width", "height", "thickness"]
+source = "https://www.haastooling.com/p/05-0088 (W 101.6 / H 44.5 / D 38.1 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-jaws-05-0049"
+kind = "soft_jaws"
+vendor = "Haas"
+product = "aluminum 5 x 2-1/2 jaws for the self-centering vise (PN 05-0049)"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading"
+width = 125
+height = 50.8
+thickness = 64
+[[workholding.cite]]
+fields = ["width", "height", "thickness"]
+source = "https://www.haastooling.com/p/05-0049 (W 125.0 / H 50.8 / D 64.0 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-jaws-05-0236"
+kind = "soft_jaws"
+vendor = "Haas"
+product = "aluminum 8 x 1 jaws (PN 05-0236)"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading"
+width = 203.2
+height = 55.9
+thickness = 25.4
+[[workholding.cite]]
+fields = ["width", "height", "thickness"]
+source = "https://www.haastooling.com/p/05-0236 (W 203.2 / H 55.9 / D 25.4 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-subplate-05-0581"
+kind = "fixture_plate"
+vendor = "Haas"
+product = "UMC-500/750 rectangle grid steel subplate (PN 05-0581), M12x1.75"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading; the drawing's [e] 50.0 is probably the grid pitch but is unlabelled"
+unknown = ["pitch", "hole_d", "hole_offset"]
+length = 400
+width = 215
+thickness = 19
+[[workholding.cite]]
+fields = ["length", "width", "thickness"]
+source = "https://www.haastooling.com/p/05-0581 (400.0 x 215.0, 19.0 thick, M12x1.75)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-ha5c"
+kind = "collet"
+vendor = "Haas"
+product = "HA5C 5C indexer (collet capacity)"
+note = "centre height 101.60 (HA5C_Dimensions.pdf); spindle nose 2-3/16-10 thread; the indexer itself is a machine axis (CAM-MACHINE)"
+unknown = ["nose_d", "nose_len"]
+range_min = 0.4
+range_max = 27
+[[workholding.cite]]
+fields = ["range_min", "range_max"]
+source = "https://www.haas.co.uk/rotaries/ha5c/ (std 5C 1/64 - 1 1/16 in, 0.4 - 27 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-st-10-chuck"
+kind = "chuck"
+vendor = "Haas"
+product = "the standard chuck of the Haas ST-10 (size only)"
+note = "chuck size as the machine page gives it (nominal); type, jaws and range on haascnc.com, which refused"
+unknown = ["jaws", "body_len", "jaw_height", "jaw_len", "grip_min", "grip_max"]
+body_d = 165
+[[workholding.cite]]
+fields = ["body_d"]
+source = "https://www.haas.co.uk/lathes/st-10/ (chuck size 165 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-st-20-chuck"
+kind = "chuck"
+vendor = "Haas"
+product = "the standard chuck of the Haas ST-20 (size only)"
+note = "chuck size as the machine page gives it (nominal); type, jaws and range on haascnc.com, which refused"
+unknown = ["jaws", "body_len", "jaw_height", "jaw_len", "grip_min", "grip_max"]
+body_d = 210
+[[workholding.cite]]
+fields = ["body_d"]
+source = "https://www.haas.co.uk/lathes/st-20/ (chuck size 210 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-st-30-chuck"
+kind = "chuck"
+vendor = "Haas"
+product = "the standard chuck of the Haas ST-30 (size only)"
+note = "chuck size as the machine page gives it (nominal); type, jaws and range on haascnc.com, which refused"
+unknown = ["jaws", "body_len", "jaw_height", "jaw_len", "grip_min", "grip_max"]
+body_d = 254
+[[workholding.cite]]
+fields = ["body_d"]
+source = "https://www.haas.co.uk/lathes/st-30/ (chuck size 254 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-chuck-05-0808"
+kind = "chuck"
+vendor = "Haas"
+product = "10 in manual 3-jaw scroll chuck A2-6 (PN 05-0808, TL-1/TL-2)"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading"
+unknown = ["body_len", "jaw_height", "jaw_len"]
+jaws = 3
+body_d = 254
+through_hole = 76
+max_rpm = 2500
+grip_min = 5.08
+grip_max = 259.08
+grip_force = 46000
+[[workholding.cite]]
+fields = ["jaws", "body_d", "through_hole", "max_rpm", "grip_min", "grip_max", "grip_force"]
+source = "https://www.haastooling.com/p/05-0808 (3-jaw; 254.0; ID 76.0; 2500 rpm; OD clamp 0.2-10.2 in; 46000 N)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-04-0299"
+kind = "collet"
+vendor = "Haas"
+product = "HQCB-42 pull-back quick-change collet chuck A2-5 (PN 04-0299, Haas HRG collets)"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading"
+range_min = 4
+range_max = 42
+nose_d = 102
+nose_len = 17.5
+max_rpm = 7000
+[[workholding.cite]]
+fields = ["range_min", "range_max", "nose_d", "nose_len", "max_rpm"]
+source = "https://www.haastooling.com/p/04-0299 (capacity 4.0-42.0, nose 102.0 x 17.5, 7000 rpm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-05-0332"
+kind = "collet"
+vendor = "Haas"
+product = "HQCB-65 pull-back quick-change collet chuck A2-6 (PN 05-0332, Haas HRG collets)"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading"
+range_min = 4
+range_max = 65
+nose_d = 120
+nose_len = 23.5
+max_rpm = 5500
+[[workholding.cite]]
+fields = ["range_min", "range_max", "nose_d", "nose_len", "max_rpm"]
+source = "https://www.haastooling.com/p/05-0332 (capacity 4.0-65.0, nose 120.0 x 23.5, 5500 rpm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "haas-05-0331"
+kind = "collet"
+vendor = "Haas"
+product = "HQCBD-52 dead-length quick-change collet chuck A2-5 (PN 05-0331)"
+note = "Haas sells it (haastooling.com, Haas Automation's own store); haascnc.com refused automated reading; the nose length is garbled on the page"
+unknown = ["nose_len"]
+range_min = 4
+range_max = 52
+nose_d = 116
+max_rpm = 7000
+[[workholding.cite]]
+fields = ["range_min", "range_max", "nose_d", "max_rpm"]
+source = "https://www.haastooling.com/p/05-0331 (4.0-52.0, nose 116.0, 7000 rpm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "tormach-vise-35285"
+kind = "vise"
+vendor = "Tormach"
+product = "4 in CNC vise (PN 35285)"
+note = "Tormach's own page (read through a page fetcher: plain requests get 503); bed height 64 mm published (overall height not)"
+unknown = ["jaw_thickness", "body_width", "height"]
+jaw_width = 102
+max_opening = 102
+jaw_height = 32
+body_length = 279
+[[workholding.cite]]
+fields = ["jaw_width", "max_opening", "jaw_height", "body_length"]
+source = "https://tormach.com/4in-cnc-vise-35285.html (jaw width 102, inside opening 102, jaw depth 32, overall length 279 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "tormach-vise-31759"
+kind = "vise"
+vendor = "Tormach"
+product = "5 in CNC vise (PN 31759)"
+note = "Tormach's own page (read through a page fetcher: plain requests get 503); bed height 64 mm published (overall height not)"
+unknown = ["jaw_thickness", "body_width", "height"]
+jaw_width = 127
+max_opening = 102
+jaw_height = 32
+body_length = 305
+[[workholding.cite]]
+fields = ["jaw_width", "max_opening", "jaw_height", "body_length"]
+source = "https://tormach.com/5-in-cnc-vise-31759.html (jaw width 127, inside opening 102, jaw depth 32, overall length 305 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "tormach-vise-38935"
+kind = "vise"
+vendor = "Tormach"
+product = "5 in machinist vise, precision angle lock (PN 38935)"
+note = "Tormach's own page (read through a page fetcher: plain requests get 503); bed height 64 mm published (overall height not)"
+unknown = ["jaw_thickness", "body_width", "height"]
+jaw_width = 127
+max_opening = 127
+jaw_height = 38
+body_length = 318
+[[workholding.cite]]
+fields = ["jaw_width", "max_opening", "jaw_height", "body_length"]
+source = "https://tormach.com/5-in-machinist-vise-38935.html (jaw width 127, inside opening 127, jaw depth 38, overall length 318 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "tormach-vise-51739"
+kind = "vise"
+vendor = "Tormach"
+product = "6 in CNC vise, precision angle lock (PN 51739)"
+note = "Tormach's own page (read through a page fetcher: plain requests get 503); jaw bolt pattern 3.875 x 0.9375 in"
+unknown = ["jaw_width", "jaw_height", "jaw_thickness", "body_length", "body_width", "height"]
+max_opening = 152.4
+[[workholding.cite]]
+fields = ["max_opening"]
+source = "https://tormach.com/6-in-cnc-vise-51739.html (jaw opening 6 in)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "tormach-smw-plate-1100"
+kind = "fixture_plate"
+vendor = "Tormach"
+product = "SMW fixture tooling plate for PCNC 1100 (Saunders Machine Works)"
+note = "Tormach's own page (read through a page fetcher: plain requests get 503); grid and thread not published; SMW steel plates' dowel holes .5005 in"
+unknown = ["pitch", "hole_d", "hole_offset"]
+length = 863.6
+width = 303.53
+thickness = 24.13
+[[workholding.cite]]
+fields = ["length", "width", "thickness"]
+source = "https://tormach.com/smw-1100-tool-plate-bundle.html (34 x 11.95 x 0.95 in)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "tormach-smw-plate-770"
+kind = "fixture_plate"
+vendor = "Tormach"
+product = "SMW fixture tooling plate for PCNC 770 (Saunders Machine Works)"
+note = "Tormach's own page (read through a page fetcher: plain requests get 503); grid and thread not published; SMW steel plates' dowel holes .5005 in"
+unknown = ["pitch", "hole_d", "hole_offset"]
+length = 660.4
+width = 303.53
+thickness = 24.13
+[[workholding.cite]]
+fields = ["length", "width", "thickness"]
+source = "https://tormach.com/smw-770-tool-plate-bundle.html (26 x 11.95 x 0.95 in)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "tormach-xstech-plate-53638"
+kind = "fixture_plate"
+vendor = "Tormach"
+product = "xsTECH aluminum fixture plate (PN 53638), tapped 1/4-20"
+note = "Tormach's own page (read through a page fetcher: plain requests get 503)"
+unknown = ["hole_d", "hole_offset"]
+length = 304.8
+width = 151.13
+thickness = 14.605
+pitch = 19.05
+[[workholding.cite]]
+fields = ["length", "width", "thickness", "pitch"]
+source = "https://tormach.com/tormach-xstech-aluminum-fixture-tooling-plate-53638.html (12 x 5.95 x 0.575 in; holes 0.75 in on centre)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "tormach-clamp-kit-32580"
+kind = "strap_clamp"
+vendor = "Tormach"
+product = "strap clamp kit for 5/8 in T-slots, 58 pcs (PN 32580)"
+note = "Tormach's own page (read through a page fetcher: plain requests get 503); strap and step-block sizes not published; stud_d is the 1/2-13 thread's nominal diameter"
+unknown = ["length", "width", "thickness", "stud_above"]
+slot = 15.9
+stud_d = 12.7
+[[workholding.cite]]
+fields = ["slot", "stud_d"]
+source = "https://tormach.com/clamp-kit-t-slots-58-pcs-32580.html (5/8 in T-slots; 1/2-13 studs)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "tormach-chuck-32855"
+kind = "chuck"
+vendor = "Tormach"
+product = "4 in precision 3-jaw chuck, 5C mount (8L) (PN 32855)"
+note = "Tormach's own page (read through a page fetcher: plain requests get 503)"
+unknown = ["body_len", "jaw_height", "jaw_len"]
+jaws = 3
+body_d = 101.6
+through_hole = 22.225
+grip_min = 2.03
+grip_max = 80.01
+[[workholding.cite]]
+fields = ["jaws", "body_d", "through_hole", "grip_min", "grip_max"]
+source = "https://tormach.com/4in-precision-3-jaw-chuck-5c-mount-32855.html"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "tormach-chuck-50841"
+kind = "chuck"
+vendor = "Tormach"
+product = "4 in precision 4-jaw chuck, 5C mount (8L) (PN 50841)"
+note = "Tormach's own page (read through a page fetcher: plain requests get 503); OD range as the page's inch figures (its mm figures disagree)"
+unknown = ["body_len", "jaw_height", "jaw_len"]
+jaws = 4
+body_d = 101.6
+through_hole = 23.876
+grip_min = 1.575
+grip_max = 76.2
+[[workholding.cite]]
+fields = ["jaws", "body_d", "through_hole", "grip_min", "grip_max"]
+source = "https://tormach.com/4in-precision-4-jaw-chuck-5c-mount-50841.html"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "tormach-chuck-33156"
+kind = "chuck"
+vendor = "Tormach"
+product = "3-jaw reversible 6 in chuck, D1-4 (15L) (PN 33156)"
+note = "Tormach's own page (read through a page fetcher: plain requests get 503)"
+unknown = ["body_len", "jaw_height", "jaw_len", "grip_min", "grip_max"]
+jaws = 3
+body_d = 158.75
+through_hole = 40.64
+max_rpm = 2500
+[[workholding.cite]]
+fields = ["jaws", "body_d", "through_hole", "max_rpm"]
+source = "https://tormach.com/3-jaw-reversible-6in-lathe-chuck-d1-type-direct-mount-33156.html"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "tormach-chuck-33336"
+kind = "chuck"
+vendor = "Tormach"
+product = "4-jaw independent 6 in chuck, D1-4 (15L) (PN 33336)"
+note = "Tormach's own page (read through a page fetcher: plain requests get 503)"
+unknown = ["body_len", "jaw_height", "jaw_len", "grip_min", "grip_max"]
+jaws = 4
+body_d = 152.4
+through_hole = 44.45
+max_rpm = 2000
+[[workholding.cite]]
+fields = ["jaws", "body_d", "through_hole", "max_rpm"]
+source = "https://tormach.com/4-jaw-independent-reversible-6in-lathe-chuck-d1-type-direct-mount-33336.html"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "carbide3d-vacuum-24x24"
+kind = "vacuum"
+vendor = "Carbide 3D"
+product = "Vacuum Table 24x24 (Shapeoko, on the Hybrid Table's T-slots)"
+note = "the vacuum is the pump's (Carbide 3D's is rated 5 CFM, a flow): measure it"
+unknown = ["vacuum", "seal_inset"]
+length = 609.6
+width = 609.6
+thickness = 20
+[[workholding.cite]]
+fields = ["length", "width", "thickness"]
+source = "https://shop.carbide3d.com/products/vacuum-table-24x24 (24 x 24 in, 20 mm thick; 5 x 5 mm gasket)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "carbide3d-nomad-vise"
+kind = "vise"
+vendor = "Carbide 3D"
+product = "Nomad low profile vise"
+unknown = ["jaw_height", "jaw_thickness", "body_width", "height"]
+jaw_width = 50.8
+body_length = 203.2
+max_opening = 165.1
+[[workholding.cite]]
+fields = ["jaw_width", "body_length", "max_opening"]
+source = "https://shop.carbide3d.com/products/low-profile-vise (2 in jaw, 8 in long, 6.5 in max clamping width)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "carbide3d-crush-it"
+kind = "edge_clamp"
+vendor = "Carbide 3D"
+product = "Crush-It clamp (M6, Hybrid Table slots)"
+note = "'as low as 11 mm' above the table when seated in a Hybrid Table slot (the clamp's own height not stated)"
+unknown = ["body_length", "height"]
+body_width = 25
+range_max = 2
+[[workholding.cite]]
+fields = ["body_width", "range_max"]
+source = "https://shop.carbide3d.com/products/crush-it-essential-clamp (25 mm wide; 2 mm throw)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "datron-ms-vp-a"
+kind = "vacuum"
+vendor = "DATRON"
+product = "MS-VP-A vacuum plate"
+note = "DATRON's pumps reach 10-20 mbar end pressure (absolute): the vacuum below atmosphere depends on the day's air pressure and the leaks: measure it"
+unknown = ["vacuum", "seal_inset"]
+length = 500
+width = 500
+thickness = 40
+[[workholding.cite]]
+fields = ["length", "width", "thickness"]
+source = "https://www.datron.com/wp-content/uploads/2022/11/DATRON_Accessories_Catalog.pdf (500 x 500 x 40 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "datron-ms-vp-b-1"
+kind = "vacuum"
+vendor = "DATRON"
+product = "MS-VP-B-1 vacuum plate (2 segments)"
+note = "DATRON's pumps reach 10-20 mbar end pressure (absolute): the vacuum below atmosphere depends on the day's air pressure and the leaks: measure it"
+unknown = ["vacuum", "seal_inset"]
+length = 1000
+width = 500
+thickness = 60
+[[workholding.cite]]
+fields = ["length", "width", "thickness"]
+source = "https://www.datron.com/wp-content/uploads/2022/11/DATRON_Accessories_Catalog.pdf (1000 x 500 x 60 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "datron-ms-vp-b-2"
+kind = "vacuum"
+vendor = "DATRON"
+product = "MS-VP-B-2 vacuum plate (2 segments)"
+note = "DATRON's pumps reach 10-20 mbar end pressure (absolute): the vacuum below atmosphere depends on the day's air pressure and the leaks: measure it"
+unknown = ["vacuum", "seal_inset"]
+length = 1000
+width = 700
+thickness = 60
+[[workholding.cite]]
+fields = ["length", "width", "thickness"]
+source = "https://www.datron.com/wp-content/uploads/2022/11/DATRON_Accessories_Catalog.pdf (1000 x 700 x 60 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "datron-kzs"
+kind = "self_centring"
+vendor = "DATRON"
+product = "KZS compact centric clamp (0A01088D)"
+note = "the body read as L x W x H as printed; 0-75 mm at 32 mm depth with the jaws turned"
+unknown = ["jaw_height", "jaw_thickness"]
+jaw_width = 100
+max_opening = 160
+grip = 14
+clamp_force = 20000
+body_length = 150
+body_width = 140
+height = 105
+[[workholding.cite]]
+fields = ["jaw_width", "max_opening", "grip", "clamp_force", "body_length", "body_width", "height"]
+source = "https://www.datron.com/wp-content/uploads/2022/11/DATRON_Accessories_Catalog.pdf (100 mm jaws; 0-160 mm at 14 mm clamping depth; 20 kN; 150 x 140 x 105 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "datron-mfs"
+kind = "vise"
+vendor = "DATRON"
+product = "MFS multifunctional clamp (0A01088C), single clamping"
+unknown = ["jaw_height", "jaw_thickness"]
+jaw_width = 100
+max_opening = 310
+clamp_force = 20000
+body_length = 330
+body_width = 118
+height = 109.5
+[[workholding.cite]]
+fields = ["jaw_width", "max_opening", "clamp_force", "body_length", "body_width", "height"]
+source = "https://www.datron.com/wp-content/uploads/2022/11/DATRON_Accessories_Catalog.pdf (100 mm jaws; single 0-310 mm; 20 kN per jaw; 330 x 118 x 109.5 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "sherline-vise-3551"
+kind = "vise"
+vendor = "Sherline"
+product = "milling vise (P/N 3551)"
+note = "Sherline suspended new orders from 2026-10-19 (its site's notice)"
+unknown = ["jaw_thickness", "body_length", "body_width", "height"]
+jaw_width = 50.8
+jaw_height = 25.4
+max_opening = 50.8
+[[workholding.cite]]
+fields = ["jaw_width", "jaw_height", "max_opening"]
+source = "https://sherline.com/product/3551-milling-vise (2.00 in jaw, 1.00 in deep, 2.00 in opening)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "sherline-plate-3560"
+kind = "fixture_plate"
+vendor = "Sherline"
+product = "mill tooling plate (P/N 3560), tapped 10-32"
+unknown = ["pitch", "hole_d", "hole_offset"]
+length = 254
+width = 101.6
+thickness = 12.7
+[[workholding.cite]]
+fields = ["length", "width", "thickness"]
+source = "https://www.sherline.com/?p=2109 (4 x 10 x 1/2 in)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "sherline-chuck-1041"
+kind = "chuck"
+vendor = "Sherline"
+product = "2.5 in 3-jaw self-centering chuck (P/N 1041)"
+note = "the range is the normal jaws'; reversed jaws grip larger (the sources disagree on how much)"
+unknown = ["body_len", "jaw_height", "jaw_len"]
+jaws = 3
+body_d = 63.5
+grip_min = 2
+grip_max = 30
+through_hole = 17
+[[workholding.cite]]
+fields = ["jaws", "body_d", "grip_min", "grip_max", "through_hole"]
+source = "https://www.sherline.com/product/1041-3-jaw-self-centering-chuck-2-5/ (normal capacity 2-30 mm; through hole 17 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "sherline-chuck-1040"
+kind = "chuck"
+vendor = "Sherline"
+product = "3.1 in 3-jaw self-centering chuck (P/N 1040)"
+note = "the range is the normal jaws'; reversed jaws grip larger (the sources disagree on how much)"
+unknown = ["body_len", "jaw_height", "jaw_len"]
+jaws = 3
+body_d = 78.74
+grip_min = 2
+grip_max = 38
+through_hole = 17
+[[workholding.cite]]
+fields = ["jaws", "body_d", "grip_min", "grip_max", "through_hole"]
+source = "https://www.sherline.com/product/3-jaw-self-centering-chuck-3-1/ (normal capacity 2-38 mm; through hole 17 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "sherline-chuck-1044"
+kind = "chuck"
+vendor = "Sherline"
+product = "2.5 in 4-jaw independent chuck (P/N 1044)"
+note = "the range is the normal jaws'; reversed jaws grip larger (the sources disagree on how much)"
+unknown = ["body_len", "jaw_height", "jaw_len"]
+jaws = 4
+body_d = 63.5
+grip_min = 2
+grip_max = 30
+through_hole = 17
+[[workholding.cite]]
+fields = ["jaws", "body_d", "grip_min", "grip_max", "through_hole"]
+source = "https://www.sherline.com/product/4-jaw-independent-chuck-3-1/ (normal capacity 2-30 mm; through hole 17 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "sherline-chuck-1030"
+kind = "chuck"
+vendor = "Sherline"
+product = "3.1 in 4-jaw independent chuck (P/N 1030)"
+note = "the range is the normal jaws'; reversed jaws grip larger (the sources disagree on how much)"
+unknown = ["body_len", "jaw_height", "jaw_len"]
+jaws = 4
+body_d = 78.74
+grip_min = 2
+grip_max = 38
+through_hole = 17
+[[workholding.cite]]
+fields = ["jaws", "body_d", "grip_min", "grip_max", "through_hole"]
+source = "https://www.sherline.com/product/4-jaw-independent-chuck/ (normal capacity 2-38 mm; through hole 17 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "grizzly-clamp-kit-g1076"
+kind = "strap_clamp"
+vendor = "Grizzly"
+product = "G1076 clamping kit for 5/8 in T-slots"
+note = "grizzly.com refused; Grizzly's own manual PDF; studs 3-8 in; step-block heights not published"
+unknown = ["length", "width", "thickness", "stud_above"]
+slot = 15.875
+stud_d = 12.7
+[[workholding.cite]]
+fields = ["slot", "stud_d"]
+source = "https://cdn0.grizzly.com/manuals/g0793_m.pdf (fits 5/8 in T-slots, 1/2-13 studs)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "grizzly-g0709-3jaw"
+kind = "chuck"
+vendor = "Grizzly"
+product = "the chuck shipped with the G0709 lathe (3-jaw)"
+note = "size as the manual names it (nominal)"
+unknown = ["body_len", "jaw_height", "jaw_len", "grip_min", "grip_max"]
+jaws = 3
+body_d = 152.4
+[[workholding.cite]]
+fields = ["jaws", "body_d"]
+source = "https://cdn0.grizzly.com/manuals/g0709_m.pdf (6 in 3-jaw)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "grizzly-g0709-4jaw"
+kind = "chuck"
+vendor = "Grizzly"
+product = "the chuck shipped with the G0709 lathe (4-jaw)"
+note = "size as the manual names it (nominal)"
+unknown = ["body_len", "jaw_height", "jaw_len", "grip_min", "grip_max"]
+jaws = 4
+body_d = 203.2
+[[workholding.cite]]
+fields = ["jaws", "body_d"]
+source = "https://cdn0.grizzly.com/manuals/g0709_m.pdf (8 in 4-jaw)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "grizzly-g0602-3jaw"
+kind = "chuck"
+vendor = "Grizzly"
+product = "the chuck shipped with the G0602 lathe (3-jaw)"
+note = "size as the manual names it (nominal)"
+unknown = ["body_len", "jaw_height", "jaw_len", "grip_min", "grip_max"]
+jaws = 3
+body_d = 127
+[[workholding.cite]]
+fields = ["jaws", "body_d"]
+source = "https://cdn0.grizzly.com/manuals/g0602_m.pdf (5 in 3-jaw)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "mazak-qt200-chuck"
+kind = "chuck"
+vendor = "Mazak"
+product = "the standard chuck of the QUICK TURN 200 (size only)"
+note = "nominal size; verify on mazak.com"
+unknown = ["jaws", "body_len", "jaw_height", "jaw_len", "grip_min", "grip_max"]
+body_d = 203.2
+[[workholding.cite]]
+fields = ["body_d"]
+source = "https://www.mazak.com/us-en/products/quick-turn/ (QUICK TURN 200: 8 in chuck; read through a page fetcher, Mazak answers plain requests with 406)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "dn-lynx-2100a-chuck"
+kind = "chuck"
+vendor = "DN Solutions"
+product = "the standard chuck of the Lynx 2100A (size only)"
+note = "nominal size"
+unknown = ["jaws", "body_len", "jaw_height", "jaw_len", "grip_min", "grip_max"]
+body_d = 152.4
+[[workholding.cite]]
+fields = ["body_d"]
+source = "https://www.dn-solutions.com/us/product/turning-center/2-axis-horizontal/lynx-2100-a.do (Lynx 2100A: 6 inch chuck)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "dn-puma-2600-chuck"
+kind = "chuck"
+vendor = "DN Solutions"
+product = "the standard chuck of the PUMA 2600 (size only)"
+note = "nominal size"
+unknown = ["jaws", "body_len", "jaw_height", "jaw_len", "grip_min", "grip_max"]
+body_d = 254
+[[workholding.cite]]
+fields = ["body_d"]
+source = "https://www.dn-solutions.com/global/product/turning-center/2-axis-horizontal/puma-2600.do (PUMA 2600: 10 inch chuck)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "kurt-d688"
+kind = "vise"
+vendor = "Kurt"
+product = "D688 (6 in)"
+note = "height in conflict: 'vise height 4.375 in' vs bed 2.875 + jaw 1.735 = 4.61 in: measure it"
+unknown = ["jaw_thickness"]
+conflict = ["height"]
+jaw_width = 152.4
+max_opening = 223.52
+jaw_height = 44.07
+body_length = 426.97
+body_width = 222.25
+clamp_force = 35443
+[[workholding.cite]]
+fields = ["jaw_width", "max_opening", "jaw_height", "body_length", "body_width"]
+source = "https://www.travers.com/product/kurt-d688-milling-machine-vise-61-421-170 (6 in, 8.8 in, 1.735 in, 16.81 in, 8-3/4 in)"
+taken = "2026-11-23"
+[[workholding.cite]]
+fields = ["clamp_force"]
+source = "https://docs.travers.com/assets/pdf/61-421-170_manual.pdf (Kurt D688 manual: 7968 lb at 80 ft-lb)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "kurt-xjab6a-318"
+kind = "soft_jaws"
+vendor = "Kurt"
+product = "XJAB6A-318 machinable aluminum jaw plate (fits all Kurt 6 in vises)"
+note = "distributor-hosted copy of Kurt's catalog (kurtworkholding.com refused)"
+width = 151.61
+thickness = 38.1
+height = 47.6
+[[workholding.cite]]
+fields = ["width", "thickness", "height"]
+source = "https://cdn.dgisupply.ca/img/product-images/Asset_URL/KURT_DX6_Catalog.pdf (Kurt 2017 catalog: 5.969 in L x 1.500 in W x 1.874 in H)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "kurt-dj606al-jawkit"
+kind = "soft_jaws"
+vendor = "Kurt"
+product = "DJ606AL-JAWKIT DoveLock machinable aluminum jaw kit"
+width = 152.4
+thickness = 31.75
+height = 50.29
+[[workholding.cite]]
+fields = ["width", "thickness", "height"]
+source = "https://cdn.dgisupply.ca/img/product-images/Asset_URL/KURT_DX6_Catalog.pdf (L x W x H as printed)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "kurt-dj608al-jawkit"
+kind = "soft_jaws"
+vendor = "Kurt"
+product = "DJ608AL-JAWKIT DoveLock machinable aluminum jaw kit"
+width = 203.2
+thickness = 38.1
+height = 50.29
+[[workholding.cite]]
+fields = ["width", "thickness", "height"]
+source = "https://cdn.dgisupply.ca/img/product-images/Asset_URL/KURT_DX6_Catalog.pdf (L x W x H as printed)"
+taken = "2026-11-23"

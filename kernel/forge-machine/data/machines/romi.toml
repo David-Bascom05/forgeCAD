@@ -644,6 +644,12 @@ basis = "the spindle head (estimate); one box/cylinder from published overall si
 # ---------------------------------------------------------------------------------------------
 # Romi GL 250: ROMI GL Series New Generation, Fanuc 0i-TF Plus i-HMI (15in).
 # X 160 Z 600 W 540; 6000 rpm ASA A2-5 built-in.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "romi-gl-250"
 kind = "lathe"
