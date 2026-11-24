@@ -72,7 +72,7 @@ pub fn hole_infos(ev: &forge_lang::eval::Eval) -> Vec<HoleInfo> {
                 forge_model::Head::Countersink { diameter, angle } => Some((diameter, angle.to_degrees())),
                 _ => None,
             },
-            class: ev.hole_fits.get(&f.id).copied(),
+            class: ev.hole_fits.iter().find(|(id, _)| *id == f.id).map(|(_, c)| *c),
         });
     }
     out
