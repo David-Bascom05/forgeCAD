@@ -13,6 +13,7 @@
 //! `iso_group` (a keyword table, listed in the report); rows it cannot class (plastics, rows
 //! with no group) are counted and skipped.
 pub mod report;
+pub mod turning;
 
 use forge_agent::json::Json;
 use forge_tooling::Library;

@@ -131,3 +131,33 @@ fn own_presets_reproduce_the_makers_rows() {
         );
     }
 }
+
+/// Turning: every insert preset written for a maker's grade-table row gives that row back
+/// inside its printed range, and the default path (no grade, no material) stays at or under
+/// the maker's start speed at the median.
+#[test]
+fn turning_presets_reproduce_and_default_is_not_fast() {
+    let raw = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../research/cam/tooling/raw");
+    let rows = feeds_vs_makers::turning::rows(&raw);
+    assert!(rows.len() >= 900, "{} turning pairs", rows.len());
+    for r in rows.iter().filter(|r| r.own.is_some()) {
+        assert_eq!(
+            r.own_in_range(),
+            Some(true),
+            "{} {} {} {}",
+            r.insert,
+            r.group,
+            r.grade,
+            r.material
+        );
+    }
+    let d = feeds_vs_makers::stats(
+        rows.iter()
+            .filter_map(|r| r.ratio(r.default))
+            .map(|x| x.0)
+            .collect(),
+    )
+    .unwrap()
+    .0;
+    assert!(d <= 1.0, "default vc median {d}");
+}

@@ -324,3 +324,33 @@ All: rpm 0.75 (0.40–1.38, n 3124), fz 0.71 (0.37–1.14, n 3108), feed rate 0.
 - material not classed (plastics or unknown text): 243
 - our drilling model has no row for the group and substrate: 4
 - tool kind not compared (chamfer, spot, tap, thread mill): 93
+
+## Turning: insert presets against the makers' grade tables
+
+980 (row, insert) pairs from Sumitomo, Tungaloy, Korloy and Ingersoll grade tables (research/cam/tooling/raw/turn-vc), over 44 inserts of the library. Theirs is the maker's start value (Sumitomo's optimum, Korloy's recommended, else the low end of the printed range: the presets' convention); ours is the insert's preset as `Insert::preset_for` picks it. Ratios ours/theirs, median (10th–90th, n).
+
+- Reproduction: with the row's grade and material, 980 of 980 pairs land inside the maker's printed range (vc; f and ap where printed).
+
+| path | pairs | vc ours/theirs | f ours/theirs |
+|---|---|---|---|
+| own (grade + material) | 980 | 1.00 (1.00–1.00, n 980) | 1.00 (1.00–1.00, n 465) |
+| graded (grade, no material: the grade's lead row) | 980 | 1.07 (1.00–1.60, n 980) | 1.00 (1.00–1.00, n 465) |
+| default (no grade, no material: the slowest grade's lead row) | 980 | 0.94 (0.48–1.33, n 980) | 1.00 (0.71–1.00, n 465) |
+
+- The default path is above the maker's start speed for the row in 246 of 980 pairs: a row of a slower material than the grade's lead row (the lead row is the maker's first printed material, e.g. Sumitomo's mild steel), or a slower grade's row when the insert's grade is not stated cannot be slower than the slowest grade's lead row.
+
+| maker | pairs | default vc ours/theirs | default f ours/theirs |
+|---|---|---|---|
+| sumitomo | 348 | 1.13 (0.67–1.70, n 348) | 1.00 (0.71–1.20, n 348) |
+| tungaloy | 117 | 0.42 (0.28–1.00, n 117) | 1.00 (1.00–1.00, n 117) |
+| korloy | 0 | – | – |
+| ingersoll | 515 | 0.85 (0.54–1.07, n 515) | – |
+
+| group | pairs | default vc ours/theirs | default f ours/theirs |
+|---|---|---|---|
+| P | 448 | 0.88 (0.33–1.21, n 448) | 1.00 (0.71–1.00, n 197) |
+| M | 326 | 1.00 (0.56–1.70, n 326) | 1.00 (0.71–1.00, n 160) |
+| K | 168 | 1.00 (0.67–1.18, n 168) | 1.00 (1.00–1.20, n 108) |
+| S | 38 | 0.77 (0.77–1.00, n 38) | – |
+
+- Not compared: Korloy's 9 inserts (no s/re in the raw extraction, so no records), inserts and groups with no printed vc (see raw/turn-vc `missing`), and K/S/H/N tables for chipbreakers the inserts do not have. A tool with no preset for the part's group gets no turning default: the op asks for vc and f (no generic turning layer yet).

@@ -18,7 +18,10 @@ fn main() {
         );
         return;
     }
-    let report = feeds_vs_makers::report::markdown(&rows, &skips);
+    let mut report = feeds_vs_makers::report::markdown(&rows, &skips);
+    report.push_str(&feeds_vs_makers::turning::markdown(
+        &feeds_vs_makers::turning::rows(&raw),
+    ));
     if std::env::args().any(|a| a == "--print") {
         println!("{report}");
         return;

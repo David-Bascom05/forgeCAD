@@ -968,6 +968,28 @@ pub struct TurnData {
     pub kr: Option<f64>,
 }
 
+impl TurnData {
+    /// The library layer from an insert's picked preset (`Insert::preset_for`): vc, f (the
+    /// preset's `fz`, mm/rev) and ap, with the cite and how the preset was chosen.
+    pub fn from_pick(p: &crate::turning::InsertPick, kr: Option<f64>) -> TurnData {
+        let cite = p.cite.map_or("uncited".to_string(), |c| {
+            format!(
+                "{}: {} ({})",
+                format!("{:?}", c.status).to_lowercase(),
+                c.value,
+                c.source
+            )
+        });
+        TurnData {
+            vc: Some(p.preset.vc),
+            f: Some(p.preset.fz),
+            ap: p.preset.ap,
+            source: format!("the insert's {} preset, {}; {cite}", p.preset.name, p.why),
+            kr,
+        }
+    }
+}
+
 /// The cut at one diameter of the op's range.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TurnPoint {

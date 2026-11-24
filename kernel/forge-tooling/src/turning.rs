@@ -37,7 +37,7 @@
 //! id = "..."; code = "..."; h = 25; b = 25; l1 = 110   # + blade_h
 //! ```
 use crate::toml::{self, Table, num, tables, text};
-use crate::{Cite, LibError, Preset, cite, preset_paths, read_presets};
+use crate::{Cite, LibError, Preset, cite, material_score, preset_paths, read_presets};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Insert {
@@ -143,7 +143,106 @@ fn opt_required(t: &Table, keys: &[&str], into: &mut Vec<String>) {
     }
 }
 
+/// An insert preset as picked for a cut: the preset, its cite, and how it was chosen.
+#[derive(Clone, Debug)]
+pub struct InsertPick<'a> {
+    pub preset: &'a Preset,
+    pub cite: Option<&'a Cite>,
+    pub why: String,
+}
+
 impl Insert {
+    /// The insert's preset for a group (CAM-HAAS's names: "<G> <chipbreaker> <grade>" the
+    /// maker's lead row for the grade, "<G> <chipbreaker> <grade> <material>" each printed
+    /// material). The grade is the one asked for (the insert record names none: a code is sold
+    /// in several grades); none asked, the grade whose lead row is slowest, so an unstated grade
+    /// never runs faster than any of them. Within the grade, the maker's row naming the stock
+    /// material (`material_score`), else the lead row. Err: the grades the insert has for the
+    /// group, where the one asked is not among them.
+    pub fn preset_for(
+        &self,
+        group: &str,
+        grade: Option<&str>,
+        material: Option<&str>,
+    ) -> Result<Option<InsertPick<'_>>, Vec<String>> {
+        let head = format!("{group} {} ", self.chipbreaker);
+        // (grade, material text) of each preset of the group
+        let parts: Vec<(&Preset, &str, &str)> = self
+            .presets
+            .iter()
+            .filter(|p| p.group == group)
+            .map(|p| {
+                let rest = p.name.strip_prefix(&head).unwrap_or("");
+                let (g, m) = rest.split_once(' ').unwrap_or((rest, ""));
+                (p, g, m)
+            })
+            .collect();
+        if parts.is_empty() {
+            return Ok(None);
+        }
+        let mut grades: Vec<&str> = parts.iter().map(|x| x.1).collect();
+        grades.sort();
+        grades.dedup();
+        let lead = |g: &str| parts.iter().find(|x| x.1 == g && x.2.is_empty()).map(|x| x.0);
+        let (grade, how) = match grade {
+            Some(g) if grades.contains(&g) => (g, format!("grade {g}")),
+            Some(_) => return Err(grades.iter().map(|g| g.to_string()).collect()),
+            None => {
+                let g = grades
+                    .iter()
+                    .copied()
+                    .filter(|g| lead(g).is_some())
+                    .min_by(|a, b| lead(a).unwrap().vc.total_cmp(&lead(b).unwrap().vc))
+                    .unwrap_or(grades[0]);
+                (
+                    g,
+                    if grades.len() > 1 {
+                        format!(
+                            "grade not stated: {g}, the slowest of the maker's {} for {group} ({}); give the insert's grade to use its own",
+                            grades.len(),
+                            grades.join(", ")
+                        )
+                    } else {
+                        format!("grade {g} (the only one printed for {group})")
+                    },
+                )
+            }
+        };
+        let matched = material.and_then(|m| {
+            parts
+                .iter()
+                .filter(|x| x.1 == grade && !x.2.is_empty())
+                .map(|x| (material_score(x.2, m), x.0))
+                .filter(|x| x.0 > 0)
+                .max_by(|a, b| a.0.cmp(&b.0).then(b.1.vc.total_cmp(&a.1.vc)))
+                .map(|x| x.1)
+        });
+        let (p, why) = match (matched, lead(grade)) {
+            (Some(p), _) => (p, format!("{how}; the maker's row for the stock material")),
+            (None, Some(p)) => (
+                p,
+                format!(
+                    "{how}; the maker's lead row for the grade{}",
+                    if material.is_some() {
+                        " (no row names the stock material)"
+                    } else {
+                        ""
+                    }
+                ),
+            ),
+            (None, None) => match parts.iter().find(|x| x.1 == grade) {
+                Some(x) => (x.0, how),
+                None => return Ok(None),
+            },
+        };
+        let path = format!("preset.{}", p.name);
+        Ok(Some(InsertPick {
+            preset: p,
+            cite: self.cites.iter().find(|c| c.path == path),
+            why,
+        }))
+    }
+
     pub fn from_table(t: &Table) -> Result<Insert, LibError> {
         let (id, code) = id_and(t, "insert")?;
         let rec = format!("insert `{id}`");
