@@ -337,6 +337,20 @@ list on main: this branch's new strings add none).
 - Not changed: `?env=bogus` is ignored without a word; a missing file says its path twice
   ("nope/missing.fg: nope/missing.fg: no such file").
 
+## 21. The page's status said "Agent connection: operation not supported…"; a STEP picked said nothing (ui/bughunt-3)
+
+- At start the app published its agent's terminal connection (`start_agent_bridge`, from
+  `load_settings`). A page has no terminal to connect (the agent runs in the desktop app), so it
+  failed, and "Agent connection: operation not supported on this platform" stood in the status
+  bar until something said otherwise. A linked DWG said nothing over it. Not started in a page now.
+- File > Open > From this computer with a STEP model (or a font): the file was added to the
+  project, the dialog closed, and nothing on screen changed. It has nothing to open itself (a
+  part reads it), so now the status says "Added to the project: NAME". A DWG opens, as before.
+- Test: `web/tests/import.cjs` (a STEP added and said; a DWG opened; a DWG linked to in a new
+  page, with no agent failure in the status; fails before on both).
+- Swept fine in the page: Markup (draw, text with typing, Esc, Done); DWG open (layers,
+  properties, its command line).
+
 ## Open (reported, not fixed here)
 
 

@@ -102,8 +102,11 @@ function openDialog() {
     }
     await importFiles(got);
     d.close();
-    const first = got.map((f) => cleanPath(f.path)).find((p) => /\.(fg|dwg)$/i.test(p));
+    const paths = got.map((f) => cleanPath(f.path));
+    const first = paths.find((p) => /\.(fg|dwg)$/i.test(p));
     if (first) fc.app_open(`${MOUNT}/${first}`);
+    // nothing to open (a STEP model, a font: read by a part): said, not silently added
+    else if (paths.length) fc.app_say(`Added to the project: ${paths.length > 3 ? `${paths.length} files` : paths.join(", ")}`);
   };
   d.querySelector("#forge-open-file").onchange = (e) => take(e.target, false);
   d.querySelector("#forge-open-dir").onchange = (e) => take(e.target, true);

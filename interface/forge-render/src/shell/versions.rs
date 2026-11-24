@@ -300,7 +300,10 @@ impl Shell {
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let mut on = self.versions.show_saves;
-                let b = ui.checkbox(&mut on, egui::RichText::new("Saves").font(sans(12.0)));
+                // (UX-LEAD: what it shows, said; a bare "Saves" read as a setting)
+                let b = ui
+                    .checkbox(&mut on, egui::RichText::new("Show saves").font(sans(12.0)))
+                    .on_hover_text("List the saves between versions too");
                 self.places.push(("versions:show-saves".into(), b.rect));
                 self.versions.show_saves = on;
             });
