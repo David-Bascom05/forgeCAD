@@ -2,9 +2,11 @@
 
 A machine tool as data: a kinematic tree of joints from the static base, the spindles, turrets
 and tool changer, the mounts where tools and parts attach, and collision bodies. Read by
-`kernel/forge-machine` (`MachineDef::parse_all`); built-in generic machines are in
-`kernel/forge-machine/data/machines.toml`, each body backed by a real part under
-`kernel/forge-machine/parts/`. Search order, as for every CAM library: the project's
+`kernel/forge-machine` (`MachineDef::parse_all`); built-in machines are in
+`kernel/forge-machine/data/machines/<vendor>.toml`, one file per vendor (`generic.toml` holds our
+placeholder machines; build.rs embeds every file in the directory, generic first, then by name;
+a machine name may appear once across them), each body backed by a real part under
+`kernel/forge-machine/parts/<vendor>/<machine>/`. Search order, as for every CAM library: the project's
 `cam/machines/*.toml`, then the user's `~/.config/forgecad/cam/machines/`, then the built-in set; a
 name found earlier hides a later one.
 
@@ -36,6 +38,7 @@ what their absence means.
 | clearance | required | least gap (mm) the collision check holds between bodies |
 | length_joint | mills: required | the linear head joint G43 moves (Z); lathes use X/Z offsets instead |
 | coolants | optional | kinds present: flood mist through air (empty: none declared) |
+| real | optional | true: a real maker's model; every value must be cited (Provenance). false if absent |
 
 ## `[[machine.joint]]`
 
@@ -87,6 +90,29 @@ each; a mill-turn has two part mounts (main, sub).
 `[[machine.body.cyl]]` (`base`, `axis`, `r`, `h`). Optional: `part` (the real `.fg` part the
 primitives envelope), `ignore` (bodies it touches by construction: ways, neighbours). Bodies on one
 link are never checked against each other.
+
+## Provenance: `[[machine.cite]]`
+
+Where each value comes from. A record with `real = true` cites every value `MachineDef::cite_paths`
+lists: per joint `joint.N.range`, `.rapid`, `.max_feed` (and `.accel`, `.pivot` when present); per
+spindle `spindle.N.rpm`, `.nose`, `.max` (and `.curve` with a power curve); per turret
+`turret.N.stations`, `.index_s`, `.center`; `changer.pockets`, `.change_s`, `.max_tool_kg`; every
+`mount.N.at`; every `body.N` (its envelope). Other values may be cited too (`joint.N.axis`,
+`.home`, `spindle.N.interface`, `machine.<anything>` for record-wide facts); a cite naming nothing
+in the record is an error. A path may be cited more than once (sources that agree, or conflict).
+
+| field | | meaning |
+|---|---|---|
+| path | required | the value, as above |
+| status | required | `published` (the source states it), `estimate` (not published: derived as `basis` says), `unknown` (nothing to derive it from), `conflict` (sources disagree) |
+| source | published, conflict: required | URL or document; restate, never copy |
+| taken | with a source: required | YYYY-MM-DD the source was read |
+| value | optional | the source's statement, restated with its units ("30 in (762 mm)") |
+| basis | estimate, unknown: required | how it was derived, and which way it errs |
+| note | conflict: required | what disagrees and which value the record holds |
+
+The record's number is always usable: an estimate or unknown is the *conservative* value (a larger
+collision envelope, a lower rate or acceleration, a smaller travel), never a silent default.
 
 ## Self-collision through travel
 
