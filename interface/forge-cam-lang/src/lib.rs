@@ -5967,6 +5967,107 @@ fn thread_target(
     faces
 }
 
+/// The band a loop of a path cut loop by loop cleared: its closed pass at its deepest level z
+/// (the cutting moves of moves[start..end] at that height, chained end to start) grown and
+/// shrunk by the cutter's radius, cleared from z up. Only where that holds: a flat end mill,
+/// the loop's levels no further apart than its flutes, its first level within its flutes of the
+/// stock's top; else None (the stock stays as it was staged: more material, never less).
+fn loop_band(
+    path: &OpPath,
+    from: &[[f64; 3]],
+    start: usize,
+    end: usize,
+    z: f64,
+    tool: &ToolUse,
+    stock_top: f64,
+) -> Option<Region> {
+    use forge_cam_geom::boolean::{Op, boolean, region_of};
+    use forge_cam_geom::offset::offset;
+    if tool.tool.kind != Kind::Flat {
+        return None;
+    }
+    let (r, lcf) = (0.5 * tool.tool.dc, tool.tool.lcf);
+    // each level's cutting moves in xy, in order: every level must trace the same curve (the
+    // band is credited from z all the way up)
+    let mut per: Vec<(f64, Vec<Seg>)> = vec![];
+    let end = end.min(path.moves.len());
+    for (mv, &a) in path.moves[start.min(end)..end]
+        .iter()
+        .zip(&from[start.min(end)..])
+    {
+        let sg = match *mv {
+            PMove::Line {
+                to,
+                phase: Phase::Cut,
+                ..
+            } => {
+                // a ramp or plunge between levels is no part of a level's curve
+                if to[2] != a[2] || (to[0], to[1]) == (a[0], a[1]) {
+                    continue;
+                }
+                (
+                    to[2],
+                    Seg::Line {
+                        a: p2(a[0], a[1]),
+                        b: p2(to[0], to[1]),
+                    },
+                )
+            }
+            PMove::Arc { to, c, cw, .. } => {
+                if to[2] != a[2] {
+                    continue;
+                }
+                (
+                    to[2],
+                    Seg::Arc {
+                        a: p2(a[0], a[1]),
+                        b: p2(to[0], to[1]),
+                        c: p2(c[0], c[1]),
+                        ccw: !cw,
+                    },
+                )
+            }
+            _ => continue,
+        };
+        match per.iter_mut().find(|(h, _)| *h == sg.0) {
+            Some((_, v)) => v.push(sg.1),
+            None => per.push((sg.0, vec![sg.1])),
+        }
+    }
+    let segs = per.iter().find(|(h, _)| *h == z)?.1.clone();
+    if segs.is_empty() || per.iter().any(|(_, v)| *v != segs) {
+        return None;
+    }
+    let mut levels: Vec<f64> = per.iter().map(|(h, _)| *h).collect();
+    levels.sort_by(f64::total_cmp);
+    let top = *levels.last()?;
+    if top + lcf < stock_top || levels.windows(2).any(|w| w[1] - w[0] > lcf) {
+        return None;
+    }
+    // one closed chain, in order
+    if segs[0].start() != segs.last()?.end() || segs.windows(2).any(|w| w[0].end() != w[1].start()) {
+        return None;
+    }
+    let mut lp = Loop { segs };
+    let poly = loop_polyline(&lp);
+    let mut area = 0.0;
+    for k in 0..poly.len() {
+        let (p, q) = (poly[k], poly[(k + 1) % poly.len()]);
+        area += p[0] * q[1] - q[0] * p[1];
+    }
+    if area < 0.0 {
+        lp = lp.reversed();
+    }
+    let rg = Region { loops: vec![lp] };
+    let (outer, _) = offset(&rg, -r).ok()?;
+    let (inner, _) = offset(&rg, r).ok()?;
+    let band = boolean(&region_of(&outer), &region_of(&inner), Op::Diff).ok()?;
+    if band.is_empty() {
+        return None;
+    }
+    Some(region_of(&band))
+}
+
 /// A region's box: its segments' ends and each arc's extreme points that lie on it (in f64).
 fn region_box(rg: &Region) -> [f64; 4] {
     let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
@@ -6675,8 +6776,58 @@ impl Cam {
             };
             later_top[i] = later_top[i + 1].max(z);
         }
+        // the next cutting move's height from each move on: a loop of a path cut loop by loop
+        // ends where the next cut is above the depth it reached
+        let mut next_cut = vec![f64::NEG_INFINITY; posted.moves.len() + 1];
+        for (i, m) in posted.moves.iter().enumerate().rev() {
+            next_cut[i] = match *m {
+                PMove::Line {
+                    to,
+                    phase: Phase::Cut,
+                    ..
+                }
+                | PMove::Arc { to, .. } => to[2],
+                _ => next_cut[i + 1],
+            };
+        }
+        // the bands each completed loop cleared (from its bottom up), and the depth the op's own
+        // voids were last staged to
+        let mut loop_bands: Vec<(Region, f64)> = vec![];
+        let mut loop_start = 0usize;
+        let stage_of = |bands: &[(Region, f64)], voids_to: f64| {
+            let mut ip = base.clone();
+            if voids_to.is_finite() {
+                for (v, floor) in &self.ops[oi].voids {
+                    let f = floor.max(voids_to);
+                    match v {
+                        None => ip.face_to(f),
+                        Some(r) => ip.cut(r.clone(), f),
+                    }
+                }
+            }
+            for (r, f) in bands {
+                ip.cut(r.clone(), *f);
+            }
+            ip
+        };
+        // the current loop's band down to its last completed level (a loop plunges from level to
+        // level without a link)
+        let mut cur_band: Option<(Region, f64)> = None;
         for (i, m) in posted.moves.iter().enumerate() {
             match *m {
+                // a plunge after cutting a level: within a loop cut loop by loop, that level is
+                // complete, and the loop's band so far is cleared down to it
+                PMove::Line {
+                    phase: Phase::Plunge, ..
+                } if stock_needed && cut_z.is_some() && later_top[i] > cut_z.unwrap_or(0.0) => {
+                    let z = cut_z.take().unwrap_or(0.0);
+                    if let Some(b) = loop_band(posted, &from, loop_start, i, z, &tool, base.max[2]) {
+                        cur_band = Some((b, z));
+                        let mut all = loop_bands.clone();
+                        all.extend(cur_band.clone());
+                        stages.push((i, faces_of(&stage_of(&all, deepest))));
+                    }
+                }
                 // a level's depth: the lowest point it cut (the feed back up is not one)
                 PMove::Line {
                     to,
@@ -6688,21 +6839,34 @@ impl Cam {
                     phase: Phase::Link, ..
                 }
                 | PMove::Rapid { .. } => {
-                    if let Some(z) = cut_z.take()
+                    let z = cut_z.take();
+                    // a loop of a path cut loop by loop ends here: its own band, cleared from
+                    // the depth it reached up (loop_band: only where that is so)
+                    if let Some(z) = z
+                        && stock_needed
+                        && later_top[i] > z
+                        && next_cut[i] > z + 1e-9
+                    {
+                        if let Some(b) = loop_band(posted, &from, loop_start, i, z, &tool, base.max[2]) {
+                            loop_bands.push((b, z));
+                            stages.push((i, faces_of(&stage_of(&loop_bands, deepest))));
+                        } else if let Some(b) = cur_band.take() {
+                            // its last level is not one the band holds for: what it did hold
+                            loop_bands.push(b);
+                        }
+                        cur_band = None;
+                        loop_start = i + 1;
+                    }
+                    if let Some(z) = z
                         && stock_needed
                         && z < deepest
                         && later_top[i] <= z
                         && !self.ops[oi].voids.is_empty()
                     {
                         deepest = z;
-                        let mut ip = base.clone();
-                        for (v, floor) in &self.ops[oi].voids {
-                            let f = floor.max(z);
-                            match v {
-                                None => ip.face_to(f),
-                                Some(r) => ip.cut(r.clone(), f),
-                            }
-                        }
+                        let mut all = loop_bands.clone();
+                        all.extend(cur_band.clone());
+                        let ip = stage_of(&all, z);
                         if std::env::var("FORGE_CAM_DEBUG").is_ok() {
                             let m = ip.material(z + 0.1).map(|m| {
                                 m.map(|m| {
@@ -7667,5 +7831,85 @@ mod feed_tests {
         assert!(feed_over(37_264, 1, 3726.3));
         assert!(!feed_over(37_262, 1, 3726.3));
         assert!(feed_over(1, 1, f64::NAN));
+    }
+}
+
+#[cfg(test)]
+mod loop_band_tests {
+    use super::*;
+
+    fn flat6() -> ToolUse {
+        let t = Library::builtin().tool("flat-6").unwrap().clone();
+        let shape = t.shape(t.lcf + 5.0, None).unwrap();
+        ToolUse {
+            t: 1,
+            tool: t,
+            holder: None,
+            stickout: 0.0,
+            shape,
+        }
+    }
+
+    /// A loop-major contour round a 20 square at z 6 then z 3 (each level the same closed
+    /// curve, plunges between): its band is the tool's width either side of the curve, so the
+    /// finishing level is staged with its own earlier levels' stock gone. Levels that differ, or a
+    /// gap over the flute length, or a top level too far under the stock's top, credit nothing.
+    #[test]
+    fn a_loop_major_contour_credits_the_band_it_swept() {
+        let sq = |z: f64| -> Vec<PMove> {
+            let c = |x: f64, y: f64| PMove::Line {
+                to: [x, y, z],
+                f: 500.0,
+                phase: Phase::Cut,
+            };
+            vec![c(10.0, -10.0), c(10.0, 10.0), c(-10.0, 10.0), c(-10.0, -10.0)]
+        };
+        let path = |levels: &[f64], last: f64| {
+            let mut moves = vec![];
+            for &z in levels {
+                moves.push(PMove::Line {
+                    to: [-10.0, -10.0, z],
+                    f: 200.0,
+                    phase: Phase::Plunge,
+                });
+                moves.extend(sq(z));
+            }
+            if let Some(PMove::Line { to, .. }) = moves.last_mut() {
+                to[0] = last;
+            }
+            OpPath {
+                tool: 0,
+                start: [-10.0, -10.0, 20.0],
+                moves,
+                rpm: 8000.0,
+                coolant: forge_post::Coolant::Flood,
+            }
+        };
+        let froms = |p: &OpPath| {
+            let mut at = p.start;
+            let mut v = vec![];
+            for m in &p.moves {
+                v.push(at);
+                if let PMove::Line { to, .. } | PMove::Rapid { to } | PMove::Arc { to, .. } = m {
+                    at = *to;
+                }
+            }
+            v
+        };
+        let tool = flat6();
+        let p = path(&[6.0, 3.0], -10.0);
+        let f = froms(&p);
+        let band = loop_band(&p, &f, 0, p.moves.len(), 3.0, &tool, 8.0).expect("a band");
+        assert_eq!(region_box(&band), [-13.0, -13.0, 13.0, 13.0]);
+        // the band has the curve's inside offset as a hole
+        assert_eq!(band.loops.len(), 2);
+        // the last level not closed: no band
+        let open = path(&[6.0, 3.0], -9.0);
+        assert!(loop_band(&open, &froms(&open), 0, open.moves.len(), 3.0, &tool, 8.0).is_none());
+        // a gap over the flute length, or a top level too far under the stock's top
+        let lcf = tool.tool.lcf;
+        let far = path(&[3.0 + lcf + 1.0, 3.0], -10.0);
+        assert!(loop_band(&far, &froms(&far), 0, far.moves.len(), 3.0, &tool, 3.0 + lcf).is_none());
+        assert!(loop_band(&p, &f, 0, p.moves.len(), 3.0, &tool, 6.0 + lcf + 1.0).is_none());
     }
 }
