@@ -362,3 +362,90 @@ fn a_lost_reference_refuses_its_solid_not_the_file() {
         Err(forge_step::ImportError::Parse(_))
     ));
 }
+
+/// A cone as a file writes it from a spline system: a rational B-spline surface, a whole turn
+/// round u (closed), linear in v up to its apex, where every u is one point; a disk under it.
+/// The cone's face is a cap: its rim, and a seam from the rim to the apex and back.
+fn nurbs_cone(r: f64, h: f64) -> String {
+    let w = std::f64::consts::FRAC_1_SQRT_2;
+    let ring = [
+        (r, 0.0, 1.0),
+        (r, r, w),
+        (0.0, r, 1.0),
+        (-r, r, w),
+        (-r, 0.0, 1.0),
+        (-r, -r, w),
+        (0.0, -r, 1.0),
+        (r, -r, w),
+        (r, 0.0, 1.0),
+    ];
+    let mut pts = String::new();
+    let mut ids = [[0usize; 2]; 9];
+    let mut n = 100;
+    for (i, &(x, y, _)) in ring.iter().enumerate() {
+        pts += &format!("#{n}=CARTESIAN_POINT('',({x:?},{y:?},0.));\n");
+        ids[i][0] = n;
+        n += 1;
+        pts += &format!("#{n}=CARTESIAN_POINT('',(0.,0.,{h:?}));\n");
+        ids[i][1] = n;
+        n += 1;
+    }
+    let rows: Vec<String> = ids.iter().map(|c| format!("(#{},#{})", c[0], c[1])).collect();
+    let weights: Vec<String> = ring.iter().map(|&(_, _, w)| format!("({w:?},{w:?})")).collect();
+    format!(
+        "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('cone','',(''),(''),'','','');
+FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));
+ENDSEC;
+DATA;
+#1=DIRECTION('',(0.,0.,1.));
+#2=DIRECTION('',(1.,0.,0.));
+#3=CARTESIAN_POINT('',(0.,0.,0.));
+#4=AXIS2_PLACEMENT_3D('',#3,#1,#2);
+#5=CIRCLE('',#4,{r:?});
+#6=CARTESIAN_POINT('',({r:?},0.,0.));
+#7=VERTEX_POINT('',#6);
+#8=EDGE_CURVE('',#7,#7,#5,.T.);
+#9=PLANE('',#4);
+{pts}#20=(BOUNDED_SURFACE()B_SPLINE_SURFACE(2,1,({rows}),.UNSPECIFIED.,.T.,.F.,.F.)B_SPLINE_SURFACE_WITH_KNOTS((3,2,2,2,3),(2,2),(0.,0.25,0.5,0.75,1.),(0.,1.),.UNSPECIFIED.)GEOMETRIC_REPRESENTATION_ITEM()RATIONAL_B_SPLINE_SURFACE(({weights}))REPRESENTATION_ITEM('')SURFACE());
+#30=ORIENTED_EDGE('',*,*,#8,.T.);
+#31=ORIENTED_EDGE('',*,*,#8,.F.);
+#32=EDGE_LOOP('',(#30));
+#33=EDGE_LOOP('',(#31));
+#34=FACE_OUTER_BOUND('',#32,.T.);
+#35=FACE_OUTER_BOUND('',#33,.T.);
+#36=ADVANCED_FACE('',(#34),#20,.T.);
+#37=ADVANCED_FACE('',(#35),#9,.F.);
+#40=CLOSED_SHELL('',(#36,#37));
+#41=MANIFOLD_SOLID_BREP('cone',#40);
+#50=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));
+#51=(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.));
+#52=(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT());
+#53=UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-06),#50,'','');
+#54=(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#53))GLOBAL_UNIT_ASSIGNED_CONTEXT((#50,#51,#52))REPRESENTATION_CONTEXT('',''));
+#55=ADVANCED_BREP_SHAPE_REPRESENTATION('',(#41),#54);
+ENDSEC;
+END-ISO-10303-21;
+",
+        rows = rows.join(","),
+        weights = weights.join(",")
+    )
+}
+
+/// A cap on a NURBS that closes to an apex (a cone from a spline system, as Onshape writes them):
+/// its loop starts at the apex and went once round u through it, which the trace did not count
+/// as a turn, so the face integrated to nothing and the body's mass came out wrong with no error
+/// (PARASOLID's Onshape case: face area 6e-9 against a mesh's 2732, volume -216 against 15956).
+#[test]
+fn a_nurbs_cap_round_its_apex_weighs_right() {
+    let (r, h) = (10.0, 30.0);
+    let imp = import(nurbs_cone(r, h).as_bytes(), &Limits::default()).unwrap();
+    assert!(imp.refusals.is_empty(), "{:?}", imp.refusals);
+    let b = &imp.solids[0].body;
+    let want = forge_math::dmath::PI * r * r * h / 3.0;
+    let m = forge_topo::mass::mass_rel(b, 1e-6).unwrap();
+    assert!((m.volume - want).abs() < 1e-4 * want, "{} vs {want}", m.volume);
+    assert!(b.unverified.is_none(), "{:?}", b.unverified);
+}

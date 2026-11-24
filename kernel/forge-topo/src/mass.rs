@@ -1397,6 +1397,19 @@ fn trace_loop<'a>(
     let mut wind = [0; 2];
     if sing[rot] {
         jumps.extend(jump(last, first));
+        // closed through its singular point, a loop that went once round the period still wound
+        // round it (a cap on a NURBS closing to an apex: rim, seam up, seam down, the whole turn in
+        // the rim), which `jump` cannot see, as it takes whole periods off. Only whole turns count:
+        // a lune from a pole goes half one
+        for a in 0..2 {
+            if let Some(p) = per[a] {
+                let turns = (last[a] - first[a]) / p;
+                let r = turns.round();
+                if r != 0.0 && (turns - r).abs() < 0.05 {
+                    wind[a] = r as i64;
+                }
+            }
+        }
     } else {
         for a in 0..2 {
             if let Some(p) = per[a] {
@@ -2582,7 +2595,13 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
     // shift runs a period along a so the region drawn is the face: positive area, the least
     let mut total = [0.0; NF];
     let mut err = [0.0; NF];
+    // the region's parameter area measured from a0, where G is zero: a loop round a pole (a cap,
+    // its rim at v = 0 and its apex at v = 1) has ∫ a db near nothing, and only ∫ (a - a0) db says
+    // which side of it the face is
     let mut area: f64 = units.iter().map(|u| u.area).sum();
+    if a0.is_finite() {
+        area -= a0 * units.iter().map(|u| u.db).sum::<f64>();
+    }
     for u in &units {
         for m in 0..NF {
             total[m] += u.s[m];
