@@ -9,6 +9,7 @@ use forge_mesh::{Quality, TriMesh, tessellate, to_binary_stl};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment, extrude, revolve};
 use forge_topo::{Body, FaceId, check, genus};
 use std::io::Write;
+use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
 
@@ -18,7 +19,7 @@ fn usage() -> ExitCode {
          forgecad agent list | send WINDOW MESSAGE | status WINDOW REQUEST\n       \
          forgecad update [INSTALL_ROOT]   (install latest main)\n       \
          forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
-         forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|dxf [SHEET])\n       \
+         forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|urdf|dxf [SHEET])\n       \
          forgecad cam FILE.fg [sheet] [--json] [-o OUT]   (a machining document: certified toolpaths, the program or setup sheet)\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
          forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
@@ -303,6 +304,9 @@ fn import(argv: &[String]) -> ExitCode {
     }
     let Some(file) = file else { return usage() };
     let path = std::path::Path::new(&file);
+    if path.extension().is_some_and(|x| x.eq_ignore_ascii_case("urdf")) {
+        return import_urdf(path, Path::new(&dir), json);
+    }
     let stem = path
         .file_name()
         .and_then(|s| s.to_str())
@@ -383,10 +387,12 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
                     a.words.push(v.clone());
                 }
             }
+            // `export F urdf`'s opt-in: 0 for unknown effort and velocity, marked as placeholders
+            "--placeholder-limits" => a.words.push("placeholder-limits".into()),
             "-o" => out = it.next().cloned(),
             w if w.starts_with("--") => {
                 eprintln!(
-                    "unknown option {w} (--json --labels --px --at --base -o; bendsim: --vendor --tooling --sequence --sheet --uts)"
+                    "unknown option {w} (--json --labels --px --at --base -o; bendsim: --vendor --tooling --sequence --sheet --uts; urdf: --placeholder-limits)"
                 );
                 return ExitCode::from(2);
             }
@@ -402,12 +408,29 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             "export" if a.words.first().is_some_and(|w| w == "stl") => "stl",
             "export" if a.words.first().is_some_and(|w| w == "3mf") => "3mf",
             "export" if a.words.first().is_some_and(|w| w == "obj") => "obj",
+            "export" if a.words.first().is_some_and(|w| w == "urdf") => "zip",
             "export" => "step",
             "cam" if a.words.first().is_some_and(|w| w == "sheet") => "html",
             "cam" => "nc",
             _ => "png",
         };
         let stem = a.file.trim_end_matches(".fg");
+        // a URDF is a directory (the robot and its meshes), or the ZIP as it is with `-o X.zip`
+        if cmd == "export"
+            && a.words.first().is_some_and(|w| w == "urdf")
+            && !out.as_deref().is_some_and(|o| o.ends_with(".zip"))
+        {
+            let dir = out.unwrap_or_else(|| format!("{stem}_urdf"));
+            if let Err(e) = unpack(png, Path::new(&dir)) {
+                eprintln!("writing {dir}: {e}");
+                return ExitCode::FAILURE;
+            }
+            if !json {
+                text = format!("wrote {dir}/ {text}");
+            }
+            let _ = writeln!(std::io::stdout(), "{text}");
+            return ExitCode::SUCCESS;
+        }
         let path = out.unwrap_or_else(|| format!("{stem}.{ext}"));
         if let Err(e) = std::fs::write(&path, png) {
             eprintln!("writing {path}: {e}");
@@ -434,6 +457,85 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     } else {
         ExitCode::FAILURE
     }
+}
+
+/// `import ROBOT.urdf [-o DIR]`: the URDF as an unlinked robot document, DIR/ROBOT_robot.fg, its
+/// meshes referenced where they are.
+fn import_urdf(path: &Path, dir: &Path, json: bool) -> ExitCode {
+    let stem = path
+        .file_stem()
+        .map_or_else(|| "robot".into(), |s| s.to_string_lossy().into_owned());
+    let out = dir.join(format!("{stem}_robot.fg"));
+    let urdf_dir = path
+        .parent()
+        .map(|p| {
+            std::fs::canonicalize(if p.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                p
+            })
+        })
+        .and_then(Result::ok)
+        .unwrap_or_default();
+    let _ = std::fs::create_dir_all(dir);
+    let doc_dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    let r = std::fs::read_to_string(path)
+        .map_err(|e| e.to_string())
+        .and_then(|x| forge_lang::urdf_import::import(&x, &urdf_dir, &doc_dir));
+    let i = match r {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("{}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(e) = std::fs::write(&out, &i.text) {
+        eprintln!("{}: {e}", out.display());
+        return ExitCode::FAILURE;
+    }
+    if json {
+        println!(
+            "{}",
+            forge_agent::json::Json::obj(vec![
+                ("ok", true.into()),
+                ("file", out.to_string_lossy().as_ref().into()),
+                ("links", i.links.into()),
+                ("joints", i.joints.into()),
+                (
+                    "dropped",
+                    forge_agent::json::Json::Arr(i.dropped.iter().map(|d| d.as_str().into()).collect()),
+                ),
+            ])
+        );
+    } else {
+        println!("wrote {}: {} links, {} joints", out.display(), i.links, i.joints);
+        for d in &i.dropped {
+            println!("not imported: {d}");
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+/// A URDF export's ZIP written out under `dir`.
+fn unpack(zip: &[u8], dir: &Path) -> Result<(), String> {
+    let members = forge_mesh::zip::read(zip, 1 << 31).map_err(|e| format!("{e:?}"))?;
+    for (name, bytes) in members {
+        // only names the exporter writes: no absolute path, no `..`
+        let rel = Path::new(&name);
+        if rel.is_absolute()
+            || rel
+                .components()
+                .any(|c| !matches!(c, std::path::Component::Normal(_)))
+        {
+            return Err(format!("refusing member {name}"));
+        }
+        let p = dir.join(rel);
+        if let Some(parent) = p.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&p, bytes).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 fn demo(args: &[String]) -> ExitCode {

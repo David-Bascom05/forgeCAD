@@ -59,6 +59,7 @@ per_doc!(
         drawing: Option<super::drawing::DrawingEnv>,
         new_drawing: Option<super::drawing::NewDrawing>,
         dwgdoc: Option<super::dwgdoc::DwgDoc>,
+        robot: Option<super::robot::RobotPanel>,
     ],
     app [
         theme, view, out, view_rect, places, cube_menu, cube_menu_fresh, cube_region, marking, window_box,
@@ -105,6 +106,7 @@ impl ShellDoc {
             drawing: None,
             new_drawing: None,
             dwgdoc: None,
+            robot: None,
         }
     }
 }

@@ -879,3 +879,30 @@ fn cycle_time_counts_arcs() {
     }
     assert!(arcs_seen > 0);
 }
+
+/// A statement's `param`s are names its arguments read, and only its own: `param skim.d` is
+/// `skim`'s, `param xskim.d` is not (the owner was once matched by the tail of its debug text,
+/// which matched nothing, so every param was dropped).
+#[test]
+fn a_statements_params_are_its_own() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let own = forge_cam_lang::run(
+        &doc("param skim.d = 18\nskim = facing(op1, tool: t1, to: d, step: 1)\n"),
+        &dir,
+    );
+    assert!(
+        own.errors.iter().all(|e| !e.contains("unknown name")),
+        "{:?}",
+        own.errors
+    );
+    assert!(own.ops.iter().any(|o| o.name == "skim"), "{:?}", own.errors);
+    let other = forge_cam_lang::run(
+        &doc("param xskim.d = 18\nskim = facing(op1, tool: t1, to: d, step: 1)\n"),
+        &dir,
+    );
+    assert!(
+        other.errors.iter().any(|e| e.contains("unknown name `d`")),
+        "{:?}",
+        other.errors
+    );
+}

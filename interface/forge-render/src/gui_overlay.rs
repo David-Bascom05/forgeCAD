@@ -188,7 +188,7 @@ impl Gui {
             self.shell.overlays(),
             sel,
             self.extras.frames.len() + feats,
-            self.explode_key(),
+            self.explode_key() ^ self.robot_key(),
         );
         if self.extras.was.as_ref() != Some(&key) {
             self.extras.was = Some(key);
@@ -296,6 +296,8 @@ impl Gui {
                 }
             }
         }
+        // a robot's joints and centres of mass, where its panel's values put them
+        self.robot_overlay(r, cam, size, px, &mut out, &mut behind);
         // a located clash's box, seen through the parts that hide it
         if let Some((lo, hi)) = self.fg_located_box {
             let c = |k: usize| {

@@ -205,6 +205,13 @@ impl Session {
             return fail("--base goes with edit");
         }
         let r = match cmd {
+            "build"
+                if self
+                    .read(&a.file)
+                    .is_ok_and(|(_, src)| forge_lang::robot::is_robot(&src)) =>
+            {
+                self.build_robot(a)
+            }
             "build" => self.built(&a.file).map(|(run, src)| Self::report(&run, &src)),
             "check" => self.read(&a.file).map(|(p, src)| {
                 let run = self.run_src(&p, &src, false);
@@ -677,6 +684,9 @@ impl Session {
         {
             return self.export_mesh(a);
         }
+        if a.words.first().is_some_and(|w| w == "urdf") {
+            return self.export_urdf(a);
+        }
         let (run, _) = self.built(&a.file)?;
         if let Some(fmt) = a.words.first().filter(|w| *w == "dxf" || *w == "dwg") {
             let dwg = fmt == "dwg";
@@ -866,6 +876,101 @@ impl Session {
             text,
             json: Json::obj(j),
             png: Some(e.bytes),
+        })
+    }
+
+    /// `urdf [tol MM] [angle DEG] [effort N] [velocity V] [travel MM] [cut J].. [package NAME]`:
+    /// the part or assembly as a URDF robot (research/export/urdf.md). The reply's bytes are a
+    /// ZIP of `NAME.urdf` and `meshes/*.stl`; a refusal is typed (`kind`, `fixes`).
+    fn export_urdf(&mut self, a: &Args) -> Result<Reply, String> {
+        use forge_lang::urdf;
+        let o = urdf::Options::parse(&a.words)?;
+        let (path, src) = self.read(&a.file)?;
+        let name = Path::new(&a.file)
+            .file_stem()
+            .map_or_else(|| "part".into(), |n| n.to_string_lossy().into_owned());
+        let r = self.urdf_of(&path, &src, &name, &o)?;
+        Ok(match r {
+            Ok(e) => Reply {
+                ok: true,
+                text: e.text(),
+                json: e.json(),
+                png: Some(e.zip),
+            },
+            Err(e) => Reply {
+                ok: false,
+                text: format!("error {e}"),
+                json: Json::obj(vec![("ok", false.into()), ("error", e.json())]),
+                png: None,
+            },
+        })
+    }
+
+    /// A part, an assembly or a robot document (`forge_lang::robot`) as URDF: a robot document's
+    /// source is built and its overrides applied. The outer error is the session's (a file it
+    /// cannot read), the inner the export's typed refusal.
+    fn urdf_of(
+        &mut self,
+        path: &Path,
+        src: &str,
+        name: &str,
+        o: &forge_lang::urdf::Options,
+    ) -> Result<Result<forge_lang::urdf::Exported, forge_lang::urdf::UrdfError>, String> {
+        use forge_lang::{robot, urdf};
+        let doc_dir = path.parent().map(Path::to_path_buf);
+        let (robot, src_path, src_text) = if robot::is_robot(src) {
+            let r = match robot::read(src, doc_dir.as_deref()) {
+                Ok(r) => r,
+                Err(es) => {
+                    let t: Vec<String> = es.iter().map(ToString::to_string).collect();
+                    return Ok(Err(urdf::UrdfError::Robot(t.join("; "))));
+                }
+            };
+            let Some(sp) = r.source_path.clone() else {
+                return Ok(urdf::export_unlinked(name, o, &r));
+            };
+            let (sp, text) = self.read(&sp.to_string_lossy())?;
+            (Some(r), sp, text)
+        } else {
+            (None, path.to_path_buf(), src.to_string())
+        };
+        let dir = src_path.parent().map(Path::to_path_buf);
+        let opts = Options {
+            dir: dir.clone(),
+            root: self.root.clone(),
+            render: true,
+            kin: true,
+            overlap: false,
+            ..Options::default()
+        };
+        let run = forge_lang::run(&src_text, opts, Default::default()).0;
+        Ok(urdf::export_robot(&run, name, dir.as_deref(), o, robot.as_ref()))
+    }
+
+    /// `build` of a robot document: the export's report, no file.
+    fn build_robot(&mut self, a: &Args) -> Result<Reply, String> {
+        let (path, src) = self.read(&a.file)?;
+        let name = Path::new(&a.file)
+            .file_stem()
+            .map_or_else(|| "robot".into(), |n| n.to_string_lossy().into_owned());
+        // a build reports what is missing without refusing on it
+        let o = forge_lang::urdf::Options {
+            placeholder: true,
+            ..Default::default()
+        };
+        Ok(match self.urdf_of(&path, &src, &name, &o)? {
+            Ok(e) => Reply {
+                ok: true,
+                text: e.text(),
+                json: e.json(),
+                png: None,
+            },
+            Err(e) => Reply {
+                ok: false,
+                text: format!("error {e}"),
+                json: Json::obj(vec![("ok", false.into()), ("error", e.json())]),
+                png: None,
+            },
         })
     }
 
