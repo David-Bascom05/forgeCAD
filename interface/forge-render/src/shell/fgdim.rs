@@ -440,12 +440,13 @@ impl Shell {
             .x
             + 18.0;
         let at = tip + way * 14.0 + vec2(if way.x < 0.0 { -FIELD_W } else { word_w }, -13.0);
+        // kept in the view; a view narrower than the word and the field (a narrow window) keeps
+        // it at the left (clamp panics on an empty range: the UI audit found it at 480 px)
+        let lo_x = view.left() + 4.0 + word_w;
+        let lo_y = view.top() + 4.0;
         let at = pos2(
-            at.x.clamp(
-                view.left() + 4.0 + word_w,
-                (view.right() - FIELD_W - 60.0).max(view.left()),
-            ),
-            at.y.clamp(view.top() + 4.0, (view.bottom() - 60.0).max(view.top())),
+            at.x.clamp(lo_x, (view.right() - FIELD_W - 60.0).max(lo_x)),
+            at.y.clamp(lo_y, (view.bottom() - 60.0).max(lo_y)),
         );
         egui::Area::new(egui::Id::unique("fg-dim-field"))
             .fixed_pos(at)
