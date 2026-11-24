@@ -288,7 +288,7 @@ fn dialect_shell_edges() {
     let r_arc = format!("{head}N20 I+5 J+0*\nN30 G01 Z-1 F100*\nN40 G02 X+10 Y+0 R+5*\n{tail}");
     let (blocks, _) = gcode::run(&r_arc, &hc).unwrap_or_else(|e| panic!("line {}: {}", e.line, e.what));
     let r_ev = blocks.iter().find_map(|b| match &b.ev {
-        Ev::Arc { centre, .. } => Some(centre.clone()),
+        Ev::Arc { centre, .. } => Some(*centre),
         _ => None,
     });
     assert!(matches!(r_ev, Some(Centre::R(_))), "{r_ev:?}");
