@@ -1122,10 +1122,13 @@ dependencies = [
  "forge-cam",
  "forge-cam-geom",
  "forge-cam-lang",
+ "forge-lang",
  "forge-machine",
  "forge-math",
+ "forge-mesh",
  "forge-post",
  "forge-tooling",
+ "forge-turn-lang",
 ]
 
 [[package]]

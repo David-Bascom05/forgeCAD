@@ -270,6 +270,25 @@ pub const OPS: &[OpSpec] = &[
             f("ramp", "Helical ramp angle", Linking, Deg, "3 (at most 30)"),
         ],
     },
+    // opt-in: last of its group (a small button); nothing picks it in Clear's place
+    OpSpec {
+        func: "adaptive",
+        label: "Adaptive",
+        group: "2D",
+        icon: "cam_adaptive",
+        what: "Roughing around the part with the cutter's engagement held under a cap (opt-in)",
+        fields: &[
+            TOOL,
+            f("from", "Top height", Heights, Len, "the stock's top"),
+            req("to", "Bottom height", Heights, Len),
+            f("step", "Max stepdown", Passes, Len, "half the tool's diameter"),
+            f("engagement", "Max engagement", Passes, Deg, "60"),
+            f("passes", "Passes", Passes, Choice(&["one_way", "two_way"]), "one_way"),
+            f("sweep", "Pass direction", Passes, Deg, "0 (from +x)"),
+            f("leave", "Radial stock to leave", Passes, Len, "0 (walls)"),
+            f("step_length", "Step length", Linking, Len, "the engine's"),
+        ],
+    },
 ];
 
 const LTOOL: Field = req("tool", "Tool", Tab::Tool, Kind::Tool);
