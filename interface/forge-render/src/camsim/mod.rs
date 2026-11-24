@@ -37,6 +37,9 @@ pub struct Marker {
     /// The part of the tool the check names ("cutter", "shank/holder"); empty where none is
     /// said (leftover, a refused op, the machine's contacts).
     pub part: String,
+    /// The tool whose move it is, in words, in an op of several tools (else empty): said once
+    /// in its kind's heading when the kind's places share it, else on each row.
+    pub tool: String,
     /// A leftover region's box (xmin ymin xmax ymax, z0 z1).
     pub region: Option<([f64; 4], f64, f64)>,
     /// Material left by the plan, not missed: a leftover region wholly under the part's bottom
@@ -267,6 +270,7 @@ impl Sim {
                         g.mv
                     ),
                     row: format!("move {} \u{b7} {d:.2} mm into the stock as cut", g.mv),
+                    tool: String::new(),
                     part: "cutter".into(),
                     region: None,
                     planned: false,
@@ -288,6 +292,7 @@ impl Sim {
                         g.mv
                     ),
                     row: format!("move {} \u{b7} {d:.2} mm into the stock as cut", g.mv),
+                    tool: String::new(),
                     part: "shank/holder".into(),
                     region: None,
                     planned: false,
@@ -446,15 +451,15 @@ impl Sim {
                     .or(best.map(|b| b.1))
                     .or_else(|| self.tl.nearest(oi, c.at))
                     .unwrap_or(self.tl.ops[oi].t0);
-                // an op of several tools (a spot drill, then the drill): the row says whose move
-                let row = match self.tl.pos(t) {
-                    Some((_, seg)) if self.tl.ops[oi].tools.len() > 1 => {
-                        match self.cam.sim_tools().get(self.tl.segs[seg].tool as usize) {
-                            Some(tu) => format!("{} \u{b7} {}", tools::tool_words(tu), check_row(c)),
-                            None => check_row(c),
-                        }
-                    }
-                    _ => check_row(c),
+                // an op of several tools (a spot drill, then the drill): whose move it is
+                let tool = match self.tl.pos(t) {
+                    Some((_, seg)) if self.tl.ops[oi].tools.len() > 1 => self
+                        .cam
+                        .sim_tools()
+                        .get(self.tl.segs[seg].tool as usize)
+                        .map(tools::tool_words)
+                        .unwrap_or_default(),
+                    _ => String::new(),
                 };
                 out.push(Marker {
                     op: Some(oi),
@@ -464,7 +469,8 @@ impl Sim {
                     at: c.at,
                     t,
                     text: format!("{}: {}", op.name, check_sentence(c)),
-                    row,
+                    row: check_row(c),
+                    tool,
                     part: c.tool_part.to_string(),
                     region: None,
                     planned: false,
@@ -488,6 +494,7 @@ impl Sim {
                         op.refusal.as_deref().unwrap_or("no reason given")
                     ),
                     row: tidy(op.refusal.as_deref().unwrap_or("no reason given")),
+                    tool: String::new(),
                     part: String::new(),
                     region: None,
                     planned: false,
@@ -531,6 +538,7 @@ impl Sim {
                         "z {:.2} to {:.2} mm \u{b7} {w:.1} \u{d7} {d:.1} mm \u{b7} {}",
                         l.z0, l.z1, l.why
                     ),
+                    tool: String::new(),
                     part: String::new(),
                     region: Some((*b, l.z0, l.z1)),
                     planned,

@@ -785,17 +785,14 @@ fn the_checks_line_is_in_words() {
     );
     assert!(!m.row.contains("bolts") && !m.row.contains("hits"), "{}", m.row);
     // the spot drill's pass and the drill's at the same hole are told apart by their tool
-    let rows: Vec<&str> = sim
+    let rows: Vec<(&str, &str)> = sim
         .markers
         .iter()
         .filter(|m| m.rule == "rapid_into_stock")
-        .map(|m| m.row.as_str())
+        .map(|m| (m.tool.as_str(), m.row.as_str()))
         .collect();
-    assert!(
-        rows.iter()
-            .any(|r| r.starts_with("\u{d8}") && r.contains("spot drill \u{b7} move ")),
-        "{rows:?}"
-    );
+    assert!(rows.iter().any(|r| r.0 == "\u{d8}10 spot drill"), "{rows:?}");
+    assert!(rows.iter().all(|r| r.1.starts_with("move ")), "{rows:?}");
     let mut seen = rows.clone();
     seen.sort();
     seen.dedup();

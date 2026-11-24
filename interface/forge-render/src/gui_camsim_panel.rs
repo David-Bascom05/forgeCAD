@@ -1470,6 +1470,12 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                     v.dedup();
                     v
                 };
+                // the tool, where the kind's places name one: once in the heading if all share it
+                let one_tool = {
+                    let mut v: Vec<&str> = ms.iter().map(|m| m.tool.as_str()).collect();
+                    v.dedup();
+                    (v.len() == 1 && !v[0].is_empty()).then(|| v[0].to_string())
+                };
                 let plural = |w: &str| if n == 1 { w.to_string() } else { format!("{w}s") };
                 let title = match *rank {
                     2 => format!(
@@ -1482,9 +1488,10 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                         setups.join(", ")
                     ),
                     _ => format!(
-                        "{} \u{b7} {n} \u{b7} in {}",
+                        "{} \u{b7} {n} \u{b7} in {}{}",
                         rule_title(rule),
-                        if ops.is_empty() { setups.join(", ") } else { ops.join(", ") }
+                        if ops.is_empty() { setups.join(", ") } else { ops.join(", ") },
+                        one_tool.as_ref().map_or(String::new(), |w| format!(" \u{b7} {w}"))
                     ),
                 };
                 let c = marker_colour(ms[0]);
@@ -1507,7 +1514,11 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                         let to = if all { n } else { (from + SHOWN).min(n) };
                         for (&k, m) in ks.iter().zip(&ms).skip(from).take(to - from) {
                             let picked = st.issue == Some(k);
-                            let mut text = egui::RichText::new(format!("{} \u{b7} {}", clock(m.t), m.row))
+                            let mut text = egui::RichText::new(if m.tool.is_empty() || one_tool.is_some() {
+                                format!("{} \u{b7} {}", clock(m.t), m.row)
+                            } else {
+                                format!("{} \u{b7} {} \u{b7} {}", clock(m.t), m.tool, m.row)
+                            })
                                 .size(11.0)
                                 .color(if *rank == 2 { t.ink2 } else { c });
                             if picked {
