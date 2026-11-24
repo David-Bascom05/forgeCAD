@@ -5406,6 +5406,19 @@ impl Cam {
                             }
                             o => return Err(format!("adaptive: region \"{o}\": \"outside\" or \"pockets\"")),
                         };
+                        // an advisory hint, never a refusal: on levels shallower than the tool's
+                        // diameter the full flute adaptive exists for does not come into play.
+                        // Measured (plan_scurve, hops on): at 0.67 D (the RPTU parts' 4 mm levels,
+                        // 6 mm tool) clear was 1.4-1.8 x faster (rptu3 67.1 s against 36.6 s, rptu4
+                        // 115.3 against 82.6); at 1.48 D (boss, 14.8 mm, 10 mm tool) they tied (162.3
+                        // against 161.9 s); from 2.5 D adaptive was 20-56 % faster round a boss or in
+                        // an open slot (docs/cam.md)
+                        let level = step.min(top - bottom);
+                        if level > 0.0 && level < d {
+                            self.warnings.push(format!(
+                                "{name}: hint: its levels are {level:.1} mm deep, under the tool's {d:.1} mm diameter; on levels this shallow `clear` was 1.4-1.8 x faster than `adaptive` where measured; fix: `clear(...)` with the same tool, from and to"
+                            ));
+                        }
                         let prm = forge_cam::adaptive::Adaptive {
                             phi_max: get_num(a, "engagement", Some(60.0))?,
                             step: get_num(a, "step_length", Some(0.0))?,
