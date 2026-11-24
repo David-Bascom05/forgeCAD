@@ -1,5 +1,6 @@
 import ForgeBoolApply.Keep
 import ForgeBoolApply.ApplySense
+import ForgeBoolApply.Read
 
 /-! The theorems the ledger cites use only the standard axioms: the build fails otherwise. -/
 
@@ -14,3 +15,6 @@ import ForgeBoolApply.ApplySense
 
 /-- info: 'ForgeBoolApply.apply_writes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms ForgeBoolApply.apply_writes
+
+/-- info: 'ForgeBoolApply.read_written' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms ForgeBoolApply.read_written
