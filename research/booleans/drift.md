@@ -297,6 +297,8 @@ answer is to record the distance (§4), or to refuse.
   to above its middle. Wall 43 lies almost wholly inside wall 25, its own face flush too. The
   second union drops the plate's bottom and the flush face below it: eight edges used once.
   Not yet traced.
+- **An n-ary wrong Ok, open** (§9): FaceWrongSide after three notches; a refusal is written and
+  awaits a judgment on its cost.
 - The n-ary boolean's refusals of §9 are refusals, not fixes: the sequential boolean builds
   each of those inputs validly.
 - A Lean statement of the composed bound per merge (δ_out = δ_in + edge tol, per entity), from
@@ -345,3 +347,33 @@ ends are within one tolerance of each other, or either of whose ends lies farthe
 tolerance from a plane the edge bounds. It is cold: only for such short edges. Test:
 `nary_edges_shorter_than_their_tolerances_are_refused` (both pairs; fails without it). Fresh
 n-ary searches of top, edge and angle, both objectives, then find no wrong Ok.
+
+The diag family (§6) found a third kind through `nary`, still open: FaceWrongSide, shrunk to three
+notches of `drift_adv edge` (the same in the world frame), by original index:
+- q0 = [-0.8372800888218773, -0.11373138087108248, -0.2204833551204205, 0.17906482084578879, -0.3544689322679776, 0.15642457524751008];
+- q6 = [-0.6052129218507916, 0.22383341292989567, -0.08696144819919327, -0.5762008893474448, -0.04268567467012552, -0.8144618293755979];
+- q20 = [0.3442284394203804, 1.0, -0.6891012720410121, -0.6789593456834419, 0.6571770356516388, 0.41846620468641493];
+
+- The first notch's top lies within tolerance of the plate's y = 0 wall. The n-ary pass imprints
+  it there: a face of the wall's plane inside the wall's face. (The sequential boolean leaves the
+  wall whole.)
+- The second's top is a hair off the plane: 1.7e-6 to 1.15e-5 along its length. Whether two
+  faces are flush is judged over where they overlap. Over the first's short face it stays within
+  LINEAR, so they are flush; over the long wall around it, it does not, so they are judged to
+  cross. Flushness is not transitive here.
+- So the second's edges are imprinted on the short face only. The crossings with the short
+  face's edges split only those edges, not the second's. The short face takes the second's edges
+  whole as a hole, walked out past its own edge and back. `check` passes it: every edge is used
+  twice.
+- The third boolean finds that face on the wrong side of its loop.
+
+The fix is to judge a face flush with all of a plane's faces or with none, a change to how the
+n-ary pass pairs faces. A refusal is written (proof/drift-tols-m, `SplitDeadEnd`): `split_face`'s
+walk notes where its one way on is back along the piece it came by, and `nary` refuses a kept
+region of a plane, on a face whose split noted one, that turns at such a tip. It refuses the case
+and every saved sequence replays with no n-ary wrong Ok, but it costs 0.17 to 0.38% more than
+without it on the gate's coplanar lines (the test sits in the walk's hottest branch), and it also refuses one Ok that
+`check` passed (a saved angle sequence's op 8, whose region walks a slit too; whether that slit
+was harmful is UNKNOWN). Cheaper forms were tried: a counter shared across threads (up to
+0.08%) is a hidden input, since a concurrent boolean could move it, and refusing in the walk
+itself refused valid sequential Oks. So it is held for a judgment, and the wrong Ok stands.
