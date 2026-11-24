@@ -1475,6 +1475,8 @@ fn table_grid(
     id: impl std::hash::Hash + std::fmt::Debug + Copy,
 ) {
     let rows = table_cells(run);
+    let cols = rows.iter().map(Vec::len).max().unwrap_or(1).max(1) as f32;
+    let col_w = ((inner - 14.0 * (cols - 1.0)) / cols).max(56.0);
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         ui.add_space(PAD);
@@ -1499,7 +1501,12 @@ fn table_grid(
                                 for (s, f) in inline(cell, base, code_ink) {
                                     job.append(&s, 0.0, f);
                                 }
-                                ui.add(egui::Label::new(job).selectable(true).extend());
+                                // each column its share of the panel: a longer cell ends in …,
+                                // whole on hover
+                                ui.scope(|ui| {
+                                    ui.set_max_width(col_w);
+                                    ui.add(egui::Label::new(job).selectable(true).truncate());
+                                });
                             }
                             ui.end_row();
                         }
