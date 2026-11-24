@@ -62,7 +62,12 @@ impl Live {
         }
     }
 
-    pub fn set_scene(&mut self, parts: &[PartMesh], placed: &[Instance], materials: &[Bsdf]) -> Result<(), String> {
+    pub fn set_scene(
+        &mut self,
+        parts: &[PartMesh],
+        placed: &[Instance],
+        materials: &[Bsdf],
+    ) -> Result<(), String> {
         let built = Built::new(parts, placed);
         self.tracer.set_scene(&built, materials, &self.lut)?;
         self.has_scene = true;
@@ -188,7 +193,12 @@ impl Job {
 pub enum Progress {
     Idle,
     /// Job, frame, samples done of all.
-    Running { job: usize, frame: u32, done: u32, of: u32 },
+    Running {
+        job: usize,
+        frame: u32,
+        done: u32,
+        of: u32,
+    },
 }
 
 /// Final renders, one at a time, a few samples a frame.
@@ -280,7 +290,8 @@ impl Queue {
             };
             self.reading = None;
             let path = job.path(self.at.1);
-            self.log.push(got.and_then(|rgba| save(&path, job.size, rgba)).map(|_| path));
+            self.log
+                .push(got.and_then(|rgba| save(&path, job.size, rgba)).map(|_| path));
             let t = self.tracer.as_mut().expect("it read");
             t.reset();
             self.at.1 += 1;
@@ -350,7 +361,11 @@ mod tests {
         };
         assert_eq!(job.path(3), "out/t_0003.png");
         let v = job.view_at(1);
-        assert!((v.eye[0]).abs() < 1e-4 && (v.eye[1] - 10.0).abs() < 1e-4 && v.eye[2] == 5.0, "{:?}", v.eye);
+        assert!(
+            (v.eye[0]).abs() < 1e-4 && (v.eye[1] - 10.0).abs() < 1e-4 && v.eye[2] == 5.0,
+            "{:?}",
+            v.eye
+        );
         assert!((v.forward[1] + 1.0).abs() < 1e-5);
     }
 }

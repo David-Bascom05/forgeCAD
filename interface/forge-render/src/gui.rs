@@ -32,8 +32,6 @@ pub mod gui_docs;
 mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
-#[path = "gui_studio.rs"]
-mod gui_studio;
 #[path = "gui_fgmarks.rs"]
 mod gui_fgmarks;
 #[path = "gui_inspect.rs"]
@@ -46,6 +44,8 @@ mod gui_overlay;
 mod gui_sheet;
 #[path = "gui_speech.rs"]
 pub mod gui_speech;
+#[path = "gui_studio.rs"]
+mod gui_studio;
 #[path = "gui_thermo.rs"]
 mod gui_thermo;
 #[path = "gui_versions.rs"]
@@ -1598,7 +1598,10 @@ impl Gui {
             .next()
             .map(|v| v.repaint_delay)
             .unwrap_or(std::time::Duration::MAX);
-        let again_in = if animating || studio_busy || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
+        let again_in = if animating
+            || studio_busy
+            || self.mark_held.is_some()
+            || self.view.as_ref().is_some_and(|v| v.dirty)
         {
             Some(std::time::Duration::ZERO)
         } else if delay == std::time::Duration::MAX {

@@ -74,6 +74,10 @@ fn close(h: &mut Headless, yaw: f32, dist: f32) {
     c.pitch = 12f32.to_radians();
     c.dist = dist;
     v.nav.jump_to(c);
+    // the view redraws on a change of instant: nudge it
+    if let Some(b) = h.gui.shell.sheet.bend_sim.as_mut() {
+        b.t = (b.t + 1e-6).min(1.0);
+    }
 }
 
 fn shot(h: &mut Headless, name: &str) {
@@ -185,7 +189,7 @@ fn a_flange_closing_on_a_straight_punch_shows_in_red() {
         v.scene
             .placements
             .iter()
-            .any(|p| p.tint[0] > 0.8 && p.tint[1] < 0.2),
+            .any(|p| p.tint[0] > 0.3 && p.tint[0] > 4.0 * p.tint[1] && p.tint[0] > 4.0 * p.tint[2]),
         "a body in red"
     );
 }

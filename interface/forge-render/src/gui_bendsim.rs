@@ -74,37 +74,35 @@ pub fn part_of(m: &Mesh) -> PartMesh {
     }
 }
 
-/// A body's colour (linear-ish rgb) and how metal, until RENDER-STUDIO's appearances land:
-/// ground tool steel, painted frame, the sheet by its material's family.
+/// The appearances library, parsed once (RENDER-STUDIO's: it clones a static list per call).
+fn appearances() -> &'static crate::studio::appearance::Appearances {
+    static A: std::sync::OnceLock<crate::studio::appearance::Appearances> = std::sync::OnceLock::new();
+    A.get_or_init(crate::studio::appearance::Appearances::builtin)
+}
+
+/// A body's tint (linear rgb, metalness) from its appearance (forge_brake::scene::Look's id,
+/// RENDER-STUDIO's library): ground tool steel, machine paint (no maker's livery is in the data:
+/// its neutral default), black-oxide backgauge, concrete floor; the sheet in its forge-material's
+/// appearance, or the panel's part blue when the material is not known; failing bodies red.
 pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
-    if b.hit {
-        return [0.86, 0.16, 0.12, 0.0];
-    }
-    match b.look {
+    let id = if b.hit {
+        "highlight-red"
+    } else {
+        b.look.appearance()
+    };
+    let found = if b.look == Look::Sheet && !b.hit {
+        appearances().viewport_tint(Some("sheet"), material, None)
+    } else {
+        appearances().viewport_tint(Some(id), None, None)
+    };
+    found.unwrap_or(match b.look {
+        Look::Sheet => [0.07, 0.33, 0.81, 0.35],
         Look::Tool => [0.66, 0.67, 0.69, 1.0],
-        // a maker's livery is not in the data: a neutral machine grey
         Look::Frame => [0.46, 0.48, 0.50, 0.15],
         Look::Gauge => [0.16, 0.16, 0.17, 0.6],
         Look::Floor => [0.30, 0.30, 0.29, 0.0],
         Look::Witness => [0.95, 0.10, 0.08, 0.0],
-        Look::Sheet => {
-            // the part in the panel's part blue, set apart from the steel tools; half metal
-            // when its material is a metal
-            let m = material.unwrap_or("").to_ascii_lowercase();
-            let metal = if m.is_empty()
-                || m.contains("steel")
-                || m.contains("alumin")
-                || m.contains("copper")
-                || m.contains("brass")
-            {
-                0.7
-            } else {
-                0.0
-            };
-            // the panel's part blue (shell/bendsim.rs look::PART), linear
-            [0.07, 0.33, 0.81, metal * 0.5]
-        }
-    }
+    })
 }
 
 impl BendView {
@@ -183,7 +181,8 @@ impl Gui {
                 &scene,
             );
             renderer.resize(v.size);
-            renderer.style = v.renderer.style;
+            // the simulation is shown as it would look: studio light, floor shadow, no edges
+            renderer.style = crate::render::VisualStyle::Realistic;
             renderer.look = v.renderer.look.clone();
             renderer.back_colour = v.renderer.back_colour;
             renderer.set_tints(&scene);

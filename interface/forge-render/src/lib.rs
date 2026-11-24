@@ -35,8 +35,8 @@ pub mod live;
 pub mod load;
 pub mod measure;
 pub mod snaps;
-pub mod studio;
 pub mod speech;
+pub mod studio;
 pub mod tess;
 pub mod thermo_view;
 #[cfg(target_arch = "wasm32")]

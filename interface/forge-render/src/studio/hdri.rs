@@ -50,13 +50,19 @@ pub fn cache_dir() -> Option<std::path::PathBuf> {
 #[cfg(not(target_arch = "wasm32"))]
 fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::Digest;
-    sha2::Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+    sha2::Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 /// An HDRI's map: the bundled one from the binary, another from the cache if it's there and
 /// its hash is the pinned one.
 pub fn load(key: &str) -> Result<Env, String> {
-    let h = list().into_iter().find(|h| h.key == key).ok_or(format!("no HDRI {key}"))?;
+    let h = list()
+        .into_iter()
+        .find(|h| h.key == key)
+        .ok_or(format!("no HDRI {key}"))?;
     let bytes = if h.bundled {
         BUNDLED.to_vec()
     } else {
@@ -67,7 +73,10 @@ pub fn load(key: &str) -> Result<Env, String> {
             .map_err(|_| format!("{} is not fetched: run tools/fetch-hdri.sh", h.name))?;
         #[cfg(not(target_arch = "wasm32"))]
         if sha256_hex(&b) != h.sha256 {
-            return Err(format!("{}: its file is not the pinned one (sha256): fetch it again", h.name));
+            return Err(format!(
+                "{}: its file is not the pinned one (sha256): fetch it again",
+                h.name
+            ));
         }
         b
     };
@@ -86,12 +95,20 @@ mod tests {
         assert!(l[0].bundled && l[0].key == "studio_small_09");
         for h in &l {
             assert_eq!(h.licence, "CC0", "{}", h.key);
-            assert!(h.page.starts_with("https://polyhaven.com/a/") && h.sha256.len() == 64, "{}", h.key);
+            assert!(
+                h.page.starts_with("https://polyhaven.com/a/") && h.sha256.len() == 64,
+                "{}",
+                h.key
+            );
         }
         let e = load("studio_small_09").unwrap();
         assert_eq!((e.w, e.h), (512, 256));
         // a lit studio: some pixels far brighter than the room
-        let most = e.rgb.iter().map(|p| p[0].max(p[1]).max(p[2])).fold(0.0f32, f32::max);
+        let most = e
+            .rgb
+            .iter()
+            .map(|p| p[0].max(p[1]).max(p[2]))
+            .fold(0.0f32, f32::max);
         assert!(most > 5.0, "{most}");
         assert!(BUNDLED.len() <= 1 << 20);
     }

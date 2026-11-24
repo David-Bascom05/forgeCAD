@@ -3,10 +3,10 @@
 //! what it writes over the view. The picture itself is the GUI's (`gui_studio.rs`): this holds
 //! what the user chose, and the GUI reads it each frame.
 
+use super::env::EnvId;
 use super::ribbon::{Group, Tool};
 use super::{Action, Shell};
 use crate::studio::appearance::Appearances;
-use super::env::EnvId;
 use egui::{Rect, RichText, Ui};
 
 /// The ribbon's commands (`Action::Env(RenderStudio, c)`).
@@ -23,7 +23,11 @@ pub const RESTART: u16 = 7;
 pub fn lights() -> Vec<String> {
     let mut v = vec!["Studio (drawn)".to_string()];
     for h in crate::studio::hdri::list() {
-        v.push(if h.bundled { format!("{} (bundled)", h.name) } else { h.name });
+        v.push(if h.bundled {
+            format!("{} (bundled)", h.name)
+        } else {
+            h.name
+        });
     }
     v.push("HDRI file".into());
     v
@@ -181,7 +185,11 @@ pub(super) fn command(s: &mut Shell, c: u16) {
 /// A heading in the browser.
 fn head(ui: &mut Ui, s: &Shell, text: &str) {
     ui.add_space(8.0);
-    ui.label(RichText::new(text).font(super::theme::semi(13.0)).color(s.theme.ink));
+    ui.label(
+        RichText::new(text)
+            .font(super::theme::semi(13.0))
+            .color(s.theme.ink),
+    );
     ui.add_space(2.0);
 }
 
@@ -204,7 +212,10 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                     .selected_text(&shown)
                     .width(ui.available_width() - 4.0)
                     .show_ui(ui, |ui| {
-                        if ui.selectable_label(st.looks[k].is_none(), "Material's own").clicked() {
+                        if ui
+                            .selectable_label(st.looks[k].is_none(), "Material's own")
+                            .clicked()
+                        {
                             st.looks[k] = None;
                         }
                         let mut family = "";
@@ -214,7 +225,11 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                                 ui.label(RichText::new(family).small().weak());
                             }
                             let on = st.looks[k].as_deref() == Some(a.name.as_str());
-                            if ui.selectable_label(on, &a.name).on_hover_text(&a.source).clicked() {
+                            if ui
+                                .selectable_label(on, &a.name)
+                                .on_hover_text(&a.source)
+                                .clicked()
+                            {
                                 st.looks[k] = Some(a.name.clone());
                             }
                         }
@@ -234,22 +249,35 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                     }
                 })
                 .response
-                .on_hover_text("Poly Haven HDRIs, CC0; all but the bundled one come from tools/fetch-hdri.sh");
+                .on_hover_text(
+                    "Poly Haven HDRIs, CC0; all but the bundled one come from tools/fetch-hdri.sh",
+                );
             if st.light == lights.len() - 1 {
                 ui.horizontal(|ui| {
                     ui.label("File");
-                    ui.text_edit_singleline(&mut st.hdri).on_hover_text("a Radiance .hdr, equirectangular");
+                    ui.text_edit_singleline(&mut st.hdri)
+                        .on_hover_text("a Radiance .hdr, equirectangular");
                 });
             }
             ui.add(egui::Slider::new(&mut st.turn_deg, -180.0..=180.0).text("Turn °"));
-            ui.add(egui::Slider::new(&mut st.strength, 0.05..=8.0).logarithmic(true).text("Strength"));
+            ui.add(
+                egui::Slider::new(&mut st.strength, 0.05..=8.0)
+                    .logarithmic(true)
+                    .text("Strength"),
+            );
             ui.add(egui::Slider::new(&mut st.exposure, -4.0..=4.0).text("Exposure EV"));
 
             head(ui, s, "Camera");
-            ui.add(egui::Slider::new(&mut st.focal_mm, 14.0..=300.0).logarithmic(true).text("Focal mm"));
+            ui.add(
+                egui::Slider::new(&mut st.focal_mm, 14.0..=300.0)
+                    .logarithmic(true)
+                    .text("Focal mm"),
+            );
             ui.add_enabled(
                 st.depth_of_field,
-                egui::Slider::new(&mut st.f_number, 1.0..=22.0).logarithmic(true).text("f/"),
+                egui::Slider::new(&mut st.f_number, 1.0..=22.0)
+                    .logarithmic(true)
+                    .text("f/"),
             );
 
             head(ui, s, "Output");
@@ -259,7 +287,11 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                 ui.label("×");
                 ui.add(egui::DragValue::new(&mut st.size.1).range(16..=8192));
             });
-            ui.add(egui::Slider::new(&mut st.spp, 16..=8192).logarithmic(true).text("Samples"));
+            ui.add(
+                egui::Slider::new(&mut st.spp, 16..=8192)
+                    .logarithmic(true)
+                    .text("Samples"),
+            );
             ui.add(egui::Slider::new(&mut st.frames, 4..=360).text("Turntable frames"));
             ui.horizontal(|ui| {
                 ui.label("File");

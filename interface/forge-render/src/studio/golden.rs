@@ -52,7 +52,14 @@ fn crank() -> Result<crate::mesh::PartMesh, String> {
 pub fn scene() -> Result<Golden, String> {
     let crank = crank()?;
     let rows = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]];
-    let built = Built::new(&[crank], &[Instance { part: 0, rows, material: 0 }]);
+    let built = Built::new(
+        &[crank],
+        &[Instance {
+            part: 0,
+            rows,
+            material: 0,
+        }],
+    );
     let b = built.bounds.ok_or("the crank has no triangles")?;
     let centre = (b.min + b.max) * 0.5;
     let radius = (b.max - b.min).len() * 0.5;
@@ -124,7 +131,8 @@ pub fn studio_golden() -> js_sys::Promise {
             .map_err(|e| JsValue::from_str(&e))?;
         let g = scene().map_err(|e| JsValue::from_str(&e))?;
         let mut t = super::gpu::Tracer::new(&device, &queue, SIZE);
-        t.set_scene(&g.built, &g.materials, &g.lut).map_err(|e| JsValue::from_str(&e))?;
+        t.set_scene(&g.built, &g.materials, &g.lut)
+            .map_err(|e| JsValue::from_str(&e))?;
         t.set_env(&g.env);
         t.step(&g.view, &g.settings, SPP);
         let floats = t.read_mean_async().await.map_err(|e| JsValue::from_str(&e))?;

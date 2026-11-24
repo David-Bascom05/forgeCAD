@@ -38,7 +38,10 @@ fn the_studio_traces_the_view_and_renders_a_file() {
         st.names
     );
     assert_eq!(st.names.len(), 1);
-    assert_ne!(h.gui.shell.view_tex, shaded, "the view shows the tracer's picture");
+    assert_ne!(
+        h.gui.shell.view_tex, shaded,
+        "the view shows the tracer's picture"
+    );
     if let Ok(dir) = std::env::var("STUDIO_SHOTS") {
         for _ in 0..60 {
             h.step();

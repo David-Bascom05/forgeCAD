@@ -172,13 +172,22 @@ fn best_split(boxes: &[Aabb], centres: &[V3], ids: &[u32], bound: &Aabb, cb: &Aa
     }
     // a leaf costs its primitives; a split one traversal step plus its sides
     let leaf_cost = ids.len() as f32 * bound.area();
-    (best.0.is_finite() && best.0 < leaf_cost + bound.area()).then_some((best.1, best.2))
-        .or_else(|| (ids.len() > 4 * LEAF).then(|| {
-            // nothing pays but the leaf is too big: halve the longest side
-            let d = cb.max - cb.min;
-            let axis = if d.x >= d.y && d.x >= d.z { 0 } else if d.y >= d.z { 1 } else { 2 };
-            (axis, cb.centre().get(axis))
-        }))
+    (best.0.is_finite() && best.0 < leaf_cost + bound.area())
+        .then_some((best.1, best.2))
+        .or_else(|| {
+            (ids.len() > 4 * LEAF).then(|| {
+                // nothing pays but the leaf is too big: halve the longest side
+                let d = cb.max - cb.min;
+                let axis = if d.x >= d.y && d.x >= d.z {
+                    0
+                } else if d.y >= d.z {
+                    1
+                } else {
+                    2
+                };
+                (axis, cb.centre().get(axis))
+            })
+        })
 }
 
 /// A ray's hit on a triangle (Möller & Trumbore 1997) given as its first corner and two edges:
@@ -215,7 +224,13 @@ pub fn hit_box(o: V3, inv: V3, min: V3, max: V3, t_max: f32) -> Option<f32> {
 }
 
 pub fn inverse(d: V3) -> V3 {
-    let f = |x: f32| if x.abs() < 1e-30 { 1e30f32.copysign(x) } else { 1.0 / x };
+    let f = |x: f32| {
+        if x.abs() < 1e-30 {
+            1e30f32.copysign(x)
+        } else {
+            1.0 / x
+        }
+    };
     v3(f(d.x), f(d.y), f(d.z))
 }
 

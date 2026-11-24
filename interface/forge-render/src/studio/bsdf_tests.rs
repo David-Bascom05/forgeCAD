@@ -98,7 +98,11 @@ fn the_tables_hold_what_ggx_reflects() {
     let l = lut();
     // a smooth mirror with F = 1 reflects everything, at any angle
     for mu in [0.2, 0.5, 1.0] {
-        assert!((l.e1(mu, 0.0) - 1.0).abs() < 0.01, "E1({mu}, 0) = {}", l.e1(mu, 0.0));
+        assert!(
+            (l.e1(mu, 0.0) - 1.0).abs() < 0.01,
+            "E1({mu}, 0) = {}",
+            l.e1(mu, 0.0)
+        );
     }
     // roughness loses energy to single scattering, most at grazing
     // at alpha 1, D is flat: about 0.31 at normal incidence (checked by brute force)
@@ -107,7 +111,11 @@ fn the_tables_hold_what_ggx_reflects() {
     assert!((l.e_spec(0.04, 1.0, 0.0) - 0.04).abs() < 0.005);
     for j in 0..LUT_N {
         let r = lut_rough(j);
-        assert!(l.e1_avg(r) <= 1.0 + 1e-3 && l.e1_avg(r) > 0.3, "{r}: {}", l.e1_avg(r));
+        assert!(
+            l.e1_avg(r) <= 1.0 + 1e-3 && l.e1_avg(r) > 0.3,
+            "{r}: {}",
+            l.e1_avg(r)
+        );
     }
 }
 
@@ -121,7 +129,11 @@ fn nothing_reflects_more_than_arrives() {
             if b.transmission > 0.0 {
                 // and from inside the glass
                 let (r2, t2) = albedo(&b, -wo, 20000, 2);
-                assert!(r2 + t2 <= 1.02, "{name} inside rough {} at mu {mu}: {r2} + {t2}", b.rough);
+                assert!(
+                    r2 + t2 <= 1.02,
+                    "{name} inside rough {} at mu {mu}: {r2} + {t2}",
+                    b.rough
+                );
             }
         }
     }
@@ -167,10 +179,16 @@ fn light_paths_reverse() {
                 // f(i, o) / eta_o^2 = f(o, i) / eta_i^2
                 let (eo, ei) = if wo.z > 0.0 { (1.0, b.ior) } else { (b.ior, 1.0) };
                 let (a, c) = (f1.lum() / (eo * eo), f2.lum() / (ei * ei));
-                assert!((a - c).abs() <= 1e-3 * a.max(c) + 1e-6, "{name} {wo:?} {wi:?}: {a} vs {c}");
+                assert!(
+                    (a - c).abs() <= 1e-3 * a.max(c) + 1e-6,
+                    "{name} {wo:?} {wi:?}: {a} vs {c}"
+                );
             } else if (wo.z > 0.0) == (wi.z > 0.0) {
                 let (a, c) = (f1.lum(), f2.lum());
-                assert!((a - c).abs() <= 1e-3 * a.max(c) + 1e-6, "{name} {wo:?} {wi:?}: {a} vs {c}");
+                assert!(
+                    (a - c).abs() <= 1e-3 * a.max(c) + 1e-6,
+                    "{name} {wo:?} {wi:?}: {a} vs {c}"
+                );
             }
         }
     }
@@ -244,7 +262,12 @@ fn the_sampler_draws_what_the_pdf_says() {
             }
         }
         // the expected counts are themselves estimates: allow their noise as well
-        assert!(chi / (dof as f64) < 4.0, "{name} rough {}: chi2/dof {} over {dof} bins, kept {kept}", b.rough, chi / dof as f64);
+        assert!(
+            chi / (dof as f64) < 4.0,
+            "{name} rough {}: chi2/dof {} over {dof} bins, kept {kept}",
+            b.rough,
+            chi / dof as f64
+        );
     }
 }
 
