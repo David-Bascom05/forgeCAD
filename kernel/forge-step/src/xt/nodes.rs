@@ -13,7 +13,11 @@ pub enum XtError {
     /// Not a transmit file: no text `T` or binary `PS` flag after the header.
     NotXt,
     /// The bytes break off or do not make what the format puts there.
-    Bytes { at: usize, want: &'static str, node: Option<(u16, u32)> },
+    Bytes {
+        at: usize,
+        want: &'static str,
+        node: Option<(u16, u32)>,
+    },
     /// A node type the file neither describes nor the base schema has.
     UnknownType { ty: u16, at: usize },
     /// A layout the file describes that cannot be one.
@@ -36,7 +40,10 @@ impl std::fmt::Display for XtError {
                 Ok(())
             }
             XtError::UnknownType { ty, at } => {
-                write!(f, "byte {at}: node type {ty} is neither described by the file nor in the base schema")
+                write!(
+                    f,
+                    "byte {at}: node type {ty} is neither described by the file nor in the base schema"
+                )
             }
             XtError::BadSchema { ty, why } => write!(f, "node type {ty}: {why}"),
             XtError::Machine => write!(f, "binary from a machine with VAX doubles or EBCDIC text"),
@@ -102,7 +109,11 @@ impl<'s> Node<'s> {
         let l = self.layout();
         let i = l.find(name)?;
         let f = &l.fields[i];
-        let n = if f.n == 1 { self.r.var as usize } else { f.n.max(1) as usize };
+        let n = if f.n == 1 {
+            self.r.var as usize
+        } else {
+            f.n.max(1) as usize
+        };
         Some((self.r.start as usize + l.offset[i], f, n * f.kind.width()))
     }
 
@@ -114,10 +125,6 @@ impl<'s> Node<'s> {
         }
     }
 
-    pub(crate) fn has(&self, name: &str) -> bool {
-        self.layout().find(name).is_some()
-    }
-
     /// A scalar: NaN when null or not in this file's layout.
     pub(crate) fn f(&self, name: &str) -> f64 {
         self.all(name).first().copied().unwrap_or(f64::NAN)
@@ -126,7 +133,11 @@ impl<'s> Node<'s> {
     /// A pointer: 0 when null.
     pub(crate) fn p(&self, name: &str) -> u32 {
         let x = self.f(name);
-        if x.is_finite() && x >= 0.0 && x <= f64::from(u32::MAX) { x as u32 } else { 0 }
+        if x.is_finite() && x >= 0.0 && x <= f64::from(u32::MAX) {
+            x as u32
+        } else {
+            0
+        }
     }
 
     pub(crate) fn int(&self, name: &str) -> Option<i64> {
@@ -146,11 +157,6 @@ impl<'s> Node<'s> {
             _ => None,
         }
     }
-
-    /// Length of the variable field.
-    pub(crate) fn var_len(&self) -> usize {
-        self.r.var as usize
-    }
 }
 
 impl Store {
@@ -165,19 +171,6 @@ impl Store {
         self.node(index).filter(|n| n.ty() == ty)
     }
 
-    /// Every node of type `ty`, in file order.
-    pub(crate) fn all_of(&self, ty: u16) -> impl Iterator<Item = Node<'_>> + '_ {
-        self.by_index
-            .iter()
-            .enumerate()
-            .filter(move |(_, k)| **k != 0 && self.recs[**k as usize - 1].ty == ty)
-            .map(move |(i, k)| Node {
-                s: self,
-                r: self.recs[*k as usize - 1],
-                index: i as u32,
-            })
-    }
-
     pub(crate) fn root(&self) -> Option<Node<'_>> {
         self.node(1)
     }
@@ -187,18 +180,30 @@ impl Store {
 fn header_keys(h: &[u8]) -> Vec<(String, String)> {
     let text: String = h
         .split(|&c| c == b'\n')
-        .map(|l| String::from_utf8_lossy(l).trim_end_matches(['\r', ' ']).to_string())
+        .map(|l| {
+            String::from_utf8_lossy(l)
+                .trim_end_matches(['\r', ' '])
+                .to_string()
+        })
         .collect();
     let mut out = Vec::new();
     for part in text.split(';') {
         let part = part.rsplit("**").next().unwrap_or(part);
-        let part = part.strip_prefix("PART1").or(part.strip_prefix("PART2")).unwrap_or(part);
+        let part = part
+            .strip_prefix("PART1")
+            .or(part.strip_prefix("PART2"))
+            .unwrap_or(part);
         let part = part.trim_start_matches(';');
         if let Some((k, v)) = part.split_once('=')
             && !k.is_empty()
-            && k.bytes().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == b'_')
+            && k.bytes()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == b'_')
         {
-            let v = v.replace("^-", " ").replace("^n", "\n").replace("^;", ";").replace("^^", "^");
+            let v = v
+                .replace("^-", " ")
+                .replace("^n", "\n")
+                .replace("^;", ";")
+                .replace("^^", "^");
             out.push((k.to_string(), v));
         }
     }
@@ -211,13 +216,19 @@ fn split_header(b: &[u8]) -> Result<(usize, &[u8], Form, bool), XtError> {
     let mut head: &[u8] = &[];
     if b.starts_with(b"**") {
         let marker = b"**END_OF_HEADER";
-        let k = b.windows(marker.len()).position(|w| w == marker).ok_or(XtError::NotXt)?;
+        let k = b
+            .windows(marker.len())
+            .position(|w| w == marker)
+            .ok_or(XtError::NotXt)?;
         head = &b[..k];
         at = k + b[k..].iter().position(|&c| c == b'\n').ok_or(XtError::NotXt)? + 1;
     }
     let rest = &b[at..];
     // a text file's data may start on a later line
-    let skip = rest.iter().position(|c| !matches!(c, b'\r' | b'\n')).unwrap_or(rest.len());
+    let skip = rest
+        .iter()
+        .position(|c| !matches!(c, b'\r' | b'\n'))
+        .unwrap_or(rest.len());
     let rest = &rest[skip..];
     at += skip;
     match rest {
@@ -270,7 +281,11 @@ impl Reader<'_> {
             let t = self.lex.short_string("a field type")?;
             Kind::of(&t)
         };
-        let xmt = if n == 1 { self.lex.logical("a field's transmit flag")? } else { true };
+        let xmt = if n == 1 {
+            self.lex.logical("a field's transmit flag")?
+        } else {
+            true
+        };
         let Some(kind) = kind else {
             return Err(LexError {
                 at: self.lex.at,
@@ -301,7 +316,11 @@ impl Reader<'_> {
             (false, Some(b)) => b,
             (false, None) => return Err(XtError::UnknownType { ty, at }),
             (true, None) => {
-                let n = self.lex.byte("a new node type's field count").map_err(lexe)?.unwrap_or(0);
+                let n = self
+                    .lex
+                    .byte("a new node type's field count")
+                    .map_err(lexe)?
+                    .unwrap_or(0);
                 if n == 255 {
                     // a type the file takes as unchanged from a base this reader lacks
                     return Err(XtError::UnknownType { ty, at });
@@ -317,7 +336,11 @@ impl Reader<'_> {
                 f
             }
             (true, Some(b)) => {
-                let n = self.lex.byte("a node type's field count").map_err(lexe)?.unwrap_or(0);
+                let n = self
+                    .lex
+                    .byte("a node type's field count")
+                    .map_err(lexe)?
+                    .unwrap_or(0);
                 if n == 255 {
                     b
                 } else {
@@ -450,11 +473,14 @@ pub(crate) fn read(b: &[u8], lim: &Limits) -> Result<Store, XtError> {
         r.lex.short("the most node types").map_err(lexe)?;
     }
     let user = r.lex.int("the user field size").map_err(lexe)?.unwrap_or(0);
-    let user = usize::try_from(user).ok().filter(|&u| u <= 64).ok_or(XtError::Bytes {
-        at: r.lex.at,
-        want: "a user field size of 0 to 64",
-        node: None,
-    })?;
+    let user = usize::try_from(user)
+        .ok()
+        .filter(|&u| u <= 64)
+        .ok_or(XtError::Bytes {
+            at: r.lex.at,
+            want: "a user field size of 0 to 64",
+            node: None,
+        })?;
     let mut recs: Vec<Rec> = Vec::new();
     let mut by_index: Vec<u32> = Vec::new();
     let mut vals: Vec<f64> = Vec::new();
@@ -504,7 +530,11 @@ pub(crate) fn read(b: &[u8], lim: &Limits) -> Result<Store, XtError> {
         let start = vals.len();
         let fields = layout.fields.clone();
         for f in &fields {
-            let n = if f.n == 1 { var as usize } else { f.n.max(1) as usize };
+            let n = if f.n == 1 {
+                var as usize
+            } else {
+                f.n.max(1) as usize
+            };
             if vals.len() + n * f.kind.width() > lim.max_values {
                 return Err(XtError::TooBig);
             }

@@ -3,11 +3,11 @@
 //! parameters, by the chain rule.
 
 use super::geom::Param;
-use forge_geom::surface::SurfDeriv;
 use forge_geom::CurveGeom;
-use forge_math::Vec3;
 use forge_geom::curve::{CurveDeriv, Domain1, ProcCurve, ProceduralCurve};
+use forge_geom::surface::SurfDeriv;
 use forge_geom::{Curve, Surface, SurfaceGeom};
+use forge_math::Vec3;
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec2, tol};
 use std::sync::Arc;
 
@@ -24,8 +24,9 @@ impl OnSurface {
         let d = me.c.domain();
         if let Param::Map(s, _) = &me.s {
             let dom = s.domain();
-            let inside =
-                |x: f64, r: &forge_geom::Domain1| r.period.is_some() || (x >= r.lo - 1e-6 && x <= r.hi + 1e-6);
+            let inside = |x: f64, r: &forge_geom::Domain1| {
+                r.period.is_some() || (x >= r.lo - 1e-6 && x <= r.hi + 1e-6)
+            };
             for k in 0..=8 {
                 let p = me.uv(d.lo + d.width() * f64::from(k) / 8.0);
                 if !p.x.is_finite() || !p.y.is_finite() || !inside(p.x, &dom.u) || !inside(p.y, &dom.v) {
@@ -52,7 +53,14 @@ impl OnSurface {
 
     /// The surface's point and derivatives at (mapped) parameters.
     fn sd(&self, uv: Point2) -> SurfDeriv {
-        match &self.s {
+        param_deriv(&self.s, uv)
+    }
+}
+
+/// A file surface's point and derivatives at its (mapped) parameters.
+pub(crate) fn param_deriv(s: &Param, uv: Point2) -> SurfDeriv {
+    {
+        match s {
             Param::Map(s, _) => s.deriv(uv),
             Param::Swept { c, cs, d, k } => {
                 let cd = c.deriv(cs * uv.x);
@@ -99,7 +107,11 @@ impl ProceduralCurve for OnSurface {
         CurveDeriv {
             p: s.p,
             d1: s.du * d1.x + s.dv * d1.y,
-            d2: s.duu * (d1.x * d1.x) + s.duv * (2.0 * d1.x * d1.y) + s.dvv * (d1.y * d1.y) + s.du * d2.x + s.dv * d2.y,
+            d2: s.duu * (d1.x * d1.x)
+                + s.duv * (2.0 * d1.x * d1.y)
+                + s.dvv * (d1.y * d1.y)
+                + s.du * d2.x
+                + s.dv * d2.y,
         }
     }
 
@@ -143,7 +155,11 @@ impl ProceduralCurve for OnSurface {
             }
             t = next;
         }
-        if self.point(t).distance_sq(p) <= best.0 { t } else { best.1 }
+        if self.point(t).distance_sq(p) <= best.0 {
+            t
+        } else {
+            best.1
+        }
     }
 
     fn bbox(&self, range: Interval) -> Box3 {
@@ -156,7 +172,10 @@ impl ProceduralCurve for OnSurface {
                 self.lin(bx.x.lo, bx.y.hi),
                 self.lin(bx.x.hi, bx.y.lo),
             ];
-            let (mut u, mut v) = (Interval::new(f64::INFINITY, f64::NEG_INFINITY), Interval::new(f64::INFINITY, f64::NEG_INFINITY));
+            let (mut u, mut v) = (
+                Interval::new(f64::INFINITY, f64::NEG_INFINITY),
+                Interval::new(f64::INFINITY, f64::NEG_INFINITY),
+            );
             for c in corners {
                 u = Interval::new(u.lo.min(c.x), u.hi.max(c.x));
                 v = Interval::new(v.lo.min(c.y), v.hi.max(c.y));
@@ -166,7 +185,9 @@ impl ProceduralCurve for OnSurface {
         // samples, grown by how far the curve can stray between them at its greatest speed
         let n = 64;
         let w = range.width();
-        let pts: Vec<Point3> = (0..=n).map(|k| self.point(range.lo + w * f64::from(k) / f64::from(n))).collect();
+        let pts: Vec<Point3> = (0..=n)
+            .map(|k| self.point(range.lo + w * f64::from(k) / f64::from(n)))
+            .collect();
         let pad = self.speed_bound(range) * w / f64::from(n);
         Box3::from_points(pts.iter().copied()).grow(pad)
     }

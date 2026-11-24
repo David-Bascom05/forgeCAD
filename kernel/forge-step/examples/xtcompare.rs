@@ -35,9 +35,22 @@ fn kind(s: &Surface) -> &'static str {
     }
 }
 
-fn sum(b: &forge_topo::Body) -> Sum {
-    let m = mass::mass_rel(b, 1e-6).ok();
-    let bx = b.faces_box();
+/// The box of the edges, sampled: a face's own box can be loose (a surface's over its domain).
+fn edge_box(b: &forge_topo::Body) -> forge_math::Box3 {
+    use forge_geom::CurveGeom;
+    let mut pts = Vec::new();
+    for e in &b.edges {
+        for k in 0..=32 {
+            pts.push(e.curve.eval(e.range.lo + e.range.width() * f64::from(k) / 32.0));
+        }
+    }
+    forge_math::Box3::from_points(pts)
+}
+
+fn sum(s: &forge_step::Solid) -> Sum {
+    let b = &s.body;
+    let m = s.mass.clone().or_else(|| mass::mass_rel(b, 1e-6).ok());
+    let bx = edge_box(b);
     let mut kinds = BTreeMap::new();
     for f in b.face_ids() {
         *kinds.entry(kind(&b.face(f).surface)).or_default() += 1;
@@ -48,7 +61,16 @@ fn sum(b: &forge_topo::Body) -> Sum {
         area: m.as_ref().map_or(f64::NAN, |m| m.area),
         bx: [bx.x.lo, bx.x.hi, bx.y.lo, bx.y.hi, bx.z.lo, bx.z.hi],
         kinds,
-        valid: forge_topo::check(b).is_empty(),
+        valid: if std::env::var_os("XT_NOCHECK").is_some() {
+            b.unverified.is_none()
+        } else {
+            if std::env::var_os("XT_TRACE").is_some() {
+                eprintln!("checking a body of {} faces", b.face_ids().count());
+            }
+            // the check on a budget: a body read wrong can send its searches on for ever
+            let _b = forge_geom::budget::scoped(1 << 24);
+            forge_topo::check(b).is_empty()
+        },
     }
 }
 
@@ -79,12 +101,23 @@ fn main() {
     let xt = &args[0];
     let step = args.get(1).filter(|s| !s.is_empty());
     let (x, xs, xe) = read(xt);
-    let mut out = format!("{{\"xt\":\"{}\",\"xt_secs\":{xs:.2},\"xt_error\":\"{xe}\"", esc(xt));
-    let xsum: Vec<Sum> = x.as_ref().map(|i| i.solids.iter().map(|s| sum(&s.body)).collect()).unwrap_or_default();
+    let mut out = format!(
+        "{{\"xt\":\"{}\",\"xt_secs\":{xs:.2},\"xt_error\":\"{xe}\"",
+        esc(xt)
+    );
+    let xsum: Vec<Sum> = x
+        .as_ref()
+        .map(|i| i.solids.iter().map(sum).collect())
+        .unwrap_or_default();
     if let Some(i) = &x {
         let mut why: BTreeMap<String, usize> = BTreeMap::new();
         for r in &i.refusals {
-            *why.entry(format!("{}: {}", r.kind, esc(&r.why).chars().take(80).collect::<String>())).or_default() += 1;
+            *why.entry(format!(
+                "{}: {}",
+                r.kind,
+                esc(&r.why).chars().take(80).collect::<String>()
+            ))
+            .or_default() += 1;
         }
         let w: Vec<String> = why.iter().map(|(k, n)| format!("\"{k}\":{n}")).collect();
         out += &format!(
@@ -95,12 +128,55 @@ fn main() {
             xsum.iter().filter(|s| !s.valid).count()
         );
     }
+    if std::env::var_os("XT_TOTALBOX").is_some() {
+        let mut t = [
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        ];
+        for s in &xsum {
+            for k in 0..3 {
+                t[2 * k] = t[2 * k].min(s.bx[2 * k]);
+                t[2 * k + 1] = t[2 * k + 1].max(s.bx[2 * k + 1]);
+            }
+        }
+        eprintln!(
+            "total box {:?} extents {:.3} {:.3} {:.3}",
+            t,
+            t[1] - t[0],
+            t[3] - t[2],
+            t[5] - t[4]
+        );
+        for s in &xsum {
+            eprintln!("solidbox {:?}", s.bx);
+        }
+        if let Some(i) = &x {
+            for (k, s) in i.solids.iter().enumerate() {
+                for f in s.body.face_ids() {
+                    if let Surface::Cylinder(c) = &s.body.face(f).surface {
+                        let (o, z) = (c.frame.origin, forge_math::Vec3::from(c.frame.z()));
+                        eprintln!(
+                            "axis {k} {} {} {} {} {} {} {}",
+                            o.x, o.y, o.z, z.x, z.y, z.z, c.radius
+                        );
+                    }
+                }
+            }
+        }
+    }
     if let Some(sp) = step {
         let (st, ss, se) = read(sp);
         out += &format!(",\"step_secs\":{ss:.2},\"step_error\":\"{se}\"");
         if let Some(i) = &st {
-            let ssum: Vec<Sum> = i.solids.iter().map(|s| sum(&s.body)).collect();
-            out += &format!(",\"step_solids\":{},\"step_refusals\":{}", i.solids.len(), i.refusals.len());
+            let ssum: Vec<Sum> = i.solids.iter().map(sum).collect();
+            out += &format!(
+                ",\"step_solids\":{},\"step_refusals\":{}",
+                i.solids.len(),
+                i.refusals.len()
+            );
             // pair each XT solid with the unused STEP solid nearest in box and volume
             let mut used = vec![false; ssum.len()];
             let (mut paired, mut face_eq, mut vol_ok, mut box_ok, mut kinds_eq) = (0, 0, 0, 0, 0);
@@ -109,7 +185,8 @@ fn main() {
             for a in &xsum {
                 let score = |b: &Sum| {
                     let d: f64 = (0..6).map(|k| (a.bx[k] - b.bx[k]).abs()).sum();
-                    d + (a.volume - b.volume).abs().powf(1.0 / 3.0)
+                    let dv = (a.volume - b.volume).abs().powf(1.0 / 3.0);
+                    d + if dv.is_finite() { dv } else { 0.0 }
                 };
                 let best = ssum
                     .iter()
@@ -117,7 +194,10 @@ fn main() {
                     .filter(|(k, _)| !used[*k])
                     .min_by(|p, q| score(p.1).total_cmp(&score(q.1)));
                 let Some((k, b)) = best else { continue };
-                let size = (0..3).map(|j| b.bx[2 * j + 1] - b.bx[2 * j]).fold(0.0, f64::max).max(1e-9);
+                let size = (0..3)
+                    .map(|j| b.bx[2 * j + 1] - b.bx[2 * j])
+                    .fold(0.0, f64::max)
+                    .max(1e-9);
                 let dbox = (0..6).map(|j| (a.bx[j] - b.bx[j]).abs()).fold(0.0, f64::max) / size;
                 if dbox > 0.05 {
                     continue;
@@ -153,7 +233,12 @@ fn main() {
             for (k, s) in v.iter().enumerate() {
                 eprintln!(
                     "{tag} {k}: faces {} vol {:.6} area {:.4} valid {} box {:?} {:?}",
-                    s.faces, s.volume, s.area, s.valid, s.bx.map(|x| (x * 1000.0).round() / 1000.0), s.kinds
+                    s.faces,
+                    s.volume,
+                    s.area,
+                    s.valid,
+                    s.bx.map(|x| (x * 1000.0).round() / 1000.0),
+                    s.kinds
                 );
             }
         };
@@ -161,13 +246,24 @@ fn main() {
         if let Some(sp) = step
             && let (Some(i), _, _) = read(sp)
         {
-            let v: Vec<Sum> = i.solids.iter().map(|s| sum(&s.body)).collect();
+            let v: Vec<Sum> = i.solids.iter().map(sum).collect();
             show("step", &v);
         }
         if let Some(i) = &x {
             for (k, s) in i.solids.iter().enumerate() {
+                let _b = forge_geom::budget::scoped(1 << 24);
+                if std::env::var_os("XT_NOCHECK").is_some() {
+                    continue;
+                }
                 for p in forge_topo::check(&s.body).iter().take(3) {
-                    eprintln!("xt {k} problem: {}", esc(&format!("{p:?}")).chars().take(300).collect::<String>());
+                    eprintln!(
+                        "xt {k} problem: {}",
+                        esc(&format!("{p:?}")).chars().take(300).collect::<String>()
+                    );
+                    if let forge_topo::check::Problem::FaceWrongSide { face, .. } = p {
+                        let fc = &s.body.faces[face.0 as usize];
+                        eprintln!("  surface {} same {}", fc.surface.kind(), fc.same_sense);
+                    }
                     if let forge_topo::check::Problem::LoopsCross { face } = p {
                         use forge_geom::{CurveGeom, SurfaceGeom};
                         let b = &s.body;
@@ -193,13 +289,23 @@ fn main() {
                     if let forge_topo::check::Problem::LoopBroken { lp, .. } = p {
                         let b = &s.body;
                         let l = &b.loops[lp.0 as usize];
-                        eprintln!("  face {:?} surface {}", l.face, kind(&b.faces[l.face.0 as usize].surface));
+                        eprintln!(
+                            "  face {:?} surface {}",
+                            l.face,
+                            kind(&b.faces[l.face.0 as usize].surface)
+                        );
                         for c in l.coedges() {
                             let ce = &b.coedges[c.0 as usize];
                             let e = &b.edges[ce.edge.0 as usize];
-                            let (p0, p1) = (b.vertices[e.start.0 as usize].point, b.vertices[e.end.0 as usize].point);
+                            let (p0, p1) = (
+                                b.vertices[e.start.0 as usize].point,
+                                b.vertices[e.end.0 as usize].point,
+                            );
                             let ck = format!("{:?}", e.curve).chars().take(12).collect::<String>();
-                            eprintln!("   {:?} fwd {} {ck} {:?} -> {:?} range {:?}", ce.edge, ce.forward, p0, p1, e.range);
+                            eprintln!(
+                                "   {:?} fwd {} {ck} {:?} -> {:?} range {:?}",
+                                ce.edge, ce.forward, p0, p1, e.range
+                            );
                         }
                     }
                 }

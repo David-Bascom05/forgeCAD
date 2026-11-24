@@ -6,11 +6,11 @@ pub use brep::{BrepTopo, Used};
 pub mod fit;
 mod heal;
 mod iges;
-pub mod xt;
 pub mod nurbs;
 pub mod part21;
 pub mod read;
 pub mod write;
+pub mod xt;
 
 pub use fit::{DEFAULT_TOL, Fit, SHEET_TOL};
 pub use part21::Limits;

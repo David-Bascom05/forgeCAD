@@ -72,8 +72,6 @@ pub(crate) struct Layout {
     pub fields: Vec<Field>,
     /// Each field's first value; the variable field, if any, is last.
     pub offset: Vec<usize>,
-    /// Values before the variable field.
-    pub fixed: usize,
     pub variable: bool,
 }
 
@@ -94,10 +92,10 @@ impl Layout {
                 at += f.kind.width() * (f.n.max(1) as usize);
             }
         }
+        let _ = at;
         Some(Layout {
             fields,
             offset,
-            fixed: at,
             variable,
         })
     }
@@ -138,7 +136,9 @@ fn base_src(ty: u16) -> Option<String> {
             "node_id:d attributes:p tolerance:f fin:p previous:p next:p curve:p next_on_curve:p \
              previous_on_curve:p owner:p",
         ),
-        17 => s("attributes:p loop:p forward:p backward:p vertex:p other:p edge:p curve:p next_at_vx:p sense:c"),
+        17 => {
+            s("attributes:p loop:p forward:p backward:p vertex:p other:p edge:p curve:p next_at_vx:p sense:c")
+        }
         18 => s("node_id:d attributes:p fin:p previous:p next:p point:p tolerance:f owner:p"),
         19 => s("node_id:d attributes:p body:p next:p previous:p shell:p type:c"),
         29 => s("node_id:d attributes:p owner:p next:p previous:p pvec:v"),
@@ -169,9 +169,9 @@ fn base_src(ty: u16) -> Option<String> {
         74 => s("n_entries:d next_block:p entries:p[]"),
         79 | 102 => s("string:c[]"),
         80 => s("next:p identifier:p type_id:d actions:u[8] field_names:p legal_owners:l[14] fields:u[]"),
-        81 => s(
-            "node_id:d definition:p owner:p next:p previous:p next_of_type:p previous_of_type:p fields:p[]",
-        ),
+        81 => {
+            s("node_id:d definition:p owner:p next:p previous:p next_of_type:p previous_of_type:p fields:p[]")
+        }
         82 | 88 => s("values:d[]"),
         83 => s("values:f[]"),
         84 => s("values:c[]"),
@@ -273,10 +273,9 @@ mod tests {
         let l = Layout::new(base(40).unwrap()).unwrap();
         assert_eq!(l.offset[5], 5);
         assert_eq!(l.offset[6], 7);
-        assert_eq!(l.fixed, 7);
         assert!(l.variable);
         let l = Layout::new(base(100).unwrap()).unwrap();
-        assert_eq!(l.fixed, 4 + 9 + 3 + 1 + 1 + 3);
+        assert_eq!(l.offset[8], 4 + 9 + 3 + 1 + 1);
         assert!(!l.variable);
     }
 }

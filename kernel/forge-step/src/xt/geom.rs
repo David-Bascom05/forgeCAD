@@ -7,8 +7,8 @@
 
 use super::nodes::{Node, Store};
 use super::spcurve::OnSurface;
-use crate::read::{Refusal, extruded, net_of_curve, turned};
 use crate::nurbs::Nurbs;
+use crate::read::{Refusal, extruded, net_of_curve, turned};
 use forge_geom::blend::{Blend, Pipe, foot, offset};
 use forge_geom::intcurve::{IntCurve, direction, refine};
 use forge_geom::spline::{Spline, SplineCurve};
@@ -219,7 +219,11 @@ impl<'s> Geo<'s> {
 
     fn real(&self, n: &Node, name: &str) -> R<f64> {
         let x = n.f(name);
-        if x.is_finite() { Ok(x) } else { refuse(n.index, n.ty(), format!("its {name} is null")) }
+        if x.is_finite() {
+            Ok(x)
+        } else {
+            refuse(n.index, n.ty(), format!("its {name} is null"))
+        }
     }
 
     fn frame(&self, n: &Node, o: &str, z: &str, x: &str) -> R<Frame> {
@@ -232,6 +236,12 @@ impl<'s> Geo<'s> {
 
     /// A surface node as the kernel's, and whether the kernel's natural normal agrees with the
     /// file's oriented one.
+    /// Whether a surface node is a rolling-ball blend, whose orientation the build settles from
+    /// its neighbours.
+    pub(crate) fn is_blend(&self, idx: u32) -> bool {
+        self.s.node(idx).is_some_and(|n| n.ty() == 56)
+    }
+
     pub(crate) fn surface(&mut self, idx: u32) -> R<(Surface, bool)> {
         if let Some(s) = self.surfaces.get(&idx) {
             return Ok(s.clone());
@@ -336,7 +346,10 @@ impl<'s> Geo<'s> {
                     why: "its section has no spline form".into(),
                 })?;
                 match extruded(net, dir.into()) {
-                    Some(s) => (s, true),
+                    Some(s) => {
+                        let natural = self.agrees(idx, &s)?;
+                        (s, natural)
+                    }
                     None => return refuse(idx, ty, "the sweep makes no surface"),
                 }
             }
@@ -348,9 +361,11 @@ impl<'s> Geo<'s> {
                     kind: "SPUN_SURF".into(),
                     why: "its profile has no spline form".into(),
                 })?;
-                // the kernel's u is the angle and v the profile's: the natural normal turns over
                 match turned((o, z.into()), net, 1e-7 * k) {
-                    Some(s) => (s, false),
+                    Some(s) => {
+                        let natural = self.agrees(idx, &s)?;
+                        (s, natural)
+                    }
                     None => return refuse(idx, ty, "the spin makes no surface"),
                 }
             }
@@ -380,7 +395,11 @@ impl<'s> Geo<'s> {
         let kn = self.node(at, knots, "the knots")?;
         let (m, kn) = (m.all("mult"), kn.all("knots"));
         if !(n.is_finite() && n >= 2.0 && n as usize <= m.len().min(kn.len())) {
-            return refuse(at, ty, format!("{n} distinct knots, of {} and {} given", kn.len(), m.len()));
+            return refuse(
+                at,
+                ty,
+                format!("{n} distinct knots, of {} and {} given", kn.len(), m.len()),
+            );
         }
         let (m, kn) = (&m[..n as usize], &kn[..n as usize]);
         let total: f64 = m.iter().sum();
@@ -403,7 +422,11 @@ impl<'s> Geo<'s> {
         let a = vx.all("vertices");
         match a.get(..n * dim) {
             Some(a) if a.iter().all(|x| x.is_finite()) => Ok(a),
-            _ => refuse(at, ty, format!("{} control values for {n} vertices of {dim}", a.len())),
+            _ => refuse(
+                at,
+                ty,
+                format!("{} control values for {n} vertices of {dim}", a.len()),
+            ),
         }
     }
 
@@ -551,7 +574,15 @@ impl<'s> Geo<'s> {
         }
         let flat = self.nurbs_curve(idx, bc.p("nurbs"), true)?;
         let Some(param) = self.param_of(n.p("surface"))? else {
-            return refuse(idx, ty, "a curve in the parameters of a surface this cannot evaluate there");
+            let st = self.s.node(n.p("surface")).map_or(0, |x| x.ty());
+            return refuse(
+                idx,
+                ty,
+                format!(
+                    "a curve in the parameters of a {} surface, which are not read",
+                    type_name(st)
+                ),
+            );
         };
         match OnSurface::curve(param, flat) {
             Some(c) => Ok(c),
@@ -563,7 +594,9 @@ impl<'s> Geo<'s> {
     /// mapped (lengths are metres there, mm here), or the file's definition (swept, spun).
     fn param_of(&mut self, sidx: u32) -> R<Option<Param>> {
         let k = self.xf.k;
-        let Some(n) = self.s.node(sidx) else { return Ok(None) };
+        let Some(n) = self.s.node(sidx) else {
+            return Ok(None);
+        };
         let map = match n.ty() {
             // P + uX + vY in metres
             50 => [[k, 0.0], [0.0, k]],
@@ -581,14 +614,28 @@ impl<'s> Geo<'s> {
                 });
             }
             67 => {
-                let Some((c, cs)) = self.in_file_param(n.p("section"))? else { return Ok(None) };
+                let Some((c, cs)) = self.in_file_param(n.p("section"))? else {
+                    return Ok(None);
+                };
                 let d = self.dir(&n, "sweep")?;
-                return Ok(Some(Param::Swept { c, cs, d: d.into(), k }));
+                return Ok(Some(Param::Swept {
+                    c,
+                    cs,
+                    d: d.into(),
+                    k,
+                }));
             }
             68 => {
-                let Some((c, cs)) = self.in_file_param(n.p("profile"))? else { return Ok(None) };
+                let Some((c, cs)) = self.in_file_param(n.p("profile"))? else {
+                    return Ok(None);
+                };
                 let (p, a) = (self.point(&n, "base")?, self.dir(&n, "axis")?);
-                return Ok(Some(Param::Spun { c, cs, p, a: a.into() }));
+                return Ok(Some(Param::Spun {
+                    c,
+                    cs,
+                    p,
+                    a: a.into(),
+                }));
             }
             _ => return Ok(None),
         };
@@ -596,11 +643,44 @@ impl<'s> Geo<'s> {
         Ok(Some(Param::Map(s, map)))
     }
 
+    /// Whether a kernel surface made for file surface `idx` (swept or spun) has the file's
+    /// natural normal: the two normals compared where the file's definition puts a point.
+    fn agrees(&mut self, idx: u32, s: &Surface) -> R<bool> {
+        use forge_geom::SurfaceGeom;
+        let Some(param) = self.param_of(idx)? else {
+            return Ok(true);
+        };
+        let c = match &param {
+            Param::Swept { c, .. } | Param::Spun { c, .. } => c.clone(),
+            Param::Map(..) => return Ok(true),
+        };
+        // the profile's middle, off any pole, a little round
+        let d = c.domain().interval();
+        let mut votes = 0i32;
+        for (f, v) in [(0.5, 0.3), (0.37, 1.1), (0.63, 2.0)] {
+            let u = match &param {
+                Param::Swept { cs, .. } | Param::Spun { cs, .. } => (d.lo + d.width() * f) / cs,
+                Param::Map(..) => 0.0,
+            };
+            let sd = super::spcurve::param_deriv(&param, Point2::new(u, v));
+            let n = sd.du.cross(sd.dv);
+            if let Some(m) = s.normal(s.project(sd.p)) {
+                let dot = n.dot(m.into());
+                if dot.abs() > 1e-12 * n.length() {
+                    votes += if dot > 0.0 { 1 } else { -1 };
+                }
+            }
+        }
+        Ok(votes >= 0)
+    }
+
     /// A curve and the factor from the file's parameter on it to the kernel's: lines' run in
     /// metres there and mm here; conics' are angles and splines' their knots in both. None for a
     /// curve whose file parameter the kernel's does not follow.
     fn in_file_param(&mut self, idx: u32) -> R<Option<(Curve, f64)>> {
-        let Some(n) = self.s.node(idx) else { return Ok(None) };
+        let Some(n) = self.s.node(idx) else {
+            return Ok(None);
+        };
         let cs = match n.ty() {
             30 => self.xf.k,
             31 | 32 | 134 => 1.0,
@@ -664,7 +744,12 @@ impl<'s> Geo<'s> {
         let n0 = pts.len();
         let pts = densify(&a, &b, pts, closed);
         if std::env::var_os("XT_TRACE").is_some() {
-            eprintln!("intersection {idx}: {n0} -> {} closed {closed} {} {}", pts.len(), a.kind(), b.kind());
+            eprintln!(
+                "intersection {idx}: {n0} -> {} closed {closed} {} {}",
+                pts.len(),
+                a.kind(),
+                b.kind()
+            );
         }
         let m = pts.len();
         let mut tans = Vec::with_capacity(m);
@@ -694,15 +779,21 @@ impl<'s> Geo<'s> {
             }
             s
         };
-        Ok(Curve::Intersection(Arc::new(IntCurve::new(a, b, pts, tans, closed, sag))))
+        Ok(Curve::Intersection(Arc::new(IntCurve::new(
+            a, b, pts, tans, closed, sag,
+        ))))
     }
 
     /// A blend's spine. An intersection of offsets is made a C1 cubic through its chart, put
     /// on both surfaces and filled in to within SPINE_TOL: the exact curve finds each point by
     /// searching both offsets, and a blend asks for its spine at every point it is asked for.
     fn spine(&mut self, idx: u32) -> R<Curve> {
-        let Some(n) = self.s.of(idx, 38) else { return self.curve(idx) };
-        let Curve::Intersection(ic) = self.curve(idx)? else { return self.curve(idx) };
+        let Some(n) = self.s.of(idx, 38) else {
+            return self.curve(idx);
+        };
+        let Curve::Intersection(ic) = self.curve(idx)? else {
+            return self.curve(idx);
+        };
         let _ = n;
         let pts = densify_to(&ic.a, &ic.b, ic.pts.clone(), ic.closed, SPINE_TOL);
         let m = pts.len();
@@ -898,7 +989,11 @@ fn densify_to(a: &Surface, b: &Surface, pts: Vec<Point3>, closed: bool, tol: f64
             if !(0.05..=0.95).contains(&f) || on.distance(mid) > 0.6 * len2.sqrt() {
                 continue;
             }
-            if on.distance(mid) <= tol || depth >= 16 || budget == 0 || on.distance(x).min(on.distance(y)) <= 1e-9 {
+            if on.distance(mid) <= tol
+                || depth >= 16
+                || budget == 0
+                || on.distance(x).min(on.distance(y)) <= 1e-9
+            {
                 continue;
             }
             budget -= 1;

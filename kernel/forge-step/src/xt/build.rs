@@ -5,8 +5,8 @@
 use super::geom::{Geo, R, Xf, refuse};
 use super::nodes::{Node, Store};
 use crate::heal::{PEdge, PFace, Proto};
-use crate::read::{ImportError, Imported, Refusal, Solid, Stats, edge_range, finish};
 use crate::part21::Limits;
+use crate::read::{ImportError, Imported, Refusal, Solid, Stats, edge_range, finish};
 use forge_geom::CurveGeom;
 use forge_math::{Interval, Point3};
 use forge_topo::Name;
@@ -88,18 +88,9 @@ fn transform(s: &Store, idx: u32) -> Result<Xf, Refusal> {
     }
     let k = t.f("scale");
     let k = if k.is_finite() && k != 0.0 { k } else { 1.0 };
-    // the file writes the matrix with the translation as its fourth column, by rows
-    let rr = if std::env::var_os("XT_ROWS").is_some() {
-        r
-    } else {
-        [[r[0][0], r[1][0], r[2][0]], [r[0][1], r[1][1], r[2][1]], [r[0][2], r[1][2], r[2][2]]]
-    };
-    let xf = Xf {
-        r: rr,
-        t: tv,
-        k,
-    };
-    let _ = &mut r;
+    // x' = (R x + t) k, R by rows (5.2.6). The corpus settles it: the other way round stands the
+    // VF-3 a metre too tall and takes its bolts out of their holes (research/parasolid).
+    let xf = Xf { r, t: tv, k };
     Ok(xf)
 }
 
@@ -108,72 +99,80 @@ fn placements(s: &Store, refusals: &mut Vec<Refusal>, place: bool) -> Vec<Placed
     let mut out = Vec::new();
     let Some(root) = s.root() else { return out };
     let mut seen_body = std::collections::HashSet::new();
-    let mut part = |p: u32, xf: Xf, inst: u32, out: &mut Vec<Placed>, depth: u32, refusals: &mut Vec<Refusal>| {
-        #[allow(clippy::too_many_arguments)]
-        fn go(
-            place: bool,
-            s: &Store,
-            p: u32,
-            xf: Xf,
-            inst: u32,
-            out: &mut Vec<Placed>,
-            depth: u32,
-            refusals: &mut Vec<Refusal>,
-            seen: &mut std::collections::HashSet<u32>,
-        ) {
-            if depth > 64 {
-                refusals.push(Refusal {
-                    entity: p,
-                    kind: "ASSEMBLY".into(),
-                    why: "assemblies nested too deep".into(),
-                });
-                return;
-            }
-            let Some(n) = s.node(p) else { return };
-            match n.ty() {
-                12 => {
-                    seen.insert(p);
-                    let name = name_of(s, inst).or_else(|| name_of(s, p)).unwrap_or_default();
-                    out.push(Placed {
-                        body: p,
-                        xf,
-                        name,
-                        instance: inst,
-                    })
+    let mut part =
+        |p: u32, xf: Xf, inst: u32, out: &mut Vec<Placed>, depth: u32, refusals: &mut Vec<Refusal>| {
+            #[allow(clippy::too_many_arguments)]
+            fn go(
+                place: bool,
+                s: &Store,
+                p: u32,
+                xf: Xf,
+                inst: u32,
+                out: &mut Vec<Placed>,
+                depth: u32,
+                refusals: &mut Vec<Refusal>,
+                seen: &mut std::collections::HashSet<u32>,
+            ) {
+                if depth > 64 {
+                    refusals.push(Refusal {
+                        entity: p,
+                        kind: "ASSEMBLY".into(),
+                        why: "assemblies nested too deep".into(),
+                    });
+                    return;
                 }
-                10 => {
-                    for i in chain(s, n.p("sub_instance"), "next_in_part") {
-                        if i.ty() != 11 {
-                            break;
-                        }
-                        if i.f("type") == 2.0 {
-                            refusals.push(Refusal {
-                                entity: i.index,
-                                kind: "INSTANCE".into(),
-                                why: "a negative instance: a part taken away is not done".into(),
-                            });
-                            continue;
-                        }
-                        let inner = if i.p("transform") == 0 {
-                            Ok(Xf {
-                                k: 1.0,
-                                ..Xf::MM
-                            })
-                        } else {
-                            transform(s, i.p("transform"))
-                        };
-                        let inner = if place { inner } else { Ok(Xf { k: 1.0, ..Xf::MM }) };
-                        match inner {
-                            Ok(t) => go(place, s, i.p("part"), xf.then(&t), i.index, out, depth + 1, refusals, seen),
-                            Err(r) => refusals.push(r),
+                let Some(n) = s.node(p) else { return };
+                match n.ty() {
+                    12 => {
+                        seen.insert(p);
+                        let name = name_of(s, inst).or_else(|| name_of(s, p)).unwrap_or_default();
+                        out.push(Placed {
+                            body: p,
+                            xf,
+                            name,
+                            instance: inst,
+                        })
+                    }
+                    10 => {
+                        for i in chain(s, n.p("sub_instance"), "next_in_part") {
+                            if i.ty() != 11 {
+                                break;
+                            }
+                            if i.f("type") == 2.0 {
+                                refusals.push(Refusal {
+                                    entity: i.index,
+                                    kind: "INSTANCE".into(),
+                                    why: "a negative instance: a part taken away is not done".into(),
+                                });
+                                continue;
+                            }
+                            let inner = if i.p("transform") == 0 {
+                                Ok(Xf { k: 1.0, ..Xf::MM })
+                            } else {
+                                transform(s, i.p("transform"))
+                            };
+                            let inner = if place { inner } else { Ok(Xf { k: 1.0, ..Xf::MM }) };
+                            match inner {
+                                Ok(t) => go(
+                                    place,
+                                    s,
+                                    i.p("part"),
+                                    xf.then(&t),
+                                    i.index,
+                                    out,
+                                    depth + 1,
+                                    refusals,
+                                    seen,
+                                ),
+                                Err(r) => refusals.push(r),
+                            }
                         }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
-        }
-        go(place, s, p, xf, inst, out, depth, refusals, &mut seen_body);
-    };
+            go(place, s, p, xf, inst, out, depth, refusals, &mut seen_body);
+        };
     match root.ty() {
         12 | 10 => part(1, Xf::MM, 0, &mut out, 0, refusals),
         // several parts: a part list block or, from older writers, a pointer list block
@@ -206,6 +205,8 @@ struct Build<'g, 's> {
     edges: HashMap<u32, (Vec<usize>, bool)>,
     stats: &'g mut Stats,
     salt: Name,
+    /// Faces on blends, whose sense the faces they are tangent to settle.
+    blends: Vec<usize>,
 }
 
 impl Build<'_, '_> {
@@ -249,7 +250,8 @@ impl Build<'_, '_> {
             return refuse(idx, 16, "the edge is missing");
         };
         // the fins round the edge: the positive one's vertex is its end, the negative's its start
-        let (mut start, mut end, mut fin_curve) = (0u32, 0u32, 0u32);
+        let (mut start, mut end) = (0u32, 0u32);
+        let mut fin_curves: Vec<u32> = Vec::new();
         let first = ed.p("fin");
         let mut at = first;
         for _ in 0..1024 {
@@ -259,21 +261,39 @@ impl Build<'_, '_> {
                 b'-' if start == 0 => start = f.p("vertex"),
                 _ => {}
             }
-            if fin_curve == 0 && f.p("curve") != 0 {
-                fin_curve = f.p("curve");
+            if f.p("curve") != 0 {
+                fin_curves.push(f.p("curve"));
             }
             at = f.p("other");
             if at == first || at == 0 {
                 break;
             }
         }
-        // the edge's curve and which way it runs along it; a tolerant edge's from a fin
-        let (cidx, against) = match ed.p("curve") {
-            0 if fin_curve != 0 => (fin_curve, false),
-            0 => return refuse(idx, 16, "no curve, on the edge or its fins"),
-            c => (c, s.node(c).is_some_and(|n| n.c("sense") == b'-')),
+        // the edge's curve and which way it runs along it; a tolerant edge's from a fin, the
+        // first whose surface reads
+        let (curve, against, cidx) = match ed.p("curve") {
+            0 => {
+                let mut got = None;
+                let mut first_err = None;
+                for &c in &fin_curves {
+                    match self.g.curve(c) {
+                        Ok(k) => {
+                            got = Some((k, false, c));
+                            break;
+                        }
+                        Err(e) => {
+                            first_err.get_or_insert(e);
+                        }
+                    }
+                }
+                match (got, first_err) {
+                    (Some(g), _) => g,
+                    (None, Some(e)) => return Err(e),
+                    (None, None) => return refuse(idx, 16, "no curve, on the edge or its fins"),
+                }
+            }
+            c => (self.g.curve(c)?, against_curve(s, c), c),
         };
-        let curve = self.g.curve(cidx)?;
         let name = self.salt.with(u64::from(idx));
         if start == 0 && end == 0 {
             let d = curve.domain();
@@ -286,8 +306,12 @@ impl Build<'_, '_> {
             }
             let mid = whole.mid();
             let (p0, p1) = (curve.eval(whole.lo), curve.eval(mid));
-            self.p.verts.push((p0, self.salt.with_str("ring0").with(u64::from(idx))));
-            self.p.verts.push((p1, self.salt.with_str("ring1").with(u64::from(idx))));
+            self.p
+                .verts
+                .push((p0, self.salt.with_str("ring0").with(u64::from(idx))));
+            self.p
+                .verts
+                .push((p1, self.salt.with_str("ring1").with(u64::from(idx))));
             let (v0, v1) = (self.p.verts.len() - 2, self.p.verts.len() - 1);
             self.p.edges.push(PEdge {
                 curve: curve.clone(),
@@ -316,13 +340,20 @@ impl Build<'_, '_> {
         // the proto edge runs the way its curve's parameter increases
         let (s0, t0, flipped) = if against { (b, a, true) } else { (a, b, false) };
         let (range, off, back) = edge_range(&curve, self.p.verts[s0].0, self.p.verts[t0].0, s0 == t0);
-        let (s0, t0, flipped) = if back { (t0, s0, !flipped) } else { (s0, t0, flipped) };
+        let (s0, t0, flipped) = if back {
+            (t0, s0, !flipped)
+        } else {
+            (s0, t0, flipped)
+        };
         self.stats.vertex_off_curve = self.stats.vertex_off_curve.max(off);
         if off > forge_math::tol::LINEAR {
             self.stats.vertices_off += 1;
         }
         if off > 1e-3 && std::env::var_os("XT_TRACE").is_some() {
-            eprintln!("edge {idx}: curve {cidx} type {} off {off:.4} range {range:?}", s.node(cidx).map_or(0, |n| n.ty()));
+            eprintln!(
+                "edge {idx}: curve {cidx} type {} off {off:.4} range {range:?}",
+                s.node(cidx).map_or(0, |n| n.ty())
+            );
         }
         self.p.edges.push(PEdge {
             curve,
@@ -342,6 +373,9 @@ impl Build<'_, '_> {
         let s = self.g.s;
         let idx = f.index;
         let (surface, agree) = self.g.surface(f.p("surface"))?;
+        if self.g.is_blend(f.p("surface")) {
+            self.blends.push(self.p.faces.len());
+        }
         let same = (agree == (f.c("sense") != b'-')) == out;
         let mut loops = Vec::new();
         for l in chain(s, f.p("loop"), "next") {
@@ -388,6 +422,17 @@ impl Build<'_, '_> {
             }
             loops.push(uses);
         }
+        if std::env::var_os("XT_TRACE").is_some() {
+            let st = s.node(f.p("surface")).map_or(0, |x| x.ty());
+            if !matches!(st, 50..=54) {
+                eprintln!(
+                    "face {} = xt face {idx} surface {} type {st} sense {} agree {agree}",
+                    self.p.faces.len(),
+                    f.p("surface"),
+                    f.c("sense") as char
+                );
+            }
+        }
         self.p.faces.push(PFace {
             surface,
             same_sense: same,
@@ -408,7 +453,11 @@ impl Build<'_, '_> {
             self.face(&f, shell, true)?;
         }
         if let Some(f) = chain(s, sh.p("front_face"), "next_front").next() {
-            return refuse(f.index, 14, "a face with solid on its front: a sheet inside a solid");
+            return refuse(
+                f.index,
+                14,
+                "a face with solid on its front: a sheet inside a solid",
+            );
         }
         let _ = self.s();
         Ok(())
@@ -417,6 +466,71 @@ impl Build<'_, '_> {
 
 /// `place`: each body where its instances put it; else each where it stands in its own part, once
 /// per instance.
+/// Whether an edge runs against its curve: the curve's sense, and a trimmed curve's basis's too
+/// (a trimmed curve is positive, and runs as its basis does).
+fn against_curve(s: &Store, c: u32) -> bool {
+    let mut against = false;
+    let mut at = c;
+    for _ in 0..16 {
+        let Some(n) = s.node(at) else { break };
+        against ^= n.c("sense") == b'-';
+        if n.ty() != 133 {
+            break;
+        }
+        at = n.p("basis_curve");
+    }
+    against
+}
+
+/// A rolling-ball face meets the faces it rounds tangentially, so outside it faces the way they
+/// do along those edges: each blend face takes the sense its tangent neighbours agree on.
+fn orient_blends(p: &mut Proto, blends: &[usize]) {
+    use forge_geom::SurfaceGeom;
+    if blends.is_empty() {
+        return;
+    }
+    let unsure: std::collections::HashSet<usize> = blends.iter().copied().collect();
+    let mut uses: HashMap<usize, Vec<usize>> = HashMap::new();
+    for (f, face) in p.faces.iter().enumerate() {
+        for l in &face.loops {
+            for &(e, _) in l {
+                uses.entry(e).or_default().push(f);
+            }
+        }
+    }
+    let normal = |p: &Proto, f: usize, at: Point3| {
+        let face = &p.faces[f];
+        let n = face.surface.normal(face.surface.project(at))?;
+        let n: forge_math::Vec3 = n.into();
+        Some(if face.same_sense { n } else { -n })
+    };
+    let nf = p.faces.len();
+    for &f in blends.iter().filter(|&&f| f < nf) {
+        let mut vote = 0i32;
+        for l in &p.faces[f].loops {
+            for &(e, _) in l {
+                let Some(others) = uses.get(&e) else { continue };
+                for &g in others {
+                    if g == f || unsure.contains(&g) {
+                        continue;
+                    }
+                    let ed = &p.edges[e];
+                    let at = ed.curve.eval(ed.range.mid());
+                    if let (Some(a), Some(b)) = (normal(p, f, at), normal(p, g, at)) {
+                        let d = a.dot(b);
+                        if d.abs() > 0.9 {
+                            vote += if d > 0.0 { 1 } else { -1 };
+                        }
+                    }
+                }
+            }
+        }
+        if vote < 0 {
+            p.faces[f].same_sense = !p.faces[f].same_sense;
+        }
+    }
+}
+
 pub(crate) fn import(b: &[u8], lim: &Limits, place: bool) -> Result<Imported, ImportError> {
     let s = super::nodes::read(b, lim).map_err(ImportError::Xt)?;
     let mut refusals = Vec::new();
@@ -472,14 +586,22 @@ pub(crate) fn import(b: &[u8], lim: &Limits, place: bool) -> Result<Imported, Im
                 edges: HashMap::new(),
                 stats: &mut stats,
                 salt,
+                blends: Vec::new(),
             };
+            if std::env::var_os("XT_TRACE").is_some() {
+                eprintln!("solid {} region {}", solids.len(), region.index);
+            }
             let built = (|| {
                 for sh in chain(&s, region.p("shell"), "next") {
                     b.shell(&sh)?;
                 }
                 Ok(())
             })();
+            let blends = std::mem::take(&mut b.blends);
             let mut proto = b.p;
+            if built.is_ok() {
+                orient_blends(&mut proto, &blends);
+            }
             if proto.vtol.len() < proto.verts.len() {
                 proto.vtol.resize(proto.verts.len(), 0.0);
             }

@@ -10,7 +10,9 @@ const NULL_REAL: f64 = -3.14158e13;
 pub(crate) enum Form {
     Text,
     /// Binary with its byte order: big-endian for neutral binary.
-    Binary { little: bool },
+    Binary {
+        little: bool,
+    },
 }
 
 /// Where a read failed, and what it wanted there.
@@ -61,6 +63,7 @@ impl<'a> Lex<'a> {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn done(&self) -> bool {
         self.at >= self.b.len()
     }
@@ -182,7 +185,9 @@ impl<'a> Lex<'a> {
     pub(crate) fn chars(&mut self, n: usize, want: &'static str) -> L<Vec<u8>> {
         let mut out = Vec::with_capacity(n.min(1 << 16));
         while out.len() < n {
-            if self.form == Form::Text && self.b.get(self.at) == Some(&b'\\') && self.b.get(self.at + 1) == Some(&b'9')
+            if self.form == Form::Text
+                && self.b.get(self.at) == Some(&b'\\')
+                && self.b.get(self.at + 1) == Some(&b'9')
             {
                 self.at += 2;
                 out.extend(std::iter::repeat_n(b' ', 9));
@@ -221,7 +226,11 @@ impl<'a> Lex<'a> {
             }
             Form::Binary { .. } => {
                 let x = f64::from_be_bytes(self.be::<8>(want)?);
-                Ok(if x == NULL_REAL || !x.is_finite() { f64::NAN } else { x })
+                Ok(if x == NULL_REAL || !x.is_finite() {
+                    f64::NAN
+                } else {
+                    x
+                })
             }
         }
     }
@@ -315,6 +324,12 @@ mod tests {
     #[test]
     fn running_out_says_where() {
         let mut l = Lex::new(b"12", Form::Binary { little: false });
-        assert_eq!(l.int("an int"), Err(LexError { at: 0, want: "an int" }));
+        assert_eq!(
+            l.int("an int"),
+            Err(LexError {
+                at: 0,
+                want: "an int"
+            })
+        );
     }
 }
