@@ -87,6 +87,10 @@ fn the_flange_simulates_in_the_app() {
             .camsim_command("colour=material;part=hidden;op=3;locate=3,0,40,0.5;tab=moves")
             .unwrap();
         shot(&mut h, &format!("native-sim-04-moves-{tag}"));
+        if w == 1400.0 {
+            h.gui.camsim_command("tab=checks;source=toolpath").unwrap();
+            shot(&mut h, &format!("native-sim-07-checks-{tag}"));
+        }
         if h.gui
             .camsim_command("tab=program;source=machine;machine=1;at=0.3")
             .is_ok()

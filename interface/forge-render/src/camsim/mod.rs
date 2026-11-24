@@ -33,6 +33,10 @@ pub struct Marker {
     pub text: String,
     /// A leftover region's box (xmin ymin xmax ymax, z0 z1).
     pub region: Option<([f64; 4], f64, f64)>,
+    /// Material left by the plan, not missed: a leftover region wholly under the part's bottom
+    /// in its setup (the stock left below the part for a later setup or a part-off). Shown
+    /// neutral, never as an issue.
+    pub planned: bool,
 }
 
 impl Marker {
@@ -257,6 +261,7 @@ impl Sim {
                         g.mv
                     ),
                     region: None,
+                    planned: false,
                 });
             }
             z.cut(g, 0.0, 1.0, c);
@@ -275,6 +280,7 @@ impl Sim {
                         g.mv
                     ),
                     region: None,
+                    planned: false,
                 });
             }
         }
@@ -436,6 +442,7 @@ impl Sim {
                     t,
                     text: format!("{}: {}", op.name, check_sentence(c)),
                     region: None,
+                    planned: false,
                 });
             }
             if op.status == "refused" && out.len() == had {
@@ -456,6 +463,7 @@ impl Sim {
                         op.refusal.as_deref().unwrap_or("no reason given")
                     ),
                     region: None,
+                    planned: false,
                 });
             }
         }
@@ -468,7 +476,19 @@ impl Sim {
                 .filter(|o| o.setup == l.setup)
                 .map(|o| o.t1)
                 .fold(0.0, f64::max);
+            // the part's bottom in this setup: material wholly under it is left by the plan
+            let bottom = self
+                .setups
+                .get(l.setup)
+                .map_or(f64::NEG_INFINITY, |s| s.part_box.0[2]);
+            let planned = l.z1 <= bottom + 1e-6;
             for b in &l.boxes {
+                let (w, d) = (b[2] - b[0], b[3] - b[1]);
+                let place = if planned {
+                    "Under the part"
+                } else {
+                    "Left on the part"
+                };
                 out.push(Marker {
                     op: None,
                     setup: l.setup,
@@ -477,10 +497,11 @@ impl Sim {
                     at: [0.5 * (b[0] + b[2]), 0.5 * (b[1] + b[3]), l.z1],
                     t,
                     text: format!(
-                        "leftover ({}) z {:.3}..{:.3}, x {:.2}..{:.2} y {:.2}..{:.2}",
-                        l.why, l.z0, l.z1, b[0], b[2], b[1], b[3]
+                        "{place}, z {:.2} to {:.2} mm, {w:.1} \u{d7} {d:.1} mm ({})",
+                        l.z0, l.z1, l.why
                     ),
                     region: Some((*b, l.z0, l.z1)),
+                    planned,
                 });
             }
         }

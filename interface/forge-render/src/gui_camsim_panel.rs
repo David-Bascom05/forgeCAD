@@ -335,6 +335,17 @@ fn op_colour(i: usize) -> Color32 {
     Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, c as u8)
 }
 
+/// A marker's colour: a failure red, material left over amber, stock left by the plan neutral.
+fn marker_colour(m: &Marker) -> Color32 {
+    if m.severe() {
+        srgb(look::FAIL)
+    } else if m.planned {
+        srgb(look::NO_VALUE)
+    } else {
+        srgb(look::LEFTOVER)
+    }
+}
+
 fn srgb(c: [f32; 3]) -> Color32 {
     let e = |x: f32| {
         let x = x.clamp(0.0, 1.0);
@@ -497,11 +508,7 @@ impl Shell {
                 if !v.contains(p) {
                     continue;
                 }
-                let c = if m.severe() {
-                    srgb(look::FAIL)
-                } else {
-                    srgb(look::LEFTOVER)
-                };
+                let c = marker_colour(m);
                 painter.circle_stroke(p, 7.0, Stroke::new(2.0, c));
                 painter.circle_filled(p, 2.5, c);
                 let id = egui::Id::unique("camsim:mark").with(k);
@@ -716,11 +723,7 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
     let pointer = resp.hover_pos();
     for m in &st.sim.markers {
         let x = x_of(m.t);
-        let c = if m.severe() {
-            srgb(look::FAIL)
-        } else {
-            srgb(look::LEFTOVER)
-        };
+        let c = marker_colour(m);
         let tri = vec![
             pos2(x, band.top() - 1.0),
             pos2(x - 4.5, rect.top() + 2.0),
@@ -1279,35 +1282,117 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
         .size(11.0)
         .color(t.ink2),
     );
-    heading(ui, t, &format!("Issues ({})", st.sim.markers.len()));
+    // the markers by kind: an issue's kind (a failed check's rule), material left over, and the
+    // stock left by the plan apart; each kind one row, opened to its places
+    let kind = |m: &Marker| -> (u8, String) {
+        if m.severe() {
+            (0, m.rule.clone())
+        } else if m.planned {
+            (2, "planned".into())
+        } else {
+            (1, "leftover".into())
+        }
+    };
+    let mut groups: Vec<((u8, String), Vec<usize>)> = vec![];
+    for (k, m) in st.sim.markers.iter().enumerate() {
+        let key = kind(m);
+        match groups.iter_mut().find(|g| g.0 == key) {
+            Some(g) => g.1.push(k),
+            None => groups.push((key, vec![k])),
+        }
+    }
+    groups.sort_by(|a, b| a.0.cmp(&b.0));
+    let issues: usize = groups.iter().filter(|g| g.0.0 < 2).map(|g| g.1.len()).sum();
+    heading(ui, t, &format!("Issues ({issues})"));
     let mut jump = None;
     egui::ScrollArea::vertical()
         .id_salt("camsim:checks")
         .show(ui, |ui| {
-            if st.sim.markers.is_empty() {
-                ui.colored_label(t.success, "None: every move certified, nothing left over.");
+            if issues == 0 {
+                ui.colored_label(t.success, "None: every move certified, nothing missed.");
             }
-            for m in &st.sim.markers {
-                let c = if m.severe() {
-                    srgb(look::FAIL)
-                } else {
-                    srgb(look::LEFTOVER)
+            for ((rank, rule), ks) in &groups {
+                let ms: Vec<&Marker> = ks.iter().map(|&k| &st.sim.markers[k]).collect();
+                let n = ms.len();
+                let thick = ms
+                    .iter()
+                    .filter_map(|m| m.region.map(|r| r.2 - r.1))
+                    .fold(0.0, f64::max);
+                let ops: Vec<String> = {
+                    let mut v: Vec<String> = ms
+                        .iter()
+                        .filter_map(|m| m.op.and_then(|o| st.sim.tl.ops.get(o)).map(|o| o.name.clone()))
+                        .collect();
+                    v.dedup();
+                    v
                 };
-                let r = ui.add(
-                    egui::Label::new(
-                        egui::RichText::new(format!("{}  {}", clock(m.t), m.text))
-                            .size(11.0)
-                            .color(c),
-                    )
-                    .sense(Sense::click()),
-                );
-                if r.on_hover_text("Go there").clicked() {
-                    jump = Some(m.t);
-                }
+                let setups: Vec<&str> = {
+                    let mut v: Vec<&str> = ms
+                        .iter()
+                        .filter_map(|m| st.sim.setups.get(m.setup).map(|s| s.name.as_str()))
+                        .collect();
+                    v.dedup();
+                    v
+                };
+                let plural = |w: &str| if n == 1 { w.to_string() } else { format!("{w}s") };
+                let title = match *rank {
+                    2 => format!(
+                        "Stock left as planned \u{b7} {n} {} under the part \u{b7} up to {thick:.1} mm thick",
+                        plural("region")
+                    ),
+                    1 => format!(
+                        "Material left on the part \u{b7} {n} {} \u{b7} up to {thick:.1} mm thick \u{b7} in {}",
+                        plural("region"),
+                        setups.join(", ")
+                    ),
+                    _ => format!(
+                        "{} \u{b7} {n} \u{b7} in {}",
+                        rule_title(rule),
+                        if ops.is_empty() { setups.join(", ") } else { ops.join(", ") }
+                    ),
+                };
+                let c = marker_colour(ms[0]);
+                egui::CollapsingHeader::new(egui::RichText::new(title).size(12.0).color(c))
+                    .id_salt(("camsim:group", *rank, rule.as_str()))
+                    .default_open(*rank == 0 && n <= 4)
+                    .show(ui, |ui| {
+                        for m in &ms {
+                            let r = ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(format!("{}  {}", clock(m.t), m.text))
+                                        .size(11.0)
+                                        .color(if *rank == 2 { t.ink2 } else { c }),
+                                )
+                                .sense(Sense::click()),
+                            );
+                            if r.on_hover_text("Go there").clicked() {
+                                jump = Some(m.t);
+                            }
+                        }
+                    });
             }
         });
     if let Some(tm) = jump {
         st.jump(tm);
+    }
+}
+
+/// A check's rule as a group's title.
+fn rule_title(rule: &str) -> String {
+    match rule {
+        "holder_collision" => "Holder hits".into(),
+        "shank_collision" => "Shank hits".into(),
+        "gouge" => "Gouges".into(),
+        "rapid_clear" => "Rapids too close".into(),
+        "rapid_into_stock" => "Rapids into the stock".into(),
+        "holder_into_stock" => "Holder into the stock".into(),
+        "machine_collision" => "Machine collisions".into(),
+        "refused" => "Refused ops".into(),
+        "overtravel" => "Beyond the machine's travel".into(),
+        r => {
+            let w = r.replace('_', " ");
+            w.get(0..1).map_or(w.clone(), |f| f.to_uppercase() + &w[1..])
+        }
     }
 }
 

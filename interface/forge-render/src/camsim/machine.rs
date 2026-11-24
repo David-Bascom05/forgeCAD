@@ -300,6 +300,7 @@ impl MachineView {
                     c.line, c.b, c.a, self.run.def.name
                 ),
                 region: None,
+                planned: false,
             });
         }
         for v in &self.run.tl.violations {
@@ -355,6 +356,7 @@ impl MachineView {
                 t,
                 text,
                 region: None,
+                planned: false,
             });
         }
         out.sort_by(|a, b| a.t.total_cmp(&b.t));

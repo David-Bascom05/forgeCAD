@@ -65,6 +65,9 @@ fn the_flange_plays_as_posted() {
     // being 3 below it and the contour going to −0.5) is, below z 0, once the setup is done
     assert!(sim.markers.iter().all(|m| !m.severe()), "{:?}", sim.markers);
     for m in &sim.markers {
+        // all of it the stock left under the part by the plan: shown neutral, not an issue
+        assert!(m.planned, "{m:?}");
+        assert!(m.text.starts_with("Under the part, z "), "{}", m.text);
         let (_, _, z1) = m.region.expect("a leftover region");
         assert!(z1 <= 1e-9 && (m.t - tl.total).abs() < 1e-9, "{m:?}");
     }
