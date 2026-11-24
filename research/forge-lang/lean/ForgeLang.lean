@@ -58,3 +58,4 @@ import ForgeLang.Builtins
 import ForgeLang.Families
 import ForgeLang.LL1.Documents
 import ForgeLang.EditClosure
+import ForgeLang.FamiliesRename

@@ -185,3 +185,5 @@ open ForgeLang ForgeLang.Counter
 #print axioms LL1.Documents.header_glued_refused
 #print axioms closure_runs
 #print axioms edit_closure
+#print axioms Families.rename_run
+#print axioms Families.rename_accepted

@@ -80,8 +80,8 @@ any document. **Machining documents** (CAM-UI and the lathe editor send SetArg, 
 DeleteFeature, MoveFeature, Suppress, Rename to them): GAP for every op's semantics. Their
 built-ins carry state (an op registers with its setup; `program` posts every op of a setup), so
 no edit of one statement is local to it, and no locality theorem can hold as stated for parts;
-what is proven is that the run is a function of the text (`Families.run`) and the names facts
-above.
+what is proven is that the run is a function of the text (`Families.run`), the names facts
+above, and Rename (`FamiliesRename.rename_run`).
 
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
@@ -95,7 +95,7 @@ above.
 | op | `MoveFeature` | | `edit.rs` | `Struct.move_sound`, `Complete.move_complete`, `ScopedMore.move_down`, `ScopedMore.move_up`, `ScopedMore.scopedMove_ok`, `Print.body_text_swap` |
 | op | `LiftLiteral` | | `edit.rs` | GAP: a literal replaced by a new param holding its value; the expected theorem is `Shared.inlineExpr_sound` read backwards (same numbers, the trace's site renamed, `Ren`/`Subst`), not stated |
 | op | `SetArg` | | `edit_ops.rs` `apply_set_arg` (a call's argument, or `arg: text` added), `apply_component_arg` | a literal argument or component default set to a literal: SetParam on its site (`Edits.setParam_roundtrip`, as Scoped.lean notes); any text: a ReplaceFeature keeping the name, so `ScopedMore.replace_complete` (nothing reads it) and `EditClosure.edit_closure` (it is read: everything outside the closure of its name unchanged). GAP: that the edited document evaluates (a re-run of the closure); the text splice parsing back to the one-argument change (checked by reparsing at run time, not proven); machining documents (see above) |
-| op | `Rename` | | `edit_ops.rs` `precheck_rename` | GAP: renaming a binder and its reads (ids follow names, P5); `Respell.respell_refuses_binder` proves Respell leaves binders to Rename, `Respell.respell_read_binders` covers the reads' side only |
+| op | `Rename` | | `edit_ops.rs` `precheck_rename`, `apply_rename`, `ast_rename` (token-level: the binding and its reads, not members, labels or params' names; in a machining document, `calls_closed`, not a call's head) | machining documents: `FamiliesRename.rename_run`, `FamiliesRename.rename_accepted` (`b` fresh, neither name a param's: the same state after every statement, the same statements failing, an accepted document stays accepted). GAP: part documents (ids follow names, P5: the expected theorem is the run with `nm a` renamed `nm b` in every id, not stated); `Respell.respell_refuses_binder` and `Respell.respell_read_binders` cover only Respell's side |
 | op | `SetProperty` | | `props.rs` | GAP: document properties (metadata) are not in the model; that they change no feature is unproven |
 | op | `Suppress` | | `edit_ops.rs` `apply_suppress` | `Suppress.suppress_complete`, `Suppress.suppress_stmts`, `Suppress.suppress_text_closure`, `Suppress.suppress_live`; ids `HistoryId.historyId_stable` |
 | op | `Unsuppress` | | `edit_ops.rs` | `Suppress.unsuppress_suppress` |
@@ -146,6 +146,18 @@ scope).
 | not-names | `interface/forge-lang/src/work.rs::POINT_FORMS` | | keyword arguments of `workpoint` | not a namespace |
 | not-names | `interface/forge-lang/src/work.rs::UCS_FORMS` | | keyword arguments of `ucs` | not a namespace |
 | not-names | `interface/forge-lang/src/work.rs::KEYS` | | keyword arguments of the work features | not a namespace |
+
+## Findings
+
+* forge-cam-lang dropped every `param OWNER.NAME` of a machining document (the owner keyed by the
+  path's Debug text, matched by suffix): fixed, an exact id match, as `Families.St.bindCall`
+  models it (test cam::a_statements_params_are_its_own).
+* Rename on a machining document rewrote a call's head when a binding shared a built-in's name
+  (`drill = drill(..)` became `holes = holes(..)`, an unknown built-in): fixed
+  (`edit_ops::calls_closed`; test edits::rename_in_a_machining_document_leaves_call_heads);
+  `FamiliesRename.renSt` is the fixed op.
+* A `fn`'s name and params may take a built-in's name (no `ShadowsBuiltin`): harmless, they are
+  read before built-ins, so no family extension changes them.
 
 ## Pending
 
