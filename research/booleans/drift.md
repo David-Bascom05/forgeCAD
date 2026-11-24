@@ -271,8 +271,8 @@ answer is to record the distance (§4), or to refuse.
 
 - A diagonal sliver (§6).
 - The strict vertex bound (§5): ruled composed for now; David may reopen it.
-- The n-ary boolean's own wrong Oks (§9): an EdgeDegenerate and an EdgeOffFace, each shrunk to
-  two ops.
+- The n-ary boolean's refusals of §9 are refusals, not fixes: the sequential boolean builds
+  each of those inputs validly.
 - A Lean statement of the composed bound per merge (δ_out = δ_in + edge tol, per entity), from
   gap #2's δ-Faithful.
 
@@ -312,4 +312,10 @@ The same top sequence through the sequential boolean has none.
   q45 = [-1.0, -0.06752310596340017, -0.3006744354686879, 0.8751654910424523,
   -0.7156475910458602, 0.20559144756225].
 
-Both are open.
+Both are edges shorter than their tolerances: the n-ary pass leaves two vertices 6.3e-6 apart
+unmerged and joins them by an edge of 8e-13, or builds an edge of 1.75e-5 that crosses the face
+it bounds. `nary` now refuses (`TolerancesMeet`) a line edge no longer than two tolerances whose
+ends are within one tolerance of each other, or either of whose ends lies farther than its
+tolerance from a plane the edge bounds. It is cold: only for such short edges. Test:
+`nary_edges_shorter_than_their_tolerances_are_refused` (both pairs; fails without it). Fresh
+n-ary searches of top, edge and angle, both objectives, then find no wrong Ok.

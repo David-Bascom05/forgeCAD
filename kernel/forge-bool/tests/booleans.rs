@@ -1014,6 +1014,19 @@ fn edge_wall(i: usize, q: [f64; 6]) -> (Body, Op) {
     (body, op)
 }
 
+/// The 100 x 100 x 10 plate the walls of `edge_wall` stand on, in frame `base`.
+fn wall_plate(base: Frame) -> Body {
+    extrude(
+        &Profile {
+            plane: base,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 100.0, 100.0, 10)],
+        },
+        10.0,
+        1,
+    )
+    .unwrap()
+}
+
 /// Walls and notches within two tolerances of a plate's wall: an imprint grows an edge's end
 /// vertex to 1.65e-5, past the middle of a kept edge 3e-5 long, so the edge is shorter than the
 /// balls at its ends (`check`: VertexTolerance). Such a boolean is refused (TolerancesMeet), not
@@ -1223,4 +1236,76 @@ fn an_nary_imprinted_edges_end_vertex_holds_its_new_face() {
         }
         body = r;
     }
+}
+
+/// Through the n-ary boolean, a wall unioned beside a wall within two tolerances of a plate's
+/// face left a piece 1.75e-5 long crossing that face and bounding it (EdgeOffFace); and a slab cut
+/// within two tolerances of a plate's top left two vertices 6.3e-6 apart unmerged, joined by an
+/// edge 8e-13 long (EdgeDegenerate). Both Oks were wrong; edges that short are now checked once
+/// built and refused (TolerancesMeet). Two ops each of hill-climbed fifties (`drift_adv`,
+/// `NARY=1`, research/booleans/drift.md §9), by their original indices.
+#[test]
+fn nary_edges_shorter_than_their_tolerances_are_refused() {
+    let walls: [(usize, [f64; 6]); 2] = [
+        (
+            21,
+            [
+                -0.937536536084658,
+                -0.1294825111441824,
+                -0.41736311767210044,
+                0.4618893574349905,
+                -0.4952621930311446,
+                0.21589878069515733,
+            ],
+        ),
+        (
+            45,
+            [
+                -1.0,
+                -0.06752310596340017,
+                -0.3006744354686879,
+                0.8751654910424523,
+                -0.7156475910458602,
+                0.20559144756225,
+            ],
+        ),
+    ];
+    let slabs: [(usize, [f64; 6]); 2] = [
+        (
+            2,
+            [
+                0.8234008506443795,
+                1.0,
+                0.9816978534888866,
+                -0.7512060189793819,
+                0.2798211277911311,
+                0.8838505963032673,
+            ],
+        ),
+        (
+            18,
+            [
+                0.7656299434906249,
+                0.30714060737671345,
+                0.5776076114719819,
+                0.3038072858117933,
+                0.5922808713271944,
+                0.1803587185311606,
+            ],
+        ),
+    ];
+    let run = |ops: &[(usize, [f64; 6])], make: fn(usize, [f64; 6]) -> (Body, Op)| {
+        let mut body = wall_plate(Frame::WORLD);
+        for &(i, q) in ops {
+            let (tool, op) = make(i, q);
+            // a refusal is an honest answer; an Ok must be a valid solid
+            if let Ok(r) = forge_bool::nary(&[&body, &tool], &[op], 1) {
+                let p = check(&r);
+                assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+                body = r;
+            }
+        }
+    };
+    run(&walls, edge_wall);
+    run(&slabs, top_slab);
 }
