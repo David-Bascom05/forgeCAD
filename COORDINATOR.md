@@ -313,3 +313,6 @@ urdf-export, machines/builder, posts/dialects.
 - PIPELINE, NEVER IDLE (David): while long gates/tests run, build the next step assuming they pass; fix speed/test issues if they come up. Only train merges wait on green.
 - ffmpeg: use PUBLIC prebuilt releases (gyan.dev / evermeet or Martin Riedl / johnvansickle or BtbN), pinned version+sha256; GPL fine (separate process); NO CI build, NO release on our repo.
 - Adaptive: allowed flat out, merged as opt-in even if slower (David told CAM-UI directly).
+- δ-ACCUMULATION (David): prove honest per-entity bound (each merge ≤ edge.tol), measure drift on long chains + ADVERSARIAL worst case (FLAT-SITES, research/booleans/drift.md); snap-to-exact-meet at merge sites only if creep shows, at zero speed cost.
+- Adaptive: no micro-moves (David) — arcs/long lines from generation, min block length test, one F per arc; chip-load guard (hex_max ≤ fz) harness-wide.
+- macOS ffmpeg: unpinned pending David (Riedl builds are --enable-nonfree: not redistributable).
