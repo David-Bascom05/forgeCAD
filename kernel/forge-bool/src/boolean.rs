@@ -2112,20 +2112,7 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
             as_is[si] = true;
         }
     }
-    let mut staying: Vec<FaceId> = Vec::new();
-    for (si, s) in specs.iter().enumerate() {
-        if as_is[si] {
-            staying.push(s.from);
-        }
-    }
-    for &(si, flip) in kept {
-        if specs[si].extend && !flip {
-            staying.push(specs[si].from);
-        }
-    }
-    for &f in untouched_kept {
-        staying.push(f);
-    }
+    let mut staying = staying_faces(specs, &as_is, kept, untouched_kept);
     staying.sort_unstable();
     staying.dedup();
     for &f in involved {
@@ -2135,13 +2122,7 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
     }
     // a face split locally gives up the loops it replaces before it gains the new ones; where
     // its outer loop goes, the spec's first loop (its new outer one) takes its place
-    let mut new_outer: Vec<usize> = Vec::new();
-    for &(si, flip) in kept {
-        let s = &specs[si];
-        if s.extend && !flip && !s.remove.is_empty() {
-            drop_replaced(a, s, si, &mut new_outer);
-        }
-    }
+    let new_outer = drop_replaced_loops(a, specs, kept);
     let mut made = Made {
         b_vertex: vec![None; b.vertex_count()],
         new_vertex: vec![None; points.len()],
@@ -2204,13 +2185,17 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
                 uses.push((e, fwd));
             }
             if flip {
-                let mut rev: Vec<(EdgeId, bool)> = Vec::with_capacity(uses.len());
-                let mut k = uses.len();
-                while k > 0 {
-                    k -= 1;
-                    rev.push((uses[k].0, !uses[k].1));
+                let n = uses.len();
+                let mut i = 0;
+                while i < n / 2 {
+                    let (x, y) = (uses[i], uses[n - 1 - i]);
+                    uses[i] = (y.0, !y.1);
+                    uses[n - 1 - i] = (x.0, !x.1);
+                    i += 1;
                 }
-                uses = rev;
+                if n % 2 == 1 {
+                    uses[n / 2].1 = !uses[n / 2].1;
+                }
             }
             let lp = a.add_loop(face, &uses);
             if s.extend && !flip {
@@ -2239,10 +2224,55 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
     }
 }
 
+/// The faces of A that `apply` keeps: specs kept as they are, extended faces, and A's faces kept
+/// untouched (unsorted, with repeats).
+#[inline(always)]
+fn staying_faces(
+    specs: &[Spec],
+    as_is: &[bool],
+    kept: &[(usize, bool)],
+    untouched_kept: &[FaceId],
+) -> Vec<FaceId> {
+    let mut staying: Vec<FaceId> = specs
+        .iter()
+        .zip(as_is)
+        .filter(|(_, k)| **k)
+        .map(|(s, _)| s.from)
+        .collect();
+    staying.extend(
+        kept.iter()
+            .filter(|&&(si, flip)| specs[si].extend && !flip)
+            .map(|&(si, _)| specs[si].from),
+    );
+    staying.extend(untouched_kept.iter().copied());
+    staying
+}
+
+/// The faces split locally give up the loops they replace (before they gain the new ones);
+/// returns the specs whose face loses its outer loop.
+#[inline(always)]
+fn drop_replaced_loops(a: &mut Body, specs: &[Spec], kept: &[(usize, bool)]) -> Vec<usize> {
+    let mut new_outer: Vec<usize> = Vec::new();
+    for &(si, flip) in kept {
+        let s = &specs[si];
+        if s.extend && !flip && !s.remove.is_empty() {
+            if s.remove.contains(&a.face(s.from).loops[0]) {
+                new_outer.push(si);
+            }
+            crate::classify::drop_query_loops(a, s.from, &s.remove);
+            for &l in &s.remove {
+                a.remove_loop(s.from, l);
+            }
+        }
+    }
+    new_outer
+}
+
 /// The vertices `apply` adds to A, as it first needs each: B's, and the new ones.
 struct Made {
-    b_vertex: Vec<Option<VertexId>>,
+    // (declared in this order so they drop as main's locals did: new_vertex, then b_vertex)
     new_vertex: Vec<Option<VertexId>>,
+    b_vertex: Vec<Option<VertexId>>,
 }
 
 impl Made {
@@ -2288,23 +2318,6 @@ impl Made {
 /// The name vertex `v` takes: from the flush list (sorted by vertex), else `n`.
 fn renamed(flush: &[(VKey, Name)], v: VKey, n: Name) -> Name {
     flush.binary_search_by_key(&v, |f| f.0).map_or(n, |k| flush[k].1)
-}
-
-/// Face `f`'s outer loop.
-fn outer_loop(a: &Body, f: FaceId) -> forge_topo::LoopId {
-    a.face(f).loops[0]
-}
-
-/// Face `s.from`, split locally, gives up the loops `s.remove` (noting `si` in `new_outer` where
-/// its outer loop goes).
-fn drop_replaced(a: &mut Body, s: &Spec, si: usize, new_outer: &mut Vec<usize>) {
-    if s.remove.contains(&outer_loop(a, s.from)) {
-        new_outer.push(si);
-    }
-    crate::classify::drop_query_loops(a, s.from, &s.remove);
-    for &l in &s.remove {
-        a.remove_loop(s.from, l);
-    }
 }
 
 /// `tol` grown to what `grown` asks of vertex `k`.
