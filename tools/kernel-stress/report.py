@@ -229,6 +229,13 @@ def main():
       f" ({sum(e['bytes'] for _, e in para) / 1e9:.2f} GB)")
     p()
 
+    notes = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "research", "kernel-stress",
+                         "haas-notes.md")
+    if os.path.exists(notes):
+        # the hand-written part: what was fixed, who owns the rest, Parasolid
+        p(open(notes).read().rstrip())
+        p()
+
     p("## Failure classes")
     p()
     p("| class | detail | count | ops | first seen |")
