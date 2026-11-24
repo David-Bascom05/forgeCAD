@@ -7,7 +7,7 @@
 //! ```text
 //! machining
 //! shared tol = 0.01
-//! f     = part("flange.fg", group: "N")             # the part, its ISO 513 material group
+//! f     = part("flange.fg", material: "6061-T6")    # the part and its stock material
 //! m     = machine("generic-vmc3")
 //! t1    = tool("face-50", t: 1, stickout: 30, holder: "bt40-er32")
 //! t2    = tool("flat-6", t: 2, stickout: 25, holder: "bt40-er32")
@@ -37,6 +37,7 @@ use forge_cam::ops::{self, CheckOut, Heights, OpPath, PMove, Phase, Stock, ToolU
 use forge_cam_geom::check::Face;
 use forge_cam_geom::region::{Loop, P2, Region, Seg, p2};
 use forge_post::{CycleKind, Rec};
+use forge_tooling::resolve::{self, Ask, Verdict};
 use forge_tooling::{Kind, Library, feeds};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -132,9 +133,18 @@ struct PartIn {
     faces: Vec<Face>,
     holes: Vec<holes::HoleInfo>,
     bbox: ([f64; 3], [f64; 3]),
+    /// ISO 513 group: `group:`, else the stock material's record, else its family; "" when
+    /// none is known (never a silent default).
     group: String,
-    /// The work material (forge-material name or alias), when `part(.., material:)` names it.
+    /// The stock material (forge-material name): `part(.., material:)`, else the part's own.
     material: Option<String>,
+    /// The stock material's family (forge-material: aluminium, copper, steel, ...), for the
+    /// generic class of a tool with no maker data.
+    family: Option<String>,
+    /// Where the material and group came from, for the reply and the fixes.
+    material_note: String,
+    /// The material's machining data (its record's machining.* keys), read once.
+    stock: Option<feeds::Stock>,
 }
 
 struct SetupIn {
@@ -183,6 +193,12 @@ pub struct OpOut {
     pub tool: Option<usize>,
     pub paths: Vec<OpPath>,
     pub feeds: Option<feeds::Feeds>,
+    /// Feeds and speeds resolved in layers (forge_tooling::resolve), with the source of each
+    /// value and the op's feed checks; None for hole plans (drill feeds are not resolved yet).
+    pub resolved: Option<resolve::Resolved>,
+    /// A hole plan's drilling feeds and speeds (forge_tooling::resolve::drilling), per tool:
+    /// ("spot" | "drill", the tool's id, what was resolved).
+    pub drilled: Vec<(&'static str, String, resolve::DrillResolved)>,
     pub checks: Vec<CheckOut>,
     pub pairs: usize,
     pub cells: usize,
@@ -1242,6 +1258,8 @@ pub struct Cam {
     pub warnings: Vec<String>,
     parts: Vec<PartIn>,
     tools: Vec<ToolUse>,
+    /// The user's feeds and speeds given on each tool (`tool(.., vc: 300)`), under the op's.
+    tool_asks: Vec<Ask>,
     setups: Vec<SetupIn>,
     pub ops: Vec<OpOut>,
     pub programs: Vec<ProgramOut>,
@@ -1571,6 +1589,9 @@ impl Cam {
             bbox: ([lo[0], -hi[1], h - hi[2]], [hi[0], -lo[1], h - lo[2]]),
             group: p.group.clone(),
             material: p.material.clone(),
+            family: p.family.clone(),
+            material_note: p.material_note.clone(),
+            stock: p.stock.clone(),
         };
         self.parts.push(turned);
         Ok(self.parts.len() - 1)
@@ -1840,6 +1861,266 @@ fn get_num(m: &BTreeMap<String, V>, k: &str, default: Option<f64>) -> Result<f64
         None => default.ok_or_else(|| format!("missing `{k}:`")),
     }
 }
+/// An op's resolved feeds and speeds for the report and the UI's Feeds & Speeds tab: each value
+/// with its unit, source (default | material | library | user | machine-clamped | limited) and
+/// note; the derived numbers; the feed checks (pass | warn | fail | not checked).
+fn feeds_speeds_json(r: &resolve::Resolved) -> Json {
+    let n = |x: f64| if x.is_finite() { Json::Num(x) } else { Json::Null };
+    let val = |v: &resolve::Val| {
+        Json::obj(vec![
+            ("v", n(v.v)),
+            ("unit", Json::Str(v.unit.into())),
+            ("source", Json::Str(v.source.name().into())),
+            ("note", Json::Str(v.note.clone())),
+        ])
+    };
+    let f = &r.feeds;
+    let pct = |have: f64, avail: Option<f64>| match avail {
+        Some(a) if a > 0.0 && have.is_finite() => Json::Num(100.0 * have / a),
+        _ => Json::Null,
+    };
+    let spread = match &r.spread {
+        Some(sp) => {
+            let four = |a: feeds::Quantiles| {
+                Json::obj(vec![
+                    ("min", n(a.min)),
+                    ("p10", n(a.p10)),
+                    ("p25", n(a.p25)),
+                    ("median", n(a.median)),
+                    ("max", n(a.max)),
+                ])
+            };
+            Json::obj(vec![
+                ("class", Json::Str(sp.class.clone())),
+                ("rows", Json::Num(sp.n as f64)),
+                (
+                    "makers",
+                    Json::Arr(sp.makers.iter().map(|m| Json::Str(m.clone())).collect()),
+                ),
+                ("vc", four(sp.vc)),
+                ("chip", four(sp.chip)),
+            ])
+        }
+        None => Json::Null,
+    };
+    Json::obj(vec![
+        ("spread", spread),
+        (
+            "values",
+            Json::obj(vec![
+                ("vc", val(&r.vc)),
+                ("rpm", val(&r.rpm)),
+                ("chip", val(&r.chip)),
+                ("fz", val(&r.fz)),
+                ("feed", val(&r.feed)),
+                ("ap", val(&r.ap)),
+                ("ae", val(&r.ae)),
+                ("plunge_feed", val(&r.plunge)),
+                ("ramp_feed", val(&r.ramp)),
+                ("lead_in_feed", val(&r.lead_in)),
+                ("min_feed", val(&r.min_feed)),
+                ("max_feed", val(&r.max_feed)),
+            ]),
+        ),
+        (
+            "derived",
+            Json::obj(vec![
+                ("hex", n(f.hex)),
+                ("hm", n(f.hm)),
+                ("engagement_deg", n(f.phi.to_degrees())),
+                ("d_eff", n(f.d_eff)),
+                ("mrr_cm3_min", n(r.mrr)),
+                ("power_kw", n(f.power)),
+                ("power_pct", pct(f.power, r.power_avail)),
+                ("torque_nm", n(f.torque)),
+                ("torque_pct", pct(f.torque, r.torque_avail)),
+                ("deflection_mm", n(r.deflection)),
+            ]),
+        ),
+        (
+            "checks",
+            Json::Arr(
+                r.checks
+                    .iter()
+                    .map(|c| {
+                        Json::obj(vec![
+                            ("what", Json::Str(c.what.into())),
+                            ("verdict", Json::Str(c.verdict.name().into())),
+                            ("value", n(c.value)),
+                            ("limit", n(c.limit)),
+                            ("unit", Json::Str(c.unit.into())),
+                            ("why", Json::Str(c.why.clone())),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+    ])
+}
+
+/// One drilling tool's resolved values for the reply: as feeds_speeds, per tool of a hole plan.
+fn drilling_json(role: &str, id: &str, r: &resolve::DrillResolved) -> Json {
+    let n = |x: f64| if x.is_finite() { Json::Num(x) } else { Json::Null };
+    let val = |v: &resolve::Val| {
+        Json::obj(vec![
+            ("v", n(v.v)),
+            ("unit", Json::Str(v.unit.into())),
+            ("source", Json::Str(v.source.name().into())),
+            ("note", Json::Str(v.note.clone())),
+        ])
+    };
+    Json::obj(vec![
+        ("role", Json::Str(role.into())),
+        ("tool", Json::Str(id.into())),
+        (
+            "values",
+            Json::obj(vec![
+                ("vc", val(&r.vc)),
+                ("rpm", val(&r.rpm)),
+                ("f", val(&r.f)),
+                ("feed", val(&r.feed)),
+                ("peck", val(&r.peck)),
+            ]),
+        ),
+        (
+            "derived",
+            Json::obj(vec![
+                ("h", n(r.h)),
+                ("mrr_cm3_min", n(r.mrr)),
+                ("power_kw", n(r.power)),
+                (
+                    "power_pct",
+                    match r.power_avail {
+                        Some(a) if a > 0.0 && r.power.is_finite() => Json::Num(100.0 * r.power / a),
+                        _ => Json::Null,
+                    },
+                ),
+                ("torque_nm", n(r.torque)),
+            ]),
+        ),
+        (
+            "checks",
+            Json::Arr(
+                r.checks
+                    .iter()
+                    .map(|c| {
+                        Json::obj(vec![
+                            ("what", Json::Str(c.what.into())),
+                            ("verdict", Json::Str(c.verdict.name().into())),
+                            ("value", n(c.value)),
+                            ("limit", n(c.limit)),
+                            ("unit", Json::Str(c.unit.into())),
+                            ("why", Json::Str(c.why.clone())),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+    ])
+}
+
+/// A material's machining data from its forge-material record: its class (as resolved) and the
+/// measured Kienzle rows where it has them (machining.vc_rows/kc1_1_rows/mc_rows, with their
+/// source).
+fn stock_of(name: &str, group: &str, dir: &Path) -> feeds::Stock {
+    let libs = forge_material::Libraries::cached(Some(dir));
+    let Some((_, m)) = libs.find(name) else {
+        return feeds::Stock::new(name, group, None, "");
+    };
+    let nums = |k: &str| match m.extra(k) {
+        Some(forge_material::Value::Nums(v)) => Some(v.clone()),
+        _ => None,
+    };
+    let num = |k: &str| match m.extra(k) {
+        Some(forge_material::Value::Num(v)) => Some(*v),
+        _ => None,
+    };
+    // measured rows against the speed, else a single stated value (a maker's group table:
+    // machining.kc1_1 / machining.mc, no speed stated: one row at vc 0)
+    let (rows, src) = match (
+        nums("machining.vc_rows"),
+        nums("machining.kc1_1_rows"),
+        nums("machining.mc_rows"),
+    ) {
+        (Some(v), Some(k), Some(c)) => (Some((v, k, c)), m.source_of("machining.kc1_1_rows").to_string()),
+        _ => match (num("machining.kc1_1"), num("machining.mc")) {
+            (Some(k), Some(c)) => (
+                Some((vec![0.0], vec![k], vec![c])),
+                m.source_of("machining.kc1_1").to_string(),
+            ),
+            _ => (None, String::new()),
+        },
+    };
+    feeds::Stock::new(&m.name, group, rows, &src)
+}
+
+/// A drill op's feeds-and-speeds args: vc|rpm, f (mm/rev)|feed (mm/min), peck (mm; 0: none),
+/// max_power, max_torque.
+fn drill_ask_of(m: &BTreeMap<String, V>) -> Result<resolve::DrillAsk, String> {
+    let g = |k: &str, zero_ok: bool| -> Result<Option<f64>, String> {
+        match m.get(k) {
+            None => Ok(None),
+            Some(V::Num(x)) if x.is_finite() && (*x > 0.0 || (zero_ok && *x == 0.0)) => Ok(Some(*x)),
+            Some(V::Num(x)) => Err(format!("`{k}` must be over 0 (got {x})")),
+            Some(_) => Err(format!("`{k}` must be a number")),
+        }
+    };
+    Ok(resolve::DrillAsk {
+        vc: g("vc", false)?,
+        rpm: g("rpm", false)?,
+        f: g("f", false)?,
+        feed: g("feed", false)?,
+        peck: g("peck", true)?,
+        max_power: g("max_power", false)?,
+        max_torque: g("max_torque", false)?,
+    })
+}
+
+/// The feeds-and-speeds args of an op or a tool (units: m/min, rpm, mm, mm/min, degrees, kW,
+/// N·m). `ap`/`ae` are the op's `step`/`stepover` under other names; each must be over 0.
+fn ask_of(m: &BTreeMap<String, V>) -> Result<Ask, String> {
+    let g = |k: &str| -> Result<Option<f64>, String> {
+        match m.get(k) {
+            None => Ok(None),
+            Some(V::Num(x)) if *x > 0.0 && x.is_finite() => Ok(Some(*x)),
+            Some(V::Num(x)) => Err(format!("`{k}` must be over 0 (got {x})")),
+            Some(_) => Err(format!("`{k}` must be a number")),
+        }
+    };
+    let ask = Ask {
+        vc: g("vc")?,
+        rpm: g("rpm")?,
+        chip: g("chip")?,
+        fz: g("fz")?,
+        feed: g("feed")?,
+        ap: g("ap")?,
+        ae: g("ae")?,
+        max_angle: g("max_angle")?,
+        tilt: g("tilt")?,
+        plunge: g("plunge_feed")?,
+        ramp: g("ramp_feed")?,
+        lead_in: g("lead_in_feed")?,
+        max_power: g("max_power")?,
+        max_torque: g("max_torque")?,
+        max_deflection: g("max_deflection")?,
+        min_feed: g("min_feed")?,
+        max_feed: g("max_feed")?,
+    };
+    if let Some(a) = ask.max_angle
+        && a > 180.0
+    {
+        return Err(format!(
+            "`max_angle` is an engagement angle in degrees, at most 180 (got {a})"
+        ));
+    }
+    if let (Some(lo), Some(hi)) = (ask.min_feed, ask.max_feed)
+        && lo > hi
+    {
+        return Err(format!("`min_feed` {lo} is over `max_feed` {hi}"));
+    }
+    Ok(ask)
+}
+
 fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<String, String> {
     match m.get(k) {
         Some(V::Str(x)) => Ok(x.clone()),
@@ -1868,6 +2149,7 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
         warnings: vec![],
         parts: vec![],
         tools: vec![],
+        tool_asks: vec![],
         setups: vec![],
         ops: vec![],
         programs: vec![],
@@ -2291,6 +2573,35 @@ impl Cam {
                         run.errors.first()
                     ));
                 }
+                // the stock material: the machining doc's `material:` (stock is often not the
+                // part's record), else the part's own; its group unless `group:` says otherwise
+                let asked = match a.get("material") {
+                    Some(V::Str(m)) => Some(m.clone()),
+                    Some(_) => return Err("part: `material` must be a string".into()),
+                    None => run.props.material.clone(),
+                };
+                let (material, mgroup, mut material_note) = self.stock_material(asked.as_deref(), dir);
+                let group = match a.get("group") {
+                    Some(V::Str(g)) => {
+                        if mgroup.as_deref().is_some_and(|m| m != g) {
+                            material_note.push_str(&format!(
+                                "; group {g} given over the material's {}",
+                                mgroup.clone().unwrap_or_default()
+                            ));
+                        }
+                        g.clone()
+                    }
+                    Some(_) => return Err("part: `group` must be a string (ISO 513: P M K N S H)".into()),
+                    None => mgroup.unwrap_or_default(),
+                };
+                // lint: a group alone leaves the generic defaults to the whole group (N: copper's
+                // speeds among aluminium's), so they are far slower than the alloy's
+                if material.is_none() && !group.is_empty() {
+                    self.warnings.push(format!(
+                        "part `{}` names only a material group ({group}): name the alloy (`material:`, a forge-material record such as \"6061-T6\") for realistic defaults; a tool with no maker data runs the whole group's slowest tenth",
+                        file
+                    ));
+                }
                 let body = run.body.ok_or("the part has no body")?;
                 // the 2.5D lowering; a part outside it (spheres, revolved faces trimmed by other
                 // curves) is lowered for 3-axis surfacing, those faces as supersets
@@ -2317,11 +2628,11 @@ impl Cam {
                     faces,
                     holes,
                     bbox: (lo, hi),
-                    group: get_str(a, "group", Some("N"))?,
-                    material: match a.get("material") {
-                        Some(V::Str(m)) => Some(m.clone()),
-                        _ => None,
-                    },
+                    stock: material.as_deref().map(|m| stock_of(m, &group, dir)),
+                    group,
+                    family: material.as_deref().and_then(|m| Self::stock_family(m, dir)),
+                    material,
+                    material_note,
                 });
                 Ok(V::Part(self.parts.len() - 1))
             }
@@ -2350,6 +2661,7 @@ impl Cam {
                     shape,
                     probe: false,
                 });
+                self.tool_asks.push(ask_of(a)?);
                 Ok(V::Tool(self.tools.len() - 1))
             }
             "setup" => {
@@ -2817,6 +3129,10 @@ impl Cam {
             ));
         }
         let b = sj.block;
+        let (jaw_material, jaw_group, jaw_note) = {
+            let (m, g, n) = self.stock_material(Some(&bl.material), Path::new("."));
+            (m, g.unwrap_or_default(), format!("the jaw blank's: {n}"))
+        };
         self.parts.push(PartIn {
             src: String::new(),
             pdir: Default::default(),
@@ -2826,8 +3142,15 @@ impl Cam {
             faces: sj.part.clone(),
             holes: vec![],
             bbox: (b.min, b.max),
-            group: "N".into(),
-            material: None,
+            stock: jaw_material
+                .as_deref()
+                .map(|m| stock_of(m, &jaw_group, Path::new("."))),
+            group: jaw_group,
+            family: jaw_material
+                .as_deref()
+                .and_then(|m| Self::stock_family(m, Path::new("."))),
+            material: jaw_material,
+            material_note: jaw_note,
         });
         self.jaws.push(sj);
         Ok(V::Jaws(self.jaws.len() - 1, self.parts.len() - 1))
@@ -3837,61 +4160,485 @@ impl Cam {
         .map_err(|e| format!("{e:?}"))
     }
 
-    /// The milling ops' feeds set from the engagement each piece meets (forge_cam::engage): the
-    /// chip held at the cutting data's feed per tooth, the in-process stock as the ops so far
-    /// left it the model. The paths' geometry is unchanged; they are posted and certified after.
-    fn feeds_from_engagement(&self, su: usize, kind: &str, out: &OpOut, paths: Vec<OpPath>) -> Vec<OpPath> {
-        use forge_cam::engage::{HeightMap, Profile, Sched, schedule};
+    /// The milling ops' feeds set from the engagement each FIXED-LENGTH sample meets
+    /// (forge_cam::engage::schedule_samples, TOOLPATH-QUALITY's measurement on the in-process
+    /// stock): the resolved chip held through radial thinning, then the feed (only the feed)
+    /// lowered so the sample's power and torque stay within the user's max_power/max_torque and
+    /// the spindle's power at the rpm (P ∝ fz^(1 − mc): exact). Every sample is posted as its
+    /// own move (never joined); no abrasion term. The paths' geometry is unchanged; they are
+    /// posted and certified after.
+    fn feeds_from_engagement(
+        &mut self,
+        su: usize,
+        kind: &str,
+        out: &OpOut,
+        paths: Vec<OpPath>,
+    ) -> Vec<OpPath> {
+        use forge_cam::engage::{HeightMap, Profile, Sched, schedule_samples};
         if !matches!(
             kind,
             "facing" | "pocket" | "clear" | "adaptive" | "contour" | "slot"
         ) {
             return paths;
         }
-        let (Some(fe), Some(ti)) = (out.feeds, out.tool) else {
+        // the resolved values (forge_tooling::resolve): the chip held is the user's, the
+        // tool's or the material's; a feed the user programmed (`fz:`, `feed:`) is never moved
+        let (Some(r), Some(ti)) = (out.resolved.as_ref(), out.tool) else {
             return paths;
         };
+        if !r.held_chip || r.chip.v <= 0.0 {
+            return paths;
+        }
         let t = &self.tools[ti];
         let Some(prof) = Profile::of(&t.tool) else {
             return paths;
         };
         let s = &self.setups[su];
-        let Some(g) = self.lib.group(&self.parts[s.part].group) else {
-            return paths;
+        // the user's ceiling, else the machine's (already held under its limit)
+        let machine_max = self
+            .lib
+            .machine(&s.machine)
+            .ok()
+            .filter(|m| m.max_feed > 0.0)
+            .map(|m| m.max_feed - resolve::FEED_MARGIN);
+        let f_max = match (r.max_feed.source, machine_max) {
+            (resolve::Source::User, Some(m)) => r.max_feed.v.min(m),
+            (resolve::Source::User, None) => r.max_feed.v,
+            (_, Some(m)) => m,
+            (_, None) => r.feed.v,
         };
-        let f_max = self.lib.machine(&s.machine).map(|m| m.max_feed).unwrap_or(fe.vf);
         let cell = (t.tool.dc / 30.0).clamp(0.05, 0.25);
         let sc = Sched {
-            fz: g.fz_at(t.tool.dc),
+            fz: r.chip.v,
             flutes: t.tool.nof.max(1) as f64,
-            rpm: fe.rpm,
-            // just under the machine's limit: G5 checks the posted F against it soundly
-            f_max: 0.999 * f_max,
-            f_min: 0.0,
+            rpm: r.rpm.v,
+            // the user's ceiling, else the machine's (held FEED_MARGIN under it)
+            f_max,
+            // the user's floor (none by default)
+            f_min: if r.min_feed.source == resolve::Source::User {
+                r.min_feed.v
+            } else {
+                0.0
+            },
             cap: feeds::THIN_CAP,
             cell,
             // samples of one diameter, fixed by length
             sample: t.tool.dc,
         };
         let mut map = HeightMap::of_stock(&s.ip, cell);
-        paths.iter().map(|p| schedule(p, &mut map, &prof, &sc)).collect()
+        // the cutting force at the actual speed: the stock's rows, else the group's
+        let part = &self.parts[s.part];
+        let kg = self.lib.group(&part.group).map(|g| match part.stock.as_ref() {
+            Some(st) => st.apply(g, r.vc.v),
+            None => g.clone(),
+        });
+        let spindle_kw = self
+            .lib
+            .machine(&s.machine)
+            .ok()
+            .and_then(|m| resolve::power_at(&m.power, r.rpm.v));
+        let caps: Vec<(f64, &str)> = [
+            (r.max_power_ask, "max_power"),
+            (
+                r.max_torque_ask
+                    .map(|t| t * std::f64::consts::PI * r.rpm.v / 30.0e3),
+                "max_torque",
+            ),
+            (spindle_kw, "the spindle's power"),
+            // δ ∝ F = 2 Mc/D: the deflection limit as a torque, then as power at the rpm
+            (
+                r.max_deflection_ask.zip(self.beam_of(ti)).map(|(lim, b)| {
+                    let per_nm = feeds::tip_deflection(2000.0 / t.tool.dc, &b);
+                    lim / per_nm * std::f64::consts::PI * r.rpm.v / 30.0e3
+                }),
+                "max_deflection",
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(c, w)| c.map(|c| (c, w)))
+        .collect();
+        let (d, re) = (
+            t.tool.dc,
+            match t.tool.kind {
+                Kind::Ball => 0.5 * t.tool.dc,
+                Kind::Bull => t.tool.re,
+                _ => 0.0,
+            },
+        );
+        let z = t.tool.nof.max(1);
+        let mut lowered = 0usize;
+        let mut short = 0usize;
+        let out_paths: Vec<OpPath> = paths
+            .iter()
+            .map(|p| {
+                let samples = schedule_samples(p, &mut map, &prof, &sc);
+                let n = samples.len();
+                // the chip held per sample: a rough class's factor only where the sample's width is
+                // under D/2 (a full-width sample keeps the slot chip)
+                let rough = match &r.class {
+                    Some((n, f)) if n == "rough" && r.slot_chip.is_finite() => Some((r.slot_chip, *f)),
+                    _ => None,
+                };
+                let target = |e: &Option<forge_cam::engage::Engage>| match (rough, e) {
+                    // engaged under 90° (ae < D/2 on a straight cut): the peak chip is thinned
+                    (Some((slot, f)), Some(g)) if g.phi < std::f64::consts::FRAC_PI_2 && g.cos_max < 1.0 => {
+                        slot * f
+                    }
+                    (Some((slot, _)), Some(_)) => slot,
+                    _ => sc.fz,
+                };
+                let want = |e: &Option<forge_cam::engage::Engage>| -> (f64, bool) {
+                    let fz0 = target(e);
+                    match e {
+                        Some(g) if g.cos_max * sc.cap > 1.0 => (fz0 / g.cos_max, false),
+                        _ => (sc.cap * fz0, true),
+                    }
+                };
+                let mut feed: Vec<(f64, bool)> = Vec::with_capacity(n);
+                for k in 0..n {
+                    let (mut fz, mut clamp) = want(&samples[k].engage);
+                    let mut capped = false;
+                    // no faster than the next sample (the engagement it runs into)
+                    if let Some(nx) = samples.get(k + 1) {
+                        let (f2, c2) = want(&nx.engage);
+                        if f2 < fz {
+                            fz = f2;
+                            clamp = c2;
+                        }
+                    }
+                    // power and torque: the feed lowered to the tightest cap, exactly
+                    if let (Some(g), Some(e)) = (kg.as_ref(), samples[k].engage) {
+                        let cut = feeds::Cut {
+                            d,
+                            flutes: z,
+                            ball: re >= 0.5 * d,
+                            carbide: false,
+                            ap: e.ap.max(0.0),
+                            ae: e.ae.max(0.0),
+                        };
+                        let ct = feeds::contact(d, re, cut.ap, 0.0);
+                        let dr = if re >= 0.5 * d { ct.d_eff } else { d };
+                        let pw = feeds::at_contact(g, &cut, fz, r.rpm.v, ct, dr).power;
+                        if pw > 0.0 && g.mc < 1.0 {
+                            for (cap, _) in &caps {
+                                let now = feeds::at_contact(g, &cut, fz, r.rpm.v, ct, dr).power;
+                                if now > *cap {
+                                    fz *= forge_math::dmath::powf(cap / now, 1.0 / (1.0 - g.mc));
+                                    clamp = true;
+                                    capped = true;
+                                    lowered += 1;
+                                }
+                            }
+                        }
+                    }
+                    let mut f = fz * sc.flutes * sc.rpm;
+                    if f >= sc.f_max {
+                        f = sc.f_max;
+                        clamp = true;
+                    } else if f <= sc.f_min {
+                        if capped {
+                            short += 1;
+                        }
+                        f = sc.f_min;
+                        clamp = true;
+                    }
+                    feed.push((f, clamp));
+                }
+                let mut moves = Vec::with_capacity(p.moves.len() + n);
+                let mut k = 0;
+                for (mi, mv) in p.moves.iter().enumerate() {
+                    let start = k;
+                    while k < n && samples[k].mv == mi {
+                        k += 1;
+                    }
+                    if start == k {
+                        moves.push(*mv);
+                        continue;
+                    }
+                    // every fixed-length sample is its own move: no joins of any kind (the post
+                    // does not repeat an F word equal to the one before)
+                    for i in start..k {
+                        let (end, f) = (samples[i].end, feed[i].0);
+                        moves.push(match *mv {
+                            PMove::Line { phase, .. } => PMove::Line { to: end, f, phase },
+                            PMove::Arc { c, cw, .. } => PMove::Arc { to: end, c, cw, f },
+                            other => other,
+                        });
+                    }
+                }
+                OpPath {
+                    tool: p.tool,
+                    start: p.start,
+                    moves,
+                    rpm: p.rpm,
+                    coolant: p.coolant,
+                }
+            })
+            .collect();
+        if lowered > 0 {
+            self.warnings.push(format!(
+                "{}: the feed was lowered on {lowered} sample(s) to hold power/torque ({})",
+                out.name,
+                caps.iter().map(|c| c.1).collect::<Vec<_>>().join(", ")
+            ));
+        }
+        if short > 0 {
+            self.warnings.push(format!(
+                "{}: the user's min_feed holds {short} sample(s) above the power/torque cap",
+                out.name
+            ));
+        }
+        out_paths
     }
 
-    fn feeds_for(&self, su: usize, t: &ToolUse, ae: f64, ap: f64) -> Option<feeds::Feeds> {
-        let g = self.lib.group(&self.parts[self.setups[su].part].group)?;
+    /// A drilling tool's feeds and speeds: the user's over the drill's preset over the group's
+    /// `[[drill]]` row for its substrate (forge_tooling::resolve::drilling).
+    fn drill_resolve(
+        &self,
+        su: usize,
+        ti: usize,
+        ask: &resolve::DrillAsk,
+        depth: f64,
+        d_cut: Option<f64>,
+    ) -> Result<resolve::DrillResolved, String> {
+        let part = &self.parts[self.setups[su].part];
+        let m = self
+            .lib
+            .machine(&self.setups[su].machine)
+            .map_err(|e| e.to_string())?;
+        let t = &self.tools[ti];
+        let sub = feeds::Substrate::of(&t.tool.material);
+        let preset = t.tool.preset_for(&part.group, "general").map(|(p, c, _)| (p, c));
+        let row = match sub {
+            feeds::Substrate::Carbide => self.lib.drilling(&part.group, "carbide"),
+            feeds::Substrate::Hss => self.lib.drilling(&part.group, "hss"),
+            _ => None,
+        };
+        resolve::drilling(
+            ask,
+            &resolve::DrillTool {
+                d: d_cut.unwrap_or(t.tool.dc).min(t.tool.dc),
+                flutes: t.tool.nof.max(2),
+                point: t.tool.angle,
+                substrate: sub,
+                preset,
+            },
+            self.lib.group(&part.group),
+            part.stock.as_ref(),
+            row,
+            &resolve::Spindle {
+                rpm: m.rpm,
+                max_feed: m.max_feed,
+                power: &m.power,
+            },
+            depth,
+        )
+        .map(|mut r| {
+            if t.tool.kind == Kind::Spot && preset.is_none() {
+                // no spot-drill data read: the twist-drill row is borrowed, at the diameter the
+                // spot cuts to
+                for v in [&mut r.f, &mut r.feed, &mut r.vc] {
+                    if v.source == resolve::Source::Material {
+                        v.note = format!(
+                            "twist-drill data borrowed for a spot drill (no spot data read), at Ø{:.2}; {}",
+                            d_cut.unwrap_or(t.tool.dc),
+                            v.note
+                        );
+                    }
+                }
+            }
+            r
+        })
+        .ok_or_else(|| {
+            format!(
+                "no drilling data for `{}` ({} drill) in group `{}` ({}): no preset on the drill, no [[drill]] row, no `vc:`/`rpm:` and `f:`/`feed:` given",
+                t.tool.id,
+                sub.name(),
+                part.group,
+                part.material_note
+            )
+        })
+    }
+
+    /// Tool `ti` as a cantilever out of its holder: its stick-out, flutes at the tip at the
+    /// substrate's equivalent diameter, the shank above; None when the substrate has no
+    /// elastic record (cutting.toml `[[substrate]]`).
+    fn beam_of(&self, ti: usize) -> Option<feeds::Beam> {
+        let t = &self.tools[ti];
+        let sub = match feeds::Substrate::of(&t.tool.material) {
+            feeds::Substrate::Carbide => "carbide",
+            feeds::Substrate::Hss => "hss",
+            _ => return None,
+        };
+        let e = self.lib.substrate(sub)?;
+        Some(feeds::Beam {
+            stickout: t.stickout,
+            lcf: t.tool.lcf,
+            de: e.de_ratio * t.tool.dc,
+            dcon: if t.tool.dcon > 0.0 { t.tool.dcon } else { t.tool.dc },
+            e_mpa: e.e_mpa,
+        })
+    }
+
+    /// A stock material by name: (its forge-material name, its ISO 513 group, how they were
+    /// found). The group is the material's `[[stock]]` record's, else its family's ISO 513
+    /// class; None when the name is unknown or its family has no class.
+    /// A forge-material record's family, by its name.
+    fn stock_family(name: &str, dir: &Path) -> Option<String> {
+        forge_material::Libraries::cached(Some(dir))
+            .find(name)
+            .map(|(_, m)| m.family.clone())
+    }
+
+    fn stock_material(&self, name: Option<&str>, dir: &Path) -> (Option<String>, Option<String>, String) {
+        let Some(name) = name else {
+            return (None, None, "the part has no material: give it one (`material` in the part, or part(.., material:)) or part(.., group:)".into());
+        };
+        let libs = forge_material::Libraries::cached(Some(dir));
+        let Some((_, m)) = libs.find(name) else {
+            return (
+                None,
+                None,
+                format!(
+                    "no material `{name}` in the material libraries; near: {}",
+                    libs.near(name).join(", ")
+                ),
+            );
+        };
+        if let Some(forge_material::Value::Str(g)) = m.extra("machining.iso513") {
+            return (
+                Some(m.name.clone()),
+                Some(g.clone()),
+                format!(
+                    "{} (ISO 513 group {g} from its record: {})",
+                    m.name,
+                    m.source_of("machining.iso513")
+                ),
+            );
+        }
+        match feeds::iso_group_of_family(&m.family) {
+            Some(g) => (
+                Some(m.name.clone()),
+                Some(g.into()),
+                format!("{} (family {}: ISO 513 group {g})", m.name, m.family),
+            ),
+            None => (
+                Some(m.name.clone()),
+                None,
+                format!(
+                    "{} is family {}, which ISO 513 does not class: no cutting data (give vc/rpm and fz/feed)",
+                    m.name, m.family
+                ),
+            ),
+        }
+    }
+
+    /// The op's feeds and speeds: the user's (op over tool) over the tool's preset for the
+    /// part's group over the group's data, clamped by the machine (forge_tooling::resolve).
+    /// The resolved cut of tool `ti` at width ae and depth ap for an op of `kind`, by the
+    /// layered resolver (`resolve_for`); for the hole plan's counterbore, countersink and
+    /// pocketed counterbore steps.
+    fn feeds_for(&self, su: usize, ti: usize, kind: &str, ae: f64, ap: f64) -> Option<feeds::Feeds> {
+        let ask = Ask {
+            ae: Some(ae),
+            ap: Some(ap),
+            ..Ask::default()
+        };
+        self.resolve_for(su, ti, kind, &ask, (ae, ap)).map(|r| r.feeds)
+    }
+
+    fn resolve_for(
+        &self,
+        su: usize,
+        ti: usize,
+        kind: &str,
+        ask: &Ask,
+        nominal: (f64, f64),
+    ) -> Option<resolve::Resolved> {
+        let group_name = &self.parts[self.setups[su].part].group;
+        let g = self.lib.group(group_name);
         let m = self.lib.machine(&self.setups[su].machine).ok()?;
-        Some(feeds::feeds(
-            g,
-            &feeds::Cut {
+        let t = &self.tools[ti];
+        // the op's class (Tool::class_for: slot, rough, a narrow contour finishes, general);
+        // the tool's preset for it (Tool::preset_for); a classed preset carries its class itself
+        // a tool the hole plan adds itself carries no asks of its own
+        let asked = ask.over(self.tool_asks.get(ti).copied().unwrap_or_default());
+        let width = asked.ae.unwrap_or(nominal.0);
+        let class = t.tool.class_for(kind, width, group_name);
+        // the part's stock material picks the maker's row for it where the tool has one
+        // (Tool::preset_for_material); else the class's representative
+        let material = &self.parts[self.setups[su].part].material;
+        let (preset, classed) = match material
+            .as_deref()
+            .and_then(|m| t.tool.preset_for_material(group_name, class, m))
+        {
+            Some((p, c)) => (Some((p, c)), true),
+            None => match t.tool.preset_for(group_name, class) {
+                Some((p, c, classed)) => (Some((p, c)), classed),
+                None => (None, false),
+            },
+        };
+        // no preset: the tool's generic class (P10 of the makers' rows for its class,
+        // data/generic.toml); its own op/slot chip ratio is the class factor where it has one
+        let gu = if preset.is_none() {
+            let tc = feeds::ToolClass {
+                family: self.parts[self.setups[su].part].family.as_deref(),
+                tier: None,
+                flutes: Some(t.tool.nof.max(1)),
+                coated: feeds::ToolClass::coated(&t.tool.coating),
+                helix: None,
+            };
+            self.lib.generic_use(group_name, class, &tc)
+        } else {
+            None
+        };
+        let class_rec = if classed || class == "slot" || class == "general" {
+            None
+        } else {
+            self.lib.op_class(class)
+        };
+        let class_src = class_rec
+            .and_then(|c| c.cites.first())
+            .map_or("", |c| c.source.as_str());
+        let generic_factor = gu.filter(|_| class_rec.is_some()).and_then(|u| u.class_factor());
+        let class_note;
+        let class_val = match (generic_factor, class_rec) {
+            (Some(f), Some(c)) => {
+                class_note = format!(
+                    "P10 {} chip over P10 slot chip of class {} (data/generic.toml)",
+                    c.name,
+                    gu.map_or(String::new(), |u| u.op.class())
+                );
+                Some((c.name.as_str(), f, class_note.as_str()))
+            }
+            (None, Some(c)) => Some((c.name.as_str(), c.chip_factor, class_src)),
+            _ => None,
+        };
+        let part = &self.parts[self.setups[su].part];
+        let stock = part.stock.as_ref();
+        resolve::milling_on(
+            &asked,
+            &resolve::ToolData {
                 d: t.tool.dc,
                 flutes: t.tool.nof.max(1),
                 ball: t.tool.kind == Kind::Ball,
-                carbide: t.tool.material == "carbide",
-                ap,
-                ae,
+                re: if t.tool.kind == Kind::Bull { t.tool.re } else { 0.0 },
+                substrate: feeds::Substrate::of(&t.tool.material),
+                coating: &t.tool.coating,
+                beam: self.beam_of(ti),
+                class: class_val,
+                preset,
+                generic: gu,
             },
-            m.rpm,
-        ))
+            g,
+            stock,
+            &resolve::Spindle {
+                rpm: m.rpm,
+                max_feed: m.max_feed,
+                power: &m.power,
+            },
+            nominal,
+        )
     }
 
     /// A probing op: `probe_wcs` (a feature's position for a work offset) or `inspect` (one
@@ -4102,6 +4849,8 @@ impl Cam {
             tool: None,
             paths: vec![],
             feeds: None,
+            resolved: None,
+            drilled: vec![],
             checks: vec![],
             pairs: 0,
             cells: 0,
@@ -4134,7 +4883,6 @@ impl Cam {
                     _ => return Err(format!("{kind}: missing `tool:`")),
                 };
                 out.tool = Some(ti);
-                let t = &self.tools[ti];
                 // the stock left on floors (Fusion's axial stock to leave): each floor raised
                 // by it; `leave` stays the radial stock, on walls
                 let ax = get_num(a, "leave_axial", Some(0.0))?;
@@ -4142,7 +4890,9 @@ impl Cam {
                     return Err("leave_axial: a length".into());
                 }
 
-                let d = t.tool.dc;
+                let d = self.tools[ti].tool.dc;
+                let lcf = self.tools[ti].tool.lcf;
+                let mut ask = ask_of(a)?;
                 // the 3-axis ops: `step:` is the step-down (as in 2D), `sample:` the spacing along a
                 // pass; `down:` is step's old name, accepted for one train with a warning
                 if surf3d(kind) {
@@ -4160,42 +4910,146 @@ impl Cam {
                         ));
                     }
                 }
+                // 3-axis ops: `step:` is the step-down (step_down); the others: `ap` is `step` (the
+                // depth per level) under its cutting-data name, one of them
                 let step = if surf3d(kind) {
                     step_down(a, 0.5 * d)?
                 } else {
-                    get_num(a, "step", Some(0.5 * d))?
+                    match (a.get("step"), ask.ap) {
+                        (Some(_), Some(_)) => return Err(format!("{kind}: give `step` or `ap`, not both")),
+                        (_, Some(ap)) => ap,
+                        (Some(_), None) => get_num(a, "step", None)?,
+                        (None, None) => 0.5 * d,
+                    }
                 };
+                if a.contains_key("step") && !surf3d(kind) {
+                    ask.ap = Some(step);
+                }
                 // a helical entry at this angle (degrees) where it fits; else plunges
                 let ramp = match a.get("ramp") {
                     None => None,
                     Some(V::Num(x)) if *x > 0.0 && *x <= 30.0 => Some(*x),
                     Some(_) => return Err("ramp: an angle in degrees, over 0 and at most 30".into()),
                 };
-                // the radial engagement the feed is set for (chip thinning credits ae < D/2): what
-                // the op cuts at most along its passes, never less (a thinner ae would overload
-                // the tool where the path cuts more: slots and a clear's first pass cut full width)
-                let fd = match kind {
-                    "facing" => self.feeds_for(su, t, 0.7 * d, step.min(t.tool.lcf)),
-                    "pocket" | "clear" => self.feeds_for(su, t, get_num(a, "stepover", Some(0.4 * d))?, step),
+                // `ae` is a clearing op's `stepover` under its cutting-data name; one of them.
+                // Offset clearing (clear, pocket) cuts its stepover wide; the op's nominal
+                // engagement (ae, ap) is used where the user gives none.
+                let stepover = match (a.contains_key("stepover"), ask.ae) {
+                    (true, Some(_)) => return Err(format!("{kind}: give `stepover` or `ae`, not both")),
+                    (true, None) => get_num(a, "stepover", None)?,
+                    (false, Some(ae)) => ae,
+                    (false, None) => 0.4 * d,
+                };
+                // the radial engagement the feed is set for where the user gives none (chip
+                // thinning credits ae < D/2): what the op cuts at most along its passes, never
+                // less (TOOLPATH-QUALITY, cam/quality: slots and a clear's first pass cut full
+                // width; what a contour meets is not known here, so no thinning credit)
+                let nominal = match kind {
+                    "facing" => (0.7 * d, step.min(lcf)),
+                    "clear" | "pocket" => {
+                        ask.ae = Some(stepover);
+                        (stepover, step)
+                    }
+                    // the whole width: a slot, and a helix down a closed hole (bore)
                     // the engagement cap's width of cut: ae = D (1 − cos φ) / 2
                     "adaptive" => {
                         let phi = get_num(a, "engagement", Some(60.0))?;
-                        let ae = 0.5 * d * (1.0 - forge_math::dmath::cos(phi.to_radians()));
-                        self.feeds_for(su, t, ae, step)
+                        (0.5 * d * (1.0 - forge_math::dmath::cos(phi.to_radians())), step)
                     }
-                    // the whole width
-                    "slot" => self.feeds_for(su, t, d, step),
-                    // what a contour meets is not known here: no thinning credit
-                    "contour" => self.feeds_for(su, t, 0.5 * d, step),
-                    // a helix down a closed hole engages up to the tool's whole width
-                    "bore" => self.feeds_for(su, t, d, step),
-                    _ => self.feeds_for(su, t, 0.1 * d, step),
+                    "slot" | "bore" => (d, step),
+                    "contour" => (0.5 * d, step),
+                    _ => (0.1 * d, step),
                 };
-                let (vf, vp) = match fd {
-                    Some(fe) => (fe.vf, 0.3 * fe.vf),
-                    None => (300.0, 100.0),
+                // a thread mill cuts on a circle inside the bore: its engagement and the edge's
+                // speed are the arc's (feeds-speeds.md §2.3, concave: material outside the bore
+                // r_b, centre path r_c = r_m − r_t): cos φ = (r_b² − r_c² − r_t²)/(2 r_c r_t);
+                // the edge at r_m moves r_m/r_c faster than the centre, so the centre is fed r_c/r_m
+                let mut arc = None;
+                let mut nominal = nominal;
+                let mut arc_phi = None;
+                if kind == "thread_mill"
+                    && let Some(V::Holes(pi, hn)) = a.get("#1")
+                    && let Some(h) = self.parts[*pi].holes.iter().find(|x| &x.name == hn)
+                    && let Some((major, _)) = h.thread
+                {
+                    let (rb, rm, rt) = (0.5 * h.d, 0.5 * major, 0.5 * d);
+                    let rc = rm - rt;
+                    if rc > 0.0 && rt > 0.0 {
+                        // as the straight cut of the same angle: ae = D (1 − cos φ)/2
+                        let c = (rb * rb - rc * rc - rt * rt) / (2.0 * rc * rt);
+                        let c = c.clamp(-1.0, 1.0);
+                        nominal.0 = 0.5 * d * (1.0 - c);
+                        arc_phi = Some(forge_math::dmath::acos_clamped(c).to_degrees());
+                        arc = Some((rc, rm));
+                    }
+                }
+                let mut rs = self.resolve_for(su, ti, kind, &ask, nominal);
+                if let (Some(phi), Some(r)) = (arc_phi, rs.as_mut())
+                    && r.ae.source == resolve::Source::Default
+                {
+                    r.ae.note = format!(
+                        "the thread's engagement on its arc in the bore: φ = {phi:.1}° (feeds-speeds.md §2.3)"
+                    );
+                }
+                if let (Some((rc, rm)), Some(r)) = (arc, rs.as_mut())
+                    && r.held_chip
+                {
+                    let k = rc / rm;
+                    r.feed.v *= k;
+                    r.feed.note = format!(
+                        "at the tool's centre on r {rc:.3}: the edge at the major radius {rm:.3} moves {:.3}x faster (feeds-speeds.md §2.3); {}",
+                        rm / rc,
+                        r.feed.note
+                    );
+                    r.plunge.v *= k;
+                    r.ramp.v *= k;
+                    r.lead_in.v *= k;
+                }
+                let (vf, vp) = match &rs {
+                    Some(r) => (r.feed.v, r.plunge.v),
+                    None => {
+                        let p = &self.parts[s.part];
+                        out.status = "refused";
+                        out.refusal = Some(format!(
+                            "no cutting data: no speed or chip given, no preset on tool `{}` for group `{}`, and no group data ({}; substrate {})",
+                            self.tools[ti].tool.id,
+                            p.group,
+                            p.material_note,
+                            feeds::Substrate::of(&self.tools[ti].tool.material).name()
+                        ));
+                        out.fix = Some(
+                            "give the part a material (or part(.., group:)), a tool with a preset for it, or `vc:`/`rpm:` and `chip:`/`fz:`/`feed:` on the op or tool".into(),
+                        );
+                        (0.0, 0.0)
+                    }
                 };
-                out.feeds = fd;
+                if let Some(r) = &rs {
+                    for c in &r.checks {
+                        if c.verdict == Verdict::Warn {
+                            self.warnings.push(format!("{name}: {} {}", c.what, c.why));
+                        }
+                    }
+                    let mut it = r.checks.iter().filter(|c| c.verdict == Verdict::Fail);
+                    if let Some(c) = it.next() {
+                        out.status = "refused";
+                        out.refusal = Some(format!(
+                            "{} {:.3} {} over the limit {:.3} ({})",
+                            c.what, c.value, c.unit, c.limit, c.why
+                        ));
+                        out.fix = Some(format!(
+                            "lower the {} (`max_power:`/`max_torque:` lower the feed to fit; or a smaller `ap`/`ae`, another tool or machine)",
+                            c.what
+                        ));
+                    }
+                }
+                out.feeds = rs.as_ref().map(|r| r.feeds);
+                out.resolved = rs;
+                if out.status == "refused" {
+                    // as a path refusal: not released, and it cuts nothing from the stock
+                    self.ops.push(out);
+                    return Ok(V::Op(self.ops.len() - 1));
+                }
+                let t = &self.tools[ti];
                 let h = s.heights;
                 match kind {
                     "engrave" => self.engrave(su, a, t, ti, h, (vf, vp), step, false, &mut voids),
@@ -4348,7 +5202,6 @@ impl Cam {
                             loops.push(l.reversed());
                         }
                         let rg = Region { loops };
-                        let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                         // the in-process stock's box: passes that would cut nothing in it are
                         // left out
                         let (b0, b1) = (s.ip.min, s.ip.max);
@@ -4479,7 +5332,6 @@ impl Cam {
                             let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
                                 .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
                             let pockets = pockets_of(&sec)?;
-                            let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                             let leave = get_num(a, "leave", Some(0.0))?;
                             let mut paths = vec![];
                             // a hole the tool does not fit (a drilled hole in the section) is left
@@ -4586,7 +5438,6 @@ impl Cam {
                             if hole.dir != [0.0, 0.0, -1.0] {
                                 return Err(not_down(&hn, hole.dir));
                             }
-                            let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                             let mut paths = vec![];
                             for p in &hole.places {
                                 let r = 0.5 * hole.d;
@@ -5342,9 +6193,10 @@ impl Cam {
         };
         if let Some(sp) = spot {
             let ti = add(self, sp, base_t)?;
+            // the spot cuts out to its chamfer ring, 0.9 of the drill (dspot below)
+            let r = self.drill_resolve(su, ti, &resolve::DrillAsk::default(), 1.0, Some(0.9 * drill_d))?;
             let t = &self.tools[ti];
-            let fe = self.feeds_for(su, t, t.tool.dc, 1.0);
-            let f = fe.map(|x| 0.3 * x.vf).unwrap_or(100.0);
+            let f = r.feed.v;
             // a 90° spot to just under the drill's radius: the chamfer ring the drill centres in
             let (sn, cs) = forge_math::dmath::sin_cos((0.5 * t.tool.angle).to_radians());
             let dspot = 0.45 * drill_d / (sn / cs).max(1e-9);
@@ -5367,9 +6219,9 @@ impl Cam {
                     *z = *r - 2.0 - dspot;
                 }
             }
-            // the speed the feed was set at (unset, the post's fallback S3000 ran it)
-            p.rpm = fe.map(|x| x.rpm).unwrap_or(0.0);
+            p.rpm = r.rpm.v;
             plan.push(format!("spot {} to {:.2} mm", t.tool.id, dspot));
+            out.drilled.push(("spot", t.tool.id.clone(), r));
             paths.push(p);
         }
         let ti = add(self, drill, base_t + 1)?;
@@ -5417,10 +6269,30 @@ impl Cam {
         } else {
             depth
         };
+        let dask = drill_ask_of(a)?;
+        let r = self.drill_resolve(su, ti, &dask, depth, None)?;
+        for c in &r.checks {
+            match c.verdict {
+                Verdict::Fail => {
+                    out.fix = Some(format!(
+                        "lower the {} (`max_power:`/`max_torque:` lower the feed to fit), or another drill or machine",
+                        c.what
+                    ));
+                    return Err(format!(
+                        "{} {:.3} {} over the limit {:.3} ({})",
+                        c.what, c.value, c.unit, c.limit, c.why
+                    ));
+                }
+                Verdict::Warn => self
+                    .warnings
+                    .push(format!("{}: drill {} {}", out.name, c.what, c.why)),
+                _ => {}
+            }
+        }
         let t = &self.tools[ti];
-        let peck = depth > 3.0 * t.tool.dc;
-        let fe = self.feeds_for(su, t, t.tool.dc, t.tool.dc);
-        let f = fe.map(|x| 0.1 * x.vf.min(2000.0)).unwrap_or(100.0);
+        let q = r.peck.v;
+        let peck = q > 0.0;
+        let f = r.feed.v;
         let kind = if peck { CycleKind::Peck } else { CycleKind::Drill };
         let mut dp = ops::holes(
             &hole.places,
@@ -5434,10 +6306,11 @@ impl Cam {
                 lead_feed: None,
             },
             depth,
-            if peck { t.tool.dc } else { 0.0 },
+            q,
         );
-        dp.rpm = fe.map(|x| x.rpm).unwrap_or(0.0);
+        dp.rpm = r.rpm.v;
         paths.push(dp);
+        out.drilled.push(("drill", t.tool.id.clone(), r));
         // each hole's circle is cleared down to where the full diameter reaches
         for p in &hole.places {
             let r = 0.5 * t.tool.dc;
@@ -5461,11 +6334,7 @@ impl Cam {
             if peck { "peck" } else { "drill" },
             t.tool.id,
             if through { "through" } else { "to depth" },
-            if peck {
-                format!(", q {}", t.tool.dc)
-            } else {
-                String::new()
-            }
+            if peck { format!(", q {q}") } else { String::new() }
         ));
         out.tool = Some(ti);
         // the ream, after the drill, to the hole's depth (a reamer cuts no point)
@@ -5473,7 +6342,7 @@ impl Cam {
             let ti = add(self, reamer, base_t + 5)?;
             let t = &self.tools[ti];
             let f = self
-                .feeds_for(su, t, t.tool.dc, t.tool.dc)
+                .feeds_for(su, ti, "general", t.tool.dc, t.tool.dc)
                 .map(|x| 0.1 * x.vf.min(2000.0))
                 .unwrap_or(100.0);
             paths.push(ops::holes(
@@ -5542,7 +6411,7 @@ impl Cam {
                 let ti = add(self, cb, base_t + 3)?;
                 let t = &self.tools[ti];
                 let f = self
-                    .feeds_for(su, t, t.tool.dc, 1.0)
+                    .feeds_for(su, ti, "general", t.tool.dc, 1.0)
                     .map(|x| 0.3 * x.vf)
                     .unwrap_or(100.0);
                 paths.push(ops::holes(
@@ -5568,7 +6437,7 @@ impl Cam {
                 let t = &self.tools[ti];
                 let dc = t.tool.dc;
                 let (stepover, step) = (0.4 * dc, (0.5 * dc).min(cdep));
-                let (vf, vp) = match self.feeds_for(su, t, stepover, step) {
+                let (vf, vp) = match self.feeds_for(su, ti, "pocket", stepover, step) {
                     Some(fe) => (fe.vf, 0.3 * fe.vf),
                     None => (300.0, 100.0),
                 };
@@ -5637,7 +6506,7 @@ impl Cam {
             let t = &self.tools[ti];
             let depth = 0.5 * (csd - t.tool.tip_d) / tan_rad((0.5 * ang).to_radians());
             let f = self
-                .feeds_for(su, t, t.tool.dc, 1.0)
+                .feeds_for(su, ti, "general", t.tool.dc, 1.0)
                 .map(|x| 0.3 * x.vf)
                 .unwrap_or(100.0);
             paths.push(ops::holes(
@@ -5658,9 +6527,80 @@ impl Cam {
         }
         if let Some(tp) = tap {
             let ti = add(self, tp, base_t + 2)?;
+            let part = &self.parts[self.setups[su].part];
+            let m = self
+                .lib
+                .machine(&self.setups[su].machine)
+                .map_err(|e| e.to_string())?;
             let t = &self.tools[ti];
-            let rpm = 300.0;
-            let f = t.tool.tp * rpm;
+            let sub = feeds::Substrate::of(&t.tool.material);
+            let preset = t.tool.presets.iter().find(|p| p.group == part.group).map(|p| {
+                let path = format!("preset.{}", if p.name.is_empty() { &p.group } else { &p.name });
+                (p, t.tool.cites.iter().find(|c| c.path == path))
+            });
+            let row = match sub {
+                feeds::Substrate::Hss => self.lib.tapping(&part.group, "hss"),
+                feeds::Substrate::Carbide => self.lib.tapping(&part.group, "carbide"),
+                _ => None,
+            };
+            let num_arg = |k: &str| match a.get(k) {
+                Some(V::Num(x)) if *x > 0.0 => Ok(Some(*x)),
+                Some(_) => Err(format!("`{k}` must be a number over 0")),
+                None => Ok(None),
+            };
+            let (vc, rpmv, feed, checks) = resolve::tapping(
+                num_arg("tap_vc")?,
+                num_arg("tap_rpm")?,
+                t.tool.dc,
+                t.tool.tp,
+                preset,
+                row,
+                &resolve::Spindle {
+                    rpm: m.rpm,
+                    max_feed: m.max_feed,
+                    power: &m.power,
+                },
+            )
+            .ok_or_else(|| {
+                format!(
+                    "no tapping speed for `{}` ({} tap) in group `{}`: no preset on the tap, no [[tap]] row, no `tap_vc:`/`tap_rpm:` given",
+                    t.tool.id,
+                    sub.name(),
+                    part.group
+                )
+            })?;
+            if let Some(c) = checks.iter().find(|c| c.verdict == Verdict::Fail) {
+                return Err(format!(
+                    "tap {} {:.1} {} over the limit {:.1}",
+                    c.what, c.value, c.unit, c.limit
+                ));
+            }
+            let rpm = rpmv.v;
+            let f = feed.v;
+            let tap_res = resolve::DrillResolved {
+                vc,
+                rpm: rpmv,
+                f: resolve::Val {
+                    v: t.tool.tp,
+                    unit: "mm/rev",
+                    source: resolve::Source::Library,
+                    note: "the tap's pitch".into(),
+                },
+                feed,
+                peck: resolve::Val {
+                    v: 0.0,
+                    unit: "mm",
+                    source: resolve::Source::Default,
+                    note: "a tap does not peck".into(),
+                },
+                h: f64::NAN,
+                mrr: f64::NAN,
+                power: f64::NAN,
+                torque: f64::NAN,
+                power_hi: f64::NAN,
+                power_avail: None,
+                checks,
+            };
             let mut p = ops::holes(
                 &hole.places,
                 CycleKind::Tap,
@@ -5677,7 +6617,8 @@ impl Cam {
             );
             p.rpm = rpm;
             paths.push(p);
-            plan.push(format!("tap {} (pitch {}) at {rpm} rpm", t.tool.id, t.tool.tp));
+            plan.push(format!("tap {} (pitch {}) at {rpm:.0} rpm", t.tool.id, t.tool.tp));
+            out.drilled.push(("tap", t.tool.id.clone(), tap_res));
             // the thread the tap cuts is not in the model (the hole is its tap drill): declared,
             // Δ the ring from the bore to the major diameter over the tapped depth, and the op
             // certified against P ∖ Δ, as thread_mill is
@@ -7880,6 +8821,12 @@ impl Cam {
                         ("torque_nm", n(f.torque)),
                     ])
                 });
+                let feeds_speeds = o.resolved.as_ref().map(feeds_speeds_json);
+                let drilling: Vec<Json> = o
+                    .drilled
+                    .iter()
+                    .map(|(role, id, r)| drilling_json(role, id, r))
+                    .collect();
                 let checks: Vec<Json> = o
                     .checks
                     .iter()
@@ -7939,6 +8886,8 @@ impl Cam {
                         Json::Arr(o.removals.iter().map(|s| Json::Str(s.clone())).collect()),
                     ),
                     ("feeds", feeds.unwrap_or(Json::Null)),
+                    ("feeds_speeds", feeds_speeds.unwrap_or(Json::Null)),
+                    ("drilling", Json::Arr(drilling)),
                     (
                         "path",
                         Json::obj(vec![

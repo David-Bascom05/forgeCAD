@@ -37,7 +37,7 @@
 //! id = "..."; code = "..."; h = 25; b = 25; l1 = 110   # + blade_h
 //! ```
 use crate::toml::{self, Table, num, tables, text};
-use crate::{Cite, LibError, Preset, cite, preset_paths, read_presets};
+use crate::{Cite, LibError, Preset, cite, material_score, preset_paths, read_presets};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Insert {
@@ -143,7 +143,145 @@ fn opt_required(t: &Table, keys: &[&str], into: &mut Vec<String>) {
     }
 }
 
+/// An insert preset as picked for a cut: the preset, its cite, and how it was chosen.
+#[derive(Clone, Debug)]
+pub struct InsertPick<'a> {
+    /// The row the speed (and depth) is taken from.
+    pub preset: &'a Preset,
+    pub cite: Option<&'a Cite>,
+    /// The feed, mm/rev: the speed row's own where a material's row was picked; else the
+    /// 10th percentile of the same rows' feeds (picked separately: `f_row`).
+    pub f: f64,
+    pub f_row: &'a Preset,
+    pub f_cite: Option<&'a Cite>,
+    pub why: String,
+}
+
 impl Insert {
+    /// The insert's preset for a group (CAM-HAAS's names: "<G> <chipbreaker> <grade>" the
+    /// maker's lead row for the grade, "<G> <chipbreaker> <grade> <material>" each printed
+    /// material). The grade is the one asked for (the insert record names none: a code is sold
+    /// in several grades); none asked, the grade whose lead row is slowest, so an unstated grade
+    /// never runs faster than any of them. Within the grade, the maker's row naming the stock
+    /// material (`material_score`), else the lead row. Err: the grades the insert has for the
+    /// group, where the one asked is not among them.
+    pub fn preset_for(
+        &self,
+        group: &str,
+        grade: Option<&str>,
+        material: Option<&str>,
+    ) -> Result<Option<InsertPick<'_>>, Vec<String>> {
+        let head = format!("{group} {} ", self.chipbreaker);
+        // (grade, material text) of each preset of the group
+        let parts: Vec<(&Preset, &str, &str)> = self
+            .presets
+            .iter()
+            .filter(|p| p.group == group)
+            .map(|p| {
+                let rest = p.name.strip_prefix(&head).unwrap_or("");
+                let (g, m) = rest.split_once(' ').unwrap_or((rest, ""));
+                (p, g, m)
+            })
+            .collect();
+        if parts.is_empty() {
+            return Ok(None);
+        }
+        let mut grades: Vec<&str> = parts.iter().map(|x| x.1).collect();
+        grades.sort();
+        grades.dedup();
+        // the 10th-percentile row by speed of a set (an actual cited row: nearest rank)
+        fn p10(rows: Vec<&Preset>) -> Option<&Preset> {
+            let q = crate::feeds::Quantiles::of(rows.iter().map(|p| p.vc).collect())?;
+            rows.into_iter().find(|p| p.vc == q.p10)
+        }
+        fn p10_f(rows: Vec<&Preset>) -> Option<&Preset> {
+            let q = crate::feeds::Quantiles::of(rows.iter().map(|p| p.fz).collect())?;
+            rows.into_iter().find(|p| p.fz == q.p10)
+        }
+        // a grade's material rows (its lead row where it prints none)
+        let rows_of = |g: Option<&str>| -> Vec<&Preset> {
+            let m: Vec<&Preset> = parts
+                .iter()
+                .filter(|x| g.is_none_or(|g| x.1 == g) && !x.2.is_empty())
+                .map(|x| x.0)
+                .collect();
+            if m.is_empty() {
+                parts
+                    .iter()
+                    .filter(|x| g.is_none_or(|g| x.1 == g))
+                    .map(|x| x.0)
+                    .collect()
+            } else {
+                m
+            }
+        };
+        let grade = match grade {
+            Some(g) if grades.contains(&g) => Some(g),
+            Some(_) => return Err(grades.iter().map(|g| g.to_string()).collect()),
+            None => None,
+        };
+        let matched = match (grade, material) {
+            (Some(g), Some(m)) => parts
+                .iter()
+                .filter(|x| x.1 == g && !x.2.is_empty())
+                .map(|x| (material_score(x.2, m), x.0))
+                .filter(|x| x.0 > 0)
+                .max_by(|a, b| a.0.cmp(&b.0).then(b.1.vc.total_cmp(&a.1.vc)))
+                .map(|x| x.1),
+            _ => None,
+        };
+        let (p, fr, why) = match (matched, grade) {
+            (Some(p), Some(g)) => (p, p, format!("grade {g}; the maker's row for the stock material")),
+            (_, Some(g)) => {
+                let rows = rows_of(Some(g));
+                let n = rows.len();
+                let (Some(p), Some(fr)) = (p10(rows.clone()), p10_f(rows)) else {
+                    return Ok(None);
+                };
+                (
+                    p,
+                    fr,
+                    format!(
+                        "grade {g}; {}: the 10th percentiles by speed and, separately, by feed of the grade's {n} rows",
+                        if material.is_some() {
+                            "no row names the stock material"
+                        } else {
+                            "no stock material named"
+                        }
+                    ),
+                )
+            }
+            (_, None) => {
+                let rows = rows_of(None);
+                let n = rows.len();
+                let (Some(p), Some(fr)) = (p10(rows.clone()), p10_f(rows)) else {
+                    return Ok(None);
+                };
+                (
+                    p,
+                    fr,
+                    format!(
+                        "grade not stated: the 10th percentiles by speed and, separately, by feed of the insert's {n} rows for {group} over its {} grades ({}); give the insert's grade (and the stock material) to use its own",
+                        grades.len(),
+                        grades.join(", ")
+                    ),
+                )
+            }
+        };
+        let cite_of = |p: &Preset| {
+            let path = format!("preset.{}", p.name);
+            self.cites.iter().find(|c| c.path == path)
+        };
+        Ok(Some(InsertPick {
+            preset: p,
+            cite: cite_of(p),
+            f: fr.fz,
+            f_row: fr,
+            f_cite: cite_of(fr),
+            why,
+        }))
+    }
+
     pub fn from_table(t: &Table) -> Result<Insert, LibError> {
         let (id, code) = id_and(t, "insert")?;
         let rec = format!("insert `{id}`");

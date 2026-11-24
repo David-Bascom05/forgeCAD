@@ -3,6 +3,14 @@
 version = 4
 
 [[package]]
+name = "feeds-vs-makers"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-agent"
 version = "0.1.0"
 dependencies = [

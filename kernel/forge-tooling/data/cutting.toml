@@ -1,75 +1,1112 @@
-# Cutting data per ISO 513 group: our own round mid-range numbers for general carbide and HSS
-# end milling, restated from the public ranges tool makers' handbooks give. A starting point:
-# verify with the tool maker for the tool and the material.
+# Cutting data per ISO 513 group for general carbide and HSS end milling, each value cited
+# (cite.rs): `published` where a source states it, `estimate` where it is our number with its
+# basis, `unknown` where nothing was read. The speeds and chips are forgeCAD's own round starting
+# points: verify with the tool maker for the tool and the material. A tool's own data
+# ([[tool.preset]]) and the user's values are used over these (forge_tooling::resolve).
+#
+# Measured Kienzle data: Klippel H., Suessmaier S., Kuffa M., Wegener K., "Dry Cutting
+# Experiments Database Ti6Al4V and Ck45", arXiv:2209.04197 (2022), licensed CC BY 4.0
+# (https://creativecommons.org/licenses/by/4.0/). Values restated as ranges with attribution.
 
 [[group]]
 group = "P"
 name = "steels"
-vc_carbide = 180
+real = true
+vc_carbide = 83.8
 vc_hss = 30
 fz_d1 = 0.008
 fz_d20 = 0.08
 kc1_1 = 1700
 mc = 0.25
-source = "forgecad generic mid-range, restated from public handbook ranges"
+kc1_1_range = [1368, 1935]
+mc_range = [0.17, 0.51]
+fz_d_rows = [3.175, 4.763, 6.35, 9.525, 12.7]
+fz_rows = [0.01143, 0.01651, 0.02286, 0.03302, 0.04318]
+source = "per value: see the cites"
 note = "verify with the tool maker"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): 714 cited maker rows"
+taken = "2026-11-24"
+value = "median 83.8 m/min over 714 rows (harvey 104, helical 374, lakeshore 236)"
+basis = "median of the cited maker rows for this ISO group, carbide end mills, every op class (CAM-HAAS's extractions research/cam/tooling/raw/{harvey,helical,lakeshore}.json, each row's URL listed in verify/feeds-vs-makers/rows.tsv); was a forgeCAD placeholder well above every maker median for P K M H (feeds-vs-makers report)"
+[[group.cite]]
+path = "vc_hss"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; mid-range for unalloyed carbon steel, verify with the tool maker"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "kc1_1"
+status = "estimate"
+basis = "inside the measured Ck45 (AISI 1045) range 1368-1935 N/mm2 over vc 10-450 m/min (orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, fitted per vc by extrapolating kc to h = 1 mm (paper section 3.7)); a round mid value, not one measurement; other P steels not covered"
+[[group.cite]]
+path = "mc"
+status = "estimate"
+basis = "inside the measured Ck45 range 0.17-0.51 (orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, fitted per vc by extrapolating kc to h = 1 mm (paper section 3.7)); the power is also checked at the range's upper end"
+[[group.cite]]
+path = "kc1_1_range"
+status = "published"
+source = "https://arxiv.org/abs/2209.04197"
+taken = "2026-11-24"
+value = "Ck45 kc1.1 [N/mm2] at vc 10,30,50,70,100,150,200,250,300,350,450 m/min: 1935,1803,1417,1729,1672,1707,1716,1794,1851,1575,1368"
+note = "Klippel, Suessmaier, Kuffa, Wegener, 'Dry Cutting Experiments Database Ti6Al4V and Ck45', ETH Zurich IWF, arXiv:2209.04197 v1 (2022), CC BY 4.0; read from the authors' TeX source (Kienzle_LtxTabelle_*.inc, the paper's Tables 16/17); orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, fitted per vc by extrapolating kc to h = 1 mm (paper section 3.7). Ck45 only"
+[[group.cite]]
+path = "mc_range"
+status = "published"
+source = "https://arxiv.org/abs/2209.04197"
+taken = "2026-11-24"
+value = "Ck45 mc at the same vc: 0.19,0.17,0.51,0.35,0.32,0.28,0.26,0.22,0.22,0.27,0.29"
+note = "Klippel, Suessmaier, Kuffa, Wegener, 'Dry Cutting Experiments Database Ti6Al4V and Ck45', ETH Zurich IWF, arXiv:2209.04197 v1 (2022), CC BY 4.0; read from the authors' TeX source (Kienzle_LtxTabelle_*.inc, the paper's Tables 16/17); orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, fitted per vc by extrapolating kc to h = 1 mm (paper section 3.7). Ck45 only"
+[[group.cite]]
+path = "fz_d_rows"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): maker slot rows, flat carbide end mills"
+taken = "2026-11-24"
+value = "median slot chip (ae >= D/2) at 1/8, 3/16, 1/4, 3/8, 1/2 in: [0.01143, 0.01651, 0.02286, 0.03302, 0.04318] mm/tooth (rows per bin 14, 14, 16, 16, 16)"
+basis = "median of the cited Harvey and Helical slot rows at each diameter (each row cited in rows.tsv); bins with fewer than 10 rows left out; used over the fz_d1-fz_d20 line"
+[[group.cite]]
+path = "fz_rows"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): maker slot rows, flat carbide end mills"
+taken = "2026-11-24"
+value = "median slot chip (ae >= D/2) at 1/8, 3/16, 1/4, 3/8, 1/2 in: [0.01143, 0.01651, 0.02286, 0.03302, 0.04318] mm/tooth (rows per bin 14, 14, 16, 16, 16)"
+basis = "median of the cited Harvey and Helical slot rows at each diameter (each row cited in rows.tsv); bins with fewer than 10 rows left out; used over the fz_d1-fz_d20 line"
 
 [[group]]
 group = "M"
 name = "stainless steels"
-vc_carbide = 110
+real = true
+vc_carbide = 76.2
 vc_hss = 15
 fz_d1 = 0.006
 fz_d20 = 0.06
 kc1_1 = 2100
 mc = 0.21
-source = "forgecad generic mid-range, restated from public handbook ranges"
+source = "per value: see the cites"
 note = "verify with the tool maker"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): 170 cited maker rows"
+taken = "2026-11-24"
+value = "median 76.2 m/min over 170 rows (harvey 52, lakeshore 118)"
+basis = "median of the cited maker rows for this ISO group, carbide end mills, every op class (CAM-HAAS's extractions research/cam/tooling/raw/{harvey,helical,lakeshore}.json, each row's URL listed in verify/feeds-vs-makers/rows.tsv); was a forgeCAD placeholder well above every maker median for P K M H (feeds-vs-makers report)"
+[[group.cite]]
+path = "vc_hss"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "kc1_1"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read for any M-group material"
+[[group.cite]]
+path = "mc"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read"
 
 [[group]]
 group = "K"
 name = "cast irons"
-vc_carbide = 160
+real = true
+vc_carbide = 64.0
 vc_hss = 25
 fz_d1 = 0.01
 fz_d20 = 0.1
 kc1_1 = 1100
 mc = 0.28
-source = "forgecad generic mid-range, restated from public handbook ranges"
+source = "per value: see the cites"
 note = "verify with the tool maker"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): 118 cited maker rows"
+taken = "2026-11-24"
+value = "median 64.0 m/min over 118 rows (lakeshore 118)"
+basis = "median of the cited maker rows for this ISO group, carbide end mills, every op class (CAM-HAAS's extractions research/cam/tooling/raw/{harvey,helical,lakeshore}.json, each row's URL listed in verify/feeds-vs-makers/rows.tsv); was a forgeCAD placeholder well above every maker median for P K M H (feeds-vs-makers report)"
+[[group.cite]]
+path = "vc_hss"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "kc1_1"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read for any K-group material"
+[[group.cite]]
+path = "mc"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read"
 
 [[group]]
 group = "N"
 name = "non-ferrous (aluminium, copper alloys)"
-vc_carbide = 400
+real = true
+vc_carbide = 213.4
 vc_hss = 90
 fz_d1 = 0.01
 fz_d20 = 0.12
 kc1_1 = 700
 mc = 0.25
-source = "forgecad generic mid-range, restated from public handbook ranges"
+kc1_1_range = [350, 700]
+fz_d_rows = [3.175, 4.763, 6.35, 9.525, 12.7]
+fz_rows = [0.03708, 0.05537, 0.07823, 0.12319, 0.16434]
+source = "per value: see the cites"
 note = "verify with the tool maker"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): 961 cited maker rows"
+taken = "2026-11-24"
+value = "median 213.4 m/min over 961 rows (harvey 468, helical 198, lakeshore 295)"
+basis = "median of the cited maker rows for this ISO group, carbide end mills, every op class (CAM-HAAS's extractions research/cam/tooling/raw/{harvey,helical,lakeshore}.json, each row's URL listed in verify/feeds-vs-makers/rows.tsv); was a forgeCAD placeholder well above every maker median for P K M H (feeds-vs-makers report)"
+[[group.cite]]
+path = "vc_hss"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; at 12.7 mm it interpolates to 0.0777 mm, near Helical's 1/2 in slot chip 0.0032 in (0.0813 mm) for H45AL-3 (feeds-speeds.md section 8)"
+[[group.cite]]
+path = "kc1_1"
+status = "estimate"
+basis = "the top of the Sandvik N-group range 350-700 N/mm2 per research/cam/libraries-machines-posts-feeds.md section 3.1 (Sandvik Coromant material pages, read by TOOLPATH-RESEARCH in an earlier session; not re-read here): the high end, so the power errs high"
+[[group.cite]]
+path = "mc"
+status = "estimate"
+basis = "Sandvik's 'typically 0.25' per research/cam/libraries-machines-posts-feeds.md section 3.1 (Sandvik Coromant material pages, read by TOOLPATH-RESEARCH in an earlier session; not re-read here); no measured aluminium mc read (feeds-speeds.md section 3.1)"
+[[group.cite]]
+path = "kc1_1_range"
+status = "estimate"
+basis = "the Sandvik N-group range per research/cam/libraries-machines-posts-feeds.md section 3.1 (Sandvik Coromant material pages, read by TOOLPATH-RESEARCH in an earlier session; not re-read here)"
+[[group.cite]]
+path = "fz_d_rows"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): maker slot rows, flat carbide end mills"
+taken = "2026-11-24"
+value = "median slot chip (ae >= D/2) at 1/8, 3/16, 1/4, 3/8, 1/2 in: [0.03708, 0.05537, 0.07823, 0.12319, 0.16434] mm/tooth (rows per bin 15, 15, 24, 24, 24)"
+basis = "median of the cited Harvey and Helical slot rows at each diameter (each row cited in rows.tsv); bins with fewer than 10 rows left out; used over the fz_d1-fz_d20 line"
+[[group.cite]]
+path = "fz_rows"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): maker slot rows, flat carbide end mills"
+taken = "2026-11-24"
+value = "median slot chip (ae >= D/2) at 1/8, 3/16, 1/4, 3/8, 1/2 in: [0.03708, 0.05537, 0.07823, 0.12319, 0.16434] mm/tooth (rows per bin 15, 15, 24, 24, 24)"
+basis = "median of the cited Harvey and Helical slot rows at each diameter (each row cited in rows.tsv); bins with fewer than 10 rows left out; used over the fz_d1-fz_d20 line"
 
 [[group]]
 group = "S"
 name = "heat-resistant alloys and titanium"
-vc_carbide = 45
+real = true
+vc_carbide = 53.3
 vc_hss = 8
 fz_d1 = 0.005
 fz_d20 = 0.05
 kc1_1 = 2500
 mc = 0.24
-source = "forgecad generic mid-range, restated from public handbook ranges"
+source = "per value: see the cites"
 note = "verify with the tool maker"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): 229 cited maker rows"
+taken = "2026-11-24"
+value = "median 53.3 m/min over 229 rows (harvey 52, lakeshore 177)"
+basis = "median of the cited maker rows for this ISO group, carbide end mills, every op class (CAM-HAAS's extractions research/cam/tooling/raw/{harvey,helical,lakeshore}.json, each row's URL listed in verify/feeds-vs-makers/rows.tsv); was a forgeCAD placeholder well above every maker median for P K M H (feeds-vs-makers report)"
+[[group.cite]]
+path = "vc_hss"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "kc1_1"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; above every measured Ti6Al4V value (662-1299 N/mm2, Klippel et al. 2022, https://arxiv.org/abs/2209.04197), so it errs high (more power) for titanium; nickel and cobalt superalloys: no value read"
+[[group.cite]]
+path = "mc"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; Ti6Al4V measured 0.21-0.41 (Klippel et al. 2022, https://arxiv.org/abs/2209.04197); superalloys: no value read"
 
 [[group]]
 group = "H"
 name = "hardened steels"
-vc_carbide = 60
+real = true
+vc_carbide = 36.6
 vc_hss = 5
 fz_d1 = 0.004
 fz_d20 = 0.04
 kc1_1 = 3400
 mc = 0.2
-source = "forgecad generic mid-range, restated from public handbook ranges"
+source = "per value: see the cites"
 note = "verify with the tool maker"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): 66 cited maker rows"
+taken = "2026-11-24"
+value = "median 36.6 m/min over 66 rows (helical 66)"
+basis = "median of the cited maker rows for this ISO group, carbide end mills, every op class (CAM-HAAS's extractions research/cam/tooling/raw/{harvey,helical,lakeshore}.json, each row's URL listed in verify/feeds-vs-makers/rows.tsv); was a forgeCAD placeholder well above every maker median for P K M H (feeds-vs-makers report)"
+[[group.cite]]
+path = "vc_hss"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "kc1_1"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read for any H-group material"
+[[group.cite]]
+path = "mc"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read"
+
+# Material properties (ISO 513 class, measured Kienzle data) live in forge-material's
+# materials.toml (machining.* keys), not here: this file is tool-side and generic group data.
+
+# Generic drilling data per group and drill substrate: vc and the feed per revolution at stated
+# diameters (linear between; outside, the lesser of the linear and proportional extension). Each
+# row is one maker's series (Guhring's catalog values, already cited on its drill records in
+# tools/guhring.toml) held for drills of that substrate with no data of their own: an estimate,
+# said per value. A drill's own preset and the user's values come first.
+
+[[drill]]
+group = "P"
+substrate = "carbide"
+real = true
+vc = 80.8
+d_rows = [3, 4, 5, 6, 8, 10, 12]
+f_rows = [0.13, 0.14, 0.15, 0.17, 0.21, 0.25, 0.27]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median 80.8 m/min over 96 rows (lakeshore 24, guhring 30, yg1 42)"
+basis = "pooled median of the cited maker rows for this group (each row's URL in verify/feeds-vs-makers/rows.tsv); was Guhring Series 5510 alone, the most aggressive of the makers read"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median feed per rev at 3, 4, 5, 6, 8, 10, 12 mm: [0.13, 0.14, 0.15, 0.17, 0.21, 0.25, 0.27] mm/rev (6 rows per bin, YG-1; Guhring has one row per bin and is left out)"
+basis = "median of the cited maker rows per diameter bin with at least 5 rows (each row in verify/feeds-vs-makers/rows.tsv)"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median feed per rev at 3, 4, 5, 6, 8, 10, 12 mm: [0.13, 0.14, 0.15, 0.17, 0.21, 0.25, 0.27] mm/rev (6 rows per bin, YG-1; Guhring has one row per bin and is left out)"
+basis = "median of the cited maker rows per diameter bin with at least 5 rows (each row in verify/feeds-vs-makers/rows.tsv)"
+
+[[drill]]
+group = "M"
+substrate = "carbide"
+real = true
+vc = 54.9
+d_rows = [6.35, 9.525]
+f_rows = [0.1651, 0.2032]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median 54.9 m/min over 23 rows (lakeshore 8, guhring 15)"
+basis = "pooled median of the cited maker rows for this group (each row's URL in verify/feeds-vs-makers/rows.tsv); was Guhring Series 5510 alone, the most aggressive of the makers read"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Stainless steels, austenitic, HRC <= 36, BHN <= 337: SFM 180; IPR 0.0065 at 1/4 in, 0.0080 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Stainless steels, austenitic, HRC <= 36, BHN <= 337: SFM 180; IPR 0.0065 at 1/4 in, 0.0080 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+
+[[drill]]
+group = "K"
+substrate = "carbide"
+real = true
+vc = 88.4
+d_rows = [3, 4, 5, 6, 8, 10, 12]
+f_rows = [0.13, 0.14, 0.15, 0.17, 0.21, 0.25, 0.27]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median 88.4 m/min over 73 rows (lakeshore 16, guhring 15, yg1 42)"
+basis = "pooled median of the cited maker rows for this group (each row's URL in verify/feeds-vs-makers/rows.tsv); was Guhring Series 5510 alone, the most aggressive of the makers read"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median feed per rev at 3, 4, 5, 6, 8, 10, 12 mm: [0.13, 0.14, 0.15, 0.17, 0.21, 0.25, 0.27] mm/rev (6 rows per bin, YG-1; Guhring has one row per bin and is left out)"
+basis = "median of the cited maker rows per diameter bin with at least 5 rows (each row in verify/feeds-vs-makers/rows.tsv)"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median feed per rev at 3, 4, 5, 6, 8, 10, 12 mm: [0.13, 0.14, 0.15, 0.17, 0.21, 0.25, 0.27] mm/rev (6 rows per bin, YG-1; Guhring has one row per bin and is left out)"
+basis = "median of the cited maker rows per diameter bin with at least 5 rows (each row in verify/feeds-vs-makers/rows.tsv)"
+
+[[drill]]
+group = "N"
+substrate = "carbide"
+real = true
+vc = 137.2
+d_rows = [6.35, 9.525]
+f_rows = [0.4064, 0.508]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median 137.2 m/min over 39 rows (lakeshore 24, guhring 15)"
+basis = "pooled median of the cited maker rows for this group (each row's URL in verify/feeds-vs-makers/rows.tsv); was Guhring Series 5510 alone, the most aggressive of the makers read"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Aluminium and Al-alloys, BHN <= 120: SFM 1015; IPR 0.0160 at 1/4 in, 0.0200 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Aluminium and Al-alloys, BHN <= 120: SFM 1015; IPR 0.0160 at 1/4 in, 0.0200 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+
+[[drill]]
+group = "P"
+substrate = "hss"
+real = true
+vc = 39.62
+d_rows = [6.35, 9.525]
+f_rows = [0.2032, 0.254]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN <= 150: SFM 130; IPR 0.0080 at 1/4 in, 0.0100 at 3/8 in"
+basis = "Guhring Series 651 (HSS jobber) values for this group, held for other hss drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN <= 150: SFM 130; IPR 0.0080 at 1/4 in, 0.0100 at 3/8 in"
+basis = "Guhring Series 651 (HSS jobber) values for this group, held for other hss drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN <= 150: SFM 130; IPR 0.0080 at 1/4 in, 0.0100 at 3/8 in"
+basis = "Guhring Series 651 (HSS jobber) values for this group, held for other hss drills; another maker's or series' data may differ"
+
+[[drill]]
+group = "K"
+substrate = "hss"
+real = true
+vc = 39.62
+d_rows = [6.35, 9.525]
+f_rows = [0.2032, 0.254]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
+taken = "2026-11-23"
+value = "Cast iron, HRC <= 23, BHN <= 242: SFM 130; IPR 0.0080 at 1/4 in, 0.0100 at 3/8 in"
+basis = "Guhring Series 651 (HSS jobber) values for this group, held for other hss drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
+taken = "2026-11-23"
+value = "Cast iron, HRC <= 23, BHN <= 242: SFM 130; IPR 0.0080 at 1/4 in, 0.0100 at 3/8 in"
+basis = "Guhring Series 651 (HSS jobber) values for this group, held for other hss drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
+taken = "2026-11-23"
+value = "Cast iron, HRC <= 23, BHN <= 242: SFM 130; IPR 0.0080 at 1/4 in, 0.0100 at 3/8 in"
+basis = "Guhring Series 651 (HSS jobber) values for this group, held for other hss drills; another maker's or series' data may differ"
+
+[[drill]]
+group = "N"
+substrate = "hss"
+real = true
+vc = 47.244
+d_rows = [3, 6, 10, 12, 20]
+f_rows = [0.0508, 0.127, 0.2032, 0.2286, 0.3556]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%201100_%201600.pdf"
+taken = "2026-11-24"
+value = "Aluminum 5052, 7075: Drilling Speed 105-205 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.014"
+basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Aluminum 5052, 7075, held for other HSS drills in group N: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%201100_%201600.pdf"
+taken = "2026-11-24"
+value = "Aluminum 5052, 7075: Drilling Speed 105-205 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.014"
+basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Aluminum 5052, 7075, held for other HSS drills in group N: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%201100_%201600.pdf"
+taken = "2026-11-24"
+value = "Aluminum 5052, 7075: Drilling Speed 105-205 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.014"
+basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Aluminum 5052, 7075, held for other HSS drills in group N: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"
+
+[[drill]]
+group = "M"
+substrate = "hss"
+real = true
+vc = 15.24
+d_rows = [3, 6, 10, 12, 20]
+f_rows = [0.0508, 0.127, 0.2032, 0.2286, 0.3302]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%201100_%201600.pdf"
+taken = "2026-11-24"
+value = "Austenitic 304, 316: Drilling Speed 40-60 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.013"
+basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Austenitic 304, 316, held for other HSS drills in group M: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%201100_%201600.pdf"
+taken = "2026-11-24"
+value = "Austenitic 304, 316: Drilling Speed 40-60 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.013"
+basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Austenitic 304, 316, held for other HSS drills in group M: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%201100_%201600.pdf"
+taken = "2026-11-24"
+value = "Austenitic 304, 316: Drilling Speed 40-60 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.013"
+basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Austenitic 304, 316, held for other HSS drills in group M: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"
+
+[[drill]]
+group = "S"
+substrate = "carbide"
+real = true
+vc = 39.624
+d_rows = [3, 6, 10, 12]
+f_rows = [0.0254, 0.0381, 0.061, 0.0635]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%20215_%20220D_%20200_%20233.pdf"
+taken = "2026-11-24"
+value = "Titanium Alloys (Annealed): Drilling Speed 120-140 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12 mm: 0.0010, 0.0015, 0.0024, 0.0025"
+basis = "OSG solid carbide general drilling (Lists 215/220D/200/233, catalog pages 338-340) for annealed titanium alloys, held for other carbide drills in group S: vc at the middle of the printed SFM range, the feed at the LOW end (errs slow); not for nickel alloys or solution-treated titanium (OSG prints 50-70 SFM for those)"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%20215_%20220D_%20200_%20233.pdf"
+taken = "2026-11-24"
+value = "Titanium Alloys (Annealed): Drilling Speed 120-140 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12 mm: 0.0010, 0.0015, 0.0024, 0.0025"
+basis = "OSG solid carbide general drilling (Lists 215/220D/200/233, catalog pages 338-340) for annealed titanium alloys, held for other carbide drills in group S: vc at the middle of the printed SFM range, the feed at the LOW end (errs slow); not for nickel alloys or solution-treated titanium (OSG prints 50-70 SFM for those)"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%20215_%20220D_%20200_%20233.pdf"
+taken = "2026-11-24"
+value = "Titanium Alloys (Annealed): Drilling Speed 120-140 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12 mm: 0.0010, 0.0015, 0.0024, 0.0025"
+basis = "OSG solid carbide general drilling (Lists 215/220D/200/233, catalog pages 338-340) for annealed titanium alloys, held for other carbide drills in group S: vc at the middle of the printed SFM range, the feed at the LOW end (errs slow); not for nickel alloys or solution-treated titanium (OSG prints 50-70 SFM for those)"
+
+# Generic tapping speeds per group and tap substrate. OSG A Brand Tap Lineup Vol 2 (EDP 80061CA-V2,
+# (c) 2019 OSG USA; powder-metallurgy HSS, V coating), its List 16505 A-SFT (spiral flute) and
+# 16515 A-POT (spiral point) tables: the lower of the two lists at the LOW end of the printed SFM
+# range (a generic tap's form is not stated; errs slow). No row for S or H: OSG prints none for
+# titanium or over 45 HRC in these cut-tap tables.
+
+[[tap]]
+group = "P"
+substrate = "hss"
+real = true
+vc = 24.384
+[[tap.cite]]
+path = "vc"
+status = "estimate"
+source = "https://cdn.dgisupply.ca/pdf//manufacturers/OSG%20Literature/OSG-A-Brand-Tap-Lineup.pdf (catalog pages 33 and 41)"
+taken = "2026-11-24"
+value = "Low carbon 1010/1018: SFM 80-120 (A-SFT 16505 and A-POT 16515)"
+basis = "the low end of the slower list (80 SFM), held for other HSS cut taps in group P; OSG's are PM-HSS with V coating, a plain HSS tap may want less"
+
+[[tap]]
+group = "M"
+substrate = "hss"
+real = true
+vc = 4.572
+[[tap.cite]]
+path = "vc"
+status = "estimate"
+source = "https://cdn.dgisupply.ca/pdf//manufacturers/OSG%20Literature/OSG-A-Brand-Tap-Lineup.pdf (catalog pages 33 and 41)"
+taken = "2026-11-24"
+value = "300 stainless: SFM 15-35 (A-SFT 16505); 25-75 (A-POT 16515)"
+basis = "the low end of the slower list (15 SFM), held for other HSS cut taps in group M; OSG's are PM-HSS with V coating, a plain HSS tap may want less"
+
+[[tap]]
+group = "K"
+substrate = "hss"
+real = true
+vc = 15.24
+[[tap.cite]]
+path = "vc"
+status = "estimate"
+source = "https://cdn.dgisupply.ca/pdf//manufacturers/OSG%20Literature/OSG-A-Brand-Tap-Lineup.pdf (catalog pages 33 and 41)"
+taken = "2026-11-24"
+value = "Cast Iron: SFM 50-80 (A-SFT 16505); 60-100 (A-POT 16515)"
+basis = "the low end of the slower list (50 SFM), held for other HSS cut taps in group K; OSG's are PM-HSS with V coating, a plain HSS tap may want less"
+
+[[tap]]
+group = "N"
+substrate = "hss"
+real = true
+vc = 21.336
+[[tap.cite]]
+path = "vc"
+status = "estimate"
+source = "https://cdn.dgisupply.ca/pdf//manufacturers/OSG%20Literature/OSG-A-Brand-Tap-Lineup.pdf (catalog pages 33 and 41)"
+taken = "2026-11-24"
+value = "Aluminium 6061/7075: SFM 70-120 (A-SFT 16505 and A-POT 16515)"
+basis = "the low end of the slower list (70 SFM), held for other HSS cut taps in group N; OSG's are PM-HSS with V coating, a plain HSS tap may want less"
+
+# Op classes: the chip a class holds against the slot chip, for the generic table (a tool's own
+# classed preset is used as given). Derived from the makers' own columns: for each tool and
+# material with a slot row, the chip its rough or finish row produces (fz x radial thinning at
+# its stated ae) over its slot chip; the median over all pairs. Rough applies only below ae = D/2
+# (the makers' rough columns are at 30-50% ae; a full-width cut keeps the slot chip).
+
+[[op_class]]
+name = "rough"
+real = true
+chip_factor = 1.466
+[[op_class.cite]]
+path = "chip_factor"
+status = "estimate"
+source = "verify/feeds-vs-makers (rows.tsv): Harvey and Helical rough vs slot columns, same tool and material"
+taken = "2026-11-24"
+value = "median 1.466 over 345 pairs (10th-90th 1.166-1.833); Harvey 1.167, Helical 1.705"
+basis = "rough-row chip (fz x 2 sqrt(r - r^2) at its stated ae, r = ae/D < 0.5) over the same tool's slot-row chip, median of the cited rows"
+
+[[op_class]]
+name = "finish"
+real = true
+chip_factor = 0.75
+[[op_class.cite]]
+path = "chip_factor"
+status = "estimate"
+source = "verify/feeds-vs-makers (rows.tsv): Harvey and Helical finish vs slot columns, same tool and material"
+taken = "2026-11-24"
+value = "median 0.750 over 378 pairs (10th-90th 0.517-0.934); Harvey 0.750, Helical 0.716"
+basis = "finish-row chip (fz x radial thinning at its stated ae) over the same tool's slot-row chip, median of the cited rows"
+
+# Elastic data per tool substrate, for the deflection check (feeds::tip_deflection).
+
+[[substrate]]
+name = "carbide"
+real = true
+e_mpa = 618000
+de_ratio = 0.8
+[[substrate.cite]]
+path = "e_mpa"
+status = "estimate"
+source = "CERATIZIT, Round Tool Materials 2024 EN, grade CTU13L, https://cdn.plansee-group.com/is/content/planseemedia/ceratizit/downloads/pdf/ctu13l/EN.pdf"
+taken = "2026-11-24"
+value = "Binder 6.5 m%; Modulus of elasticity 618 GPa"
+basis = "one maker's grade (6.5% Co) held for carbide end mills: E falls as Co rises (a 10% Co grade is near 570 GPa per a non-maker reprint), so a higher-Co tool deflects a little more than this says"
+[[substrate.cite]]
+path = "de_ratio"
+status = "unknown"
+basis = "Kops and Vo, Determination of the equivalent diameter of an end mill based on its compliance, CIRP Annals 39(1):93-96, 1990, DOI 10.1016/S0007-8506(07)61010-5: 'approximately 80% of the cutter diameter for both two- and four-flute end mills', read ONLY as a search-engine snippet of the abstract; the paper itself not read. Flute count and helix move it; unverified"
+
+[[substrate]]
+name = "hss"
+real = true
+e_mpa = 219000
+de_ratio = 0.8
+[[substrate.cite]]
+path = "e_mpa"
+status = "published"
+source = "voestalpine BOHLER, S600 (1.3343 / HS6-5-2C, M2) datasheet, https://www.bohler-edelstahl.com/app/uploads/sites/248/productdb/api/s600_en_gb.pdf"
+taken = "2026-11-24"
+value = "Modulus of elasticity 219 x 10^3 N/mm2 at 20 C (S705 HSS-Co: 224)"
+[[substrate.cite]]
+path = "de_ratio"
+status = "unknown"
+basis = "as for carbide: Kops and Vo 1990 (CIRP Annals 39(1):93-96), 'approximately 80%', read only as a search-engine snippet of the abstract; unverified"
+
+# Plastics: not an ISO 513 class (the makers group them apart; forge-material family plastic -> O).
+# No Kienzle data is published for them, so kc1_1 and mc are absent: power and torque read
+# 'not checked'. Heat is the limit (melting, chip re-welding): the speed is to be supervised.
+
+[[group]]
+group = "O"
+name = "plastics (unfilled: acrylic, acetal, nylon, PEEK, PSU, PEI ...)"
+real = true
+vc_carbide = 304.8
+fz_d1 = 0.02872
+fz_d20 = 0.48771
+fz_d_rows = [3.175, 6.35, 9.525, 12.7, 19.05, 25.4]
+fz_rows = [0.09119, 0.18212, 0.23216, 0.30963, 0.46457, 0.61925]
+source = "per value: see the cites"
+note = "speed to be supervised: plastics melt (Harvey prints the warning); no HSS speed, no Kienzle data"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+source = "Harvey Tool, Speeds and Feeds: End Mills for Plastics - Finishers - Square Upcut - 3 Flute - High Helix (902131), https://ecomm.productivity.com/customer/docs/skudocs/HAT2_Speeds_Feeds_902131.pdf"
+taken = "2026-11-24"
+value = "Acrylic, Acetal, Delrin, Lucite, Nylon 6, Nylon 6/6, PAI, PI, PEEK, Plexiglas, PS, PSU, Torlon 4203, Ultem 1000; Unfilled; 100 > 150 Rr; SFM 800 - 1200"
+basis = "the middle of the printed range (1000 SFM); the HDPE/PTFE/UHMW group prints 1200-1600 SFM, held to this one (slower); 'Since the melting point varies greatly from plastic to plastic, the speed (RPM) used should be closely supervised' (same sheet)"
+[[group.cite]]
+path = "fz_d_rows"
+status = "estimate"
+source = "Harvey Tool, Speeds and Feeds: End Mills for Plastics - Finishers - Square Upcut - 3 Flute - High Helix (902131), https://ecomm.productivity.com/customer/docs/skudocs/HAT2_Speeds_Feeds_902131.pdf"
+taken = "2026-11-24"
+value = "diameter columns .125, .250, .375, .500, .750, 1.000 in"
+basis = "the sheet's diameter columns, converted exactly"
+[[group.cite]]
+path = "fz_rows"
+status = "estimate"
+source = "Harvey Tool, Speeds and Feeds: End Mills for Plastics - Finishers - Square Upcut - 3 Flute - High Helix (902131), https://ecomm.productivity.com/customer/docs/skudocs/HAT2_Speeds_Feeds_902131.pdf"
+taken = "2026-11-24"
+value = "Semi-Roughing (.35 x Dia radial, 1 x Dia axial), acrylic/acetal/nylon/PEEK group: .00359 .00717 .00914 .01219 .01829 .02438 in"
+basis = "a 3-flute plastics finisher's semi-roughing chip load at 0.35 D, held as the group's chip (thinning at 0.35 D is 0.95: near a slot's); the HDPE group prints slightly larger chips"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "the 1/8 in row scaled by diameter to 1 mm (only used if the rows were absent)"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "the rows interpolated to 20 mm (only used if the rows were absent)"
+
+# Reaming ([[ream]]: the drilling row's shape; vc the 10th percentile of the makers' printed rows for the group and
+# substrate, f/rev by diameter from the feed column the 10th percentile of those rows calls for) and the allowance.
+
+[[ream]]
+group = "P"
+substrate = "hss"
+vc = 8
+d_rows = [4, 5, 6.3, 8, 10, 12.5, 16, 20, 25, 31.5, 40, 50]
+f_rows = [0.1, 0.1, 0.125, 0.16, 0.2, 0.2, 0.25, 0.315, 0.4, 0.4, 0.5, 0.63]
+real = true
+[[ream.cite]]
+path = "vc"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=39"
+taken = "2026-11-24"
+basis = "10th percentile of 18 rows: Hartner HSS-E reamers 88300 (https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=39, materials #page=38) vc [8, 8, 8, 10, 10, 10, 10, 10, 10, 10, 12, 12, 12, 14, 14, 16, 16] and Redline HSS [15.2] m/min (SFM low ends, https://www.redlinetools.com/customer/docs/RedLineToolsReamersTechInfo.pdf#page=1)"
+[[ream.cite]]
+path = "d_rows"
+status = "published"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+value = "Hartner feed table, countersink/reamer Ø rows 4.00 … 50.00 mm"
+[[ream.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+basis = "Hartner feed column 71 (f mm/U by Ø), the column the group's rows call for at the 10th percentile; between table rows read linearly; Hartner's own reamers' column, the lowest of the makers' (Gühring HR 500's high-feed rows are 5-7x it)"
+
+
+[[ream]]
+group = "M"
+substrate = "hss"
+vc = 4
+d_rows = [4, 5, 6.3, 8, 10, 12.5, 16, 20, 25, 31.5, 40, 50]
+f_rows = [0.125, 0.125, 0.16, 0.2, 0.25, 0.25, 0.315, 0.4, 0.5, 0.5, 0.63, 0.8]
+real = true
+[[ream.cite]]
+path = "vc"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=39"
+taken = "2026-11-24"
+basis = "10th percentile of 4 rows: Hartner HSS-E reamers 88300 (https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=39, materials #page=38) vc [4, 6, 6] and Redline HSS [6.1] m/min (SFM low ends, https://www.redlinetools.com/customer/docs/RedLineToolsReamersTechInfo.pdf#page=1)"
+[[ream.cite]]
+path = "d_rows"
+status = "published"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+value = "Hartner feed table, countersink/reamer Ø rows 4.00 … 50.00 mm"
+[[ream.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+basis = "Hartner feed column 72 (f mm/U by Ø), the column the group's rows call for at the 10th percentile; between table rows read linearly; Hartner's own reamers' column, the lowest of the makers' (Gühring HR 500's high-feed rows are 5-7x it)"
+
+
+[[ream]]
+group = "K"
+substrate = "hss"
+vc = 8
+d_rows = [4, 5, 6.3, 8, 10, 12.5, 16, 20, 25, 31.5, 40, 50]
+f_rows = [0.1, 0.1, 0.125, 0.16, 0.2, 0.2, 0.25, 0.315, 0.4, 0.4, 0.5, 0.63]
+real = true
+[[ream.cite]]
+path = "vc"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=39"
+taken = "2026-11-24"
+basis = "10th percentile of 6 rows: Hartner HSS-E reamers 88300 (https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=39, materials #page=38) vc [8, 8, 10, 12, 12, 14]"
+[[ream.cite]]
+path = "d_rows"
+status = "published"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+value = "Hartner feed table, countersink/reamer Ø rows 4.00 … 50.00 mm"
+[[ream.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+basis = "Hartner feed column 71 (f mm/U by Ø), the column the group's rows call for at the 10th percentile; between table rows read linearly; Hartner's own reamers' column, the lowest of the makers' (Gühring HR 500's high-feed rows are 5-7x it)"
+
+
+[[ream]]
+group = "N"
+substrate = "hss"
+vc = 16
+d_rows = [4, 5, 6.3, 8, 10, 12.5, 16, 20, 25, 31.5, 40, 50]
+f_rows = [0.125, 0.125, 0.16, 0.2, 0.25, 0.25, 0.315, 0.4, 0.5, 0.5, 0.63, 0.8]
+real = true
+[[ream.cite]]
+path = "vc"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=39"
+taken = "2026-11-24"
+basis = "10th percentile of 13 rows: Hartner HSS-E reamers 88300 (https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=39, materials #page=38) vc [14, 16, 18, 18, 18, 18, 18, 18, 18, 20, 20, 20] and Redline HSS [38.1] m/min (SFM low ends, https://www.redlinetools.com/customer/docs/RedLineToolsReamersTechInfo.pdf#page=1)"
+[[ream.cite]]
+path = "d_rows"
+status = "published"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+value = "Hartner feed table, countersink/reamer Ø rows 4.00 … 50.00 mm"
+[[ream.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+basis = "Hartner feed column 72 (f mm/U by Ø), the column the group's rows call for at the 10th percentile; between table rows read linearly; Hartner's own reamers' column, the lowest of the makers' (Gühring HR 500's high-feed rows are 5-7x it)"
+
+
+[[ream]]
+group = "S"
+substrate = "hss"
+vc = 4
+d_rows = [4, 5, 6.3, 8, 10, 12.5, 16, 20, 25, 31.5, 40, 50]
+f_rows = [0.1, 0.1, 0.125, 0.16, 0.2, 0.2, 0.25, 0.315, 0.4, 0.4, 0.5, 0.63]
+real = true
+[[ream.cite]]
+path = "vc"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=39"
+taken = "2026-11-24"
+basis = "10th percentile of 4 rows: Hartner HSS-E reamers 88300 (https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=39, materials #page=38) vc [4, 4, 6] and Redline HSS [10.7] m/min (SFM low ends, https://www.redlinetools.com/customer/docs/RedLineToolsReamersTechInfo.pdf#page=1)"
+[[ream.cite]]
+path = "d_rows"
+status = "published"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+value = "Hartner feed table, countersink/reamer Ø rows 4.00 … 50.00 mm"
+[[ream.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+basis = "Hartner feed column 71 (f mm/U by Ø), the column the group's rows call for at the 10th percentile; between table rows read linearly; Hartner's own reamers' column, the lowest of the makers' (Gühring HR 500's high-feed rows are 5-7x it)"
+
+
+[[ream]]
+group = "P"
+substrate = "carbide"
+vc = 12
+d_rows = [4, 5, 6.3, 8, 10, 12.5, 16, 20, 25, 31.5, 40, 50]
+f_rows = [0.1, 0.1, 0.125, 0.16, 0.2, 0.2, 0.25, 0.315, 0.4, 0.4, 0.5, 0.63]
+real = true
+[[ream.cite]]
+path = "vc"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=37"
+taken = "2026-11-24"
+basis = "10th percentile of 31 rows: Hartner solid carbide reamers 88350 (https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=37) vc [10, 10, 12, 12, 12, 12, 14, 14, 14, 14, 16, 16, 16, 18, 18, 18, 18], Gühring HR 500 (https://groupedorise.fr/boutique/datas/documents/gue_high-performance-reamers-hr-500_en-1_20240906150736.pdf#page=52) [121, 121, 144, 162, 162, 180, 180, 180, 180, 180, 180, 180, 180], Redline carbide [76.2] m/min (SFM low ends, https://www.redlinetools.com/customer/docs/RedLineToolsReamersTechInfo.pdf#page=1)"
+[[ream.cite]]
+path = "d_rows"
+status = "published"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+value = "Hartner feed table, countersink/reamer Ø rows 4.00 … 50.00 mm"
+[[ream.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+basis = "Hartner feed column 71 (f mm/U by Ø), the column the group's rows call for at the 10th percentile; between table rows read linearly; Hartner's own reamers' column, the lowest of the makers' (Gühring HR 500's high-feed rows are 5-7x it)"
+
+
+[[ream]]
+group = "M"
+substrate = "carbide"
+vc = 6
+d_rows = [4, 5, 6.3, 8, 10, 12.5, 16, 20, 25, 31.5, 40, 50]
+f_rows = [0.1, 0.1, 0.125, 0.16, 0.2, 0.2, 0.25, 0.315, 0.4, 0.4, 0.5, 0.63]
+real = true
+[[ream.cite]]
+path = "vc"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=37"
+taken = "2026-11-24"
+basis = "10th percentile of 9 rows: Hartner solid carbide reamers 88350 (https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=37) vc [6, 6, 8], Gühring HR 500 (https://groupedorise.fr/boutique/datas/documents/gue_high-performance-reamers-hr-500_en-1_20240906150736.pdf#page=52) [50, 62, 62, 80, 80], Redline carbide [45.7] m/min (SFM low ends, https://www.redlinetools.com/customer/docs/RedLineToolsReamersTechInfo.pdf#page=1)"
+[[ream.cite]]
+path = "d_rows"
+status = "published"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+value = "Hartner feed table, countersink/reamer Ø rows 4.00 … 50.00 mm"
+[[ream.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+basis = "Hartner feed column 71 (f mm/U by Ø), the column the group's rows call for at the 10th percentile; between table rows read linearly; Hartner's own reamers' column, the lowest of the makers' (Gühring HR 500's high-feed rows are 5-7x it)"
+
+
+[[ream]]
+group = "K"
+substrate = "carbide"
+vc = 12
+d_rows = [4, 5, 6.3, 8, 10, 12.5, 16, 20, 25, 31.5, 40, 50]
+f_rows = [0.1, 0.1, 0.125, 0.16, 0.2, 0.2, 0.25, 0.315, 0.4, 0.4, 0.5, 0.63]
+real = true
+[[ream.cite]]
+path = "vc"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=37"
+taken = "2026-11-24"
+basis = "10th percentile of 14 rows: Hartner solid carbide reamers 88350 (https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=37) vc [12, 12, 16, 16, 18, 18, 20, 20], Gühring HR 500 (https://groupedorise.fr/boutique/datas/documents/gue_high-performance-reamers-hr-500_en-1_20240906150736.pdf#page=52) [72, 72, 80, 80, 96, 96]"
+[[ream.cite]]
+path = "d_rows"
+status = "published"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+value = "Hartner feed table, countersink/reamer Ø rows 4.00 … 50.00 mm"
+[[ream.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+basis = "Hartner feed column 71 (f mm/U by Ø), the column the group's rows call for at the 10th percentile; between table rows read linearly; Hartner's own reamers' column, the lowest of the makers' (Gühring HR 500's high-feed rows are 5-7x it)"
+
+
+[[ream]]
+group = "N"
+substrate = "carbide"
+vc = 25
+d_rows = [4, 5, 6.3, 8, 10, 12.5, 16, 20, 25, 31.5, 40, 50]
+f_rows = [0.125, 0.125, 0.16, 0.2, 0.25, 0.25, 0.315, 0.4, 0.5, 0.5, 0.63, 0.8]
+real = true
+[[ream.cite]]
+path = "vc"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=37"
+taken = "2026-11-24"
+basis = "10th percentile of 13 rows: Hartner solid carbide reamers 88350 (https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=37) vc [25, 25, 25, 30, 30, 30, 30, 30, 30, 35, 35, 40], Redline carbide [137.2] m/min (SFM low ends, https://www.redlinetools.com/customer/docs/RedLineToolsReamersTechInfo.pdf#page=1)"
+[[ream.cite]]
+path = "d_rows"
+status = "published"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+value = "Hartner feed table, countersink/reamer Ø rows 4.00 … 50.00 mm"
+[[ream.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+basis = "Hartner feed column 72 (f mm/U by Ø), the column the group's rows call for at the 10th percentile; between table rows read linearly; Hartner's own reamers' column, the lowest of the makers' (Gühring HR 500's high-feed rows are 5-7x it)"
+
+
+[[ream]]
+group = "S"
+substrate = "carbide"
+vc = 10
+d_rows = [4, 5, 6.3, 8, 10, 12.5, 16, 20, 25, 31.5, 40, 50]
+f_rows = [0.1, 0.1, 0.125, 0.16, 0.2, 0.2, 0.25, 0.315, 0.4, 0.4, 0.5, 0.63]
+real = true
+[[ream.cite]]
+path = "vc"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=37"
+taken = "2026-11-24"
+basis = "10th percentile of 8 rows: Hartner solid carbide reamers 88350 (https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=37) vc [10, 10], Gühring HR 500 (https://groupedorise.fr/boutique/datas/documents/gue_high-performance-reamers-hr-500_en-1_20240906150736.pdf#page=52) [40, 40, 40, 40, 40], Redline carbide [13.7] m/min (SFM low ends, https://www.redlinetools.com/customer/docs/RedLineToolsReamersTechInfo.pdf#page=1)"
+[[ream.cite]]
+path = "d_rows"
+status = "published"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+value = "Hartner feed table, countersink/reamer Ø rows 4.00 … 50.00 mm"
+[[ream.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=36"
+taken = "2026-11-24"
+basis = "Hartner feed column 71 (f mm/U by Ø), the column the group's rows call for at the 10th percentile; between table rows read linearly; Hartner's own reamers' column, the lowest of the makers' (Gühring HR 500's high-feed rows are 5-7x it)"
+
+
+[[ream]]
+group = "H"
+substrate = "carbide"
+vc = 15.0
+d_rows = [3.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 20.0]
+f_rows = [0.10, 0.15, 0.25, 0.30, 0.40, 0.40, 0.45, 0.45, 0.50]
+real = true
+[[ream.cite]]
+path = "vc"
+status = "estimate"
+source = "https://groupedorise.fr/boutique/datas/documents/gue_high-performance-reamers-hr-500_en-1_20240906150736.pdf#page=52"
+taken = "2026-11-24"
+basis = "10th percentile of Gühring HR 500's hardened-steel rows H1.1.1 < 55 HRC 30, H1.1.2 < 60 HRC 24, H1.1.3 > 60 HRC 15 m/min (one maker: no other prints H reaming data)"
+[[ream.cite]]
+path = "d_rows"
+status = "published"
+source = "https://groupedorise.fr/boutique/datas/documents/gue_high-performance-reamers-hr-500_en-1_20240906150736.pdf#page=52"
+taken = "2026-11-24"
+value = "f (mm/rev) with nom. Ø 2 3 4 6 8 10 12 14 16 20"
+[[ream.cite]]
+path = "f_rows"
+status = "published"
+source = "https://groupedorise.fr/boutique/datas/documents/gue_high-performance-reamers-hr-500_en-1_20240906150736.pdf#page=52"
+taken = "2026-11-24"
+value = "H1.1.1 … 30 0.05 0.10 0.15 0.25 0.30 0.40 0.40 0.45 0.45 0.50 (Ø 3-20 used)"
+
+
+[[ream_allowance]]
+substrate = "*"
+d_to = [5.0, 10.0, 16.0, 25.0, 40.0, 1000.0]
+allowance = [0.15, 0.2, 0.25, 0.3, 0.35, 0.45]
+real = true
+[[ream_allowance.cite]]
+path = "d_to"
+status = "published"
+source = "https://groupedorise.fr/boutique/datas/documents/gue_high-performance-reamers-hr-500_en-1_20240906150736.pdf#page=2"
+taken = "2026-11-24"
+value = "Recommended undersizes in mm: up to Ø 5 | up to Ø 10 | up to Ø 16 | up to Ø 25 | up to Ø 40 | > Ø 40"
+[[ream_allowance.cite]]
+path = "allowance"
+status = "estimate"
+source = "https://groupedorise.fr/boutique/datas/documents/gue_high-performance-reamers-hr-500_en-1_20240906150736.pdf#page=2"
+taken = "2026-11-24"
+basis = "the middle of Gühring's printed 'All materials' undersizes on the diameter: Ø 0.1 – 0.2 | Ø 0.2 | Ø 0.2 – 0.3 | Ø 0.3 | Ø 0.3 – 0.4 | Ø 0.4 – 0.5; Hartner prints the same table (https://www.hartner.de/wp-content/uploads/prospekte/en/reibahlen_en.pdf#page=2); Sandvik CoroReamer's P1/K2/S1 row agrees (sandvik.coromant.com/en-us/knowledge/reaming/how-to-ream-a-hole)"
+
+
+[[counterbore]]
+group = "P"
+substrate = "hss"
+vc = 27.0
+d_rows = [18.0]
+f_rows = [0.14]
+real = true
+[[counterbore.cite]]
+path = "vc"
+status = "estimate"
+source = "https://cdn.hoffmann-group.com/dsh/en-GB/dsh_en-gb_20963.pdf#page=2"
+taken = "2026-11-24"
+basis = "Hoffmann DIN 373 counterbore 156220 18X8,5 (HSS, Z 3) data sheet: Steel < 500 N/mm² suitable 28 m/min P / Steel < 750 N/mm² suitable 27 m/min P / Steel < 900 N/mm² suitable only under restricted conditions 27 m/min P: the 10th percentile 27"
+[[counterbore.cite]]
+path = "d_rows"
+status = "published"
+source = "https://cdn.hoffmann-group.com/dsh/en-GB/dsh_en-gb_20963.pdf#page=1"
+taken = "2026-11-24"
+value = "156220 18X8,5: Ø 18 mm"
+[[counterbore.cite]]
+path = "f_rows"
+status = "published"
+source = "https://cdn.hoffmann-group.com/dsh/en-GB/dsh_en-gb_20963.pdf#page=1"
+taken = "2026-11-24"
+value = "Feed f in steel < 500 N/mm2 0.14 mm/rev."
+
+
+[[counterbore]]
+group = "N"
+substrate = "hss"
+vc = 33.0
+d_rows = [18.0]
+f_rows = [0.14]
+real = true
+[[counterbore.cite]]
+path = "vc"
+status = "estimate"
+source = "https://cdn.hoffmann-group.com/dsh/en-GB/dsh_en-gb_20963.pdf#page=2"
+taken = "2026-11-24"
+basis = "Hoffmann DIN 373 counterbore 156220 18X8,5 (HSS, Z 3) data sheet: Aluminium (short chipping) suitable 33 m/min N"
+[[counterbore.cite]]
+path = "d_rows"
+status = "published"
+source = "https://cdn.hoffmann-group.com/dsh/en-GB/dsh_en-gb_20963.pdf#page=1"
+taken = "2026-11-24"
+value = "156220 18X8,5: Ø 18 mm"
+[[counterbore.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://cdn.hoffmann-group.com/dsh/en-GB/dsh_en-gb_20963.pdf#page=1"
+taken = "2026-11-24"
+basis = "the data sheet prints the feed for steel < 500 N/mm2 only (0.14 mm/rev); held for aluminium, which it rates at a higher speed"

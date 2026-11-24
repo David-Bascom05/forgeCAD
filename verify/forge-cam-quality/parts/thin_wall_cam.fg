@@ -2,7 +2,7 @@ machining
 # Benchmark (verify/forge-cam-quality): both pockets of thin_wall.fg with a 6 mm end mill.
 shared tol = 0.01
 
-f    = part("thin_wall.fg", group: "N")
+f    = part("thin_wall.fg", material: "6061-T6")
 m    = machine("generic-vmc3")
 t2   = tool("flat-6", t: 2, stickout: 26, holder: "bt40-er32")
 op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol)

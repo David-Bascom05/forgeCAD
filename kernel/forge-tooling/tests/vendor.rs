@@ -178,6 +178,93 @@ fn builtin_files_are_named_by_vendor() {
     assert_eq!(l, Library::builtin());
 }
 
+/// The cutting data cites every value (published, estimate with its basis, or unknown); the
+/// P group carries Klippel et al.'s measured Ck45 Kienzle ranges (CC BY 4.0) and its point
+/// values lie inside them.
+#[test]
+fn cutting_data_is_cited_per_value() {
+    let lib = Library::builtin();
+    assert_eq!(lib.cutting.len(), 7);
+    for g in &lib.cutting {
+        assert!(g.real, "group {}", g.group);
+        // a value the record holds is cited; plastics (O) hold no Kienzle data and no HSS speed
+        let held = |f: &str| match f {
+            "vc_hss" => g.vc_hss.is_finite(),
+            "kc1_1" => g.kc1_1.is_finite(),
+            "mc" => g.mc.is_finite(),
+            _ => true,
+        };
+        if g.group == "O" {
+            assert!(!g.kc1_1.is_finite() && !g.mc.is_finite());
+        }
+        for f in ["vc_carbide", "vc_hss", "fz_d1", "fz_d20", "kc1_1", "mc"]
+            .into_iter()
+            .filter(|f| held(f))
+        {
+            let c = g
+                .cites
+                .iter()
+                .find(|c| c.path == f)
+                .unwrap_or_else(|| panic!("{} {f}", g.group));
+            assert!(
+                c.status == CiteStatus::Published || !c.basis.is_empty(),
+                "{} {f}",
+                g.group
+            );
+        }
+    }
+    let p = lib.group("P").unwrap();
+    assert_eq!(
+        (p.kc1_1_range, p.mc_range),
+        (Some([1368.0, 1935.0]), Some([0.17, 0.51]))
+    );
+    let r = p.kc1_1_range.unwrap();
+    assert!(p.kc1_1 >= r[0] && p.kc1_1 <= r[1]);
+    let c = p.cites.iter().find(|c| c.path == "kc1_1_range").unwrap();
+    assert_eq!(c.status, CiteStatus::Published);
+    assert!(c.source.contains("2209.04197") && c.note.contains("CC BY 4.0"));
+    assert_eq!(p.upper(), (1935.0, 0.51));
+}
+
+/// Kienzle rows (as forge-material's Ti-6Al-4V record holds Klippel et al.'s Table 16) are read
+/// between rows at the cut's speed and held at the end rows outside them.
+#[test]
+fn stock_kienzle_rows() {
+    let ti = forge_tooling::feeds::Stock::new(
+        "Ti-6Al-4V annealed",
+        "S",
+        Some((
+            vec![40.0, 50.0, 500.0],
+            vec![1253.0, 1061.0, 662.0],
+            vec![0.22, 0.28, 0.41],
+        )),
+        "test rows",
+    );
+    let (kc, mc, kr, mr, _) = ti.kienzle_at(45.0).unwrap();
+    assert!(
+        (kc - 1157.0).abs() < 1e-9 && (mc - 0.25).abs() < 1e-12,
+        "{kc} {mc}"
+    );
+    assert_eq!((kr, mr), ([662.0, 1253.0], [0.22, 0.41]));
+    let (kc, _, _, _, how) = ti.kienzle_at(600.0).unwrap();
+    assert!(kc == 662.0 && how.contains("over the data"));
+    // rows that do not line up are dropped, not guessed
+    assert!(
+        forge_tooling::feeds::Stock::new("x", "P", Some((vec![1.0], vec![], vec![])), "")
+            .kienzle_at(10.0)
+            .is_none()
+    );
+    assert_eq!(forge_tooling::feeds::iso_group_of_family("aluminium"), Some("N"));
+    assert_eq!(forge_tooling::feeds::iso_group_of_family("plastic"), Some("O"));
+    assert_eq!(forge_tooling::feeds::iso_group_of_family("rubber"), None);
+    use forge_tooling::feeds::Substrate;
+    assert_eq!(Substrate::of("Solid Carbide"), Substrate::Carbide);
+    assert_eq!(Substrate::of("Micrograin Carbide"), Substrate::Carbide);
+    assert_eq!(Substrate::of("HSS-Co"), Substrate::Hss);
+    assert_eq!(Substrate::of("PCD"), Substrate::Other);
+    assert_eq!(Substrate::of(""), Substrate::Unknown);
+}
+
 /// FEEDS-SPEEDS' preset spec: per (ISO group, class) a representative named "<group> <class>",
 /// and every maker row as "<group> <class> <maker's material>"; each cited once; the numbers
 /// are the maker's printed inch values converted exactly.
@@ -257,6 +344,50 @@ fn presets_follow_the_spec() {
             .flat_map(|t| &t.cites)
             .any(|c| c.note.contains("upper limit"))
     );
+}
+
+/// A part's stock material picks the maker's own row on the tool (Tool::preset_for_material):
+/// an exact alloy name over a family pattern, the slowest of the maker's hardness classes; a
+/// narrow contour is a finishing cut (Tool::class_for).
+#[test]
+fn presets_by_stock_material_and_class() {
+    let l = Library::builtin();
+    let text = |t: &forge_tooling::Tool, g: &str, c: &str, m: &str| {
+        t.preset_for_material(g, c, m).map(|(p, _)| p.name.clone())
+    };
+    let harvey = l.tool("harvey-792208").unwrap();
+    // brass C36000 by Harvey's "C3xxxx" family, not the wrought-aluminium representative
+    let n = text(harvey, "N", "slot", "C36000 H02").unwrap();
+    assert!(n.contains("Brass"), "{n}");
+    let n = text(harvey, "N", "slot", "6061-T6").unwrap();
+    assert!(n.contains("Wrought"), "{n}");
+    // a material the maker's texts do not name: none (the caller takes the representative)
+    assert_eq!(text(harvey, "N", "slot", "Gray iron class 30"), None);
+    let helical = l.tool("helical-30017").unwrap();
+    for (g, m, want) in [
+        ("S", "Inconel 718 aged", "NICKEL ALLOY"),
+        ("S", "Ti-6Al-4V annealed", "TITANIUM ALLOY"),
+        ("M", "304 annealed", "AUSTENITIC"),
+        ("M", "17-4PH H1150", "PH STAINLESS"),
+        ("P", "4140 annealed", "LOW ALLOY"),
+    ] {
+        let n = text(helical, g, "slot", m).unwrap_or_else(|| panic!("{m}"));
+        assert!(n.contains(want), "{m}: {n}");
+    }
+    // the slowest of the maker's hardness classes for the same alloys
+    let (p, _) = helical.preset_for_material("M", "slot", "304 annealed").unwrap();
+    let slowest = helical
+        .presets
+        .iter()
+        .filter(|q| q.name.starts_with("M slot AUSTENITIC"))
+        .map(|q| q.vc)
+        .fold(f64::INFINITY, f64::min);
+    assert_eq!(p.vc, slowest);
+    // a contour at 10% D or under finishes, wider roughs; clearing stays rough at any width
+    assert_eq!(harvey.class_for("contour", 0.3175, "N"), "finish");
+    assert_eq!(harvey.class_for("contour", 1.0, "N"), "rough");
+    assert_eq!(harvey.class_for("clear", 0.3, "N"), "rough");
+    assert_eq!(harvey.class_for("slot", 3.175, "N"), "slot");
 }
 
 /// Parting: a groove insert, the blade it seats in and the block the blade clamps in, each
@@ -447,4 +578,149 @@ fn reamers_and_counterbores() {
         assert_eq!(t.dc, d);
         t.shape(t.lcf + 2.0, None).unwrap();
     }
+}
+
+/// An insert's preset for a cut: the grade asked (an unknown one lists the grades); within the
+/// grade the row naming the stock material, else the 10th percentile by speed of the grade's
+/// rows; no grade asked, the 10th percentile of all the insert's rows for the group. The
+/// turning resolver's library layer carries it with its cite.
+#[test]
+fn insert_preset_for_grade_and_material() {
+    let l = Library::builtin();
+    let ins = l
+        .inserts
+        .iter()
+        .find(|i| i.id == "sumitomo-CNMG120408N-GU")
+        .unwrap();
+    // CAM-HAAS's example: P GU AC8115P = vc 350, f 0.25, ap 2.5 (the printed optimum)
+    let p = ins.preset_for("P", Some("AC8115P"), None).unwrap().unwrap();
+    assert_eq!((p.preset.vc, p.preset.fz, p.preset.ap), (350.0, 0.25, Some(2.5)));
+    assert!(p.why.contains("10th percentile"), "{}", p.why);
+    // a grade the maker prints none for: the grades it has, to choose from
+    let e = ins.preset_for("P", Some("XX99"), None).unwrap_err();
+    assert!(e.contains(&"AC8115P".to_string()), "{e:?}");
+    // no grade: the 10th percentile by speed over every grade's material rows for P
+    let d = ins.preset_for("P", None, None).unwrap().unwrap();
+    let rows: Vec<f64> = ins
+        .presets
+        .iter()
+        .filter(|q| q.group == "P" && q.name.split(' ').count() > 3)
+        .map(|q| q.vc)
+        .collect();
+    let q = forge_tooling::feeds::Quantiles::of(rows).unwrap();
+    assert_eq!(d.preset.vc, q.p10);
+    // and the feed, separately: the 10th percentile of the same rows' feeds
+    let fs: Vec<f64> = ins
+        .presets
+        .iter()
+        .filter(|q| q.group == "P" && q.name.split(' ').count() > 3)
+        .map(|q| q.fz)
+        .collect();
+    assert_eq!(d.f, forge_tooling::feeds::Quantiles::of(fs).unwrap().p10);
+    assert!(d.why.contains("grade not stated"), "{}", d.why);
+    // a named material picks its row in the grade: Sumitomo's medium/high carbon steel row
+    let m = ins
+        .preset_for("P", Some("AC8025P"), Some("C45 bright"))
+        .unwrap()
+        .unwrap();
+    assert!(
+        m.why.contains("10th percentile") || m.why.contains("stock material"),
+        "{}",
+        m.why
+    );
+    // the turning resolver's library layer, with the cite's page
+    let t = forge_tooling::resolve::TurnData::from_pick(&p, Some(95.0));
+    assert_eq!((t.vc, t.f, t.ap), (Some(350.0), Some(0.25), Some(2.5)));
+    assert!(t.source.contains("sumitool.com"), "{}", t.source);
+    // no preset for the group: none (the op asks for vc and f)
+    assert!(ins.preset_for("N", None, None).unwrap().is_none());
+}
+
+/// A turning tool with no preset for the group takes the generic turning class: P10 of the
+/// makers' insert rows for the group, labelled `material` with the class's spread.
+#[test]
+fn generic_turning_default() {
+    use forge_tooling::resolve::{self, Source, Spindle, TurnAsk, TurnData};
+    let l = Library::builtin();
+    let g = l.turn_generic("P", Some("wood")).unwrap();
+    assert_eq!((g.group.as_str(), g.family.as_str()), ("P", "*"));
+    assert!(g.makers.len() >= 2 && g.n >= 10);
+    let t = TurnData::from_generic(g, Some(95.0));
+    let r = resolve::turning(
+        &TurnAsk::default(),
+        &t,
+        l.group("P"),
+        &Spindle {
+            rpm: [50.0, 4000.0],
+            max_feed: 0.0,
+            power: &[],
+        },
+        [20.0, 60.0],
+    )
+    .unwrap();
+    assert_eq!((r.vc.v, r.vc.source), (g.vc.p10, Source::Material));
+    assert_eq!((r.f.v, r.f.source), (g.f.p10, Source::Material));
+    assert!(r.vc.note.contains("10th percentile"), "{}", r.vc.note);
+    let sp = r.spread.unwrap();
+    assert_eq!((sp.vc, sp.n), (g.vc, g.n));
+    // no class for a group with no turning data: nothing to default to (the op is refused)
+    assert!(l.turn_generic("N", None).is_none());
+}
+
+/// Reaming and counterboring data: every row cited per value; the allowance band by diameter;
+/// a 10 mm carbide reamer in N resolves at its row's speed with the pre-drill 9.8.
+#[test]
+fn reaming_and_counterbore_data() {
+    use forge_tooling::feeds::Substrate;
+    use forge_tooling::resolve::{self, DrillTool, ReamAsk, Spindle};
+    let l = Library::builtin();
+    for (k, rows) in [("ream", &l.reaming), ("counterbore", &l.counterboring)] {
+        assert!(!rows.is_empty(), "{k}");
+        for r in rows.iter() {
+            assert!(r.real, "{k} {}/{}", r.group, r.substrate);
+            for f in ["vc", "d_rows", "f_rows"] {
+                let c = r
+                    .cites
+                    .iter()
+                    .find(|c| c.path == f)
+                    .unwrap_or_else(|| panic!("{k} {} {f}", r.group));
+                assert!(c.status == CiteStatus::Published || !c.basis.is_empty());
+            }
+        }
+    }
+    for g in ["P", "M", "K", "N", "S"] {
+        assert!(
+            l.ream(g, "hss").is_some() && l.ream(g, "carbide").is_some(),
+            "{g}"
+        );
+    }
+    assert!(l.ream("H", "carbide").is_some() && l.ream("H", "hss").is_none());
+    let a = l.ream_allowance("carbide").unwrap();
+    assert_eq!(
+        (a.at(4.0), a.at(10.0), a.at(12.0)),
+        (Some(0.15), Some(0.2), Some(0.25))
+    );
+    let r = resolve::reaming(
+        &ReamAsk::default(),
+        &DrillTool {
+            d: 10.0,
+            flutes: 6,
+            point: 0.0,
+            substrate: Substrate::Carbide,
+            preset: None,
+        },
+        l.group("N"),
+        None,
+        l.ream("N", "carbide"),
+        Some(a),
+        &Spindle {
+            rpm: [100.0, 12000.0],
+            max_feed: 0.0,
+            power: &[],
+        },
+    )
+    .unwrap();
+    assert_eq!((r.vc.v, r.predrill.v), (25.0, 9.8));
+    assert!((r.f.v - 0.25).abs() < 1e-12, "{}", r.f.v);
+    assert!(r.f.note.contains("reaming data"), "{}", r.f.note);
 }

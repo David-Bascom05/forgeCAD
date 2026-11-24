@@ -72,6 +72,7 @@ fn tool_of(t: u32, d: f64, cr: f64, words: &str, flutes: Option<u32>) -> Tool {
         oal: 50.0,
         hand: "right".into(),
         material: String::new(),
+        coating: String::new(),
         vendor: String::new(),
         product_id: String::new(),
         source: words.to_string(),

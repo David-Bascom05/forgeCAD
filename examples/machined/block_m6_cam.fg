@@ -4,7 +4,7 @@ machining
 # the 6 mm major diameter, listed in the reply.
 shared tol = 0.01
 
-f    = part("block_m6.fg", group: "N")
+f    = part("block_m6.fg", material: "6061-T6")
 m    = machine("generic-vmc3")
 t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
 t6   = tool("threadmill-m6-m12-1", t: 6, stickout: 20, holder: "bt40-er32")

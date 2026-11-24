@@ -5,7 +5,7 @@ machining
 # d 6.6 through).
 shared tol = 0.01
 
-f    = part("flange.fg", group: "N")
+f    = part("flange.fg", material: "6061-T6")
 m    = machine("generic-vmc3")
 t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
 op1  = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: "top-center", tol: tol, at: (0, 0, -250))

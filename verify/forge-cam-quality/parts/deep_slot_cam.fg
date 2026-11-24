@@ -2,7 +2,7 @@ machining
 # Benchmark (verify/forge-cam-quality): the deep slot as a pocket with a 6 mm end mill.
 shared tol = 0.01
 
-f    = part("deep_slot.fg", group: "N")
+f    = part("deep_slot.fg", material: "6061-T6")
 m    = machine("generic-vmc3")
 t2   = tool("flat-6", t: 2, stickout: 30, holder: "bt40-er32")
 op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol)

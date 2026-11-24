@@ -164,7 +164,11 @@ pub struct Tool {
     pub dcon: f64,
     pub oal: f64,
     pub hand: String,
+    /// The substrate as the record writes it ("carbide", "Solid Carbide", "HSS-Co", ...):
+    /// feeds::Substrate::of reads it.
     pub material: String,
+    /// The coating as the record writes it ("AlTiN", "uncoated", ...; "" when not stated).
+    pub coating: String,
     pub vendor: String,
     pub product_id: String,
     pub source: String,
@@ -233,6 +237,90 @@ fn positive(rec: &str, k: &'static str, v: f64) -> Result<f64, LibError> {
 }
 
 impl Tool {
+    /// The tool's per-material preset for a stock material: among this group's and class's
+    /// "<group> <class> <maker's material>" presets, the one whose maker text names the
+    /// material's designation (forge-material's record name: "6061-T6" → 6061, "C36000 H02" →
+    /// C36000, "Inconel 718 aged" → 718, "17-4PH H1150" → 17-4, "Ti-6Al-4V annealed" →
+    /// Ti6Al4V). An exact name beats a family pattern ("6xxx", "C3xxxx", "41XX"), a longer
+    /// pattern a shorter; among equally good matches (the makers' hardness classes) the
+    /// slowest. None when the maker's texts do not name the material.
+    pub fn preset_for_material(
+        &self,
+        group: &str,
+        class: &str,
+        material: &str,
+    ) -> Option<(&Preset, Option<&Cite>)> {
+        let prefix = format!("{group} {class} ");
+        let mut best: Option<(usize, &Preset)> = None;
+        for p in self.presets.iter().filter(|p| p.group == group) {
+            let Some(text) = p.name.strip_prefix(&prefix) else {
+                continue;
+            };
+            let s = material_score(text, material);
+            if s == 0 {
+                continue;
+            }
+            best = match best {
+                Some((bs, bp)) if bs > s || (bs == s && bp.vc <= p.vc) => Some((bs, bp)),
+                _ => Some((s, p)),
+            };
+        }
+        let p = best?.1;
+        let path = format!("preset.{}", p.name);
+        Some((p, self.cites.iter().find(|c| c.path == path)))
+    }
+
+    /// The class an op of the language cuts in: a slot is slot; clearing, pocketing and facing
+    /// rough; a contour finishes when its width is a finishing width (at most 10% of D, or the
+    /// tool's own "<group> finish" preset's ae where wider; the makers' finishing widths: Harvey
+    /// 10%, Helical 2-6%) and roughs otherwise; the rest are general. Clearing
+    /// at a small width is not finishing (it runs full flute depth: the makers' "max" rows).
+    pub fn class_for(&self, kind: &str, width: f64, group: &str) -> &'static str {
+        match kind {
+            "slot" => "slot",
+            "clear" | "pocket" | "facing" => "rough",
+            "contour" => {
+                let fin = self
+                    .presets
+                    .iter()
+                    .find(|p| p.group == group && p.name == format!("{group} finish"))
+                    .and_then(|p| p.ae)
+                    .map_or(0.1 * self.dc, |ae| ae.max(0.1 * self.dc));
+                if width <= fin * (1.0 + 1e-9) {
+                    "finish"
+                } else {
+                    "rough"
+                }
+            }
+            _ => "general",
+        }
+    }
+
+    /// The tool's preset for a group and an op class, as an op takes it by default: the
+    /// representative "<group> <class>" (CAM-HAAS's spec: one per class, the maker's row for the
+    /// group's representative material), then any preset named for the class, then the group's
+    /// "general", then the group's first. Returns the preset, its cite, and whether it is the
+    /// class's own (a classed preset carries its class; no class factor goes on top).
+    pub fn preset_for(&self, group: &str, class: &str) -> Option<(&Preset, Option<&Cite>, bool)> {
+        let of_group: Vec<&Preset> = self.presets.iter().filter(|p| p.group == group).collect();
+        let rep = format!("{group} {class}");
+        let named = |c: &str| {
+            of_group
+                .iter()
+                .copied()
+                .find(|p| p.name.split_whitespace().nth(1) == Some(c))
+        };
+        let (p, classed) = match of_group.iter().copied().find(|p| p.name == rep) {
+            Some(p) => (p, true),
+            None => match named(class) {
+                Some(p) => (p, true),
+                None => (named("general").or_else(|| of_group.first().copied())?, false),
+            },
+        };
+        let path = format!("preset.{}", if p.name.is_empty() { &p.group } else { &p.name });
+        Some((p, self.cites.iter().find(|c| c.path == path), classed))
+    }
+
     pub fn from_table(t: &Table) -> Result<Tool, LibError> {
         let id = text(t, "id")
             .ok_or_else(|| LibError::Missing {
@@ -308,6 +396,7 @@ impl Tool {
             oal,
             hand: text(t, "hand").unwrap_or("right").to_string(),
             material: s("material"),
+            coating: s("coating"),
             vendor: s("vendor"),
             product_id: s("product_id"),
             source: s("source"),
@@ -612,6 +701,22 @@ pub struct Library {
     pub assemblies: Vec<Assembly>,
     pub machines: Vec<Machine>,
     pub cutting: Vec<feeds::Group>,
+    /// Generic drilling data per group and substrate.
+    pub drilling: Vec<feeds::DrillRow>,
+    /// Generic tapping speeds per group and substrate.
+    pub tapping: Vec<feeds::TapRow>,
+    /// Chip factors per op class (rough, finish) against the slot chip.
+    pub op_classes: Vec<feeds::OpClassData>,
+    pub generics: Vec<feeds::Generic>,
+    /// Reaming data: `[[ream]]` rows (the drilling row's shape: vc, and f/rev by diameter) and
+    /// the allowance tables.
+    pub reaming: Vec<feeds::DrillRow>,
+    pub ream_allowances: Vec<feeds::ReamAllowance>,
+    /// Counterboring data: `[[counterbore]]` rows (the drilling row's shape).
+    pub counterboring: Vec<feeds::DrillRow>,
+    pub turn_generics: Vec<feeds::TurnGeneric>,
+    /// Elastic data per tool substrate (deflection).
+    pub substrates: Vec<feeds::SubstrateData>,
     pub vises: Vec<Vise>,
     pub jaw_blanks: Vec<JawBlank>,
     pub collets: Vec<Collet>,
@@ -946,6 +1051,33 @@ impl Library {
         for r in tables(&t, "group") {
             self.cutting.push(feeds::Group::from_table(r)?);
         }
+        for r in tables(&t, "substrate") {
+            self.substrates.push(feeds::SubstrateData::from_table(r)?);
+        }
+        for r in tables(&t, "op_class") {
+            self.op_classes.push(feeds::OpClassData::from_table(r)?);
+        }
+        for r in tables(&t, "generic") {
+            self.generics.push(feeds::Generic::from_table(r)?);
+        }
+        for r in tables(&t, "ream") {
+            self.reaming.push(feeds::DrillRow::from_table(r)?);
+        }
+        for r in tables(&t, "counterbore") {
+            self.counterboring.push(feeds::DrillRow::from_table(r)?);
+        }
+        for r in tables(&t, "ream_allowance") {
+            self.ream_allowances.push(feeds::ReamAllowance::from_table(r)?);
+        }
+        for r in tables(&t, "turn_generic") {
+            self.turn_generics.push(feeds::TurnGeneric::from_table(r)?);
+        }
+        for r in tables(&t, "tap") {
+            self.tapping.push(feeds::TapRow::from_table(r)?);
+        }
+        for r in tables(&t, "drill") {
+            self.drilling.push(feeds::DrillRow::from_table(r)?);
+        }
         for r in tables(&t, "vise") {
             self.vises.push(Vise::from_table(r)?);
         }
@@ -1045,6 +1177,74 @@ impl Library {
     pub fn group(&self, g: &str) -> Option<&feeds::Group> {
         self.cutting.iter().find(|x| x.group == g || x.name == g)
     }
+    /// Elastic data for a substrate ("carbide" | "hss").
+    pub fn substrate(&self, name: &str) -> Option<&feeds::SubstrateData> {
+        self.substrates.iter().find(|x| x.name == name)
+    }
+    /// The chip factor record of an op class ("rough" | "finish").
+    /// The generic class a tool cuts a group in: the narrowest class that has data, opening
+    /// the dimensions in `feeds::GENERIC_LEVELS` order (a dimension the tool does not state is
+    /// open from the start).
+    pub fn generic(&self, group: &str, op: &str, tc: &feeds::ToolClass) -> Option<&feeds::Generic> {
+        feeds::generic_in(&self.generics, group, op, tc)
+    }
+    /// A tool's generic classes for an op class: the op's and the slot's (see
+    /// `resolve::GenericUse`); None where either has no data.
+    pub fn generic_use(
+        &self,
+        group: &str,
+        op: &str,
+        tc: &feeds::ToolClass,
+    ) -> Option<resolve::GenericUse<'_>> {
+        Some(resolve::GenericUse {
+            op: self.generic(group, op, tc)?,
+            slot: self.generic(group, "slot", tc)?,
+        })
+    }
+    /// The generic turning class for a group: the part's material family's where it has data,
+    /// else the whole group's.
+    pub fn turn_generic(&self, group: &str, family: Option<&str>) -> Option<&feeds::TurnGeneric> {
+        let find = |f: &str| {
+            self.turn_generics
+                .iter()
+                .find(|g| g.group == group && g.family == f)
+        };
+        family.and_then(find).or_else(|| find("*"))
+    }
+    /// The group's reaming row for a substrate ("carbide" | "hss").
+    pub fn ream(&self, group: &str, substrate: &str) -> Option<&feeds::DrillRow> {
+        self.reaming
+            .iter()
+            .find(|r| r.group == group && r.substrate == substrate)
+    }
+    /// The group's counterboring row for a substrate.
+    pub fn counterbore(&self, group: &str, substrate: &str) -> Option<&feeds::DrillRow> {
+        self.counterboring
+            .iter()
+            .find(|r| r.group == group && r.substrate == substrate)
+    }
+    /// The reaming allowance table for a substrate (its own, else one for any substrate).
+    pub fn ream_allowance(&self, substrate: &str) -> Option<&feeds::ReamAllowance> {
+        self.ream_allowances
+            .iter()
+            .find(|a| a.substrate == substrate)
+            .or_else(|| self.ream_allowances.iter().find(|a| a.substrate == "*"))
+    }
+    pub fn op_class(&self, name: &str) -> Option<&feeds::OpClassData> {
+        self.op_classes.iter().find(|x| x.name == name)
+    }
+    /// Generic tapping speed for a group and substrate ("hss" | "carbide").
+    pub fn tapping(&self, group: &str, substrate: &str) -> Option<&feeds::TapRow> {
+        self.tapping
+            .iter()
+            .find(|x| x.group == group && x.substrate == substrate)
+    }
+    /// Generic drilling data for a group and substrate ("carbide" | "hss").
+    pub fn drilling(&self, group: &str, substrate: &str) -> Option<&feeds::DrillRow> {
+        self.drilling
+            .iter()
+            .find(|x| x.group == group && x.substrate == substrate)
+    }
 }
 
 fn near<'a>(name: &str, all: impl Iterator<Item = &'a str>) -> Vec<String> {
@@ -1071,6 +1271,69 @@ fn edit_distance(a: &str, b: &str) -> usize {
 // BUILTIN: [(file, text)], generated by build.rs: the generic files (fixtures, tools, holders,
 // machines, cutting) first, then every vendor file under data/{tools,holders,collets,turning}/.
 include!(concat!(env!("OUT_DIR"), "/builtin.rs"));
+
+/// How well a maker's material text names a stock material (forge-material record name): 100
+/// for the material's designation by name ("6061" in "(2014, 5062, 6061, ...)", "Inconel 718"),
+/// the count of fixed characters for a family pattern ("6xxx" → 1, "C3xxxx" → 2), 0 for no match.
+/// The designations are the record name's words with a digit, temper suffixes (-T6, -H32, H02,
+/// H1150) and a PH suffix dropped.
+pub fn material_score(text: &str, material: &str) -> usize {
+    let compact = |t: &str| -> String {
+        t.chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '.')
+            .collect::<String>()
+            .to_ascii_uppercase()
+    };
+    // the material's designations: words with a digit, temper suffixes (-T6, -H32, H02,
+    // H1150) and a PH suffix dropped
+    let des: Vec<String> = material
+        .split_whitespace()
+        .filter(|w| w.chars().any(|c| c.is_ascii_digit()))
+        .map(|w| {
+            let w = match w.rfind('-') {
+                Some(i)
+                    if w[i + 1..].starts_with(['T', 'H', 'O'])
+                        && w[i + 2..].chars().all(|c| c.is_ascii_digit()) =>
+                {
+                    &w[..i]
+                }
+                _ => w,
+            };
+            let w = w.strip_suffix("PH").unwrap_or(w);
+            compact(w)
+        })
+        .filter(|w| {
+            let temper =
+                w.len() >= 3 && w.starts_with(['H', 'T']) && w[1..].chars().all(|c| c.is_ascii_digit());
+            !temper && (w.len() >= 3 || w.chars().any(|c| c.is_ascii_alphabetic()))
+        })
+        .collect();
+    let mut best = 0;
+    for tok in text.split([',', '(', ')', '&', ':', ';']) {
+        let t = compact(tok);
+        for d in &des {
+            let s = if t == *d
+                || (t.ends_with(d.as_str())
+                    && t[..t.len() - d.len()]
+                        .chars()
+                        .last()
+                        .is_some_and(|c| c.is_ascii_alphabetic())
+                    && d.chars().next().is_some_and(|c| c.is_ascii_digit()))
+            {
+                100
+            } else if t.len() == d.len()
+                && t.contains('X')
+                && t.chars().zip(d.chars()).all(|(a, b)| a == 'X' || a == b)
+            {
+                t.chars().filter(|c| *c != 'X').count()
+            } else {
+                0
+            };
+            best = best.max(s);
+        }
+    }
+    best
+}
 
 /// The built-in library files, in reading order: (`builtin/<path>`, contents). The generic files
 /// come first, then each vendor file (`builtin/tools/<vendor>.toml`, `builtin/holders/...`,
@@ -1104,7 +1367,7 @@ mod tests {
     #[test]
     fn builtin_reads_and_shapes() {
         let l = Library::builtin();
-        assert!(l.tools.len() >= 15 && l.holders.len() >= 3 && l.machines.len() == 2 && l.cutting.len() == 6);
+        assert!(l.tools.len() >= 15 && l.holders.len() >= 3 && l.machines.len() == 2 && l.cutting.len() == 7);
         let m = l.machine("generic-vmc3").unwrap();
         assert_eq!(m.joints.len(), 3);
         assert_eq!(m.power_at(750.0), Some(5.5));

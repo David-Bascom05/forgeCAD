@@ -99,6 +99,109 @@ the pass is plunged. A helix is posted as G2/G3 with Z and checked as its arc sw
 piece's heights (a superset), in closed form against prism faces; next to any other face it is
 refused as undecided.
 
+### Feeds and speeds are params
+
+Every milling op (facing, clear, contour, pocket, slot, engrave, thread_mill, edge_break) and
+every `tool(..)` takes these args; an op's value wins over its tool's (kernel/forge-tooling/src/resolve.rs):
+
+| arg | unit | what |
+|---|---|---|
+| `vc:` or `rpm:` | m/min, rpm | cutting speed (at D_eff for a ball), or the spindle speed (wins) |
+| `chip:`, `fz:` or `feed:` | mm, mm, mm/min | the peak chip to hold (thinned for ae < D/2); a feed per tooth used as given (not thinned); or the feed |
+| `ap:` (= `step:`) | mm | axial depth per level (one of the two) |
+| `ae:` (= `stepover:`) or `max_angle:` | mm, degrees | radial width (clear and pocket cut their stepover wide), or the largest engagement angle |
+| `tilt:` | degrees | the tool's tilt toward the feed: a ball's contact moves out to D sin(α + tilt) |
+| `plunge_feed:`, `ramp_feed:`, `lead_in_feed:` | mm/min | entry feeds (default 30%, 30%, 100% of the feed: labelled "no data behind it"). Posted today: the plunge feed (plunges and helical ramps) and the feed; `ramp_feed` and `lead_in_feed` are resolved and reported but not yet posted on their own (forge-cam's `Cut` carries two feeds) |
+| `max_power:`, `max_torque:` | kW, N·m | limits: the feed (only the feed) is lowered to meet them; P ∝ fz^(1−mc), so exactly |
+| `max_deflection:` | mm | the tool's tip deflection limit: the feed (only) is lowered to meet it. δ = F/(3E)[(L³ − b³)/I_shank + b³/I_flute] (stepped cantilever, derived), F = 2 Mc/D the mean tangential force at the tip, L the stick-out, b the flute length, E and the flutes' equivalent diameter from the substrate's cited `[[substrate]]` record; the holder and spindle taken rigid (their compliance not checked). Reported as `derived.deflection_mm` |
+| `min_feed:`, `max_feed:` | mm/min | the feed range (engagement feed stays in it) |
+
+Thread milling: the width is the thread's own engagement on its arc in the bore (concave arc,
+feeds-speeds.md §2.3): cos φ = (r_b² − r_c² − r_t²)/(2 r_c r_t), r_b the bore, r_c = r_m − r_t the
+centre path, held as the straight cut of the same angle (source `default`, said in the note); the
+chip is held at the edge, and the centre is fed r_c/r_m of the edge's feed (plunge, ramp and
+lead-in alike). A user `ae:`/`max_angle:` or programmed `fz:`/`feed:` is used as given.
+
+Op classes (cutting.toml `[[op_class]]`, cited: medians of the makers' own rough and finish
+columns against their slot column for the same tool, verify/feeds-vs-makers): a tool preset named
+for the op's class (`N rough`, `P slot`, ...) is taken first, then a `general` one. With generic
+data, slot and general hold the slot chip; finish holds 0.75× it; rough holds 1.466× it only where
+engagement feed measures a sample engaged under 90° (ae < D/2): the op's static feed, which also
+runs entries and unmeasured moves, keeps the slot chip.
+
+Engagement feed (clear, pocket, contour, slot, facing; not when the user programmed `fz:`/`feed:`):
+TOOLPATH-QUALITY's measurement on the in-process stock gives each FIXED-LENGTH sample (one tool
+diameter) its engaged angle, ap and ae; the feed holds the resolved chip through radial thinning,
+then is lowered (only the feed) so the sample's power and torque stay within `max_power:`,
+`max_torque:` and the spindle's power at the rpm, inside [`min_feed:`, `max_feed:`]. Samples are
+joined only at the same clamp, never by engagement band; no material-abrasion term.
+
+The stock material is `part(.., material:)` (a forge-material name; stock is often not the
+part's own record), else the part document's material. Its ISO 513 group is `part(.., group:)`,
+else its `[[stock]]` record's in cutting.toml, else its family's class (steel P, stainless M,
+iron K, aluminium and copper N, titanium S); nothing defaults. A `[[stock]]` record with measured
+Kienzle rows (Ti-6Al-4V and C45: Klippel et al. 2022, CC BY 4.0) gives kc1.1/mc at the cut's speed
+for power and torque. The tool's substrate (`material`: carbide, HSS, ...) picks the group's
+speed column; cermet, ceramic, CBN and PCD have none, so the maker's preset or the user's speed
+is needed; a coating moves no generic number (the maker's preset carries it). With no speed or
+chip from any layer the op is refused, with the fix.
+
+Plastics (forge-material family `plastic`) are group O: not an ISO 513 class, the makers' own
+grouping. Its speed and chip by diameter are Harvey's plastics finisher sheet (acrylic, acetal,
+nylon, PEEK ... unfilled), cited; no Kienzle data is published, so power and torque read `not
+checked`, and no HSS speed (an HSS tool needs the user's speed). Plastics melt: supervise the speed.
+
+**A tool with maker presets** uses them first: `Tool::preset_for_material` takes the maker's row
+that names the part's stock material (its alloy in the maker's text, else its family pattern such
+as 6xxx or C3xxxx; the slowest hardness class among equals), else `Tool::preset_for` the class's
+representative ("<group> <class>"). A preset's fz is the maker's programmed feed at its own
+stated width and depth, so its chip is fz·k(ae/D)·sin κ. The op's class (`Tool::class_for`): a
+slot is slot; clearing, pocketing and facing rough; a contour at a finishing width (≤ 10% D, or
+the tool's finish preset's ae where wider) finish, else rough; the rest general.
+
+**A tool with no maker data** takes the **10th percentile (P10) of its class** from
+kernel/forge-tooling/data/generic.toml (generated from the makers' cited rows by
+verify/feeds-vs-makers, `cargo run -p feeds-vs-makers -- --generic`): a class is material group ×
+material family (the part's forge-material family: N splits aluminium / copper, S titanium /
+nickel) × op class × maker tier (material-specific / general-purpose, an estimate from the
+makers' product lines) × flutes × coating × helix band, written only with ≥ 10 rows from ≥ 2
+makers; where the tool's class has fewer, the lookup opens helix, then tier, coating, flutes, op
+class, and last the family (the note names the class used). A part that names only its group
+gets the whole group (in N, copper's speeds among them). P10, not the median, because the costs are asymmetric: too fast breaks tools, too
+slow only costs time. Speed is the class's P10 speed; the chip is the class's P10 slot chip relative to
+the group's slot chip at the diameter; a rough or finish op's factor is the class's own P10
+op/slot chip ratio (else cutting.toml `[[op_class]]`). The value's `spread` (JSON below) gives the
+class's min / P10 / P25 / median / max so the user can push up knowingly. Carbide only (every maker row
+is); HSS and groups with no class use cutting.toml's group columns. The hold-out per maker (verify/feeds-vs-makers/REPORT.md) gives how often P10 is above a maker's
+own number.
+
+Each value is resolved in layers, each over the one before: `default` → `material` (the
+stock's data, else its group in cutting.toml) → `library` (the tool's `[[tool.preset]]` for the group, with its cite) →
+`user`. Then only two things lower a value, and both are reported with the reason:
+`machine-clamped` (rpm range; max feed, held 1 mm/min under it) and `limited` (the user's own
+limits). A user's value is never changed silently. Formulas (feeds.rs, with sources): chip thinning
+hex = fz sin φ, φ = acos(1 − 2ae/D); the mean chip hm = fz (1 − cos φ)/φ for Kienzle's
+kc = kc1.1 hm^(−mc); Pc = ap ae vf kc / 6e7 kW; Mc = Pc 30e3/(π n) N·m. Contact (feeds::contact): for ap < re (bull re, ball D/2), D_eff = D − 2re + 2√(re² − (re − ap)²) and the axial thinning sin κ = √(1 − (1 − ap/re)²) (a ball: D_eff/D, its width cut at D_eff); a tilted ball D_eff = D sin(min(α + tilt, 90°)), α = acos(1 − 2ap/D). Thinning together is capped at 3×: past it the chip is held under the target.
+
+Checks per op: rpm (a clamp warns), power and torque against the machine's spindle curve at the
+rpm (over: the op is refused, with the numbers), feed against the machine's maximum, the peak chip
+against the tool's own chip (over: warns). Missing data is `not checked`, never a pass: no power
+curve, an rpm outside the curve (no extrapolation), no kc data for the material, no maximum feed,
+no tool data.
+
+Drilling (`drill(..)`: spot and drill) is its own model, forge_tooling::resolve::drilling: `vc:`|`rpm:`,
+`f:` (mm/rev)|`feed:` (mm/min), `peck:` (mm, 0 none), `max_power:`, `max_torque:` on the op. Layers:
+the group's `[[drill]]` row for the drill's substrate (cutting.toml: vc and the feed per rev by
+diameter, each row one maker's cited series held for the substrate: Guhring 5510 carbide and 651
+HSS, OSG EX-SUS-GOLD HSS for N and M) → the drill's own preset (its maker's vc and mm/rev) → the user.
+Sandvik's drilling formulas: n = 1000 vc/(π Dc), vf = fn n, Q = Dc fn vc/4, Pc = fn vc Dc kc/240e3,
+Mc = Pc 30e3/(π n), kc at (fn/z) sin κr. Peck: the user's, else PMPA's schedule (Cribsheet #116: peck past 3–4 D; 3.5 D, 2 D, then 1 D),
+held at its 1 D for every peck from 3 D (one G83 Q; errs slow). A spot drill borrows the twist-drill row at the diameter it cuts
+to (said; no spot data read). Reply: ops[].drilling[] {role, tool, values, derived, checks}. Taps (`drill(.., plan: "auto")` on a threaded hole) run at `tap_vc:`|`tap_rpm:`, else the
+tap's preset, else the group's `[[tap]]` row (OSG A Brand cut-tap tables, List 16505/16515: the low
+end of the slower list; none for S or H), clamped to the machine; the feed is the pitch per
+revolution. Reply rows: role spot | drill | tap.
+
 `leave:` is the radial stock to leave (on walls: each pass's offset grows by it) and
 `leave_axial:` the axial stock (on floors: the op's lowest level, `to:` or a hole's depth, is
 raised by it), both default 0, either may be negative; `facing`, `clear`, `contour` and `pocket`
@@ -211,6 +314,11 @@ setups[]   name, part, machine, wcs {origin, axes, offset}, stock {kind, min, ma
 ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|slot|thread_mill|edge_break|bore), setup, status (built|refused),
            tool {id, T, H, type, d, holder, stickout} | null, plan[] (hole plans),
            feeds {rpm, vc, fz, hex, hm, f, power_kw, torque_nm} | null,
+           feeds_speeds {spread {class, rows, makers[], vc {min, p10, p25, median, max}, chip {min, p10, p25, median, max}} | null,
+                    values {vc, rpm, chip, fz, feed, ap, ae, plunge_feed, ramp_feed, lead_in_feed,
+                    min_feed, max_feed: {v, unit, source (default|material|library|user|machine-clamped|limited), note}},
+                    derived {hex, hm, engagement_deg, d_eff, mrr_cm3_min, power_kw, power_pct, torque_nm, torque_pct},
+                    checks[] {what (rpm|power|torque|feed|chip), verdict (pass|warn|fail|not checked), value, limit, unit, why}} | null,
            path {moves, length_cut, length_rapid, time_s},
            certificate {verdict (pass|fail), certified, pairs, cells, least_cutter_distance, against},
            checks[] (failures only) {rule, verdict (fail|undecided), certified, value, limit, unit,

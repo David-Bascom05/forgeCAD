@@ -788,6 +788,42 @@ mod tests {
                 assert!(s.len() > 10, "{} {key}: {s}", m.name);
             }
             assert!((100.0..25000.0).contains(&m.density), "{}", m.name);
+            // CAM's machining keys: each with its own source; a known class; rows that line up
+            for (k, v) in &m.extra {
+                if k.starts_with("machining.") {
+                    assert!(
+                        m.sources.iter().any(|(sk, _)| sk == k),
+                        "{}: {k} has no source_{k}",
+                        m.name
+                    );
+                    if k == "machining.iso513" {
+                        assert!(
+                            matches!(v, Value::Str(c) if ["P", "M", "K", "N", "S", "H", "O"].contains(&c.as_str())),
+                            "{}: {k}",
+                            m.name
+                        );
+                    }
+                }
+            }
+            let rows = |k: &str| match m.extra(k) {
+                Some(Value::Nums(v)) => Some(v.clone()),
+                _ => None,
+            };
+            // a single Kienzle value comes as a pair
+            assert_eq!(
+                m.extra("machining.kc1_1").is_some(),
+                m.extra("machining.mc").is_some(),
+                "{}: machining.kc1_1 and machining.mc go together",
+                m.name
+            );
+            if let Some(vc) = rows("machining.vc_rows") {
+                let (kc, mc) = (
+                    rows("machining.kc1_1_rows").unwrap(),
+                    rows("machining.mc_rows").unwrap(),
+                );
+                assert!(kc.len() == vc.len() && mc.len() == vc.len(), "{}", m.name);
+                assert!(vc.windows(2).all(|w| w[0] < w[1]), "{}", m.name);
+            }
             assert!(m.poisson.is_none_or(|p| p < 0.5), "{}", m.name);
             // a drawn thermoplastic can break below its yield; a metal can't
             if let (Some(y), Some(u)) = (m.yield_mpa, m.uts)
