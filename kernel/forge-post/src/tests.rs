@@ -617,3 +617,37 @@ fn machine_configured_codes_are_refused_not_guessed() {
         assert!(!Dialect::get(n).unwrap().cites.is_empty(), "{n}");
     }
 }
+
+/// A dialect's decimals and feed_decimals are whole numbers from 0 to MAX_DECIMALS (6), where 10^k
+/// is exact in f64; more, a fraction or a negative is refused naming the limit.
+#[test]
+fn a_dialects_decimals_are_whole_and_at_most_six() {
+    let src = DIALECTS[0].1;
+    for key in ["decimals", "feed_decimals"] {
+        let line = src
+            .lines()
+            .find(|l| l.trim_start().starts_with(&format!("{key} =")))
+            .unwrap_or_else(|| panic!("{key} in {}", DIALECTS[0].0));
+        for (k, ok) in [
+            ("0", true),
+            ("6", true),
+            ("7", false),
+            ("23", false),
+            ("2.5", false),
+            ("-1", false),
+        ] {
+            let r = Dialect::parse(&src.replacen(line, &format!("{key} = {k}"), 1));
+            match (ok, r) {
+                (true, Ok(_)) => {}
+                (false, Err(PostError::Dialect(why))) => {
+                    assert!(
+                        why.contains(key) && why.contains("from 0 to 6"),
+                        "{key} = {k}: {why}"
+                    )
+                }
+                (_, r) => panic!("{key} = {k}: {r:?}"),
+            }
+        }
+    }
+    assert_eq!(MAX_DECIMALS, 6);
+}

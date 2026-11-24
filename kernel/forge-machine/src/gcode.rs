@@ -128,8 +128,10 @@ impl Control {
         let Some(toml::Val::Table(d)) = root.get("dialect") else {
             return Err("no [dialect] table".into());
         };
-        let decimals = toml::num(d, "decimals").ok_or("the dialect has no decimals")? as u32;
-        let feed_decimals = toml::num(d, "feed_decimals").ok_or("the dialect has no feed_decimals")? as u32;
+        let decimals = toml::num(d, "decimals").ok_or("the dialect has no decimals")?;
+        let decimals = forge_post::decimals_of("decimals", decimals)?;
+        let feed_decimals = toml::num(d, "feed_decimals").ok_or("the dialect has no feed_decimals")?;
+        let feed_decimals = forge_post::decimals_of("feed_decimals", feed_decimals)?;
         // a dialect may have no dwell (its units unknown: forge-post refuses one); a G4 in its
         // text is then read as Fanuc's P milliseconds
         let dwell = toml::text(d, "dwell").unwrap_or("G4 P{ms}");

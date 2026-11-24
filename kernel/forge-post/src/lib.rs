@@ -59,6 +59,19 @@ pub const UNAVAILABLE: [(&str, &str); 5] = [
     ),
 ];
 
+/// The most decimals a dialect may give a word: more than any control writes, and 10^k stays
+/// exact in f64 (so a value's scaling is the same bits on every target, whatever powi does).
+pub const MAX_DECIMALS: u32 = 6;
+
+/// A dialect's decimal count `key`: a whole number from 0 to [`MAX_DECIMALS`], else why not.
+pub fn decimals_of(key: &str, v: f64) -> Result<u32, String> {
+    if v.fract() == 0.0 && (0.0..=MAX_DECIMALS as f64).contains(&v) {
+        Ok(v as u32)
+    } else {
+        Err(format!("`{key}` is {v}: a whole number from 0 to {MAX_DECIMALS}"))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum PostError {
     Dialect(String),
@@ -185,7 +198,8 @@ impl Dialect {
         let name = text(&t, "name")
             .ok_or_else(|| PostError::Dialect("no name".into()))?
             .to_string();
-        let decimals = num(&t, "decimals").ok_or_else(|| PostError::Dialect("no decimals".into()))? as u32;
+        let decimals = num(&t, "decimals").ok_or_else(|| PostError::Dialect("no decimals".into()))?;
+        let decimals = decimals_of("decimals", decimals).map_err(PostError::Dialect)?;
         let point = match text(&t, "point").unwrap_or("always") {
             "always" => Point::Always,
             "never" => Point::Never,
@@ -227,7 +241,8 @@ impl Dialect {
         Ok(Dialect {
             cites,
             extension: text(&t, "extension").unwrap_or("nc").to_string(),
-            feed_decimals: num(&t, "feed_decimals").unwrap_or(1.0) as u32,
+            feed_decimals: decimals_of("feed_decimals", num(&t, "feed_decimals").unwrap_or(1.0))
+                .map_err(PostError::Dialect)?,
             name,
             decimals,
             point,
@@ -732,7 +747,9 @@ pub fn motions_with(p: &QProgram, params: (f64, f64)) -> Vec<Motion> {
                 f,
             } => {
                 for h in holes {
-                    expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, params, &mut out);
+                    expand_hole(
+                        *kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, params, &mut out,
+                    );
                 }
             }
             QRec::Dwell(ms) => out.push(Motion::Dwell(*ms)),
@@ -991,7 +1008,19 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 if tpl == "expand" {
                     let mut ms = Vec::new();
                     for h in holes {
-                        expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, k, (PECK_CLEAR, CHIP_LIFT), &mut ms);
+                        expand_hole(
+                            *kind,
+                            *h,
+                            *z,
+                            *r,
+                            *clear,
+                            *q,
+                            *dwell,
+                            *f,
+                            k,
+                            (PECK_CLEAR, CHIP_LIFT),
+                            &mut ms,
+                        );
                     }
                     for m in ms {
                         let rr = match m {
@@ -1447,7 +1476,19 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             Some(80) => {
                 let (kind, z, r, q, dw, clear) = cycle.unwrap();
                 let (x, y) = (to[0].unwrap_or(0), to[1].unwrap_or(0));
-                expand_hole(kind, [x, y], z, r, clear, q, dw, feed, k, (PECK_CLEAR, CHIP_LIFT), &mut out);
+                expand_hole(
+                    kind,
+                    [x, y],
+                    z,
+                    r,
+                    clear,
+                    q,
+                    dw,
+                    feed,
+                    k,
+                    (PECK_CLEAR, CHIP_LIFT),
+                    &mut out,
+                );
                 pos = [Some(x), Some(y), Some(clear)];
                 continue;
             }
