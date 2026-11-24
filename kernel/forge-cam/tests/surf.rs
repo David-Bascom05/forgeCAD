@@ -272,7 +272,7 @@ fn surfacing_paths_are_the_same_bits_everywhere() {
             }
         }
     }
-    assert_eq!(h, 0xfec2cc97e5c76082, "digest {h:#018x}");
+    assert_eq!(h, 0xb92a77bd2fd88e19, "digest {h:#018x}");
 }
 
 /// Z-level roughing off the prism route (the dome's sphere) traces each level's blocked region

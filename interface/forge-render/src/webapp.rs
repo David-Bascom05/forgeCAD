@@ -43,9 +43,6 @@ extern "C" {
     /// several in one zip. `json`: {name, files: [{path, text}]}.
     #[wasm_bindgen(js_namespace = window, js_name = forge_export)]
     fn page_export(json: &str);
-    /// The page's: a file handed to the browser to save (its downloads).
-    #[wasm_bindgen(js_namespace = window, js_name = forge_download)]
-    fn page_download(name: &str, bytes: Uint8Array);
     #[wasm_bindgen(js_namespace = performance, js_name = now)]
     fn perf_now() -> f64;
     #[wasm_bindgen(js_namespace = Date, js_name = now)]

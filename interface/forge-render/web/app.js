@@ -138,7 +138,7 @@ let mirror = null;
 const problems = [];
 // the app's own settings and state (`/home`): kept in this browser, whatever serves the files
 const home = store ? new Mirror(await localBackend("_app"), "/home", fc, (e) => console.error(`forge-app: ${e}`)) : null;
-// a photo or a recording, handed to the person (gui_record.rs)
+// a file the app made (a photo, a recording, File > Export STL / 3MF / OBJ), to the downloads
 window.forge_download = (name, bytes) => download(name, new Blob([bytes.slice()]));
 
 // MP4 recording (gui_record.rs, record/web.rs): WebCodecs' H.264 encoder, its frames handed back
@@ -258,8 +258,6 @@ window.forge_export = async (json) => {
   download(fname, blob);
   window.forge_exported = fname;
 };
-// File > Export STL / 3MF / OBJ: the file the app made, to the browser's downloads
-window.forge_download = (name, bytes) => download(name, new Blob([bytes]));
 window.forge_save_as = (name) => {
   const n = prompt("Save as (a path in the project)", name || "part.fg");
   if (n) fc.app_save_as(`${MOUNT}/${cleanPath(n)}`);
