@@ -295,7 +295,6 @@ impl MachineUi {
             .collect();
     }
 
-    /// After the models changed: written to the user's library, checked, redrawn.
     /// forgecad's own models, about to be changed: the user's from now on, files and all.
     fn own_models(&mut self) {
         let (Some(from), Some(dir)) = (self.models_shipped.clone(), self.models_dir()) else {
@@ -311,6 +310,7 @@ impl MachineUi {
         self.models_shipped = None;
     }
 
+    /// After the models changed: written to the user's library, checked, redrawn.
     pub fn models_changed(&mut self) {
         self.own_models();
         match self.models_dir() {
@@ -352,11 +352,11 @@ impl MachineUi {
 
     /// Opens the split of model `i`: its parts read, each with a guessed body.
     pub fn open_split(&mut self, i: usize) -> Result<(), String> {
-        self.own_models();
         let m = self.models.get(i).ok_or("no such model")?.clone();
         let def = self.def.as_ref().ok_or("no machine")?;
+        // read where the models are (forgecad's own are copied to the user's only on apply)
         let dir = self
-            .models_dir()
+            .models_read_dir()
             .ok_or("no folder for your library on this system")?;
         let ps = forge_machine_builder::model_files::read_file(&dir.join(&m.file))?;
         let parts = ps
@@ -397,6 +397,7 @@ impl MachineUi {
             ));
         }
         let to: Vec<Option<String>> = sp.parts.iter().map(|p| p.dest.clone().flatten()).collect();
+        self.own_models();
         let dir = self
             .models_dir()
             .ok_or("no folder for your library on this system")?;

@@ -247,6 +247,8 @@ pub fn shipped_roots() -> Vec<PathBuf> {
     {
         out.push(bin.join("../share/forgecad/machine-models"));
     }
+    // the build's own source tree (its path is baked in at compile time; on another machine it is
+    // simply not there, and the roots above are looked at first)
     out.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kernel/forge-machine/data/models"));
     out
 }
@@ -341,12 +343,13 @@ pub fn fetch(machine: &str) -> Result<String, String> {
     Ok(format!("{machine}'s models fetched into {}", d.display()))
 }
 
-/// The folder a machine's models are drawn from: the user's, where they have attached any, else
-/// forgecad's own where downloaded (`shipped_dir`; `not_downloaded` says when they are not).
+/// The folder a machine's models are drawn from: the user's, where they keep an index for it
+/// (theirs even when empty: a user who removed forgecad's models sees none), else forgecad's own
+/// where downloaded (`shipped_dir`; `not_downloaded` says when they are not).
 pub fn drawn_dir(user_machines: Option<&Path>, machine: &str) -> Option<PathBuf> {
     user_machines
         .map(|u| dir_in(u, machine))
-        .filter(|d| forge_dirs::fs::is_file(d.join(INDEX)) && load_in(d).is_ok_and(|m| !m.is_empty()))
+        .filter(|d| forge_dirs::fs::is_file(d.join(INDEX)))
         .or_else(|| shipped_dir(machine))
 }
 
