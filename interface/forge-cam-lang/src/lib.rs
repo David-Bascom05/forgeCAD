@@ -202,6 +202,8 @@ pub struct OpChecks {
 pub struct ProgramOut {
     pub name: String,
     pub setups: Vec<usize>,
+    /// The ops it posts, in order (every op of its setups, or those `ops:` names).
+    pub ops: Vec<usize>,
     pub post: String,
     pub text: Option<String>,
     pub lines: usize,
@@ -891,18 +893,59 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
                 .push(format!("line {}: {e}", line_of(src, st.span.lo as usize)));
         }
     }
+    // each op was certified on the stock every earlier op of its setup, and every op of the
+    // setup it continues, left: so those are posted before it (an earlier program, or earlier
+    // in its own), or the program is refused
+    let mut seen: Vec<usize> = vec![];
+    for pi in 0..cam.programs.len() {
+        if !cam.programs[pi].round_trip {
+            continue;
+        }
+        let mut missing: Option<(usize, usize)> = None;
+        let mut this: Vec<usize> = vec![];
+        for &oi in &cam.programs[pi].ops {
+            let su = cam.ops[oi].setup;
+            let before = |j: usize| {
+                !cam.ops[j].paths.is_empty()
+                    && ((cam.ops[j].setup == su && j < oi) || Some(cam.ops[j].setup) == cam.setups[su].from)
+            };
+            if let Some(j) =
+                (0..cam.ops.len()).find(|&j| before(j) && !seen.contains(&j) && !this.contains(&j))
+            {
+                missing = Some((oi, j));
+                break;
+            }
+            this.push(oi);
+        }
+        if missing.is_none() {
+            seen.extend(this);
+        }
+        if let Some((oi, j)) = missing {
+            let p = &mut cam.programs[pi];
+            let e = format!(
+                "program `{}` posts `{}`, certified on the stock `{}` leaves, which no program posts before it; fix: post `{}` first (an earlier program, or in this one's `ops:`)",
+                p.name, cam.ops[oi].name, cam.ops[j].name, cam.ops[j].name
+            );
+            p.error = Some(e.clone());
+            p.text = None;
+            p.lines = 0;
+            p.round_trip = false;
+            cam.ok = false;
+            cam.errors.push(e);
+        }
+    }
     // an op no program posted has no certificate: its checks run on the posted path only
     let posted: Vec<usize> = cam
         .programs
         .iter()
         .filter(|p| p.round_trip)
-        .flat_map(|p| p.setups.clone())
+        .flat_map(|p| p.ops.clone())
         .collect();
-    for o in &mut cam.ops {
-        if o.status == "built" && !posted.contains(&o.setup) {
+    for (oi, o) in cam.ops.iter_mut().enumerate() {
+        if o.status == "built" && !posted.contains(&oi) {
             o.status = "unposted";
             o.refusal =
-                Some("not certified: no program(..) posts this setup (checks run on the posted path)".into());
+                Some("not certified: no program(..) posts this op (checks run on the posted path)".into());
         }
     }
     cam.leftover();
@@ -1361,7 +1404,31 @@ impl Cam {
                         .unwrap_or_else(|_| "fanuc".into()))
                 })?;
                 let number = get_num(a, "number", Some(1000.0))? as u32;
-                let out = self.post(name, &su, &post, number);
+                // `ops:`: some ops of its setups, not all (each must be one of theirs)
+                let sel: Option<Vec<usize>> = match a.get("ops") {
+                    None => None,
+                    Some(v) => {
+                        let vs: Vec<&V> = match v {
+                            V::Tuple(t) => t.iter().collect(),
+                            v => vec![v],
+                        };
+                        let mut ids = vec![];
+                        for v in vs {
+                            match v {
+                                V::Op(i) if su.contains(&self.ops[*i].setup) => ids.push(*i),
+                                V::Op(i) => {
+                                    return Err(format!(
+                                        "ops: `{}` is an op of setup `{}`, which this program does not post",
+                                        self.ops[*i].name, self.setups[self.ops[*i].setup].name
+                                    ));
+                                }
+                                _ => return Err("ops: an op or a list of ops of the program's setups".into()),
+                            }
+                        }
+                        Some(ids)
+                    }
+                };
+                let out = self.post(name, &su, sel.as_deref(), &post, number);
                 self.programs.push(out);
                 Ok(V::Num(0.0))
             }
@@ -3769,9 +3836,17 @@ impl Cam {
     }
 
     /// Posts the setups' ops, reads the text back, and certifies the path the text means.
-    fn post(&mut self, name: &str, setups: &[usize], post: &str, number: u32) -> ProgramOut {
+    fn post(
+        &mut self,
+        name: &str,
+        setups: &[usize],
+        sel: Option<&[usize]>,
+        post: &str,
+        number: u32,
+    ) -> ProgramOut {
         let mut po = ProgramOut {
             setups: setups.to_vec(),
+            ops: vec![],
             name: name.into(),
             post: post.into(),
             text: None,
@@ -3793,8 +3868,13 @@ impl Cam {
         // each op's records, and which records are whose
         let mut spans: Vec<(usize, usize, usize, usize)> = vec![];
         let op_ids: Vec<usize> = (0..self.ops.len())
-            .filter(|&i| setups.contains(&self.ops[i].setup) && !self.ops[i].paths.is_empty())
+            .filter(|&i| {
+                setups.contains(&self.ops[i].setup)
+                    && !self.ops[i].paths.is_empty()
+                    && sel.is_none_or(|s| s.contains(&i))
+            })
             .collect();
+        po.ops = op_ids.clone();
         for &oi in &op_ids {
             let op = &self.ops[oi];
             let s = &self.setups[op.setup];
