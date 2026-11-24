@@ -69,14 +69,54 @@ pub fn hops(
             let mut j = i;
             let mut top = at[2];
             let mut b = at;
+            let mut before_b = at;
             while j < moves.len() && is_link(&moves[j]) {
+                before_b = b;
                 b = end(&moves[j]);
                 top = top.max(b[2]);
                 j += 1;
             }
+            // a run that ends above a plunge straight down (an entry into material): the hop
+            // lands just over the material the map holds there, and the plunge goes on from
+            // there (its feed only through the stock, not through the air above it)
+            if let Some(PMove::Line {
+                to: p,
+                f: fp,
+                phase: Phase::Plunge,
+            }) = moves.get(j).copied()
+                && p[0] == b[0]
+                && p[1] == b[1]
+                && p[2] < b[2]
+            {
+                let zt = (top_near(map, b[0], b[1], rr) + CLEAR).max(p[2]);
+                let land = [b[0], b[1], zt];
+                if zt < b[2] - 1e-9
+                    && top > at[2] + 1e-9
+                    && let Some(h) = hop(map, rr, bodies, at, land, top, None, feed)
+                {
+                    let plunge = PMove::Line {
+                        to: p,
+                        f: fp,
+                        phase: Phase::Plunge,
+                    };
+                    for m in h.iter().chain(std::iter::once(&plunge)) {
+                        sweep(map, prof, at, m);
+                        at = end(m);
+                    }
+                    out.extend(h);
+                    out.push(plunge);
+                    n_hops += 1;
+                    i = j + 1;
+                    continue;
+                }
+            }
+            // the run's last move straight down onto b: from that height a hop may come down the
+            // same column even where material stands beside b (the descent the run already made)
+            let down_from =
+                (before_b[0] == b[0] && before_b[1] == b[1] && before_b[2] > b[2]).then_some(before_b[2]);
             if j < moves.len()
                 && top > at[2].max(b[2]) + 1e-9
-                && let Some(h) = hop(map, rr, bodies, at, b, top, feed)
+                && let Some(h) = hop(map, rr, bodies, at, b, top, down_from, feed)
             {
                 for m in &h {
                     sweep(map, prof, at, m);
@@ -134,6 +174,7 @@ fn top_near(map: &HeightMap, x: f64, y: f64, rr: f64) -> f64 {
 
 /// The hop from a to b (no higher than `ceiling`), or None: the end's disk meets material above
 /// it, or the way needs more height than the run it replaces had.
+#[allow(clippy::too_many_arguments)]
 fn hop(
     map: &HeightMap,
     rr: f64,
@@ -141,9 +182,17 @@ fn hop(
     a: [f64; 3],
     b: [f64; 3],
     ceiling: f64,
+    down_from: Option<f64>,
     feed: f64,
 ) -> Option<Vec<PMove>> {
-    if top_near(map, b[0], b[1], rr) > b[2] + 1e-9 {
+    // material beside the landing (within rr, above its level): the hop comes straight down onto
+    // it, and only where the run it replaces came down that same column from at least as high
+    // (the tool's own column, within r + h, the test a link at depth passes: never)
+    if top_near(map, b[0], b[1], rr - map.h) > b[2] + 1e-9 {
+        return None;
+    }
+    let beside = top_near(map, b[0], b[1], rr) > b[2] + 1e-9;
+    if beside && down_from.is_none() {
         return None;
     }
     let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
@@ -175,7 +224,7 @@ fn hop(
         })
         .collect();
     let hc = need.iter().copied().fold(a[2].max(b[2]), f64::max);
-    if hc > ceiling + 1e-9 {
+    if hc > ceiling + 1e-9 || beside && down_from.is_some_and(|d| d < hc - 1e-9) {
         return None;
     }
     // the ramp from (0, z0) to (k, hc) farthest along that stays above the need, at most half
@@ -200,7 +249,7 @@ fn hop(
     } else {
         0
     };
-    let kd = ramp(b[2], &|i| need[n - i]);
+    let kd = if beside { 0 } else { ramp(b[2], &|i| need[n - i]) };
     let line = |q: [f64; 2], z: f64| PMove::Line {
         to: [q[0], q[1], z],
         f: feed,
@@ -450,6 +499,93 @@ mod tests {
             _ => panic!("{out:?}"),
         }
         assert_eq!(check(&out, start, 5.0), 1);
+    }
+
+    #[test]
+    fn a_retract_onto_an_entry_hops_down_to_just_over_the_material() {
+        // the next start stands in the material between the pockets (top 0): the retract
+        // crosses at 5 and plunges from there; the hop lands at 0.5 and the plunge goes on
+        let start = [6.0, 10.0, -5.0];
+        let mv = vec![
+            line([14.0, 10.0, -5.0], Phase::Cut),
+            PMove::Rapid {
+                to: [14.0, 10.0, 5.0],
+            },
+            PMove::Rapid {
+                to: [30.0, 10.0, 5.0],
+            },
+            line([30.0, 10.0, -5.0], Phase::Plunge),
+            line([34.0, 10.0, -5.0], Phase::Cut),
+        ];
+        let (mut m, prof) = stock();
+        let (out, n) = hops(&mv, start, &mut m, &prof, &[], 9000.0);
+        assert_eq!(n, 1);
+        let k = out
+            .iter()
+            .position(|m| {
+                matches!(
+                    m,
+                    PMove::Line {
+                        phase: Phase::Plunge,
+                        ..
+                    }
+                )
+            })
+            .unwrap();
+        assert_eq!(end(&out[k - 1]), [30.0, 10.0, CLEAR], "{out:?}");
+        assert_eq!(out[k], mv[3]);
+        assert!(out[1..k].iter().all(|m| matches!(
+            m,
+            PMove::Line {
+                phase: Phase::Hop,
+                ..
+            }
+        )));
+        assert_eq!(check(&out, start, 5.0), 1);
+    }
+
+    #[test]
+    fn a_landing_beside_a_wall_comes_straight_down_the_retracts_column() {
+        // the next start at x = 44.4: its column (r + h) clear, the material's wall at 41 within
+        // r + 2h of it
+        let start = [6.0, 10.0, -5.0];
+        let mv = vec![
+            line([14.0, 10.0, -5.0], Phase::Cut),
+            PMove::Rapid {
+                to: [14.0, 10.0, 5.0],
+            },
+            PMove::Rapid {
+                to: [44.4, 10.0, 5.0],
+            },
+            PMove::Rapid {
+                to: [44.4, 10.0, -5.0],
+            },
+            line([50.0, 10.0, -5.0], Phase::Cut),
+        ];
+        let (mut m, prof) = stock();
+        let (out, n) = hops(&mv, start, &mut m, &prof, &[], 9000.0);
+        assert_eq!(n, 1);
+        let k = out
+            .iter()
+            .rposition(|m| {
+                matches!(
+                    m,
+                    PMove::Line {
+                        phase: Phase::Hop,
+                        ..
+                    }
+                )
+            })
+            .unwrap();
+        assert_eq!(end(&out[k - 1])[..2], [44.4, 10.0], "not straight down: {out:?}");
+        // without the run's own descent there (it comes down on a slant), no hop
+        let mut slant = mv.clone();
+        slant[2] = PMove::Rapid {
+            to: [40.0, 10.0, 5.0],
+        };
+        let (mut m, _) = stock();
+        let (_, n) = hops(&slant, start, &mut m, &prof, &[], 9000.0);
+        assert_eq!(n, 0);
     }
 
     #[test]
