@@ -132,9 +132,10 @@ jobs:
         with:
           workspaces: interface/forge-render -> target
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-      # the browser build stays warning-free (it broke unseen before: a native-only dependency)
+      # the browser build stays warning-free (it broke unseen before: a native-only dependency),
+      # and calls none of std's that panic or fail in a page (web/clippy/clippy.toml)
       # on push the same build without the lint gate (-D warnings): the cache is the same
-      - run: cargo clippy --lib --locked --target wasm32-unknown-unknown -- ${{ github.event_name != 'push' && '-D warnings' || '' }}
+      - run: CLIPPY_CONF_DIR="$PWD/web/clippy" cargo clippy --lib --locked --target wasm32-unknown-unknown -- ${{ github.event_name != 'push' && '-D warnings' || '' }}
         if: ${{ github.event_name != 'push' || steps.rust.outputs.cache-hit != 'true' }}
 
   gpu:
@@ -222,6 +223,18 @@ jobs:
         if: matrix.test == 'e2e' && !matrix.threaded
         working-directory: interface/forge-render
         run: node web/tests/studio.cjs "$GITHUB_WORKSPACE/target/web"
+      # the paths that reached std's browser panics (Versions, Agent, Check Forming) are clicked
+      # through, parts of any size are drawn shaded, history is kept where the project is, and
+      # frames keep up with the mouse
+      - name: no panics, shaded, history, pace
+        if: matrix.test == 'e2e'
+        working-directory: interface/forge-render
+        run: |
+          node web/tests/nopanic.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/shade.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/history.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/pace.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/select.cjs "$GITHUB_WORKSPACE/target/web"
       # Photo and Record: a PNG, and an MP4 by WebCodecs into the app's muxer, ffprobe'd
       - name: record
         if: matrix.test == 'e2e' && !matrix.threaded

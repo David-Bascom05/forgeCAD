@@ -2,6 +2,10 @@
 //! takes which pair, and what that thread remembers from before, changes no bit. A guard only: it passed with
 //! the near match in `ssi::searched` too, which `bits` showed under load. The test that fails on that cause is
 //! `a_box_a_little_off_is_another_question` in `ssi.rs` (research/drag-speed).
+//!
+//! Helpers are forced on (`forge_math::par::force_helpers`, a test-only feature): left to the
+//! adaptive thresholds, most stages of booleans this small stay on one thread (98 helpers started
+//! over this run under load, 774 forced; G10, verify/forge-bool-proof/LEDGER.md).
 #![cfg(not(target_family = "wasm"))]
 use forge_math::hash::BitHasher;
 use forge_model::{Part, suite};
@@ -24,6 +28,7 @@ fn bits(part: &Part, threads: usize) -> u64 {
 
 #[test]
 fn threads_and_load_change_no_bit() {
+    forge_math::par::force_helpers(true);
     let stop = std::sync::atomic::AtomicBool::new(false);
     let mut parts: Vec<(String, Part)> = suite::parts()
         .into_iter()
@@ -51,6 +56,8 @@ fn threads_and_load_change_no_bit() {
             }
         }));
         stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        // the comparison ran threaded
+        assert!(forge_math::par::helpers_started() > 0, "no helper thread started");
         if let Err(p) = held {
             std::panic::resume_unwind(p);
         }

@@ -26,6 +26,12 @@ const SHOTS = [
   ["cam-10-checks.png", ["select op1", "checks"], (s) => s.cam.dialogs.includes("checks")],
   ["cam-12-op-linking.png", ["select prof", "edit prof", "tab 4"], (s) => s.cam.dialogs.includes("op")],
   ["cam-11-new-pocket.png", ["select bore", "new-op pocket", "tab 1"], (s) => s.cam.dialogs.includes("op")],
+  ["cam-35-nc-programs-web.png", ["programs"], (s) => s.cam.dialogs.includes("programs"), TURN],
+  ["cam-1-opened.png", [], (s) => true],
+  // a small screen (UX-LEAD's 1024 × 700): the windows fit the view, nothing runs under a panel
+  ["cam-40-small-op.png", ["select prof"], (s) => s.cam.selected === "prof", undefined, "1024x700"],
+  ["cam-41-small-tools.png", ["tools"], (s) => s.cam.dialogs.includes("tools"), undefined, "1024x700"],
+  ["cam-42-small-programs.png", ["programs"], (s) => s.cam.dialogs.includes("programs"), undefined, "1024x700"],
 ];
 const only = process.argv[3];
 const s = http.createServer((q, r) => { const u = decodeURIComponent(new URL(q.url, "http://x").pathname); const f = path.join(root, u === "/" ? "index.html" : u);
@@ -33,10 +39,10 @@ const s = http.createServer((q, r) => { const u = decodeURIComponent(new URL(q.u
   r.writeHead(200, { "content-type": { ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm" }[path.extname(f)] ?? "application/octet-stream" }); fs.createReadStream(f).pipe(r); });
 s.listen(0, async () => {
   const b = await t.browser();
-  for (const [name, cmds, ready, doc] of SHOTS) {
+  for (const [name, cmds, ready, doc, size] of SHOTS) {
     if (only && !name.includes(only)) continue;
     const T0 = Date.now();
-    const p = await t.page(b, `http://127.0.0.1:${s.address().port}/?offscreen=1440x900&storage=memory`);
+    const p = await t.page(b, `http://127.0.0.1:${s.address().port}/?offscreen=${size ?? "1440x900"}&storage=memory`);
     try {
       await t.until(p, (s) => s.ready, "ready");
       await p.evaluate(() => window.forgecad.loaded);

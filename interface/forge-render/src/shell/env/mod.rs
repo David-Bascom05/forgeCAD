@@ -342,6 +342,11 @@ impl Shell {
         let Some(id) = self.env else { return false };
         let e = id.imp();
         if e.browser(self, ui, r) {
+            // whoever draws it, the left panel is noted by one name (tests, scripts, the agent)
+            let name = format!("env:{}:browser", id.key());
+            if !self.places.iter().any(|p| p.0 == name) {
+                self.places.push((name, r));
+            }
             return true;
         }
         if e.keeps_tree() {

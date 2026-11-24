@@ -79,6 +79,17 @@ impl Gui {
             }
         }
         let Some(w) = &self.shell.cam else { return };
+        // a lathe document: the simulation is milling's (forge-cam-lang): nothing to show, rather
+        // than milling's refusals of every turning built-in (the section view is turning's)
+        if w.turning() {
+            if self.shell.camsim.take().is_some() {
+                self.shell.camsim_job.focus = None;
+                if let Some(v) = &mut self.view {
+                    v.dirty = true;
+                }
+            }
+            return;
+        }
         // the workspace has a run of text the simulation is not of: simulate it
         if let Some(run) = &w.run {
             // keyed by the text and what its run came to: the same text run again with the
@@ -175,14 +186,9 @@ impl Gui {
         }
         // the view not under the panel (right) and the timeline (bottom), as fractions
         let vr = self.shell.view_rect;
-        let panel = if st.folded {
-            36.0
-        } else {
-            crate::gui_camsim_panel::PANEL_W
-        } + 16.0;
-        let bar = crate::gui_camsim_panel::TIMELINE_H + 16.0;
-        let fx = (panel / vr.width().max(1.0)).clamp(0.0, 0.6);
-        let fy = (bar / vr.height().max(1.0)).clamp(0.0, 0.6);
+        let free = self.shell.camsim_free(vr);
+        let fx = ((vr.right() - free.right()) / vr.width().max(1.0)).clamp(0.0, 0.6);
+        let fy = ((vr.bottom() - free.bottom()) / vr.height().max(1.0)).clamp(0.0, 0.6);
         if lo[0].is_finite()
             && let Some(v) = &mut self.view
         {

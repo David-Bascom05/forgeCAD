@@ -397,3 +397,178 @@ fn a_grown_ball_is_a_bigger_ball() {
     let b = g.b_at(4.0);
     assert!(b.lo <= 0.0 && b.hi >= 0.0);
 }
+
+/// φ(d) of a horizontal cylinder of radius r (whole, its axis at height 0), sampled: the most of
+/// √(r² − e²) − b(|u|) over e − u = d, u on a grid of [−R, R].
+fn phi_sampled(col: &Column, r: f64, d: f64, n: usize) -> f64 {
+    let mut m = f64::NEG_INFINITY;
+    for i in 0..=n {
+        let u = -col.r + 2.0 * col.r * i as f64 / n as f64;
+        let e = d + u;
+        if e.abs() > r {
+            continue;
+        }
+        m = m.max((r * r - e * e).sqrt() - col.b_at(u.abs()).mid());
+    }
+    m
+}
+
+#[test]
+fn a_dome_cylinders_chord_bound_is_its_sampled_maximum() {
+    // the exact route (cyl_chord, Concave.lean): every move's bound holds the sampled maximum of
+    // CL − z along it, and is within the sampling's error of it (exact, not a branch and bound)
+    let mut rng = Rng(0x51ed_2701_aa55_9e11);
+    let (mut ends, mut inner, mut n) = (0, 0, 0);
+    for (name, c) in cutters() {
+        let (col, _) = column(&c);
+        assert!(col.convex(), "{name}");
+        for _ in 0..40 {
+            let a = unit([1.0, rng.r(-1.0, 1.0), 0.0]);
+            let xx = unit(crs([0.0, 0.0, 1.0], a));
+            let yy = crs(a, xx);
+            let o = [rng.r(-2.0, 2.0), rng.r(-2.0, 2.0), rng.r(-3.0, 0.0)];
+            let r = rng.r(1.0, 8.0);
+            // the arc's upper half (y up or down: p's range covers the top either way)
+            let f = Face::new(
+                Surf::Cyl {
+                    o,
+                    x: xx,
+                    y: yy,
+                    ax: a,
+                    r,
+                },
+                Ival::new(-1.0, 1.0),
+                Ival::new(-8.0, 8.0),
+                None,
+                1e-9,
+                0,
+            );
+            let lat = |p: [f64; 2]| {
+                ((p[0] - o[0]) * a[1] - (p[1] - o[1]) * a[0]) / (a[0] * a[0] + a[1] * a[1]).sqrt()
+            };
+            let pa = [rng.r(-6.0, 6.0), rng.r(-6.0, 6.0)];
+            let pb = [pa[0] + rng.r(-4.0, 4.0), pa[1] + rng.r(-4.0, 4.0)];
+            let za = o[2] + phi_sampled(&col, r, lat(pa), 4000) + rng.r(-0.3, 0.6);
+            let zb = o[2] + phi_sampled(&col, r, lat(pb), 4000) + rng.r(-0.3, 0.6);
+            if !(za.is_finite() && zb.is_finite()) {
+                continue;
+            }
+            let mv = Move::Line {
+                a: [pa[0], pa[1], za],
+                b: [pb[0], pb[1], zb],
+            };
+            let Some(bound) = forge_cam_geom::drop::cyl_chord(&col, &f, &mv) else {
+                continue;
+            };
+            let mut m = f64::NEG_INFINITY;
+            let mut arg = 0.0;
+            for k in 0..=300 {
+                let t = k as f64 / 300.0;
+                let p = [pa[0] + t * (pb[0] - pa[0]), pa[1] + t * (pb[1] - pa[1])];
+                let u = o[2] + phi_sampled(&col, r, lat(p), 600) - (za + t * (zb - za));
+                if u > m {
+                    m = u;
+                    arg = t;
+                }
+            }
+            n += 1;
+            if arg == 0.0 || arg == 1.0 {
+                ends += 1;
+            } else {
+                inner += 1;
+            }
+            assert!(bound >= m - 1e-9, "{name}: bound {bound} under the sampled {m}");
+            assert!(
+                bound <= m + 1e-3,
+                "{name}: bound {bound} far over the sampled {m} (at {arg})"
+            );
+        }
+    }
+    println!("{n} moves: worst at an end {ends}, inside {inner}");
+    assert!(ends > 20 && inner > 20);
+}
+
+#[test]
+fn a_move_by_a_dome_cylinders_end_is_cleared_only_where_it_is() {
+    // gap_move's exact route past a dome cylinder's end (the column's section for a ball or a
+    // flat end; b(√·) superadditivity for a bull nose): moves along and across the axis near
+    // the face's ends, at heights about the sampled CL; every Clear holds at each sampled face
+    // point and instant, every Over is real
+    let mut rng = Rng(0x0dd5_eed5_1234_9876);
+    let (mut clear, mut over) = (0, 0);
+    for (name, c) in cutters() {
+        let (col, _) = column(&c);
+        for _ in 0..80 {
+            let a = unit([1.0, rng.r(-0.5, 0.5), 0.0]);
+            let xx = unit(crs([0.0, 0.0, 1.0], a));
+            let yy = crs(a, xx);
+            let o = [rng.r(-1.0, 1.0), rng.r(-1.0, 1.0), rng.r(-2.0, 0.0)];
+            let r = rng.r(1.0, 6.0);
+            let half = rng.r(0.5, 3.0);
+            let f = Face::new(
+                Surf::Cyl {
+                    o,
+                    x: xx,
+                    y: yy,
+                    ax: a,
+                    r,
+                },
+                Ival::new(-1.0, 1.0),
+                Ival::new(-half, half),
+                None,
+                1e-9,
+                0,
+            );
+            // near an end: along the axis (with a little across), or across it
+            let n = [-a[1], a[0]];
+            let end = if rng.f() < 0.5 { half } else { -half };
+            let t0 = end + rng.r(-1.5, 1.5) * col.r;
+            let l0 = rng.r(-(r + col.r), r + col.r);
+            let along = rng.f() < 0.6;
+            let (dt, dl) = if along {
+                (rng.r(-2.0, 2.0), rng.r(-0.05, 0.05))
+            } else {
+                (rng.r(-0.3, 0.3), rng.r(-3.0, 3.0))
+            };
+            let pa = [o[0] + t0 * a[0] + l0 * n[0], o[1] + t0 * a[1] + l0 * n[1]];
+            let pb = [pa[0] + dt * a[0] + dl * n[0], pa[1] + dt * a[1] + dl * n[1]];
+            let za = sampled(&col, &f, pa[0], pa[1], 40);
+            let zb = sampled(&col, &f, pb[0], pb[1], 40);
+            if !(za.is_finite() && zb.is_finite()) {
+                continue;
+            }
+            let lift = rng.r(-0.02, 0.1);
+            let mv = Move::Line {
+                a: [pa[0], pa[1], za + lift],
+                b: [pb[0], pb[1], zb + lift],
+            };
+            // (a tangent move may stay unknown: a small budget)
+            let (g, _) = gap_move(&col, &f, &mv, -0.005, 1e-4, 4_000);
+            match g {
+                Gap::Clear { lower } => {
+                    clear += 1;
+                    for k in 0..=10 {
+                        let t = k as f64 / 10.0;
+                        let (x, y) = (pa[0] + t * (pb[0] - pa[0]), pa[1] + t * (pb[1] - pa[1]));
+                        let z = za + lift + t * (zb - za);
+                        let v = sampled_gap(&col, &f, x, y, z, 24);
+                        assert!(v >= lower - 1e-9, "{name}: v {v} < {lower} at {t} on {mv:?}");
+                    }
+                }
+                Gap::Over { s, by, .. } => {
+                    over += 1;
+                    let (x, y) = (pa[0] + s * (pb[0] - pa[0]), pa[1] + s * (pb[1] - pa[1]));
+                    let z = za + lift + s * (zb - za);
+                    let cl = drop(&col, std::slice::from_ref(&f), &[0], x, y, 1e-5, 60_000);
+                    assert!(
+                        cl.hi - z >= by - 1e-5,
+                        "{name}: over by {by} but CL {cl:?} at z {z}"
+                    );
+                }
+                Gap::Unknown => {}
+            }
+        }
+    }
+    println!("moves: {clear} clear, {over} over");
+    assert!(clear > 60 && over > 10);
+}

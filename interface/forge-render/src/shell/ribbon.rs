@@ -637,11 +637,7 @@ impl Shell {
             return self.sketch_ribbon(ui, w);
         }
         let mut gx = 0.0;
-        let mut gs = groups(self);
-        // the Machine Builder's own commands, on the Manage tab while it is open
-        if self.machine.is_some() && self.tab == 4 {
-            gs.extend(super::machine::groups(self));
-        }
+        let gs = groups(self);
         // too wide for the window: small buttons lose their words, as Inventor's ribbon shrinks
         let full: f32 = gs
             .iter()
@@ -717,9 +713,10 @@ impl Shell {
         }
     }
 
-    /// Nothing open: no part, drawing or DWG.
+    /// Nothing open: no part, drawing, DWG or machining document (one opened alone, its part
+    /// not in a tab of its own, is a document all the same).
     pub(super) fn no_document(&self) -> bool {
-        self.fg.is_none() && self.drawing.is_none() && self.dwgdoc.is_none()
+        self.fg.is_none() && self.drawing.is_none() && self.dwgdoc.is_none() && self.cam.is_none()
     }
 
     /// A tool that does nothing without a document is drawn off then, its tooltip saying why;

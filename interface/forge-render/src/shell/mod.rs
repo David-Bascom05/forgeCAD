@@ -41,8 +41,12 @@ pub mod harness_look;
 pub mod harness_ui;
 pub mod icons;
 pub mod inspect;
+pub mod lib_form;
 pub mod machine;
+pub mod machine_brake;
 mod machine_parts;
+pub mod machine_tooling;
+pub mod machine_workholding;
 pub mod markup;
 pub mod materials;
 mod measure_ui;
@@ -1322,6 +1326,9 @@ impl Shell {
             self.file_menu = false;
             self.cube_menu = None;
             self.marking = None;
+        } else if let Some(w) = self.cam.as_mut().filter(|w| w.escape_level()) {
+            // the Manufacture workspace: its dialog, else its floating window
+            w.escape();
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.renaming.is_some()) {
             p.renaming = None;
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.tool.is_some()) {

@@ -3020,7 +3020,7 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
                     .named
                     .iter()
                     .find(|x| x.0 == name)
-                    .map(|x| x.1.clone())
+                    .map(|x| crate::sketch::attach(&x.1, s))
                     .ok_or_else(|| unknown(&v)),
             }
         }

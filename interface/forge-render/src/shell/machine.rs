@@ -102,6 +102,20 @@ pub struct MachineUi {
     /// Hosted by the Machine Builder environment: the library is drawn in its browser
     /// (`Shell::machine_side`), not in a floating panel.
     pub in_env: bool,
+    /// A library preview's ghost labels where they are on the screen (the host's, each frame).
+    pub view_labels: Vec<(egui::Pos2, String)>,
+    /// A long tool's section and dimensions, drawn to scale beside the view.
+    pub inset: Option<crate::library_mesh::Inset>,
+    /// Which library the workspace edits: "machine", or a tooling kind ("tool", "holder", ...).
+    pub lib: &'static str,
+    /// The tooling tab's state, while a tooling kind is chosen.
+    pub tooling: Option<super::machine_tooling::ToolingUi>,
+    /// The workholding tab's state, while it is chosen.
+    pub workholding: Option<super::machine_workholding::WorkholdingUi>,
+    /// The press-brake tab's state (punch, die or press), while one is chosen.
+    pub brake: Option<super::machine_brake::BrakeUi>,
+    /// The tooling record last shown (its text): the host is told when it changes.
+    tooling_seen: String,
 }
 
 fn today() -> String {
@@ -151,6 +165,13 @@ impl MachineUi {
             file_in: String::new(),
             filter: String::new(),
             in_env: false,
+            view_labels: Vec::new(),
+            inset: None,
+            lib: "machine",
+            tooling: None,
+            workholding: None,
+            brake: None,
+            tooling_seen: String::new(),
         };
         if let Some(e) = m.cat.entries.first() {
             let (d, l, f) = (e.def.clone(), e.level, e.file.clone());
@@ -446,14 +467,28 @@ fn label_w(ui: &mut Ui, t: &Theme, s: &str) {
 
 /// The provenance chip and the "?" (mark unknown) of a value.
 fn chip(ui: &mut Ui, c: &Ctx, path: &str, touch: &mut Touch) {
-    let (w, col) = badge(c.t, c.cites, path, c.own);
-    ui.label(RichText::new(w).font(sans(10.0)).color(col))
-        .on_hover_text(path);
-    if ui
-        .small_button("?")
-        .on_hover_text("I don't know this value: mark it UNKNOWN")
-        .clicked()
-    {
+    let (w, _) = badge(c.t, c.cites, path, c.own);
+    let detail = c
+        .cites
+        .cites
+        .iter()
+        .filter(|x| x.path == path)
+        .map(|x| {
+            [
+                x.source.as_str(),
+                x.taken.as_str(),
+                x.basis.as_str(),
+                x.note.as_str(),
+            ]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" · ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let detail = format!("{path}\n{detail}");
+    if super::lib_form::chip(ui, c.t, super::lib_form::Prov::of(Some(&w)), detail.trim(), true) {
         touch.unknown.push(path.to_string());
         touch.any = true;
     }
@@ -765,45 +800,203 @@ pub enum MachineCmd {
     Close,
 }
 
-/// The Machine Builder's ribbon groups (for the environment's tabs; research/ui/environments.md §5).
+/// The Machine Builder's ribbon groups (its environment's tab; research/ui/environments.md §5):
+/// Library (new, derive, save), Check, and for machines Motion. Exit is the environment's own
+/// Finish button.
 pub(in crate::shell) fn groups(s: &Shell) -> Vec<super::ribbon::Group> {
     use super::ribbon::{Group, Tool};
-    let m = s.machine.as_ref();
-    let has = m.is_some_and(|m| m.def.is_some());
-    let valid = m.is_some_and(|m| m.def.is_some() && m.problem.is_none());
+    let Some(m) = s.machine.as_ref() else {
+        return Vec::new();
+    };
     let tool = |name, icon, cmd, on: bool| Tool {
         name,
         icon,
         action: on.then_some(super::Action::Machine(cmd)),
         on: false,
     };
-    vec![
-        Group {
-            name: "Machine",
-            big: vec![
-                tool("From Template", "new", MachineCmd::FromTemplate, m.is_some()),
-                tool("Clone Machine", "copy", MachineCmd::Clone, has),
-                tool("Save Machine", "save", MachineCmd::Save, valid),
+    let group = |name, big: Vec<Tool>| Group {
+        name,
+        big,
+        small: vec![],
+        icons: vec![],
+    };
+    let (has, valid) = m.record_state();
+    let templates = m.lib == "machine" || super::machine_brake::is_brake(m.lib);
+    let mut v = vec![
+        group(
+            "Library",
+            vec![
+                tool("New from Template", "new", MachineCmd::FromTemplate, templates),
+                tool("Derive Copy", "copy", MachineCmd::Clone, has),
+                tool("Save", "save", MachineCmd::Save, valid && m.dirty()),
             ],
-            small: vec![],
-            icons: vec![],
-        },
-        Group {
-            name: "Motion",
-            big: vec![
-                tool("Home Axes", "home", MachineCmd::Home, valid),
-                tool("Check Travel", "check", MachineCmd::Check, valid),
-            ],
-            small: vec![],
-            icons: vec![],
-        },
-        Group {
-            name: "Exit",
-            big: vec![tool("Close Builder", "close", MachineCmd::Close, m.is_some())],
-            small: vec![],
-            icons: vec![],
-        },
-    ]
+        ),
+        group("Check", vec![tool("Check", "check", MachineCmd::Check, valid)]),
+    ];
+    if m.lib == "machine" {
+        v.push(group(
+            "Motion",
+            vec![tool("Home Axes", "home", MachineCmd::Home, valid)],
+        ));
+    }
+    v
+}
+
+/// The status bar's line: where the user is and what is chosen.
+pub fn status_line(m: &MachineUi) -> String {
+    let kind = lib_title(m.lib);
+    let rec = m.record_name().unwrap_or_else(|| "nothing chosen".into());
+    let unsaved = if m.dirty() { " · not saved" } else { "" };
+    format!("Machine Builder · {kind} · {rec}{unsaved}")
+}
+
+fn lib_title(w: &str) -> &'static str {
+    if w == "machine" {
+        "Machines"
+    } else if w == "workholding" {
+        "Workholding"
+    } else if let Some((_, t)) = forge_brake_builder::KINDS.iter().find(|(k, _)| *k == w) {
+        t
+    } else {
+        forge_tooling_builder::KINDS
+            .iter()
+            .find(|(k, _, _)| *k == w)
+            .map_or("Library", |(_, _, t)| *t)
+    }
+}
+
+impl MachineUi {
+    /// (a record is chosen, it reads as valid).
+    pub fn record_state(&self) -> (bool, bool) {
+        match self.lib {
+            "machine" => (self.def.is_some(), self.def.is_some() && self.problem.is_none()),
+            "workholding" => {
+                let c = self.workholding.as_ref().is_some_and(|w| w.cur.is_some());
+                (c, c)
+            }
+            w if super::machine_brake::is_brake(w) => self.brake.as_ref().map_or((false, false), |b| {
+                (b.cur.is_some(), b.cur.is_some() && b.problem.is_none())
+            }),
+            _ => self.tooling.as_ref().map_or((false, false), |t| {
+                (t.cur.is_some(), t.cur.is_some() && t.problem.is_none())
+            }),
+        }
+    }
+
+    /// Edited since it was read or saved.
+    pub fn dirty(&self) -> bool {
+        match self.lib {
+            "machine" => self.changed,
+            "workholding" => self.workholding.as_ref().is_some_and(|w| w.changed),
+            w if super::machine_brake::is_brake(w) => self.brake.as_ref().is_some_and(|b| b.changed),
+            _ => self.tooling.as_ref().is_some_and(|t| t.changed),
+        }
+    }
+
+    /// The chosen record's display name.
+    pub fn record_name(&self) -> Option<String> {
+        match self.lib {
+            "machine" => self.def.as_ref().map(|d| d.name.clone()),
+            "workholding" => self.workholding.as_ref()?.cur.as_ref().map(|r| r.name.clone()),
+            w if super::machine_brake::is_brake(w) => self.brake.as_ref()?.cur.as_ref().map(|r| r.id.clone()),
+            _ => self.tooling.as_ref()?.cur.as_ref().map(|r| r.id.clone()),
+        }
+    }
+
+    /// Chooses a record of the library being edited, by its id (a machine by its name).
+    pub fn pick_record(&mut self, id: &str) -> Result<(), String> {
+        let missing = || format!("no `{id}` in {}", lib_title(self.lib));
+        match self.lib {
+            "machine" => {
+                let e = self.cat.get(id).ok_or_else(missing)?;
+                let (d, l, f) = (e.def.clone(), e.level, e.file.clone());
+                self.load(d, Some((l, f)), Vec::new());
+            }
+            "workholding" => {
+                let w = self.workholding.as_mut().ok_or_else(missing)?;
+                let e = w
+                    .entries
+                    .iter()
+                    .find(|e| e.def.name == id)
+                    .cloned()
+                    .ok_or_else(missing)?;
+                w.pick(e);
+            }
+            x if super::machine_brake::is_brake(x) => {
+                let b = self.brake.as_mut().ok_or_else(missing)?;
+                let e = b
+                    .entries
+                    .iter()
+                    .find(|e| e.def.id == id)
+                    .cloned()
+                    .ok_or_else(missing)?;
+                b.pick(e);
+            }
+            _ => {
+                let t = self.tooling.as_mut().ok_or_else(missing)?;
+                let e = t
+                    .entries
+                    .iter()
+                    .find(|e| e.def.id == id)
+                    .cloned()
+                    .ok_or_else(missing)?;
+                t.pick(e);
+            }
+        }
+        Ok(())
+    }
+
+    /// A ribbon command, for the library being edited.
+    pub fn command(&mut self, c: MachineCmd) {
+        let project = self.project.clone();
+        let level = self.level;
+        match self.lib {
+            "machine" => match c {
+                MachineCmd::FromTemplate => self.make_template(),
+                MachineCmd::Clone => self.make_clone(),
+                MachineCmd::Save => self.save(),
+                MachineCmd::Check => self.run_check(),
+                MachineCmd::Home => {
+                    if let Some(d) = &self.def {
+                        self.q = d.joints.iter().map(|j| j.home).collect();
+                        self.jogged();
+                    }
+                }
+                MachineCmd::Close => {}
+            },
+            "workholding" => {
+                if let Some(w) = &mut self.workholding {
+                    match c {
+                        MachineCmd::Clone => w.derive(),
+                        MachineCmd::Save => w.save(level, project.as_deref()),
+                        MachineCmd::Check => w.check(),
+                        _ => {}
+                    }
+                }
+            }
+            x if super::machine_brake::is_brake(x) => {
+                if let Some(b) = &mut self.brake {
+                    match c {
+                        MachineCmd::FromTemplate => b.from_template(),
+                        MachineCmd::Clone => b.derive(),
+                        MachineCmd::Save => b.save(level, project.as_deref()),
+                        MachineCmd::Check => b.check(),
+                        _ => {}
+                    }
+                }
+            }
+            _ => {
+                if let Some(t) = &mut self.tooling {
+                    match c {
+                        MachineCmd::Clone => t.derive(project.as_deref()),
+                        MachineCmd::Save => t.save(level, project.as_deref()),
+                        MachineCmd::Check => t.check(project.as_deref()),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Shell {
@@ -811,10 +1004,44 @@ impl Shell {
     pub fn machine_side(&mut self, ui: &mut Ui, r: egui::Rect) {
         let Some(mut st) = self.machine.take() else { return };
         let t = self.theme;
-        let mut places = Vec::new();
-        ui.scope_builder(egui::UiBuilder::new().max_rect(r), |ui| {
-            library(ui, &t, &mut st, &mut places);
+        let mut places = vec![("env:machine-builder:browser".to_string(), r)];
+        ui.scope_builder(egui::UiBuilder::new().max_rect(r.shrink2(vec2(8.0, 6.0))), |ui| {
+            lib_choice(ui, &mut st, &mut places);
+            ui.add_space(4.0);
+            if st.lib == "machine" {
+                library(ui, &t, &mut st, &mut places);
+            } else if st.lib == "workholding" {
+                workholding_library(ui, &t, &mut st, &mut places);
+            } else if super::machine_brake::is_brake(st.lib) {
+                brake_library(ui, &t, &mut st, &mut places);
+            } else {
+                tooling_library(ui, &t, &mut st, &mut places);
+            }
         });
+        self.places.extend(places);
+        self.machine = Some(st);
+    }
+
+    /// The environment's properties panel: the chosen record's sheet (and its checks).
+    pub fn machine_props(&mut self, ui: &mut Ui, r: egui::Rect) {
+        let Some(mut st) = self.machine.take() else { return };
+        super::lib_form::set_doc_units(self.units);
+        let t = self.theme;
+        let mut places = Vec::new();
+        ui.scope_builder(
+            egui::UiBuilder::new().max_rect(r.shrink2(vec2(10.0, 8.0))),
+            |ui| {
+                if st.lib == "machine" {
+                    editor(ui, &t, &mut st, &mut places);
+                } else if let Some(tu) = &mut st.tooling {
+                    super::machine_tooling::editor(ui, &t, tu)
+                } else if let Some(w) = &mut st.workholding {
+                    super::machine_workholding::editor(ui, &t, w)
+                } else if let Some(b) = &mut st.brake {
+                    super::machine_brake::editor(ui, &t, b)
+                }
+            },
+        );
         self.places.extend(places);
         self.machine = Some(st);
     }
@@ -822,6 +1049,31 @@ impl Shell {
     /// The workspace's panels, while it is open.
     pub fn machine_ui(&mut self, ctx: &egui::Context) {
         let Some(mut st) = self.machine.take() else { return };
+        // the tooling record changed: the host draws it again
+        let shown = match (&st.tooling, &st.workholding, &st.brake) {
+            (Some(tu), _, _) => Some(format!("{:?}", tu.cur.as_ref().map(|r| &r.typed))),
+            (None, Some(w), _) => Some(format!("{:?}", w.cur.as_ref().map(|r| (&r.name, &r.vals)))),
+            (None, None, Some(b)) => Some(format!("{:?}", b.cur.as_ref().map(|r| (&r.id, &r.table)))),
+            _ => None,
+        };
+        if let Some(k) = shown
+            && k != st.tooling_seen
+        {
+            // another record (not an edit of this one): the view fits it
+            let id = |x: &str| {
+                x.split("id: \"")
+                    .nth(1)
+                    .or_else(|| x.split("((\"").nth(1))
+                    .and_then(|r| r.split('"').next())
+                    .map(str::to_string)
+            };
+            if id(&k) != id(&st.tooling_seen) {
+                st.fit += 1;
+            }
+            st.tooling_seen = k;
+            st.geom += 1;
+            st.pose += 1;
+        }
         if st.cat_gen != catalog::generation() {
             st.reload_catalog();
         }
@@ -829,7 +1081,27 @@ impl Shell {
         let v = self.view_rect;
         let mut close = false;
         let mut places: Vec<(String, egui::Rect)> = Vec::new();
-        // the library (in the environment's browser instead when it hosts the builder)
+        // in its environment: the library is the browser, the sheet the properties panel; only
+        // a machine's jog bar stays over the view (its transport)
+        if self.env == Some(super::env::EnvId::MachineBuilder) {
+            if st.lib != "machine" {
+                overlay(ctx, &t, &st, v);
+            }
+            if st.lib == "machine" {
+                egui::Window::new("Jog")
+                    .id(egui::Id::unique("machine:jog"))
+                    .title_bar(false)
+                    .resizable(false)
+                    .collapsible(false)
+                    .fixed_pos(pos2(v.left() + 8.0, v.bottom() - 116.0))
+                    .fixed_size(vec2((v.width() - 16.0).max(200.0), 100.0))
+                    .frame(super::theme::panel_frame(&t))
+                    .show(ctx, |ui| jog(ui, &t, &mut st, &mut places));
+            }
+            self.places.extend(places);
+            self.machine = Some(st);
+            return;
+        }
         if !st.in_env {
             egui::Window::new("Machines")
                 .id(egui::Id::unique("machine:library"))
@@ -851,7 +1123,16 @@ impl Shell {
                         });
                     });
                     ui.add_space(4.0);
-                    library(ui, &t, &mut st, &mut places);
+                    lib_choice(ui, &mut st, &mut places);
+                    if st.lib == "machine" {
+                        library(ui, &t, &mut st, &mut places);
+                    } else if st.lib == "workholding" {
+                        workholding_library(ui, &t, &mut st, &mut places);
+                    } else if super::machine_brake::is_brake(st.lib) {
+                        brake_library(ui, &t, &mut st, &mut places);
+                    } else {
+                        tooling_library(ui, &t, &mut st, &mut places);
+                    }
                 });
         }
         // the editor
@@ -863,7 +1144,17 @@ impl Shell {
             .fixed_pos(pos2(v.right() - 438.0, v.top() + 8.0))
             .fixed_size(vec2(430.0, (v.height() - 140.0).max(200.0)))
             .frame(super::theme::panel_frame(&t))
-            .show(ctx, |ui| editor(ui, &t, &mut st, &mut places));
+            .show(ctx, |ui| {
+                if st.lib == "machine" {
+                    editor(ui, &t, &mut st, &mut places)
+                } else if let Some(tu) = &mut st.tooling {
+                    super::machine_tooling::editor(ui, &t, tu)
+                } else if let Some(w) = &mut st.workholding {
+                    super::machine_workholding::editor(ui, &t, w)
+                } else if let Some(b) = &mut st.brake {
+                    super::machine_brake::editor(ui, &t, b)
+                }
+            });
         // the jog bar
         egui::Window::new("Jog")
             .id(egui::Id::unique("machine:jog"))
@@ -873,7 +1164,17 @@ impl Shell {
             .fixed_pos(pos2(v.left() + 8.0, v.bottom() - 124.0))
             .fixed_size(vec2((v.width() - 16.0).max(200.0), 108.0))
             .frame(super::theme::panel_frame(&t))
-            .show(ctx, |ui| jog(ui, &t, &mut st, &mut places));
+            .show(ctx, |ui| {
+                if st.lib == "machine" {
+                    jog(ui, &t, &mut st, &mut places)
+                } else if st.lib == "workholding" {
+                    workholding_bar(ui, &t, &mut st, &mut places)
+                } else if super::machine_brake::is_brake(st.lib) {
+                    brake_bar(ui, &t, &mut st, &mut places)
+                } else {
+                    tooling_bar(ui, &t, &mut st, &mut places)
+                }
+            });
         self.places.extend(places);
         if close {
             self.status = "Machine Builder closed".into();
@@ -881,6 +1182,199 @@ impl Shell {
             self.machine = Some(st);
         }
     }
+}
+
+/// The library the workspace edits: machines, or one of forge-tooling's kinds.
+fn lib_choice(ui: &mut Ui, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let title = |w: &str| {
+        if w == "machine" {
+            "Machines"
+        } else if w == "workholding" {
+            "Workholding"
+        } else if let Some((_, t)) = forge_brake_builder::KINDS.iter().find(|(k, _)| *k == w) {
+            t
+        } else {
+            forge_tooling_builder::KINDS
+                .iter()
+                .find(|(k, _, _)| *k == w)
+                .map_or("?", |(_, _, t)| *t)
+        }
+    };
+    let mut want = st.lib;
+    let r = egui::ComboBox::from_id_salt("machine:lib")
+        .selected_text(title(st.lib))
+        .width(ui.available_width() - 8.0)
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut want, "machine", "Machines");
+            for (w, _, t) in forge_tooling_builder::KINDS {
+                ui.selectable_value(&mut want, *w, *t);
+            }
+            ui.selectable_value(&mut want, "workholding", "Workholding");
+            for (w, t) in forge_brake_builder::KINDS {
+                ui.selectable_value(&mut want, *w, *t);
+            }
+        });
+    places.push(("machine:lib".into(), r.response.rect));
+    if want != st.lib {
+        st.set_lib(want);
+    }
+}
+
+impl MachineUi {
+    /// Switches the library edited: "machine" or a tooling kind.
+    pub fn set_lib(&mut self, word: &'static str) {
+        self.lib = word;
+        let brake = super::machine_brake::is_brake(word);
+        self.tooling = (word != "machine" && word != "workholding" && !brake)
+            .then(|| super::machine_tooling::ToolingUi::new(word, self.project.as_deref()));
+        self.brake = brake.then(|| super::machine_brake::BrakeUi::new(word, self.project.as_deref()));
+        self.workholding = (word == "workholding")
+            .then(|| super::machine_workholding::WorkholdingUi::new(self.project.as_deref()));
+        self.tooling_seen.clear();
+        self.geom += 1;
+        self.pose += 1;
+        self.fit += 1;
+    }
+}
+
+fn tooling_library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let project = st.project.clone();
+    let Some(tu) = &mut st.tooling else { return };
+    super::machine_tooling::library(ui, t, tu, project.as_deref(), places);
+    ui.separator();
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Save to");
+        ui.selectable_value(&mut st.level, Level::User, "User");
+        ui.add_enabled_ui(st.project.is_some(), |ui| {
+            ui.selectable_value(&mut st.level, Level::Project, "Project");
+        });
+    });
+    let Some(tu) = &mut st.tooling else { return };
+    let r = ui.add_enabled(
+        tu.cur.is_some(),
+        egui::Button::new(if tu.changed { "Save *" } else { "Save" }),
+    );
+    places.push(("tooling:save".into(), r.rect));
+    if r.clicked() {
+        tu.save(st.level, project.as_deref());
+    }
+    if !tu.message.is_empty() {
+        ui.label(RichText::new(&tu.message).font(sans(11.0)).color(t.ink2));
+    }
+}
+
+impl MachineUi {
+    /// The preview of the chosen library record, built from its own dimensions (None:
+    /// machines, drawn from their bodies).
+    pub fn library_preview(&self) -> Option<crate::library_mesh::Preview> {
+        use crate::library_mesh as lm;
+        let none = || {
+            let mut p = lm::Preview::default();
+            p.ghosts.push(lm::Ghost {
+                bounds: Some(([-20.0; 3], [20.0; 3])),
+                edges: Vec::new(),
+                at: [20.0, 0.0, 20.0],
+                label: "no geometry to draw".into(),
+            });
+            p
+        };
+        Some(match self.lib {
+            "machine" => return None,
+            w if super::machine_brake::is_brake(w) => self
+                .brake
+                .as_ref()
+                .and_then(|b| b.library_preview())
+                .unwrap_or_else(none),
+            "workholding" => self
+                .workholding
+                .as_ref()
+                .and_then(|w| w.library_preview())
+                .unwrap_or_else(none),
+            _ => self
+                .tooling
+                .as_ref()
+                .and_then(|t| t.library_preview())
+                .unwrap_or_else(none),
+        })
+    }
+
+    /// The preview's solid bodies (tests, thumbnails).
+    pub fn preview_bodies(&self) -> Option<Vec<crate::machine_mesh::Tris>> {
+        self.library_preview()
+            .map(|p| p.parts.into_iter().map(|(t, _)| t).collect())
+    }
+}
+
+fn workholding_library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let project = st.project.clone();
+    let Some(w) = &mut st.workholding else { return };
+    super::machine_workholding::library(ui, t, w, project.as_deref(), places);
+    ui.separator();
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Save to");
+        ui.selectable_value(&mut st.level, Level::User, "User");
+        ui.add_enabled_ui(st.project.is_some(), |ui| {
+            ui.selectable_value(&mut st.level, Level::Project, "Project");
+        });
+    });
+    let Some(w) = &mut st.workholding else { return };
+    let r = ui.add_enabled(
+        w.cur.is_some(),
+        egui::Button::new(if w.changed { "Save *" } else { "Save" }),
+    );
+    places.push(("workholding:save".into(), r.rect));
+    if r.clicked() {
+        w.save(st.level, project.as_deref());
+    }
+    if !w.message.is_empty() {
+        ui.label(RichText::new(&w.message).font(sans(11.0)).color(t.ink2));
+    }
+}
+
+fn workholding_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let Some(w) = &mut st.workholding else { return };
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Checks").font(semi(12.0)).color(t.ink));
+        let r = ui.add_enabled(w.cur.is_some(), egui::Button::new("Check"));
+        places.push(("workholding:check".into(), r.rect));
+        if r.clicked() {
+            w.check();
+        }
+        ui.label(RichText::new(&w.message).font(sans(11.0)).color(t.ink2));
+    });
+    ui.label(small(
+        t,
+        "The preview places the record as its check does (a mill device on a reference stock, a lathe device about +z from the chuck face).",
+    ));
+}
+
+fn tooling_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let project = st.project.clone();
+    let Some(tu) = &mut st.tooling else { return };
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Checks").font(semi(12.0)).color(t.ink));
+        let r = ui.add_enabled(
+            tu.cur.is_some() && tu.problem.is_none(),
+            egui::Button::new("Check"),
+        );
+        places.push(("tooling:check".into(), r.rect));
+        if r.clicked() {
+            tu.check(project.as_deref());
+        }
+        let (txt, col) = match (&tu.problem, tu.findings.is_empty()) {
+            (Some(p), _) => (format!("refused: {p}"), t.error),
+            (None, false) => (
+                format!("{} problems (see the editor)", tu.findings.len()),
+                t.error,
+            ),
+            (None, true) => (tu.message.clone(), t.ink2),
+        };
+        ui.label(RichText::new(txt).font(sans(11.0)).color(col));
+    });
+    ui.label(small(
+        t,
+        "The preview is the record's turned outline about its axis (z from the tip or nose); inserts and turning holders have none yet.",
+    ));
 }
 
 /// An entry's group in the list: its vendor (`builtin/<vendor>.toml`) or its file's name.
@@ -918,6 +1412,7 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
                     .iter()
                     .any(|x| x.to_lowercase().contains(&want))
             };
+            super::lib_form::empty_levels(ui, t, st.cat.entries.iter().any(|e| e.level != Level::Builtin));
             for lv in [Level::Project, Level::User, Level::Builtin] {
                 let here: Vec<_> = st
                     .cat
@@ -925,21 +1420,10 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
                     .iter()
                     .filter(|e| e.level == lv && matches(e))
                     .collect();
-                ui.label(
-                    RichText::new(lv.name().to_uppercase())
-                        .font(semi(10.0))
-                        .color(t.ink2),
-                );
                 if here.is_empty() {
-                    ui.label(small(
-                        t,
-                        match lv {
-                            Level::Project if st.project.is_none() => "  (no part open: no project folder)",
-                            _ if !want.is_empty() => "  none match",
-                            _ => "  none",
-                        },
-                    ));
+                    continue;
                 }
+                super::lib_form::level_head(ui, t, lv.name(), here.len());
                 // by vendor (a built-in file) or by file (the user's, the project's)
                 let mut groups: Vec<String> = here.iter().map(|e| group_of(e)).collect();
                 groups.dedup();
@@ -973,7 +1457,17 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
                                 );
                                 txt.push(')');
                             }
-                            let r = ui.selectable_label(on, RichText::new(txt).font(sans(12.0)));
+                            let r = ui
+                                .horizontal(|ui| {
+                                    super::lib_form::thumb(
+                                        ui,
+                                        t,
+                                        &super::lib_form::machine_thumb(&e.def),
+                                        26.0,
+                                    );
+                                    ui.selectable_label(on, RichText::new(txt).font(sans(12.0)))
+                                })
+                                .inner;
                             places.push((format!("machine:pick:{}", e.def.name), r.rect));
                             if r.clicked() {
                                 chosen = Some((e.def.clone(), e.level, e.file.clone()));
@@ -2034,5 +2528,162 @@ fn jog(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egu
     });
     if moved {
         st.jogged();
+    }
+}
+
+fn brake_library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let project = st.project.clone();
+    let Some(b) = &mut st.brake else { return };
+    super::machine_brake::library(ui, t, b, project.as_deref(), places);
+    ui.separator();
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Save to");
+        ui.selectable_value(&mut st.level, Level::User, "User");
+        ui.add_enabled_ui(st.project.is_some(), |ui| {
+            ui.selectable_value(&mut st.level, Level::Project, "Project");
+        });
+    });
+    let Some(b) = &mut st.brake else { return };
+    let r = ui.add_enabled(
+        b.cur.is_some(),
+        egui::Button::new(if b.changed { "Save *" } else { "Save" }),
+    );
+    places.push(("brake:save".into(), r.rect));
+    if r.clicked() {
+        b.save(st.level, project.as_deref());
+    }
+    if !b.message.is_empty() {
+        ui.label(RichText::new(&b.message).font(sans(11.0)).color(t.ink2));
+    }
+}
+
+fn brake_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let Some(b) = &mut st.brake else { return };
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Checks").font(semi(12.0)).color(t.ink));
+        let r = ui.add_enabled(b.cur.is_some() && b.problem.is_none(), egui::Button::new("Check"));
+        places.push(("brake:check".into(), r.rect));
+        if r.clicked() {
+            b.check();
+        }
+        let (txt, col) = match &b.problem {
+            Some(p) => (format!("refused: {p}"), t.error),
+            None => (b.message.clone(), t.ink2),
+        };
+        ui.label(RichText::new(txt).font(sans(11.0)).color(col));
+    });
+    ui.label(small(
+        t,
+        "The preview is the record's exact section (forge-brake's) drawn along the bed (over its longest segment, at most four times the section's size); a press: its ram, bed and housing as blocks. Amber: stand-in values for unknown ones.",
+    ));
+}
+
+/// Over the view of a library record: the ghosts' labels (what the record does not give), and a
+/// long tool's section to scale with its dimensions (docs/ux/STANDARD.md §4).
+fn overlay(ctx: &egui::Context, t: &Theme, st: &MachineUi, v: egui::Rect) {
+    let p = ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Foreground,
+        egui::Id::unique("machine:overlay"),
+    ));
+    let p = p.with_clip_rect(v);
+    // the labels in two columns at the view's sides (the side nearer each one's anchor),
+    // stacked down from their anchors so none overlaps another, each with a leader to its anchor
+    let inset_top = st
+        .inset
+        .as_ref()
+        .map(|_| v.bottom() - (v.width().min(v.height()) / 3.0).clamp(140.0, 220.0) - 24.0);
+    let wrap = (v.width() * 0.26).clamp(150.0, 260.0);
+    let mut sides: [Vec<(egui::Pos2, &String)>; 2] = [Vec::new(), Vec::new()];
+    for (at, words) in st.view_labels.iter().filter(|(_, w)| !w.is_empty()) {
+        sides[usize::from(at.x > v.center().x)].push((*at, words));
+    }
+    for (side, list) in sides.iter_mut().enumerate() {
+        list.sort_by(|a, b| a.0.y.total_cmp(&b.0.y));
+        let mut next = v.top() + 44.0;
+        for (at, words) in list.iter() {
+            let g = p.layout(words.to_string(), sans(11.0), t.ink, wrap);
+            let size = g.size() + vec2(12.0, 8.0);
+            let mut y = at.y.max(next) - size.y / 2.0;
+            y = y.max(next);
+            let bottom = if side == 0 {
+                inset_top.unwrap_or(v.bottom() - 12.0)
+            } else {
+                v.bottom() - 12.0
+            };
+            y = y.min(bottom - size.y);
+            let x = if side == 0 {
+                v.left() + 12.0
+            } else {
+                v.right() - 12.0 - size.x
+            };
+            let box_ = egui::Rect::from_min_size(pos2(x, y), size);
+            next = box_.bottom() + 6.0;
+            let foot = if side == 0 {
+                box_.right_center()
+            } else {
+                box_.left_center()
+            };
+            p.line_segment([*at, foot], egui::Stroke::new(1.0, t.ink2.gamma_multiply(0.8)));
+            p.circle_filled(*at, 2.5, t.ink2);
+            p.rect_filled(box_, 4.0, t.surface.gamma_multiply(0.94));
+            p.rect_stroke(
+                box_,
+                4.0,
+                egui::Stroke::new(1.0, t.line),
+                egui::StrokeKind::Inside,
+            );
+            p.galley(box_.min + vec2(6.0, 4.0), g, t.ink);
+        }
+    }
+    if let Some((outline, dims)) = &st.inset {
+        // a corner of the view: a third of its shorter side, 140 to 220 px
+        let side = (v.width().min(v.height()) / 3.0).clamp(140.0, 220.0);
+        let r = egui::Rect::from_min_size(pos2(v.left() + 12.0, v.bottom() - side - 12.0), vec2(side, side));
+        p.rect_filled(r, 6.0, t.surface.gamma_multiply(0.95));
+        p.rect_stroke(r, 6.0, egui::Stroke::new(1.0, t.line), egui::StrokeKind::Inside);
+        p.text(
+            r.min + vec2(10.0, 8.0),
+            egui::Align2::LEFT_TOP,
+            "Section (to scale)",
+            semi(11.0),
+            t.ink,
+        );
+        let area = egui::Rect::from_min_max(
+            r.min + vec2(10.0, 28.0),
+            pos2(r.max.x - 10.0, r.max.y - 18.0 - 15.0 * dims.len() as f32),
+        );
+        let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+        for q in outline {
+            lo = [lo[0].min(q[0]), lo[1].min(q[1])];
+            hi = [hi[0].max(q[0]), hi[1].max(q[1])];
+        }
+        if lo[0].is_finite() {
+            let s = (area.width() as f64 / (hi[0] - lo[0]).max(1e-9))
+                .min(area.height() as f64 / (hi[1] - lo[1]).max(1e-9));
+            let c = area.center();
+            let mid = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0];
+            let pts: Vec<egui::Pos2> = outline
+                .iter()
+                .map(|q| {
+                    pos2(
+                        c.x + ((q[0] - mid[0]) * s) as f32,
+                        c.y - ((q[1] - mid[1]) * s) as f32,
+                    )
+                })
+                .collect();
+            p.add(egui::Shape::closed_line(pts, egui::Stroke::new(1.5, t.ink)));
+        }
+        for (k, (l, val)) in dims.iter().enumerate() {
+            p.text(
+                pos2(
+                    r.left() + 10.0,
+                    r.bottom() - 10.0 - 15.0 * (dims.len() - 1 - k) as f32,
+                ),
+                egui::Align2::LEFT_BOTTOM,
+                format!("{l}  {val}"),
+                sans(11.0),
+                if val == "unknown" { t.error } else { t.ink2 },
+            );
+        }
     }
 }

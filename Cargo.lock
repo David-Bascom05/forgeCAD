@@ -88,6 +88,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-brake-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-brake",
+ "forge-library",
+ "forge-vendor",
+]
+
+[[package]]
 name = "forge-cam"
 version = "0.1.0"
 dependencies = [
@@ -97,6 +106,18 @@ dependencies = [
  "forge-post",
  "forge-tooling",
  "forge-topo",
+]
+
+[[package]]
+name = "forge-cam-3d"
+version = "0.1.0"
+dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-lang",
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
 ]
 
 [[package]]
@@ -117,6 +138,7 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-cam",
+ "forge-cam-3d",
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
@@ -137,10 +159,13 @@ dependencies = [
  "forge-cam",
  "forge-cam-geom",
  "forge-cam-lang",
+ "forge-lang",
  "forge-machine",
  "forge-math",
+ "forge-mesh",
  "forge-post",
  "forge-tooling",
+ "forge-turn-lang",
 ]
 
 [[package]]
@@ -176,9 +201,10 @@ dependencies = [
  "forge-model",
  "forge-ops",
  "forge-step",
+ "forge-tooling-builder",
  "forge-topo",
  "forge-turn-lang",
- "forge-workholding",
+ "forge-workholding-builder",
 ]
 
 [[package]]
@@ -487,6 +513,7 @@ name = "forge-probe-builder"
 version = "0.1.0"
 dependencies = [
  "forge-library",
+ "forge-machine",
  "forge-probe",
 ]
 
@@ -607,6 +634,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-tooling-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-topo"
 version = "0.1.0"
 dependencies = [
@@ -693,6 +730,15 @@ dependencies = [
  "forge-mesh",
  "forge-post",
  "forge-tooling",
+]
+
+[[package]]
+name = "forge-workholding-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-workholding",
 ]
 
 [[package]]

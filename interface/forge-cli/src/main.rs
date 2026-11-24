@@ -55,8 +55,9 @@ fn usage() -> ExitCode {
          forgecad machine list [--json] | new NAME (--from M | --template T) [--project] | check FILE|NAME [--json]   (your own machines)\n       \
          forgecad mesh FILE.stl|obj|3mf [--json]        (a mesh read and measured: not a B-rep)\n       \
          forgecad tool log add|list|observe|worn|chipped|broken|regrind|predict|run|calibrate ..   (physical tools: wear and life)\n       \
+         forgecad tool|holder|collet|collet_nut|pull_stud|insert|turn_holder list | new ID --from ID [FIELD=VALUE..] [--project] | check ID|FILE   (your own tooling)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
-         forgecad workholding list [KIND] | show NAME | schema | new NAME --from X [field=value ..] [--json]   (vises, clamps, plates, chucks, collets)\n       \
+         forgecad workholding list [KIND] | new ID --from X [field=value ..] [--user] | check [ID ..] | show ID | schema [--json]   (vises, clamps, plates, chucks, collets)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
     ExitCode::from(2)
@@ -302,6 +303,20 @@ fn main() -> ExitCode {
             }
             ExitCode::from(o.code)
         }
+        Some(w @ ("tool" | "holder" | "collet" | "collet_nut" | "pull_stud" | "insert" | "turn_holder"))
+            if args.len() >= 3 =>
+        {
+            let env = forge_tooling_builder::cli::Env {
+                project: std::path::PathBuf::from("."),
+                user_cam: forge_tooling_builder::user_cam(),
+            };
+            let o = forge_tooling_builder::cli::run(&env, w, &args[2..]).expect("a tooling kind");
+            let _ = write!(std::io::stdout(), "{}", o.out);
+            if !o.err.is_empty() {
+                eprintln!("{}", o.err.trim_end());
+            }
+            ExitCode::from(o.code)
+        }
         Some("vendor") => {
             let json = args.iter().any(|a| a == "--json");
             let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
@@ -322,24 +337,13 @@ fn main() -> ExitCode {
             }
         }
         Some("workholding") => {
-            let json = args.iter().any(|a| a == "--json");
-            let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
-            let here = std::env::current_dir().ok();
-            let user = forge_dirs::config();
-            match forge_workholding::cli::tool(&rest, user.as_deref(), here.as_deref()) {
-                Ok((j, text)) => {
-                    if json {
-                        println!("{j}");
-                    } else {
-                        print!("{text}");
-                    }
-                    ExitCode::SUCCESS
-                }
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    ExitCode::from(1)
-                }
+            let here = std::env::current_dir().unwrap_or_else(|_| ".".into());
+            let o = forge_workholding_builder::cli::run(&args[2..], &here, None);
+            print!("{}", o.text);
+            if !o.text.ends_with('\n') {
+                println!();
             }
+            ExitCode::from(o.code)
         }
         Some("help" | "--help" | "-h") => {
             println!("{}", forge_lang::help(&args[2..].join(" ")));

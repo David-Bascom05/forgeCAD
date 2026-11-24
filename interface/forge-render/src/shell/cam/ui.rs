@@ -7,7 +7,7 @@ use super::schema::{self, Kind, Tab};
 use super::{Ask, CamWs, Cmd, Locate, OpDlg, SetupDlg};
 use crate::shell::placed::Placed;
 use crate::shell::theme::{Theme, medium, mono, sans};
-use crate::shell::thermo_ui::{button, fact, foot, frame, head, heading, note, row, tabs};
+use crate::shell::thermo_ui::{button, foot, frame, head, heading, note, row, tabs};
 use crate::shell::{Action, Shell, icons};
 use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
 
@@ -177,7 +177,6 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                     (!generating && w.run.is_some()).then_some(Action::Cam(Ask::CheckNow)),
                     false,
                 ),
-                ("Auto Generate", "cam_generate", a(Ask::AutoGenerate), w.auto),
             ],
         ),
         (
@@ -285,6 +284,18 @@ impl Shell {
                     cert.1,
                 );
                 places.push(("cam:certification".into(), r));
+                // a setting, so a checkbox (the ribbon holds commands)
+                ui.horizontal(|ui| {
+                    ui.add_space(30.0);
+                    let mut auto = w.auto;
+                    let r = ui
+                        .checkbox(&mut auto, egui::RichText::new("Generate as I edit").font(sans(12.0)).color(t.ink2))
+                        .on_hover_text("Each edit generates again: the ops it changed, and those after them in their setup.");
+                    places.push(("cam:auto".into(), r.rect));
+                    if auto != w.auto {
+                        cmds.push(Cmd::AutoGenerate);
+                    }
+                });
                 if w.setups().is_empty() {
                     note(
                         ui,
@@ -442,12 +453,7 @@ impl Shell {
                     t.ink,
                 );
                 for s in w.tools() {
-                    let label = format!(
-                        "{}  ·  {}  T{}",
-                        s.name,
-                        s.pos(0).map(super::doc::unquote).unwrap_or_default(),
-                        s.arg("t").unwrap_or("?")
-                    );
+                    let label = tool_words(&w, s);
                     let resp = tree_row(
                         ui,
                         &t,
@@ -496,7 +502,8 @@ impl Shell {
     pub(in crate::shell) fn cam_ui(&mut self, ctx: &egui::Context) {
         let Some(mut w) = self.cam.take() else { return };
         let t = self.theme;
-        let v = self.view_rect;
+        // the view less what the simulation's panel and timeline cover: the windows keep inside
+        let v = self.camsim_free(self.view_rect);
         let mut places: Places = vec![];
         let mut blocks: Vec<Rect> = vec![];
         if let Some(mut d) = w.op_dlg.take() {
@@ -703,7 +710,7 @@ fn details(
                 note(ui, "Generate to see the stock and work offset.", width, t.ink2);
                 return;
             };
-            fact(ui, t, "Machine", &su.machine, width, t.ink);
+            fact(ui, t, "Machine", &machine_words(&su.machine), width, t.ink);
             fact(ui, t, "Work offset", &wcs_word(su.offset), width, t.ink);
             if let Some(r) = run {
                 let ops: Vec<&super::run::OpRes> = r.ops.iter().filter(|o| o.setup == id).collect();
@@ -839,7 +846,7 @@ fn details(
             let (_, word, c) = status_look(t, st);
             fact(ui, t, "Status", word, width, c);
             if let Some(o) = run.and_then(|r| r.op(id)) {
-                note(ui, &format!("Assurance: {}", o.assurance.words()), width, t.ink2);
+                fact(ui, t, "Assurance", o.assurance.words(), width, t.ink2);
             }
             if st == "stale" || st == "error" {
                 ui.horizontal(|ui| {
@@ -911,27 +918,24 @@ fn details(
                 fact(ui, t, "Time", &time(o.time_s), width, t.ink);
             }
             if let Some(l) = o.least {
-                fact(
-                    ui,
-                    t,
-                    "Least cutter distance",
-                    &format!("{} mm", num(l)),
-                    width,
-                    t.ink,
-                );
                 let tol = run.and_then(|r| r.setup(&o.setup)).map_or(0.0, |s| s.tol);
-                if l.abs() <= tol + 1e-9 {
-                    // a finishing cut touches the wall it finishes by design: a gouge is below −tol
-                    note(
-                        ui,
-                        &format!(
-                            "0 is the cutter on the wall it finishes, as a finishing pass is meant to be; a gouge would be under −{} mm (the setup's tol).",
+                // a finishing cut touches the wall it finishes by design: a gouge is below −tol;
+                // one line, the reason on hover
+                let (words, tip) = if l.abs() <= tol + 1e-9 {
+                    (
+                        format!("{} mm · on its wall", num(l)),
+                        format!(
+                            "The cutter touches the wall it finishes, as a finishing pass is meant to; a gouge would be under −{} mm (the setup's tolerance).",
                             num(tol)
                         ),
-                        width,
-                        t.ink2,
-                    );
-                }
+                    )
+                } else {
+                    (
+                        format!("{} mm", num(l)),
+                        "The least distance the certificate found between the cutter and the part over every posted move.".to_string(),
+                    )
+                };
+                fact_tip(ui, t, "Least cutter distance", &words, &tip, width, t.ink);
             }
             if o.pairs > 0 {
                 fact(ui, t, "Certified pairs", &o.pairs.to_string(), width, t.ink);
@@ -1224,11 +1228,7 @@ fn op_dialog(
         .tools()
         .iter()
         .map(|s| {
-            let id = s.pos(0).map(super::doc::unquote).unwrap_or_default();
-            (
-                s.name.clone(),
-                format!("{} · T{} · {id}", s.name, s.arg("t").unwrap_or("?")),
-            )
+            (s.name.clone(), tool_words(w, s))
         })
         .collect();
     let part = w.parts.first().cloned().unwrap_or_default();
@@ -1268,7 +1268,8 @@ fn op_dialog(
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1313,15 +1314,10 @@ fn op_dialog(
                         if let Some(tool) = w.lib.tools.iter().find(|x| {
                             w.stmt(&val).and_then(|s| s.pos(0)).map(super::doc::unquote).as_deref() == Some(x.id.as_str())
                         }) {
-                            fact(ui, t, "Type", tool.kind.name(), DLG_W, t.ink2);
-                            fact(
-                                ui,
-                                t,
-                                "Diameter · flutes · flute length",
-                                &format!("{} · {} · {} mm", num(tool.dc), tool.nof, num(tool.lcf)),
-                                DLG_W,
-                                t.ink2,
-                            );
+                            fact(ui, t, "Type", kind_words(tool.kind), DLG_W, t.ink2);
+                            fact(ui, t, "Diameter", &format!("{} mm", num(tool.dc)), DLG_W, t.ink2);
+                            fact(ui, t, "Flutes", &tool.nof.to_string(), DLG_W, t.ink2);
+                            fact(ui, t, "Flute length", &format!("{} mm", num(tool.lcf)), DLG_W, t.ink2);
                         }
                         ui.horizontal(|ui| {
                             ui.add_space(146.0);
@@ -1396,13 +1392,15 @@ fn op_dialog(
             }
             ui.add_space(2.0);
             note(ui, spec.what, DLG_W, t.ink2);
-            note(ui, &CamWs::op_text(d), DLG_W, t.ink2);
+            forge_text(ui, t, &CamWs::op_text(d), DLG_W);
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
             }
             (ok, cancel, apply) = foot(ui, t, "cam:op", true, places);
         });
     let rect = r.map(|r| r.response.rect);
+    // Enter is OK (Esc cancels: the shell's one level back, CamWs::escape; Tab moves on)
+    ok |= ctx.input(|i| i.key_pressed(egui::Key::Enter));
     if ok || apply {
         let missing: Vec<&str> = spec
             .fields
@@ -1463,18 +1461,14 @@ fn setup_dialog(
         .map(|s| {
             (
                 s.name.clone(),
-                format!(
-                    "{} · {}",
-                    s.name,
-                    s.pos(0).map(super::doc::unquote).unwrap_or_default()
-                ),
+                machine_words(&s.pos(0).map(super::doc::unquote).unwrap_or_default()),
             )
         })
         .collect();
     machines.extend(w.lib.machines.iter().map(|m| {
         (
             format!("machine(\"{}\")", m.name),
-            format!("{} ({}, {})", m.name, m.kind, m.control),
+            format!("{} · {} control", machine_words(&m.name), m.control),
         )
     }));
     let mut fixtures: Vec<(String, String)> = vec![(String::new(), "none".into())];
@@ -1508,7 +1502,8 @@ fn setup_dialog(
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1542,7 +1537,10 @@ fn setup_dialog(
                     }
                     items.push(("(0, 0, 0)".into(), "Part origin".into()));
                     arg_choice(ui, t, "Origin", &mut o, &items, "cam:setup:origin", places);
-                    arg_field(ui, t, "Origin point", &mut o, "\"top-center\" or (x, y, z)", "", "cam:setup:origin:text", places);
+                    // a point of its own: its numbers (the named origins need none)
+                    if o.trim_start().starts_with('(') {
+                        arg_field(ui, t, "Origin point (x, y, z)", &mut o, "(0, 0, 0)", "mm", "cam:setup:origin:text", places);
+                    }
                     set(d, "origin", o);
                     let mut wcs = get(d, "wcs");
                     let offsets: Vec<(String, String)> = std::iter::once((String::new(), "G54 (default)".to_string()))
@@ -1629,7 +1627,7 @@ fn setup_dialog(
                 }
             }
             if d.tab != 3 {
-                note(ui, &w.setup_text(d), DLG_W, t.ink2);
+                forge_text(ui, t, &w.setup_text(d), DLG_W);
             }
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
@@ -1637,6 +1635,8 @@ fn setup_dialog(
             (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
         });
     let rect = r.map(|r| r.response.rect);
+    // Enter is OK (Esc cancels: the shell's one level back, CamWs::escape; Tab moves on)
+    ok |= ctx.input(|i| i.key_pressed(egui::Key::Enter));
     if ok && let Err(e) = w.setup_ok(d) {
         d.error = Some(e);
         return (true, rect);
@@ -1700,7 +1700,8 @@ fn lathe_dialog(
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1757,13 +1758,15 @@ fn lathe_dialog(
                     }
                 }
             }
-            note(ui, &w.setup_text(d), DLG_W, t.ink2);
+            forge_text(ui, t, &w.setup_text(d), DLG_W);
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
             }
             (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
         });
     let rect = r.map(|r| r.response.rect);
+    // Enter is OK (Esc cancels: the shell's one level back, CamWs::escape; Tab moves on)
+    ok |= ctx.input(|i| i.key_pressed(egui::Key::Enter));
     if ok && let Err(e) = w.setup_ok(d) {
         d.error = Some(e);
         return (true, rect);
@@ -1779,7 +1782,8 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .filter(|s| s.role == super::doc::Role::Program)
         .map(|s| s.name.clone())
         .collect();
-    let width = 620.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 620.0_f32.min(v.width() - 32.0).max(360.0);
     let mut edits: Vec<super::doc::Edit> = vec![];
     let mut write: Option<(String, String)> = None;
     let (mut post_it, mut export_it): (Option<String>, Option<String>) = (None, None);
@@ -1791,7 +1795,8 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .default_pos(pos2(v.right() - width - 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_post", "Post Process", width, places, "cam:post");
             if progs.is_empty() {
@@ -1955,17 +1960,19 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
 
 fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &mut Places) -> Option<Rect> {
     let mut close = false;
-    let width = 560.0;
+    // within the view (a side panel takes its right): its left, as the other windows open
+    let width = 560.0_f32.min(v.width() - 48.0).max(380.0);
     let mut add: Option<String> = None;
     let r = egui::Window::new("cam-tools")
         .id(egui::Id::unique("cam-tools-window"))
         .title_bar(false)
         .collapsible(false)
         .resizable(false)
-        .default_pos(pos2(v.center().x - width / 2.0, v.top() + 60.0))
+        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_tools", "Tool Library", width, places, "cam:tools");
             let mut f = w.tools_filter.clone();
@@ -1982,27 +1989,40 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
                 return;
             }
             heading(ui, t, "Cutters", width);
-            let (r, _) = ui.allocate_exact_size(vec2(width, 300.0), Sense::hover());
+            // the list gives way on a small view, so the window keeps inside it
+            let list_h = (v.height() - 330.0).clamp(120.0, 300.0);
+            let (r, _) = ui.allocate_exact_size(vec2(width, list_h), Sense::hover());
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
             egui::ScrollArea::vertical().id_salt("cam-tools-list").auto_shrink([false, false]).show(&mut child, |ui| {
                 for tool in &w.lib.tools {
-                    let line = format!(
-                        "{}  ·  {}  ·  D {}  ·  {} fl  ·  flute {}",
-                        tool.id,
-                        tool.kind.name(),
-                        num(tool.dc),
-                        tool.nof,
-                        num(tool.lcf)
-                    );
-                    if !f.is_empty() && !line.to_lowercase().contains(&f) {
+                    // what a machinist reads: the id, the kind in words, Ø, flutes, flute length
+                    let parts = [
+                        tool.id.clone(),
+                        kind_words(tool.kind).to_string(),
+                        format!("Ø{} mm", num(tool.dc)),
+                        format!("{} flutes", tool.nof),
+                        format!("{} mm flute", num(tool.lcf)),
+                    ];
+                    // as much as fits before "Add" on a narrow window, the rest dropped from the end
+                    let room = width - 12.0 - 38.0 - 96.0;
+                    let mut k = parts.len();
+                    let mut line = parts.join("  ·  ");
+                    while k > 2 && ui.painter().layout_no_wrap(line.clone(), sans(12.0), t.ink).size().x > room {
+                        k -= 1;
+                        line = parts[..k].join("  ·  ");
+                    }
+                    let full = parts.join("  ·  ");
+                    if !f.is_empty() && !full.to_lowercase().contains(&f) {
                         continue;
                     }
-                    let (r, resp) = ui.allocate_exact_size(vec2(width - 12.0, 24.0), Sense::click());
+                    let (r, resp) = ui.allocate_exact_size(vec2(width - 12.0, 26.0), Sense::click());
+                    let resp = if k < parts.len() { resp.on_hover_text(&full) } else { resp };
                     if resp.hovered() {
                         ui.painter().rect_filled(r, 0.0, t.hover);
                     }
                     let inu = used.contains(&tool.id);
-                    ui.painter().text(pos2(r.left() + 14.0, r.center().y), Align2::LEFT_CENTER, &line, sans(12.0), t.ink);
+                    tool_glyph(ui.painter(), Rect::from_center_size(pos2(r.left() + 22.0, r.center().y), vec2(12.0, 22.0)), tool.kind, t.ink2);
+                    ui.painter().text(pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, &line, sans(12.0), t.ink);
                     ui.painter().text(
                         pos2(r.right() - 10.0, r.center().y),
                         Align2::RIGHT_CENTER,
@@ -2042,9 +2062,14 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
             }
             heading(ui, t, "Holders", width);
             for h in &w.lib.holders {
-                fact(ui, t, &h.id, &format!("{} · gauge {} mm · {} rpm", h.interface, num(h.gauge_length), num(h.max_rpm)), width, t.ink);
+                fact(ui, t, &h.id, &format!("{} · gauge {} mm · max {} rpm", h.interface, num(h.gauge_length), grouped(h.max_rpm)), width, t.ink);
             }
-            note(ui, "Built in: generic tools and conservative holders, our own numbers; verify with the vendor. A project adds its own in cam/*.toml beside the document.", width, t.ink2);
+            // one line (a small view keeps it whole); the rest on hover
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label(egui::RichText::new("Built in: generic, our own numbers · verify with the vendor").font(sans(12.0)).color(t.ink2))
+                    .on_hover_text("Generic tools and conservative holders, our own numbers: verify with the vendor. A project adds its own in cam/*.toml beside the document.");
+            });
             ui.add_space(8.0);
         });
     if let Some(id) = add.clone().filter(|_| w.turning()) {
@@ -2181,16 +2206,23 @@ fn section_window(
     places: &mut Places,
 ) -> Option<Rect> {
     let mut close = false;
-    let width = 560.0;
+    // half the view at most, and beside a floating window (620 wide at the view's left) when one
+    // is open
+    let floating = w.programs_open || w.quality_open || w.tools_open || w.checks_open || w.text_open || w.post_dlg.is_some();
+    let room = if floating { v.width() - 620.0 - 64.0 } else { v.width() * 0.5 };
+    let width = 560.0_f32.min(room).max(320.0);
     let r = egui::Window::new("cam-section")
         .id(egui::Id::unique("cam-section-window"))
         .title_bar(false)
         .collapsible(false)
         .resizable(false)
-        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
+        // docked at the view's bottom right: the floating windows open at its top left
+        .pivot(Align2::RIGHT_BOTTOM)
+        .fixed_pos(pos2(v.right() - 16.0, v.bottom() - 16.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(
                 ui,
@@ -2224,7 +2256,8 @@ fn programs_window(
 ) -> Option<Rect> {
     use super::nc::Posted;
     let mut close = false;
-    let width = 620.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 620.0_f32.min(v.width() - 32.0).max(360.0);
     let mut edits: Vec<super::doc::Edit> = vec![];
     let mut cmds: Vec<Cmd> = vec![];
     let progs: Vec<super::doc::Stmt> = w
@@ -2247,7 +2280,8 @@ fn programs_window(
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_sheet", "NC Programs", width, places, "cam:programs");
             if progs.is_empty() {
@@ -2280,7 +2314,7 @@ fn programs_window(
                 places.push(("cam:programs:allow".into(), r.rect));
             });
             ui.add_space(4.0);
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.add_space(14.0);
                 if !setups.is_empty() && button(ui, t, "New Program", false, "cam:programs:new".into(), places) {
                     let n = super::doc::free_name(&w.stmts, &format!("prog{}", progs.len() + 1));
@@ -2393,6 +2427,7 @@ fn program_row(
     let mut want = had.clone();
     ui.horizontal(|ui| {
         ui.add_space(14.0);
+        ui.spacing_mut().item_spacing.x = 10.0;
         ui.label(egui::RichText::new("Setups").font(sans(13.0)).color(t.ink2));
         for su in setups {
             let mut on = want.contains(su);
@@ -2434,6 +2469,7 @@ fn program_row(
         let mut pick: Vec<String> = ops.iter().filter(|o| on_now(&o.name)).map(|o| o.name.clone()).collect();
         ui.horizontal_wrapped(|ui| {
             ui.add_space(14.0);
+            ui.spacing_mut().item_spacing.x = 10.0;
             ui.label(egui::RichText::new("Ops").font(sans(13.0)).color(t.ink2));
             for o in &ops {
                 let mut on = pick.contains(&o.name);
@@ -2483,7 +2519,7 @@ fn program_row(
     }
     // its file: name, folder, extension, header
     let ext_default = forge_cam_lang::export::ext_of(&p.arg_str("post").unwrap_or_default()).to_string();
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.add_space(14.0);
         prog_field(ui, t, "File", 110.0, p, "file", &p.name, field, edits, places);
         prog_field(ui, t, "Folder", 90.0, p, "out", "beside it", field, edits, places);
@@ -2491,7 +2527,7 @@ fn program_row(
         prog_field(ui, t, "Comment", 140.0, p, "comment", "header line", field, edits, places);
     });
     // posting: one file per setup, decimals, coolant (forge-post's options, certified as posted)
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.add_space(14.0);
         let had = p.arg_str("split").as_deref() == Some("setup");
         let mut on = had;
@@ -2505,7 +2541,7 @@ fn program_row(
             });
         }
         prog_field(ui, t, "Decimals", 34.0, p, "decimals", "", field, edits, places);
-        prog_field(ui, t, "Feed dec.", 34.0, p, "feed_decimals", "", field, edits, places);
+        prog_field(ui, t, "Feed decimals", 34.0, p, "feed_decimals", "", field, edits, places);
         ui.add_space(6.0);
         ui.label(egui::RichText::new("Coolant").font(sans(12.0)).color(t.ink2));
         let now = p.arg_str("coolant").unwrap_or_default();
@@ -2579,8 +2615,9 @@ fn prog_field(
         Some((k, b)) if *k == key => b.clone(),
         _ => now.clone(),
     };
-    ui.add_space(6.0);
+    ui.add_space(8.0);
     ui.label(egui::RichText::new(label).font(sans(12.0)).color(t.ink2));
+    ui.add_space(4.0);
     let r = ui.add(
         egui::TextEdit::singleline(&mut v)
             .font(sans(12.0))
@@ -2620,7 +2657,8 @@ fn quality_window(
     places: &mut Places,
 ) -> Option<Rect> {
     let mut close = false;
-    let width = 720.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 720.0_f32.min(v.width() - 32.0).max(360.0);
     let mut select: Option<String> = None;
     let mut colour = w.focus.colour_by;
     let r = egui::Window::new("cam-quality")
@@ -2631,7 +2669,8 @@ fn quality_window(
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_check", "Toolpath Quality", width, places, "cam:quality");
             // the toolpath's colouring in the view (the simulation view draws it)
@@ -2780,7 +2819,8 @@ fn checks_window(
     places: &mut Places,
 ) -> Option<Rect> {
     let mut close = false;
-    let width = 460.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 460.0_f32.min(v.width() - 32.0).max(360.0);
     let mut locate: Option<Locate> = None;
     let r = egui::Window::new("cam-checks")
         .id(egui::Id::unique("cam-checks-window"))
@@ -2790,7 +2830,8 @@ fn checks_window(
         .default_pos(pos2(v.right() - width - 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_check", "Checks", width, places, "cam:checks");
             let Some(run) = &w.run else {
@@ -2841,7 +2882,8 @@ fn checks_window(
 fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &mut Places) -> Option<Rect> {
     let mut close = false;
     let mut apply = false;
-    let width = 640.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 640.0_f32.min(v.width() - 32.0).max(360.0);
     let r = egui::Window::new("cam-text")
         .id(egui::Id::unique("cam-text-window"))
         .title_bar(false)
@@ -2850,7 +2892,8 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(
                 ui,
@@ -2916,4 +2959,150 @@ pub fn status_line(w: &CamWs) -> String {
         w.path.rsplit('/').next().unwrap_or(""),
         if w.dirty() { " · unsaved" } else { "" }
     )
+}
+
+/// A tool kind in words.
+fn kind_words(k: forge_tooling::Kind) -> &'static str {
+    use forge_tooling::Kind::*;
+    match k {
+        Flat => "Flat end mill",
+        Ball => "Ball end mill",
+        Bull => "Bull nose end mill",
+        Chamfer => "Chamfer mill",
+        Spot => "Spot drill",
+        Drill => "Drill",
+        Tap => "Tap",
+        ThreadMill => "Thread mill",
+        Reamer => "Reamer",
+        Bore => "Boring bar",
+        Counterbore => "Counterbore",
+        Countersink => "Countersink",
+        Slot => "Slot cutter",
+        Engrave => "Engraver",
+    }
+}
+
+/// A whole number with thin groups of three (15 000).
+fn grouped(v: f64) -> String {
+    let n = v.round() as i64;
+    let s = n.abs().to_string();
+    let mut out = String::new();
+    for (k, c) in s.chars().enumerate() {
+        if k > 0 && (s.len() - k).is_multiple_of(3) {
+            out.push('\u{2009}');
+        }
+        out.push(c);
+    }
+    if n < 0 { format!("-{out}") } else { out }
+}
+
+/// A tool's side silhouette in `r` (shank up, its tip down): flat, ball, point or V.
+fn tool_glyph(p: &egui::Painter, r: Rect, k: forge_tooling::Kind, ink: Color32) {
+    use forge_tooling::Kind::*;
+    let st = Stroke::new(1.2, ink);
+    let (l, rt, top, bot) = (r.left(), r.right(), r.top(), r.bottom());
+    let tip = bot - r.width() * 0.5;
+    // the shank and the flutes' sides
+    p.line_segment([pos2(l, top), pos2(l, tip)], st);
+    p.line_segment([pos2(rt, top), pos2(rt, tip)], st);
+    p.line_segment([pos2(l, top), pos2(rt, top)], st);
+    match k {
+        Ball => {
+            let c = pos2(r.center().x, tip);
+            let n = 8;
+            let pts: Vec<egui::Pos2> = (0..=n)
+                .map(|i| {
+                    let a = std::f32::consts::PI * i as f32 / n as f32;
+                    pos2(c.x - a.cos() * r.width() * 0.5, c.y + a.sin() * r.width() * 0.5)
+                })
+                .collect();
+            p.add(egui::Shape::line(pts, st));
+        }
+        Drill | Spot | Chamfer | Countersink | Engrave => {
+            p.line_segment([pos2(l, tip), pos2(r.center().x, bot)], st);
+            p.line_segment([pos2(rt, tip), pos2(r.center().x, bot)], st);
+        }
+        _ => {
+            p.line_segment([pos2(l, tip), pos2(l, bot)], st);
+            p.line_segment([pos2(rt, tip), pos2(rt, bot)], st);
+            p.line_segment([pos2(l, bot), pos2(rt, bot)], st);
+        }
+    }
+    // flutes
+    p.line_segment([pos2(l, (top + tip) * 0.5), pos2(rt, (top + tip) * 0.5 + 3.0)], Stroke::new(0.8, ink));
+}
+
+/// A document tool as a machinist reads it: "T1 · Flat end mill Ø10" (the library's kind and
+/// diameter; the id when the library has no such tool).
+fn tool_words(w: &CamWs, s: &super::doc::Stmt) -> String {
+    let id = s.pos(0).map(super::doc::unquote).unwrap_or_default();
+    let t = s.arg("t").unwrap_or("?");
+    match w.lib.tools.iter().find(|x| x.id == id) {
+        Some(x) => format!("T{t} · {} Ø{}", kind_words(x.kind), num(x.dc)),
+        None => format!("T{t} · {id}"),
+    }
+}
+
+/// A machine's id in words: "generic-vmc3" → "Generic 3-axis VMC".
+fn machine_words(id: &str) -> String {
+    let words: Vec<String> = id
+        .split(['-', '_'])
+        .filter(|w| !w.is_empty())
+        .map(|w| match w {
+            "vmc3" => "3-axis VMC".to_string(),
+            "vmc4" => "4-axis VMC".to_string(),
+            "vmc5" => "5-axis VMC".to_string(),
+            "hmc" | "vmc" | "cnc" => w.to_uppercase(),
+            w => {
+                let mut c = w.chars();
+                c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+            }
+        })
+        .collect();
+    if words.is_empty() { id.to_string() } else { words.join(" ") }
+}
+
+/// A label and its value on one row, the value right-aligned; when the two do not fit side by
+/// side the value takes its own row under the label, right-aligned and wrapped: a value never
+/// draws over its label (docs/ux/STANDARD.md §5).
+fn fact(ui: &mut Ui, t: &Theme, k: &str, v: &str, w: f32, ink: Color32) {
+    fact_r(ui, t, k, v, w, ink);
+}
+
+/// `fact`, its response (for a hover).
+fn fact_r(ui: &mut Ui, t: &Theme, k: &str, v: &str, w: f32, ink: Color32) -> egui::Response {
+    let pad = 14.0;
+    let kg = ui.painter().layout_no_wrap(k.to_string(), sans(12.0), t.ink2);
+    let vg = ui.painter().layout_no_wrap(v.to_string(), mono(12.0), ink);
+    if kg.size().x + vg.size().x + 16.0 <= w - 2.0 * pad {
+        let (r, resp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::hover());
+        ui.painter().galley(pos2(r.left() + pad, r.center().y - kg.size().y * 0.5), kg, t.ink2);
+        ui.painter().galley(pos2(r.right() - pad - vg.size().x, r.center().y - vg.size().y * 0.5), vg, ink);
+        return resp;
+    }
+    // the label, then the value under it (wrapped to the row)
+    let vg = ui.painter().layout(v.to_string(), mono(12.0), ink, w - 2.0 * pad - 12.0);
+    let h = 20.0 + vg.size().y + 2.0;
+    let (r, resp) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
+    ui.painter().galley(pos2(r.left() + pad, r.top() + 10.0 - kg.size().y * 0.5), kg, t.ink2);
+    ui.painter().galley(pos2(r.right() - pad - vg.size().x, r.top() + 20.0), vg, ink);
+    resp
+}
+
+/// A fact whose words need a sentence: the row, and the sentence on hover.
+fn fact_tip(ui: &mut Ui, t: &Theme, k: &str, v: &str, tip: &str, w: f32, ink: Color32) {
+    fact_r(ui, t, k, v, w, ink).on_hover_text(tip);
+}
+
+/// The statement a dialog will write, as the document holds it: a muted "Forge text" label and
+/// the line in the code font (the text is the source of truth; this is it, not a caption).
+fn forge_text(ui: &mut Ui, t: &Theme, text: &str, w: f32) {
+    ui.add_space(4.0);
+    let (r, _) = ui.allocate_exact_size(vec2(w, 16.0), Sense::hover());
+    ui.painter().text(pos2(r.left() + 14.0, r.center().y), Align2::LEFT_CENTER, "Forge text", sans(11.0), t.ink2);
+    let g = ui.painter().layout(text.to_string(), mono(12.0), t.ink, w - 36.0);
+    let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 10.0), Sense::hover());
+    let field = egui::Rect::from_min_max(pos2(r.left() + 12.0, r.top()), pos2(r.right() - 12.0, r.bottom()));
+    ui.painter().rect_filled(field, 4.0, t.field);
+    ui.painter().galley(pos2(field.left() + 6.0, field.top() + 5.0), g, t.ink);
 }
