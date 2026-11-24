@@ -277,7 +277,7 @@ pub fn grow_query_reach(body: &mut Body, v: forge_topo::VertexId, tol: f64) {
     for f in faces {
         let face = &mut body.faces[f.index()];
         let Some(q) = face.query.get_mut() else { continue };
-        match std::sync::Arc::get_mut(q).and_then(|a| a.downcast_mut::<FaceInfo>()) {
+        match std::sync::Arc::get_mut(&mut q.0).and_then(|a| a.downcast_mut::<FaceInfo>()) {
             Some(info) => info.reach = info.reach.max(tol),
             // shared with a copy of the body: built afresh when next asked
             None => face.query.clear(),
