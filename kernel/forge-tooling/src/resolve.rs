@@ -14,7 +14,7 @@
 //!
 //! The formulas are feeds.rs's (chip thinning, mean chip, Kienzle power, torque). Power and
 //! torque limits lower the feed only, never ap or ae (patent note: fto-adaptive.md, '607).
-use crate::feeds::{self, Beam, Cut, DrillRow, Group, Stock, Substrate, THIN_CAP, TapRow};
+use crate::feeds::{self, Beam, Cut, DrillRow, Generic, Group, Stock, Substrate, THIN_CAP, TapRow};
 use crate::{Cite, Preset};
 use std::f64::consts::PI;
 
@@ -139,6 +139,43 @@ pub struct ToolData<'a> {
     pub class: Option<(&'a str, f64, &'a str)>,
     /// The tool's cutting data for the part's group, and its cite.
     pub preset: Option<(&'a Preset, Option<&'a Cite>)>,
+    /// The tool's generic class (`Library::generic`) for the op's class and for a slot, where
+    /// no preset or user value sets the speed or chip (carbide only: the makers' rows are).
+    pub generic: Option<GenericUse<'a>>,
+}
+
+/// A tool's generic classes: the op's (speed) and the slot's (the chip the op's feed is set
+/// from; the op's class rides on it as a factor, see `ToolData::class`).
+#[derive(Clone, Copy, Debug)]
+pub struct GenericUse<'a> {
+    pub op: &'a Generic,
+    pub slot: &'a Generic,
+}
+
+impl GenericUse<'_> {
+    /// The op class's chip against the slot's, from the makers' rows of the same tool class:
+    /// P25 over P25. None where the op's record is not its own class's (a slot, or a class
+    /// opened up to any op).
+    pub fn class_factor(&self) -> Option<f64> {
+        let rest = |g: &Generic| (g.tier.clone(), g.flutes, g.coating.clone(), g.helix.clone());
+        (self.op.op != "*"
+            && self.op.op != "slot"
+            && self.slot.op == "slot"
+            && rest(self.op) == rest(self.slot))
+        .then(|| self.op.chip[1] / self.slot.chip[1])
+    }
+}
+
+/// The makers' spread for the class a generic value came from: what the user may push up to.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Spread {
+    pub class: String,
+    pub n: usize,
+    pub makers: Vec<String>,
+    /// m/min, [min, P25, median, max].
+    pub vc: [f64; 4],
+    /// mm at this diameter, [min, P25, median, max].
+    pub chip: [f64; 4],
 }
 
 /// The machine, as the resolver needs it.
@@ -186,6 +223,9 @@ pub struct Check {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Resolved {
+    /// The makers' spread for the generic class the speed or chip came from (None: a preset or
+    /// the user set them, or no class has data).
+    pub spread: Option<Spread>,
     pub vc: Val,
     pub rpm: Val,
     /// The chip held (peak, mm), the programmed feed per tooth, and the feed.
@@ -357,6 +397,22 @@ pub fn milling_on(
                 Source::Library,
                 cite_note(c, "the tool's preset (uncited)"),
             )
+        } else if let (Some(gu), Substrate::Carbide) = (tool.generic, tool.substrate) {
+            let x = gu.op;
+            Val::new(
+                x.vc[1],
+                "m/min",
+                Source::Material,
+                format!(
+                    "lower quartile of {} maker rows ({}) for class {}; makers {:.0}–{:.0}, median {:.0} m/min (generated from verify/feeds-vs-makers)",
+                    x.n,
+                    x.makers.join(", "),
+                    x.class(),
+                    x.vc[0],
+                    x.vc[3],
+                    x.vc[2]
+                ),
+            )
         } else {
             let g = group?;
             // the group's generic speeds are per substrate; a coating moves no generic number
@@ -464,12 +520,34 @@ pub fn milling_on(
         } else {
             // no chip from any layer: nothing to set the feed from
             let g = group?;
-            Val::new(
-                g.fz_at(d),
-                "mm",
-                Source::Material,
-                format!("group {}: {}", g.group, g.source),
-            )
+            match (tool.generic, tool.substrate) {
+                (Some(gu), Substrate::Carbide) => {
+                    let x = gu.slot;
+                    Val::new(
+                        g.fz_at(d) * x.chip[1],
+                        "mm",
+                        Source::Material,
+                        format!(
+                            "lower quartile of {} maker slot-equivalent chips ({}) for class {}: {:.2}× group {}'s slot chip {:.4} mm at D {d}; makers {:.2}–{:.2}×, median {:.2}×",
+                            x.n,
+                            x.makers.join(", "),
+                            x.class(),
+                            x.chip[1],
+                            g.group,
+                            g.fz_at(d),
+                            x.chip[0],
+                            x.chip[3],
+                            x.chip[2]
+                        ),
+                    )
+                }
+                _ => Val::new(
+                    g.fz_at(d),
+                    "mm",
+                    Source::Material,
+                    format!("group {}: {}", g.group, g.source),
+                ),
+            }
         };
         // the op's class against the slot chip (cutting.toml [[op_class]]). A user's chip is
         // used as given.
@@ -813,7 +891,27 @@ pub fn milling_on(
         });
     }
 
+    let spread = match (tool.generic, tool.substrate, group) {
+        (Some(gu), Substrate::Carbide, Some(g))
+            if vc_val.source == Source::Material || chip.source == Source::Material =>
+        {
+            let s = g.fz_at(d);
+            Some(Spread {
+                class: if gu.op.key() == gu.slot.key() {
+                    gu.op.class()
+                } else {
+                    format!("speed: {}; chip: {}", gu.op.class(), gu.slot.class())
+                },
+                n: gu.op.n,
+                makers: gu.op.makers.clone(),
+                vc: gu.op.vc,
+                chip: gu.slot.chip.map(|r| r * s),
+            })
+        }
+        _ => None,
+    };
     Some(Resolved {
+        spread,
         vc: vc_val,
         rpm,
         chip,
@@ -1629,6 +1727,7 @@ mod tests {
             beam: None,
             class: None,
             preset: p,
+            generic: None,
         }
     }
 
@@ -2192,6 +2291,7 @@ mod tests {
             beam: None,
             class: None,
             preset: Some((&p, None)),
+            generic: None,
         };
         let at = |ae: f64| {
             milling(
@@ -2211,5 +2311,84 @@ mod tests {
         assert!((r.fz.v - 0.058166).abs() < 1e-12 && (r.chip.v - h).abs() < 1e-12);
         // in a slot the same chip is programmed unthinned: 0.6 of the finishing feed
         assert!((at(3.175).fz.v - h).abs() < 1e-12);
+    }
+
+    /// With no preset, a carbide tool takes its class's lower quartile (speed, and the slot
+    /// chip relative to the group's), carries the class's spread, and its class factor is the
+    /// class's own op/slot chip ratio.
+    #[test]
+    fn generic_class_lower_quartile() {
+        let mk = |op: &str, vc: [f64; 4], chip: [f64; 4]| Generic {
+            group: "N".into(),
+            op: op.into(),
+            tier: "*".into(),
+            flutes: 3,
+            coating: "*".into(),
+            helix: "*".into(),
+            n: 40,
+            makers: vec!["a".into(), "b".into()],
+            vc,
+            chip,
+            cites: Vec::new(),
+        };
+        let slot = mk("slot", [100.0, 150.0, 200.0, 600.0], [0.4, 0.8, 1.0, 1.3]);
+        let rough = mk("rough", [100.0, 160.0, 210.0, 640.0], [0.5, 1.0, 1.1, 1.4]);
+        let gu = GenericUse {
+            op: &rough,
+            slot: &slot,
+        };
+        assert!((gu.class_factor().unwrap() - 1.25).abs() < 1e-12);
+        assert_eq!(
+            GenericUse {
+                op: &slot,
+                slot: &slot
+            }
+            .class_factor(),
+            None
+        );
+        let g = group();
+        let t = ToolData {
+            d: 10.0,
+            flutes: 3,
+            ball: false,
+            re: 0.0,
+            substrate: Substrate::Carbide,
+            coating: "",
+            beam: None,
+            class: None,
+            preset: None,
+            generic: Some(gu),
+        };
+        let r = milling(
+            &Ask {
+                ae: Some(10.0),
+                ap: Some(5.0),
+                ..Ask::default()
+            },
+            &t,
+            Some(&g),
+            &spindle(),
+            (0.0, 0.0),
+        )
+        .unwrap();
+        assert_eq!((r.vc.v, r.vc.source), (160.0, Source::Material));
+        assert!(r.vc.note.contains("lower quartile of 40"), "{}", r.vc.note);
+        assert!((r.chip.v - 0.8 * g.fz_at(10.0)).abs() < 1e-12);
+        let sp = r.spread.unwrap();
+        assert_eq!(sp.vc, rough.vc);
+        assert!((sp.chip[3] - 1.3 * g.fz_at(10.0)).abs() < 1e-12);
+        // HSS: the makers' rows are carbide, so the group's HSS column, no spread
+        let h = milling(
+            &Ask::default(),
+            &ToolData {
+                substrate: Substrate::Hss,
+                ..t
+            },
+            Some(&g),
+            &spindle(),
+            (10.0, 5.0),
+        )
+        .unwrap();
+        assert!(h.spread.is_none() && h.vc.v == g.vc_hss);
     }
 }

@@ -40,10 +40,10 @@ fn every_row_is_pinned() {
     );
 }
 
-/// The agreed bands on the medians of ours/theirs (the 10th–90th spread is the makers' own,
-/// not ours, so only medians are banded).
+/// The generic default is the lower quartile of its class: over the makers' rows ours sits
+/// under the makers at the median (speed and chip), and no group's median is far over.
 #[test]
-fn medians_stay_in_band() {
+fn generic_defaults_sit_under_the_makers() {
     use feeds_vs_makers::stats;
     let rows = rows();
     let mill: Vec<_> = rows.iter().filter(|r| r.kind != "drill").collect();
@@ -51,38 +51,62 @@ fn medians_stay_in_band() {
     let all_rpm = med(mill.iter().map(|r| r.r_rpm()).collect());
     let all_f = med(mill.iter().filter_map(|r| r.r_f()).collect());
     for (what, m) in [("milling rpm", all_rpm), ("milling fz", all_f)] {
-        assert!((0.8..=1.25).contains(&m), "{what} median {m}");
+        assert!((0.6..=1.0).contains(&m), "{what} median {m}");
     }
     for g in ["P", "M", "K", "N", "S", "H"] {
         let sel: Vec<_> = mill.iter().filter(|r| r.group == g).collect();
         let r = med(sel.iter().map(|r| r.r_rpm()).collect());
-        // ours never well over the makers' speed for a group
-        assert!((0.6..=1.5).contains(&r), "group {g} rpm median {r}");
+        // H has one maker: no class, the group table (Helical's two hardness classes straddle it)
+        let hi = if g == "H" { 1.5 } else { 1.0 };
+        assert!((0.5..=hi).contains(&r), "group {g} rpm median {r}");
         if let Some((f, ..)) = stats(sel.iter().filter_map(|r| r.r_f()).collect()) {
-            assert!((0.5..=1.5).contains(&f), "group {g} fz median {f}");
+            assert!((0.4..=1.1).contains(&f), "group {g} fz median {f}");
         }
     }
-    // drills (calibration rows: their medians are checked for drift by the pins)
+    // drills (unchanged: the drill rows are the drill model's own calibration)
     let drill: Vec<_> = rows.iter().filter(|r| r.kind == "drill").collect();
     let r = med(drill.iter().map(|r| r.r_rpm()).collect());
     assert!((0.6..=1.6).contains(&r), "drill rpm median {r}");
 }
 
-/// Each maker against a table derived without it: no maker's held-out median is more than 3x
-/// from the others' consensus (the makers' own spread reaches ~2.5x: Harvey's slot chips,
-/// Guhring's drill speeds; the per-row pins catch any drift of ours).
+/// Each maker against P25-by-class built from the other makers only: the held-out speed
+/// median is at most the maker's own for every maker (Harvey's sits right at the others' P25:
+/// 1.00); the chip, within the makers' own spread
+/// (Helical prints chips ~0.4-0.75 of the others', so the others' P25 is over its median).
+/// The shares above each maker's own numbers are in REPORT.md.
 #[test]
-fn held_out_makers_stay_in_band() {
-    for (m, n, rpm, chip) in feeds_vs_makers::held_out_by_maker(&rows()) {
-        if n == 0 {
-            continue;
-        }
-        let r = rpm.unwrap().0;
-        assert!((0.33..=3.0).contains(&r), "{m}: held-out rpm median {r}");
-        if let Some((c, ..)) = chip {
-            assert!((0.33..=3.0).contains(&c), "{m}: held-out chip median {c}");
-        }
+fn generic_held_out_by_maker() {
+    let rows = rows();
+    let ho = feeds_vs_makers::generic_held_out(&rows);
+    for m in ["harvey", "helical", "lakeshore"] {
+        let sel: Vec<_> = ho.iter().filter(|x| rows[x.0].vendor == m).collect();
+        assert!(sel.len() >= 100, "{m}: {} rows held out", sel.len());
+        let v = feeds_vs_makers::stats(sel.iter().map(|x| x.1).collect())
+            .unwrap()
+            .0;
+        assert!(v <= 1.01, "{m}: held-out P25 speed median {v}");
+        let c = feeds_vs_makers::stats(sel.iter().filter_map(|x| x.2).collect())
+            .unwrap()
+            .0;
+        assert!((0.25..=1.5).contains(&c), "{m}: held-out P25 chip median {c}");
     }
+}
+
+/// data/generic.toml is what the makers' rows give now (FORGE_BLESS=1, or
+/// `cargo run -p feeds-vs-makers -- --generic`, to write it).
+#[test]
+fn generic_table_is_current() {
+    let t = feeds_vs_makers::generic_table(&rows(), None);
+    let now = feeds_vs_makers::generic_toml(&t);
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kernel/forge-tooling/data/generic.toml");
+    if std::env::var("FORGE_BLESS").is_ok() {
+        std::fs::write(&path, &now).unwrap();
+        return;
+    }
+    assert!(
+        std::fs::read_to_string(&path).unwrap() == now,
+        "data/generic.toml is stale: cargo run -p feeds-vs-makers -- --generic"
+    );
 }
 
 /// Presets ON: the preset written for a maker's row gives that row's numbers back, inside its

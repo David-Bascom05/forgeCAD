@@ -1,6 +1,6 @@
-well_island_cam/skim facing t_stop=19.9 t_min=18.2 cut=12.5 air=2.1 rapid=60 retracts=2 plunges=0 ramps=0 c90=0 phi_max=105 phi_mean=87 climb=0.38 slot=0.00 hex_max=0.1977 hex_p99=0.1293 hex_mean=0.1288 thin=0.00 thick=0.00 removed=3047 fc=208
-well_island_cam/well pocket t_stop=37.5 t_min=32.2 cut=21.1 air=5.2 rapid=222 retracts=8 plunges=4 ramps=4 c90=20 phi_max=180 phi_mean=119 climb=0.55 slot=0.45 hex_max=0.1099 hex_p99=0.1066 hex_mean=0.0728 thin=0.04 thick=0.11 removed=5818 fc=401
-well_island_cam program prog t_stop=57.4 t_min=50.5 changes=2 error=None
-deep_slot_cam/skim facing t_stop=34.8 t_min=31.2 cut=25.4 air=2.2 rapid=60 retracts=2 plunges=0 ramps=0 c90=0 phi_max=113 phi_mean=98 climb=0.42 slot=0.00 hex_max=0.1073 hex_p99=0.0732 hex_mean=0.0730 thin=0.00 thick=0.00 removed=3969 fc=131
-deep_slot_cam/slot pocket t_stop=21.6 t_min=19.4 cut=12.9 air=5.5 rapid=14 retracts=6 plunges=5 ramps=0 c90=0 phi_max=180 phi_mean=133 climb=0.44 slot=0.56 hex_max=0.1066 hex_p99=0.1066 hex_mean=0.0815 thin=0.01 thick=0.28 removed=7084 fc=392
-deep_slot_cam program prog t_stop=56.4 t_min=50.7 changes=1 error=None
+well_island_cam/skim facing t_stop=29.0 t_min=27.8 cut=20.6 air=3.7 rapid=60 retracts=2 plunges=0 ramps=0 c90=0 phi_max=105 phi_mean=86 climb=0.38 slot=0.00 hex_max=0.1348 hex_p99=0.1108 hex_mean=0.1098 thin=0.01 thick=0.00 removed=3047 fc=156
+well_island_cam/well pocket t_stop=53.8 t_min=50.1 cut=35.7 air=8.5 rapid=222 retracts=8 plunges=4 ramps=4 c90=20 phi_max=180 phi_mean=117 climb=0.56 slot=0.44 hex_max=0.0749 hex_p99=0.0727 hex_mean=0.0603 thin=0.04 thick=0.00 removed=5818 fc=301
+well_island_cam program prog t_stop=82.8 t_min=77.9 changes=2 error=None
+deep_slot_cam/skim facing t_stop=51.3 t_min=49.0 cut=41.6 air=3.7 rapid=60 retracts=2 plunges=0 ramps=0 c90=0 phi_max=113 phi_mean=98 climb=0.42 slot=0.00 hex_max=0.0784 hex_p99=0.0627 hex_mean=0.0624 thin=0.00 thick=0.00 removed=3969 fc=104
+deep_slot_cam/slot pocket t_stop=33.9 t_min=32.5 cut=22.5 air=8.9 rapid=14 retracts=6 plunges=5 ramps=0 c90=0 phi_max=180 phi_mean=129 climb=0.48 slot=0.52 hex_max=0.0727 hex_p99=0.0727 hex_mean=0.0651 thin=0.01 thick=0.00 removed=7084 fc=294
+deep_slot_cam program prog t_stop=85.1 t_min=81.4 changes=1 error=None

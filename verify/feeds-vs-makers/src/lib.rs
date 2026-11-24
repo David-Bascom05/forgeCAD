@@ -16,7 +16,7 @@ pub mod report;
 
 use forge_agent::json::Json;
 use forge_tooling::Library;
-use forge_tooling::feeds::Substrate;
+use forge_tooling::feeds::{Generic, Substrate, ToolClass};
 use forge_tooling::resolve::{self, Ask, DrillAsk, DrillTool, Spindle, ToolData};
 use std::path::Path;
 
@@ -52,6 +52,15 @@ pub struct Row {
     /// (`Tool::preset_for` with the op's class), at the maker's engagement. None where the
     /// library has no such tool or no preset for the group.
     pub on: Option<On>,
+    /// The tool's coating as printed, its helix (degrees, where printed) and corner radius.
+    pub coating: String,
+    pub helix: Option<f64>,
+    pub re: f64,
+    /// The maker's chip (its fz thinned at its own ae and ap, `resolve::preset_chip`) over our
+    /// group's slot chip at the same diameter: what the generic classes are made of.
+    pub chip_ratio: Option<f64>,
+    /// Which generic class our presets-OFF numbers came from (empty: none, the group table).
+    pub generic: String,
     /// The maker's printed range (low, high): rpm, and feed where stated.
     pub theirs_rpm_span: (f64, f64),
     pub theirs_f_span: Option<(f64, f64)>,
@@ -300,6 +309,27 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                             ap,
                             ..Ask::default()
                         };
+                        let coating = val(vals, "coating")
+                            .and_then(|x| x.str())
+                            .unwrap_or("")
+                            .to_string();
+                        let helix = val(vals, "helix").and_then(|x| x.num());
+                        let tc = ToolClass {
+                            tier: Some(tier_of(vendor)),
+                            flutes: Some(z.max(1)),
+                            coated: ToolClass::coated(&coating),
+                            helix,
+                        };
+                        // the generic default path: the op's class as the language classes it
+                        // (a generic tool: a contour at 10% D or under finishes), its generic
+                        // class and the class's chip factor (or the [[op_class]] one)
+                        let class = generic_class(&op, ae, d);
+                        let gu = lib.generic_use(g, class, &tc);
+                        let factor = match (class, gu.and_then(|u| u.class_factor())) {
+                            ("slot" | "general", _) => None,
+                            (c, Some(f)) => Some((c, f)),
+                            (c, None) => lib.op_class(c).map(|r| (c, r.chip_factor)),
+                        };
                         let tool = ToolData {
                             d,
                             flutes: z.max(1),
@@ -308,9 +338,28 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                             substrate: sub,
                             coating: "",
                             beam: None,
-                            class: None,
+                            class: factor.map(|(c, f)| (c, f, "")),
                             preset: None,
+                            generic: gu,
                         };
+                        let chip_ratio = mid(val(c, "fz")).map(|fz| {
+                            let p = forge_tooling::Preset {
+                                name: String::new(),
+                                group: g.into(),
+                                vc,
+                                fz,
+                                ap,
+                                ae,
+                            };
+                            let rr = if kind == "ball" {
+                                0.5 * d
+                            } else if kind == "bull" {
+                                re
+                            } else {
+                                0.0
+                            };
+                            resolve::preset_chip(&p, d, rr).0 / group.fz_at(d)
+                        });
                         // with no engagement stated the maker's chip is compared as a slot's
                         let nominal = (d, ap.unwrap_or(0.5 * d));
                         let Some(res) = resolve::milling(&ask, &tool, Some(group), &FREE, nominal) else {
@@ -321,7 +370,7 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                         let on = lt.and_then(|t| {
                             let class = t.class_for(lang_kind(&op), ae.unwrap_or(d), g);
                             let (p, c, classed) = t.preset_for(g, class)?;
-                            let class_rec = if classed || class != "rough" {
+                            let class_rec = if classed || class == "slot" || class == "general" {
                                 None
                             } else {
                                 lib.op_class(class)
@@ -331,6 +380,7 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                                 &ToolData {
                                     class: class_rec.map(|c| (c.name.as_str(), c.chip_factor, "")),
                                     preset: Some((p, c)),
+                                    generic: None,
                                     ..tool
                                 },
                                 Some(group),
@@ -355,6 +405,8 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                                 &own_ask,
                                 &ToolData {
                                     preset: Some(pc),
+                                    class: None,
+                                    generic: None,
                                     ..tool
                                 },
                                 Some(group),
@@ -388,6 +440,11 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                             circular: false,
                             on,
                             own,
+                            coating,
+                            helix,
+                            re,
+                            chip_ratio,
+                            generic: gu.map_or(String::new(), |u| u.op.class()),
                             theirs_rpm_span,
                             theirs_f_span: span(val(c, "fz")),
                         });
@@ -486,6 +543,11 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                             circular,
                             on,
                             own,
+                            coating: String::new(),
+                            helix: None,
+                            re: 0.0,
+                            chip_ratio: None,
+                            generic: String::new(),
                             theirs_rpm_span,
                             theirs_f_span: c.get("fn_or_fz").and_then(|x| {
                                 let u = x.get("unit").and_then(|u| u.str()).unwrap_or("");
@@ -563,126 +625,179 @@ pub fn theirs_vc(r: &Row) -> f64 {
     r.theirs_rpm * std::f64::consts::PI * r.d / 1000.0
 }
 
-fn median(mut v: Vec<f64>) -> Option<f64> {
-    v.retain(|x| x.is_finite());
-    if v.is_empty() {
-        return None;
+/// The makers' tier, from their own product lines: Harvey's "… Material Specific End Mills"
+/// and Helical's "End Mills for Aluminum Alloys / for Steels" lines are material-specific
+/// (high-performance) tools; Lakeshore's sheet is "GENERAL PURPOSE EM SPECS"
+/// (lakeshorecarbide.com/pdf/GENERAL PURPOSE EM SPECS.pdf); the tool names are in the raw
+/// records (research/cam/tooling/raw/*.json `name`).
+pub fn tier_of(vendor: &str) -> &'static str {
+    match vendor {
+        "lakeshore" => "general-purpose",
+        _ => "material-specific",
     }
-    v.sort_by(f64::total_cmp);
-    Some(v[(v.len() - 1) / 2])
 }
 
-/// A slot row (the chip is the peak chip: no thinning credit).
-fn is_slot(r: &Row) -> bool {
-    r.kind == "flat" && (r.op == "slot" || r.ae.is_some_and(|a| a >= 0.5 * r.d))
+/// A maker's op as a generic tool's op class: slot; rough and max (HEM) rough; finish at a
+/// finishing width (<= 10% D, `Tool::class_for` for a tool with no finish preset), else rough;
+/// the rest general.
+pub fn generic_class(op: &str, ae: Option<f64>, d: f64) -> &'static str {
+    match op {
+        "slot" => "slot",
+        "rough" | "max" => "rough",
+        "finish" if ae.is_some_and(|a| a <= 0.1 * d * (1.0 + 1e-9)) => "finish",
+        "finish" => "rough",
+        _ => "general",
+    }
 }
 
-/// Leave one maker out: for each row, the generic speed (and, for the groups whose chip comes
-/// from maker slot rows, the slot chip at its diameter) re-derived from the OTHER makers' rows
-/// only, as the shipped table was derived from all; the row's ratios then scored against that.
-/// Returns (row index, held-out rpm ratio, held-out chip ratio); a row whose group no other
-/// maker covers is left out (no hold-out possible).
-pub fn held_out(
-    rows: &[Row],
-    current_vc: &dyn Fn(&str, bool) -> f64,
-    chip_groups: &[&str],
-) -> Vec<(usize, f64, Option<f64>)> {
-    let mut out = Vec::new();
-    for (i, r) in rows.iter().enumerate() {
-        let drill = r.kind == "drill";
-        let others = |f: &dyn Fn(&Row) -> bool| -> Vec<&Row> {
-            rows.iter()
-                .filter(|o| {
-                    o.vendor != r.vendor
-                        && o.group == r.group
-                        && (o.kind == "drill") == drill
-                        && o.substrate == r.substrate
-                        && f(o)
-                })
-                .collect()
+/// Fewest rows, and fewest makers, a generic class is written with.
+pub const GENERIC_MIN_ROWS: usize = 10;
+pub const GENERIC_MIN_MAKERS: usize = 2;
+
+/// The generic classes from the makers' end-mill rows (carbide: every compared row is): for
+/// each level of `feeds::GENERIC_LEVELS`, each class with at least GENERIC_MIN_ROWS rows from
+/// at least GENERIC_MIN_MAKERS makers, the min, lower quartile, median and max of the rows'
+/// speeds (the middle of a printed range) and chips (relative to the group's slot chip).
+/// `without`: leave one maker's rows out (the hold-out).
+pub fn generic_table(rows: &[Row], without: Option<&str>) -> Vec<Generic> {
+    use std::collections::BTreeMap;
+    let mut classes: BTreeMap<String, Vec<&Row>> = BTreeMap::new();
+    for r in rows
+        .iter()
+        .filter(|r| r.kind != "drill" && r.substrate == "carbide" && Some(r.vendor.as_str()) != without)
+    {
+        let tc = ToolClass {
+            tier: Some(tier_of(&r.vendor)),
+            flutes: Some(r.z.max(1)),
+            coated: ToolClass::coated(&r.coating),
+            helix: r.helix,
         };
-        let Some(vc_cal) = median(others(&|_| true).iter().map(|o| theirs_vc(o)).collect()) else {
+        let op = generic_class(&r.op, r.ae, r.d);
+        for keep in forge_tooling::feeds::GENERIC_LEVELS {
+            if let Some(k) = forge_tooling::feeds::generic_key(r.group, op, &tc, keep) {
+                classes.entry(k).or_default().push(r);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for (k, sel) in classes {
+        let mut makers: Vec<String> = sel.iter().map(|r| r.vendor.clone()).collect();
+        makers.sort();
+        makers.dedup();
+        if sel.len() < GENERIC_MIN_ROWS || makers.len() < GENERIC_MIN_MAKERS {
+            continue;
+        }
+        let q4 = |mut v: Vec<f64>| -> Option<[f64; 4]> {
+            v.retain(|x| x.is_finite());
+            if v.is_empty() {
+                return None;
+            }
+            v.sort_by(f64::total_cmp);
+            let q = |p: f64| v[((v.len() - 1) as f64 * p).round() as usize];
+            Some([v[0], q(0.25), q(0.5), v[v.len() - 1]])
+        };
+        let Some(vc) = q4(sel.iter().map(|r| theirs_vc(r)).collect()) else {
             continue;
         };
-        let k = vc_cal / current_vc(r.group, drill);
-        let r_rpm = r.r_rpm() * k;
-        // the chip: re-derived at the row's diameter from the others' slot rows (bins of the
-        // same diameter, within 2%), where this group's chip came from slot rows
-        let r_f = if !drill && chip_groups.contains(&r.group) {
-            let same_d = others(&|o| is_slot(o) && (o.d - r.d).abs() <= 0.02 * r.d);
-            let mine = rows
-                .iter()
-                .filter(|o| o.group == r.group && is_slot(o) && (o.d - r.d).abs() <= 0.02 * r.d);
-            match (
-                median(same_d.iter().filter_map(|o| o.theirs_f).collect()),
-                median(mine.filter_map(|o| o.theirs_f).collect()),
-            ) {
-                (Some(cal), Some(all)) => r.r_f().map(|f| f * cal / all),
-                _ => None,
-            }
-        } else if drill {
-            // a drill's feed per rev is not re-derived without its maker: no hold-out
-            None
-        } else {
-            r.r_f()
+        let Some(chip) = q4(sel.iter().filter_map(|r| r.chip_ratio).collect()) else {
+            continue;
         };
-        out.push((i, r_rpm, r_f));
+        let f: Vec<&str> = k.split('|').collect();
+        out.push(Generic {
+            group: f[0].into(),
+            op: f[1].into(),
+            tier: f[2].into(),
+            flutes: f[3].parse().unwrap_or(0),
+            coating: f[4].into(),
+            helix: f[5].into(),
+            n: sel.len(),
+            makers,
+            vc,
+            chip,
+            cites: Vec::new(),
+        });
     }
     out
 }
 
-/// Our shipped generic speed for a group (carbide end mills; or a carbide/HSS drill row).
-pub fn shipped_vc(lib: &Library, group: &str, drill: bool, substrate: &str) -> f64 {
-    let sub = if substrate == "HSS" { "hss" } else { "carbide" };
-    if drill {
-        lib.drilling(group, sub).map_or(f64::NAN, |r| r.vc)
-    } else {
-        lib.group(group)
-            .map_or(f64::NAN, |g| if sub == "hss" { g.vc_hss } else { g.vc_carbide })
-    }
-}
-
-/// The groups whose generic slot chip comes from the makers' slot rows (cutting.toml fz_rows).
-pub fn chip_groups(lib: &Library) -> Vec<&'static str> {
-    ["P", "M", "K", "N", "S", "H"]
-        .into_iter()
-        .filter(|g| lib.group(g).is_some_and(|x| !x.fz_rows.is_empty()))
-        .collect()
-}
-
-/// Held-out stats per maker: (maker, rows held out, rpm stats, chip stats).
-#[allow(clippy::type_complexity)]
-pub fn held_out_by_maker(
-    rows: &[Row],
-) -> Vec<(
-    String,
-    usize,
-    Option<(f64, f64, f64, usize)>,
-    Option<(f64, f64, f64, usize)>,
-)> {
-    let lib = Library::builtin();
-    let cg = chip_groups(&lib);
-    let ho = held_out(
-        rows,
-        &|g: &str, drill: bool| {
-            // the substrate is carbide for every compared end mill; drills look theirs up by row
-            shipped_vc(&lib, g, drill, "carbide")
-        },
-        &cg,
+/// data/generic.toml's text for a table.
+pub fn generic_toml(table: &[Generic]) -> String {
+    let mut s = String::from(
+        "# Generated by `cargo run -p feeds-vs-makers -- --generic` from the makers' cited end-mill rows\n\
+         # (research/cam/tooling/raw/{harvey,helical,lakeshore}.json); do not edit. Each class: the makers'\n\
+         # speeds and chips over its rows as [min, P25, median, max]; the generic default is P25 (the\n\
+         # lower quartile: a speed or chip that is too high breaks tools, one too low costs time).\n\
+         # chip is relative to the group's slot chip at the row's diameter (cutting.toml fz rows).\n",
     );
-    let mut makers: Vec<String> = rows.iter().map(|r| r.vendor.clone()).collect();
+    let f4 = |a: [f64; 4]| format!("[{:.4}, {:.4}, {:.4}, {:.4}]", a[0], a[1], a[2], a[3]);
+    for g in table {
+        s.push_str(&format!(
+            "\n[[generic]]\ngroup = \"{}\"\nop = \"{}\"\ntier = \"{}\"\nflutes = {}\ncoating = \"{}\"\nhelix = \"{}\"\nn = {}\nmakers = [{}]\nvc = {}\nchip = {}\nreal = true\n",
+            g.group,
+            g.op,
+            g.tier,
+            g.flutes,
+            g.coating,
+            g.helix,
+            g.n,
+            g.makers.iter().map(|m| format!("\"{m}\"")).collect::<Vec<_>>().join(", "),
+            f4(g.vc),
+            f4(g.chip)
+        ));
+        for (path, what) in [
+            ("vc", "cutting speeds (the middle of each printed range)"),
+            (
+                "chip",
+                "chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter)",
+            ),
+        ] {
+            s.push_str(&format!(
+                "[[generic.cite]]\npath = \"{path}\"\nstatus = \"estimate\"\nsource = \"research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)\"\ntaken = \"2026-11-24\"\nbasis = \"min, lower quartile, median, max of {} makers' {what} over {} rows of class {}\"\n",
+                g.makers.len(),
+                g.n,
+                g.class()
+            ));
+        }
+    }
+    s
+}
+
+/// Leave one maker out of the generic classes: each of its rows scored against the classes
+/// built from the other makers only, at the class the row's tool would resolve to there.
+/// Returns, per row of a maker: (row index, P25 speed / maker's, P25 chip / maker's, class).
+pub fn generic_held_out(rows: &[Row]) -> Vec<(usize, f64, Option<f64>, String)> {
+    let mut makers: Vec<&str> = rows
+        .iter()
+        .filter(|r| r.kind != "drill")
+        .map(|r| r.vendor.as_str())
+        .collect();
     makers.sort();
     makers.dedup();
-    makers
-        .into_iter()
-        .map(|m| {
-            let sel: Vec<&(usize, f64, Option<f64>)> = ho.iter().filter(|x| rows[x.0].vendor == m).collect();
-            (
-                m,
-                sel.len(),
-                stats(sel.iter().map(|x| x.1).collect()),
-                stats(sel.iter().filter_map(|x| x.2).collect()),
-            )
-        })
-        .collect()
+    let mut out = Vec::new();
+    for m in makers {
+        let table = generic_table(rows, Some(m));
+        for (i, r) in rows
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.vendor == m && r.kind != "drill")
+        {
+            let tc = ToolClass {
+                tier: Some(tier_of(&r.vendor)),
+                flutes: Some(r.z.max(1)),
+                coated: ToolClass::coated(&r.coating),
+                helix: r.helix,
+            };
+            let op = generic_class(&r.op, r.ae, r.d);
+            let Some(gv) = forge_tooling::feeds::generic_in(&table, r.group, op, &tc) else {
+                continue;
+            };
+            let gs = forge_tooling::feeds::generic_in(&table, r.group, "slot", &tc);
+            let chip = match (gs, r.chip_ratio) {
+                (Some(gs), Some(c)) => Some(gs.chip[1] / c),
+                _ => None,
+            };
+            out.push((i, gv.vc[1] / theirs_vc(r), chip, gv.class()));
+        }
+    }
+    out
 }

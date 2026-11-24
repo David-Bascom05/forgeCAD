@@ -128,6 +128,29 @@ grouping. Its speed and chip by diameter are Harvey's plastics finisher sheet (a
 nylon, PEEK ... unfilled), cited; no Kienzle data is published, so power and torque read `not
 checked`, and no HSS speed (an HSS tool needs the user's speed). Plastics melt: supervise the speed.
 
+**A tool with maker presets** uses them first: `Tool::preset_for_material` takes the maker's row
+that names the part's stock material (its alloy in the maker's text, else its family pattern such
+as 6xxx or C3xxxx; the slowest hardness class among equals), else `Tool::preset_for` the class's
+representative ("<group> <class>"). A preset's fz is the maker's programmed feed at its own
+stated width and depth, so its chip is fz·k(ae/D)·sin κ. The op's class (`Tool::class_for`): a
+slot is slot; clearing, pocketing and facing rough; a contour at a finishing width (≤ 10% D, or
+the tool's finish preset's ae where wider) finish, else rough; the rest general.
+
+**A tool with no maker data** takes the **lower quartile (P25) of its class** from
+kernel/forge-tooling/data/generic.toml (generated from the makers' cited rows by
+verify/feeds-vs-makers, `cargo run -p feeds-vs-makers -- --generic`): a class is material group ×
+op class × maker tier (material-specific / general-purpose, from the makers' own product lines)
+× flutes × coating × helix band, written only with ≥ 10 rows from ≥ 2 makers; where the tool's
+class has fewer, the lookup opens helix, then tier, coating, flutes, op class (the note names the
+class used). P25, not the median, because the costs are asymmetric: too fast breaks tools, too
+slow costs time. Speed is the class's P25 speed; the chip is the class's P25 slot chip relative to
+the group's slot chip at the diameter; a rough or finish op's factor is the class's own P25
+op/slot chip ratio (else cutting.toml `[[op_class]]`). The value's `spread` (JSON below) gives the
+class's min / P25 / median / max so the user can push up knowingly. Carbide only (every maker row
+is); HSS and groups with no class use cutting.toml's group columns. Held out per maker, P25 sits
+at about 0.7× the general-purpose maker's own speed and chip, and above it in about one row in
+five (verify/feeds-vs-makers/REPORT.md).
+
 Each value is resolved in layers, each over the one before: `default` → `material` (the
 stock's data, else its group in cutting.toml) → `library` (the tool's `[[tool.preset]]` for the group, with its cite) →
 `user`. Then only two things lower a value, and both are reported with the reason:
@@ -181,7 +204,8 @@ setups[]   name, part, machine, wcs {origin, axes, offset}, stock {kind, min, ma
 ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|slot|thread_mill|edge_break), setup, status (built|refused),
            tool {id, T, H, type, d, holder, stickout} | null, plan[] (hole plans),
            feeds {rpm, vc, fz, hex, hm, f, power_kw, torque_nm} | null,
-           feeds_speeds {values {vc, rpm, chip, fz, feed, ap, ae, plunge_feed, ramp_feed, lead_in_feed,
+           feeds_speeds {spread {class, rows, makers[], vc {min, p25, median, max}, chip {min, p25, median, max}} | null,
+                    values {vc, rpm, chip, fz, feed, ap, ae, plunge_feed, ramp_feed, lead_in_feed,
                     min_feed, max_feed: {v, unit, source (default|material|library|user|machine-clamped|limited), note}},
                     derived {hex, hm, engagement_deg, d_eff, mrr_cm3_min, power_kw, power_pct, torque_nm, torque_pct},
                     checks[] {what (rpm|power|torque|feed|chip), verdict (pass|warn|fail|not checked), value, limit, unit, why}} | null,

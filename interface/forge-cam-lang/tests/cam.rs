@@ -1144,12 +1144,14 @@ fn stock_material_sets_the_cutting_data() {
         .unwrap();
     assert_eq!(skim.vc.source, Source::Material);
     assert!(skim.chip.note.contains("group N"), "{}", skim.chip.note);
-    // titanium: group S, and the measured rows at the cut's speed (group S carbide speed)
+    // titanium: group S, and the measured rows at the cut's speed (55 m/min asked: the
+    // generic S default, the lower quartile of the makers' S rows, is under the rows' 40 m/min)
     let cam = forge_cam_lang::run(
         &src.replace(
             "part(\"flange.fg\", group: \"N\")",
             "part(\"flange.fg\", material: \"Ti-6Al-4V annealed\")",
-        ),
+        )
+        .replace("facing(op1, tool: t1,", "facing(op1, tool: t1, vc: 55,"),
         &dir,
     );
     let skim = cam
@@ -1161,8 +1163,7 @@ fn stock_material_sets_the_cutting_data() {
         .clone()
         .unwrap();
     let vc = skim.vc.v;
-    assert_eq!(skim.vc.source, Source::Material);
-    assert!((52.0..60.0).contains(&vc), "{vc}");
+    assert_eq!((vc, skim.vc.source), (55.0, Source::User));
     let p = skim.checks.iter().find(|c| c.what == "power").unwrap();
     assert!(
         p.why

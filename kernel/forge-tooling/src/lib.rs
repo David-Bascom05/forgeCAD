@@ -750,6 +750,7 @@ pub struct Library {
     pub tapping: Vec<feeds::TapRow>,
     /// Chip factors per op class (rough, finish) against the slot chip.
     pub op_classes: Vec<feeds::OpClassData>,
+    pub generics: Vec<feeds::Generic>,
     /// Elastic data per tool substrate (deflection).
     pub substrates: Vec<feeds::SubstrateData>,
     pub vises: Vec<Vise>,
@@ -1089,6 +1090,9 @@ impl Library {
         for r in tables(&t, "op_class") {
             self.op_classes.push(feeds::OpClassData::from_table(r)?);
         }
+        for r in tables(&t, "generic") {
+            self.generics.push(feeds::Generic::from_table(r)?);
+        }
         for r in tables(&t, "tap") {
             self.tapping.push(feeds::TapRow::from_table(r)?);
         }
@@ -1191,6 +1195,25 @@ impl Library {
         self.substrates.iter().find(|x| x.name == name)
     }
     /// The chip factor record of an op class ("rough" | "finish").
+    /// The generic class a tool cuts a group in: the narrowest class that has data, opening
+    /// the dimensions in `feeds::GENERIC_LEVELS` order (a dimension the tool does not state is
+    /// open from the start).
+    pub fn generic(&self, group: &str, op: &str, tc: &feeds::ToolClass) -> Option<&feeds::Generic> {
+        feeds::generic_in(&self.generics, group, op, tc)
+    }
+    /// A tool's generic classes for an op class: the op's and the slot's (see
+    /// `resolve::GenericUse`); None where either has no data.
+    pub fn generic_use(
+        &self,
+        group: &str,
+        op: &str,
+        tc: &feeds::ToolClass,
+    ) -> Option<resolve::GenericUse<'_>> {
+        Some(resolve::GenericUse {
+            op: self.generic(group, op, tc)?,
+            slot: self.generic(group, "slot", tc)?,
+        })
+    }
     pub fn op_class(&self, name: &str) -> Option<&feeds::OpClassData> {
         self.op_classes.iter().find(|x| x.name == name)
     }

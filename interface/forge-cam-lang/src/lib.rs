@@ -465,7 +465,31 @@ fn feeds_speeds_json(r: &resolve::Resolved) -> Json {
         Some(a) if a > 0.0 && have.is_finite() => Json::Num(100.0 * have / a),
         _ => Json::Null,
     };
+    let spread = match &r.spread {
+        Some(sp) => {
+            let four = |a: [f64; 4]| {
+                Json::obj(vec![
+                    ("min", n(a[0])),
+                    ("p25", n(a[1])),
+                    ("median", n(a[2])),
+                    ("max", n(a[3])),
+                ])
+            };
+            Json::obj(vec![
+                ("class", Json::Str(sp.class.clone())),
+                ("rows", Json::Num(sp.n as f64)),
+                (
+                    "makers",
+                    Json::Arr(sp.makers.iter().map(|m| Json::Str(m.clone())).collect()),
+                ),
+                ("vc", four(sp.vc)),
+                ("chip", four(sp.chip)),
+            ])
+        }
+        None => Json::Null,
+    };
     Json::obj(vec![
+        ("spread", spread),
         (
             "values",
             Json::obj(vec![
@@ -2771,6 +2795,19 @@ impl Cam {
                 None => (None, false),
             },
         };
+        // no preset: the tool's generic class (P25 of the makers' rows for its class,
+        // data/generic.toml); its own op/slot chip ratio is the class factor where it has one
+        let gu = if preset.is_none() {
+            let tc = feeds::ToolClass {
+                tier: None,
+                flutes: Some(t.tool.nof.max(1)),
+                coated: feeds::ToolClass::coated(&t.tool.coating),
+                helix: None,
+            };
+            self.lib.generic_use(group_name, class, &tc)
+        } else {
+            None
+        };
         let class_rec = if classed || class == "slot" || class == "general" {
             None
         } else {
@@ -2779,6 +2816,20 @@ impl Cam {
         let class_src = class_rec
             .and_then(|c| c.cites.first())
             .map_or("", |c| c.source.as_str());
+        let generic_factor = gu.filter(|_| class_rec.is_some()).and_then(|u| u.class_factor());
+        let class_note;
+        let class_val = match (generic_factor, class_rec) {
+            (Some(f), Some(c)) => {
+                class_note = format!(
+                    "P25 {} chip over P25 slot chip of class {} (data/generic.toml)",
+                    c.name,
+                    gu.map_or(String::new(), |u| u.op.class())
+                );
+                Some((c.name.as_str(), f, class_note.as_str()))
+            }
+            (None, Some(c)) => Some((c.name.as_str(), c.chip_factor, class_src)),
+            _ => None,
+        };
         let part = &self.parts[self.setups[su].part];
         let stock = part.stock.as_ref();
         resolve::milling_on(
@@ -2791,8 +2842,9 @@ impl Cam {
                 substrate: feeds::Substrate::of(&t.tool.material),
                 coating: &t.tool.coating,
                 beam: self.beam_of(ti),
-                class: class_rec.map(|c| (c.name.as_str(), c.chip_factor, class_src)),
+                class: class_val,
                 preset,
+                generic: gu,
             },
             g,
             stock,
