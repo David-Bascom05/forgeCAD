@@ -35,3 +35,5 @@ import ForgeBoolProof
 #print axioms ForgeBoolProof.regionSense_of_alone
 #print axioms ForgeBoolProof.oriented_result
 #print axioms ForgeBoolProof.oriented_result_of_writes
+#print axioms ForgeBoolProof.compl_preconnected
+#print axioms ForgeBoolProof.seeded_result
