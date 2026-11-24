@@ -36,6 +36,9 @@ cycle_tap = "refuse"
 cycle_ream = "G98 G85 X{x} Y{y} Z{z} R{r} F{f}"
 cycle_next = "X{x} Y{y}"
 cycle_cancel = "G80"
+# probe (skip) move: straight probe toward the point, error if it is reached untriggered
+# (LinuxCNC G-code reference, G38.n Straight Probe, https://linuxcnc.org/docs/html/gcode/g-code.html, read 2026-11-24)
+probe_move = "G38.2 X{x} Y{y} Z{z} F{f}"
 source = "forgecad, restated from NIST RS274NGC v3 and the LinuxCNC G-code reference"
 taken = "2026-11-23"
 note = "verify with your configuration"

@@ -36,6 +36,8 @@ cycle_tap = "refuse"
 cycle_ream = "expand"
 cycle_next = ""
 cycle_cancel = ""
+# probe (skip) move: G38.2 is in GRBL 1.1's motion modal group (https://github.com/gnea/grbl/wiki/Grbl-v1.1-Commands, read 2026-11-24)
+probe_move = "G38.2 X{x} Y{y} Z{z} F{f}"
 source = "forgecad, restated from the GRBL 1.1 command reference"
 taken = "2026-11-23"
 note = "verify with your firmware"

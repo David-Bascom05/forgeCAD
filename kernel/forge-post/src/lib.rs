@@ -206,6 +206,14 @@ pub enum Rec {
     },
     Dwell(f64),
     Home,
+    /// A probe (skip) move toward `to` at feed `f`: the control stops where the probe triggers
+    /// and alarms if it reaches `to` untriggered (LinuxCNC G38.2, Grbl G38.2). The dialect's
+    /// `probe_move` writes it, all three axis words; afterwards the position is unknown to the
+    /// program, so the next move writes every axis.
+    Probe {
+        to: [f64; 3],
+        f: f64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -256,6 +264,7 @@ pub enum QRec {
     },
     Dwell(Q),
     Home,
+    Probe([Q; 3], Q),
 }
 
 /// What the control does: the motion and the machine-state events, in integer units.
@@ -278,6 +287,8 @@ pub enum Motion {
     SpindleStop,
     Coolant(Coolant),
     Home,
+    /// A probe (skip) move toward the point at the feed: it stops where the probe triggers.
+    Probe([Q; 3], Q),
 }
 
 /// The nearest integer to x · 10^k, ties to even, exactly.
@@ -423,6 +434,7 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
             Rec::Coolant(c) => QRec::Coolant(*c),
             Rec::Rapid(v) => QRec::Rapid(q3(*v)?),
             Rec::Line(v, f) => QRec::Line(q3(*v)?, quant(*f, fk)?),
+            Rec::Probe { to, f } => QRec::Probe(q3(*to)?, quant(*f, fk)?),
             Rec::Arc { to, c, cw, f } => QRec::Arc {
                 to: q3(*to)?,
                 c: [quant(c[0], k)?, quant(c[1], k)?],
@@ -549,6 +561,7 @@ pub fn motions_with(p: &QProgram, params: (f64, f64)) -> Vec<Motion> {
             QRec::Coolant(c) => out.push(Motion::Coolant(*c)),
             QRec::Rapid(v) => out.push(Motion::Rapid(*v)),
             QRec::Line(v, f) => out.push(Motion::Feed(*v, *f)),
+            QRec::Probe(v, f) => out.push(Motion::Probe(*v, *f)),
             QRec::Arc { to, c, cw, f, full } => out.push(Motion::Arc {
                 to: *to,
                 c: *c,
@@ -567,7 +580,9 @@ pub fn motions_with(p: &QProgram, params: (f64, f64)) -> Vec<Motion> {
                 f,
             } => {
                 for h in holes {
-                    expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, params, &mut out);
+                    expand_hole(
+                        *kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, params, &mut out,
+                    );
                 }
             }
             QRec::Dwell(ms) => out.push(Motion::Dwell(*ms)),
@@ -753,6 +768,33 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                     w.emit(&ws.join(" "));
                 }
             }
+            QRec::Probe(v, f) => {
+                let tpl = d.s("probe_move").to_string();
+                if tpl.is_empty() {
+                    return Err(PostError::Unsupported {
+                        what: format!(
+                            "a probe move on {} (no openly published probe move is cited for it)",
+                            d.name
+                        ),
+                        fix:
+                            "probe by hand, or post for a control whose probe move is cited (linuxcnc, grbl)"
+                                .into(),
+                    });
+                }
+                w.emit(&fill(
+                    &tpl,
+                    &[
+                        ("x", num_(v[0])),
+                        ("y", num_(v[1])),
+                        ("z", num_(v[2])),
+                        ("f", fnum(*f)),
+                    ],
+                ));
+                // where it stopped is not known: every axis and the motion mode are written again
+                pos = [None; 3];
+                motion = None;
+                feed = Some(*f);
+            }
             QRec::Arc { to, c, cw, f, .. } => {
                 let (sx, sy) = match (pos[0], pos[1]) {
                     (Some(x), Some(y)) => (x, y),
@@ -802,7 +844,19 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 if tpl == "expand" {
                     let mut ms = Vec::new();
                     for h in holes {
-                        expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, k, (PECK_CLEAR, CHIP_LIFT), &mut ms);
+                        expand_hole(
+                            *kind,
+                            *h,
+                            *z,
+                            *r,
+                            *clear,
+                            *q,
+                            *dwell,
+                            *f,
+                            k,
+                            (PECK_CLEAR, CHIP_LIFT),
+                            &mut ms,
+                        );
                     }
                     for m in ms {
                         let rr = match m {
@@ -991,6 +1045,11 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
     let mut out = Vec::new();
     let mut pos: [Option<Q>; 3] = [None; 3];
     let mut feed: Q = 0;
+    // the dialect's probe move: its template's leading G word (G38.2, G31)
+    let probe_g: Option<f64> = d
+        .s("probe_move")
+        .split_whitespace()
+        .find_map(|w| w.strip_prefix('G').and_then(|g| g.parse::<f64>().ok()));
     let mut motion: Option<u32> = None;
     let mut cycle: Option<(CycleKind, Q, Q, Q, Q, Q)> = None; // kind, z, r, q, dwell ms, clear
     let mut rpm: Q = 0;
@@ -1020,6 +1079,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         let get = |c: char| words.iter().find(|(l, _)| *l == c).map(|(_, v)| v.clone());
         let mut gs: Vec<u32> = Vec::new();
         let mut ms: Vec<u32> = Vec::new();
+        let mut probe = false;
         for (l, v) in &words {
             match l {
                 'G' => {
@@ -1028,7 +1088,9 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                         line: ln,
                         what: format!("G{v}"),
                     })?;
-                    if g.fract() == 0.0 {
+                    if probe_g == Some(g) {
+                        probe = true;
+                    } else if g.fract() == 0.0 {
                         gs.push(g as u32)
                     } else {
                         gs.push(10_000)
@@ -1160,6 +1222,20 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         if skip_motion {
             continue;
         }
+        if probe {
+            let mut p = [0; 3];
+            for (i, c) in ['X', 'Y', 'Z'].into_iter().enumerate() {
+                let v = get(c).ok_or_else(|| ReadError {
+                    line: ln,
+                    what: format!("a probe move with no {c} (the dialect writes all three)"),
+                })?;
+                p[i] = parse_q(&v, k, ln)?;
+            }
+            out.push(Motion::Probe(p, feed));
+            pos = [None; 3];
+            motion = None;
+            continue;
+        }
         let has_xyz = get('X').is_some() || get('Y').is_some() || get('Z').is_some();
         if !has_xyz {
             continue;
@@ -1174,7 +1250,19 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             Some(80) => {
                 let (kind, z, r, q, dw, clear) = cycle.unwrap();
                 let (x, y) = (to[0].unwrap_or(0), to[1].unwrap_or(0));
-                expand_hole(kind, [x, y], z, r, clear, q, dw, feed, k, (PECK_CLEAR, CHIP_LIFT), &mut out);
+                expand_hole(
+                    kind,
+                    [x, y],
+                    z,
+                    r,
+                    clear,
+                    q,
+                    dw,
+                    feed,
+                    k,
+                    (PECK_CLEAR, CHIP_LIFT),
+                    &mut out,
+                );
                 pos = [Some(x), Some(y), Some(clear)];
                 continue;
             }
@@ -1260,7 +1348,7 @@ pub fn normalize(m: &[Motion]) -> Vec<Motion> {
                 at = Some(*p);
             }
             Motion::Arc { to, .. } => at = Some(*to),
-            Motion::Home | Motion::Tool(_) => at = None,
+            Motion::Home | Motion::Tool(_) | Motion::Probe(..) => at = None,
             _ => {}
         }
         out.push(x.clone());
