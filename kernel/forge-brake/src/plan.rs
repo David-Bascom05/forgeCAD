@@ -126,7 +126,10 @@ impl<'a> Search<'a> {
             }
             for &punch in &punches {
                 for &die in &dies {
-                    setups.push(Setup { punch, die, rotate });
+                    // with stations set up, a step works at one of them
+                    if tl.stations.is_empty() || tl.station(punch, die).is_some() {
+                        setups.push(Setup { punch, die, rotate });
+                    }
                 }
             }
         }

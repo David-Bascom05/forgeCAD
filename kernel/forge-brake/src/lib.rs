@@ -8,6 +8,7 @@
 //!   clearances are certified by interval branch and bound, never sampled or meshed.
 //! - [`plan`]: a bend order and tooling that pass every check, or each bend's blocking checks.
 pub mod bb;
+pub mod catalog;
 pub mod geo;
 pub mod library;
 pub mod model;

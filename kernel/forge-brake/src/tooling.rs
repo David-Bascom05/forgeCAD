@@ -123,6 +123,19 @@ pub struct Backgauge {
     pub finger: Finger,
     /// How far the fingers back off once the punch holds the part.
     pub retract: f64,
+    /// The fingers' range along the bed (Z1/Z2 axes), from the bed's centre; None: not stated.
+    pub z: Option<(f64, f64)>,
+}
+
+/// The press frame's side housings, one each end of the bed past the housing gap: plates
+/// `thickness` thick along the bed, open towards the operator (-x) to `throat` behind the tool
+/// line, solid from there `depth` further back, from far below the die seat to far above the
+/// ram (the throat's height is the daylight the beams already bound).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Frame {
+    pub throat: f64,
+    pub thickness: f64,
+    pub depth: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -140,6 +153,12 @@ pub struct Press {
     /// kN.
     pub max_force: Option<f64>,
     pub backgauge: Backgauge,
+    /// The side housings, when their throat is known: then a part may run past the housing gap
+    /// through the throat, checked by distance against them.
+    pub frame: Option<Frame>,
+    /// Values a real press's record does not know (`open_height`, `stroke`, ..): the rules that
+    /// need them are reported as not checked, never passed.
+    pub unchecked: Vec<String>,
 }
 
 /// Overbend at a target angle (the bend's turn) for a material (`*`: any).
@@ -165,6 +184,21 @@ pub struct Tooling {
     pub springback: Vec<Springback>,
     /// The die the planner tries first: V nearest this many thicknesses.
     pub v_rule: f64,
+    /// Stations along the bed. None: one station, centred on the bed, tooled for each step by
+    /// the segment rule (and only its tools are on the press).
+    pub stations: Vec<Station>,
+}
+
+/// A station: a punch and a die (indices into the set), their stacks' lengths, and the stack's
+/// centre along the bed from the bed's centre. Every station's tools are on the press in every
+/// step; a step works at the station holding its punch and die.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Station {
+    pub punch: usize,
+    pub die: usize,
+    pub y: f64,
+    pub punch_length: f64,
+    pub die_length: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -187,6 +221,16 @@ pub enum ToolingError {
     },
     NoPunches,
     NoDies,
+    /// A station names a punch or die the set does not hold.
+    Station {
+        y: f64,
+    },
+    /// A tool's working geometry is not known (its record holds no published value for these
+    /// fields): it cannot be simulated.
+    Unknown {
+        id: String,
+        fields: Vec<String>,
+    },
 }
 
 fn check(id: &str, what: &'static str, value: f64, lo: f64, hi: f64) -> Result<(), ToolingError> {
@@ -466,9 +510,46 @@ impl Tooling {
         check(&p.id, "bed_length", p.bed_length, 1.0, 100000.0)?;
         check(&p.id, "housing_gap", p.housing_gap, 1.0, 100000.0)?;
         check(&p.id, "backgauge.retract", p.backgauge.retract, 0.0, 1000.0)?;
+        if let Some(f) = p.frame {
+            check(&p.id, "frame.throat", f.throat, 1.0, 10000.0)?;
+            check(&p.id, "frame.thickness", f.thickness, 1.0, 10000.0)?;
+            check(&p.id, "frame.depth", f.depth, 1.0, 100000.0)?;
+        }
         check(&self.id, "clearance", self.clearance, 0.01, 100.0)?;
         check(&self.id, "self_clearance", self.self_clearance, 0.0, 100.0)?;
+        for st in &self.stations {
+            if st.punch >= self.punches.len() || st.die >= self.dies.len() {
+                return Err(ToolingError::Station { y: st.y });
+            }
+            check(
+                &self.id,
+                "station.punch_length",
+                st.punch_length,
+                1.0,
+                p.bed_length + 1e-6,
+            )?;
+            check(
+                &self.id,
+                "station.die_length",
+                st.die_length,
+                1.0,
+                p.bed_length + 1e-6,
+            )?;
+            let h = 0.5 * st.punch_length.max(st.die_length);
+            check(
+                &self.id,
+                "station.y",
+                st.y,
+                -0.5 * p.bed_length + h - 1e-6,
+                0.5 * p.bed_length - h + 1e-6,
+            )?;
+        }
         Ok(())
+    }
+
+    /// The station a step with this punch and die works at.
+    pub fn station(&self, punch: usize, die: usize) -> Option<&Station> {
+        self.stations.iter().find(|s| s.punch == punch && s.die == die)
     }
 
     pub fn punch(&self, id: &str) -> Option<&Punch> {

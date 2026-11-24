@@ -73,6 +73,7 @@ dependencies = [
  "forge-math",
  "forge-ops",
  "forge-sheet",
+ "forge-vendor",
 ]
 
 [[package]]
