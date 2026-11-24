@@ -923,3 +923,12 @@ Keep it so:
 - do not let it vary per link.
 
 Record the benchmark that set it in the code comment, as provenance.
+
+**§10 status (2026-11-24, cam/quality-adaptive-wip @e92fa672, as reported by TOOLPATH-QUALITY;
+not re-read here):**
+- The cap's provenance (the values tried, the parts, the date) is in the code comment. The cap is
+  a pure length test.
+- With leave = 0 and no wall pass, links never retrace: they retract, and `AdaptiveOut.notes`
+  says why.
+- forge-cam-lang always runs the wall pass.
+- The winding test uses leave 0.05, so it still covers retraces.
