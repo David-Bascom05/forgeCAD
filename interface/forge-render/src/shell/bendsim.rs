@@ -1619,7 +1619,9 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                         Some(u) => {
                             ui.add(
                                 egui::Label::new(
-                                    egui::RichText::new(format!("{u} unknown")).small().color(t.ink2),
+                                    egui::RichText::new(format!("{u} unknown"))
+                                        .font(super::theme::caption())
+                                        .color(t.ink2),
                                 )
                                 .wrap(),
                             );

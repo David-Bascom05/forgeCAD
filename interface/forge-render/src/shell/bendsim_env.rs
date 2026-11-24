@@ -174,15 +174,15 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
             "Play",
             vec![tool(
                 if playing { "Pause" } else { "Play" },
-                "forward",
+                if playing { "pause" } else { "play" },
                 cmd(PLAY),
                 playing,
             )],
             vec![
-                tool("First Bend", "home", cmd(FIRST), false),
-                tool("Previous Bend", "backward", cmd(BACK), false),
-                tool("Next Bend", "forward", cmd(NEXT), false),
-                tool("Last Bend", "end", cmd(LAST), false),
+                tool("First Bend", "first", cmd(FIRST), false),
+                tool("Previous Bend", "stepback", cmd(BACK), false),
+                tool("Next Bend", "stepfwd", cmd(NEXT), false),
+                tool("Last Bend", "last", cmd(LAST), false),
             ],
         ),
         group(
