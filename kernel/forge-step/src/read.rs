@@ -332,7 +332,9 @@ impl<'a> Reader<'a> {
             self.real(id, "CARTESIAN_POINT", c.get(2))? * m,
         );
         // far past the box, a slide along an axis would lose the point's last digits
-        if !(p.x.abs().max(p.y.abs()).max(p.z.abs()) <= 1e3 * forge_math::tol::MODEL_HALF_SIZE) {
+        let far = p.x.abs().max(p.y.abs()).max(p.z.abs());
+        // (a NaN is past it too)
+        if far.is_nan() || far > 1e3 * forge_math::tol::MODEL_HALF_SIZE {
             return refuse(id, "CARTESIAN_POINT", "outside the 1 km model box");
         }
         Ok(p)

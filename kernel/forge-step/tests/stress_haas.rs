@@ -87,9 +87,9 @@ fn a_tolerant_edge_still_checks_once_moved() {
 /// bottom to top. A seam starts at the first rim's vertex and runs to the other rim, so the
 /// cylinder's seam lies at `a[0]` and the cone's at `a[2]`, both ending on the middle rim.
 fn turned(a: [f64; 3]) -> String {
-    let p = |r: f64, t: f64| (r * t.cos(), r * t.sin());
+    let p = |r: f64, t: f64| (r * forge_math::dmath::cos(t), r * forge_math::dmath::sin(t));
     let (p0, p1, p2) = (p(5.0, a[0]), p(5.0, a[1]), p(7.0, a[2]));
-    let semi = (2.0_f64 / 5.0).atan();
+    let semi = forge_math::dmath::atan(2.0_f64 / 5.0);
     format!(
         "ISO-10303-21;
 HEADER;
@@ -240,7 +240,15 @@ fn a_tolerance_covers_the_gap_between_the_samples() {
     let mut worst = 0.0_f64;
     for k in 0..16 {
         let phi = forge_math::dmath::TAU / 255.0 * f64::from(k) / 16.0;
-        let bad = edge_off_at(&text, pt, Vec3::new(1e-4 * phi.cos(), 1e-4 * phi.sin(), 0.0));
+        let bad = edge_off_at(
+            &text,
+            pt,
+            Vec3::new(
+                1e-4 * forge_math::dmath::cos(phi),
+                1e-4 * forge_math::dmath::sin(phi),
+                0.0,
+            ),
+        );
         let imp = import(bad.as_bytes(), &Limits::default()).unwrap();
         let b = &imp.solids[0].body;
         for e in b.edge_ids() {
