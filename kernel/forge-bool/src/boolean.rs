@@ -4802,7 +4802,25 @@ fn on_to_its_vertex(index: &Index, face: FaceId, body: &Body, e: EdgeId, w: [f64
     let hi = w[1] == edge.range.hi && !ts.contains(&w[1]);
     off(lo, edge.start)
         .or_else(|| off(hi, edge.end))
+        .or_else(|| off_near_ends(index, face, &edge.curve, w))
         .unwrap_or(Where::On)
+}
+
+/// A straight stretch On at its samples whose ends are on the boundary too (an end on another edge,
+/// or at a crossing) may still leave the edge it began beside: two lines at an angle part linearly,
+/// so it is farthest from that edge near an end. Decided by a point 4·LINEAR in from each end, off
+/// the boundary there (B2, research/kernel-audit/tilt-wrong-ok.md: a wall's edge crossing another
+/// face's edge at 2.4e-10 rad, 1.2·LINEAR from it at its far end).
+fn off_near_ends(index: &Index, face: FaceId, curve: &Curve, w: [f64; 2]) -> Option<Where> {
+    let len = curve.eval(w[0]).distance(curve.eval(w[1]));
+    if len <= 16.0 * tol::LINEAR {
+        return None;
+    }
+    let f = 4.0 * tol::LINEAR / len;
+    [1.0 - f, f].into_iter().find_map(|g| {
+        let o = index.point_in_face(face, curve.eval(w[0] + (w[1] - w[0]) * g));
+        (o != Where::On).then_some(o)
+    })
 }
 
 pub(crate) fn overlap(a: &forge_math::Box3, b: &forge_math::Box3) -> forge_math::Box3 {
