@@ -167,3 +167,19 @@ Shadow.lean proves S1–S4, with `shadow_face` and `certified_clear_gen` assembl
 2. An executable ℚ(√d) form of the arc candidates, if the L6 tests want one.
 3. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
    expansion in the G6 model, L5 for the checker's intervals, and L4 (Aeneas).
+
+## Open (TOOLPATH-QUALITY, 2026-11-24): dropping a pocket pass loop (H.dropLoop)
+
+`ops::pocket_in` (cam/quality) leaves out an outer loop L of pass k (stepover s ≤ r) when
+(L ⊕ B_r) ∩ S ⊆ Rₖ₊₁ ⊕ B_r, decided by exact booleans at run time (S the stock's box, Rₖ₊₁ =
+{depth ≥ r + (k+1)s} the region the next pass in bounds). That the kept passes still cover
+opening R r ∩ S rests on, not yet in Lean:
+
+- `passes_cover_from m`: if r + m·s ≤ depth p and dist q p ≤ r, some pass j ≥ m has a point
+  within r of q. (passes_cover on the eroded region R ⊖ B_{ms}, with depth_{R ⊖ B_{ms}} =
+  depth_R − ms where positive.)
+- then by induction from the innermost pass out: (Rₖ ⊕ B_r) ⊆ (⋃ loops of pass k) ⊕ B_r ∪
+  (Rₖ₊₁ ⊕ B_r), so a loop whose band within S lies in Rₖ₊₁ ⊕ B_r can go.
+
+Until proven this is a hypothesis (hyp, H.dropLoop), not a theorem; the void the op claims
+(opening R r) depends on it only inside S, the in-process stock's box.

@@ -678,6 +678,26 @@ pub fn pocket(
     leave: f64,
     ramp: Option<f64>,
 ) -> Result<OpPath, OpError> {
+    pocket_in(rg, c, sp, stepover, leave, ramp, None)
+}
+
+/// `pocket`, with the stock's xy box S given: with stepover ≤ r, a pass is left out when all
+/// it could cut in S is cut by the passes inside it. Passes are offsets at r + k·s; Rₖ the region pass k bounds
+/// (islands as holes), the passes from k inward cover Rₖ ⊕ r (passes_cover applied to
+/// rg ⊖ (k·s)), and pass k's swept band lies in Rₖ ⊕ r. Deciding from the innermost pass out,
+/// pass k is left out when (Rₖ ⊕ r) ∩ S ⊆ Rₖ₊₁ ⊕ r (exact booleans), Rₖ₊₁ the next pass in:
+/// the kept passes from k inward then still cover (Rₖ ⊕ r) ∩ S (induction), so the opening the
+/// op claims is cleared within S, and outside S there is no stock. (A clear's region reaches
+/// 2r past the stock, so its outer passes run in air.)
+pub fn pocket_in(
+    rg: &Region,
+    c: Cut,
+    sp: Span,
+    stepover: f64,
+    leave: f64,
+    ramp: Option<f64>,
+    within: Option<&Region>,
+) -> Result<OpPath, OpError> {
     let Cut { tool, tidx, h, feed } = c;
     let Span { top, bottom, step } = sp;
     let r = 0.5 * tool.tool.dc + leave;
@@ -706,6 +726,41 @@ pub fn pocket(
     // plunge
     let rh = 0.25 * tool.tool.dc;
     let c0 = forge_cam_geom::boolean::region_of(&passes[0]);
+    // (only where the passes cover the opening: stepover ≤ r, Pocket.passes_cover)
+    if let Some(sx) = within.filter(|_| stepover <= r) {
+        use forge_cam_geom::boolean::{Op, boolean, region_of};
+        // passes[k] is at r + k s, outermost first here; Rₖ ⊕ r for each
+        let grown: Vec<Option<Region>> = passes
+            .iter()
+            .map(|ls| offset(&region_of(ls), -r).ok().map(|(g, _)| region_of(&g)))
+            .collect();
+        for k in (0..passes.len().saturating_sub(1)).rev() {
+            let Some(gin) = &grown[k + 1] else { continue };
+            passes[k].retain(|l| {
+                // only an outer loop (its region alone a bounded one); its swept band is
+                // (L ⊕ r) ∖ (L ⊖ r), L the region it bounds
+                if !loop_ccw_approx(&l.segs) {
+                    return true;
+                }
+                let lr = region_of(std::slice::from_ref(l));
+                let Ok((out, _)) = offset(&lr, -r) else {
+                    return true;
+                };
+                let band = match offset(&lr, r) {
+                    Ok((inn, _)) if !inn.is_empty() => {
+                        boolean(&region_of(&out), &region_of(&inn), Op::Diff).map(|b| region_of(&b))
+                    }
+                    Ok(_) => Ok(region_of(&out)),
+                    Err(e) => Err(e),
+                };
+                let left = band
+                    .and_then(|b| boolean(&b, sx, Op::Inter))
+                    .and_then(|i| boolean(&region_of(&i), gin, Op::Diff));
+                !matches!(left, Ok(d) if d.is_empty())
+            });
+        }
+        passes.retain(|ls| !ls.is_empty());
+    }
     passes.reverse();
     let helix_fits = |s: forge_cam_geom::region::P2| -> bool {
         let a = forge_cam_geom::region::p2(s.x + rh, s.y);
@@ -877,6 +932,47 @@ pub fn pocket(
         rpm: 0.0,
         coolant: forge_post::Coolant::Flood,
     })
+}
+
+/// Whether a closed loop runs counter-clockwise (its signed area, arcs as chords): for choosing
+/// which loops to test, never for a check.
+fn loop_ccw_approx(segs: &[Seg]) -> bool {
+    let mut pts: Vec<(f64, f64)> = Vec::new();
+    for sg in segs {
+        match *sg {
+            Seg::Line { a, .. } => pts.push((a.x, a.y)),
+            Seg::Arc { a, b, c, ccw } => {
+                pts.push((a.x, a.y));
+                // the arc's middle, so a half or whole turn counts
+                let a0 = dmath::atan2(a.y - c.y, a.x - c.x);
+                let a1 = dmath::atan2(b.y - c.y, b.x - c.x);
+                let tau = std::f64::consts::TAU;
+                let mut sw = a1 - a0;
+                if ccw {
+                    while sw <= 0.0 {
+                        sw += tau;
+                    }
+                } else {
+                    while sw >= 0.0 {
+                        sw -= tau;
+                    }
+                }
+                let r = ((a.x - c.x) * (a.x - c.x) + (a.y - c.y) * (a.y - c.y)).sqrt();
+                for q in 1..4 {
+                    let (sn, cs) = dmath::sin_cos(a0 + sw * q as f64 / 4.0);
+                    pts.push((c.x + r * cs, c.y + r * sn));
+                }
+            }
+        }
+    }
+    let n = pts.len();
+    let mut area = 0.0;
+    for i in 0..n {
+        let (x0, y0) = pts[i];
+        let (x1, y1) = pts[(i + 1) % n];
+        area += x0 * y1 - x1 * y0;
+    }
+    area > 0.0
 }
 
 /// Whether q is inside a closed loop (even–odd, arcs as 32 chords a turn): for ordering passes

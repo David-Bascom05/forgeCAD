@@ -446,6 +446,9 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
                     } else {
                         q.len_air += len;
                         q.t_air += dt;
+                        if std::env::var_os("FORGE_QUALITY_AIR").is_some() {
+                            eprintln!("air {} {:?} f={f:.0} dt={dt:.4} at={:?}", op.name, phase, b);
+                        }
                     }
                     a = b;
                 }
