@@ -693,3 +693,101 @@ fn inch_quantisation_is_exact() {
         assert_eq!(quant_ratio(v, 3, 1, 1).unwrap(), quant(v, 3).unwrap());
     }
 }
+
+/// A contour with cutter compensation (wear): on before the lead line, off before the lead-out
+/// line. A dialect without cited comp keys and corner behaviour refuses it; one with them
+/// prints G41 D / G40 and reads them back as the same events.
+fn comp_prog() -> Program {
+    Program {
+        number: 1,
+        title: "comp".into(),
+        recs: vec![
+            Rec::ToolChange {
+                t: 3,
+                h: 3,
+                name: "flat-10".into(),
+            },
+            Rec::Spindle {
+                rpm: 5000.0,
+                cw: true,
+            },
+            Rec::Rapid([-20.0, -20.0, 5.0]),
+            Rec::Line([-20.0, -20.0, -2.0], 300.0),
+            Rec::Comp(Some((CompSide::Left, 3))),
+            Rec::Line([-10.0, -10.0, -2.0], 800.0),
+            Rec::Line([10.0, -10.0, -2.0], 800.0),
+            Rec::Comp(None),
+            Rec::Line([20.0, -20.0, -2.0], 800.0),
+            Rec::Rapid([20.0, -20.0, 5.0]),
+        ],
+    }
+}
+
+#[test]
+fn cutter_comp_rules_print_and_read() {
+    let fanuc = Dialect::get("fanuc").unwrap();
+    let q = quantize(&comp_prog(), &fanuc).unwrap();
+    // no dialect declares its corner behaviour yet: refused, with the fix
+    match print(&q, &fanuc) {
+        Err(PostError::Unsupported { what, .. }) => assert!(what.contains("cutter compensation"), "{what}"),
+        r => panic!("{r:?}"),
+    }
+    // every dialect: one that sets and cites all four keys round-trips the events; any other
+    // refuses (none declares its corner behaviour yet)
+    for (name, _) in DIALECTS {
+        let d = Dialect::get(name).unwrap();
+        let q = quantize(&comp_prog(), &d).unwrap();
+        let full = ["comp_left", "comp_right", "comp_off", "comp_corner"]
+            .iter()
+            .all(|k| !d.s(k).is_empty() && !d.cites.iter().any(|c| c.key == *k && c.status == "refused"));
+        if full {
+            let (_, back) = round_trip(&q, &d).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(
+                back.iter().filter(|m| matches!(m, Motion::Comp(_))).count(),
+                2,
+                "{name}"
+            );
+        } else {
+            assert!(
+                matches!(print(&q, &d), Err(PostError::Unsupported { .. })),
+                "{name}"
+            );
+        }
+    }
+    // LinuxCNC cites G41/G42/G40 but not its corner behaviour: refused too
+    let lc = Dialect::get("linuxcnc").unwrap();
+    let ql = quantize(&comp_prog(), &lc).unwrap();
+    assert!(matches!(print(&ql, &lc), Err(PostError::Unsupported { .. })));
+    // a test dialect with the four keys
+    let src = format!(
+        "{}\ncomp_left = \"G41 D{{d}}\"\ncomp_right = \"G42 D{{d}}\"\ncomp_off = \"G40\"\ncomp_corner = \"arc\"\n",
+        DIALECTS
+            .iter()
+            .find(|d| d.0 == "fanuc")
+            .unwrap()
+            .1
+            .replace("cite_required = true", "")
+    );
+    let d = Dialect::parse(&src).unwrap();
+    let q = quantize(&comp_prog(), &d).unwrap();
+    let (txt, back) = round_trip(&q, &d).unwrap();
+    assert!(txt.lines().any(|l| l.contains("G41 D3")), "{txt}");
+    assert!(txt.lines().any(|l| l.ends_with("G40")), "{txt}");
+    assert_eq!(back.iter().filter(|m| matches!(m, Motion::Comp(_))).count(), 2);
+    // the rules
+    let mut p = comp_prog();
+    p.recs[5] = Rec::Arc {
+        to: [-10.0, -10.0, -2.0],
+        c: [-15.0, -15.0],
+        cw: false,
+        f: 800.0,
+    };
+    assert!(quantize(&p, &d).is_err(), "an arc after G41");
+    let mut p = comp_prog();
+    p.recs.truncate(8);
+    p.recs.remove(7);
+    assert!(quantize(&p, &d).is_err(), "on at the end");
+    let mut p = comp_prog();
+    p.recs.insert(6, Rec::Home);
+    assert!(quantize(&p, &d).is_err(), "home while on");
+}
