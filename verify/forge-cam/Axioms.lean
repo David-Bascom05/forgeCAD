@@ -4,6 +4,8 @@ import ForgeCam
 #print axioms ForgeCam.sd_hyp_eq_sdRZ
 #print axioms ForgeCam.clear_of_frontier
 #print axioms ForgeCam.clearFace_sound
+#print axioms ForgeCam.clearFace_subset
+#print axioms ForgeCam.wall_hull_mem
 #print axioms ForgeCam.hyp_preconnected
 #print axioms ForgeCam.certified_clear
 #print axioms ForgeCam.sd_le_sd_add_dist
