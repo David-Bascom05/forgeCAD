@@ -36,6 +36,8 @@ pub mod gui_docs;
 mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
+#[path = "gui_record.rs"]
+pub mod gui_record;
 #[path = "gui_fgmarks.rs"]
 mod gui_fgmarks;
 #[path = "gui_inspect.rs"]
@@ -46,8 +48,6 @@ pub mod gui_machine;
 pub mod gui_markup;
 #[path = "gui_overlay.rs"]
 mod gui_overlay;
-#[path = "gui_record.rs"]
-pub mod gui_record;
 #[path = "gui_robot.rs"]
 pub mod gui_robot;
 #[path = "gui_sheet.rs"]

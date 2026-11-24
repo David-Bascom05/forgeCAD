@@ -14,7 +14,6 @@ pub mod bendsim;
 mod bendsim_cards;
 mod bendsim_env;
 pub mod cam;
-pub mod capture;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -28,6 +27,7 @@ mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
 mod empty;
+pub mod capture;
 pub mod env;
 pub mod fg;
 pub mod fgasm;
@@ -592,9 +592,9 @@ impl Shell {
         // short of the view cube: a narrow view (a small window, the properties column open)
         // shows the switches that fit left of it (all of them stay in Settings)
         let ppp = ctx.pixels_per_point();
-        let limit = self.cube_place.map_or(self.view_rect.right(), |c| {
-            self.view_rect.min.x + c.at.0 / ppp - 8.0
-        });
+        let limit = self
+            .cube_place
+            .map_or(self.view_rect.right(), |c| self.view_rect.min.x + c.at.0 / ppp - 8.0);
         let r = egui::Area::new(egui::Id::unique("view-toolbar"))
             .fixed_pos(at)
             .order(egui::Order::Middle)
