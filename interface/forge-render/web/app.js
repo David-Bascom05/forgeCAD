@@ -182,16 +182,33 @@ window.forge_export = async (json) => {
 };
 window.forge_save_as = (name) => {
   const n = prompt("Save as (a path in the project)", name || "part.fg");
-  if (n) fc.app_save_as(`${MOUNT}/${cleanPath(n)}`);
+  if (!n) return;
+  // a name outside the project is refused, and the app says so (it threw, and nothing said)
+  try {
+    fc.app_save_as(`${MOUNT}/${cleanPath(n)}`);
+  } catch (e) {
+    fc.app_say(`Not saved: ${e.message}`);
+  }
 };
-const asked = q.get("open");
+// the link's file, when it is a path the project may hold; else the app starts with none and
+// says why (`?open=../x` threw here, before the app started: a dead page)
+let asked = null;
+let refused = null;
+if (q.get("open")) {
+  try {
+    asked = cleanPath(q.get("open"));
+  } catch (e) {
+    refused = `Not opened: ${e.message}`;
+  }
+}
 // the app first, with the part asked for: the project's other files follow behind its first frame
 // (hundreds of them took a round trip each before it showed)
-await Promise.all([home?.load(), asked && mirror?.loadOne(cleanPath(asked))]);
+await Promise.all([home?.load(), asked && mirror?.loadOne(asked)]);
 // ?noapp: the files and the kernel only, no canvas (the parity test)
 if (!q.has("noapp")) {
-  fc.start_app(asked ? `${MOUNT}/${cleanPath(asked)}` : undefined, q.get("offscreen") ?? undefined);
+  fc.start_app(asked ? `${MOUNT}/${asked}` : undefined, q.get("offscreen") ?? undefined);
   if (q.get("env")) fc.app_env(q.get("env"));
+  if (refused) fc.app_say(refused);
 }
 say("started");
 const loaded = (async () => {
@@ -208,7 +225,8 @@ const loaded = (async () => {
   if (asked) {
     // what the part reads (an assembly's parts, a font) may have come since its first build
     fc.app_rebuild();
-  } else {
+  } else if (!refused) {
+    // (a link refused: nothing else opened in its place, the status saying why)
     const first = files().filter((p) => p.endsWith(".fg")).sort()[0];
     if (first) fc.app_open(`${MOUNT}/${first}`);
   }

@@ -67,6 +67,8 @@ enum Ask {
     BendAt(u32, f64),
     /// A file the app wrote that the page's storage refused or lost: (project path, why).
     StoreFailed(String, String),
+    /// The page's word for the status line (a link's file it would not open, say).
+    Say(String),
     /// Words for the toolpath simulation (`app_camsim`).
     CamSim(String),
     /// A click on what the shell noted by this name (`app_click`): the tests' hand. The button
@@ -505,13 +507,7 @@ impl Host {
                 Ask::Machine(c) => {
                     let _ = self.gui.machine_command(&c);
                 }
-                Ask::Rebuild => {
-                    if let Some(s) = &mut self.gui.fg {
-                        s.rebuild();
-                    }
-                    // a machining document reads its parts: run again with what arrived
-                    self.gui.camsim_reload();
-                }
+                Ask::Rebuild => self.gui.rebuild_open(),
                 Ask::Apply(op) => {
                     if let Err(e) = self.gui.fg_apply(op) {
                         self.gui.shell.status = e;
@@ -519,6 +515,7 @@ impl Host {
                 }
                 Ask::Pixels(f) => self.pixels(f),
                 Ask::StoreFailed(path, why) => self.gui.store_failed(&path, &why),
+                Ask::Say(text) => self.gui.shell.status = text,
                 Ask::CamSim(c) => {
                     if let Err(e) = self.gui.camsim_command(&c) {
                         self.gui.shell.status = e;
@@ -1231,6 +1228,13 @@ pub fn app_type(text: String, enter: bool) {
 #[wasm_bindgen]
 pub fn app_store_failed(path: String, why: String) {
     ask(Ask::StoreFailed(path, why));
+}
+
+/// Says `text` in the app's status line: what the page refused (a link's file outside the
+/// project, a name to save as that isn't a project path).
+#[wasm_bindgen]
+pub fn app_say(text: String) {
+    ask(Ask::Say(text));
 }
 
 /// The app's next frame as `{width, height, rgba}`, through a callback (see `Host::pixels`).

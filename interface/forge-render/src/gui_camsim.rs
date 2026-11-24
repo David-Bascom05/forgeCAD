@@ -218,6 +218,21 @@ impl Gui {
         }
     }
 
+    /// Every open document made again from its files as they are now: the page asks once the
+    /// project's files have all come (a deep-linked file opened before them), so a part, a
+    /// machining document's parts and a drawing's part that were not there yet are read.
+    pub fn rebuild_open(&mut self) {
+        if let Some(s) = &mut self.fg {
+            s.rebuild();
+        }
+        // a machining document reads its parts: run again with what arrived
+        self.camsim_reload();
+        // a drawing's part: it read "no such file", and nothing watched the file that wasn't there
+        if let Some(d) = &mut self.shell.drawing {
+            d.rebuild();
+        }
+    }
+
     /// Simulates the document again (its files changed), keeping the time shown.
     pub fn camsim_reload(&mut self) {
         if let Some(st) = self.shell.camsim.as_deref_mut() {

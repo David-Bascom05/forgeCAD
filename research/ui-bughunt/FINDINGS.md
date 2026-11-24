@@ -317,6 +317,26 @@ list on main: this branch's new strings add none).
   anything (the page's host drops those actions). Not drawn in the page now (shell/mod.rs
   `title_bar`, `resize_edges`). Test: `web/tests/chrome.cjs` (no icon pixels there; fails before).
 
+## 20. Deep links: `?open=../x` killed the page; a linked drawing never drew its part (ui/bughunt-3)
+
+- `?open=../../../etc/passwd` (any path with `..`): app.js's `cleanPath` threw at the top level,
+  before `start_app`, so the page stayed dead (`window.forgecad` never set, a page error). The
+  app now starts with nothing open, and its status says "Not opened: not a project path: …"
+  (`app_say`). File > Save As with such a name threw the same way and said nothing. Now it says
+  "Not saved: …".
+- `?open=machined/flange_dwg.fg`: the page opens the linked file before the project's other
+  files (they follow its first frame), then asks for a rebuild once they have come. That rebuild
+  covered the part document and machining documents, not a drawing, so the sheet stayed empty
+  with "flange.fg: no such file". A file that was missing when the drawing was made is watched by
+  nothing, so the same happened on the desktop when the part was saved after its drawing was
+  opened. `Gui::rebuild_open` makes every open document again from its files, the drawing
+  included (`DrawingEnv::rebuild`). The page's rebuild is that.
+- Tests: `tests/late_part.rs` (native: the drawing opened before its part, the part written,
+  `rebuild_open`: no "no such file"; fails before) and `web/tests/deeplink.cjs` (both links in the
+  page; fails before: the page error).
+- Not changed: `?env=bogus` is ignored without a word; a missing file says its path twice
+  ("nope/missing.fg: nope/missing.fg: no such file").
+
 ## Open (reported, not fixed here)
 
 
