@@ -1792,6 +1792,53 @@ theorem place_edge_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF)
   · have h0 : (0#usize).val = 0 := rfl
     simp only [h0, List.take_zero, List.append_nil]; exact ⟨by simp, hP⟩
 
+theorem place_all_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF)
+    (hsmall : (allUses b).length < Usize.max) (hnvA : vpre b (allUses b) b.nv = (allUses b).length)
+    (ne : Usize) (hne : ne.val = b.edges.size)
+    (atv items : alloc.vec.Vec Usize) (hP : PlaceInv b (allUses b) [] atv.val items.val) :
+    topo_fans.fans_loop2 FI t ne atv items 0#usize ⦃ r =>
+      r.val.length = (allUses b).length ∧
+      ∀ w < b.nv, ∀ j < cntQ b (allUses b) w, (r.val[vpre b (allUses b) w + j]!).val =
+        ((allUses b).filter fun c => b.start c == w)[j]! ⦄ := by
+  unfold topo_fans.fans_loop2
+  apply loop.spec_decr_nat (fun (y : alloc.vec.Vec Usize × alloc.vec.Vec Usize × Usize) => ne.val - y.2.2.val)
+    (fun y => y.2.2.val ≤ ne.val ∧ PlaceInv b (allUses b) (usesUpTo b y.2.2.val) y.1.val y.2.1.val)
+  · rintro ⟨a, it, e⟩ ⟨hle, hP0⟩
+    simp only at hle hP0 ⊢
+    unfold topo_fans.fans_loop2.body
+    split
+    · rename_i hlt
+      have hlt' : e.val < ne.val := by scalar_tac
+      have he : e.val < b.edges.size := by omega
+      step with R.base.edge_n_uses e he as ⟨n, hn⟩
+      have hsub : List.Sublist (usesUpTo b e.val ++ (b.ed e.val).uses) (allUses b) := by
+        rw [← usesUpTo_succ]; exact usesUpTo_sublist b _ (by omega)
+      step with place_edge_spec FI t R H W hsmall _ e n he hn hsub hnvA a it hP0 as ⟨a1, it1, hP1⟩
+      step with usize_add_wspec e 1#usize (succ_le_max e ne hlt') as ⟨e1, he1⟩
+      have he1v : e1.val = e.val + 1 := by rw [he1]; exact succ_val e ne hlt'
+      rw [he1v, usesUpTo_succ]
+      exact ⟨by omega, hP1, by omega⟩
+    · rename_i hlt
+      have hk : e.val = ne.val := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [hk, hne, usesUpTo_all] at hP0
+      exact ⟨hP0.2.1, hP0.2.2.2⟩
+  · have h0 : (0#usize).val = 0 := rfl
+    simp only [h0]; exact ⟨by simp, by simpa [usesUpTo] using hP⟩
+
+theorem leaving_eq (b : Body) (v : Nat) : b.leaving v = (allUses b).filter fun c => b.start c == v := by
+  unfold Body.leaving; rw [← usesUpTo_all]; unfold usesUpTo; rw [List.filter_flatMap]
+
+theorem allUses_use (b : Body) {c : Nat} (h : c ∈ allUses b) : Use b c := by
+  rw [← usesUpTo_all] at h; unfold usesUpTo at h
+  obtain ⟨e, he, hc⟩ := List.mem_flatMap.1 h
+  exact ⟨e, List.mem_range.1 he, hc⟩
+
+theorem vpre_all (H : Sound b) (W : b.WF) : vpre b (allUses b) b.nv = (allUses b).length := by
+  rw [vpre_eq]; unfold cntLt
+  rw [List.filter_eq_self.2]
+  intro c hc; simpa using use_start_lt H W (allUses_use b hc)
+
 end sort
 
 end forge_topo
