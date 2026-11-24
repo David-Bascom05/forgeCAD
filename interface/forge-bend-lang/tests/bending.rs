@@ -134,3 +134,39 @@ fn arguments_are_checked_against_the_list() {
         assert!(forge_bend_lang::ARGS.iter().any(|a| a.0 == *n), "{n}");
     }
 }
+
+#[test]
+fn a_cincinnati_program_is_written() {
+    let d = dir("cinci");
+    let doc = planned("trumpf-trubend-5130") + "prog = program(format: \"cincinnati\")\n";
+    let b = run(&doc, &d);
+    assert!(b.ok, "{:?}", b.errors);
+    let (xml, ext, notes) = b.program_text().unwrap().unwrap();
+    assert_eq!(ext, "pgm");
+    assert!(xml.starts_with("<?xml version=\"1.0\" ?>\n<Document><PressBrakeProgram Version=\"9\""));
+    assert!(xml.contains("NumSteps=\"2\"") && xml.matches("<Step ").count() == 2);
+    // a 90 degree bend: included 90, in angle mode
+    assert!(xml.contains("RevMode=\"0\" RevAngle=\"90\""), "{xml}");
+    // 2 mm stock in inches
+    assert!(xml.contains("MatThick=\"0.0787\""), "{xml}");
+    assert_eq!(xml.matches("<ProgOutData />").count(), 16);
+    // well formed: every element opened is closed, in order
+    let mut stack: Vec<String> = Vec::new();
+    for tag in xml.split('<').skip(2) {
+        let body = tag.split('>').next().unwrap();
+        if let Some(name) = body.strip_prefix('/') {
+            assert_eq!(stack.pop().as_deref(), Some(name), "{xml}");
+        } else if !body.ends_with('/') {
+            stack.push(body.split_whitespace().next().unwrap().to_string());
+        }
+    }
+    assert!(stack.is_empty(), "{stack:?}");
+    assert!(notes.iter().any(|n| n.contains("Tool Library")));
+    // an unspecified format: refused, naming what is written
+    let other = planned("trumpf-trubend-5130") + "prog = program(format: \"delem\")\n";
+    let e = run(&other, &d).errors;
+    assert!(
+        e.iter()
+            .any(|(_, t)| t.contains("ProgramFormatUnavailable") && t.contains("cincinnati"))
+    );
+}

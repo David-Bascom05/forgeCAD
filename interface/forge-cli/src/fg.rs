@@ -263,11 +263,26 @@ impl Session {
                 ));
             }
         }
-        let file = a
-            .words
-            .first()
-            .is_some_and(|w| w == "sheet")
-            .then(|| b.sheet().into_bytes());
+        // `sheet`: the setup sheet; `program`: the press-brake program the document asks for
+        let file = match a.words.first().map(String::as_str) {
+            Some("sheet") => Some(b.sheet().into_bytes()),
+            Some("program") => match b.program_text() {
+                Some(Ok((t, _, notes))) => {
+                    for n in notes {
+                        text.push_str(&format!("program: {n}\n"));
+                    }
+                    Some(t.into_bytes())
+                }
+                Some(Err(e)) => return Err(e),
+                None => {
+                    return Err(
+                        "the document asks for no program: add `prog = program(format: \"cincinnati\")`"
+                            .into(),
+                    );
+                }
+            },
+            _ => None,
+        };
         Ok(Reply {
             ok: b.ok && b.sim.as_ref().is_some_and(|s| s.plan.feasible),
             text,
