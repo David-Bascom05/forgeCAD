@@ -603,3 +603,58 @@ pass (move its points along the normal, or round it at a user radius). Never enl
 
 **Counsel question 13.** US 9,164,503: does a slot-clearing mode that cuts along a medial axis
 and then offsets outward read on it if the slot ends are not recessed circles?
+
+## 8. Emergent spirals from a cap-driven step rule (question from TOOLPATH-QUALITY, 2026-11-24)
+
+**The case.** kernel/forge-cam/src/adaptive.rs, on cam/quality, implements this rule. From the
+current position, take the largest turn toward material whose engagement on the cleared-area grid
+is at most one cap. There is no minimum and no band. A pass ends when no turn keeps the cap even
+at 1/8 step, or after about two radii in air. In a closed rectangular pocket, entered by a helix
+at its widest point, the rule *emergently* produces one continuous outward spiral: about 30
+turns, stepover set only by the cap, engagement roughly constant, rising in the corners.
+
+**Reading against '645 cl.1, '861 cl.1, '445 cl.1** (§1.1; engineering analysis, not legal
+advice). These are machine and object claims about the path the tool follows. How the path was
+computed does not appear in them, so "emergent" is no defence for these claims. Element by
+element:
+1. **An asymmetric, non-circular spiral.** A rectangular outward spiral is one.
+2. **Sequential loops separated by different distances at different places.** Likely met: a
+   cap-set stepover is not uniform around a rectangle; it is narrower where the corners raise the
+   engagement.
+3. **Within each loop, engagement falls from a max to a min and rises again (at least twice per
+   loop in '645/'445).** Likely met: four corners per loop give four rises and falls. No
+   preselected values are needed.
+
+**Verdict: high risk.** This is the configuration the matrix row marks "may read", made concrete.
+'224 cl.13 is also at risk: an asymmetric spiral of at least two loops whose stepover rises and
+falls cyclically.
+
+**Would ending a pass at a heading turn of 300° or more help?** Somewhat, but not clearly. Each
+pass becomes open and is joined by a fixed-rule link. Whether a series of nearly closed passes
+with short links is still "a spiral with sequential loops" is claim construction. The overall
+pattern of the machined path is what a machine claim reads on, so a court could look through
+short links. Treat it as reducing the risk, not removing it. Passes that end when they meet
+their own earlier cut give essentially the same pattern, with the same doubt.
+
+**Constructions that remove a required element structurally** (recommended for closed pockets
+until counsel answers Q2):
+- **(a) Uniform-stepover offsets.** Constant stepover at every place (removes element 2), with
+  corners rounded at a user radius, engagement *certified* rather than steered, and the chip held
+  by the per-move feed. Prior art: Held 1991 and every 1990s CAM. Engagement is bounded but not
+  constant; the feed takes up the variation.
+- **(b) One-direction "peel" passes.** The same cap-driven step rule, but along passes that sweep
+  across the region in one general direction and never wind around a centre, each ended at the
+  boundary and linked back through the cleared area. No spiral and no loops (removes elements 1
+  and 2). It is still constant-engagement per step.
+- **(c) Circles or trochoids along the medial axis.** No single spiral; prior art: Elber, Cohen &
+  Drake 2005; Rauch et al.
+- **Keep the cap-driven rule as is only where its output cannot loop:** open-sided regions, rest
+  regions and slots, where it naturally gives open passes.
+
+**Islands.** Outside clearing that produces partial loops around each island also approaches the
+"moat" claims ('224 cl.45; '704 cl.4; '445 cl.4: when the path meets an island, run a path that
+surrounds it). Keep passes near islands as parts of the region's general sweep. Don't generate a
+pass whose purpose is to encircle an island on first contact. Counsel Q3 stands.
+
+**Added to counsel Q2:** the concrete output above (an emergent, cap-driven rectangular spiral
+of about 30 loops with corner engagement peaks), and the 300° split variant.
