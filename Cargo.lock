@@ -448,6 +448,7 @@ name = "forge-material"
 version = "0.1.0"
 dependencies = [
  "forge-dirs",
+ "forge-math",
 ]
 
 [[package]]
