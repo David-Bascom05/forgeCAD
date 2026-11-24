@@ -233,4 +233,240 @@ theorem ip : ∀ (gs : List Aff) (s₀ s₁ : Rat), s₀ < s₁ →
         · simp
         · simp at hev; simp; intro _; have := hneg h.root (by grind) (by grind); grind
 
+/-! ## Double roots where some function is negative -/
+
+/-- Wherever two of them vanish together inside, some function is negative. -/
+def DistinctW (gs : List Aff) (s₀ s₁ : Rat) : Prop :=
+  ∀ s, s₀ < s → s < s₁ → 2 ≤ gs.countP (fun g => decide (g.ev s = 0)) → ∃ k ∈ gs, k.ev s < 0
+
+theorem distinctW_sub {gs : List Aff} {s₀ s₁ t₀ t₁ : Rat} (h : DistinctW gs s₀ s₁) (h0 : s₀ ≤ t₀)
+    (h1 : t₁ ≤ s₁) : DistinctW gs t₀ t₁ := fun s a b => h s (by grind) (by grind)
+
+theorem distinctW_tail {g : Aff} {gs : List Aff} {s₀ s₁ : Rat} (h : DistinctW (g :: gs) s₀ s₁)
+    (hg : ∀ s, s₀ < s → s < s₁ → 0 ≤ g.ev s) : DistinctW gs s₀ s₁ := by
+  intro s h0 h1 h2
+  have := h s h0 h1 (by rw [List.countP_cons]; grind)
+  obtain ⟨k, hk, hneg⟩ := this
+  rcases List.mem_cons.mp hk with rfl | hk
+  · have := hg s h0 h1; grind
+  · exact ⟨k, hk, hneg⟩
+
+/-- Just below `r` there is a point no root lies between. -/
+theorem step_below (gs : List Aff) {s₀ r : Rat} (h : s₀ < r) :
+    ∃ r', s₀ < r' ∧ r' < r ∧ ∀ g ∈ gs, g.m ≠ 0 → ¬ (r' ≤ g.root ∧ g.root < r) := by
+  induction gs with
+  | nil => exact ⟨(s₀ + r) / 2, by grind, by grind, fun _ h => nomatch h⟩
+  | cons g gs ih =>
+    obtain ⟨r', h0, h1, hr⟩ := ih
+    by_cases hg : g.m ≠ 0 ∧ r' ≤ g.root ∧ g.root < r
+    · refine ⟨(g.root + r) / 2, by grind, by grind, fun k hk hm hk' => ?_⟩
+      rcases List.mem_cons.mp hk with rfl | hk
+      · grind
+      · exact hr k hk hm ⟨by grind, hk'.2⟩
+    · refine ⟨r', h0, h1, fun k hk hm => ?_⟩
+      rcases List.mem_cons.mp hk with rfl | hk
+      · intro h'; exact hg ⟨hm, h'⟩
+      · exact hr k hk hm
+
+theorem step_above (gs : List Aff) {r s₁ : Rat} (h : r < s₁) :
+    ∃ r', r < r' ∧ r' < s₁ ∧ ∀ g ∈ gs, g.m ≠ 0 → ¬ (r < g.root ∧ g.root ≤ r') := by
+  induction gs with
+  | nil => exact ⟨(r + s₁) / 2, by grind, by grind, fun _ h => nomatch h⟩
+  | cons g gs ih =>
+    obtain ⟨r', h0, h1, hr⟩ := ih
+    by_cases hg : g.m ≠ 0 ∧ r < g.root ∧ g.root ≤ r'
+    · refine ⟨(r + g.root) / 2, by grind, by grind, fun k hk hm hk' => ?_⟩
+      rcases List.mem_cons.mp hk with rfl | hk
+      · grind
+      · exact hr k hk hm ⟨hk'.1, by grind⟩
+    · refine ⟨r', h0, h1, fun k hk hm => ?_⟩
+      rcases List.mem_cons.mp hk with rfl | hk
+      · intro h'; exact hg ⟨hm, h'⟩
+      · exact hr k hk hm
+
+/-- An affine function nonzero at `t` with no root in `[t, r)`, negative at `r`, is negative at
+`t`. -/
+theorem neg_of_noroot (k : Aff) {t r : Rat} (htr : t < r) (hr : k.ev r < 0)
+    (hno : k.m ≠ 0 → ¬ (t ≤ k.root ∧ k.root < r)) : k.ev t < 0 := by
+  by_cases hm : k.m = 0
+  · simp only [Aff.ev, hm, Rat.zero_mul] at hr ⊢; exact hr
+  · have hno := hno hm
+    rcases lt_trichotomy' 0 (k.ev t) with h | h | h
+    · obtain ⟨-, h1, h2, -⟩ := k.down htr h hr; exact absurd ⟨Rat.le_of_lt h1, h2⟩ hno
+    · have : k.root = t := by
+        rw [Aff.ev_eq k hm] at h
+        rcases Rat.mul_eq_zero.mp h.symm with h | h; exact absurd h hm; grind
+      exact absurd ⟨by grind, by grind⟩ hno
+    · exact h
+
+theorem neg_of_noroot' (k : Aff) {r t : Rat} (htr : r < t) (hr : k.ev r < 0)
+    (hno : k.m ≠ 0 → ¬ (r < k.root ∧ k.root ≤ t)) : k.ev t < 0 := by
+  by_cases hm : k.m = 0
+  · simp only [Aff.ev, hm, Rat.zero_mul] at hr ⊢; exact hr
+  · have hno := hno hm
+    rcases lt_trichotomy' 0 (k.ev t) with h | h | h
+    · obtain ⟨-, h1, h2, -⟩ := k.up htr hr h; exact absurd ⟨h1, Rat.le_of_lt h2⟩ hno
+    · have : k.root = t := by
+        rw [Aff.ev_eq k hm] at h
+        rcases Rat.mul_eq_zero.mp h.symm with h | h; exact absurd h hm; grind
+      exact absurd ⟨by grind, by grind⟩ hno
+    · exact h
+
+theorem pos_false_of_neg {gs : List Aff} {s : Rat} {k : Aff} (hk : k ∈ gs) (h : k.ev s < 0) :
+    pos gs s = false := by
+  unfold pos; rw [List.all_eq_false]; exact ⟨k, hk, by simp; grind⟩
+
+theorem ev_ne_of_noroot (k : Aff) (t s₀ : Rat) (h0 : k.ev s₀ ≠ 0) (hne : k.m ≠ 0 → k.root ≠ t) :
+    k.ev t ≠ 0 := by
+  by_cases hm : k.m = 0
+  · simp only [Aff.ev, hm, Rat.zero_mul] at h0 ⊢; exact h0
+  · rw [Aff.ev_eq k hm]; exact mul_ne_zero' hm (by have := hne hm; grind)
+
+theorem isEv_shrink (gs : List Aff) (h : Aff) {s₀ r' r : Rat} (hlt : r' < r)
+    (hno : h.m ≠ 0 → ¬ (r' ≤ h.root ∧ h.root < r)) : isEv s₀ r gs h = isEv s₀ r' gs h := by
+  unfold isEv
+  by_cases hm : h.m = 0
+  · simp [hm]
+  · have := hno hm
+    by_cases hb : h.root < r'
+    · simp [hm, hb, show h.root < r by grind]
+    · simp [hm, hb, show ¬ h.root < r by grind]
+
+theorem isEv_shrink' (gs : List Aff) (h : Aff) {r r' s₁ : Rat} (hlt : r < r')
+    (hno : h.m ≠ 0 → ¬ (r < h.root ∧ h.root ≤ r')) : isEv r s₁ gs h = isEv r' s₁ gs h := by
+  unfold isEv
+  by_cases hm : h.m = 0
+  · simp [hm]
+  · have := hno hm
+    by_cases hb : r' < h.root
+    · simp [hm, hb, show r < h.root by grind]
+    · simp [hm, hb, show ¬ r < h.root by grind]
+
+/-- **Interval parity**, double roots allowed where some function is negative. -/
+theorem ipW : ∀ (gs : List Aff) (s₀ s₁ : Rat), s₀ < s₁ →
+    (∀ g ∈ gs, g.ev s₀ ≠ 0 ∧ g.ev s₁ ≠ 0) → DistinctW gs s₀ s₁ →
+    (pos gs s₀ ^^ pos gs s₁) = par (gs.map (isEv s₀ s₁ gs))
+  | [], _, _, _, _, _ => by simp [pos]
+  | g :: gs, s₀, s₁, h01, hends, hd => by
+    have hg := hends g (List.mem_cons_self ..)
+    have hends' : ∀ k ∈ gs, k.ev s₀ ≠ 0 ∧ k.ev s₁ ≠ 0 := fun k hk => hends k (List.mem_cons_of_mem _ hk)
+    simp only [List.map_cons, par_cons, isEv_cons_self]
+    rw [List.map_congr_left (fun h hh => isEv_cons_other s₀ s₁ g h gs hh)]
+    have hposc : ∀ s, pos (g :: gs) s = (decide (0 < g.ev s) && pos gs s) := fun s => by
+      simp [pos]
+    rw [hposc, hposc]
+    rcases lt_trichotomy' 0 (g.ev s₀) with a0 | a0 | a0 <;>
+      rcases lt_trichotomy' 0 (g.ev s₁) with a1 | a1 | a1
+    · have hpos : ∀ s, s₀ ≤ s → s ≤ s₁ → 0 < g.ev s := fun s h0 h1 => g.pos_between a0 a1 h0 h1
+      have hd' := distinctW_tail hd (fun s h0 h1 => Rat.le_of_lt (hpos s (by grind) (by grind)))
+      have hno : (decide (g.m ≠ 0) && decide (s₀ < g.root) && decide (g.root < s₁) && pos gs g.root) = false := by
+        by_cases hm : g.m = 0
+        · simp [hm]
+        · have := Aff.ev_root g hm
+          simp; intro _ h0 h1; have := hpos g.root (by grind) (by grind); grind
+      rw [hno]
+      rw [List.map_congr_left (g := isEv s₀ s₁ gs) (fun h hh => by
+        unfold isEv
+        cases hev : (decide (h.m ≠ 0) && decide (s₀ < h.root) && decide (h.root < s₁) && nonpos gs h.root == 1)
+        · simp
+        · simp at hev; simp; exact hpos h.root (by grind) (by grind))]
+      simp [a0, a1]
+      exact ipW gs s₀ s₁ h01 hends' hd'
+    · exact absurd a1.symm hg.2
+    · obtain ⟨hm, hr0, hr1, hsg⟩ := g.down h01 a0 a1
+      have hm0 : g.m ≠ 0 := by grind
+      have hd' : DistinctW gs s₀ g.root := distinctW_tail (distinctW_sub hd (Rat.le_refl) (Rat.le_of_lt hr1))
+        (fun s _ h1 => Rat.le_of_lt ((hsg s).mpr h1))
+      have hev_r : ∀ h ∈ gs, (isEv s₀ s₁ gs h && decide (0 < g.ev h.root)) = isEv s₀ g.root gs h := by
+        intro h hh
+        unfold isEv; rw [show decide (0 < g.ev h.root) = decide (h.root < g.root) from by simp [hsg]]
+        cases decide (h.m ≠ 0) <;> cases hd1 : decide (s₀ < h.root) <;> simp at hd1 ⊢ <;> grind
+      by_cases hz : ∃ k ∈ gs, k.ev g.root = 0
+      · -- a double root at r: some function is negative there; step just below it
+        obtain ⟨k, hk, hk0⟩ := hz
+        obtain ⟨j, hj, hjneg⟩ := hd g.root hr0 hr1 (by
+          rw [List.countP_cons]
+          have : 1 ≤ gs.countP (fun g' => decide (g'.ev g.root = 0)) :=
+            List.countP_pos_iff.mpr ⟨k, hk, by simp [hk0]⟩
+          simp [Aff.ev_root g hm0]; grind)
+        have hj' : j ∈ gs := by
+          rcases List.mem_cons.mp hj with rfl | hj
+          · rw [Aff.ev_root j hm0] at hjneg; grind
+          · exact hj
+        obtain ⟨r', h0', h1', hno⟩ := step_below gs hr0
+        have hends'' : ∀ k ∈ gs, k.ev s₀ ≠ 0 ∧ k.ev r' ≠ 0 := fun k hk =>
+          ⟨(hends' k hk).1, ev_ne_of_noroot k r' s₀ (hends' k hk).1
+            (fun hm h => hno k hk hm ⟨by grind, by grind⟩)⟩
+        have ih := ipW gs s₀ r' h0' hends'' (distinctW_sub hd' (Rat.le_refl) (Rat.le_of_lt h1'))
+        have hpr' : pos gs r' = false := pos_false_of_neg hj'
+          (neg_of_noroot j h1' hjneg (hno j hj'))
+        rw [hpr', Bool.xor_false] at ih
+        rw [List.map_congr_left (g := isEv s₀ r' gs) (fun h hh => by
+          rw [hev_r h hh]; exact isEv_shrink gs h h1' (hno h hh))]
+        rw [← ih]
+        have hpg : pos gs g.root = false := pos_false_of_neg hj' hjneg
+        simp [a0, show ¬ 0 < g.ev s₁ by grind, hpg]
+      · have hnz : ∀ k ∈ gs, k.ev g.root ≠ 0 := fun k hk h => hz ⟨k, hk, h⟩
+        have ih := ipW gs s₀ g.root hr0 (fun k hk => ⟨(hends' k hk).1, hnz k hk⟩) hd'
+        rw [List.map_congr_left (g := isEv s₀ g.root gs) hev_r]
+        rw [← ih]
+        simp [a0, show ¬ 0 < g.ev s₁ by grind, hm0, hr0, hr1]
+        cases pos gs s₀ <;> cases pos gs g.root <;> rfl
+    · exact absurd a0.symm hg.1
+    · exact absurd a0.symm hg.1
+    · exact absurd a0.symm hg.1
+    · obtain ⟨hm, hr0, hr1, hsg⟩ := g.up h01 a0 a1
+      have hm0 : g.m ≠ 0 := by grind
+      have hd' : DistinctW gs g.root s₁ := distinctW_tail (distinctW_sub hd (Rat.le_of_lt hr0) (Rat.le_refl))
+        (fun s h0 _ => Rat.le_of_lt ((hsg s).mpr h0))
+      have hev_r : ∀ h ∈ gs, (isEv s₀ s₁ gs h && decide (0 < g.ev h.root)) = isEv g.root s₁ gs h := by
+        intro h hh
+        unfold isEv; rw [show decide (0 < g.ev h.root) = decide (g.root < h.root) from by simp [hsg]]
+        cases decide (h.m ≠ 0) <;> cases hd1 : decide (h.root < s₁) <;> simp at hd1 ⊢ <;> grind
+      by_cases hz : ∃ k ∈ gs, k.ev g.root = 0
+      · obtain ⟨k, hk, hk0⟩ := hz
+        obtain ⟨j, hj, hjneg⟩ := hd g.root hr0 hr1 (by
+          rw [List.countP_cons]
+          have : 1 ≤ gs.countP (fun g' => decide (g'.ev g.root = 0)) :=
+            List.countP_pos_iff.mpr ⟨k, hk, by simp [hk0]⟩
+          simp [Aff.ev_root g hm0]; grind)
+        have hj' : j ∈ gs := by
+          rcases List.mem_cons.mp hj with rfl | hj
+          · rw [Aff.ev_root j hm0] at hjneg; grind
+          · exact hj
+        obtain ⟨r', h0', h1', hno⟩ := step_above gs hr1
+        have hends'' : ∀ k ∈ gs, k.ev r' ≠ 0 ∧ k.ev s₁ ≠ 0 := fun k hk =>
+          ⟨ev_ne_of_noroot k r' s₀ (hends' k hk).1 (fun hm h => hno k hk hm ⟨by grind, by grind⟩),
+            (hends' k hk).2⟩
+        have ih := ipW gs r' s₁ h1' hends'' (distinctW_sub hd' (Rat.le_of_lt h0') (Rat.le_refl))
+        have hpr' : pos gs r' = false := pos_false_of_neg hj'
+          (neg_of_noroot' j h0' hjneg (hno j hj'))
+        rw [hpr', Bool.false_xor] at ih
+        rw [List.map_congr_left (g := isEv r' s₁ gs) (fun h hh => by
+          rw [hev_r h hh]; exact isEv_shrink' gs h h0' (hno h hh))]
+        rw [← ih]
+        have hpg : pos gs g.root = false := pos_false_of_neg hj' hjneg
+        simp [a1, show ¬ 0 < g.ev s₀ by grind, hpg]
+      · have hnz : ∀ k ∈ gs, k.ev g.root ≠ 0 := fun k hk h => hz ⟨k, hk, h⟩
+        have ih := ipW gs g.root s₁ hr1 (fun k hk => ⟨hnz k hk, (hends' k hk).2⟩) hd'
+        rw [List.map_congr_left (g := isEv g.root s₁ gs) hev_r]
+        rw [← ih]
+        simp [a1, show ¬ 0 < g.ev s₀ by grind, hm0, hr0, hr1]
+    · exact absurd a1.symm hg.2
+    · have hneg : ∀ s, s₀ ≤ s → s ≤ s₁ → g.ev s < 0 := fun s h0 h1 => g.neg_between a0 a1 h0 h1
+      have hno : (decide (g.m ≠ 0) && decide (s₀ < g.root) && decide (g.root < s₁) && pos gs g.root) = false := by
+        by_cases hm : g.m = 0
+        · simp [hm]
+        · simp; intro _ h0 h1; have := hneg g.root (by grind) (by grind)
+          have := Aff.ev_root g hm; grind
+      rw [hno]
+      rw [par_all_false]
+      · simp [show ¬ 0 < g.ev s₀ by grind, show ¬ 0 < g.ev s₁ by grind]
+      · intro b hb
+        obtain ⟨h, hh, rfl⟩ := List.mem_map.mp hb
+        unfold isEv
+        cases hev : (decide (h.m ≠ 0) && decide (s₀ < h.root) && decide (h.root < s₁) && nonpos gs h.root == 1)
+        · simp
+        · simp at hev; simp; intro _; have := hneg h.root (by grind) (by grind); grind
+
 end ForgeCertify

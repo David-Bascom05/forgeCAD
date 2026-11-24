@@ -66,6 +66,7 @@ pub(super) fn scope(s: &Shell) -> &'static str {
             FLAT_TAB => "flat",
             THERMO_TAB => "thermo",
             super::super::WELD_TAB => "weld",
+            super::super::CAM_TAB => "cam",
             _ => "tools",
         }
     }

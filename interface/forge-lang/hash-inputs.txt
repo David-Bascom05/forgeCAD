@@ -1,0 +1,39 @@
+# What FORGE_KERNEL_HASH (the result caches' key, build.rs) hashes: forge-lang's own build closure,
+# every crate it links (normal and build dependencies, any target), and nothing else, so a change
+# to a crate it does not link (a CAM crate, a machine's data) leaves the key and the binaries alone.
+# tests/hash_inputs.rs checks this list against `cargo metadata`; fix the list when it fails.
+#
+#   path DIR            a workspace crate: every file under DIR (from the repository root) but its
+#                       tests/, benches/ and examples/, so its sources, Cargo.toml, build.rs and
+#                       every file its code includes (data/, fonts, stdparts)
+#   dep NAME VERSION    a crate from a registry or git (none today): its version is the input
+path interface/forge-agent
+path interface/forge-history
+path interface/forge-lang
+path interface/forge-units
+path kernel/forge-alloc
+path kernel/forge-asm
+path kernel/forge-bool
+path kernel/forge-brake
+path kernel/forge-dirs
+path kernel/forge-draw
+path kernel/forge-dwg
+path kernel/forge-font
+path kernel/forge-geom
+path kernel/forge-git
+path kernel/forge-gpu
+path kernel/forge-harness
+path kernel/forge-material
+path kernel/forge-math
+path kernel/forge-mesh
+path kernel/forge-model
+path kernel/forge-ops
+path kernel/forge-par
+path kernel/forge-sheet
+path kernel/forge-sheet-core
+path kernel/forge-sketch
+path kernel/forge-step
+path kernel/forge-thermo
+path kernel/forge-topo
+path kernel/forge-vendor
+path kernel/forge-weld

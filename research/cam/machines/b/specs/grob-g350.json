@@ -1,0 +1,166 @@
+{
+ "vendor": "GROB",
+ "model": "G350 (2nd/current generation)",
+ "family": "G-series universal machining centres",
+ "source": [
+  "https://www.grobgroup.com/en/products/product-range/universal-machining-centers/milling-centers/g350/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "Horizontal motorized spindle; three linear axes arranged to minimise distance from guides to TCP (maker); 'tunnel concept' lets the part swivel inside the work area; tilting rotary table with A-axis (230 deg swivel range) carrying B-axis rotary (360 deg) -> with horizontal spindle the rotary table axis is B. Options: A-only or B-only tables. Which unit carries X/Y/Z not stated (memory: all three linear axes in the spindle unit, unverified).",
+ "control": {
+  "standard": null,
+  "options": [
+   "SIEMENS 840D sl",
+   "HEIDENHAIN TNC 640 (GROB4Pilot)"
+  ]
+ },
+ "travel_mm": {
+  "X": 600,
+  "Y": 855,
+  "Z": 750
+ },
+ "rotary": {
+  "A": {
+   "range_deg": null,
+   "orig": "230 deg swivel range",
+   "rapid_rpm": null,
+   "indexing_or_full": "full 5-axis simultaneous, torque motor"
+  },
+  "B": {
+   "range_deg": null,
+   "orig": "360 deg",
+   "rapid_rpm": null,
+   "indexing_or_full": "full, torque motor"
+  },
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 400,
+ "rotary_table_dia_mm": 570,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": 340
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 12000,
+  "rpm_min": null,
+  "taper_or_interface": "HSK-A63",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 52
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 83
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 70,
+  "Y": 45,
+  "Z": 90,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [
+   "single disk-type magazine",
+   "double disk-type magazine",
+   "additional tool magazine"
+  ],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": 2.7,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": 365,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": 15300,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.pockets",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "milling_head",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.size_mm",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rotary.C",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "table_mm"
+ ],
+ "options": [
+  "spindles HSK-A63: 16,000 rpm 206 Nm (32 kW); 18,000 / 21,000 rpm 47 Nm; 30,000 rpm 63 Nm (53 kW)",
+  "pallet changer (weight 17,500 kg; table load with pallet 340 kg)",
+  "double disk magazine tool length 365/180/550 mm (bottom/top/over both)",
+  "Vario rotary table with steady rest + tailstock / tandem"
+ ],
+ "notes": "Spindle kW values come from the page's application examples (12,000 rpm 52 kW/83 Nm; 16,000 rpm 32 kW/206 Nm; 30,000 rpm 53 kW/63 Nm), not a rated table. Interference (collision) diameter 720 mm. Positioning 0.006 mm. Chip-to-chip 2.7 s per VDI 2852. Pocket counts and A/B speeds not on page; page's 'All technical data' expands only these fields; no public datasheet PDF found.",
+ "_not_applicable": [
+  "swing_over_bed_mm",
+  "max_turning_dia_mm",
+  "max_turning_length_mm",
+  "chuck_size_in",
+  "bar_capacity_mm",
+  "spindle_nose_type",
+  "sub_spindle",
+  "live_tool",
+  "turret_stations",
+  "turret_index_s",
+  "tailstock"
+ ]
+}

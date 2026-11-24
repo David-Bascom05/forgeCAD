@@ -447,6 +447,30 @@ impl IntCurve {
                 (out, out_d) = (t, d);
             }
         }
+        // a closed curve's whole turn has its two ends at one point: a search that stopped at one
+        // end may have its foot just past it, before the other end (fuzz_keep 262; a point on the
+        // curve there, at distance 0, has none nearer)
+        if out_d > 0.0 && self.closed && (out == lo || out == hi) && hi - lo >= self.domain_hi() {
+            let (s0, s1) = if out == lo {
+                ((hi - 1.0).max(lo), hi)
+            } else {
+                (lo, (lo + 1.0).min(hi))
+            };
+            let mut t = self.on_cubic(p, s0, s1);
+            for _ in 0..3 {
+                let d1 = self.hermite(t).1;
+                let g = (self.eval(t) - p).dot(d1);
+                let h = d1.dot(d1);
+                if h <= 0.0 {
+                    break;
+                }
+                t = (t - g / h).clamp(s0, s1);
+            }
+            let d = self.eval(t).distance_sq(p);
+            if d < out_d {
+                out = t;
+            }
+        }
         out
     }
 
@@ -1066,6 +1090,40 @@ mod tests {
                 c.a.distance(p) <= tol::LINEAR && c.b.distance(p) <= tol::LINEAR,
                 "{t}"
             );
+        }
+    }
+
+    /// An edge round a whole closed curve from a parameter between samples (fuzz_keep 262: a plane
+    /// through a torus, the loop's seam vertex at t = 23.697 of 0..49): a point just before the
+    /// seam was given the seam itself, 1.2e-2 away, as its nearest (the search went on only past
+    /// `lo`, not back from `hi`, the same point), and a line's crossing there was lost.
+    #[test]
+    fn closest_round_a_whole_turn_looks_past_both_ends() {
+        let cyl = Surface::Cylinder(Cylinder {
+            frame: Frame::WORLD,
+            radius: 2.0,
+        });
+        let sph = Surface::Sphere(Sphere {
+            frame: Frame::WORLD.with_origin(Point3::new(0.5, 0.0, 1.0)),
+            radius: 4.0,
+        });
+        let region = Box3::from_points([Point3::new(-6.0, -6.0, -6.0), Point3::new(6.0, 6.0, 8.0)]);
+        for c in trace(&cyl, &sph, region).unwrap() {
+            let d = c.domain_hi();
+            for s in [0.3, 0.7, 5.5] {
+                let range = Interval::new(s, s + d);
+                for back in [0.05, 0.1, 0.2] {
+                    // a point just before the seam: on the turn at s + d - back
+                    let p = CurveGeom::eval(&c, s + d - back);
+                    let t = c.closest(p, range);
+                    let q = CurveGeom::eval(&c, t);
+                    assert!(
+                        q.distance(p) <= 1e-9,
+                        "s {s} back {back}: t {t}, {}",
+                        q.distance(p)
+                    );
+                }
+            }
         }
     }
 

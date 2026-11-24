@@ -1,0 +1,14 @@
+# brother-speedio-s500xd2 head: the spindle head on the column ways (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -140
+shared y0 = -140
+shared z0 = 630
+shared L = 280
+shared W = 650
+shared H = 450
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

@@ -1,0 +1,164 @@
+{
+ "vendor": "HERMLE",
+ "model": "C 22 U GEN2",
+ "family": "C GEN2 (High-Performance Line)",
+ "source": [
+  "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-22-gen2/",
+  "https://www.hermle.de/fileadmin/website/5_NEWS-UND-MEDIA/5_2_Mediathek/Technische_Daten/Englisch/HERMLE_Technical-Data_C22-GEN2_2025_EN.pdf"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "X, Y, Z in the tool (spindle unit); 5-axis swivelling rotary table: A swivel cradle (+/-135 deg) carrying C rotary table, collision circle dia 610 at A=0. Vertical spindle.",
+ "control": {
+  "standard": "HEIDENHAIN TNC7",
+  "options": [
+   "SIEMENS SINUMERIK ONE"
+  ]
+ },
+ "travel_mm": {
+  "X": 450,
+  "Y": 600,
+  "Z": 330
+ },
+ "rotary": {
+  "A": {
+   "range_deg": [
+    -135,
+    135
+   ],
+   "rapid_rpm": 25,
+   "indexing_or_full": "full simultaneous (one-sided drive)"
+  },
+  "B": null,
+  "C": {
+   "range_deg": [
+    0,
+    360
+   ],
+   "rapid_rpm": 40,
+   "indexing_or_full": "full, worm drive"
+  }
+ },
+ "spindle_nose_to_table_mm": [
+  null,
+  515
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  320,
+  320
+ ],
+ "table_load_kg": 300,
+ "rotary_table_dia_mm": 320,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 16000,
+  "rpm_min": null,
+  "taper_or_interface": "HSK-A63",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 31
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 98
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 30,
+  "Y": 30,
+  "Z": 30,
+  "A_or_B_rpm": 25,
+  "C_rpm": 40
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": "8 m/s2 (dynamic 15)",
+ "changer": {
+  "pockets": 55,
+  "options": [
+   "HSK-A50/E40: 65 pockets",
+   "ZM 50 / ZM 88k / ZM 216 / ZM 528 additional magazines"
+  ],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": 4.5,
+  "max_tool_dia_mm": 80,
+  "max_tool_dia_empty_adjacent_mm": 125,
+  "max_tool_len_mm": 250,
+  "max_tool_kg": 8
+ },
+ "coolant": {
+  "through_spindle": true,
+  "notes": "ICS 40 bar/27 l/min or 80 bar/12 l/min (option), paper band filter"
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": 9000,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "changer.tool_to_tool_s",
+  "max_cutting_feed_m_min",
+  "milling_head",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "rotary.B",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "spindles: 15,000 SK40 31kW/98Nm; 20,000 HSK-A63 38kW/94Nm; 25,000 HSK-A63 37kW/35Nm; 30,000 HSK-A50 37kW/35Nm; 42,000 HSK-E40 35kW/17.5Nm (all 20% c.d.f.)",
+  "tables: dia 320 torque C (A 55 rpm tandem, C 80 rpm, 150 kg); MT mill-turn table C 1,500 rpm (HDH); rigid clamping table 600x630 750 kg (STANDARD on sheet)",
+  "dynamic package: rapid 50 m/min, 15 m/s2"
+ ],
+ "notes": "Datasheet marks the RIGID clamping table as standard; the 5-axis 'U' needs a swivelling rotary table option. Recorded rotary = dia 320 worm-drive swivel rotary table (the one on the product page: dia 320, 300 kg). Spindle power/torque at 20% c.d.f.; 'max vertical table clearance 515 mm' put as max of spindle_nose_to_table. Max workpiece dia 450 x 415 mm. Linear feed force 4,500 N. Positioning <=6 um. Values from HERMLE technical data sheet (GEN2); standard items read from the filled-dot markers on the rendered sheet. Linear axes: 'two axes in the workpiece and three axes in the tool' (C 32 page wording, same C-series concept) -> X, Y, Z carried by the spindle side, A swivel cradle carries C rotary table; vertical spindle. Overall machine dimensions not on sheet.",
+ "_not_applicable": [
+  "swing_over_bed_mm",
+  "max_turning_dia_mm",
+  "max_turning_length_mm",
+  "chuck_size_in",
+  "bar_capacity_mm",
+  "spindle_nose_type",
+  "sub_spindle",
+  "live_tool",
+  "turret_stations",
+  "turret_index_s",
+  "tailstock"
+ ]
+}
