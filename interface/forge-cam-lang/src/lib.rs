@@ -4363,11 +4363,11 @@ impl Cam {
                 // sample, at most cap fz, no faster than the next sample, within [f_min, f_max]):
                 // at the op's chip, and for a rough op at its class chip, taken where the sample is
                 // engaged under 90° (ae < D/2 on a straight cut: the peak chip is thinned)
-                let base = sample_feeds(&samples, &sc);
+                let base = sample_feeds(samples, &sc);
                 let rough_feed = rough.map(|(slot, f)| {
                     (
-                        sample_feeds(&samples, &Sched { fz: slot * f, ..sc }),
-                        sample_feeds(&samples, &Sched { fz: slot, ..sc }),
+                        sample_feeds(samples, &Sched { fz: slot * f, ..sc }),
+                        sample_feeds(samples, &Sched { fz: slot, ..sc }),
                     )
                 });
                 let chosen = |k: usize| -> f64 {
