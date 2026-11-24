@@ -79,6 +79,39 @@ pub struct Face {
     /// for `holds`: the same values `TrimRef` would work out on each call; with the pieces they
     /// were worked out for (the fields are public: a trim changed since is not taken as these).
     tgaps: (Vec<TSeg>, Vec<f64>),
+    /// `holds`'s trim answers for boxes asked before (see `Held`).
+    held: Held,
+}
+
+/// The trim's answers (`TrimRef::classify`) for parameter boxes already asked, by the boxes'
+/// bits: kept only where `holds` classifies with `tgaps` (the trim is the one they were worked
+/// out for), so each answer is a function of `tgaps` (private, set once by `Face::new`) and
+/// the box alone, the same answer again. The branch and bounds split the same face box at the
+/// same midpoints, so most boxes come back. Not part of the face's value: it prints as `Held`,
+/// compares equal and clones empty. Bounded: emptied when full.
+pub struct Held(std::sync::Mutex<std::collections::HashMap<[u64; 4], i32>>);
+
+const HELD_MAX: usize = 1 << 16;
+
+impl Default for Held {
+    fn default() -> Held {
+        Held(std::sync::Mutex::new(std::collections::HashMap::new()))
+    }
+}
+impl Clone for Held {
+    fn clone(&self) -> Held {
+        Held::default()
+    }
+}
+impl PartialEq for Held {
+    fn eq(&self, _: &Held) -> bool {
+        true
+    }
+}
+impl std::fmt::Debug for Held {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Held")
+    }
 }
 
 /// A planar face's trim: closed polygons and arcs in (p, q), as f64 polylines whose arcs are
@@ -191,6 +224,7 @@ impl Face {
             id,
             prism: None,
             tgaps: (vec![], vec![]),
+            held: Held::default(),
         };
         f.prism = crate::slab::Prism::of(&f);
         if let Some(t) = &f.trim {
@@ -223,12 +257,34 @@ impl Face {
             }
             Some(t) => {
                 // the gaps worked out once (if the trim was changed since: worked out here)
-                let gaps = if self.tgaps.0 == t.segs {
-                    Some(&self.tgaps.1[..])
+                let s = if self.tgaps.0 == t.segs {
+                    // the trim `tgaps` was worked out for: its answer for this box, kept
+                    let key = [p.lo.to_bits(), p.hi.to_bits(), q.lo.to_bits(), q.hi.to_bits()];
+                    let known = self.held.0.lock().ok().and_then(|m| m.get(&key).copied());
+                    match known {
+                        Some(s) => s,
+                        None => {
+                            let s = TrimRef {
+                                segs: &t.segs,
+                                gaps: Some(&self.tgaps.1[..]),
+                            }
+                            .classify(p, q);
+                            if let Ok(mut m) = self.held.0.lock() {
+                                if m.len() >= HELD_MAX {
+                                    m.clear();
+                                }
+                                m.insert(key, s);
+                            }
+                            s
+                        }
+                    }
                 } else {
-                    None
+                    TrimRef {
+                        segs: &t.segs,
+                        gaps: None,
+                    }
+                    .classify(p, q)
                 };
-                let s = TrimRef { segs: &t.segs, gaps }.classify(p, q);
                 if s == 1 && !in_box { 0 } else { s }
             }
         }
@@ -1466,6 +1522,116 @@ pub fn apart(a: &[Ival; 3], b: &[Ival; 3], gap: f64) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    /// A face's kept trim answers are the answers made fresh: boxes of a midpoint subdivision
+    /// of the face's box (as the branch and bounds make them), each asked twice (the second
+    /// from the kept answers) and against a face built anew; and a clone whose trim was then
+    /// changed is answered for its own trim, not from kept answers. A key that drops part of
+    /// the box (e.g. q.hi) fails it.
+    #[test]
+    fn kept_trim_answers_are_the_fresh_answers() {
+        let plane = Surf::Plane {
+            o: [0.0, 0.0, 0.0],
+            u: [1.0, 0.0, 0.0],
+            v: [0.0, 1.0, 0.0],
+        };
+        // an L with a rounded inner corner (lines and an arc)
+        let r = 3.0;
+        let segs = vec![
+            TSeg::Line {
+                a: [0.0, 0.0],
+                b: [40.0, 0.0],
+            },
+            TSeg::Line {
+                a: [40.0, 0.0],
+                b: [40.0, 10.0],
+            },
+            TSeg::Line {
+                a: [40.0, 10.0],
+                b: [10.0 + r, 10.0],
+            },
+            TSeg::Arc {
+                a: [10.0 + r, 10.0],
+                b: [10.0, 10.0 + r],
+                c: [10.0 + r, 10.0 + r],
+                r,
+                ccw: false,
+            },
+            TSeg::Line {
+                a: [10.0, 10.0 + r],
+                b: [10.0, 30.0],
+            },
+            TSeg::Line {
+                a: [10.0, 30.0],
+                b: [0.0, 30.0],
+            },
+            TSeg::Line {
+                a: [0.0, 30.0],
+                b: [0.0, 0.0],
+            },
+        ];
+        let make = || {
+            Face::new(
+                plane,
+                Ival::new(0.0, 40.0),
+                Ival::new(0.0, 30.0),
+                Some(Trim { segs: segs.clone() }),
+                1e-9,
+                0,
+            )
+        };
+        let kept = make();
+        let mut boxes = vec![(Ival::new(0.0, 40.0), Ival::new(0.0, 30.0))];
+        let mut k = 0;
+        while k < boxes.len() && boxes.len() < 3000 {
+            let (p, q) = boxes[k];
+            let (pa, pb) = p.split();
+            let (qa, qb) = q.split();
+            // one axis at a time, as the branch and bounds split: boxes then share three of
+            // their four bounds with others
+            boxes.extend([(pa, q), (pb, q), (p, qa), (p, qb)]);
+            k += 1;
+        }
+        let mut seen = [0usize; 3];
+        // forward (parents before children), again (all from the kept answers), and on a
+        // second face in reverse (children before parents)
+        let back = make();
+        let order = boxes.iter().map(|b| (&kept, *b));
+        let order = order.chain(boxes.iter().map(|b| (&kept, *b)));
+        let order = order.chain(boxes.iter().rev().map(|b| (&back, *b)));
+        for (f, (p, q)) in order {
+            let fresh = make().holds(p, q);
+            assert_eq!(f.holds(p, q), fresh, "{p:?} {q:?}");
+            seen[(fresh + 1) as usize] += 1;
+        }
+        assert!(
+            seen.iter().all(|n| *n > 50),
+            "in, out and unknown boxes all met: {seen:?}"
+        );
+        // a clone with its trim moved: its own answers (the arc's corner box is in it now)
+        let mut moved = kept.clone();
+        if let Some(t) = &mut moved.trim {
+            for sg in &mut t.segs {
+                if let TSeg::Line { a, b } = sg {
+                    a[0] += 20.0;
+                    b[0] += 20.0;
+                }
+            }
+        }
+        let mut differ = 0;
+        for &(p, q) in &boxes {
+            let want = TrimRef {
+                segs: &moved.trim.as_ref().unwrap().segs,
+                gaps: None,
+            }
+            .classify(p, q);
+            let in_box = p.lo >= moved.p.lo && p.hi <= moved.p.hi && q.lo >= moved.q.lo && q.hi <= moved.q.hi;
+            let want = if want == 1 && !in_box { 0 } else { want };
+            assert_eq!(moved.holds(p, q), want, "moved: {p:?} {q:?}");
+            differ += usize::from(want != kept.holds(p, q));
+        }
+        assert!(differ > 50, "the moved trim answers differently: {differ}");
+    }
     use super::*;
 
     /// A trim of a jaw block's top face (the block less its pocket, from stock.rs): a trim arc's
