@@ -561,6 +561,16 @@ fn groups(s: &Shell) -> Vec<Group> {
                 ],
             ),
             g(
+                "Machines",
+                vec![go(
+                    "Machine Builder",
+                    "gear",
+                    Action::MachineBuilder,
+                    s.machine.is_some(),
+                )],
+                vec![],
+            ),
+            g(
                 "Options",
                 vec![go("Settings", "options", Action::Settings, s.prefs.open)],
                 vec![],
@@ -638,7 +648,11 @@ impl Shell {
             return self.sketch_ribbon(ui, w);
         }
         let mut gx = 0.0;
-        let gs = groups(self);
+        let mut gs = groups(self);
+        // the Machine Builder's own commands, on the Manage tab while it is open
+        if self.machine.is_some() && self.tab == 4 {
+            gs.extend(super::machine::groups(self));
+        }
         // too wide for the window: small buttons lose their words, as Inventor's ribbon shrinks
         let full: f32 = gs
             .iter()

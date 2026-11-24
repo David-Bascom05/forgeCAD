@@ -1,0 +1,2635 @@
+{
+ "vendor": "Rego-Fix",
+ "blocked": [],
+ "records": [
+  {
+   "kind": "holder",
+   "id": "4340.11651",
+   "name": "CAT 40 / ER 16 x 4\" H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 24, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT 40 / ER 16 x 4\" H"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "CAT 40 / ER 16 x 4\" H"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "L [inch] = 4\""
+    },
+    "nose_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D [mm] = 28 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX CAT/ ER colletholders are balanced to G 2.5 @ 22, 000 rpm. (PDF page 23, printed 21)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "285",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 285; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 101.6,
+     "d": 28.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4340.12051",
+   "name": "CAT 40 / ER 20 x 4\" H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 24, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT 40 / ER 20 x 4\" H"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "CAT 40 / ER 20 x 4\" H"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "L [inch] = 4\""
+    },
+    "nose_d": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "D [mm] = 34 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX CAT/ ER colletholders are balanced to G 2.5 @ 22, 000 rpm. (PDF page 23, printed 21)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "325",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 325; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 101.6,
+     "d": 34.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4340.12551",
+   "name": "CAT 40 / ER 25 x 4\" H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 24, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT 40 / ER 25 x 4\" H"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "CAT 40 / ER 25 x 4\" H"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "L [inch] = 4\""
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D [mm] = 42 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX CAT/ ER colletholders are balanced to G 2.5 @ 22, 000 rpm. (PDF page 23, printed 21)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "325",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 325; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 101.6,
+     "d": 42.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4340.13231",
+   "name": "CAT 40 / ER 32 x 3\" H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 24, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT 40 / ER 32 x 3\" H"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "CAT 40 / ER 32 x 3\" H"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "L [inch] = 3\""
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D [mm] = 50 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX CAT/ ER colletholders are balanced to G 2.5 @ 22, 000 rpm. (PDF page 23, printed 21)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "405",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 405; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 50.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4340.13251",
+   "name": "CAT 40 / ER 32 x 4\" H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 24, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT 40 / ER 32 x 4\" H"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "CAT 40 / ER 32 x 4\" H"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "L [inch] = 4\""
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D [mm] = 50 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX CAT/ ER colletholders are balanced to G 2.5 @ 22, 000 rpm. (PDF page 23, printed 21)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "405",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 405; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 101.6,
+     "d": 50.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4340.13271",
+   "name": "CAT 40 / ER 32 x 6\" H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 24, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT 40 / ER 32 x 6\" H"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "CAT 40 / ER 32 x 6\" H"
+    },
+    "gauge_length": {
+     "v": 152.4,
+     "unit": "mm",
+     "stated": "L [inch] = 6\""
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D [mm] = 50 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX CAT/ ER colletholders are balanced to G 2.5 @ 22, 000 rpm. (PDF page 23, printed 21)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "405/405",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 405/405; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 152.4,
+     "d": 50.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4340.14041",
+   "name": "CAT 40 / ER 40 x 3.5\" H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 24, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT 40 / ER 40 x 3.5\" H"
+    },
+    "clamp": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "CAT 40 / ER 40 x 3.5\" H"
+    },
+    "gauge_length": {
+     "v": 88.9,
+     "unit": "mm",
+     "stated": "L [inch] = 3.5\""
+    },
+    "nose_d": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "D [mm] = 63 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX CAT/ ER colletholders are balanced to G 2.5 @ 22, 000 rpm. (PDF page 23, printed 21)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "505",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 505; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 88.9,
+     "d": 63.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "8843.16081",
+   "name": "CAT 40 / ER 32 x 10\" XL",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 24, printed page 22)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT 40 / ER 32 x 10\" XL"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "CAT 40 / ER 32 x 10\" XL"
+    },
+    "gauge_length": {
+     "v": 254.0,
+     "unit": "mm",
+     "stated": "L [inch] = 10\""
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D [mm] = 50 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX CAT/ ER colletholders are balanced to G 2.5 @ 22, 000 rpm. (PDF page 23, printed 21)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "D1": {
+     "v": 52.0,
+     "unit": "mm",
+     "stated": "D1 [mm] = 52 (XL: collar diameter where the slender extension starts, on drawing)"
+    },
+    "L1": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "L1 (XL: from the D1 collar face to the nose, on drawing) = 4\""
+    }
+   },
+   "profile": [
+    {
+     "z": 152.4,
+     "d": 52.0,
+     "stated": "D1 collar at L - L1 (collar width not given)"
+    },
+    {
+     "z": 254.0,
+     "d": 50.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4130.11640",
+   "name": "BT 30 / ER 16 x 080 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 36, printed page 34)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT 30 / ER 16 x 080 H"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "BT 30 / ER 16 x 080 H"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L [mm] = 80mm"
+    },
+    "nose_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D [mm] = 28 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX BT / ER colletholders are balanced to G 2.5 @ 22,000 rpm. (PDF page 35, printed 33)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "285",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 285; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.0,
+     "d": 28.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4130.12030",
+   "name": "BT 30 / ER 20 x 070 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 36, printed page 34)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT 30 / ER 20 x 070 H"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "BT 30 / ER 20 x 070 H"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "L [mm] = 70mm"
+    },
+    "nose_d": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "D [mm] = 34 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX BT / ER colletholders are balanced to G 2.5 @ 22,000 rpm. (PDF page 35, printed 33)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "325",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 325; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 70.0,
+     "d": 34.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4130.12520",
+   "name": "BT 30 / ER 25 x 060 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 36, printed page 34)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT 30 / ER 25 x 060 H"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "BT 30 / ER 25 x 060 H"
+    },
+    "gauge_length": {
+     "v": 60.0,
+     "unit": "mm",
+     "stated": "L [mm] = 60mm"
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D [mm] = 42 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX BT / ER colletholders are balanced to G 2.5 @ 22,000 rpm. (PDF page 35, printed 33)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "325",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 325; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 60.0,
+     "d": 42.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4130.13250",
+   "name": "BT 30 / ER 32 x 100 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 36, printed page 34)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT 30 / ER 32 x 100 H"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "BT 30 / ER 32 x 100 H"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L [mm] = 100mm"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D [mm] = 50 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX BT / ER colletholders are balanced to G 2.5 @ 22,000 rpm. (PDF page 35, printed 33)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "405",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 405; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 100.0,
+     "d": 50.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4140.11630",
+   "name": "BT 40 / ER 16 x 070 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 37, printed page 35)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT 40 / ER 16 x 070 H"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "BT 40 / ER 16 x 070 H"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "L [mm] = 70mm"
+    },
+    "nose_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D [mm] = 28 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX BT / ER colletholders are balanced to G 2.5 @ 22,000 rpm. (PDF page 35, printed 33)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "285",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 285; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 70.0,
+     "d": 28.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4140.12030",
+   "name": "BT 40 / ER 20 x 070 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 37, printed page 35)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT 40 / ER 20 x 070 H"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "BT 40 / ER 20 x 070 H"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "L [mm] = 70mm"
+    },
+    "nose_d": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "D [mm] = 34 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX BT / ER colletholders are balanced to G 2.5 @ 22,000 rpm. (PDF page 35, printed 33)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "325",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 325; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 70.0,
+     "d": 34.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4140.12530",
+   "name": "BT 40 / ER 25 x 070 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 37, printed page 35)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT 40 / ER 25 x 070 H"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "BT 40 / ER 25 x 070 H"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "L [mm] = 70mm"
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D [mm] = 42 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX BT / ER colletholders are balanced to G 2.5 @ 22,000 rpm. (PDF page 35, printed 33)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "325",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 325; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 70.0,
+     "d": 42.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4140.13230",
+   "name": "BT 40 / ER 32 x 070 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 37, printed page 35)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT 40 / ER 32 x 070 H"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "BT 40 / ER 32 x 070 H"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "L [mm] = 70mm"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D [mm] = 50 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX BT / ER colletholders are balanced to G 2.5 @ 22,000 rpm. (PDF page 35, printed 33)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "405",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 405; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 70.0,
+     "d": 50.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4140.13250",
+   "name": "BT 40 / ER 32 x 100 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 37, printed page 35)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT 40 / ER 32 x 100 H"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "BT 40 / ER 32 x 100 H"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L [mm] = 100mm"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D [mm] = 50 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX BT / ER colletholders are balanced to G 2.5 @ 22,000 rpm. (PDF page 35, printed 33)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "405",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 405; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 100.0,
+     "d": 50.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4140.14050",
+   "name": "BT 40 / ER 40 x 100 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 37, printed page 35)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT 40 / ER 40 x 100 H"
+    },
+    "clamp": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "BT 40 / ER 40 x 100 H"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L [mm] = 100mm"
+    },
+    "nose_d": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "D [mm] = 63 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX BT / ER colletholders are balanced to G 2.5 @ 22,000 rpm. (PDF page 35, printed 33)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "505",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 505; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 100.0,
+     "d": 63.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "8841.16050",
+   "name": "BT 40 / ER 32 x 226 XL",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 37, printed page 35)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT 40 / ER 32 x 226 XL"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "BT 40 / ER 32 x 226 XL"
+    },
+    "gauge_length": {
+     "v": 226.0,
+     "unit": "mm",
+     "stated": "L [mm] = 226mm"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D [mm] = 50 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 22,000 rpm",
+     "unit": "text",
+     "stated": "REGO-FIX BT / ER colletholders are balanced to G 2.5 @ 22,000 rpm. (PDF page 35, printed 33)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "D1": {
+     "v": 55.0,
+     "unit": "mm",
+     "stated": "D1 [mm] = 55 (XL: collar diameter where the slender extension starts, on drawing)"
+    },
+    "L1": {
+     "v": 140.0,
+     "unit": "mm",
+     "stated": "L1 (XL: from the D1 collar face to the nose, on drawing) = 140mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 86.0,
+     "d": 55.0,
+     "stated": "D1 collar at L - L1 (collar width not given)"
+    },
+    {
+     "z": 226.0,
+     "d": 50.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut"
+   ],
+   "note": "z measured from the start of the L dimension as drawn (flange face on the taper side) toward the nut"
+  },
+  {
+   "kind": "holder",
+   "id": "4563.11640",
+   "name": "HSK-A 63 / ER 16 x 080 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 46, printed page 44)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK-A 63 / ER 16 x 080 H"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "HSK-A 63 / ER 16 x 080 H"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L [mm] = 80mm"
+    },
+    "nose_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D [mm] = 28 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "HSK 63: G 2.5 @ 25,000 rpm (PDF page 44, printed 42)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "325",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 325; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.0,
+     "d": 28.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut",
+    "exact L datum on the HSK-A drawing"
+   ],
+   "note": "z measured from the start of the L dimension; the HSK-A drawing datum was not checked on the image (likely the HSK flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "2563.12030",
+   "name": "HSK-A 63 / ER 20 x 075",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 46, printed page 44)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK-A 63 / ER 20 x 075"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "HSK-A 63 / ER 20 x 075"
+    },
+    "gauge_length": {
+     "v": 75.0,
+     "unit": "mm",
+     "stated": "L [mm] = 75mm"
+    },
+    "nose_d": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "D [mm] = 34 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "HSK 63: G 2.5 @ 25,000 rpm (PDF page 44, printed 42)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    }
+   },
+   "profile": [
+    {
+     "z": 75.0,
+     "d": 34.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut",
+    "exact L datum on the HSK-A drawing"
+   ],
+   "note": "z measured from the start of the L dimension; the HSK-A drawing datum was not checked on the image (likely the HSK flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "4563.12540",
+   "name": "HSK-A 63 / ER 25 x 080 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 46, printed page 44)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK-A 63 / ER 25 x 080 H"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "HSK-A 63 / ER 25 x 080 H"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L [mm] = 80mm"
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D [mm] = 42 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "HSK 63: G 2.5 @ 25,000 rpm (PDF page 44, printed 42)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "325",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 325; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.0,
+     "d": 42.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut",
+    "exact L datum on the HSK-A drawing"
+   ],
+   "note": "z measured from the start of the L dimension; the HSK-A drawing datum was not checked on the image (likely the HSK flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "4563.13240",
+   "name": "HSK-A 63 / ER 32 x 080 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 46, printed page 44)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK-A 63 / ER 32 x 080 H"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "HSK-A 63 / ER 32 x 080 H"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L [mm] = 80mm"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D [mm] = 50 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "HSK 63: G 2.5 @ 25,000 rpm (PDF page 44, printed 42)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "405",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 405; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.0,
+     "d": 50.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut",
+    "exact L datum on the HSK-A drawing"
+   ],
+   "note": "z measured from the start of the L dimension; the HSK-A drawing datum was not checked on the image (likely the HSK flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "4563.13250",
+   "name": "HSK-A 63 / ER 32 x 100 H",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 46, printed page 44)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK-A 63 / ER 32 x 100 H"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "HSK-A 63 / ER 32 x 100 H"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L [mm] = 100mm"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D [mm] = 50 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "HSK 63: G 2.5 @ 25,000 rpm (PDF page 44, printed 42)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "balancing_ring": {
+     "v": "405",
+     "unit": "text",
+     "stated": "FWR ... (balancing ring) = 405; H = ready to accept balancing rings"
+    }
+   },
+   "profile": [
+    {
+     "z": 100.0,
+     "d": 50.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut",
+    "exact L datum on the HSK-A drawing"
+   ],
+   "note": "z measured from the start of the L dimension; the HSK-A drawing datum was not checked on the image (likely the HSK flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "8865.16070",
+   "name": "HSK-A 63 / ER 32 x 240 XL",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 46, printed page 44)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK-A 63 / ER 32 x 240 XL"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "HSK-A 63 / ER 32 x 240 XL"
+    },
+    "gauge_length": {
+     "v": 240.0,
+     "unit": "mm",
+     "stated": "L [mm] = 240mm"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D [mm] = 50 (clamping nut diameter on drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 5,000 rpm",
+     "unit": "text",
+     "stated": "Balancing in XL colletholders: 100 % balanced to G 2.5 @ 5,000 rpm. (PDF page 44, printed 42)"
+    },
+    "nut": {
+     "v": "Hi-Q / ER clamping nut",
+     "unit": "text",
+     "stated": "Included in delivery: ER colletholders come with Hi-Q® / ER clamping nut"
+    },
+    "D1": {
+     "v": 55.0,
+     "unit": "mm",
+     "stated": "D1 [mm] = 55 (XL: collar diameter where the slender extension starts, on drawing)"
+    },
+    "L1": {
+     "v": 140.0,
+     "unit": "mm",
+     "stated": "L1 (XL: from the D1 collar face to the nose, on drawing) = 140mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 100.0,
+     "d": 55.0,
+     "stated": "D1 collar at L - L1 (collar width not given)"
+    },
+    {
+     "z": 240.0,
+     "d": 50.0,
+     "stated": "D at L (nut front face)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameters between flange and nut",
+    "exact L datum on the HSK-A drawing"
+   ],
+   "note": "z measured from the start of the L dimension; the HSK-A drawing datum was not checked on the image (likely the HSK flange face)"
+  },
+  {
+   "kind": "collet",
+   "id": "1111.06000",
+   "name": "ER standard collet ER 11 Ø 6 mm",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 89, printed page 87); dimensions: https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangen-Masse_EN_0.pdf (page 1)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER11",
+     "unit": "text",
+     "stated": "ER 11"
+    },
+    "bore": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Ø 6 mm"
+    },
+    "clamp_min": {
+     "v": 5.5,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 6.0 – 5.5"
+    },
+    "clamp_max": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 6.0 – 5.5"
+    },
+    "length": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "L = 18 (TD sheet, row ER 11 3.0 – 7.0)"
+    },
+    "od": {
+     "v": 11.5,
+     "unit": "mm",
+     "stated": "D1 = 11.5 (TD sheet; largest diameter on drawing)"
+    },
+    "D2": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "D2 (size column; equals the ER size) = 11"
+    },
+    "D3": {
+     "v": 9.5,
+     "unit": "mm",
+     "stated": "D3 (drawing label, front diameter) = 9.5"
+    },
+    "L1": {
+     "v": 3.8,
+     "unit": "mm",
+     "stated": "L1** (** L1 references to the top plane of the colletholder) = 3.8"
+    },
+    "L2": {
+     "v": 2.0,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 2"
+    },
+    "L3": {
+     "v": 2.5,
+     "unit": "mm",
+     "stated": "L3 (drawing label) = 2.5"
+    },
+    "drawing": {
+     "v": "4",
+     "unit": "text",
+     "stated": "Drawing 4"
+    },
+    "cone_angle": {
+     "v": 8,
+     "unit": "deg",
+     "stated": "8° (drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L2 and L3 beyond the drawing label"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "1116.06000",
+   "name": "ER standard collet ER 16 Ø 6 mm",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 90, printed page 88); dimensions: https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangen-Masse_EN_0.pdf (page 1)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "ER 16"
+    },
+    "bore": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Ø 6 mm"
+    },
+    "clamp_min": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 6.0 – 5.0"
+    },
+    "clamp_max": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 6.0 – 5.0"
+    },
+    "length": {
+     "v": 27.5,
+     "unit": "mm",
+     "stated": "L = 27.5 (TD sheet, row ER 16 5.0 – 10.0)"
+    },
+    "od": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "D1 = 17 (TD sheet; largest diameter on drawing)"
+    },
+    "D2": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "D2 (size column; equals the ER size) = 16"
+    },
+    "D3": {
+     "v": 13.8,
+     "unit": "mm",
+     "stated": "D3 (drawing label, front diameter) = 13.8"
+    },
+    "L1": {
+     "v": 6.26,
+     "unit": "mm",
+     "stated": "L1** (** L1 references to the top plane of the colletholder) = 6.26"
+    },
+    "L2": {
+     "v": 2.7,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 2.7"
+    },
+    "L3": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "L3 (drawing label) = 4"
+    },
+    "drawing": {
+     "v": "4",
+     "unit": "text",
+     "stated": "Drawing 4"
+    },
+    "cone_angle": {
+     "v": 8,
+     "unit": "deg",
+     "stated": "8° (drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L2 and L3 beyond the drawing label"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "1120.06000",
+   "name": "ER standard collet ER 20 Ø 6 mm",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 91, printed page 89); dimensions: https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangen-Masse_EN_0.pdf (page 1)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER 20"
+    },
+    "bore": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Ø 6 mm"
+    },
+    "clamp_min": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 6.0 – 5.0"
+    },
+    "clamp_max": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 6.0 – 5.0"
+    },
+    "length": {
+     "v": 31.5,
+     "unit": "mm",
+     "stated": "L = 31.5 (TD sheet, row ER 20 2.0 – 6.50)"
+    },
+    "od": {
+     "v": 21.0,
+     "unit": "mm",
+     "stated": "D1 = 21 (TD sheet; largest diameter on drawing)"
+    },
+    "D2": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "D2 (size column; equals the ER size) = 20"
+    },
+    "D3": {
+     "v": 17.4,
+     "unit": "mm",
+     "stated": "D3 (drawing label, front diameter) = 17.4"
+    },
+    "D4": {
+     "v": 9.0,
+     "unit": "mm",
+     "stated": "D4 (counterbore diameter at the back, drawings 1/3) = 9"
+    },
+    "L1": {
+     "v": 6.36,
+     "unit": "mm",
+     "stated": "L1** (** L1 references to the top plane of the colletholder) = 6.36"
+    },
+    "L2": {
+     "v": 2.8,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 2.8"
+    },
+    "L3": {
+     "v": 4.8,
+     "unit": "mm",
+     "stated": "L3 (drawing label) = 4.8"
+    },
+    "L4": {
+     "v": 13.0,
+     "unit": "mm",
+     "stated": "L4 (bore depth from the back, drawings 1/3) = 13"
+    },
+    "drawing": {
+     "v": "3",
+     "unit": "text",
+     "stated": "Drawing 3"
+    },
+    "cone_angle": {
+     "v": 8,
+     "unit": "deg",
+     "stated": "8° (drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L2 and L3 beyond the drawing label"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "1120.12000",
+   "name": "ER standard collet ER 20 Ø 12 mm",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 91, printed page 89); dimensions: https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangen-Masse_EN_0.pdf (page 1)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER 20"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Ø 12 mm"
+    },
+    "clamp_min": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 12.0 – 11.0"
+    },
+    "clamp_max": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 12.0 – 11.0"
+    },
+    "length": {
+     "v": 31.5,
+     "unit": "mm",
+     "stated": "L = 31.5 (TD sheet, row ER 20 7.0 – 13.0)"
+    },
+    "od": {
+     "v": 21.0,
+     "unit": "mm",
+     "stated": "D1 = 21 (TD sheet; largest diameter on drawing)"
+    },
+    "D2": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "D2 (size column; equals the ER size) = 20"
+    },
+    "D3": {
+     "v": 17.4,
+     "unit": "mm",
+     "stated": "D3 (drawing label, front diameter) = 17.4"
+    },
+    "L1": {
+     "v": 6.36,
+     "unit": "mm",
+     "stated": "L1** (** L1 references to the top plane of the colletholder) = 6.36"
+    },
+    "L2": {
+     "v": 2.8,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 2.8"
+    },
+    "L3": {
+     "v": 4.8,
+     "unit": "mm",
+     "stated": "L3 (drawing label) = 4.8"
+    },
+    "drawing": {
+     "v": "4",
+     "unit": "text",
+     "stated": "Drawing 4"
+    },
+    "cone_angle": {
+     "v": 8,
+     "unit": "deg",
+     "stated": "8° (drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L2 and L3 beyond the drawing label"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "1125.06000",
+   "name": "ER standard collet ER 25 Ø 6 mm",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 92, printed page 90); dimensions: https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangen-Masse_EN_0.pdf (page 1)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "ER 25"
+    },
+    "bore": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Ø 6 mm"
+    },
+    "clamp_min": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 6.0 – 5.0"
+    },
+    "clamp_max": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 6.0 – 5.0"
+    },
+    "length": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "L = 34 (TD sheet, row ER 25 2.0 – 7.50)"
+    },
+    "od": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "D1 = 26 (TD sheet; largest diameter on drawing)"
+    },
+    "D2": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "D2 (size column; equals the ER size) = 25"
+    },
+    "D3": {
+     "v": 22.0,
+     "unit": "mm",
+     "stated": "D3 (drawing label, front diameter) = 22"
+    },
+    "D4": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "D4 (counterbore diameter at the back, drawings 1/3) = 12"
+    },
+    "L1": {
+     "v": 6.66,
+     "unit": "mm",
+     "stated": "L1** (** L1 references to the top plane of the colletholder) = 6.66"
+    },
+    "L2": {
+     "v": 3.1,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 3.1"
+    },
+    "L3": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "L3 (drawing label) = 5"
+    },
+    "L4": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "L4 (bore depth from the back, drawings 1/3) = 15"
+    },
+    "drawing": {
+     "v": "3",
+     "unit": "text",
+     "stated": "Drawing 3"
+    },
+    "cone_angle": {
+     "v": 8,
+     "unit": "deg",
+     "stated": "8° (drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L2 and L3 beyond the drawing label"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "1125.16000",
+   "name": "ER standard collet ER 25 Ø 16 mm",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 93, printed page 91); dimensions: https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangen-Masse_EN_0.pdf (page 1)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "ER 25"
+    },
+    "bore": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "Ø 16 mm"
+    },
+    "clamp_min": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 16.0 – 15.0"
+    },
+    "clamp_max": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 16.0 – 15.0"
+    },
+    "length": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "L = 34 (TD sheet, row ER 25 8.0 – 17.0)"
+    },
+    "od": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "D1 = 26 (TD sheet; largest diameter on drawing)"
+    },
+    "D2": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "D2 (size column; equals the ER size) = 25"
+    },
+    "D3": {
+     "v": 22.0,
+     "unit": "mm",
+     "stated": "D3 (drawing label, front diameter) = 22"
+    },
+    "L1": {
+     "v": 6.66,
+     "unit": "mm",
+     "stated": "L1** (** L1 references to the top plane of the colletholder) = 6.66"
+    },
+    "L2": {
+     "v": 3.1,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 3.1"
+    },
+    "L3": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "L3 (drawing label) = 5"
+    },
+    "drawing": {
+     "v": "4",
+     "unit": "text",
+     "stated": "Drawing 4"
+    },
+    "cone_angle": {
+     "v": 8,
+     "unit": "deg",
+     "stated": "8° (drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L2 and L3 beyond the drawing label"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "1132.06000",
+   "name": "ER standard collet ER 32 Ø 6 mm",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 93, printed page 91); dimensions: https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangen-Masse_EN_0.pdf (page 1)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER 32"
+    },
+    "bore": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Ø 6 mm"
+    },
+    "clamp_min": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 6.0 – 5.0"
+    },
+    "clamp_max": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 6.0 – 5.0"
+    },
+    "length": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "L = 40 (TD sheet, row ER 32 5.0 – 7.5)"
+    },
+    "od": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "D1 = 33 (TD sheet; largest diameter on drawing)"
+    },
+    "D2": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D2 (size column; equals the ER size) = 32"
+    },
+    "D3": {
+     "v": 29.2,
+     "unit": "mm",
+     "stated": "D3 (drawing label, front diameter) = 29.2"
+    },
+    "D4": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "D4 (counterbore diameter at the back, drawings 1/3) = 15"
+    },
+    "L1": {
+     "v": 7.16,
+     "unit": "mm",
+     "stated": "L1** (** L1 references to the top plane of the colletholder) = 7.16"
+    },
+    "L2": {
+     "v": 3.6,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 3.6"
+    },
+    "L3": {
+     "v": 5.5,
+     "unit": "mm",
+     "stated": "L3 (drawing label) = 5.5"
+    },
+    "L4": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "L4 (bore depth from the back, drawings 1/3) = 15"
+    },
+    "drawing": {
+     "v": "3",
+     "unit": "text",
+     "stated": "Drawing 3"
+    },
+    "cone_angle": {
+     "v": 8,
+     "unit": "deg",
+     "stated": "8° (drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L2 and L3 beyond the drawing label"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "1132.12000",
+   "name": "ER standard collet ER 32 Ø 12 mm",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 94, printed page 92); dimensions: https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangen-Masse_EN_0.pdf (page 1)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER 32"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Ø 12 mm"
+    },
+    "clamp_min": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 12.0 – 11.0"
+    },
+    "clamp_max": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 12.0 – 11.0"
+    },
+    "length": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "L = 40 (TD sheet, row ER 32 8.0 – 22.0)"
+    },
+    "od": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "D1 = 33 (TD sheet; largest diameter on drawing)"
+    },
+    "D2": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D2 (size column; equals the ER size) = 32"
+    },
+    "D3": {
+     "v": 29.2,
+     "unit": "mm",
+     "stated": "D3 (drawing label, front diameter) = 29.2"
+    },
+    "L1": {
+     "v": 7.16,
+     "unit": "mm",
+     "stated": "L1** (** L1 references to the top plane of the colletholder) = 7.16"
+    },
+    "L2": {
+     "v": 3.6,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 3.6"
+    },
+    "L3": {
+     "v": 5.5,
+     "unit": "mm",
+     "stated": "L3 (drawing label) = 5.5"
+    },
+    "drawing": {
+     "v": "4",
+     "unit": "text",
+     "stated": "Drawing 4"
+    },
+    "cone_angle": {
+     "v": 8,
+     "unit": "deg",
+     "stated": "8° (drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L2 and L3 beyond the drawing label"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "1132.20000",
+   "name": "ER standard collet ER 32 Ø 20 mm",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 94, printed page 92); dimensions: https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangen-Masse_EN_0.pdf (page 1)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER 32"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "Ø 20 mm"
+    },
+    "clamp_min": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 20.0 – 19.0"
+    },
+    "clamp_max": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 20.0 – 19.0"
+    },
+    "length": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "L = 40 (TD sheet, row ER 32 8.0 – 22.0)"
+    },
+    "od": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "D1 = 33 (TD sheet; largest diameter on drawing)"
+    },
+    "D2": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D2 (size column; equals the ER size) = 32"
+    },
+    "D3": {
+     "v": 29.2,
+     "unit": "mm",
+     "stated": "D3 (drawing label, front diameter) = 29.2"
+    },
+    "L1": {
+     "v": 7.16,
+     "unit": "mm",
+     "stated": "L1** (** L1 references to the top plane of the colletholder) = 7.16"
+    },
+    "L2": {
+     "v": 3.6,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 3.6"
+    },
+    "L3": {
+     "v": 5.5,
+     "unit": "mm",
+     "stated": "L3 (drawing label) = 5.5"
+    },
+    "drawing": {
+     "v": "4",
+     "unit": "text",
+     "stated": "Drawing 4"
+    },
+    "cone_angle": {
+     "v": 8,
+     "unit": "deg",
+     "stated": "8° (drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L2 and L3 beyond the drawing label"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "1140.12000",
+   "name": "ER standard collet ER 40 Ø 12 mm",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 95, printed page 93); dimensions: https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangen-Masse_EN_0.pdf (page 1)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "ER 40"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Ø 12 mm"
+    },
+    "clamp_min": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 12.0 – 11.0"
+    },
+    "clamp_max": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 12.0 – 11.0"
+    },
+    "length": {
+     "v": 46.0,
+     "unit": "mm",
+     "stated": "L = 46 (TD sheet, row ER 40 9.0 – 30.0)"
+    },
+    "od": {
+     "v": 41.0,
+     "unit": "mm",
+     "stated": "D1 = 41 (TD sheet; largest diameter on drawing)"
+    },
+    "D2": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "D2 (size column; equals the ER size) = 40"
+    },
+    "D3": {
+     "v": 36.2,
+     "unit": "mm",
+     "stated": "D3 (drawing label, front diameter) = 36.2"
+    },
+    "L1": {
+     "v": 7.66,
+     "unit": "mm",
+     "stated": "L1** (** L1 references to the top plane of the colletholder) = 7.66"
+    },
+    "L2": {
+     "v": 4.1,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 4.1"
+    },
+    "L3": {
+     "v": 7.0,
+     "unit": "mm",
+     "stated": "L3 (drawing label) = 7"
+    },
+    "drawing": {
+     "v": "4",
+     "unit": "text",
+     "stated": "Drawing 4"
+    },
+    "cone_angle": {
+     "v": 8,
+     "unit": "deg",
+     "stated": "8° (drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L2 and L3 beyond the drawing label"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "1140.20000",
+   "name": "ER standard collet ER 40 Ø 20 mm",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 95, printed page 93); dimensions: https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangen-Masse_EN_0.pdf (page 1)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "ER 40"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "Ø 20 mm"
+    },
+    "clamp_min": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 20.0 – 19.0"
+    },
+    "clamp_max": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "Clamping range [mm] 20.0 – 19.0"
+    },
+    "length": {
+     "v": 46.0,
+     "unit": "mm",
+     "stated": "L = 46 (TD sheet, row ER 40 9.0 – 30.0)"
+    },
+    "od": {
+     "v": 41.0,
+     "unit": "mm",
+     "stated": "D1 = 41 (TD sheet; largest diameter on drawing)"
+    },
+    "D2": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "D2 (size column; equals the ER size) = 40"
+    },
+    "D3": {
+     "v": 36.2,
+     "unit": "mm",
+     "stated": "D3 (drawing label, front diameter) = 36.2"
+    },
+    "L1": {
+     "v": 7.66,
+     "unit": "mm",
+     "stated": "L1** (** L1 references to the top plane of the colletholder) = 7.66"
+    },
+    "L2": {
+     "v": 4.1,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 4.1"
+    },
+    "L3": {
+     "v": 7.0,
+     "unit": "mm",
+     "stated": "L3 (drawing label) = 7"
+    },
+    "drawing": {
+     "v": "4",
+     "unit": "text",
+     "stated": "Drawing 4"
+    },
+    "cone_angle": {
+     "v": 8,
+     "unit": "deg",
+     "stated": "8° (drawing)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L2 and L3 beyond the drawing label"
+   ]
+  },
+  {
+   "kind": "collet_nut",
+   "id": "3411.00000",
+   "name": "Hi-Q® / ER 11",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 117, printed page 115); drawing PDF page 116 (printed 114)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER11",
+     "unit": "text",
+     "stated": "Hi-Q® / ER 11"
+    },
+    "od": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "A = 19 (outside diameter on drawing)"
+    },
+    "length": {
+     "v": 11.3,
+     "unit": "mm",
+     "stated": "B = 11.3 (overall nut length on drawing)"
+    },
+    "thread": {
+     "v": "M 14 x 0.75",
+     "unit": "text",
+     "stated": "C = M 14 x 0.75"
+    },
+    "L1": {
+     "v": "4.9 – 6.6",
+     "unit": "text",
+     "stated": "L1 = 4.9 – 6.6 (range; dimensioned from the nut face on the drawing, meaning not stated)"
+    },
+    "cavity_thread_td_sheet": {
+     "v": "M 14 x 0.75",
+     "unit": "text",
+     "stated": "TD sheet 'Dimensions for ER collet cavities ... and matching clamping nuts', C = M 14 x 0.75 (https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangenaufnahme_EN_0.pdf)"
+    },
+    "wrench_flats": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "SW = 17"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L1"
+   ]
+  },
+  {
+   "kind": "collet_nut",
+   "id": "3416.00000",
+   "name": "Hi-Q® / ER 16",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 117, printed page 115); drawing PDF page 116 (printed 114)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Hi-Q® / ER 16"
+    },
+    "od": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "A = 28 (outside diameter on drawing)"
+    },
+    "length": {
+     "v": 17.5,
+     "unit": "mm",
+     "stated": "B = 17.5 (overall nut length on drawing)"
+    },
+    "thread": {
+     "v": "M 22 x 1.5",
+     "unit": "text",
+     "stated": "C = M 22 x 1.5"
+    },
+    "L1": {
+     "v": "7.0 – 10.5",
+     "unit": "text",
+     "stated": "L1 = 7.0 – 10.5 (range; dimensioned from the nut face on the drawing, meaning not stated)"
+    },
+    "cavity_thread_td_sheet": {
+     "v": "M 22 x 1.5",
+     "unit": "text",
+     "stated": "TD sheet 'Dimensions for ER collet cavities ... and matching clamping nuts', C = M 22 x 1.5 (https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangenaufnahme_EN_0.pdf)"
+    },
+    "wrench_flats": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "SW = 25"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L1"
+   ]
+  },
+  {
+   "kind": "collet_nut",
+   "id": "3420.00000",
+   "name": "Hi-Q® / ER 20",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 117, printed page 115); drawing PDF page 116 (printed 114)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Hi-Q® / ER 20"
+    },
+    "od": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "A = 34 (outside diameter on drawing)"
+    },
+    "length": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "B = 19 (overall nut length on drawing)"
+    },
+    "thread": {
+     "v": "M 25 x 1.5",
+     "unit": "text",
+     "stated": "C = M 25 x 1.5"
+    },
+    "L1": {
+     "v": "8.0 – 11.5",
+     "unit": "text",
+     "stated": "L1 = 8.0 – 11.5 (range; dimensioned from the nut face on the drawing, meaning not stated)"
+    },
+    "cavity_thread_td_sheet": {
+     "v": "M 24 x 1.5",
+     "unit": "text",
+     "stated": "TD sheet 'Dimensions for ER collet cavities ... and matching clamping nuts', C = M 24 x 1.5 (https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangenaufnahme_EN_0.pdf)"
+    },
+    "wrench_flats": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "SW = 30"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L1"
+   ],
+   "note": "Catalogue nut table gives M 25 x 1.5 for ER 20; the TD cavity sheet gives M 24 x 1.5 for standard ER 20 cavities. Both recorded as stated."
+  },
+  {
+   "kind": "collet_nut",
+   "id": "3425.00000",
+   "name": "Hi-Q® / ER 25",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 117, printed page 115); drawing PDF page 116 (printed 114)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "Hi-Q® / ER 25"
+    },
+    "od": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "A = 42 (outside diameter on drawing)"
+    },
+    "length": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "B = 20 (overall nut length on drawing)"
+    },
+    "thread": {
+     "v": "M 32 x 1.5",
+     "unit": "text",
+     "stated": "C = M 32 x 1.5"
+    },
+    "L1": {
+     "v": "8.5 – 12.0",
+     "unit": "text",
+     "stated": "L1 = 8.5 – 12.0 (range; dimensioned from the nut face on the drawing, meaning not stated)"
+    },
+    "cavity_thread_td_sheet": {
+     "v": "M 32 x 1.5",
+     "unit": "text",
+     "stated": "TD sheet 'Dimensions for ER collet cavities ... and matching clamping nuts', C = M 32 x 1.5 (https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangenaufnahme_EN_0.pdf)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L1"
+   ]
+  },
+  {
+   "kind": "collet_nut",
+   "id": "3432.00000",
+   "name": "Hi-Q® / ER 32",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 117, printed page 115); drawing PDF page 116 (printed 114)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "Hi-Q® / ER 32"
+    },
+    "od": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "A = 50 (outside diameter on drawing)"
+    },
+    "length": {
+     "v": 22.5,
+     "unit": "mm",
+     "stated": "B = 22.5 (overall nut length on drawing)"
+    },
+    "thread": {
+     "v": "M 40 x 1.5",
+     "unit": "text",
+     "stated": "C = M 40 x 1.5"
+    },
+    "L1": {
+     "v": "9.5 – 13.0",
+     "unit": "text",
+     "stated": "L1 = 9.5 – 13.0 (range; dimensioned from the nut face on the drawing, meaning not stated)"
+    },
+    "cavity_thread_td_sheet": {
+     "v": "M 40 x 1.5",
+     "unit": "text",
+     "stated": "TD sheet 'Dimensions for ER collet cavities ... and matching clamping nuts', C = M 40 x 1.5 (https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangenaufnahme_EN_0.pdf)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L1"
+   ]
+  },
+  {
+   "kind": "collet_nut",
+   "id": "3440.00000",
+   "name": "Hi-Q® / ER 40",
+   "url": "https://us.rego-fix.com/system/files/docs/2017-08/RFTC_ER_Catalog121616_Linked.pdf (PDF page 117, printed page 115); drawing PDF page 116 (printed 114)",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "Hi-Q® / ER 40"
+    },
+    "od": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "A = 63 (outside diameter on drawing)"
+    },
+    "length": {
+     "v": 25.5,
+     "unit": "mm",
+     "stated": "B = 25.5 (overall nut length on drawing)"
+    },
+    "thread": {
+     "v": "M 50 x 1.5",
+     "unit": "text",
+     "stated": "C = M 50 x 1.5"
+    },
+    "L1": {
+     "v": "11.5 – 15.0",
+     "unit": "text",
+     "stated": "L1 = 11.5 – 15.0 (range; dimensioned from the nut face on the drawing, meaning not stated)"
+    },
+    "cavity_thread_td_sheet": {
+     "v": "M 50 x 1.5",
+     "unit": "text",
+     "stated": "TD sheet 'Dimensions for ER collet cavities ... and matching clamping nuts', C = M 50 x 1.5 (https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangenaufnahme_EN_0.pdf)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "meaning of L1"
+   ]
+  }
+ ],
+ "reference_tables": {
+  "er_collet_dimensions": {
+   "url": "https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangen-Masse_EN_0.pdf (page 1)",
+   "note": "Full ER8-ER50 table: d range, D1-D4, L, L1-L4, drawing no. L1** references to the top plane of the colletholder."
+  },
+  "er_cavity_and_nut": {
+   "url": "https://us.rego-fix.com/system/files/docs/2017-09/RFAG_TD_ER_Spannzangenaufnahme_EN_0.pdf (page 1)",
+   "note": "ER cavity labels A, B, C (thread), E, F as drawn (A and B are diameters at the cone, E and F axial lengths), per nut family ER/ERM/AX; B equals the ER size."
+  },
+  "pull_studs": "Not offered in the REGO-FIX ER catalogue; none collected."
+ }
+}
