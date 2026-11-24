@@ -566,6 +566,11 @@ impl Shell {
         let o = self.overlays();
         let mut flip = None;
         let mut places = Vec::new();
+        // as many chips as fit left of the view cube's home button: a narrow view (an
+        // environment's docked panels either side) drops the rest; each stays in Settings
+        let limit = self.cube_place.map_or(self.view_rect.right() - 10.0, |c| {
+            self.view_rect.left() + c.at.0 / c.scale.max(1e-3) - 6.0
+        });
         let r = egui::Area::new(egui::Id::unique("view-toolbar"))
             .fixed_pos(at)
             .order(egui::Order::Middle)
@@ -575,6 +580,9 @@ impl Shell {
                     for (name, word) in OVERLAY_SWITCHES {
                         let on = o.get(name);
                         let g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), sans(12.0), t.ink));
+                        if ui.cursor().left() + g.size().x + 18.0 > limit {
+                            break;
+                        }
                         let (r, resp) = ui.allocate_exact_size(vec2(g.size().x + 18.0, 24.0), Sense::click());
                         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, on, word));
                         let p = ui.painter();

@@ -430,4 +430,13 @@ fn a_narrow_view_gets_a_compact_bar() {
     );
     let bar = h.gui.shell.place("env:bendsim:timeline").expect("the bar");
     assert!(bar.height() < 80.0, "one row and the track: {bar:?}");
+    // the view's chips stop short of the cube's home button (the rest stay in Settings)
+    let cube = h.gui.shell.cube_place.expect("the cube");
+    let home = view.left() + cube.at.0 / cube.scale;
+    for name in ["axes", "grid", "planes", "anchors"] {
+        if let Some(r) = h.gui.shell.place(&format!("view:{name}")) {
+            assert!(r.right() < home, "{name} chip {r:?} reaches the home button at {home}");
+        }
+    }
+    assert!(h.gui.shell.place("view:axes").is_some(), "the first chips still shown");
 }
