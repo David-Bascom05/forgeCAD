@@ -252,12 +252,13 @@ fn cutters_from_the_tools_profiles() {
     assert!(Timeline::of(&sim.cam).total > 0.0);
 }
 
-/// A refused op's checks are markers at the time of their move: the bolt holes drilled before
-/// the plate's top is cleared rapid into the stock.
+/// A refused op's checks are markers at the time of their move: the bolt holes drilled under a
+/// clear height set below the stock's top (`clear: -0.5`) rapid into the stock. (Drilling before
+/// the top is faced is certified since 195b4712: each cycle's R plane is lifted over the stock.)
 #[test]
 fn a_refused_ops_check_is_a_marker_on_its_move() {
     let dir = machined();
-    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01, clear: -0.5, retract: -1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
     let sim = Sim::open(src, &dir);
     let b = sim.cam.ops.iter().position(|o| o.name == "bolts").unwrap();
     assert_eq!(sim.cam.ops[b].status, "refused");
@@ -279,7 +280,7 @@ fn a_refused_ops_check_is_a_marker_on_its_move() {
         assert!(m.severe());
         assert_ne!(m.rule, "refused", "a check's marker, not the op's");
     }
-    // facing alone leaves the plate's sides: leftover markers once the setup is done
+    // drilling alone leaves the plate's top and sides: leftover markers once the setup is done
     assert!(
         sim.markers
             .iter()
@@ -495,8 +496,8 @@ fn feed_move_values_land_on_lines_and_arcs() {
 }
 
 /// Rapids and holders against the stock as cut, on the grid: none on the certified flange
-/// (milliseconds, the whole program); the bolt holes drilled before the plate's top is cleared
-/// rapid into the stock, as the certified checker also says.
+/// (milliseconds, the whole program); the bolt holes drilled under a clear height below the
+/// stock's top rapid into the stock, as the certified checker also says.
 #[test]
 fn rapids_and_holders_against_the_stock_as_cut() {
     let sim = flange();
@@ -508,7 +509,7 @@ fn rapids_and_holders_against_the_stock_as_cut() {
     );
     assert!(issues.is_empty(), "{:?}", issues.first());
     let dir = machined();
-    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01, clear: -0.5, retract: -1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
     let sim = Sim::open(src, &dir);
     let b = sim.cam.ops.iter().position(|o| o.name == "bolts").unwrap();
     assert_eq!(sim.cam.ops[b].status, "refused");
