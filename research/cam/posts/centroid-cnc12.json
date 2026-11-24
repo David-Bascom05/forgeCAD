@@ -1,0 +1,200 @@
+{
+ "dialect": "centroid-cnc12",
+ "control": "Centroid CNC12 (mill, M-Series)",
+ "sources": [
+  {
+   "id": "S1",
+   "url": "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf",
+   "title": "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13",
+   "edition": "CNC12 Version 4.12, (c) 2018",
+   "taken": "2026-11-23"
+  }
+ ],
+ "items": {
+  "program_open": {
+   "value": "No start code required in the text; optional O<number> program number line (O9100-O9999 is special: extracted into a subprogram file, not run). % marks not mentioned.",
+   "source": "S1",
+   "where": "11.2.6 O - Program Number p192",
+   "note": "% handling UNKNOWN."
+  },
+  "program_close": {
+   "value": "End with M30: by default M30 does nothing and is meant to be customised (Intercon posts it). M2 is NOT a plain end: it moves Z home, then restarts the program from the first line and waits for Cycle Start.",
+   "source": "S1",
+   "where": "13.19 M30 p247; 13.5 M02 p244",
+   "note": "Surprise vs Fanuc/LinuxCNC."
+  },
+  "comment": {
+   "value": "';' to end of line (internal comment). ':' as first character = visible comment line shown on screen. Parentheses are NOT comments: () and [] are numerical-expression delimiters.",
+   "source": "S1",
+   "where": "11.2.12, 11.2.13, 11.2.14 p194",
+   "note": "A post that emits (comment) will be misread; use ';'."
+  },
+  "line_numbers": {
+   "value": "Optional N block numbers, used as GOTO targets and search; no maximum stated.",
+   "source": "S1",
+   "where": "11.2.5 p192",
+   "note": ""
+  },
+  "block_end": {
+   "value": "One block per line (examples); no other block-end character described.",
+   "source": "S1",
+   "where": "11.1, examples ch.11-12",
+   "note": "Explicit statement not found; inferred from examples only - treat as weak."
+  },
+  "safe_start": {
+   "value": "Codes exist: G90/G91 (12.38), G17 (12.7), G20/G21 (12.8/12.9, program units only, native units unchanged), G40 (12.14), G49 (12.15), G80 (12.27), G94 = cancel inverse time (12.42). No prescribed safe-start line; manual's own examples start 'N1 G90 G17 M25'.",
+   "source": "S1",
+   "where": "12.x; 11.2.5 example p192",
+   "note": ""
+  },
+  "tool_change": {
+   "value": "T<n> M6 (T selects, M6 executes; T alone does nothing). D word for diameter offsets.",
+   "source": "S1",
+   "where": "11.2.11 p193-194; 13.9 p244",
+   "note": ""
+  },
+  "tool_change_behaviour": {
+   "value": "M6 always moves Z to home first (even if customised by mfunc6.mac), stops spindle and coolant; with ATC (parameter 6 = 1) the PLC changes the tool; otherwise it waits for Cycle Start (manual change). M6 can be replaced by a macro file c:\\cncm\\mfunc6.mac.",
+   "source": "S1",
+   "where": "13.9 p244-245; 13.2 p242",
+   "note": ""
+  },
+  "tool_length_comp": {
+   "value": "H<n> selects the offset (modal, can be on its own line), G43 applies (+), G44 (-), G49 or G43 H00 cancels. Not automatic with T.",
+   "source": "S1",
+   "where": "11.2.4 p192; 12.15 p215",
+   "note": ""
+  },
+  "spindle": {
+   "value": "S<rpm> (does not start spindle); M3 CW, M4 CCW, M5 stop.",
+   "source": "S1",
+   "where": "11.2.10 p193; 13.6-13.8 p244",
+   "note": ""
+  },
+  "work_offset": {
+   "value": "G54..G59 (or E1..E6) = WCS 1-6; optional extra-cost 12 more: G54 P1..P12 (WCS 7-18) or E7..E18.",
+   "source": "S1",
+   "where": "12.21 p217; 11.2.2 p191",
+   "note": "Note G54 P, not G54.1 P."
+  },
+  "arc_format": {
+   "value": "G2/G3 with R (positive small arc, negative big arc; not for full circles) or I J K incremental from start; absolute I J K only if parameter 2 bit 0 is set. G18 direction note: G2 appears CCW in XZ.",
+   "source": "S1",
+   "where": "12.3 p205-208",
+   "note": ""
+  },
+  "rapid_linear": {
+   "value": "G0 / G1. G0 is a dog-leg: Z up first then XY when Z rises; XY first then Z when Z falls.",
+   "source": "S1",
+   "where": "12.1, 12.2 p205",
+   "note": ""
+  },
+  "feed": {
+   "value": "F in units per minute (inch or mm); default 3.0.",
+   "source": "S1",
+   "where": "11.2.3 p192",
+   "note": ""
+  },
+  "decimal_point": {
+   "value": "Examples treat integers as whole units (G01 X2 Y3 moves to X2, Y3). But G83 Q is subject to 'implied floating point' rules of parameters 245/246, which v4.12 does not explain: write every value with a decimal point.",
+   "source": "S1",
+   "where": "12.2 p205; 12.34 p231",
+   "note": "Implied-decimal behaviour UNKNOWN; do not rely on integers."
+  },
+  "max_digits": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN"
+  },
+  "retract_home": {
+   "value": "M25 = Z to Z home (Return #1 Z) at max rate; G28 = to reference point via intermediate point (G28 G91 Z0 = Z straight home), Z moves first when going up; G53 X~ Y~ Z~ = one-shot rapid in machine coords (G90 only, L word sets rate).",
+   "source": "S1",
+   "where": "13.17 p246; 12.11 p212; 12.20 p217",
+   "note": ""
+  },
+  "coolant": {
+   "value": "M7 mist, M8 flood, M9 off. No through-spindle code.",
+   "source": "S1",
+   "where": "13.10-13.12 p245",
+   "note": ""
+  },
+  "dwell": {
+   "value": "G4 P<seconds> (0.01..327.67 s); X used if P absent; default 0.01 s.",
+   "source": "S1",
+   "where": "12.4 p208; 11.2.7 p193",
+   "note": ""
+  },
+  "drill_G81": {
+   "value": "G81 X Y Z R (F modal, K repeats).",
+   "source": "S1",
+   "where": "12.31 p227; 12.27 p223",
+   "note": ""
+  },
+  "dwell_drill_G82": {
+   "value": "G82 X Y Z R P (P seconds).",
+   "source": "S1",
+   "where": "12.33 p229",
+   "note": ""
+  },
+  "peck_G83": {
+   "value": "G83 X Y Z R Q ; Q peck; rapid out to R each peck, rapid back to clearance set by G10 P83 R<clear> (parameter 83).",
+   "source": "S1",
+   "where": "12.34 p230-231",
+   "note": "The 2-line format there also lists L as dwell, apparently lathe-derived."
+  },
+  "chipbreak_G73": {
+   "value": "G73 X Y Z R Q F ; retract per peck set with G10 P73 R<amount> (parameter 73).",
+   "source": "S1",
+   "where": "12.28 p225",
+   "note": ""
+  },
+  "rigid_tap_G84": {
+   "value": "G84 X Y Z R (P dwell s) ; spindle CW must be started first. Floating: F (units/min) with S sets the lead implicitly. Rigid tapping (if enabled): Q = thread lead/pitch, not modal, must be on every hole line.",
+   "source": "S1",
+   "where": "12.35 p232",
+   "note": ""
+  },
+  "bore_G85": {
+   "value": "G85 X Y Z R ; feed in, feed out.",
+   "source": "S1",
+   "where": "12.36 p233",
+   "note": ""
+  },
+  "return_level": {
+   "value": "G98 initial point (default); G99 R point.",
+   "source": "S1",
+   "where": "12.43, 12.44",
+   "note": ""
+  },
+  "cycle_cancel": {
+   "value": "G80 (G0-G3 also cancel). Cycles need X and/or Y to execute; repeats use K, not L.",
+   "source": "S1",
+   "where": "12.27 p223",
+   "note": ""
+  },
+  "peck_depth_word": {
+   "value": "Q",
+   "source": "S1",
+   "where": "11.2.8 p193; 12.27 p223",
+   "note": ""
+  },
+  "cycle_dwell_units": {
+   "value": "Seconds, same as G04 (G74, G82, G84, G89).",
+   "source": "S1",
+   "where": "12.27 p223",
+   "note": ""
+  },
+  "native_language": {
+   "value": "Fanuc-like G-code with Centroid macro extensions (IF/GOTO, [] expressions, M-function macros, Intercon conversational front end that posts G-code). No mode switch.",
+   "source": "S1",
+   "where": "11.3 p200ff; 13.2 p242",
+   "note": ""
+  }
+ },
+ "notes": "Latest v5.40+ mill manual could not be fetched (406 to curl, >10 MB for WebFetch); values are from v4.12 (2018) and may have changed. Big differences: parentheses are expressions not comments; M2 restarts the program; M30 is a no-op custom code; repeats use K; extended WCS is G54 P1-12.",
+ "unknown": [
+  "max_digits"
+ ],
+ "filled": "29/30"
+}
