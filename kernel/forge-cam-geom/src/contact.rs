@@ -781,6 +781,53 @@ mod tests {
         assert!(cleared > 20, "{cleared}");
     }
 
+    /// `clear_arc` keeps the chords' sagitta: over a sphere (where the closed form is exact), a
+    /// level arc chorded at exactly the sagitta bound's step, whose chords are clear while the arc
+    /// dips in, is not cleared; with the sagitta dropped from the chords' limit it would be.
+    #[test]
+    fn clear_arc_keeps_the_sagitta() {
+        let b = ball(6.0);
+        let f = sphere([0.0, 0.0, -10.0], 30.0);
+        // the arc: radius 20 about (0, 40), nearest the sphere's axis at ρ = 20 (t = 0); three
+        // chords, each exactly the step the sagitta bound allows
+        let r = 20.0_f64;
+        let step = (2.0 * ARC_SAG / r).sqrt();
+        let t1 = 1.5 * step;
+        assert_eq!(((2.0 * t1) / step).ceil(), 3.0);
+        // the middle chord (t in ±step/2, t the half-angle tangent) is nearest the axis at its
+        // middle
+        let rho_chord = 40.0 - r / (1.0 + 0.25 * step * step).sqrt(); // r cos(atan(step/2))
+        // the ball's centre where the clearance is 0 halfway between the arc and its chord
+        let rm = 0.5 * (20.0 + rho_chord);
+        let hz = (33.0_f64 * 33.0 - rm * rm).sqrt();
+        let clear_at = |rho: f64| (rho * rho + hz * hz).sqrt() - 33.0;
+        assert!(
+            clear_at(20.0) < -5e-6 && clear_at(rho_chord) > 5e-6,
+            "{} {}",
+            clear_at(20.0),
+            clear_at(rho_chord)
+        );
+        let mv = Move::Arc {
+            c: [0.0, 40.0, hz - 10.0 - 3.0],
+            x: [0.0, -1.0, 0.0],
+            y: [1.0, 0.0, 0.0],
+            r,
+            t0: -t1,
+            t1,
+        };
+        // the chord alone is clear
+        let p = |t: f64| {
+            let d = 1.0 + t * t;
+            [r * 2.0 * t / d, 40.0 - r * (1.0 - t * t) / d, hz - 13.0]
+        };
+        let chord = Move::Line {
+            a: p(-0.5 * step),
+            b: p(0.5 * step),
+        };
+        assert!(matches!(clear(&b, &f, &chord, 0.0), Some(Verdict::Clear { .. })));
+        assert!(clear_arc(&b, &f, &mv, 0.0).is_none());
+    }
+
     /// `clear_arc` refuses non-finite or overflowing data and anything but a level arc.
     #[test]
     fn arcs_with_bad_data_are_refused() {
