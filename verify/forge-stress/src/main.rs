@@ -275,18 +275,25 @@ impl Ops<'_> {
     /// A boolean, judged; its volume, or NaN.
     fn boolean(&mut self, op: &str, a: &Body, b: &Body, how: Op) -> f64 {
         let key = format!("s{}:{op}", self.s);
+        // the answer's check, mass and mesh are watched with it: a body a boolean got wrong can
+        // hang them as well as the boolean
         let (r, ms) = self
             .cx
-            .run(&key, || boolean(a, b, how, 9000).map_err(|e| format!("{e:?}")));
+            .run(&key, || {
+                let t = Instant::now();
+                let r = boolean(a, b, how, 9000).map_err(|e| format!("{e:?}"));
+                let bms = t.elapsed().as_secs_f64() * 1e3;
+                (bms, judge(r))
+            });
         match r {
             Res::Skipped => f64::NAN,
             Res::Panic(m) => {
                 self.line(op, ms, "panic", "", &m);
                 f64::NAN
             }
-            Res::Done(r) => {
-                let (st, v, d) = judge(r);
-                self.line(op, ms, &st, &format!(",\"vol\":{}", num(v)), &d);
+            Res::Done((bms, (st, v, d))) => {
+                // the boolean's own time; the check of its answer after it is in `all_ms`
+                self.line(op, bms, &st, &format!(",\"vol\":{},\"all_ms\":{ms:.1}", num(v)), &d);
                 if st == "empty" { 0.0 } else { v }
             }
         }
@@ -603,6 +610,9 @@ fn main() {
             ("sec_y", c, UnitVec3::Y),
             ("sec_z", c, UnitVec3::Z),
             ("sec_z37", Point3::new(c.x, c.y, bx.z.lo + 0.37 * d), UnitVec3::Z),
+            // the middle on x moved off by a hair: a plane through a turned part's axis meets its
+            // seams and poles, and a fault there and not here is the plane's
+            ("sec_x_off", Point3::new(c.x + 1.37e-4 * bx.diagonal(), c.y, c.z), UnitVec3::X),
         ] {
             let key = format!("s{i}:{name}");
             let (r, ms) =
