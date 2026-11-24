@@ -170,6 +170,9 @@ pub fn tool_use(id: &str, t: u32, g: &ProbeGeom, note: String) -> Result<ToolUse
             taken: String::new(),
             note,
             presets: Vec::new(),
+            // the probe's own values are the user's (probe(..)'s arguments)
+            real: false,
+            cites: Vec::new(),
         },
         holder: None,
         stickout: top,

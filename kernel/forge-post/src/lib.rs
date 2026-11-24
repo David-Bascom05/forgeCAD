@@ -18,17 +18,55 @@ use forge_cam_geom::big::Nat;
 use forge_cam_geom::real::Dy;
 use forge_tooling::toml::{self, Table, num, text, texts};
 
-pub const DIALECTS: [(&str, &str); 5] = [
+pub const DIALECTS: [(&str, &str); 12] = [
     ("fanuc", include_str!("../data/fanuc.toml")),
     ("haas", include_str!("../data/haas.toml")),
     ("haas-hsm", include_str!("../data/haas-hsm.toml")),
     ("linuxcnc", include_str!("../data/linuxcnc.toml")),
     ("grbl", include_str!("../data/grbl.toml")),
+    ("siemens", include_str!("../data/siemens.toml")),
+    ("heidenhain", include_str!("../data/heidenhain.toml")),
+    ("pathpilot", include_str!("../data/pathpilot.toml")),
+    ("mach3", include_str!("../data/mach3.toml")),
+    ("mach4", include_str!("../data/mach4.toml")),
+    ("centroid-cnc12", include_str!("../data/centroid-cnc12.toml")),
+    ("masso", include_str!("../data/masso.toml")),
+];
+
+/// Controls whose dialect we cannot restate: no openly published programming manual gives the
+/// codes a post needs (research/cam/posts/BLOCKED.md). Asking for one is a typed refusal with
+/// the reason, never a guessed dialect.
+pub const UNAVAILABLE: [(&str, &str); 5] = [
+    (
+        "brother",
+        "no open programming manual for Brother CNC-C00/D00 (it ships with the machine); Brother's public FAQs give 19 of 31 codes but not spindle M3/M4/M5, arcs, dwell or the drilling cycles",
+    ),
+    (
+        "mazak-eia",
+        "Mazak's EIA/ISO programming manuals are behind the MPower customer login; no open source gives the codes",
+    ),
+    (
+        "mazak-eia-lathe",
+        "Mazak's EIA/ISO programming manuals are behind the MPower customer login; no open source gives the codes",
+    ),
+    (
+        "syntec",
+        "Syntec's programming manuals need a syntecclub.com login; no open source gives the codes",
+    ),
+    (
+        "okuma-osp",
+        "Okuma OSP programming manuals come through distributors or on the control; no open source gives the codes",
+    ),
 ];
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PostError {
     Dialect(String),
+    /// A real control whose dialect is not available, and why.
+    Unavailable {
+        name: String,
+        reason: String,
+    },
     UnknownDialect {
         name: String,
         known: Vec<String>,
@@ -59,8 +97,64 @@ pub struct Dialect {
     pub decimals: u32,
     pub feed_decimals: u32,
     pub point: Point,
+    /// Where each code comes from (`[[dialect.cite]]`): a dialect restated from a control maker's
+    /// manual cites every code it uses (`cite_required = true`).
+    pub cites: Vec<Cite>,
     t: Table,
 }
+
+/// One code's source: the dialect key (`dwell`, `cycle_peck`, ...), the document and where in it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Cite {
+    pub key: String,
+    /// `published` (the manual states it) or `refused` (not in any open manual: the post refuses it)
+    pub status: String,
+    pub source: String,
+    pub taken: String,
+    pub r#where: String,
+    pub note: String,
+}
+
+/// The template keys a dialect may set; with `cite_required`, each one it sets is cited.
+pub const KEYS: [&str; 37] = [
+    "program_open",
+    "program_close",
+    "comment",
+    "line_numbers",
+    "block_end",
+    "safe_start",
+    "tool_change",
+    "length_comp",
+    "spindle_cw",
+    "spindle_ccw",
+    "spindle_stop",
+    "wcs",
+    "arc",
+    "retract_home",
+    "coolant_flood",
+    "coolant_mist",
+    "coolant_through",
+    "coolant_off",
+    "dwell",
+    "cycle_drill",
+    "cycle_dwell",
+    "cycle_peck",
+    "cycle_chipbreak",
+    "cycle_tap",
+    "cycle_ream",
+    "cycle_next",
+    "cycle_cancel",
+    "point",
+    "decimals",
+    "comment_eol",
+    "read_g_ignore",
+    "read_g_skip",
+    "read_words",
+    "coolant_through_off",
+    "sign",
+    "g_digits",
+    "tool_word",
+];
 
 impl Dialect {
     pub fn get(name: &str) -> Result<Dialect, PostError> {
@@ -68,6 +162,12 @@ impl Dialect {
             if n == name {
                 return Dialect::parse(s);
             }
+        }
+        if let Some((_, why)) = UNAVAILABLE.iter().find(|(n, _)| *n == name) {
+            return Err(PostError::Unavailable {
+                name: name.to_string(),
+                reason: why.to_string(),
+            });
         }
         Err(PostError::UnknownDialect {
             name: name.to_string(),
@@ -92,7 +192,40 @@ impl Dialect {
             "full" => Point::Full,
             p => return Err(PostError::Dialect(format!("point = `{p}`"))),
         };
+        let mut cites = Vec::new();
+        for c in toml::tables(&t, "cite") {
+            let key = text(c, "key").ok_or_else(|| PostError::Dialect("a cite with no key".into()))?;
+            if !KEYS.contains(&key) {
+                return Err(PostError::Dialect(format!("cite `{key}` names no dialect key")));
+            }
+            let status = text(c, "status").unwrap_or("published");
+            if !["published", "refused"].contains(&status) {
+                return Err(PostError::Dialect(format!("cite `{key}`: status `{status}`")));
+            }
+            let source = text(c, "source").unwrap_or("");
+            if status == "published" && (source.is_empty() || text(c, "taken").is_none()) {
+                return Err(PostError::Dialect(format!(
+                    "cite `{key}`: a published code needs source and taken"
+                )));
+            }
+            cites.push(Cite {
+                key: key.to_string(),
+                status: status.to_string(),
+                source: source.to_string(),
+                taken: text(c, "taken").unwrap_or("").to_string(),
+                r#where: text(c, "where").unwrap_or("").to_string(),
+                note: text(c, "note").unwrap_or("").to_string(),
+            });
+        }
+        if t.get("cite_required") == Some(&toml::Val::Bool(true)) {
+            for k in KEYS {
+                if t.contains_key(k) && !cites.iter().any(|c| c.key == k) {
+                    return Err(PostError::Dialect(format!("`{k}` is set but not cited")));
+                }
+            }
+        }
         Ok(Dialect {
+            cites,
             extension: text(&t, "extension").unwrap_or("nc").to_string(),
             feed_decimals: num(&t, "feed_decimals").unwrap_or(1.0) as u32,
             name,
@@ -104,6 +237,38 @@ impl Dialect {
 
     fn s(&self, k: &str) -> &str {
         text(&self.t, k).unwrap_or("")
+    }
+    /// A template as the dialect sets it ("" if unset; "refuse" / "expand" for cycles).
+    pub fn template(&self, k: &str) -> &str {
+        self.s(k)
+    }
+    /// Whether the dialect writes a multi-line key (program_open, retract_home, ...).
+    pub fn has_lines(&self, k: &str) -> bool {
+        !self.lines(k).is_empty()
+    }
+    /// A coordinate word's digits: `sign = "always"` writes + on non-negative values (X+10).
+    fn coord(&self, q: Q) -> String {
+        let s = digits(q, self.decimals, self.point);
+        if self.s("sign") == "always" && q >= 0 {
+            format!("+{s}")
+        } else {
+            s
+        }
+    }
+    /// A motion G word: `g_digits = 2` writes G00 .. G03.
+    fn g(&self, g: u32) -> String {
+        if self.n("g_digits") == Some(2.0) {
+            format!("G{g:02}")
+        } else {
+            format!("G{g}")
+        }
+    }
+    /// A template that may be one line or several (an array).
+    fn tpl_lines(&self, k: &str) -> Vec<String> {
+        match self.t.get(k) {
+            Some(toml::Val::Str(x)) => vec![x.clone()],
+            _ => self.lines(k),
+        }
     }
     fn lines(&self, k: &str) -> Vec<String> {
         texts(&self.t, k).unwrap_or_default()
@@ -633,11 +798,18 @@ impl Writer<'_> {
             return;
         }
         let numbered = self.d.t.get("line_numbers") == Some(&toml::Val::Bool(true)) && s != "%";
+        // a comment runs to the end of its line: no terminator after it
+        let eol = self.d.s("comment_eol");
+        let end = if !eol.is_empty() && s.contains(eol) {
+            ""
+        } else {
+            self.d.s("block_end")
+        };
         if numbered {
-            self.lines.push(format!("N{} {}", self.n, s));
+            self.lines.push(format!("N{} {}{end}", self.n, s));
             self.n += self.d.n("line_step").unwrap_or(10.0) as i64;
         } else {
-            self.lines.push(s.to_string());
+            self.lines.push(format!("{s}{end}"));
         }
     }
     fn comment(&mut self, text: &str) {
@@ -654,7 +826,7 @@ impl Writer<'_> {
 /// Writes the program in the dialect.
 pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
     let k = d.decimals;
-    let num_ = |q: Q| digits(q, k, d.point);
+    let num_ = |q: Q| d.coord(q);
     let fnum = |q: Q| {
         digits(
             q,
@@ -678,7 +850,12 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
         .collect();
     for l in d.lines("program_open") {
         let s = fill(&l, &[("num", p.number.to_string()), ("title", title.clone())]);
-        if s == "%" { w.lines.push(s) } else { w.emit(&s) }
+        // a `%` line (a tape mark, or a header such as `%NAME G71 *`) is written as it is
+        if s.contains('%') {
+            w.lines.push(s)
+        } else {
+            w.emit(&s)
+        }
     }
     for l in d.lines("safe_start") {
         w.emit(&l);
@@ -709,7 +886,10 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
             }
             QRec::ToolChange { t, h, name } => {
                 for l in d.lines("tool_change") {
-                    w.emit(&fill(&l, &[("t", t.to_string()), ("name", name.clone())]));
+                    w.emit(&fill(
+                        &l,
+                        &[("t", t.to_string()), ("h", h.to_string()), ("name", name.clone())],
+                    ));
                 }
                 let lc = d.s("length_comp").to_string();
                 if !lc.is_empty() {
@@ -721,7 +901,9 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
             }
             QRec::Spindle { rpm, cw } => {
                 let key = if *cw { "spindle_cw" } else { "spindle_ccw" };
-                w.emit(&fill(d.s(key), &[("rpm", rpm.to_string())]));
+                for l in d.tpl_lines(key) {
+                    w.emit(&fill(&l, &[("rpm", rpm.to_string())]));
+                }
             }
             QRec::SpindleStop => w.emit(d.s("spindle_stop")),
             QRec::Coolant(c) => {
@@ -755,7 +937,7 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 if !axes.is_empty() {
                     let mut ws = Vec::new();
                     if motion != Some(g) {
-                        ws.push(format!("G{g}"));
+                        ws.push(d.g(g));
                         motion = Some(g);
                     }
                     ws.extend(axes);
@@ -806,14 +988,21 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                     }
                 };
                 let g = if *cw { 2 } else { 3 };
-                let mut ws = vec![format!("G{g}")];
+                let centre_first = d.s("arc") == "centre_abs";
+                if centre_first {
+                    // the centre as its own block, absolute (HEIDENHAIN ISO: I J, then G02/G03)
+                    w.emit(&format!("I{} J{}", num_(c[0]), num_(c[1])));
+                }
+                let mut ws = vec![d.g(g)];
                 motion = Some(g);
                 // an arc always states its end, so a full circle is unambiguous
                 word(&mut ws, 'X', to[0], &mut pos[0], true);
                 word(&mut ws, 'Y', to[1], &mut pos[1], true);
                 word(&mut ws, 'Z', to[2], &mut pos[2], false);
-                ws.push(format!("I{}", num_(c[0] - sx)));
-                ws.push(format!("J{}", num_(c[1] - sy)));
+                if !centre_first {
+                    ws.push(format!("I{}", num_(c[0] - sx)));
+                    ws.push(format!("J{}", num_(c[1] - sy)));
+                }
                 if feed != Some(*f) {
                     ws.push(format!("F{}", fnum(*f)));
                     feed = Some(*f);
@@ -873,7 +1062,7 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                             decimals: k,
                             feed_decimals: d.feed_decimals,
                         };
-                        write_moves(&one, d, &mut w, &mut pos, &mut feed, &mut motion);
+                        write_moves(&one, d, &mut w, &mut pos, &mut feed, &mut motion)?;
                     }
                     continue;
                 }
@@ -909,6 +1098,12 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
             }
             QRec::Dwell(ms) => {
                 let tpl = d.s("dwell").to_string();
+                if tpl.is_empty() {
+                    return Err(PostError::Unsupported {
+                        what: format!("a dwell on {} (no open source gives its units)", d.name),
+                        fix: "leave the dwell out, or post for a control whose dwell is known".into(),
+                    });
+                }
                 w.emit(&fill(
                     &tpl,
                     &[("ms", ms.to_string()), ("s", digits(*ms, 3, Point::Never))],
@@ -930,7 +1125,12 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
         }
     }
     for l in d.lines("program_close") {
-        if l == "%" { w.lines.push(l) } else { w.emit(&l) }
+        let l = fill(&l, &[("num", p.number.to_string()), ("title", title.clone())]);
+        if l.contains('%') {
+            w.lines.push(l)
+        } else {
+            w.emit(&l)
+        }
     }
     let mut s = w.lines.join("\n");
     s.push('\n');
@@ -944,8 +1144,8 @@ fn write_moves(
     pos: &mut [Option<Q>; 3],
     feed: &mut Option<Q>,
     motion: &mut Option<u32>,
-) {
-    let num_ = |q: Q| digits(q, d.decimals, d.point);
+) -> Result<(), PostError> {
+    let num_ = |q: Q| d.coord(q);
     let fnum = |q: Q| {
         digits(
             q,
@@ -972,7 +1172,7 @@ fn write_moves(
                 if !axes.is_empty() {
                     let mut ws = Vec::new();
                     if *motion != Some(g) {
-                        ws.push(format!("G{g}"));
+                        ws.push(d.g(g));
                         *motion = Some(g);
                     }
                     ws.extend(axes);
@@ -987,6 +1187,12 @@ fn write_moves(
             }
             QRec::Dwell(ms) => {
                 let tpl = d.s("dwell").to_string();
+                if tpl.is_empty() {
+                    return Err(PostError::Unsupported {
+                        what: format!("a dwell on {} (no open source gives its units)", d.name),
+                        fix: "leave the dwell out, or post for a control whose dwell is known".into(),
+                    });
+                }
                 w.emit(&fill(
                     &tpl,
                     &[("ms", ms.to_string()), ("s", digits(*ms, 3, Point::Never))],
@@ -995,6 +1201,7 @@ fn write_moves(
             _ => {}
         }
     }
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1053,8 +1260,46 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
     let mut motion: Option<u32> = None;
     let mut cycle: Option<(CycleKind, Q, Q, Q, Q, Q)> = None; // kind, z, r, q, dwell ms, clear
     let mut rpm: Q = 0;
+    // the dialect's extras: an end-of-line comment mark, a block terminator, G codes that carry
+    // no motion (ignored) or that make the block carry none (skipped), more word letters
+    let eol = d.s("comment_eol").chars().next();
+    let block_end = d.s("block_end").trim().to_string();
+    let g_ignore_f: Vec<f64> = toml::nums(&d.t, "read_g_ignore").unwrap_or_default();
+    let g_ignore: Vec<u32> = g_ignore_f
+        .iter()
+        .filter(|x| x.fract() == 0.0)
+        .map(|x| *x as u32)
+        .collect();
+    let g_skip: Vec<u32> = toml::nums(&d.t, "read_g_skip")
+        .unwrap_or_default()
+        .into_iter()
+        .map(|x| x as u32)
+        .collect();
+    let more_words = d.s("read_words").to_string();
+    let centre_first = d.s("arc") == "centre_abs";
+    let tool_word = d.t.get("tool_word") == Some(&toml::Val::Bool(true));
+    let mut centre: Option<(Q, Q)> = None;
+    // the dwell's word: the letter before the dwell template's `{ms}` or `{s}`
+    let word_of = |tpl: &str| -> char {
+        tpl.find("{ms}")
+            .or_else(|| tpl.find("{s}"))
+            .and_then(|i| tpl[..i].chars().last())
+            .filter(|c| c.is_ascii_alphabetic())
+            .unwrap_or('P')
+    };
+    let dwell_letter = word_of(d.s("dwell"));
+    let cycle_dwell_letter = word_of(d.s("cycle_dwell"));
     for (n, raw) in text_.lines().enumerate() {
         let ln = n + 1;
+        let raw = match eol.and_then(|c| raw.find(c)) {
+            Some(i) => &raw[..i],
+            None => raw,
+        };
+        let raw = if block_end.is_empty() {
+            raw
+        } else {
+            raw.trim_end().strip_suffix(block_end.as_str()).unwrap_or(raw)
+        };
         // comments and the program brackets
         let mut s = String::new();
         let mut depth = 0;
@@ -1067,7 +1312,9 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             }
         }
         let s = s.trim();
-        if s.is_empty() || s == "%" {
+        // a tape mark or a `%` header/last block (`%NAME G71 *`, `N99999999 %NAME G71 *`); any
+        // other `%` is refused as an unknown word
+        if s.is_empty() || pct_block(s) {
             continue;
         }
         let mut words: Vec<(char, String)> = Vec::new();
@@ -1092,6 +1339,8 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                         probe = true;
                     } else if g.fract() == 0.0 {
                         gs.push(g as u32)
+                    } else if g_ignore_f.contains(&g) {
+                        // a decimal G the dialect lists as carrying no motion (G91.1)
                     } else {
                         gs.push(10_000)
                     }
@@ -1101,6 +1350,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     what: format!("M{v}"),
                 })?),
                 'N' | 'O' | 'X' | 'Y' | 'Z' | 'I' | 'J' | 'F' | 'R' | 'Q' | 'P' | 'S' | 'T' | 'H' | 'K' => {}
+                c if more_words.contains(*c) => {}
                 c => {
                     return Err(ReadError {
                         line: ln,
@@ -1112,7 +1362,10 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         if let Some(sv) = get('S') {
             rpm = parse_q(&sv, 0, ln)?;
         }
-        if let Some(fv) = get('F') {
+        // a dwell written with F (G4 F seconds) is not a feed
+        if let Some(fv) = get('F')
+            && !(dwell_letter == 'F' && gs.contains(&4))
+        {
             feed = parse_q(&fv, fk, ln)?;
         }
         for m in &ms {
@@ -1132,6 +1385,15 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     });
                 }
             }
+        }
+        // a control whose T block is the tool change (no M6): T with a number; a bare T changes
+        // only the speed
+        if tool_word
+            && !ms.contains(&6)
+            && let Some(t) = get('T')
+            && let Ok(t) = t.parse::<u32>()
+        {
+            out.push(Motion::Tool(t));
         }
         // grbl's tool change is a pause with the tool in a comment: the comment named it
         if ms.contains(&0) && !ms.contains(&6) {
@@ -1168,7 +1430,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                         Some(v) => parse_q(&v, k, ln)?,
                         None => 0,
                     };
-                    let dw = match get('P') {
+                    let dw = match get(cycle_dwell_letter) {
                         Some(v) => parse_q(&v, if d.s("cycle_dwell").contains("{ms}") { 0 } else { 3 }, ln)?,
                         None => 0,
                     };
@@ -1184,9 +1446,9 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     motion = None;
                 }
                 4 => {
-                    let p = get('P').ok_or_else(|| ReadError {
+                    let p = get(dwell_letter).ok_or_else(|| ReadError {
                         line: ln,
-                        what: "G4 with no P".into(),
+                        what: format!("G4 with no {dwell_letter}"),
                     })?;
                     // milliseconds (integer P) or seconds (with a point), as the dialect writes it
                     let ms = if d.s("dwell").contains("{ms}") {
@@ -1199,6 +1461,8 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                 }
                 90 | 94 | 17 | 21 | 40 | 49 | 98 | 64 | 54..=59 | 187 => {}
                 43 => skip_motion = true,
+                g if g_ignore.contains(g) => {}
+                g if g_skip.contains(g) => skip_motion = true,
                 28 | 53 | 91 => {
                     home = true;
                     skip_motion = true;
@@ -1235,6 +1499,15 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             pos = [None; 3];
             motion = None;
             continue;
+        }
+        if centre_first && (get('I').is_some() || get('J').is_some()) {
+            let need = |c: char| {
+                get(c).ok_or_else(|| ReadError {
+                    line: ln,
+                    what: format!("a centre with no {c}"),
+                })
+            };
+            centre = Some((parse_q(&need('I')?, k, ln)?, parse_q(&need('J')?, k, ln)?));
         }
         let has_xyz = get('X').is_some() || get('Y').is_some() || get('Z').is_some();
         if !has_xyz {
@@ -1289,22 +1562,31 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     })?,
                     pos[1].unwrap(),
                 );
-                let i = parse_q(
-                    &get('I').ok_or_else(|| ReadError {
+                let (i, j) = if centre_first {
+                    let (cx, cy) = centre.ok_or_else(|| ReadError {
                         line: ln,
-                        what: "an arc with no I".into(),
-                    })?,
-                    k,
-                    ln,
-                )?;
-                let j = parse_q(
-                    &get('J').ok_or_else(|| ReadError {
-                        line: ln,
-                        what: "an arc with no J".into(),
-                    })?,
-                    k,
-                    ln,
-                )?;
+                        what: "an arc with no centre defined".into(),
+                    })?;
+                    (cx - sx, cy - sy)
+                } else {
+                    let i = parse_q(
+                        &get('I').ok_or_else(|| ReadError {
+                            line: ln,
+                            what: "an arc with no I".into(),
+                        })?,
+                        k,
+                        ln,
+                    )?;
+                    let j = parse_q(
+                        &get('J').ok_or_else(|| ReadError {
+                            line: ln,
+                            what: "an arc with no J".into(),
+                        })?,
+                        k,
+                        ln,
+                    )?;
+                    (i, j)
+                };
                 let p = [
                     to[0].unwrap(),
                     to[1].unwrap(),
@@ -1332,6 +1614,18 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         pos = to;
     }
     Ok(out)
+}
+
+/// A block that is a tape mark or a `%` header: `%`, `%NAME ...`, or `N<digits> %NAME ...`.
+fn pct_block(s: &str) -> bool {
+    let t = s.trim_start();
+    let t = match t.strip_prefix(['N', 'n']) {
+        Some(r) if r.starts_with(|c: char| c.is_ascii_digit()) => {
+            r.trim_start_matches(|c: char| c.is_ascii_digit()).trim_start()
+        }
+        _ => t,
+    };
+    t.starts_with('%')
 }
 
 /// The motion without its null moves (a rapid or feed to where the tool already is), which

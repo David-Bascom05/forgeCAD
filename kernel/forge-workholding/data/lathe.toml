@@ -1,0 +1,253 @@
+# Real lathe workholding from openly published specs, each value cited; read 2026-11-23.
+# Kitagawa's own site refused automated reading: its chucks are from a distributor's spec table.
+
+[[workholding]]
+name = "kitagawa-b208"
+kind = "chuck"
+vendor = "Kitagawa"
+product = "B-208 power chuck (3-jaw, open centre)"
+note = "jaw interface 1.5 mm x 60° serrations; gripping range is the jaw capacity as listed; the body's length and the jaws' sizes are not on the page"
+unknown = ["body_len", "jaw_height", "jaw_len"]
+jaws = 3
+body_d = 209.95
+grip_min = 13
+grip_max = 210
+max_rpm = 5000
+through_hole = 52
+stroke = 7.4
+grip_force = 86000
+[[workholding.cite]]
+fields = ["jaws", "body_d", "grip_min", "grip_max", "max_rpm", "through_hole", "stroke", "grip_force"]
+source = "https://benchmarktooling.com/products/83072389 (distributor's B208 table)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "kitagawa-b210"
+kind = "chuck"
+vendor = "Kitagawa"
+product = "B-210 power chuck (3-jaw, open centre)"
+note = "listed on an A2-8 adapter"
+unknown = ["body_len", "jaw_height", "jaw_len"]
+jaws = 3
+body_d = 254
+grip_min = 31
+grip_max = 254
+max_rpm = 4200
+through_hole = 75.01
+stroke = 8.79
+grip_force = 111000
+[[workholding.cite]]
+fields = ["jaws", "body_d", "grip_min", "grip_max", "max_rpm", "through_hole", "stroke", "grip_force"]
+source = "https://benchmarktooling.com/products/67295949 (distributor's B210 table)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "kitagawa-b206"
+kind = "chuck"
+vendor = "Kitagawa"
+product = "B-206 power chuck (3-jaw, open centre)"
+note = "the distributor lists 152.4 mm, which reads as the 6 in class, not the body: body_d unknown"
+unknown = ["body_d", "body_len", "jaw_height", "jaw_len"]
+jaws = 3
+grip_min = 16
+grip_max = 169
+max_rpm = 6000
+through_hole = 45
+stroke = 5.5
+grip_force = 57000
+[[workholding.cite]]
+fields = ["jaws", "grip_min", "grip_max", "max_rpm", "through_hole", "stroke", "grip_force"]
+source = "https://benchmarktooling.com/products/67295915 (distributor's B206 table)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "bison-bial-200-4jaw"
+kind = "chuck"
+vendor = "Bison-Bial"
+product = "DIN 702-4 four-jaw chuck 200 mm (Hoffmann 315635-200)"
+note = "body_len is H1 (height without jaws) 96; jaw_len = H2 127 − H1 96 (the jaws' stand past the face); gripping range and speed not on the page"
+unknown = ["jaw_height", "grip_min", "grip_max"]
+jaws = 4
+body_d = 200
+body_len = 96
+jaw_len = 31
+through_hole = 55
+[[workholding.cite]]
+fields = ["jaws", "body_d", "body_len", "jaw_len", "through_hole"]
+source = "https://www.hoffmann-group.com/IN/en/hin/p/315635-200 (A 200, H1 96, H2 127, E 55, 4 jaws)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "royal-5c-accu-length-a2-5"
+kind = "collet"
+vendor = "Royal Products"
+product = "Low-Profile Accu-Length 5C CNC collet chuck #42330 (A2-5)"
+note = "A overall 146.05, D body 101.6, E flange 163.83; the smallest collet is the user's"
+unknown = ["range_min"]
+range_max = 26.99
+nose_d = 61.72
+nose_len = 25.4
+max_rpm = 6000
+[[workholding.cite]]
+fields = ["range_max", "nose_d", "nose_len", "max_rpm"]
+source = "https://royalproducts.com/wp-content/uploads/2021/01/RP-2021-Low-Profile-Workholding-Catalog.pdf (capacity 1-1/16 in, B 2.43 in, C 1.00 in, 6,000 rpm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "royal-16c-accu-length-a2-5"
+kind = "collet"
+vendor = "Royal Products"
+product = "Low-Profile Accu-Length 16C CNC collet chuck #42338 (A2-5)"
+unknown = ["range_min"]
+range_max = 41.28
+nose_d = 82.55
+nose_len = 26.16
+max_rpm = 6000
+[[workholding.cite]]
+fields = ["range_max", "nose_d", "nose_len", "max_rpm"]
+source = "https://royalproducts.com/wp-content/uploads/2021/01/RP-2021-Low-Profile-Workholding-Catalog.pdf (capacity 1-5/8 in, B 3.25 in, C 1.03 in, 6,000 rpm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "er32-rego-fix"
+kind = "collet"
+vendor = "REGO-FIX"
+product = "ER32 collet (DIN 6499 / ISO 15488) in a Hi-Q nut"
+note = "the nose is the nut (50 x 22.5, M40 x 1.5); range 1-22 mm across the collet sizes (21-22 is an extended size), each collet closes 1 mm; the holder behind the nut is the machine's"
+range_min = 1
+range_max = 22
+nose_d = 50
+nose_len = 22.5
+collet_d = 33
+collet_len = 40
+[[workholding.cite]]
+fields = ["range_min", "range_max", "nose_d", "nose_len"]
+source = "https://www.productivity.com/wp-content/uploads/2020/04/Rego-Fix-_ER_System-3-25-20-Interactive.pdf (REGO-FIX ER System catalog: metric tables; nut p.32 A 50, B 22.5)"
+taken = "2026-11-23"
+[[workholding.cite]]
+fields = ["collet_d", "collet_len"]
+source = "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/ER.pdf (ER32: A 33, B 40)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "er16-rego-fix"
+kind = "collet"
+vendor = "REGO-FIX"
+product = "ER16 collet in a Hi-Q nut"
+note = "the nose is the nut (28 x 17.5, M22 x 1.5)"
+range_min = 0.5
+range_max = 10
+nose_d = 28
+nose_len = 17.5
+collet_d = 17
+collet_len = 27
+[[workholding.cite]]
+fields = ["range_min", "range_max", "nose_d", "nose_len"]
+source = "https://www.productivity.com/wp-content/uploads/2020/04/Rego-Fix-_ER_System-3-25-20-Interactive.pdf"
+taken = "2026-11-23"
+[[workholding.cite]]
+fields = ["collet_d", "collet_len"]
+source = "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/ER.pdf"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "er25-rego-fix"
+kind = "collet"
+vendor = "REGO-FIX"
+product = "ER25 collet in a Hi-Q nut"
+note = "the nose is the nut (42 x 20, M32 x 1.5); 17 mm is an extended size"
+range_min = 0.5
+range_max = 17
+nose_d = 42
+nose_len = 20
+collet_d = 26
+collet_len = 35
+[[workholding.cite]]
+fields = ["range_min", "range_max", "nose_d", "nose_len"]
+source = "https://www.productivity.com/wp-content/uploads/2020/04/Rego-Fix-_ER_System-3-25-20-Interactive.pdf"
+taken = "2026-11-23"
+[[workholding.cite]]
+fields = ["collet_d", "collet_len"]
+source = "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/ER.pdf"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "er40-rego-fix"
+kind = "collet"
+vendor = "REGO-FIX"
+product = "ER40 collet in a Hi-Q nut"
+note = "the nose is the nut (63 x 25.5, M50 x 1.5); 27-30 are extended sizes"
+range_min = 2
+range_max = 30
+nose_d = 63
+nose_len = 25.5
+collet_d = 41
+collet_len = 46
+[[workholding.cite]]
+fields = ["range_min", "range_max", "nose_d", "nose_len"]
+source = "https://www.productivity.com/wp-content/uploads/2020/04/Rego-Fix-_ER_System-3-25-20-Interactive.pdf"
+taken = "2026-11-23"
+[[workholding.cite]]
+fields = ["collet_d", "collet_len"]
+source = "https://www.iscar.com/eCatalog/Ecat/datafileENM/INFO/ER.pdf"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "neidlein-fsb-2"
+kind = "face_driver"
+vendor = "NEIDLEIN"
+product = "FSB 2 face driver (73003)"
+note = "clamping Ø 26 / 31 / 36 by pin position; the catalog's l1/l2 are not defined in its text: body_len unknown; 'Ratio D/d should not exceed 2' (cutting Ø over clamping Ø)"
+unknown = ["body_len"]
+body_d = 70
+range_min = 26
+range_max = 36
+pins = 6
+[[workholding.cite]]
+fields = ["body_d", "range_min", "range_max", "pins"]
+source = "https://www.acomee.com.mx/catalogos/catalogosn/NEIDLEIN%20FACE%20DRIVER.pdf (NEIDLEIN catalog, distributor copy: FSB 2 d 70, 6 pins, D1/D3 26/36)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "neidlein-fsb-4"
+kind = "face_driver"
+vendor = "NEIDLEIN"
+product = "FSB 4 face driver (73005)"
+unknown = ["body_len"]
+body_d = 90
+range_min = 39
+range_max = 59
+pins = 6
+[[workholding.cite]]
+fields = ["body_d", "range_min", "range_max", "pins"]
+source = "https://www.acomee.com.mx/catalogos/catalogosn/NEIDLEIN%20FACE%20DRIVER.pdf (FSB 4 d 90, 6 pins, D1/D3 39/59)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "royal-quad-live-centre-4mt"
+kind = "centre"
+vendor = "Royal Products"
+product = "High-Precision Quad-Bearing Live Center, 4 MT (#10414)"
+note = "B head Ø 62.23, F point projection 37.34 (letters read from the catalog's drawing); 60° +15'/-0"
+angle = 60
+body_d = 62.23
+point_len = 37.34
+max_rpm = 5000
+[[workholding.cite]]
+fields = ["angle", "body_d", "point_len", "max_rpm"]
+source = "https://royalproducts.com/pdfs/2024%20RP%20CATALOG%20-%20LIVE%20AND%20DEAD%20CENTERS.pdf (p.93: B 2.45 in, F 1.47 in, 5,000 rpm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "rohm-slz-1152"
+kind = "steady_rest"
+vendor = "Röhm"
+product = "SLZ/SLZB 1152 self-centring steady rest"
+note = "its frame's size about the axis and its width are not in the manual's text"
+unknown = ["frame_r", "width"]
+range_min = 11
+range_max = 152
+[[workholding.cite]]
+fields = ["range_min", "range_max"]
+source = "https://www.roehm.biz/fileadmin/products/media/en/DC0000335.PDF (operating instructions §1.2: 11 -- 152)"
+taken = "2026-11-23"

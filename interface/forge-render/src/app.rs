@@ -178,6 +178,8 @@ fn present_mode(asked: Option<&str>, has: &[wgpu::PresentMode]) -> wgpu::Present
 
 pub struct App {
     file: Option<String>,
+    /// The environment to open it in (`--env`).
+    env: Option<String>,
     size: (f64, f64),
     proxy: EventLoopProxy<()>,
     live: Option<Live>,
@@ -352,6 +354,17 @@ impl App {
                 _ => {}
             }
         }
+        // the Manufacture workspace's Export…: the system's save dialog off the loop
+        if let Some(x) = l.gui.shell.cam.as_mut().and_then(|w| w.export.take()) {
+            let (send, recv) = std::sync::mpsc::channel();
+            self.exported = Some(recv);
+            let proxy = self.proxy.clone();
+            l.gui.shell.status = "Export NC: choose where".into();
+            std::thread::spawn(move || {
+                let _ = send.send(crate::shell::cam::nc::save_dialog(x));
+                let _ = proxy.send_event(());
+            });
+        }
         l.gui.shell.view.maximized = l.window.is_maximized();
     }
 }
@@ -429,6 +442,7 @@ impl ApplicationHandler for App {
         if let Some(f) = self.file.take() {
             gui.open(&f);
         }
+        gui.env_asked = self.env.take();
         let egui = egui_winit::State::new(
             gui.ctx.clone(),
             egui::ViewportId::ROOT,
@@ -464,6 +478,11 @@ impl ApplicationHandler for App {
         {
             self.exported = None;
             if let Some(l) = &mut self.live {
+                if let Some(w) = &mut l.gui.shell.cam {
+                    w.said = Some(said.clone());
+                    w.write_gen += 1;
+                    w.exported += 1;
+                }
                 l.gui.shell.status = said;
                 l.window.request_redraw();
             }
@@ -626,8 +645,10 @@ impl ApplicationHandler for App {
 }
 
 /// Runs the app, on this file if there is one.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     file: Option<String>,
+    env: Option<String>,
     size: (f64, f64),
     times: bool,
     present: Option<String>,
@@ -638,6 +659,7 @@ pub fn run(
     let proxy = on_loop.create_proxy();
     let mut app = App {
         file,
+        env,
         size,
         proxy,
         live: None,

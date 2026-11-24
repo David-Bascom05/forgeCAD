@@ -47,6 +47,10 @@ impl Kind {
 pub struct ArcOf {
     pub c: [f64; 2],
     pub r: f64,
+    /// The end's radius less the start's: a posted arc's ends, rounded to the control's
+    /// resolution, sit at radii a little apart; the radius goes from one to the other along
+    /// the sweep (as a control blends them), so the piece ends where the move says.
+    pub dr: f64,
     /// Start angle and signed sweep, radians.
     pub a0: f64,
     pub sweep: f64,
@@ -86,7 +90,8 @@ impl Seg {
             ],
             Some(ar) => {
                 let t = ar.a0 + ar.sweep * u;
-                [ar.c[0] + ar.r * dmath::cos(t), ar.c[1] + ar.r * dmath::sin(t), z]
+                let r = ar.r + ar.dr * u;
+                [ar.c[0] + r * dmath::cos(t), ar.c[1] + r * dmath::sin(t), z]
             }
         }
     }
@@ -207,6 +212,7 @@ pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, mut t: f64
                 let arc = ArcOf {
                     c,
                     r,
+                    dr: ((to[0] - c[0]).powi(2) + (to[1] - c[1]).powi(2)).sqrt() - r,
                     a0,
                     sweep: a1 - a0,
                 };

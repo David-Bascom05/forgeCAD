@@ -2068,6 +2068,12 @@ status = "unknown"
 basis = "r 60 x 70 mm, its rim 30 mm behind the reference tool point (stand-in)"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "tormach-15lx-turret"
 kind = "lathe"
@@ -2261,3 +2267,9 @@ basis = "length 90 mm and a 5 mm jaw margin are stand-ins"
 path = "body.turret"
 status = "unknown"
 basis = "r 110 x 80 mm, its rim 40 mm behind the reference tool point (stand-in)"
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+

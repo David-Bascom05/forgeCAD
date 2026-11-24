@@ -267,7 +267,7 @@ impl Procedural for Spun {
     fn bbox(&self, uv: Box2) -> Box3 {
         let b = self.c.bbox(uv.v);
         let r = Interval::new(b.x.lo.max(0.0), b.x.hi.max(0.0));
-        let (cu, su) = (uv.u.cos(), uv.u.sin());
+        let (su, cu) = uv.u.sin_cos();
         let times = |a: Interval, b: Interval| {
             let (p, q, s, t) = (a.lo * b.lo, a.lo * b.hi, a.hi * b.lo, a.hi * b.hi);
             Interval::new(p.min(q).min(s).min(t), p.max(q).max(s).max(t))

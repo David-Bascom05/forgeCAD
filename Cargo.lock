@@ -108,11 +108,26 @@ dependencies = [
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
+ "forge-library",
  "forge-machine",
+ "forge-material",
  "forge-math",
  "forge-model",
  "forge-post",
  "forge-sketch",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-cam-quality"
+version = "0.1.0"
+dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-cam-lang",
+ "forge-machine",
+ "forge-math",
+ "forge-post",
  "forge-tooling",
 ]
 
@@ -150,6 +165,7 @@ dependencies = [
  "forge-step",
  "forge-topo",
  "forge-turn-lang",
+ "forge-workholding",
 ]
 
 [[package]]
@@ -318,9 +334,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-library"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+]
+
+[[package]]
 name = "forge-machine"
 version = "0.1.0"
 dependencies = [
+ "forge-machine-core",
  "forge-math",
  "forge-post",
  "forge-tooling",
@@ -331,11 +355,16 @@ name = "forge-machine-builder"
 version = "0.1.0"
 dependencies = [
  "forge-dirs",
+ "forge-library",
  "forge-machine",
  "forge-machine-lang",
  "forge-math",
  "forge-tooling",
 ]
+
+[[package]]
+name = "forge-machine-core"
+version = "0.1.0"
 
 [[package]]
 name = "forge-machine-lang"
@@ -431,6 +460,22 @@ version = "0.1.0"
 dependencies = [
  "forge-cam-geom",
  "forge-tooling",
+]
+
+[[package]]
+name = "forge-probe"
+version = "0.1.0"
+dependencies = [
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-probe-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-library",
+ "forge-machine",
+ "forge-probe",
 ]
 
 [[package]]
@@ -583,6 +628,7 @@ version = "0.1.0"
 dependencies = [
  "forge-cam-geom",
  "forge-geom",
+ "forge-machine",
  "forge-math",
  "forge-ops",
  "forge-post",
@@ -596,7 +642,9 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-cam-geom",
+ "forge-dirs",
  "forge-lang",
+ "forge-tooling",
  "forge-turn",
 ]
 
@@ -619,6 +667,20 @@ version = "0.1.0"
 dependencies = [
  "forge-math",
  "forge-ops",
+]
+
+[[package]]
+name = "forge-workholding"
+version = "0.1.0"
+dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-dirs",
+ "forge-lang",
+ "forge-math",
+ "forge-mesh",
+ "forge-post",
+ "forge-tooling",
 ]
 
 [[package]]

@@ -1,0 +1,5119 @@
+{
+ "vendor": "Tormach",
+ "blocked": [
+  "https://tormach.com/catalogsearch/result/?q=r8+collet"
+ ],
+ "records": [
+  {
+   "kind": "holder",
+   "id": "31831",
+   "name": "TTS™ ER Collet Holder: ER16",
+   "url": "https://tormach.com/tts-toolholder-er16-31831.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "Alloy Steel TTS"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Fits all ER16 collets"
+    },
+    "nose_d": {
+     "v": 27,
+     "unit": "mm",
+     "stated": "Outside Diameter: 1.06 in. (27 mm)"
+    },
+    "gauge_length": {
+     "v": 49,
+     "unit": "mm",
+     "stated": "Installed Height: 1.93 in. (49 mm)"
+    },
+    "nut_thread": {
+     "v": "M22 x 1.5",
+     "unit": "text",
+     "stated": "Thread: M22 x 1.5"
+    },
+    "clamp_range": {
+     "v": "3/64 in. - 3/8 in. (1 mm - 10 mm)",
+     "unit": "text",
+     "stated": "ER collets range in size from 3/64 in. - 3/8 in. (1 mm - 10 mm)"
+    }
+   },
+   "unknown": [
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "31829",
+   "name": "TTS™ ER Collet Holder: ER20",
+   "url": "https://tormach.com/tts-toolholder-er20-31829.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "Alloy Steel TTS"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Fits all ER20 collets"
+    },
+    "nose_d": {
+     "v": 34,
+     "unit": "mm",
+     "stated": "Outside Diameter: 1.34 in. (34 mm)"
+    },
+    "gauge_length": {
+     "v": 52,
+     "unit": "mm",
+     "stated": "Installed Height: 2.05 in. (52 mm)"
+    },
+    "nut_thread": {
+     "v": "M25 x 1.5",
+     "unit": "text",
+     "stated": "Thread: M25 x 1.5"
+    },
+    "clamp_range": {
+     "v": "3/64 in. - 1/2 in. (1 mm - 13 mm)",
+     "unit": "text",
+     "stated": "ER collets range in size from 3/64 in. - 1/2 in. (1 mm - 13 mm)"
+    }
+   },
+   "unknown": [
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "33266",
+   "name": "TTS™ ER Collet Holder: ER32",
+   "url": "https://tormach.com/tts-toolholder-er32-33266.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "Alloy Steel TTS"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "Fits all ER32 collets"
+    },
+    "nose_d": {
+     "v": 50,
+     "unit": "mm",
+     "stated": "Outside Diameter: 1.97 in. (50 mm)"
+    },
+    "gauge_length": {
+     "v": 54,
+     "unit": "mm",
+     "stated": "Installed Height: 2.13 in. (54 mm)"
+    },
+    "nut_thread": {
+     "v": "M40 x 1.5",
+     "unit": "text",
+     "stated": "Thread: M40 x 1.5"
+    }
+   },
+   "unknown": [
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "32020",
+   "name": "TTS™ ER Collet Tap Holder: ER16",
+   "url": "https://tormach.com/tts-er16-collet-tap-holder-32020.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "Alloy Steel TTS"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Fits all ER16 collets"
+    },
+    "nose_d": {
+     "v": 27,
+     "unit": "mm",
+     "stated": "Outside Diameter: 1.06 in. (27 mm)"
+    },
+    "gauge_length": {
+     "v": 96,
+     "unit": "mm",
+     "stated": "Installed Height: 3.8 in. (96 mm)"
+    },
+    "nut_thread": {
+     "v": "M22 x 1.5",
+     "unit": "text",
+     "stated": "Thread: M22 x 1.5"
+    },
+    "clamp_range": {
+     "v": "3/64 in. - 3/8 in. (1 mm - 10 mm)",
+     "unit": "text",
+     "stated": "ER collets range in size from 3/64 in. - 3/8 in. (1 mm - 10 mm)"
+    },
+    "float": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "Approximately Float: 0.75 in."
+    }
+   },
+   "unknown": [
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "32021",
+   "name": "TTS™ ER Collet Tap Holder: ER20",
+   "url": "https://tormach.com/tts-er20-collet-tap-holder-32021.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "Alloy Steel TTS"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Fits all ER20 collets"
+    },
+    "nose_d": {
+     "v": 34,
+     "unit": "mm",
+     "stated": "Outside Diameter: 1.34 in. (34 mm)"
+    },
+    "gauge_length": {
+     "v": 112,
+     "unit": "mm",
+     "stated": "Installed Height: 4.4 in. (112 mm)"
+    },
+    "nut_thread": {
+     "v": "M25 x 1.5",
+     "unit": "text",
+     "stated": "Thread: M25 x 1.5"
+    },
+    "clamp_range": {
+     "v": "3/64 in. - 1/2 in. (1 mm - 13 mm)",
+     "unit": "text",
+     "stated": "ER collets range in size from 3/64 in. - 1/2 in. (1 mm - 13 mm)"
+    },
+    "float": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "Approximately Float: 0.75 in."
+    }
+   },
+   "unknown": [
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "31820",
+   "name": "TTS™ Set Screw Holder: 3/8 in.",
+   "url": "https://tormach.com/tts-set-screw-holder-31820-html.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ Set Screw Holder: 3/8 in."
+    },
+    "clamp": {
+     "v": "set screw 3/8 in.",
+     "unit": "text",
+     "stated": "TTS™ Set Screw Holder: 3/8 in."
+    },
+    "clamp_d": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "TTS™ Set Screw Holder: 3/8 in."
+    }
+   },
+   "unknown": [
+    "gauge_length",
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "31821",
+   "name": "TTS™ Set Screw Holder: 1/2 in.",
+   "url": "https://tormach.com/tts-set-screw-holder-31821.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ Set Screw Holder: 1/2 in."
+    },
+    "clamp": {
+     "v": "set screw 1/2 in.",
+     "unit": "text",
+     "stated": "TTS™ Set Screw Holder: 1/2 in."
+    },
+    "clamp_d": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "TTS™ Set Screw Holder: 1/2 in."
+    }
+   },
+   "unknown": [
+    "gauge_length",
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "31824",
+   "name": "TTS™ Set Screw Holder: 12mm",
+   "url": "https://tormach.com/tts-set-screw-holder-31824.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ Set Screw Holder: 12mm"
+    },
+    "clamp": {
+     "v": "set screw 12mm",
+     "unit": "text",
+     "stated": "TTS™ Set Screw Holder: 12mm"
+    },
+    "clamp_d": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "TTS™ Set Screw Holder: 12mm"
+    }
+   },
+   "unknown": [
+    "gauge_length",
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "31830",
+   "name": "TTS™ Shell Mill Arbor: 1/2 in.",
+   "url": "https://tormach.com/tts-shell-mill-arbor-1-2in-31830.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS-1/2 in. Shell Mill Arbor"
+    },
+    "clamp": {
+     "v": "shell mill arbor 1/2 in.",
+     "unit": "text",
+     "stated": "Compatible with shell mills designed for 1/2 in. R8 arbors"
+    },
+    "pilot_d": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "TTS-1/2 in. Shell Mill Arbor"
+    },
+    "screw_thread": {
+     "v": "1/4-28",
+     "unit": "text",
+     "stated": "1/4-28 thread"
+    },
+    "shank_d": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "tool shank: 3/4 in. diameter, 1.375 in. long"
+    },
+    "shank_length": {
+     "v": 34.925,
+     "unit": "mm",
+     "stated": "tool shank: 3/4 in. diameter, 1.375 in. long"
+    },
+    "shell_face_width": {
+     "v": 38.1,
+     "unit": "mm",
+     "stated": "1.5 in. shell face width"
+    }
+   },
+   "unknown": [
+    "gauge_length",
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "32430",
+   "name": "TTS™ Saw Arbor: 1/2 in.",
+   "url": "https://tormach.com/tts-slitting-saw-arbor-32430.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS - 0.5 in. Slitting Saw Arbor."
+    },
+    "clamp": {
+     "v": "slitting saw arbor 0.5 in.",
+     "unit": "text",
+     "stated": "For saws with 0.5 in. diameter arbor holes."
+    },
+    "gauge_length": {
+     "v": 51,
+     "unit": "mm",
+     "stated": "Projection from Spindle Nose: 2 in. (51mm)"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "32431",
+   "name": "TTS™ Saw Arbor: 1 in.",
+   "url": "https://tormach.com/tts-slitting-saw-arbor-32431.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ - 1 in. Slitting Saw Arbor."
+    },
+    "clamp": {
+     "v": "slitting saw arbor 1 in.",
+     "unit": "text",
+     "stated": "For saws with 1 in. diameter arbor holes."
+    },
+    "gauge_length": {
+     "v": 66,
+     "unit": "mm",
+     "stated": "Projection from Spindle Nose: 2.6 in. (66 mm)"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "31825",
+   "name": "TTS™ Drill Chuck Arbor: JT1",
+   "url": "https://tormach.com/tts-drill-chuck-arbor-jt1-31825.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ Drill Chuck Arbor: JT1"
+    },
+    "clamp": {
+     "v": "JT1 drill chuck taper",
+     "unit": "text",
+     "stated": "Arbor for mounting JT1 taper chucks"
+    }
+   },
+   "unknown": [
+    "gauge_length",
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "31826",
+   "name": "TTS™ Drill Chuck Arbor: JT2",
+   "url": "https://tormach.com/tts-drill-chuck-arbor-jt2-31826.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ Drill Chuck Arbor: JT2"
+    },
+    "clamp": {
+     "v": "JT2 drill chuck taper",
+     "unit": "text",
+     "stated": "Arbor for mounting JT2 taper (Jacobs Taper #2) chucks"
+    }
+   },
+   "unknown": [
+    "gauge_length",
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "31828",
+   "name": "TTS™ Drill Chuck Arbor: JT6",
+   "url": "https://tormach.com/tts-drill-chuck-arbor-jt6-31828.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ Drill Chuck Arbor: JT6"
+    },
+    "clamp": {
+     "v": "JT6 drill chuck taper",
+     "unit": "text",
+     "stated": "TTS JT6 Arbor for mounting Jacobs Taper #6 chucks."
+    }
+   },
+   "unknown": [
+    "gauge_length",
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "31814",
+   "name": "TTS™ M10 Threaded Arbor: Medium",
+   "url": "https://tormach.com/tts-m10-threaded-arbor-medium-31814.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ M10 Threaded Arbor: Medium"
+    },
+    "clamp": {
+     "v": "modular head thread M10",
+     "unit": "text",
+     "stated": "Thread: M10"
+    },
+    "gauge_length": {
+     "v": 48,
+     "unit": "mm",
+     "stated": "Length: 1.9\" (48mm)*"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "31815",
+   "name": "TTS™ M10 Threaded Arbor: Long",
+   "url": "https://tormach.com/tts-m10-threaded-arbor-long-31815.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ M10 Threaded Arbor: Long"
+    },
+    "clamp": {
+     "v": "modular head thread M10",
+     "unit": "text",
+     "stated": "Thread: M10"
+    },
+    "gauge_length": {
+     "v": 103,
+     "unit": "mm",
+     "stated": "Length: 4.1\" (103 mm)*"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "31816",
+   "name": "TTS™ M12 Threaded Arbor: Short",
+   "url": "https://tormach.com/tts-m12-threaded-arbor-short-31816.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ M12 Threaded Arbor: Short"
+    },
+    "clamp": {
+     "v": "modular head thread M12",
+     "unit": "text",
+     "stated": "Thread: M12"
+    },
+    "gauge_length": {
+     "v": 26,
+     "unit": "mm",
+     "stated": "Length: 1.0\" (26 mm)*"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "31817",
+   "name": "TTS™ M12 Threaded Arbor: Medium",
+   "url": "https://tormach.com/tts-m12-threaded-arbor-medium-31817.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ M12 Threaded Arbor: Medium"
+    },
+    "clamp": {
+     "v": "modular head thread M12",
+     "unit": "text",
+     "stated": "Thread: M12"
+    },
+    "gauge_length": {
+     "v": 65,
+     "unit": "mm",
+     "stated": "Length: 2.6\" (65 mm)*"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "33281",
+   "name": "TTS™ M12 Threaded Arbor: Long",
+   "url": "https://tormach.com/tts-m12-threaded-arbor-long-33281.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ M12 Threaded Arbor: Long"
+    },
+    "clamp": {
+     "v": "modular head thread M12",
+     "unit": "text",
+     "stated": "Thread: M12"
+    },
+    "gauge_length": {
+     "v": 103,
+     "unit": "mm",
+     "stated": "Length: 4.1 in. (103 mm)*"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "r8_collet",
+   "id": "50568",
+   "name": "Lyndex TTS™ Adapter Collet: R8",
+   "url": "https://tormach.com/tts-adapter-collet-r8-50568.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "R8 spindle to TTS",
+     "unit": "text",
+     "stated": "R8 collet with modified length allows for mounting all TTS tool holders in R8 taper spindles."
+    },
+    "clamp": {
+     "v": "TTS (3/4 in. shank) tool holders",
+     "unit": "text",
+     "stated": "allows for mounting of all TTS tool holders"
+    },
+    "thread": {
+     "v": "7/16-20 UNF",
+     "unit": "text",
+     "stated": "7/16-20 UNF thread"
+    }
+   },
+   "unknown": [
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "37180",
+   "name": "ER11M x M8 Modular Collet Chuck",
+   "url": "https://tormach.com/er11m-x-m8-modular-collet-chuck-37180-builder.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "modular thread M8 x 1.25",
+     "unit": "text",
+     "stated": "Arbor Thread: M8 x 1.25"
+    },
+    "clamp": {
+     "v": "ER11M",
+     "unit": "text",
+     "stated": "Fits all ER11 collets"
+    },
+    "nut_thread": {
+     "v": "M13 x .75",
+     "unit": "text",
+     "stated": "Collet Nut Thread: M13 x .75; Use with ER11M Collet Nuts"
+    }
+   },
+   "unknown": [
+    "gauge_length",
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "37181",
+   "name": "ER16M x M10 Modular Collet Chuck",
+   "url": "https://tormach.com/er16m-x-m10-modular-collet-chuck-37181-builder.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "modular thread M10 x 1.5",
+     "unit": "text",
+     "stated": "Arbor Thread: M10 x 1.5"
+    },
+    "clamp": {
+     "v": "ER16M",
+     "unit": "text",
+     "stated": "Fits all ER16 collets"
+    },
+    "nut_thread": {
+     "v": "M19 x 1.0",
+     "unit": "text",
+     "stated": "Collet Nut Thread: M19 x 1.0; Use with ER16M Collet Nuts"
+    }
+   },
+   "unknown": [
+    "gauge_length",
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "37182",
+   "name": "ER20M x M12 Modular Collet Chuck",
+   "url": "https://tormach.com/er20m-x-m12-modular-collet-chuck-37182-builder.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "modular thread M12 x 1.75",
+     "unit": "text",
+     "stated": "Arbor Thread: M12 x 1.75"
+    },
+    "clamp": {
+     "v": "ER20M",
+     "unit": "text",
+     "stated": "Fits all ER20 collets"
+    },
+    "nut_thread": {
+     "v": "M24 x 1.0",
+     "unit": "text",
+     "stated": "Collet Nut Thread: M24 x 1.0; Use with ER20M Collet Nuts"
+    }
+   },
+   "unknown": [
+    "gauge_length",
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39651",
+   "name": "BT30 Tool Holder, ER16, 60mm Gage Length",
+   "url": "https://tormach.com/bt30-tool-holder-er16-60mm.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "ER16"
+    },
+    "gauge_length": {
+     "v": 60,
+     "unit": "mm",
+     "stated": "Gage length is 60mm (1.97 inches)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "balance_rpm": {
+     "v": 20000,
+     "unit": "rpm",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "pull_stud_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread for Pull Stud is M12 x1.75"
+    },
+    "clamp_range": {
+     "v": "3/64 in. - 3/8 in. (1 mm - 10 mm)",
+     "unit": "text",
+     "stated": "ER collets range in size from 3/64 in. - 3/8 in. (1 mm - 10 mm)"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39653",
+   "name": "BT30 Tool Holder, ER16M (Mini-Nut), 60mm Gage Length",
+   "url": "https://tormach.com/bt30-tool-holder-er16-mini-nut-60mm.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "ER16M",
+     "unit": "text",
+     "stated": "ER16 (Mini-Nut)"
+    },
+    "gauge_length": {
+     "v": 60,
+     "unit": "mm",
+     "stated": "Gage length is 60mm (1.97 inches)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "balance_rpm": {
+     "v": 20000,
+     "unit": "rpm",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "pull_stud_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread for Pull Stud is M12 x1.75"
+    },
+    "clamp_range": {
+     "v": "3/64 in. - 3/8 in. (1 mm - 10 mm)",
+     "unit": "text",
+     "stated": "ER collets range in size from 3/64 in. - 3/8 in. (1 mm - 10 mm)"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "51080",
+   "name": "BT30 Tool Holder, ER20, 48mm Gauge Length",
+   "url": "https://tormach.com/bt30-tool-holder-er20-48mm-51080.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER20"
+    },
+    "gauge_length": {
+     "v": 48,
+     "unit": "mm",
+     "stated": "Gage length is 48mm (1.89 in.)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "balance_rpm": {
+     "v": 20000,
+     "unit": "rpm",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "pull_stud_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread for Pull Stud is M12 x1.75"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39655",
+   "name": "BT30 Tool Holder, ER20, 60mm Gage Length",
+   "url": "https://tormach.com/bt30-tool-holder-er20-60mm.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER20"
+    },
+    "gauge_length": {
+     "v": 60,
+     "unit": "mm",
+     "stated": "Gage length is 60mm (1.97 in.)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "balance_rpm": {
+     "v": 20000,
+     "unit": "rpm",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "pull_stud_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread for Pull Stud is M12 x1.75"
+    },
+    "clamp_range": {
+     "v": "3/64 in. - 1/2 in. (1 mm - 13 mm)",
+     "unit": "text",
+     "stated": "ER collets range in size from 3/64 in. - 1/2 in. (1 mm - 13 mm)"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39657",
+   "name": "BT30 Tool Holder, ER20M (Mini-Nut), 60mm Gage Length",
+   "url": "https://tormach.com/bt30-tool-holder-er20m-60mm-gage-length.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "ER20M",
+     "unit": "text",
+     "stated": "ER20M"
+    },
+    "gauge_length": {
+     "v": 60,
+     "unit": "mm",
+     "stated": "Gage length is 60mm (1.97 inches)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "balance_rpm": {
+     "v": 20000,
+     "unit": "rpm",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "pull_stud_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread for Pull Stud is M12 x1.75"
+    },
+    "clamp_range": {
+     "v": "3/64 in. - 1/2 in. (1 mm - 13 mm)",
+     "unit": "text",
+     "stated": "ER collets range in size from 3/64 in. - 1/2 in. (1 mm - 13 mm)"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39661",
+   "name": "BT30 Tool Holder, ER32, 60mm Gage Length",
+   "url": "https://tormach.com/bt30-tool-holder-er32-60mm.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER32"
+    },
+    "gauge_length": {
+     "v": 60,
+     "unit": "mm",
+     "stated": "Gage length is 60mm (1.97 inches)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "balance_rpm": {
+     "v": 20000,
+     "unit": "rpm",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "pull_stud_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread for Pull Stud is M12 x1.75"
+    },
+    "clamp_range": {
+     "v": "1/8 in. - 3/4 in. (8 mm - 20 mm)",
+     "unit": "text",
+     "stated": "ER collets range in size from 1/8 in. - 3/4 in. (8 mm - 20 mm)"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39668",
+   "name": "BT30 Tool Holder, End Mill 1/8 in, 50mm",
+   "url": "https://tormach.com/bt30-tool-holder-end-mill-1-8-in-50mm.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "end mill 1/8 in.",
+     "unit": "text",
+     "stated": "End Mill 1/8 in"
+    },
+    "gauge_length": {
+     "v": 50,
+     "unit": "mm",
+     "stated": "Gage length is 50mm (1.97 inches)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "balance_rpm": {
+     "v": 20000,
+     "unit": "rpm",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "pull_stud_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread for Pull Stud is M12 x1.75"
+    },
+    "clamp_d": {
+     "v": 3.175,
+     "unit": "mm",
+     "stated": "End Mill 1/8 in"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39670",
+   "name": "BT30 Tool Holder, End Mill 1/4 in, 50mm",
+   "url": "https://tormach.com/bt30-tool-holder-end-mill-1-4-in-50mm.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "end mill 1/4 in.",
+     "unit": "text",
+     "stated": "End Mill 1/4 in"
+    },
+    "gauge_length": {
+     "v": 50,
+     "unit": "mm",
+     "stated": "Gage length is 50mm (1.97 inches)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "balance_rpm": {
+     "v": 20000,
+     "unit": "rpm",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "pull_stud_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread for Pull Stud is M12 x1.75"
+    },
+    "clamp_d": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "End Mill 1/4 in"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39671",
+   "name": "BT30 Tool Holder, End Mill 3/8 in, 50mm",
+   "url": "https://tormach.com/bt30-tool-holder-end-mill-3-8-in-50mm.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "end mill 3/8 in.",
+     "unit": "text",
+     "stated": "End Mill 3/8 in"
+    },
+    "gauge_length": {
+     "v": 50,
+     "unit": "mm",
+     "stated": "Gage length is 50mm (1.97 inches)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "balance_rpm": {
+     "v": 20000,
+     "unit": "rpm",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "pull_stud_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread for Pull Stud is M12 x1.75"
+    },
+    "clamp_d": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "End Mill 3/8 in"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39672",
+   "name": "BT30 Tool Holder, End Mill 1/2 in, 50mm",
+   "url": "https://tormach.com/bt30-tool-holder-end-mill-1-2-in-50mm.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "end mill 1/2 in.",
+     "unit": "text",
+     "stated": "End Mill 1/2 in"
+    },
+    "gauge_length": {
+     "v": 50,
+     "unit": "mm",
+     "stated": "Gage length is 50mm (1.97 inches)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "balance_rpm": {
+     "v": 20000,
+     "unit": "rpm",
+     "stated": "Balanced to G2.5 at 20,000 rpm"
+    },
+    "pull_stud_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread for Pull Stud is M12 x1.75"
+    },
+    "clamp_d": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "End Mill 1/2 in"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39664",
+   "name": "BT30 Tool Holder, End Mill 6mm, 50mm Gage Length",
+   "url": "https://tormach.com/bt30-tool-holder-end-mill-6mm-50mm-gage-length-39664.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "end mill (set screw) 6 mm",
+     "unit": "text",
+     "stated": "Set screw tool holder that holds 6mm tools with a nose (extension) of 50 mm long."
+    },
+    "gauge_length": {
+     "v": 50,
+     "unit": "mm",
+     "stated": "BT30 Tool Holder, End Mill 6mm, 50mm Gage Length"
+    },
+    "clamp_d": {
+     "v": 6,
+     "unit": "mm",
+     "stated": "Set screw tool holder that holds 6mm tools"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39666",
+   "name": "BT30 Tool Holder, End Mill 10mm, 50mm Gage Length",
+   "url": "https://tormach.com/bt30-tool-holder-end-mill-10mm-50mm-gage-lengths-39666.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "end mill 10 mm",
+     "unit": "text",
+     "stated": "BT30 Tool Holder, End Mill 10mm, 50mm Gage Length"
+    },
+    "gauge_length": {
+     "v": 50,
+     "unit": "mm",
+     "stated": "BT30 Tool Holder, End Mill 10mm, 50mm Gage Length"
+    },
+    "clamp_d": {
+     "v": 10,
+     "unit": "mm",
+     "stated": "End Mill 10mm"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39673",
+   "name": "BT30 Tool Holder, Drill Chuck 8mm, 80mm",
+   "url": "https://tormach.com/bt30-tool-holder-drill-chuck-8mm-80mm.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "drill chuck 8 mm",
+     "unit": "text",
+     "stated": "Drill Chuck 8mm"
+    },
+    "gauge_length": {
+     "v": 80,
+     "unit": "mm",
+     "stated": "80mm Gage Length"
+    },
+    "pull_stud_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread for Pull Stud is M12 x1.75"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39676",
+   "name": "BT30 Tool Holder, Face Mill Arbor 1/2 in, 35mm",
+   "url": "https://tormach.com/bt30-tool-holder-face-mill-arbor-1-2-in-35mm-39676.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "face/shell mill arbor 1/2 in.",
+     "unit": "text",
+     "stated": "BT30 Face Mill Arbor 1/2 in"
+    },
+    "gauge_length": {
+     "v": 35,
+     "unit": "mm",
+     "stated": "Gage length is 35mm (1.38 inches)"
+    },
+    "balance": {
+     "v": "G2.5 at 20000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 grade at 20000 rpm"
+    },
+    "pull_stud_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "M12x1.75 pull stud thread"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39679",
+   "name": "BT30 Tool Holder, Tapping Head ER20, 110mm",
+   "url": "https://tormach.com/bt30-tool-holder-tapping-head-er20-110mm-gage-length.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "ER20 tension/compression tapping head",
+     "unit": "text",
+     "stated": "Tapping Head ER20"
+    },
+    "gauge_length": {
+     "v": 110,
+     "unit": "mm",
+     "stated": "110mm Gage Length"
+    },
+    "clamp_range": {
+     "v": "3/64 in. - 1/2 in. (1 mm - 13 mm)",
+     "unit": "text",
+     "stated": "ER collets range in size from 3/64 in. - 1/2 in. (1 mm - 13 mm)"
+    },
+    "compression": {
+     "v": 5,
+     "unit": "mm",
+     "stated": "5mm of Compression"
+    },
+    "extension": {
+     "v": 18,
+     "unit": "mm",
+     "stated": "18mm of Extension"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39633",
+   "name": "BT30 Tool Holder, Modular, M4, 25mm Gage Length",
+   "url": "https://tormach.com/test-bar-bt30-250mm.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "modular head thread M4",
+     "unit": "text",
+     "stated": "Modular, M4"
+    },
+    "gauge_length": {
+     "v": 25,
+     "unit": "mm",
+     "stated": "25mm Gage Length"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39636",
+   "name": "BT30 Tool Holder, Modular, M6, 25mm",
+   "url": "https://tormach.com/bt30-tool-holder-modular-m6-25mm.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "modular head thread M6",
+     "unit": "text",
+     "stated": "Modular, M6"
+    },
+    "gauge_length": {
+     "v": 25,
+     "unit": "mm",
+     "stated": "25mm Gage Length"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39644",
+   "name": "BT30 Tool Holder, Modular, M10, 100mm",
+   "url": "https://tormach.com/bt30-tool-holder-modular-m10-100mm-39644.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "modular head thread M10",
+     "unit": "text",
+     "stated": "Modular, M10"
+    },
+    "gauge_length": {
+     "v": 100,
+     "unit": "mm",
+     "stated": "BT30 Tool Holder, Modular, M10, 100mm Gage Length"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39645",
+   "name": "BT30 Tool Holder, Modular, M12, 25mm",
+   "url": "https://tormach.com/bt30-tool-holder-modular-m12-25mm-39645.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "modular head thread M12",
+     "unit": "text",
+     "stated": "Modular, M12"
+    },
+    "gauge_length": {
+     "v": 25,
+     "unit": "mm",
+     "stated": "BT30 Tool Holder, Modular, M12, 25mm Gage Length"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "39647",
+   "name": "BT30 Tool Holder, Modular, M12, 100mm",
+   "url": "https://tormach.com/bt30-tool-holder-modular-m12-100mm-39647.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 Tool Holder"
+    },
+    "clamp": {
+     "v": "modular head thread M12",
+     "unit": "text",
+     "stated": "Modular, M12"
+    },
+    "gauge_length": {
+     "v": 100,
+     "unit": "mm",
+     "stated": "BT30 Tool Holder, Modular, M12, 100mm Gage Length"
+    }
+   },
+   "unknown": [
+    "nose_d",
+    "body_d",
+    "max_rpm",
+    "balance"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "37553",
+   "name": "Pull Stud, BT30 45-Degree",
+   "url": "https://tormach.com/pull-stud-bt30-45.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30 (ISO7388-3-JF30-45)",
+     "unit": "text",
+     "stated": "Pull Stud, BT30 45-degree, M12 x 1.75, ISO7388-3-JF30-45"
+    },
+    "thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Pull Stud, BT30 45-degree, M12 x 1.75"
+    },
+    "angle": {
+     "v": 45,
+     "unit": "deg",
+     "stated": "Pull Stud, BT30 45-degree"
+    }
+   },
+   "unknown": [
+    "oal"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "51734",
+   "name": "Pull Stud, BT30-45 deg., Thru Spindle Coolant (TSC)",
+   "url": "https://tormach.com/bt30-pull-stud-tsc-51734.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30 (ISO7388-3-JF30-45)",
+     "unit": "text",
+     "stated": "Pull Stud, BT30-45 deg., ISO7388-3-JF30-45"
+    },
+    "thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear thread is M12 X 1.75"
+    },
+    "angle": {
+     "v": 45,
+     "unit": "deg",
+     "stated": "Pull Stud, BT30-45 deg."
+    },
+    "coolant_bore": {
+     "v": 2.54,
+     "unit": "mm",
+     "stated": "Hole thru is .100 in. diameter"
+    },
+    "material": {
+     "v": "H13 tool steel",
+     "unit": "text",
+     "stated": "Made from hardened and tempered H13 tool steel"
+    }
+   },
+   "unknown": [
+    "oal"
+   ]
+  },
+  {
+   "kind": "collet_nut",
+   "id": "31778",
+   "name": "ER16 Collet Nut",
+   "url": "https://tormach.com/er16-collet-nut-31778.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Fits all ER16 collets"
+    },
+    "thread": {
+     "v": "M22 x 1.5",
+     "unit": "text",
+     "stated": "ID Thread: M22 x 1.5"
+    },
+    "od": {
+     "v": 27,
+     "unit": "mm",
+     "stated": "Outside Diameter: 1.06\" (27 mm)"
+    },
+    "length": {
+     "v": 18,
+     "unit": "mm",
+     "stated": "Height: .71\" (18 mm)"
+    },
+    "max_rpm": {
+     "v": 10000,
+     "unit": "rpm",
+     "stated": "Balanced; for speeds up to 10,000 RPM"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "collet_nut",
+   "id": "31970",
+   "name": "ER20 Collet Nut",
+   "url": "https://tormach.com/er20-collet-nut-31970.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Fits all ER20 collets"
+    },
+    "thread": {
+     "v": "M25 x 1.5",
+     "unit": "text",
+     "stated": "ID Thread: M25 x 1.5"
+    },
+    "od": {
+     "v": 34,
+     "unit": "mm",
+     "stated": "Outside Diameter: 1.34\" (34 mm)"
+    },
+    "length": {
+     "v": 19,
+     "unit": "mm",
+     "stated": "Height: .75\" (19 mm)"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "collet_nut",
+   "id": "37103",
+   "name": "Package of 2 ER11M Collet Nut",
+   "url": "https://tormach.com/er11m-collet-nut-37103.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER11M",
+     "unit": "text",
+     "stated": "Fits all ER11 collets"
+    },
+    "thread": {
+     "v": "M13 x .75",
+     "unit": "text",
+     "stated": "ID Thread: M13 x .75"
+    },
+    "od": {
+     "v": 16,
+     "unit": "mm",
+     "stated": "Outside Diameter: .630 in. (16 mm)"
+    },
+    "length": {
+     "v": 12,
+     "unit": "mm",
+     "stated": "Height: .47 in. (12 mm)"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "collet_nut",
+   "id": "37104",
+   "name": "Package of 2 ER16M Collet Nut",
+   "url": "https://tormach.com/er16m-collet-nut-37104.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER16M",
+     "unit": "text",
+     "stated": "Fits all ER16 collets"
+    },
+    "thread": {
+     "v": "M19 x 1.0",
+     "unit": "text",
+     "stated": "ID Thread: M19 x 1.0"
+    },
+    "od": {
+     "v": 22,
+     "unit": "mm",
+     "stated": "Outside Diameter: .866 in. (22 mm)"
+    },
+    "length": {
+     "v": 18.4,
+     "unit": "mm",
+     "stated": "Height: .73 in. (18.4 mm)"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "collet_nut",
+   "id": "37105",
+   "name": "Package of 2 ER20M Collet Nut",
+   "url": "https://tormach.com/er20m-collet-nut-37105.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20M",
+     "unit": "text",
+     "stated": "Fits all ER20 collets"
+    },
+    "thread": {
+     "v": "M24 x 1.0",
+     "unit": "text",
+     "stated": "ID Thread: M24 x 1.0"
+    },
+    "od": {
+     "v": 28,
+     "unit": "mm",
+     "stated": "Outside Diameter: 1.102 in. (28 mm)"
+    },
+    "length": {
+     "v": 19,
+     "unit": "mm",
+     "stated": "Height: .75 in. (19 mm)"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "collet",
+   "id": "32517",
+   "name": "ER16 Collet - 1 mm",
+   "url": "https://tormach.com/er16-collet-1mm-32517.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "ER16 Collet - 1 mm"
+    },
+    "bore": {
+     "v": 1.0,
+     "unit": "mm",
+     "stated": "ER16 Collet - 1 mm"
+    }
+   },
+   "unknown": [
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "31692",
+   "name": "ER16 Collet - 3 mm",
+   "url": "https://tormach.com/er16-collet-3mm-31692.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "ER16 Collet - 3 mm"
+    },
+    "bore": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "ER16 Collet - 3 mm"
+    }
+   },
+   "unknown": [
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "31694",
+   "name": "ER16 Collet - 6 mm",
+   "url": "https://tormach.com/er16-collet-6mm-31694.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "ER16 Collet - 6 mm"
+    },
+    "bore": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "ER16 Collet - 6 mm"
+    }
+   },
+   "unknown": [
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "31056",
+   "name": "ER20 Collet - 3 mm",
+   "url": "https://tormach.com/er20-collet-3mm-31056.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER20 Collet - 3 mm"
+    },
+    "bore": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "ER20 Collet - 3 mm"
+    }
+   },
+   "unknown": [
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "54984",
+   "name": "ER20 Collet - 12 mm 4-Pack",
+   "url": "https://tormach.com/er20-collet-12-mm-4-pack-54984.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER20 Collet - 12 mm 4-Pack"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "ER20 Collet - 12 mm 4-Pack"
+    }
+   },
+   "unknown": [
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "54977",
+   "name": "ER20 Collet - 1/4 in. 4-Pack",
+   "url": "https://tormach.com/er20-collet-1-4-in-4-pieces-54977.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER20 Collet - 1/4 in. 4-Pack"
+    },
+    "bore": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "ER20 Collet - 1/4 in. 4-Pack"
+    },
+    "runout": {
+     "v": 0.008,
+     "unit": "mm",
+     "stated": "0.008mm Accuracy"
+    }
+   },
+   "unknown": [
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "54980",
+   "name": "ER20 Collet - 1/2 in. 4-Pack",
+   "url": "https://tormach.com/er20-collet-1-2-in-4-pack-54980.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER20 Collet - 1/2 in. 4-Pack"
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "ER20 Collet - 1/2 in. 4-Pack"
+    }
+   },
+   "unknown": [
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "35052",
+   "name": "ER32 Collet - 2 mm",
+   "url": "https://tormach.com/er32-collet-2mm-35052.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER32 Collet - 2 mm"
+    },
+    "bore": {
+     "v": 2.0,
+     "unit": "mm",
+     "stated": "ER32 Collet - 2 mm"
+    }
+   },
+   "unknown": [
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "35063",
+   "name": "ER32 Collet - 13 mm",
+   "url": "https://tormach.com/er32-collet-13mm-35063.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER32 Collet - 13 mm"
+    },
+    "bore": {
+     "v": 13.0,
+     "unit": "mm",
+     "stated": "ER32 Collet - 13 mm"
+    }
+   },
+   "unknown": [
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "55000",
+   "name": "ER32 Collet - 3/4 in. 4-Pack",
+   "url": "https://tormach.com/er32-collet-3-4-in-4-pack-55000.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER32 Collet - 3/4 in. 4-Pack"
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "ER32 Collet - 3/4 in. 4-Pack"
+    }
+   },
+   "unknown": [
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "51721",
+   "name": "ER20 TSC Sealed Collet Set (11 Pcs.) - Metric",
+   "url": "https://tormach.com/er20-tsc-collet-set-11pcs-51721.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Works in all ER20 Collet Chucks"
+    },
+    "sizes": {
+     "v": "Thru Spindle Coolant ER20 Metric Collet Set, 11pcs, (3mm - 13mm)",
+     "unit": "text",
+     "stated": "Thru Spindle Coolant ER20 Metric Collet Set, 11pcs, (3mm - 13mm)"
+    },
+    "collapse_range": {
+     "v": 0.2,
+     "unit": "mm",
+     "stated": "These collets have a 0.007” (0.2mm) range of collapse while maintaining full accuracy"
+    },
+    "runout": {
+     "v": 0.008,
+     "unit": "mm",
+     "stated": "Total runout less than 0.0003” (8 microns)"
+    },
+    "coolant": {
+     "v": "through-spindle coolant, up to 3,600 PSI (25 MPa)",
+     "unit": "text",
+     "stated": "For use with coolant pressures up to 3,600 PSI (25MPa)"
+    }
+   },
+   "unknown": [
+    "bore",
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "52277",
+   "name": "ER20 TSC Sealed Collet Set (25 Pcs.) - Inch",
+   "url": "https://tormach.com/er20-tsc-imperial-collet-set-52277.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Works in all ER20 Collet Chucks"
+    },
+    "sizes": {
+     "v": "Through Spindle Coolant ER20 Imperial Collet Set, 25pcs, (1/8 in. - 1/2 in.)",
+     "unit": "text",
+     "stated": "Through Spindle Coolant ER20 Imperial Collet Set, 25pcs, (1/8 in. - 1/2 in.)"
+    },
+    "collapse_range": {
+     "v": 0.2,
+     "unit": "mm",
+     "stated": "These collets have a 0.007 in. (0.2mm) range of collapse while maintaining full accuracy"
+    },
+    "runout": {
+     "v": 0.008,
+     "unit": "mm",
+     "stated": "Total runout less than 0.0003 in. (8 microns)"
+    },
+    "coolant": {
+     "v": "through-spindle coolant, up to 3,600 PSI (25 MPa)",
+     "unit": "text",
+     "stated": "For use with coolant pressures up to 3,600 PSI (25MPa)"
+    }
+   },
+   "unknown": [
+    "bore",
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "52308",
+   "name": "ER16 TSC Sealed Collet Set (17 Pcs.) - Inch",
+   "url": "https://tormach.com/er20-tsc-collet-set-52308.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Works in all ER16 Collet Chucks"
+    },
+    "sizes": {
+     "v": "ER16 Imperial Sealed TSC Collet Set, 17pcs(1/8 in. - 3/8 in.)",
+     "unit": "text",
+     "stated": "ER16 Imperial Sealed TSC Collet Set, 17pcs(1/8 in. - 3/8 in.)"
+    },
+    "collapse_range": {
+     "v": 0.2,
+     "unit": "mm",
+     "stated": "These collets have a 0.007 in. (0.2mm) range of collapse while maintaining full accuracy"
+    },
+    "runout": {
+     "v": 0.008,
+     "unit": "mm",
+     "stated": "Total runout less than 0.0003 in. (8 microns)"
+    },
+    "coolant": {
+     "v": "through-spindle coolant, up to 3,600 PSI (25 MPa)",
+     "unit": "text",
+     "stated": "For use with coolant pressures up to 3,600 PSI (25MPa)"
+    }
+   },
+   "unknown": [
+    "bore",
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "51720",
+   "name": "ER16 TSC Sealed Collet Set (8 Pcs.) - Metric",
+   "url": "https://tormach.com/er16-tsc-51720.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Works in all ER16 Collet Chucks"
+    },
+    "sizes": {
+     "v": "Through Spindle Coolant ER16 Metric Collet Set , 8pcs, (3mm - 10mm)",
+     "unit": "text",
+     "stated": "Through Spindle Coolant ER16 Metric Collet Set , 8pcs, (3mm - 10mm)"
+    },
+    "collapse_range": {
+     "v": 0.2,
+     "unit": "mm",
+     "stated": "These collets have a 0.007 in. (0.2mm) range of collapse while maintaining full accuracy"
+    },
+    "runout": {
+     "v": 0.008,
+     "unit": "mm",
+     "stated": "Total runout less than 0.0003 in. (8 microns)"
+    },
+    "coolant": {
+     "v": "through-spindle coolant, up to 3,600 PSI (25 MPa)",
+     "unit": "text",
+     "stated": "For use with coolant pressures up to 3,600 PSI (25MPa)"
+    }
+   },
+   "unknown": [
+    "bore",
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "38306",
+   "name": "ER11 Collet Set (7 Pcs.) - Inch",
+   "url": "https://tormach.com/er11-collet-set-1-16-1-4-in-7pcs-38306.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER11",
+     "unit": "text",
+     "stated": "ER11 Collet Set (7 Pcs.) - Inch"
+    },
+    "sizes": {
+     "v": "1/16 -1/4 in., 7pcs.",
+     "unit": "text",
+     "stated": "ER11 Collet Set: 1/16 -1/4 in., 7pcs."
+    }
+   },
+   "unknown": [
+    "bore",
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": "38302",
+   "name": "ER11 Collet Set (7 Pcs.) - Metric",
+   "url": "https://tormach.com/er11-collet-set-1-7mm-7pcs-38302.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER11",
+     "unit": "text",
+     "stated": "ER11 Collet Set (7 Pcs.) - Metric"
+    },
+    "sizes": {
+     "v": "1-7mm, 7Pcs.",
+     "unit": "text",
+     "stated": "ER11 Collet Set: 1-7mm, 7Pcs."
+    }
+   },
+   "unknown": [
+    "bore",
+    "clamp_min",
+    "clamp_max",
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "33740",
+   "name": "1/8 in. x 1/8 in. x 1/2 in. x 1-1/2 in.",
+   "url": "https://tormach.com/2-flute-carbide-end-mill-33740.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.175,
+     "unit": "mm",
+     "stated": "Cutting Diameter: 1/8 in."
+    },
+    "dcon": {
+     "v": 3.175,
+     "unit": "mm",
+     "stated": "Shank Size: 1/8 in."
+    },
+    "lcf": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Flute Length: 1/2 in."
+    },
+    "oal": {
+     "v": 38.1,
+     "unit": "mm",
+     "stated": "Total Length: 1-1/2 in."
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "Flutes: 2"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "TIALN",
+     "unit": "text",
+     "stated": "Coating: TIALN"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "Helix: 30°"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "flat",
+   "id": "33753",
+   "name": "3/8 in. x 3/8 in. x 9/16 in. x 2-1/2 in.",
+   "url": "https://tormach.com/2-flute-carbide-end-mill-33753.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Cutting Diameter: 3/8 in."
+    },
+    "dcon": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Shank Size: 3/8 in."
+    },
+    "lcf": {
+     "v": 14.2875,
+     "unit": "mm",
+     "stated": "Flute Length: 9/16 in."
+    },
+    "oal": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Total Length: 2-1/2 in."
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "Flutes: 2"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "TIALN",
+     "unit": "text",
+     "stated": "Coating: TIALN"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "Helix: 30°"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "flat",
+   "id": "33748",
+   "name": "3/8 in. x 3/8 in. x 1 in. x 2-1/2 in.",
+   "url": "https://tormach.com/4-flute-carbide-end-mill-33748.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Cutting Diameter: 3/8 in."
+    },
+    "dcon": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Shank Size: 3/8 in."
+    },
+    "lcf": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "Flute Length: 1 in."
+    },
+    "oal": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Total Length: 2-1/2 in."
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "Flutes: 4"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "TIALN",
+     "unit": "text",
+     "stated": "Coating: TIALN"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "Helix: 30°"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "flat",
+   "id": "33458",
+   "name": "D:3/16 in. x SD:3/8 in. x FL:7/16 in. x OL:3-1/8 in.",
+   "url": "https://tormach.com/2-flute-high-speed-steel-end-mill-33458.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.7625,
+     "unit": "mm",
+     "stated": "Cutting Diameter: 3/16 in."
+    },
+    "dcon": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Shank Size: 3/8 in."
+    },
+    "lcf": {
+     "v": 11.1125,
+     "unit": "mm",
+     "stated": "Flute Length: 7/16 in."
+    },
+    "oal": {
+     "v": 79.375,
+     "unit": "mm",
+     "stated": "Overall Length: 3-1/8 in."
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "Flutes: 2 Flutes"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Material: HSS"
+    },
+    "coating": {
+     "v": "Uncoated",
+     "unit": "text",
+     "stated": "Coating: Uncoated"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "Helix: 30°"
+    },
+    "maker_pn": {
+     "v": "YG1 11043",
+     "unit": "text",
+     "stated": "YG1 Part Number:11043"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "flat",
+   "id": "33445",
+   "name": "D:3/16 in. x SD:3/8 in. x FL:1/2 in. x OL:2-3/8 in.",
+   "url": "https://tormach.com/4-flute-high-speed-steel-end-mill-33445.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.7625,
+     "unit": "mm",
+     "stated": "Cutting Diameter: 3/16 in."
+    },
+    "dcon": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Shank Size: 3/8 in."
+    },
+    "lcf": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Flute Length: 1/2 in."
+    },
+    "oal": {
+     "v": 60.325,
+     "unit": "mm",
+     "stated": "Overall Length: 2-3/8 in."
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "Flutes: 4 Flutes"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Material: HSS"
+    },
+    "coating": {
+     "v": "Uncoated",
+     "unit": "text",
+     "stated": "Coating: Uncoated"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "Helix: 30°"
+    },
+    "maker_pn": {
+     "v": "YG1 7043",
+     "unit": "text",
+     "stated": "YG1 Part Number:7043"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "bull",
+   "id": "33452",
+   "name": "D:1/2 in. x SD:1/2 in. x FL:1 in. x OL:3 in.",
+   "url": "https://tormach.com/4-flute-variable-flute-roughing-end-mill-33452.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Cutting Diameter: 1/2 in."
+    },
+    "dcon": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Shank Size: 1/2 in."
+    },
+    "lcf": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "Flute Length: 1 in."
+    },
+    "oal": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Overall Length: 3 in."
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "Flutes: 4 Flutes"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "Nano AlTiN",
+     "unit": "text",
+     "stated": "Coating: Nano AlTiN"
+    },
+    "helix": {
+     "v": "Variable",
+     "unit": "text",
+     "stated": "Helix: Variable"
+    },
+    "re": {
+     "v": 0.508,
+     "unit": "mm",
+     "stated": "End Style: Radius 0.020\""
+    },
+    "maker_pn": {
+     "v": "YG1 G90832",
+     "unit": "text",
+     "stated": "YG1 Part Number:G90832"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "bull",
+   "id": "35950",
+   "name": "5/16 in. x 5/16 in. x 13/16 in. x 2-1/2 in. x R.015 in.",
+   "url": "https://tormach.com/5-flute-corner-radius-end-mill-35950.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 7.9375,
+     "unit": "mm",
+     "stated": "Cutting Diameter: 5/16 in."
+    },
+    "dcon": {
+     "v": 7.9375,
+     "unit": "mm",
+     "stated": "Shank Size: 5/16 in."
+    },
+    "lcf": {
+     "v": 20.6375,
+     "unit": "mm",
+     "stated": "Flute Length: 13/16 in."
+    },
+    "oal": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Overall Length: 2-1/2 in."
+    },
+    "nof": {
+     "v": 5,
+     "unit": "count",
+     "stated": "Flutes: 5 Flutes"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "TiAlN",
+     "unit": "text",
+     "stated": "Coating: TiAlN"
+    },
+    "helix": {
+     "v": "Variable",
+     "unit": "text",
+     "stated": "Helix: Variable"
+    },
+    "re": {
+     "v": 0.381,
+     "unit": "mm",
+     "stated": "End Style: .015 in. Radius"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "bull",
+   "id": "35967",
+   "name": "1/2 in. x 1/2 in. x 1 in. x 3 in. x R.120 in.",
+   "url": "https://tormach.com/5-flute-corner-radius-end-mill-35967.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Cutting Diameter: 1/2 in."
+    },
+    "dcon": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Shank Size: 1/2 in."
+    },
+    "lcf": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "Flute Length: 1 in."
+    },
+    "oal": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Overall Length: 3 in."
+    },
+    "nof": {
+     "v": 5,
+     "unit": "count",
+     "stated": "Flutes: 5 Flutes"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "TiAlN",
+     "unit": "text",
+     "stated": "Coating: TiAlN"
+    },
+    "helix": {
+     "v": "Variable",
+     "unit": "text",
+     "stated": "Helix: Variable"
+    },
+    "re": {
+     "v": 3.048,
+     "unit": "mm",
+     "stated": "End Style: .120 in. Radius"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "chamfer",
+   "id": "35274",
+   "name": "2 Flute 90° Drill Mill/Chamfer Tool: 1/4 in.",
+   "url": "https://tormach.com/2-flute-carbide-90-degree-drill-mill-35274.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Cutting Diameter: 1/4 in."
+    },
+    "dcon": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Shank Size: 1/4 in."
+    },
+    "lcf": {
+     "v": 11.1125,
+     "unit": "mm",
+     "stated": "Flute Length: 7/16 in."
+    },
+    "oal": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Total Length: 2-1/2 in."
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "Flutes: 2"
+    },
+    "angle": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle: 90°"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "TIALN",
+     "unit": "text",
+     "stated": "Coating: TIALN"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "Helix: 30°"
+    }
+   },
+   "unknown": []
+  },
+  {
+   "kind": "ball",
+   "id": "37368",
+   "name": "2 FL REG BALL CARB EM 1/8 x 1/8 x 3/8 x 3 (component of End Mill Kit for Aluminum #1, PN 37377)",
+   "url": "https://tormach.com/14-piece-carbide-end-mill-kit-aluminum-37377.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dcon": {
+     "v": 3.175,
+     "unit": "mm",
+     "stated": "1/8 x 1/8 x 3/8 x 3"
+    },
+    "dc": {
+     "v": 3.175,
+     "unit": "mm",
+     "stated": "1/8 x 1/8 x 3/8 x 3"
+    },
+    "lcf": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "1/8 x 1/8 x 3/8 x 3"
+    },
+    "oal": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "1/8 x 1/8 x 3/8 x 3"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FL REG BALL CARB EM"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "14 Piece Carbide End Mill Kit."
+    },
+    "size_legend": {
+     "v": "shank, dc, LOC, OAL, corner radius",
+     "unit": "text",
+     "stated": "The sizes given describe the following dimensional characteristics (in inches) in order: shank diameter, cutting diameter, length of cut, overall length, corner radius (if given)."
+    }
+   },
+   "unknown": [
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "ball",
+   "id": "37371",
+   "name": "2 FL REG BALL CARB EM 1/4 x 1/4 x 3/4 x 2-1/2 (component of End Mill Kit for Aluminum #1, PN 37377)",
+   "url": "https://tormach.com/14-piece-carbide-end-mill-kit-aluminum-37377.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dcon": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "1/4 x 1/4 x 3/4 x 2-1/2"
+    },
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "1/4 x 1/4 x 3/4 x 2-1/2"
+    },
+    "lcf": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "1/4 x 1/4 x 3/4 x 2-1/2"
+    },
+    "oal": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "1/4 x 1/4 x 3/4 x 2-1/2"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FL REG BALL CARB EM"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "14 Piece Carbide End Mill Kit."
+    },
+    "size_legend": {
+     "v": "shank, dc, LOC, OAL, corner radius",
+     "unit": "text",
+     "stated": "The sizes given describe the following dimensional characteristics (in inches) in order: shank diameter, cutting diameter, length of cut, overall length, corner radius (if given)."
+    }
+   },
+   "unknown": [
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "37367",
+   "name": "3 FL REG SQUARE CARB EM 1/8 x 1/8 x 3/8 x 1-1/2 (component of End Mill Kit for Aluminum #1, PN 37377)",
+   "url": "https://tormach.com/14-piece-carbide-end-mill-kit-aluminum-37377.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dcon": {
+     "v": 3.175,
+     "unit": "mm",
+     "stated": "1/8 x 1/8 x 3/8 x 1-1/2"
+    },
+    "dc": {
+     "v": 3.175,
+     "unit": "mm",
+     "stated": "1/8 x 1/8 x 3/8 x 1-1/2"
+    },
+    "lcf": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "1/8 x 1/8 x 3/8 x 1-1/2"
+    },
+    "oal": {
+     "v": 38.1,
+     "unit": "mm",
+     "stated": "1/8 x 1/8 x 3/8 x 1-1/2"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "3 FL REG SQUARE CARB EM"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "14 Piece Carbide End Mill Kit."
+    },
+    "size_legend": {
+     "v": "shank, dc, LOC, OAL, corner radius",
+     "unit": "text",
+     "stated": "The sizes given describe the following dimensional characteristics (in inches) in order: shank diameter, cutting diameter, length of cut, overall length, corner radius (if given)."
+    }
+   },
+   "unknown": [
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "37370",
+   "name": "3 FL REG SQUARE CARB EM 1/4 x 1/4 x 3/4 x 2-1/2 (component of End Mill Kit for Aluminum #1, PN 37377)",
+   "url": "https://tormach.com/14-piece-carbide-end-mill-kit-aluminum-37377.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dcon": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "1/4 x 1/4 x 3/4 x 2-1/2"
+    },
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "1/4 x 1/4 x 3/4 x 2-1/2"
+    },
+    "lcf": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "1/4 x 1/4 x 3/4 x 2-1/2"
+    },
+    "oal": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "1/4 x 1/4 x 3/4 x 2-1/2"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "3 FL REG SQUARE CARB EM"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "14 Piece Carbide End Mill Kit."
+    },
+    "size_legend": {
+     "v": "shank, dc, LOC, OAL, corner radius",
+     "unit": "text",
+     "stated": "The sizes given describe the following dimensional characteristics (in inches) in order: shank diameter, cutting diameter, length of cut, overall length, corner radius (if given)."
+    }
+   },
+   "unknown": [
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "37372",
+   "name": "3 FL REG SQUARE CARB EM 3/8 x 3/8 x 1 x 2-1/2 (component of End Mill Kit for Aluminum #1, PN 37377)",
+   "url": "https://tormach.com/14-piece-carbide-end-mill-kit-aluminum-37377.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dcon": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "3/8 x 3/8 x 1 x 2-1/2"
+    },
+    "dc": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "3/8 x 3/8 x 1 x 2-1/2"
+    },
+    "lcf": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "3/8 x 3/8 x 1 x 2-1/2"
+    },
+    "oal": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "3/8 x 3/8 x 1 x 2-1/2"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "3 FL REG SQUARE CARB EM"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "14 Piece Carbide End Mill Kit."
+    },
+    "size_legend": {
+     "v": "shank, dc, LOC, OAL, corner radius",
+     "unit": "text",
+     "stated": "The sizes given describe the following dimensional characteristics (in inches) in order: shank diameter, cutting diameter, length of cut, overall length, corner radius (if given)."
+    }
+   },
+   "unknown": [
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "bull",
+   "id": "37373",
+   "name": "3 FL REG SQUARE CARB EM 3/8 x 3/8 x 1 x 2-1/2 x R.030 (component of End Mill Kit for Aluminum #1, PN 37377)",
+   "url": "https://tormach.com/14-piece-carbide-end-mill-kit-aluminum-37377.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dcon": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "3/8 x 3/8 x 1 x 2-1/2 x R.030"
+    },
+    "dc": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "3/8 x 3/8 x 1 x 2-1/2 x R.030"
+    },
+    "lcf": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "3/8 x 3/8 x 1 x 2-1/2 x R.030"
+    },
+    "oal": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "3/8 x 3/8 x 1 x 2-1/2 x R.030"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "3 FL REG SQUARE CARB EM"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "14 Piece Carbide End Mill Kit."
+    },
+    "size_legend": {
+     "v": "shank, dc, LOC, OAL, corner radius",
+     "unit": "text",
+     "stated": "The sizes given describe the following dimensional characteristics (in inches) in order: shank diameter, cutting diameter, length of cut, overall length, corner radius (if given)."
+    },
+    "re": {
+     "v": 0.762,
+     "unit": "mm",
+     "stated": "3/8 x 3/8 x 1 x 2-1/2 x R.030"
+    }
+   },
+   "unknown": [
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "37374",
+   "name": "3 FL REG SQUARE CARB EM 1/2 x 1/2 x 1-1/4 x 3 (component of End Mill Kit for Aluminum #1, PN 37377)",
+   "url": "https://tormach.com/14-piece-carbide-end-mill-kit-aluminum-37377.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dcon": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "1/2 x 1/2 x 1-1/4 x 3"
+    },
+    "dc": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "1/2 x 1/2 x 1-1/4 x 3"
+    },
+    "lcf": {
+     "v": 31.75,
+     "unit": "mm",
+     "stated": "1/2 x 1/2 x 1-1/4 x 3"
+    },
+    "oal": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "1/2 x 1/2 x 1-1/4 x 3"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "3 FL REG SQUARE CARB EM"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "14 Piece Carbide End Mill Kit."
+    },
+    "size_legend": {
+     "v": "shank, dc, LOC, OAL, corner radius",
+     "unit": "text",
+     "stated": "The sizes given describe the following dimensional characteristics (in inches) in order: shank diameter, cutting diameter, length of cut, overall length, corner radius (if given)."
+    }
+   },
+   "unknown": [
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "bull",
+   "id": "37375",
+   "name": "3 FL REG SQUARE CARB EM 1/2 x 1/2 x 1-1/4 x 3 x R.030 (component of End Mill Kit for Aluminum #1, PN 37377)",
+   "url": "https://tormach.com/14-piece-carbide-end-mill-kit-aluminum-37377.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dcon": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "1/2 x 1/2 x 1-1/4 x 3 x R.030"
+    },
+    "dc": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "1/2 x 1/2 x 1-1/4 x 3 x R.030"
+    },
+    "lcf": {
+     "v": 31.75,
+     "unit": "mm",
+     "stated": "1/2 x 1/2 x 1-1/4 x 3 x R.030"
+    },
+    "oal": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "1/2 x 1/2 x 1-1/4 x 3 x R.030"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "3 FL REG SQUARE CARB EM"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "14 Piece Carbide End Mill Kit."
+    },
+    "size_legend": {
+     "v": "shank, dc, LOC, OAL, corner radius",
+     "unit": "text",
+     "stated": "The sizes given describe the following dimensional characteristics (in inches) in order: shank diameter, cutting diameter, length of cut, overall length, corner radius (if given)."
+    },
+    "re": {
+     "v": 0.762,
+     "unit": "mm",
+     "stated": "1/2 x 1/2 x 1-1/4 x 3 x R.030"
+    }
+   },
+   "unknown": [
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "thread_mill",
+   "id": "34691",
+   "name": "#8 x 1/2 in. x 1/4 in. Thread Mill",
+   "url": "https://tormach.com/8-single-form-carbide-thread-mill-34691.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.048,
+     "unit": "mm",
+     "stated": "Cutting Diameter: .120 in."
+    },
+    "dcon": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Shank Diameter: 1/4 in."
+    },
+    "lcf": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Maximum DOC: 1/2 in."
+    },
+    "neck_d": {
+     "v": 1.778,
+     "unit": "mm",
+     "stated": "Neck Diameter: .070 in."
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "Flutes: 4 Flutes"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "Thread Angle: 60°"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "Uncoated",
+     "unit": "text",
+     "stated": "Coating: Uncoated"
+    },
+    "thread_range": {
+     "v": "8, 10, M4, M5",
+     "unit": "text",
+     "stated": "Recommended Thread Size: 8, 10, M4, M5"
+    },
+    "crest": {
+     "v": ".002",
+     "unit": "text",
+     "stated": "Crest: .002"
+    }
+   },
+   "unknown": [
+    "oal",
+    "tp"
+   ]
+  },
+  {
+   "kind": "thread_mill",
+   "id": "34692",
+   "name": "#10 x 1/2 in. x 1/4 in. Thread Mill",
+   "url": "https://tormach.com/10-single-form-carbide-thread-mill-34692.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.429,
+     "unit": "mm",
+     "stated": "Cutting Diameter: .135 in."
+    },
+    "dcon": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Shank Diameter: 1/4 in."
+    },
+    "lcf": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Maximum DOC: 1/2 in."
+    },
+    "neck_d": {
+     "v": 1.778,
+     "unit": "mm",
+     "stated": "Neck Diameter: .070 in."
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "Flutes: 4 Flutes"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "Thread Angle: 60°"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "Uncoated",
+     "unit": "text",
+     "stated": "Coating: Uncoated"
+    },
+    "thread_range": {
+     "v": "10, 12, M5",
+     "unit": "text",
+     "stated": "Recommended Thread Size: 10, 12, M5"
+    },
+    "crest": {
+     "v": ".002",
+     "unit": "text",
+     "stated": "Crest: .002"
+    }
+   },
+   "unknown": [
+    "oal",
+    "tp"
+   ]
+  },
+  {
+   "kind": "thread_mill",
+   "id": "34693",
+   "name": "#12 x 5/8 in. x 1/4 in. Thread Mill",
+   "url": "https://tormach.com/12-single-form-carbide-thread-mill-34693.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.064,
+     "unit": "mm",
+     "stated": "Cutting Diameter: .160 in."
+    },
+    "dcon": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Shank Diameter: 1/4 in."
+    },
+    "lcf": {
+     "v": 15.875,
+     "unit": "mm",
+     "stated": "Maximum DOC: 5/8 in."
+    },
+    "neck_d": {
+     "v": 2.413,
+     "unit": "mm",
+     "stated": "Neck Diameter: .095 in."
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "Flutes: 4 Flutes"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "Thread Angle: 60°"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "Uncoated",
+     "unit": "text",
+     "stated": "Coating: Uncoated"
+    },
+    "thread_range": {
+     "v": "12, 1/4, M5, M6",
+     "unit": "text",
+     "stated": "Recommended Thread Size: 12, 1/4, M5, M6"
+    },
+    "crest": {
+     "v": ".002",
+     "unit": "text",
+     "stated": "Crest: .002"
+    }
+   },
+   "unknown": [
+    "oal",
+    "tp"
+   ]
+  },
+  {
+   "kind": "thread_mill",
+   "id": "34694",
+   "name": "1/4 x 3/4 in. x 3/16 in. Thread Mill",
+   "url": "https://tormach.com/single-form-carbide-thread-mill-34694.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.572,
+     "unit": "mm",
+     "stated": "Cutting Diameter: .180 in."
+    },
+    "dcon": {
+     "v": 4.7625,
+     "unit": "mm",
+     "stated": "Shank Diameter: 3/16 in."
+    },
+    "lcf": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "Maximum DOC: 3/4 in."
+    },
+    "neck_d": {
+     "v": 2.921,
+     "unit": "mm",
+     "stated": "Neck Diameter: .115 in."
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "Flutes: 4 Flutes"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "Thread Angle: 60°"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "Uncoated",
+     "unit": "text",
+     "stated": "Coating: Uncoated"
+    },
+    "thread_range": {
+     "v": "1/4, M6",
+     "unit": "text",
+     "stated": "Recommended Thread Size: 1/4, M6"
+    },
+    "crest": {
+     "v": ".002",
+     "unit": "text",
+     "stated": "Crest: .002"
+    }
+   },
+   "unknown": [
+    "oal",
+    "tp"
+   ]
+  },
+  {
+   "kind": "thread_mill",
+   "id": "34695",
+   "name": "5/16 x 3/4 in. x 5/16 in. Thread Mill",
+   "url": "https://tormach.com/single-form-carbide-thread-mill-34695.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.096,
+     "unit": "mm",
+     "stated": "Cutting Diameter: .240 in."
+    },
+    "dcon": {
+     "v": 7.9375,
+     "unit": "mm",
+     "stated": "Shank Diameter: 5/16 in."
+    },
+    "lcf": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "Maximum DOC: 3/4 in."
+    },
+    "neck_d": {
+     "v": 4.064,
+     "unit": "mm",
+     "stated": "Neck Diameter: .160 in."
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "Flutes: 4 Flutes"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "Thread Angle: 60°"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "Uncoated",
+     "unit": "text",
+     "stated": "Coating: Uncoated"
+    },
+    "thread_range": {
+     "v": "5/16, 3/8, 7/16, M8, M10",
+     "unit": "text",
+     "stated": "Recommended Thread Size: 5/16, 3/8, 7/16, M8, M10"
+    },
+    "crest": {
+     "v": ".004",
+     "unit": "text",
+     "stated": "Crest: .004"
+    }
+   },
+   "unknown": [
+    "oal",
+    "tp"
+   ]
+  },
+  {
+   "kind": "thread_mill",
+   "id": "34696",
+   "name": "3/8 in. x 1 in. x 3/8 in. Thread Mill",
+   "url": "https://tormach.com/single-form-carbide-thread-mill-34696.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 7.62,
+     "unit": "mm",
+     "stated": "Cutting Diameter: .300 in."
+    },
+    "dcon": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Shank Diameter: 3/8 in."
+    },
+    "lcf": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "Maximum DOC: 1 in."
+    },
+    "neck_d": {
+     "v": 5.5372,
+     "unit": "mm",
+     "stated": "Neck Diameter: .218 in."
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "Flutes: 4 Flutes"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "Thread Angle: 60°"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "Uncoated",
+     "unit": "text",
+     "stated": "Coating: Uncoated"
+    },
+    "thread_range": {
+     "v": "3/8, 7/16, 1/2, M10, M12, M14",
+     "unit": "text",
+     "stated": "Recommended Thread Size: 3/8, 7/16, 1/2, M10, M12, M14"
+    },
+    "crest": {
+     "v": ".004",
+     "unit": "text",
+     "stated": "Crest: .004"
+    }
+   },
+   "unknown": [
+    "oal",
+    "tp"
+   ]
+  },
+  {
+   "kind": "thread_mill",
+   "id": "34697",
+   "name": "1/2 in. x 1-1/4 in. x 1/2 in. Thread Mill",
+   "url": "https://tormach.com/single-form-carbide-thread-mill-34697.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.8552,
+     "unit": "mm",
+     "stated": "Cutting Diameter: .388 in."
+    },
+    "dcon": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Shank Diameter: 1/2 in."
+    },
+    "lcf": {
+     "v": 31.75,
+     "unit": "mm",
+     "stated": "Maximum DOC: 1-1/4 in."
+    },
+    "neck_d": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Neck Diameter: .250 in."
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "Flutes: 4 Flutes"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "Thread Angle: 60°"
+    },
+    "material": {
+     "v": "Micrograin Carbide",
+     "unit": "text",
+     "stated": "Material: Micrograin Carbide"
+    },
+    "coating": {
+     "v": "Uncoated",
+     "unit": "text",
+     "stated": "Coating: Uncoated"
+    },
+    "thread_range": {
+     "v": "7/16, 1/2, 9/16, 5/8, 11/16, 3/4, 13/16, M14-M22",
+     "unit": "text",
+     "stated": "Recommended Thread Size: 7/16, 1/2, 9/16, 5/8, 11/16, 3/4, 13/16, M14-M22"
+    },
+    "crest": {
+     "v": ".004",
+     "unit": "text",
+     "stated": "Crest: .004"
+    }
+   },
+   "unknown": [
+    "oal",
+    "tp"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "33403",
+   "name": "8-32 Tap",
+   "url": "https://tormach.com/8-32-high-performance-spiral-flute-tap-hss-33403.html",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "8-32",
+     "unit": "text",
+     "stated": "8-32 Tap"
+    },
+    "tp": {
+     "v": 0.7937,
+     "unit": "mm",
+     "stated": "8-32 Tap"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Flutes: 3 Flutes"
+    },
+    "material": {
+     "v": "High Vanadium HSS",
+     "unit": "text",
+     "stated": "Material: High Vanadium HSS"
+    },
+    "coating": {
+     "v": "TICN",
+     "unit": "text",
+     "stated": "Coating: TICN"
+    },
+    "helix": {
+     "v": 40,
+     "unit": "deg",
+     "stated": "Helix: 40°"
+    },
+    "end_style": {
+     "v": "Bottoming",
+     "unit": "text",
+     "stated": "End Style: Bottoming"
+    },
+    "tap_drill": {
+     "v": "#29",
+     "unit": "text",
+     "stated": "Tap Drill: #29"
+    },
+    "maker_pn": {
+     "v": "YG1 T2283C",
+     "unit": "text",
+     "stated": "YG1 Part Number:T2283C"
+    }
+   },
+   "unknown": [
+    "dc"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "33405",
+   "name": "10-24 Tap",
+   "url": "https://tormach.com/10-24-high-performance-spiral-flute-tap-hss-33405.html",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "10-24",
+     "unit": "text",
+     "stated": "10-24 Tap"
+    },
+    "tp": {
+     "v": 1.0583,
+     "unit": "mm",
+     "stated": "10-24 Tap"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Flutes: 3 Flutes"
+    },
+    "material": {
+     "v": "High Vanadium HSS",
+     "unit": "text",
+     "stated": "Material: High Vanadium HSS"
+    },
+    "coating": {
+     "v": "TICN",
+     "unit": "text",
+     "stated": "Coating: TICN"
+    },
+    "helix": {
+     "v": 40,
+     "unit": "deg",
+     "stated": "Helix: 40°"
+    },
+    "end_style": {
+     "v": "Bottoming",
+     "unit": "text",
+     "stated": "End Style: Bottoming"
+    },
+    "tap_drill": {
+     "v": "#21",
+     "unit": "text",
+     "stated": "Tap Drill: #21"
+    },
+    "maker_pn": {
+     "v": "YG1 T2323C",
+     "unit": "text",
+     "stated": "YG1 Part Number:T2323C"
+    }
+   },
+   "unknown": [
+    "dc"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "33409",
+   "name": "1/4 in. - 20 Tap",
+   "url": "https://tormach.com/20-high-performance-spiral-flute-tap-hss-33409.html",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "1/4 in. - 20",
+     "unit": "text",
+     "stated": "1/4 in. - 20 Tap"
+    },
+    "tp": {
+     "v": 1.27,
+     "unit": "mm",
+     "stated": "1/4 in. - 20 Tap"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Flutes: 3 Flutes"
+    },
+    "material": {
+     "v": "High Vanadium HSS",
+     "unit": "text",
+     "stated": "Material: High Vanadium HSS"
+    },
+    "coating": {
+     "v": "TICN",
+     "unit": "text",
+     "stated": "Coating: TICN"
+    },
+    "helix": {
+     "v": 40,
+     "unit": "deg",
+     "stated": "Helix: 40°"
+    },
+    "end_style": {
+     "v": "Bottoming",
+     "unit": "text",
+     "stated": "End Style: Bottoming"
+    },
+    "tap_drill": {
+     "v": "#7",
+     "unit": "text",
+     "stated": "Tap Drill: #7"
+    },
+    "maker_pn": {
+     "v": "YG1 T2403C",
+     "unit": "text",
+     "stated": "YG1 Part Number:T2403C"
+    }
+   },
+   "unknown": [
+    "dc"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "33413",
+   "name": "3/8 in.- 16 Tap",
+   "url": "https://tormach.com/16-high-performance-spiral-flute-tap-hss-33413.html",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "3/8 in.- 16",
+     "unit": "text",
+     "stated": "3/8 in.- 16 Tap"
+    },
+    "tp": {
+     "v": 1.5875,
+     "unit": "mm",
+     "stated": "3/8 in.- 16 Tap"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Flutes: 3 Flutes"
+    },
+    "material": {
+     "v": "High Vanadium HSS",
+     "unit": "text",
+     "stated": "Material: High Vanadium HSS"
+    },
+    "coating": {
+     "v": "TICN",
+     "unit": "text",
+     "stated": "Coating: TICN"
+    },
+    "helix": {
+     "v": 40,
+     "unit": "deg",
+     "stated": "Helix: 40°"
+    },
+    "end_style": {
+     "v": "Bottoming",
+     "unit": "text",
+     "stated": "End Style: Bottoming"
+    },
+    "tap_drill": {
+     "v": "5/16\"",
+     "unit": "text",
+     "stated": "Tap Drill: 5/16\""
+    },
+    "maker_pn": {
+     "v": "YG1 T2483C",
+     "unit": "text",
+     "stated": "YG1 Part Number:T2483C"
+    }
+   },
+   "unknown": [
+    "dc"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "33419",
+   "name": "M4 X 0.7 Tap",
+   "url": "https://tormach.com/m4-x-07-high-performance-spiral-flute-tap-hss-33419.html",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M4 X 0.7",
+     "unit": "text",
+     "stated": "M4 X 0.7 Tap"
+    },
+    "tp": {
+     "v": 0.7,
+     "unit": "mm",
+     "stated": "M4 X 0.7 Tap"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Flutes: 3 Flutes"
+    },
+    "material": {
+     "v": "High Vanadium HSS",
+     "unit": "text",
+     "stated": "Material: High Vanadium HSS"
+    },
+    "coating": {
+     "v": "TICN",
+     "unit": "text",
+     "stated": "Coating: TICN"
+    },
+    "helix": {
+     "v": 40,
+     "unit": "deg",
+     "stated": "Helix: 40°"
+    },
+    "end_style": {
+     "v": "Bottoming",
+     "unit": "text",
+     "stated": "End Style: Bottoming"
+    },
+    "tap_drill": {
+     "v": "3.30 mm",
+     "unit": "text",
+     "stated": "Tap Drill: 3.30 mm"
+    },
+    "maker_pn": {
+     "v": "YG1 T5244C",
+     "unit": "text",
+     "stated": "YG1 Part Number:T5244C"
+    }
+   },
+   "unknown": [
+    "dc"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "33421",
+   "name": "M6 X 1.0 Tap",
+   "url": "https://tormach.com/m6-x-1-high-performance-spiral-flute-tap-hss-33421.html",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M6 X 1.0",
+     "unit": "text",
+     "stated": "M6 X 1.0 Tap"
+    },
+    "tp": {
+     "v": 1.0,
+     "unit": "mm",
+     "stated": "M6 X 1.0 Tap"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Flutes: 3 Flutes"
+    },
+    "material": {
+     "v": "High Vanadium HSS",
+     "unit": "text",
+     "stated": "Material: High Vanadium HSS"
+    },
+    "coating": {
+     "v": "TICN",
+     "unit": "text",
+     "stated": "Coating: TICN"
+    },
+    "helix": {
+     "v": 40,
+     "unit": "deg",
+     "stated": "Helix: 40°"
+    },
+    "end_style": {
+     "v": "Bottoming",
+     "unit": "text",
+     "stated": "End Style: Bottoming"
+    },
+    "tap_drill": {
+     "v": "5.00 mm",
+     "unit": "text",
+     "stated": "Tap Drill: 5.00 mm"
+    },
+    "maker_pn": {
+     "v": "YG1 T5315C",
+     "unit": "text",
+     "stated": "YG1 Part Number:T5315C"
+    }
+   },
+   "unknown": [
+    "dc"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "33425",
+   "name": "M10 X 1.5 Tap",
+   "url": "https://tormach.com/m10-x-15-high-performance-spiral-flute-tap-hss-33425.html",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M10 X 1.5",
+     "unit": "text",
+     "stated": "M10 X 1.5 Tap"
+    },
+    "tp": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "M10 X 1.5 Tap"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Flutes: 3 Flutes"
+    },
+    "material": {
+     "v": "High Vanadium HSS",
+     "unit": "text",
+     "stated": "Material: High Vanadium HSS"
+    },
+    "coating": {
+     "v": "TICN",
+     "unit": "text",
+     "stated": "Coating: TICN"
+    },
+    "helix": {
+     "v": 40,
+     "unit": "deg",
+     "stated": "Helix: 40°"
+    },
+    "end_style": {
+     "v": "Bottoming",
+     "unit": "text",
+     "stated": "End Style: Bottoming"
+    },
+    "tap_drill": {
+     "v": "8.50 mm",
+     "unit": "text",
+     "stated": "Tap Drill: 8.50 mm"
+    },
+    "maker_pn": {
+     "v": "YG1 T5426C",
+     "unit": "text",
+     "stated": "YG1 Part Number:T5426C"
+    }
+   },
+   "unknown": [
+    "dc"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "33428",
+   "name": "M12 X 1.25 Tap",
+   "url": "https://tormach.com/m12-x-125-high-performance-spiral-flute-tap-hss-33428.html",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M12 X 1.25",
+     "unit": "text",
+     "stated": "M12 X 1.25 Tap"
+    },
+    "tp": {
+     "v": 1.25,
+     "unit": "mm",
+     "stated": "M12 X 1.25 Tap"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Flutes: 3 Flutes"
+    },
+    "material": {
+     "v": "High Vanadium HSS",
+     "unit": "text",
+     "stated": "Material: High Vanadium HSS"
+    },
+    "coating": {
+     "v": "TICN",
+     "unit": "text",
+     "stated": "Coating: TICN"
+    },
+    "helix": {
+     "v": 40,
+     "unit": "deg",
+     "stated": "Helix: 40°"
+    },
+    "end_style": {
+     "v": "Bottoming",
+     "unit": "text",
+     "stated": "End Style: Bottoming"
+    },
+    "tap_drill": {
+     "v": "10.80 mm",
+     "unit": "text",
+     "stated": "Tap Drill: 10.80 mm"
+    },
+    "maker_pn": {
+     "v": "YG1 T5525C",
+     "unit": "text",
+     "stated": "YG1 Part Number:T5525C"
+    }
+   },
+   "unknown": [
+    "dc"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "33497",
+   "name": "3/64 in. x 3/4 in. x 1-3/4 in. 10-Pack Drills",
+   "url": "https://tormach.com/high-speed-steel-jobber-length-drill-33497.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 1.1906,
+     "unit": "mm",
+     "stated": "3/64 in. x 3/4 in. x 1-3/4 in. 10-Pack Drills"
+    },
+    "size": {
+     "v": "3/64 in. x 3/4 in. x 1-3/4 in.",
+     "unit": "text",
+     "stated": "3/64 in. x 3/4 in. x 1-3/4 in. 10-Pack Drills"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle: 135°"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Material: HSS"
+    },
+    "coating": {
+     "v": "TIN",
+     "unit": "text",
+     "stated": "Coating: TIN"
+    },
+    "point_style": {
+     "v": "Normal",
+     "unit": "text",
+     "stated": "Point Style: Normal"
+    },
+    "tolerance": {
+     "v": "H8",
+     "unit": "text",
+     "stated": "Tolerance: H8"
+    },
+    "maker_pn": {
+     "v": "YG1 D1GP113003",
+     "unit": "text",
+     "stated": "YG1 Part Number:D1GP113003"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "33573",
+   "name": "7/64 in. x 1-1/2 in. x 2-5/8 in.10-Pack Drills",
+   "url": "https://tormach.com/high-speed-steel-jobber-length-drill-33573.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 2.7781,
+     "unit": "mm",
+     "stated": "7/64 in. x 1-1/2 in. x 2-5/8 in.10-Pack Drills"
+    },
+    "size": {
+     "v": "7/64 in. x 1-1/2 in. x 2-5/8 in.",
+     "unit": "text",
+     "stated": "7/64 in. x 1-1/2 in. x 2-5/8 in.10-Pack Drills"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle: 135°"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Material: HSS"
+    },
+    "coating": {
+     "v": "TIN",
+     "unit": "text",
+     "stated": "Coating: TIN"
+    },
+    "point_style": {
+     "v": "Split",
+     "unit": "text",
+     "stated": "Point Style: Split"
+    },
+    "tolerance": {
+     "v": "H8",
+     "unit": "text",
+     "stated": "Tolerance: H8"
+    },
+    "maker_pn": {
+     "v": "YG1 D1GP182007",
+     "unit": "text",
+     "stated": "YG1 Part Number:D1GP182007"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "33602",
+   "name": "13/32 in. x 3-7/8 in. x 5-1/4 in. 5-Pack Drills",
+   "url": "https://tormach.com/high-speed-steel-jobber-length-drill-33602.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.3187,
+     "unit": "mm",
+     "stated": "13/32 in. x 3-7/8 in. x 5-1/4 in. 5-Pack Drills"
+    },
+    "size": {
+     "v": "13/32 in. x 3-7/8 in. x 5-1/4 in.",
+     "unit": "text",
+     "stated": "13/32 in. x 3-7/8 in. x 5-1/4 in. 5-Pack Drills"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle: 135°"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Material: HSS"
+    },
+    "coating": {
+     "v": "TIN",
+     "unit": "text",
+     "stated": "Coating: TIN"
+    },
+    "point_style": {
+     "v": "Split",
+     "unit": "text",
+     "stated": "Point Style: Split"
+    },
+    "tolerance": {
+     "v": "H8",
+     "unit": "text",
+     "stated": "Tolerance: H8"
+    },
+    "maker_pn": {
+     "v": "YG1 D1GP182026",
+     "unit": "text",
+     "stated": "YG1 Part Number:D1GP182026"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "33610",
+   "name": "1.1 mm x 12 mm x 34 mm 10-Pack Drills",
+   "url": "https://tormach.com/high-speed-steel-jobber-length-drill-metric-33610.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 1.1,
+     "unit": "mm",
+     "stated": "1.1 mm x 12 mm x 34 mm 10-Pack Drills"
+    },
+    "size": {
+     "v": "1.1 mm x 12 mm x 34 mm",
+     "unit": "text",
+     "stated": "1.1 mm x 12 mm x 34 mm 10-Pack Drills"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle: 135°"
+    },
+    "material": {
+     "v": "5% COBALT HSS",
+     "unit": "text",
+     "stated": "Material: 5% COBALT HSS"
+    },
+    "coating": {
+     "v": "TIN",
+     "unit": "text",
+     "stated": "Coating: TIN"
+    },
+    "point_style": {
+     "v": "Normal",
+     "unit": "text",
+     "stated": "Point Style: Normal"
+    },
+    "tolerance": {
+     "v": "H8",
+     "unit": "text",
+     "stated": "Tolerance: H8"
+    },
+    "maker_pn": {
+     "v": "YG1 DLGP195011",
+     "unit": "text",
+     "stated": "YG1 Part Number:DLGP195011"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "33611",
+   "name": "1.2 mm x 16 mm x 38 mm 10-Pack Drills",
+   "url": "https://tormach.com/high-speed-steel-jobber-length-drill-metric-33611.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 1.2,
+     "unit": "mm",
+     "stated": "1.2 mm x 16 mm x 38 mm 10-Pack Drills"
+    },
+    "size": {
+     "v": "1.2 mm x 16 mm x 38 mm",
+     "unit": "text",
+     "stated": "1.2 mm x 16 mm x 38 mm 10-Pack Drills"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle: 135°"
+    },
+    "material": {
+     "v": "5% COBALT HSS",
+     "unit": "text",
+     "stated": "Material: 5% COBALT HSS"
+    },
+    "coating": {
+     "v": "TIN",
+     "unit": "text",
+     "stated": "Coating: TIN"
+    },
+    "point_style": {
+     "v": "Normal",
+     "unit": "text",
+     "stated": "Point Style: Normal"
+    },
+    "tolerance": {
+     "v": "H8",
+     "unit": "text",
+     "stated": "Tolerance: H8"
+    },
+    "maker_pn": {
+     "v": "YG1 DLGP195012",
+     "unit": "text",
+     "stated": "YG1 Part Number:DLGP195012"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "33550",
+   "name": "#4 x 2-1/2 in. x 3-3/4 in. 10-Pack Drills",
+   "url": "https://tormach.com/4-high-speed-steel-jobber-length-drill-33550.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": "#4",
+     "unit": "text",
+     "stated": "#4 x 2-1/2 in. x 3-3/4 in. 10-Pack Drills"
+    },
+    "size": {
+     "v": "#4 x 2-1/2 in. x 3-3/4 in.",
+     "unit": "text",
+     "stated": "#4 x 2-1/2 in. x 3-3/4 in. 10-Pack Drills"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "Point Angle: 118°"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Material: HSS"
+    },
+    "coating": {
+     "v": "TIN",
+     "unit": "text",
+     "stated": "Coating: TIN"
+    },
+    "point_style": {
+     "v": "Split",
+     "unit": "text",
+     "stated": "Point Style: Split"
+    },
+    "tolerance": {
+     "v": "H8",
+     "unit": "text",
+     "stated": "Tolerance: H8"
+    },
+    "maker_pn": {
+     "v": "YG1 D1GP138253",
+     "unit": "text",
+     "stated": "YG1 Part Number:D1GP138253"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal"
+   ]
+  },
+  {
+   "kind": "face_mill",
+   "id": "31280",
+   "name": "Face Mill - 38 mm",
+   "url": "https://tormach.com/face-mill-38mm-31280-builder.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 38,
+     "unit": "mm",
+     "stated": "38 mm (1.50 in.) Cutting Diameter"
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "4 Flute Indexable Mill"
+    },
+    "height": {
+     "v": 35,
+     "unit": "mm",
+     "stated": "35 mm (1.35 in.) Height"
+    },
+    "shoulder_angle": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Shoulder angle: 90 degrees"
+    },
+    "mount": {
+     "v": "1/2 in. shell mill arbor (TTS 31830 / BT30 39676)",
+     "unit": "text",
+     "stated": "TTS-1/2 in. Shell Mill Arbor. Compatible with shell mills designed for 1/2 in. R8 arbors."
+    }
+   },
+   "unknown": [
+    "oal",
+    "dcon"
+   ]
+  },
+  {
+   "kind": "face_mill",
+   "id": "52442",
+   "name": "Face Mill - 1 1/2 in.",
+   "url": "https://tormach.com/1-50-in-45-facemill-with-10-sekt1204-inserts-52442-builder.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 38.1,
+     "unit": "mm",
+     "stated": "(1.50 in.) Cutting Diameter"
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "4 Flute Indexable Mill"
+    },
+    "shoulder_angle": {
+     "v": 45,
+     "unit": "deg",
+     "stated": "Shoulder angle: 45 degrees"
+    },
+    "insert": {
+     "v": "SEKT1204 (SEKT/SEHT)",
+     "unit": "text",
+     "stated": "Comes With 10 SEKT1204 Inserts"
+    }
+   },
+   "unknown": [
+    "oal",
+    "dcon"
+   ]
+  },
+  {
+   "kind": "face_mill",
+   "id": "33031",
+   "name": "TTS™ SuperFly Cutter Kit",
+   "url": "https://tormach.com/tts-superfly-cutter-kit-33031-builder.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc_min": {
+     "v": 66.04,
+     "unit": "mm",
+     "stated": "Adjustable between 2.6 in. to 3 in. Cutting Diameter"
+    },
+    "dc_max": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Adjustable between 2.6 in. to 3 in. Cutting Diameter"
+    },
+    "height": {
+     "v": 46,
+     "unit": "mm",
+     "stated": "1.8 in. (46 mm) Height"
+    },
+    "max_rpm": {
+     "v": 2500,
+     "unit": "rpm",
+     "stated": "Max RPM: 2500"
+    },
+    "interface": {
+     "v": "TTS",
+     "unit": "text",
+     "stated": "TTS™ Fly Cutter Body with ATC Geometry"
+    },
+    "insert": {
+     "v": "SEHT",
+     "unit": "text",
+     "stated": "Includes tool bar for SEHT Insert"
+    }
+   },
+   "unknown": [
+    "dc",
+    "nof",
+    "oal",
+    "dcon",
+    "dc"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "31255",
+   "name": "End Mill - 25 mm",
+   "url": "https://tormach.com/end-mill-25mm-31255.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 25,
+     "unit": "mm",
+     "stated": "25 mm (0.98\") Cutting Diameter"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "3 Flute Indexable Mill"
+    },
+    "height": {
+     "v": 35,
+     "unit": "mm",
+     "stated": "35 mm (1.38\") Height"
+    },
+    "mount": {
+     "v": "M12 screw stud",
+     "unit": "text",
+     "stated": "M12 Screw Stud"
+    },
+    "type": {
+     "v": "indexable",
+     "unit": "text",
+     "stated": "3 Flute Indexable Mill"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "31258",
+   "name": "Center Cut End Mill - 25 mm",
+   "url": "https://tormach.com/center-cut-end-mill-25mm-31258.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 25,
+     "unit": "mm",
+     "stated": "25 mm (0.98\") Cutting Diameter"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 Flute Indexable Mill"
+    },
+    "height": {
+     "v": 35,
+     "unit": "mm",
+     "stated": "35 mm (1.38\") Height"
+    },
+    "mount": {
+     "v": "M12 screw stud",
+     "unit": "text",
+     "stated": "M12 Screw Stud"
+    },
+    "type": {
+     "v": "indexable",
+     "unit": "text",
+     "stated": "2 Flute Indexable Mill"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "ball",
+   "id": "31236",
+   "name": "Ball Precision Cutter - 8 mm",
+   "url": "https://tormach.com/ball-precision-cutter-8mm-31236.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8,
+     "unit": "mm",
+     "stated": "8 mm (0.31 in.) Ball Diameter"
+    },
+    "height": {
+     "v": 16,
+     "unit": "mm",
+     "stated": "16 mm (0.63 in.) Height"
+    },
+    "mount": {
+     "v": "M4 screw stud",
+     "unit": "text",
+     "stated": "M4 Screw Stud"
+    },
+    "type": {
+     "v": "indexable ball",
+     "unit": "text",
+     "stated": "Requires 2-sided Ball Insert"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal",
+    "nof",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "38175",
+   "name": "Modular Insert End Mill: 17 mm",
+   "url": "https://tormach.com/modular-insert-end-mill-17mm-38175.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "Diameter: 17 mm"
+    },
+    "height": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "Height: 25 mm"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "Flutes: 2 Flutes"
+    },
+    "mount": {
+     "v": "M8 modular thread",
+     "unit": "text",
+     "stated": "Screw: M8"
+    },
+    "type": {
+     "v": "modular insert head",
+     "unit": "text",
+     "stated": "Modular Insert End Mill: 17 mm"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "38176",
+   "name": "Modular Insert End Mill: 20 mm",
+   "url": "https://tormach.com/modular-insert-end-mill-20mm-38176.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "Diameter: 20 mm"
+    },
+    "height": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "Height: 30 mm"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "Flutes: 2 Flutes"
+    },
+    "mount": {
+     "v": "M10 modular thread",
+     "unit": "text",
+     "stated": "Screw: M10"
+    },
+    "type": {
+     "v": "modular insert head",
+     "unit": "text",
+     "stated": "Modular Insert End Mill: 20 mm"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "bull",
+   "id": "38179",
+   "name": "Modular Insert Toroidal Mill: 9 mm",
+   "url": "https://tormach.com/modular-insert-corner-rounding-end-mill-9mm-38179.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.0,
+     "unit": "mm",
+     "stated": "Diameter: 9 mm"
+    },
+    "height": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "Height: 15 mm"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "Flutes: 2 Flutes"
+    },
+    "mount": {
+     "v": "M4 modular thread",
+     "unit": "text",
+     "stated": "Holder Screw Size: M4"
+    },
+    "type": {
+     "v": "modular insert head",
+     "unit": "text",
+     "stated": "Modular Insert Toroidal Mill: 9 mm"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal",
+    "re",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "bull",
+   "id": "38185",
+   "name": "Modular Insert Toroidal Mill: 12 mm",
+   "url": "https://tormach.com/modular-insert-corner-rounding-end-mill-12mm-38185.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Diameter: 12 mm"
+    },
+    "height": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "Height: 18 mm"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "Flutes: 2 Flutes"
+    },
+    "mount": {
+     "v": "M6 modular thread",
+     "unit": "text",
+     "stated": "Screw: M6"
+    },
+    "type": {
+     "v": "modular insert head",
+     "unit": "text",
+     "stated": "Modular Insert Toroidal Mill: 12 mm"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal",
+    "re",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "bull",
+   "id": "38187",
+   "name": "Modular Insert Toroidal Mill: 17 mm",
+   "url": "https://tormach.com/modular-insert-corner-rounding-end-mill-17mm-38187.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "Diameter: 17 mm"
+    },
+    "height": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "Height: 23 mm"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "Flutes: 2 Flutes"
+    },
+    "mount": {
+     "v": "M8 modular thread",
+     "unit": "text",
+     "stated": "Screw: M8"
+    },
+    "type": {
+     "v": "modular insert head",
+     "unit": "text",
+     "stated": "Modular Insert Toroidal Mill: 17 mm"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal",
+    "re",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "bull",
+   "id": "38188",
+   "name": "Modular Insert Toroidal Mill: 20 mm",
+   "url": "https://tormach.com/modular-insert-corner-rounding-end-mill-20mm-38188.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "Diameter: 20 mm"
+    },
+    "height": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "Height: 30 mm"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Flutes: 3 Flutes"
+    },
+    "mount": {
+     "v": "M10 modular thread",
+     "unit": "text",
+     "stated": "Screw: M10"
+    },
+    "type": {
+     "v": "modular insert head",
+     "unit": "text",
+     "stated": "Modular Insert Toroidal Mill: 20 mm"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal",
+    "re",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "bull",
+   "id": "38190",
+   "name": "Modular Insert Toroidal Mill: 22 mm",
+   "url": "https://tormach.com/modular-insert-toroidal-end-mill-22mm-38190.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 22.0,
+     "unit": "mm",
+     "stated": "Diameter: 22 mm"
+    },
+    "height": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "Height: 30 mm"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Flutes: 3 Flutes"
+    },
+    "mount": {
+     "v": "M10 modular thread",
+     "unit": "text",
+     "stated": "Screw: M10"
+    },
+    "type": {
+     "v": "modular insert head",
+     "unit": "text",
+     "stated": "Modular Insert Toroidal Mill: 22 mm"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal",
+    "re",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "38801",
+   "name": "Mini-Shear - .500 in.",
+   "url": "https://tormach.com/mini-shear-0500in-38801-builder.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Cutting Diameter: .500 in."
+    },
+    "nof": {
+     "v": 1,
+     "unit": "count",
+     "stated": "No. of Inserts: 1"
+    },
+    "insert": {
+     "v": "XDET-2.52-.010",
+     "unit": "text",
+     "stated": "Insert: XDET-2.52-.010"
+    },
+    "oal": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Overall Length: 3.0”"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "38804",
+   "name": "TTS™ Mini-Shear .750 in.",
+   "url": "https://tormach.com/tts-minishear-0750in-38804-builder.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "Cutting Diameter: .750 in."
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "No. of Inserts: 2"
+    },
+    "insert": {
+     "v": "XDET-2.52-.010",
+     "unit": "text",
+     "stated": "Insert: XDET-2.52-.010"
+    },
+    "lcf": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "Max. Cutting Depth: 2.0\""
+    }
+   },
+   "unknown": [
+    "dcon",
+    "oal",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "35571",
+   "name": "TTS™ Shear-Hog - 0.750 in.",
+   "url": "https://tormach.com/tts-shear-hog-0750in-35571-builder.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "Cutting Diameter: 0.750 in."
+    },
+    "nof": {
+     "v": 1,
+     "unit": "count",
+     "stated": "No. of Inserts: 1"
+    },
+    "insert": {
+     "v": "ADEH-43x",
+     "unit": "text",
+     "stated": "Insert: ADEH-43x"
+    },
+    "lcf": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "Max. Cutting Depth: 2 in."
+    }
+   },
+   "unknown": [
+    "dcon",
+    "oal",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "35608",
+   "name": "Shear-Hog - 2 in.",
+   "url": "https://tormach.com/tts-shear-hog-2-in-builder.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "Cutting Diameter: 2 in."
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "No. of Inserts: 2"
+    },
+    "insert": {
+     "v": "ADEH-43x",
+     "unit": "text",
+     "stated": "Insert: ADEH-43x"
+    },
+    "lcf": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "Max. Cutting Depth: 2 in."
+    }
+   },
+   "unknown": [
+    "dcon",
+    "oal",
+    "material",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "flat",
+   "id": "38160",
+   "name": "DIJET QM Mini Modular Insert High Feed End Mill: 1/2 in.",
+   "url": "https://tormach.com/dijet-qm-mini-modular-insert-high-feed-end-mill-38160-builder.html",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Cutting Diameter: 1/2 in."
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Inserts: 3"
+    },
+    "insert": {
+     "v": "T6",
+     "unit": "text",
+     "stated": "Insert Wrench: T6"
+    },
+    "mount": {
+     "v": "M6 x 1 modular thread",
+     "unit": "text",
+     "stated": "Thread: M6 x 1"
+    }
+   },
+   "unknown": [
+    "lcf",
+    "dcon",
+    "oal",
+    "material",
+    "coating",
+    "helix"
+   ]
+  }
+ ]
+}
