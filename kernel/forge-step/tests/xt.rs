@@ -12,6 +12,10 @@ fn volume(b: &forge_topo::Body) -> f64 {
     mass::mass_rel(b, 1e-9).expect("mass").volume
 }
 
+fn centroid(b: &forge_topo::Body) -> forge_math::Point3 {
+    mass::mass_rel(b, 1e-9).expect("mass").centroid
+}
+
 fn near(a: f64, b: f64, tol: f64) -> bool {
     (a - b).abs() <= tol * b.abs().max(1.0)
 }
@@ -203,5 +207,63 @@ fn corpus_bodies_read_and_measure() {
         let v = s.mass.as_ref().map(|m| m.volume).expect("measured");
         assert!(near(v, want, 1e-6), "{f} ({what}): {v} against {want}");
         assert!(imp.system.contains("SOLIDWORKS"), "{}", imp.system);
+    }
+}
+
+/// What a Part Studio of several parts exports: a list of bodies at the root, each with its name
+/// attribute (one in UTF-16), read the same from text and binary.
+#[test]
+fn a_multi_part_file_reads_each_body_with_its_name() {
+    for f in ["multipart.x_t", "multipart.x_b"] {
+        let imp = import(&data(f), &Limits::default()).unwrap_or_else(|e| panic!("{f}: {e}"));
+        assert!(imp.refusals.is_empty(), "{f}: {:?}", imp.refusals);
+        let names: Vec<&str> = imp.solids.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["Plate", "Stift Ø20"], "{f}");
+        assert!(near(volume(&imp.solids[0].body), 6000.0, 1e-9), "{f}");
+        assert!(
+            near(
+                volume(&imp.solids[1].body),
+                std::f64::consts::PI * 100.0 * 25.0,
+                1e-6
+            ),
+            "{f}"
+        );
+        // the cylinder about x = 50 mm (its rims have no vertex: placed by its centroid)
+        let c = centroid(&imp.solids[1].body);
+        assert!(
+            near(c.x, 50.0, 1e-9) && near(c.y, 0.0, 1e-9) && near(c.z, 12.5, 1e-9),
+            "{f}: {c:?}"
+        );
+    }
+}
+
+/// An assembly of a sub-assembly placed twice: each part placed through both transforms, named
+/// by its own name (the innermost instance carries none).
+#[test]
+fn a_nested_assembly_places_through_every_level() {
+    for f in ["nested.x_t", "nested.x_b"] {
+        let imp = import(&data(f), &Limits::default()).unwrap_or_else(|e| panic!("{f}: {e}"));
+        assert!(imp.refusals.is_empty(), "{f}: {:?}", imp.refusals);
+        assert_eq!(imp.solids.len(), 4, "{f}");
+        let names: Vec<&str> = imp.solids.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["Block", "Pin", "Block", "Pin"], "{f}");
+        let blocks: Vec<Box3> = [0, 2].iter().map(|&i| boxed(&imp.solids[i].body)).collect();
+        assert!(
+            near(blocks[0].y.lo, 0.0, 1e-9) && near(blocks[0].x.hi, 20.0, 1e-9),
+            "{f}: {blocks:?}"
+        );
+        assert!(
+            near(blocks[1].y.lo, 100.0, 1e-9) && near(blocks[1].y.hi, 110.0, 1e-9),
+            "{f}: {blocks:?}"
+        );
+        // the pin 50 mm along x inside the sub-assembly, then 100 mm along y in the second
+        let pin = centroid(&imp.solids[3].body);
+        assert!(
+            near(pin.x, 50.0, 1e-9) && near(pin.y, 100.0, 1e-9),
+            "{f}: {pin:?}"
+        );
+        for s in &imp.solids {
+            assert!(forge_topo::check(&s.body).is_empty(), "{f}");
+        }
     }
 }

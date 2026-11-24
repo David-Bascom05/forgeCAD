@@ -31,6 +31,13 @@ BASE = {
     50: G + " v v v",
     51: G + " v v f v",
     100: "d p p p f9 v f d v",
+    # lists and attributes: `*` marks the variable field, its length written before the index
+    74: "d p p*",
+    79: "c*",
+    80: "p p d u8 p l14 u*",
+    81: "d p p p p p p p*",
+    84: "c*",
+    98: "w*",
 }
 VARIABLE = set()
 
@@ -56,13 +63,25 @@ class Model:
 
 
 def types_of(ty):
+    """(code, count) per field: count 0 for a scalar, n for an array, -1 for the variable field
+    (its values one list)."""
     out = []
     for t in BASE[ty].split():
-        if t[0] == "f" and len(t) > 1:
-            out.append(("f", int(t[1:])))
+        if t.endswith("*"):
+            out.append((t[0], -1))
+        elif len(t) > 1:
+            out.append((t[0], int(t[1:])))
         else:
             out.append((t, 0))
     return out
+
+
+def var_len(ty, vals):
+    """The variable field's length (the last field's values), or None for a fixed node."""
+    ts = types_of(ty)
+    if ts and ts[-1][1] == -1:
+        return len(vals[-1])
+    return None
 
 
 def text(m, embedded):
@@ -97,10 +116,17 @@ def text(m, embedded):
         if embedded and ty not in seen:
             s += "255 "
         seen.add(ty)
+        vl = var_len(ty, vals)
+        if vl is not None:
+            s += f"{vl} "
         s += f"{i} "
         it = iter(vals)
         for t, n in types_of(ty):
-            if t in "cl":
+            if n and t in "cl":
+                s += "".join(next(it))
+            elif n and t in "updw":
+                s += "".join(num(x) for x in next(it))
+            elif t in "cl":
                 s += next(it)
             elif t == "v":
                 v = next(it)
@@ -147,9 +173,27 @@ def binary(m, little):
     for i in sorted(m.nodes, key=lambda k: (k != 1, k)):
         ty, vals = m.nodes[i]
         out += struct.pack(e + "h", ty)
+        vl = var_len(ty, vals)
+        if vl is not None:
+            out += struct.pack(e + "i", vl)
         out += ptr(i)
         it = iter(vals)
         for t, n in types_of(ty):
+            if n and t != "f":
+                xs = next(it)
+                if t == "c":
+                    out += "".join(xs).encode()
+                elif t == "l":
+                    out += bytes(1 if x == "T" else 0 for x in xs)
+                elif t == "u":
+                    out += bytes(xs)
+                elif t in "nw":
+                    out += b"".join(struct.pack(e + "h", x) for x in xs)
+                elif t == "d":
+                    out += b"".join(struct.pack(e + "i", x) for x in xs)
+                elif t == "p":
+                    out += b"".join(ptr(x) for x in xs)
+                continue
             if t == "c":
                 out += next(it).encode()
             elif t == "l":
@@ -270,16 +314,18 @@ def box(m, a, b, c, owner=0):
     return solid(m, faces, edges, verts, owner)
 
 
-def cylinder(m, r, h):
-    """A cylinder of radius r about z from 0 to h: two rims with no vertex."""
+def cylinder(m, r, h, at=(0, 0)):
+    """A cylinder of radius r about the z line through `at` (x, y), from 0 to h: two rims with
+    no vertex."""
+    x, y = at
     edges = [
-        (31, [(0, 0, 0), (0, 0, 1), (1, 0, 0), r], 0, 0),
-        (31, [(0, 0, h), (0, 0, 1), (1, 0, 0), r], 0, 0),
+        (31, [(x, y, 0), (0, 0, 1), (1, 0, 0), r], 0, 0),
+        (31, [(x, y, h), (0, 0, 1), (1, 0, 0), r], 0, 0),
     ]
     faces = [
-        (51, [(0, 0, 0), (0, 0, 1), r, (1, 0, 0)], "+", [[(0, "+")], [(1, "-")]]),
-        (50, [(0, 0, 0), (0, 0, -1), (1, 0, 0)], "+", [[(0, "-")]]),
-        (50, [(0, 0, h), (0, 0, 1), (1, 0, 0)], "+", [[(1, "+")]]),
+        (51, [(x, y, 0), (0, 0, 1), r, (1, 0, 0)], "+", [[(0, "+")], [(1, "-")]]),
+        (50, [(x, y, 0), (0, 0, -1), (1, 0, 0)], "+", [[(0, "-")]]),
+        (50, [(x, y, h), (0, 0, 1), (1, 0, 0)], "+", [[(1, "+")]]),
     ]
     return solid(m, faces, edges, [])
 
@@ -299,6 +345,67 @@ def assembly():
     return m
 
 
+def named(m, owner, name):
+    """A name attribute on `owner` (a body or an instance), as SolidWorks and Onshape write one:
+    SDL/TYSA_NAME with its characters, or SDL/TYSA_UNAME with UTF-16 units when not ASCII."""
+    uni = any(ord(c) > 126 for c in name)
+    key = "SDL/TYSA_UNAME" if uni else "SDL/TYSA_NAME"
+    ident = m.add(79, [list(key)])
+    actions = [0] * 8
+    legal = ["F"] * 14
+    d = m.add(80, [0, ident, 8001 if uni else 8000, actions, 0, legal, [5 if uni else 2]])
+    if uni:
+        units = list(struct.unpack("<%dH" % (len(name.encode("utf-16-le")) // 2), name.encode("utf-16-le")))
+        v = m.add(98, [units])
+    else:
+        v = m.add(84, [list(name)])
+    a = m.add(81, [m.next, d, owner, 0, 0, 0, 0, [v]])
+    m.nodes[owner][1][1] = a
+    return a
+
+
+def multipart():
+    """A multi-part file, as a Part Studio of several parts exports: a list of bodies at the
+    root, each named, one name not ASCII."""
+    m = Model()
+    lst = m.add(74, None)
+    b1 = box(m, 0.03, 0.02, 0.01)
+    named(m, b1, "Plate")
+    b2 = cylinder(m, 0.01, 0.025, at=(0.05, 0.0))
+    named(m, b2, "Stift Ø20")
+    m.set(lst, 74, [2, 0, [b1, b2]])
+    return m
+
+
+def nested():
+    """An assembly of two instances of a sub-assembly (a block and a pin beside it), the second
+    moved 100 mm along y; the top instances named, the parts named."""
+    m = Model()
+    top = m.add(10, None)
+    t1, t2 = m.reserve(), m.reserve()
+    sub = m.reserve()
+    s1, s2 = m.reserve(), m.reserve()
+    st2 = m.reserve()
+    blk = box(m, 0.02, 0.01, 0.005)
+    named(m, blk, "Block")
+    pin = cylinder(m, 0.002, 0.01, at=(0.0, 0.0))
+    named(m, pin, "Pin")
+    tr1, tr2 = m.reserve(), m.reserve()
+    I = [1, 0, 0, 0, 1, 0, 0, 0, 1]
+    m.set(tr1, 100, [m.next, t1, 0, 0] + I + [(0, 0, 0), 1.0, 0, (0, 0, 0)])
+    m.set(tr2, 100, [m.next, t2, 0, 0] + I + [(0, 0.1, 0), 1.0, 1, (0, 0, 0)])
+    m.set(st2, 100, [m.next, s2, 0, 0] + I + [(0.05, 0, 0), 1.0, 1, (0, 0, 0)])
+    m.set(t1, 11, [m.next, 0, 1, sub, tr1, top, t2, 0, t2, 0])
+    m.set(t2, 11, [m.next, 0, 1, sub, tr2, top, 0, t1, 0, t1])
+    m.set(s1, 11, [m.next, 0, 1, blk, 0, sub, s2, 0, 0, 0])
+    m.set(s2, 11, [m.next, 0, 1, pin, st2, sub, 0, s1, 0, 0])
+    m.set(sub, 10, [m.next + 10, 0, 0, 0, 0, 0, 0, 0, 1000.0, 1e-8, 0, 0, 0, 1, 0, 1, s1])
+    m.set(top, 10, [m.next + 10, 0, 0, 0, 0, 0, 0, 0, 1000.0, 1e-8, 0, 0, 0, 1, 0, 1, t1])
+    named(m, t1, "Left")
+    named(m, t2, "Right")
+    return m
+
+
 def main(out):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -314,6 +421,12 @@ def main(out):
     (out / "cylinder.x_b").write_bytes(binary(m, False))
     m = assembly()
     (out / "assembly.x_t").write_text(text(m, True))
+    m = multipart()
+    (out / "multipart.x_t").write_text(text(m, True))
+    (out / "multipart.x_b").write_bytes(binary(m, False))
+    m = nested()
+    (out / "nested.x_t").write_text(text(m, True))
+    (out / "nested.x_b").write_bytes(binary(m, False))
 
 
 if __name__ == "__main__":
