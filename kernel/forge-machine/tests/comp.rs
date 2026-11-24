@@ -30,7 +30,7 @@ fn centre_path(text: &str, r: f64) -> Result<Vec<Move>, (usize, String)> {
     let c = control(&m);
     let (bs, _) = gcode::run(text, &c).map_err(|e| (e.line, e.what))?;
     let ix = [c.idx('X').unwrap(), c.idx('Y').unwrap()];
-    let out: Vec<Block> = comp::apply(&bs, ix, 4, None, &|t| (t == 1).then_some(r))?;
+    let out: Vec<Block> = comp::apply(&bs, ix, 4, None, c.comp.unwrap(), &|t| (t == 1).then_some(r))?;
     // the text's lines from the G41 block (6) to the G40 block (the last but one)
     let last = text.lines().count() - 1;
     Ok(out
@@ -254,4 +254,126 @@ fn a_line_meeting_an_arc_at_a_corner() {
     let s = 5.0 / 2f64.sqrt();
     assert!(close((p[2].0, p[2].1, p[2].2), ('W', -s, 20.0 + s)), "{p:?}");
     assert_eq!(p[2].3, Some((0.0, 20.0)));
+}
+
+// ---------------------------------------------------------------------------------------------
+// LinuxCNC (its interpreter's documented source, v2.9.9 interp_convert.cc; the dialect's cites)
+
+fn lcnc_path(contour: &str, exit: &str, r: f64) -> Result<Vec<Move>, (usize, String)> {
+    let m = builtin_named("generic-vmc3").unwrap();
+    let c = Control::for_dialect(&m, "linuxcnc", 1).unwrap();
+    let cm = c.comp.expect("linuxcnc cites compensation");
+    assert!(!cm.entry_norm && cm.corner_arc && cm.tol == 0.05);
+    let text = format!(
+        "G17 G21 G90 G94\nG0 X-20. Y-20. Z5.\nG1 Z-2. F500.\nG41 D1\nG1 X0 Y0\n{contour}G40\n{exit}\n"
+    );
+    let (bs, _) = gcode::run(&text, &c).map_err(|e| (e.line, e.what))?;
+    let ix = [c.idx('X').unwrap(), c.idx('Y').unwrap()];
+    let u = 10f64.powi(c.decimals as i32);
+    let out = comp::apply(&bs, ix, c.decimals, None, cm, &|t| (t == 1).then_some(r))?;
+    Ok(out
+        .iter()
+        .filter(|b| b.line >= 5)
+        .filter_map(|b| {
+            let p = |to: &Vec<Option<i64>>| (to[ix[0]].unwrap() as f64 / u, to[ix[1]].unwrap() as f64 / u);
+            match &b.ev {
+                Ev::Rapid(to) => Some(('R', p(to).0, p(to).1, None)),
+                Ev::Feed { to, .. } => Some(('L', p(to).0, p(to).1, None)),
+                Ev::Arc {
+                    to,
+                    centre: Centre::Abs([a, cc]),
+                    cw,
+                    ..
+                } => Some((
+                    if *cw { 'W' } else { 'C' },
+                    p(to).0,
+                    p(to).1,
+                    Some((*a as f64 / u, *cc as f64 / u)),
+                )),
+                _ => None,
+            }
+        })
+        .collect())
+}
+
+fn near(got: &[Move], want: &[Move], tol: f64) {
+    assert_eq!(got.len(), want.len(), "{got:?}\nvs {want:?}");
+    for (g, w) in got.iter().zip(want) {
+        let ok = g.0 == w.0
+            && (g.1 - w.1).abs() <= tol
+            && (g.2 - w.2).abs() <= tol
+            && match (g.3, w.3) {
+                (Some(a), Some(b)) => (a.0 - b.0).abs() <= tol && (a.1 - b.1).abs() <= tol,
+                (None, None) => true,
+                _ => false,
+            };
+        assert!(ok, "{g:?} vs {w:?}\nin {got:?}");
+    }
+}
+
+#[test]
+fn linuxcnc_entry_is_perpendicular_to_itself_and_meets_the_contour_at_a_corner() {
+    let p = lcnc_path("Y30.\nX40.\nY0\nX0\n", "G0 X-20. Y-20.", 5.0).unwrap();
+    // the entry from (-20, -20) to (0, 0) ends 5 to its left, at (-5, 5)/√2; with the first block
+    // (up the Y axis) it makes an inside corner: both meet where x = -5 crosses y = x + 5√2
+    let h = 5.0 * 2f64.sqrt();
+    near(
+        &p,
+        &[
+            ('L', -5.0, h - 5.0, None),
+            ('L', -5.0, 30.0, None),
+            ('W', 0.0, 35.0, Some((0.0, 30.0))),
+            ('L', 40.0, 35.0, None),
+            ('W', 45.0, 30.0, Some((40.0, 30.0))),
+            ('L', 45.0, 0.0, None),
+            ('W', 40.0, -5.0, Some((40.0, 0.0))),
+            ('L', 0.0, -5.0, None),
+            // after G40: straight from the compensated end to the programmed point
+            ('R', -20.0, -20.0, None),
+        ],
+        1e-4,
+    );
+}
+
+#[test]
+fn linuxcnc_turns_within_its_tolerance_join_straight() {
+    // up to (0, 30), then to (0.5, 40): a right turn of atan(0.05) = 0.04996 rad < 0.05
+    let p = lcnc_path("Y30.\nX0.5 Y40.\n", "G0 X-20. Y-20.", 5.0).unwrap();
+    let l = (0.25f64 + 100.0).sqrt();
+    let end = (0.5 - 5.0 * 10.0 / l, 40.0 + 5.0 * 0.5 / l);
+    assert_eq!(p.len(), 4, "{p:?}");
+    near(
+        &p[1..3],
+        &[('L', -5.0, 30.0, None), ('L', end.0, end.1, None)],
+        1e-4,
+    );
+    // to (0.6, 40): atan(0.06) = 0.0599 rad, past it: a circle about (0, 30)
+    let p = lcnc_path("Y30.\nX0.6 Y40.\n", "G0 X-20. Y-20.", 5.0).unwrap();
+    assert_eq!(p[2].0, 'W', "{p:?}");
+    assert_eq!(p[2].3, Some((0.0, 30.0)));
+}
+
+#[test]
+fn linuxcnc_exit_and_refusals() {
+    // a Z-only move after G40 still goes back to the programmed X Y (it runs from the compensated
+    // end to the programmed point)
+    let p = lcnc_path("Y30.\n", "G0 Z5.", 5.0).unwrap();
+    assert_eq!(p.last().unwrap().0, 'R');
+    assert_eq!((p.last().unwrap().1, p.last().unwrap().2), (0.0, 30.0));
+    // an entry not longer than the radius
+    let e = lcnc_path("Y30.\n", "G0 X-20. Y-20.", 30.0).unwrap_err();
+    assert!(e.1.contains("longer than the radius"), "{e:?}");
+    // an arc after G40
+    let e = lcnc_path("Y30.\n", "G2 X10. Y30. I5. J0", 5.0).unwrap_err();
+    assert!(e.1.contains("straight"), "{e:?}");
+    // Fanuc cites no corner behaviour: G41 refused by the shell
+    let m = builtin_named("generic-vmc3").unwrap();
+    let c = Control::for_dialect(&m, "fanuc", 1).unwrap();
+    assert!(c.comp.is_none());
+    assert!(
+        gcode::run("G41 D1\n", &c)
+            .unwrap_err()
+            .what
+            .contains("compensation")
+    );
 }

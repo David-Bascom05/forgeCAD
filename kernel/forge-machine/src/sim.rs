@@ -572,7 +572,10 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
             _ => return Err(SimError::Setup("cutter compensation needs X and Y".into())),
         };
         let radius = |t: u32| s.radius.iter().find(|(n, _)| *n == t).map(|(_, r)| *r);
-        compensated = crate::comp::apply(blocks, ix, s.control.decimals, s.start_tool, &radius)
+        let model = s.control.comp.ok_or_else(|| {
+            SimError::Setup("cutter compensation on a control that does not cite it".into())
+        })?;
+        compensated = crate::comp::apply(blocks, ix, s.control.decimals, s.start_tool, model, &radius)
             .map_err(|(line, what)| SimError::At { line, what })?;
         &compensated[..]
     } else {

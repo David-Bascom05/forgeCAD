@@ -1,6 +1,16 @@
-//! Cutter radius compensation (G41/G42) as SINUMERIK 840D states it (PGsl 03/2013, chapter 10),
-//! applied to the shell's events before the simulation: the programmed path between G41/G42 and
-//! G40 replaced by the tool centre's.
+//! Cutter radius compensation (G41/G42) as two controls state it, applied to the shell's events
+//! before the simulation: the programmed path between G41/G42 and G40 replaced by the tool
+//! centre's. SINUMERIK 840D from its manual (PGsl 03/2013, chapter 10), below; LinuxCNC from its
+//! interpreter's documented source (v2.9.9, rs274ngc/interp_convert.cc, the forge-post dialect's
+//! cites), where it differs:
+//!
+//! - LinuxCNC's entry move ends displaced perpendicular to itself (convert_straight_comp1), and
+//!   must be longer than the radius; it then meets the first contour block at a corner, handled
+//!   as any other. Its outside corners get a circle about the corner (as G450), its inside ones
+//!   the intersection; a turn within TOLERANCE_CONCAVE_CORNER (0.05 rad) gets neither, the next
+//!   line starting where the last block ended (an arc so: refused). The move after G40 runs
+//!   straight from the compensated end to the programmed point (a Z-only one too), and must not
+//!   be an arc. The radius is the D word's tool's (no D, or D0: the loaded tool's).
 //!
 //! - The equidistant: each line shifted by the radius R along its normal to the side (G41 left of
 //!   the direction of travel, G42 right); each arc about the same centre with its radius less or
@@ -24,7 +34,7 @@
 //! (10^-decimals): each compensated point within half a unit of the exact one in X and Y; an
 //! arc's centre is the programmed one (an R word's centre rounded likewise), its end radius
 //! within a unit of its start's (the simulation follows that as a spiral).
-use crate::gcode::{Block, Centre, Ev, FeedMode, Q};
+use crate::gcode::{Block, Centre, CompModel, Ev, FeedMode, Q};
 use forge_math::dmath;
 
 type P = [f64; 2];
@@ -76,6 +86,10 @@ struct El {
     to: Vec<Option<Q>>,
     f: Q,
     mode: FeedMode,
+    /// The entry move on a control whose entry is perpendicular to itself (LinuxCNC): it starts
+    /// uncompensated, where the tool is; `rapid` if it is a G0.
+    entry: bool,
+    rapid: bool,
 }
 
 impl El {
@@ -182,6 +196,7 @@ pub fn apply(
     ix: [usize; 2],
     k: u32,
     start_tool: Option<u32>,
+    model: CompModel,
     radius: &dyn Fn(u32) -> Option<f64>,
 ) -> Result<Vec<Block>, Refusal> {
     if !blocks.iter().any(|b| matches!(b.ev, Ev::Comp { .. })) {
@@ -206,9 +221,19 @@ pub fn apply(
             Ev::Comp { left: None, .. } => {
                 return Err((b.line, "G40 with compensation off".into()));
             }
-            Ev::Comp { left: Some(lft), arc } => {
-                let t = tool.ok_or((b.line, "G41/G42 with no tool loaded".to_string()))?;
-                if !d_on {
+            Ev::Comp {
+                left: Some(lft),
+                arc,
+                d,
+            } => {
+                // SINUMERIK: D1 of the loaded tool (a D in force); LinuxCNC: the D word's tool,
+                // or the loaded one (no D, or D0: the spindle's entry)
+                let t = match d {
+                    Some(t) if *t != 0 => Some(*t),
+                    _ => tool,
+                }
+                .ok_or((b.line, "G41/G42 with no tool loaded".to_string()))?;
+                if model.entry_norm && !d_on {
                     return Err((b.line, "G41/G42 with no tool offset (D) in force".into()));
                 }
                 let r = radius(t).ok_or((
@@ -220,7 +245,7 @@ pub fn apply(
                     .clone()
                     .and_then(|p| xy(&p).map(|v| (p, v)))
                     .ok_or((b.line, "G41/G42 from an unknown position".to_string()))?;
-                let used = section(&blocks[i + 1..], s, *arc, start, ix, &qf, &fq, &mut out)?;
+                let used = section(&blocks[i + 1..], s, *arc, model, start, ix, &qf, &fq, &mut out)?;
                 // the position after: the retract's end
                 for bb in &blocks[i + 1..i + 1 + used] {
                     if let Ev::Rapid(to) | Ev::Feed { to, .. } | Ev::Arc { to, .. } = &bb.ev {
@@ -245,7 +270,8 @@ fn section(
     bs: &[Block],
     s: f64,
     arc_corners: bool,
-    (start_to, start): (Vec<Option<Q>>, P),
+    model: CompModel,
+    (_start_to, start): (Vec<Option<Q>>, P),
     ix: [usize; 2],
     qf: &dyn Fn(Q) -> f64,
     fq: &dyn Fn(f64) -> Q,
@@ -257,7 +283,6 @@ fn section(
             _ => Err((line, "an unknown X or Y under compensation".into())),
         }
     };
-    // the approach: the first move
     let mut j = 0;
     let mut passthrough: Vec<(usize, Block)> = Vec::new();
     let mut approach: Option<Block> = None;
@@ -265,7 +290,6 @@ fn section(
     let mut retract: Option<Block> = None;
     let mut off = false;
     let mut at = start;
-    let _ = &start_to;
     while j < bs.len() {
         let b = &bs[j];
         j += 1;
@@ -275,28 +299,53 @@ fn section(
                 passthrough.push((els.len(), b.clone()));
             }
             Ev::Comp { left: None, .. } if approach.is_some() && !off => {
-                if els.is_empty() {
+                if els.iter().all(|e| e.entry) {
                     return Err((b.line, "no contour block between G41/G42 and G40".into()));
                 }
                 off = true;
             }
             Ev::Rapid(to) | Ev::Feed { to, .. } if approach.is_none() => {
                 let p = xy(to, b.line)?;
-                if norm(sub(p, at)) == 0.0 {
+                let len = norm(sub(p, at));
+                if len == 0.0 {
                     return Err((b.line, "the G41/G42 block does not move in X or Y".into()));
+                }
+                if !model.entry_norm {
+                    // LinuxCNC: an error unless longer than the radius (convert_straight_comp1)
+                    if len <= s.abs() {
+                        return Err((
+                            b.line,
+                            "the entry move under compensation is not longer than the radius".into(),
+                        ));
+                    }
+                    let (f, mode, rapid) = match &b.ev {
+                        Ev::Feed { f, mode, .. } => (*f, *mode, false),
+                        _ => (0, FeedMode::PerMin, true),
+                    };
+                    els.push(El {
+                        a: at,
+                        b: p,
+                        geo: Geo::Line,
+                        line: b.line,
+                        to: to.clone(),
+                        f,
+                        mode,
+                        entry: true,
+                        rapid,
+                    });
                 }
                 at = p;
                 approach = Some(b.clone());
             }
-            Ev::Rapid(to) | Ev::Feed { to, .. } if off => {
-                let p = xy(to, b.line)?;
-                if norm(sub(p, at)) == 0.0 {
-                    return Err((b.line, "the G40 block does not move in X or Y".into()));
-                }
+            Ev::Rapid(_) | Ev::Feed { .. } if off => {
+                // straight from the compensated end to the programmed point
                 retract = Some(b.clone());
                 break;
             }
-            Ev::Feed { to, f, mode } if !off => {
+            Ev::Arc { .. } if off => {
+                return Err((b.line, "the move after G40 must be straight".into()));
+            }
+            Ev::Feed { to, f, mode } => {
                 let p = xy(to, b.line)?;
                 if norm(sub(p, at)) == 0.0 {
                     return Err((
@@ -312,14 +361,13 @@ fn section(
                     to: to.clone(),
                     f: *f,
                     mode: *mode,
+                    entry: false,
+                    rapid: false,
                 });
                 at = p;
             }
             Ev::Arc { .. } if approach.is_none() => {
-                return Err((
-                    b.line,
-                    "the G41/G42 block must be a G0 or G1 move (PGsl 10.1 p. 258)".into(),
-                ));
+                return Err((b.line, "the G41/G42 block must be a G0 or G1 move".into()));
             }
             Ev::Arc {
                 to,
@@ -329,7 +377,7 @@ fn section(
                 full,
                 f,
                 mode,
-            } if !off => {
+            } => {
                 if *plane != 17 {
                     return Err((b.line, "an arc outside G17 under compensation".into()));
                 }
@@ -361,6 +409,8 @@ fn section(
                     to: to.clone(),
                     f: *f,
                     mode: *mode,
+                    entry: false,
+                    rapid: false,
                 });
                 at = p;
             }
@@ -386,8 +436,11 @@ fn section(
         }
     };
     let n = els.len();
-    // each block's compensated ends
-    let mut se: Vec<(P, P)> = els.iter().map(|e| (e.off(e.a, s), e.off(e.b, s))).collect();
+    // each block's compensated ends; the entry (LinuxCNC) starts where the tool is
+    let mut se: Vec<(P, P)> = els
+        .iter()
+        .map(|e| (if e.entry { e.a } else { e.off(e.a, s) }, e.off(e.b, s)))
+        .collect();
     for e in &els {
         if let Geo::Arc { c, ccw, .. } = &e.geo {
             let r = norm(sub(e.a, *c));
@@ -400,8 +453,8 @@ fn section(
             }
         }
     }
-    // corners: an inserted circle after block i (G450 outside)
-    let mut corner_arc: Vec<Option<(P, P, P, bool)>> = vec![None; n];
+    // corners: an inserted circle after block i (outside, on a control that rounds them)
+    let mut corner_arc: Vec<Option<(P, P, bool)>> = vec![None; n];
     for i in 0..n.saturating_sub(1) {
         let (ea, eb) = (&els[i], &els[i + 1]);
         let p = ea.b;
@@ -411,24 +464,48 @@ fn section(
         if norm(sub(e_end, f_start)) < 1e-9 {
             continue; // tangent (or a zero radius)
         }
-        let outside = s * cr < 0.0 || (cr.abs() < 1e-12 && dt < 0.0);
+        // the turn toward the outside (the side away from the tool), radians
+        let conv = if cr.abs() < 1e-12 && dt < 0.0 {
+            dmath::PI
+        } else {
+            let phi = dmath::atan2(cr, dt);
+            if s > 0.0 { -phi } else { phi }
+        };
         if matches!(ea.geo, Geo::Arc { full: true, .. }) || matches!(eb.geo, Geo::Arc { full: true, .. }) {
             return Err((
                 eb.line,
                 "a full circle meeting a block at a corner under compensation is not modelled".into(),
             ));
         }
+        if model.tol > 0.0 {
+            if conv.abs() <= model.tol {
+                // within the control's tolerance: no circle, no trim; a line goes on from where
+                // the last block ended (LinuxCNC convert_straight_comp2)
+                if !matches!(eb.geo, Geo::Line) {
+                    return Err((
+                        eb.line,
+                        "an arc meeting a block within the control's corner tolerance is not modelled".into(),
+                    ));
+                }
+                se[i + 1].0 = e_end;
+                continue;
+            }
+            if conv > dmath::PI - model.tol {
+                return Err((eb.line, "a reversal under compensation is not modelled".into()));
+            }
+        }
+        let outside = conv > 0.0;
         if outside && arc_corners {
             // a circle of radius |s| about the corner: clockwise when the tool is on the left
-            corner_arc[i] = Some((e_end, f_start, p, s > 0.0));
+            corner_arc[i] = Some((f_start, p, s > 0.0));
             continue;
         }
         let x = nearest(meet(ea.eq(s), eb.eq(s)), p).ok_or((
             eb.line,
             if outside {
-                "G451: the equidistants do not meet at this corner".to_string()
+                "the equidistants do not meet at this outside corner (G451)".to_string()
             } else {
-                "the compensated blocks do not meet at this inside corner (the control's look-ahead, CDON/CDOF, is not modelled, PGsl 10.5)".to_string()
+                "the compensated blocks do not meet at this inside corner (the control's look-ahead is not modelled)".to_string()
             },
         ))?;
         se[i].1 = x;
@@ -458,7 +535,7 @@ fn section(
         if !ok {
             return Err((
                 e.line,
-                "the compensated block is shortened past its start (a bottleneck: the control's look-ahead, CDON/CDOF, is not modelled, PGsl 10.5)".into(),
+                "the compensated block is shortened past its start (a bottleneck: the control's look-ahead is not modelled)".into(),
             ));
         }
     }
@@ -469,23 +546,26 @@ fn section(
         v
     };
     let qp = |p: P| [fq(p[0]), fq(p[1])];
-    // the approach: straight to the first block's compensated start
-    let mut ap = approach.clone();
-    match &mut ap.ev {
-        Ev::Rapid(to) | Ev::Feed { to, .. } => *to = with_xy(to, se[0].0),
-        _ => unreachable!(),
-    }
-    out.push(ap);
-    let mut last = qp(se[0].0);
+    let mut last = qp(start);
     let mut pt = passthrough.into_iter().peekable();
-    while let Some((at_el, b)) = pt.next_if(|(k, _)| *k == 0) {
-        let _ = at_el;
+    if model.entry_norm {
+        // NORM: straight to the first block's compensated start
+        let mut ap = approach.clone();
+        match &mut ap.ev {
+            Ev::Rapid(to) | Ev::Feed { to, .. } => *to = with_xy(to, se[0].0),
+            _ => unreachable!(),
+        }
+        out.push(ap);
+        last = qp(se[0].0);
+    }
+    while let Some((_, b)) = pt.next_if(|(k, _)| *k == 0) {
         out.push(b);
     }
     for (i, e) in els.iter().enumerate() {
         let (_, b) = se[i];
         let to = with_xy(&e.to, b);
         let ev = match &e.geo {
+            Geo::Line if e.rapid => Ev::Rapid(to.clone()),
             Geo::Line => Ev::Feed {
                 to: to.clone(),
                 f: e.f,
@@ -507,11 +587,11 @@ fn section(
             out.push(Block { line: e.line, ev });
             last = end;
         }
+        // the events that followed block i
         while let Some((_, b)) = pt.next_if(|(k, _)| *k == i + 1) {
             out.push(b);
         }
-        if let Some((from, to_p, c, cw)) = corner_arc[i] {
-            let _ = from;
+        if let Some((to_p, c, cw)) = corner_arc[i] {
             let nx = &els[i + 1];
             if qp(to_p) != last {
                 let mut to2 = e.to.clone();

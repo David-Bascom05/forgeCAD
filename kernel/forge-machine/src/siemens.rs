@@ -485,6 +485,7 @@ pub fn block(
             comp_ev = Some(Ev::Comp {
                 left: Some(left),
                 arc,
+                d: None,
             });
         }
         Some(None) if s.comp => {
@@ -498,6 +499,7 @@ pub fn block(
             comp_ev = Some(Ev::Comp {
                 left: None,
                 arc: s.corner.unwrap_or(true),
+                d: None,
             });
         }
         _ => {}
