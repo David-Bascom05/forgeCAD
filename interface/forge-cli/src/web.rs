@@ -116,6 +116,18 @@ fn default_app() -> Option<PathBuf> {
 
 /// 128 bits from the OS's randomness (std seeds each `RandomState` from it), as hex.
 fn random_token() -> String {
+    // the OS's CSPRNG device where there is one
+    #[cfg(unix)]
+    {
+        use std::io::Read;
+        let mut b = [0u8; 16];
+        if std::fs::File::open("/dev/urandom")
+            .and_then(|mut f| f.read_exact(&mut b))
+            .is_ok()
+        {
+            return b.iter().map(|x| format!("{x:02x}")).collect();
+        }
+    }
     let mut s = String::new();
     for i in 0..2u64 {
         let mut h = RandomState::new().build_hasher();
@@ -502,7 +514,11 @@ fn git_allowed(rel: &Path) -> bool {
         .components()
         .map(|c| c.as_os_str().to_string_lossy().to_ascii_lowercase())
         .collect();
-    if parts.iter().any(|p| p.ends_with('.') || p.ends_with(' ')) {
+    // nor hold anything but ASCII: HFS+ ignores some characters (`in\u{200c}fo` is `info`)
+    if parts
+        .iter()
+        .any(|p| p.ends_with('.') || p.ends_with(' ') || !p.is_ascii())
+    {
         return false;
     }
     let whole = parts.join("/");
@@ -787,18 +803,42 @@ fn precondition(q: &Request, now: &Option<String>) -> Result<(), Response> {
 }
 
 /// Written whole or not at all: a file beside it, then renamed over it.
-fn put(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
+pub(crate) fn put(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
     if let Some(d) = p.parent() {
         std::fs::create_dir_all(d)?;
     }
-    let tmp = p.with_file_name(format!(
-        ".{}.forgecad-web-{}",
-        p.file_name()
-            .map_or_else(Default::default, |n| n.to_string_lossy()),
-        forge_dirs::process_id()
-    ));
-    std::fs::write(&tmp, bytes)?;
-    std::fs::rename(&tmp, p).inspect_err(|_| {
+    // the file beside it: a name no one can guess, made new (O_CREAT|O_EXCL: a link or a file
+    // already there is refused, never written through), then renamed over it
+    let mut tries = 0;
+    let (tmp, mut f) = loop {
+        // a name taken 16 times running is no accident: fail, closed
+        tries += 1;
+        if tries > 16 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "no free name for the file written beside it",
+            ));
+        }
+        let tmp = p.with_file_name(format!(
+            ".{}.forgecad-web-{}",
+            p.file_name()
+                .map_or_else(Default::default, |n| n.to_string_lossy()),
+            random_token()
+        ));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+        {
+            Ok(f) => break (tmp, f),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    };
+    let written = f.write_all(bytes).and_then(|_| f.sync_all());
+    drop(f);
+    written.and_then(|_| std::fs::rename(&tmp, p)).inspect_err(|_| {
         let _ = std::fs::remove_file(&tmp);
     })
 }
@@ -1000,6 +1040,8 @@ mod tests {
             ".git/objects/INFO/alternates",
             ".git/objects/info./alternates",
             ".git/objects/info /alternates",
+            ".git/objects/in\u{200c}fo/alternates",
+            ".git/r\u{e9}fs/x",
             ".git/COMMONDIR",
             ".git/refs/heads/x.",
             ".git/tmp_obj_",
@@ -1087,6 +1129,56 @@ mod tests {
         );
         assert_eq!(s, 400);
         assert!(!root.join(".git/hooks/post-commit").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The final review's: the temporary file a write makes beside its file was named by the
+    /// process id and written through whatever was there, so a link planted at that name
+    /// (`.part.fg.forgecad-web-PID -> .git/config`, or a file outside) took the write. Now its
+    /// name is random and it's made new, never through a link.
+    #[cfg(unix)]
+    #[test]
+    fn a_write_never_goes_through_a_link_planted_beside_it() {
+        let (at, root) = started(None, true);
+        let outside = root
+            .parent()
+            .unwrap()
+            .join(format!("forgecad-web-outside-{}", forge_dirs::process_id()));
+        std::fs::write(&outside, "untouched").unwrap();
+        // every name the old scheme could have used, and then some
+        for name in [
+            format!(".part.fg.forgecad-web-{}", forge_dirs::process_id()),
+            ".part.fg.forgecad-web-0".to_string(),
+        ] {
+            std::os::unix::fs::symlink(&outside, root.join(&name)).unwrap();
+            std::os::unix::fs::symlink(".git/config", root.join(format!("{name}.git"))).unwrap();
+        }
+        let config = std::fs::read(root.join(".git/config")).unwrap();
+        let (_, head, _) = call(at, "GET", "/api/files/part.fg", &[], b"");
+        let v = header(&head, "etag").unwrap();
+        let (s, _, _) = call(
+            at,
+            "PUT",
+            "/api/files/part.fg",
+            &[("If-Match", &v)],
+            b"shared t = 3\n",
+        );
+        assert_eq!(s, 200);
+        assert_eq!(
+            std::fs::read_to_string(root.join("part.fg")).unwrap(),
+            "shared t = 3\n"
+        );
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "untouched");
+        assert_eq!(std::fs::read(root.join(".git/config")).unwrap(), config);
+        // and no temporary left behind
+        let left: Vec<_> = std::fs::read_dir(&root)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.contains("forgecad-web") && !n.ends_with(".git") && n.len() > 30)
+            .collect();
+        assert!(left.is_empty(), "{left:?}");
+        let _ = std::fs::remove_file(outside);
         let _ = std::fs::remove_dir_all(&root);
     }
 
