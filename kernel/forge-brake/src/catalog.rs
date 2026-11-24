@@ -491,6 +491,7 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
     let rd = (r.num("relief.depth")?, r.num("relief.z0")?, r.num("relief.z1")?);
     let segments = r.segments()?;
     let outline = r.outline()?;
+    let has_outline = outline.is_some();
     let prov = r.prov("punch")?;
     r.check_cites(&prov)?;
     let mut unknown = Vec::new();
@@ -529,7 +530,8 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
             max_load,
             // a width that is the envelope of a published dimension (twice it, about the tip
             // line): the dimension itself is what is drawn
-            drawn_width: prov_width_twice(&prov).then_some(w / 2.0),
+            // (a drawn section is what it is: drawn and checked alike)
+            drawn_width: (prov_width_twice(&prov) && !has_outline).then_some(w / 2.0),
         };
         // the working part: the flanks up to where they reach the body's width (or 12 mm, the
         // stand-ins' height, whichever is lower), unless the record states it
@@ -985,6 +987,48 @@ impl Catalog {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every drawn section (an `outline` measured off a maker's drawing): one closed loop, its tip
+    /// at the origin (within the 0.5 mm it is grown and a millimetre of the drawing), its top at
+    /// the published height, the tip the lowest point; cited as an estimate with its basis.
+    #[test]
+    fn drawn_sections_sit_on_their_published_dimensions() {
+        let c = Catalog::builtin();
+        let mut n = 0;
+        for r in &c.punches {
+            let Ok(p) = &r.punch else { continue };
+            let Some(prof) = &p.profile else { continue };
+            n += 1;
+            let pts: Vec<forge_math::Point2> = prof.iter().map(|s| s.point(0.0)).collect();
+            let (zlo, zhi) = pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |a, q| {
+                (a.0.min(q.y), a.1.max(q.y))
+            });
+            assert!(
+                (zhi - p.height).abs() < 1e-6,
+                "{}: top {zhi} vs height {}",
+                p.id,
+                p.height
+            );
+            assert!((-1.5..=0.0).contains(&zlo), "{}: lowest {zlo}", p.id);
+            let tip = pts.iter().min_by(|a, b| a.y.total_cmp(&b.y)).unwrap();
+            // the lowest vertex of a rounded tip lies anywhere along its arc
+            assert!(tip.x.abs() < 1.5 + p.tip_radius, "{}: tip at x {}", p.id, tip.x);
+            let cites = r.prov.of("outline");
+            assert!(
+                cites
+                    .iter()
+                    .any(|c| c.status == Status::Estimate && c.basis.is_some()),
+                "{}: the outline's cite",
+                p.id
+            );
+            assert!(
+                p.drawn_width.is_none(),
+                "{}: a drawn section is drawn as checked",
+                p.id
+            );
+        }
+        assert!(n >= 8, "{n} drawn sections");
+    }
 
     #[test]
     fn builtin_library_reads_and_cites_every_value() {

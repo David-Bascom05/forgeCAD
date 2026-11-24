@@ -116,11 +116,11 @@ def main():
         how = "the tang's step"
     zpx = (tip_y - face) / a.height
     xpx = (xs.max() - xs.min() - 2 * half) / a.width if a.width else zpx
-    if a.axis is None:
-        # the tool's axis: the tang's middle just above the clamping face
-        r = np.nonzero(region[int(face - 2 * lw)])[0]
-        a.axis = 0.5 * (r.min() + r.max())
-    print(f"# grey {a.fill}; clamping face from {how} (row {face:.0f}); axis column {a.axis:.1f}")
+    # the tang's middle just above the clamping face: reported (an offset punch's tip is not under
+    # it); x = 0 is the tip (the punch's frame), unless --axis says otherwise
+    r = np.nonzero(region[int(face - 2 * lw)])[0]
+    tang = 0.5 * (r.min() + r.max()) if len(r) else None
+    print(f"# grey {a.fill}; clamping face from {how} (row {face:.0f})")
     print(f"# scales: x {xpx:.3f} px/mm, z {zpx:.3f} px/mm (printed height {a.height}); line {lw} px")
     print(f"# overall width across: {(xs.max() - xs.min() - 2 * half) / xpx:.1f} mm")
     grown = cv2.dilate(region.astype(np.uint8) * 255, cv2.getStructuringElement(
@@ -129,9 +129,10 @@ def main():
     c = max(cs, key=cv2.contourArea)
     poly = cv2.approxPolyDP(c, a.eps * xpx, True)[:, 0, :].astype(float)
     tipc = c[:, 0, :][np.argmax(c[:, 0, 1])].astype(float)
-    tip = (a.axis if a.axis is not None else tipc[0], tip_y)
-    print(f"# the tip's lowest pixel is {(tipc[0] - tip[0]) / xpx:+.2f} mm from x = 0")
     sgn = 1.0 if a.throat == "right" else -1.0
+    tip = (a.axis if a.axis is not None else tipc[0], tip_y)
+    if tang is not None:
+        print(f"# the tang's centre line is {sgn * (tang - tip[0]) / xpx:+.2f} mm from x = 0 (the tip)")
 
     def to_mm(p):
         return (sgn * (p[0] - tip[0]) / xpx, (tip[1] - p[1]) / zpx)
@@ -144,7 +145,8 @@ def main():
         changed = False
         for i in range(len(pts)):
             a_, b_, c_ = pts[i - 1], pts[i], pts[(i + 1) % len(pts)]
-            if math.hypot(c_[0] - a_[0], c_[1] - a_[1]) < a.spike and math.hypot(b_[0] - a_[0], b_[1] - a_[1]) > 1.0:
+            # never at the working tip: a sharp tip is out and back too, and is the tool
+            if b_[1] > 15.0 and math.hypot(c_[0] - a_[0], c_[1] - a_[1]) < a.spike and math.hypot(b_[0] - a_[0], b_[1] - a_[1]) > 1.0:
                 del pts[i]
                 changed = True
                 break
