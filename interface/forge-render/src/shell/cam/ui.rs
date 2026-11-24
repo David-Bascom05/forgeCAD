@@ -2299,11 +2299,15 @@ fn finder(
         ui.add_space(12.0);
         let word = |ui: &mut Ui, s: &str| ui.label(egui::RichText::new(s).font(sans(12.0)).color(t.ink2));
         word(ui, "\u{d8} from");
+        ui.add_space(6.0);
         let r = ui.add(egui::TextEdit::singleline(&mut w.tools_find.dmin).font(sans(12.0)).desired_width(40.0));
         places.push(("cam:tools:dmin".into(), r.rect));
+        ui.add_space(6.0);
         word(ui, "to");
+        ui.add_space(6.0);
         let r = ui.add(egui::TextEdit::singleline(&mut w.tools_find.dmax).font(sans(12.0)).desired_width(40.0));
         places.push(("cam:tools:dmax".into(), r.rect));
+        ui.add_space(6.0);
         word(ui, "mm");
         ui.add_space(6.0);
         let mats = toollib::materials(&w.lib);
@@ -2549,16 +2553,17 @@ fn detail_pane(
             if !x.material.is_empty() {
                 facts.push(("Material", x.material.clone()));
             }
-            sheet(ui, t, width, |ui, iw| {
-                for (k, val) in &facts {
-                    fact(ui, t, k, val, iw, t.ink);
-                }
-            });
             // in the document: its number, stick-out and holder (Apply in the footer)
             if let Some(name) = &doc_name {
                 heading(ui, t, &format!("{name} in this document"), width);
                 tool_instance(ui, t, w, name, inst_id(name), apply, places);
             }
+            heading(ui, t, "The tool", width);
+            sheet(ui, t, width, |ui, iw| {
+                for (k, val) in &facts {
+                    fact(ui, t, k, val, iw, t.ink);
+                }
+            });
             ui.add_space(12.0);
         });
     });
