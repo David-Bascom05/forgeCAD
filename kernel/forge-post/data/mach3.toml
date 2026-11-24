@@ -6,13 +6,17 @@ name = "mach3"
 extension = "tap"
 decimals = 4
 feed_decimals = 1
+units_mm = "G21"
+units_inch = "G20"
+inch_decimals = 4
+inch_feed_decimals = 2
 point = "always"
 program_open = ["({title})"]
 program_close = ["M30"]
 comment = "({text})"
 comment_strip = "()"
 line_numbers = false
-safe_start = ["G17 G21 G40 G49 G80 G90 G94", "G91.1"]
+safe_start = ["G17 {units} G40 G49 G80 G90 G94", "G91.1"]
 tool_change = ["T{t} M6"]
 length_comp = "G43 H{h}"
 spindle_cw = "S{rpm} M3"
@@ -227,3 +231,31 @@ note = "M7/M8 flood vs mist: the manual contradicts itself and the outputs are u
 key = "dwell"
 status = "refused"
 note = "G4 P is seconds or milliseconds by a Config>Logic setting the program cannot see"
+
+[[dialect.cite]]
+key = "units_mm"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.x p10-20..10-31; 10.5.6 p10-12"
+note = "G21 (the safe start's)"
+
+[[dialect.cite]]
+key = "units_inch"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-24"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.9 p10-20"
+note = "Program G20 to use inches for length units. Program G21 to use millimetres; near the beginning, before any motion"
+
+[[dialect.cite]]
+key = "inch_decimals"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.5.3.1 p10-11"
+note = "the number format reads decimals (inch increment not stated): 4 written, 0.0001 in"
+
+[[dialect.cite]]
+key = "inch_feed_decimals"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.5.3.1 p10-11"
+note = "the number format reads decimals (inch feed increment not stated): 2 written"

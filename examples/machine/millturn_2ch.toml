@@ -1,0 +1,25 @@
+# Two channels on the generic mill-turn: the B head and the sub-spindle, synchronised at M100.
+# forgecad machine millturn_2ch.toml   (exit 0: no contact under any timing the bounds allow)
+[setup]
+machine = "generic-mill-turn"
+dialect = "millturn-2ch"
+
+[[setup.channel]]
+n = 1
+program = "millturn_ch1.nc"
+[[setup.channel.wcs]]
+n = 54
+c = 0
+z = 0
+x = 0
+y = 0
+b = 0
+
+[[setup.channel]]
+n = 2
+program = "millturn_ch2.nc"
+part_mount = "sub"
+[[setup.channel.wcs]]
+n = 54
+z = 0
+c = 0

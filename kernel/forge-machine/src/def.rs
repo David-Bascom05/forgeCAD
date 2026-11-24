@@ -10,7 +10,7 @@
 //!
 //! Nothing is defaulted silently: a field a kind needs is a typed error naming the record, the
 //! field and the fix. Optional fields say so and what their absence means.
-use forge_tooling::toml::{self, Table, boolean, num, nums, tables, text, texts};
+use forge_tooling::toml::{self, Table, Val, boolean, num, nums, tables, text, texts};
 
 /// What a definition can be wrong about. Every variant names where.
 #[derive(Clone, Debug, PartialEq)]
@@ -177,6 +177,9 @@ pub struct Joint {
     pub reset: Reset,
     /// A lathe's X: the word is a diameter, the joint moves its half.
     pub diameter: bool,
+    /// Where the machine's zero (reference point) sits in the travel: +1 at the plus end, -1 the
+    /// minus end (`ref = "plus" | "minus"`), as makers publish; None: not stated.
+    pub reference: Option<i8>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -208,6 +211,11 @@ pub struct Spindle {
     pub interface: String,
     /// A joint whose letter positions this spindle as a C axis (mill-turn), if any.
     pub c_joint: Option<String>,
+    /// Duty ratings as makers publish them: (kW, duty) with duty "cont", "30min", "10min",
+    /// "1min", "S3-25%", ... (`ratings_kw` / `ratings_duty`). Empty: none given.
+    pub ratings: Vec<(f64, String)>,
+    /// Torque, N·m: [max, continuous] (`torque_nm`); None: not given.
+    pub torque_nm: Option<[f64; 2]>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -278,6 +286,10 @@ pub struct Mount {
     pub dir: [f64; 3],
     /// Part mount: the part's +X (unit, orthogonal to dir). Tool mount: unused, [1, 0, 0].
     pub xdir: [f64; 3],
+    /// Part mount: the most the table, pallet or rotary carries, kg, and its inertia limit,
+    /// kg·m² (rotaries); None: not given (the load is then not checked, and replies say so).
+    pub max_kg: Option<f64>,
+    pub max_inertia: Option<f64>,
 }
 
 /// An analytic solid in a link's frame (home pose, base coordinates).
@@ -292,6 +304,26 @@ pub enum Prim {
         r: f64,
         h: f64,
     },
+    /// Oriented box: the points o + s·axes[0] + t·axes[1] + r·axes[2], 0 ≤ s ≤ size[0], ...
+    /// (axes orthonormal, checked on read): a workholding block placed at an angle.
+    OBox {
+        o: [f64; 3],
+        axes: [[f64; 3]; 3],
+        size: [f64; 3],
+    },
+}
+
+impl Prim {
+    /// An oriented box's point at fractions (a, b, c) of its sides.
+    pub fn obox_at(o: &[f64; 3], axes: &[[f64; 3]; 3], size: &[f64; 3], f: [f64; 3]) -> [f64; 3] {
+        let mut p = *o;
+        for k in 0..3 {
+            for i in 0..3 {
+                p[i] += f[k] * size[k] * axes[k][i];
+            }
+        }
+        p
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -306,6 +338,12 @@ pub struct Body {
     pub part: Option<String>,
     /// Bodies it may touch by construction (neighbours in the chain, ways): not checked pairwise.
     pub ignore: Vec<String>,
+    /// Its own least gap, mm, in place of the machine's `clearance` for any pair it is in (the
+    /// smaller of two bodies' wins); None: the machine's.
+    pub clearance: Option<f64>,
+    /// The stock runs through it by construction (a Swiss guide bushing): stock against it is
+    /// never a contact (`passes = "stock"`).
+    pub passes_stock: bool,
 }
 
 /// A region of joint space the control forbids (Fanuc stored stroke check 2/3, an interference
@@ -328,6 +366,32 @@ impl Zone {
             .enumerate()
             .all(|(k, &j)| self.min[k] < q[j] && q[j] < self.max[k])
     }
+}
+
+/// A spindle work probe the machine ships with or offers (`[[machine.probe]]`): a forge-probe
+/// device record. In the spindle it is a tool (the setup gives its SimTool); cite `probe.NAME`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProbeSlot {
+    pub name: String,
+    /// The forge-probe device id.
+    pub device: String,
+    /// `standard` (ships with the machine) or `option`.
+    pub offer: String,
+    /// The T number / pocket it is kept in, if the record states one.
+    pub t: Option<u32>,
+}
+
+/// A tool setter on the machine (`[[machine.setter]]`): a forge-probe device whose envelope is
+/// the ordinary `[[machine.body]]` named `body`. `at` is the device's trigger point (the point a
+/// tool is brought to) and `dir` the device's +z (away from the table), base frame, home pose;
+/// cite `setter.NAME.at` and `.dir`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Setter {
+    pub name: String,
+    pub device: String,
+    pub body: String,
+    pub at: [f64; 3],
+    pub dir: [f64; 3],
 }
 
 /// How a cited value stands (docs/cam-machine.md, "Provenance").
@@ -392,6 +456,18 @@ pub struct MachineDef {
     pub chip_lift: Option<f64>,
     /// Forbidden regions of joint space the control enforces.
     pub zones: Vec<Zone>,
+    /// Gang tool posts (`[[machine.gang]]`): each station is a tool mount named `GANG.T<n>`;
+    /// T n selects it (no index, no stop).
+    pub gangs: Vec<String>,
+    /// Work probes the machine ships with or offers.
+    pub probes: Vec<ProbeSlot>,
+    /// Tool setters on the table.
+    pub setters: Vec<Setter>,
+    /// The maker's homing order (`[[machine.homing]] order`): groups of joints, each group homed
+    /// together, the groups in turn (joints it does not name afterwards, one at a time, order not
+    /// published); each joint toward its `ref` end. None: not published (a
+    /// homing is then a generic reference return, and replies say so). Cite `homing`.
+    pub homing: Option<Vec<Vec<String>>>,
     /// A record of a real maker's model: every value in `cite_paths` must be cited.
     pub real: bool,
     pub cites: Vec<Cite>,
@@ -700,6 +776,18 @@ impl Joint {
             preference: preference as i8,
             reset,
             diameter,
+            reference: match text(t, "ref") {
+                None => None,
+                Some("plus") => Some(1),
+                Some("minus") => Some(-1),
+                Some(other) => {
+                    return Err(DefError::Bad {
+                        record: rec,
+                        field: "ref",
+                        why: format!("`{other}`: plus | minus"),
+                    });
+                }
+            },
             name,
         })
     }
@@ -831,6 +919,19 @@ impl MachineDef {
                 },
                 interface: text(s, "interface").unwrap_or("").to_string(),
                 c_joint: text(s, "c_joint").map(str::to_string),
+                ratings: {
+                    let kw = nums(s, "ratings_kw").unwrap_or_default();
+                    let duty = texts(s, "ratings_duty").unwrap_or_default();
+                    if kw.len() != duty.len() || kw.iter().any(|k| k.is_nan() || *k <= 0.0) {
+                        return Err(DefError::Bad {
+                            record: rec,
+                            field: "ratings_kw",
+                            why: "and ratings_duty need one positive kW per duty".into(),
+                        });
+                    }
+                    kw.into_iter().zip(duty).collect()
+                },
+                torque_nm: vec_n::<2>(s, &rec, "torque_nm")?,
                 name: sn,
             });
         }
@@ -1073,8 +1174,52 @@ impl MachineDef {
                 at: need_vec::<3>(s, &rec, "at", "give `at = [x, y, z]`")?,
                 dir,
                 xdir,
+                max_kg: match num(s, "max_kg") {
+                    Some(v) => Some(positive(&rec, "max_kg", v)?),
+                    None => None,
+                },
+                max_inertia: match num(s, "max_inertia") {
+                    Some(v) => Some(positive(&rec, "max_inertia", v)?),
+                    None => None,
+                },
                 name: mn,
             });
+        }
+        let mut gangs = Vec::new();
+        for g in tables(t, "gang") {
+            let gn = need_text(g, &format!("{m} gang"), "name", "give `name`")?.to_string();
+            let rec = format!("{m} gang `{gn}`");
+            let link = need_text(g, &rec, "link", "give `link`, the slide the tools ride on")?.to_string();
+            let ts = nums(g, "t").ok_or_else(|| rec_err(&rec, "t", "give `t = [1, 2, ...]`"))?;
+            let at = nums(g, "at")
+                .ok_or_else(|| rec_err(&rec, "at", "give `at = [x, y, z, ...]`, three per tool"))?;
+            let dir = nums(g, "dir")
+                .ok_or_else(|| rec_err(&rec, "dir", "give `dir = [x, y, z, ...]`, three per tool"))?;
+            if ts.is_empty() || at.len() != 3 * ts.len() || dir.len() != 3 * ts.len() {
+                return Err(DefError::Bad {
+                    record: rec,
+                    field: "at",
+                    why: "and dir need three numbers per T".into(),
+                });
+            }
+            for (i, tv) in ts.iter().enumerate() {
+                if *tv < 1.0 || tv.fract() != 0.0 {
+                    return Err(rec_err(&rec, "t", "T numbers are positive whole numbers"));
+                }
+                let d = normalize([dir[3 * i], dir[3 * i + 1], dir[3 * i + 2]])
+                    .ok_or_else(|| rec_err(&rec, "dir", "a tool direction must not be zero"))?;
+                mounts.push(Mount {
+                    name: format!("{gn}.T{}", *tv as u32),
+                    kind: MountKind::Tool,
+                    link: link.clone(),
+                    at: [at[3 * i], at[3 * i + 1], at[3 * i + 2]],
+                    dir: d,
+                    xdir: [1.0, 0.0, 0.0],
+                    max_kg: None,
+                    max_inertia: None,
+                });
+            }
+            gangs.push(gn);
         }
         let mut bodies = Vec::new();
         for s in tables(t, "body") {
@@ -1088,6 +1233,28 @@ impl MachineDef {
                 prims: if no_envelope { Vec::new() } else { prims(s, &rec)? },
                 part: text(s, "part").map(str::to_string),
                 ignore: texts(s, "ignore").unwrap_or_default(),
+                clearance: match num(s, "clearance") {
+                    Some(c) if c >= 0.0 && c.is_finite() => Some(c),
+                    Some(c) => {
+                        return Err(DefError::Bad {
+                            record: rec,
+                            field: "clearance",
+                            why: format!("must be >= 0 (is {c})"),
+                        });
+                    }
+                    None => None,
+                },
+                passes_stock: match text(s, "passes") {
+                    None => false,
+                    Some("stock") => true,
+                    Some(other) => {
+                        return Err(DefError::Bad {
+                            record: rec,
+                            field: "passes",
+                            why: format!("`{other}`: only \"stock\" runs through a body"),
+                        });
+                    }
+                },
                 name: bn,
             });
         }
@@ -1232,8 +1399,86 @@ impl MachineDef {
                 name: zn,
             });
         }
+        let mut probes = Vec::new();
+        for p in tables(t, "probe") {
+            let pn = need_text(p, &format!("{m} probe"), "name", "give `name`")?.to_string();
+            let rec = format!("{m} probe `{pn}`");
+            let device = need_text(p, &rec, "device", "give `device`, a forge-probe device id")?.to_string();
+            let offer = need_text(p, &rec, "offer", "give `offer`: standard | option")?.to_string();
+            if offer != "standard" && offer != "option" {
+                return Err(DefError::Unknown {
+                    record: rec,
+                    field: "offer",
+                    name: offer,
+                    known: vec!["standard".into(), "option".into()],
+                });
+            }
+            let tn = match num(p, "t") {
+                None => None,
+                Some(v) if v >= 1.0 && v.fract() == 0.0 && v <= u32::MAX as f64 => Some(v as u32),
+                Some(_) => return Err(rec_err(&rec, "t", "`t` is a positive whole number")),
+            };
+            probes.push(ProbeSlot {
+                name: pn,
+                device,
+                offer,
+                t: tn,
+            });
+        }
+        let mut setters = Vec::new();
+        for p in tables(t, "setter") {
+            let sn = need_text(p, &format!("{m} setter"), "name", "give `name`")?.to_string();
+            let rec = format!("{m} setter `{sn}`");
+            setters.push(Setter {
+                device: need_text(p, &rec, "device", "give `device`, a forge-probe device id")?.to_string(),
+                body: need_text(
+                    p,
+                    &rec,
+                    "body",
+                    "give `body`, the [[machine.body]] that is its envelope",
+                )?
+                .to_string(),
+                at: need_vec::<3>(p, &rec, "at", "give `at`, the trigger point, home pose")?,
+                dir: unit(p, &rec, "dir", "give `dir`, the device's up direction")?,
+                name: sn,
+            });
+        }
+        let homing = match tables(t, "homing") {
+            [] => None,
+            [h] => {
+                let rec = format!("{m} homing");
+                let Some(Val::Arr(groups)) = h.get("order") else {
+                    return Err(rec_err(&rec, "order", "give `order = [[\"Z\"], [\"X\", \"Y\"]]`"));
+                };
+                let mut order = Vec::new();
+                for g in groups {
+                    let Val::Arr(js) = g else {
+                        return Err(rec_err(&rec, "order", "each group is a list of joint names"));
+                    };
+                    let mut grp = Vec::new();
+                    for j in js {
+                        let Val::Str(j) = j else {
+                            return Err(rec_err(&rec, "order", "each group is a list of joint names"));
+                        };
+                        grp.push(j.clone());
+                    }
+                    order.push(grp);
+                }
+                Some(order)
+            }
+            _ => {
+                return Err(DefError::Shape {
+                    machine: name,
+                    why: "more than one [[machine.homing]]".into(),
+                });
+            }
+        };
         let def = MachineDef {
+            probes,
+            setters,
+            homing,
             zones,
+            gangs,
             pallets,
             peck_clear: nonneg("peck_clear")?,
             chip_lift: nonneg("chip_lift")?,
@@ -1256,6 +1501,7 @@ impl MachineDef {
             name,
         };
         def.validate()?;
+        def.validate_probing()?;
         def.validate_cites()?;
         Ok(def)
     }
@@ -1316,6 +1562,16 @@ impl MachineDef {
         for b in &self.bodies {
             out.push(format!("body.{}", b.name));
         }
+        for p in &self.probes {
+            out.push(format!("probe.{}", p.name));
+        }
+        for st in &self.setters {
+            out.push(format!("setter.{}.at", st.name));
+            out.push(format!("setter.{}.dir", st.name));
+        }
+        if self.homing.is_some() {
+            out.push("homing".into());
+        }
         out
     }
 
@@ -1325,9 +1581,86 @@ impl MachineDef {
         self.cite_status("zones") == Some(CiteStatus::Unknown)
     }
 
+    /// Probes, setters and the homing order: unique names; a setter's body exists and rides the
+    /// table side (a table joint's link, or the base); the homing order names each joint at
+    /// most once.
+    pub fn validate_probing(&self) -> Result<(), DefError> {
+        for (i, p) in self.probes.iter().enumerate() {
+            if self.probes[..i].iter().any(|q| q.name == p.name) {
+                return Err(DefError::Duplicate {
+                    kind: "probe",
+                    name: p.name.clone(),
+                });
+            }
+        }
+        for (i, st) in self.setters.iter().enumerate() {
+            if self.setters[..i].iter().any(|q| q.name == st.name) {
+                return Err(DefError::Duplicate {
+                    kind: "setter",
+                    name: st.name.clone(),
+                });
+            }
+            let rec = format!("machine `{}` setter `{}`", self.name, st.name);
+            let Some(b) = self.bodies.iter().find(|b| b.name == st.body) else {
+                return Err(DefError::Unknown {
+                    record: rec,
+                    field: "body",
+                    name: st.body.clone(),
+                    known: self.bodies.iter().map(|b| b.name.clone()).collect(),
+                });
+            };
+            let table_side = b.link == "base" || self.joint(&b.link).is_some_and(|j| j.side == Side::Table);
+            if !table_side {
+                return Err(DefError::Bad {
+                    record: rec,
+                    field: "body",
+                    why: format!(
+                        "rides `{}`, a head joint: a tool setter sits on the table side",
+                        b.link
+                    ),
+                });
+            }
+        }
+        if let Some(order) = &self.homing {
+            let rec = format!("machine `{}` homing", self.name);
+            let mut seen: Vec<&str> = Vec::new();
+            for j in order.iter().flatten() {
+                if self.joint(j).is_none() {
+                    return Err(DefError::Unknown {
+                        record: rec,
+                        field: "order",
+                        name: j.clone(),
+                        known: self.joints.iter().map(|j| j.name.clone()).collect(),
+                    });
+                }
+                if seen.contains(&j.as_str()) {
+                    return Err(DefError::Bad {
+                        record: rec,
+                        field: "order",
+                        why: format!("names `{j}` twice"),
+                    });
+                }
+                seen.push(j);
+            }
+            if order.iter().any(|g| g.is_empty()) {
+                return Err(DefError::Bad {
+                    record: rec,
+                    field: "order",
+                    why: "has an empty group".into(),
+                });
+            }
+        }
+        Ok(())
+    }
+
     /// A zone's joints as indexes into `joints` (validated to exist).
     pub fn zone_joints(&self, z: &Zone) -> Vec<usize> {
         z.joints.iter().filter_map(|j| self.joint_index(j)).collect()
+    }
+
+    /// The gang station tool `t` sits in, if any.
+    pub fn gang_mount(&self, t: u32) -> Option<&Mount> {
+        self.gangs.iter().find_map(|g| self.mount(&format!("{g}.T{t}")))
     }
 
     /// The zones q is strictly inside.
@@ -1656,7 +1989,7 @@ impl MachineDef {
                     && rot_h + rot_t == 0
                     && turn >= 1
                     && mill == 0
-                    && !self.turrets.is_empty()
+                    && (!self.turrets.is_empty() || !self.gangs.is_empty())
             }
             Kind::MillTurn => lin >= 3 && turn >= 1 && mill >= 1 && rot_t >= 1,
             Kind::TurnMill => {
@@ -1756,7 +2089,27 @@ impl MachineDef {
                 })
                 .collect(),
             rpm: s.rpm.unwrap_or([0.0, f64::INFINITY]),
-            power: s.power.clone(),
+            // no curve published but a continuous rating and torque: the conservative curve,
+            // torque-limited to the base speed P / T, then the continuous power
+            power: if s.power.is_empty() {
+                match (
+                    s.ratings.iter().find(|(_, d)| d == "cont").map(|(kw, _)| *kw),
+                    s.torque_nm.map(|t| t[1]),
+                    s.rpm.map(|r| r[1]),
+                ) {
+                    (Some(kw), Some(t), Some(top)) if t > 0.0 => {
+                        let base = kw * 1000.0 * 60.0 / (2.0 * std::f64::consts::PI * t);
+                        if base < top {
+                            vec![[0.0, 0.0], [base, kw], [top, kw]]
+                        } else {
+                            vec![[0.0, 0.0], [top, t * 2.0 * std::f64::consts::PI * top / 60_000.0]]
+                        }
+                    }
+                    _ => Vec::new(),
+                }
+            } else {
+                s.power.clone()
+            },
             max_feed: self
                 .joints
                 .iter()

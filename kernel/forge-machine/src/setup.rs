@@ -7,6 +7,8 @@
 //! [setup]
 //! machine = "generic-vmc3"
 //! dialect = "fanuc"          # a forge-post dialect name
+//! units = "inch"             # optional ("mm"): the program posted in inches (G20); offsets,
+//!                            # tools and stock here stay in mm
 //! program = "op1.nc"         # beside the setup file
 //! step = 0.5                 # removal grid (mm); optional, 1.0
 //!
@@ -40,11 +42,21 @@ pub enum Stock {
     Bar { r0: f64, z0: f64, z1: f64 },
 }
 
+/// A named workholding body in the part frame: one or more boxes and cylinders, collision-checked
+/// with the part and reported by name.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fixture {
+    pub name: String,
+    pub prims: Vec<Prim>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct SetupSpec {
     pub machine: String,
     pub dialect: String,
     pub program: String,
+    /// The program is in inches (`units = "inch"`).
+    pub inch: bool,
     pub channel: u8,
     pub tool_mount: Option<String>,
     pub part_mount: Option<String>,
@@ -57,8 +69,11 @@ pub struct SetupSpec {
     pub h: Vec<(u32, f64)>,
     pub geo: Vec<(u32, Vec<(char, f64)>)>,
     pub stock: Option<Stock>,
-    /// Fixture boxes, part frame.
-    pub fixture: Vec<Prim>,
+    /// Workholding (vises, clamps, plates, chucks), part frame.
+    pub fixture: Vec<Fixture>,
+    /// The work's mass on the part mount (part, fixture, pallet top), kg, for the mount's
+    /// `max_kg`; None: not given (the load is then not checked, and the reply says so).
+    pub work_kg: Option<f64>,
     pub start_tool: Option<u32>,
 }
 
@@ -87,6 +102,14 @@ fn need_vec<const N: usize>(t: &Table, rec: &str, k: &str) -> Result<[f64; N], S
     Ok(a)
 }
 
+fn fixture_box(t: &Table, rec: &str) -> Result<Prim, String> {
+    let (min, max) = (need_vec::<3>(t, rec, "min")?, need_vec::<3>(t, rec, "max")?);
+    if (0..3).any(|k| min[k] >= max[k]) {
+        return Err(format!("{rec}: a box needs min < max on every axis"));
+    }
+    Ok(Prim::Box { min, max })
+}
+
 fn whole(v: f64, rec: &str, k: &str) -> Result<u32, String> {
     if v >= 0.0 && v.fract() == 0.0 && v <= u32::MAX as f64 {
         Ok(v as u32)
@@ -111,6 +134,54 @@ impl SetupSpec {
         let Some(Val::Table(s)) = root.get("setup") else {
             return Err("no [setup] table".into());
         };
+        if !tables(s, "channel").is_empty() {
+            return Err(
+                "[setup]: this setup has [[setup.channel]] blocks: read it with parse_channels".into(),
+            );
+        }
+        Self::from_table(s)
+    }
+
+    /// A setup of several channels: `[[setup.channel]]` blocks, each a channel's setup (`n`, its
+    /// `program`, its `wcs`, `tool`, `geo`, `part_mount`, ...) on top of `[setup]`'s keys. The
+    /// stock and fixtures given in `[setup]` belong to the first channel; another channel has
+    /// only those it gives itself. None if the setup has no channel blocks.
+    pub fn parse_channels(src: &str) -> Result<Option<Vec<SetupSpec>>, String> {
+        let root = toml::parse(src).map_err(|e| format!("line {}: {}", e.line, e.what))?;
+        let Some(Val::Table(s)) = root.get("setup") else {
+            return Err("no [setup] table".into());
+        };
+        let chans = tables(s, "channel");
+        if chans.is_empty() {
+            return Ok(None);
+        }
+        let mut out: Vec<SetupSpec> = Vec::new();
+        for (i, c) in chans.iter().enumerate() {
+            let mut t = s.clone();
+            t.remove("channel");
+            if i > 0 {
+                t.remove("stock");
+                t.remove("fixture");
+                t.remove("work_kg");
+            }
+            for (k, v) in c.iter() {
+                if k != "n" {
+                    t.insert(k.clone(), v.clone());
+                }
+            }
+            let n =
+                num(c, "n").ok_or_else(|| format!("[[setup.channel]] {}: give `n`, the channel", i + 1))?;
+            t.insert("channel".into(), Val::Num(n));
+            let spec = Self::from_table(&t).map_err(|e| format!("channel {n}: {e}"))?;
+            if out.iter().any(|o| o.channel == spec.channel) {
+                return Err(format!("[[setup.channel]]: channel {n} twice"));
+            }
+            out.push(spec);
+        }
+        Ok(Some(out))
+    }
+
+    fn from_table(s: &Table) -> Result<SetupSpec, String> {
         let rec = "[setup]";
         let txt = |k: &str| -> Result<String, String> {
             text(s, k)
@@ -143,6 +214,10 @@ impl SetupSpec {
                 return Err(format!("{rec}: `body` must be (radius > 0, from < to) triples"));
             }
             let cut = match (nums(t, "mill"), nums(t, "nose")) {
+                // a touch probe: `probe = r`, its stylus ball's radius
+                (None, None) if num(t, "probe").is_some_and(|r| r > 0.0 && r.is_finite()) => Cut::Probe {
+                    r: num(t, "probe").unwrap_or(0.0),
+                },
                 (Some(m), None) if m.len() == 2 && m[0] > 0.0 && (0.0..=m[0]).contains(&m[1]) => Cut::Mill {
                     r: m[0],
                     corner: m[1],
@@ -153,7 +228,7 @@ impl SetupSpec {
                 },
                 _ => {
                     return Err(format!(
-                        "{rec}: give one of `mill = [r, corner]` (0 ≤ corner ≤ r) or `nose = [rn, dr, dz]`"
+                        "{rec}: give one of `mill = [r, corner]` (0 ≤ corner ≤ r), `nose = [rn, dr, dz]` or `probe = r` (a touch probe's ball radius)"
                     ));
                 }
             };
@@ -189,15 +264,69 @@ impl SetupSpec {
             _ => return Err("one [[setup.stock]] at most".into()),
         };
         let mut fixture = Vec::new();
-        for f in tables(s, "fixture") {
-            let r = "[[setup.fixture]]";
-            fixture.push(Prim::Box {
-                min: need_vec::<3>(f, r, "min")?,
-                max: need_vec::<3>(f, r, "max")?,
-            });
+        for (i, f) in tables(s, "fixture").iter().enumerate() {
+            let name = text(f, "name")
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("fixture {}", i + 1));
+            let r = format!("[[setup.fixture]] `{name}`");
+            let mut prims = Vec::new();
+            // the short form: one box given on the fixture itself
+            if f.contains_key("min") || f.contains_key("max") {
+                prims.push(fixture_box(f, &r)?);
+            }
+            for b in tables(f, "box") {
+                prims.push(fixture_box(b, &r)?);
+            }
+            for c in tables(f, "cyl") {
+                let base = need_vec::<3>(c, &r, "base")?;
+                let axis = need_vec::<3>(c, &r, "axis")?;
+                let n = (axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]).sqrt();
+                let (rad, h) = (need_num(c, &r, "r")?, need_num(c, &r, "h")?);
+                if !(n > 0.0 && rad > 0.0 && h > 0.0) {
+                    return Err(format!("{r}: a cyl needs a non-zero axis and r, h > 0"));
+                }
+                prims.push(Prim::Cyl {
+                    base,
+                    axis: [axis[0] / n, axis[1] / n, axis[2] / n],
+                    r: rad,
+                    h,
+                });
+            }
+            for b in tables(f, "obox") {
+                let o = need_vec::<3>(b, &r, "o")?;
+                let axes = [
+                    need_vec::<3>(b, &r, "u")?,
+                    need_vec::<3>(b, &r, "v")?,
+                    need_vec::<3>(b, &r, "w")?,
+                ];
+                let size = need_vec::<3>(b, &r, "size")?;
+                let dot = |a: &[f64; 3], c: &[f64; 3]| a[0] * c[0] + a[1] * c[1] + a[2] * c[2];
+                let ortho = (0..3).all(|i| {
+                    (0..3).all(|j| (dot(&axes[i], &axes[j]) - if i == j { 1.0 } else { 0.0 }).abs() < 1e-9)
+                });
+                if !ortho || size.iter().any(|x| x.is_nan() || *x <= 0.0) {
+                    return Err(format!("{r}: an obox needs orthonormal u, v, w and size > 0"));
+                }
+                prims.push(Prim::OBox { o, axes, size });
+            }
+            if prims.is_empty() {
+                return Err(format!(
+                    "{r}: give `min`/`max`, or [[setup.fixture.box]] / [[setup.fixture.cyl]] / [[setup.fixture.obox]]"
+                ));
+            }
+            if fixture.iter().any(|x: &Fixture| x.name == name) {
+                return Err(format!("{r}: two fixtures with one name"));
+            }
+            fixture.push(Fixture { name, prims });
         }
         let channel = num(s, "channel").unwrap_or(1.0);
+        let inch = match text(s, "units").unwrap_or("mm") {
+            "mm" => false,
+            "inch" => true,
+            u => return Err(format!("{rec}: units = `{u}` (mm or inch)")),
+        };
         Ok(SetupSpec {
+            inch,
             machine: txt("machine")?,
             dialect: txt("dialect")?,
             program: txt("program")?,
@@ -213,6 +342,11 @@ impl SetupSpec {
             geo,
             stock,
             fixture,
+            work_kg: match num(s, "work_kg") {
+                Some(v) if v >= 0.0 && v.is_finite() => Some(v),
+                Some(_) => return Err("[setup]: `work_kg` must be >= 0".into()),
+                None => None,
+            },
             start_tool: num(s, "start_tool")
                 .map(|v| whole(v, rec, "start_tool"))
                 .transpose()?,
@@ -225,7 +359,10 @@ impl SetupSpec {
         def: &'a MachineDef,
         dialect_src: &str,
     ) -> Result<crate::sim::Setup<'a>, SimError> {
-        let control = Control::for_machine(def, dialect_src, self.channel).map_err(SimError::Setup)?;
+        let mut control = Control::for_machine(def, dialect_src, self.channel).map_err(SimError::Setup)?;
+        if self.inch {
+            control = control.in_inches().map_err(SimError::Setup)?;
+        }
         let mut s = crate::sim::Setup::new(def, control)?;
         let per_letter = |vals: &[(char, f64)], what: &str| -> Result<Vec<f64>, SimError> {
             for (l, _) in vals {
@@ -271,6 +408,39 @@ impl SetupSpec {
     }
 
     /// The workpiece's collision bodies: the stock (a box; a bar as a cylinder on the part's z)
+    /// The work's mass against the part mount's `max_kg`: Ok(()) within it, Err((work, max)) over
+    /// it; or what could not be checked (no `work_kg`, no `max_kg`, or an estimated/unknown one).
+    pub fn check_load(
+        &self,
+        s: &crate::sim::Setup,
+    ) -> (Result<(), (f64, f64)>, Option<crate::sim::Unchecked>) {
+        let Some(mount) = s.def.mount(&s.part_mount) else {
+            return (Ok(()), None);
+        };
+        let path = format!("mount.{}.max_kg", mount.name);
+        let not = |path: String, why: &'static str| {
+            Some(crate::sim::Unchecked {
+                path,
+                why,
+                line: 0,
+                check: "table load",
+            })
+        };
+        match (self.work_kg, mount.max_kg) {
+            (Some(w), Some(max)) => {
+                let est = match s.def.cite_status(&path) {
+                    Some(crate::def::CiteStatus::Unknown) => not(path, "unknown"),
+                    Some(crate::def::CiteStatus::Estimate) => not(path, "estimated"),
+                    None if !s.def.real => not(path, "estimated"),
+                    _ => None,
+                };
+                (if w > max { Err((w, max)) } else { Ok(()) }, est)
+            }
+            (None, Some(_)) => (Ok(()), not("setup.work_kg".into(), "unknown")),
+            (_, None) => (Ok(()), not(path, "unknown")),
+        }
+    }
+
     /// and the fixture boxes.
     pub fn work_bodies(&self, s: &crate::sim::Setup) -> Vec<crate::collide::CBody> {
         let mut out = Vec::new();
@@ -294,13 +464,8 @@ impl SetupSpec {
             )),
             None => {}
         }
-        for (i, f) in self.fixture.iter().enumerate() {
-            out.push(crate::collide::part_body(
-                s,
-                &format!("fixture {}", i + 1),
-                std::slice::from_ref(f),
-                Role::Fixture,
-            ));
+        for f in &self.fixture {
+            out.push(crate::collide::part_body(s, &f.name, &f.prims, Role::Fixture));
         }
         out
     }

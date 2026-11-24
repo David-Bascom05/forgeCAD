@@ -6784,6 +6784,7 @@ impl Cam {
                 recs: q.recs[a..b].to_vec(),
                 decimals: d.decimals,
                 feed_decimals: d.feed_decimals,
+                inch: q.inch,
             };
             // the control's peck retract and chip-break lift: the posted program does not fix
             // them; the path is certified so that any value in [0, the depth already drilled]

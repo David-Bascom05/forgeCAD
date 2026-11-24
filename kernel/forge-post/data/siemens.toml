@@ -7,6 +7,10 @@ name = "siemens"
 extension = "mpf"
 decimals = 3
 feed_decimals = 1
+units_mm = "G21"
+units_inch = "G20"
+inch_decimals = 4
+inch_feed_decimals = 2
 point = "always"
 program_open = ["G291", "({title})"]
 program_close = ["M30"]
@@ -15,7 +19,7 @@ comment_strip = "();"
 line_numbers = true
 line_start = 10
 line_step = 10
-safe_start = ["G21", "G90 G94 G17 G40 G49 G80"]
+safe_start = ["{units}", "G90 G94 G17 G40 G49 G80"]
 tool_change = ["T{t} M6"]
 length_comp = "G00 G43 H{h}"
 spindle_cw = "S{rpm} M03"
@@ -234,3 +238,31 @@ note = "G291 selects the mode, no motion"
 
 # Not in the open manual (refused by the post): mist coolant (M07?) and through-spindle coolant are
 # machine-builder M codes the ISO manual does not list.
+
+[[dialect.cite]]
+key = "units_mm"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "G21 3.2.2 p. 3-60; G90 3.2.1 p. 3-59; G94 1.2.4 p. 1-21; G17 p. 2-27; G40 3.5.3 p. 3-76; G49 3.5.2 p. 3-74; G80 4.1.14 p. 4-127"
+note = "G21 (the safe start's)"
+
+[[dialect.cite]]
+key = "units_inch"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-24"
+where = "3.2.2 Table 3-4 p. 3-60"
+note = "G20 Input in inch system, G21 in mm system (group 06), in a block without other commands at the beginning of a program"
+
+[[dialect.cite]]
+key = "inch_decimals"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-24"
+where = "Table 1-1 p. 1-13"
+note = "IS-B: linear axis inch 0.0001"
+
+[[dialect.cite]]
+key = "inch_feed_decimals"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-24"
+where = "Table 1-1 p. 1-13"
+note = "IS-B: F feed G94 inch 0.01"

@@ -8,6 +8,8 @@
 //!   G17 G18 G19, G21 (G20 inch is refused), G28 (home through an intermediate point), G40, G43 H
 //!   G49, G53 (non-modal machine move), G54–G59, G64, G80–G85 G73 with G98 G99, G90 G91, G93 G94
 //!   G95, G96 G97, G50 S (lathe: spindle clamp), G187 (Haas smoothing: no motion effect).
+//! - skip (probe) moves G38.2–G38.5 / G31 where the dialect's `probe_move` names them (`Ev::Skip`,
+//!   the shell's: outside the proven core).
 //! - M0 M1 M2 M30 M3 M4 M5 M6 M7 M8 M9 M88 M89.
 //!
 //! Numbers: a word's value is held as an integer count of 10^-k (coordinates: k = `decimals`;
@@ -37,11 +39,63 @@ fn ge(line: usize, what: impl Into<String>) -> GError {
     }
 }
 
+/// The skip codes a dialect's `probe_move` templates name: each template's leading G word
+/// (`"G38.2 {axes} F{f}"` → 382, `"G31 {axes} F{f}"` → 310). Lines of a list each count.
+fn skip_codes(d: &forge_tooling::toml::Table) -> Vec<u16> {
+    use forge_tooling::toml;
+    let ts = toml::texts(d, "probe_move")
+        .or_else(|| toml::text(d, "probe_move").map(|t| vec![t.to_string()]))
+        .unwrap_or_default();
+    let mut out = Vec::new();
+    for t in ts {
+        for w in t.split_whitespace() {
+            if let Some(g) = w.strip_prefix('G')
+                && let Ok(v) = g.parse::<f64>()
+            {
+                let v = (v * 10.0).round();
+                if (0.0..=9999.0).contains(&v) && !out.contains(&(v as u16)) {
+                    out.push(v as u16);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The probing macros a dialect's templates call: (P number, which).
+fn macro_codes(d: &forge_tooling::toml::Table) -> Vec<(u32, Macro)> {
+    use forge_tooling::toml;
+    let mut out = Vec::new();
+    for (k, m) in [
+        ("probe_on", Macro::On),
+        ("probe_off", Macro::Off),
+        ("probe_protected", Macro::Protected),
+        ("probe_surface", Macro::Surface),
+    ] {
+        let Some(t) = toml::text(d, k) else { continue };
+        if !t.split_whitespace().any(|w| w == "G65") {
+            continue;
+        }
+        if let Some(p) = t
+            .split_whitespace()
+            .find_map(|w| w.strip_prefix('P').and_then(|p| p.parse::<u32>().ok()))
+        {
+            out.push((p, m));
+        }
+    }
+    out
+}
+
 /// What the interpreter needs to know about the control and the machine's words.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Control {
     pub decimals: u32,
     pub feed_decimals: u32,
+    /// The program is in inches (G20; `in_inches`): words are counts of 10^-decimals inch, feeds
+    /// of 10^-feed_decimals inch/min; G21 is refused, as G20 is in a mm program.
+    pub inch: bool,
+    /// The dialect's inch decimals and feed decimals, when it has an inch code.
+    pub inch_units: Option<(u32, u32)>,
     /// The axis words, in the order of the position vector.
     pub letters: Vec<char>,
     /// Which of `letters` are rotary (values in degrees).
@@ -60,8 +114,30 @@ pub struct Control {
     pub chip_lift: f64,
     /// The machine has a pallet changer: M60 swaps the pallet.
     pub pallets: bool,
+    /// The M codes that are multi-channel waits (`wait_m = [lo, hi]` in the dialect).
+    pub wait_m: Option<(u32, u32)>,
+    /// The channel these letters drive (1: letters with no digit or a 1; 2: Z2, C2, ...).
+    pub channel: u8,
     /// The dialect's lexical extras, read in this shell before the words reach the core.
     pub lex: Lex,
+    /// The skip (probe) moves this dialect cites, in tenths (G38.2 = 382, G31 = 310): from its
+    /// `probe_move` template. Empty: a skip move is refused as outside the subset.
+    pub skip: Vec<u16>,
+    /// The probing macros this dialect cites (G65 P<n>): each template's P number and what it is
+    /// (`probe_on`, `probe_off`, `probe_protected`, `probe_surface`). Others are refused.
+    pub macros: Vec<(u32, Macro)>,
+}
+
+/// A probing macro the simulation models from its published description.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Macro {
+    /// Probe on / off: a small Z move of unpublished size inside.
+    On,
+    Off,
+    /// A feed move to the target that stops with an alarm if the probe triggers.
+    Protected,
+    /// Along one axis toward the surface, `Q` past it, then back to the start.
+    Surface,
 }
 
 /// A dialect's text conventions beyond the Fanuc words the core interprets (forge-post's
@@ -81,6 +157,9 @@ pub struct Lex {
     pub dwell_letter: char,
     /// A canned cycle's P counts milliseconds (G82 P250) though G4's dwell is in seconds.
     pub cycle_p_ms: bool,
+    /// The tool change is a comment naming the tool, then M0 (GRBL, which has no M6): the
+    /// comment's text before the number ("TOOL "). The M0 that follows changes the tool.
+    pub tool_comment: Option<String>,
 }
 
 impl Default for Lex {
@@ -92,6 +171,7 @@ impl Default for Lex {
             centre_abs: false,
             dwell_letter: 'P',
             cycle_p_ms: false,
+            tool_comment: None,
         }
     }
 }
@@ -102,6 +182,8 @@ impl Control {
         Control {
             decimals,
             feed_decimals,
+            inch: false,
+            inch_units: None,
             letters: vec!['X', 'Y', 'Z'],
             rotary: vec![false; 3],
             diameter: None,
@@ -111,7 +193,11 @@ impl Control {
             peck_clear: forge_post::PECK_CLEAR,
             chip_lift: forge_post::CHIP_LIFT,
             pallets: false,
+            wait_m: None,
+            channel: 1,
             lex: Lex::default(),
+            skip: Vec::new(),
+            macros: Vec::new(),
         }
     }
 
@@ -169,11 +255,33 @@ impl Control {
             dwell_letter,
             cycle_p_ms: !dwell.contains("{ms}")
                 && toml::text(d, "cycle_dwell").is_some_and(|t| t.contains("P{ms}")),
+            // `tool_change = ["(TOOL {t}: {name})", "M0"]`: the comment before {t}
+            tool_comment: toml::texts(d, "tool_change").and_then(|tc| {
+                let first = tc.first()?.trim();
+                let last = tc.last()?.trim();
+                if tc.len() < 2 || !first.starts_with('(') || last != "M0" {
+                    return None;
+                }
+                let i = first.find("{t}")?;
+                Some(first[1..i].to_string())
+            }),
         };
+        let inch_units = (toml::text(d, "units_inch").is_some_and(|t| !t.is_empty())
+            && !toml::tables(d, "cite").iter().any(|c| {
+                toml::text(c, "key") == Some("units_inch") && toml::text(c, "status") == Some("refused")
+            }))
+        .then(|| {
+            (
+                toml::num(d, "inch_decimals").map_or(decimals + 1, |x| x as u32),
+                toml::num(d, "inch_feed_decimals").map_or(feed_decimals + 1, |x| x as u32),
+            )
+        });
         Ok(Control {
             lex,
             decimals,
             feed_decimals,
+            inch: false,
+            inch_units,
             letters,
             rotary,
             diameter,
@@ -183,7 +291,27 @@ impl Control {
             peck_clear: def.peck_clear.unwrap_or(forge_post::PECK_CLEAR),
             chip_lift: def.chip_lift.unwrap_or(forge_post::CHIP_LIFT),
             pallets: def.pallets.is_some(),
+            channel,
+            wait_m: toml::nums(d, "wait_m").and_then(|w| match w.as_slice() {
+                [lo, hi] if lo <= hi && *lo >= 0.0 => Some((*lo as u32, *hi as u32)),
+                _ => None,
+            }),
+            skip: skip_codes(d),
+            macros: macro_codes(d),
         })
+    }
+
+    /// The control reading an inch program (posted with forge-post's `PostOptions::inch`): the
+    /// dialect's inch decimals; refused where the dialect has no inch code.
+    pub fn in_inches(&self) -> Result<Control, String> {
+        let (k, fk) = self
+            .inch_units
+            .ok_or("the dialect has no inch code (post in mm)")?;
+        let mut c = self.clone();
+        c.inch = true;
+        c.decimals = k;
+        c.feed_decimals = fk;
+        Ok(c)
     }
 
     /// A built-in forge-post dialect's text by name.
@@ -204,7 +332,7 @@ impl Control {
         Control::for_machine(def, src, channel)
     }
 
-    fn idx(&self, c: char) -> Option<usize> {
+    pub fn idx(&self, c: char) -> Option<usize> {
         self.letters.iter().position(|l| *l == c)
     }
 }
@@ -296,6 +424,37 @@ pub enum Ev {
     End,
     /// M60 on a machine with a pallet changer: the pallet in the machining position is swapped.
     Pallet,
+    /// A multi-channel wait (Fanuc M100–M199 by the dialect's `wait_m`): this channel holds until
+    /// every channel with the same wait reaches it.
+    Wait(u32),
+    /// A skip (probe) move, G38.2–G38.5 or G31 (`code` in tenths): a feed toward `to` that stops
+    /// somewhere unknown along it when the probe triggers (G38.4/.5: when contact is lost). The
+    /// simulation sweeps the whole segment; afterwards the moved axes' positions are unknown to
+    /// the interpreter until an absolute word sets them.
+    Skip {
+        to: Vec<Option<Q>>,
+        f: Q,
+        code: u16,
+    },
+    /// A probing macro switched the probe on or off: its small Z move is not published, so Z is
+    /// unknown to the interpreter afterwards (the simulation does not move it).
+    ProbeSwitch(bool),
+    /// A protected positioning macro: a feed move to `to` that alarms if the probe triggers.
+    Protected {
+        to: Vec<Option<Q>>,
+        f: Q,
+    },
+    /// A single-surface measure macro along letter index `axis` toward `at`, `q` past it (`to`:
+    /// that end, the only word set), then back to the start (the macro's own feeds are not
+    /// modelled: its time is unknown).
+    /// `wcs`: the work offset (54..59) the macro sets from the error (S1..S6), if any.
+    Surface {
+        axis: usize,
+        at: Q,
+        q: Q,
+        to: Vec<Option<Q>>,
+        wcs: Option<u32>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -316,6 +475,14 @@ pub struct State {
     pub selected: Option<u32>,
     /// The arc centre an absolute I J block set (`Lex::centre_abs`), in program units.
     pub centre: Option<(Q, Q)>,
+    /// A tool a `Lex::tool_comment` comment named, waiting for its M0.
+    pub comment_tool: Option<u32>,
+    /// The protected positioning macro's feed: modal to that macro only (Inspection Plus O9810).
+    pub protected_f: Option<Q>,
+    /// The probe is switched on (a probing macro's `probe_on`): no tool change until it is off.
+    pub probe_on: bool,
+    /// The probe was switched off and the G28 reference return its macro requires has not come.
+    pub probe_off_pending: bool,
 }
 
 impl State {
@@ -335,6 +502,10 @@ impl State {
             css: false,
             selected: None,
             centre: None,
+            comment_tool: None,
+            protected_f: None,
+            probe_on: false,
+            probe_off_pending: false,
         }
     }
 }
@@ -577,8 +748,16 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
     let mut comments = Vec::new();
     let parsed = words(raw, ln, &mut comments, &c.lex)?;
     let push = |out: &mut Vec<Block>, ev: Ev| out.push(Block { line: ln, ev });
-    for c in comments {
-        push(out, Ev::Comment(c));
+    for cm in comments {
+        if let Some(pre) = &c.lex.tool_comment
+            && let Some(rest) = cm.strip_prefix(pre.as_str())
+        {
+            let n: String = rest.chars().take_while(|ch| ch.is_ascii_digit()).collect();
+            if let Ok(t) = n.parse() {
+                st.comment_tool = Some(t);
+            }
+        }
+        push(out, Ev::Comment(cm));
     }
     let Some(ws) = parsed else { return Ok(()) };
     let Some(ws) = lex_rewrite(ws, ln, c, st)? else {
@@ -622,50 +801,54 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
     let has_g = |g: u16| gs.contains(&(g * 10));
     // the G codes we know, by group; anything else is refused
     for g in &gs {
-        let ok = matches!(
-            *g,
-            0 | 10
-                | 20
-                | 30
-                | 40
-                | 170
-                | 180
-                | 190
-                | 210
-                | 280
-                | 400
-                | 430
-                | 490
-                | 500
-                | 530
-                | 540
-                | 550
-                | 560
-                | 570
-                | 580
-                | 590
-                | 640
-                | 730
-                | 800
-                | 810
-                | 820
-                | 830
-                | 840
-                | 850
-                | 900
-                | 910
-                | 930
-                | 940
-                | 950
-                | 960
-                | 970
-                | 980
-                | 990
-                | 1870
-        );
+        let ok = c.skip.contains(g)
+            || (*g == 650 && !c.macros.is_empty())
+            || matches!(
+                *g,
+                0 | 10
+                    | 20
+                    | 30
+                    | 40
+                    | 170
+                    | 180
+                    | 190
+                    | 280
+                    | 400
+                    | 430
+                    | 490
+                    | 500
+                    | 530
+                    | 540
+                    | 550
+                    | 560
+                    | 570
+                    | 580
+                    | 590
+                    | 640
+                    | 730
+                    | 800
+                    | 810
+                    | 820
+                    | 830
+                    | 840
+                    | 850
+                    | 900
+                    | 910
+                    | 930
+                    | 940
+                    | 950
+                    | 960
+                    | 970
+                    | 980
+                    | 990
+                    | 1870
+            );
+        // the program's units: its own code, never the other's (no switch within a program)
+        let ok = ok || (*g == 210 && !c.inch) || (*g == 200 && c.inch);
         if !ok {
             let what = match g {
-                200 => "G20 (inch) is not modelled: post in mm".to_string(),
+                200 => "G20 (inch) in a program read in mm: read it with the control in inches".to_string(),
+                210 => "G21 (mm) in a program read in inches".to_string(),
                 410 | 420 => {
                     "cutter compensation (G41/G42) is not modelled: post the compensated path".to_string()
                 }
@@ -735,7 +918,10 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         }
         let s = s_word.ok_or_else(|| ge(ln, "G50 with no S"))?;
         push(out, Ev::Clamp(s));
-    } else if let Some(s) = s_word {
+    } else if let Some(s) = s_word
+        && !has_g(65)
+    {
+        // (a probing macro's S is the work offset it sets, not a speed)
         st.rpm = s;
     }
     // 2. T, M6
@@ -791,9 +977,17 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
             0 | 1 => stop = Some(Ev::Stop { optional: *m == 1 }),
             2 | 30 => stop = Some(Ev::End),
             60 if c.pallets => push(out, Ev::Pallet),
+            m if c.wait_m.is_some_and(|(lo, hi)| (lo..=hi).contains(m)) => push(out, Ev::Wait(*m)),
             m => return Err(ge(ln, format!("M{m} is not in the subset"))),
         }
     }
+    // a manual change by comment (GRBL): the M0 after `(TOOL n: …)` puts tool n in
+    let after_stop: Option<Ev> = match (&stop, c.lex.tool_comment.is_some()) {
+        (Some(Ev::Stop { optional: false }), true) => {
+            st.comment_tool.take().map(|t| Ev::Tool { t, offset: None })
+        }
+        _ => None,
+    };
     // 3. dwell
     let mut nonmodal_used_words = false;
     if has_g(4) {
@@ -827,6 +1021,24 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         axis[i] = coord(*l)?;
     }
     let any_axis = axis.iter().any(|a| a.is_some());
+    // the probe switch macros' rules (Renishaw H-2000-6222 p. 9-23): the probe is off before a
+    // tool change, and the move after switching it off is a G28 reference return
+    if st.probe_on && (ms.contains(&6) || (c.lathe && get('T').is_some())) {
+        return Err(ge(
+            ln,
+            "a tool change while the probe is on: switch it off first (G65 P9833)",
+        ));
+    }
+    if st.probe_off_pending && any_axis {
+        if has_g(28) {
+            st.probe_off_pending = false;
+        } else {
+            return Err(ge(
+                ln,
+                "a move after the probe is switched off that is not a G28 reference return (the off macro moves Z; Renishaw H-2000-6222 p. 9-23)",
+            ));
+        }
+    }
     let absolute = if has_g(91) {
         Some(false)
     } else if has_g(90) {
@@ -848,7 +1060,7 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         for (i, _) in mv {
             st.core.pos[i] = None;
         }
-        if let Some(e) = stop {
+        for e in stop.into_iter().chain(after_stop) {
             push(out, e);
         }
         return Ok(());
@@ -879,13 +1091,195 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         for i in axes {
             st.core.pos[i] = None;
         }
-        if let Some(e) = stop {
+        for e in stop.into_iter().chain(after_stop) {
+            push(out, e);
+        }
+        return Ok(());
+    }
+    // 5b'. a probing macro call (G65 P<n>, the dialect's cited ones): the shell's, outside the
+    // proven core, modelled from the macro's published description
+    if has_g(65) {
+        let p = get('P').and_then(|v| v.trim_end_matches('.').parse::<u32>().ok());
+        let Some(&(_, mac)) = c.macros.iter().find(|(n, _)| Some(*n) == p) else {
+            return Err(ge(
+                ln,
+                format!("G65 P{}: not a probing macro this dialect cites", p.unwrap_or(0)),
+            ));
+        };
+        if gs.len() > 1 {
+            return Err(ge(ln, "a probing macro call with other G codes in the block"));
+        }
+        if !st.core.absolute {
+            return Err(ge(
+                ln,
+                "a probing macro in G91 is not modelled: its words are positions",
+            ));
+        }
+        let zi = c.idx('Z');
+        match mac {
+            Macro::On | Macro::Off => {
+                st.probe_on = mac == Macro::On;
+                st.probe_off_pending = mac == Macro::Off;
+                push(out, Ev::ProbeSwitch(mac == Macro::On));
+                if let Some(z) = zi {
+                    st.core.pos[z] = None;
+                }
+            }
+            Macro::Protected => {
+                // its F is modal to this macro only
+                let f = f_word
+                    .or(st.protected_f)
+                    .ok_or_else(|| ge(ln, "a protected move with no feed"))?;
+                st.protected_f = Some(f);
+                let mut to = vec![None; axis.len()];
+                for i in 0..axis.len() {
+                    if let Some(v) = axis[i] {
+                        if st.core.pos[i].is_none() {
+                            // the move starts from where the machine is: unknown here
+                            return Err(ge(ln, "a protected move from an unknown position"));
+                        }
+                        to[i] = Some(v);
+                    }
+                }
+                if !any_axis {
+                    return Err(ge(ln, "a protected move with no axis word"));
+                }
+                push(out, Ev::Protected { to: to.clone(), f });
+                for (i, t) in to.iter().enumerate() {
+                    if let Some(v) = t {
+                        st.core.pos[i] = Some(*v);
+                    }
+                }
+            }
+            Macro::Surface => {
+                let named: Vec<usize> = (0..axis.len()).filter(|&i| axis[i].is_some()).collect();
+                let [ax] = named[..] else {
+                    return Err(ge(ln, "a single-surface measure names one axis"));
+                };
+                if c.letters[ax] != 'X' && c.letters[ax] != 'Y' && c.letters[ax] != 'Z' {
+                    return Err(ge(ln, "a single-surface measure on X, Y or Z only"));
+                }
+                if st.core.pos.iter().any(|p| p.is_none()) {
+                    return Err(ge(ln, "a single-surface measure from an unknown position"));
+                }
+                let q = coord('Q')?.ok_or_else(|| {
+                    ge(
+                        ln,
+                        "a single-surface measure with no Q (its default is not assumed)",
+                    )
+                })?;
+                if q <= 0 {
+                    return Err(ge(ln, "a single-surface measure needs Q > 0"));
+                }
+                let at = axis[ax].unwrap_or(0);
+                let from = st.core.pos[ax].unwrap_or(0);
+                if at == from {
+                    return Err(ge(ln, "a single-surface measure starting on its surface"));
+                }
+                let end = if at > from {
+                    at.checked_add(q)
+                } else {
+                    at.checked_sub(q)
+                }
+                .ok_or_else(|| ge(ln, "a coordinate past the word range"))?;
+                let mut to = vec![None; axis.len()];
+                to[ax] = Some(end);
+                let wcs = match s_word {
+                    None => None,
+                    Some(n @ 1..=6) => Some(n as u32 + 53),
+                    Some(n) => return Err(ge(ln, format!("S{n}: only S1..S6 (G54..G59) are modelled"))),
+                };
+                push(
+                    out,
+                    Ev::Surface {
+                        axis: ax,
+                        at,
+                        q,
+                        to,
+                        wcs,
+                    },
+                );
+            }
+        }
+        st.core.mode = None;
+        st.core.cyc = None;
+        for e in stop.into_iter().chain(after_stop) {
+            push(out, e);
+        }
+        return Ok(());
+    }
+    // 5c. a skip (probe) move: the shell's, outside the proven core (docs/cam-machine.md). Its
+    // end is unknown, so the moved axes' program position becomes unknown, and the motion mode
+    // is cleared (G38.x is modal on LinuxCNC, G31 one-shot on Fanuc: a bare axis word after it
+    // is refused rather than read either way).
+    if let Some(code) = gs.iter().copied().find(|g| c.skip.contains(g)) {
+        if !motion_gs.is_empty() || gs.iter().filter(|g| c.skip.contains(g)).count() > 1 {
+            return Err(ge(ln, "a skip move with another motion code in the block"));
+        }
+        if has_g(28) || get('I').is_some() || get('J').is_some() || get('K').is_some() || get('R').is_some() {
+            return Err(ge(ln, "a skip move with arc or home words"));
+        }
+        if st.feed_mode != FeedMode::PerMin {
+            return Err(ge(ln, "a skip move needs G94 (feed per minute)"));
+        }
+        if !any_axis {
+            return Err(ge(ln, "a skip move with no axis word"));
+        }
+        let abs = absolute.unwrap_or(st.core.absolute);
+        let mut to: Vec<Option<Q>> = vec![None; axis.len()];
+        for i in 0..axis.len() {
+            if let Some(v) = axis[i] {
+                to[i] = Some(if abs {
+                    v
+                } else {
+                    let p = st.core.pos[i]
+                        .ok_or_else(|| ge(ln, refusal(mcore::Refuse::IncrementalFromUnknown)))?;
+                    p.checked_add(v)
+                        .ok_or_else(|| ge(ln, "a coordinate past the word range"))?
+                });
+            }
+        }
+        // the start must be known on every axis the move names (the segment starts there)
+        if (0..axis.len()).any(|i| axis[i].is_some() && st.core.pos[i].is_none()) {
+            return Err(ge(ln, "a skip move from an unknown position"));
+        }
+        let f = f_word
+            .or(st.core.feed)
+            .ok_or_else(|| ge(ln, "a skip move with no feed"))?;
+        if f == 0 {
+            return Err(ge(ln, "a skip move at feed 0"));
+        }
+        st.core.feed = Some(f);
+        if let Some(a) = absolute {
+            st.core.absolute = a;
+        }
+        for p in [17u16, 18, 19] {
+            if has_g(p) {
+                st.core.plane = p as u32;
+            }
+        }
+        st.core.mode = None;
+        st.core.cyc = None;
+        push(
+            out,
+            Ev::Skip {
+                to: to.clone(),
+                f,
+                code,
+            },
+        );
+        for (i, t) in to.iter().enumerate() {
+            if t.is_some() {
+                st.core.pos[i] = None;
+            }
+        }
+        for e in stop.into_iter().chain(after_stop) {
             push(out, e);
         }
         return Ok(());
     }
     if nonmodal_used_words && !any_axis {
-        if let Some(e) = stop {
+        for e in stop.into_iter().chain(after_stop) {
             push(out, e);
         }
         return Ok(());
@@ -954,8 +1348,17 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         z: c.idx('Z').unwrap_or(usize::MAX),
     };
     // the machine's peck clearance and chip-break lift (forge-post's when the record is silent)
-    let pc = forge_post::quant(c.peck_clear, k).unwrap_or(0);
-    let lift = forge_post::quant(c.chip_lift, k).unwrap_or(0);
+    let (pc, lift) = if c.inch {
+        (
+            forge_post::quant_ratio(c.peck_clear, k, 10, 254).unwrap_or(0),
+            forge_post::quant_ratio(c.chip_lift, k, 10, 254).unwrap_or(0),
+        )
+    } else {
+        (
+            forge_post::quant(c.peck_clear, k).unwrap_or(0),
+            forge_post::quant(c.chip_lift, k).unwrap_or(0),
+        )
+    };
     let (evs, next) = mcore::step(&axes, pc, lift, &st.core, &b).map_err(|r| ge(ln, refusal(r)))?;
     st.core = next;
     let mode = st.feed_mode;
@@ -982,7 +1385,7 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
             },
         );
     }
-    if let Some(e) = stop {
+    for e in stop.into_iter().chain(after_stop) {
         push(out, e);
     }
     Ok(())

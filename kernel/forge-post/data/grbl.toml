@@ -5,6 +5,10 @@ name = "grbl"
 extension = "gcode"
 decimals = 3
 feed_decimals = 0
+units_mm = "G21"
+units_inch = "G20"
+inch_decimals = 4
+inch_feed_decimals = 2
 point = "never"
 program_open = ["({title})"]
 program_close = ["M2"]
@@ -13,7 +17,7 @@ comment_strip = "()"
 line_numbers = false
 line_start = 10
 line_step = 10
-safe_start = ["G90 G94 G17", "G21"]
+safe_start = ["G90 G94 G17", "{units}"]
 tool_change = ["(TOOL {t}: {name})", "M0"]
 length_comp = ""
 spindle_cw = "S{rpm} M3"
@@ -36,6 +40,15 @@ cycle_tap = "refuse"
 cycle_ream = "expand"
 cycle_next = ""
 cycle_cancel = ""
+# probe (skip) move: G38.2 is in GRBL 1.1's motion modal group; $# reports the last probe as PRB
+probe_move = "G38.2 X{x} Y{y} Z{z} F{f}"
 source = "forgecad, restated from the GRBL 1.1 command reference"
 taken = "2026-11-23"
 note = "verify with your firmware"
+
+[[dialect.cite]]
+key = "probe_move"
+source = "https://github.com/gnea/grbl/wiki/Grbl-v1.1-Commands"
+taken = "2026-11-24"
+where = "Grbl v1.1 Commands, $G - View gcode parser state: modal groups table (Motion Mode: G0, G1, G2, G3, G38.2, G38.3, G38.4, G38.5, G80); $# - View gcode parameters (PRB, the last probing cycle's coordinates, :1 when it succeeded)"
+note = "the probe word set as GRBL lists it; the axis words and F as for G1 (read by PROBING, 2026-11-24)"

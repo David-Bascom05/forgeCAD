@@ -48,6 +48,19 @@ pub struct CBody {
     pub prims: Vec<Prim>,
     pub ignore: Vec<String>,
     pub role: Role,
+    /// Its own least gap (a machine body's `clearance`), else the machine's.
+    pub clearance: Option<f64>,
+    /// The stock runs through it (a guide bushing): no contact with Role::Stock.
+    pub passes_stock: bool,
+}
+
+/// The least gap a pair keeps: the smaller of their own, else the machine's.
+fn pair_clearance(def: &MachineDef, a: &CBody, b: &CBody) -> f64 {
+    match (a.clearance, b.clearance) {
+        (Some(x), Some(y)) => x.min(y),
+        (Some(x), None) | (None, Some(x)) => x,
+        (None, None) => def.clearance,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -76,6 +89,75 @@ pub struct Report {
     /// pair of its own bodies a move does not prove clear: a possible contact, not checked
     /// (the contact itself is in `contacts` too).
     pub unchecked: Vec<crate::sim::Unchecked>,
+    /// Skip moves whose following moves were checked for every place the probe can stop
+    /// (`check_after_skip`) and kept every pair clear: their lines.
+    pub skips_proven: Vec<usize>,
+}
+
+/// One pair through segment si: through its own path, or, when it follows a skip move with
+/// joints at the skip's unknown stop, for every stop.
+#[allow(clippy::too_many_arguments)]
+fn segment_pair(
+    def: &MachineDef,
+    tl: &Timeline,
+    si: usize,
+    a: &CBody,
+    b: &CBody,
+    clearance: f64,
+    spans: &mut usize,
+) -> Verdict {
+    let seg = &tl.segments[si];
+    match tl.after_skip.iter().find(|d| d.segment == si) {
+        Some(d) => check_after_skip(
+            def,
+            &tl.segments[d.skip],
+            seg,
+            &d.start,
+            &d.end,
+            a,
+            b,
+            clearance,
+            spans,
+        ),
+        None => check_span(def, seg, a, b, 0.0, 1.0, clearance, MAX_DEPTH, spans),
+    }
+}
+
+/// The skip moves (their lines) whose dependent moves all came out clear for every stop.
+fn skips_proven(tl: &Timeline, contacts: &[Contact]) -> Vec<usize> {
+    let mut skips: Vec<usize> = tl.after_skip.iter().map(|d| d.skip).collect();
+    skips.dedup();
+    skips
+        .into_iter()
+        .filter(|k| {
+            let line = tl.segments[*k].line;
+            !tl.skip_unmodelled.contains(&line)
+                && !tl
+                    .after_skip
+                    .iter()
+                    .filter(|d| d.skip == *k)
+                    .any(|d| contacts.iter().any(|c| c.segment == d.segment))
+        })
+        .map(|k| tl.segments[k].line)
+        .collect()
+}
+
+/// What `sim::unchecked` says of the moves after skip moves (`skip.end`), narrowed by a report:
+/// when every skip move's following moves were proven clear for every stop, only the material
+/// removal after it (from the stock model's trigger) is left unchecked.
+pub fn narrow_skip_unchecked(unchecked: &mut [crate::sim::Unchecked], tl: &Timeline, rep: &Report) {
+    let lines: Vec<usize> = tl
+        .marks
+        .iter()
+        .filter(|m| matches!(m.what, crate::sim::Happening::Skip { .. }))
+        .map(|m| m.line)
+        .collect();
+    if lines.is_empty() || !lines.iter().all(|l| rep.skips_proven.contains(l)) {
+        return;
+    }
+    for u in unchecked.iter_mut().filter(|u| u.path == "skip.end") {
+        u.check = "material removal after a skip move, from where the simulation stops it (collisions proven for every stop)";
+    }
 }
 
 /// The machine's bodies (a body with no envelope, cited unknown, is left out: sim::unchecked
@@ -90,6 +172,8 @@ pub fn machine_bodies(def: &MachineDef) -> Vec<CBody> {
             prims: b.prims.clone(),
             ignore: b.ignore.clone(),
             role: Role::Machine,
+            clearance: b.clearance,
+            passes_stock: b.passes_stock,
         })
         .collect()
 }
@@ -98,7 +182,9 @@ pub fn machine_bodies(def: &MachineDef) -> Vec<CBody> {
 pub fn tool_bodies(s: &Setup, t: u32) -> Vec<CBody> {
     let def = s.def;
     let Some(tool) = s.tool(t) else { return Vec::new() };
-    let m = def.mount(&s.tool_mount).unwrap();
+    let Some(m) = s.mount_for(t) else {
+        return Vec::new();
+    };
     let tip = kin::add(m.at, tool.tip);
     let u = kin::scale(m.dir, -1.0);
     tool.body
@@ -119,6 +205,8 @@ pub fn tool_bodies(s: &Setup, t: u32) -> Vec<CBody> {
             }],
             ignore: Vec::new(),
             role: Role::Tool { cutting: i == 0 },
+            clearance: None,
+            passes_stock: false,
         })
         .collect()
 }
@@ -138,28 +226,36 @@ pub fn part_body(s: &Setup, name: &str, prims_in_part: &[Prim], role: Role) -> C
         .iter()
         .flat_map(|p| match p {
             Prim::Box { min, max } => {
-                // a box in the part frame is an oriented box in the base frame: keep it exact as
-                // a box only when the frame is axis-aligned; otherwise it is refused (none of the
-                // built-in mounts is skewed)
+                // a box in the part frame is an oriented box in the base frame: a box again when
+                // the frame is axis-aligned, else an oriented box
                 let a = f.apply(*min);
                 let b = f.apply(*max);
                 let axis_aligned =
                     f.r.iter()
                         .all(|row| row.iter().filter(|x| **x != 0.0).count() == 1);
-                assert!(
-                    axis_aligned,
-                    "a skewed part mount: boxes need an axis-aligned part frame"
-                );
-                vec![Prim::Box {
-                    min: [a[0].min(b[0]), a[1].min(b[1]), a[2].min(b[2])],
-                    max: [a[0].max(b[0]), a[1].max(b[1]), a[2].max(b[2])],
-                }]
+                if axis_aligned {
+                    vec![Prim::Box {
+                        min: [a[0].min(b[0]), a[1].min(b[1]), a[2].min(b[2])],
+                        max: [a[0].max(b[0]), a[1].max(b[1]), a[2].max(b[2])],
+                    }]
+                } else {
+                    vec![Prim::OBox {
+                        o: a,
+                        axes: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]].map(|d| f.dir(d)),
+                        size: [max[0] - min[0], max[1] - min[1], max[2] - min[2]],
+                    }]
+                }
             }
             Prim::Cyl { base, axis, r, h } => vec![Prim::Cyl {
                 base: f.apply(*base),
                 axis: f.dir(*axis),
                 r: *r,
                 h: *h,
+            }],
+            Prim::OBox { o, axes, size } => vec![Prim::OBox {
+                o: f.apply(*o),
+                axes: axes.map(|a| f.dir(a)),
+                size: *size,
             }],
         })
         .collect();
@@ -169,6 +265,8 @@ pub fn part_body(s: &Setup, name: &str, prims_in_part: &[Prim], role: Role) -> C
         prims,
         ignore: Vec::new(),
         role,
+        clearance: None,
+        passes_stock: false,
     }
 }
 
@@ -222,6 +320,26 @@ fn place(p: &Prim, t: &IRigid) -> IPrim {
                 c: t.apply(&cc),
                 e,
                 h,
+            }
+        }
+        Prim::OBox { o, axes, size } => {
+            // the centre in interval arithmetic (sound for float axes); the axes as given, so the
+            // support function Σ h_i |e_i · n| is exact for the parallelepiped they span
+            let mut c = ip(*o);
+            for k in 0..3 {
+                let half = Interval::point(size[k]) * Interval::point(0.5);
+                for i in 0..3 {
+                    c[i] = c[i] + half * Interval::point(axes[k][i]);
+                }
+            }
+            let e = axes.map(|a| {
+                let ia = ip(a);
+                [0, 1, 2].map(|i| t.r[i][0] * ia[0] + t.r[i][1] * ia[1] + t.r[i][2] * ia[2])
+            });
+            IPrim::Box {
+                c: t.apply(&c),
+                e,
+                h: size.map(|x| (x * 0.5).next_up()),
             }
         }
         Prim::Cyl { base, axis, r, h } => {
@@ -399,6 +517,12 @@ fn samples(p: &Prim, t: &Rigid) -> Vec<V3> {
                 out.push(t.apply([pick(0, 0), pick(1, 1), pick(2, 2)]));
             }
         }
+        Prim::OBox { o, axes, size } => {
+            for i in 0..27 {
+                let f = [0, 1, 2].map(|d| ((i / [1, 3, 9][d]) % 3) as f64 * 0.5);
+                out.push(t.apply(Prim::obox_at(o, axes, size, f)));
+            }
+        }
         Prim::Cyl { base, axis, r, h } => {
             let u = if axis[0].abs() < 0.9 {
                 kin::cross(*axis, [1.0, 0.0, 0.0])
@@ -430,6 +554,15 @@ fn depth(p: &Prim, t: &Rigid, x: V3) -> f64 {
         Prim::Box { min, max } => (0..3)
             .map(|k| (l[k] - min[k]).min(max[k] - l[k]))
             .fold(f64::INFINITY, f64::min),
+        Prim::OBox { o, axes, size } => {
+            let w = kin::sub(l, *o);
+            (0..3)
+                .map(|k| {
+                    let s = kin::dot(w, axes[k]);
+                    s.min(size[k] - s)
+                })
+                .fold(f64::INFINITY, f64::min)
+        }
         Prim::Cyl { base, axis, r, h } => {
             let w = kin::sub(l, *base);
             let z = kin::dot(w, *axis);
@@ -542,7 +675,8 @@ fn may_pair(a: &CBody, b: &CBody, kind: SegKind) -> bool {
     let cut = |x: &CBody, y: &CBody| {
         matches!(x.role, Role::Tool { cutting: true }) && y.role == Role::Stock && kind != SegKind::Rapid
     };
-    !(cut(a, b) || cut(b, a))
+    let through = |x: &CBody, y: &CBody| x.passes_stock && y.role == Role::Stock;
+    !(cut(a, b) || cut(b, a) || through(a, b) || through(b, a))
 }
 
 /// Checks every pair of bodies through every segment. `work` are the workpiece bodies (stock,
@@ -570,7 +704,7 @@ pub fn check(s: &Setup, tl: &Timeline, work: &[CBody]) -> Report {
                     continue;
                 }
                 rep.pairs_checked += 1;
-                let v = check_span(def, seg, a, b, 0.0, 1.0, def.clearance, MAX_DEPTH, &mut rep.spans);
+                let v = segment_pair(def, tl, si, a, b, pair_clearance(def, a, b), &mut rep.spans);
                 if v != Verdict::Clear {
                     if a.role == Role::Machine && b.role == Role::Machine && def.zones_unpublished() {
                         let path = format!("zones ({} / {})", a.name, b.name);
@@ -594,6 +728,7 @@ pub fn check(s: &Setup, tl: &Timeline, work: &[CBody]) -> Report {
             }
         }
     }
+    rep.skips_proven = skips_proven(tl, &rep.contacts);
     rep
 }
 
@@ -621,7 +756,17 @@ pub fn check_pose(def: &MachineDef, q: &[f64]) -> Vec<(String, String, Verdict)>
             if !may_pair(a, b, SegKind::Rapid) {
                 continue;
             }
-            let v = check_span(def, &seg, a, b, 0.0, 1.0, def.clearance, 4, &mut spans);
+            let v = check_span(
+                def,
+                &seg,
+                a,
+                b,
+                0.0,
+                1.0,
+                pair_clearance(def, a, b),
+                4,
+                &mut spans,
+            );
             if v != Verdict::Clear {
                 out.push((a.name.clone(), b.name.clone(), v));
             }
@@ -653,6 +798,16 @@ pub fn dense_overlap(a: &CBody, b: &CBody, pose: &[Rigid]) -> bool {
                                 f(j, min[1], max[1]),
                                 f(k, min[2], max[2]),
                             ]));
+                        }
+                    }
+                }
+            }
+            Prim::OBox { o, axes, size } => {
+                for i in 0..n {
+                    for j in 0..n {
+                        for k in 0..n {
+                            let f = [i, j, k].map(|m| m as f64 / (n - 1) as f64);
+                            out.push(t.apply(Prim::obox_at(o, axes, size, f)));
                         }
                     }
                 }
@@ -693,4 +848,383 @@ pub fn dense_overlap(a: &CBody, b: &CBody, pose: &[Rigid]) -> bool {
         }
     }
     false
+}
+
+// ------------------------------------------------------------------------------------------
+// Two channels (sim::multi): a pair of bodies, each moved by one channel's segment, with the two
+// segments' parameters independent (any relative timing).
+
+/// The channels (joint letter digits: Z2 is channel 2, Z channel 1) whose joints move a body.
+pub fn body_channels(def: &MachineDef, b: &CBody) -> Vec<u8> {
+    let mut out: Vec<u8> = Vec::new();
+    let Some(l) = b.link else { return out };
+    for j in def.chain(&def.joints[l].name).unwrap_or_default() {
+        let letter = &def.joints[j].letter;
+        let base = letter.trim_end_matches(|c: char| c.is_ascii_digit());
+        let ch: u8 = letter[base.len()..].parse().unwrap_or(1);
+        if !out.contains(&ch) {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+/// The joints channel `ch` drives.
+pub fn channel_joints(def: &MachineDef, ch: u8) -> Vec<usize> {
+    (0..def.joints.len())
+        .filter(|&j| {
+            let letter = &def.joints[j].letter;
+            let base = letter.trim_end_matches(|c: char| c.is_ascii_digit());
+            letter[base.len()..].parse::<u8>().unwrap_or(1) == ch
+        })
+        .collect()
+}
+
+/// Body `a` moved by segment `sa` (channel A's joints `ja`) against body `b` moved by `sb` (the
+/// other joints), over every pair of times: Clear only if the pair keeps `clearance` for all
+/// sa ∈ [0, 1] and sb ∈ [0, 1] independently. A Hit's `s` is sa's.
+#[allow(clippy::too_many_arguments)]
+pub fn check_two(
+    def: &MachineDef,
+    sa: &Segment,
+    sb: &Segment,
+    ja: &[usize],
+    a: &CBody,
+    b: &CBody,
+    clearance: f64,
+    spans: &mut usize,
+) -> Verdict {
+    let mut budget = TWO_BUDGET;
+    two_span(
+        def,
+        sa,
+        sb,
+        ja,
+        a,
+        b,
+        [0.0, 1.0],
+        [0.0, 1.0],
+        clearance,
+        TWO_DEPTH,
+        spans,
+        &mut budget,
+    )
+}
+
+/// Two parameters split one at a time: this deep reaches 2^-12 of each segment. Past the
+/// budget of spans a pair is left Near (not proven clear), never Clear.
+const TWO_DEPTH: u32 = 24;
+const TWO_BUDGET: usize = 4096;
+
+#[allow(clippy::too_many_arguments)]
+fn two_span(
+    def: &MachineDef,
+    sa: &Segment,
+    sb: &Segment,
+    ja: &[usize],
+    a: &CBody,
+    b: &CBody,
+    ra: [f64; 2],
+    rb: [f64; 2],
+    clearance: f64,
+    depth_left: u32,
+    spans: &mut usize,
+    budget: &mut usize,
+) -> Verdict {
+    *spans += 1;
+    let qa = q_span(sa, ra[0], ra[1]);
+    let qb = q_span(sb, rb[0], rb[1]);
+    let q: Vec<Interval> = (0..qa.len())
+        .map(|j| if ja.contains(&j) { qa[j] } else { qb[j] })
+        .collect();
+    let pose = kin::ipose(def, &q);
+    let (ta, tb) = (ilink(&pose, a.link), ilink(&pose, b.link));
+    let pa: Vec<IPrim> = a.prims.iter().map(|p| place(p, &ta)).collect();
+    let pb: Vec<IPrim> = b.prims.iter().map(|p| place(p, &tb)).collect();
+    let mut worst = f64::INFINITY;
+    let mut wide = 0.0f64;
+    for x in &pa {
+        for y in &pb {
+            let g = gap_lo(x, y);
+            worst = worst.min(g);
+            if g < clearance {
+                wide = wide.max(width(x) + width(y));
+            }
+        }
+    }
+    if worst >= clearance {
+        return Verdict::Clear;
+    }
+    let (ma, mb) = (0.5 * (ra[0] + ra[1]), 0.5 * (rb[0] + rb[1]));
+    *budget = budget.saturating_sub(1);
+    if wide <= RES || depth_left == 0 || *budget == 0 {
+        let (xa, xb) = (sa.at(ma), sb.at(mb));
+        let qm: Vec<f64> = (0..xa.len())
+            .map(|j| if ja.contains(&j) { xa[j] } else { xb[j] })
+            .collect();
+        if let Some(w) = witness(a, b, &kin::pose(def, &qm)) {
+            return Verdict::Hit { s: ma, witness: w };
+        }
+        return Verdict::Near {
+            s0: ra[0],
+            s1: ra[1],
+            gap_lo: worst,
+        };
+    }
+    // split the parameter whose segment moves more over its span
+    let move_of = |sg: &Segment, r: [f64; 2]| -> f64 {
+        sg.q0
+            .iter()
+            .zip(&sg.q1)
+            .map(|(x, y)| (y - x).abs())
+            .fold(0.0, f64::max)
+            * (r[1] - r[0])
+    };
+    let halves: [([f64; 2], [f64; 2]); 2] = if move_of(sa, ra) >= move_of(sb, rb) {
+        [([ra[0], ma], rb), ([ma, ra[1]], rb)]
+    } else {
+        [(ra, [rb[0], mb]), (ra, [mb, rb[1]])]
+    };
+    let first = two_span(
+        def,
+        sa,
+        sb,
+        ja,
+        a,
+        b,
+        halves[0].0,
+        halves[0].1,
+        clearance,
+        depth_left - 1,
+        spans,
+        budget,
+    );
+    if matches!(first, Verdict::Hit { .. }) {
+        return first;
+    }
+    let second = two_span(
+        def,
+        sa,
+        sb,
+        ja,
+        a,
+        b,
+        halves[1].0,
+        halves[1].1,
+        clearance,
+        depth_left - 1,
+        spans,
+        budget,
+    );
+    match (&first, &second) {
+        (_, Verdict::Hit { .. }) | (Verdict::Clear, _) => second,
+        _ => first,
+    }
+}
+
+/// A move after a skip (probe) move, for every place the probe can stop: the skip moved along
+/// `skip` (a line) and stopped at an unknown u ∈ [0, 1]; on `seg`, joint j starts at the skip's
+/// point P_j(u) where `start[j]`, ends there where `end[j]`, and is the segment's own value
+/// otherwise. Clear only if the pair keeps `clearance` for every (u, s) ∈ [0, 1]²; a Hit's `s` is
+/// the segment's.
+#[allow(clippy::too_many_arguments)]
+pub fn check_after_skip(
+    def: &MachineDef,
+    skip: &Segment,
+    seg: &Segment,
+    start: &[bool],
+    end: &[bool],
+    a: &CBody,
+    b: &CBody,
+    clearance: f64,
+    spans: &mut usize,
+) -> Verdict {
+    if !matches!(skip.path, Path::Line) || !matches!(seg.path, Path::Line) {
+        return Verdict::Near {
+            s0: 0.0,
+            s1: 1.0,
+            gap_lo: f64::NEG_INFINITY,
+        };
+    }
+    let mut budget = TWO_BUDGET;
+    after_skip_span(
+        def,
+        skip,
+        seg,
+        start,
+        end,
+        a,
+        b,
+        [0.0, 1.0],
+        [0.0, 1.0],
+        clearance,
+        TWO_DEPTH,
+        spans,
+        &mut budget,
+    )
+}
+
+/// The joint values over u ∈ ru (the skip's stop) and s ∈ rs (along the move after it).
+fn after_skip_q(
+    skip: &Segment,
+    seg: &Segment,
+    start: &[bool],
+    end: &[bool],
+    ru: [f64; 2],
+    rs: [f64; 2],
+) -> Vec<Interval> {
+    let p = q_span(skip, ru[0], ru[1]);
+    let own = q_span(seg, rs[0], rs[1]);
+    let sv = Interval::new(rs[0], rs[1]);
+    let one_s = Interval::new(1.0 - rs[1], 1.0 - rs[0]);
+    (0..own.len())
+        .map(|j| match (start[j], end[j]) {
+            (false, false) => own[j],
+            (true, true) => p[j],
+            // from the stop to the segment's own end: P (1 − s) + s T
+            (true, false) => p[j] * one_s + sv * seg.q1[j],
+            // from the segment's own start to the stop
+            (false, true) => one_s * seg.q0[j] + sv * p[j],
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn after_skip_span(
+    def: &MachineDef,
+    skip: &Segment,
+    seg: &Segment,
+    start: &[bool],
+    end: &[bool],
+    a: &CBody,
+    b: &CBody,
+    ru: [f64; 2],
+    rs: [f64; 2],
+    clearance: f64,
+    depth_left: u32,
+    spans: &mut usize,
+    budget: &mut usize,
+) -> Verdict {
+    *spans += 1;
+    let q = after_skip_q(skip, seg, start, end, ru, rs);
+    let pose = kin::ipose(def, &q);
+    let (ta, tb) = (ilink(&pose, a.link), ilink(&pose, b.link));
+    let pa: Vec<IPrim> = a.prims.iter().map(|p| place(p, &ta)).collect();
+    let pb: Vec<IPrim> = b.prims.iter().map(|p| place(p, &tb)).collect();
+    let mut worst = f64::INFINITY;
+    let mut wide = 0.0f64;
+    for x in &pa {
+        for y in &pb {
+            let g = gap_lo(x, y);
+            worst = worst.min(g);
+            if g < clearance {
+                wide = wide.max(width(x) + width(y));
+            }
+        }
+    }
+    if worst >= clearance {
+        return Verdict::Clear;
+    }
+    let (mu, ms) = (0.5 * (ru[0] + ru[1]), 0.5 * (rs[0] + rs[1]));
+    *budget = budget.saturating_sub(1);
+    if wide <= RES || depth_left == 0 || *budget == 0 {
+        // a witness at the midpoint pose
+        let pu = skip.at(mu);
+        let qm: Vec<f64> = (0..pu.len())
+            .map(|j| {
+                let a0 = if start[j] { pu[j] } else { seg.q0[j] };
+                let a1 = if end[j] { pu[j] } else { seg.q1[j] };
+                a0 + ms * (a1 - a0)
+            })
+            .collect();
+        if let Some(w) = witness(a, b, &kin::pose(def, &qm)) {
+            return Verdict::Hit { s: ms, witness: w };
+        }
+        return Verdict::Near {
+            s0: rs[0],
+            s1: rs[1],
+            gap_lo: worst,
+        };
+    }
+    // split the parameter that moves the joints more over its span
+    let moves = |sg: &Segment| -> f64 {
+        sg.q0
+            .iter()
+            .zip(&sg.q1)
+            .map(|(x, y)| (y - x).abs())
+            .fold(0.0, f64::max)
+    };
+    let halves: [([f64; 2], [f64; 2]); 2] =
+        if moves(skip) * (ru[1] - ru[0]) >= (moves(seg) + moves(skip)) * (rs[1] - rs[0]) {
+            [([ru[0], mu], rs), ([mu, ru[1]], rs)]
+        } else {
+            [(ru, [rs[0], ms]), (ru, [ms, rs[1]])]
+        };
+    let mut out = Verdict::Clear;
+    for (hu, hs) in halves {
+        let v = after_skip_span(
+            def,
+            skip,
+            seg,
+            start,
+            end,
+            a,
+            b,
+            hu,
+            hs,
+            clearance,
+            depth_left - 1,
+            spans,
+            budget,
+        );
+        match v {
+            Verdict::Hit { .. } => return v,
+            Verdict::Clear => {}
+            _ => out = v,
+        }
+    }
+    out
+}
+
+/// `check` over the pairs `keep` admits (a multi-channel run checks each channel's own pairs
+/// with this, the cross-channel ones with check_two).
+pub fn check_where(
+    s: &Setup,
+    tl: &Timeline,
+    work: &[CBody],
+    keep: &dyn Fn(&CBody, &CBody) -> bool,
+) -> Report {
+    let def = s.def;
+    let machine = machine_bodies(def);
+    let mut rep = Report::default();
+    for (si, seg) in tl.segments.iter().enumerate() {
+        let tools: Vec<CBody> = seg.tool.map(|t| tool_bodies(s, t)).unwrap_or_default();
+        let all: Vec<&CBody> = machine.iter().chain(tools.iter()).chain(work.iter()).collect();
+        for i in 0..all.len() {
+            for j in i + 1..all.len() {
+                let (a, b) = (all[i], all[j]);
+                if !may_pair(a, b, seg.kind) || !keep(a, b) {
+                    continue;
+                }
+                rep.pairs_checked += 1;
+                let v = segment_pair(def, tl, si, a, b, pair_clearance(def, a, b), &mut rep.spans);
+                if v != Verdict::Clear {
+                    rep.contacts.push(Contact {
+                        line: seg.line,
+                        segment: si,
+                        a: a.name.clone(),
+                        b: b.name.clone(),
+                        verdict: v,
+                    });
+                }
+            }
+        }
+    }
+    rep.skips_proven = skips_proven(tl, &rep.contacts);
+    rep
+}
+
+/// may_pair and the pair's clearance, for sim::multi.
+pub fn pair_rule(def: &MachineDef, a: &CBody, b: &CBody, kind: SegKind) -> Option<f64> {
+    may_pair(a, b, kind).then(|| pair_clearance(def, a, b))
 }

@@ -142,3 +142,25 @@ fn a_holder_into_the_pocket_wall_is_found() {
     let r = removal::mill(&s, &tl, [0.0, 0.0, -20.0], [50.0, 30.0, 10.0], 0.5).unwrap();
     assert!(r.holder_hits.is_empty(), "{:?}", r.holder_hits);
 }
+
+/// An arc in the ZX plane (G18) whose ends are above the stock but whose middle dips into it: the
+/// lowest tip is not at an end (it was taken as the ends' and the move skipped).
+#[test]
+fn a_g18_arc_dipping_into_the_stock_cuts() {
+    let m = builtin().remove(0);
+    let s = vmc_setup(&m, 5.0, 0.0);
+    // centre (x 0, z 30), radius 25: the ends at z 15, the bottom at z 5, the stock top at 10
+    let dips = |g: &str| {
+        let prog = format!("G43 H1\nG0 X-20. Y15. Z30.\nZ15.\nG18 {g} X20. Z15. I20. K15. F500.\nG0 Z30.\n");
+        let tl = sim::simulate(&prog, &s).unwrap();
+        let r = removal::mill(&s, &tl, [-30.0, 0.0, 0.0], [30.0, 30.0, 10.0], 0.5).unwrap();
+        let low = r.map.z.iter().copied().fold(f64::INFINITY, f64::min);
+        (r.removed.iter().sum::<f64>(), low)
+    };
+    let (v2, l2) = dips("G2");
+    let (v3, l3) = dips("G3");
+    // one way round passes under z 10 (down to 5), the other stays above
+    let (v, low) = if v2 > v3 { (v2, l2) } else { (v3, l3) };
+    assert!(v > 0.0 && (low - 5.0).abs() < 0.05, "{v2} {l2} {v3} {l3}");
+    assert_eq!(v2.min(v3), 0.0);
+}

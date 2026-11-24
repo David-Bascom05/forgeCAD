@@ -195,6 +195,8 @@ fn clear_is_never_contradicted_by_samples() {
             seg_la: Vec::new(),
             t_scurve: 0.0,
             seg_scurve: Vec::new(),
+            after_skip: Vec::new(),
+            skip_unmodelled: Vec::new(),
         };
         let r = collide::check(&s, &tl, std::slice::from_ref(&stock));
         let pose = forge_machine::kin::pose(&m, &q);
@@ -436,6 +438,7 @@ fn builtin_machines_have_no_self_collision_in_travel() {
                     feed_combined: true,
                     start: home.clone(),
                     start_tool: None,
+                    skip_stops: Vec::new(),
                 };
                 for seg in segs {
                     let tl = sim::Timeline {
@@ -450,6 +453,8 @@ fn builtin_machines_have_no_self_collision_in_travel() {
                         seg_la: Vec::new(),
                         t_scurve: 0.0,
                         seg_scurve: Vec::new(),
+                        after_skip: Vec::new(),
+                        skip_unmodelled: Vec::new(),
                     };
                     let rep = collide::check(&s2, &tl, &[]);
                     if let Some(c) = rep.contacts.first() {
@@ -529,4 +534,84 @@ fn a_vendor_contact_in_a_run_is_a_possible_contact_not_checked() {
     for g in builtin().iter().filter(|g| g.name.starts_with("generic-")) {
         assert!(!g.zones_unpublished(), "{}", g.name);
     }
+}
+
+/// The moves after a skip (probe) move are checked for every place the probe can stop, not only
+/// where the simulation stops it: with the stop estimated early (high, as a stock model can put
+/// it), a rapid in X with Z still at the stop clears a low block, which the one-stop check
+/// accepts; from a later, lower stop it meets the block, which the check finds. A retract that
+/// sets Z first is proven for every stop.
+#[test]
+fn moves_after_a_skip_are_checked_for_every_stop() {
+    let m = builtin().remove(0);
+    let mut c = Control::for_dialect(&m, "fanuc", 1).unwrap();
+    c.skip = vec![382];
+    let mut s = Setup::new(&m, c).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -300.0])];
+    s.tools = vec![SimTool {
+        t: 1,
+        name: "probe".into(),
+        tip: [0.0, 0.0, -100.0],
+        body: vec![(3.0, 0.0, 20.0), (8.0, 20.0, 100.0)],
+        cut: Cut::Mill { r: 3.0, corner: 0.0 },
+    }];
+    s.h = vec![(1, 100.0)];
+    s.start_tool = Some(1);
+    // a low block at X 100 (this setup's tip is at part z = word Z + 200): the tool meets it from
+    // a stop below word Z 15
+    let block = collide::part_body(
+        &s,
+        "block",
+        &[Prim::Box {
+            min: [95.0, -20.0, 200.0],
+            max: [105.0, 20.0, 215.0],
+        }],
+        Role::Fixture,
+    );
+    // retract first: proven for every stop
+    let ok = "G43 H1\nG0 X0 Y0 Z50.\nG38.2 Z5. F100.\nG0 Z200.\nG0 X100.\n";
+    let tl = sim::simulate(ok, &s).unwrap();
+    assert_eq!(tl.after_skip.len(), 1, "{:?}", tl.after_skip);
+    let z = m.joint_index("Z").unwrap();
+    let d = &tl.after_skip[0];
+    assert!(d.start[z] && !d.end[z]);
+    let r = collide::check(&s, &tl, std::slice::from_ref(&block));
+    assert!(r.contacts.is_empty(), "{:?}", r.contacts);
+    assert_eq!(r.skips_proven, vec![3]);
+    let mut u = sim::unchecked(&m, &tl);
+    collide::narrow_skip_unchecked(&mut u, &tl, &r);
+    assert!(
+        u.iter()
+            .any(|x| x.path == "skip.end" && x.check.contains("collisions proven for every stop")),
+        "{u:?}"
+    );
+    // across in X with Z still at the stop, the stop estimated at the top (u = 0)
+    s.skip_stops = vec![(3, 0.0)];
+    let bad = "G43 H1\nG0 X0 Y0 Z50.\nG38.2 Z5. F100.\nG0 X100.\n";
+    let tl = sim::simulate(bad, &s).unwrap();
+    let mut one_stop = tl.clone();
+    one_stop.after_skip.clear();
+    let r1 = collide::check(&s, &one_stop, std::slice::from_ref(&block));
+    assert!(r1.contacts.is_empty(), "{:?}", r1.contacts);
+    let r = collide::check(&s, &tl, std::slice::from_ref(&block));
+    assert!(
+        r.contacts.iter().any(|c| c.line == 4
+            && (c.a == "block" || c.b == "block")
+            && matches!(c.verdict, Verdict::Hit { .. })),
+        "{:?}",
+        r.contacts
+    );
+    assert!(r.skips_proven.is_empty());
+    let mut u = sim::unchecked(&m, &tl);
+    collide::narrow_skip_unchecked(&mut u, &tl, &r);
+    assert!(
+        u.iter()
+            .any(|x| x.path == "skip.end" && x.why == "estimated" && !x.check.contains("proven"))
+    );
+    // an arc after the skip is not modelled: the skip is reported, not proven
+    s.skip_stops.clear();
+    let arc = "G43 H1\nG0 X0 Y0 Z50.\nG38.2 Z5. F100.\nG2 X10. Y0 I5. J0 F500.\n";
+    let tl = sim::simulate(arc, &s).unwrap();
+    assert_eq!(tl.skip_unmodelled, vec![3]);
+    assert!(collide::check(&s, &tl, &[]).skips_proven.is_empty());
 }
