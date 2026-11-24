@@ -305,7 +305,7 @@ pub fn trash_path(file: &Path) -> PathBuf {
     let name = file
         .file_name()
         .map_or_else(|| "file".into(), |n| n.to_string_lossy().to_string());
-    let secs = std::time::SystemTime::now()
+    let secs = forge_math::clock::system_now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
     (0..)

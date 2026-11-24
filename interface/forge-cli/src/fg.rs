@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// The tools a part file takes, on the command line and over `serve`/`mcp`.
-pub const COMMANDS: [&str; 9] = [
-    "build", "check", "query", "measure", "render", "export", "edit", "diff", "cam",
+pub const COMMANDS: [&str; 10] = [
+    "build", "check", "query", "measure", "render", "export", "edit", "diff", "cam", "bend",
 ];
 
 /// A tool's arguments: the file, and its words (a selector, the refs to measure, the view, the
@@ -217,12 +217,78 @@ impl Session {
             "edit" => self.edit(a, params),
             "diff" => self.diff(a),
             "cam" => self.cam(a),
+            "bend" => self.bend(a),
             _ => Err(format!(
                 "unknown command '{cmd}' ({}; a part changes by edit F OP)",
                 COMMANDS.join(" ")
             )),
         };
         r.unwrap_or_else(fail)
+    }
+
+    /// `bend F [sheet]`: a bending document's reply (`forgecad.bending/1`): the press-brake
+    /// program simulated as it states; with `sheet`, the setup sheet (HTML) is the file.
+    fn bend(&mut self, a: &Args) -> Result<Reply, String> {
+        let path = self.path(&a.file)?;
+        let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+        let b = forge_bend_lang::run(&src, &dir);
+        let mut text = String::new();
+        for (at, e) in &b.errors {
+            text.push_str(&format!("error {at}: {e}\n"));
+        }
+        if let Some(sim) = &b.sim {
+            text.push_str(&format!(
+                "{} on {}\n",
+                if sim.plan.feasible {
+                    "feasible"
+                } else {
+                    "not feasible"
+                },
+                sim.tooling.press.id
+            ));
+            for (i, st) in sim.plan.steps.iter().enumerate() {
+                let fails: Vec<&str> = st.failures().iter().map(|c| c.rule.word()).collect();
+                text.push_str(&format!(
+                    "{}. {} {} on {}: {}\n",
+                    i + 1,
+                    sim.names[st.bend],
+                    st.punch,
+                    st.die,
+                    if fails.is_empty() {
+                        "pass".to_string()
+                    } else {
+                        fails.join(", ")
+                    }
+                ));
+            }
+        }
+        // `sheet`: the setup sheet; `program`: the press-brake program the document asks for
+        let file = match a.words.first().map(String::as_str) {
+            Some("sheet") => Some(b.sheet().into_bytes()),
+            Some("program") => match b.program_text() {
+                Some(Ok((t, _, notes))) => {
+                    for n in notes {
+                        text.push_str(&format!("program: {n}\n"));
+                    }
+                    Some(t.into_bytes())
+                }
+                Some(Err(e)) => return Err(e),
+                None => {
+                    return Err(
+                        "the document asks for no program: add `prog = program(format: \"cincinnati\")`"
+                            .into(),
+                    );
+                }
+            },
+            _ => None,
+        };
+        Ok(Reply {
+            ok: b.ok && b.sim.as_ref().is_some_and(|s| s.plan.feasible),
+            text,
+            json: b.json(),
+            png: file,
+        })
     }
 
     /// `cam F [sheet]`: a machining document's reply (`forgecad.cam/1`); the file it carries is

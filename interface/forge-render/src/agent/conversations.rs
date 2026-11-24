@@ -87,7 +87,7 @@ fn write(path: &Path, value: &Json) -> Result<(), String> {
 impl Conversation {
     pub fn new(project: &Path, settings: &AgentSettings, title: &str) -> Result<Self, String> {
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        let stamp = std::time::SystemTime::now()
+        let stamp = forge_math::clock::system_now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| e.to_string())?
             .as_nanos();

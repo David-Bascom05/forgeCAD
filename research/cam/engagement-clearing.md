@@ -1,6 +1,9 @@
-# Engagement-controlled clearing: design (not built)
+# Engagement-controlled clearing: first design
 
-**Status: design only, written 2026-11-24 by the TOOLPATH-QUALITY worker. Not built yet.**
+**Status: an early design, written 2026-11-24 by the TOOLPATH-QUALITY worker. What was built is
+kernel/forge-cam/src/adaptive.rs (`adaptive(..)` in docs/cam.md): a cleared-area simulation
+stepped to one capped engagement, one-direction peel passes, links at depth by retrace; this file
+keeps the reasoning that led there.**
 
 ## 1. Why: what the harness measures today
 

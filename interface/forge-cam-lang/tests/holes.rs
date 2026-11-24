@@ -87,3 +87,75 @@ fn a_through_hole_stops_short_of_the_support_or_says_what_stock_it_needs() {
         "{r}"
     );
 }
+
+#[test]
+fn a_hole_with_an_iso_class_is_drilled_under_size_and_reamed() {
+    let cam = forge_cam_lang::run(&doc("h = drill(op1, f.pin, plan: \"auto\")"), &dir());
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    let o = cam.ops.iter().find(|o| o.name == "h").unwrap();
+    assert_eq!(o.status, "built", "{:?}", o.refusal);
+    assert!(
+        o.plan.iter().any(|p| p.starts_with("drill drill-9.8")),
+        "{:?}",
+        o.plan
+    );
+    assert!(
+        o.plan.iter().any(|p| p == "ream reamer-10h7 (H7)"),
+        "{:?}",
+        o.plan
+    );
+}
+
+#[test]
+fn a_dowel_sized_hole_with_no_class_is_said() {
+    let cam = forge_cam_lang::run(&doc("h = drill(op1, f.pointed, plan: \"drill\")"), &dir());
+    assert!(
+        cam.warnings
+            .iter()
+            .any(|w| w.starts_with("h: `pointed` is a dowel's size (5 mm) with no fit")),
+        "{:?}",
+        cam.warnings
+    );
+}
+
+#[test]
+fn a_tapped_hole_is_certified_against_its_declared_thread() {
+    // block_m6: the M6 hole is modelled at its 5 mm tap drill; the tap cuts to 6. The thread is
+    // declared (Δ, in removals) and the op certified against P ∖ Δ, as thread_mill is
+    let src = "machining\nf = part(\"block_m6.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1), below: 2), origin: \"top-corner\", tol: 0.01, at: (-20, -20, -250))\nskim = facing(op1, tool: t1, to: 14, step: 1)\nside = clear(op1, tool: t1, from: 14, to: -0.5, step: 3, stepover: 4)\ntap = drill(op1, f.m6, plan: \"auto\")\nprog = program(op1, post: \"fanuc\", number: 1)\n";
+    let cam = forge_cam_lang::run(src, &dir());
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    let o = cam.ops.iter().find(|o| o.name == "tap").unwrap();
+    assert_eq!(o.status, "built", "{:?}", o.refusal);
+    assert!(o.plan.iter().any(|p| p.starts_with("tap ")), "{:?}", o.plan);
+    assert!(
+        o.removals
+            .iter()
+            .any(|r| r.starts_with("cosmetic_thread M6x1 of `m6`")),
+        "{:?}",
+        o.removals
+    );
+}
+
+#[test]
+fn the_manifold_taps_are_certified_against_their_threads() {
+    // the manifold's top face (z 26) trims its pocket's corner arcs end first and its boss's
+    // foot anticlockwise: its trim is chained and its loops' senses set by nesting, so the
+    // thread's disk comes out of it (the face kept whole, the tap gouged it by 0.5)
+    let src = "machining\nf = part(\"manifold.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 2.5, 0), below: 4.5), origin: \"top-corner\", tol: 0.01, at: (-60, -40, -260))\ntap = drill(op1, f.taps, plan: \"auto\")\nprog = program(op1, post: \"fanuc\", number: 1)\n";
+    let cam = forge_cam_lang::run(src, &dir());
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    let o = cam.ops.iter().find(|o| o.name == "tap").unwrap();
+    assert_eq!(o.removals.len(), 4, "{:?}", o.removals);
+    // (the stock is left above the holes here, so the tap's shank may meet it: only the part
+    // is this test's subject)
+    assert!(
+        !o.checks.iter().any(|c| c.rule == "gouge" && c.verdict != "pass"),
+        "{:?}",
+        o.checks
+            .iter()
+            .filter(|c| c.rule == "gouge")
+            .take(3)
+            .collect::<Vec<_>>()
+    );
+}

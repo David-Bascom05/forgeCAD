@@ -75,6 +75,7 @@ fn punch(
             us_segments()
         },
         max_load: Some(max_load),
+        drawn_width: None,
     }
 }
 
@@ -97,6 +98,7 @@ fn die(
         shoulder_radius: rs,
         height,
         width,
+        floor: None,
         profile: None,
         segments: if style == Style::Eu {
             eu_segments()
@@ -116,8 +118,8 @@ fn fmt_len(v: f64) -> String {
 }
 
 /// Springback rows every set starts with: mild steel, stainless and aluminium, degrees of
-/// overbend at a 90 degree turn (stated as round shop numbers).
-fn springback() -> Vec<Springback> {
+/// overbend at a 90 degree turn (stated as round shop numbers: a stand-in, not a maker's data).
+pub fn springback_standin() -> Vec<Springback> {
     let row = |m: &str, a: f64, o: f64| Springback {
         material: m.into(),
         angle: deg(a),
@@ -240,13 +242,18 @@ pub fn std_eu() -> Tooling {
                     width: 15.0,
                 },
                 retract: 5.0,
+                z: None,
             },
+            frame: None,
+            unchecked: Vec::new(),
+            estimated: Vec::new(),
         },
         clearance: 0.5,
         self_clearance: 0.0,
         short_end: None,
-        springback: springback(),
+        springback: springback_standin(),
         v_rule: 8.0,
+        stations: Vec::new(),
     }
 }
 
@@ -347,13 +354,18 @@ pub fn std_us() -> Tooling {
                     width: 0.625 * inch,
                 },
                 retract: 0.25 * inch,
+                z: None,
             },
+            frame: None,
+            unchecked: Vec::new(),
+            estimated: Vec::new(),
         },
         clearance: 0.5,
         self_clearance: 0.0,
         short_end: None,
-        springback: springback(),
+        springback: springback_standin(),
         v_rule: 8.0,
+        stations: Vec::new(),
     }
 }
 

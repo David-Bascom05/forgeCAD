@@ -280,14 +280,12 @@ impl VendorUi {
         let (tx, rx) = mpsc::channel();
         let src = fg.source.clone();
         let dir = doc_dir(fg);
-        let spawned = std::thread::Builder::new()
-            .name("dfm-check".into())
-            .spawn(move || {
-                let _ = tx.send(forge_lang::dfm::report(&src, dir, None));
-            });
-        if spawned.is_ok() {
-            self.running = Some(rx);
-        }
+        // `plat::spawn`, not std's: a browser has no threads (std's spawn fails there, and the
+        // check never ran); in the single-threaded page it runs before this returns
+        crate::plat::spawn("dfm-check", move || {
+            let _ = tx.send(forge_lang::dfm::report(&src, dir, None));
+        });
+        self.running = Some(rx);
     }
 
     /// Every violation's flat points on sheet `id`, the chosen one's last: (points, chosen).

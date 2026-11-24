@@ -186,7 +186,9 @@ fn refusals_name_the_check_and_a_fix() {
         cam.program_text().is_none(),
         "no program is released with a refused op"
     );
-    // the bolt holes before the plate top is cleared: the rapids would enter stock
+    // the bolt holes before the plate top is cleared: each cycle's R plane is lifted above the
+    // stock left over the holes (18, posted R-1. with Z0 on the stock top at 20), so the rapids
+    // stay out of it and the drill feeds through
     let cam = forge_cam_lang::run(
         &doc(
             "skim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n",
@@ -194,8 +196,14 @@ fn refusals_name_the_check_and_a_fix() {
         &dir,
     );
     let b = cam.ops.iter().find(|o| o.name == "bolts").unwrap();
-    assert_eq!(b.status, "refused", "{:?}", b.checks);
-    assert!(b.checks.iter().any(|c| c.rule == "rapid_clear"));
+    assert_eq!(b.status, "built", "{:?}", b.checks);
+    let (txt, _) = cam.program_text().unwrap();
+    assert!(
+        txt.lines()
+            .filter(|l| l.contains("G81") || l.contains("G83"))
+            .all(|l| l.contains("R-1.")),
+        "{txt}"
+    );
     // a typed error for an unknown name
     let cam = forge_cam_lang::run(&doc("x = drill(op1, f.nope)\n"), &dir);
     assert!(
@@ -1864,7 +1872,7 @@ fn a_statements_params_are_its_own() {
 fn the_mould_core_is_surfaced_and_certified() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
     let head = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01, at: (-200, -150, -250))\n";
-    let rough = "rough = zlevel(op1, tool: t1, leave: 0.5, down: 3, stepover: 4, area: (-45, -35, 45, 35), grid: 1)\n";
+    let rough = "rough = zlevel(op1, tool: t1, leave: 0.5, step: 3, stepover: 4, area: (-45, -35, 45, 35), grid: 1)\n";
     let fin = "fin = parallel(op1, tool: t2, stepover: 4, area: (-30, -24, 30, 24))\ncorner = pencil(op1, tool: t2, area: (-30, -24, 30, 24), grid: 1)\n";
     let prog = "prog = program(op1, post: \"fanuc\", number: 1002)\n";
     let cam = forge_cam_lang::run(&format!("{head}{rough}{fin}{prog}"), &dir);
@@ -1881,4 +1889,169 @@ fn the_mould_core_is_surfaced_and_certified() {
     let cam = forge_cam_lang::run(&format!("{head}{fin}{prog}"), &dir);
     assert!(!cam.ok);
     assert!(cam.ops.iter().any(|o| o.status == "refused"));
+}
+
+/// Z-level roughing on a prism part takes the material exactly (its bands' sections grown by the
+/// tool), over the whole stock: above `to`, the stock's margin and the well's long sides are
+/// cleared to within the tool's widening, and the part's own section is never voided.
+#[test]
+fn zlevel_on_a_prism_part_clears_to_the_walls_and_the_margin() {
+    use forge_cam::stock::InProcess;
+    use forge_cam_geom::boolean::{Op, boolean, region_of};
+    use forge_cam_geom::region::{Loop, Region, Seg, p2};
+    use forge_tooling::Library;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("well_island.fg")).unwrap();
+    let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+    let body = run.body.unwrap();
+    let faces = forge_cam::lower::lower(&body).unwrap();
+    let lib = Library::builtin();
+    let tl = lib.tool("flat-10").unwrap().clone();
+    let shape = tl.shape(32.0, Some(lib.holder("bt40-er32").unwrap())).unwrap();
+    let sf = forge_cam::surf::Surfacer::new(&faces, &shape.bodies[0], 0.0, 0.01, 0.0).unwrap();
+    let tool = forge_cam::ops::ToolUse {
+        t: 1,
+        tool: tl,
+        holder: None,
+        stickout: 32.0,
+        shape,
+    };
+    let c = forge_cam::ops::Cut {
+        tool: &tool,
+        tidx: 0,
+        h: forge_cam::ops::Heights {
+            clear: 30.0,
+            retract: 20.0,
+        },
+        feed: (1000.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
+    };
+    // the stock: 3 over each side, 1 over the top; tool centres a diameter past it
+    let (smin, smax) = ([-3.0, -3.0, 0.0], [63.0, 43.0, 13.0]);
+    let area = [smin[0] - 10.0, smin[1] - 10.0, smax[0] + 10.0, smax[1] + 10.0];
+    let (_, voids) = forge_cam::surf::zlevel_voids(&sf, c, area, 13.0, 6.0, 3.0, 4.0, 1.0).unwrap();
+    let mut ip = InProcess::new(smin, smax);
+    for (v, f) in voids {
+        ip.cut(v, f);
+    }
+    let rect = |x0: f64, y0: f64, x1: f64, y1: f64| Region {
+        loops: vec![Loop {
+            segs: vec![
+                Seg::Line {
+                    a: p2(x0, y0),
+                    b: p2(x1, y0),
+                },
+                Seg::Line {
+                    a: p2(x1, y0),
+                    b: p2(x1, y1),
+                },
+                Seg::Line {
+                    a: p2(x1, y1),
+                    b: p2(x0, y1),
+                },
+                Seg::Line {
+                    a: p2(x0, y1),
+                    b: p2(x0, y0),
+                },
+            ],
+        }],
+    };
+    let m = ip.material(6.5).unwrap().expect("material at 6.5");
+    let gone = |r: Region| region_of(&boolean(&m, &r, Op::Inter).unwrap()).loops.is_empty();
+    // the margin outside the plate, up to 0.01 from its side
+    assert!(gone(rect(-3.0, 5.0, -0.01, 35.0)), "the margin's sliver stays");
+    // the well's long side, away from its corners (a flat end leaves those) and from the boss
+    // (the 7 mm between them is narrower than the tool), 0.01 from the wall
+    assert!(
+        gone(rect(14.0, 8.01, 20.0, 9.0)),
+        "a sliver on the well's wall stays"
+    );
+    // never more than the tool took: the part's section is all still material
+    let sec = forge_cam::section::section(&faces, 6.5, 1e-5).unwrap();
+    assert!(region_of(&boolean(&sec, &m, Op::Diff).unwrap()).loops.is_empty());
+}
+
+/// forge-cam-3d's finishing ops in the document (steep_shallow, spiral, flat), after z-level
+/// roughing on the mould core: built, every move certified (column route), the spacing derived
+/// from the cusp and reported.
+#[test]
+fn the_mould_core_is_finished_by_cusp() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    // the example's ops, lighter for the test's time: a 0.05 mm cusp, the steep band 26 to 20
+    let src = std::fs::read_to_string(dir.join("mold_core_finish_cam.fg"))
+        .unwrap()
+        .replace("cusp: 0.01", "cusp: 0.05")
+        .replace("from: 26, to: 10.5", "from: 26, to: 20");
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.ops
+            .iter()
+            .map(|o| (
+                &o.name,
+                &o.refusal,
+                o.checks
+                    .iter()
+                    .filter(|c| c.verdict != "pass")
+                    .take(3)
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>()
+    );
+    for name in ["ss", "top", "plate"] {
+        let op = cam.ops.iter().find(|o| o.name == name).unwrap();
+        assert!(op.status == "built" && op.pairs > 0, "{name}: {:?}", op.refusal);
+        let f = op.finish.as_ref().unwrap();
+        assert_eq!(f.cusp, Some(0.05));
+        assert!(f.cusp_bound.unwrap() <= 0.05, "{name}: {f:?}");
+        assert!(f.stepover > 0.0, "{name}: {f:?}");
+    }
+}
+
+/// The 3-axis ops' step-down is `step:` (as in 2D); `down:` is its old name, accepted with a
+/// warning for one train; both given is refused, and parallel refuses `step:` (it used to be
+/// its sample spacing, now `sample:`), so no old document silently changes meaning.
+#[test]
+fn the_3axis_step_down_is_step() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let head = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\n";
+    let run = |op: &str| forge_cam_lang::run(&format!("{head}{op}\n"), &dir);
+    let both = run(
+        "w = waterline(op1, tool: t2, from: 24, to: 20, step: 2, down: 2, area: (-30, -24, 30, 24), grid: 1)",
+    );
+    assert!(
+        !both.ok
+            && format!(
+                "{:?}{:?}",
+                both.errors,
+                both.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+            )
+            .contains("both given")
+    );
+    let par = run("p = parallel(op1, tool: t2, stepover: 4, step: 1, area: (-5, -5, 5, 5))");
+    assert!(
+        !par.ok
+            && format!(
+                "{:?}{:?}",
+                par.errors,
+                par.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+            )
+            .contains("sample:")
+    );
+    let old =
+        run("w = waterline(op1, tool: t2, from: 24, to: 22, down: 2, area: (-30, -24, 30, 24), grid: 1)");
+    assert!(
+        old.warnings.iter().any(|w| w.contains("`down:` is now `step:`")),
+        "{:?}",
+        old.warnings
+    );
+    // (no program: the op is made, not posted or certified; accepted, no error)
+    assert!(old.errors.is_empty(), "{:?}", old.errors);
+    assert!(
+        old.ops
+            .iter()
+            .any(|o| o.name == "w" && o.paths.iter().any(|p| !p.moves.is_empty()))
+    );
 }

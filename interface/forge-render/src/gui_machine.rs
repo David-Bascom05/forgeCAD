@@ -20,6 +20,14 @@ pub struct MachHost {
     fit: u64,
     /// Each placement's body name and link name.
     bodies: Vec<(String, String)>,
+    /// A library preview's placements' tints (its parts' appearances, then its ghosts).
+    tints: Vec<[f32; 4]>,
+    /// A library preview's ghost labels (world point, words) and its framing.
+    labels: Vec<([f64; 3], String)>,
+    /// The preview's box ghosts, drawn see-through over the frame (`crate::ghost`).
+    ghost_boxes: Vec<crate::frame::Bounds>,
+    /// A long tool's section and dimensions, for the inset.
+    inset: Option<crate::library_mesh::Inset>,
 }
 
 fn oct(n: [f32; 3]) -> [i16; 2] {
@@ -126,6 +134,65 @@ fn link_tint(def: &MachineDef, link: &str) -> [f32; 4] {
     }
 }
 
+/// A machine's bodies at home (their primitives are in the home pose).
+fn machine_bounds(def: &forge_machine::def::MachineDef) -> Option<crate::frame::Bounds> {
+    use forge_machine::def::Prim;
+    let pts = def
+        .bodies
+        .iter()
+        .flat_map(|b| b.prims.iter())
+        .flat_map(|p| match p {
+            Prim::Box { min, max } => vec![*min, *max],
+            Prim::Cyl { base, axis, r, h } => crate::shell::lib_form::cyl_pts(*base, *axis, *r, *h),
+        });
+    crate::frame::Bounds::of(pts.map(|p| p.map(|x| x as f32)))
+}
+
+/// A library preview framed (docs/ux/STANDARD.md §2, `crate::frame`): its bounds, ghosts
+/// included, at the standard fill from the 3/4 view; a long tool (a punch or die set) by its near
+/// end's stretch, seen along its length, so its section reads (the inset shows it to scale).
+fn frame_preview(p: &crate::library_mesh::Preview, size: (u32, u32)) -> crate::camera::Camera {
+    use crate::frame::{Bounds, Framing, ViewRect};
+    let view = ViewRect::full(size.0 as f32, size.1 as f32);
+    let Some((lo, hi)) = p.bounds() else {
+        return crate::frame::frame(Bounds::new([-50.0; 3], [50.0; 3]), view, Framing::default(), &[]).camera;
+    };
+    let f = |a: [f64; 3]| a.map(|x| x as f32);
+    let ext = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
+    let sec = ext[0].max(ext[2]);
+    if p.long_axis == Some(1) && ext[1] > 4.0 * sec {
+        let near = Bounds::new(f(lo), f([hi[0], lo[1] + 4.0 * sec, hi[2]]));
+        return crate::frame::frame_from(near, view, 0.7, -62.0, 22.0);
+    }
+    let how = if p.operator {
+        Framing {
+            // front-right, well round to the side and low: a housing's side face, with its C
+            // (the throat) cut, is what you see
+            dir: crate::frame::Dir::Custom(-25.0, 14.0),
+            ..Framing::default()
+        }
+    } else {
+        Framing::default()
+    };
+    crate::frame::frame(Bounds::new(f(lo), f(hi)), view, how, &[]).camera
+}
+
+impl super::Gui {
+    /// The Library Builder's box ghosts into the frame's translucent world (gui_overlay).
+    pub(super) fn machine_ghost_world(
+        &self,
+        cam: &crate::camera::Camera,
+        size: (u32, u32),
+        out: &mut Vec<crate::origin::WorldVert>,
+    ) {
+        if self.shell.machine.as_ref().is_some_and(|m| m.lib != "machine") {
+            for b in &self.mach.ghost_boxes {
+                crate::ghost::ghost_box(*b, cam, size, out);
+            }
+        }
+    }
+}
+
 const HIT: [f32; 4] = [0.93, 0.25, 0.22, 0.0];
 const NEAR: [f32; 4] = [0.98, 0.66, 0.18, 0.0];
 
@@ -164,9 +231,21 @@ impl Gui {
             self.mach.fit = 0;
             return;
         };
-        let Some(def) = m.def.clone() else { return };
+        // a library record: its preview (its parts from its dimensions, its ghosts) is the scene
+        let tooling = (m.lib != "machine").then_some(());
+        let def = match (&tooling, m.def.clone()) {
+            (Some(_), _) => forge_machine::library::builtin().remove(0),
+            (None, Some(d)) => d,
+            (None, None) => return,
+        };
         if m.geom != self.mach.geom {
             self.mach.geom = m.geom;
+            let preview = if tooling.is_some() {
+                m.library_preview()
+            } else {
+                None
+            };
+            self.mach.inset = preview.as_ref().and_then(|p| p.section.clone());
             self.mach.pose = 0;
             // a user's or project's machine: its parts are beside its file; a built-in's are embedded
             let dir = match &m.origin {
@@ -175,26 +254,68 @@ impl Gui {
                 None => None,
             };
             let unsaved_parts = m.parts.clone();
-            let mut meshes: Vec<PartMesh> = def
-                .bodies
-                .iter()
-                .map(|b| {
-                    // a made machine's parts not saved yet: from the texts it carries
-                    if m.origin.is_none()
-                        && let Some(p) = &b.part
-                        && let Some((_, src)) = unsaved_parts.iter().find(|(r, _)| r == p)
-                        && let Ok(t) = crate::machine_mesh::part_tris(src, None)
-                    {
-                        return body_mesh(&t);
-                    }
-                    body_mesh(&crate::machine_mesh::body_tris(&def, b, dir.as_deref()))
-                })
-                .collect();
-            self.mach.bodies = def
-                .bodies
-                .iter()
-                .map(|b| (b.name.clone(), b.link.clone()))
-                .collect();
+            let mut meshes: Vec<PartMesh> = if let Some(prev) = &preview {
+                let mut ms: Vec<PartMesh> = prev.parts.iter().map(|(t, _)| body_mesh(t)).collect();
+                self.mach.tints = prev.parts.iter().map(|(_, l)| l.tint()).collect();
+                let f32s = |p: [f64; 3]| p.map(|x| x as f32);
+                self.mach.ghost_boxes = prev
+                    .ghosts
+                    .iter()
+                    .filter_map(|g| g.bounds)
+                    .map(|(a, b)| crate::frame::Bounds::new(f32s(a), f32s(b)))
+                    .collect();
+                // the ghosts that are not boxes: dashed edges, on one empty part
+                if prev.ghosts.iter().any(|g| !g.edges.is_empty()) {
+                    let mut g = crate::machine_mesh::Tris::default();
+                    let at = prev
+                        .ghosts
+                        .iter()
+                        .find_map(|g| g.edges.first().and_then(|e| e.first()))
+                        .copied()
+                        .unwrap_or([0.0; 3]);
+                    g.pos.extend([at; 3]);
+                    g.nrm.extend([[0.0, 0.0, 1.0]; 3]);
+                    g.tri.push([0, 1, 2]);
+                    g.edges = prev.ghosts.iter().flat_map(|x| x.edges.iter().cloned()).collect();
+                    g.patches.push((0, 1, 0, 3));
+                    ms.push(body_mesh(&g));
+                    self.mach.tints.push(crate::palette::GREY);
+                }
+                self.mach.labels = prev
+                    .ghosts
+                    .iter()
+                    .filter(|g| !g.label.is_empty())
+                    .map(|g| (g.at, g.label.clone()))
+                    .collect();
+                self.mach.bodies = (0..ms.len())
+                    .map(|k| (format!("preview{k}"), "base".into()))
+                    .collect();
+                ms
+            } else {
+                self.mach.labels.clear();
+                self.mach.ghost_boxes.clear();
+                def.bodies
+                    .iter()
+                    .map(|b| {
+                        // a made machine's parts not saved yet: from the texts it carries
+                        if m.origin.is_none()
+                            && let Some(p) = &b.part
+                            && let Some((_, src)) = unsaved_parts.iter().find(|(r, _)| r == p)
+                            && let Ok(t) = crate::machine_mesh::part_tris(src, None)
+                        {
+                            return body_mesh(&t);
+                        }
+                        body_mesh(&crate::machine_mesh::body_tris(&def, b, dir.as_deref()))
+                    })
+                    .collect()
+            };
+            if tooling.is_none() {
+                self.mach.bodies = def
+                    .bodies
+                    .iter()
+                    .map(|b| (b.name.clone(), b.link.clone()))
+                    .collect();
+            }
             if meshes.is_empty() {
                 // a scene needs a part: an empty mesh at the origin
                 meshes.push(body_mesh(&crate::machine_mesh::prims_tris(&[Prim::Box {
@@ -205,15 +326,19 @@ impl Gui {
             let info = crate::render::part_info(&meshes);
             let placements: Vec<Placement> = (0..meshes.len())
                 .map(|k| Placement {
-                    tint: def
-                        .bodies
-                        .get(k)
-                        .map_or(crate::palette::GREY, |b| link_tint(&def, &b.link)),
+                    tint: if tooling.is_some() {
+                        self.mach.tints.get(k).copied().unwrap_or(crate::palette::GREY)
+                    } else {
+                        def.bodies
+                            .get(k)
+                            .map_or(crate::palette::GREY, |b| link_tint(&def, &b.link))
+                    },
                     ..Placement::at(k as u32, [0.0; 3])
                 })
                 .collect();
             let mut scene = Scene::new(&info, placements);
             scene.set_explode(0.0);
+
             let mut renderer = Renderer::new(
                 self.device.clone(),
                 self.queue.clone(),
@@ -240,8 +365,25 @@ impl Gui {
                     }
                     if fresh || m.fit != self.mach.fit {
                         self.mach.fit = m.fit;
-                        let (c, r) = v.scene.bounds();
-                        v.nav.camera = super::view_camera(c, r, self.shell.view.parallel, v.size);
+                        v.nav.camera = match preview.as_ref() {
+                            Some(p) => frame_preview(p, v.size),
+                            None => match machine_bounds(&def) {
+                                // a machine: its bodies at home, framed from the front 3/4
+                                Some(b) => {
+                                    crate::frame::frame(
+                                        b,
+                                        crate::frame::ViewRect::full(v.size.0 as f32, v.size.1 as f32),
+                                        crate::frame::Framing::default(),
+                                        &[],
+                                    )
+                                    .camera
+                                }
+                                None => {
+                                    let (c, r) = v.scene.bounds();
+                                    super::view_camera(c, r, self.shell.view.parallel, v.size)
+                                }
+                            },
+                        };
                     }
                     v.dirty = true;
                 }
@@ -259,12 +401,30 @@ impl Gui {
                 }
             }
         }
+        // the ghosts' labels where they are on the screen, and the inset, for the panel to draw
+        if let Some(v) = &self.view {
+            let rect = self.shell.view_rect;
+            let px: Vec<(egui::Pos2, String)> = self
+                .mach
+                .labels
+                .iter()
+                .filter_map(|(p, l)| {
+                    crate::gui_camsim_panel::screen_of(&v.nav.camera, v.size, rect, *p)
+                        .map(|q| (q, l.clone()))
+                })
+                .collect();
+            let inset = self.mach.inset.clone();
+            if let Some(m) = &mut self.shell.machine {
+                m.view_labels = px;
+                m.inset = inset;
+            }
+        }
         let Some(m) = &self.shell.machine else { return };
         if m.pose != self.mach.pose
             && let Some(v) = &mut self.view
         {
             self.mach.pose = m.pose;
-            let valid = m.problem.is_none();
+            let valid = m.problem.is_none() && tooling.is_none();
             let pose = if valid { kin::pose(&def, &m.q) } else { Vec::new() };
             for (i, (name, link)) in self.mach.bodies.iter().enumerate() {
                 if i >= v.scene.placements.len() {
@@ -280,6 +440,9 @@ impl Gui {
                 v.scene.placements[i].tint = match hit {
                     Some((_, _, true)) => HIT,
                     Some((_, _, false)) => NEAR,
+                    None if tooling.is_some() => {
+                        self.mach.tints.get(i).copied().unwrap_or(crate::palette::GREY)
+                    }
                     None => link_tint(&def, link),
                 };
             }
@@ -297,19 +460,8 @@ impl Gui {
             self.shell.machine = None;
             return;
         }
-        let Some(m) = &mut self.shell.machine else { return };
-        match c {
-            C::FromTemplate => m.make_template(),
-            C::Clone => m.make_clone(),
-            C::Save => m.save(),
-            C::Check => m.run_check(),
-            C::Home => {
-                if let Some(d) = &m.def {
-                    m.q = d.joints.iter().map(|j| j.home).collect();
-                    m.jogged();
-                }
-            }
-            C::Close => {}
+        if let Some(m) = &mut self.shell.machine {
+            m.command(c);
         }
     }
 
@@ -375,8 +527,39 @@ impl Gui {
                 }
                 None => Err(format!("no tab `{name}`")),
             },
+            ["range", joint, lo, hi] => {
+                let i = m.def.as_ref().and_then(|d| d.joint_index(joint));
+                match (i, lo.parse::<f64>(), hi.parse::<f64>()) {
+                    (Some(i), Ok(a), Ok(b)) if a < b => {
+                        if let Some(d) = &mut m.def {
+                            d.joints[i].range = Some([a, b]);
+                            let path = format!("joint.{joint}.range");
+                            d.cites.retain(|c| c.path != path);
+                        }
+                        m.changed = true;
+                        m.edited(false);
+                        Ok(())
+                    }
+                    _ => Err(format!("no joint `{joint}` or not a range `{lo} {hi}`")),
+                }
+            }
+            ["lib", word] => {
+                let all = ["machine", "workholding"]
+                    .into_iter()
+                    .chain(forge_tooling_builder::KINDS.iter().map(|k| k.0))
+                    .chain(forge_brake_builder::KINDS.iter().map(|k| k.0));
+                let found = all.into_iter().find(|k| k == word);
+                match found {
+                    Some(k) => {
+                        m.set_lib(k);
+                        Ok(())
+                    }
+                    None => Err(format!("no library `{word}`")),
+                }
+            }
+            ["rec", id] => m.pick_record(id),
             ["check"] => {
-                m.run_check();
+                m.command(crate::shell::machine::MachineCmd::Check);
                 Ok(())
             }
             ["save", level] => {
@@ -389,7 +572,7 @@ impl Gui {
                 Ok(())
             }
             _ => Err(format!(
-                "`{cmd}`: open | close | pick NAME | template KIND NAME | clone NAME | jog JOINT VALUE | tab NAME | check | save user|project"
+                "`{cmd}`: open | close | lib KIND | rec ID | range JOINT LO HI | pick NAME | template KIND NAME | clone NAME | jog JOINT VALUE | tab NAME | check | save user|project"
             )),
         };
         let say = match got {
@@ -401,7 +584,7 @@ impl Gui {
                     .collect();
                 format!(
                     "{}{}{}{}",
-                    m.def.as_ref().map_or("none".to_string(), |d| d.name.clone()),
+                    m.record_name().unwrap_or_else(|| "none".to_string()),
                     m.problem
                         .as_ref()
                         .map_or(String::new(), |p| format!(" refused: {p}")),

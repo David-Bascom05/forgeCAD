@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 forge-dirs = { path = "../../kernel/forge-dirs" }
-forge-workholding = { path = "../../kernel/forge-workholding" }
+forge-workholding-builder = { path = "../forge-workholding-builder" }
 forge-math = { path = "../../kernel/forge-math" }
 forge-geom = { path = "../../kernel/forge-geom" }
 forge-topo = { path = "../../kernel/forge-topo" }
@@ -23,8 +23,10 @@ forge-agent = { path = "../forge-agent" }
 forge-import = { path = "../forge-import" }
 forge-lang = { path = "../forge-lang" }
 forge-cam-lang = { path = "../forge-cam-lang" }
+forge-bend-lang = { path = "../forge-bend-lang" }
 forge-machine-lang = { path = "../forge-machine-lang" }
 forge-machine-builder = { path = "../forge-machine-builder" }
+forge-tooling-builder = { path = "../forge-tooling-builder" }
 forge-turn-lang = { path = "../forge-turn-lang" }
 forge-step = { path = "../../kernel/forge-step" }
 

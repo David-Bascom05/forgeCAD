@@ -1,0 +1,13 @@
+machining
+# Benchmark (adaptive vs clear): boss.fg's open level all round the boss, 14.8 mm
+# deep with a 6 mm end mill (2.5 D, flute 18 mm), material group N: clear.
+shared tol = 0.01
+
+f    = part("boss.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-6", t: 1, stickout: 30, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol)
+skim = facing(op1, tool: t1, to: 25, step: 1)
+rough = clear(op1, tool: t1, from: 25, to: 10.2, step: 6, stepover: 2.4)
+fin  = contour(op1, tool: t1, side: "outside", from: 25, to: 10, step: 15)
+prog = program(op1, post: "fanuc", number: 5007)

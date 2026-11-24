@@ -146,6 +146,7 @@ fn families() -> Vec<(&'static str, Vec<String>, Model)> {
     use forge_lang::*;
     const CAM: &str = "interface/forge-cam-lang/src/lib.rs";
     const TURN: &str = "interface/forge-turn-lang/src/lib.rs";
+    const BEND: &str = "interface/forge-bend-lang/src/lib.rs";
     vec![
         ("core", owned(builtins::BUILTINS), Model::Shadow),
         ("shapes", owned(shapes::NAMES), Model::Shadow),
@@ -175,6 +176,11 @@ fn families() -> Vec<(&'static str, Vec<String>, Model)> {
         ("cam-expr", expr_builtins(CAM), Model::Closed),
         ("turn", arms(TURN, "fn call(&mut self"), Model::Closed),
         ("turn-expr", expr_builtins(TURN), Model::Closed),
+        (
+            "bend",
+            arms(BEND, "fn call(&mut self, name: &str, f: &str"),
+            Model::Closed,
+        ),
     ]
 }
 
@@ -195,6 +201,7 @@ const FAMILY_CONSTS: &[&str] = &[
     "interface/forge-lang/src/harness.rs::BUILTINS",
     "interface/forge-lang/src/drawing/doc.rs::FUNCTIONS",
     "interface/forge-lang/src/syntax.rs::KEYWORDS",
+    "interface/forge-bend-lang/src/lib.rs::NAMES",
 ];
 
 /// The crates whose sources define what a document may say.
@@ -202,6 +209,7 @@ const LANG_DIRS: &[&str] = &[
     "interface/forge-lang/src",
     "interface/forge-cam-lang/src",
     "interface/forge-turn-lang/src",
+    "interface/forge-bend-lang/src",
 ];
 
 fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -294,6 +302,7 @@ fn headers() -> BTreeSet<(String, String)> {
 const HEADER_FILES: &[(&str, &str)] = &[
     ("interface/forge-cam-lang/src/lib.rs", "families cam, cam-expr"),
     ("interface/forge-turn-lang/src/lib.rs", "families turn, turn-expr"),
+    ("interface/forge-bend-lang/src/lib.rs", "family bend"),
     ("interface/forge-lang/src/drawing/doc.rs", "family drawing"),
     (
         "interface/forge-lang/src/asm.rs",
@@ -533,6 +542,7 @@ const ARG_KINDS: &[(&str, &str, &[&str])] = &[
         "interface/forge-turn-lang/src/lib.rs",
         &["turn", "turn-expr"],
     ),
+    ("bend", "interface/forge-bend-lang/src/lib.rs", &["bend"]),
 ];
 
 /// The arguments each built-in takes: with an `ARGS` list, one `args` row per built-in, its
@@ -563,6 +573,12 @@ fn every_argument_list_has_its_rows() {
                     ));
                 }
                 let ops: BTreeSet<String> = lists.iter().map(|l| l.0.clone()).collect();
+                // a built-in listed twice: the lookup takes the first, the second is dead
+                if ops.len() != lists.len() {
+                    let mut seen = BTreeSet::new();
+                    let twice: Vec<&String> = lists.iter().map(|l| &l.0).filter(|o| !seen.insert(*o)).collect();
+                    errs.push(format!("`{kind}` ARGS: listed more than once {twice:?} (only the first entry is read)"));
+                }
                 // a built-in without a list yet: its `args` row says GAP (any keyword is taken,
                 // unchecked), and the row goes when the list comes
                 let mut missing = vec![];

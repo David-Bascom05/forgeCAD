@@ -1,6 +1,6 @@
 well_island_cam/skim facing t_stop=35.9 t_min=34.9 cut=26.9 air=4.4 rapid=60 retracts=2 plunges=0 ramps=0 c90=0 phi_max=105 phi_mean=87 climb=0.38 slot=0.00 hex_max=0.1085 hex_p99=0.0560 hex_mean=0.0560 thin=0.02 thick=0.00 removed=3047 fc=132
-well_island_cam/well pocket t_stop=65.4 t_min=62.0 cut=44.8 air=11.3 rapid=222 retracts=8 plunges=4 ramps=4 c90=20 phi_max=180 phi_mean=121 climb=0.53 slot=0.46 hex_max=0.0603 hex_p99=0.0585 hex_mean=0.0325 thin=0.10 thick=0.00 removed=5818 fc=255
-well_island_cam program prog t_stop=101.3 t_min=96.9 changes=2 error=None
+well_island_cam/well pocket t_stop=62.2 t_min=58.8 cut=44.7 air=8.2 rapid=222 retracts=8 plunges=4 ramps=4 c90=20 phi_max=180 phi_mean=121 climb=0.53 slot=0.46 hex_max=0.0603 hex_p99=0.0585 hex_mean=0.0325 thin=0.10 thick=0.00 removed=5818 fc=255
+well_island_cam program prog t_stop=98.1 t_min=93.6 changes=2 error=None
 deep_slot_cam/skim facing t_stop=65.7 t_min=63.8 cut=55.4 air=4.8 rapid=60 retracts=2 plunges=0 ramps=0 c90=0 phi_max=113 phi_mean=98 climb=0.42 slot=0.00 hex_max=0.0475 hex_p99=0.0317 hex_mean=0.0316 thin=0.01 thick=0.00 removed=3969 fc=71
-deep_slot_cam/slot pocket t_stop=40.9 t_min=39.6 cut=26.6 air=11.9 rapid=14 retracts=6 plunges=5 ramps=0 c90=0 phi_max=180 phi_mean=137 climb=0.40 slot=0.60 hex_max=0.0585 hex_p99=0.0585 hex_mean=0.0375 thin=0.01 thick=0.00 removed=7084 fc=250
-deep_slot_cam program prog t_stop=106.6 t_min=103.4 changes=1 error=None
+deep_slot_cam/slot pocket t_stop=35.4 t_min=34.1 cut=26.4 air=6.6 rapid=14 retracts=6 plunges=5 ramps=0 c90=0 phi_max=180 phi_mean=137 climb=0.40 slot=0.60 hex_max=0.0585 hex_p99=0.0585 hex_mean=0.0375 thin=0.01 thick=0.00 removed=7084 fc=250
+deep_slot_cam program prog t_stop=101.1 t_min=97.8 changes=1 error=None

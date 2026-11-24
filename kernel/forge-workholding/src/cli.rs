@@ -8,7 +8,7 @@ fn js(s: &str) -> String {
     format!("{s:?}")
 }
 
-/// Runs a workholding command. `user` is the user's config directory, `project` the project's
+/// Runs a workholding command. `user` is the user's `<config>/forgecad` directory, `project` the project's
 /// root; `new` writes `<project>/cam/workholding/NAME.toml` (refusing to overwrite).
 pub fn tool(
     args: &[String],

@@ -302,8 +302,18 @@ pub struct Timeline {
     pub t_stop: f64,
     /// Joint names, the order of every q vector.
     pub joints: Vec<String>,
-    /// True if some joint that moved has no `accel` (its t_stop is t_min).
+    /// True if some joint that moved has no `accel` (its t_stop is t_min; t_la takes
+    /// `LookAhead::default_accel`).
     pub accel_missing: bool,
+    /// Lookahead estimate (s): grbl's planner with its defaults (lookahead.rs); `seg_la` per
+    /// segment, in the order of `segments`. `lookahead::plan` gives it for other parameters.
+    pub t_la: f64,
+    pub seg_la: Vec<f64>,
+    /// The cycle-time ESTIMATE (s): the jerk-limited planner (lookahead::plan_scurve) with
+    /// `SCurve::default()`, the stated assumption set (records' accel where they have it); per
+    /// segment in `seg_scurve`. Not a prediction; `t_min` is the guaranteed lower bound beside it.
+    pub t_scurve: f64,
+    pub seg_scurve: Vec<f64>,
 }
 
 fn q_to_f(v: i64, k: u32) -> f64 {
@@ -348,6 +358,10 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
         t_stop: 0.0,
         joints: def.joints.iter().map(|j| j.name.clone()).collect(),
         accel_missing: false,
+        t_la: 0.0,
+        seg_la: Vec::new(),
+        t_scurve: 0.0,
+        seg_scurve: Vec::new(),
     };
     let mut wcs: Vec<f64> = s
         .wcs
@@ -789,6 +803,12 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
     }
     tl.t_min = t;
     tl.t_stop = t_est;
+    let (per, total) = crate::lookahead::plan(def, &tl, &crate::lookahead::LookAhead::default());
+    tl.seg_la = per;
+    tl.t_la = total;
+    let (per, total) = crate::lookahead::plan_scurve(def, &tl, &crate::lookahead::SCurve::default());
+    tl.seg_scurve = per;
+    tl.t_scurve = total;
     for sg in &tl.segments {
         for z in &def.zones {
             if let Some(sv) = zone_entry(def, z, sg) {
@@ -1257,9 +1277,11 @@ pub fn timeline_json(tl: &Timeline) -> String {
             .join(",")
     ));
     o.push_str(&format!(
-        "\"t_min\":{},\"t_stop\":{},\"accel_missing\":{},",
+        "\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"t_scurve\":{},\"accel_missing\":{},",
         num(tl.t_min),
         num(tl.t_stop),
+        num(tl.t_la),
+        num(tl.t_scurve),
         tl.accel_missing
     ));
     o.push_str("\"segments\":[");
@@ -1273,11 +1295,12 @@ pub fn timeline_json(tl: &Timeline) -> String {
             SegKind::Arc => "arc",
         };
         o.push_str(&format!(
-            "{{\"line\":{},\"kind\":\"{kind}\",\"t0\":{},\"t_min\":{},\"t_stop\":{},\"q1\":{},\"tool\":{}}}",
+            "{{\"line\":{},\"kind\":\"{kind}\",\"t0\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"q1\":{},\"tool\":{}}}",
             sg.line,
             num(sg.t0),
             num(sg.t_min),
             num(sg.t_stop),
+            num(tl.seg_la.get(i).copied().unwrap_or(0.0)),
             arr(&sg.q1),
             sg.tool.map(|t| t.to_string()).unwrap_or("null".into())
         ));
