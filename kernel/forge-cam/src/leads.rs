@@ -1,6 +1,6 @@
 //! Leads and the entry position of a closed contour loop.
 //!
-//! Method (plain, textbook CNC practice; no patented method): the tool joins the loop on a
+//! Method (plain, textbook CNC practice): the tool joins the loop on a
 //! circular arc tangent to the loop at its start (G1-continuous), optionally preceded by a
 //! straight line tangent to that arc, and leaves it the same way at its end. The arc lies on
 //! the air side of the loop: with the part on the tool's right (climb) the air is on the left,

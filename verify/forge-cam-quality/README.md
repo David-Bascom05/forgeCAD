@@ -72,5 +72,5 @@ climb and cut each loop through its levels; feeds held ≥ D/2 per move.
 Still to do: comparison against an open-source reference (pending the licence verdict); air in
 `clear` (its outer ring is in air by design: a lemma that air rings may be dropped); retracts at
 the cut feed (G0 would need G3 against the op's own cleared voids); contour lead-in/out arcs;
-rest machining; scallop for 3-axis; engagement-controlled clearing (research/cam/
-engagement-clearing.md, after counsel).
+rest machining; scallop for 3-axis; engagement-controlled clearing (design in research/cam/
+engagement-clearing.md).

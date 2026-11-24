@@ -190,7 +190,7 @@ roughing, parallel, waterline, pencil and rest on a filleted core, every move ce
 
 2.5D on parts whose faces are planes, and cylinders, cones and tori about z (others are refused by kind, typed):
 facing, clearing, contours, hole pockets and hole plans, with linking by retract. Not yet:
-adaptive clearing (patents first), 3+2, turning, 5-axis; chamfer mills,
+adaptive clearing, 3+2, turning, 5-axis; chamfer mills,
 threads modelled as helicoidal faces (`thread(hole:)`): the lowering refuses them, so a modelled thread is milled as a declared Δ only when the model records it instead.
 
 ## In the app: the Manufacture workspace
