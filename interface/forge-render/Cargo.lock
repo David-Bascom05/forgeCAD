@@ -1106,6 +1106,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-cam-3d"
+version = "0.1.0"
+dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-math",
+ "forge-post",
+]
+
+[[package]]
 name = "forge-cam-geom"
 version = "0.1.0"
 
@@ -1123,6 +1133,7 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-cam",
+ "forge-cam-3d",
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
