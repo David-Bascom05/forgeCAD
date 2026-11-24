@@ -293,3 +293,51 @@ fn the_cube_looks_down_the_bend_and_what_hides_it_is_seen_through() {
     }
     assert!(h.gui.bend.ghosts.is_empty(), "off: everything solid");
 }
+
+/// Follow bend through the operator's handling (David, via the coordinator): the part pulled
+/// out toward the operator and turned stays in view, the eye widening for it, and the next bend
+/// is framed on its station.
+#[test]
+fn following_keeps_the_handled_part_in_view() {
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "follow", "trumpf-trubend-5130", None);
+    h.gui.shell.sheet.bend_sim.as_mut().unwrap().follow = true;
+    let mut seen = Vec::new();
+    for t in [0.0, 0.02, 0.05, 0.08, 0.11, 0.15, 0.5] {
+        {
+            let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+            b.step = 1;
+            b.t = t;
+        }
+        for _ in 0..3 {
+            h.step();
+        }
+        // the part's middle, as the view's camera projects it
+        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+        let sim = b.sim.as_ref().unwrap();
+        let mut sc = forge_brake::scene::Scene::new(&sim.model, &sim.tooling, &sim.plan);
+        let bodies = sc.bodies(1, t);
+        let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+        for x in bodies.iter().filter(|x| x.look.is_sheet()) {
+            let (a, c) = x.mesh.bounds().unwrap();
+            for k in 0..3 {
+                lo[k] = lo[k].min(a[k]);
+                hi[k] = hi[k].max(c[k]);
+            }
+        }
+        let (cam, size) = h.gui.shell.camera.expect("the view's camera");
+        let m = cam.view(size.0, size.1).matrix;
+        let mut inside = true;
+        for corner in 0..8 {
+            let p = [0, 1, 2].map(|k| if corner >> k & 1 == 0 { lo[k] } else { hi[k] });
+            let c = |r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
+            let w = c(3);
+            inside &= w > 0.0 && (c(0) / w).abs() <= 1.0 && (c(1) / w).abs() <= 1.0;
+        }
+        seen.push((t, inside));
+        if t == 0.05 {
+            shot(&mut h, "13-following-the-handling");
+        }
+    }
+    assert!(seen.iter().all(|s| s.1), "the whole part in view at every instant: {seen:?}");
+}
