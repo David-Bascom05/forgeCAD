@@ -2648,8 +2648,26 @@ impl Renderer {
     /// The view cube alone, over transparent black, into `target` (this renderer's format and
     /// size): what the Render Studio lays over its traced picture. The globals are the last
     /// frame's, so call it after `frame` for the same camera.
-    pub fn cube_only(&mut self, target: &wgpu::TextureView, camera: &Camera, overlay: &Overlay) {
+    /// The view cube alone over transparent, for an environment drawing the view itself (the
+    /// Render Studio's trace); with `lit`, those faces too, drawn see-through over the picture in
+    /// their colours (what's chosen there: the ghost pass, nothing opaque to hide them).
+    pub fn cube_only(
+        &mut self,
+        target: &wgpu::TextureView,
+        camera: &Camera,
+        overlay: &Overlay,
+        scene: &Scene,
+        lit: &[FaceColour],
+    ) {
         let cube_verts = self.write_cube(camera, overlay);
+        if !lit.is_empty() {
+            let mut fc = Vec::with_capacity(lit.len().min(FACE_COLOURS) * 8);
+            for c in lit.iter().take(FACE_COLOURS) {
+                fc.extend_from_slice(&c.placement.to_le_bytes());
+                fc.extend_from_slice(&c.rgba);
+            }
+            self.queue.write_buffer(&self.face_ghosts, 0, &fc);
+        }
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -2675,10 +2693,11 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
+            pass.set_bind_group(0, &self.binds, &[]);
+            pass.set_bind_group(1, &self.sun.read, &[]);
+            pass.set_bind_group(2, &self.back_image.binds, &[]);
+            self.draw_face_list(&mut pass, scene, lit, true);
             if cube_verts > 0 {
-                pass.set_bind_group(0, &self.binds, &[]);
-                pass.set_bind_group(1, &self.sun.read, &[]);
-                pass.set_bind_group(2, &self.back_image.binds, &[]);
                 pass.set_pipeline(&self.cube);
                 pass.set_vertex_buffer(0, self.cube_verts.slice(..));
                 pass.draw(0..cube_verts, 0..1);
