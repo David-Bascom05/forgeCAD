@@ -408,7 +408,7 @@ pub fn write_with(header: &str, all: &[Instance]) -> String {
 }
 
 /// Where instances are kept. The file-backed store (one file per instance at the project or
-/// user `cam/tool-instances/` level) is forge-tooling-builder's `instances::LevelStore`; tests
+/// user `cam/tool-instances/` level) is forge-cam-lang's `toolstore::LevelStore`; tests
 /// and the browser can use `MemStore`.
 pub trait Store {
     fn load(&mut self) -> Result<Vec<Instance>, String>;

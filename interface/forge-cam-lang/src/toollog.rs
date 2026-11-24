@@ -10,7 +10,7 @@
 //! forgecad tool log calibrate
 //!   any: [--project] (a new instance at the project level; default the user's), [--date YYYY-MM-DD]
 //! Instances are kept by a `Store` (forge_tooling::instances): on disk, one file per instance in
-//! `cam/tool-instances/` (forge-tooling-builder's LevelStore).
+//! `cam/tool-instances/` (forge_cam_lang::toolstore::LevelStore).
 //! ```
 //! `run` adds each named tool's predicted use of the job (its cut, binned by condition) to the
 //! instance; `--posted` records it as posted rather than run. Life use is a prediction from

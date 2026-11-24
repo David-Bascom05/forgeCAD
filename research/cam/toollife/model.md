@@ -85,12 +85,12 @@ cast iron, Inconel 718; steel milling with f/ap exponents; maker tool-life corre
 
 ## 3. Tracking: tool instances
 
-A library kind of its own (forge-tooling-builder `instances::ToolInstances`, agreed with
+A library kind of its own (forge-cam-lang `toolstore::ToolInstances` on forge-library, agreed with
 MACHINE-BUILDER): one file per physical tool, `cam/tool-instances/<label>.toml`, at the user
 level by default (`<config>/forgecad/cam/tool-instances/`: a crib outlives projects) or the
 project's (`--project`). Never in the .fg, never in `cam/tools/`. An instance names its
 library tool by id and is resolved through the tools catalog; values are not copied in.
-Storage goes through `instances::Store` (LevelStore on disk, MemStore in memory/browser).
+Storage goes through `instances::Store` (toolstore::LevelStore on disk, MemStore in memory/browser).
 
     [[instance]] label, tool (library id), serial, note, state
     [[instance.run]] program, date, work, minutes, how = "run" | "posted"
