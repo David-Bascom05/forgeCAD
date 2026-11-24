@@ -150,13 +150,42 @@ impl Dy {
     }
 
     pub fn cmp(&self, o: &Dy) -> Ordering {
-        let d = self.sub(o);
-        if d.is_zero() {
-            Ordering::Equal
-        } else if d.neg {
-            Ordering::Less
+        // signs first, then magnitudes (by binary order, then the limbs aligned): no difference
+        // is formed
+        let (sa, sb) = (self.signum(), o.signum());
+        if sa != sb {
+            return sa.cmp(&sb);
+        }
+        if sa == 0 {
+            return Ordering::Equal;
+        }
+        let m = self.cmp_mag(o);
+        if sa < 0 { m.reverse() } else { m }
+    }
+
+    /// -1, 0 or 1.
+    #[inline]
+    fn signum(&self) -> i32 {
+        if self.is_zero() {
+            0
+        } else if self.neg {
+            -1
         } else {
-            Ordering::Greater
+            1
+        }
+    }
+
+    /// |self| against |o|, both nonzero.
+    fn cmp_mag(&self, o: &Dy) -> Ordering {
+        let (oa, ob) = (self.order(), o.order());
+        if oa != ob {
+            return oa.cmp(&ob);
+        }
+        // the same top bit: line the limbs up at the smaller exponent
+        if self.exp >= o.exp {
+            self.mag.shl((self.exp - o.exp) as u64).cmp(&o.mag)
+        } else {
+            self.mag.cmp(&o.mag.shl((o.exp - self.exp) as u64))
         }
     }
 
@@ -499,6 +528,53 @@ fn bneg(a: &BigIval) -> BigIval {
 }
 
 fn bmul(a: &BigIval, b: &BigIval, p: u64) -> BigIval {
+    match (&a.lo, &a.hi, &b.lo, &b.hi) {
+        (Some(al), Some(ah), Some(bl), Some(bh)) => {
+            // the extreme corners by the operands' signs (the textbook case split), so only the
+            // two products that can be extreme are formed, but where both straddle zero; the same
+            // exact minimum and maximum as all four corners compared
+            let (al_nn, ah_np) = (!al.neg || al.is_zero(), ah.neg || ah.is_zero());
+            let (bl_nn, bh_np) = (!bl.neg || bl.is_zero(), bh.neg || bh.is_zero());
+            let (lo, hi) = if al_nn {
+                if bl_nn {
+                    (al.mul(bl), ah.mul(bh))
+                } else if bh_np {
+                    (ah.mul(bl), al.mul(bh))
+                } else {
+                    (ah.mul(bl), ah.mul(bh))
+                }
+            } else if ah_np {
+                if bl_nn {
+                    (al.mul(bh), ah.mul(bl))
+                } else if bh_np {
+                    (ah.mul(bh), al.mul(bl))
+                } else {
+                    (al.mul(bh), al.mul(bl))
+                }
+            } else if bl_nn {
+                (al.mul(bh), ah.mul(bh))
+            } else if bh_np {
+                (ah.mul(bl), al.mul(bl))
+            } else {
+                let (x, y) = (al.mul(bh), ah.mul(bl));
+                let (u, v) = (al.mul(bl), ah.mul(bh));
+                (
+                    if y.cmp(&x) == Ordering::Less { y } else { x },
+                    if v.cmp(&u) == Ordering::Greater { v } else { u },
+                )
+            };
+            BigIval {
+                lo: Some(lo.round(p, false)),
+                hi: Some(hi.round(p, true)),
+            }
+        }
+        _ => BigIval::whole(),
+    }
+}
+
+/// `bmul` as it was (all four corners compared): the reference for the case split.
+#[cfg(test)]
+fn bmul_corners(a: &BigIval, b: &BigIval, p: u64) -> BigIval {
     match (&a.lo, &a.hi, &b.lo, &b.hi) {
         (Some(al), Some(ah), Some(bl), Some(bh)) => {
             let c = [al.mul(bl), al.mul(bh), ah.mul(bl), ah.mul(bh)];
@@ -1301,6 +1377,60 @@ impl Ctx {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The order of dyadics, and the interval product by its sign cases, are what comparing
+    /// differences and all four corners give: on random intervals with zero, negative,
+    /// positive and straddling ends, at several precisions.
+    #[test]
+    fn compare_and_product_cases() {
+        let mut s = 0x0123_4567_89ab_cdefu64;
+        let mut next = || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            s
+        };
+        let mut pick = || {
+            let r = next();
+            let x = match r % 6 {
+                0 => 0.0,
+                1 => ((r >> 8) % 7) as f64 - 3.0,
+                _ => {
+                    let m = (r >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0;
+                    m * 2f64.powi((r % 200) as i32 - 100)
+                }
+            };
+            Dy::from_f64(x)
+        };
+        for _ in 0..20_000 {
+            let (x, y) = (pick(), pick());
+            let d = x.sub(&y);
+            let want = if d.is_zero() {
+                Ordering::Equal
+            } else if d.neg {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            };
+            assert_eq!(x.cmp(&y), want, "{x:?} {y:?}");
+            let iv = |u: Dy, v: Dy| {
+                let (lo, hi) = if u.cmp(&v) == Ordering::Greater {
+                    (v, u)
+                } else {
+                    (u, v)
+                };
+                BigIval {
+                    lo: Some(lo),
+                    hi: Some(hi),
+                }
+            };
+            let (a, b) = (iv(x, y), iv(pick(), pick()));
+            for p in [64, 128, 256] {
+                let (m, c) = (bmul(&a, &b, p), bmul_corners(&a, &b, p));
+                assert_eq!((&m.lo, &m.hi), (&c.lo, &c.hi));
+            }
+        }
+    }
 
     #[test]
     fn dyadic_exact() {
