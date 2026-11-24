@@ -1085,6 +1085,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-brake-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-brake",
+ "forge-library",
+ "forge-vendor",
+]
+
+[[package]]
 name = "forge-cam-geom"
 version = "0.1.0"
 
@@ -1301,6 +1310,7 @@ dependencies = [
  "forge-agent",
  "forge-bend-lang",
  "forge-brake",
+ "forge-brake-builder",
  "forge-dirs",
  "forge-draw",
  "forge-dwg",

@@ -108,6 +108,8 @@ pub struct MachineUi {
     pub tooling: Option<super::machine_tooling::ToolingUi>,
     /// The workholding tab's state, while it is chosen.
     pub workholding: Option<super::machine_workholding::WorkholdingUi>,
+    /// The press-brake tab's state (punch, die or press), while one is chosen.
+    pub brake: Option<super::machine_brake::BrakeUi>,
     /// The tooling record last shown (its text): the host is told when it changes.
     tooling_seen: String,
 }
@@ -162,6 +164,7 @@ impl MachineUi {
             lib: "machine",
             tooling: None,
             workholding: None,
+            brake: None,
             tooling_seen: String::new(),
         };
         if let Some(e) = m.cat.entries.first() {
@@ -726,9 +729,10 @@ impl Shell {
     pub fn machine_ui(&mut self, ctx: &egui::Context) {
         let Some(mut st) = self.machine.take() else { return };
         // the tooling record changed: the host draws it again
-        let shown = match (&st.tooling, &st.workholding) {
-            (Some(tu), _) => Some(format!("{:?}", tu.cur.as_ref().map(|r| &r.typed))),
-            (None, Some(w)) => Some(format!("{:?}", w.cur.as_ref().map(|r| (&r.name, &r.vals)))),
+        let shown = match (&st.tooling, &st.workholding, &st.brake) {
+            (Some(tu), _, _) => Some(format!("{:?}", tu.cur.as_ref().map(|r| &r.typed))),
+            (None, Some(w), _) => Some(format!("{:?}", w.cur.as_ref().map(|r| (&r.name, &r.vals)))),
+            (None, None, Some(b)) => Some(format!("{:?}", b.cur.as_ref().map(|r| (&r.id, &r.table)))),
             _ => None,
         };
         if let Some(k) = shown
@@ -783,6 +787,8 @@ impl Shell {
                         library(ui, &t, &mut st, &mut places);
                     } else if st.lib == "workholding" {
                         workholding_library(ui, &t, &mut st, &mut places);
+                    } else if super::machine_brake::is_brake(st.lib) {
+                        brake_library(ui, &t, &mut st, &mut places);
                     } else {
                         tooling_library(ui, &t, &mut st, &mut places);
                     }
@@ -804,6 +810,8 @@ impl Shell {
                     super::machine_tooling::editor(ui, &t, tu)
                 } else if let Some(w) = &mut st.workholding {
                     super::machine_workholding::editor(ui, &t, w)
+                } else if let Some(b) = &mut st.brake {
+                    super::machine_brake::editor(ui, &t, b)
                 }
             });
         // the jog bar
@@ -820,6 +828,8 @@ impl Shell {
                     jog(ui, &t, &mut st, &mut places)
                 } else if st.lib == "workholding" {
                     workholding_bar(ui, &t, &mut st, &mut places)
+                } else if super::machine_brake::is_brake(st.lib) {
+                    brake_bar(ui, &t, &mut st, &mut places)
                 } else {
                     tooling_bar(ui, &t, &mut st, &mut places)
                 }
@@ -840,6 +850,8 @@ fn lib_choice(ui: &mut Ui, st: &mut MachineUi, places: &mut Vec<(String, egui::R
             "Machines"
         } else if w == "workholding" {
             "Workholding"
+        } else if let Some((_, t)) = forge_brake_builder::KINDS.iter().find(|(k, _)| *k == w) {
+            t
         } else {
             forge_tooling_builder::KINDS
                 .iter()
@@ -857,6 +869,9 @@ fn lib_choice(ui: &mut Ui, st: &mut MachineUi, places: &mut Vec<(String, egui::R
                 ui.selectable_value(&mut want, *w, *t);
             }
             ui.selectable_value(&mut want, "workholding", "Workholding");
+            for (w, t) in forge_brake_builder::KINDS {
+                ui.selectable_value(&mut want, *w, *t);
+            }
         });
     places.push(("machine:lib".into(), r.response.rect));
     if want != st.lib {
@@ -868,8 +883,10 @@ impl MachineUi {
     /// Switches the library edited: "machine" or a tooling kind.
     pub fn set_lib(&mut self, word: &'static str) {
         self.lib = word;
-        self.tooling = (word != "machine" && word != "workholding")
+        let brake = super::machine_brake::is_brake(word);
+        self.tooling = (word != "machine" && word != "workholding" && !brake)
             .then(|| super::machine_tooling::ToolingUi::new(word, self.project.as_deref()));
+        self.brake = brake.then(|| super::machine_brake::BrakeUi::new(word, self.project.as_deref()));
         self.workholding = (word == "workholding")
             .then(|| super::machine_workholding::WorkholdingUi::new(self.project.as_deref()));
         self.tooling_seen.clear();
@@ -911,6 +928,9 @@ impl MachineUi {
     pub fn preview_bodies(&self) -> Option<Vec<crate::machine_mesh::Tris>> {
         match self.lib {
             "machine" => None,
+            w if super::machine_brake::is_brake(w) => {
+                Some(self.brake.as_ref().and_then(|b| b.preview()).unwrap_or_default())
+            }
             "workholding" => Some(
                 self.workholding
                     .as_ref()
@@ -2119,4 +2139,51 @@ fn jog(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egu
     if moved {
         st.jogged();
     }
+}
+
+fn brake_library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let project = st.project.clone();
+    let Some(b) = &mut st.brake else { return };
+    super::machine_brake::library(ui, t, b, project.as_deref(), places);
+    ui.separator();
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Save to");
+        ui.selectable_value(&mut st.level, Level::User, "User");
+        ui.add_enabled_ui(st.project.is_some(), |ui| {
+            ui.selectable_value(&mut st.level, Level::Project, "Project");
+        });
+    });
+    let Some(b) = &mut st.brake else { return };
+    let r = ui.add_enabled(
+        b.cur.is_some(),
+        egui::Button::new(if b.changed { "Save *" } else { "Save" }),
+    );
+    places.push(("brake:save".into(), r.rect));
+    if r.clicked() {
+        b.save(st.level, project.as_deref());
+    }
+    if !b.message.is_empty() {
+        ui.label(RichText::new(&b.message).font(sans(11.0)).color(t.ink2));
+    }
+}
+
+fn brake_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let Some(b) = &mut st.brake else { return };
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Checks").font(semi(12.0)).color(t.ink));
+        let r = ui.add_enabled(b.cur.is_some() && b.problem.is_none(), egui::Button::new("Check"));
+        places.push(("brake:check".into(), r.rect));
+        if r.clicked() {
+            b.check();
+        }
+        let (txt, col) = match &b.problem {
+            Some(p) => (format!("refused: {p}"), t.error),
+            None => (b.message.clone(), t.ink2),
+        };
+        ui.label(RichText::new(txt).font(sans(11.0)).color(col));
+    });
+    ui.label(small(
+        t,
+        "The preview is the record's exact section (forge-brake's) drawn along the bed over its longest segment; a press: its ram, bed and housing as blocks.",
+    ));
 }

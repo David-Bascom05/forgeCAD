@@ -39,6 +39,7 @@ pub mod harness_ui;
 pub mod icons;
 pub mod inspect;
 pub mod machine;
+pub mod machine_brake;
 mod machine_parts;
 pub mod machine_tooling;
 pub mod machine_workholding;

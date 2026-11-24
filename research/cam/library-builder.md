@@ -123,6 +123,24 @@ the vendor libraries make it long), its panel the form + validation, its view th
 Manage-tab button and `Action::MachineBuilder` go when the adapter lands. Pickers elsewhere
 (CAM-UI's setup dialog, tool picker) read `Catalog::<K>::load` and reload on `generation()`.
 
+## 7a. Press-brake punches, dies and presses
+
+forge-brake-builder (BENDSIM-ENV) supplies `Punches`, `Dies`, `Presses` (forge-library kinds with
+`ROOT = "bend"`, `FOLDER = "tooling"`: the three share a project's or the user's `bend/tooling`,
+each kind reading only its own `[[punch]]`/`[[die]]`/`[[press]]` records), `fields(kind)` from
+forge_brake::schema, `templates()`, `check()` and `preview()`. The app's tabs
+(interface/forge-render/src/shell/machine_brake.rs) edit the record's TOML table field by field
+and read it again with forge-brake after every edit; a value not held shows UNKNOWN with "set".
+
+- forge-brake's cites know published, estimate, unknown and conflict, no `user`: a value the
+  user enters is cited `estimate` with the basis `USER_VALUE` and shown as "user"; "?" removes
+  the value and cites it unknown. A working-geometry value unknown fails the check (the tool
+  cannot be simulated) and no section is drawn; an unpublished press value is NOT CHECKED.
+- Save refuses a file of that id holding another kind's records (one folder for three kinds).
+- Preview: each exact section drawn along the bed over the record's longest segment
+  (`machine_mesh::prism`, caps ear-clipped); a press as ram, bed and housing blocks.
+- Pictures: library-builder/brake-*.png (tests/brake_builder.rs, `FORGE_UI_SHOTS`).
+
 ## 8. Order of work
 
 1. F4 `collide::check_box` on cam/machine (band) — machine travel proofs without the workaround.

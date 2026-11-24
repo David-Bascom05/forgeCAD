@@ -217,6 +217,107 @@ pub fn obox_tris(o: [f64; 3], axes: [[f64; 3]; 3], size: [f64; 3], out: &mut Tri
     out.patch(t0, v0);
 }
 
+/// A closed section (x, z) drawn along y over `len`, centred: a press-brake tool or a press's
+/// beam. The section may be concave; its caps are ear-clipped.
+pub fn prism(outline: &[[f64; 2]], len: f64) -> Tris {
+    let mut t = Tris::default();
+    let mut pts: Vec<[f64; 2]> = Vec::with_capacity(outline.len());
+    for p in outline {
+        if pts
+            .last()
+            .is_none_or(|q: &[f64; 2]| (q[0] - p[0]).abs() + (q[1] - p[1]).abs() > 1e-9)
+        {
+            pts.push(*p);
+        }
+    }
+    while pts.len() > 1 && {
+        let (a, b) = (pts[0], pts[pts.len() - 1]);
+        (a[0] - b[0]).abs() + (a[1] - b[1]).abs() <= 1e-9
+    } {
+        pts.pop();
+    }
+    if pts.len() < 3 || len <= 0.0 {
+        return t;
+    }
+    // counter-clockwise in (x, z)
+    let area: f64 = (0..pts.len())
+        .map(|i| {
+            let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+            a[0] * b[1] - b[0] * a[1]
+        })
+        .sum();
+    if area < 0.0 {
+        pts.reverse();
+    }
+    let (y0, y1) = (-len / 2.0, len / 2.0);
+    let at = |p: [f64; 2], y: f64| [p[0], y, p[1]];
+    let n = pts.len();
+    for i in 0..n {
+        let (a, b) = (pts[i], pts[(i + 1) % n]);
+        let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+        let l = (dx * dx + dz * dz).sqrt();
+        t.quad(
+            [at(a, y1), at(b, y1), at(b, y0), at(a, y0)],
+            [dz / l, 0.0, -dx / l],
+        );
+    }
+    // the caps: ear clipping of the counter-clockwise polygon
+    let cross =
+        |o: [f64; 2], a: [f64; 2], b: [f64; 2]| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    let mut idx: Vec<usize> = (0..n).collect();
+    let mut ears: Vec<[usize; 3]> = Vec::new();
+    let mut guard = 0;
+    while idx.len() > 3 && guard < 4 * n * n {
+        guard += 1;
+        let m = idx.len();
+        let mut cut = None;
+        for k in 0..m {
+            let (ia, ib, ic) = (idx[(k + m - 1) % m], idx[k], idx[(k + 1) % m]);
+            let (a, b, c) = (pts[ia], pts[ib], pts[ic]);
+            if cross(a, b, c) <= 1e-12 {
+                continue;
+            }
+            let inside = idx.iter().any(|&j| {
+                j != ia
+                    && j != ib
+                    && j != ic
+                    && cross(a, b, pts[j]) >= 0.0
+                    && cross(b, c, pts[j]) >= 0.0
+                    && cross(c, a, pts[j]) >= 0.0
+            });
+            if !inside {
+                cut = Some(k);
+                ears.push([ia, ib, ic]);
+                break;
+            }
+        }
+        match cut {
+            Some(k) => {
+                idx.remove(k);
+            }
+            None => break,
+        }
+    }
+    if idx.len() == 3 {
+        ears.push([idx[0], idx[1], idx[2]]);
+    }
+    for (y, ny, flip) in [(y0, -1.0, false), (y1, 1.0, true)] {
+        let b = t.pos.len() as u32;
+        t.pos.extend(pts.iter().map(|p| at(*p, y)));
+        t.nrm.extend(std::iter::repeat_n([0.0, ny, 0.0], n));
+        for e in &ears {
+            let [i, j, k] = e.map(|v| b + v as u32);
+            t.tri.push(if flip { [i, k, j] } else { [i, j, k] });
+        }
+        let mut ring: Vec<[f64; 3]> = pts.iter().map(|p| at(*p, y)).collect();
+        ring.push(at(pts[0], y));
+        t.edges.push(ring);
+    }
+    let (nt, nv) = (t.tri.len(), t.pos.len());
+    t.patches.push((0, nt as u32, 0, nv as u32));
+    t
+}
+
 /// A body's primitives.
 pub fn prims_tris(prims: &[Prim]) -> Tris {
     let mut t = Tris::default();
@@ -457,5 +558,39 @@ mod tests {
         assert_eq!(moved.len(), out.len());
         let changed = out.iter().zip(&moved).filter(|(a, b)| a.at != b.at).count();
         assert_eq!(changed, t.tri.len() * 3);
+    }
+}
+
+#[cfg(test)]
+mod prism_tests {
+    use super::prism;
+
+    /// An L (concave): two side faces per edge row, caps covering its area on both ends.
+    #[test]
+    fn a_concave_section_is_closed() {
+        let l = [
+            [0.0, 0.0],
+            [20.0, 0.0],
+            [20.0, 5.0],
+            [5.0, 5.0],
+            [5.0, 30.0],
+            [0.0, 30.0],
+        ];
+        let t = prism(&l, 100.0);
+        let cap_area: f64 = t
+            .tri
+            .iter()
+            .filter(|tr| tr.iter().all(|&i| t.pos[i as usize][1] > 0.0))
+            .map(|tr| {
+                let [a, b, c] = tr.map(|i| t.pos[i as usize]);
+                0.5 * ((b[0] - a[0]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[0] - a[0])).abs()
+            })
+            .sum();
+        assert!((cap_area - (20.0 * 5.0 + 5.0 * 25.0)).abs() < 1e-9, "{cap_area}");
+        // clockwise input draws the same
+        let mut r = l.to_vec();
+        r.reverse();
+        assert_eq!(prism(&r, 100.0).tri.len(), t.tri.len());
+        assert_eq!(t.tri.len(), 6 * 2 + 2 * 4);
     }
 }
