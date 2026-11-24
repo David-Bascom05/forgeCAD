@@ -2514,7 +2514,7 @@ fn program_row(
             .width(70.0)
             .selected_text(if pick.is_empty() { "post's" } else { pick.as_str() })
             .show_ui(ui, |ui| {
-                for c in ["", "flood", "mist", "air", "off"] {
+                for c in ["", "flood", "mist", "through", "off"] {
                     ui.selectable_value(&mut pick, c.to_string(), if c.is_empty() { "post's" } else { c });
                 }
             });
