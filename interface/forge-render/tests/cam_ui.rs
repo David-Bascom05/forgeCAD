@@ -504,3 +504,26 @@ fn a_narrow_window_tabs_the_sheet_and_the_simulation() {
         assert_ne!(h.gui.view.as_ref().unwrap().nav.camera, before, "framed again");
     }
 }
+
+/// A cycle time is the lower bound and the estimate together (never the estimate alone), and the
+/// estimate counts the tool change the bound counts (the flange changes T1 for T12).
+#[test]
+fn cycle_time_is_the_bound_and_the_estimate_together() {
+    let Some((h, _)) = open("cycle") else { return };
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    let r = w.run.as_ref().unwrap();
+    let q = r.quality.as_ref().expect("measured");
+    let p = q.progs.first().expect("a timed program");
+    assert!(p.error.is_none(), "{:?}", p.error);
+    assert!(p.tool_changes > 0, "the flange changes tools");
+    assert!(p.t_min > 0.0 && p.t_scurve >= p.t_min, "t_min {} t_scurve {}", p.t_min, p.t_scurve);
+    let (lo, est) = r.cycle(r.ops.iter().map(|o| o.name.as_str())).expect("timed");
+    assert!(est >= lo);
+    for o in &q.ops {
+        assert!(o.t_scurve + 1e-9 >= o.t_min, "{}: t_min {} t_scurve {}", o.name, o.t_min, o.t_scurve);
+    }
+    let line = forge_render::shell::cam::status_line(w);
+    assert!(line.contains('\u{2265}') && line.contains("est."), "{line}");
+    let words = forge_render::shell::cam::cycle_words((lo, est));
+    assert!(words.starts_with('\u{2265}') && words.contains(" est. "), "{words}");
+}

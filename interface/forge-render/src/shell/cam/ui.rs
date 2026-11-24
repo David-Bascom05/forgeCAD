@@ -199,8 +199,23 @@ pub fn num(x: f64) -> String {
 }
 
 /// A time as m:ss.
+/// What a cycle time's two numbers are (shown on hover wherever they are).
+pub const CYCLE_TIP: &str = "\u{2265}: the least time the posted program can take on this machine, from its feeds, rapid rates and tool changes (a guaranteed lower bound).\nest.: an estimate with stated assumptions, not a prediction: a jerk-limited motion planner with 1000 mm/s\u{b2} acceleration (the machine record's where it gives one), 20,000 mm/s\u{b3} jerk and corners blended within 0.02 mm. A real machine can differ by tens of per cent.";
+
+/// A cycle time: the lower bound and the estimate, together.
+pub fn cycle_words((lo, est): (f64, f64)) -> String {
+    format!("\u{2265} {} \u{b7} est. {}", time(lo), time(est))
+}
+
+/// As `cycle_words`, short (m:ss), for the browser's rows.
+fn cycle_short((lo, est): (f64, f64)) -> String {
+    format!("\u{2265} {} \u{b7} est. {}", short_time(lo), short_time(est))
+}
+
 fn short_time(s: f64) -> String {
-    format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0).floor() as u32)
+    // whole seconds, rounded as `time` rounds them
+    let s = s.round();
+    format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0) as u32)
 }
 
 /// A work offset's word: G54 for the first.
@@ -330,7 +345,9 @@ impl Shell {
                         Some(_) if lathe => format!("{su}  ·  lathe"),
                         Some(s) => {
                             let tsum: f64 = w.run.as_ref().map_or(0.0, |r| r.ops.iter().filter(|o| o.setup == su).map(|o| o.time_s).sum());
-                            if tsum > 0.0 {
+                            if let Some(c) = w.run.as_ref().and_then(|r| r.setup_cycle(&su)) {
+                                format!("{su}  ·  {}  ·  {}", wcs_word(s.offset), cycle_short(c))
+                            } else if tsum > 0.0 {
                                 format!("{su}  ·  {}  ·  {}", wcs_word(s.offset), short_time(tsum))
                             } else {
                                 format!("{su}  ·  {}", wcs_word(s.offset))
@@ -728,23 +745,26 @@ fn details(
             if let Some(r) = run {
                 let ops: Vec<&super::run::OpRes> = r.ops.iter().filter(|o| o.setup == id).collect();
                 let total: f64 = ops.iter().map(|o| o.time_s).sum();
-                heading(ui, t, &format!("Cycle time {}", time(total)), width);
-                for o in &ops {
-                    fact(
+                if let Some(c) = r.setup_cycle(id) {
+                    heading(ui, t, "Cycle time", width);
+                    fact_tip(ui, t, "On the machine", &cycle_words(c), CYCLE_TIP, width, t.ink);
+                    for o in &ops {
+                        if let Some(oc) = r.cycle([o.name.as_str()]) {
+                            fact_tip(ui, t, &format!("  {} · {}", o.name, o.kind), &cycle_words(oc), CYCLE_TIP, width, t.ink2);
+                        }
+                    }
+                } else {
+                    heading(ui, t, &format!("Feed time {}", time(total)), width);
+                    for o in &ops {
+                        fact(ui, t, &format!("  {} · {}", o.name, o.kind), &time(o.time_s), width, t.ink2);
+                    }
+                    note(
                         ui,
-                        t,
-                        &format!("  {} · {}", o.name, o.kind),
-                        &time(o.time_s),
+                        "Feeds and rapids at their programmed rates, tool changes not counted: not a cycle time (that comes from the machine's timeline once the program is timed).",
                         width,
                         t.ink2,
                     );
                 }
-                note(
-                    ui,
-                    "Feeds and rapids at their programmed rates, tool changes not counted; the machine-timeline time comes with the quality measure.",
-                    width,
-                    t.ink2,
-                );
             }
             fact(
                 ui,
@@ -928,7 +948,10 @@ fn details(
                     width,
                     t.ink,
                 );
-                fact(ui, t, "Time", &time(o.time_s), width, t.ink);
+                match run.and_then(|r| r.cycle([o.name.as_str()])) {
+                    Some(c) => fact_tip(ui, t, "Cycle time", &cycle_words(c), CYCLE_TIP, width, t.ink),
+                    None => fact(ui, t, "Feed time", &time(o.time_s), width, t.ink),
+                }
             }
             if let Some(l) = o.least {
                 let tol = run.and_then(|r| r.setup(&o.setup)).map_or(0.0, |s| s.tol);
@@ -1001,8 +1024,8 @@ fn pct(x: f64) -> String {
 fn quality_facts(ui: &mut Ui, t: &Theme, q: &forge_cam_quality::OpQ, width: f32) {
     heading(ui, t, "Toolpath quality", width);
     let cut_air = q.t_cut + q.t_air;
-    if q.t_stop > 0.0 {
-        fact(ui, t, "Cycle (machine timeline)", &time(q.t_stop), width, t.ink);
+    if q.t_min > 0.0 {
+        fact_tip(ui, t, "Cycle time", &cycle_words((q.t_min, q.t_scurve.max(q.t_min))), CYCLE_TIP, width, t.ink);
     }
     if cut_air > 0.0 {
         let air = q.t_air / cut_air;
@@ -2814,14 +2837,13 @@ fn quality_window(
                     let words = match &p.error {
                         Some(e) => format!("not timed: {e}"),
                         None => format!(
-                            "{} with stops ({} at least) · {} tool changes{}",
-                            time(p.t_stop),
-                            time(p.t_min),
+                            "{} · {} tool changes{}",
+                            cycle_words((p.t_min, p.t_scurve.max(p.t_min))),
                             p.tool_changes,
                             if p.accel_missing { " · the machine gives no accelerations" } else { "" }
                         ),
                     };
-                    fact(ui, t, &format!("{} on {}", p.name, p.machine), &words, width, if p.error.is_some() { t.warn } else { t.ink });
+                    fact_tip(ui, t, &format!("{} on {}", p.name, p.machine), &words, CYCLE_TIP, width, if p.error.is_some() { t.warn } else { t.ink });
                 }
             }
             note(
@@ -2983,8 +3005,11 @@ pub fn status_line(w: &CamWs) -> String {
         .run
         .as_ref()
         .map_or(0.0, |r| r.ops.iter().map(|o| o.time_s).sum());
-    let machining = if time > 0.0 {
-        format!(" · {} machining", self::time(time))
+    let cycle = w.run.as_ref().and_then(|r| r.cycle(r.ops.iter().map(|o| o.name.as_str())));
+    let machining = if let Some(c) = cycle {
+        format!(" · {} machining", cycle_words(c))
+    } else if time > 0.0 {
+        format!(" · {} feed time", self::time(time))
     } else {
         String::new()
     };

@@ -89,6 +89,9 @@ pub struct CamSimUi {
     pub hosted: bool,
     /// Docked last frame: the panel is in the environment's properties column, not over the view.
     pub docked: bool,
+    /// Each op's cycle time on the machine (the workspace's run, forge-cam-quality: the lower
+    /// bound and the estimate), by name; set by the host as it draws the panel.
+    pub cycles: Vec<(String, (f64, f64))>,
     /// The op the workspace selected (its path drawn in the selection's blue).
     pub selected_op: Option<usize>,
     /// Every problem of the document listed, not the first few.
@@ -133,6 +136,7 @@ impl CamSimUi {
             selected_op: None,
             hosted: false,
             docked: false,
+            cycles: vec![],
             drawn_key: None,
             stock_mesh: vec![],
             stop_at_markers: true,
@@ -357,6 +361,12 @@ impl Shell {
         let t = self.theme;
         st.hosted = true;
         st.folded = false;
+        st.cycles = self
+            .cam
+            .as_ref()
+            .and_then(|w| w.run.as_ref())
+            .map(|r| r.ops.iter().filter_map(|o| Some((o.name.clone(), r.cycle([o.name.as_str()])?))).collect())
+            .unwrap_or_default();
         ui.scope_builder(egui::UiBuilder::new().max_rect(r), |ui| {
             ui.set_width(r.width());
             camsim_panel(ui, &mut st, &t, r.width());
@@ -901,12 +911,11 @@ fn source(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
         let contacts = r.contacts.contacts.len();
         let lines = [
             format!(
-                "{} lines of {} code · {} motions · {} (at least {})",
+                "{} lines of {} code · {} motions · {}",
                 r.text.lines().count(),
                 r.dialect,
                 r.tl.segments.len(),
-                duration(r.tl.t_stop),
-                duration(r.tl.t_min)
+                crate::shell::cam::cycle_words(crate::shell::cam::run::timeline_cycle(&r.tl))
             ),
             if r.wcs_given {
                 format!("Work offset G54: {offset} mm (from the setup)")
@@ -1033,15 +1042,30 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                             {
                                 jump = Some(op.t1);
                             }
-                            // its time, in a right-aligned column
-                            let (r, _) = ui.allocate_exact_size(vec2(78.0, 18.0), Sense::hover());
+                            // its time, in a right-aligned column: the cycle time on the
+                            // machine (the bound and the estimate, together) once timed, else
+                            // the feed time the playback runs at
+                            let cycle = st.cycles.iter().find(|c| c.0 == out.name).map(|c| c.1);
+                            let (words, tip) = match cycle {
+                                Some((lo, est)) => (
+                                    format!("\u{2265} {} \u{b7} est. {}", mmss(lo), mmss(est)),
+                                    crate::shell::cam::CYCLE_TIP.to_string(),
+                                ),
+                                None => (
+                                    duration(op.t1 - op.t0),
+                                    "Feed time: feeds and rapids at their programmed rates (not a cycle time)".into(),
+                                ),
+                            };
+                            let g = ui.painter().layout_no_wrap(words.clone(), FontId::proportional(12.0), t.ink2);
+                            let (r, resp) = ui.allocate_exact_size(vec2(g.size().x.max(78.0), 18.0), Sense::hover());
                             ui.painter().text(
                                 pos2(r.right(), r.center().y),
                                 Align2::RIGHT_CENTER,
-                                duration(op.t1 - op.t0),
+                                words,
                                 FontId::proportional(12.0),
                                 t.ink2,
                             );
+                            resp.on_hover_text(tip);
                         });
                     });
                     if let Some(r) = &out.refusal {
@@ -1402,6 +1426,12 @@ pub fn glyph_button(
 }
 
 /// A duration in words: "45 s", "1 min 20 s", "2 h 05 min".
+/// m:ss, whole seconds rounded.
+fn mmss(secs: f64) -> String {
+    let s = secs.round();
+    format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0) as u32)
+}
+
 pub fn duration(secs: f64) -> String {
     let s = secs.max(0.0);
     if s < 60.0 {
