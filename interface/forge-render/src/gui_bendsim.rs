@@ -212,6 +212,25 @@ fn appearances() -> &'static crate::studio::appearance::Appearances {
 /// its neutral default), black-oxide backgauge, concrete floor; the sheet in its forge-material's
 /// appearance, or a neutral matte sheet when the material is not known; failing bodies red.
 pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
+    let t = own_tint(b, material);
+    // the other stations' tools dimmed (UX-LEAD, BENDSIM-TOOLS): the station working is the
+    // tools as they are, solid steel; the others there, set back, a light neutral and matte
+    if b.look == Look::Tool && b.name.starts_with("station") && !b.hit {
+        return [0, 1, 2, 3].map(|k| match k {
+            3 => t[3] * STATION_DIM_METAL,
+            _ => t[k] + (STATION_DIM_TO - t[k]) * STATION_DIM,
+        });
+    }
+    t
+}
+
+/// How far the other stations' tools are set back toward a light neutral, that neutral, and what
+/// of their metal's sheen they keep.
+pub const STATION_DIM: f32 = 0.55;
+pub const STATION_DIM_TO: f32 = 0.8;
+pub const STATION_DIM_METAL: f32 = 0.3;
+
+fn own_tint(b: &Body, material: Option<&str>) -> [f32; 4] {
     let id = if b.hit {
         "highlight-red"
     } else {
@@ -1128,5 +1147,35 @@ impl Gui {
             v.nav.fit_all(&v.scene);
             v.dirty = true;
         }
+    }
+}
+
+#[cfg(test)]
+mod station_tests {
+    use super::*;
+
+    fn tool(name: &str) -> Body {
+        Body {
+            name: name.into(),
+            look: Look::Tool,
+            mesh: Mesh::default(),
+            hit: false,
+            strip: None,
+        }
+    }
+
+    #[test]
+    fn the_stations_not_working_are_set_back() {
+        let working = tint(&tool("punch:trumpf/OW300-S/body"), None);
+        let other = tint(&tool("station3:punch:trumpf/OW300-S/body"), None);
+        let lum = |c: [f32; 4]| c[0] + c[1] + c[2];
+        assert!(lum(other) > lum(working), "lighter: {other:?} vs {working:?}");
+        assert!(other[3] < working[3], "less metal: {other:?} vs {working:?}");
+        // a failing tool keeps its red wherever it stands
+        let mut red = tool("station3:punch:trumpf/OW300-S/body");
+        red.hit = true;
+        let mut red_here = tool("punch:trumpf/OW300-S/body");
+        red_here.hit = true;
+        assert_eq!(tint(&red, None), tint(&red_here, None));
     }
 }
