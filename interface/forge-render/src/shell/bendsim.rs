@@ -1516,23 +1516,40 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
             .corner_radius(5.0)
             .inner_margin(egui::Margin::same(8))
             .show(ui, |ui| {
+                let file = st
+                    .doc
+                    .as_ref()
+                    .and_then(|d| d.path.file_name())
+                    .map_or("the bending document".to_string(), |f| f.to_string_lossy().into_owned());
                 ui.add(
                     egui::Label::new(
-                        egui::RichText::new(
-                            "This re-plan replaces the bending document's stations and order (your stations, stack lengths and tools there). Undo brings them back.",
-                        )
+                        egui::RichText::new(format!(
+                            "Re-planning replaces your stations, stack lengths and tools in {file}. Undo brings them back."
+                        ))
                         .color(t.ink),
                     )
                     .wrap(),
                 );
+                // Keep mine is the default: it holds the focus (Enter keeps); Esc keeps too (the
+                // shell's one level back, escape_one_level)
+                let mut keep = false;
                 ui.horizontal(|ui| {
+                    // drawn as the default button (filled with the accent)
+                    let k = ui.add(
+                        egui::Button::new(egui::RichText::new("Keep mine").color(egui::Color32::WHITE))
+                            .fill(t.accent),
+                    );
+                    if !ui.memory(|m| m.has_focus(k.id)) && ui.memory(|m| m.focused().is_none()) {
+                        k.request_focus();
+                    }
+                    keep |= k.clicked();
                     if ui.button("Replace").clicked() {
                         st.redo_replacing(c.clone(), &tooling);
                     }
-                    if ui.button("Keep mine").clicked() {
-                        st.pending_replace = None;
-                    }
                 });
+                if keep {
+                    st.pending_replace = None;
+                }
             });
         ui.add_space(6.0);
     }
@@ -2318,18 +2335,22 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
             ));
         }
     }
+    // on a backing plate (the view chips' style), wrapped short of the view cube's corner, so
+    // the text reads on the light bed and never runs under the cube (UX-LEAD)
+    let wrap = (rect.width() - 24.0 - OVERLAY_CUBE_ROOM).max(120.0);
     let mut y = rect.top() + 44.0;
     for (l, c) in lines {
-        p.text(
-            egui::pos2(rect.left() + 12.0, y),
-            egui::Align2::LEFT_TOP,
-            l,
-            egui::FontId::proportional(13.0),
-            c,
-        );
-        y += 18.0;
+        let g = p.layout(l, egui::FontId::proportional(13.0), c, wrap);
+        let at = egui::pos2(rect.left() + 12.0, y);
+        let plate = egui::Rect::from_min_size(at, g.size()).expand2(egui::vec2(6.0, 2.0));
+        p.rect_filled(plate, 4.0, egui::Color32::from_black_alpha(170));
+        y += g.size().y + 6.0;
+        p.galley(at, g, c);
     }
 }
+
+/// The room the view cube takes at the view's top right, kept clear of the overlay's text.
+pub const OVERLAY_CUBE_ROOM: f32 = 130.0;
 
 #[cfg(test)]
 mod tests {

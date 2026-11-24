@@ -1394,7 +1394,24 @@ fn a_replan_keeps_the_users_stations() {
         now,
         "nothing written yet"
     );
-    let (c, t) = b.pending_replace.clone().unwrap();
+    let ask = b.pending_replace.clone();
+    // Keep mine is the default: Enter keeps, and so does Esc (UX-LEAD)
+    for key in [egui::Key::Enter, egui::Key::Escape] {
+        h.gui.shell.sheet.bend_sim.as_mut().unwrap().pending_replace = ask.clone();
+        h.step();
+        h.step();
+        h.key(key);
+        h.step();
+        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+        assert!(b.pending_replace.is_none(), "{key:?}: the question answered");
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            now,
+            "{key:?} kept the user's"
+        );
+    }
+    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+    let (c, t) = ask.unwrap();
     b.redo_replacing(c, &t);
     assert!(b.pending_replace.is_none());
     // replaced, and undone
@@ -1507,4 +1524,64 @@ fn the_punch_meets_the_bend_every_frame() {
             }
         }
     }
+}
+
+/// UX-LEAD's shots (off unless BENDSIM_SHOTS names a folder): the TruBend's stations, the ones not
+/// at work dimmed; the re-plan question over a written bending document; bend 4's handling
+/// caption on its backing plate.
+#[test]
+fn shots_for_ux_lead() {
+    if std::env::var("BENDSIM_SHOTS").is_err() {
+        return;
+    }
+    let Some(mut h) = headless() else { return };
+    let d = scratch("ux-lead");
+    let f = d.join("load_tray.fg");
+    let src = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    );
+    std::fs::copy(src, &f).unwrap();
+    open(&mut h, f.to_str().unwrap());
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    let c = Choice {
+        press: Some("trumpf-trubend-5130".into()),
+        stations_auto: true,
+        ..Choice::default()
+    };
+    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+    b.redo(c, "std-eu");
+    h.step();
+    let n = h
+        .gui
+        .shell
+        .sheet
+        .bend_sim
+        .as_ref()
+        .unwrap()
+        .sim
+        .as_ref()
+        .unwrap()
+        .plan
+        .steps
+        .len();
+    for k in 0..n {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.playing = false;
+        b.step = k;
+        b.t = 0.6;
+        shot(&mut h, &format!("ux-stations-bend-{}", k + 1));
+    }
+    // bend 4, the operator turning the part: the caption on its plate
+    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+    b.step = 3.min(n - 1);
+    b.t = 0.07;
+    shot(&mut h, "ux-bend-4-handling");
+    // the re-plan question, over the written document
+    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+    b.write_doc().expect("the program written");
+    b.reload();
+    b.pending_replace = Some((b.choice.clone(), b.tooling.clone()));
+    shot(&mut h, "ux-replan-question");
 }
