@@ -1356,6 +1356,11 @@ fn run_here(
         if let Err(e) = catch_unwind(AssertUnwindSafe(|| c.fixture(f, only_tab))) {
             eprintln!("{}: the crawl stopped: {}", f.name, panic_words(&e));
         }
+        // kept as it goes: a crawl killed later loses only the document it was in
+        if let Some(dir) = &out {
+            std::fs::create_dir_all(dir).unwrap();
+            write_records(dir, &c.records);
+        }
     }
     if let Some(dir) = &out {
         std::fs::create_dir_all(dir).unwrap();
