@@ -40,6 +40,11 @@ pub struct ToolLook {
     /// Where it points: (radius, height) from the tip, on the holder's lower outer edge (or the
     /// shank's top).
     pub note: Option<([f64; 2], String)>,
+    /// The tool and its holder in people's words, the note's label beside the tool ("Ø10 flat
+    /// end mill · BT40 holder, ER32 nut"); the note itself (record keys, sources) is its hover.
+    pub label: String,
+    /// The drawing's widest radius (the holder's flange, the nut): the label stands clear of it.
+    pub reach: f64,
     /// A generic holder interface (taper and flange) above the gauge line, drawn see-through and
     /// labelled "generic shape": no record of the library holds the interface's dimensions.
     pub ghost: Option<Tris>,
@@ -300,12 +305,71 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
         });
     }
     let tris = pieces.iter().map(|p| p.tris.tri.len()).sum();
+    let label = format!("{} \u{b7} {}", tool_words(tu), holder_words(tu.holder.as_deref()));
+    let reach = pieces
+        .iter()
+        .flat_map(|p| p.tris.pos.iter())
+        .map(|q| (q[0] * q[0] + q[1] * q[1]).sqrt())
+        .fold(0.0, f64::max);
     ToolLook {
         pieces,
         tris,
         no_holder: tu.holder.is_none(),
         note,
+        label,
+        reach,
         ghost,
+    }
+}
+
+/// A tool in people's words: its diameter and kind ("Ø10 flat end mill", "Ø6.8 drill").
+pub fn tool_words(tu: &ToolUse) -> String {
+    let kind = match tu.tool.kind {
+        _ if tu.probe => "probe",
+        Kind::Flat => "flat end mill",
+        Kind::Ball => "ball end mill",
+        Kind::Bull => "bull-nose end mill",
+        Kind::Chamfer => "chamfer mill",
+        Kind::Spot => "spot drill",
+        Kind::Drill => "drill",
+        Kind::Tap => "tap",
+        Kind::ThreadMill => "thread mill",
+        Kind::Reamer => "reamer",
+        Kind::Bore => "boring bar",
+        Kind::Counterbore => "counterbore",
+        Kind::Countersink => "countersink",
+        Kind::Slot => "slitting saw",
+        Kind::Engrave => "engraver",
+    };
+    let d = format!("{:.2}", tu.tool.dc);
+    let d = d.trim_end_matches('0').trim_end_matches('.');
+    format!("\u{d8}{d} {kind}")
+}
+
+/// A holder in people's words: its interface and collet nut ("BT40 holder, ER32 nut"), from the
+/// library's records; the record key is the note's.
+pub fn holder_words(holder: Option<&str>) -> String {
+    let Some(id) = holder else {
+        return "no holder given".into();
+    };
+    static LIB: std::sync::OnceLock<forge_tooling::Library> = std::sync::OnceLock::new();
+    let lib = LIB.get_or_init(forge_tooling::Library::builtin);
+    let iface = lib
+        .holder(id)
+        .ok()
+        .map(|h| h.interface.clone())
+        .unwrap_or_default();
+    let holder = match iface.as_str() {
+        "" => "holder".to_string(),
+        "straight" => "straight-shank holder".to_string(),
+        i => format!("{i} holder"),
+    };
+    match collet_nut(id) {
+        Some((_, _, nut)) => {
+            let system = nut.split(" from ").next().unwrap_or(&nut).to_string();
+            format!("{holder}, {system} nut")
+        }
+        None => holder,
     }
 }
 

@@ -745,4 +745,35 @@ fn a_cutters_flutes_stand_out_from_its_shank() {
         "{:?}",
         lk.note
     );
+    // the label beside the tool is people's words; the record keys are the note's (its hover)
+    assert_eq!(lk.label, "\u{d8}10 flat end mill \u{b7} BT40 holder, ER32 nut");
 }
+
+/// The Checks tab's first line says in words what every move was checked for: all clear on the
+/// flange; on a broken copy (its clear height under the stock's top: rapids into it) the failure
+/// named in its issue kind's words. The checker's codes are only its hover.
+#[test]
+fn the_checks_line_is_in_words() {
+    use forge_render::gui_camsim_panel::checked_line;
+    let sim = flange();
+    let (line, failed) = checked_line(&sim.markers, sim.cam.leftover_done);
+    assert!(!failed);
+    assert_eq!(
+        line,
+        "Every move checked: no gouges, holder and fixture clear, rapids clear. Leftover stock measured exactly."
+    );
+    let dir = machined();
+    let sim = Sim::open(BROKEN, &dir);
+    let mut rules: Vec<&str> = sim.markers.iter().map(|m| m.rule.as_str()).collect();
+    rules.sort();
+    rules.dedup();
+    eprintln!("broken flange: {rules:?}");
+    let (line, failed) = checked_line(&sim.markers, sim.cam.leftover_done);
+    assert!(failed, "{line}");
+    assert!(line.contains("too close"), "{line}");
+    assert!(!line.contains("G3") && !line.contains("pairs"), "{line}");
+}
+
+/// The flange's bolt holes drilled alone under a clear height below the stock's top: rapids into
+/// it, and the material drilling leaves.
+pub const BROKEN: &str = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01, clear: -0.5, retract: -1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";

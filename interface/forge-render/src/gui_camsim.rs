@@ -553,6 +553,8 @@ impl Gui {
                         .get(num()? as usize)
                         .ok_or(format!("`{cmd}`: no such marker"))?;
                     let t = m.t;
+                    st.issue = Some(num()? as usize);
+                    st.issue_new = true;
                     st.jump(t);
                 }
                 "locate" => {
