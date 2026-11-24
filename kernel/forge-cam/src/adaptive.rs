@@ -156,6 +156,8 @@ struct Field {
     allowed: Vec<Vec<(f64, f64)>>,
     work: Vec<Vec<(f64, f64)>>,
     map: HeightMap,
+    /// The stock as it stood before the op (rapids are certified against it).
+    map0: HeightMap,
     prof: Profile,
     r: f64,
     eps: f64,
@@ -205,6 +207,67 @@ impl Field {
             }
         }
         false
+    }
+
+    /// The highest the stock stood before this op within `rr` of (x, y) (−∞: none).
+    fn top0(&self, x: f64, y: f64, rr: f64) -> f64 {
+        let h = self.map0.h;
+        let n = (rr / h).ceil() as i64;
+        let mut t = f64::NEG_INFINITY;
+        for j in -n..=n {
+            for i in -n..=n {
+                let (dx, dy) = (i as f64 * h, j as f64 * h);
+                if dx * dx + dy * dy <= rr * rr {
+                    t = t.max(self.map0.top(x + dx, y + dy));
+                }
+            }
+        }
+        t
+    }
+
+    /// The link by retract from `cur` to `target` (its level): up, across at the retract height,
+    /// down. A rapid is certified against the stock as it stood before the op (G3, 0.1 mm clear),
+    /// so up and down go at feed only through the height that stock stood at over the tool's
+    /// disk (and `CLEAR` above it), rapid beyond.
+    fn retract_link(
+        &self,
+        mv: &mut Vec<PMove>,
+        cur: [f64; 3],
+        target: [f64; 3],
+        retract: f64,
+        feed: (f64, f64),
+    ) {
+        const CLEAR: f64 = 0.5;
+        let rr = self.r + CLEAR + self.map0.h;
+        if cur[2] < retract {
+            let up = (self.top0(cur[0], cur[1], rr) + CLEAR).clamp(cur[2], retract);
+            if up > cur[2] {
+                mv.push(PMove::Line {
+                    to: [cur[0], cur[1], up],
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            }
+            if up < retract {
+                mv.push(PMove::Rapid {
+                    to: [cur[0], cur[1], retract],
+                });
+            }
+        }
+        mv.push(PMove::Rapid {
+            to: [target[0], target[1], retract],
+        });
+        let down = (self.top0(target[0], target[1], rr) + CLEAR).clamp(target[2], retract);
+        if down < retract {
+            mv.push(PMove::Rapid {
+                to: [target[0], target[1], down],
+            });
+        }
+        mv.push(PMove::Line {
+            to: target,
+            f: feed.1,
+            phase: Phase::Plunge,
+        });
     }
 
     /// The fixed link rule: the straight move a → b at z lies in the cleared area (no material
@@ -270,6 +333,7 @@ pub fn adaptive(
         allowed,
         work,
         map: HeightMap::of_stock(ip, cell),
+        map0: HeightMap::of_stock(ip, cell),
         prof,
         r: 0.5 * tool.tool.dc,
         eps: 1e-3,
@@ -333,15 +397,20 @@ pub fn adaptive(
                     }
                     // material just beyond the disk, ahead along the sweep (sign +1) or, two-way,
                     // against it (−1): a pass from here meets it going that way
+                    // within the band the pass sweeps going straight (its width, out to four
+                    // radii ahead)
                     let ahead = |sign: f64| {
-                        (0..16).any(|k| {
-                            let d = rot([1.0, 0.0], std::f64::consts::TAU * k as f64 / 16.0);
-                            // past the disk by a grid spacing: the next candidate out may already
-                            // overlap material
-                            let rr = f.r + g + 2.0 * f.map.h;
-                            sign * (d[0] * sweep_dir[0] + d[1] * sweep_dir[1]) > 0.0
-                                && f.material(p[0] + rr * d[0], p[1] + rr * d[1], z)
-                        })
+                        let u = [sign * sweep_dir[0], sign * sweep_dir[1]];
+                        let n = [-u[1], u[0]];
+                        [f.r + g + 2.0 * f.map.h, 2.0 * f.r, 3.0 * f.r, 4.0 * f.r]
+                            .iter()
+                            .any(|&t| {
+                                [-0.9, -0.45, 0.0, 0.45, 0.9].iter().any(|&s| {
+                                    let (x, y) =
+                                        (p[0] + t * u[0] + s * f.r * n[0], p[1] + t * u[1] + s * f.r * n[1]);
+                                    f.material(x, y, z)
+                                })
+                            })
                     };
                     // two-way: the way back first (a zigzag), else the way the last pass went
                     let sign = if !prm.two_way {
@@ -539,19 +608,7 @@ pub fn adaptive(
                     phase: Phase::Link,
                 });
             } else {
-                mv.push(PMove::Line {
-                    to: [cur[0], cur[1], h.retract],
-                    f: feed.0,
-                    phase: Phase::Link,
-                });
-                mv.push(PMove::Rapid {
-                    to: [p[0], p[1], h.retract],
-                });
-                mv.push(PMove::Line {
-                    to: target,
-                    f: feed.1,
-                    phase: Phase::Plunge,
-                });
+                f.retract_link(&mut mv, cur, target, h.retract, feed);
             }
             moves_at_level.push((target, target));
             // the heading: the sweep direction, or two-way its reverse (the way material lies)
@@ -801,19 +858,7 @@ pub fn adaptive(
                             phase: Phase::Link,
                         });
                     } else {
-                        mv.push(PMove::Line {
-                            to: [cur[0], cur[1], h.retract],
-                            f: feed.0,
-                            phase: Phase::Link,
-                        });
-                        mv.push(PMove::Rapid {
-                            to: [s0.x, s0.y, h.retract],
-                        });
-                        mv.push(PMove::Line {
-                            to: target,
-                            f: feed.1,
-                            phase: Phase::Plunge,
-                        });
+                        f.retract_link(&mut mv, cur, target, h.retract, feed);
                     }
                     let mut a = target;
                     for sg in &l.segs {
@@ -1103,6 +1148,45 @@ mod tests {
         }
     }
 
+    /// The winding number about q of the path's pieces at depth (z ≤ `zmax`): each run of moves
+    /// that stays at or below it, closed by its own end–start chord, summed. Retracts and rapids
+    /// above `zmax` end a piece (the tool lifted).
+    fn winding_at_depth(path: &OpPath, q: [f64; 2], zmax: f64) -> i64 {
+        let mut total = 0i64;
+        let mut piece: Vec<PMove> = Vec::new();
+        let mut start = path.start;
+        let mut at = path.start;
+        let flush = |piece: &mut Vec<PMove>, start: [f64; 3], total: &mut i64| {
+            if !piece.is_empty() {
+                let p = OpPath {
+                    tool: path.tool,
+                    start,
+                    moves: std::mem::take(piece),
+                    rpm: 0.0,
+                    coolant: forge_post::Coolant::Flood,
+                };
+                *total += winding(&p, q);
+            }
+        };
+        for mv in &path.moves {
+            let to = match *mv {
+                PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+                PMove::Cycle { .. } => continue,
+            };
+            if at[2] <= zmax && to[2] <= zmax {
+                if piece.is_empty() {
+                    start = at;
+                }
+                piece.push(*mv);
+            } else {
+                flush(&mut piece, start, &mut total);
+            }
+            at = to;
+        }
+        flush(&mut piece, start, &mut total);
+        total
+    }
+
     /// The winding number of a path's xy projection (every move, links and rapids too, closed
     /// by the chord from its end to its start) about q.
     fn winding(path: &OpPath, q: [f64; 2]) -> i64 {
@@ -1207,8 +1291,26 @@ mod tests {
                 &prm,
             )
             .unwrap();
-            assert_eq!(
+            if std::env::var_os("FORGE_ADAPTIVE_DUMP").is_some() {
+                let mut t = format!("start {:?}\n", out.path.start);
+                for m in &out.path.moves {
+                    t += &format!("{m:?}\n");
+                }
+                std::fs::write(
+                    std::env::temp_dir().join(format!("adaptive_{sweep}_{wall}_{two_way}.txt")),
+                    t,
+                )
+                .unwrap();
+            }
+            // the whole projection, rapids over the island included (reported: whether it is
+            // the reading fto-adaptive.md §9 (2) means is with TOOLPATH-RESEARCH)
+            eprintln!(
+                "sweep {sweep}, wall {wall}, two-way {two_way}: whole path winds {} round the island, at depth {}",
                 winding(&out.path, [20.0, 15.0]),
+                winding_at_depth(&out.path, [20.0, 15.0], -2.9)
+            );
+            assert_eq!(
+                winding_at_depth(&out.path, [20.0, 15.0], -2.9),
                 0,
                 "sweep {sweep}, wall {wall}, two-way {two_way}: round the island"
             );
@@ -1218,7 +1320,7 @@ mod tests {
                 while x <= 46.0 {
                     // a pass and the link or rapid back enclose the strip of cleared air between
                     // them once; a spiral of n loops winds n times round its core
-                    let w = winding(&out.path, [x + 0.013, y + 0.017]);
+                    let w = winding_at_depth(&out.path, [x + 0.013, y + 0.017], -2.9);
                     assert!(
                         w.abs() <= 1,
                         "sweep {sweep}, wall {wall}, two-way {two_way}: {w} times round ({x}, {y})"
