@@ -619,41 +619,69 @@ impl ClGrid {
 /// generator, split where not).
 pub fn waterline(sf: &Surfacer, c: Cut, area: [f64; 4], zs: &[f64], h: f64) -> Result<OpPath, OpError> {
     let g = ClGrid::new(sf, area, h)?;
-    // every loop of every level traced on its own (on all cores), kept in order
+    // every loop of every level traced on its own, kept in order. A loop's vertices, and then
+    // its pieces between consecutive vertices, are independent of each other (each a function
+    // of its own ends): both are made on all cores (forge_math::par) as flat lists over every
+    // loop, so a few long loops do not leave cores idle, and assembled in order as one pass would
     let mut jobs: Vec<(f64, Contour)> = Vec::new();
     for &z in zs {
         for lp in contours(&g, z) {
             jobs.push((z, lp));
         }
     }
-    let traced: Vec<Result<Option<Vec<[f64; 3]>>, SurfError>> = forge_math::par::map(jobs.len(), |j| {
+    // each vertex: the crossing on its grid edge, bisected to the free side
+    let edges: Vec<(usize, usize)> = jobs
+        .iter()
+        .enumerate()
+        .flat_map(|(j, (_, lp))| (0..lp.len()).map(move |e| (j, e)))
+        .collect();
+    let verts: Vec<[f64; 3]> = forge_math::par::map(edges.len(), |i| {
+        let (j, e) = edges[i];
         let (z, lp) = &jobs[j];
-        let z = *z;
-        // each vertex: the crossing on its grid edge, bisected to the free side
-        let mut pts: Vec<[f64; 3]> = Vec::new();
-        for &(a, b) in lp {
-            let p = match push(sf, a, b, z, h) {
-                Some((s, _)) => [a[0] + s * (b[0] - a[0]), a[1] + s * (b[1] - a[1])],
-                None => a,
-            };
-            pts.push([p[0], p[1], z]);
+        let (a, b) = lp[e];
+        let p = match push(sf, a, b, *z, h) {
+            Some((s, _)) => [a[0] + s * (b[0] - a[0]), a[1] + s * (b[1] - a[1])],
+            None => a,
+        };
+        [p[0], p[1], *z]
+    });
+    // each loop's vertices, closed (a loop of fewer than three is dropped)
+    let mut loops: Vec<Vec<[f64; 3]>> = Vec::with_capacity(jobs.len());
+    let mut k = 0;
+    for (_, lp) in &jobs {
+        let mut pts = verts[k..k + lp.len()].to_vec();
+        k += lp.len();
+        if pts.len() >= 3 {
+            let first = pts[0];
+            pts.push(first);
+        } else {
+            pts.clear();
         }
-        if pts.len() < 3 {
-            return Ok(None);
-        }
-        let first = pts[0];
-        pts.push(first);
-        let mut run = vec![pts[0]];
-        for &p in &pts[1..] {
-            level_refine(sf, run[run.len() - 1], p, 0, &mut run)?;
-        }
-        Ok(Some(run))
+        loops.push(pts);
+    }
+    // each piece refined from its start (the vertex before it: a refinement ends at its end)
+    let pieces: Vec<(usize, usize)> = loops
+        .iter()
+        .enumerate()
+        .flat_map(|(j, pts)| (1..pts.len()).map(move |i| (j, i)))
+        .collect();
+    let refined: Vec<Result<Vec<[f64; 3]>, SurfError>> = forge_math::par::map(pieces.len(), |i| {
+        let (j, k) = pieces[i];
+        let mut out = Vec::new();
+        level_refine(sf, loops[j][k - 1], loops[j][k], 0, &mut out)?;
+        Ok(out)
     });
     let mut runs: Vec<Vec<[f64; 3]>> = Vec::new();
-    for t in traced {
-        if let Some(r) = t? {
-            runs.push(r);
+    let mut refined = refined.into_iter();
+    for pts in &loops {
+        if pts.is_empty() {
+            continue;
         }
+        let mut run = vec![pts[0]];
+        for _ in 1..pts.len() {
+            run.extend(refined.next().expect("a piece per pair")?);
+        }
+        runs.push(run);
     }
     as_paths(c, &runs).ok_or(OpError::ToolTooBig {
         tool_d: 2.0 * sf.check.r,
@@ -964,7 +992,9 @@ pub fn rest(
         false
     };
     let rows = raster(area, stepover, 0.0)?;
-    let mut runs = Vec::new();
+    // each row's wanted stretches, in order; then each dropped on its own (on all cores,
+    // forge_math::par), kept in order (the first error in that order is the one returned)
+    let mut spans: Vec<[[f64; 2]; 2]> = Vec::new();
     let mut r = 0;
     while r + 1 < rows.len() {
         let (a, b) = (rows[r], rows[r + 1]);
@@ -994,10 +1024,16 @@ pub fn rest(
                 ]
             };
             if s1 > s0 {
-                runs.push(sf.drop_polyline(&[at(s0), at(s1)], step)?);
+                spans.push([at(s0), at(s1)]);
             }
         }
         r += 2;
+    }
+    let dropped: Vec<Result<Vec<[f64; 3]>, SurfError>> =
+        forge_math::par::map(spans.len(), |k| sf.drop_polyline(&spans[k], step));
+    let mut runs = Vec::with_capacity(dropped.len());
+    for d in dropped {
+        runs.push(d?);
     }
     as_paths(c, &runs).ok_or(OpError::ToolTooBig {
         tool_d: 2.0 * sf.check.r,
