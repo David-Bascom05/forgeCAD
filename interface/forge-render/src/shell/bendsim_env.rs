@@ -46,7 +46,28 @@ pub(super) fn enter(s: &mut Shell) -> Result<(), String> {
     if !fresh {
         let was = s.sheet.bend_sim.take();
         let tooling = was.as_ref().map_or("std-eu", |b| b.tooling.as_str());
-        let mut b = BendSimUi::open(&fg.source, &fg.path, tooling);
+        // first time in: a real press from the library (the first whose maker's own tools the
+        // library holds), not a stand-in
+        let choice = was.as_ref().map(|b| b.choice.clone()).unwrap_or_else(|| {
+            let dir = std::path::Path::new(&fg.path)
+                .parent()
+                .map(std::path::Path::to_path_buf);
+            let press = forge_lang::bendsim::catalog(dir.as_deref()).ok().and_then(|c| {
+                c.presses
+                    .iter()
+                    .find(|p| {
+                        p.press.is_ok()
+                            && !c.default_tools(p, true).is_empty()
+                            && !c.default_tools(p, false).is_empty()
+                    })
+                    .map(|p| p.id.clone())
+            });
+            super::bendsim::Choice {
+                press,
+                ..Default::default()
+            }
+        });
+        let mut b = BendSimUi::open_with(&fg.source, &fg.path, tooling, choice);
         if let Some(w) = was {
             b.resume(&w);
         }
@@ -75,12 +96,12 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
                 tooling_word(id),
                 "bendtable",
                 Some(Action::Env(EnvId::BendSim, k as u16)),
-                b.is_some_and(|b| b.tooling == *id),
+                b.is_some_and(|b| b.tooling == *id && b.choice.press.is_none()),
             )
         })
         .collect();
     vec![
-        group("Tooling", vec![], tooling),
+        group("Stand-in Tooling", vec![], tooling),
         group(
             "Play",
             vec![tool(
@@ -108,7 +129,7 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
     ]
 }
 
-/// The bend order and the step's checks, in the left panel.
+/// Setup, sequence and the step's results, in the left panel.
 pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
     let Some(mut b) = s.sheet.bend_sim.take() else {
         return false;
@@ -116,18 +137,29 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
     let t = s.theme;
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(egui::vec2(10.0, 8.0))));
     child.set_clip_rect(r);
-    egui::ScrollArea::both()
+    let mut flat = None;
+    egui::ScrollArea::vertical()
         .id_salt("env-bendsim-browser")
         .show(&mut child, |ui| {
             ui.label(
-                egui::RichText::new("Bend order")
+                egui::RichText::new("Bend Simulation")
                     .font(super::theme::semi(13.0))
                     .color(t.ink),
             );
-            super::bendsim::body(ui, &mut b, false);
+            super::bendsim::setup_ui(ui, &mut b);
+            ui.separator();
+            super::bendsim::sequence_ui(ui, &mut b);
+            ui.separator();
+            flat = super::bendsim::results_ui(ui, &b);
         });
     s.places.push(("env:bendsim:browser".into(), r));
     s.sheet.bend_sim = Some(b);
+    // the flat pattern, its bend lines shown, the bend named (picking one line out is a gap)
+    if let Some(bend) = flat {
+        s.sheet.bend_lines = true;
+        s.out.push(Action::EnterEnv(EnvId::FlatPattern));
+        s.status = format!("Flat Pattern: bend {bend}");
+    }
     true
 }
 
@@ -135,20 +167,42 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
 pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
     if let Some(b) = &mut s.sheet.bend_sim {
         b.tick(f64::from(ctx.input(|i| i.stable_dt)).min(0.1));
-        if b.playing {
+        // playing, or moved from outside (the page, the agent): the view has frames to draw
+        let now = (b.step, b.t.to_bits());
+        if b.playing || b.painted != Some(now) {
+            b.painted = Some(now);
             ctx.request_repaint();
         }
     }
 }
 
-/// The press section fills the view (true: it owns the view).
+/// The view is the renderer's (the press in 3D, gui_bendsim.rs): over it, the machine, step and
+/// failures, and the timeline along its foot. The view keeps its pointer (orbit, zoom).
 pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
-    let Some(b) = s.sheet.bend_sim.as_deref() else {
+    let Some(b) = s.sheet.bend_sim.as_deref_mut() else {
         return false;
     };
-    super::bendsim::paint(ui, view, b);
+    super::bendsim::overlay(ui, view, b);
+    let band = Rect::from_min_max(
+        egui::pos2(view.left() + 12.0, view.bottom() - 74.0),
+        egui::pos2(view.right() - 12.0, view.bottom() - 8.0),
+    );
+    egui::Area::new(egui::Id::unique("env-bendsim-timeline"))
+        .fixed_pos(band.min)
+        .order(egui::Order::Foreground)
+        .show(ui.ctx(), |ui| {
+            egui::Frame::new()
+                .fill(egui::Color32::from_black_alpha(170))
+                .corner_radius(6.0)
+                .inner_margin(6.0)
+                .show(ui, |ui| {
+                    ui.set_width(band.width() - 12.0);
+                    super::bendsim::timeline_ui(ui, b);
+                });
+        });
     s.places.push(("env:bendsim:view".into(), view));
-    true
+    s.places.push(("env:bendsim:timeline".into(), band));
+    false
 }
 
 pub(super) fn command(s: &mut Shell, c: u16) {
@@ -157,9 +211,14 @@ pub(super) fn command(s: &mut Shell, c: u16) {
     };
     let n = b.sim.as_ref().map_or(0, |x| x.plan.steps.len());
     let again = |b: &mut BendSimUi, fg: &super::fg::FgPanel, tooling: &str| {
-        let mut fresh = BendSimUi::open(&fg.source, &fg.path, tooling);
-        fresh.resume(b);
-        *b = fresh;
+        b.source = fg.source.clone();
+        b.path = fg.path.clone();
+        let mut c = b.choice.clone();
+        if tooling != b.tooling {
+            // a stand-in set asked for: off the library's press
+            c = Default::default();
+        }
+        b.redo(c, tooling);
     };
     match c {
         FIRST => b.go(0),
@@ -183,8 +242,8 @@ pub(super) fn command(s: &mut Shell, c: u16) {
 /// A built-in tooling set's word on the ribbon.
 fn tooling_word(id: &str) -> &'static str {
     match id {
-        "std-eu" => "European Tooling",
-        "std-us" => "American Tooling",
+        "std-eu" => "Stand-in European",
+        "std-us" => "Stand-in American",
         _ => "Tooling",
     }
 }

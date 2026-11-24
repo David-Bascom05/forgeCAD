@@ -56,6 +56,8 @@ enum Ask {
     Pixels(js_sys::Function),
     /// An environment by name (`?env=`), entered once the document has built.
     Env(String),
+    /// The Bend Simulation at a step and an instant in it.
+    BendAt(u32, f64),
 }
 
 thread_local! {
@@ -406,6 +408,13 @@ impl Host {
                 Ask::SaveAs(p) => self.gui.save_as(&p),
                 Ask::Save => self.gui.fg_save(),
                 Ask::Env(e) => self.gui.env_asked = Some(e),
+                Ask::BendAt(k, t) => {
+                    if let Some(b) = &mut self.gui.shell.sheet.bend_sim {
+                        b.step = (k as usize).min(b.steps().saturating_sub(1));
+                        b.t = t.clamp(0.0, 1.0);
+                        b.playing = false;
+                    }
+                }
                 Ask::Rebuild => {
                     if let Some(s) = &mut self.gui.fg {
                         s.rebuild();
@@ -767,6 +776,12 @@ pub fn app_rebuild() {
 #[wasm_bindgen]
 pub fn app_env(name: String) {
     ask(Ask::Env(name));
+}
+
+/// The Bend Simulation environment to step `step` at `t` (0..1) of it: what its timeline sets.
+#[wasm_bindgen]
+pub fn app_bendsim_at(step: u32, t: f64) {
+    ask(Ask::BendAt(step, t));
 }
 
 #[wasm_bindgen]

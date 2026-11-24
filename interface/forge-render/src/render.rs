@@ -2208,7 +2208,10 @@ impl Renderer {
         let live = self.live_part();
         for (k, m) in marks.iter().take(MARKS).enumerate() {
             let k = k as u32;
-            let part = scene.placements[m.placement as usize].part;
+            let Some(pl) = scene.placements.get(m.placement as usize) else {
+                continue;
+            };
+            let part = pl.part;
             let Some(lod) = scene.lod_on_screen(m.placement) else {
                 continue;
             };
@@ -2246,7 +2249,10 @@ impl Renderer {
             pass.set_pipeline(pipeline);
             for (k, m) in marks.iter().take(MARKS).enumerate() {
                 let k = k as u32;
-                let part = scene.placements[m.placement as usize].part;
+                let Some(pl) = scene.placements.get(m.placement as usize) else {
+                    continue;
+                };
+                let part = pl.part;
                 let Some(lod) = scene.lod_on_screen(m.placement) else {
                     continue;
                 };

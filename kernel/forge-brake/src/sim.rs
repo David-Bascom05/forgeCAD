@@ -169,9 +169,25 @@ pub struct Check {
     /// The bend's turn there.
     pub phi: Option<f64>,
     pub phase: Option<Phase>,
+    /// Not checked: the press or tool value it needs is unknown (named). Never a pass; a
+    /// warning, so it does not block a plan.
+    pub unchecked: Option<String>,
+    /// A distance failing against a body whose envelope is an estimate erring large (a real
+    /// press's beams, with no published geometry): a refusal, not a proven collision.
+    pub estimate: bool,
 }
 
 impl Check {
+    /// A rule that cannot be checked: `what` is unknown.
+    pub fn not_checked(rule: Rule, what: &str) -> Check {
+        let mut c = Check::rule(rule, f64::NAN, f64::NAN, true);
+        c.pass = false;
+        c.severity = Severity::Warning;
+        c.certified = false;
+        c.unchecked = Some(what.into());
+        c
+    }
+
     fn rule(rule: Rule, value: f64, limit: f64, at_most: bool) -> Check {
         let pass = if at_most { value <= limit } else { value >= limit };
         Check {
@@ -191,6 +207,8 @@ impl Check {
             at: None,
             phi: None,
             phase: None,
+            unchecked: None,
+            estimate: false,
         }
     }
 }
@@ -364,6 +382,10 @@ pub struct StepCtx<'a> {
     pub z_tdc: f64,
     lengths: (Option<f64>, Option<f64>),
     die_index: usize,
+    punch_index: usize,
+    /// The working station's centre along the bed from the bed's centre (the part is centred
+    /// on its station: y = 0).
+    pub oy: f64,
     /// Verdicts kept across steps: a piece's place depends only on the bends on its path to
     /// the moving one, so its verdict against a tool holds wherever those are bent alike.
     pub memo: Option<std::rc::Rc<std::cell::RefCell<Memo>>>,
@@ -505,10 +527,15 @@ impl<'a> StepCtx<'a> {
         // length by the clearance at each end (flanges standing at the ends stay clear)
         let need = (bj.len - 2.0 * tl.short_end.unwrap_or(t.max(3.0))).max(0.0);
         let room = bj.len - 2.0 * tl.clearance;
-        let lengths = (
-            cover_within(&punch.segments, need, room).map(|c| c.0),
-            cover_within(&die.segments, need, room).map(|c| c.0),
-        );
+        let station = tl.station(setup.punch, setup.die);
+        let lengths = match station {
+            Some(st) => (Some(st.punch_length), Some(st.die_length)),
+            None => (
+                cover_within(&punch.segments, need, room).map(|c| c.0),
+                cover_within(&die.segments, need, room).map(|c| c.0),
+            ),
+        };
+        let oy = station.map_or(0.0, |st| st.y);
         StepCtx {
             m,
             tl,
@@ -528,6 +555,8 @@ impl<'a> StepCtx<'a> {
             z_tdc,
             lengths,
             die_index: setup.die,
+            punch_index: setup.punch,
+            oy,
             memo: None,
             legs: None,
         }
@@ -709,6 +738,8 @@ impl<'a> StepCtx<'a> {
         let half = |l: Option<f64>| 0.5 * l.unwrap_or(self.bj.len);
         let (py, dy) = (half(plen), half(dlen));
         let bed = 0.5 * pr.bed_length;
+        // the beams along the bed, in the station's frame
+        let beams = (-bed - self.oy, bed - self.oy);
         let ph = self.punch.height;
         if phase != Phase::Static {
             out.push(Element {
@@ -730,7 +761,7 @@ impl<'a> StepCtx<'a> {
             out.push(Element {
                 name: "ram".into(),
                 sec: rect(-pr.ram.front, ph, pr.ram.back, ph + 2000.0),
-                y: (-bed, bed),
+                y: beams,
                 attach: Attach::Punch,
                 work: Work::None,
                 punchy: true,
@@ -749,11 +780,59 @@ impl<'a> StepCtx<'a> {
             out.push(Element {
                 name: "bed".into(),
                 sec: rect(-pr.bed.front, -dh - 2000.0, pr.bed.back, -dh),
-                y: (-bed, bed),
+                y: beams,
                 attach: Attach::Die,
                 work: Work::None,
                 punchy: false,
             });
+        }
+        // the other stations' tools: punches ride the ram, set to this step's punch height
+        // (their tips meet the same sheet line when all punches are one height; a taller or
+        // shorter one is placed by its own height from the clamp)
+        for (k, st) in tl.stations.iter().enumerate() {
+            if st.punch == self.punch_index && st.die == self.die_index {
+                continue;
+            }
+            let (p, d) = (&tl.punches[st.punch], &tl.dies[st.die]);
+            let y = st.y - self.oy;
+            if phase != Phase::Static {
+                let lift = ph - p.height;
+                for (part, sec) in [("tip", p.tip_section()), ("body", p.body_section())] {
+                    out.push(Element {
+                        name: format!("station{}:punch:{}/{part}", k + 1, p.id),
+                        sec: shifted(&sec, 0.0, lift),
+                        y: (y - 0.5 * st.punch_length, y + 0.5 * st.punch_length),
+                        attach: Attach::Punch,
+                        work: Work::None,
+                        punchy: true,
+                    });
+                }
+            }
+            if phase == Phase::Static || phase == Phase::Bend {
+                let drop = self.die.height - d.height;
+                out.push(Element {
+                    name: format!("station{}:die:{}", k + 1, d.id),
+                    sec: shifted(&d.section(), 0.0, drop),
+                    y: (y - 0.5 * st.die_length, y + 0.5 * st.die_length),
+                    attach: Attach::Die,
+                    work: Work::None,
+                    punchy: false,
+                });
+            }
+        }
+        // the frame's side housings, behind their throats
+        if let Some(f) = pr.frame {
+            let g = 0.5 * pr.housing_gap;
+            for (side, (y0, y1)) in [("left", (-g - f.thickness, -g)), ("right", (g, g + f.thickness))] {
+                out.push(Element {
+                    name: format!("frame:{side}"),
+                    sec: rect(f.throat, -self.die.height - 4000.0, f.throat + f.depth, 6000.0),
+                    y: (y0 - self.oy, y1 - self.oy),
+                    attach: Attach::Die,
+                    work: Work::None,
+                    punchy: false,
+                });
+            }
         }
         if let Some(g) = gauge {
             let bg = &pr.backgauge;
@@ -867,7 +946,7 @@ impl<'a> StepCtx<'a> {
                     phase,
                 };
                 let c0 = bb::CELLS.load(std::sync::atomic::Ordering::Relaxed);
-                let t0 = std::time::Instant::now();
+                let t0 = trace_clock();
                 let key: Option<MemoKey> = (!el.name.starts_with("backgauge")).then(|| {
                     let (kind, id) = match pc.strip {
                         Strip::Wall(w) => (0u8, w.0),
@@ -883,7 +962,13 @@ impl<'a> StepCtx<'a> {
                         kind,
                         id,
                         pc.path,
-                        el.name.clone(),
+                        // with stations, where a tool stands depends on the working station
+                        // and its punch: kept apart
+                        if self.tl.stations.is_empty() {
+                            el.name.clone()
+                        } else {
+                            format!("{}@{}/{}", el.name, self.oy.to_bits(), self.punch_index)
+                        },
                         phase,
                         self.rot < 0.0,
                         self.j,
@@ -924,7 +1009,7 @@ impl<'a> StepCtx<'a> {
                         pc.strip,
                         quick,
                         bb::CELLS.load(std::sync::atomic::Ordering::Relaxed) - c0,
-                        t0.elapsed(),
+                        t0.map(|t| t.elapsed()),
                         v
                     );
                 }
@@ -958,6 +1043,16 @@ impl<'a> StepCtx<'a> {
                         Severity::Error
                     };
                     c.tool = Some(el.name.clone());
+                    if self
+                        .tl
+                        .press
+                        .estimated
+                        .iter()
+                        .any(|e| el.name.starts_with(e.as_str()))
+                    {
+                        c.estimate = true;
+                        c.certified = false;
+                    }
                     c.phase = Some(phase);
                     if let Some(q) = q {
                         c.part = Some(self.part_ref(pc, q));
@@ -1048,7 +1143,7 @@ impl<'a> StepCtx<'a> {
                 };
                 let roots = self.roots(mv, s);
                 let c0 = bb::CELLS.load(std::sync::atomic::Ordering::Relaxed);
-                let t0 = std::time::Instant::now();
+                let t0 = trace_clock();
                 let v = bb::certify(&pb, &roots, limit, res, BUDGET, !quick);
                 if std::env::var_os("BENDSIM_TRACE").is_some() {
                     eprintln!(
@@ -1057,7 +1152,7 @@ impl<'a> StepCtx<'a> {
                         st.strip,
                         quick,
                         bb::CELLS.load(std::sync::atomic::Ordering::Relaxed) - c0,
-                        t0.elapsed(),
+                        t0.map(|t| t.elapsed()),
                         v
                     );
                 }
@@ -1248,8 +1343,23 @@ impl<'a> StepCtx<'a> {
             false,
         ));
         let travel = self.z_tdc - self.ztip(self.phimax);
-        out.push(Check::rule(Rule::Stroke, travel, self.tl.press.stroke, true));
-        let mut oh = Check::rule(Rule::OpenHeight, self.z_tdc, self.t + self.tl.clearance, false);
+        // the clamps' heights unknown: how far the ram must come down is not known either
+        out.push(if self.tl.press.unchecked.iter().any(|u| u == "open_height") {
+            Check::not_checked(
+                Rule::Stroke,
+                "the tool clamps' heights under the press's open height",
+            )
+        } else {
+            Check::rule(Rule::Stroke, travel, self.tl.press.stroke, true)
+        });
+        let mut oh = if self.tl.press.unchecked.iter().any(|u| u == "open_height") {
+            Check::not_checked(
+                Rule::OpenHeight,
+                "the tool clamps' heights under the press's open height",
+            )
+        } else {
+            Check::rule(Rule::OpenHeight, self.z_tdc, self.t + self.tl.clearance, false)
+        };
         oh.phase = Some(Phase::Approach);
         out.push(oh);
         let (pl, dl) = self.tool_lengths();
@@ -1272,7 +1382,15 @@ impl<'a> StepCtx<'a> {
 
         let tool_len = pl.unwrap_or(0.0).max(dl.unwrap_or(0.0));
         let pr = &self.tl.press;
-        let mut bl = Check::rule(Rule::BedLength, ylen, pr.housing_gap, true);
+        // with the frame known, a part longer than the housing gap may pass through the
+        // throats: the housings are checked by distance, so the part's own limit is the
+        // bed's frame-to-frame span through them (none here)
+        let ylim = if pr.frame.is_some() {
+            f64::INFINITY
+        } else {
+            pr.housing_gap
+        };
+        let mut bl = Check::rule(Rule::BedLength, ylen, ylim, true);
         // the segments are summed in tenths of a millimetre: equal to the bed is not over it
         if tool_len > pr.bed_length + 1e-6 {
             bl = Check::rule(Rule::BedLength, tool_len, pr.bed_length, true);
@@ -1298,9 +1416,24 @@ impl<'a> StepCtx<'a> {
                     tool = Some(name.clone());
                 }
             }
-            let mut c = Check::rule(Rule::Tonnage, value, lim, true);
-            c.tool = tool;
-            out.push(c);
+            // limits not known: the press's force (a real press's record), a real tool's load
+            let mut unknown: Vec<String> = Vec::new();
+            if pr.max_force.is_none() && pr.unchecked.iter().any(|u| u == "force") {
+                unknown.push(format!("force of press {}", pr.id));
+            }
+            if lim.is_finite() {
+                let mut c = Check::rule(Rule::Tonnage, value, lim, true);
+                c.tool = tool;
+                out.push(c);
+            }
+            if !unknown.is_empty() || !lim.is_finite() {
+                if unknown.is_empty() {
+                    unknown.push("every load limit".into());
+                }
+                let mut c = Check::not_checked(Rule::Tonnage, &unknown.join(", "));
+                c.value = f;
+                out.push(c);
+            }
         }
         (out, travel, force)
     }
@@ -1339,6 +1472,11 @@ impl<'a> StepCtx<'a> {
     /// The backgauge: the outermost stop on the gauged leg's side the fingers reach, clear of the
     /// rest of the part.
     pub fn gauge(&self) -> (Check, Option<Gauged>) {
+        if self.tl.press.unchecked.iter().any(|u| u == "backgauge") {
+            let mut c = Check::not_checked(Rule::BackgaugeReach, "backgauge ranges of the press");
+            c.phase = Some(Phase::Static);
+            return (c, None);
+        }
         let bg = &self.tl.press.backgauge;
         let mut cands: Vec<Stop> = Vec::new();
         let die_pt =
@@ -1447,6 +1585,15 @@ impl<'a> StepCtx<'a> {
                 tried.get_or_insert((*x, *part));
                 continue;
             }
+            // the fingers' Z travel, in the station's frame
+            let (ya, yb) = match bg.z {
+                Some((zl, zh)) => (ya.max(zl - self.oy + 0.5 * fw), yb.min(zh - self.oy - 0.5 * fw)),
+                None => (*ya, *yb),
+            };
+            if yb < ya {
+                tried.get_or_insert((*x, *part));
+                continue;
+            }
             let span = yb - ya;
             let fingers = if bg.fingers >= 2 && span >= 2.0 * fw + 4.0 * self.tl.clearance {
                 vec![ya + 0.25 * span, yb - 0.25 * span]
@@ -1495,6 +1642,25 @@ impl<'a> StepCtx<'a> {
 
 /// A place a backgauge finger may stop on: its x, its span along y and in z, and what it is.
 type Stop = (f64, (f64, f64), (f64, f64), PartRef);
+
+/// The trace's clock: only when tracing, and never on wasm32 (no clock there: Instant panics).
+fn trace_clock() -> Option<std::time::Instant> {
+    #[cfg(not(target_arch = "wasm32"))]
+    if std::env::var_os("BENDSIM_TRACE").is_some() {
+        return Some(std::time::Instant::now());
+    }
+    None
+}
+
+/// A tool section moved by (dx, dz).
+fn shifted(r: &Region, dx: f64, dz: f64) -> Region {
+    Region::of(
+        r.loops
+            .iter()
+            .map(|l| l.iter().map(|s| s.shifted(dx, dz)).collect())
+            .collect(),
+    )
+}
 
 fn rect(x0: f64, z0: f64, x1: f64, z1: f64) -> Region {
     let pts = [(x0, z0), (x1, z0), (x1, z1), (x0, z1)];

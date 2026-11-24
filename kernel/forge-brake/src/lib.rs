@@ -8,11 +8,14 @@
 //!   clearances are certified by interval branch and bound, never sampled or meshed.
 //! - [`plan`]: a bend order and tooling that pass every check, or each bend's blocking checks.
 pub mod bb;
+pub mod catalog;
 pub mod geo;
 pub mod library;
 pub mod model;
 pub mod num;
 pub mod plan;
+pub mod scene;
+pub mod schema;
 pub mod sim;
 pub mod tooling;
 pub mod view;
@@ -23,3 +26,24 @@ pub use sim::{Check, PartRef, Phase, Rule, Setup, Severity, Step, Surface};
 pub use tooling::{
     Backgauge, Die, Finger, Press, Punch, PunchKind, Segment, Springback, Style, Tooling, ToolingError,
 };
+
+#[cfg(test)]
+mod wasm_safe {
+    /// std::time panics on wasm32-unknown-unknown (the browser build): the crate reads no clock
+    /// except the trace's, which is native only (sim.rs `trace_clock`, cfg'd out on wasm32).
+    #[test]
+    fn no_clock_outside_the_native_trace() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+        for e in std::fs::read_dir(dir).unwrap() {
+            let p = e.unwrap().path();
+            let s = std::fs::read_to_string(&p).unwrap();
+            let n = s.matches("Instant::now").count() + s.matches("SystemTime::now").count();
+            let allowed = usize::from(p.ends_with("sim.rs"));
+            assert!(n <= allowed, "{}: {n} clock reads", p.display());
+        }
+        let sim = include_str!("sim.rs");
+        let at = sim.find("Instant::now").unwrap();
+        let before = &sim[..at];
+        assert!(before.rfind("#[cfg(not(target_arch = \"wasm32\"))]").is_some_and(|c| at - c < 200));
+    }
+}

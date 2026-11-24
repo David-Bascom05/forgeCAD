@@ -24,6 +24,8 @@ pub mod gui_apptools;
 mod gui_asm;
 #[path = "gui_asmdrag.rs"]
 mod gui_asmdrag;
+#[path = "gui_bendsim.rs"]
+mod gui_bendsim;
 #[path = "gui_docs.rs"]
 pub mod gui_docs;
 #[path = "gui_env.rs"]
@@ -121,6 +123,7 @@ pub(crate) type PartAnchors = (String, Result<Vec<String>, String>);
 
 pub struct Gui {
     pub vers: gui_versions::VersState,
+    pub bend: gui_bendsim::BendView,
     /// An environment asked by name (a deep link, `--env`): entered once the document built.
     pub env_asked: Option<String>,
     pub ctx: egui::Context,
@@ -280,6 +283,7 @@ impl Gui {
         warm_shell.out.clear();
         Gui {
             vers: Default::default(),
+            bend: Default::default(),
             env_asked: None,
             agent: Default::default(),
             apps: Default::default(),
@@ -1295,6 +1299,7 @@ impl Gui {
         self.inspect_tick();
         self.sheet_frame();
         self.env_frame();
+        self.bendsim_frame();
         self.fg_hole_guess();
         self.fg_preview();
         if self.explode_tick() {
@@ -1480,11 +1485,17 @@ impl Gui {
                     selected: true,
                     second: false,
                 }));
+                // the bend simulation's bodies are not the design's: none of its marks
+                if self.bend.showing() {
+                    m.clear();
+                }
                 m
             };
             // the build's flags on the faces of what they're of; Compare's colours over them
             let flagged;
-            let colours: &[crate::render::FaceColour] = if self.vers.colours.is_empty() {
+            let colours: &[crate::render::FaceColour] = if self.bend.showing() {
+                &[]
+            } else if self.vers.colours.is_empty() {
                 flagged = self.fg_marks_was.1.clone();
                 &flagged
             } else {
