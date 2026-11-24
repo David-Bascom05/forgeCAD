@@ -77,6 +77,9 @@ forge-machine = { path = "../../kernel/forge-machine" }
 # writer, levels and check, and the part-in-envelope check
 forge-machine-builder = { path = "../forge-machine-builder" }
 forge-machine-lang = { path = "../forge-machine-lang" }
+forge-tooling = { path = "../../kernel/forge-tooling" }
+forge-tooling-builder = { path = "../forge-tooling-builder" }
+forge-library = { path = "../forge-library" }
 png = "=0.18.1"
 # a background image's file (zune: MIT OR Apache-2.0 OR Zlib), already in the lock
 zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std"] }
