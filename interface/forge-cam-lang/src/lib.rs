@@ -101,6 +101,17 @@ enum StockSpec {
         min: [f64; 3],
         max: [f64; 3],
     },
+    /// A bar (`cylinder`) or a tube (`id`) along z about the part's centre: its diameter (or
+    /// the part's round extent plus the radial margin), its bore, the margin above, below.
+    Round {
+        d: Option<f64>,
+        id: Option<f64>,
+        radial: f64,
+        above: f64,
+        below: f64,
+    },
+    /// A stock modelled as its own part file (a prism along z, in the part's frame).
+    Solid(String),
 }
 
 struct PartIn {
@@ -133,6 +144,8 @@ struct SetupIn {
     at: Option<[f64; 3]>,
     /// The in-process stock as the ops so far left it.
     ip: forge_cam::stock::InProcess,
+    /// The stock's kind as declared: box, cylinder, tube or solid.
+    stock_kind: &'static str,
     /// The workholding, if the setup names one.
     fixture: Option<forge_cam::fixture::Fixture>,
     /// The setup this one continues, the part turned over.
@@ -247,6 +260,10 @@ impl PartIn {
     }
 }
 
+fn dist_pts(a: forge_cam_geom::region::P2, b: forge_cam_geom::region::P2) -> f64 {
+    ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt()
+}
+
 fn num(v: &V) -> Option<f64> {
     if let V::Num(x) = v { Some(*x) } else { None }
 }
@@ -291,6 +308,166 @@ impl Cam {
             z: frame.origin.z,
             off: 0.0,
         })
+    }
+
+    /// A bar, tube or modelled stock for part i: its box and its section (a prism along z),
+    /// shown to hold the part: in each band between the part's flat faces, the part's section
+    /// less the stock's is empty (exact booleans), and the part's heights are within the
+    /// stock's. A part that is not 2.5D there is refused (its section is not known).
+    fn shaped_stock(&self, i: usize, spec: &StockSpec, dir: &Path) -> Result<(Stock, Region), String> {
+        use forge_cam_geom::boolean::{Op, boolean};
+        let p = &self.parts[i];
+        let (plo, phi) = p.bbox;
+        // the part's sections, one per band between its flat faces' heights
+        let mut zs = vec![plo[2], phi[2]];
+        for f in &p.faces {
+            if let Some(forge_cam_geom::slab::Prism::Flat { z, .. }) = &f.prism
+                && *z > plo[2]
+                && *z < phi[2]
+            {
+                zs.push(*z);
+            }
+        }
+        zs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        // heights within 1e-6 are one (the box's ends are its faces' padded by their mu)
+        zs.dedup_by(|b, a| (*b - *a).abs() <= 1e-6);
+        let mut secs = vec![];
+        for w in zs.windows(2) {
+            let zm = 0.5 * (w[0] + w[1]);
+            let sec = forge_cam::section::section(&p.faces, zm, 1e-5).map_err(|e| {
+                format!("stock: the part's section at z = {zm}: {e:?} (a shaped stock needs a 2.5D part)")
+            })?;
+            secs.push((zm, sec));
+        }
+        let (st, outline) = match spec {
+            StockSpec::Round {
+                d,
+                id,
+                radial,
+                above,
+                below,
+            } => {
+                let c = p2(0.5 * (plo[0] + phi[0]), 0.5 * (plo[1] + phi[1]));
+                let r = match d {
+                    Some(d) => 0.5 * d,
+                    None => {
+                        // the part's farthest reach from the centre (an arc by its circle)
+                        let mut m: f64 = 0.0;
+                        for (_, sec) in &secs {
+                            for l in &sec.loops {
+                                for sg in &l.segs {
+                                    let dist = |q: forge_cam_geom::region::P2| {
+                                        ((q.x - c.x).powi(2) + (q.y - c.y).powi(2)).sqrt()
+                                    };
+                                    m = m.max(match *sg {
+                                        Seg::Line { a, b } => dist(a).max(dist(b)),
+                                        Seg::Arc { a, c: cc, .. } => dist(cc) + dist_pts(a, cc),
+                                    });
+                                }
+                            }
+                        }
+                        m + radial
+                    }
+                };
+                let mut outline = forge_cam::stock::disk(c, r);
+                if let Some(id) = id {
+                    let ri = 0.5 * id;
+                    if ri >= r {
+                        return Err(format!(
+                            "tube: the bore (id {id}) is not inside the tube (d {})",
+                            2.0 * r
+                        ));
+                    }
+                    outline
+                        .loops
+                        .push(forge_cam::stock::disk(c, ri).reversed().loops.remove(0));
+                }
+                let st = Stock {
+                    min: [c.x - r, c.y - r, plo[2] - below],
+                    max: [c.x + r, c.y + r, phi[2] + above],
+                };
+                (st, outline)
+            }
+            StockSpec::Solid(file) => {
+                let path = dir.join(file);
+                let src =
+                    forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let (run, _) = forge_lang::run(
+                    &src,
+                    forge_lang::Options {
+                        dir: path.parent().map(Path::to_path_buf),
+                        ..Default::default()
+                    },
+                    Default::default(),
+                );
+                if !run.ok() {
+                    return Err(format!(
+                        "the stock `{file}` does not build: {:?}",
+                        run.errors.first()
+                    ));
+                }
+                let body = run.body.ok_or("the stock has no body")?;
+                let faces = forge_cam::lower::lower(&body)
+                    .map_err(|e| format!("the stock `{file}` is outside this phase's CAM domain: {e:?}"))?;
+                let mut lo = [f64::INFINITY; 3];
+                let mut hi = [f64::NEG_INFINITY; 3];
+                for fc in &faces {
+                    for k in 0..3 {
+                        lo[k] = lo[k].min(fc.bbox[k].lo + fc.mu);
+                        hi[k] = hi[k].max(fc.bbox[k].hi - fc.mu);
+                    }
+                }
+                // a prism along z: walls over its whole height, flat faces only at its ends
+                let mu = 1e-6 * (1.0 + hi[2].abs().max(lo[2].abs()));
+                for fc in &faces {
+                    let ok = match &fc.prism {
+                        Some(forge_cam_geom::slab::Prism::Wall { z0, z1, .. }) => {
+                            *z0 <= lo[2] + mu && *z1 >= hi[2] - mu
+                        }
+                        Some(forge_cam_geom::slab::Prism::Flat { z, .. }) => {
+                            (z - lo[2]).abs() <= mu || (z - hi[2]).abs() <= mu
+                        }
+                        None => false,
+                    };
+                    if !ok {
+                        return Err(format!(
+                            "the stock `{file}` is not a prism along z (face {}): its section must not change with height",
+                            fc.id
+                        ));
+                    }
+                }
+                let zm = 0.5 * (lo[2] + hi[2]);
+                let outline = forge_cam::section::section(&faces, zm, 1e-5)
+                    .map_err(|e| format!("the stock `{file}`'s section: {e:?}"))?;
+                (Stock { min: lo, max: hi }, outline)
+            }
+            _ => unreachable!("shaped_stock takes a round or modelled stock"),
+        };
+        // (flush within 1e-6: the boxes are the faces' padded by their mu)
+        if plo[2] < st.min[2] - 1e-6 || phi[2] > st.max[2] + 1e-6 {
+            return Err(format!(
+                "stock: the part (z {} to {}) is not within the stock's heights ({} to {})",
+                plo[2], phi[2], st.min[2], st.max[2]
+            ));
+        }
+        for (zm, sec) in &secs {
+            let out = boolean(sec, &outline, Op::Diff).map_err(|e| format!("{e:?}"))?;
+            if !out.is_empty() {
+                // where, by its vertices (a hint for the fix)
+                let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+                for l in &forge_cam_geom::boolean::region_of(&out).loops {
+                    for sg in &l.segs {
+                        let q = sg.start();
+                        b = [b[0].min(q.x), b[1].min(q.y), b[2].max(q.x), b[3].max(q.y)];
+                    }
+                }
+                return Err(format!(
+                    "stock: the part is outside the stock at z = {zm} (x {:.3} to {:.3}, y {:.3} to {:.3})",
+                    b[0], b[2], b[1], b[3]
+                ));
+            }
+        }
+        Ok((st, outline))
     }
 
     /// An op's arguments with each model height (`from:`, `to:`) read in setup su's frame.
@@ -449,6 +626,54 @@ impl Cam {
                         return Ok(V::Stock(StockSpec::Box { min: lo, max: hi }));
                     }
                     return Err("box(margin: (x, y, z)) or box(min: (..), max: (..))".into());
+                }
+                if fname == "cylinder" || fname == "tube" {
+                    let a = self.named(args, env)?;
+                    let len = |k: &str| -> Result<Option<f64>, String> {
+                        match a.get(k) {
+                            None => Ok(None),
+                            Some(V::Num(x)) if *x > 0.0 && x.is_finite() => Ok(Some(*x)),
+                            Some(_) => Err(format!("{fname}: {k}: a length over 0")),
+                        }
+                    };
+                    let (radial, above) = match a.get("margin") {
+                        None => (0.0, 0.0),
+                        Some(V::Tuple(t)) if t.len() == 2 => match (num(&t[0]), num(&t[1])) {
+                            (Some(r), Some(z)) if r >= 0.0 && z >= 0.0 => (r, z),
+                            _ => return Err(format!("{fname}: margin: (radial, above), lengths ≥ 0")),
+                        },
+                        Some(_) => return Err(format!("{fname}: margin: (radial, above), lengths ≥ 0")),
+                    };
+                    let below = match a.get("below") {
+                        None => 0.0,
+                        Some(V::Num(b)) if *b >= 0.0 => *b,
+                        Some(_) => return Err(format!("{fname}: below: a length ≥ 0")),
+                    };
+                    let d = len("d")?;
+                    let id = len("id")?;
+                    if d.is_some() && a.contains_key("margin") && radial > 0.0 {
+                        return Err(format!("{fname}: d: or a radial margin, not both"));
+                    }
+                    if fname == "tube" && id.is_none() {
+                        return Err("tube: id: the bore's diameter".into());
+                    }
+                    if fname == "cylinder" && id.is_some() {
+                        return Err("cylinder: no id: (a bored bar is a tube)".into());
+                    }
+                    return Ok(V::Stock(StockSpec::Round {
+                        d,
+                        id,
+                        radial,
+                        above,
+                        below,
+                    }));
+                }
+                if fname == "solid" {
+                    let a = self.named(args, env)?;
+                    return match a.get("#0") {
+                        Some(V::Str(f)) => Ok(V::Stock(StockSpec::Solid(f.clone()))),
+                        _ => Err("solid(\"STOCK.fg\"): the stock as its own part file".into()),
+                    };
                 }
                 if fname == "vise" {
                     let a = self.named(args, env)?;
@@ -990,6 +1215,13 @@ impl Cam {
                     _ => "generic-vmc3".into(),
                 };
                 let (plo, phi) = self.parts[part].bbox;
+                let mut shape: Option<Region> = None;
+                let stock_kind = match a.get("stock") {
+                    Some(V::Stock(StockSpec::Round { id: Some(_), .. })) => "tube",
+                    Some(V::Stock(StockSpec::Round { .. })) => "cylinder",
+                    Some(V::Stock(StockSpec::Solid(_))) => "solid",
+                    _ => "box",
+                };
                 let stock = match a.get("stock") {
                     None if from.is_some() => {
                         let ip = self.setups[from.unwrap()].ip.turned(self.parts[part].h());
@@ -1003,8 +1235,13 @@ impl Cam {
                         max: [phi[0] + m[0], phi[1] + m[1], phi[2] + m[2]],
                     },
                     Some(V::Stock(StockSpec::Box { min, max })) => Stock { min: *min, max: *max },
+                    Some(V::Stock(spec @ (StockSpec::Round { .. } | StockSpec::Solid(_)))) => {
+                        let (st, outline) = self.shaped_stock(part, spec, dir)?;
+                        shape = Some(outline);
+                        st
+                    }
                     None => Stock { min: plo, max: phi },
-                    _ => return Err("stock: box(..)".into()),
+                    _ => return Err("stock: box(..), cylinder(..), tube(..) or solid(..)".into()),
                 };
                 let origin = match a.get("origin") {
                     Some(V::Str(s)) if s == "top-center" => [
@@ -1077,8 +1314,12 @@ impl Cam {
                     ip: match from {
                         // what the earlier setup provably cleared, turned over, inside this stock
                         Some(k) if a.get("stock").is_none() => self.setups[k].ip.turned(self.parts[part].h()),
-                        _ => forge_cam::stock::InProcess::new(stock.min, stock.max),
+                        _ => match &shape {
+                            Some(o) => forge_cam::stock::InProcess::shaped(stock.min, stock.max, o)?,
+                            None => forge_cam::stock::InProcess::new(stock.min, stock.max),
+                        },
                     },
+                    stock_kind,
                     fixture,
                     from,
                 });
@@ -3967,7 +4208,7 @@ impl Cam {
                     (
                         "stock",
                         Json::obj(vec![
-                            ("kind", Json::Str("box".into())),
+                            ("kind", Json::Str(s.stock_kind.into())),
                             ("min", v3(s.stock.min)),
                             ("max", v3(s.stock.max)),
                         ]),

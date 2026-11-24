@@ -1172,7 +1172,10 @@ fn heights_are_model_references() {
         let cam = forge_cam_lang::run(&doc(&body), &dir);
         assert!(cam.errors.is_empty(), "{:?}", cam.errors);
         let o = cam.ops.iter().find(|o| o.name == "back").unwrap();
-        (o.status, format!("{:?}", o.paths.iter().map(|p| &p.moves).collect::<Vec<_>>()))
+        (
+            o.status,
+            format!("{:?}", o.paths.iter().map(|p| &p.moves).collect::<Vec<_>>()),
+        )
     };
     let (st, a) = turned("18");
     assert_eq!(st, "built");
@@ -1199,4 +1202,82 @@ fn heights_are_model_references() {
             cam.errors
         );
     }
+}
+
+fn stocked(stock: &str, dir: &Path) -> forge_cam_lang::Cam {
+    stocked_to(stock, dir, -0.5)
+}
+
+fn stocked_to(stock: &str, dir: &Path, bottom: f64) -> forge_cam_lang::Cam {
+    let src = format!(
+        "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: {stock}, origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\ntop = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepover: 4)\nprof = contour(op1, tool: t1, side: \"outside\", from: 12, to: {bottom}, step: 4)\nprog = program(op1, post: \"fanuc\", number: 1)\n"
+    );
+    forge_cam_lang::run(&src, dir)
+}
+
+/// Stock shapes (Fusion parity): a bar (`cylinder`) or a tube about the part's centre, or the
+/// stock as its own part file (`solid`, a prism along z). The in-process stock is the stock's
+/// own shape (what lies outside it cleared from its bottom up), and each is shown to hold the
+/// part band by band (exact booleans): a bar too thin, or a tube whose bore cuts the part, is
+/// refused with where.
+#[test]
+fn stock_is_a_bar_a_tube_or_a_modelled_solid() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let ok = |cam: &forge_cam_lang::Cam, kind: &str| {
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        assert!(
+            cam.ops.iter().all(|o| o.status == "built"),
+            "{:?}",
+            cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+        );
+        let mut j = String::new();
+        cam.json().write(&mut j);
+        assert!(j.contains(&format!("\"kind\":\"{kind}\"")), "{j}");
+    };
+    // the plate's corners are 40√2 from the centre: the bar is that plus 2 across
+    ok(&stocked("cylinder(margin: (2, 1), below: 3)", &dir), "cylinder");
+    // the bore is 20: a tube's bore of 18 is inside it at every height
+    ok(
+        &stocked("tube(d: 120, id: 18, margin: (0, 1), below: 3)", &dir),
+        "tube",
+    );
+    let cam = stocked("cylinder(d: 100, margin: (0, 1))", &dir);
+    assert!(
+        cam.errors
+            .iter()
+            .any(|e| e.contains("the part is outside the stock")),
+        "{:?}",
+        cam.errors
+    );
+    let cam = stocked("tube(d: 120, id: 22)", &dir);
+    assert!(
+        cam.errors
+            .iter()
+            .any(|e| e.contains("the part is outside the stock")),
+        "{:?}",
+        cam.errors
+    );
+    // the stock modelled: a 90 × 90 plate to z = 19, in the part's frame
+    let tmp = forge_dirs::temp_dir().join(format!("forgecad-stock-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::fs::copy(dir.join("flange.fg"), tmp.join("flange.fg")).unwrap();
+    std::fs::write(
+        tmp.join("blank.fg"),
+        "sketch s(on: xy) {\n  o = rect(center: (0, 0), size: (90, 90))\n}\nb = extrude(s, 19)\n",
+    )
+    .unwrap();
+    // (flush with the part's bottom: the profile stops above it, or it would cut what holds
+    // the stock)
+    ok(&stocked_to("solid(\"blank.fg\")", &tmp, 0.5), "solid");
+    let cam = stocked("solid(\"blank.fg\")", &tmp);
+    assert!(cam.ops.iter().any(|o| o.refusal.as_deref().is_some_and(|r| r.contains("support under the stock"))));
+    // a blank whose section changes with height is not taken
+    std::fs::write(
+        tmp.join("stepped.fg"),
+        "sketch s(on: xy) {\n  o = rect(center: (0, 0), size: (90, 90))\n}\nb = extrude(s, 10)\nsketch t(on: b.end) {\n  o = rect(center: (0, 0), size: (86, 86))\n}\nc = extrude(t.o, 9)\n",
+    )
+    .unwrap();
+    let cam = stocked_to("solid(\"stepped.fg\")", &tmp, 0.5);
+    assert!(cam.errors.iter().any(|e| e.contains("is not a prism along z")), "{:?}", cam.errors);
+    let _ = std::fs::remove_dir_all(&tmp);
 }
