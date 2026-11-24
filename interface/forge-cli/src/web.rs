@@ -68,6 +68,8 @@ pub struct Config {
     pub writable: bool,
     /// `--agent`: the page's agent is the person's Claude Code, run here (agent_bridge.rs).
     pub agent: Option<Arc<crate::agent_bridge::Agent>>,
+    /// How long a request's head may take from its first byte (`HEAD_TIME`; less in tests).
+    pub head_time: std::time::Duration,
 }
 
 const USAGE: &str =
@@ -141,6 +143,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
         token,
         writable,
         agent,
+        head_time: HEAD_TIME,
     })
 }
 
@@ -313,7 +316,6 @@ fn read_request(r: &mut BufReader<TcpStream>, c: &Config) -> Result<Option<Reque
     let mut head = Vec::new();
     // a request, once it starts, comes in good time: its head in 30 s, its body in 30 s more
     // and a second a 64 KB; a client trickling it in loses the connection, not a slot forever
-    let mut began: Option<std::time::Instant> = None;
     let stream = r.get_ref().try_clone().map_err(|_| error(400, "unreadable"))?;
     let within = |by: std::time::Instant| -> Result<(), Response> {
         let left = by.saturating_duration_since(std::time::Instant::now());
@@ -323,15 +325,36 @@ fn read_request(r: &mut BufReader<TcpStream>, c: &Config) -> Result<Option<Reque
         let _ = stream.set_read_timeout(Some(left));
         Ok(())
     };
+    // the clock starts at the request's first byte (waiting for it is the idle time)
+    if r.fill_buf().map_err(|e| slow_or(e, "unreadable"))?.is_empty() {
+        return Ok(None);
+    }
+    let began = std::time::Instant::now();
     loop {
-        if let Some(t) = began {
-            within(t + HEAD_TIME)?;
-        }
+        within(began + c.head_time)?;
+        // a line, as it comes: in time (each piece of it, not just the whole) and no longer
+        // than a head may be
         let mut line = Vec::new();
-        let n = r
-            .read_until(b'\n', &mut line)
-            .map_err(|e| slow_or(e, "unreadable"))?;
-        began.get_or_insert_with(std::time::Instant::now);
+        loop {
+            within(began + c.head_time)?;
+            let buf = r.fill_buf().map_err(|e| slow_or(e, "unreadable"))?;
+            if buf.is_empty() {
+                break;
+            }
+            let (take, done) = match buf.iter().position(|b| *b == b'\n') {
+                Some(k) => (k + 1, true),
+                None => (buf.len(), false),
+            };
+            line.extend_from_slice(&buf[..take]);
+            r.consume(take);
+            if head.len() + line.len() > MAX_HEAD + 2 {
+                return Err(error(413, "the request's head is too large"));
+            }
+            if done {
+                break;
+            }
+        }
+        let n = line.len();
         if n == 0 {
             return if head.is_empty() {
                 Ok(None)
@@ -389,7 +412,7 @@ fn read_request(r: &mut BufReader<TcpStream>, c: &Config) -> Result<Option<Reque
     }
     let mut body = vec![0; len];
     within(
-        std::time::Instant::now() + HEAD_TIME + std::time::Duration::from_secs((len / (64 << 10)) as u64),
+        std::time::Instant::now() + c.head_time + std::time::Duration::from_secs((len / (64 << 10)) as u64),
     )?;
     r.read_exact(&mut body)
         .map_err(|e| slow_or(e, "the body cut short"))?;
@@ -1587,6 +1610,8 @@ mod tests {
             token: token.map(str::to_string),
             writable,
             agent: None,
+            // a slow request's test needn't wait 30 s
+            head_time: std::time::Duration::from_secs(2),
         });
         std::thread::spawn(move || run(l, c));
         (at, root)
@@ -1812,29 +1837,45 @@ mod tests {
         let (at, root) = started(None, true);
         let mut s = std::net::TcpStream::connect(at).unwrap();
         let t = std::time::Instant::now();
-        s.write_all(b"GET /api/info HTTP/1.1\r\n").unwrap();
-        // a header line every 5 s: never idle long, never done
+        // the request line itself trickled, a byte every 0.4 s: never idle long, never done;
+        // the clock runs from its first byte (the head's time is 2 s here)
         let mut all = String::new();
         s.set_read_timeout(Some(std::time::Duration::from_millis(100)))
             .unwrap();
-        while t.elapsed() < std::time::Duration::from_secs(45) {
-            if t.elapsed().as_secs().is_multiple_of(5) {
-                let _ = s.write_all(b"X-Slow: 1\r\n");
+        for b in b"GET /api/info HTTP/1.1".iter().cycle() {
+            if t.elapsed() > std::time::Duration::from_secs(10) {
+                break;
             }
-            let mut b = [0u8; 512];
-            match s.read(&mut b) {
+            let _ = s.write_all(&[*b]);
+            let mut got = [0u8; 512];
+            match s.read(&mut got) {
                 Ok(0) => break,
-                Ok(n) => all.push_str(&String::from_utf8_lossy(&b[..n])),
+                Ok(n) => all.push_str(&String::from_utf8_lossy(&got[..n])),
                 Err(_) => {}
             }
             if all.contains("\r\n\r\n") {
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(900));
+            std::thread::sleep(std::time::Duration::from_millis(300));
         }
         assert!(all.starts_with("HTTP/1.1 408"), "{all}");
-        let took = t.elapsed().as_secs();
-        assert!((29..40).contains(&took), "{took} s");
+        let took = t.elapsed().as_millis();
+        assert!((1900..5000).contains(&took), "{took} ms");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A head's line is no longer than a head may be: refused as it grows past that.
+    #[test]
+    fn a_line_too_long_is_refused_as_it_comes() {
+        use std::io::{Read, Write};
+        let (at, root) = started(None, true);
+        let mut s = std::net::TcpStream::connect(at).unwrap();
+        let _ = s.write_all(format!("GET /{} HTTP/1.1", "a".repeat(80 << 10)).as_bytes());
+        let mut all = String::new();
+        s.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let _ = s.read_to_string(&mut all);
+        assert!(all.starts_with("HTTP/1.1 413"), "{}", &all[..all.len().min(80)]);
         let _ = std::fs::remove_dir_all(&root);
     }
 
