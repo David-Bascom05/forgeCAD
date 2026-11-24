@@ -1026,6 +1026,17 @@ mod tests {
                 "{}: a drawn section is drawn as checked",
                 p.id
             );
+            // the body checked by distance starts at the tip height: below it, the working part
+            // is the rules' (a body there would collide with the contact the bend is made by)
+            for l in &p.body_section().loops {
+                for sg in l {
+                    assert!(
+                        sg.point(0.0).y >= p.tip_height - 1e-9,
+                        "{}: body below the tip height",
+                        p.id
+                    );
+                }
+            }
         }
         assert!(n >= 8, "{n} drawn sections");
     }
