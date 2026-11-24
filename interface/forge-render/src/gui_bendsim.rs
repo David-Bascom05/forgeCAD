@@ -30,6 +30,9 @@ pub struct BendView {
     ours: Option<u64>,
     /// The camera framed on the press once per entry.
     framed: bool,
+    /// Follow was on the part through the operator's handling at the last instant shown: as it
+    /// ends, the eye goes back to the working zone.
+    handled: bool,
     /// The working station's place along the bed when framed: the part moved to another
     /// station, the eye follows it there.
     station: Option<u64>,
@@ -227,6 +230,7 @@ pub fn framing(
     bodies: &[Body],
     envelope: Option<([f32; 3], [f32; 3])>,
     how: Framing,
+    handling: bool,
     size: (u32, u32),
 ) -> Option<(crate::camera::Camera, [f32; 3], [f32; 3])> {
     let (mut lo, mut hi) = match envelope {
@@ -243,6 +247,8 @@ pub fn framing(
     match how {
         // the working zone is the part's, scaled to it (David): the punch's tip and the die's V
         // where they meet it, never the tools' height or the press
+        // through the operator's handling the part is the subject alone: away from the tools
+        Framing::Work if handling => {}
         Framing::Work => {
             let tip = bodies
                 .iter()
@@ -292,12 +298,35 @@ pub fn framing(
     };
     cam.yaw = yaw.to_radians();
     cam.pitch = pitch.to_radians();
-    // the subject's sphere fits the view with a margin of about 15 % (the press: ~70 %)
+    // the subject's sphere fits the view with a margin of about 15 % (the press, and the part
+    // being handled: ~70 %)
     let margin = match how {
-        Framing::Work => 1.15,
-        Framing::Overview => 1.0 / 0.7,
+        Framing::Work if !handling => 1.15,
+        _ => 1.0 / 0.7,
     };
     cam.dist = cam.fit_dist(radius, size.0.max(1), size.1.max(1)) * margin;
+    if handling {
+        // the part handled is seen clear of the press (RENDER-STUDIO, the coordinator: not the
+        // bed's near edge): the eye rises from the working zone's until its lines to the part's
+        // middle and corners pass no press part or tool
+        let mut aims = vec![center];
+        aims.extend((0..8).map(|k| [0, 1, 2].map(|i| if k >> i & 1 == 0 { lo[i] } else { hi[i] })));
+        let blocks: Vec<([f32; 3], [f32; 3])> = bodies
+            .iter()
+            .filter(|x| matches!(x.look, Look::Frame | Look::Gauge | Look::Tool))
+            .filter_map(|x| x.mesh.bounds())
+            .collect();
+        let clear = |c: &crate::camera::Camera| {
+            let eye = c.eye();
+            aims.iter()
+                .all(|&p| blocks.iter().all(|&(a, b)| !hits(eye, p, a, b)))
+        };
+        let mut p = pitch;
+        while p < 75.0 && !clear(&cam) {
+            p += 5.0;
+            cam.pitch = p.to_radians();
+        }
+    }
     Some((cam, lo, hi))
 }
 
@@ -605,17 +634,22 @@ impl Gui {
         };
         let ask = b.frame;
         // with Follow bend, each new step is framed afresh, and through the operator's handling
-        // the eye widens to keep the part in view, settling back on the working zone as it
-        // returns to the tools; otherwise the eye is the user's
+        // the eye keeps on the part (it alone, clear of the press), settling back on the working
+        // zone as it returns to the tools; otherwise the eye is the user's
         let moved = self.bend.framed && b.follow && self.bend.step != Some(step);
         let handling = b.follow && stage_at(b.t).0 == forge_brake::scene::Stage::Handle;
         let first = !self.bend.framed;
+        let back = self.bend.handled && !handling && b.follow;
+        self.bend.handled = handling;
         let mut eye = None;
-        if first || ask.is_some() || moved || (handling && self.bend.framed) {
+        if first || ask.is_some() || moved || back || (handling && self.bend.framed) {
             let how = ask.unwrap_or(Framing::Work);
             // the part's whole motion through the step at the tools, from gauging to the ram's
             // return (kept for the step), and where the part is now
             let envelope = match how {
+                Framing::Work if handling => {
+                    bounds(bodies.iter().filter(|x| x.look.is_sheet()).map(|x| &x.mesh))
+                }
                 Framing::Work => {
                     let kept = self.bend.envelope.filter(|e| e.0 == step).map(|e| (e.1, e.2));
                     let env = kept.or_else(|| {
@@ -645,7 +679,7 @@ impl Gui {
                 }
                 Framing::Overview => None,
             };
-            if let Some((cam, lo, hi)) = framing(&bodies, envelope, how, v.size) {
+            if let Some((cam, lo, hi)) = framing(&bodies, envelope, how, handling, v.size) {
                 self.bend.subject = (how == Framing::Work).then_some((lo, hi));
                 if how == Framing::Work && !handling {
                     // the cube's home is the working zone
@@ -848,6 +882,7 @@ impl Gui {
 
     fn bendsim_put_back(&mut self) {
         self.bend.framed = false;
+        self.bend.handled = false;
         self.bend.cut.clear();
         self.bend.subject = None;
         self.bend.raw.clear();
