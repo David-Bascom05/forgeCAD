@@ -971,7 +971,7 @@ pub(in crate::shell) fn groups(s: &Shell) -> Vec<super::ribbon::Group> {
     if m.lib == "machine" {
         v.push(group(
             "Motion",
-            vec![tool("Home Axes", "home", MachineCmd::Home, valid)],
+            vec![tool("Home Axes", "home", MachineCmd::Home, valid && !m.at_home())],
         ));
     }
     v
@@ -998,6 +998,9 @@ pub fn why_off(m: &MachineUi, name: &str) -> Option<String> {
             format!("The {what} is refused as it stands: fix what the sheet says first")
         }
         "Save" => "Nothing to save: no change since it was read or saved".into(),
+        "Home Axes" if m.at_home() => {
+            "The axes are at home already: jog one in Motion, then Home brings it back".into()
+        }
         _ => return None,
     })
 }
@@ -1041,6 +1044,17 @@ impl MachineUi {
                 (t.cur.is_some(), t.cur.is_some() && t.problem.is_none())
             }),
         }
+    }
+
+    /// Every joint at its home value (Home Axes would change nothing).
+    pub fn at_home(&self) -> bool {
+        self.def.as_ref().is_none_or(|d| {
+            d.joints.len() == self.q.len()
+                && d.joints
+                    .iter()
+                    .zip(&self.q)
+                    .all(|(j, q)| (j.home - q).abs() < 1e-9)
+        })
     }
 
     /// Edited since it was read or saved.
@@ -3343,6 +3357,20 @@ mod off_tests {
         );
         assert!(m.problem.is_none(), "{:?}", m.problem);
         assert!(why_off(&m, "Save").unwrap().starts_with("Nothing to save"));
-        assert!(home_on(m));
+        // at home already: off, saying so (a click would change nothing)
+        assert!(
+            why_off(&m, "Home Axes")
+                .unwrap()
+                .starts_with("The axes are at home already")
+        );
+        let mut jogged = MachineUi::new(None);
+        jogged.load(
+            forge_machine::library::builtin_named("generic-vmc3").unwrap(),
+            None,
+            Vec::new(),
+        );
+        assert!(!home_on(m));
+        jogged.q[0] += 10.0;
+        assert!(home_on(jogged));
     }
 }
