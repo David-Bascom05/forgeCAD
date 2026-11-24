@@ -2621,10 +2621,7 @@ impl Cam {
             .map_err(|e| e.to_string())?;
         let t = &self.tools[ti];
         let sub = feeds::Substrate::of(&t.tool.material);
-        let preset = t.tool.presets.iter().find(|p| p.group == part.group).map(|p| {
-            let path = format!("preset.{}", if p.name.is_empty() { &p.group } else { &p.name });
-            (p, t.tool.cites.iter().find(|c| c.path == path))
-        });
+        let preset = t.tool.preset_for(&part.group, "general").map(|(p, c, _)| (p, c));
         let row = match sub {
             feeds::Substrate::Carbide => self.lib.drilling(&part.group, "carbide"),
             feeds::Substrate::Hss => self.lib.drilling(&part.group, "hss"),
@@ -2764,22 +2761,10 @@ impl Cam {
             "clear" | "pocket" | "facing" | "contour" => "rough",
             _ => "general",
         };
-        let of_group: Vec<&forge_tooling::Preset> =
-            t.tool.presets.iter().filter(|p| &p.group == group_name).collect();
-        let named = |c: &str| {
-            of_group
-                .iter()
-                .copied()
-                .find(|p| p.name.split_whitespace().any(|w| w == c))
+        let (preset, classed) = match t.tool.preset_for(group_name, class) {
+            Some((p, c, classed)) => (Some((p, c)), classed),
+            None => (None, false),
         };
-        let (preset, classed) = match named(class) {
-            Some(p) => (Some(p), true),
-            None => (named("general").or_else(|| of_group.first().copied()), false),
-        };
-        let preset = preset.map(|p| {
-            let path = format!("preset.{}", if p.name.is_empty() { &p.group } else { &p.name });
-            (p, t.tool.cites.iter().find(|c| c.path == path))
-        });
         let class_rec = if classed || class == "slot" || class == "general" {
             None
         } else {

@@ -273,6 +273,21 @@ pub fn milling(
     milling_on(ask, tool, group, None, spindle, nominal)
 }
 
+/// A maker's preset states the feed per tooth it programs at its own width and depth (Harvey,
+/// Helical and Lakeshore print IPT per op at a stated RDOC and ADOC), so its chip is that feed
+/// thinned at that engagement: hex = fz · k(ae/D) · sin κ(ap). A preset with no width is read as
+/// a slot's (k = 1). Returns (chip, k).
+pub fn preset_chip(p: &Preset, d: f64, re: f64) -> (f64, f64) {
+    let ct = feeds::contact(d, re, p.ap.unwrap_or(d), 0.0);
+    let d_radial = if re >= 0.5 * d { ct.d_eff } else { d };
+    let kr = p.ae.map_or(1.0, |ae| {
+        feeds::thinning((ae / d_radial.max(1e-9)).clamp(0.0, 1.0))
+    });
+    let k = if p.ap.is_some() { kr * ct.sin_kappa } else { kr };
+    let k = if k > 0.0 { k } else { 1.0 };
+    (p.fz * k, k)
+}
+
 /// As `milling`, for a specific stock material: its record's kc1.1 and mc at the cut's actual
 /// speed (and their measured spread) take the group's place for power and torque.
 pub fn milling_on(
@@ -429,14 +444,21 @@ pub fn milling_on(
         let chip = if let Some(h) = ask.chip {
             Val::new(h, "mm", Source::User, "")
         } else if let Some((p, c)) = preset {
+            let (h, kp) = preset_chip(p, d, re);
             Val::new(
-                p.fz,
+                h,
                 "mm",
                 Source::Library,
                 format!(
-                    "{}; the tool's {} chip, thinned for this width",
+                    "{}; the tool's {} feed {:.4} mm/tooth{}, thinned for this width",
                     cite_note(c, "the tool's preset (uncited)"),
-                    if p.name.is_empty() { "preset" } else { &p.name }
+                    if p.name.is_empty() { "preset" } else { &p.name },
+                    p.fz,
+                    if kp < 1.0 {
+                        format!(" at its own width (chip {h:.4} mm)")
+                    } else {
+                        String::new()
+                    }
                 ),
             )
         } else {
@@ -764,15 +786,16 @@ pub fn milling_on(
     });
     // the chip vs the tool's own data: more than its preset's chip is over the maker's number
     if let Some((p, _)) = preset {
+        let (h, _) = preset_chip(p, d, re);
         checks.push(Check {
             what: "chip",
-            verdict: if derived.hex > p.fz * (1.0 + 1e-9) {
+            verdict: if derived.hex > h * (1.0 + 1e-9) {
                 Verdict::Warn
             } else {
                 Verdict::Pass
             },
             value: derived.hex,
-            limit: p.fz,
+            limit: h,
             unit: "mm",
             why: format!(
                 "peak chip vs the tool's {} chip",
@@ -2138,5 +2161,55 @@ mod tests {
         };
         let u = milling(&user, &with(("rough", 1.466)), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
         assert_eq!(u.chip.v, 0.05);
+    }
+
+    /// A preset's feed is the maker's programmed feed at its own width: Harvey 792208's N finish
+    /// row, .00229 IPT at 10% D radial (ae 0.3175 of 3.175): its chip is fz · 2√(0.1 − 0.01)
+    /// = 0.6 fz, and run at that same width it programs the maker's feed back.
+    #[test]
+    fn preset_feed_is_programmed_at_its_width() {
+        let p = Preset {
+            name: "N finish".into(),
+            group: "N".into(),
+            vc: 304.8,
+            fz: 0.058166,
+            ap: Some(1.5875),
+            ae: Some(0.3175),
+        };
+        let (h, k) = preset_chip(&p, 3.175, 0.0);
+        assert!(
+            (k - 0.6).abs() < 1e-12 && (h - 0.6 * 0.058166).abs() < 1e-12,
+            "{h} {k}"
+        );
+        let g = group();
+        let t = ToolData {
+            d: 3.175,
+            flutes: 2,
+            ball: false,
+            re: 0.0,
+            substrate: Substrate::Carbide,
+            coating: "",
+            beam: None,
+            class: None,
+            preset: Some((&p, None)),
+        };
+        let at = |ae: f64| {
+            milling(
+                &Ask {
+                    ae: Some(ae),
+                    ap: Some(1.5875),
+                    ..Ask::default()
+                },
+                &t,
+                Some(&g),
+                &spindle(),
+                (0.0, 0.0),
+            )
+            .unwrap()
+        };
+        let r = at(0.3175);
+        assert!((r.fz.v - 0.058166).abs() < 1e-12 && (r.chip.v - h).abs() < 1e-12);
+        // in a slot the same chip is programmed unthinned: 0.6 of the finishing feed
+        assert!((at(3.175).fz.v - h).abs() < 1e-12);
     }
 }

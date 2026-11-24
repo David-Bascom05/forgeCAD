@@ -204,6 +204,31 @@ fn positive(rec: &str, k: &'static str, v: f64) -> Result<f64, LibError> {
 }
 
 impl Tool {
+    /// The tool's preset for a group and an op class, as an op takes it by default: the
+    /// representative "<group> <class>" (CAM-HAAS's spec: one per class, the maker's row for the
+    /// group's representative material), then any preset named for the class, then the group's
+    /// "general", then the group's first. Returns the preset, its cite, and whether it is the
+    /// class's own (a classed preset carries its class; no class factor goes on top).
+    pub fn preset_for(&self, group: &str, class: &str) -> Option<(&Preset, Option<&Cite>, bool)> {
+        let of_group: Vec<&Preset> = self.presets.iter().filter(|p| p.group == group).collect();
+        let rep = format!("{group} {class}");
+        let named = |c: &str| {
+            of_group
+                .iter()
+                .copied()
+                .find(|p| p.name.split_whitespace().nth(1) == Some(c))
+        };
+        let (p, classed) = match of_group.iter().copied().find(|p| p.name == rep) {
+            Some(p) => (p, true),
+            None => match named(class) {
+                Some(p) => (p, true),
+                None => (named("general").or_else(|| of_group.first().copied())?, false),
+            },
+        };
+        let path = format!("preset.{}", if p.name.is_empty() { &p.group } else { &p.name });
+        Some((p, self.cites.iter().find(|c| c.path == path), classed))
+    }
+
     pub fn from_table(t: &Table) -> Result<Tool, LibError> {
         let id = text(t, "id")
             .ok_or_else(|| LibError::Missing {

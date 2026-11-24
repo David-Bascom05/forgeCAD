@@ -10,7 +10,9 @@ fn main() {
         return;
     }
     std::fs::write(root.join("REPORT.md"), report).unwrap();
-    let mut tsv = String::from("vendor\ttool\tkind\td\tz\tsubstrate\tgroup\top\tmaterial\tae\tap\ttheirs_rpm\tours_rpm\ttheirs_f\tours_f\tr_rpm\tr_f\tr_vf\tours_src\tcircular\turl\n");
+    let mut tsv = String::from(
+        "vendor\ttool\tkind\td\tz\tsubstrate\tgroup\top\tmaterial\tae\tap\ttheirs_rpm\tours_rpm\ttheirs_f\tours_f\tr_rpm\tr_f\tr_vf\tours_src\tcircular\turl\n",
+    );
     let o = |x: Option<f64>| x.map_or("-".to_string(), |v| format!("{v:.5}"));
     for r in &rows {
         tsv.push_str(&format!(

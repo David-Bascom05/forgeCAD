@@ -11,7 +11,11 @@ fn rows() -> Vec<feeds_vs_makers::Row> {
 #[test]
 fn every_row_is_pinned() {
     let rows = rows();
-    assert!(rows.len() >= 2000, "{} rows: the raw files are missing?", rows.len());
+    assert!(
+        rows.len() >= 2000,
+        "{} rows: the raw files are missing?",
+        rows.len()
+    );
     let now: Vec<String> = rows.iter().map(feeds_vs_makers::pin_line).collect();
     let pin = Path::new(env!("CARGO_MANIFEST_DIR")).join("pinned.tsv");
     if std::env::var("FORGE_BLESS").is_ok() {
@@ -78,5 +82,32 @@ fn held_out_makers_stay_in_band() {
         if let Some((c, ..)) = chip {
             assert!((0.33..=3.0).contains(&c), "{m}: held-out chip median {c}");
         }
+    }
+}
+
+/// Presets ON: the preset written for a maker's row gives that row's numbers back (inside its
+/// printed range). The only exceptions are Lakeshore's tools at a diameter that ends one
+/// column of its table and starts the next (1/8, 1/4, 3/8, 1/2"): the preset holds the first
+/// column's feed, the next column's row prints a higher one; the speed is in range.
+#[test]
+fn own_presets_reproduce_the_makers_rows() {
+    let rows = rows();
+    let own: Vec<_> = rows.iter().filter(|r| r.own.is_some()).collect();
+    assert!(own.len() >= 2500, "{} rows with their own preset", own.len());
+    for r in own.iter().filter(|r| r.own_in_range() == Some(false)) {
+        let (lo, hi) = r.theirs_rpm_span;
+        let n = r.own.unwrap().0;
+        let boundary = [3.175, 6.35, 9.525, 12.7].iter().any(|d| (r.d - d).abs() < 1e-6);
+        assert!(
+            r.vendor == "lakeshore" && boundary && n >= lo * 0.999 && n <= hi * 1.001,
+            "{} {} {} {}: own preset {:?} outside {:?} {:?}",
+            r.vendor,
+            r.tool,
+            r.op,
+            r.material,
+            r.own,
+            r.theirs_rpm_span,
+            r.theirs_f_span
+        );
     }
 }

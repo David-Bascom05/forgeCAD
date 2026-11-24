@@ -48,6 +48,24 @@ pub struct Row {
     /// Our default for this row was set from these very rows (a maker's own table, or the
     /// pooled median of the makers' rows): not an independent check.
     pub circular: bool,
+    /// Presets ON, the real default path: the tool's own preset as an op takes it
+    /// (`Tool::preset_for` with the op's class), at the maker's engagement. None where the
+    /// library has no such tool or no preset for the group.
+    pub on: Option<On>,
+    /// The maker's printed range (low, high): rpm, and feed where stated.
+    pub theirs_rpm_span: (f64, f64),
+    pub theirs_f_span: Option<(f64, f64)>,
+    /// The tool's preset for this very row (its material text and engagement): ours must give
+    /// the maker's own numbers back (a check of the conversion and of reading a preset's feed).
+    pub own: Option<(f64, f64)>,
+}
+
+/// One row run with presets ON.
+#[derive(Clone, Debug, PartialEq)]
+pub struct On {
+    pub preset: String,
+    pub rpm: f64,
+    pub f: f64,
 }
 
 impl Row {
@@ -60,6 +78,68 @@ impl Row {
     pub fn r_vf(&self) -> Option<f64> {
         self.r_f().map(|f| f * self.r_rpm())
     }
+    pub fn on_rpm(&self) -> Option<f64> {
+        self.on.as_ref().map(|o| o.rpm / self.theirs_rpm)
+    }
+    pub fn on_f(&self) -> Option<f64> {
+        Some(self.on.as_ref()?.f / self.theirs_f?)
+    }
+    pub fn own_rpm(&self) -> Option<f64> {
+        self.own.map(|o| o.0 / self.theirs_rpm)
+    }
+    pub fn own_f(&self) -> Option<f64> {
+        Some(self.own?.1 / self.theirs_f?)
+    }
+    /// Ours (with the row's own preset) inside the maker's printed range, speed and feed.
+    pub fn own_in_range(&self) -> Option<bool> {
+        let (n, f) = self.own?;
+        let within = |x: f64, (lo, hi): (f64, f64)| x >= lo * (1.0 - 1e-3) && x <= hi * (1.0 + 1e-3);
+        Some(within(n, self.theirs_rpm_span) && self.theirs_f_span.is_none_or(|sp| within(f, sp)))
+    }
+}
+
+/// The class an op of the language takes for a maker's op (forge-cam-lang `resolve_for`: a slot
+/// is slot; clearing, pocketing, facing and contouring are rough; the rest general). The
+/// language has no finishing class: a maker's finishing row runs as a contour, i.e. rough.
+pub fn lang_class(op: &str) -> &'static str {
+    match op {
+        "slot" => "slot",
+        "rough" | "max" | "finish" => "rough",
+        _ => "general",
+    }
+}
+
+/// The tool's preset written for this very maker row: same group, the maker's material text,
+/// the row's width and depth.
+fn own_preset<'a>(
+    t: &'a forge_tooling::Tool,
+    g: &str,
+    op: &str,
+    text: &str,
+    ae: Option<(f64, f64)>,
+    ap: Option<(f64, f64)>,
+) -> Option<(&'a forge_tooling::Preset, Option<&'a forge_tooling::Cite>)> {
+    // the preset's width and depth are a value of the row's printed range (the presets take its
+    // low end)
+    let near = |a: Option<f64>, b: Option<(f64, f64)>| match (a, b) {
+        (Some(a), Some((lo, hi))) => a >= lo - 1e-3 && a <= hi + 1e-3,
+        (None, None) => true,
+        _ => false,
+    };
+    let p = t.presets.iter().find(|p| {
+        let class = match op {
+            "slot" | "rough" | "finish" => op,
+            "max" => "rough",
+            _ => "general",
+        };
+        p.group == g
+            && p.name.split(' ').nth(1) == Some(class)
+            && p.name.splitn(3, ' ').nth(2) == Some(text)
+            && near(p.ae, ae)
+            && near(p.ap, ap)
+    })?;
+    let path = format!("preset.{}", p.name);
+    Some((p, t.cites.iter().find(|c| c.path == path)))
 }
 
 /// The maker's material text → ISO 513 group: (keywords, group), first match wins, so the more
@@ -70,7 +150,18 @@ pub const CLASSES: &[(&[&str], &str)] = &[
     (&["> 50 hrc", "46 rc+", "hardened"], "H"),
     (&["stainless"], "M"),
     (&["cast iron"], "K"),
-    (&["titanium", "monel", "high nickel", "inconel", "nickel alloy", "heat resistant", "superalloy"], "S"),
+    (
+        &[
+            "titanium",
+            "monel",
+            "high nickel",
+            "inconel",
+            "nickel alloy",
+            "heat resistant",
+            "superalloy",
+        ],
+        "S",
+    ),
     (&["alumin", "magnesium", "zinc", "copper", "brass", "bronze"], "N"),
     (&["steel", "stl", "carbon"], "P"),
 ];
@@ -95,6 +186,24 @@ fn mid(v: Option<&Json>) -> Option<f64> {
             } else {
                 Some(xs.iter().sum::<f64>() / xs.len() as f64)
             }
+        }
+        _ => None,
+    }
+}
+
+/// A stated value's printed range (a single value: both ends).
+fn span(v: Option<&Json>) -> Option<(f64, f64)> {
+    match v? {
+        Json::Num(x) => Some((*x, *x)),
+        Json::Arr(a) => {
+            let xs: Vec<f64> = a.iter().filter_map(|x| x.num()).collect();
+            if xs.is_empty() {
+                return None;
+            }
+            Some((
+                xs.iter().copied().fold(f64::INFINITY, f64::min),
+                xs.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+            ))
         }
         _ => None,
     }
@@ -137,17 +246,23 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
             skips.add(&format!("{vendor}.json does not parse"));
             continue;
         };
-        let Some(Json::Arr(recs)) = doc.get("records") else { continue };
+        let Some(Json::Arr(recs)) = doc.get("records") else {
+            continue;
+        };
         for r in recs {
             let kind = r.get("kind").and_then(|k| k.str()).unwrap_or("").to_string();
             let vals = r.get("values").unwrap_or(&Json::Null);
-            let Some(d) = val(vals, "dc").and_then(|x| x.num()) else { continue };
+            let Some(d) = val(vals, "dc").and_then(|x| x.num()) else {
+                continue;
+            };
             let z = val(vals, "nof").and_then(|x| x.num()).unwrap_or(2.0) as u32;
             let mat = val(vals, "material").and_then(|x| x.str()).unwrap_or("");
             let sub = Substrate::of(mat);
             let id = r.get("id").and_then(|x| x.str()).unwrap_or("?").to_string();
             let re = val(vals, "re").and_then(|x| x.num()).unwrap_or(0.0);
-            let Some(Json::Arr(cut)) = r.get("cutting") else { continue };
+            let Some(Json::Arr(cut)) = r.get("cutting") else {
+                continue;
+            };
             for c in cut {
                 let text = c
                     .get("material")
@@ -167,6 +282,11 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                 };
                 let Some(group) = lib.group(g) else { continue };
                 let theirs_rpm = 1000.0 * vc / (std::f64::consts::PI * d);
+                let vc_span = span(val(c, "vc")).unwrap_or((vc, vc));
+                let theirs_rpm_span = (
+                    1000.0 * vc_span.0 / (std::f64::consts::PI * d),
+                    1000.0 * vc_span.1 / (std::f64::consts::PI * d),
+                );
                 match kind.as_str() {
                     "flat" | "bull" | "ball" => {
                         if op == "chamfer" || op == "drilling" {
@@ -196,6 +316,52 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                             skips.add("our resolver has no data (substrate without a generic column)");
                             continue;
                         };
+                        let lt = lib.tool(&format!("{vendor}-{id}")).ok();
+                        let on = lt.and_then(|t| {
+                            let class = lang_class(&op);
+                            let (p, c, classed) = t.preset_for(g, class)?;
+                            let class_rec = if classed || class != "rough" {
+                                None
+                            } else {
+                                lib.op_class(class)
+                            };
+                            let res = resolve::milling(
+                                &ask,
+                                &ToolData {
+                                    class: class_rec.map(|c| (c.name.as_str(), c.chip_factor, "")),
+                                    preset: Some((p, c)),
+                                    ..tool
+                                },
+                                Some(group),
+                                &FREE,
+                                nominal,
+                            )?;
+                            Some(On {
+                                preset: p.name.clone(),
+                                rpm: res.rpm.v,
+                                f: res.fz.v,
+                            })
+                        });
+                        let own = lt.and_then(|t| {
+                            let pc = own_preset(t, g, &op, &text, span(val(c, "ae")), span(val(c, "ap")))?;
+                            // at the preset's own width and depth (a value of the row's range)
+                            let own_ask = Ask {
+                                ae: pc.0.ae.or(ae),
+                                ap: pc.0.ap.or(ap),
+                                ..Ask::default()
+                            };
+                            let res = resolve::milling(
+                                &own_ask,
+                                &ToolData {
+                                    preset: Some(pc),
+                                    ..tool
+                                },
+                                Some(group),
+                                &FREE,
+                                nominal,
+                            )?;
+                            Some((res.rpm.v, res.fz.v))
+                        });
                         out.push(Row {
                             vendor: vendor.into(),
                             tool: id.clone(),
@@ -212,9 +378,17 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                             ours_rpm: res.rpm.v,
                             theirs_f: mid(val(c, "fz")),
                             ours_f: res.fz.v,
-                            ours_src: format!("vc {} / chip {}", res.vc.source.name(), res.chip.source.name()),
+                            ours_src: format!(
+                                "vc {} / chip {}",
+                                res.vc.source.name(),
+                                res.chip.source.name()
+                            ),
                             url,
                             circular: false,
+                            on,
+                            own,
+                            theirs_rpm_span,
+                            theirs_f_span: span(val(c, "fz")),
                         });
                     }
                     "drill" => {
@@ -234,12 +408,55 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                             Substrate::Hss => lib.drilling(g, "hss"),
                             _ => None,
                         };
-                        let Some(res) =
-                            resolve::drilling(&DrillAsk::default(), &dt, Some(group), None, rowdata, &FREE, d)
-                        else {
+                        let Some(res) = resolve::drilling(
+                            &DrillAsk::default(),
+                            &dt,
+                            Some(group),
+                            None,
+                            rowdata,
+                            &FREE,
+                            d,
+                        ) else {
                             skips.add("our drilling model has no row for the group and substrate");
                             continue;
                         };
+                        let lt = lib.tool(&format!("{vendor}-{id}")).ok();
+                        let pset = lt.and_then(|t| t.preset_for(g, "general"));
+                        let on = pset.and_then(|(p, c, _)| {
+                            let res = resolve::drilling(
+                                &DrillAsk::default(),
+                                &DrillTool {
+                                    preset: Some((p, c)),
+                                    ..dt
+                                },
+                                Some(group),
+                                None,
+                                rowdata,
+                                &FREE,
+                                d,
+                            )?;
+                            Some(On {
+                                preset: p.name.clone(),
+                                rpm: res.rpm.v,
+                                f: res.f.v,
+                            })
+                        });
+                        let own = lt.and_then(|t| {
+                            let pc = own_preset(t, g, "general", &text, None, None)?;
+                            let res = resolve::drilling(
+                                &DrillAsk::default(),
+                                &DrillTool {
+                                    preset: Some(pc),
+                                    ..dt
+                                },
+                                Some(group),
+                                None,
+                                rowdata,
+                                &FREE,
+                                d,
+                            )?;
+                            Some((res.rpm.v, res.f.v))
+                        });
                         let circular = rowdata.is_some_and(|rw| {
                             rw.cites.iter().any(|ci| {
                                 (vendor == "guhring" && ci.source.contains("guhring"))
@@ -266,6 +483,13 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                             ours_src: format!("vc {} / f {}", res.vc.source.name(), res.f.source.name()),
                             url,
                             circular,
+                            on,
+                            own,
+                            theirs_rpm_span,
+                            theirs_f_span: c.get("fn_or_fz").and_then(|x| {
+                                let u = x.get("unit").and_then(|u| u.str()).unwrap_or("");
+                                if u.contains("rev") { span(x.get("v")) } else { None }
+                            }),
                         });
                     }
                     _ => skips.add("tool kind not compared (chamfer, spot, tap, thread mill)"),
@@ -292,7 +516,12 @@ pub fn stats(mut v: Vec<f64>) -> Option<(f64, f64, f64, usize)> {
 pub fn summary<F: Fn(&Row) -> String>(
     rows: &[Row],
     key: F,
-) -> Vec<(String, Option<(f64, f64, f64, usize)>, Option<(f64, f64, f64, usize)>, Option<(f64, f64, f64, usize)>)> {
+) -> Vec<(
+    String,
+    Option<(f64, f64, f64, usize)>,
+    Option<(f64, f64, f64, usize)>,
+    Option<(f64, f64, f64, usize)>,
+)> {
     let mut keys: Vec<String> = rows.iter().map(&key).collect();
     keys.sort();
     keys.dedup();
@@ -313,7 +542,7 @@ pub fn summary<F: Fn(&Row) -> String>(
 pub fn pin_line(r: &Row) -> String {
     let f = |x: Option<f64>| x.map_or("-".to_string(), |v| format!("{v:.4}"));
     format!(
-        "{}\t{}\t{}\t{}\t{}\t{}\t{:.4}\t{}",
+        "{}\t{}\t{}\t{}\t{}\t{}\t{:.4}\t{}\ton {}\t{}\t{}",
         r.vendor,
         r.tool,
         r.group,
@@ -321,7 +550,10 @@ pub fn pin_line(r: &Row) -> String {
         r.material,
         r.ae.map_or("-".into(), |a| format!("{a:.3}")),
         r.r_rpm(),
-        f(r.r_f())
+        f(r.r_f()),
+        r.on.as_ref().map_or("-", |o| o.preset.as_str()),
+        f(r.on_rpm()),
+        f(r.on_f())
     )
 }
 
@@ -349,24 +581,41 @@ fn is_slot(r: &Row) -> bool {
 /// only, as the shipped table was derived from all; the row's ratios then scored against that.
 /// Returns (row index, held-out rpm ratio, held-out chip ratio); a row whose group no other
 /// maker covers is left out (no hold-out possible).
-pub fn held_out(rows: &[Row], current_vc: &dyn Fn(&str, bool) -> f64, chip_groups: &[&str]) -> Vec<(usize, f64, Option<f64>)> {
+pub fn held_out(
+    rows: &[Row],
+    current_vc: &dyn Fn(&str, bool) -> f64,
+    chip_groups: &[&str],
+) -> Vec<(usize, f64, Option<f64>)> {
     let mut out = Vec::new();
     for (i, r) in rows.iter().enumerate() {
         let drill = r.kind == "drill";
         let others = |f: &dyn Fn(&Row) -> bool| -> Vec<&Row> {
             rows.iter()
-                .filter(|o| o.vendor != r.vendor && o.group == r.group && (o.kind == "drill") == drill && o.substrate == r.substrate && f(o))
+                .filter(|o| {
+                    o.vendor != r.vendor
+                        && o.group == r.group
+                        && (o.kind == "drill") == drill
+                        && o.substrate == r.substrate
+                        && f(o)
+                })
                 .collect()
         };
-        let Some(vc_cal) = median(others(&|_| true).iter().map(|o| theirs_vc(o)).collect()) else { continue };
+        let Some(vc_cal) = median(others(&|_| true).iter().map(|o| theirs_vc(o)).collect()) else {
+            continue;
+        };
         let k = vc_cal / current_vc(r.group, drill);
         let r_rpm = r.r_rpm() * k;
         // the chip: re-derived at the row's diameter from the others' slot rows (bins of the
         // same diameter, within 2%), where this group's chip came from slot rows
         let r_f = if !drill && chip_groups.contains(&r.group) {
             let same_d = others(&|o| is_slot(o) && (o.d - r.d).abs() <= 0.02 * r.d);
-            let mine = rows.iter().filter(|o| o.group == r.group && is_slot(o) && (o.d - r.d).abs() <= 0.02 * r.d);
-            match (median(same_d.iter().filter_map(|o| o.theirs_f).collect()), median(mine.filter_map(|o| o.theirs_f).collect())) {
+            let mine = rows
+                .iter()
+                .filter(|o| o.group == r.group && is_slot(o) && (o.d - r.d).abs() <= 0.02 * r.d);
+            match (
+                median(same_d.iter().filter_map(|o| o.theirs_f).collect()),
+                median(mine.filter_map(|o| o.theirs_f).collect()),
+            ) {
                 (Some(cal), Some(all)) => r.r_f().map(|f| f * cal / all),
                 _ => None,
             }
@@ -387,18 +636,29 @@ pub fn shipped_vc(lib: &Library, group: &str, drill: bool, substrate: &str) -> f
     if drill {
         lib.drilling(group, sub).map_or(f64::NAN, |r| r.vc)
     } else {
-        lib.group(group).map_or(f64::NAN, |g| if sub == "hss" { g.vc_hss } else { g.vc_carbide })
+        lib.group(group)
+            .map_or(f64::NAN, |g| if sub == "hss" { g.vc_hss } else { g.vc_carbide })
     }
 }
 
 /// The groups whose generic slot chip comes from the makers' slot rows (cutting.toml fz_rows).
 pub fn chip_groups(lib: &Library) -> Vec<&'static str> {
-    ["P", "M", "K", "N", "S", "H"].into_iter().filter(|g| lib.group(g).is_some_and(|x| !x.fz_rows.is_empty())).collect()
+    ["P", "M", "K", "N", "S", "H"]
+        .into_iter()
+        .filter(|g| lib.group(g).is_some_and(|x| !x.fz_rows.is_empty()))
+        .collect()
 }
 
 /// Held-out stats per maker: (maker, rows held out, rpm stats, chip stats).
 #[allow(clippy::type_complexity)]
-pub fn held_out_by_maker(rows: &[Row]) -> Vec<(String, usize, Option<(f64, f64, f64, usize)>, Option<(f64, f64, f64, usize)>)> {
+pub fn held_out_by_maker(
+    rows: &[Row],
+) -> Vec<(
+    String,
+    usize,
+    Option<(f64, f64, f64, usize)>,
+    Option<(f64, f64, f64, usize)>,
+)> {
     let lib = Library::builtin();
     let cg = chip_groups(&lib);
     let ho = held_out(
