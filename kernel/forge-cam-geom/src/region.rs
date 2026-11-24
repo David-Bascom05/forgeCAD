@@ -262,7 +262,7 @@ pub fn elem_tangent(cx: &mut Ctx, e: &Elem, at_end: bool) -> Pt {
 static VALID: Mutex<Option<HashMap<u64, Vec<Region>>>> = Mutex::new(None);
 const VALID_MAX: usize = 4096;
 
-fn content_hash(rg: &Region) -> u64 {
+pub(crate) fn content_hash(rg: &Region) -> u64 {
     let mut h = std::hash::DefaultHasher::new();
     for l in &rg.loops {
         l.segs.len().hash(&mut h);

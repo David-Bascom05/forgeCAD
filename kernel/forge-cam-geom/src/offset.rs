@@ -28,6 +28,8 @@ use crate::ival::Ival;
 use crate::real::{Ctx, R};
 use crate::region::{self, Elem, Exact, P2, Region, RegionError, Seg, p2};
 use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 /// One closed loop of the offset, in f64: each end the exact point rounded to the grid `GRID`
 /// (shared bit for bit between neighbours), arcs' centres too. A loop of one zero-length line
@@ -53,8 +55,41 @@ pub struct Stats {
     pub exact_evals: u64,
 }
 
+type Offsets = Result<(Vec<OLoop>, Stats), OffsetError>;
+
+/// Offsets already made in this process, by the region's content and the distance: the offset
+/// is a function of those numbers alone (each decision an exact sign of expressions built from
+/// them), so the same region at the same distance has the same result, counters included. A
+/// pocket's first pass and the opening that records what it cleared are the same offset.
+/// Bounded: emptied when full.
+static MADE: Mutex<Option<HashMap<(u64, u64), Vec<(Region, Offsets)>>>> = Mutex::new(None);
+const MADE_MAX: usize = 512;
+
 /// The offset of a validated region (see the module doc), with its counters.
-pub fn offset(rg: &Region, r: f64) -> Result<(Vec<OLoop>, Stats), OffsetError> {
+pub fn offset(rg: &Region, r: f64) -> Offsets {
+    let key = (region::content_hash(rg), r.to_bits());
+    let known = MADE.lock().ok().and_then(|g| {
+        g.as_ref()?
+            .get(&key)?
+            .iter()
+            .find(|(q, _)| q == rg)
+            .map(|(_, o)| o.clone())
+    });
+    if let Some(o) = known {
+        return o;
+    }
+    let o = offset_anew(rg, r);
+    if let Ok(mut g) = MADE.lock() {
+        let m = g.get_or_insert_with(HashMap::new);
+        if m.len() >= MADE_MAX {
+            m.clear();
+        }
+        m.entry(key).or_default().push((rg.clone(), o.clone()));
+    }
+    o
+}
+
+fn offset_anew(rg: &Region, r: f64) -> Offsets {
     if r < 0.0 {
         let (loops, st) = offset(&rg.reversed(), -r)?;
         let mut out = Vec::with_capacity(loops.len());
