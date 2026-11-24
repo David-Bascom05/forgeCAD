@@ -688,6 +688,41 @@ fn a_narrow_window_tabs_the_sheet_and_the_simulation() {
     }
 }
 
+/// A phone-wide window (480 px: a view about 200 px wide beside the browser): Manufacture opens
+/// and draws with its simulation (BUTTON-AUDITOR, bracket_cam: the timeline's width went negative
+/// and egui panicked, in a debug build), the timeline folded away where its controls do not fit.
+#[test]
+fn manufacture_opens_in_a_phone_wide_window() {
+    let ex = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+    let dir = std::env::temp_dir().join(format!("fg-cam-ui-{}-narrow", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for f in ["bracket.fg", "bracket_cam.fg"] {
+        std::fs::copy(ex.join(f), dir.join(f)).unwrap();
+    }
+    let mut h = match Headless::new((480.0, 860.0), 1.0) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("skipped: {e}");
+            return;
+        }
+    };
+    h.step();
+    h.gui.open(dir.join("bracket_cam.fg").to_str().unwrap());
+    settle(&mut h);
+    // the simulation comes after the run: drawn a few frames with it
+    let t0 = std::time::Instant::now();
+    while h.gui.shell.camsim.is_none() {
+        assert!(t0.elapsed().as_secs() < 60, "no simulation");
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    for _ in 0..10 {
+        h.step();
+    }
+    assert!(h.gui.shell.view_rect.width() < 300.0, "a narrow view: {:?}", h.gui.shell.view_rect);
+    shot(&mut h, "cam-480");
+}
+
 /// A cycle time is the lower bound and the estimate together (never the estimate alone), and the
 /// estimate counts the tool change the bound counts (the flange changes T1 for T12).
 #[test]

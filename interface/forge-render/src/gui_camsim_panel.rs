@@ -373,6 +373,14 @@ fn srgb(c: [f32; 3]) -> Color32 {
 }
 
 pub(crate) const TIMELINE_H: f32 = 78.0;
+/// The narrowest the timeline is drawn (its transport, time and speed controls); narrower, it is
+/// folded away.
+const TIMELINE_MIN_W: f32 = 240.0;
+
+/// Whether the timeline is drawn in view `v` beside a panel `panel_w` wide.
+fn timeline_fits(v: Rect, panel_w: f32) -> bool {
+    v.width() - panel_w - 24.0 >= TIMELINE_MIN_W
+}
 pub(crate) const PANEL_W: f32 = 312.0;
 
 /// How much of the view's right the panel takes: none when docked in the environment's
@@ -429,10 +437,9 @@ impl Shell {
         // a machining document is in Manufacture, whose properties column hosts the panel
         // (outside `v`), from before the column has first drawn it
         let panel_w = if self.cam.is_some() { -8.0 } else { covered_w(st) };
-        Rect::from_min_max(
-            v.min,
-            pos2(v.right() - panel_w - 8.0, v.bottom() - TIMELINE_H - 16.0),
-        )
+        // a timeline folded away (a view too narrow for it) covers nothing
+        let timeline = if timeline_fits(v, covered_w(st)) { TIMELINE_H + 16.0 } else { 0.0 };
+        Rect::from_min_max(v.min, pos2(v.right() - panel_w - 8.0, v.bottom() - timeline))
     }
 
     /// The simulation's timeline and panel, over the view; true if a machining document is open.
@@ -460,21 +467,25 @@ impl Shell {
             pos2(v.left() + 8.0, v.bottom() - TIMELINE_H - extra - 8.0),
             pos2(v.right() - panel_w - 16.0, v.bottom() - 8.0),
         );
-        let r = egui::Area::new(egui::Id::unique("camsim:timeline"))
-            .fixed_pos(bar.min)
-            .order(egui::Order::Middle)
-            .fade_in(false)
-            .show(ctx, |ui| {
-                ui.set_width(bar.width());
-                ui.set_height(bar.height());
-                egui::Frame::new()
-                    .fill(t.surface)
-                    .stroke(Stroke::new(1.0, t.line))
-                    .corner_radius(6.0)
-                    .inner_margin(6.0)
-                    .show(ui, |ui| timeline(ui, &mut st, &t, bar.width() - 12.0));
-            });
-        self.view_blocks.push(r.response.rect);
+        // a view too narrow for the timeline's controls (a phone-wide window: the bar's width
+        // went negative, and egui panicked): folded away, the panel's Program tab still plays
+        if timeline_fits(v, panel_w) {
+            let r = egui::Area::new(egui::Id::unique("camsim:timeline"))
+                .fixed_pos(bar.min)
+                .order(egui::Order::Middle)
+                .fade_in(false)
+                .show(ctx, |ui| {
+                    ui.set_width(bar.width());
+                    ui.set_height(bar.height());
+                    egui::Frame::new()
+                        .fill(t.surface)
+                        .stroke(Stroke::new(1.0, t.line))
+                        .corner_radius(6.0)
+                        .inner_margin(6.0)
+                        .show(ui, |ui| timeline(ui, &mut st, &t, bar.width() - 12.0));
+                });
+            self.view_blocks.push(r.response.rect);
+        }
         // the panel: down the view's right, unless the environment docks it
         if !st.docked {
             // the panel: down the view's right
