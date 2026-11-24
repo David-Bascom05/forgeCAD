@@ -334,3 +334,23 @@ fn a_surface_model_shell_that_closes_is_a_solid() {
     assert!(r.map_or(true, |i| i.solids.is_empty()
         && i.refusals.iter().any(|x| x.kind == "OPEN_SHELL")));
 }
+
+/// A reference past 32 bits (SolidWorks writes #18446744073709551615, -1, for one it lost: VF-2,
+/// VF-10, ST-30, VF-6) refused the whole file as a parse error; now only what needs it is refused.
+#[test]
+fn a_lost_reference_refuses_its_solid_not_the_file() {
+    let text = export(&bar(5.0, 10.0), &Options::default()).unwrap().text;
+    let at = text.find("=EDGE_CURVE('',").unwrap() + 15;
+    let end = at + text[at..].find(',').unwrap();
+    let bad = format!("{}#18446744073709551615{}", &text[..at], &text[end..]);
+    match import(bad.as_bytes(), &Limits::default()) {
+        Ok(i) => assert!(i.solids.is_empty() && !i.refusals.is_empty()),
+        Err(e) => assert!(!matches!(e, forge_step::ImportError::Parse(_)), "{e}"),
+    }
+    // a reference with no digits at all is still an error in the text
+    let worse = format!("{}#{}", &text[..at], &text[end..]);
+    assert!(matches!(
+        import(worse.as_bytes(), &Limits::default()),
+        Err(forge_step::ImportError::Parse(_))
+    ));
+}
