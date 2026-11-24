@@ -1350,7 +1350,11 @@ fn run_here(
     };
     for f in fixtures {
         eprintln!("== {}", f.name);
-        c.fixture(f, only_tab);
+        // a panic the crawl can't step past (starting again into one) ends this document's
+        // crawl, not the run: what it found so far is kept
+        if let Err(e) = catch_unwind(AssertUnwindSafe(|| c.fixture(f, only_tab))) {
+            eprintln!("{}: the crawl stopped: {}", f.name, panic_words(&e));
+        }
     }
     if let Some(dir) = &out {
         std::fs::create_dir_all(dir).unwrap();
