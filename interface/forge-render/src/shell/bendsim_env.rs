@@ -46,7 +46,27 @@ pub(super) fn enter(s: &mut Shell) -> Result<(), String> {
     if !fresh {
         let was = s.sheet.bend_sim.take();
         let tooling = was.as_ref().map_or("std-eu", |b| b.tooling.as_str());
-        let choice = was.as_ref().map(|b| b.choice.clone()).unwrap_or_default();
+        // first time in: a real press from the library (the first whose maker's own tools the
+        // library holds), not a stand-in
+        let choice = was.as_ref().map(|b| b.choice.clone()).unwrap_or_else(|| {
+            let dir = std::path::Path::new(&fg.path)
+                .parent()
+                .map(std::path::Path::to_path_buf);
+            let press = forge_lang::bendsim::catalog(dir.as_deref()).ok().and_then(|c| {
+                c.presses
+                    .iter()
+                    .find(|p| {
+                        p.press.is_ok()
+                            && !c.default_tools(p, true).is_empty()
+                            && !c.default_tools(p, false).is_empty()
+                    })
+                    .map(|p| p.id.clone())
+            });
+            super::bendsim::Choice {
+                press,
+                ..Default::default()
+            }
+        });
         let mut b = BendSimUi::open_with(&fg.source, &fg.path, tooling, choice);
         if let Some(w) = was {
             b.resume(&w);
