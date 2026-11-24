@@ -577,13 +577,14 @@ pub fn measure_op(
     let mut hex_t = 0.0;
     let mut hex_tt = 0.0;
     let mut hexes: Vec<(f64, f64)> = Vec::new();
+    let mut tiles = map::Tiles::of(m);
     for (pi, p) in paths.iter().enumerate() {
         let prof = profile(p.tool);
         let r = prof.r();
         let flutes = p.tool.nof.max(1) as f64;
         let rpm = p.rpm;
         q.rpm = rpm;
-        q.p_avail = power_at(&curve, rpm);
+        q.p_avail = power_at(curve, rpm);
         let l = cell.max((0.25 * r).min(0.5));
         let mut at = p.start;
         // the last feed direction (xy), for corners
@@ -604,7 +605,7 @@ pub fn measure_op(
                         };
                     }
                     let top = [holes[0], holes[1], m.top(holes[0], holes[1]).max(z)];
-                    q.removed += m.sweep(top, [holes[0], holes[1], z], &prof);
+                    q.removed += m.sweep_in(top, [holes[0], holes[1], z], &prof, Some(&mut tiles));
                     continue;
                 }
             };
@@ -621,7 +622,7 @@ pub fn measure_op(
                 q.len_rapid += dist(at, to);
                 let mut a = at;
                 for b in pieces(at, mv, l) {
-                    if m.sweep(a, b, &prof) > AIR_VOL {
+                    if m.sweep_in(a, b, &prof, Some(&mut tiles)) > AIR_VOL {
                         q.rapid_cuts += 1;
                     }
                     a = b;
@@ -668,7 +669,7 @@ pub fn measure_op(
                 } else {
                     None
                 };
-                let removed = m.sweep(a, b, &prof);
+                let removed = m.sweep_in(a, b, &prof, Some(&mut tiles));
                 q.removed += removed;
                 if removed > AIR_VOL {
                     moved_in = true;
