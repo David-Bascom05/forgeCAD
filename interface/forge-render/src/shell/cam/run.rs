@@ -516,6 +516,37 @@ fn turning_sheet(text: &str, tc: &forge_turn_lang::TurnCam) -> String {
     h
 }
 
+/// `r` checked again over its posted paths (forge-cam-lang's `Cam::check`), nothing
+/// regenerated: each op's checks and status replaced by the new verdicts, its assurance "checked
+/// on demand". A turning run is returned as it is (forge-turn-lang has no on-demand check yet).
+pub fn recheck(mut r: Run) -> Run {
+    let Some(cam) = &r.cam else { return r };
+    for oc in cam.check(None) {
+        let Some(o) = r.ops.iter_mut().find(|o| o.name == oc.op) else { continue };
+        o.checks = oc
+            .checks
+            .iter()
+            .map(|c| Check {
+                rule: c.rule.to_string(),
+                verdict: c.verdict.to_string(),
+                value: c.value,
+                limit: c.limit,
+                at: c.at,
+                tool_part: c.tool_part.to_string(),
+                other: c.other.clone(),
+                phase: c.phase.to_string(),
+                mov: c.move_index,
+            })
+            .collect();
+        o.pairs = oc.pairs;
+        o.assurance = Assurance::CheckedOnDemand;
+        if o.status == "built" || o.status == "refused" {
+            o.status = if oc.clear { "built" } else { "refused" }.into();
+        }
+    }
+    r
+}
+
 impl Run {
     pub fn op(&self, name: &str) -> Option<&OpRes> {
         self.ops.iter().find(|o| o.name == name)
@@ -656,6 +687,14 @@ mod tests {
             stale(&was, &doc::read(&t).unwrap()),
             ["skim", "top", "prof", "bore", "bolts"]
         );
+    }
+
+    #[test]
+    fn check_now_checks_the_posted_paths_again() {
+        let (text, dir) = flange();
+        let r = recheck(run(&text, &dir));
+        assert!(r.ops.iter().all(|o| o.status == "built" && o.assurance == Assurance::CheckedOnDemand), "{:?}", r.ops.iter().map(|o| (&o.name, &o.status, o.assurance)).collect::<Vec<_>>());
+        assert!(r.ops.iter().all(|o| o.pairs > 0 || o.kind == "drill"));
     }
 
     #[test]

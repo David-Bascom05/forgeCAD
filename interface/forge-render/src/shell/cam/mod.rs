@@ -189,6 +189,8 @@ pub struct CamWs {
     pub stale: Vec<String>,
     /// A run asked of the host, and the one it is making (its text).
     pub want_run: bool,
+    /// A check of the last run asked of the host (Check Now).
+    pub want_check: bool,
     pub running: Option<String>,
     /// Where the host's run lands.
     pub job: Arc<Mutex<Option<run::Run>>>,
@@ -246,6 +248,7 @@ impl CamWs {
             run: None,
             stale: vec![],
             want_run: true,
+            want_check: false,
             running: None,
             job: Arc::new(Mutex::new(None)),
             auto: true,
@@ -574,7 +577,13 @@ impl CamWs {
             // forge-cam-lang checks as it generates: until an on-demand checker of a run's
             // posted paths is exposed, checking now is generating again
             Cmd::CheckNow => {
-                self.want_run = true;
+                // a milling run is checked again as posted; anything else is generated (a
+                // turning run checks as it generates)
+                if self.run.as_ref().is_some_and(|r| r.cam.is_some()) && self.stale.is_empty() {
+                    self.want_check = true;
+                } else {
+                    self.want_run = true;
+                }
                 self.checks_open = true;
             }
         }

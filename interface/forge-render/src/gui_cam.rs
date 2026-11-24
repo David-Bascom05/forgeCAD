@@ -60,6 +60,22 @@ impl Gui {
                 waker();
             });
         }
+        // a check asked, none going: the run checked again off this thread
+        let Some(w) = &mut self.shell.cam else { return };
+        if w.want_check && w.running.is_none() {
+            w.want_check = false;
+            if let Some(r) = w.run.take() {
+                let slot = w.job.clone();
+                let waker = self.waker.clone();
+                w.running = Some(r.text.clone());
+                self.shell.status = "Checking: the posted paths certified again".into();
+                crate::plat::spawn("forge-cam-check", move || {
+                    let r = run::recheck(r);
+                    *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+                    waker();
+                });
+            }
+        }
         let Some(w) = &mut self.shell.cam else { return };
         for (path, text) in std::mem::take(&mut w.want_write) {
             match forge_dirs::fs::write(&path, text.as_bytes()) {
