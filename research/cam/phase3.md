@@ -12,10 +12,11 @@ patent counsel first); z-level roughing here is offset clearing.
 | drop-cutter | drop.rs `drop`, `drop_above` | CL = sup over the face of y.z − b(ρ). Per face a closed form gives an upper bound for the untrimmed surface and a contact point; the contact, evaluated in intervals where proven inside the face, gives a lower bound. Faces whose bounds do not meet go to an interval branch and bound over the face's parameters (mean-value form per profile piece, capped by the monotone bound and the closed form). Result [lo, hi] with hi − lo ≤ res, each face widened by its mu |
 | closed forms | drop.rs `closed`, `closed_t`, `disk_drop`, `bowl_drop`, `plane_support`, `wall_drop` | planes (any tilt: the profile's support against the slope); spheres, cylinders with a horizontal axis and tori about a vertical axis reduce to one circle in the vertical plane through the tool's axis (ring_bound / line_bound, Drop.lean), solved per profile piece: tangency (dome: external; bowl: internal), rings, flat tops, arc ends. Bowls (the face below its centre/axis/tube centre, decided from the parametrisation) take the face's lateral range. Vertical walls (prisms): z1 − b(D), D slab.rs's proven 2D distance |
 | the gap of a move | drop.rs `gap_move` | the least signed distance of the face to the column over the move (`Gap::Clear { lower }`, `Over` with a real face point, `Unknown`). Closed form over pieces of s (mean-value form in s) first; the sphere bound S − sd(centre) for a convex column; for walls R − D and z1 − b(D) − tip; else branch and bound over (p, q, s) with the column's own interval signed distance capped by the vertical and radial depths. A proven bound holds for every body in the column (Drop.lean `sd_body_ge_of_column`) |
+| a dome cylinder's move, exact | drop.rs `cyl_chord`, `section`, `Column::sq_convex` | a horizontal cylinder above its axis against a convex column: across the axis its untrimmed CL is a sup-convolution of two concave functions (the disk's top, the profile upside down), so concave; along a line move the tip is affine in the lateral place d, so the move's worst point is the unconstrained maximum r √(1 + λ²) + B(λ) (the disk's and the profile's conjugates) if the maximiser d* = e* − u* lies within the move's d, else the nearer end (Concave.lean `move_clear_of_outside`). Past the face's end along its axis by a: the column's section a off its axis (a ball's is a ball, a flat end's a flat end) or, for profiles with b(√·) convex, b(a) − b(0) lower. Used per piece of s in `gap_move` before the mean-value form: one piece for most moves |
 | the checker's route | forge-cam ops.rs `certify_with` | `certify_fixtured` unchanged; with `column` on (the surfacing ops), the cutter and a shank inside the column are checked against the part by `gap_move` first; `Over` is checked as the cutter's own signed distance at the witness point (a real violation when below the limit); everything else goes to the existing branch and bound. A move that has failed is not checked further (its failure is reported) |
 | lowering | forge-cam lower3d.rs | every face `lower` takes, as it takes it; a sphere or a revolved face trimmed by other curves as a superset (the whole sphere or torus, a cylinder or cone between its edges' heights): sound for every check, stricter; procedural faces refused by kind |
 | ops | forge-cam surf.rs | `parallel` (zig-zag rows, all cores), `waterline` (marching squares on a CL grid, crossings by certified bisection: the push-cutter), `zlevel` (offset clearing of the free tool-centre region per level, passes ≤ the tool's radius apart, its voids recorded), `pencil` (the CL surface's creases), `rest` (rows over the positions whose reach holds what an earlier tool left, by grid envelopes), `scallop` (level sets of the distance along the CL surface from the area's edge) |
-| generators' self-check | surf.rs `Surfacer` | every move is checked by `gap` at half the op's tolerance and split (a new drop at its middle) until proven; steep pieces become a step (up, then across); paths are made with the column widened 0.2371·tol past the rim (no exact wall tangency) and the leave as the cutter grown by it (`Column::grow`) |
+| generators' self-check | surf.rs `Surfacer` | every move is checked by `gap` (gap_move, so the dome cylinder's exact form above) at half the op's tolerance and split (a new drop at its middle) until proven; steep pieces become a step (up, then across); paths are made with the column widened 0.2371·tol past the rim (no exact wall tangency) and the leave as the cutter grown by it (`Column::grow`) |
 | 3D in-process stock | surf.rs `ZMap` | a height map whose cells are lowered only to a height every point of the cell is proven cut down to (the farthest corner's reach), so it holds the true stock; its faces for the checker. The machining document uses the 2.5D in-process stock, to which z-level roughing adds its voids |
 | machining document | forge-cam-lang | `parallel`, `waterline`, `zlevel`, `pencil`, `scallop`, `rest`; certification through the column route; examples/machined/mold_core(.fg, _cam.fg) |
 
@@ -29,6 +30,8 @@ patent counsel first); z-level roughing here is offset clearing.
 | the dome test's deliberately gouging path, certified (refused) | 9 s | 0.17 s |
 | mould core machining document, five ops, 15.4k moves, every move certified (G1–G6, full) | 222 s | 34 s |
 | drop-cutter, mould core, 775 points | — | 0.15 s (≈ 0.2 ms/point, most in one cell) |
+| mould core document, the generators' self-check (CPU, all ops) | 6.06 s (5.46 s of it dome cylinders: fillets) | 0.79 s (dome cylinders 0.05 s) |
+| mould core machining document, wall | 17.5 s (after main's merge) | 13.2 s (the certifier uses gap_move too) |
 
 The 34 s of the document: z-level roughing 13.7 s (exact offsets of the staircase free regions,
 one per level), the rest under 8 s each. The checker's share is small.
@@ -48,6 +51,18 @@ one per level), the rest under 8 s each. The checker's share is small.
 - tests/cam.rs (forge-cam-lang): the mould core roughed and finished, certified full; without the
   roughing the finishing is refused (its shank in stock nobody removed).
 
+## The generators' self-check: why it stays, and what was proven away
+
+David asked for the check to be proven away (its own lemma instead of a check at generate time).
+From a move's two end drops alone it cannot be: a face can enter the column through its rim
+between two drop points (a needle, a ridge crossing the row) and nothing about the ends bounds
+it; a chord-sag bound needs the face. What is proven instead is per face kind: for the faces
+whose closed form is concave along a move (a horizontal cylinder above its axis with a convex
+column, the faces the mould core's check spent 90% on), the move's worst point is found exactly
+(Concave.lean), so the check there is a closed form, not a search. The check stays in
+generation (it decides where a row is split or stepped) and its time there fell 6.06 s → 0.79 s
+on the mould core; the certifier (refuse-only, unchanged in what it accepts) gets the same speed.
+
 ## L1 (verify/forge-cam/ForgeCam/Drop.lean, 10 theorems, standard axioms)
 
 `sd_antitone`, `column_compl_nonempty`, `sd_body_ge_of_column` (a body in the column is at least as
@@ -56,10 +71,21 @@ far: the column's gap transfers to the cutter and a narrow shank), `sd_column_ge
 the column off the face), `ring_rho_ge`, `ring_bound`, `line_rho_ge`, `line_bound` (spheres,
 horizontal cylinders and tori about a vertical axis reduce to the plane through the tool's axis).
 
+Concave.lean (12 theorems, standard axioms): `disk_conj`, `disk_conj_at` (the disk's conjugate and
+where it is attained), `top_concave`, `neg_profile_concave` (b convex and non-decreasing),
+`end_of_outside`, `move_clear_of_outside`, `move_le_unconstrained` (a maximiser outside the move:
+its nearer end decides; else the unconstrained maximum), `end_rho_ge`, `section_mono`,
+`ball_section` (past the face's end: the column's section), `superadd`, `profile_superadd`
+(b(√·) convex: b(a) − b(0) lower).
+
 ## Open (hypotheses and gaps; none is assumed proven)
 
 1. **The 1D closed forms' candidates** (`disk_drop`, `bowl_drop`, `plane_support`): that each
    piece's stationary points and ends include the maximum. L6-tested; Lean open.
+   Likewise `conj`'s maximiser ρ* (the profile's slope point; the interval it returns holds one)
+   and its bound B(λ): L6-tested against sampling (`a_dome_cylinders_chord_bound_is_its_sampled_maximum`,
+   within 1e-3 of the sampled maximum; `a_move_by_a_dome_cylinders_end_is_cleared_only_where_it_is`);
+   Lean has the theorems that use them (Concave.lean), not the candidate enumeration.
 2. **The sphere bound S − sd(centre)** needs a convex column (`Column::convex` checks the profile);
    the supporting half-space argument is not in Lean yet.
 3. **Column containment** of each cutter (`Column::of`; `sd_body_ge_of_column` takes T ⊆ column as

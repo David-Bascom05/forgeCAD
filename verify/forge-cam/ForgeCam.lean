@@ -12,6 +12,7 @@ import ForgeCam.DistArc
 import ForgeCam.Trim
 import ForgeCam.Shadow
 import ForgeCam.Drop
+import ForgeCam.Concave
 import ForgeCam.PathEnds
 import ForgeCam.Heights
 import ForgeCam.Turn

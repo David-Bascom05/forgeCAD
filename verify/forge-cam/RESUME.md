@@ -182,3 +182,19 @@ The checker of drop.rs (the tool's column, research/cam/phase3.md). 10 theorems,
 Open: the 1D closed forms' candidates (`disk_drop`, `bowl_drop`, `plane_support`) contain the
 maximum; the sphere bound S − sd(centre) for a convex column (supporting half-space); each
 cutter lies in its column (`Column::of`, L6-tested); the z-map's soundness; L5.
+
+## A dome cylinder's exact move bound (Concave.lean, CAM-3AXIS, 2026-11-24): done
+
+drop.rs `cyl_chord`, `section`, `Column::sq_convex` (research/cam/phase3.md). 12 theorems, standard
+axioms.
+- `disk_conj`, `disk_conj_at`: √(r² − e²) − λe ≤ r√(1 + λ²), attained at e* = −λr/√(1 + λ²).
+- `top_concave`, `neg_profile_concave`: the disk's top and −b(|u|) (b convex, non-decreasing) are
+  concave, so the cylinder's CL across its axis (their sup-convolution) is.
+- `end_of_outside`, `move_clear_of_outside`, `move_le_unconstrained`: along a line move, a
+  maximiser beyond an end makes that end decide; else the unconstrained maximum bounds it.
+- `end_rho_ge`, `section_mono`, `ball_section`: past the face's end by a, the column's section a
+  off its axis (a ball's is a ball).
+- `superadd`, `profile_superadd`: h = b ∘ √ convex gives b(√(u² + a²)) ≥ b(|u|) + b(a) − b(0).
+
+Open: that `conj` finds the profile's maximiser ρ* and B(λ) (the enumeration over pieces; L6-tested
+in tests/drop_vs_sampling.rs), and L5.
