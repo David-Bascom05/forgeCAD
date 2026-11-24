@@ -5,8 +5,9 @@
 //! The method is the plain greedy one. From each piece's start it finds the longest run of input
 //! vertices that one line, or one circular arc, stays within the tolerance of. The arc is in xy
 //! with its height linear in the angle, which is `PMove::Arc`'s form. The run's end is found by
-//! doubling and then bisecting. A piece is kept only when the caller's `accept` agrees: that is
-//! the caller's proof (certification of the move, a cusp check), and a rejected run backs off.
+//! doubling and then bisecting, on the geometry alone. A piece is kept only when the caller's
+//! `accept` agrees: that is the caller's proof (certification of the move, a cusp check), asked
+//! once for the longest run; a refused run backs off, bisecting with proofs below it.
 //! One input segment is always kept as it is. So the output never has more moves than the input,
 //! and it is the input where nothing longer fits or is accepted.
 //!
@@ -256,37 +257,57 @@ pub fn fit(pts: &[[f64; 3]], f: Fit, accept: &mut dyn FnMut([f64; 3], &Piece) ->
     if !(f.tol > 0.0 && f.tol.is_finite()) || !pts.iter().all(|&p| finite(p)) {
         return pts[1..].iter().map(|&to| Piece::Line { to }).collect();
     }
+    // the geometry alone (no proof): a line or an arc fits pts[i..=j]
+    let geo = |i: usize, j: usize| {
+        let run = &pts[i..=j];
+        line_ok(run, f.tol) || (f.arcs && j >= i + 2 && arc_fit(run, &f).is_some())
+    };
     let mut i = 0;
     while i + 1 < n {
-        let mut good = (i + 1, Piece::Line { to: pts[i + 1] });
-        // doubling
+        // 1. the longest run that fits, by its geometry alone: doubling, then bisecting
+        let mut fits = i + 1;
         let mut k = 2;
         let mut bad = n;
         loop {
             let j = (i + k).min(n - 1);
-            if j <= good.0 {
+            if j <= fits {
                 break;
             }
-            match piece(pts, i, j, &f, accept) {
-                Some(p) => {
-                    good = (j, p);
-                    if j == n - 1 {
-                        break;
-                    }
-                    k *= 2;
-                }
-                None => {
-                    bad = j;
+            if geo(i, j) {
+                fits = j;
+                if j == n - 1 {
                     break;
                 }
+                k *= 2;
+            } else {
+                bad = j;
+                break;
             }
         }
-        // bisecting between the last good end and the first bad one
-        while bad < n && bad > good.0 + 1 {
-            let j = good.0 + (bad - good.0) / 2;
-            match piece(pts, i, j, &f, accept) {
-                Some(p) => good = (j, p),
-                None => bad = j,
+        while bad < n && bad > fits + 1 {
+            let j = fits + (bad - fits) / 2;
+            if geo(i, j) {
+                fits = j;
+            } else {
+                bad = j;
+            }
+        }
+        // 2. that piece proven (one ask, two with an arc after a line); if refused, the longest
+        //    proven piece below it, bisecting with proofs
+        let mut good = (i + 1, Piece::Line { to: pts[i + 1] });
+        if fits > i + 1 {
+            match piece(pts, i, fits, &f, accept) {
+                Some(p) => good = (fits, p),
+                None => {
+                    let mut bad = fits;
+                    while bad > good.0 + 1 {
+                        let j = good.0 + (bad - good.0) / 2;
+                        match piece(pts, i, j, &f, accept) {
+                            Some(p) => good = (j, p),
+                            None => bad = j,
+                        }
+                    }
+                }
             }
         }
         out.push(good.1);
@@ -561,6 +582,19 @@ mod tests {
             assert!(d <= tol * 1.0001, "tol {tol}: {d}");
             assert_eq!(ps.last().unwrap().to(), pts[600]);
         }
+    }
+
+    #[test]
+    fn the_longest_run_is_proven_once() {
+        // a straight run: found by its geometry, then one ask
+        let pts: Vec<[f64; 3]> = (0..=1000).map(|k| [k as f64 * 0.1, 0.0, 0.0]).collect();
+        let mut asks = 0;
+        let ps = fit(&pts, Fit::lines(0.001), &mut |_, _| {
+            asks += 1;
+            true
+        });
+        assert_eq!(ps.len(), 1);
+        assert_eq!(asks, 1);
     }
 
     #[test]

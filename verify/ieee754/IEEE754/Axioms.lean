@@ -3,6 +3,8 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 -/
 import Lean
 import IEEE754.Binary64
+import IEEE754.Conic
+import IEEE754.EqualCrossing
 import IEEE754.Compare
 import IEEE754.Computed
 import IEEE754.TwoSum
@@ -53,6 +55,17 @@ elab "#standard_axioms " ids:ident* : command => do
         throwError "{n} rests on the axiom {a}"
 
 #standard_axioms
+  -- a conic's size made by a division (forge-geom plane_cylinder's ellipse)
+  IEEE754.round_ge_two_pow_qmin IEEE754.div_pos_finite IEEE754.quarter_pos_finite
+  IEEE754.mul_pos_finite IEEE754.mul_nonneg_finite
+  -- ssi equal_crossing's divisor |x × a| and major = r / |x × a|
+  IEEE754.round_err_le IEEE754.add_err_le IEEE754.sub_err_le IEEE754.mul_err_le IEEE754.div_err_le
+  IEEE754.sq3_err IEEE754.diff_prod_err IEEE754.sqrt_ge_two_pow IEEE754.sqrt_le_two_pow
+  IEEE754.len_gt_sq_gt IEEE754.caller_core IEEE754.caller_bound
+  IEEE754.cross_sq_le IEEE754.sq_near_half IEEE754.normalize_core IEEE754.sq_near_upper
+  IEEE754.cross_comp_near IEEE754.chain_lower IEEE754.chain_upper IEEE754.chain_q IEEE754.unit_core
+  IEEE754.sqrt_sq_lower IEEE754.t_bound IEEE754.x_bound IEEE754.v_bound IEEE754.sq_le_of_abs_le
+  IEEE754.unit_cross_len IEEE754.div_pos_finite4 IEEE754.equal_crossing_major
   -- rounding
   IEEE754.round_rel_err IEEE754.round_abs_err IEEE754.round_err IEEE754.round_mono
   IEEE754.round_val IEEE754.round_exact
