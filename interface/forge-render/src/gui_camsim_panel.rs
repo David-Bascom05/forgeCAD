@@ -1267,9 +1267,14 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
             if st.sim.markers.is_empty() {
                 ui.colored_label(t.success, "None: every move certified, nothing left over.");
             }
+            // a certified run: what is left is not a fault (UX-LEAD, until each region says why
+            // it is left): neutral, not amber
+            let certified = cam.ok && cam.ops.iter().all(|o| o.status == "built");
             for m in &st.sim.markers {
                 let c = if m.severe() {
                     srgb(look::FAIL)
+                } else if certified {
+                    t.ink2
                 } else {
                     srgb(look::LEFTOVER)
                 };
