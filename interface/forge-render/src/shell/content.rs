@@ -14,6 +14,8 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 
 const W: f32 = 860.0;
 const TREE_W: f32 = 200.0;
+/// Under a family's picture: its name and two lines of what it is.
+const CARD_TEXT: f32 = 52.0;
 const TILE: f32 = 112.0;
 const PICTURE_PX: usize = 160;
 
@@ -425,13 +427,13 @@ impl Shell {
                         // families as pictures
                         egui::ScrollArea::vertical()
                             .id_salt("cc-fams")
-                            .max_height(2.0 * (TILE + 44.0) + 10.0)
+                            .max_height(2.0 * (TILE + CARD_TEXT) + 10.0)
                             .show(ui, |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
                                     for f in &fams {
                                         let (r, resp) =
-                                            ui.allocate_exact_size(vec2(TILE, TILE + 44.0), Sense::click());
+                                            ui.allocate_exact_size(vec2(TILE, TILE + CARD_TEXT), Sense::click());
                                         let on = cc.fam == Some(f.id);
                                         ui.painter().rect(
                                             r,
@@ -452,19 +454,26 @@ impl Shell {
                                         );
                                         picture_in(ui, &t, cc.pictures.get(&key(&tile_spec(f))), pic);
                                         ui.painter().text(
-                                            pos2(r.center().x, r.bottom() - 32.0),
+                                            pos2(r.center().x, r.bottom() - 40.0),
                                             egui::Align2::CENTER_CENTER,
                                             &f.name,
                                             semi(11.0),
                                             t.ink,
                                         );
-                                        let g = ui.painter().layout(
+                                        // two lines at most at the theme's smallest size (11 px; it was
+                                        // 9.5, and a third line ran off the card), cut with "…" past
+                                        // that: the card's hover has the whole title
+                                        let mut job = egui::text::LayoutJob::simple(
                                             f.item().to_string(),
-                                            sans(9.5),
+                                            sans(11.0),
                                             t.ink2,
                                             TILE - 8.0,
                                         );
-                                        let at = pos2(r.center().x - g.size().x / 2.0, r.bottom() - 22.0);
+                                        job.wrap.max_rows = 2;
+                                        job.wrap.overflow_character = Some('\u{2026}');
+                                        job.halign = egui::Align::Center;
+                                        let g = ui.fonts_mut(|fo| fo.layout_job(job));
+                                        let at = pos2(r.center().x, r.bottom() - 30.0);
                                         ui.painter().galley(at, g, t.ink2);
                                         places.push((format!("cc:fam:{}", f.name), r));
                                         let resp = resp.on_hover_text(format!("{}\n{}", f.title, f.standard));
