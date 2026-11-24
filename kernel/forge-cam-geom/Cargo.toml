@@ -8,7 +8,7 @@ repository.workspace = true
 
 [dependencies]
 # the exact numbers (Nat, the exact reals, Ival): one implementation, shared with forge-math
-forge-num = { path = "../forge-num" }
+forge-num = { path = "../forge-num", features = ["real"] }
 
 [lints]
 workspace = true
