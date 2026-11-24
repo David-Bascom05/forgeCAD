@@ -86,7 +86,7 @@ An argument's value words (`fit: "H7"`, `seat: "flat"`: strings a built-in check
 the lists `not-names` rows below) are not names and not modelled. An extension that takes a value
 it refused before changes no document it accepted. Checked by hand, case by case, for each
 extension so far:
-* `hole(.., fit: CLASS)` without `screw` (CAM-CORE, cam/parity caa8c49a; `holes.rs`
+* `hole(.., fit: CLASS)` without `screw` (CAM-CORE, cam/parity caa8c49a, kept in a `Vec` since 9e215596; `holes.rs`
   `HOLE_CLASSES`, recorded in `Eval::hole_fits` for CAM's ream plan, the feature unchanged).
   Before, any `fit:` without `screw` was `NotApplicable`. After:
   * with `screw`, the same checks;
