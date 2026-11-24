@@ -146,6 +146,8 @@ impl Gui {
             }
             return false;
         }
+        // where Render Image and Turntable write when no file is named
+        let (render_dir, render_name) = self.capture_place_for("render");
         let Some(v) = &mut self.view else {
             return false;
         };
@@ -489,15 +491,17 @@ impl Gui {
                     if st.depth_of_field && !cam.parallel {
                         fview = fview.with_lens(view.focal_mm(), Some(st.f_number), cam.dist);
                     }
-                    // a file named alone goes beside the document, as photos do
+                    // where captures go (the Capture folder, else the document's): a fresh
+                    // `<document>-render-<time>.png` there, or the file named (a name alone there)
                     let out = {
                         let p = std::path::Path::new(st.out.trim());
-                        let doc = self.shell.fg.as_ref().map(|f| f.path.clone());
-                        match doc.as_deref().map(std::path::Path::new).and_then(|d| d.parent()) {
-                            Some(dir) if p.is_relative() && !dir.as_os_str().is_empty() => {
-                                dir.join(p).to_string_lossy().into_owned()
-                            }
-                            _ => st.out.trim().to_string(),
+                        if st.out.trim().is_empty() {
+                            let ext = if ask == Ask::Image { ".png" } else { "" };
+                            Self::fresh_name(&render_dir, &render_name, ext)
+                        } else if p.is_relative() && !render_dir.as_os_str().is_empty() {
+                            render_dir.join(p).to_string_lossy().into_owned()
+                        } else {
+                            st.out.trim().to_string()
                         }
                     };
                     let output = if ask == Ask::Image {
@@ -576,7 +580,7 @@ impl Gui {
                 (id, (w, h))
             });
             status = Some(match &last {
-                Ok(p) => format!("Render saved: {p}"),
+                Ok(p) => format!("Wrote {p}"),
                 Err(e) => format!("Render failed: {e}"),
             });
             st.result = Some(RenderResult {

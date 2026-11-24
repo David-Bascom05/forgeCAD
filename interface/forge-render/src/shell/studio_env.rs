@@ -131,6 +131,7 @@ pub struct StudioUi {
     pub size: (u32, u32),
     pub spp: u32,
     pub frames: u32,
+    /// The file a render writes; empty: a fresh `<document>-render-<time>.png` where captures go.
     pub out: String,
     /// Bumped when anything the GUI must rebuild for changes (appearances, the light).
     pub version: u64,
@@ -179,7 +180,7 @@ impl Default for StudioUi {
             size: (1920, 1080),
             spp: 512,
             frames: 36,
-            out: "render.png".into(),
+            out: String::new(),
             version: 0,
             asks: Vec::new(),
             samples: 0,
@@ -441,7 +442,13 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                 });
                 ui.horizontal(|ui| {
                     ui.label("File");
-                    ui.text_edit_singleline(&mut st.out);
+                    ui.add(
+                        egui::TextEdit::singleline(&mut st.out).hint_text("a new file in the Capture folder"),
+                    )
+                    .on_hover_text(
+                        "Empty: <document>-render-<time>.png in the Capture settings' folder (else the \
+                         document's). A name alone goes there too.",
+                    );
                 });
             });
             if !st.queue.is_empty() {

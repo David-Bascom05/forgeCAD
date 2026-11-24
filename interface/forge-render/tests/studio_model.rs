@@ -192,10 +192,12 @@ fn render_image_shows_its_progress_at_once_then_its_result() {
     let dir = std::env::temp_dir().join(format!("fg-studio-render-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
+    h.gui.shell.capture.folder = dir.to_string_lossy().into_owned();
     let st = &mut h.gui.shell.studio;
     st.size = (64, 48);
     st.spp = 64;
-    st.out = dir.join("r.png").to_string_lossy().into_owned();
+    // no file named: a fresh one where captures go (BUTTON-AUDITOR: not the process's folder)
+    assert!(st.out.is_empty());
     let t0 = std::time::Instant::now();
     assert!(h.click("tool:Render Image"), "no Render Image on the ribbon");
     h.step();
@@ -217,10 +219,17 @@ fn render_image_shows_its_progress_at_once_then_its_result() {
     }
     let res = h.gui.shell.studio.result.clone().unwrap();
     let path = res.said.clone().expect("it saved");
-    assert!(std::path::Path::new(&path).is_file(), "{path}");
+    let p = std::path::Path::new(&path);
+    assert!(p.is_file(), "{path}");
+    assert_eq!(p.parent(), Some(dir.as_path()), "{path}");
+    let name = p.file_name().unwrap().to_string_lossy();
+    assert!(
+        name.starts_with("flange-render-") && name.ends_with(".png"),
+        "{name}"
+    );
     assert_eq!(res.thumb.map(|t| t.1), Some((64, 48)), "the picture shown");
     assert!(h.gui.shell.studio.rendering.is_none());
-    assert_eq!(h.gui.shell.status, format!("Render saved: {path}"));
+    assert_eq!(h.gui.shell.status, format!("Wrote {path}"));
     h.step();
     shot(&h, "rendered");
     // a failure is said, not silent
