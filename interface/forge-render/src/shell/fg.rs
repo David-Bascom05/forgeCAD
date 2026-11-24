@@ -847,6 +847,8 @@ impl Shell {
         let rows = fg.tree();
         let mut places: Vec<(String, Rect)> = Vec::new();
         let mut chosen = None;
+        // what a menu's "Select …" says it chose, in the status line
+        let mut select_said: Option<String> = None;
         let mut toggle = None;
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area));
         let planes = self.overlays().planes;
@@ -1179,6 +1181,7 @@ impl Shell {
                                 && let Some(first) = readers(&source, &key).into_iter().next()
                                 && off_item(ui, &format!("Select {first}"), "select-user", None)
                             {
+                                select_said = Some(format!("{first} uses {key}: change or delete it first"));
                                 chosen = Some(first);
                             }
                         }
@@ -1282,12 +1285,16 @@ impl Shell {
             return;
         }
         if let Some(k) = chosen {
-            fg.selected = if fg.selected.as_deref() == Some(k.as_str()) {
+            // a menu's "Select …" selects (a row's click toggles)
+            fg.selected = if select_said.is_none() && fg.selected.as_deref() == Some(k.as_str()) {
                 None
             } else {
                 Some(k)
             };
             fg.editing = None;
+        }
+        if let Some(w) = select_said {
+            self.status = w;
         }
         self.places.extend(places);
         self.fg = Some(fg);
