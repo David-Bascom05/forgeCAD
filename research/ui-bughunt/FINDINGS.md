@@ -433,7 +433,8 @@ list on main: this branch's new strings add none).
 - Combined with CAM-UI's release-refusal fix button (train 6, cam/ui-turn-words): the button sits
   right after the words, the words are cut to leave it room short of Markup, and the hover gives
   the whole line and the refusal's detail. Where not even a few words fit beside it (480 px), the
-  fix stands alone with the words on its hover (a lone "…" said nothing):
+  fix stands alone, led by the issues' amber warning so it reads as the fix for a problem
+  (UX-LEAD), with the words on its hover (a lone "…" said nothing):
   `shots/status-480-refusal.png`, `shots/status-760-refusal.png`; `status_narrow.rs` checks both.
 
 ## 27. A small window crashed the app: two clamps whose bounds crossed (ui/bughunt-3)

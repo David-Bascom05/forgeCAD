@@ -1288,9 +1288,13 @@ impl Shell {
         }
         self.note("status:said", said);
         if let (Some((label, action)), Some(g)) = (fix, fix_g) {
+            // alone (no words beside it), the issues' amber warning first: it reads as the fix
+            // for a problem, not a plain command
+            let icon_w = if wordless { 18.0 } else { 0.0 };
+            let left = if wordless { x + 4.0 } else { said.right() + 12.0 };
             let fr = Rect::from_min_size(
-                pos2(said.right() + 12.0, st.top() + 2.0),
-                vec2(g.size().x + 16.0, STATUS_H - 4.0),
+                pos2(left, st.top() + 2.0),
+                vec2(icon_w + g.size().x + 16.0, STATUS_H - 4.0),
             );
             let mut r = ui.interact(fr, ui.scope_id().with("status-fix"), Sense::click());
             if wordless && let Some(h) = &hover {
@@ -1302,8 +1306,18 @@ impl Shell {
                 3.0,
                 Color32::from_white_alpha(if r.hovered() { 56 } else { 36 }),
             );
+            if wordless {
+                icons::draw(
+                    &p,
+                    pos2(fr.left() + 6.0, fr.center().y - 7.0),
+                    14.0,
+                    "warning",
+                    1.5,
+                    fg::WARN,
+                );
+            }
             p.galley(
-                pos2(fr.left() + 8.0, fr.center().y - g.size().y * 0.5),
+                pos2(fr.left() + icon_w + 8.0, fr.center().y - g.size().y * 0.5),
                 g,
                 Color32::WHITE,
             );
