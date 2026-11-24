@@ -363,6 +363,22 @@ list on main: this branch's new strings add none).
 - Test: `tests/drawing_dimension.rs` (the clicks in a headless window on a thread with a
   watchdog; the dimension `d1 = dim(top, …)` is in the file). Before: the watchdog fired at 240 s.
 
+## 24. A linked machining document generated refused first: "0/5 ops certified" (ui/bughunt-3)
+
+- `?open=machined/flange_cam.fg`: the page opened the linked file before the project's other
+  files had come (on purpose, for a fast first frame), so its first generation had no
+  `flange.fg`: every op an error, certification refused, "flange_cam.fg · 0/5 ops certified",
+  and Export NC refused, for the seconds until the files came and §20's rebuild ran. Found while
+  checking for the coordinator whether flange_cam's `at:` got lost (it didn't: my sweep project
+  was a copy from before 8cae054a placed every example).
+- The page now starts the app with nothing open, says "Loading project…", and opens the linked
+  file (and `?env=`) once every file is in. `Mirror.loadOne` (the early single-file read) is
+  gone.
+- Test: `web/tests/deeplink.cjs`, a machining case with the project's files held back 4 s
+  (Playwright route on /api/bundle): says "Loading project…", and no generation is seen that
+  is not certified in full. Before: "flange_cam.fg · 0/5 ops certified" on the way.
+  `lib.cjs`'s `page()` takes an optional `prepare(p)` run before the page loads.
+
 ## Open (reported, not fixed here)
 
 
