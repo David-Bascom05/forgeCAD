@@ -65,12 +65,10 @@ fn finishing_ops_certify_on_the_dome() {
     let sf = Surfacer::new(&faces, &ball.shape.bodies[0], 0.0, TOL, 0.0).unwrap();
     let c = Cut { tool: &ball, tidx: 0, h: H, feed: (1000.0, 300.0) };
     let area = [10.0, 10.0, 50.0, 50.0];
-    let mut paths = vec![
-        ("parallel", surf::parallel(&sf, c, area, 2.0, 30.0, 1.0).unwrap()),
-        ("waterline", surf::waterline(&sf, c, area, &[2.0, 6.0], 1.0).unwrap()),
-        ("scallop", surf::scallop(&sf, c, area, 2.5, 1.0).unwrap()),
-        ("pencil", surf::pencil(&sf, c, area, 0.5, 0.02).unwrap()),
-    ];
+    let mut paths = vec![("parallel", surf::parallel(&sf, c, area, 2.0, 30.0, 1.0).unwrap())];
+    paths.push(("waterline", surf::waterline(&sf, c, area, &[2.0, 6.0], 1.0).unwrap()));
+    paths.push(("scallop", surf::scallop(&sf, c, area, 2.5, 1.0).unwrap()));
+    paths.push(("pencil", surf::pencil(&sf, c, area, 0.5, 0.02).unwrap()));
     let bull = tool("bull-10-r1", 2);
     let sfb = Surfacer::new(&faces, &bull.shape.bodies[0], 0.0, TOL, 0.0).unwrap();
     paths.push(("rest", surf::rest(&sf, &sfb, c, area, 2.0, 1.0, 1.0, 0.05).unwrap()));

@@ -133,6 +133,8 @@ impl From<SurfError> for OpError {
 /// The drop-cutter over a part, for one tool.
 pub struct Surfacer<'a> {
     pub faces: &'a [Face],
+    /// The cutter's body (for the Euclidean check where the column's is too strict: side contact).
+    pub cutter: forge_cam_geom::tool::Body,
     /// The cutter's own column (for the checks).
     pub check: Column,
     /// The column the paths are made with: the cutter grown by the leave.
@@ -158,6 +160,7 @@ impl<'a> Surfacer<'a> {
         let grid = XyGrid::new(faces, make.r);
         Ok(Surfacer {
             faces,
+            cutter: cutter.clone(),
             check,
             make,
             leave,
@@ -185,18 +188,34 @@ impl<'a> Surfacer<'a> {
 
     /// The vertical-gap check of one cutting move against every face near it, at `limit`.
     pub fn gap(&self, a: [f64; 3], b: [f64; 3], limit: f64) -> Gap {
+        self.gap_at(a, b, limit).0
+    }
+
+    /// `gap`, and the face that decided it (the first not proven clear).
+    pub fn gap_at(&self, a: [f64; 3], b: [f64; 3], limit: f64) -> (Gap, Option<usize>) {
         let r = self.check.r;
         let idx = self.grid.near(a[0].min(b[0]) - r, a[1].min(b[1]) - r, a[0].max(b[0]) + r, a[1].max(b[1]) + r);
         let mv = Move::Line { a, b };
         let mut least = 0.0f64;
         for &i in &idx {
-            let (g, _) = drop::gap_move(&self.check, &self.faces[i as usize], &mv, limit, self.res, self.budget);
+            let f = &self.faces[i as usize];
+            let (g, _) = drop::gap_move(&self.check, f, &mv, limit, self.res, self.budget);
             match g {
                 Gap::Clear { lower } => least = least.min(lower),
-                other => return other,
+                // a proven penetration of the column: the piece is split (the cutter may still
+                // be clear, but the generator does not spend a search to find out)
+                Gap::Over { .. } => return (g, Some(i as usize)),
+                Gap::Unknown => {
+                    // the cutter's own signed distance, as the certifier then checks it, on a
+                    // tenth of the budget
+                    match forge_cam_geom::check::certify(&self.cutter, f, &mv, limit, self.res, self.budget / 10).0 {
+                        forge_cam_geom::check::Verdict::Clear { lower } => least = least.min(lower),
+                        _ => return (g, Some(i as usize)),
+                    }
+                }
             }
         }
-        Gap::Clear { lower: least }
+        (Gap::Clear { lower: least }, None)
     }
 
     /// A 2D polyline dropped onto the part: samples at most `step` apart, then each piece split
@@ -247,6 +266,19 @@ impl<'a> Surfacer<'a> {
                 return self.refine(m, b, depth + 1, out);
             }
         }
+        // a steep piece (the CL falling off a rounded wall's side): the step first (straight up
+        // at the lower end, then level, or level then straight down), which the column proves
+        // where it touches only from the side
+        if (b[2] - a[2]).abs() > 4.0 * len && len <= 4.0 * self.tol {
+            let mid = if b[2] > a[2] { [a[0], a[1], b[2]] } else { [b[0], b[1], a[2]] };
+            if matches!(self.gap(a, mid, -0.5 * self.tol), Gap::Clear { .. })
+                && matches!(self.gap(mid, b, -0.5 * self.tol), Gap::Clear { .. })
+            {
+                out.push(mid);
+                out.push(b);
+                return Ok(());
+            }
+        }
         match self.gap(a, b, -0.5 * self.tol) {
             Gap::Clear { .. } => {
                 out.push(b);
@@ -258,7 +290,23 @@ impl<'a> Surfacer<'a> {
                 self.refine(a, m, depth + 1, out)?;
                 self.refine(m, b, depth + 1, out)
             }
-            _ => Err(SurfError::Stuck { at: b, len }),
+            _ => {
+                // a cliff (a vertical wall between the ends): straight up at the lower end, then
+                // across at the higher height (or across, then straight down)
+                let mid = if b[2] > a[2] { [a[0], a[1], b[2]] } else { [b[0], b[1], a[2]] };
+                if matches!(self.gap(a, mid, -0.5 * self.tol), Gap::Clear { .. })
+                    && matches!(self.gap(mid, b, -0.5 * self.tol), Gap::Clear { .. })
+                {
+                    out.push(mid);
+                    out.push(b);
+                    return Ok(());
+                }
+                if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                    let (g, fi) = self.gap_at(a, b, -0.5 * self.tol);
+                    eprintln!("stuck {a:?} -> {b:?}: {g:?} face {:?}", fi.map(|i| &self.faces[i]));
+                }
+                Err(SurfError::Stuck { at: b, len })
+            }
         }
     }
 }
@@ -513,31 +561,39 @@ pub fn waterline(sf: &Surfacer, c: Cut, area: [f64; 4], zs: &[f64], h: f64) -> R
 /// A constant-z piece proven at tol/2, else split at its middle pushed out to the free side
 /// (along the piece's normal, toward lower CL).
 fn level_refine(sf: &Surfacer, a: [f64; 3], b: [f64; 3], depth: usize, out: &mut Vec<[f64; 3]>) -> Result<(), SurfError> {
-    match sf.gap(a, b, -0.5 * sf.tol) {
-        Gap::Clear { .. } => {
-            out.push(b);
-            return Ok(());
-        }
-        _ => {}
-    }
     let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+    // the middle pushed out to the free side's boundary (along the piece's normal, toward lower
+    // CL): split there when the boundary strays from the chord, before any proof is tried
+    let mid = |sf: &Surfacer| -> [f64; 3] {
+        let m = [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1])];
+        let n = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
+        let e = 0.25 * len;
+        let c1 = sf.cl(m[0] + e * n[0], m[1] + e * n[1]).hi;
+        let c2 = sf.cl(m[0] - e * n[0], m[1] - e * n[1]).hi;
+        let dir = if c1 <= c2 { n } else { [-n[0], -n[1]] };
+        let far = [m[0] + len * dir[0], m[1] + len * dir[1]];
+        let p = match push(sf, far, m, a[2], 0.25 * len) {
+            Some((s, _)) => [far[0] + s * (m[0] - far[0]), far[1] + s * (m[1] - far[1])],
+            None => m,
+        };
+        [p[0], p[1], a[2]]
+    };
+    if len > sf.tol && depth < 24 {
+        let mm = mid(sf);
+        let off = ((mm[0] - 0.5 * (a[0] + b[0])).powi(2) + (mm[1] - 0.5 * (a[1] + b[1])).powi(2)).sqrt();
+        if off > 0.25 * sf.tol {
+            level_refine(sf, a, mm, depth + 1, out)?;
+            return level_refine(sf, mm, b, depth + 1, out);
+        }
+    }
+    if let Gap::Clear { .. } = sf.gap(a, b, -0.5 * sf.tol) {
+        out.push(b);
+        return Ok(());
+    }
     if len <= sf.res || depth >= 24 {
         return Err(SurfError::Stuck { at: b, len });
     }
-    let m = [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1])];
-    let n = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len];
-    // the free side: whichever normal direction has the lower CL a little way out
-    let e = 0.25 * len;
-    let c1 = sf.cl(m[0] + e * n[0], m[1] + e * n[1]).hi;
-    let c2 = sf.cl(m[0] - e * n[0], m[1] - e * n[1]).hi;
-    let dir = if c1 <= c2 { n } else { [-n[0], -n[1]] };
-    let far = [m[0] + len * dir[0], m[1] + len * dir[1]];
-    // from far (free, hopefully) back toward m: the last free point before blocked
-    let mid = match push(sf, far, m, a[2], 0.25 * len) {
-        Some((s, _)) => [far[0] + s * (m[0] - far[0]), far[1] + s * (m[1] - far[1])],
-        None => m,
-    };
-    let mm = [mid[0], mid[1], a[2]];
+    let mm = mid(sf);
     level_refine(sf, a, mm, depth + 1, out)?;
     level_refine(sf, mm, b, depth + 1, out)
 }
@@ -1106,6 +1162,23 @@ pub fn zlevel(
     stepover: f64,
     h: f64,
 ) -> Result<OpPath, OpError> {
+    zlevel_voids(sf, c, area, top, bottom, down, stepover, h).map(|x| x.0)
+}
+
+/// `zlevel`, and what each level provably cleared, for the in-process stock: where the cutter
+/// has a flat bottom of radius rf ≥ stepover, the level's free tool-centre region C grown by rf,
+/// down to the level (the passes, k·stepover apart, cover it: passes_cover).
+#[allow(clippy::too_many_arguments)]
+pub fn zlevel_voids(
+    sf: &Surfacer,
+    c: Cut,
+    area: [f64; 4],
+    top: f64,
+    bottom: f64,
+    down: f64,
+    stepover: f64,
+    h: f64,
+) -> Result<(OpPath, Vec<(forge_cam_geom::region::Region, f64)>), OpError> {
     use forge_cam_geom::boolean::{Op, boolean, region_of};
     use forge_cam_geom::offset::offset;
     use forge_cam_geom::region::{Loop, Region, Seg, p2};
@@ -1115,7 +1188,13 @@ pub fn zlevel(
         return Err(SurfError::Bad("stepover").into());
     }
     let g = ClGrid::new(sf, area, h)?;
-    let mut runs: Vec<Vec<[f64; 3]>> = Vec::new();
+    let mut runs: Vec<([f64; 3], Vec<PMove>)> = Vec::new();
+    let mut voids = Vec::new();
+    // the cutter's flat bottom: its first profile piece, if level
+    let rf = match sf.check.segs[0] {
+        drop::CSeg::Line { a, b } if a[1] == b[1] => b[0],
+        _ => 0.0,
+    };
     // the levels, and the part's own top within them (its highest CL), so the stock above the
     // part's top is taken down to it
     let mut zs = crate::ops::levels(top, bottom, down);
@@ -1253,6 +1332,12 @@ pub fn zlevel(
         if free.loops.is_empty() {
             continue;
         }
+        if rf > 0.0
+            && stepover <= rf
+            && let Ok((v, _)) = offset(&free, -rf)
+        {
+            voids.push((region_of(&v), z));
+        }
         // passes: the free region's boundary, then its offsets inward by k·stepover
         let mut k = 0usize;
         loop {
@@ -1269,42 +1354,25 @@ pub fn zlevel(
                 break;
             }
             for l in loops {
-                let mut run: Vec<[f64; 3]> = Vec::new();
-                let s = l[0].start();
-                run.push([s.x, s.y, z]);
+                // the loop as it is, arcs as arcs (the stock's void rests on the exact loops)
+                let st = l[0].start();
+                let mut mv = Vec::new();
                 for sg in &l {
-                    // arcs as chords' polylines (the checker proves each piece)
                     match *sg {
-                        Seg::Line { b, .. } => run.push([b.x, b.y, z]),
-                        Seg::Arc { a, b, c: ctr, ccw } => {
-                            let r = ((a.x - ctr.x).powi(2) + (a.y - ctr.y).powi(2)).sqrt();
-                            let a0 = forge_math::dmath::atan2(a.y - ctr.y, a.x - ctr.x);
-                            let mut a1 = forge_math::dmath::atan2(b.y - ctr.y, b.x - ctr.x);
-                            let tau = std::f64::consts::TAU;
-                            if ccw {
-                                while a1 <= a0 {
-                                    a1 += tau;
-                                }
-                            } else {
-                                while a1 >= a0 {
-                                    a1 -= tau;
-                                }
-                            }
-                            let piece: f64 = (0.25 * sf.check.r).max(sf.tol);
-                            let n = (((a1 - a0).abs() * r / piece).ceil() as usize).max(1);
-                            for i in 1..=n {
-                                if i == n {
-                                    run.push([b.x, b.y, z]);
-                                } else {
-                                    let t = a0 + (a1 - a0) * i as f64 / n as f64;
-                                    let (sn, cs) = forge_math::dmath::sin_cos(t);
-                                    run.push([ctr.x + r * cs, ctr.y + r * sn, z]);
-                                }
-                            }
-                        }
+                        Seg::Line { b, .. } => mv.push(PMove::Line {
+                            to: [b.x, b.y, z],
+                            f: c.feed.0,
+                            phase: Phase::Cut,
+                        }),
+                        Seg::Arc { b, c: ctr, ccw, .. } => mv.push(PMove::Arc {
+                            to: [b.x, b.y, z],
+                            c: [ctr.x, ctr.y],
+                            cw: !ccw,
+                            f: c.feed.0,
+                        }),
                     }
                 }
-                runs.push(run);
+                runs.push(([st.x, st.y, z], mv));
             }
             k += 1;
             if k > 10_000 {
@@ -1312,10 +1380,47 @@ pub fn zlevel(
             }
         }
     }
-    as_paths(c, &runs).ok_or(OpError::ToolTooBig {
-        tool_d: 2.0 * sf.check.r,
-        why: "nothing to rough between these heights".into(),
-    })
+    if runs.is_empty() {
+        return Err(OpError::ToolTooBig {
+            tool_d: 2.0 * sf.check.r,
+            why: "nothing to rough between these heights".into(),
+        });
+    }
+    // each loop entered from the retract height, left back up to it
+    let h = c.h;
+    let s0 = runs[0].0;
+    let mut mv = Vec::new();
+    for (st, ms) in runs {
+        mv.push(PMove::Rapid {
+            to: [st[0], st[1], h.retract],
+        });
+        mv.push(PMove::Line {
+            to: st,
+            f: c.feed.1,
+            phase: Phase::Plunge,
+        });
+        let end = match ms.last() {
+            Some(PMove::Line { to, .. }) | Some(PMove::Arc { to, .. }) => *to,
+            _ => st,
+        };
+        mv.extend(ms);
+        mv.push(PMove::Line {
+            to: [end[0], end[1], h.retract],
+            f: c.feed.0,
+            phase: Phase::Link,
+        });
+    }
+    mv.push(PMove::Rapid {
+        to: [s0[0], s0[1], h.clear],
+    });
+    let p = OpPath {
+        tool: c.tidx,
+        start: [s0[0], s0[1], h.clear],
+        moves: mv,
+        rpm: 0.0,
+        coolant: forge_post::Coolant::Flood,
+    };
+    Ok((p, voids))
 }
 
 #[cfg(test)]

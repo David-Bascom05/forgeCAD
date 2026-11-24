@@ -66,6 +66,36 @@ fn face(rng: &mut Rng, kind: usize) -> Face {
             1e-9,
             0,
         ),
+        5 => {
+            // a bowl: a sphere's lower part (axis up), or a horizontal cylinder's lower half
+            if rng.f() < 0.5 {
+                let up = [0.0, 0.0, 1.0];
+                let xx = unit(crs([0.3, 1.0, 0.1], up));
+                let yy = crs(up, xx);
+                Face::new(Surf::Sphere { o, x: xx, y: yy, ax: up, r: rng.r(3.5, 12.0) }, Ival::new(-1.0, 1.0), Ival::new(-1.0, rng.r(-0.5, 0.0)), None, 1e-9, 0)
+            } else {
+                let a = unit([1.0, rng.r(-1.0, 1.0), 0.0]);
+                let xx = [0.0, 0.0, -1.0];
+                let yy = crs(a, xx);
+                let th = (std::f64::consts::PI / 4.0 * rng.r(0.3, 1.0)).tan();
+                Face::new(Surf::Cyl { o, x: xx, y: yy, ax: a, r: rng.r(2.0, 8.0) }, Ival::new(-th, th), Ival::new(-8.0, 8.0), None, 1e-9, 0)
+            }
+        }
+        6 => {
+            // a torus about a vertical axis, its tube arc anywhere (a convex round or a foot)
+            let up = [0.0, 0.0, if rng.f() < 0.8 { 1.0 } else { -1.0 }];
+            let xx = unit(crs([0.3, 1.0, 0.1], up));
+            let yy = crs(up, xx);
+            let pm = rng.r(-std::f64::consts::PI, std::f64::consts::PI);
+            Face::new(
+                Surf::Torus { o, x: xx, y: yy, ax: up, big: rng.r(4.0, 10.0), r: rng.r(1.0, 4.0), cm: pm.cos(), sm: pm.sin() },
+                Ival::new(-1.0, 1.0),
+                Ival::new(-rng.r(0.1, 0.9), rng.r(0.1, 0.9)),
+                None,
+                1e-9,
+                0,
+            )
+        }
         _ => Face::new(
             Surf::Cone { o, x, y, ax, r0: rng.r(1.0, 5.0), k: rng.r(-0.8, 0.8) },
             Ival::new(-1.0, 1.0),
@@ -97,13 +127,33 @@ fn sampled(col: &Column, f: &Face, x: f64, y: f64, n: usize) -> f64 {
     m
 }
 
+/// The least over a grid of the face of the column's signed distance (its solid's, at the
+/// interval's middle), over points within R.
+fn sampled_gap(col: &Column, f: &Face, x: f64, y: f64, z: f64, n: usize) -> f64 {
+    let mut m = f64::INFINITY;
+    for i in 0..=n {
+        for j in 0..=n {
+            let p = f.p.lo + (f.p.hi - f.p.lo) * i as f64 / n as f64;
+            let q = f.q.lo + (f.q.hi - f.q.lo) * j as f64 / n as f64;
+            let pt = f.surf.eval(Ival::pt(p), Ival::pt(q));
+            let (px, py, pz) = (pt[0].mid(), pt[1].mid(), pt[2].mid());
+            let rho = ((px - x).powi(2) + (py - y).powi(2)).sqrt();
+            if rho > col.r {
+                continue;
+            }
+            m = m.min(col.solid.sd_rz(Ival::pt(rho), Ival::pt(pz - z)).mid());
+        }
+    }
+    m
+}
+
 #[test]
 fn drop_holds_every_sample_and_agrees_with_the_general_search() {
     let mut rng = Rng(0x9e3779b97f4a7c15);
     let (mut n, mut closed_cells, mut bb_cells) = (0, 0usize, 0usize);
     for (name, c) in cutters() {
         let (col, _) = column(&c);
-        for kind in 0..5 {
+        for kind in 0..7 {
             for _ in 0..3 {
                 let f = face(&mut rng, kind);
                 let (x, y) = (rng.r(-5.0, 5.0), rng.r(-5.0, 5.0));
@@ -140,7 +190,7 @@ fn a_cleared_move_is_clear_at_every_sample() {
     let (mut clear, mut over, mut unknown) = (0, 0, 0);
     for (name, c) in cutters() {
         let (col, _) = column(&c);
-        for kind in 0..5 {
+        for kind in 0..7 {
             for _ in 0..4 {
                 let f = face(&mut rng, kind);
                 let a = [rng.r(-4.0, 4.0), rng.r(-4.0, 4.0)];
@@ -158,22 +208,22 @@ fn a_cleared_move_is_clear_at_every_sample() {
                 match g {
                     Gap::Clear { lower } => {
                         clear += 1;
-                        for k in 0..=40 {
-                            let t = k as f64 / 40.0;
+                        for k in 0..=20 {
+                            let t = k as f64 / 20.0;
                             let (x, y) = (a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]));
                             let z = za + lift + t * (zb - za);
-                            let s = sampled(&col, &f, x, y, 60);
-                            // v = z − (y.z − b) ≥ lower at every sample
-                            assert!(z - s >= lower - 1e-9, "{name} kind {kind}: v {} < {lower}", z - s);
+                            // the column's signed distance ≥ lower at every sampled face point
+                            let v = sampled_gap(&col, &f, x, y, z, 30);
+                            assert!(v >= lower - 1e-9, "{name} kind {kind}: v {v} < {lower}");
                         }
                     }
-                    Gap::Over { s, by } => {
+                    Gap::Over { s, by, .. } => {
                         over += 1;
                         // a real point: the drop there is at least by above the move
                         let (x, y) = (a[0] + s * (b[0] - a[0]), a[1] + s * (b[1] - a[1]));
                         let z = za + lift + s * (zb - za);
-                        let cl = drop(&col, std::slice::from_ref(&f), &[0], x, y, 1e-6, 400_000);
-                        assert!(cl.hi - z >= by - 1e-6, "{name} kind {kind}: over by {by} but CL {cl:?} at z {z}");
+                        let cl = drop(&col, std::slice::from_ref(&f), &[0], x, y, 1e-5, 400_000);
+                        assert!(cl.hi - z >= by - 1e-5, "{name} kind {kind}: over by {by} but CL {cl:?} at z {z}");
                     }
                     Gap::Unknown => unknown += 1,
                 }

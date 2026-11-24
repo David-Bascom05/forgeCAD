@@ -425,6 +425,11 @@ pub fn certify_with(
             let stock: &[Face] = &stages[st].1;
             let sgrid = &sgrids[st];
             for b in &tool.shape.bodies {
+                // on the surfacing route a move that has failed is not checked further (its
+                // failure is reported; the rest of its faces could only add to it)
+                if col.is_some() && !o.fails.is_empty() {
+                    break;
+                }
                 let sb = check::swept_box_body(m, b);
                 // the part: the cutter may touch it within tol on a cut; nothing else may touch it
                 for (set, (faces, what, grid)) in [
@@ -455,6 +460,9 @@ pub fn certify_with(
                     };
                     grid.near(&sb, &mut cand, &mut seen);
                     for &fi in &cand {
+                        if col.is_some() && !o.fails.is_empty() {
+                            break;
+                        }
                         let f = &faces[fi as usize];
                         if check::apart(&sb, &f.bbox, limit.max(0.0) + f.mu) {
                             continue;
@@ -473,11 +481,43 @@ pub fn certify_with(
                             let (g, n) =
                                 forge_cam_geom::drop::gap_move(col, f, m, limit, tol / 4.0, 200_000);
                             o.cells += n;
-                            if let forge_cam_geom::drop::Gap::Clear { lower } = g {
-                                if b.part == Part::Cutter {
-                                    o.least = o.least.min(lower);
+                            match g {
+                                forge_cam_geom::drop::Gap::Clear { lower } => {
+                                    if b.part == Part::Cutter {
+                                        o.least = o.least.min(lower);
+                                    }
+                                    continue;
                                 }
-                                continue;
+                                forge_cam_geom::drop::Gap::Over { s, p, q, .. } => {
+                                    // the column's witness: this body's own signed distance there,
+                                    // proven below the limit (by mu more), is a real violation
+                                    let (pi, qi) = (forge_cam_geom::ival::Ival::pt(p), forge_cam_geom::ival::Ival::pt(q));
+                                    let y = f.surf.eval(pi, qi);
+                                    let t = m.at(forge_cam_geom::ival::Ival::pt(s));
+                                    let sd = b.sd(y[0].sub(t[0]), y[1].sub(t[1]), y[2].sub(t[2]));
+                                    let d = sd.add(forge_cam_geom::ival::Ival::pt(f.mu)).hi;
+                                    if f.holds(pi, qi) == 1 && d < limit {
+                                        let at = [y[0].mid(), y[1].mid(), y[2].mid()];
+                                        o.fails.push((
+                                            CheckOut {
+                                                rule: if b.part == Part::Cutter { "gouge" } else { "holder_collision" },
+                                                verdict: "fail",
+                                                value: d,
+                                                limit,
+                                                at,
+                                                tool_part: if b.part == Part::Cutter { "cutter" } else { "shank/holder" },
+                                                other: format!("{what} face {}", f.id),
+                                                phase: phase.name(),
+                                                move_index: *idx,
+                                            },
+                                            o.pairs,
+                                            o.cells,
+                                            o.least,
+                                        ));
+                                        continue;
+                                    }
+                                }
+                                forge_cam_geom::drop::Gap::Unknown => {}
                             }
                         }
                         let (v, n) = check::certify_shared(b, f, m, limit, tol / 4.0, 200_000, slot);

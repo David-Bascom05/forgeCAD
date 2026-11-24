@@ -2,6 +2,7 @@
 //! (`lower`); setups, stock, operations and the checks build on it.
 pub mod fixture;
 pub mod lower;
+pub mod lower3d;
 pub mod ops;
 pub mod section;
 pub mod stock;
