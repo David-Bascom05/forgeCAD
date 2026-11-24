@@ -927,6 +927,12 @@ impl Gui {
         self.agent.turns.start(undo_label(text));
         self.apps.view_set = false;
         let mut msg = prompt(text, refs);
+        if document.is_some()
+            && self.shell.drawing.is_none()
+            && let Some(note) = self.shell.fg.as_ref().and_then(build_note)
+        {
+            msg.push_str(&format!("\n\n({note})"));
+        }
         if self.agent.told.as_deref() != Some(path.as_str()) {
             msg = if document.is_some() {
                 format!("(The open file is now {path}.)\n\n{msg}")
@@ -1085,6 +1091,42 @@ impl Gui {
         }
         self.agent.backend = Some(backend);
     }
+}
+
+/// Issues told with a message, at most; the rest are counted.
+const NOTE_ISSUES: usize = 3;
+
+/// The open file as it builds now, for the agent with each message: its errors and warnings, the
+/// first few by line. None while it hasn't built.
+pub fn build_note(fg: &crate::shell::fg::FgPanel) -> Option<String> {
+    if fg.file.is_empty() {
+        return None;
+    }
+    let (errors, warnings) = crate::shell::fg::issue_counts(&fg.issues);
+    let name = name_of(&fg.file);
+    if errors + warnings == 0 {
+        return Some(format!("{name} builds now with no errors or warnings"));
+    }
+    let shown: Vec<String> = fg
+        .issues
+        .iter()
+        .filter(|i| !crate::shell::fg::is_note(i))
+        .take(NOTE_ISSUES)
+        .map(|i| format!("line {}: {}", i.line, i.text.lines().next().unwrap_or("")))
+        .collect();
+    let more = (errors + warnings).saturating_sub(shown.len());
+    let plural = |n: usize, w: &str| format!("{n} {w}{}", if n == 1 { "" } else { "s" });
+    Some(format!(
+        "{name} now has {}, {}: {}{}",
+        plural(errors, "error"),
+        plural(warnings, "warning"),
+        shown.join("; "),
+        if more > 0 {
+            format!("; and {more} more")
+        } else {
+            String::new()
+        }
+    ))
 }
 
 /// The document open: the drawing, else the part or assembly.
