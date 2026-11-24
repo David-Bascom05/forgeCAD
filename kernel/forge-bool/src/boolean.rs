@@ -2216,7 +2216,13 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
                 uses.push((e, fwd));
             }
             if flip {
-                uses = uses.into_iter().rev().map(|(e, f)| (e, !f)).collect();
+                let mut rev: Vec<(EdgeId, bool)> = Vec::with_capacity(uses.len());
+                let mut k = uses.len();
+                while k > 0 {
+                    k -= 1;
+                    rev.push((uses[k].0, !uses[k].1));
+                }
+                uses = rev;
             }
             let lp = a.add_loop(face, &uses);
             if s.extend && !flip {
