@@ -334,6 +334,14 @@ impl Gui {
                     if v.nav.camera.parallel {
                         c.set_parallel(true, b.radius());
                     }
+                    // the robot itself, not its box, spanning the fill: its parts' corners as
+                    // seen from that direction, centred, the lens (or distance) made to fit them
+                    tighten(
+                        &mut c,
+                        &v.scene.shown_corners(),
+                        w / h.max(1.0),
+                        crate::frame::Framing::default().fill,
+                    );
                     v.nav.cut_to(c);
                 }
                 None => v.nav.fit_all(&v.scene),
@@ -444,4 +452,38 @@ fn arrow(at: [f32; 3], d: forge_math::Vec3, len: f32) -> ([f32; 3], [[f32; 3]; 2
     let (back, wide) = (len * 0.22, len * 0.1);
     let barb = |s: f32| [0, 1, 2].map(|i| tip[i] - d[i] * back + n[i] * wide * s);
     (tip, [barb(1.0), barb(-1.0)])
+}
+
+/// A framed camera brought to its subject's points: centred on them as seen, and the parallel
+/// lens's field (or the eye's distance) set so they span `fill` of the view's shorter side.
+fn tighten(c: &mut crate::camera::Camera, pts: &[[f32; 3]], aspect: f32, fill: f32) {
+    use crate::camera::dot;
+    if pts.is_empty() {
+        return;
+    }
+    let (_, right, up) = c.axes();
+    let (mut x0, mut x1, mut y0, mut y1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
+    for p in pts {
+        let q = [0, 1, 2].map(|i| p[i] - c.target[i]);
+        let (x, y) = (dot(q, right), dot(q, up));
+        (x0, x1, y0, y1) = (x0.min(x), x1.max(x), y0.min(y), y1.max(y));
+    }
+    let (dx, dy) = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
+    c.target = [0, 1, 2].map(|i| c.target[i] + right[i] * dx + up[i] * dy);
+    // half the height the view must show: the points' height, or their width over the aspect
+    let half = ((y1 - y0) * 0.5).max((x1 - x0) * 0.5 / aspect.max(1e-3)) / fill.clamp(0.05, 1.0);
+    if half <= 0.0 {
+        return;
+    }
+    if c.parallel {
+        c.fovy = (half / c.dist).atan() * 2.0;
+    } else {
+        // the eye outside every point of the subject
+        let reach = pts
+            .iter()
+            .map(|p| [0, 1, 2].map(|i| p[i] - c.target[i]))
+            .map(|q| dot(q, q).sqrt())
+            .fold(0.0_f32, f32::max);
+        c.dist = (half / (c.fovy * 0.5).tan()).max(reach * 1.1);
+    }
 }

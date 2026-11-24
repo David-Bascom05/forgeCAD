@@ -351,16 +351,13 @@ impl RobotPanel {
 /// Where a value shown came from (docs/ux/STANDARD.md §6).
 #[derive(Clone, Debug, PartialEq)]
 enum Prov {
-    /// Linked: the source assembly's (its mass from its materials).
-    Linked,
+    /// Linked: the source assembly's (its mass from its materials); the source's file.
+    Linked(String),
     /// The robot document's own; with the source's value it replaced, if it had one.
     Yours(Option<String>),
     /// Not given anywhere.
     Unknown,
 }
-
-/// `from assembly`'s colour.
-const BLUE: egui::Color32 = egui::Color32::from_rgb(59, 130, 246);
 
 /// One badge, one column wide, the hover its detail: the shared widget (`shell::ux::badge`) for
 /// the robot's own values and unknown ones; `from assembly` (which it has no word for) drawn
@@ -384,19 +381,12 @@ fn badge(ui: &mut Ui, t: &Theme, b: &Prov) {
         Prov::Unknown => {
             ux::badge(ui, t, &ux::Source::Unknown);
         }
-        Prov::Linked => {
-            let (r, resp) = ui.allocate_exact_size(vec2(ux::BADGE_W + 26.0, 16.0), Sense::hover());
-            let g = ui
-                .painter()
-                .layout_no_wrap("from assembly".into(), crate::shell::theme::caption(), BLUE);
-            let pill = egui::Rect::from_min_size(r.min + vec2(0.0, 0.5), vec2(g.size().x + 10.0, 15.0));
-            ui.painter().rect_filled(pill, 7.5, BLUE.gamma_multiply(0.14));
-            ui.painter().galley(
-                pos2(pill.left() + 5.0, pill.center().y - g.size().y / 2.0),
-                g,
-                BLUE,
+        Prov::Linked(from) => {
+            ux::badge(
+                ui,
+                t,
+                &ux::Source::Linked(format!("From {from}: the source's value, linked.")),
             );
-            resp.on_hover_text("Linked: the source assembly's value.");
         }
     }
 }
@@ -735,9 +725,6 @@ impl Shell {
                             .color(t.ink2),
                     ),
                 };
-                if !p.said.is_empty() {
-                    ui.label(RichText::new(&p.said).font(sans(11.0)).color(t.ink2));
-                }
                 Self::robot_problems(ui, &t, &mut p);
                 match p.view.clone() {
                     None => {
@@ -990,6 +977,7 @@ impl Shell {
     }
 
     fn joint_sheet(ui: &mut Ui, t: &Theme, p: &mut RobotPanel, _view: &RobotView, j: &ViewJoint, inch: bool) {
+        let linked = Prov::Linked(p.source.clone().unwrap_or_else(|| "the source".into()));
         let what = format!("joint({})", j.name);
         let line = p.line_of(&what);
         let key = |f: &str| match line {
@@ -1021,14 +1009,7 @@ impl Shell {
             .num_columns(3)
             .spacing(vec2(10.0, 4.0))
             .show(ui, |ui| {
-                row(
-                    ui,
-                    t,
-                    "Type",
-                    &key("type"),
-                    kind_name(j.kind),
-                    Some(&Prov::Linked),
-                );
+                row(ui, t, "Type", &key("type"), kind_name(j.kind), Some(&linked));
                 row(ui, t, "Parent link", "parent", &j.parent, None);
                 row(ui, t, "Child link", "child", &j.child, None);
                 if !j.of.is_empty() && j.of != j.name {
@@ -1041,7 +1022,7 @@ impl Shell {
                         "Follows",
                         "mimic",
                         &format!("{l} × {} + {}", num(*m, 4), num(*off, 4)),
-                        Some(&Prov::Linked),
+                        Some(&linked),
                     );
                 }
             });
@@ -1104,51 +1085,69 @@ impl Shell {
             let prov = match &over {
                 Some(w) if w.is_empty() => Prov::Yours(None),
                 Some(w) => Prov::Yours(Some(w.clone())),
-                None if j.limit.is_some() => Prov::Linked,
+                None if j.limit.is_some() => linked.clone(),
                 None => Prov::Unknown,
             };
             section(ui, t, "Limits");
+            let lo_key = format!("{}.lo", j.name);
+            let hi_key = format!("{}.hi", j.name);
+            // the range in one row; Override (Edit, once the robot's) opens its two fields
+            let editing = p.draft.contains_key(&lo_key) || p.draft.contains_key(&hi_key);
             egui::Grid::new("robot-joint-lim")
                 .num_columns(3)
                 .spacing(vec2(10.0, 4.0))
                 .show(ui, |ui| match j.limit {
-                    Some(_) => {
-                        row(ui, t, "Lower", &key("limit"), &lim(lo0), Some(&prov));
-                        row(ui, t, "Upper", &key("limit"), &lim(hi0), Some(&prov));
-                    }
+                    Some(_) => row(
+                        ui,
+                        t,
+                        "Range",
+                        &key("limit"),
+                        &format!("{} … {}", lim(lo0), lim(hi0)),
+                        Some(&prov),
+                    ),
                     None => row(ui, t, "Range", &key("limit"), "none (turns freely)", Some(&prov)),
                 });
-            let lo_key = format!("{}.lo", j.name);
-            let hi_key = format!("{}.hi", j.name);
-            let mut lo = *p.draft.get(&lo_key).unwrap_or(&lo0);
-            let mut hi = *p.draft.get(&hi_key).unwrap_or(&hi0);
-            ui.horizontal(|ui| {
-                if ui
-                    .add(egui::DragValue::new(&mut lo).speed(0.5).suffix(unit))
-                    .changed()
-                {
-                    p.draft.insert(lo_key.clone(), lo);
-                }
-                ui.label(RichText::new("to").font(sans(12.0)).color(t.ink2));
-                if ui
-                    .add(egui::DragValue::new(&mut hi).speed(0.5).suffix(unit))
-                    .changed()
-                {
-                    p.draft.insert(hi_key.clone(), hi);
-                }
-                let ok = lo <= hi;
-                if ui
-                    .add_enabled(ok, egui::Button::new("Override"))
-                    .on_hover_text("the robot's own limits; the assembly keeps its")
-                    .on_disabled_hover_text("lower above upper")
-                    .clicked()
-                {
-                    let was = j.limit.map(|_| txt(lo0, hi0));
-                    p.set_joint(j, "limit", txt(lo, hi), was);
-                    p.draft.remove(&lo_key);
-                    p.draft.remove(&hi_key);
-                }
-            });
+            if editing {
+                let mut lo = *p.draft.get(&lo_key).unwrap_or(&lo0);
+                let mut hi = *p.draft.get(&hi_key).unwrap_or(&hi0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(egui::DragValue::new(&mut lo).speed(0.5).suffix(unit))
+                        .changed()
+                    {
+                        p.draft.insert(lo_key.clone(), lo);
+                    }
+                    ui.label(RichText::new("…").font(sans(12.0)).color(t.ink2));
+                    if ui
+                        .add(egui::DragValue::new(&mut hi).speed(0.5).suffix(unit))
+                        .changed()
+                    {
+                        p.draft.insert(hi_key.clone(), hi);
+                    }
+                    if ui
+                        .add_enabled(lo <= hi, egui::Button::new("Apply"))
+                        .on_hover_text("the robot's own limits; the assembly keeps its")
+                        .on_disabled_hover_text("lower above upper")
+                        .clicked()
+                    {
+                        let was = j.limit.map(|_| txt(lo0, hi0));
+                        p.set_joint(j, "limit", txt(lo, hi), was);
+                        p.draft.remove(&lo_key);
+                        p.draft.remove(&hi_key);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        p.draft.remove(&lo_key);
+                        p.draft.remove(&hi_key);
+                    }
+                });
+            } else if ui
+                .button(if over.is_some() { "Edit…" } else { "Override…" })
+                .on_hover_text("the robot's own limits; the assembly keeps its")
+                .clicked()
+            {
+                p.draft.insert(lo_key.clone(), lo0);
+                p.draft.insert(hi_key.clone(), hi0);
+            }
             if over.is_some()
                 && let Some(l) = line
             {
@@ -1227,35 +1226,47 @@ impl Shell {
                             .font(mono(11.0)),
                         );
                         let dk = format!("{}.{field}", j.name);
+                        let dirty = p.draft.contains_key(&dk);
                         let mut v = *p.draft.get(&dk).unwrap_or(&written.unwrap_or(0.0));
+                        // an unknown shows no number: `unknown · Set…`, the field once asked for
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.set_min_width(VALUE_W);
-                            if ui
-                                .add(
-                                    egui::DragValue::new(&mut v)
-                                        .speed(0.1)
-                                        .range(0.0..=f64::MAX)
-                                        .suffix(format!(" {unit}")),
-                                )
-                                .changed()
+                            if (written.is_some() || dirty)
+                                && ui
+                                    .add(
+                                        egui::DragValue::new(&mut v)
+                                            .speed(0.1)
+                                            .range(0.0..=f64::MAX)
+                                            .suffix(format!(" {unit}")),
+                                    )
+                                    .changed()
                             {
                                 p.draft.insert(dk.clone(), v);
                             }
                         });
                         ui.horizontal(|ui| {
                             badge(ui, t, &prov);
-                            let dirty = p.draft.contains_key(&dk);
-                            if dirty
-                                && ui
+                            if written.is_none() && !dirty {
+                                if ui
+                                    .small_button("Set…")
+                                    .on_hover_text("give the robot's own value")
+                                    .clicked()
+                                {
+                                    p.draft.insert(dk.clone(), 0.0);
+                                }
+                            } else if dirty {
+                                if ui
                                     .small_button("Set")
                                     .on_hover_text("the robot's own value")
                                     .clicked()
-                            {
-                                p.set_joint(j, field, format!("{v}"), None);
-                                p.draft.remove(&dk);
-                            }
-                            if own
-                                && !dirty
+                                {
+                                    p.set_joint(j, field, format!("{v}"), None);
+                                    p.draft.remove(&dk);
+                                }
+                                if ui.small_button("Cancel").clicked() {
+                                    p.draft.remove(&dk);
+                                }
+                            } else if own
                                 && let Some(l) = line
                                 && ui
                                     .small_button("Clear")
@@ -1293,6 +1304,7 @@ impl Shell {
         l: &forge_urdf::ViewLink,
         inch: bool,
     ) {
+        let linked = Prov::Linked(p.source.clone().unwrap_or_else(|| "the source".into()));
         let what = format!("inertial({})", l.name);
         let line = p.line_of(&what);
         let key = |f: &str| match line {
@@ -1332,8 +1344,8 @@ impl Shell {
         let prov = match &over {
             Some(w) if w.is_empty() => Prov::Yours(None),
             Some(w) => Prov::Yours(Some(format!("{w} kg"))),
-            None if l.dummy => Prov::Linked,
-            None if l.mass.is_some() => Prov::Linked,
+            None if l.dummy => linked.clone(),
+            None if l.mass.is_some() => linked.clone(),
             None => Prov::Unknown,
         };
         egui::Grid::new("robot-link")

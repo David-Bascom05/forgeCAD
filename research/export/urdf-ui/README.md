@@ -10,7 +10,7 @@ Structure, Exit / Finish Robot), the link and joint tree in the browser, the sel
 joint's sheet docked at the right edge at full height, the view what is left, fitted to the robot
 on entering (§2: its parts filling 70% of the view's shorter side, from the 3/4 view). Every
 value carries its unit (mm or in by the status bar's toggle, degrees, N·m or N, rad/s or m/s)
-and a badge for where it came from (§6: `from assembly`, `yours`, `unknown`).
+and a badge for where it came from (§6: `linked`, `yours`, `unknown · Set…`).
 
 - `01-robot-open.png`: `examples/robot/arm2_robot.fg` opened: the tree from the root with tree
   lines, an icon per kind, each link's mass right-aligned, `root` and `massless` badges; the
