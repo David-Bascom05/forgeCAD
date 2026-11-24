@@ -71,6 +71,42 @@ static ROUND_TRIPS: memo::Memo<RoundTrip> = memo::Memo::new();
 /// 2D ops' engagement samples, per path (`feeds_from_engagement`).
 static SCHEDULED: memo::Memo<Vec<Vec<forge_cam::engage::Sample>>> = memo::Memo::new();
 
+/// An adaptive clearing's path and the cells it cleared per level, or its refusal
+/// (`adaptive_memo`).
+type Cleared = Result<(OpPath, Vec<(Region, f64)>), String>;
+static ADAPTIVE: memo::Memo<Cleared> = memo::Memo::new();
+
+/// `forge_cam::adaptive::adaptive`, taken from an earlier run when every argument is the same
+/// (memo.rs): it is a function of them alone (no clock, file or state; two env switches only
+/// print), so the path and voids are the ones it would make. The cut by each of its fields
+/// (a new field fails to compile until it is in the key); the rest by their full text. Without
+/// it every rerun and every edit of another op cut each adaptive op again: seconds a click.
+fn adaptive_memo(
+    rg: &Region,
+    cut: ops::Cut,
+    span: ops::Span,
+    ip: &forge_cam::stock::InProcess,
+    prm: &forge_cam::adaptive::Adaptive,
+) -> Cleared {
+    let ops::Cut {
+        tool,
+        tidx,
+        h,
+        feed,
+        ramp_feed,
+        lead_feed,
+    } = cut;
+    let key = format!(
+        "adaptive/1 {:?}",
+        (rg, (tool, tidx, h, feed, ramp_feed, lead_feed), span, ip, prm)
+    );
+    ADAPTIVE.get_or(key, || {
+        forge_cam::adaptive::adaptive(rg, cut, span, ip, prm)
+            .map(|o| (o.path, o.voids))
+            .map_err(|e| format!("{e:?}"))
+    })
+}
+
 /// A 3-axis finishing op's paths (or refusal), the lines it adds to the plan, and its finish record.
 type Finished = (Result<Vec<OpPath>, String>, Vec<String>, Option<Finish>);
 static FINISHED: memo::Memo<Finished> = memo::Memo::new();
@@ -5342,7 +5378,7 @@ impl Cam {
                         };
                         let mut paths = vec![];
                         for rg in &regions {
-                            let out = forge_cam::adaptive::adaptive(
+                            let (path, vs) = adaptive_memo(
                                 rg,
                                 ops::Cut {
                                     tool: t,
@@ -5355,12 +5391,11 @@ impl Cam {
                                 ops::Span { top, bottom, step },
                                 &s.ip,
                                 &prm,
-                            )
-                            .map_err(|e| format!("{e:?}"))?;
-                            for (v, z) in out.voids {
+                            )?;
+                            for (v, z) in vs {
                                 voids.push((Some(v), z));
                             }
-                            paths.push(out.path);
+                            paths.push(path);
                         }
                         Ok(paths)
                     }
@@ -10160,5 +10195,75 @@ mod frame_tests {
         let src = forge_dirs::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
         let cam = run(&src, &dir);
         assert!(cam.frames.is_empty() && cam.parts.iter().all(|p| p.prepared.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod adaptive_memo_tests {
+    /// Every input class of an adaptive op is in its memo key: its engagement, levels (from,
+    /// to, step), the tool, the in-process stock before it (the facing above it) and the part's
+    /// section each cut it anew, and that run is the fresh one (every memo bypassed); the same
+    /// text, and an edit adaptive does not read (the program's number), take it from the memo.
+    #[test]
+    fn each_input_class_clears_anew() {
+        let src_dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../verify/forge-cam-quality/parts");
+        // scratch under the workspace's target (wasm32-wasip1 has no temp_dir or pid)
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/adaptive_memo_test");
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("deep_open_slot.fg")).unwrap();
+        forge_dirs::fs::write(dir.join("deep_open_slot.fg"), &part).unwrap();
+        let doc = "machining\nf = part(\"deep_open_slot.fg\", group: \"P\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-6\", t: 1, stickout: 30, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: \"top-corner\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 20, step: 1)\nrough = adaptive(op1, tool: t1, from: 20, to: 5.2, step: 15, engagement: 40)\nprog = program(op1, post: \"fanuc\", number: 5008)\n";
+        let reply = |cam: &super::Cam| {
+            let mut t = cam.json().to_string();
+            for p in &cam.programs {
+                t.push_str(&format!("\n{:?}", p.text));
+            }
+            t
+        };
+        let run = |d: &str| {
+            let before = super::ADAPTIVE.computed();
+            let cam = super::run(d, &dir);
+            assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+            assert!(cam.ops[1].moves > 0, "adaptive cut nothing");
+            (super::ADAPTIVE.computed() - before, reply(&cam))
+        };
+        let fresh = |d: &str| {
+            super::memo::bypass(true);
+            let cam = super::run(d, &dir);
+            super::memo::bypass(false);
+            reply(&cam)
+        };
+        let (n, first) = run(doc);
+        assert_eq!(n, 1);
+        assert_eq!(run(doc), (0, first.clone()), "the same text cut it again");
+        let r = run(&doc.replace("number: 5008", "number: 5009"));
+        assert_eq!(r.0, 0, "the program's number: cut again");
+        for (what, d) in [
+            ("engagement", doc.replace("engagement: 40", "engagement: 35")),
+            // read only by adaptive itself (not the feeds, as engagement is)
+            (
+                "step length",
+                doc.replace("engagement: 40)", "engagement: 40, step_length: 0.6)"),
+            ),
+            ("level", doc.replace("to: 5.2", "to: 6")),
+            ("step", doc.replace("step: 15", "step: 7.5")),
+            ("tool", doc.replace("\"flat-6\"", "\"flat-10\"")),
+            (
+                "stock before it",
+                doc.replace("to: 20, step: 1)", "to: 19.5, step: 1)"),
+            ),
+        ] {
+            let (n, got) = run(&d);
+            assert_eq!(n, 1, "{what}: not cut anew");
+            assert_eq!(got, fresh(&d), "{what}: not the fresh run");
+        }
+        let edited = part.replacen("shared w = 12", "shared w = 13", 1);
+        assert_ne!(edited, part, "the part's slot width moved");
+        forge_dirs::fs::write(dir.join("deep_open_slot.fg"), &edited).unwrap();
+        let (n, got) = run(doc);
+        assert_eq!(n, 1, "part: not cut anew");
+        assert_eq!(got, fresh(doc), "part: not the fresh run");
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
     }
 }
