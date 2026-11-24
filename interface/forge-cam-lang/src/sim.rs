@@ -98,6 +98,10 @@ pub struct MachineRun {
     pub control: forge_machine::gcode::Control,
     pub tl: forge_machine::sim::Timeline,
     pub contacts: forge_machine::collide::Report,
+    /// The stock as the posted code cuts it (forge-machine's removal on a 0.5 mm grid): its
+    /// rapids and holder or shank pieces into material, in the machine's part frame (less
+    /// `shift` for the document's): the one source of these findings; Err says why it did not run.
+    pub removal: Result<forge_machine::removal::MillResult, String>,
     /// The workholding as the check took it (part frame on the machine); the stock is left
     /// to the certified checker (it changes as it is cut).
     pub work: Vec<forge_machine::collide::CBody>,
@@ -276,6 +280,8 @@ impl Cam {
             }
         }
         let contacts = collide::check(&setup, &tl, &work);
+        let removal = forge_machine::removal::mill(&setup, &tl, mv(s.stock.min), mv(s.stock.max), 0.5)
+            .map_err(|e| format!("{e:?}"));
 
         Ok(MachineRun {
             program: prog.name.clone(),
@@ -289,6 +295,7 @@ impl Cam {
             control,
             tl,
             contacts,
+            removal,
             work,
             def,
         })

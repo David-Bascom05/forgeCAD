@@ -225,29 +225,6 @@ impl ZMap {
         self.cut_with(seg, u0, u1, tool, &mut |g, k, z| g.lower(k, z))
     }
 
-    /// How deep an envelope swept along `seg` would go into the material there is (the most
-    /// any column's top stands above it), and where; None if it stays clear. Nothing is cut.
-    pub fn depth(&mut self, seg: &Seg, env: &Cutter) -> Option<(f32, [f64; 3])> {
-        // nothing stands higher than the tallest column: an envelope above it meets nothing
-        let low = seg.a[2].min(seg.b[2]) as f32 + env.h.iter().copied().fold(f32::INFINITY, f32::min);
-        if low >= self.top {
-            return None;
-        }
-        let mut worst: Option<(f32, usize, f32)> = None;
-        self.cut_with(seg, 0.0, 1.0, env, &mut |g, k, z| {
-            let d = g.hi[k].min(g.hi[k].max(g.lo[k])) - z.max(g.lo[k]);
-            if g.hi[k] > g.lo[k] && d > 1e-4 && worst.is_none_or(|w| d > w.0) {
-                worst = Some((d, k, z));
-            }
-            false
-        });
-        worst.map(|(d, k, z)| {
-            let c = self.centre(k % self.nx, k / self.nx);
-            (d, [c[0], c[1], z as f64])
-        })
-    }
-
-    /// The tool stamped with its tip at p; whether anything changed.
     fn stamp_with(&mut self, p: [f64; 3], tool: &Cutter, act: &mut dyn FnMut(&mut ZMap, usize, f32) -> bool) -> bool {
         let r = tool.r;
         let (i0, j0, i1, j1) = self.range(p[0] - r, p[1] - r, p[0] + r, p[1] + r);
