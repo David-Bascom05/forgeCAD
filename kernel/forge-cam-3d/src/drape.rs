@@ -103,7 +103,22 @@ pub fn drape(dc: &dyn DropCutter, xy: &[[f64; 2]], d: Drape) -> Result<Vec<Pass>
 /// After this many halvings a piece that is still not proven becomes a step (see `refine`).
 const STEP_DEPTH: u32 = 8;
 
-/// Appends the points strictly between a and b that make every chord acceptable. False when a
+/// `drape` of each polyline, on all cores (forge_math::par), the answers in the lines' order (so
+/// the result never depends on the threads); the first error in that order is returned.
+pub fn drape_all(
+    dc: &dyn DropCutter,
+    lines: &[Vec<[f64; 2]>],
+    d: Drape,
+) -> Result<Vec<Vec<Pass>>, DrapeError> {
+    let out = forge_math::par::map(lines.len(), |k| drape(dc, &lines[k], d));
+    let mut v = Vec::with_capacity(out.len());
+    for r in out {
+        v.push(r?);
+    }
+    Ok(v)
+}
+
+/// After this many halvings that make every chord acceptable. False when a
 /// midpoint has nothing under the tool (the caller breaks the pass).
 fn refine(
     dc: &dyn DropCutter,

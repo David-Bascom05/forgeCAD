@@ -148,8 +148,8 @@ pub fn creases(dc: &dyn DropCutter, p: Params, c: &Containment) -> Vec<Vec<[f64;
 /// Pencil passes: the creases, draped and clipped to the containment.
 pub fn pencil(dc: &dyn DropCutter, p: Params, d: Drape, c: &Containment) -> Result<Vec<Pass>, DrapeError> {
     let mut out = Vec::new();
-    for l in creases(dc, p, c) {
-        out.extend(drape::drape(dc, &l, d)?);
+    for passes in drape::drape_all(dc, &creases(dc, p, c), d)? {
+        out.extend(passes);
     }
     Ok(c.clip(out, None))
 }

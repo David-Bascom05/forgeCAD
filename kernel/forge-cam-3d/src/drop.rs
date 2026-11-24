@@ -41,7 +41,8 @@ impl Band {
     }
 }
 
-pub trait DropCutter {
+/// `Sync`: strategies sample it from several threads (forge_math::par).
+pub trait DropCutter: Sync {
     /// The cutter-location height at (x, y), or `None` with nothing under the tool.
     fn drop(&self, x: f64, y: f64) -> Option<Band>;
     /// The maximum cutter-location height along the xy segment a → b, or `None` with nothing

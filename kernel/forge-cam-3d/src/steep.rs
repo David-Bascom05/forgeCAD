@@ -254,18 +254,20 @@ pub fn steep_and_shallow(dc: &dyn DropCutter, p: Params) -> Result<(Vec<Pass>, V
     let tan0 = p.sin0 / p.cos0;
     let steep = sm.mask(tan0, true).dilate(p.overlap);
     let shallow = sm.mask(tan0, false).dilate(p.overlap);
+    // one CL grid for every level, the levels on all cores (in order)
+    let zs = waterline::levels(p.top, p.bottom, p.dz);
+    let all = waterline::levels_on(
+        dc,
+        &zs,
+        waterline::Params {
+            grid: p.grid,
+            tol_xy: p.tol,
+        },
+    )
+    .map_err(SteepError::Waterline)?;
     let mut sp = Vec::new();
-    for z in waterline::levels(p.top, p.bottom, p.dz) {
-        let ls = waterline::level(
-            dc,
-            z,
-            waterline::Params {
-                grid: p.grid,
-                tol_xy: p.tol,
-            },
-        )
-        .map_err(SteepError::Waterline)?;
-        for l in &ls {
+    for ls in &all {
+        for l in ls {
             sp.extend(clip_loop(l, &steep));
         }
     }
@@ -277,8 +279,9 @@ pub fn steep_and_shallow(dc: &dyn DropCutter, p: Params) -> Result<(Vec<Pass>, V
         zmin: p.bottom,
     };
     let mut hp = Vec::new();
-    for line in pattern::raster(lo, hi, p.angle_deg, p.stepover, true) {
-        for pass in drape::drape(dc, &line, d).map_err(SteepError::Drape)? {
+    let lines = pattern::raster(lo, hi, p.angle_deg, p.stepover, true);
+    for passes in drape::drape_all(dc, &lines, d).map_err(SteepError::Drape)? {
+        for pass in passes {
             hp.extend(clip_open(&pass, &shallow));
         }
     }

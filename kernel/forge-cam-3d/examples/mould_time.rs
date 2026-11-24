@@ -7,19 +7,19 @@ use forge_cam_3d::drop::DropCutter;
 use forge_cam_3d::surfdrop::SurfDrop;
 use forge_cam_3d::{pattern, steep, waterline};
 use forge_tooling::Library;
-use std::cell::Cell;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 struct Count<'a> {
     i: &'a dyn DropCutter,
-    n: [Cell<usize>; 3],
-    t: [Cell<f64>; 3],
+    n: [AtomicU64; 3],
+    t: [AtomicU64; 3],
 }
 impl Count<'_> {
     fn tick<T>(&self, k: usize, f: impl FnOnce() -> T) -> T {
         let t0 = Instant::now();
         let r = f();
-        self.n[k].set(self.n[k].get() + 1);
-        self.t[k].set(self.t[k].get() + t0.elapsed().as_secs_f64());
+        self.n[k].fetch_add(1, Ordering::Relaxed);
+        self.t[k].fetch_add(t0.elapsed().as_nanos() as u64, Ordering::Relaxed);
         r
     }
 }
@@ -120,8 +120,10 @@ fn main() {
     );
     println!(
         "  waterline calls drop/seg_below/seg3: {:?} secs {:?}",
-        wc.n.iter().map(|c| c.get()).collect::<Vec<_>>(),
-        wc.t.iter().map(|c| c.get()).collect::<Vec<_>>()
+        wc.n.iter().map(|c| c.load(Ordering::Relaxed)).collect::<Vec<_>>(),
+        wc.t.iter()
+            .map(|c| c.load(Ordering::Relaxed) as f64 * 1e-9)
+            .collect::<Vec<_>>()
     );
     let t0f = Instant::now();
     let fc = Count {
@@ -142,8 +144,10 @@ fn main() {
         "flat at 10: {} passes {:.1} s; calls drop/seg_below/seg3: {:?} secs {:?}",
         fl.len(),
         t0f.elapsed().as_secs_f64(),
-        fc.n.iter().map(|c| c.get()).collect::<Vec<_>>(),
-        fc.t.iter().map(|c| c.get()).collect::<Vec<_>>()
+        fc.n.iter().map(|c| c.load(Ordering::Relaxed)).collect::<Vec<_>>(),
+        fc.t.iter()
+            .map(|c| c.load(Ordering::Relaxed) as f64 * 1e-9)
+            .collect::<Vec<_>>()
     );
     // the chords of that line at 2 mm, each check timed
     let mut worst = Vec::new();
@@ -198,7 +202,9 @@ fn main() {
     );
     println!(
         "  calls drop/seg_below/seg3: {:?} secs {:?}",
-        cc.n.iter().map(|c| c.get()).collect::<Vec<_>>(),
-        cc.t.iter().map(|c| c.get()).collect::<Vec<_>>()
+        cc.n.iter().map(|c| c.load(Ordering::Relaxed)).collect::<Vec<_>>(),
+        cc.t.iter()
+            .map(|c| c.load(Ordering::Relaxed) as f64 * 1e-9)
+            .collect::<Vec<_>>()
     );
 }

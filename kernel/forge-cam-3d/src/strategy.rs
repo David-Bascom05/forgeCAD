@@ -30,8 +30,8 @@ fn finish(
     sm: Option<&SlopeMap>,
 ) -> Result<Vec<Pass>, DrapeError> {
     let mut ps = Vec::new();
-    for l in lines {
-        ps.extend(drape::drape(dc, &l, d)?);
+    for passes in drape::drape_all(dc, &lines, d)? {
+        ps.extend(passes);
     }
     let owned;
     let sm = match sm {

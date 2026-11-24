@@ -2173,7 +2173,7 @@ impl Cam {
                     Err(_) => ok = false,
                 }
                 (found_lo, ok)
-                        });
+            });
             for (found_lo, ok) in bands {
                 self.leftover.extend(found_lo);
                 all_ok &= ok;
@@ -4665,30 +4665,19 @@ impl Cam {
                     None => step_down(a, 0.1 * d)?,
                 };
                 fin.stepdown = dz;
-                let mut lv = vec![
-                    waterline::level(
-                        &dc,
-                        top,
-                        waterline::Params {
-                            grid,
-                            tol_xy: 0.5 * tol,
-                        },
-                    )
-                    .map_err(|x| e(format!("{x:?}")))?,
-                ];
-                for z in waterline::levels(top, bottom, dz) {
-                    lv.push(
-                        waterline::level(
-                            &dc,
-                            z,
-                            waterline::Params {
-                                grid,
-                                tol_xy: 0.5 * tol,
-                            },
-                        )
-                        .map_err(|x| e(format!("{x:?}")))?,
-                    );
-                }
+                // the top level (only the first ramp's partner) and each level below, from one
+                // CL grid, on all cores
+                let mut zs = vec![top];
+                zs.extend(waterline::levels(top, bottom, dz));
+                let lv = waterline::levels_on(
+                    &dc,
+                    &zs,
+                    waterline::Params {
+                        grid,
+                        tol_xy: 0.5 * tol,
+                    },
+                )
+                .map_err(|x| e(format!("{x:?}")))?;
                 // the top level is only the first ramp's partner, not cut itself
                 let rp = ramp::ramps(&dc, &lv, dr).map_err(|x| e(format!("{x:?}")))?;
                 // ramps() drapes the top level's loops first, as they are: that many passes

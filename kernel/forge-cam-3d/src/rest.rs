@@ -150,8 +150,9 @@ pub fn rest(
     let m = rest.dilate(margin);
     let [lo, hi] = cur.extent();
     let mut ps = Vec::new();
-    for l in pattern::raster(lo, hi, angle_deg, stepover, true) {
-        for p in crate::drape::drape(cur, &l, d)? {
+    let lines = pattern::raster(lo, hi, angle_deg, stepover, true);
+    for passes in crate::drape::drape_all(cur, &lines, d)? {
+        for p in passes {
             ps.extend(crate::steep::clip_open(&p, &m));
         }
     }

@@ -276,13 +276,15 @@ pub fn scallop(dc: &dyn DropCutter, p: Params, d: Drape, c: &Containment) -> Res
         }
     }
     let step = p.stepover * (1.0 - 0.03);
-    let mut out = Vec::new();
+    let mut rings = Vec::new();
     let mut lv = 0.5 * p.grid;
     while lv < dmax {
-        for ring in level_sets(&f, lv) {
-            out.extend(drape::drape(dc, &ring, d)?);
-        }
+        rings.extend(level_sets(&f, lv));
         lv += step;
+    }
+    let mut out = Vec::new();
+    for passes in drape::drape_all(dc, &rings, d)? {
+        out.extend(passes);
     }
     Ok(c.clip(out, None))
 }

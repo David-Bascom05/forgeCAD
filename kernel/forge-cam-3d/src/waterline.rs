@@ -82,31 +82,98 @@ fn refine(dc: &dyn DropCutter, mut f: [f64; 2], mut b: [f64; 2], z: f64, tol: f6
     f
 }
 
+/// The drop-cutter sampled once on a waterline grid (with one free ring of nodes outside the
+/// extent, which closes every loop), for slicing at any number of heights: each node's band, or
+/// None with nothing under the tool. Rows are sampled on all cores (forge_math::par), in order.
+pub struct ClGrid {
+    pub x0: f64,
+    pub y0: f64,
+    pub g: f64,
+    pub nx: usize,
+    pub ny: usize,
+    pub band: Vec<Option<crate::drop::Band>>,
+}
+
+impl ClGrid {
+    /// None when the extent is empty.
+    pub fn new(dc: &dyn DropCutter, g: f64) -> Option<ClGrid> {
+        let [lo, hi] = dc.extent();
+        if !(lo[0] <= hi[0] && lo[1] <= hi[1]) || !(g > 0.0) {
+            return None;
+        }
+        let x0 = lo[0] - g;
+        let y0 = lo[1] - g;
+        let nx = (((hi[0] + g - x0) / g).ceil() as usize) + 1;
+        let ny = (((hi[1] + g - y0) / g).ceil() as usize) + 1;
+        let rows: Vec<Vec<Option<crate::drop::Band>>> = forge_math::par::map(ny, |j| {
+            let mut row = Vec::with_capacity(nx);
+            let mut i = 0;
+            while i < nx {
+                let on_ring = i == 0 || j == 0 || i + 1 == nx || j + 1 == ny;
+                row.push(if on_ring {
+                    None
+                } else {
+                    dc.drop(x0 + g * i as f64, y0 + g * j as f64)
+                });
+                i += 1;
+            }
+            row
+        });
+        let mut band = Vec::with_capacity(nx * ny);
+        for r in rows {
+            band.extend(r);
+        }
+        Some(ClGrid {
+            x0,
+            y0,
+            g,
+            nx,
+            ny,
+            band,
+        })
+    }
+}
+
 /// The waterline loops at height `z`.
 pub fn level(dc: &dyn DropCutter, z: f64, p: Params) -> Result<Vec<Loop>, WaterlineError> {
     if !(p.grid > 0.0 && p.tol_xy > 0.0 && p.tol_xy < p.grid) {
         return Err(WaterlineError::Bad("grid/tol_xy"));
     }
-    let [lo, hi] = dc.extent();
-    if !(lo[0] <= hi[0] && lo[1] <= hi[1]) {
-        return Ok(Vec::new());
+    match ClGrid::new(dc, p.grid) {
+        None => Ok(Vec::new()),
+        Some(g) => level_on(dc, &g, z, p),
     }
-    // one free ring of nodes outside the extent closes every loop
-    let x0 = lo[0] - p.grid;
-    let y0 = lo[1] - p.grid;
-    let nx = (((hi[0] + p.grid - x0) / p.grid).ceil() as usize) + 1;
-    let ny = (((hi[1] + p.grid - y0) / p.grid).ceil() as usize) + 1;
-    let node = |i: usize, j: usize| -> [f64; 2] { [x0 + p.grid * i as f64, y0 + p.grid * j as f64] };
+}
+
+/// The loops at each height of `zs`, from one grid, the heights on all cores (in order).
+pub fn levels_on(dc: &dyn DropCutter, zs: &[f64], p: Params) -> Result<Vec<Vec<Loop>>, WaterlineError> {
+    if !(p.grid > 0.0 && p.tol_xy > 0.0 && p.tol_xy < p.grid) {
+        return Err(WaterlineError::Bad("grid/tol_xy"));
+    }
+    let Some(g) = ClGrid::new(dc, p.grid) else {
+        return Ok(vec![Vec::new(); zs.len()]);
+    };
+    let out = forge_math::par::map(zs.len(), |k| level_on(dc, &g, zs[k], p));
+    let mut v = Vec::with_capacity(out.len());
+    for r in out {
+        v.push(r?);
+    }
+    Ok(v)
+}
+
+/// `level` on a grid sampled once (`ClGrid::new` with the same spacing).
+pub fn level_on(dc: &dyn DropCutter, cg: &ClGrid, z: f64, p: Params) -> Result<Vec<Loop>, WaterlineError> {
+    let (x0, y0, nx, ny) = (cg.x0, cg.y0, cg.nx, cg.ny);
+    let node = |i: usize, j: usize| -> [f64; 2] { [x0 + cg.g * i as f64, y0 + cg.g * j as f64] };
+    // blocked: something under the tool at a band not proven at or below z (the ring is free)
     let mut blocked = vec![false; nx * ny];
-    let mut j = 0;
-    while j < ny {
-        let mut i = 0;
-        while i < nx {
-            let on_ring = i == 0 || j == 0 || i + 1 == nx || j + 1 == ny;
-            blocked[j * nx + i] = !on_ring && !free(dc, node(i, j), z);
-            i += 1;
-        }
-        j += 1;
+    let mut k = 0;
+    while k < nx * ny {
+        blocked[k] = match cg.band[k] {
+            None => false,
+            Some(b) => !(b.hi <= z),
+        };
+        k += 1;
     }
     // edge ids: horizontal (i, j)–(i+1, j) is 2(j nx + i); vertical (i, j)–(i, j+1) is +1
     let hid = |i: usize, j: usize| 2 * (j * nx + i);
