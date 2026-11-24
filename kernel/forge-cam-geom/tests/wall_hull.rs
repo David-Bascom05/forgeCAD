@@ -100,7 +100,7 @@ fn the_hull_is_formed_only_for_a_vertical_plane_whose_trim_is_not_its_box() {
         panic!("an L wall's hull");
     };
     assert!(
-        z0 <= 0.0 && z0 > -1e-9 && z1 >= 20.0 && z1 < 20.0 + 1e-9,
+        (-1e-9..=0.0).contains(&z0) && (20.0..20.0 + 1e-9).contains(&z1),
         "{z0} {z1}"
     );
     // a horizontal plane, a sloped plane: none
