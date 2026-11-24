@@ -27,12 +27,15 @@ use forge_math::dmath;
 pub const CLEAR: f64 = 0.5;
 
 /// `moves` from `start` with every retract between cuts that a hop can replace replaced, the
-/// map left as the path leaves the stock. `feed`: the link feed. The number of hops made.
+/// map left as the path leaves the stock. `feed`: the link feed. `bodies`: the tool's bodies
+/// above the cutter (shank, holder), each as (its lowest point above the tip, its largest
+/// radius). The number of hops made.
 pub fn hops(
     moves: &[PMove],
     start: [f64; 3],
     map: &mut HeightMap,
     prof: &Profile,
+    bodies: &[(f64, f64)],
     feed: f64,
 ) -> (Vec<PMove>, usize) {
     // canned cycles and probe moves: not walked here (left as they are)
@@ -73,7 +76,7 @@ pub fn hops(
             }
             if j < moves.len()
                 && top > at[2].max(b[2]) + 1e-9
-                && let Some(h) = hop(map, rr, at, b, top, feed)
+                && let Some(h) = hop(map, rr, bodies, at, b, top, feed)
             {
                 for m in &h {
                     sweep(map, prof, at, m);
@@ -91,6 +94,26 @@ pub fn hops(
         i += 1;
     }
     (out, n_hops)
+}
+
+/// The highest material on the map's cells meeting the box [lo, hi] (−∞: none).
+fn box_top(map: &HeightMap, lo: [f64; 2], hi: [f64; 2]) -> f64 {
+    let cell = |v: f64, o: f64| ((v - o) / map.h).floor();
+    let i0 = cell(lo[0], map.x0).max(0.0) as usize;
+    let j0 = cell(lo[1], map.y0).max(0.0) as usize;
+    let i1 = cell(hi[0], map.x0);
+    let j1 = cell(hi[1], map.y0);
+    if i1 < 0.0 || j1 < 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    let (i1, j1) = ((i1 as usize).min(map.nx - 1), (j1 as usize).min(map.ny - 1));
+    let mut t = f64::NEG_INFINITY;
+    for j in j0..=j1 {
+        for i in i0..=i1 {
+            t = t.max(map.z[j * map.nx + i]);
+        }
+    }
+    t
 }
 
 /// The highest material within rr of (x, y) on the map (−∞: none).
@@ -111,7 +134,15 @@ fn top_near(map: &HeightMap, x: f64, y: f64, rr: f64) -> f64 {
 
 /// The hop from a to b (no higher than `ceiling`), or None: the end's disk meets material above
 /// it, or the way needs more height than the run it replaces had.
-fn hop(map: &HeightMap, rr: f64, a: [f64; 3], b: [f64; 3], ceiling: f64, feed: f64) -> Option<Vec<PMove>> {
+fn hop(
+    map: &HeightMap,
+    rr: f64,
+    bodies: &[(f64, f64)],
+    a: [f64; 3],
+    b: [f64; 3],
+    ceiling: f64,
+    feed: f64,
+) -> Option<Vec<PMove>> {
     if top_near(map, b[0], b[1], rr) > b[2] + 1e-9 {
         return None;
     }
@@ -122,10 +153,25 @@ fn hop(map: &HeightMap, rr: f64, a: [f64; 3], b: [f64; 3], ceiling: f64, feed: f
         [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]
     };
     // the tip's least height at each sample
+    // the bodies above the cutter (wider: a holder): the tip high enough that each body's lowest
+    // point clears by CLEAR the highest material in the box round the way, widened by its radius
+    // and 2h (a bound on the material within that radius of any point of the way)
+    let floor = bodies
+        .iter()
+        .map(|&(z0, rb)| {
+            let w = rb + 2.0 * map.h;
+            box_top(
+                map,
+                [a[0].min(b[0]) - w, a[1].min(b[1]) - w],
+                [a[0].max(b[0]) + w, a[1].max(b[1]) + w],
+            ) + CLEAR
+                - z0
+        })
+        .fold(f64::NEG_INFINITY, f64::max);
     let need: Vec<f64> = (0..=n)
         .map(|k| {
             let q = p(k);
-            top_near(map, q[0], q[1], rr) + CLEAR
+            (top_near(map, q[0], q[1], rr) + CLEAR).max(floor)
         })
         .collect();
     let hc = need.iter().copied().fold(a[2].max(b[2]), f64::max);
@@ -337,7 +383,7 @@ mod tests {
     fn a_retract_over_material_becomes_one_hop_clear_of_it() {
         let (mv, start) = path([46.0, 10.0, -5.0]);
         let (mut m, prof) = stock();
-        let (out, n) = hops(&mv, start, &mut m, &prof, 9000.0);
+        let (out, n) = hops(&mv, start, &mut m, &prof, &[], 9000.0);
         assert_eq!(n, 1);
         assert!(out.iter().all(|m| !matches!(m, PMove::Rapid { .. })), "{out:?}");
         assert_eq!(check(&out, start, 5.0), 1);
@@ -379,16 +425,26 @@ mod tests {
         let start = [6.0, 10.0, -5.0];
         let mv = vec![
             line([16.0, 10.0, -5.0], Phase::Cut),
-            PMove::Rapid { to: [16.0, 10.0, 5.0] },
-            PMove::Rapid { to: [46.0, 10.0, 5.0] },
-            PMove::Rapid { to: [46.0, 10.0, -5.0] },
+            PMove::Rapid {
+                to: [16.0, 10.0, 5.0],
+            },
+            PMove::Rapid {
+                to: [46.0, 10.0, 5.0],
+            },
+            PMove::Rapid {
+                to: [46.0, 10.0, -5.0],
+            },
             line([50.0, 10.0, -5.0], Phase::Cut),
         ];
         let (mut m, prof) = stock();
-        let (out, n) = hops(&mv, start, &mut m, &prof, 9000.0);
+        let (out, n) = hops(&mv, start, &mut m, &prof, &[], 9000.0);
         assert_eq!(n, 1);
         match out[1] {
-            PMove::Line { to, phase: Phase::Link, .. } => {
+            PMove::Line {
+                to,
+                phase: Phase::Link,
+                ..
+            } => {
                 assert!(to[0] == 16.0 && to[1] == 10.0, "not straight up: {out:?}")
             }
             _ => panic!("{out:?}"),
@@ -401,7 +457,7 @@ mod tests {
         // the next start stands in the material between the pockets
         let (mv, start) = path([30.0, 10.0, -5.0]);
         let (mut m, prof) = stock();
-        let (out, n) = hops(&mv, start, &mut m, &prof, 9000.0);
+        let (out, n) = hops(&mv, start, &mut m, &prof, &[], 9000.0);
         assert_eq!(n, 0);
         assert_eq!(out, mv);
     }

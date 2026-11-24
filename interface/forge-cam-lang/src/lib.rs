@@ -3361,6 +3361,13 @@ impl Cam {
         else {
             return paths;
         };
+        let bodies: Vec<(f64, f64)> = t
+            .shape
+            .bodies
+            .iter()
+            .filter(|b| b.z0 > 1e-9)
+            .map(|b| (b.z0, b.rmax))
+            .collect();
         let cell = (t.tool.dc / 30.0).clamp(0.05, 0.25);
         let trusted = !self.ops.iter().any(|o| o.setup == su && o.status != "built");
         let mut map = if trusted {
@@ -3371,7 +3378,7 @@ impl Cam {
         paths
             .into_iter()
             .map(|mut p| {
-                let (moves, _) = forge_cam::hop::hops(&p.moves, p.start, &mut map, &prof, feed);
+                let (moves, _) = forge_cam::hop::hops(&p.moves, p.start, &mut map, &prof, &bodies, feed);
                 p.moves = moves;
                 p
             })
