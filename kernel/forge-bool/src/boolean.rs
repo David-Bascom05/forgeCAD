@@ -78,6 +78,9 @@ pub enum Unhandled {
     ToolVerticesMeet { at: Point3 },
     /// Every point the n-ary pass could judge a region by lies on another tool's edge.
     ProbeOnToolEdge { face: FaceRef },
+    /// An edge's end, its tolerance grown to hold a face imprinted on it, reaches past the
+    /// edge's middle: the edge is shorter than the balls at its ends.
+    TolerancesMeet { at: Point3 },
 }
 
 impl std::fmt::Display for Unhandled {
@@ -103,6 +106,11 @@ impl std::fmt::Display for Unhandled {
             Unhandled::ProbeOnToolEdge { face } => {
                 write!(f, "every point of a region of {face} lies on another tool's edge")
             }
+            Unhandled::TolerancesMeet { at } => write!(
+                f,
+                "an edge at ({:.3}, {:.3}, {:.3}) is shorter than its ends' tolerances",
+                at.x, at.y, at.z
+            ),
         }
     }
 }
@@ -425,9 +433,17 @@ pub(crate) struct Imprint {
     pub(crate) edge: EdgeId,
     pub(crate) range: Interval,
     pub(crate) into: FaceId,
-    /// The body `into` belongs to.
-    pub(crate) into_side: Side,
+    /// The body `into` belongs to (a `Side`; u32 keeps the record at 40 bytes with `exact`).
+    pub(crate) into_side: u32,
+    /// The edge's own face lies on `into`'s surface (`same_plane`, `same_cylinder`: but for
+    /// rounding inside `ROUNDING`): the edge and its ends are as near `into` as they are to their
+    /// own face, nothing for `imprint_tols` to grow. Decided once per pair of faces on one
+    /// surface that imprinted something (`mark_exact`); false for an edge found lying on another
+    /// body's face (`trim_in`), which `imprint_tols` asks of the edge's own faces.
+    pub(crate) exact: bool,
 }
+// (the size it had before `exact`: a larger record moves every list of them on the heap)
+const _: () = assert!(std::mem::size_of::<Imprint>() == 40);
 
 /// Where a face piece lies relative to the other body.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -490,6 +506,14 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
     }
     #[cfg(debug_assertions)]
     faces_survive(&before, b, op, target);
+    #[cfg(debug_assertions)]
+    {
+        let off = forge_topo::check::vertices_off_planes(target);
+        debug_assert!(
+            off.is_empty(),
+            "vertices off their planes past their tolerances: {off:?}"
+        );
+    }
     Ok(())
 }
 
@@ -907,6 +931,9 @@ pub(crate) struct Plan {
     pub(crate) tols: Vec<f64>,
     /// Existing vertices whose tolerance grows to hold the curves now ending on them.
     pub(crate) grown: Vec<(VKey, f64)>,
+    /// Edges of A kept whole whose tolerance grows to hold the face of B they now bound
+    /// (`imprint_tols`).
+    pub(crate) grown_edges: Vec<(EdgeId, f64)>,
     pub(crate) alias: Vec<(VKey, VKey)>,
     /// Each piece of a face or edge split into several kept ones, and its whole's name.
     pub(crate) wholes: Vec<(Name, Name)>,
@@ -1372,6 +1399,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
     let mut along = Vec::new();
     for &(fa, fb) in &coplanar {
         let pair = [&index[0], &index[1]];
+        let made = imprints.len();
         imprint(
             bodies,
             pair,
@@ -1394,6 +1422,9 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
             &mut imprints,
             &mut along,
         )?;
+        if imprints.len() > made {
+            mark_exact(&mut imprints[made..], &a.face(fa).surface, &b.face(fb).surface);
+        }
     }
     share_cuts(&bodies, &mut along, &mut cuts);
 
@@ -1490,7 +1521,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
         );
         sg.range = Interval::new(lo, hi);
     }
-    let grown = grown_tols(&bodies, &cuts, &cut_vertex, &segs, &alias, key_point);
+    let mut grown = grown_tols(&bodies, &cuts, &cut_vertex, &segs, &alias, key_point);
     if debug_on() {
         for (i, sg) in segs.iter().enumerate() {
             let ends = sg.ends.map(|(x, y)| (cut_vertex[x], cut_vertex[y]));
@@ -1622,7 +1653,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
                 && split_faces.binary_search(&f).is_err()
                 && !imprints.iter().any(|im| im.side == 1 && im.into == f)
                 && !coplanar.iter().any(|&(fa, _)| fa == f)
-                && let Some(p) = face_point(body, f)
+                && let Some(p) = face_point_in(body, f)
             {
                 let kept = match (op, index[1].classify(p)) {
                     (Op::Intersect, Where::Inside) | (Op::Union | Op::Subtract, Where::Outside) => Some(true),
@@ -2071,6 +2102,21 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
         survivors.sort_unstable();
         survivors.dedup();
     }
+    // (only imprints not of faces on one surface have anything to grow)
+    let grown_edges = if imprints.iter().all(|im| im.exact) {
+        Vec::new()
+    } else {
+        let first = grown.len();
+        let pieces_of = |sd: Side, e: EdgeId| {
+            let (at, first, n) = edge_pieces[sd][e.index()];
+            (at == now).then_some((first as usize, n as usize))
+        };
+        let grown_edges = imprint_tols(&bodies, &imprints, pieces_of, &mut pieces, &alias, &mut grown);
+        if grown.len() > first {
+            refuse_tolerances_meeting(&grown[first..], &pieces, |p| uses[p] > 0)?;
+        }
+        grown_edges
+    };
     (scratch.cuts, scratch.segs) = (cuts, segs);
     Ok(Plan {
         pieces,
@@ -2083,6 +2129,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
         flush,
         tols,
         grown,
+        grown_edges,
         alias,
         wholes,
         involved,
@@ -2102,6 +2149,7 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
         points,
         flush,
         grown,
+        grown_edges,
         involved,
         untouched_kept,
         ..
@@ -2235,6 +2283,11 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
             crate::classify::grow_query_reach(a, v, t);
         }
     }
+    // (an edge's tolerance is in no face's index: `classify::info` reaches by vertices and sag)
+    for &(e, t) in grown_edges {
+        let x = &mut a.edges[e.index()];
+        x.tol = x.tol.max(t);
+    }
     // B kept where no new edge joins it to A: a lump apart (a union of disjoint solids) or a
     // void, a shell of its own; and what meets a shell other than the first, as what was added
     // above joined the first whichever it belongs to (others are regrouped when the body is compacted)
@@ -2302,6 +2355,224 @@ fn renamed(flush: &[(VKey, Name)], v: VKey, n: Name) -> Name {
 #[inline(always)]
 fn reversed(uses: Vec<(EdgeId, bool)>) -> Vec<(EdgeId, bool)> {
     uses.into_iter().rev().map(|(e, f)| (e, !f)).collect()
+}
+
+/// An edge imprinted on a face of the other body lies on that face's surface only within
+/// tolerance: the two faces were found on one surface (`imprint`), not the edge on it. Where the
+/// edge strays from that surface further than its own tolerance, the tolerance grows to hold it,
+/// so the result records how far each edge is from each face it bounds (without it, `check`
+/// finds the edge off the face, EdgeOffFace: a wrong Ok; research/booleans/drift.md). The pieces
+/// over the imprinted stretch carry the grown tolerance; an edge of A kept whole is returned with
+/// it. Likewise an end vertex of the edge where the imprint reaches it, to its distance from that
+/// surface: no curve of its own ends there to vouch for it (more than `Vertex::tol` promises, which
+/// is cheap here and keeps the vertex as near every face it bounds as its record says). Cold: only
+/// booleans with faces on one surface, or an edge lying on the other body's face, imprint.
+/// `pieces_of` gives an edge's pieces (first, count) where it has been split into them; `bodies`
+/// are the operands by side (the n-ary boolean's tools).
+#[cold]
+#[inline(never)]
+pub(crate) fn imprint_tols(
+    bodies: &[&Body],
+    imprints: &[Imprint],
+    pieces_of: impl Fn(Side, EdgeId) -> Option<(usize, usize)>,
+    pieces: &mut [Piece],
+    alias: &[(VKey, VKey)],
+    grown: &mut Vec<(VKey, f64)>,
+) -> Vec<(EdgeId, f64)> {
+    let mut grown_edges = Vec::new();
+    for im in imprints {
+        // (most imprints are of faces on one surface)
+        if im.exact {
+            continue;
+        }
+        let surface = &bodies[im.into_side as usize].face(im.into).surface;
+        // (an edge found lying on the other body's face may be one of its own faces' on that very
+        // surface too)
+        let body = bodies[im.side];
+        let edge = body.edge(im.edge);
+        if edge
+            .coedges
+            .iter()
+            .any(|&c| same_surface(&body.face(body.coedge_face(c)).surface, surface))
+        {
+            continue;
+        }
+        for (t, v) in [(edge.range.lo, edge.start), (edge.range.hi, edge.end)] {
+            if t != im.range.lo && t != im.range.hi {
+                continue;
+            }
+            let k = VKey::Old(im.side, v);
+            let k = alias.iter().find(|a| a.0 == k).map_or(k, |a| a.1);
+            if let VKey::Old(sd, v) = k {
+                let x = bodies[sd].vertex(v);
+                let d = off_surface(surface, x.point) + ROUNDING;
+                if d > x.tol {
+                    grown.push((k, d));
+                }
+            }
+        }
+        let Some((first, n)) = pieces_of(im.side, im.edge) else {
+            continue;
+        };
+        // (the whole stretch first: within the edge's own tolerance, so is each piece of it)
+        if stray(&edge.curve, im.range, surface) + ROUNDING <= edge.tol.max(tol::LINEAR) {
+            continue;
+        }
+        for pc in &mut pieces[first..first + n] {
+            let (lo, hi) = (pc.range.lo.max(im.range.lo), pc.range.hi.min(im.range.hi));
+            if lo >= hi {
+                continue;
+            }
+            // (and the rounding of a distance measured another way, as `check` measures it: a
+            // few units in the last place of the coordinates, far below anything modelled)
+            let d = stray(&pc.curve, Interval::new(lo, hi), surface) + ROUNDING;
+            if d > pc.tol.max(tol::LINEAR) {
+                pc.tol = d;
+                if let Some((0, e)) = pc.whole {
+                    grown_edges.push((e, d));
+                }
+            }
+        }
+    }
+    grown_edges
+}
+
+/// Vertices `imprint_tols` grew (`grown`) past the middle of a kept piece (`kept`) ending on
+/// them: the edge is shorter than the balls at its ends, which `check` refuses
+/// (VertexTolerance); refused here, not handed out.
+#[cold]
+#[inline(never)]
+pub(crate) fn refuse_tolerances_meeting(
+    grown: &[(VKey, f64)],
+    pieces: &[Piece],
+    kept: impl Fn(usize) -> bool,
+) -> R<()> {
+    for &(k, t) in grown {
+        for (p, pc) in pieces.iter().enumerate() {
+            if (pc.start != k && pc.end != k) || t <= 1.1 * pc.tol.max(tol::LINEAR) || !kept(p) {
+                continue;
+            }
+            let at = |x: f64| pc.curve.eval(pc.range.lo + pc.range.width() * x);
+            let length: f64 = (0..16)
+                .map(|i| at(i as f64 / 16.0).distance(at((i + 1) as f64 / 16.0)))
+                .sum();
+            if 2.0 * t >= length {
+                return Err(BoolError::unhandled(Unhandled::TolerancesMeet { at: at(0.5) }));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A margin over a distance for its rounding: a few units in the last place of coordinates up
+/// to a metre (16 ε · 1000 mm ≈ 3.6e-12 mm).
+const ROUNDING: f64 = 1e-11;
+
+/// Planes `a` and `b` one plane but for rounding: normals equal or opposite and `a`'s origin on
+/// `b`, each within 8 units in the last place. Within a metre of their origins they then part by
+/// less than 16 ε · 1000 mm ≈ 3.6e-12 mm, inside `ROUNDING` (a part rotated into place has its
+/// planes' normals off by an ε or so).
+fn same_plane(a: &forge_geom::Plane, b: &forge_geom::Plane) -> bool {
+    let (na, nb) = (a.normal_vec().get(), b.normal_vec().get());
+    // (most are one plane bit for bit)
+    if (na == nb || na == -nb) && b.signed_distance(a.frame.origin) == 0.0 {
+        return true;
+    }
+    same_plane_rounded(a, b)
+}
+
+#[cold]
+#[inline(never)]
+fn same_plane_rounded(a: &forge_geom::Plane, b: &forge_geom::Plane) -> bool {
+    const ULPS: f64 = 8.0 * f64::EPSILON;
+    let (na, nb) = (a.normal_vec().get(), b.normal_vec().get());
+    let (oa, ob) = (a.frame.origin, b.frame.origin);
+    let scale = oa.x.abs() + oa.y.abs() + oa.z.abs() + ob.x.abs() + ob.y.abs() + ob.z.abs();
+    ((na - nb).length() <= ULPS || (na + nb).length() <= ULPS)
+        && b.signed_distance(oa).abs() <= ULPS * (1.0 + scale)
+}
+
+/// The imprints a pair of faces on surfaces `a` and `b` just made: `exact` where the surfaces are
+/// one (`same_surface`). Asked only of pairs that made some (most pairs on one surface imprint
+/// nothing new).
+pub(crate) fn mark_exact(made: &mut [Imprint], a: &Surface, b: &Surface) {
+    let exact = same_surface(a, b);
+    for im in made {
+        im.exact = exact;
+    }
+}
+
+/// Surfaces `a` and `b` one surface: planes `same_plane`, cylinders `same_cylinder`.
+pub(crate) fn same_surface(a: &Surface, b: &Surface) -> bool {
+    match (a, b) {
+        (Surface::Plane(a), Surface::Plane(b)) => same_plane(a, b),
+        (Surface::Cylinder(a), Surface::Cylinder(b)) => same_cylinder(a, b),
+        _ => false,
+    }
+}
+
+/// Cylinders `a` and `b` one cylinder but for rounding: radii equal, axes equal or opposite, and
+/// `b`'s origin on `a`'s axis, each within 8 units in the last place (as `same_plane`; a part
+/// rotated into place has its axes off by an ε or so).
+fn same_cylinder(a: &forge_geom::Cylinder, b: &forge_geom::Cylinder) -> bool {
+    let (da, db) = (a.frame.z().get(), b.frame.z().get());
+    // (most are one cylinder bit for bit)
+    if a.radius == b.radius
+        && (da == db || da == -db)
+        && (b.frame.origin - a.frame.origin).cross(da) == Vec3::ZERO
+    {
+        return true;
+    }
+    same_cylinder_rounded(a, b)
+}
+
+#[cold]
+#[inline(never)]
+fn same_cylinder_rounded(a: &forge_geom::Cylinder, b: &forge_geom::Cylinder) -> bool {
+    const ULPS: f64 = 8.0 * f64::EPSILON;
+    let (da, db) = (a.frame.z().get(), b.frame.z().get());
+    let (oa, ob) = (a.frame.origin, b.frame.origin);
+    let scale = oa.x.abs() + oa.y.abs() + oa.z.abs() + ob.x.abs() + ob.y.abs() + ob.z.abs();
+    (a.radius - b.radius).abs() <= ULPS * a.radius.abs().max(b.radius.abs())
+        && ((da - db).length() <= ULPS || (da + db).length() <= ULPS)
+        && (ob - oa).cross(da).length() <= ULPS * (1.0 + scale)
+}
+
+/// How far a curve's stretch `range` strays from a surface. From a plane: a line's exactly (at an
+/// end: the distance is linear along it), a circle's at most its centre's distance and its radius
+/// times the sine of its tilt to the plane (exact for a circle parallel to it); else the most of
+/// 17 points along it (as `check` asks).
+fn stray(c: &Curve, range: Interval, s: &Surface) -> f64 {
+    match (c, s) {
+        (Curve::Line(_), Surface::Plane(p)) => {
+            return p
+                .signed_distance(c.eval(range.lo))
+                .abs()
+                .max(p.signed_distance(c.eval(range.hi)).abs());
+        }
+        (Curve::Circle(k), Surface::Plane(p)) => {
+            let n = p.normal_vec().get();
+            let (u, v) = (k.frame.x().get().dot(n), k.frame.y().get().dot(n));
+            return p.signed_distance(k.frame.origin).abs() + k.radius * (u * u + v * v).sqrt();
+        }
+        _ => {}
+    }
+    (0..=16)
+        .map(|k| off_surface(s, c.eval(range.lo + range.width() * k as f64 / 16.0)))
+        .fold(0.0, f64::max)
+}
+
+/// How far point `p` is from surface `s`: a plane's or a cylinder's in closed form, else by
+/// projection.
+fn off_surface(s: &Surface, p: Point3) -> f64 {
+    match s {
+        Surface::Plane(q) => q.signed_distance(p).abs(),
+        Surface::Cylinder(c) => {
+            let (z, v) = (c.frame.z().get(), p - c.frame.origin);
+            ((v - z * v.dot(z)).length() - c.radius).abs()
+        }
+        _ => s.distance(p),
+    }
 }
 
 /// `tol` grown to what `grown` asks of vertex `k`.
@@ -3329,7 +3600,8 @@ fn trim_in(
                         edge: e,
                         range: Interval::new(w[0], w[1]),
                         into,
-                        into_side: sides[1 - k],
+                        into_side: sides[1 - k] as u32,
+                        exact: false,
                     });
                 }
             }
@@ -4931,7 +5203,9 @@ pub(crate) fn imprint(
                         edge: e,
                         range: Interval::new(w[0], w[1]),
                         into: dst_face,
-                        into_side: sides[dst],
+                        into_side: sides[dst] as u32,
+                        // (`mark_exact`, once the pair's imprints are made)
+                        exact: false,
                     }),
                     // along the destination's boundary: the shared part of coincident edges
                     Where::On | Where::Outside => {}
@@ -5669,7 +5943,7 @@ fn local_split(c: LocalSplit) -> Option<Local> {
     if hit(loops[0]) {
         return None;
     }
-    let class = match c.index[1].classify(face_point(body, c.f)?) {
+    let class = match c.index[1].classify(face_point_in(body, c.f)?) {
         Where::Inside => Class::In,
         Where::Outside => Class::Out,
         Where::On => return None,
@@ -5701,6 +5975,14 @@ fn local_split(c: LocalSplit) -> Option<Local> {
 
 /// A point on face `f` a little inside its boundary, beside the middle of its first edge.
 pub(crate) fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
+    face_point_by(body, f, 1.0, false)
+}
+
+/// `face_point`, its step in from the edge scaled by `scale`; with `reach`, no more than half as
+/// far as the face reaches that way, by its loops' vertices, and None where that is no more than
+/// two tolerances (on a plane: a curved face's vertices may all lie on a seam, level with the
+/// edge).
+fn face_point_by(body: &Body, f: FaceId, scale: f64, reach: bool) -> Option<Point3> {
     let face = body.face(f);
     let c = body.lp(*face.loops.first()?).coedges().next()?;
     let co = body.coedge(c);
@@ -5714,8 +5996,56 @@ pub(crate) fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
         .eval(edge.range.lo)
         .distance(d.p)
         .max(d.p.distance(edge.curve.eval(edge.range.hi)));
-    let q = d.p + inward * (0.01 * len.max(1e-3)).min(0.05);
+    let mut step = scale * (0.01 * len.max(1e-3)).min(0.05);
+    if reach {
+        // the first vertex twice the step in settles it, nearly always on the first loop (a
+        // curved edge may bulge further than the vertices: the step is only shorter for it)
+        let mut most = 0.0f64;
+        for k in face.loops.iter().flat_map(|&l| body.lp(l).coedges()) {
+            most = most.max((body.vertex(body.coedge_start(k)).point - d.p).dot(inward.get()));
+            if most >= 2.0 * step {
+                break;
+            }
+        }
+        if most <= 2.0 * tol::LINEAR {
+            return None;
+        }
+        step = step.min(0.5 * most);
+    }
+    let q = d.p + inward * step;
     Some(face.surface.eval(face.surface.project(q)))
+}
+
+/// `face_point`, where it lies on the face: on a face narrower than the step in from its edge (a
+/// sliver a boolean cut within tolerance of a wall) the step overshoots, and the point, off the
+/// face, may lie on the other side of a body the face does not reach (a wall unioned flush beside
+/// the sliver read the sliver as inside it, and dropped it: an open shell, a wrong Ok;
+/// research/booleans/drift.md §6). On a plane the step goes no more than half as far as the face
+/// reaches in (a box would not do: a sliver running diagonally has a wide one); on a curved face
+/// the point is kept only within the face's box, shorter steps tried off it. None leaves the face
+/// to be decided in pieces.
+fn face_point_in(body: &Body, f: FaceId) -> Option<Point3> {
+    if matches!(body.face(f).surface, forge_geom::Surface::Plane(_)) {
+        return face_point_by(body, f, 1.0, true);
+    }
+    let p = face_point(body, f)?;
+    // (the box worked out with nothing kept: no cache of the body's grows for it)
+    let within = body.face_box_unkept(f).grow(tol::LINEAR);
+    if within.contains(p) {
+        return Some(p);
+    }
+    nearer_face_point(body, f, &within)
+}
+
+/// `face_point_in` on a curved face where the usual step overshot it: steps a 32nd and a 1024th
+/// as long.
+#[cold]
+#[inline(never)]
+fn nearer_face_point(body: &Body, f: FaceId, within: &Box3) -> Option<Point3> {
+    [1.0 / 32.0, 1.0 / 1024.0]
+        .into_iter()
+        .filter_map(|s| face_point_by(body, f, s, false))
+        .find(|&p| within.contains(p))
 }
 
 /// The pieces chained into one closed loop (in walking order) and its outline in the face's

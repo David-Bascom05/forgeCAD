@@ -25,8 +25,12 @@ id_type!(ShellId);
 pub struct Vertex {
     pub point: Point3,
     pub name: Name,
-    /// The radius of the ball every curve and surface through the vertex meets: LINEAR, or
-    /// more where a boolean could not settle the vertex within LINEAR of all of them.
+    /// The radius of the ball every curve ending at the vertex meets: LINEAR, or more where a
+    /// boolean could not settle the vertex within LINEAR of all of them. Each face through the
+    /// vertex then lies within this and the tolerance of the face's edges at the vertex
+    /// (`Edge::tol`): the bound `check::vertices_off_planes` asks of planes in debug builds. Not
+    /// within this alone: a vertex settled on an edge whose curve is itself near the edge's
+    /// tolerance off its face can sit up to both off it (research/booleans/drift.md §5).
     pub tol: f64,
 }
 
@@ -44,7 +48,9 @@ pub struct Edge {
     pub coedges: Small<CoedgeId, 2>,
     pub name: Name,
     /// How far the edge may lie from its faces: `tol::LINEAR`, or more on an edge read from a
-    /// file, the deviation measured there. Only import sets it; pieces of an edge inherit it.
+    /// file, the deviation measured there, or on an edge a boolean imprinted on a face of the
+    /// other body that it strays from further (`forge_bool`'s `imprint_tols`). Pieces of an edge
+    /// inherit it.
     pub tol: f64,
     /// False once no face uses the edge (after an in-place edit).
     pub alive: bool,
