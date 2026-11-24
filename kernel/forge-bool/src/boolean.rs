@@ -447,6 +447,8 @@ pub(crate) enum Class {
 pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     #[cfg(debug_assertions)]
     crate::size::debug_check(&[a, b]);
+    #[cfg(debug_assertions)]
+    crate::curve_ok::debug_check(&[a, b]);
     // flat faces: the part read by reference and the result written fresh, with no copy first
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::boolean(a, b, op)? {
@@ -467,6 +469,8 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
     #[cfg(debug_assertions)]
     crate::size::debug_check(&[target, b]);
+    #[cfg(debug_assertions)]
+    crate::curve_ok::debug_check(&[target, b]);
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::boolean(target, b, op)? {
         *target = r;
@@ -583,6 +587,8 @@ fn survivors(a: &Body, b: &Body, op: Op, r: &Body) -> Option<String> {
 pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R<()> {
     #[cfg(debug_assertions)]
     crate::size::debug_check(&[target, &b.clone().into_body()]);
+    #[cfg(debug_assertions)]
+    crate::curve_ok::debug_check(&[target, &b.clone().into_body()]);
     #[cfg(feature = "decide_once")]
     if crate::decide_once::flat(target) {
         let tool = b.clone().into_body();
