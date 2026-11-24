@@ -820,6 +820,60 @@ fn robot_json(g: &Gui) -> Json {
     ])
 }
 
+/// The Agent tab's transcript, each entry as `{kind, text}` (a tool's its summary, a diff's its
+/// file and whether undone, a question's its id and state), whether it's running, and its problem.
+fn agent_json(a: &crate::shell::agent::AgentTab) -> Json {
+    use crate::shell::agent::Entry;
+    let entries = a
+        .entries
+        .iter()
+        .map(|e| match e {
+            Entry::User { text, .. } => Json::obj(vec![("kind", "user".into()), ("text", text.clone().into())]),
+            Entry::Agent { text } => Json::obj(vec![("kind", "agent".into()), ("text", text.clone().into())]),
+            Entry::Tool { summary, state, .. } => Json::obj(vec![
+                ("kind", "tool".into()),
+                ("text", summary.clone().into()),
+                ("state", format!("{state:?}").into()),
+            ]),
+            Entry::Diff { file, undone, turn, index, .. } => Json::obj(vec![
+                ("kind", "diff".into()),
+                ("text", file.clone().into()),
+                ("undone", (*undone).into()),
+                ("turn", num(*turn as f64)),
+                ("index", num(*index as f64)),
+            ]),
+            Entry::Note { text, error } => Json::obj(vec![
+                ("kind", "note".into()),
+                ("text", text.clone().into()),
+                ("error", (*error).into()),
+            ]),
+            Entry::Permission {
+                id,
+                summary,
+                input,
+                state,
+                ..
+            } => Json::obj(vec![
+                ("kind", "permission".into()),
+                ("id", id.clone().into()),
+                ("text", summary.clone().into()),
+                ("input", input.clone().into()),
+                ("state", format!("{state:?}").into()),
+            ]),
+        })
+        .collect();
+    Json::obj(vec![
+        ("running", a.running.into()),
+        ("entries", Json::Arr(entries)),
+        ("mode", a.mode.flag().into()),
+        ("mode_other", a.mode_other.clone().map_or(Json::Null, Json::from)),
+        (
+            "problem",
+            a.problem.as_ref().map_or(Json::Null, |p| p.text.clone().into()),
+        ),
+    ])
+}
+
 fn state_json(g: &Gui, canvas: Json) -> String {
     let doc = g.fg.as_ref();
     let built = g.last_built.as_ref().map(|b| {
@@ -850,6 +904,8 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("seq", doc.map_or(Json::Null, |s| num(s.seq as f64))),
         ("done", doc.map_or(Json::Null, |s| num(s.done as f64))),
         ("dirty", doc.is_some_and(|s| s.dirty()).into()),
+        // the Agent tab, as a test reads it: each entry's kind and words, a question waiting
+        ("agent", agent_json(&g.shell.agent)),
         // the Versions panel's word: history kept or not, and why not
         (
             "versions",
@@ -933,6 +989,8 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                             || n.starts_with("tool:")
                             || n.starts_with("robot:")
                             || n.starts_with("measure:")
+                            || n.starts_with("side:")
+                            || n.starts_with("agent:")
                             || n.starts_with("status:")
                     })
                     .map(|(n, r)| {
