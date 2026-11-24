@@ -698,6 +698,12 @@ impl Crawl {
             rec.ms = t0.elapsed().as_millis();
             return (rec, Some(h));
         }
+        // the status line cleared first: a command that says what the one before said (Mirror
+        // then Copy, both refused alike) is seen to speak
+        h.gui.shell.status.clear();
+        for _ in 0..2 {
+            step(&mut h);
+        }
         let before = Snap::take(&mut h);
         let pickers = forge_render::plat::PICKERS_ASKED.load(std::sync::atomic::Ordering::Relaxed);
         HOST.with(|x| x.borrow_mut().clear());
