@@ -246,7 +246,9 @@ impl HeightMap {
     /// How far round an edge point `engage` looks for stock: the cell's half-diagonal (the model
     /// holds material only to within a cell: a cell is lowered whole when its centre is cut, and
     /// the stock's own edges fall anywhere in a cell), and at least half the 1° between edge
-    /// points at radius r.
+    /// points at radius r. This holds for material at least a cell wide: a sliver narrower than
+    /// a cell between two cuts may hold no cell centre, and the model then has none of it (its
+    /// engagement is under a cell's width).
     pub fn reach(&self, r: f64) -> f64 {
         (std::f64::consts::FRAC_1_SQRT_2 * self.h).max(0.5 * r * std::f64::consts::PI / (EDGE_N - 1) as f64)
     }

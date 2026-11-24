@@ -224,11 +224,23 @@ A correctness change that costs speed; recorded here because it moves outputs an
     9 cells instead of 1.
   - Half a cell's reach was tried, with 2x2 blocks; it is not conservative (0.32 % over the
     chip on a 17° slanted slot).
+  - Tried to win the cost back (output identical): the own cell first, the last block reused,
+    an air point's block passed over on low tiles. Together about 5 %. Not tried, and why:
+    - a dilated-max map kept by sweep_in: each piece lowers a crescent of about 45 cells, and
+      refreshing their neighbourhoods costs about as much as the reads it saves (about 900 vs
+      1450 per piece); a 3x3 max is also wider than `reach`, so outputs would move again;
+    - coarser angular sampling: fewer, wider reads, but it changes how the engaged angle and
+      cos θ are taken (a new semantics, not a speed-up of this one).
+    TOOLPATH-QUALITY offered the dilated map as a later follow-up, built lazily outside
+    HeightMap's hot fields.
 - **Sound.** Nothing certified changes: feeds are no part of G1-G4, and every posted feed is
   checked by G5 as before. The model holds material only to within a cell. Its box covers the
-  stock, and a cell is lowered whole when its centre is cut. So true material at an edge point
-  lies within a cell's half-diagonal of a cell the model still holds high, and the read errs only
-  toward more engagement and a lower feed.
+  stock, and a cell is lowered whole when its centre is cut. So true material at an edge point,
+  if it is at least a cell wide, lies within a cell's half-diagonal of a cell the model still
+  holds high, and the read errs only toward more engagement and a lower feed. A sliver narrower
+  than a cell between two cuts can hold no cell centre and is not in the model at all. Its
+  engagement is under a cell's width; the sweep lowering a cell only when its whole box is cut
+  would close that too (TOOLPATH-QUALITY's review).
 - **Pinned by.** `kernel/forge-cam/tests/engage_conservative.rs`: the model's feed never above
   the exact engagement's, over sub-cell stock extents, a first pass leaving the stock, a second
   beside a slot, and slots slanted at 17°, 30°, 45° and 62°. It fails on the old read (7.47 %).
