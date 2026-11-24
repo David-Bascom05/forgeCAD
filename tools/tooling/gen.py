@@ -767,7 +767,7 @@ def shop(vendor, r, outs, skips):
                  E("cdx", "cutdia", "no reach is printed: half the printed max cut-off diameter CUTDIA"),
                  dict(path="hand", status="estimate", source=url, taken=tk, value=S("fig"),
                       basis="the catalogue figure shows a double-ended neutral blade; no R/L is printed")]
-        base["note"] = (base["note"] + f"; clamps in tool block {V('tool_block')}; {V('clamp')}").strip("; ")
+        base["note"] = (base["note"] + f"; clamps in tool blocks {V('tool_block')}; {V('clamp')}").strip("; ")
         outs["turning"].rec("blade", {"id": rid, **f, **base}, cites)
     elif k == "grooving_insert":
         f = dict(code=r["id"], width=V("cw"), re=V("re"), head=V("insl"), seat=str(V("seat_size")))
@@ -821,6 +821,16 @@ def shop(vendor, r, outs, skips):
                 if c.get(kk):
                     out.lines.append(f"{kk} = {tv(c[kk])}")
         out.lines.append("")
+    elif k == "tool_block":
+        f = dict(code=r["id"], h=V("h"), b=V("b"), l1=V("oal"), blade_h=32 if V("blade") == "CGP32..." else None)
+        cites = [dict(path="code", status="published", source=url, taken=tk, value=r["id"]),
+                 P("h", "h"), P("b", "b"), P("l1", "oal")]
+        if f["blade_h"]:
+            cites.append(dict(path="blade_h", status="estimate", source=url, taken=tk, value=S("blade"),
+                              basis="the block takes CGP32 blades, whose height H is 32 (F229)"))
+        base["note"] = (base["note"] + f"; HFASSY {V('hfassy')}, HBH {V('hbh')}, OAH {V('oah')}, OAW {V('oaw')} mm "
+                        "(the block's other printed dimensions)").strip("; ")
+        outs["turning"].rec("tool_block", {"id": rid, **f, **base}, cites)
     else:
         skips[f"shop kind {k}"] += 1
 
