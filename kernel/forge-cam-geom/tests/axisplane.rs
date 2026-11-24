@@ -213,3 +213,56 @@ fn never_clear_where_the_branch_and_bound_hits() {
     }
     assert!(decided > 300 && hits > 50, "decided {decided}, hits {hits}");
 }
+
+#[test]
+fn a_negative_limit_or_mu_is_never_cleared_here() {
+    let t = assemble(&Cutter::Flat { d: 6.0 }, 15.0, 6.0, 30.0, None).unwrap();
+    let body = &t.bodies[0];
+    let mv = Move::Line {
+        a: [-30.0, 0.0, 11.0],
+        b: [30.0, 0.0, 11.0],
+    };
+    // well clear (1 above the face), but the closed form takes only limit ≥ 0 and mu ≥ 0
+    let f = top(-20.0, 20.0, -5.0, 5.0, 10.0, 0.0);
+    assert!(forge_cam_geom::axisplane::clear(body, &f, &mv, -0.5).is_none());
+    let fneg = top(-20.0, 20.0, -5.0, 5.0, 10.0, -0.25);
+    assert!(forge_cam_geom::axisplane::clear(body, &fneg, &mv, 0.5).is_none());
+    // the same with limit 0.5 and mu 0: proven
+    assert!(forge_cam_geom::axisplane::clear(body, &f, &mv, 0.5).is_some());
+}
+
+#[test]
+fn a_bodys_radius_includes_an_arcs_bulge() {
+    use forge_cam_geom::tool::{Body, PSeg, Part};
+    // a lollipop-like profile: up the axis to (2, 0), an arc bulging out to ρ = 1 + √2 about
+    // (1, 1) up to (2, 2), then back to the axis
+    let r = 2f64.sqrt();
+    let chain = vec![
+        PSeg::Line {
+            a: [0.0, 0.0],
+            b: [2.0, 0.0],
+        },
+        PSeg::Arc {
+            a: [2.0, 0.0],
+            b: [2.0, 2.0],
+            c: [1.0, 1.0],
+            r,
+            ccw: true,
+        },
+        PSeg::Line {
+            a: [2.0, 2.0],
+            b: [0.0, 2.0],
+        },
+    ];
+    let b = Body::new(chain, Part::NonCutting).unwrap();
+    assert!(b.rmax >= 1.0 + r, "{}", b.rmax);
+    // and the cutters' own: their arcs end at their widest, so rmax is their radius
+    for (c, want) in [
+        (Cutter::Flat { d: 6.0 }, 3.0),
+        (Cutter::Ball { d: 6.0 }, 3.0),
+        (Cutter::Bull { d: 8.0, re: 1.5 }, 4.0),
+    ] {
+        let t = assemble(&c, 15.0, 6.0, 30.0, None).unwrap();
+        assert_eq!(t.bodies[0].rmax, want, "{c:?}");
+    }
+}

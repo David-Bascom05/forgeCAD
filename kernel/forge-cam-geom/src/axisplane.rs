@@ -1,24 +1,28 @@
-//! An axis-aligned plane face against an axisymmetric body (its axis along +z) on a line move,
-//! or an arc at one height for a horizontal plane: a lower bound on their distance in closed
-//! form, decided in exact arithmetic (real.rs), so a distance exactly at the limit is proven.
+//! An axis-aligned plane face (spanned by two coordinate axes: a workholding box's, a plate's,
+//! the stock's) against a tool body on a line move, or a horizontal arc: a lower bound on their
+//! distance in closed form, decided in exact arithmetic (real.rs), so a distance exactly at the
+//! limit is proven (ForgeCam.AxisPlane.axisplane_clear, axisplane_clear_below).
 //!
 //! The branch and bound proves a clearance only above its limit by a margin its intervals leave;
 //! a tool exactly at a fixture's clearance, or touching a modelled plate (distance 0 against a
-//! limit of 0), stays undecided there. Here the bound is a separation along one axis:
-//! - a horizontal face (all its points at height h): every body point is at height at least
-//!   tip + z0 and at most tip + z1, so each face point is at least (tip + z0 − h) from the body
-//!   when the body is above, (h − tip − z1) when it is below;
-//! - a vertical face whose normal is ±x (or ±y) (all its points at that coordinate c): every body
-//!   point is within rmax of the axis horizontally, so each face point is at least
-//!   |c − axis| − rmax from it.
+//! limit of 0), stays undecided there. Here the bound is a separation along one coordinate axis
+//! k, on one side: the body's near extent along k against the face box's far end. A separation
+//! g ≥ 0 along one coordinate bounds the distance by g; the tip is linear in a line's parameter,
+//! so each gap is too, and its least is at an end. The best over axes and sides is the bound.
 //!
-//! The face's own extent (its trim) is not used: the plane contains it, so the bound on the plane
-//! is a bound on the face. The tip's height and the axis's coordinate are linear in the move's
-//! parameter, so their least separation is at an end, unless the axis crosses the plane's
-//! coordinate along the move (then nothing is proven). The face's mu is subtracted: the bound is
-//! on the face as given; mu bounds the true object's distance from it.
+//! The model the lemma's hypotheses stand for (what REMOVED-CHECKS' "code = model" owes):
+//! - the body (hp): a solid of revolution about the +z axis through the tip, as every `Body` is
+//!   (a (ρ, z) profile; there is no other axis in the type: CAM is 3-axis). Every point lies
+//!   within ρ ≤ rmax of the axis (rmax includes an arc's bulge, `Body::new`) and at heights
+//!   tip + [z0, z1]; so along x or y within tip ± rmax, along z within tip + [z0, z1];
+//! - the face (hq): its points lie in the box o + [p] u + [q] v (a trim lies within its
+//!   parameter box, check.rs `Face`), each end computed exactly here; the true object lies
+//!   within mu of the face, so along k within that box's extent ± mu;
+//! - limit ≥ 0 and mu ≥ 0 (refused otherwise): a separation is a distance bound only when it is
+//!   not negative (best − mu ≥ limit ≥ 0).
 //!
-//! Only ever a Clear: `None` passes the pair on (as `contact::clear` does).
+//! Non-finite data is refused. Only ever a Clear: `None` passes the pair on (as `contact::clear`
+//! does).
 use crate::check::{Face, Move, Surf, Verdict};
 use crate::real::Ctx;
 use crate::tool::Body;
@@ -77,8 +81,12 @@ fn face_box(cx: &mut Ctx, f: &Face) -> Option<[[crate::real::R; 2]; 3]> {
 pub fn clear(body: &Body, f: &Face, mv: &Move, limit: f64) -> Option<Verdict> {
     let mut cx = Ctx::new();
     let fb = face_box(&mut cx, f)?;
+    // limit ≥ 0 and mu ≥ 0, as the lemma has them: a separation is a distance bound only when
+    // it is not negative (best − mu ≥ limit ≥ 0)
     if !(limit.is_finite()
+        && limit >= 0.0
         && f.mu.is_finite()
+        && f.mu >= 0.0
         && body.z0.is_finite()
         && body.z1.is_finite()
         && body.rmax.is_finite())

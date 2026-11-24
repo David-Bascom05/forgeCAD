@@ -129,12 +129,17 @@ owed = ["lemma", "code = model"]
 # end, compared with limit + mu in exact rationals (real.rs), so a tie at the limit (a pass exactly
 # at the fixture clearance, a tool on a plate at distance 0) is proven. No check is skipped: it
 # only decides what was undecided (a refusal before).
+# The model the lemmas' hypotheses stand for ("code = model"): hp, the body is a solid of
+# revolution about +z through the tip (every tool::Body is a (rho, z) profile, no other axis: CAM
+# is 3-axis), within rho <= rmax (Body::new counts an arc's bulge) and heights tip + [z0, z1];
+# hq, the face lies in its parameter box o + [p]u + [q]v (a trim lies within it, check.rs Face)
+# and the true object within mu of the face. limit >= 0 and mu >= 0 are refused otherwise.
 [[check]]
 id = "axisplane-clear"
 owner = "CAM-CORE"
 removed = "check.rs certify_shared's Undecided (a refusal) replaced by a Clear where the separating-axis bound proves it"
 rust = { file = "kernel/forge-cam-geom/src/axisplane.rs", fn = "clear" }
-reviewed_at = "dca6dc7c8270281a"
+reviewed_at = "67fd7bbfbb0355af"
 level = "L1"
 lemmas = [
   { project = "verify/forge-cam", name = "ForgeCam.AxisPlane.axisplane_clear" },
@@ -145,5 +150,7 @@ tests = [
   { file = "kernel/forge-cam-geom/tests/axisplane.rs", name = "a_pass_exactly_at_the_clearance_over_a_jaw_is_clear", kind = "mutation" },
   { file = "kernel/forge-cam-geom/tests/axisplane.rs", name = "a_pass_beside_a_jaw_exactly_at_the_clearance_is_clear", kind = "unit" },
   { file = "kernel/forge-cam-geom/tests/axisplane.rs", name = "a_tool_resting_on_a_plate_at_distance_zero_is_clear_at_limit_zero", kind = "unit" },
+  { file = "kernel/forge-cam-geom/tests/axisplane.rs", name = "a_negative_limit_or_mu_is_never_cleared_here", kind = "unit" },
+  { file = "kernel/forge-cam-geom/tests/axisplane.rs", name = "a_bodys_radius_includes_an_arcs_bulge", kind = "mutation" },
 ]
 owed = ["code = model"]
