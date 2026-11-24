@@ -122,7 +122,8 @@ fn tip_path<'a>(s: &'a Setup<'a>, seg: &'a Segment, t: u32) -> Result<impl Fn(f6
     if (ax[0].abs() > 1e-12) || (ax[1].abs() > 1e-12) || (ax[2] - 1.0).abs() > 1e-12 {
         return Err(RemovalError::Tilted { line: seg.line });
     }
-    Ok(move |u: f64| s.tip_in_part(&seg.at(u), t).unwrap().0)
+    s.tip_along(seg, t)
+        .ok_or(RemovalError::NoTool { line: seg.line, t })
 }
 
 /// Least of f over [a, b] for f convex there (ternary search, endpoints included).
@@ -228,19 +229,36 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
         let (a, b) = (p(0.0), p(1.0));
         // the cells under the move's box, grown by r
         let (mut lo, mut hi) = ([a[0].min(b[0]), a[1].min(b[1])], [a[0].max(b[0]), a[1].max(b[1])]);
+        // the move's lowest tip: a line's or a helix's at an end; an arc in another plane (G18,
+        // G19) can dip below both, so from samples less the longest chord between them
+        let mut lowest = a[2].min(b[2]);
         if let Path::Arc { .. } = seg.path {
             // the arc's xy extent: sample it (its circle's box is within these plus the sag)
+            let mut prev = a;
+            let mut chord = 0.0f64;
             for k in 0..=64 {
                 let x = p(k as f64 / 64.0);
                 lo = [lo[0].min(x[0]), lo[1].min(x[1])];
                 hi = [hi[0].max(x[0]), hi[1].max(x[1])];
+                lowest = lowest.min(x[2]);
+                chord = chord.max(
+                    ((x[0] - prev[0]).powi(2) + (x[1] - prev[1]).powi(2) + (x[2] - prev[2]).powi(2)).sqrt(),
+                );
+                prev = x;
             }
+            lowest -= chord;
             lo = [lo[0] - step, lo[1] - step];
             hi = [hi[0] + step, hi[1] + step];
         }
         // the widest piece decides the cells to visit
         let reach = tool.body.iter().map(|p| p.0).fold(r, f64::max);
-        let lowest = a[2].min(b[2]);
+        // the lowest a non-cutting piece starts above the tip
+        let lowest_from = tool
+            .body
+            .iter()
+            .skip(1)
+            .map(|p| p.1)
+            .fold(f64::INFINITY, f64::min);
         if lowest >= map.top {
             if seg.kind != SegKind::Rapid {
                 air += seg.t_min;
@@ -259,6 +277,17 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
                 let (x, y) = map.node(i, j);
                 let cur = map.z[j * nx + i];
                 if cur <= map.bottom {
+                    continue;
+                }
+                // cells the move cannot change, skipped with the same results: already below the
+                // tip's lowest point (no cutter reaches under it, every other piece is above the
+                // tip), or, on a line, farther from the path than the widest piece reaches
+                if cur <= lowest - 1e-6 {
+                    continue;
+                }
+                if let Path::Line = seg.path
+                    && within([a[0], a[1]], [b[0], b[1]], [x, y], reach).is_none()
+                {
                     continue;
                 }
                 let env = |u: f64| -> f64 {
@@ -282,7 +311,10 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
                 let new = low.max(map.bottom);
                 // each non-cutting piece: a flat-bottomed cylinder `from` above the tip
                 let after = new.min(cur);
-                for (pi, (pr, from, _)) in tool.body.iter().enumerate().skip(1) {
+                // no piece above the cutter can reach below the move's lowest tip + its `from`:
+                // when the cell is at or under that, none can hit it (the same results, skipped)
+                let reachable = after > lowest + lowest_from - 1e-6;
+                for (pi, (pr, from, _)) in tool.body.iter().enumerate().skip(1).filter(|_| reachable) {
                     let penv = |u: f64| -> f64 {
                         let c = p(u);
                         let d = ((x - c[0]).powi(2) + (y - c[1]).powi(2)).sqrt();

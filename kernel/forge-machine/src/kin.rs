@@ -155,6 +155,63 @@ fn place(def: &MachineDef, q: &[f64], j: usize, out: &mut [Rigid], done: &mut [b
     done[j] = true;
 }
 
+/// `pose` for many joint vectors that share their rotaries (a milling move): the tree order and
+/// the parents found once, each fixed rotary's placement computed once. The same operations in
+/// the same order as `pose`, so the same bits.
+pub struct Fixed {
+    order: Vec<usize>,
+    parent: Vec<Option<usize>>,
+    rot: Vec<Option<Rigid>>,
+}
+
+impl Fixed {
+    /// For joint vectors whose joints with `fixed[j]` keep the value `q0[j]`.
+    pub fn new(def: &MachineDef, q0: &[f64], fixed: &[bool]) -> Fixed {
+        let n = def.joints.len();
+        let parent: Vec<Option<usize>> = (0..n).map(|j| def.joint_index(&def.joints[j].parent)).collect();
+        let mut order = Vec::with_capacity(n);
+        let mut done = vec![false; n];
+        fn visit(j: usize, parent: &[Option<usize>], done: &mut [bool], order: &mut Vec<usize>) {
+            if done[j] {
+                return;
+            }
+            if let Some(p) = parent[j] {
+                visit(p, parent, done, order);
+            }
+            done[j] = true;
+            order.push(j);
+        }
+        for j in 0..n {
+            visit(j, &parent, &mut done, &mut order);
+        }
+        let rot = (0..n)
+            .map(|j| (fixed[j] && def.joints[j].ty == JointType::Rotary).then(|| joint_rigid(def, j, q0[j])))
+            .collect();
+        Fixed { order, parent, rot }
+    }
+
+    pub fn pose(&self, def: &MachineDef, q: &[f64]) -> Vec<Rigid> {
+        let mut out = vec![Rigid::ID; self.order.len()];
+        self.pose_into(def, q, &mut out);
+        out
+    }
+
+    /// `pose` into a buffer of def.joints.len().
+    pub fn pose_into(&self, def: &MachineDef, q: &[f64], out: &mut [Rigid]) {
+        for &j in &self.order {
+            let parent = match self.parent[j] {
+                Some(p) => out[p],
+                None => Rigid::ID,
+            };
+            let jr = match &self.rot[j] {
+                Some(r) => *r,
+                None => joint_rigid(def, j, q[j]),
+            };
+            out[j] = parent.then(&jr);
+        }
+    }
+}
+
 /// A link's placement from a pose ("base" is the identity).
 pub fn link<'a>(def: &MachineDef, pose: &'a [Rigid], name: &str) -> &'a Rigid {
     match def.joint_index(name) {
