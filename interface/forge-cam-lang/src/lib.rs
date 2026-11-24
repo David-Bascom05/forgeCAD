@@ -2536,159 +2536,171 @@ impl Cam {
             zs.dedup();
             // each band is decided on its own (its material, the part's section, the offset and
             // the difference): on all cores (forge_math::par), the results kept in band order
+            let mc = memo::context();
             let bands: Vec<(Vec<Leftover>, bool)> = forge_math::par::map(zs.len().saturating_sub(1), |bi| {
-                let w = &zs[bi..bi + 2];
-                let mut ok = true;
-                let mut found_lo: Vec<Leftover> = Vec::new();
-                let zm = 0.5 * (w[0] + w[1]);
-                let Ok(Some(mat)) = s.ip.material(zm) else {
-                    if s.ip.material(zm).is_err() {
-                        ok = false;
-                    }
-                    return (found_lo, ok);
-                };
-                // the part's section for this band, and how far it may be grown. Its own, by
-                // δ + ε; or, where it has none (outside the part's heights) or none can be taken
-                // (a band thinner than the section's resolution at a face), a section at z′ just
-                // past either end, by √((δ + ε)² − dz²), dz the band's farthest height from z′: a
-                // point within that of (x, y, z′) ∈ P is within δ + ε of P (P ⊕ B is
-                // three-dimensional), whatever z′ is
-                let e = 0.5 * grow;
-                let mut tries = vec![(zm, grow)];
-                for zp in [w[0] - e, w[1] + e] {
-                    let dz = (zp - w[0]).abs().max((zp - w[1]).abs());
-                    let g2 = grow * grow - dz * dz;
-                    if g2 > 0.0 {
-                        tries.push((zp, (g2.sqrt() * (1.0 - 1e-12)).max(0.0)));
-                    }
-                }
-                let mut found = None;
-                let mut failed = false;
-                for (zp, g) in tries {
-                    match part.section(zp, 1e-5) {
-                        Ok(sec) => {
-                            if std::env::var("FORGE_CAM_DEBUG").is_ok() {
-                                eprintln!("G4 band {w:?}: section at {zp}, grown {g}");
-                            }
-                            found = Some((sec, g, zp));
-                            break;
+                mc.enter(|| {
+                    let w = &zs[bi..bi + 2];
+                    let mut ok = true;
+                    let mut found_lo: Vec<Leftover> = Vec::new();
+                    let zm = 0.5 * (w[0] + w[1]);
+                    let Ok(Some(mat)) = s.ip.material(zm) else {
+                        if s.ip.material(zm).is_err() {
+                            ok = false;
                         }
-                        Err(forge_cam::section::SectionError::Empty) => {}
-                        Err(e) => {
-                            if std::env::var("FORGE_CAM_DEBUG").is_ok() {
-                                eprintln!("G4 at z {zp}: section {e:?}");
-                            }
-                            failed = true;
+                        return (found_lo, ok);
+                    };
+                    // the part's section for this band, and how far it may be grown. Its own, by
+                    // δ + ε; or, where it has none (outside the part's heights) or none can be taken
+                    // (a band thinner than the section's resolution at a face), a section at z′ just
+                    // past either end, by √((δ + ε)² − dz²), dz the band's farthest height from z′: a
+                    // point within that of (x, y, z′) ∈ P is within δ + ε of P (P ⊕ B is
+                    // three-dimensional), whatever z′ is
+                    let e = 0.5 * grow;
+                    let mut tries = vec![(zm, grow)];
+                    for zp in [w[0] - e, w[1] + e] {
+                        let dz = (zp - w[0]).abs().max((zp - w[1]).abs());
+                        let g2 = grow * grow - dz * dz;
+                        if g2 > 0.0 {
+                            tries.push((zp, (g2.sqrt() * (1.0 - 1e-12)).max(0.0)));
                         }
                     }
-                }
-                // the section at the band's own height, for the tool-radius reason
-                let own = found
-                    .as_ref()
-                    .and_then(|(sec, _, zp)| if *zp == zm { Some(sec.clone()) } else { None });
-                let left = match found {
-                    Some((sec, g, _)) => match forge_cam_geom::offset::offset(&sec, -g) {
-                        Ok((grown, _)) => forge_cam_geom::boolean::boolean(
-                            &mat,
-                            &forge_cam_geom::boolean::region_of(&grown),
-                            forge_cam_geom::boolean::Op::Diff,
-                        ),
-                        Err(e) => Err(e),
-                    },
-                    None if failed => {
-                        return (found_lo, false);
-                    }
-                    // no part at or near this height: all the material is left over
-                    None => Ok(mat
-                        .loops
-                        .iter()
-                        .map(|l| forge_cam_geom::offset::OLoop { segs: l.segs.clone() })
-                        .collect()),
-                };
-                if let Err(e) = &left
-                    && std::env::var("FORGE_CAM_DEBUG").is_ok()
-                {
-                    eprintln!("G4 band {w:?}: {e:?}");
-                }
-                match left {
-                    Ok(ls) if !ls.is_empty() => {
-                        let bx = |ls: &[forge_cam_geom::offset::OLoop]| -> Vec<[f64; 4]> {
-                            ls.iter()
-                                .map(|l| {
-                                    let mut b =
-                                        [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
-                                    for sg in &l.segs {
-                                        for p in [sg.start(), sg.end()] {
-                                            b = [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)];
-                                        }
-                                        // an arc may bulge past its ends: its circle's box bounds it
-                                        if let Seg::Arc { a, c, .. } = *sg {
-                                            let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
-                                            b = [
-                                                b[0].min(c.x - r),
-                                                b[1].min(c.y - r),
-                                                b[2].max(c.x + r),
-                                                b[3].max(c.y + r),
-                                            ];
-                                        }
-                                    }
-                                    b
-                                })
-                                .collect()
-                        };
-                        // held by the fixture: under the jaws' top, and within the fixture's
-                        // clearance of one of its pieces (where no tool may go)
-                        let held = |b: &[f64; 4]| match &s.fixture {
-                            Some(f) if w[1] <= f.jaw_top => f.boxes().iter().any(|(_, lo, hi)| {
-                                let c = f.clearance;
-                                b[0] <= hi[0] + c
-                                    && b[2] >= lo[0] - c
-                                    && b[1] <= hi[1] + c
-                                    && b[3] >= lo[1] - c
-                                    && w[0] <= hi[2] + c
-                                    && w[1] >= lo[2] - c
-                            }),
-                            _ => false,
-                        };
-                        // held, by each loop's box; the rest classified as a region
-                        let (hl, ul): (Vec<_>, Vec<_>) = ls
-                            .into_iter()
-                            .partition(|l| held(&bx(std::slice::from_ref(l))[0]));
-                        let mut out: Vec<Reason> = vec![(bx(&hl), "held by fixture", None, None)];
-                        if below.is_some_and(|d| w[1] <= d) {
-                            out.push((bx(&ul), "below every tool tip", None, below));
-                        } else {
-                            match (rmin, &own) {
-                                (Some(r), Some(sec)) if !ul.is_empty() => {
-                                    match tool_radius_split(&s.ip, sec, r, &ul) {
-                                        Some((reach, not)) => {
-                                            out.push((bx(&reach), "uncut", None, None));
-                                            out.push((bx(&not), "tool radius", Some(r), None));
-                                        }
-                                        None => out.push((bx(&ul), "uncut", None, None)),
-                                    }
+                    let mut found = None;
+                    let mut failed = false;
+                    for (zp, g) in tries {
+                        match part.section(zp, 1e-5) {
+                            Ok(sec) => {
+                                if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                                    eprintln!("G4 band {w:?}: section at {zp}, grown {g}");
                                 }
-                                _ => out.push((bx(&ul), "uncut", None, None)),
+                                found = Some((sec, g, zp));
+                                break;
                             }
-                        }
-                        for (boxes, why, r, below) in out {
-                            if !boxes.is_empty() {
-                                found_lo.push(Leftover {
-                                    setup: si,
-                                    z0: w[0],
-                                    z1: w[1],
-                                    boxes,
-                                    why,
-                                    r,
-                                    below,
-                                });
+                            Err(forge_cam::section::SectionError::Empty) => {}
+                            Err(e) => {
+                                if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                                    eprintln!("G4 at z {zp}: section {e:?}");
+                                }
+                                failed = true;
                             }
                         }
                     }
-                    Ok(_) => {}
-                    Err(_) => ok = false,
-                }
-                (found_lo, ok)
+                    // the section at the band's own height, for the tool-radius reason
+                    let own = found
+                        .as_ref()
+                        .and_then(|(sec, _, zp)| if *zp == zm { Some(sec.clone()) } else { None });
+                    let left = match found {
+                        Some((sec, g, _)) => match forge_cam_geom::offset::offset(&sec, -g) {
+                            Ok((grown, _)) => forge_cam_geom::boolean::boolean(
+                                &mat,
+                                &forge_cam_geom::boolean::region_of(&grown),
+                                forge_cam_geom::boolean::Op::Diff,
+                            ),
+                            Err(e) => Err(e),
+                        },
+                        None if failed => {
+                            return (found_lo, false);
+                        }
+                        // no part at or near this height: all the material is left over
+                        None => Ok(mat
+                            .loops
+                            .iter()
+                            .map(|l| forge_cam_geom::offset::OLoop { segs: l.segs.clone() })
+                            .collect()),
+                    };
+                    if let Err(e) = &left
+                        && std::env::var("FORGE_CAM_DEBUG").is_ok()
+                    {
+                        eprintln!("G4 band {w:?}: {e:?}");
+                    }
+                    match left {
+                        Ok(ls) if !ls.is_empty() => {
+                            let bx = |ls: &[forge_cam_geom::offset::OLoop]| -> Vec<[f64; 4]> {
+                                ls.iter()
+                                    .map(|l| {
+                                        let mut b = [
+                                            f64::INFINITY,
+                                            f64::INFINITY,
+                                            f64::NEG_INFINITY,
+                                            f64::NEG_INFINITY,
+                                        ];
+                                        for sg in &l.segs {
+                                            for p in [sg.start(), sg.end()] {
+                                                b = [
+                                                    b[0].min(p.x),
+                                                    b[1].min(p.y),
+                                                    b[2].max(p.x),
+                                                    b[3].max(p.y),
+                                                ];
+                                            }
+                                            // an arc may bulge past its ends: its circle's box bounds it
+                                            if let Seg::Arc { a, c, .. } = *sg {
+                                                let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                                                b = [
+                                                    b[0].min(c.x - r),
+                                                    b[1].min(c.y - r),
+                                                    b[2].max(c.x + r),
+                                                    b[3].max(c.y + r),
+                                                ];
+                                            }
+                                        }
+                                        b
+                                    })
+                                    .collect()
+                            };
+                            // held by the fixture: under the jaws' top, and within the fixture's
+                            // clearance of one of its pieces (where no tool may go)
+                            let held = |b: &[f64; 4]| match &s.fixture {
+                                Some(f) if w[1] <= f.jaw_top => f.boxes().iter().any(|(_, lo, hi)| {
+                                    let c = f.clearance;
+                                    b[0] <= hi[0] + c
+                                        && b[2] >= lo[0] - c
+                                        && b[1] <= hi[1] + c
+                                        && b[3] >= lo[1] - c
+                                        && w[0] <= hi[2] + c
+                                        && w[1] >= lo[2] - c
+                                }),
+                                _ => false,
+                            };
+                            // held, by each loop's box; the rest classified as a region
+                            let (hl, ul): (Vec<_>, Vec<_>) = ls
+                                .into_iter()
+                                .partition(|l| held(&bx(std::slice::from_ref(l))[0]));
+                            let mut out: Vec<Reason> = vec![(bx(&hl), "held by fixture", None, None)];
+                            if below.is_some_and(|d| w[1] <= d) {
+                                out.push((bx(&ul), "below every tool tip", None, below));
+                            } else {
+                                match (rmin, &own) {
+                                    (Some(r), Some(sec)) if !ul.is_empty() => {
+                                        match tool_radius_split(&s.ip, sec, r, &ul) {
+                                            Some((reach, not)) => {
+                                                out.push((bx(&reach), "uncut", None, None));
+                                                out.push((bx(&not), "tool radius", Some(r), None));
+                                            }
+                                            None => out.push((bx(&ul), "uncut", None, None)),
+                                        }
+                                    }
+                                    _ => out.push((bx(&ul), "uncut", None, None)),
+                                }
+                            }
+                            for (boxes, why, r, below) in out {
+                                if !boxes.is_empty() {
+                                    found_lo.push(Leftover {
+                                        setup: si,
+                                        z0: w[0],
+                                        z1: w[1],
+                                        boxes,
+                                        why,
+                                        r,
+                                        below,
+                                    });
+                                }
+                            }
+                        }
+                        Ok(_) => {}
+                        Err(_) => ok = false,
+                    }
+                    (found_lo, ok)
+                })
             });
             for (found_lo, ok) in bands {
                 self.leftover.extend(found_lo);
@@ -9216,286 +9228,302 @@ impl Cam {
         // part's frame
         let scale = 10f64.powi(d.decimals as i32);
         let fscale = 10f64.powi(d.feed_decimals as i32);
-        for (oi, pi, a, b) in spans {
-            let s = &self.setups[self.ops[oi].setup];
-            let o = s.origin;
-            let sub = forge_post::QProgram {
-                number: 0,
-                title: String::new(),
-                recs: q.recs[a..b].to_vec(),
-                decimals: d.decimals,
-                feed_decimals: d.feed_decimals,
-                inch: q.inch,
-            };
-            // the control's peck retract and chip-break lift: the posted program does not fix
-            // them; the path is certified so that any value in [0, the depth already drilled]
-            // gives the same verdicts (CYCLE_PARAMS: tests/peck.rs)
-            let ms = forge_post::motions_with(&sub, *CYCLE_PARAMS.lock().unwrap_or_else(|e| e.into_inner()));
-            // G5's runtime half: what the text commands the spindle and the feed, as read back
-            let runtime = self.runtime_limits(oi, &ms, d.feed_decimals);
-            let back = |p: [i64; 3]| {
-                [
-                    p[0] as f64 / scale + o[0],
-                    p[1] as f64 / scale + o[1],
-                    p[2] as f64 / scale + o[2],
-                ]
-            };
-            let path = &self.ops[oi].paths[pi];
-            // the planned probe moves' overtravel and window, in order (the text carries only
-            // the end of the search)
-            let mut planned_probes = path.moves.iter().filter_map(|m| match *m {
-                PMove::Probe { over, entry, .. } => Some((over, entry)),
-                _ => None,
-            });
-            let mut moves = vec![];
-            // the probe's ball radius (a single-surface measure names the surface, not the tip)
-            let ball_r = 0.5 * self.tools[path.tool].tool.dc;
-            // where the last probe move started (a feed straight back there is its back-off)
-            let mut probe_from: Option<[f64; 3]> = None;
-            let mut start: Option<[f64; 3]> = None;
-            let (mut lc, mut lr, mut time) = (0.0, 0.0, 0.0);
-            let mut column: Option<([f64; 2], f64, f64)> = None;
-            let mut at = [0.0; 3];
-            for m in &ms {
-                let (to, ph, f) = match m {
-                    forge_post::Motion::Rapid(p) => (back(*p), Phase::Rapid, 0.0),
-                    forge_post::Motion::Feed(p, f) => {
-                        let to = back(*p);
-                        // a probe move's back-off: straight back to where its search started
-                        if let (Some(from), Some(PMove::Probe { back: b @ false, .. })) =
-                            (probe_from, moves.last_mut())
-                            && from == to
-                        {
-                            *b = true;
-                            let l =
-                                ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2))
-                                    .sqrt();
+        // each path read back and certified on its own (a function of the program's records
+        // and the op, reading `self` only), on up to the threads there are; taken into the ops
+        // after, in the paths' order, as before (the memos' state carried to the threads)
+        let mc = memo::context();
+        let done: Vec<_> = forge_math::par::map(spans.len(), |k| {
+            mc.enter(|| {
+                let (oi, pi, a, b) = spans[k];
+                let s = &self.setups[self.ops[oi].setup];
+                let o = s.origin;
+                let sub = forge_post::QProgram {
+                    number: 0,
+                    title: String::new(),
+                    recs: q.recs[a..b].to_vec(),
+                    decimals: d.decimals,
+                    feed_decimals: d.feed_decimals,
+                    inch: q.inch,
+                };
+                // the control's peck retract and chip-break lift: the posted program does not fix
+                // them; the path is certified so that any value in [0, the depth already drilled]
+                // gives the same verdicts (CYCLE_PARAMS: tests/peck.rs)
+                let ms =
+                    forge_post::motions_with(&sub, *CYCLE_PARAMS.lock().unwrap_or_else(|e| e.into_inner()));
+                // G5's runtime half: what the text commands the spindle and the feed, as read back
+                let runtime = self.runtime_limits(oi, &ms, d.feed_decimals);
+                let back = |p: [i64; 3]| {
+                    [
+                        p[0] as f64 / scale + o[0],
+                        p[1] as f64 / scale + o[1],
+                        p[2] as f64 / scale + o[2],
+                    ]
+                };
+                let path = &self.ops[oi].paths[pi];
+                // the planned probe moves' overtravel and window, in order (the text carries only
+                // the end of the search)
+                let mut planned_probes = path.moves.iter().filter_map(|m| match *m {
+                    PMove::Probe { over, entry, .. } => Some((over, entry)),
+                    _ => None,
+                });
+                let mut moves = vec![];
+                // the probe's ball radius (a single-surface measure names the surface, not the tip)
+                let ball_r = 0.5 * self.tools[path.tool].tool.dc;
+                // where the last probe move started (a feed straight back there is its back-off)
+                let mut probe_from: Option<[f64; 3]> = None;
+                let mut start: Option<[f64; 3]> = None;
+                let (mut lc, mut lr, mut time) = (0.0, 0.0, 0.0);
+                let mut column: Option<([f64; 2], f64, f64)> = None;
+                let mut at = [0.0; 3];
+                for m in &ms {
+                    let (to, ph, f) = match m {
+                        forge_post::Motion::Rapid(p) => (back(*p), Phase::Rapid, 0.0),
+                        forge_post::Motion::Feed(p, f) => {
+                            let to = back(*p);
+                            // a probe move's back-off: straight back to where its search started
+                            if let (Some(from), Some(PMove::Probe { back: b @ false, .. })) =
+                                (probe_from, moves.last_mut())
+                                && from == to
+                            {
+                                *b = true;
+                                let l = ((to[0] - at[0]).powi(2)
+                                    + (to[1] - at[1]).powi(2)
+                                    + (to[2] - at[2]).powi(2))
+                                .sqrt();
+                                let fa = *f as f64 / fscale;
+                                lc += l;
+                                time += if fa > 0.0 { l / fa * 60.0 } else { 0.0 };
+                                probe_from = None;
+                                at = to;
+                                continue;
+                            }
+                            (to, Phase::Cut, *f as f64 / fscale)
+                        }
+                        forge_post::Motion::Arc { to, c, cw, f, full } => {
+                            let t = back(*to);
+                            if start.is_none() {
+                                start = Some(t);
+                            }
+                            let cc = [c[0] as f64 / scale + o[0], c[1] as f64 / scale + o[1]];
+                            let r = ((at[0] - cc[0]).powi(2) + (at[1] - cc[1]).powi(2)).sqrt();
+                            // its length: the turn it sweeps (as the control reads it: a whole turn
+                            // when `full`), with the height it climbs; its time at its feed
+                            let tau = std::f64::consts::TAU;
+                            let a0 = forge_math::dmath::atan2(at[1] - cc[1], at[0] - cc[0]);
+                            let a1 = forge_math::dmath::atan2(t[1] - cc[1], t[0] - cc[0]);
+                            let mut sweep = if *cw { a0 - a1 } else { a1 - a0 };
+                            while sweep < 0.0 {
+                                sweep += tau;
+                            }
+                            while sweep >= tau {
+                                sweep -= tau;
+                            }
+                            if *full {
+                                sweep = tau;
+                            }
+                            let l = ((r * sweep).powi(2) + (t[2] - at[2]).powi(2)).sqrt();
+                            lc += l;
+                            let fa = *f as f64 / fscale;
+                            time += if fa > 0.0 { l / fa * 60.0 } else { 0.0 };
+                            moves.push(PMove::Arc {
+                                to: t,
+                                c: [c[0] as f64 / scale + o[0], c[1] as f64 / scale + o[1]],
+                                cw: *cw,
+                                f: *f as f64 / fscale,
+                            });
+                            at = t;
+                            column = None;
+                            continue;
+                        }
+                        // the probing macros: the switch moves Z a little (not modelled here: the
+                        // next protected move names every axis), a protected move is a feed move, a
+                        // single-surface measure is a probe move that returns to its start
+                        forge_post::Motion::ProbeOn(_) => continue,
+                        forge_post::Motion::ProbeProtected(p, f) => {
+                            (back(*p), Phase::Link, *f as f64 / fscale)
+                        }
+                        forge_post::Motion::ProbeSurface { axis, at: sv, q, .. } => {
+                            let k = *axis as usize;
+                            let surf = *sv as f64 / scale + o[k];
+                            let sgn = if surf >= at[k] { 1.0 } else { -1.0 };
+                            let mut to = at;
+                            to[k] = if k == 2 { surf } else { surf - sgn * ball_r };
+                            let over = *q as f64 / scale;
+                            let (_, entry) = planned_probes.next().unwrap_or((0.0, 0.0));
+                            let l = (to[k] - at[k]).abs() + over;
+                            lc += 2.0 * l;
+                            moves.push(PMove::Probe {
+                                to,
+                                f: 0.0,
+                                over,
+                                entry,
+                                back: true,
+                            });
+                            column = None;
+                            continue;
+                        }
+                        forge_post::Motion::Probe(p, f) => {
+                            let end = back(*p);
+                            // (a probe move the op did not plan has no window: the ball may touch
+                            // nothing on it)
+                            let (over, entry) = planned_probes.next().unwrap_or((0.0, 0.0));
+                            let d = [end[0] - at[0], end[1] - at[1], end[2] - at[2]];
+                            let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+                            let to = if l > over {
+                                [
+                                    end[0] - over * d[0] / l,
+                                    end[1] - over * d[1] / l,
+                                    end[2] - over * d[2] / l,
+                                ]
+                            } else {
+                                at
+                            };
+                            // the search's time is at most its whole length at its feed
                             let fa = *f as f64 / fscale;
                             lc += l;
                             time += if fa > 0.0 { l / fa * 60.0 } else { 0.0 };
-                            probe_from = None;
+                            moves.push(PMove::Probe {
+                                to,
+                                f: fa,
+                                over,
+                                entry,
+                                back: false,
+                            });
+                            probe_from = Some(at);
                             at = to;
+                            column = None;
                             continue;
                         }
-                        (to, Phase::Cut, *f as f64 / fscale)
-                    }
-                    forge_post::Motion::Arc { to, c, cw, f, full } => {
-                        let t = back(*to);
-                        if start.is_none() {
-                            start = Some(t);
-                        }
-                        let cc = [c[0] as f64 / scale + o[0], c[1] as f64 / scale + o[1]];
-                        let r = ((at[0] - cc[0]).powi(2) + (at[1] - cc[1]).powi(2)).sqrt();
-                        // its length: the turn it sweeps (as the control reads it: a whole turn
-                        // when `full`), with the height it climbs; its time at its feed
-                        let tau = std::f64::consts::TAU;
-                        let a0 = forge_math::dmath::atan2(at[1] - cc[1], at[0] - cc[0]);
-                        let a1 = forge_math::dmath::atan2(t[1] - cc[1], t[0] - cc[0]);
-                        let mut sweep = if *cw { a0 - a1 } else { a1 - a0 };
-                        while sweep < 0.0 {
-                            sweep += tau;
-                        }
-                        while sweep >= tau {
-                            sweep -= tau;
-                        }
-                        if *full {
-                            sweep = tau;
-                        }
-                        let l = ((r * sweep).powi(2) + (t[2] - at[2]).powi(2)).sqrt();
-                        lc += l;
-                        let fa = *f as f64 / fscale;
-                        time += if fa > 0.0 { l / fa * 60.0 } else { 0.0 };
-                        moves.push(PMove::Arc {
-                            to: t,
-                            c: [c[0] as f64 / scale + o[0], c[1] as f64 / scale + o[1]],
-                            cw: *cw,
-                            f: *f as f64 / fscale,
-                        });
-                        at = t;
-                        column = None;
-                        continue;
-                    }
-                    // the probing macros: the switch moves Z a little (not modelled here: the next
-                    // protected move names every axis), a protected move is a feed move, a
-                    // single-surface measure is a probe move that returns to its start
-                    forge_post::Motion::ProbeOn(_) => continue,
-                    forge_post::Motion::ProbeProtected(p, f) => (back(*p), Phase::Link, *f as f64 / fscale),
-                    forge_post::Motion::ProbeSurface { axis, at: sv, q, .. } => {
-                        let k = *axis as usize;
-                        let surf = *sv as f64 / scale + o[k];
-                        let sgn = if surf >= at[k] { 1.0 } else { -1.0 };
-                        let mut to = at;
-                        to[k] = if k == 2 { surf } else { surf - sgn * ball_r };
-                        let over = *q as f64 / scale;
-                        let (_, entry) = planned_probes.next().unwrap_or((0.0, 0.0));
-                        let l = (to[k] - at[k]).abs() + over;
-                        lc += 2.0 * l;
-                        moves.push(PMove::Probe {
-                            to,
-                            f: 0.0,
-                            over,
-                            entry,
-                            back: true,
-                        });
-                        column = None;
-                        continue;
-                    }
-                    forge_post::Motion::Probe(p, f) => {
-                        let end = back(*p);
-                        // (a probe move the op did not plan has no window: the ball may touch
-                        // nothing on it)
-                        let (over, entry) = planned_probes.next().unwrap_or((0.0, 0.0));
-                        let d = [end[0] - at[0], end[1] - at[1], end[2] - at[2]];
-                        let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
-                        let to = if l > over {
-                            [
-                                end[0] - over * d[0] / l,
-                                end[1] - over * d[1] / l,
-                                end[2] - over * d[2] / l,
-                            ]
-                        } else {
-                            at
-                        };
-                        // the search's time is at most its whole length at its feed
-                        let fa = *f as f64 / fscale;
-                        lc += l;
-                        time += if fa > 0.0 { l / fa * 60.0 } else { 0.0 };
-                        moves.push(PMove::Probe {
-                            to,
-                            f: fa,
-                            over,
-                            entry,
-                            back: false,
-                        });
-                        probe_from = Some(at);
+                        _ => continue,
+                    };
+                    if start.is_none() {
+                        start = Some(to);
                         at = to;
-                        column = None;
                         continue;
                     }
-                    _ => continue,
-                };
-                if start.is_none() {
-                    start = Some(to);
-                    at = to;
-                    continue;
-                }
-                let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2)).sqrt();
-                if ph == Phase::Rapid {
-                    lr += l;
-                    time += l / 10_000.0 * 60.0;
-                } else {
-                    lc += l;
-                    time += if f > 0.0 { l / f * 60.0 } else { 0.0 };
-                }
-                // a feed move straight down is a plunge; a rapid straight back up its column, from
-                // where a plunge ended, retraces positions already checked: a link
-                let ph = if ph == Phase::Cut && to[0] == at[0] && to[1] == at[1] && to[2] < at[2] {
-                    Phase::Plunge
-                } else {
-                    ph
-                };
-                let ph = if ph == Phase::Rapid
-                    && to[0] == at[0]
-                    && to[1] == at[1]
-                    && to[2] > at[2]
-                    && matches!(
-                        moves.last(),
-                        Some(PMove::Line {
-                            phase: Phase::Plunge,
-                            ..
-                        })
-                    ) {
-                    Phase::Link
-                } else {
-                    ph
-                };
-                // a rapid straight down within the span of this column the tool has already
-                // been through at this xy (a peck cycle's re-entry): it passes only where it has
-                // been, each such place checked already (by a rapid's stricter limits, or swept
-                // by the cutter), so it is a link, checked as the feed there is (the same limits).
-                // So the verdicts are the same for any peck retract or chip-break lift in [0, the
-                // depth drilled]
-                let ph = if ph == Phase::Rapid
-                    && to[0] == at[0]
-                    && to[1] == at[1]
-                    && to[2] < at[2]
-                    && column
-                        .is_some_and(|(xy, low, high)| xy == [to[0], to[1]] && to[2] >= low && at[2] <= high)
-                {
-                    Phase::Link
-                } else {
-                    ph
-                };
-                // the span of the column through the current xy the tool has passed (reset when
-                // the xy changes: the move arriving there gives its end only)
-                column = if to[0] == at[0] && to[1] == at[1] {
-                    match column {
-                        Some((xy, l, h)) if xy == [to[0], to[1]] => {
-                            Some((xy, l.min(to[2]).min(at[2]), h.max(to[2]).max(at[2])))
-                        }
-                        _ => Some(([to[0], to[1]], to[2].min(at[2]), to[2].max(at[2]))),
+                    let l =
+                        ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2)).sqrt();
+                    if ph == Phase::Rapid {
+                        lr += l;
+                        time += l / 10_000.0 * 60.0;
+                    } else {
+                        lc += l;
+                        time += if f > 0.0 { l / f * 60.0 } else { 0.0 };
                     }
-                } else {
-                    Some(([to[0], to[1]], to[2], to[2]))
-                };
-                moves.push(if ph == Phase::Rapid {
-                    PMove::Rapid { to }
-                } else {
-                    PMove::Line { to, f, phase: ph }
-                });
-                at = to;
-            }
-            let posted = OpPath {
-                tool: path.tool,
-                start: start.unwrap_or(path.start),
-                moves,
-                rpm: path.rpm,
-                coolant: path.coolant,
-            };
-            // the lowest tip: moves are lines, arcs and helices, their heights linear between
-            // their ends, so the least end is the least height (cycles are read back as lines)
-            let mut low = posted.start[2];
-            for m in &posted.moves {
-                if let PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } = *m {
-                    low = low.min(to[2]);
-                }
-            }
-            let mut sum =
-                self.certify_posted(oi, &posted, FULL_STOCK.load(std::sync::atomic::Ordering::Relaxed));
-            // G5: every position the posted path reaches, as the machine's joints see it
-            if let Some(c) = self.axis_limits(oi, &posted) {
-                sum.clear = false;
-                sum.checks.insert(0, c);
-            }
-            if let Some(c) = runtime {
-                sum.clear = false;
-                sum.checks.insert(0, c);
-            }
-            // every check names this path (a hole plan posts one per tool)
-            for c in &mut sum.checks {
-                c.path = pi;
-            }
-            // the lowest the tool's tip goes in a move that met the fixture
-            let ends: Vec<[f64; 3]> = std::iter::once(posted.start)
-                .chain(posted.moves.iter().scan(posted.start, |at, m| {
-                    match *m {
-                        PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => *at = to,
-                        PMove::Probe { to, back, .. } => {
-                            if !back {
-                                *at = to
+                    // a feed move straight down is a plunge; a rapid straight back up its column, from
+                    // where a plunge ended, retraces positions already checked: a link
+                    let ph = if ph == Phase::Cut && to[0] == at[0] && to[1] == at[1] && to[2] < at[2] {
+                        Phase::Plunge
+                    } else {
+                        ph
+                    };
+                    let ph = if ph == Phase::Rapid
+                        && to[0] == at[0]
+                        && to[1] == at[1]
+                        && to[2] > at[2]
+                        && matches!(
+                            moves.last(),
+                            Some(PMove::Line {
+                                phase: Phase::Plunge,
+                                ..
+                            })
+                        ) {
+                        Phase::Link
+                    } else {
+                        ph
+                    };
+                    // a rapid straight down within the span of this column the tool has already
+                    // been through at this xy (a peck cycle's re-entry): it passes only where it has
+                    // been, each such place checked already (by a rapid's stricter limits, or swept
+                    // by the cutter), so it is a link, checked as the feed there is (the same limits).
+                    // So the verdicts are the same for any peck retract or chip-break lift in [0, the
+                    // depth drilled]
+                    let ph = if ph == Phase::Rapid
+                        && to[0] == at[0]
+                        && to[1] == at[1]
+                        && to[2] < at[2]
+                        && column.is_some_and(|(xy, low, high)| {
+                            xy == [to[0], to[1]] && to[2] >= low && at[2] <= high
+                        }) {
+                        Phase::Link
+                    } else {
+                        ph
+                    };
+                    // the span of the column through the current xy the tool has passed (reset when
+                    // the xy changes: the move arriving there gives its end only)
+                    column = if to[0] == at[0] && to[1] == at[1] {
+                        match column {
+                            Some((xy, l, h)) if xy == [to[0], to[1]] => {
+                                Some((xy, l.min(to[2]).min(at[2]), h.max(to[2]).max(at[2])))
                             }
+                            _ => Some(([to[0], to[1]], to[2].min(at[2]), to[2].max(at[2]))),
                         }
-                        PMove::Cycle { .. } => {}
+                    } else {
+                        Some(([to[0], to[1]], to[2], to[2]))
+                    };
+                    moves.push(if ph == Phase::Rapid {
+                        PMove::Rapid { to }
+                    } else {
+                        PMove::Line { to, f, phase: ph }
+                    });
+                    at = to;
+                }
+                let posted = OpPath {
+                    tool: path.tool,
+                    start: start.unwrap_or(path.start),
+                    moves,
+                    rpm: path.rpm,
+                    coolant: path.coolant,
+                };
+                // the lowest tip: moves are lines, arcs and helices, their heights linear between
+                // their ends, so the least end is the least height (cycles are read back as lines)
+                let mut low = posted.start[2];
+                for m in &posted.moves {
+                    if let PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } = *m {
+                        low = low.min(to[2]);
                     }
-                    Some(*at)
-                }))
-                .collect();
-            let low_fix = sum
-                .checks
-                .iter()
-                .filter(|c| c.rule == "fixture_collision")
-                .filter_map(|c| Some(ends.get(c.move_index)?[2].min(ends.get(c.move_index + 1)?[2])))
-                .fold(f64::INFINITY, f64::min);
+                }
+                let mut sum =
+                    self.certify_posted(oi, &posted, FULL_STOCK.load(std::sync::atomic::Ordering::Relaxed));
+                // G5: every position the posted path reaches, as the machine's joints see it
+                if let Some(c) = self.axis_limits(oi, &posted) {
+                    sum.clear = false;
+                    sum.checks.insert(0, c);
+                }
+                if let Some(c) = runtime {
+                    sum.clear = false;
+                    sum.checks.insert(0, c);
+                }
+                // every check names this path (a hole plan posts one per tool)
+                for c in &mut sum.checks {
+                    c.path = pi;
+                }
+                // the lowest the tool's tip goes in a move that met the fixture
+                let ends: Vec<[f64; 3]> = std::iter::once(posted.start)
+                    .chain(posted.moves.iter().scan(posted.start, |at, m| {
+                        match *m {
+                            PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => *at = to,
+                            PMove::Probe { to, back, .. } => {
+                                if !back {
+                                    *at = to
+                                }
+                            }
+                            PMove::Cycle { .. } => {}
+                        }
+                        Some(*at)
+                    }))
+                    .collect();
+                let low_fix = sum
+                    .checks
+                    .iter()
+                    .filter(|c| c.rule == "fixture_collision")
+                    .filter_map(|c| Some(ends.get(c.move_index)?[2].min(ends.get(c.move_index + 1)?[2])))
+                    .fold(f64::INFINITY, f64::min);
+                (oi, pi, posted, low, sum, lc, lr, time, low_fix)
+            })
+        });
+        for (oi, pi, posted, low, sum, lc, lr, time, low_fix) in done {
+            let s = &self.setups[self.ops[oi].setup];
             let op = &mut self.ops[oi];
             if op.posted.len() <= pi {
                 op.posted.resize(pi + 1, posted.clone());

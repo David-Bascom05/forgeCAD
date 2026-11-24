@@ -3950,15 +3950,22 @@ fn quality_window(
                 // chip load and engagement come from the quality measure: none to colour by
                 // while a milling run's measure is on its way
                 let measuring = w.run.as_ref().is_some_and(|r| r.cam.is_some() && r.quality.is_none());
+                // a turning run (no milling CAM) is not measured at all
+                let turning = w.run.as_ref().is_some_and(|r| r.cam.is_none());
+                let why = if turning {
+                    "Turning runs aren't measured yet"
+                } else {
+                    "Measuring quality"
+                };
                 for (label, c, key) in [
                     ("Op", None, "op"),
                     ("Chip load", Some(ColourBy::ChipLoad), "chip"),
                     ("Engagement", Some(ColourBy::Engagement), "engagement"),
                 ] {
-                    let live = c.is_none() || !measuring;
+                    let live = c.is_none() || !(measuring || turning);
                     let r = ui
                         .add_enabled(live, egui::Button::selectable(colour == c, label))
-                        .on_disabled_hover_text("Measuring quality");
+                        .on_disabled_hover_text(why);
                     places.push((format!("cam:quality:colour:{key}"), r.rect));
                     if r.clicked() {
                         colour = c;
