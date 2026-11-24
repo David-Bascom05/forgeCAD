@@ -57,6 +57,7 @@ pub mod thermo;
 pub mod thermo_material;
 pub mod thermo_ui;
 mod tree;
+pub mod ux;
 pub mod vendorui;
 pub mod versions;
 mod visual_style;
