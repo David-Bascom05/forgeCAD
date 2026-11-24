@@ -20,6 +20,8 @@ struct Followup {
     pictures: Vec<crate::agent::Picture>,
     /// Its message in the chat (sent, shown, waiting): taken out if it's dropped.
     entry: Option<usize>,
+    /// Its card, not in the chat while it waits: added when it goes.
+    card: Option<Entry>,
     project: Option<PathBuf>,
     model: String,
 }
@@ -31,6 +33,8 @@ pub struct AgentHost {
     backend: Option<Box<dyn Backend>>,
     turn_active: bool,
     followups: std::collections::VecDeque<Followup>,
+    /// The card of the message being sent, when the chat hasn't it yet: added when it goes.
+    card: Option<Entry>,
     rx: Option<Receiver<Event>>,
     /// What the backend was made for: the folder, the settings.
     made_for: Option<(String, AgentSettings)>,
@@ -241,9 +245,15 @@ impl Gui {
             .agent
             .followups
             .iter()
-            .map(|f| match f.entry.and_then(|k| self.shell.agent.entries.get(k)) {
-                Some(Entry::User { text, .. }) => text.clone(),
-                _ => f.text.clone(),
+            .map(|f| {
+                match f
+                    .card
+                    .as_ref()
+                    .or(f.entry.and_then(|k| self.shell.agent.entries.get(k)))
+                {
+                    Some(Entry::User { text, .. }) => text.clone(),
+                    _ => f.text.clone(),
+                }
             })
             .collect();
     }
@@ -255,7 +265,9 @@ impl Gui {
         };
         let mut text = f.text.clone();
         let mut refs = f.refs.clone();
-        if let Some(k) = f.entry
+        if let Some(Entry::User { text: t, refs: r, .. }) = &f.card {
+            (text, refs) = (t.clone(), r.clone());
+        } else if let Some(k) = f.entry
             && let Some(Entry::User { text: t, refs: r, .. }) = self.shell.agent.entries.get(k)
         {
             (text, refs) = (t.clone(), r.clone());
@@ -311,6 +323,7 @@ impl Gui {
             return;
         }
         self.shell.agent.running = true;
+        self.agent.card = next.card;
         self.agent_send(&next.text, &next.refs, next.pictures);
     }
 
@@ -897,10 +910,23 @@ impl Gui {
                     refs,
                     markup: true,
                     pictures,
+                    ..
                 } => self.markup_job = Some((text, refs, pictures)),
                 AgentAct::Send {
-                    text, refs, pictures, ..
-                } => self.agent_send(&text, &refs, pictures),
+                    text,
+                    refs,
+                    pictures,
+                    shown,
+                    ..
+                } => {
+                    self.agent.card = (!shown).then(|| Entry::User {
+                        text: text.clone(),
+                        refs: refs.clone(),
+                        markup: None,
+                        pictures: pictures.len(),
+                    });
+                    self.agent_send(&text, &refs, pictures)
+                }
                 AgentAct::ShowMarkup(k) => self.markup_show(k),
                 AgentAct::Trust { dir, yes } => {
                     self.shell.agent.trust_ask = None;
@@ -1016,17 +1042,29 @@ impl Gui {
                 text: text.into(),
                 refs: refs.to_vec(),
                 pictures,
+                // its card in the chat already (markup's), else kept to add when it goes
                 entry: self
-                    .shell
                     .agent
-                    .entries
-                    .iter()
-                    .rposition(|e| matches!(e, Entry::User { .. })),
+                    .card
+                    .is_none()
+                    .then(|| {
+                        self.shell
+                            .agent
+                            .entries
+                            .iter()
+                            .rposition(|e| matches!(e, Entry::User { .. }))
+                    })
+                    .flatten(),
+                card: self.agent.card.take(),
                 project: self.agent_root(),
                 model: self.shell.agent.settings.label(),
             });
             self.sync_queue();
             return;
+        }
+        // it goes now: its card, if the chat hasn't it yet
+        if let Some(c) = self.agent.card.take() {
+            self.shell.agent.entries.push(c);
         }
         let fail = |g: &mut Gui, text: String, fix: Option<String>| {
             g.shell.agent.take(Event::Problem { text, fix });

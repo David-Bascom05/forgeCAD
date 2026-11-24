@@ -11,6 +11,14 @@ use forge_render::shell::agent_settings::{AgentSettings, Kind};
 use std::path::{Path, PathBuf};
 
 const PNG: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13];
+/// A real 12×8 picture, orange to blue, for the chip's thumbnail.
+fn real_png() -> Vec<u8> {
+    let rgb: Vec<u8> = (0..12 * 8)
+        .flat_map(|k| if k % 12 < 6 { [240, 140, 30] } else { [40, 90, 220] })
+        .collect();
+    forge_render::agent::apptools::png(12, 8, &rgb).unwrap()
+}
+
 const JPEG: &[u8] = &[0xFF, 0xD8, 0xFF, 0xE0, 0, 16];
 
 #[test]
@@ -60,12 +68,14 @@ fn the_tab_keeps_pictures_for_the_next_message_and_refuses_what_isnt_one() {
     assert!(tab.add_picture(JPEG.to_vec()));
     assert!(!tab.add_picture(b"%PDF-1.7".to_vec()));
     assert!(
-        matches!(tab.entries.last(), Some(Entry::Note { text, error: true }) if text.contains("PNG, JPEG, GIF or WebP"))
+        matches!(tab.entries.last(), Some(Entry::Note { text, error: false }) if text.contains("PNG, JPEG, GIF or WebP"))
     );
     let mut big = PNG.to_vec();
     big.resize(forge_render::agent::PICTURE_BYTES + 1, 0);
     assert!(!tab.add_picture(big));
-    assert!(matches!(tab.entries.last(), Some(Entry::Note { text, .. }) if text.contains("up to 5 MB")));
+    assert!(
+        matches!(tab.entries.last(), Some(Entry::Note { text, .. }) if text.contains("over 5 MB can't be sent: resize it"))
+    );
     assert_eq!(tab.pictures.len(), 2);
     tab.entries.clear();
     // a picture alone is a message
@@ -141,11 +151,7 @@ fn a_dropped_picture_reaches_claude_code_with_the_message() {
         h.step();
     }
     assert_eq!(h.gui.shell.agent.tab, forge_render::shell::agent::SideTab::Agent);
-    assert!(
-        h.gui.agent_picture(PNG.to_vec()),
-        "{:?}",
-        h.gui.shell.agent.entries
-    );
+    assert!(h.gui.agent_picture(real_png()), "{:?}", h.gui.shell.agent.entries);
     assert!(h.gui.agent_picture(JPEG.to_vec()));
     h.step();
     assert!(h.gui.shell.place("agent:picture:1").is_some(), "each a chip");

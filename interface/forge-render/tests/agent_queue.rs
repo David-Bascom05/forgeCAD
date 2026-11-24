@@ -83,6 +83,8 @@ fn a_queued_message_can_be_dropped_or_taken_back_to_edit() {
     say(&mut h, "second");
     say(&mut h, "third");
     assert!(wait(&mut h, |g| g.shell.agent.queue == ["second", "third"]));
+    // waiting, they're their queue rows only: no card says they were sent
+    assert_eq!(users(&h.gui), ["first"]);
     assert!(
         h.gui.shell.place("agent:queued:1:drop").is_some(),
         "each queued, with its ×"
@@ -105,7 +107,7 @@ fn a_queued_message_can_be_dropped_or_taken_back_to_edit() {
         h.step();
     }
     assert_eq!(h.gui.shell.agent.queue, ["second"]);
-    assert_eq!(users(&h.gui), ["first", "second"]);
+    assert_eq!(users(&h.gui), ["first"]);
     // taken back: in the box to change, out of the queue and the chat
     assert!(h.click("agent:queued:0:edit"));
     h.step();
@@ -142,6 +144,16 @@ fn a_queued_message_can_be_dropped_or_taken_back_to_edit() {
     assert!(wait(&mut h, |_| std::fs::read_to_string(dir.join("heard.jsonl"))
         .unwrap()
         .contains("second, changed")));
+    // one more behind it: its card comes when it goes, after the turn before it
+    say(&mut h, "fourth");
+    assert!(wait(&mut h, |g| g.shell.agent.queue == ["fourth"]));
+    assert_eq!(users(&h.gui), ["first", "second, changed"]);
+    std::fs::write(dir.join("go"), "").unwrap();
+    assert!(wait(&mut h, |_| std::fs::read_to_string(dir.join("heard.jsonl"))
+        .unwrap()
+        .contains("fourth")));
+    assert_eq!(users(&h.gui), ["first", "second, changed", "fourth"]);
+    assert!(h.gui.shell.agent.queue.is_empty());
     std::fs::write(dir.join("go"), "").unwrap();
     let _ = std::fs::remove_dir_all(dir);
 }

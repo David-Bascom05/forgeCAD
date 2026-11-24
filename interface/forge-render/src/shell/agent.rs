@@ -246,6 +246,8 @@ pub enum AgentAct {
         markup: bool,
         /// Pasted or dropped, after the view's picture if there's one.
         pictures: Vec<crate::agent::Picture>,
+        /// Its card is in the chat already; else the host adds it when the message goes.
+        shown: bool,
     },
     /// A sent message's marks shown again: its entry, the camera they were drawn over put back.
     ShowMarkup(usize),
@@ -765,12 +767,17 @@ impl AgentTab {
         let refs = std::mem::take(&mut self.refs);
         let pictures = std::mem::take(&mut self.pictures);
         self.started_new = false;
-        self.entries.push(Entry::User {
-            text: text.clone(),
-            refs: refs.clone(),
-            markup: None,
-            pictures: pictures.len(),
-        });
+        // behind a running turn it waits as its queue row only; its card comes when it goes
+        // (markup's stays: its picture is taken now, onto the card)
+        let shown = !self.running || markup;
+        if shown {
+            self.entries.push(Entry::User {
+                text: text.clone(),
+                refs: refs.clone(),
+                markup: None,
+                pictures: pictures.len(),
+            });
+        }
         self.input.clear();
         self.problem = None;
         self.usage = None;
@@ -783,6 +790,7 @@ impl AgentTab {
             refs,
             markup,
             pictures,
+            shown,
         });
     }
 
@@ -792,7 +800,7 @@ impl AgentTab {
         let size = bytes.len();
         let refused = if size > crate::agent::PICTURE_BYTES {
             Some(format!(
-                "That picture is {:.1} MB: the agent takes up to 5 MB a picture",
+                "That picture is {:.1} MB · pictures over 5 MB can't be sent: resize it, or send a PNG or JPEG",
                 size as f64 / 1048576.0
             ))
         } else {
@@ -801,11 +809,14 @@ impl AgentTab {
                     self.pictures.push(p);
                     None
                 }
-                None => Some("Only a PNG, JPEG, GIF or WebP picture can go to the agent".into()),
+                None => {
+                    Some("Only a PNG, JPEG, GIF or WebP picture can be sent: save it as one of those".into())
+                }
             }
         };
         if let Some(text) = refused {
-            self.entries.push(Entry::Note { text, error: true });
+            // guidance, not a failure: said quietly
+            self.entries.push(Entry::Note { text, error: false });
             return false;
         }
         true
@@ -1490,7 +1501,35 @@ fn table_grid(
 ) {
     let rows = table_cells(run);
     let cols = rows.iter().map(Vec::len).max().unwrap_or(1).max(1) as f32;
-    let col_w = ((inner - 14.0 * (cols - 1.0)) / cols).max(56.0);
+    // the first column (ids, names) as wide as it is, up to 40% of the panel; the rest share
+    // what's left
+    let first = rows
+        .iter()
+        .enumerate()
+        .filter_map(|(n, r)| {
+            let font = if n == 0 { semi(12.0) } else { sans(12.0) };
+            // as it's drawn: `code` in mono is wider than the plain face
+            r.first().map(|c| {
+                let base = TextFormat {
+                    font_id: font,
+                    color: t.ink,
+                    ..Default::default()
+                };
+                let mut job = LayoutJob::default();
+                for (s, f) in inline(c, base, code_ink) {
+                    job.append(&s, 0.0, f);
+                }
+                ui.fonts_mut(|f| f.layout_job(job).size().x)
+            })
+        })
+        .fold(0.0, f32::max)
+        .min(inner * 0.4)
+        .max(40.0);
+    let rest_w = if cols > 1.0 {
+        ((inner - first - 14.0 * (cols - 1.0)) / (cols - 1.0)).max(48.0)
+    } else {
+        first
+    };
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         ui.add_space(PAD);
@@ -1505,7 +1544,8 @@ fn table_grid(
                     .show(ui, |ui| {
                         for (n, row) in rows.iter().enumerate() {
                             let font = if n == 0 { semi(12.0) } else { sans(12.0) };
-                            for cell in row {
+                            for (c, cell) in row.iter().enumerate() {
+                                let col_w = if c == 0 { first + 1.0 } else { rest_w };
                                 let mut job = LayoutJob::default();
                                 let base = TextFormat {
                                     font_id: font.clone(),
@@ -3139,7 +3179,8 @@ impl Shell {
             let mut unpick = None;
             for (k, pic) in self.agent.pictures.iter().enumerate() {
                 let label = format!("Picture {} · {}", k + 1, pic.ext().to_uppercase());
-                let cr = picture_chip(ui, &t, pos2(x, y), &label, box_r.right() - 6.0 - x);
+                let thumb = picture_thumb(ui.ctx(), pic);
+                let cr = picture_chip(ui, &t, pos2(x, y), &label, thumb, box_r.right() - 6.0 - x);
                 let xr = Rect::from_min_size(pos2(cr.right() - 16.0, cr.top()), vec2(16.0, cr.height()));
                 let resp = ui
                     .interact(xr, ui.scope_id().with(("agent-unpicture", k)), Sense::click())
@@ -3584,9 +3625,9 @@ impl Shell {
         let v_resp = ui
             .interact(vr, ui.scope_id().with("agent-view"), Sense::click())
             .on_hover_text(if on {
-                "A picture of the view goes with the message (click to leave it off)"
+                "A picture of the view goes with the next message"
             } else {
-                "Attach the current view: a picture of it goes with the message"
+                "Attach a picture of the view to the next message"
             });
         v_resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, on, "Attach view"));
         if on {
@@ -3598,7 +3639,7 @@ impl Shell {
             &p,
             vr.center() - vec2(8.0, 8.0),
             16.0,
-            "eye",
+            "camera",
             1.5,
             if on { t.on_ink } else { t.ink },
         );
@@ -3689,15 +3730,67 @@ fn chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, id: &str, room: f32, removable: 
     r
 }
 
-/// A pasted picture's chip: its name, a ×.
-fn picture_chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, label: &str, room: f32) -> Rect {
+/// A pasted picture's 20 px thumbnail (PNG or JPEG; GIF and WebP have none), made once.
+fn picture_thumb(ctx: &egui::Context, pic: &crate::agent::Picture) -> Option<egui::TextureHandle> {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    pic.bytes.hash(&mut h);
+    let id = egui::Id::unique(("agent-picture-thumb", h.finish()));
+    if let Some(t) = ctx.data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)) {
+        return t;
+    }
+    let made = crate::look::decode_image(&pic.bytes).map(|(w, h, rgba)| {
+        // nearest pixels, at most 40 a side (20 points, twice for HiDPI)
+        let s = (40.0 / w.max(h) as f32).min(1.0);
+        let (tw, th) = (((w as f32 * s) as usize).max(1), ((h as f32 * s) as usize).max(1));
+        let mut out = Vec::with_capacity(tw * th * 4);
+        for y in 0..th {
+            for x in 0..tw {
+                let (sx, sy) = ((x as f32 / s) as usize, (y as f32 / s) as usize);
+                let k = (sy.min(h as usize - 1) * w as usize + sx.min(w as usize - 1)) * 4;
+                out.extend_from_slice(&rgba[k..k + 4]);
+            }
+        }
+        let img = egui::ColorImage::from_rgba_unmultiplied([tw, th], &out);
+        ctx.load_texture(format!("agent-picture-{id:?}"), img, egui::TextureOptions::LINEAR)
+    });
+    ctx.data_mut(|d| d.insert_temp(id, made.clone()));
+    made
+}
+
+/// A pasted picture's chip: its thumbnail, its name, a ×.
+fn picture_chip(
+    ui: &mut Ui,
+    t: &Theme,
+    at: egui::Pos2,
+    label: &str,
+    thumb: Option<egui::TextureHandle>,
+    room: f32,
+) -> Rect {
     let g = ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), sans(11.0), t.ink));
-    let w = (g.size().x + 26.0).min(room.max(40.0));
+    let lead = if thumb.is_some() { 20.0 } else { 0.0 };
+    let w = (g.size().x + 26.0 + lead).min(room.max(40.0));
     let r = Rect::from_min_size(at, vec2(w, 20.0));
     let p = ui.painter().with_clip_rect(r);
     p.rect_filled(r, 10.0, t.raised);
     p.rect_stroke(r, 10.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
-    p.galley(pos2(r.left() + 7.0, r.center().y - g.size().y * 0.5), g, t.ink);
+    if let Some(tex) = &thumb {
+        // as the picture is, in a 16 px square at the chip's left
+        let size = tex.size_vec2();
+        let s = 16.0 / size.x.max(size.y);
+        let tr = Rect::from_center_size(pos2(r.left() + 12.0, r.center().y), size * s);
+        p.image(
+            tex.id(),
+            tr,
+            Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+            Color32::WHITE,
+        );
+    }
+    p.galley(
+        pos2(r.left() + 7.0 + lead, r.center().y - g.size().y * 0.5),
+        g,
+        t.ink,
+    );
     p.text(
         pos2(r.right() - 9.0, r.center().y),
         Align2::CENTER_CENTER,
@@ -4448,6 +4541,7 @@ mod tests {
                 refs: vec!["extrude1.end".into()],
                 markup: false,
                 pictures: vec![],
+                shown: true,
             }]
         );
         a.take(Event::Text("I'll ".into()));
