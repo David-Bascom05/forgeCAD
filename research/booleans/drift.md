@@ -377,3 +377,17 @@ without it on the gate's coplanar lines (the test sits in the walk's hottest bra
 was harmful is UNKNOWN). Cheaper forms were tried: a counter shared across threads (up to
 0.08%) is a hidden input, since a concurrent boolean could move it, and refusing in the walk
 itself refused valid sequential Oks. So it is held for a judgment, and the wrong Ok stands.
+
+## 11. A cone's tip joined across a split ruling (Haas TRT210)
+
+KERNEL-STRESS's FaceWrongSide wrong Oks K038–K040 (HRP3 #424881, TRT210 #65625: union and
+intersect with a copy of the part moved half its width along x; wrong at every offset from 0 to
+1e-3 mm, so not the padded box's tolerance edge) were one thing. The part's drill-point cone comes
+in two halves between two rulings from the apex. Unify left the halves apart on the part itself (a
+ruling ending at the apex is not joined across: one face round a cone to its apex has no seam), but
+in the boolean's result one ruling was split by a vertex the imprint left. The piece off the apex
+passed that test, the halves joined across it, and the piece at the apex went with it, walked
+there and back: the tip was one face bounded by its circle alone (FaceWrongSide, mass "loops draw
+no region", the mesh open). `between_same` now also refuses a line on a cone (every line on a cone
+is a ruling) where either face reaches the apex. All three cases come out valid, and union plus
+intersection add up to twice the part to 1e-11.
