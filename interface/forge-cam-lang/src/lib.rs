@@ -6099,3 +6099,58 @@ mod loop_band_tests {
         assert!(loop_band(&p, &f, 0, p.moves.len(), 3.0, &tool, 6.0 + lcf + 1.0).is_none());
     }
 }
+
+#[cfg(test)]
+mod staging_tests {
+    use super::*;
+
+    /// 0897fd13 (soundness): an op's stock is staged after a level (its voids taken as cleared
+    /// down to it), but only where no later cut is higher. Here a pocket's path cuts the deep well
+    /// to z 7, links up, then rapids down into the shallow well before cutting it at z 9.5.
+    /// The shallow well's stock (z 7 to the top) is still there, so the rapid meets it. Staging
+    /// after the deep well took the whole op's voids as cleared down to z 7, the shallow well's
+    /// included, and certified the rapid clear. Now no stage is made there and the rapid is
+    /// refused, on that move.
+    #[test]
+    fn a_rapid_into_stock_a_later_higher_cut_removes_is_refused() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        let src = "machining\nf = part(\"two_wells.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-6\", t: 1, stickout: 30, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1), below: 2), origin: \"top-corner\", tol: 0.01, at: (-20, -20, -250))\nwells = pocket(op1, tool: t1, from: 12, to: 7, stepover: 2.4, step: 3)\np = program(op1, post: \"fanuc\", number: 1)\n";
+        let cam = run(src, &dir);
+        assert!(cam.ok, "{:?}", cam.errors);
+        let real = &cam.ops[0].paths[0];
+        let line = |to: [f64; 3], phase| PMove::Line { to, f: 300.0, phase };
+        let path = OpPath {
+            tool: real.tool,
+            start: [16.0, 20.0, 20.0],
+            moves: vec![
+                PMove::Rapid {
+                    to: [16.0, 20.0, 15.0],
+                },
+                line([16.0, 20.0, 7.0], Phase::Plunge),
+                line([16.0, 25.0, 7.0], Phase::Cut),
+                line([16.0, 25.0, 15.0], Phase::Link),
+                PMove::Rapid {
+                    to: [44.0, 20.0, 15.0],
+                },
+                // into the shallow well's stock (7..13): it is cut only by the next move
+                PMove::Rapid {
+                    to: [44.0, 20.0, 9.5],
+                },
+                line([44.0, 25.0, 9.5], Phase::Cut),
+                line([44.0, 25.0, 15.0], Phase::Link),
+            ],
+            rpm: real.rpm,
+            coolant: real.coolant,
+        };
+        let sum = cam.certify_posted(0, &path, true);
+        assert!(
+            !sum.clear,
+            "the rapid into the shallow well's stock was certified clear"
+        );
+        let bad: Vec<_> = sum.checks.iter().filter(|c| c.verdict != "pass").collect();
+        assert!(
+            bad.iter().all(|c| c.move_index == 5 && c.phase == "rapid"),
+            "{bad:?}"
+        );
+    }
+}
