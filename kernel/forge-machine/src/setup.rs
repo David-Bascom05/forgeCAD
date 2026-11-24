@@ -7,6 +7,8 @@
 //! [setup]
 //! machine = "generic-vmc3"
 //! dialect = "fanuc"          # a forge-post dialect name
+//! units = "inch"             # optional ("mm"): the program posted in inches (G20); offsets,
+//!                            # tools and stock here stay in mm
 //! program = "op1.nc"         # beside the setup file
 //! step = 0.5                 # removal grid (mm); optional, 1.0
 //!
@@ -45,6 +47,8 @@ pub struct SetupSpec {
     pub machine: String,
     pub dialect: String,
     pub program: String,
+    /// The program is in inches (`units = "inch"`).
+    pub inch: bool,
     pub channel: u8,
     pub tool_mount: Option<String>,
     pub part_mount: Option<String>,
@@ -197,7 +201,13 @@ impl SetupSpec {
             });
         }
         let channel = num(s, "channel").unwrap_or(1.0);
+        let inch = match text(s, "units").unwrap_or("mm") {
+            "mm" => false,
+            "inch" => true,
+            u => return Err(format!("{rec}: units = `{u}` (mm or inch)")),
+        };
         Ok(SetupSpec {
+            inch,
             machine: txt("machine")?,
             dialect: txt("dialect")?,
             program: txt("program")?,
@@ -225,7 +235,10 @@ impl SetupSpec {
         def: &'a MachineDef,
         dialect_src: &str,
     ) -> Result<crate::sim::Setup<'a>, SimError> {
-        let control = Control::for_machine(def, dialect_src, self.channel).map_err(SimError::Setup)?;
+        let mut control = Control::for_machine(def, dialect_src, self.channel).map_err(SimError::Setup)?;
+        if self.inch {
+            control = control.in_inches().map_err(SimError::Setup)?;
+        }
         let mut s = crate::sim::Setup::new(def, control)?;
         let per_letter = |vals: &[(char, f64)], what: &str| -> Result<Vec<f64>, SimError> {
             for (l, _) in vals {

@@ -373,12 +373,48 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
         .and_then(|lj| s.joint_of.iter().position(|j| def.joints[*j].name == *lj));
     let mut t = 0.0f64;
     let mut t_est = 0.0f64;
+    // a word of letter i in mm (linear) or degrees (rotary): an inch program's linear words are
+    // counts of 10^-k inch, w · 254 · 10^-(k+1) mm
+    let inch = s.control.inch;
+    let len = |w: i64, i: usize| -> f64 {
+        if inch && !s.control.rotary[i] {
+            w.checked_mul(254)
+                .map_or(w as f64 * 25.4 / 10f64.powi(k as i32), |x| q_to_f(x, k + 1))
+        } else {
+            q_to_f(w, k)
+        }
+    };
+    // a feed in mm/min (an inch program's in inch/min)
+    let feed_mm = |f: i64| -> f64 {
+        if inch {
+            f.checked_mul(254)
+                .map_or(f as f64 * 25.4 / 10f64.powi(fk as i32), |x| q_to_f(x, fk + 1))
+        } else {
+            q_to_f(f, fk)
+        }
+    };
+    // an inch program's feed applies to inches: a feed that turns a rotary joint is not modelled
+    let inch_rotary = |q0: &[f64], q1: &[f64], ln: usize| -> Result<(), SimError> {
+        if inch
+            && def
+                .joints
+                .iter()
+                .enumerate()
+                .any(|(j, jt)| jt.ty == JointType::Rotary && q0[j] != q1[j])
+        {
+            return Err(SimError::At {
+                line: ln,
+                what: "a feed move turning a rotary axis in an inch program is not modelled".into(),
+            });
+        }
+        Ok(())
+    };
     // the program position (control letters) to joint values, keeping unspecified joints
     let to_q = |words: &[Option<i64>], q: &[f64], wcs: &[f64], toff: &[f64]| -> Vec<f64> {
         let mut out = q.to_vec();
         for (i, w) in words.iter().enumerate() {
             if let Some(w) = w {
-                let mut v = q_to_f(*w, k);
+                let mut v = len(*w, i);
                 if s.control.diameter == Some(s.control.letters[i]) {
                     v *= 0.5;
                 }
@@ -406,7 +442,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
             Ev::Machine(mv) => {
                 let mut q1 = q.clone();
                 for (i, v) in mv {
-                    let mut x = q_to_f(*v, k);
+                    let mut x = len(*v, *i);
                     if s.control.diameter == Some(s.control.letters[*i]) {
                         x *= 0.5;
                     }
@@ -434,6 +470,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
             }
             Ev::Feed { to, f, mode } => {
                 let q1 = to_q(to, &q, &wcs, &toff);
+                inch_rotary(&q, &q1, ln)?;
                 let seg = feed_seg(
                     s,
                     ln,
@@ -441,7 +478,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     &q,
                     &q1,
                     Path::Line,
-                    q_to_f(*f, fk),
+                    feed_mm(*f),
                     *mode,
                     spindle,
                     css_now,
@@ -486,7 +523,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     // the centre in program units, to joint values as a position's words are
                     Centre::Abs([wa, wb]) => {
                         let wj = |i: usize, w: i64| {
-                            let mut v = q_to_f(w, k);
+                            let mut v = len(w, i);
                             if s.control.diameter == Some(s.control.letters[i]) {
                                 v *= 0.5;
                             }
@@ -497,7 +534,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                         (ca, cb, r)
                     }
                     Centre::R(rw) => {
-                        let r = q_to_f(*rw, k);
+                        let r = len(*rw, ia);
                         let (dx, dy) = (ea - sa, eb - sb);
                         let d = (dx * dx + dy * dy).sqrt();
                         if d > 2.0 * r.abs() * (1.0 + 1e-12) {
@@ -555,7 +592,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     &q,
                     &q1,
                     path,
-                    q_to_f(*f, fk),
+                    feed_mm(*f),
                     *mode,
                     spindle,
                     css_now,

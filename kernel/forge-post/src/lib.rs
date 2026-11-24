@@ -14,6 +14,17 @@
 //! below); `print` writes it; `read` parses our own text back to motions. The obligation, tested
 //! on every dialect: read(print(q)) = motions(q), exactly. The path the checks must hold for is
 //! therefore motions(quantize(g)), the rounded path, never g itself.
+//!
+//! A post's options (`PostOptions`, `Dialect::with`) change the dialect itself:
+//! - fewer decimals, never more than the control's increment;
+//! - line numbers on or off (off refused where every block is numbered);
+//! - no safe start, with the modes it would have set in `assumes_modes`;
+//! - inches: the dialect's cited `units_inch` code in place of `units_mm` (`{units}` in its header
+//!   templates), lengths and feeds quantised exactly from mm (x · 10^k · 10 / 254, ties to even)
+//!   at its `inch_decimals` and `inch_feed_decimals`. Integer units are then 10^-k inch
+//!   (`QProgram::mm_per_unit`), and the reader refuses the other unit's code.
+//!
+//! The round trip holds for the dialect they return.
 use forge_cam_geom::big::Nat;
 use forge_cam_geom::real::Dy;
 use forge_tooling::toml::{self, Table, num, text, texts};
@@ -103,13 +114,17 @@ pub struct Dialect {
     /// safe start that would set them is left out (`PostOptions::safe_start = Some(false)`): the
     /// safe start's lines. Empty when the program sets them itself.
     pub assumes_modes: Vec<String>,
+    /// Lengths and feeds in inches (`PostOptions::inch`): `decimals` and `feed_decimals` are then
+    /// the inch ones, and the program's integer units 10^-decimals inch.
+    pub inch: bool,
     t: Table,
 }
 
 /// What a post may change of its dialect (`Dialect::with`). None keeps the dialect's own.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PostOptions {
-    /// Inch: not yet (refused with a fix).
+    /// Inch: the dialect's cited inch code (`units_inch`) in place of its mm one, lengths and
+    /// feeds in inches at its inch decimals (refused where no source gives the code).
     pub inch: bool,
     /// Coordinate digits after the point, at most the dialect's (its control's increment).
     pub decimals: Option<u32>,
@@ -134,7 +149,7 @@ pub struct Cite {
 }
 
 /// The template keys a dialect may set; with `cite_required`, each one it sets is cited.
-pub const KEYS: [&str; 38] = [
+pub const KEYS: [&str; 42] = [
     "program_open",
     "program_close",
     "comment",
@@ -173,6 +188,10 @@ pub const KEYS: [&str; 38] = [
     "g_digits",
     "tool_word",
     "line_numbers_required",
+    "units_mm",
+    "units_inch",
+    "inch_decimals",
+    "inch_feed_decimals",
 ];
 
 impl Dialect {
@@ -246,6 +265,7 @@ impl Dialect {
         Ok(Dialect {
             cites,
             assumes_modes: Vec::new(),
+            inch: false,
             extension: text(&t, "extension").unwrap_or("nc").to_string(),
             feed_decimals: num(&t, "feed_decimals").unwrap_or(1.0) as u32,
             name,
@@ -260,29 +280,44 @@ impl Dialect {
     /// so the certified text is the one written.
     pub fn with(&self, o: &PostOptions) -> Result<Dialect, PostError> {
         let mut d = self.clone();
-        if o.inch {
-            return Err(PostError::Unsupported {
-                what: format!("inch output ({})", self.name),
-                fix: "post in mm (units: \"mm\")".into(),
-            });
-        }
-        if let Some(k) = o.decimals {
-            if k > self.decimals {
+        if o.inch && !self.inch {
+            let code = self.s("units_inch");
+            let refused = self
+                .cites
+                .iter()
+                .find(|c| c.key == "units_inch" && c.status == "refused");
+            if code.is_empty() || refused.is_some() || self.s("units_mm").is_empty() {
+                let why = refused.map(|c| format!(": {}", c.note)).unwrap_or_default();
                 return Err(PostError::Unsupported {
-                    what: format!("{k} decimals: {} writes at most {}", self.name, self.decimals),
-                    fix: format!("decimals: {} or fewer", self.decimals),
+                    what: format!("inch output ({}{why})", self.name),
+                    fix: "post in mm (units: \"mm\")".into(),
+                });
+            }
+            d.inch = true;
+            d.decimals = self
+                .n("inch_decimals")
+                .map(|x| x as u32)
+                .unwrap_or(self.decimals + 1);
+            d.feed_decimals = self
+                .n("inch_feed_decimals")
+                .map(|x| x as u32)
+                .unwrap_or(self.feed_decimals + 1);
+        }
+        let (dk, fk) = (d.decimals, d.feed_decimals);
+        if let Some(k) = o.decimals {
+            if k > dk {
+                return Err(PostError::Unsupported {
+                    what: format!("{k} decimals: {} writes at most {dk}", self.name),
+                    fix: format!("decimals: {dk} or fewer"),
                 });
             }
             d.decimals = k;
         }
         if let Some(k) = o.feed_decimals {
-            if k > self.feed_decimals {
+            if k > fk {
                 return Err(PostError::Unsupported {
-                    what: format!(
-                        "{k} feed decimals: {} writes at most {}",
-                        self.name, self.feed_decimals
-                    ),
-                    fix: format!("feed_decimals: {} or fewer", self.feed_decimals),
+                    what: format!("{k} feed decimals: {} writes at most {fk}", self.name),
+                    fix: format!("feed_decimals: {fk} or fewer"),
                 });
             }
             d.feed_decimals = k;
@@ -305,6 +340,14 @@ impl Dialect {
 
     fn s(&self, k: &str) -> &str {
         text(&self.t, k).unwrap_or("")
+    }
+    /// The code that sets the program's units (`{units}` in the header templates).
+    fn units(&self) -> &str {
+        if self.inch {
+            self.s("units_inch")
+        } else {
+            self.s("units_mm")
+        }
     }
     /// A template as the dialect sets it ("" if unset; "refuse" / "expand" for cycles).
     pub fn template(&self, k: &str) -> &str {
@@ -558,6 +601,60 @@ pub fn quant(x: f64, k: u32) -> Result<Q, PostError> {
     Ok(if d.neg { -v2 } else { v2 })
 }
 
+/// The nearest integer to x · 10^k · num / den, ties to even, exactly (x in mm to inches:
+/// num 10, den 254).
+pub fn quant_ratio(x: f64, k: u32, num: u32, den: u32) -> Result<Q, PostError> {
+    if !x.is_finite() {
+        return Err(PostError::Range {
+            what: "a non-finite number".into(),
+            value: x,
+        });
+    }
+    let d = Dy::from_f64(x);
+    let mut m = d.mag.mul_small(num);
+    let mut i = 0;
+    while i < k {
+        m = m.mul_small(10);
+        i += 1;
+    }
+    // x · 10^k · num / den = m · 2^exp / den
+    let (top, bot) = if d.exp >= 0 {
+        (m.shl(d.exp as u64), Nat::from_u64(den as u64))
+    } else {
+        (m, Nat::from_u64(den as u64).shl((-d.exp) as u64))
+    };
+    let (q, r) = top.divrem(&bot);
+    // round half to even: 2r against the divisor
+    let twice = r.shl(1);
+    let n = match twice.cmp(&bot) {
+        core::cmp::Ordering::Greater => q.add(&Nat::from_u64(1)),
+        core::cmp::Ordering::Equal if q.bit(0) => q.add(&Nat::from_u64(1)),
+        _ => q,
+    };
+    if n.bits() > 62 {
+        return Err(PostError::Range {
+            what: "a coordinate".into(),
+            value: x,
+        });
+    }
+    let mut v2 = 0i64;
+    let mut j = n.limbs.len();
+    while j > 0 {
+        j -= 1;
+        v2 = (v2 << 32) | n.limbs[j] as i64;
+    }
+    Ok(if d.neg { -v2 } else { v2 })
+}
+
+/// A length or feed in the program's units: mm as they are, or in inches.
+fn qlen(x: f64, k: u32, inch: bool) -> Result<Q, PostError> {
+    if inch {
+        quant_ratio(x, k, 10, 254)
+    } else {
+        quant(x, k)
+    }
+}
+
 fn pow10(k: u32) -> i64 {
     let mut p = 1i64;
     let mut i = 0;
@@ -604,8 +701,9 @@ pub fn digits(q: Q, k: u32, point: Point) -> String {
 pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
     let k = d.decimals;
     let fk = d.feed_decimals;
+    let inch = d.inch;
     let q3 = |v: [f64; 3]| -> Result<[Q; 3], PostError> {
-        Ok([quant(v[0], k)?, quant(v[1], k)?, quant(v[2], k)?])
+        Ok([qlen(v[0], k, inch)?, qlen(v[1], k, inch)?, qlen(v[2], k, inch)?])
     };
     let mut out = Vec::new();
     // where the tool is, as the program states it (an arc's start)
@@ -626,7 +724,8 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
         let mut full = false;
         if let (Rec::Arc { to, c, cw, f }, Some(s)) = (r, from) {
             let xy_same = to[0] == s[0] && to[1] == s[1];
-            let q_same = quant(to[0], k)? == quant(s[0], k)? && quant(to[1], k)? == quant(s[1], k)?;
+            let q_same = qlen(to[0], k, inch)? == qlen(s[0], k, inch)?
+                && qlen(to[1], k, inch)? == qlen(s[1], k, inch)?;
             if xy_same {
                 full = true;
             } else if q_same {
@@ -634,7 +733,7 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
                 let cross = (s[0] - c[0]) * (to[1] - c[1]) - (s[1] - c[1]) * (to[0] - c[0]);
                 let short = if *cw { cross <= 0.0 } else { cross >= 0.0 };
                 if short {
-                    out.push(QRec::Line(q3(*to)?, quant(*f, fk)?));
+                    out.push(QRec::Line(q3(*to)?, qlen(*f, fk, inch)?));
                     continue;
                 }
                 full = true;
@@ -655,12 +754,12 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
             Rec::SpindleStop => QRec::SpindleStop,
             Rec::Coolant(c) => QRec::Coolant(*c),
             Rec::Rapid(v) => QRec::Rapid(q3(*v)?),
-            Rec::Line(v, f) => QRec::Line(q3(*v)?, quant(*f, fk)?),
+            Rec::Line(v, f) => QRec::Line(q3(*v)?, qlen(*f, fk, inch)?),
             Rec::Arc { to, c, cw, f } => QRec::Arc {
                 to: q3(*to)?,
-                c: [quant(c[0], k)?, quant(c[1], k)?],
+                c: [qlen(c[0], k, inch)?, qlen(c[1], k, inch)?],
                 cw: *cw,
-                f: quant(*f, fk)?,
+                f: qlen(*f, fk, inch)?,
                 full,
             },
             Rec::Cycle {
@@ -676,14 +775,14 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
                 kind: *kind,
                 holes: holes
                     .iter()
-                    .map(|h| Ok([quant(h[0], k)?, quant(h[1], k)?]))
+                    .map(|h| Ok([qlen(h[0], k, inch)?, qlen(h[1], k, inch)?]))
                     .collect::<Result<_, PostError>>()?,
-                z: quant(*z, k)?,
-                r: quant(*r, k)?,
-                clear: quant(*clear, k)?,
-                q: quant(*q, k)?,
+                z: qlen(*z, k, inch)?,
+                r: qlen(*r, k, inch)?,
+                clear: qlen(*clear, k, inch)?,
+                q: qlen(*q, k, inch)?,
                 dwell: quant(*dwell * 1000.0, 0)?,
-                f: quant(*f, fk)?,
+                f: qlen(*f, fk, inch)?,
             },
             Rec::Dwell(s) => QRec::Dwell(quant(*s * 1000.0, 0)?),
             Rec::Home => QRec::Home,
@@ -695,6 +794,7 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
         recs: out,
         decimals: k,
         feed_decimals: fk,
+        inch,
     })
 }
 
@@ -705,6 +805,19 @@ pub struct QProgram {
     pub recs: Vec<QRec>,
     pub decimals: u32,
     pub feed_decimals: u32,
+    /// Integer units of 10^-decimals inch (feeds 10^-feed_decimals inch/min), not mm.
+    pub inch: bool,
+}
+
+impl QProgram {
+    /// One length unit in mm, exactly: (numerator, denominator).
+    pub fn mm_per_unit(&self) -> (i64, i64) {
+        if self.inch {
+            (254, pow10(self.decimals) * 10)
+        } else {
+            (1, pow10(self.decimals))
+        }
+    }
 }
 
 /// The peck cycles' retract clearance and chip-break lift, mm (the controls' usual parameters,
@@ -725,6 +838,7 @@ fn expand_hole(
     dwell: Q,
     f: Q,
     k: u32,
+    inch: bool,
     params: (f64, f64),
     out: &mut Vec<Motion>,
 ) {
@@ -743,8 +857,8 @@ fn expand_hole(
         }
         CycleKind::Peck | CycleKind::ChipBreak => {
             let step = if q > 0 { q } else { r - z };
-            let pc = quant(params.0, k).unwrap_or(0);
-            let lift = quant(params.1, k).unwrap_or(0);
+            let pc = qlen(params.0, k, inch).unwrap_or(0);
+            let lift = qlen(params.1, k, inch).unwrap_or(0);
             let mut depth = r;
             while depth > z {
                 let next = if depth - step > z { depth - step } else { z };
@@ -801,7 +915,7 @@ pub fn motions_with(p: &QProgram, params: (f64, f64)) -> Vec<Motion> {
             } => {
                 for h in holes {
                     expand_hole(
-                        *kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, params, &mut out,
+                        *kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, p.inch, params, &mut out,
                     );
                 }
             }
@@ -903,8 +1017,16 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
         .chars()
         .filter(|c| !d.s("comment_strip").contains(*c))
         .collect();
+    let units = d.units().to_string();
     for l in d.lines("program_open") {
-        let s = fill(&l, &[("num", p.number.to_string()), ("title", title.clone())]);
+        let s = fill(
+            &l,
+            &[
+                ("num", p.number.to_string()),
+                ("title", title.clone()),
+                ("units", units.clone()),
+            ],
+        );
         // a `%` line (a tape mark, or a header such as `%NAME G71 *`) is written as it is
         if s.contains('%') {
             w.lines.push(s)
@@ -913,7 +1035,7 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
         }
     }
     for l in d.lines("safe_start") {
-        w.emit(&l);
+        w.emit(&fill(&l, &[("units", units.clone())]));
     }
     // modal state
     let mut pos: [Option<Q>; 3] = [None; 3];
@@ -1068,6 +1190,7 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                             *dwell,
                             *f,
                             k,
+                            d.inch,
                             (PECK_CLEAR, CHIP_LIFT),
                             &mut ms,
                         );
@@ -1086,6 +1209,7 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                             recs: vec![rr],
                             decimals: k,
                             feed_decimals: d.feed_decimals,
+                            inch: d.inch,
                         };
                         write_moves(&one, d, &mut w, &mut pos, &mut feed, &mut motion)?;
                     }
@@ -1150,7 +1274,14 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
         }
     }
     for l in d.lines("program_close") {
-        let l = fill(&l, &[("num", p.number.to_string()), ("title", title.clone())]);
+        let l = fill(
+            &l,
+            &[
+                ("num", p.number.to_string()),
+                ("title", title.clone()),
+                ("units", units.clone()),
+            ],
+        );
         if l.contains('%') {
             w.lines.push(l)
         } else {
@@ -1476,7 +1607,17 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     out.push(Motion::Dwell(ms));
                     skip_motion = true;
                 }
-                90 | 94 | 17 | 21 | 40 | 49 | 98 | 64 | 54..=59 | 187 => {}
+                // the program's units: its own code, never the other's
+                20 | 21 if (*g == 20) != d.inch => {
+                    return Err(ReadError {
+                        line: ln,
+                        what: format!(
+                            "G{g}: this program is in {}",
+                            if d.inch { "inches" } else { "mm" }
+                        ),
+                    });
+                }
+                90 | 94 | 17 | 20 | 21 | 40 | 49 | 98 | 64 | 54..=59 | 187 => {}
                 43 => skip_motion = true,
                 g if g_ignore.contains(g) => {}
                 g if g_skip.contains(g) => skip_motion = true,
@@ -1536,6 +1677,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     dw,
                     feed,
                     k,
+                    d.inch,
                     (PECK_CLEAR, CHIP_LIFT),
                     &mut out,
                 );

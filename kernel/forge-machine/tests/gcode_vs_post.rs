@@ -361,3 +361,51 @@ fn interpreter_agrees_with_forge_post_reader_under_post_options() {
     }
     assert!(n >= 15 * 2 * forge_post::DIALECTS.len(), "{n}");
 }
+
+/// Inch programs (forge_post::PostOptions::inch): the interpreter reading with the control in
+/// inches agrees with forge-post's reader, on every dialect with an inch code; a mm reading of the
+/// inch text, and an inch reading of a mm text, are refused.
+#[test]
+fn interpreter_agrees_with_forge_post_reader_in_inches() {
+    use forge_post::PostOptions;
+    let mut r = Lcg(0x1c4);
+    let mut n = 0;
+    for (name, src) in forge_post::DIALECTS {
+        let d = Dialect::get(name).unwrap();
+        let def = &forge_machine::library::builtin()[0];
+        let c = Control::for_machine(def, src, 1).unwrap();
+        let Ok(di) = d.with(&PostOptions {
+            inch: true,
+            ..Default::default()
+        }) else {
+            assert!(c.in_inches().is_err(), "{name}");
+            continue;
+        };
+        let ci = c.in_inches().unwrap();
+        assert_eq!(
+            (ci.decimals, ci.feed_decimals),
+            (di.decimals, di.feed_decimals),
+            "{name}"
+        );
+        for _ in 0..20 {
+            let prog = fit(random_program(&mut r, name), &d);
+            let q = forge_post::quantize(&prog, &di).unwrap();
+            let text = forge_post::print(&q, &di).unwrap();
+            let theirs = forge_post::read(&text, &di).unwrap_or_else(|e| panic!("{name}: {e:?}\n{text}"));
+            let (evs, _) = gcode::run(&text, &ci)
+                .unwrap_or_else(|e| panic!("{name} line {}: {}\n{text}", e.line, e.what));
+            let evs: Vec<Ev> = evs.into_iter().map(|b| b.ev).collect();
+            let ours = as_motions(&evs, &ci);
+            assert_eq!(
+                forge_post::normalize(&ours),
+                forge_post::normalize(&theirs),
+                "{name}\n{text}"
+            );
+            assert!(gcode::run(&text, &c).is_err(), "{name}: the mm control read G20");
+            let mm = forge_post::print(&forge_post::quantize(&prog, &d).unwrap(), &d).unwrap();
+            assert!(gcode::run(&mm, &ci).is_err(), "{name}: the inch control read G21");
+            n += 1;
+        }
+    }
+    assert!(n >= 20 * 8, "{n}");
+}

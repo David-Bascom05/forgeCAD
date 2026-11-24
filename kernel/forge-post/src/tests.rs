@@ -360,6 +360,7 @@ fn round_trip_compares_what_the_control_executes() {
     // to the control: the round trip refuses it (by motion, not by text)
     let d = Dialect::get("fanuc").unwrap();
     let q = QProgram {
+        inch: false,
         number: 1,
         title: "t".into(),
         recs: vec![
@@ -634,15 +635,61 @@ fn post_options_round_trip_or_are_refused() {
             ..Default::default()
         });
         assert_eq!(off.is_err(), required, "{name}");
-        assert!(
-            d.with(&PostOptions {
+        // inch: where the dialect has a cited inch code, the program round-trips in inches with
+        // that code and not the mm one; elsewhere it is refused
+        let inch = d.with(&PostOptions {
+            inch: true,
+            ..Default::default()
+        });
+        let can = !d.s("units_inch").is_empty()
+            && !d
+                .cites
+                .iter()
+                .any(|c| c.key == "units_inch" && c.status == "refused");
+        assert_eq!(inch.is_ok(), can, "{name}: {inch:?}");
+        if let Ok(di) = inch {
+            let q = quantize(&p, &di).unwrap();
+            assert!(q.inch);
+            let (txt, back) = round_trip(&q, &di).unwrap_or_else(|e| panic!("{name} inch: {e}"));
+            assert!(back.len() > 20);
+            let (mm, inc) = (d.s("units_mm"), d.s("units_inch"));
+            assert!(txt.contains(inc) && !txt.contains(mm), "{name}: {txt}");
+            // the mm reading of the inch text is refused, and the inch reading of the mm text
+            assert!(read(&txt, &d).is_err(), "{name}");
+            let qm = quantize(&p, &d).unwrap();
+            assert!(read(&print(&qm, &d).unwrap(), &di).is_err(), "{name}");
+            // a length's units: 25.4 mm is 1 inch exactly
+            assert_eq!(q.mm_per_unit(), (254, 10i64.pow(di.decimals + 1)));
+            // the limits are the inch ones: its own decimals allowed, one more refused
+            let o = PostOptions {
                 inch: true,
+                decimals: Some(di.decimals),
+                feed_decimals: Some(di.feed_decimals),
                 ..Default::default()
-            })
-            .is_err()
-        );
+            };
+            assert!(d.with(&o).is_ok(), "{name}");
+            let more = PostOptions {
+                feed_decimals: Some(di.feed_decimals + 1),
+                ..o
+            };
+            assert!(d.with(&more).is_err(), "{name}");
+        }
     }
     // the control that numbers every block
     let h = Dialect::get("heidenhain").unwrap();
     assert!(h.t.get("line_numbers_required") == Some(&toml::Val::Bool(true)));
+}
+
+/// mm to inches exactly: x · 10^k / 25.4 to the nearest, ties to even.
+#[test]
+fn inch_quantisation_is_exact() {
+    assert_eq!(quant_ratio(25.4, 4, 10, 254).unwrap(), 10000);
+    assert_eq!(quant_ratio(-25.4, 4, 10, 254).unwrap(), -10000);
+    assert_eq!(quant_ratio(1.0, 4, 10, 254).unwrap(), 394); // 0.03937.. in
+    assert_eq!(quant_ratio(0.0, 4, 10, 254).unwrap(), 0);
+    assert_eq!(quant_ratio(12.7, 0, 10, 254).unwrap(), 0); // 0.5 in: a tie, to even (if exact)
+    // agrees with the plain quantiser on mm (num = den)
+    for v in [0.1 + 0.2, 1.0 / 3.0, -1.0005, 12345.678, 2.5e-7] {
+        assert_eq!(quant_ratio(v, 3, 1, 1).unwrap(), quant(v, 3).unwrap());
+    }
 }

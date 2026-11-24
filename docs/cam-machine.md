@@ -17,6 +17,12 @@ what their absence means.
 ## Frames and units
 
 - mm, degrees, mm/min (deg/min for rotaries), seconds, rpm, kW.
+- A program may be posted in inches (forge-post `PostOptions::inch`; a setup's `units = "inch"`,
+  `Control::in_inches`). Its words are read at the dialect's inch decimals, and a linear word
+  w becomes w·254·10^-(k+1) mm at the boundary, exactly as an integer before the one division.
+  Everything else stays in mm: the machine, offsets, tools, stock. G20 is refused in a mm
+  program and G21 in an inch one: a program does not switch units. A feed move that turns a
+  rotary axis is refused in inches, because F would mix inches and degrees.
 - All geometry is in the **base frame with every joint at 0** (the home pose).
 - A **linear** joint at value q translates its link and everything below it by q·`axis`.
 - A **rotary** joint at value q turns its link by q degrees about the line through `pivot`
@@ -217,7 +223,7 @@ pieces into material, the removal summary, and what is claimed.
 
 | part | what it is |
 |---|---|
-| interpreter (forge-machine-core, gcode.rs) | words to control events in exact integers. The block core (kernel/forge-machine-core: motion, modal words, arcs, canned cycles, G28) is proven, through Aeneas, to be the Lean spec's `step` and, over a program, its `runFrom` (verify/aeneas/forge-machine-core, L4, within 2^29 units); the spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine). The shell (text to words, tools, spindle, offsets) agrees with forge-post's reader on its subset (L6, 240 programs × 4 dialects) |
+| interpreter (forge-machine-core, gcode.rs) | words to control events in exact integers. The block core (kernel/forge-machine-core: motion, modal words, arcs, canned cycles, G28) is proven, through Aeneas, to be the Lean spec's `step` and, over a program, its `runFrom` (verify/aeneas/forge-machine-core, L4, within 2^29 units); the spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine). The shell (text to words, tools, spindle, offsets) agrees with forge-post's reader on its subset (L6: random programs on all 11 dialects, also under the post options: fewer decimals, line numbers on and off, no safe start, inches) |
 | kinematics (kin.rs) | joint values to link placements, dmath rotations (exact at multiples of 90°), and the same over intervals |
 | timing (sim.rs) | `t_min` a lower bound (feed and axis limits; G95 with G96 integrated exactly on lines, the clamp's bound on arcs); `t_stop` exact stops with trapezoidal acceleration, an estimate |
 | collision (collide.rs) | every pair of bodies on different links through every segment: interval poses and separating-axis lower bounds prove Clear; a penetration witness gives Hit; otherwise Near (refused). A Hit's witness is a point in the base (machine) frame at the segment parameter `s` |
@@ -231,6 +237,7 @@ Native and wasm32 give the same bits (tests/bits.rs).
 [setup]
 machine = "generic-vmc3"
 dialect = "fanuc"          # a forge-post dialect, or NAME.toml beside the setup
+units = "inch"             # optional ("mm"): the program is in inches (G20)
 program = "op1.nc"         # beside the setup
 step = 0.5                 # removal grid, mm (optional: 1)
 start_tool = 1             # the tool in the spindle at the start (optional)
