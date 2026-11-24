@@ -229,7 +229,9 @@ for p in gearbox volute crank valve heatsink quadarm conrod jack frame manifold 
     echo "$p $m ${n:-FAIL}" >> "$now"
   done
 done
-bits() { "$bin/bits"; "$bin/benchparts" bits; }
+# (the parts from this checkout: the binaries' own source path is the shared build folder, which a
+# gate starting while this one counts empties and refills; its bits then failed, or were cut short)
+bits() { "$bin/bits"; FORGE_BENCH_PARTS="$PWD/interface/forge-lang/parts/bench" "$bin/benchparts" bits; }
 if [ "$1" = --save ]; then
   mv "$now" "$baseline"
   bits > "$dir/bits.txt"
