@@ -9,12 +9,12 @@ fn argv(s: &str) -> Vec<String> {
 
 #[test]
 fn log_a_job_on_a_physical_tool() {
-    let tmp = std::env::temp_dir().join(format!("forge-toollog-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&tmp);
-    std::fs::create_dir_all(&tmp).unwrap();
+    let tmp = forge_dirs::temp_dir().join(format!("forge-toollog-{}", forge_dirs::process_id()));
+    let _ = forge_dirs::fs::remove_dir_all(&tmp);
+    forge_dirs::fs::create_dir_all(&tmp).unwrap();
     let ex = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
-    std::fs::copy(ex.join("flange.fg"), tmp.join("flange.fg")).unwrap();
-    std::fs::write(
+    forge_dirs::fs::copy(ex.join("flange.fg"), tmp.join("flange.fg")).unwrap();
+    forge_dirs::fs::write(
         tmp.join("job.fg"),
         "machining\nf = part(\"flange.fg\", group: \"S\", material: \"Ti-6Al-4V\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"lakeshore-LC206014X\", t: 1, stickout: 30, holder: \"bt40-er32\", rpm: 4000)\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18.5, step: 1)\nprog = program(op1, post: \"fanuc\", number: 1)\n",
     )
@@ -61,5 +61,5 @@ fn log_a_job_on_a_physical_tool() {
     assert!(tmp.join("cam/tool-instances.toml").exists());
     assert_eq!(r("frobnicate").code, 2);
     assert_eq!(r("").code, 2);
-    let _ = std::fs::remove_dir_all(&tmp);
+    let _ = forge_dirs::fs::remove_dir_all(&tmp);
 }
