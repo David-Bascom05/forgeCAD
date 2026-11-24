@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "..", "research", "ui-audit")
 
-WEIGHT = {"page-crash": 100, "page-nothing": 60, "crash": 100, "nothing": 60, "error-text": 30, "off-screen": 25, "no-exit": 25,
+WEIGHT = {"crash@narrow": 100, "nothing@narrow": 40, "page-crash": 100, "page-nothing": 60, "crash": 100, "nothing": 60, "error-text": 30, "off-screen": 25, "no-exit": 25,
           "silent-mode": 20, "raw-text": 15, "empty": 15, "overlap": 12, "clipped": 10,
           "no-reason": 8, "tiny-text": 6, "contrast": 6}
 SOFT = 3
@@ -58,7 +58,7 @@ def label_findings(r):
 
 # UX-LEAD: unreachable is a dead button (off-screen: the crawl can't scroll, so P1 until a review
 # finds a scroll); a lie is P1 (flagged by the visual review in verdicts.tsv as "lie")
-P1 = {"crash", "nothing", "page-crash", "page-nothing", "silent-mode", "off-screen", "off-screen@narrow", "lie"}
+P1 = {"crash", "crash@narrow", "nothing", "nothing@narrow", "page-crash", "page-nothing", "silent-mode", "off-screen", "off-screen@narrow", "lie"}
 P2 = {"raw-text", "no-unit", "no-reason", "clipped", "no-exit", "error-text", "tiny-text", "empty", "overlap"}
 
 
@@ -95,9 +95,24 @@ def main():
         if not os.path.exists(os.path.join(d, "records.tsv")):
             continue
         for r in read(d):
+            if r["class"] == "CRASH":
+                narrow[key(r)].append(("crash@narrow", True, r["detail"]))
+            if r["class"] == "NOTHING VISIBLE":
+                narrow[key(r)].append(("nothing@narrow", True, r["detail"]))
             for rule, hard, what in findings(r):
                 if rule in ("off-screen", "clipped", "overlap"):
                     narrow[key(r)].append((rule + "@narrow", hard, what))
+    status = []
+    spath = os.path.join(OUT, "status.tsv")
+    if os.path.exists(spath):
+        for line in open(spath):
+            if line.strip() and not line.startswith("#"):
+                pat, _, word = line.rstrip("\n").partition("\t")
+                status.append((pat, word))
+
+    def status_of(k):
+        return next((w for p, w in status if p in k), "")
+
     verdicts = {}
     vpath = os.path.join(OUT, "verdicts.tsv")
     if os.path.exists(vpath):
@@ -124,10 +139,17 @@ def main():
                 name = os.path.basename(src)
                 shutil.copy(src, os.path.join(OUT, "thumbs", name))
                 thumb = f"thumbs/{name}"
-        rows.append(dict(r, p=plevel(r, fs), web=(w["class"] if w else ""), key=key(r), fs=fs, score=s, verdict=v, auto=auto, note=note, thumbp=thumb))
+        rows.append(dict(r, st=status_of(key(r)) if fs or r["class"] in ("CRASH", "NOTHING VISIBLE") else "", p=plevel(r, fs), web=(w["class"] if w else ""), key=key(r), fs=fs, score=s, verdict=v, auto=auto, note=note, thumbp=thumb))
     classes = Counter(r["class"] for r in rows)
     vs = Counter(r["verdict"] for r in rows if r["class"] != "DISABLED")
-    worst = sorted((r for r in rows), key=lambda r: -r["score"])[:20]
+    # the worst commands, each once (the same dialog from several documents is one fix)
+    worst, took = [], set()
+    for r in sorted(rows, key=lambda r: -r["score"]):
+        k = (r["env"], r["tab"], r["tool"])
+        if k not in took and r["score"] > 0:
+            took.add(k)
+            worst.append(r)
+    worst = worst[:20]
     L = []
     L.append("# UI audit: every ribbon command, clicked\n")
     L.append("Made by `tools/ui-audit/crawl.sh` (the crawler is `interface/forge-render/tests/ui_audit`). "
@@ -151,7 +173,8 @@ def main():
     L.append("\n## The 20 worst\n")
     for i, r in enumerate(worst, 1):
         probs = "; ".join(f"{rule}: {what}" for rule, hard, what in r["fs"] if hard) or r["detail"]
-        L.append(f"{i}. **{r['key']}** ({r['p']}, {r['class']}, score {r['score']}, {r['verdict']}): {probs}")
+        st = f" → **{r['st']}**" if r["st"] else " → open"
+        L.append(f"{i}. **{r['key']}** ({r['p']}, {r['class']}, score {r['score']}, {r['verdict']}): {probs}{st}")
     L.append("\n## Every command\n")
     by = defaultdict(list)
     for r in rows:
@@ -178,16 +201,16 @@ def main():
     S = ["# Button audit scores\n",
          "Every live command, worst first: verdict (good / fix / redo), P-level (STANDARD severity), the "
          "rules it breaks. Full detail and shots: research/ui-audit/report.md.\n",
-         "| Command | What a click does | Verdict | P | Score | Problems |", "|---|---|---|---|---|---|"]
+         "| Command | What a click does | Verdict | P | Score | Problems | Status |", "|---|---|---|---|---|---|---|"]
     for r in sorted((r for r in rows if r["class"] != "DISABLED" or r["fs"]), key=lambda r: -r["score"]):
         probs = "; ".join(f"{rule}: {what}" for rule, hard, what in r["fs"]).replace("|", "\\|")
-        S.append(f"| {r['key']} | {r['class']} | {r['verdict']} | {r['p']} | {r['score']} | {probs} |")
+        S.append(f"| {r['key']} | {r['class']} | {r['verdict']} | {r['p']} | {r['score']} | {probs} | {r['st'] or 'open'} |")
     bdir = os.path.join(OUT, "..", "button-audit")
     os.makedirs(bdir, exist_ok=True)
     open(os.path.join(bdir, "SCORES.md"), "w").write("\n".join(S) + "\n")
     print(f"{len(rows)} commands; classes {dict(classes)}; verdicts {dict(vs)}")
     for i, r in enumerate(worst, 1):
-        print(f"{i:2}. {r['key']} [{r['class']}] {r['score']}")
+        print(f"{i:2}. {r['key']} [{r['class']}] {r['score']} {r['st'] or 'OPEN'}")
 
 
 if __name__ == "__main__":
