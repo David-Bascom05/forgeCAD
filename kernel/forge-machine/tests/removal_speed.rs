@@ -1,4 +1,4 @@
-//! Timing only (ignored; `cargo test --release -p forge-machine --test removal_speed -- --ignored --nocapture`): a pocket on a flange-sized stock at CAM-SIM's grid, with its digest (unchanged by the speed work).
+//! Timing only (ignored; `cargo test --release -p forge-machine --test removal_speed -- --ignored --nocapture`): a pocket on a flange-sized stock at CAM-SIM's grid, with its digest (0xa9118efcb77c7167 through the exact speed work; 0x16fc5f615e70afe1 with the closed form, within docs/cam-machine.md's bound).
 use forge_machine::gcode::Control;
 use forge_machine::library::builtin_named;
 use forge_machine::removal;

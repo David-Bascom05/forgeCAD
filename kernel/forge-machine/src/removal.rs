@@ -8,10 +8,14 @@
 //! - Turning: a radius map along the part's axis. Each node holds the outer radius; a move of the
 //!   nose (a disc of radius rn) lowers it to the least radius the disc reaches at that z.
 //!
-//! On a straight move the minimised function is convex in s on the range where the cutter covers
-//! the node (a convex non-decreasing profile of a convex distance, plus a linear term), so a
-//! ternary search finds it to 1e-12 in s; on an arc it is minimised over 64 samples per eighth of
-//! a turn, then refined. This is a simulation in floating point at the nodes, not a proof: it is
+//! On a move at one height (a line with both ends at the same z, or an arc whose joints turn the
+//! tip on a plane circle or, with its end radius rounded, a spiral) the profile only rises with
+//! distance, so the least is at the path's nearest point, found in closed form (a spiral's by a
+//! few Newton steps from the node's own direction). Otherwise the minimised function is convex in
+//! s on a straight move where the cutter covers the node (a convex non-decreasing profile of a
+//! convex distance, plus a linear term), so a ternary search finds it to 1e-13 in s; on an arc it
+//! is minimised over 64 samples per eighth of a turn, then refined. docs/cam-machine.md bounds
+//! how far the closed form is from the search (Removal: the tip's two forms). This is a simulation in floating point at the nodes, not a proof: it is
 //! what a reviewer looks at, and it finds rapids into material with the stock as cut so far,
 //! which the collision check (initial stock) cannot.
 //!
@@ -109,11 +113,15 @@ fn profile(r: f64, corner: f64, d: f64) -> Option<f64> {
     Some(corner - (corner * corner - e * e).max(0.0).sqrt())
 }
 
-/// Which form of the tip removal evaluates: `Affine` (what `mill` uses) or `Chained` (the pose
-/// chain at every s, `Setup::tip_along`; kept to check the affine form against).
+/// How removal finds a node's lowest cutter height over a move. `Closed` (what `mill` uses): the
+/// affine tip, and on a move at one height (a line, or an arc whose joints turn the tip on a
+/// circle) the nearest point of the path in closed form; otherwise the search. `Affine`: the
+/// affine tip and the search on every move. `Chained`: the pose chain at every s and the search.
+/// The last two are kept to check the first against (docs/cam-machine.md).
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TipForm {
+    Closed,
     Affine,
     Chained,
 }
@@ -137,7 +145,7 @@ fn tip_path<'a>(
         return Err(RemovalError::Tilted { line: seg.line });
     }
     let p: Option<Box<dyn Fn(f64) -> V3 + 'a>> = match form {
-        TipForm::Affine => s
+        TipForm::Closed | TipForm::Affine => s
             .tip_affine(seg, t)
             .map(|f| Box::new(f) as Box<dyn Fn(f64) -> V3>),
         TipForm::Chained => s.tip_along(seg, t).map(|f| Box::new(f) as Box<dyn Fn(f64) -> V3>),
@@ -183,6 +191,137 @@ fn sampled_min(f: &dyn Fn(f64) -> f64, n: usize) -> f64 {
     best.min(convex_min(f, a, b))
 }
 
+/// An arc's tip path in the part's frame when it is a plane spiral at one height (a circle when
+/// r = r1): the centre, the radius at joint angle a0 and its change per radian, the part-frame
+/// angle of joint angle 0 and the sense joint angles turn in it (+1 ccw).
+struct Circle {
+    c: [f64; 2],
+    r: f64,
+    k: f64,
+    alpha: f64,
+    dir: f64,
+    a0: f64,
+    sweep: f64,
+}
+
+/// The circle, when no joint but the arc's moves and both joints' columns lie in the part's xy
+/// plane, a unit vector and its quarter turn: then the tip is the joints' arc, turned and moved.
+fn flat_circle(s: &Setup, seg: &Segment, t: u32) -> Option<Circle> {
+    let Path::Arc {
+        a,
+        b,
+        c,
+        r,
+        r1,
+        a0,
+        sweep,
+    } = seg.path
+    else {
+        return None;
+    };
+    if sweep == 0.0 {
+        return None;
+    }
+    let (base, cols) = s.tip_columns(seg, t)?;
+    let col = |j: usize| cols.iter().find(|(k, _)| *k == j).map(|(_, v)| *v);
+    if cols
+        .iter()
+        .any(|(k, _)| *k != a && *k != b && seg.q0[*k] != seg.q1[*k])
+    {
+        return None;
+    }
+    let (ca, cb) = (col(a)?, col(b)?);
+    if ca[2] != 0.0 || cb[2] != 0.0 || ((ca[0] * ca[0] + ca[1] * ca[1]) - 1.0).abs() > 8.0 * f64::EPSILON {
+        return None;
+    }
+    let dir = if cb[0] == -ca[1] && cb[1] == ca[0] {
+        1.0
+    } else if cb[0] == ca[1] && cb[1] == -ca[0] {
+        -1.0
+    } else {
+        return None;
+    };
+    let (da, db) = (c[0] - seg.q0[a], c[1] - seg.q0[b]);
+    Some(Circle {
+        c: [
+            base[0] + da * ca[0] + db * cb[0],
+            base[1] + da * ca[1] + db * cb[1],
+        ],
+        r,
+        k: (r1 - r) / sweep,
+        alpha: dmath::atan2(ca[1], ca[0]),
+        dir,
+        a0,
+        sweep,
+    })
+}
+
+impl Circle {
+    /// The xy distance from p to the arc (ends pa and pb): for each turn of the node's own
+    /// direction that lies within the sweep, the nearest point of the spiral about it (Newton on
+    /// the squared distance from that direction; a circle's is the direction itself), and the
+    /// ends.
+    fn dist(&self, p: [f64; 2], pa: [f64; 2], pb: [f64; 2]) -> f64 {
+        let e = |q: [f64; 2]| ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt();
+        let mut best = e(pa).min(e(pb));
+        let w = [p[0] - self.c[0], p[1] - self.c[1]];
+        let rho = (w[0] * w[0] + w[1] * w[1]).sqrt();
+        let (lo, hi) = if self.sweep > 0.0 {
+            (self.a0, self.a0 + self.sweep)
+        } else {
+            (self.a0 + self.sweep, self.a0)
+        };
+        let rad = |th: f64| self.r + self.k * (th - self.a0);
+        if rho == 0.0 {
+            // every point of the arc is its radius away: the least at an end
+            return best.min(rad(lo).abs()).min(rad(hi).abs());
+        }
+        let two_pi = 2.0 * dmath::PI;
+        // the node's direction as a joint angle, every turn of it within the sweep
+        let th0 = self.dir * (dmath::atan2(w[1], w[0]) - self.alpha);
+        let mut th = lo + (th0 - lo).rem_euclid(two_pi);
+        while th <= hi {
+            // f²(Δ)/2 = (ρ² + R² − 2ρR cos Δ)/2, R = rad(th + Δ): its derivative
+            // g = Rk − ρk cos Δ + ρR sin Δ, and g' = k² + 2ρk sin Δ + ρR cos Δ
+            let mut d = 0.0f64;
+            for _ in 0..8 {
+                let big_r = rad(th + d);
+                let (sn, cs) = dmath::sin_cos(d);
+                let g = big_r * self.k - rho * self.k * cs + rho * big_r * sn;
+                let gp = self.k * self.k + 2.0 * rho * self.k * sn + rho * big_r * cs;
+                if g == 0.0 || gp <= 0.0 {
+                    break;
+                }
+                let nd = (d - g / gp).clamp(lo - th, hi - th);
+                if nd == d {
+                    break;
+                }
+                d = nd;
+            }
+            let big_r = rad(th + d);
+            let (sn, cs) = dmath::sin_cos(d);
+            let f = ((rho - big_r * cs).powi(2) + (big_r * sn).powi(2)).sqrt();
+            best = best.min(f);
+            th += two_pi;
+        }
+        best
+    }
+}
+
+/// The xy distance from p to the segment a–b.
+fn seg_dist(a: [f64; 2], b: [f64; 2], p: [f64; 2]) -> f64 {
+    let d = [b[0] - a[0], b[1] - a[1]];
+    let w = [p[0] - a[0], p[1] - a[1]];
+    let l2 = d[0] * d[0] + d[1] * d[1];
+    let t = if l2 > 0.0 {
+        ((w[0] * d[0] + w[1] * d[1]) / l2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let e = [w[0] - t * d[0], w[1] - t * d[1]];
+    (e[0] * e[0] + e[1] * e[1]).sqrt()
+}
+
 /// The s-range where a line from a to b (xy) passes within r of p.
 fn within(a: [f64; 2], b: [f64; 2], p: [f64; 2], r: f64) -> Option<(f64, f64)> {
     let d = [b[0] - a[0], b[1] - a[1]];
@@ -205,7 +344,7 @@ fn within(a: [f64; 2], b: [f64; 2], p: [f64; 2], r: f64) -> Option<(f64, f64)> {
 
 /// Mills a box stock (part coordinates) through a timeline on a grid of `step`.
 pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<MillResult, RemovalError> {
-    mill_with(s, tl, min, max, step, TipForm::Affine)
+    mill_with(s, tl, min, max, step, TipForm::Closed)
 }
 
 /// `mill` with the tip's form chosen (tests check the affine form against the chained one).
@@ -308,6 +447,14 @@ pub fn mill_with(
         let i1 = (((hi[0] + reach - map.x0) / step).ceil().max(0.0) as usize).min(nx - 1);
         let j0 = (((lo[1] - reach - map.y0) / step).floor().max(0.0)) as usize;
         let j1 = (((hi[1] + reach - map.y0) / step).ceil().max(0.0) as usize).min(ny - 1);
+        // the tip at one height over the move (exactly: the same bits at both ends of a line;
+        // an arc's circle from its joints' columns)
+        let flat = form == TipForm::Closed && matches!(seg.path, Path::Line) && a[2] == b[2];
+        let circle = if form == TipForm::Closed {
+            flat_circle(s, seg, t)
+        } else {
+            None
+        };
         let mut holder: Option<HolderHit> = None;
         let mut vol = 0.0;
         let mut worst: Option<(f64, V3)> = None;
@@ -338,10 +485,26 @@ pub fn mill_with(
                     }
                 };
                 let low = match seg.path {
+                    // a line at one height: the cutter's lowest over the node is at the path's
+                    // nearest point (its profile only rises with distance), in closed form
+                    Path::Line if flat => {
+                        let d = seg_dist([a[0], a[1]], [b[0], b[1]], [x, y]);
+                        match profile(r, corner, d) {
+                            Some(g) => a[2] + g,
+                            None => f64::INFINITY,
+                        }
+                    }
                     Path::Line => match within([a[0], a[1]], [b[0], b[1]], [x, y], r) {
                         Some((s0, s1)) => convex_min(&env, s0, s1),
                         None => f64::INFINITY,
                     },
+                    Path::Arc { .. } if circle.is_some() => {
+                        let d = circle.as_ref().unwrap().dist([x, y], [a[0], a[1]], [b[0], b[1]]);
+                        match profile(r, corner, d) {
+                            Some(g) => a[2] + g,
+                            None => f64::INFINITY,
+                        }
+                    }
                     Path::Arc { sweep, .. } => {
                         let n = ((sweep.abs() / (dmath::PI / 4.0)).ceil() as usize).max(1) * 64;
                         sampled_min(&env, n)

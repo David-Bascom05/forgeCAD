@@ -297,12 +297,52 @@ C−121.25°, where the sine and cosine are not exact:
 | 3-axis mill | 3.6e-15 mm | 8.7e-11 mm | 0 |
 | trunnion at C−121.25° | 1.4e-14 mm | 1.0e-10 mm | 7.7e-14 mm |
 
+**The nearest point in closed form.** Most moves keep the tip at one height. That covers a line
+whose ends have the same z, and an arc whose two joints' columns are a unit vector and its
+quarter turn in the part's xy plane with no other joint moving. On such a move the cutter's
+profile only rises with distance, so a node's lowest cutter height is z + g(d_min), with d_min
+the distance from the node to the path's nearest point. `mill` finds it in closed form:
+
+- for a line, the distance to the segment;
+- for an arc, the candidates are, for each turn of the node's own direction that lies within the
+  sweep, the radial distance (a circle) or a few Newton steps on the squared distance (a spiral:
+  a rounded end radius makes the control's radius change linearly along the arc), and the two
+  ends.
+
+Every other move is searched as before: a ternary search to 1e-13 in s on a line, 64 samples per
+eighth of a turn and then a ternary search on an arc. The flange pocket goes from 2.8 s to 19 ms.
+
+Against the reference (chained tip and the search), a height differs by at most
+**δ + δd + √(2·corner·δd)**:
+
+- δ is the tips' bound above;
+- δd = 2·1e-13·L + 2δ + 16·u·Mxy bounds how far the two nearest-point distances can be apart.
+  L is the path's xy length, so 1e-13·L covers the search's last bracket; Mxy bounds the
+  coordinates.
+- The profile g has slope 0 under the flat, and the corner's part, c − √(c² − e²), is ½-Hölder
+  with constant √(2c).
+
+That comes to about 2e-5 mm on the flange. The real gaps are far smaller: tests/removal_tip.rs
+checks the closed form and the affine search against the reference on the flange pocket and on
+arcs that cut fresh stock (part turns, full turns, both senses, rounded ends), on the 3-axis mill
+and the trunnion at C−121.25°:
+
+| program | machine | closed form vs reference | affine search vs reference | bound |
+|---|---|---|---|---|
+| flange pocket | 3-axis mill | 3.6e-15 mm | 0 | 2.0e-5 mm |
+| flange pocket | trunnion at C−121.25° | 1.3e-13 mm | 7.7e-14 mm | 2.2e-5 mm |
+| rings | 3-axis mill | 1.7e-10 mm | 7.1e-15 mm | 1.9e-5 mm |
+| rings | trunnion at C−121.25° | 3.9e-14 mm | 1.6e-14 mm | 2.0e-5 mm |
+
+The closed form changes the removal heights' bits, so tests/bits.rs is re-pinned (0x8329c333c7dd69f8,
+native and wasm32). The kernel's bits.txt is untouched.
+
 A height follows the tip with slope 1 under the cutter's flat. Under its corner it follows with
 the corner's slope. At a node that the cutter's rim only grazes (distance r from the path), it is
-not continuous in the tip at all: a gap of δ can add or drop that node's cut. The test asserts the
-heights are within the bound on this grid, and they are; that says nothing about other grids. The
-pinned digests (tests/bits.rs, and the flange pocket's 0xa9118efcb77c7167) are unchanged by the
-affine form.
+not continuous in the tip or the distance at all: a gap of δ can add or drop that node's cut. The
+test asserts the heights are within the bound on its grids, and they are; that says nothing about
+other grids. The affine form alone left the pinned digests (tests/bits.rs, and the flange pocket's
+0xa9118efcb77c7167) unchanged; the closed form moves both.
 
 ## Several channels (`multi`)
 
