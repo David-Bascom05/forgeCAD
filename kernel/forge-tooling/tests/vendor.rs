@@ -345,3 +345,47 @@ fn presets_follow_the_spec() {
             .any(|c| c.note.contains("upper limit"))
     );
 }
+
+/// A part's stock material picks the maker's own row on the tool (Tool::preset_for_material):
+/// an exact alloy name over a family pattern, the slowest of the maker's hardness classes; a
+/// narrow contour is a finishing cut (Tool::class_for).
+#[test]
+fn presets_by_stock_material_and_class() {
+    let l = Library::builtin();
+    let text = |t: &forge_tooling::Tool, g: &str, c: &str, m: &str| {
+        t.preset_for_material(g, c, m).map(|(p, _)| p.name.clone())
+    };
+    let harvey = l.tool("harvey-792208").unwrap();
+    // brass C36000 by Harvey's "C3xxxx" family, not the wrought-aluminium representative
+    let n = text(harvey, "N", "slot", "C36000 H02").unwrap();
+    assert!(n.contains("Brass"), "{n}");
+    let n = text(harvey, "N", "slot", "6061-T6").unwrap();
+    assert!(n.contains("Wrought"), "{n}");
+    // a material the maker's texts do not name: none (the caller takes the representative)
+    assert_eq!(text(harvey, "N", "slot", "Gray iron class 30"), None);
+    let helical = l.tool("helical-30017").unwrap();
+    for (g, m, want) in [
+        ("S", "Inconel 718 aged", "NICKEL ALLOY"),
+        ("S", "Ti-6Al-4V annealed", "TITANIUM ALLOY"),
+        ("M", "304 annealed", "AUSTENITIC"),
+        ("M", "17-4PH H1150", "PH STAINLESS"),
+        ("P", "4140 annealed", "LOW ALLOY"),
+    ] {
+        let n = text(helical, g, "slot", m).unwrap_or_else(|| panic!("{m}"));
+        assert!(n.contains(want), "{m}: {n}");
+    }
+    // the slowest of the maker's hardness classes for the same alloys
+    let (p, _) = helical.preset_for_material("M", "slot", "304 annealed").unwrap();
+    let slowest = helical
+        .presets
+        .iter()
+        .filter(|q| q.name.starts_with("M slot AUSTENITIC"))
+        .map(|q| q.vc)
+        .fold(f64::INFINITY, f64::min);
+    assert_eq!(p.vc, slowest);
+    // a contour at 10% D or under finishes, wider roughs; clearing stays rough at any width
+    assert_eq!(harvey.class_for("contour", 0.3175, "N"), "finish");
+    assert_eq!(harvey.class_for("contour", 1.0, "N"), "rough");
+    assert_eq!(harvey.class_for("clear", 0.3, "N"), "rough");
+    assert_eq!(harvey.class_for("slot", 3.175, "N"), "slot");
+}

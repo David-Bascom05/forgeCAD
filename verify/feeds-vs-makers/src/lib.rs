@@ -98,13 +98,14 @@ impl Row {
     }
 }
 
-/// The class an op of the language takes for a maker's op (forge-cam-lang `resolve_for`: a slot
-/// is slot; clearing, pocketing, facing and contouring are rough; the rest general). The
-/// language has no finishing class: a maker's finishing row runs as a contour, i.e. rough.
-pub fn lang_class(op: &str) -> &'static str {
+/// The op of the language a maker's row is: a slot row a slot, a rough row a pocket, a
+/// max/HEM row a clearing, a finishing row a contour, the rest general.
+pub fn lang_kind(op: &str) -> &'static str {
     match op {
         "slot" => "slot",
-        "rough" | "max" | "finish" => "rough",
+        "rough" => "pocket",
+        "max" => "clear",
+        "finish" => "contour",
         _ => "general",
     }
 }
@@ -318,7 +319,7 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                         };
                         let lt = lib.tool(&format!("{vendor}-{id}")).ok();
                         let on = lt.and_then(|t| {
-                            let class = lang_class(&op);
+                            let class = t.class_for(lang_kind(&op), ae.unwrap_or(d), g);
                             let (p, c, classed) = t.preset_for(g, class)?;
                             let class_rec = if classed || class != "rough" {
                                 None

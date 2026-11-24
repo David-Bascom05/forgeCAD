@@ -1454,3 +1454,33 @@ fn plastics_have_their_own_group_and_no_power_check() {
     }
     assert!(top.deflection.is_nan());
 }
+
+/// With a maker's tool, the part's stock material picks the maker's row for it (brass C36000 on
+/// Harvey's "C3xxxx" row, not the tool's wrought-aluminium representative), and the cite says so.
+#[test]
+fn a_makers_tool_takes_its_row_for_the_stock_material() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace("tool(\"flat-10\"", "tool(\"harvey-942324\"");
+    let run = |m: &str| {
+        let cam = forge_cam_lang::run(
+            &src.replace(
+                "part(\"flange.fg\", group: \"N\")",
+                &format!("part(\"flange.fg\", material: \"{m}\")"),
+            ),
+            &dir,
+        );
+        let skim = cam.ops.iter().find(|o| o.name == "skim").unwrap();
+        skim.resolved
+            .clone()
+            .unwrap_or_else(|| panic!("{:?} {:?}", cam.errors, skim.refusal))
+    };
+    let brass = run("C36000 H02");
+    let al = run("6061-T6");
+    assert_eq!(brass.vc.source, Source::Library);
+    assert!(brass.chip.note.contains("Brass"), "{}", brass.chip.note);
+    assert!(al.chip.note.contains("Wrought"), "{}", al.chip.note);
+    assert!(brass.vc.v < al.vc.v, "{} {}", brass.vc.v, al.vc.v);
+}

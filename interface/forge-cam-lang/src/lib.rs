@@ -2753,17 +2753,23 @@ impl Cam {
         let g = self.lib.group(group_name);
         let m = self.lib.machine(&self.setups[su].machine).ok()?;
         let t = &self.tools[ti];
-        // the op's class: slot for a slot, rough for clearing and facing (by its width), general
-        // for the rest; a tool preset named for the class ("N rough") is taken first, then a
-        // general one, then any for the group; a classed preset carries its class itself
-        let class = match kind {
-            "slot" => "slot",
-            "clear" | "pocket" | "facing" | "contour" => "rough",
-            _ => "general",
-        };
-        let (preset, classed) = match t.tool.preset_for(group_name, class) {
-            Some((p, c, classed)) => (Some((p, c)), classed),
-            None => (None, false),
+        // the op's class (Tool::class_for: slot, rough, a narrow contour finishes, general);
+        // the tool's preset for it (Tool::preset_for); a classed preset carries its class itself
+        let asked = ask.over(self.tool_asks[ti]);
+        let width = asked.ae.unwrap_or(nominal.0);
+        let class = t.tool.class_for(kind, width, group_name);
+        // the part's stock material picks the maker's row for it where the tool has one
+        // (Tool::preset_for_material); else the class's representative
+        let material = &self.parts[self.setups[su].part].material;
+        let (preset, classed) = match material
+            .as_deref()
+            .and_then(|m| t.tool.preset_for_material(group_name, class, m))
+        {
+            Some((p, c)) => (Some((p, c)), true),
+            None => match t.tool.preset_for(group_name, class) {
+                Some((p, c, classed)) => (Some((p, c)), classed),
+                None => (None, false),
+            },
         };
         let class_rec = if classed || class == "slot" || class == "general" {
             None
@@ -2776,7 +2782,7 @@ impl Cam {
         let part = &self.parts[self.setups[su].part];
         let stock = part.stock.as_ref();
         resolve::milling_on(
-            &ask.over(self.tool_asks[ti]),
+            &asked,
             &resolve::ToolData {
                 d: t.tool.dc,
                 flutes: t.tool.nof.max(1),

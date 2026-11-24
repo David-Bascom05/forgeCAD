@@ -204,6 +204,122 @@ fn positive(rec: &str, k: &'static str, v: f64) -> Result<f64, LibError> {
 }
 
 impl Tool {
+    /// The tool's per-material preset for a stock material: among this group's and class's
+    /// "<group> <class> <maker's material>" presets, the one whose maker text names the
+    /// material's designation (forge-material's record name: "6061-T6" → 6061, "C36000 H02" →
+    /// C36000, "Inconel 718 aged" → 718, "17-4PH H1150" → 17-4, "Ti-6Al-4V annealed" →
+    /// Ti6Al4V). An exact name beats a family pattern ("6xxx", "C3xxxx", "41XX"), a longer
+    /// pattern a shorter; among equally good matches (the makers' hardness classes) the
+    /// slowest. None when the maker's texts do not name the material.
+    pub fn preset_for_material(
+        &self,
+        group: &str,
+        class: &str,
+        material: &str,
+    ) -> Option<(&Preset, Option<&Cite>)> {
+        let compact = |t: &str| -> String {
+            t.chars()
+                .filter(|c| c.is_ascii_alphanumeric() || *c == '.')
+                .collect::<String>()
+                .to_ascii_uppercase()
+        };
+        // the material's designations: words with a digit, temper suffixes (-T6, -H32, H02,
+        // H1150) and a PH suffix dropped
+        let des: Vec<String> = material
+            .split_whitespace()
+            .filter(|w| w.chars().any(|c| c.is_ascii_digit()))
+            .map(|w| {
+                let w = match w.rfind('-') {
+                    Some(i)
+                        if w[i + 1..].starts_with(['T', 'H', 'O'])
+                            && w[i + 2..].chars().all(|c| c.is_ascii_digit()) =>
+                    {
+                        &w[..i]
+                    }
+                    _ => w,
+                };
+                let w = w.strip_suffix("PH").unwrap_or(w);
+                compact(w)
+            })
+            .filter(|w| {
+                let temper =
+                    w.len() >= 3 && w.starts_with(['H', 'T']) && w[1..].chars().all(|c| c.is_ascii_digit());
+                !temper && (w.len() >= 3 || w.chars().any(|c| c.is_ascii_alphabetic()))
+            })
+            .collect();
+        let score = |text: &str| -> usize {
+            let mut best = 0;
+            for tok in text.split([',', '(', ')', '&', ':', ';']) {
+                let t = compact(tok);
+                for d in &des {
+                    let s = if t == *d
+                        || (t.ends_with(d.as_str())
+                            && t[..t.len() - d.len()]
+                                .chars()
+                                .last()
+                                .is_some_and(|c| c.is_ascii_alphabetic())
+                            && d.chars().next().is_some_and(|c| c.is_ascii_digit()))
+                    {
+                        100
+                    } else if t.len() == d.len()
+                        && t.contains('X')
+                        && t.chars().zip(d.chars()).all(|(a, b)| a == 'X' || a == b)
+                    {
+                        t.chars().filter(|c| *c != 'X').count()
+                    } else {
+                        0
+                    };
+                    best = best.max(s);
+                }
+            }
+            best
+        };
+        let prefix = format!("{group} {class} ");
+        let mut best: Option<(usize, &Preset)> = None;
+        for p in self.presets.iter().filter(|p| p.group == group) {
+            let Some(text) = p.name.strip_prefix(&prefix) else {
+                continue;
+            };
+            let s = score(text);
+            if s == 0 {
+                continue;
+            }
+            best = match best {
+                Some((bs, bp)) if bs > s || (bs == s && bp.vc <= p.vc) => Some((bs, bp)),
+                _ => Some((s, p)),
+            };
+        }
+        let p = best?.1;
+        let path = format!("preset.{}", p.name);
+        Some((p, self.cites.iter().find(|c| c.path == path)))
+    }
+
+    /// The class an op of the language cuts in: a slot is slot; clearing, pocketing and facing
+    /// rough; a contour finishes when its width is a finishing width (at most 10% of D, or the
+    /// tool's own "<group> finish" preset's ae where wider; the makers' finishing widths: Harvey
+    /// 10%, Helical 2-6%) and roughs otherwise; the rest are general. Clearing
+    /// at a small width is not finishing (it runs full flute depth: the makers' "max" rows).
+    pub fn class_for(&self, kind: &str, width: f64, group: &str) -> &'static str {
+        match kind {
+            "slot" => "slot",
+            "clear" | "pocket" | "facing" => "rough",
+            "contour" => {
+                let fin = self
+                    .presets
+                    .iter()
+                    .find(|p| p.group == group && p.name == format!("{group} finish"))
+                    .and_then(|p| p.ae)
+                    .map_or(0.1 * self.dc, |ae| ae.max(0.1 * self.dc));
+                if width <= fin * (1.0 + 1e-9) {
+                    "finish"
+                } else {
+                    "rough"
+                }
+            }
+            _ => "general",
+        }
+    }
+
     /// The tool's preset for a group and an op class, as an op takes it by default: the
     /// representative "<group> <class>" (CAM-HAAS's spec: one per class, the maker's row for the
     /// group's representative material), then any preset named for the class, then the group's

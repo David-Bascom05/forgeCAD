@@ -194,7 +194,7 @@ fn presets_on(rows: &[Row]) -> String {
     let exact = own.iter().filter(|r| r.own_in_range() == Some(true)).count();
     let mut s = String::from("\n## Presets ON (the real default path)\n\n");
     s.push_str(&format!(
-        "Each row run again as an op of the language runs it: the tool's own maker preset taken by `Tool::preset_for` for the op's class (the representative \"<group> <class>\", i.e. the maker's row for the group's representative material; a maker slot row is a slot, rough/max/finish rows run as rough because the language has no finishing class, the rest general), at the maker's ae/ap, no machine clamps. {} of {} rows have a preset for their group on their tool (the rest fall back to the generic table above).\n\n",
+        "Each row run again as an op of the language runs it: the tool's own maker preset taken by `Tool::preset_for` for the op's class (the representative \"<group> <class>\", i.e. the maker's row for the group's representative material; a maker's slot row runs as a slot, rough as a pocket, max as a clearing, finish as a contour, which `Tool::class_for` classes finish at a finishing width; the rest general), at the maker's ae/ap, no machine clamps. {} of {} rows have a preset for their group on their tool (the rest fall back to the generic table above).\n\n",
         on.len(),
         rows.len()
     ));
@@ -209,7 +209,7 @@ fn presets_on(rows: &[Row]) -> String {
         fmt(stats(own.iter().filter_map(|r| r.own_rpm()).collect())),
         fmt(stats(own.iter().filter_map(|r| r.own_f()).collect()))
     ));
-    s.push_str("- What the spread below means: the representative preset stands for every material of its group on that tool (e.g. Harvey's wrought-aluminium row runs a cast copper part too), so rows of other materials in the group differ by the maker's own material-to-material spread; and a maker's finish row runs on the rough preset re-thinned to the finishing width.\n");
+    s.push_str("- What the spread below means: this pass names no stock material, so the representative preset stands for every material of its group on that tool (e.g. Harvey's wrought-aluminium row for a cast copper part), and rows of other materials differ by the maker's own material-to-material spread. When the part names its material (forge-material), `Tool::preset_for_material` takes the maker's row for it instead (alloy named in the maker's text, else its family pattern; the slowest hardness class among equals): tests `presets_by_stock_material_and_class` and `a_makers_tool_takes_its_row_for_the_stock_material`.\n");
     s.push_str(&on_table(&on, "group", |r| r.group.to_string()));
     s.push_str(&on_table(&on, "maker", |r| r.vendor.clone()));
     s.push_str(&on_table(&on, "maker op class", |r| r.op.clone()));
