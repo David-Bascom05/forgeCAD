@@ -9,6 +9,8 @@ pub const FEATURES: &[(&str, bool)] = &[("decisions", cfg!(feature = "decisions"
 
 pub mod blend;
 pub mod budget;
+#[cfg(feature = "certified_trace")]
+pub mod certify;
 pub mod corner;
 pub mod curve;
 pub mod intcurve;
