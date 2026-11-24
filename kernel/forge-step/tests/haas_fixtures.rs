@@ -104,10 +104,9 @@ fn corner_patch_with_a_pole_reads_valid() {
     sound(&one("corner_patch_82faces.step"));
 }
 
-/// HA2TS #92348: a sphere face bounded by four arcs whose loop draws no region in parameters
-/// (mass fails).
+/// HA2TS #92348: a sphere face bounded by four arcs whose loop drew no region in parameters
+/// (mass failed): a loop through a pole whose whole turn went uncounted (mass-cap).
 #[test]
-#[ignore = "open: a sphere face that draws no region"]
 fn sphere_face_of_four_arcs_weighs() {
     sound(&one("sphere_no_region_156faces.step"));
 }
