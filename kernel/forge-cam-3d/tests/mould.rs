@@ -64,7 +64,7 @@ fn certify(dc: &dyn DropCutter, what: &str, ps: Vec<Pass>, faces: &[Face], tool:
         emit(),
     );
     let t0 = std::time::Instant::now();
-    let sum = ops::certify_with(&p, tool, faces, &[], &[], 0.0, 0.01, 1.0, true);
+    let sum = ops::certify_with(&p, tool, faces, &[(0, Vec::new())], &[], 0.0, 0.01, 1.0, true);
     let secs = t0.elapsed().as_secs_f64();
     eprintln!(
         "{what}: passes {} moves {} links {count:?} certified in {secs:.1} s",

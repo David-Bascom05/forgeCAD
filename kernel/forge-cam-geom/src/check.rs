@@ -1028,6 +1028,7 @@ pub fn certify_shared(
         Surf::Plane { .. } => f.prism.is_none() && mv.planar().is_none(),
         Surf::Torus { .. } | Surf::Cone { .. } => f.prism.is_none(),
     };
+    // (an early Clear leaves `shared` as it was: the next body's call recomputes what it needs)
     if fast && let Some(v) = crate::contact::clear(body, f, mv, limit) {
         return (v, 0);
     }

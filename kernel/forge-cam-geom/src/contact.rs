@@ -206,11 +206,14 @@ impl Quad {
         best
     }
     /// A proven lower bound on min Q over [0, 1]² (the tangent plane at the guess).
-    pub(crate) fn min_lo(&self) -> f64 {
+    pub(crate) fn min_lo(&self) -> Option<f64> {
         let (s0, t0) = self.guess();
         let (si, ti) = (Ival::pt(s0), Ival::pt(t0));
         let q0 = self.q(si, ti);
         let g = self.grad(si, ti);
+        if !(fin(q0) && fin(g[0]) && fin(g[1])) {
+            return None;
+        }
         let mut lo = f64::INFINITY;
         let mut k = 0;
         while k < 4 {
@@ -219,25 +222,32 @@ impl Quad {
             let l = q0
                 .add(g[0].mul(Ival::pt(s).sub(si)))
                 .add(g[1].mul(Ival::pt(t).sub(ti)));
+            // a non-finite end (overflow, or NaN made the whole line) proves nothing: refuse
+            if !fin(l) {
+                return None;
+            }
             if l.lo < lo {
                 lo = l.lo;
             }
         }
-        lo.max(0.0)
+        Some(lo.max(0.0))
     }
     /// A proven upper bound on max Q over [0, 1]² (a convex function's maximum is at a corner).
-    pub(crate) fn max_hi(&self) -> f64 {
+    pub(crate) fn max_hi(&self) -> Option<f64> {
         let mut hi = 0.0f64;
         let mut k = 0;
         while k < 4 {
             let (s, t) = CORNERS[k];
             k += 1;
-            let v = self.q(Ival::pt(s), Ival::pt(t)).hi;
-            if v > hi {
-                hi = v;
+            let v = self.q(Ival::pt(s), Ival::pt(t));
+            if !fin(v) {
+                return None;
+            }
+            if v.hi > hi {
+                hi = v.hi;
             }
         }
-        hi
+        Some(hi)
     }
 }
 
@@ -264,21 +274,30 @@ fn frame_k(x: V3, y: V3, ax: Option<V3>) -> (f64, f64) {
 
 /// A lower bound on the distance from a point set whose distances to the reference lie in
 /// [dmin, dmax] (squared: q_lo, q_hi) to a shell of radii [s_lo, s_hi].
-pub(crate) fn shell(q_lo: f64, q_hi: f64, s_lo: f64, s_hi: f64) -> f64 {
+pub(crate) fn shell(q_lo: f64, q_hi: f64, s_lo: f64, s_hi: f64) -> Option<f64> {
+    if !(q_lo.is_finite() && q_hi.is_finite() && s_lo.is_finite() && s_hi.is_finite()) {
+        return None;
+    }
     let dmin = Ival::pt(q_lo).sqrt().lo;
     let dmax = Ival::pt(q_hi).sqrt().hi;
-    if dmin > s_hi {
+    Some(if dmin > s_hi {
         Ival::pt(dmin).sub(Ival::pt(s_hi)).lo.max(0.0)
     } else if dmax < s_lo {
         Ival::pt(s_lo).sub(Ival::pt(dmax)).lo.max(0.0)
     } else {
         0.0
-    }
+    })
 }
 
 /// The proven lower bound on min sd_body over the face's full surface and the line a → b, or
 /// None when no closed form applies.
 pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
+    // every input finite and at most 1e100 in size, so no square or sum of a few squares below
+    // overflows; any non-finite value later is refused too (f64 min/max would drop a NaN and so
+    // flip a comparison towards Clear)
+    if !(inputs_ok(c, f, a, b)) {
+        return None;
+    }
     let base = [Ival::pt(a[0]), Ival::pt(a[1]), Ival::pt(a[2]).add(Ival::pt(c.zc))];
     let d = sub(iv(b), iv(a));
     let e = [Ival::pt(0.0), Ival::pt(0.0), Ival::pt(c.z1).sub(Ival::pt(c.zc))];
@@ -293,11 +312,11 @@ pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
             let (klo, khi) = frame_k(x, y, Some(ax));
             let ri = Ival::pt(r);
             shell(
-                q.min_lo(),
-                q.max_hi(),
+                q.min_lo()?,
+                q.max_hi()?,
                 ri.mul(Ival::pt(klo)).lo,
                 ri.mul(Ival::pt(khi)).hi,
-            )
+            )?
         }
         Surf::Cyl { o, x, y, ax, r } => {
             // points o + r(c x + s y) + q ax: distance to the axis line at most r·k_hi; at least
@@ -320,7 +339,7 @@ pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
             let rhi = ri.mul(Ival::pt(khi));
             let rlo2 = ri.mul(Ival::pt(klo)).sqr().sub(rhi.mul(along).sqr());
             let rlo = if rlo2.lo > 0.0 { rlo2.sqrt().lo } else { 0.0 };
-            shell(q.min_lo(), q.max_hi(), rlo, rhi.hi)
+            shell(q.min_lo()?, q.max_hi()?, rlo, rhi.hi)?
         }
         Surf::Plane { o, u, v } => {
             let (ui, vi) = (iv(u), iv(v));
@@ -342,6 +361,9 @@ pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
                 k += 1;
                 let w = add(add(w0, scl(d, Ival::pt(s))), scl(e, Ival::pt(t)));
                 let h = dot(w, n).div(nn);
+                if !fin(h) {
+                    return None;
+                }
                 lo = lo.min(h.lo);
                 hi = hi.max(h.hi);
             }
@@ -359,10 +381,67 @@ pub fn lower(c: &Capsule, f: &Face, a: V3, b: V3) -> Option<f64> {
     Some(Ival::pt(dist).sub(Ival::pt(c.rho)).lo)
 }
 
+fn fin(i: Ival) -> bool {
+    i.lo.is_finite() && i.hi.is_finite()
+}
+
+fn small(x: f64) -> bool {
+    x.is_finite() && x.abs() <= 1e100
+}
+
+fn small3(v: V3) -> bool {
+    small(v[0]) && small(v[1]) && small(v[2])
+}
+
+/// Every number the bound reads, finite and at most 1e100.
+fn inputs_ok(c: &Capsule, f: &Face, a: V3, b: V3) -> bool {
+    let surf = match f.surf {
+        Surf::Plane { o, u, v } => small3(o) && small3(u) && small3(v),
+        Surf::Cyl { o, x, y, ax, r } | Surf::Sphere { o, x, y, ax, r } => {
+            small3(o) && small3(x) && small3(y) && small3(ax) && small(r)
+        }
+        Surf::Cone { o, x, y, ax, r0, k } => {
+            small3(o) && small3(x) && small3(y) && small3(ax) && small(r0) && small(k)
+        }
+        Surf::Torus {
+            o,
+            x,
+            y,
+            ax,
+            big,
+            r,
+            cm,
+            sm,
+        } => {
+            small3(o)
+                && small3(x)
+                && small3(y)
+                && small3(ax)
+                && small(big)
+                && small(r)
+                && small(cm)
+                && small(sm)
+        }
+    };
+    surf && small3(a)
+        && small3(b)
+        && small(c.zc)
+        && small(c.z1)
+        && small(c.rho)
+        && small(f.mu)
+        && small(f.p.lo)
+        && small(f.p.hi)
+        && small(f.q.lo)
+        && small(f.q.hi)
+}
+
 /// Clear by the closed form, or None (the caller goes on to its other methods). Only a line
 /// move, and only a body with a capsule.
 pub fn clear(body: &Body, f: &Face, mv: &Move, limit: f64) -> Option<Verdict> {
     let Move::Line { a, b } = *mv else { return None };
+    if !(limit.is_finite() && f.mu.is_finite()) {
+        return None;
+    }
     let c = capsule(body)?;
     let lo = lower(&c, f, a, b)?;
     let lim_clear = Ival::pt(limit).add(Ival::pt(f.mu)).hi;
@@ -534,5 +613,174 @@ mod tests {
             k += 1;
         }
         assert!(agreed > 15, "{agreed}");
+    }
+
+    /// Non-finite or overflowing data anywhere (move, face, frame, radius, mu, limit) never
+    /// gives Clear: the closed form refuses and the existing paths decide.
+    #[test]
+    fn nan_inf_and_overflow_are_refused() {
+        let b = ball(6.0);
+        let c = capsule(&b).unwrap();
+        let bad = [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 1e300, -1e300];
+        let base_sphere = |o: V3, x: V3, r: f64| {
+            Face::new(
+                Surf::Sphere {
+                    o,
+                    x,
+                    y: [0.0, 1.0, 0.0],
+                    ax: [0.0, 0.0, 1.0],
+                    r,
+                },
+                Ival::new(-1.0, 1.0),
+                Ival::new(0.0, 1.0),
+                None,
+                0.0,
+                0,
+            )
+        };
+        let (a, bb) = ([0.0, 0.0, 30.0], [5.0, 0.0, 30.0]);
+        // sanity: the clean case clears
+        let ok = base_sphere([0.0, 0.0, -10.0], [1.0, 0.0, 0.0], 30.0);
+        assert!(clear(&b, &ok, &Move::Line { a, b: bb }, -0.01).is_some());
+        for &v in &bad {
+            let cases: Vec<(Face, V3, V3)> = vec![
+                (base_sphere([v, 0.0, -10.0], [1.0, 0.0, 0.0], 30.0), a, bb),
+                (base_sphere([0.0, 0.0, -10.0], [v, 0.0, 0.0], 30.0), a, bb),
+                (base_sphere([0.0, 0.0, -10.0], [1.0, 0.0, 0.0], v), a, bb),
+                (ok.clone(), [v, 0.0, 30.0], bb),
+                (ok.clone(), a, [5.0, v, 30.0]),
+                (
+                    Face::new(
+                        Surf::Plane {
+                            o: [0.0, 0.0, v],
+                            u: [1.0, 0.0, 0.0],
+                            v: [0.0, 1.0, 0.0],
+                        },
+                        Ival::new(-1.0, 1.0),
+                        Ival::new(-1.0, 1.0),
+                        None,
+                        0.0,
+                        1,
+                    ),
+                    a,
+                    bb,
+                ),
+                (
+                    Face::new(
+                        Surf::Cyl {
+                            o: [0.0, 0.0, -5.0],
+                            x: [0.0, 1.0, 0.0],
+                            y: [0.0, 0.0, 1.0],
+                            ax: [v, 0.0, 0.0],
+                            r: 3.0,
+                        },
+                        Ival::new(-1.0, 1.0),
+                        Ival::new(-1.0, 1.0),
+                        None,
+                        0.0,
+                        2,
+                    ),
+                    a,
+                    bb,
+                ),
+            ];
+            for (k, (f, p, q)) in cases.iter().enumerate() {
+                assert!(lower(&c, f, *p, *q).is_none(), "value {v} case {k}: lower");
+                assert!(
+                    clear(&b, f, &Move::Line { a: *p, b: *q }, -0.01).is_none(),
+                    "value {v} case {k}"
+                );
+            }
+            // a bad mu or limit
+            let mut fm = ok.clone();
+            fm.mu = v;
+            assert!(
+                clear(&b, &fm, &Move::Line { a, b: bb }, -0.01).is_none(),
+                "mu {v}"
+            );
+            // a non-finite limit is refused (a finite one, however low, is a fair question)
+            if !v.is_finite() {
+                assert!(clear(&b, &ok, &Move::Line { a, b: bb }, v).is_none(), "limit {v}");
+            }
+        }
+    }
+
+    /// Degenerate moves (zero length, vertical, along z only between equal xy) and the cutter
+    /// inside a large sphere near its wall: the bound stays below the sampled true minimum.
+    #[test]
+    fn degenerate_moves_and_the_inside_case() {
+        let b = ball(6.0);
+        let c = capsule(&b).unwrap();
+        let dome = sphere([0.0, 0.0, -10.0], 30.0);
+        let moves = [
+            ([3.0, 2.0, 21.0], [3.0, 2.0, 21.0]),
+            ([3.0, 2.0, 21.0], [3.0, 2.0, 35.0]),
+            ([3.0, 2.0, 35.0], [3.0, 2.0, 21.0]),
+            ([0.0, 0.0, 20.0], [0.0, 0.0, 20.0]),
+        ];
+        for (a, bb) in moves {
+            let lo = lower(&c, &dome, a, bb).unwrap();
+            let t = sampled_min(&b, &dome, a, bb);
+            assert!(lo <= t + 1e-9, "{a:?}->{bb:?}: {lo} > {t}");
+        }
+        // inside a sphere of radius 50 about the origin (its lower half: a bowl), the tool near
+        // the bottom: the inside-shell case proves the gap
+        let bowl = Face::new(
+            Surf::Sphere {
+                o: [0.0, 0.0, 0.0],
+                x: [1.0, 0.0, 0.0],
+                y: [0.0, 1.0, 0.0],
+                ax: [0.0, 0.0, 1.0],
+                r: 50.0,
+            },
+            Ival::new(-1.0, 1.0),
+            Ival::new(-1.0, 0.0),
+            None,
+            0.0,
+            3,
+        );
+        let (a, bb) = ([0.0, 0.0, -49.0], [4.0, 0.0, -48.5]);
+        let lo = lower(&c, &bowl, a, bb).unwrap();
+        let t = sampled_min(&b, &bowl, a, bb);
+        assert!(lo <= t + 1e-9, "{lo} > {t}");
+        // and well inside, away from the wall, it is positive (the inside case decides)
+        let lo = lower(&c, &bowl, [0.0, 0.0, -30.0], [1.0, 0.0, -30.0]).unwrap();
+        assert!(lo > 5.0, "{lo}");
+    }
+
+    fn sampled_min(b: &Body, f: &Face, a: V3, bb: V3) -> f64 {
+        let mut tmin = f64::INFINITY;
+        let n = 60;
+        let mut i = 0;
+        while i <= n {
+            let mut j = 0;
+            while j <= n {
+                let p = f.p.lo + (f.p.hi - f.p.lo) * i as f64 / n as f64;
+                let q = f.q.lo + (f.q.hi - f.q.lo) * j as f64 / n as f64;
+                let y = f.surf.eval(Ival::pt(p), Ival::pt(q));
+                let y = [y[0].mid(), y[1].mid(), y[2].mid()];
+                let mut m = 0;
+                while m <= 10 {
+                    let s = m as f64 / 10.0;
+                    let g = [
+                        a[0] + (bb[0] - a[0]) * s,
+                        a[1] + (bb[1] - a[1]) * s,
+                        a[2] + (bb[2] - a[2]) * s,
+                    ];
+                    tmin = tmin.min(
+                        b.sd(
+                            Ival::pt(y[0] - g[0]),
+                            Ival::pt(y[1] - g[1]),
+                            Ival::pt(y[2] - g[2]),
+                        )
+                        .mid(),
+                    );
+                    m += 1;
+                }
+                j += 1;
+            }
+            i += 1;
+        }
+        tmin
     }
 }

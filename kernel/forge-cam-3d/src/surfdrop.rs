@@ -5,13 +5,16 @@
 //! - `drop` is `Surfacer::cl` (the generating column: the cutter grown by the leave, widened a
 //!   little past its rim; at least the floor);
 //! - the segment tests check the cutter's column grown by the leave (`gap_move`, then the
-//!   cutter's own signed distance where the column's is undecided, as `Surfacer::gap` does), so
-//!   a chord keeps the leave as the points do.
+//!   column's undecided taken as not proven: the strategy splits the piece), so a chord keeps
+//!   the leave as the points do.
 
 use crate::drop::{Band, DropCutter, seg_band};
 use forge_cam::surf::{Surfacer, XyGrid};
-use forge_cam_geom::check::{Move, Verdict, certify};
+use forge_cam_geom::check::Move;
 use forge_cam_geom::drop::{Column, Gap, gap_move};
+
+/// Cells for one face's gap check in a generator's segment test.
+const GAP_BUDGET: usize = 2_000;
 
 pub struct SurfDrop<'s, 'a> {
     pub sf: &'s Surfacer<'a>,
@@ -39,23 +42,20 @@ impl<'s, 'a> SurfDrop<'s, 'a> {
         let mut i = 0;
         while i < idx.len() {
             let f = &self.sf.faces[idx[i] as usize];
-            match gap_move(&self.chk, f, &mv, limit, self.sf.res, self.sf.budget).0 {
+            // the closed form for a ball cutter (contact.rs: sphere, cylinder, plane, torus,
+            // cone), then the column's gap on a small budget: undecided is "not proven", and
+            // the strategy splits the piece
+            if forge_cam_geom::contact::clear(&self.sf.cutter, f, &mv, self.sf.leave + limit).is_some() {
+                i += 1;
+                continue;
+            }
+            match gap_move(&self.chk, f, &mv, limit, self.sf.res, GAP_BUDGET).0 {
                 Gap::Clear { .. } => {}
                 Gap::Over { .. } => return false,
-                Gap::Unknown => {
-                    let v = certify(
-                        &self.sf.cutter,
-                        f,
-                        &mv,
-                        self.sf.leave + limit,
-                        self.sf.res,
-                        self.sf.budget / 10,
-                    )
-                    .0;
-                    if !matches!(v, Verdict::Clear { .. }) {
-                        return false;
-                    }
-                }
+                // undecided by the column: not proven. The generator splits the piece (short
+                // pieces resolve by the closed forms), which is far cheaper than a branch and
+                // bound here; the path's certification is the checker's, after
+                Gap::Unknown => return false,
             }
             i += 1;
         }

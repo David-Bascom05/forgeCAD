@@ -66,6 +66,10 @@ fn eta(x: V3, y: V3, ax: V3) -> f64 {
     Ival::pt(m).scale(3.0).hi
 }
 
+fn fin(i: Ival) -> bool {
+    i.lo.is_finite() && i.hi.is_finite()
+}
+
 /// P's h (along ax, normalised) and ρ (from the axis line through o) enclosures, each widened
 /// by |w|·2η to F*'s; None when ax is degenerate. `w0, d, e`: contact.rs's parallelogram less o.
 fn h_rho(w0: [Ival; 3], d: [Ival; 3], e: [Ival; 3], ax: V3, eta: f64) -> Option<(Ival, Ival)> {
@@ -82,8 +86,8 @@ fn h_rho(w0: [Ival; 3], d: [Ival; 3], e: [Ival; 3], ax: V3, eta: f64) -> Option<
         hlo = hlo.min(hk.lo);
         hhi = hhi.max(hk.hi);
     }
-    // (NaN in any corner: the whole line)
-    if hlo.is_nan() || hhi.is_nan() {
+    // (NaN or overflow in any corner: refuse; f64 min/max would drop a NaN)
+    if !(hlo.is_finite() && hhi.is_finite()) {
         return None;
     }
     let rq = crate::contact::Quad {
@@ -93,8 +97,8 @@ fn h_rho(w0: [Ival; 3], d: [Ival; 3], e: [Ival; 3], ax: V3, eta: f64) -> Option<
         ax: Some((ai, aa)),
     };
     let wq = crate::contact::Quad { w0, d, e, ax: None };
-    let (rlo, rhi) = (Ival::pt(rq.min_lo()).sqrt().lo, Ival::pt(rq.max_hi()).sqrt().hi);
-    let wmax = Ival::pt(wq.max_hi()).sqrt().hi;
+    let (rlo, rhi) = (Ival::pt(rq.min_lo()?).sqrt().lo, Ival::pt(rq.max_hi()?).sqrt().hi);
+    let wmax = Ival::pt(wq.max_hi()?).sqrt().hi;
     let widen = Ival::pt(wmax).mul(Ival::pt(eta)).scale(2.0).hi;
     let h = Ival::new(
         Ival::pt(hlo).sub(Ival::pt(widen)).lo,
@@ -128,13 +132,16 @@ pub(crate) fn dist(f: &Face, w0: [Ival; 3], d: [Ival; 3], e: [Ival; 3]) -> Optio
             let tube = Ival::pt(r).abs().mul(lam);
             // dist(P, C*)² enclosed
             let dr = rho.sub(rr);
+            if !(fin(h) && fin(dr) && fin(tube)) {
+                return None;
+            }
             let q_lo = Ival::pt(off0(h)).sqr().add(Ival::pt(off0(dr)).sqr()).lo;
             let hmax = h.abs().hi;
             let drmax = dr.abs().hi;
             let q_hi = Ival::pt(hmax).sqr().add(Ival::pt(drmax).sqr()).hi;
             // a ring torus's points are exactly the tube radius from C*; a spindle's at most
             let s_lo = if rr.lo >= tube.hi { tube.lo } else { 0.0 };
-            let base = crate::contact::shell(q_lo, q_hi, s_lo, tube.hi);
+            let base = crate::contact::shell(q_lo, q_hi, s_lo, tube.hi)?;
             // each face point within η (R + 2·tube) of F*'s
             let eps = Ival::pt(eta).mul(rr.abs().add(tube.scale(2.0))).hi;
             Some(Ival::pt(base).sub(Ival::pt(eps)).lo.max(0.0))
@@ -151,6 +158,11 @@ pub(crate) fn dist(f: &Face, w0: [Ival; 3], d: [Ival; 3], e: [Ival; 3]) -> Optio
             let norm = Ival::pt(1.0).add(ki.sqr()).sqrt();
             let fp = off0(lin.sub(rho));
             let fm = off0(Ival::pt(0.0).sub(lin).sub(rho));
+            // both nappes' bounds must be numbers: f64 min drops a NaN, which would keep only
+            // one nappe's (larger) bound
+            if !(fp.is_finite() && fm.is_finite() && fin(norm)) {
+                return None;
+            }
             let base = Ival::pt(fp.min(fm)).div(norm).lo;
             // the coefficients (r0 + q k, q) over the face's q range
             let q = f.q;

@@ -100,6 +100,9 @@ pub fn drape(dc: &dyn DropCutter, xy: &[[f64; 2]], d: Drape) -> Result<Vec<Pass>
     Ok(out)
 }
 
+/// After this many halvings a piece that is still not proven becomes a step (see `refine`).
+const STEP_DEPTH: u32 = 8;
+
 /// Appends the points strictly between a and b that make every chord acceptable. False when a
 /// midpoint has nothing under the tool (the caller breaks the pass).
 fn refine(
@@ -112,13 +115,31 @@ fn refine(
 ) -> Result<bool, DrapeError> {
     let m = [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1])];
     let mz = 0.5 * (a[2] + b[2]);
-    let below = dc.seg3_below(a, b, d.slack);
+    // the cheap test first: one drop at the middle
     let close = match dc.drop(m[0], m[1]) {
         None => return Ok(false),
         Some(band) => mz - band.lo.max(d.zmin) <= d.leave,
     };
-    if below && close {
+    let below = close && dc.seg3_below(a, b, d.slack);
+    if below {
         return Ok(true);
+    }
+    // a piece split this often lies across a cliff (a wall steeper than the chords can follow):
+    // a step instead, as a vertical move and a level one. Up then across when b is higher, across
+    // then down when a is: each vertical leg is free (its lower end is at or above its CL
+    // height, so is the line above it), the level leg is proven by seg_below at the higher end's
+    // height
+    if depth >= STEP_DEPTH {
+        let (ab, bb) = ([a[0], a[1]], [b[0], b[1]]);
+        if b[2] >= a[2] {
+            if dc.seg_below(ab, bb, b[2]) {
+                out.push([a[0], a[1], b[2]]);
+                return Ok(true);
+            }
+        } else if dc.seg_below(ab, bb, a[2]) {
+            out.push([b[0], b[1], a[2]]);
+            return Ok(true);
+        }
     }
     if depth > 40 {
         return Err(DrapeError::Unproven { at: m });
