@@ -307,6 +307,15 @@ impl ViewIds {
     }
 }
 
+/// A whole view's ids on their way back: the buffer, its size and row, set ready when mapped.
+struct IdsOut {
+    read: wgpu::Buffer,
+    w: u32,
+    h: u32,
+    row: u32,
+    ready: Arc<AtomicBool>,
+}
+
 struct PickState {
     id: wgpu::Texture,
     id_view: wgpu::TextureView,
@@ -402,6 +411,8 @@ pub struct Renderer {
     dot: wgpu::RenderPipeline,
     marks: wgpu::Buffer,
     pick: PickState,
+    /// The whole view's ids drawn and on their way back (`view_ids_start`): one at a time.
+    ids_out: Option<IdsOut>,
     binds: wgpu::BindGroup,
     globals: wgpu::Buffer,
     placements: wgpu::Buffer,
@@ -1461,6 +1472,7 @@ impl Renderer {
             dot,
             marks,
             pick,
+            ids_out: None,
             binds,
             globals,
             placements,
@@ -1748,7 +1760,64 @@ impl Renderer {
         lo: (f32, f32),
         hi: (f32, f32),
     ) -> Vec<(Entity, u32, u32)> {
-        let ids = self.view_ids(scene, camera);
+        self.view_ids(scene, camera).seen_in_box(lo, hi)
+    }
+
+    /// The placement and entity under each pixel of the whole view. Draws them and waits, so for a
+    /// window let go or a message sent, not for a frame. Natively only: a page can't wait for the
+    /// GPU (its read back comes in a later task), so it starts them (`view_ids_start`) and takes
+    /// them when they're back (`view_ids_take`).
+    pub fn view_ids(&mut self, scene: &mut Scene, camera: &Camera) -> ViewIds {
+        self.view_ids_start(scene, camera);
+        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+        self.view_ids_take(scene).expect("it's been waited for")
+    }
+
+    /// Whether a whole view's ids are on their way back.
+    pub fn view_ids_busy(&self) -> bool {
+        self.ids_out.is_some()
+    }
+
+    /// The whole view's ids, once they're back (`view_ids_start`); None while they aren't.
+    pub fn view_ids_take(&mut self, scene: &Scene) -> Option<ViewIds> {
+        let out = self.ids_out.as_ref()?;
+        let _ = self.device.poll(wgpu::PollType::Poll);
+        if !out.ready.load(Ordering::Acquire) {
+            return None;
+        }
+        let IdsOut { read, w, h, row, .. } = self.ids_out.take()?;
+        let ids = read.slice(..).get_mapped_range().ok()?;
+        let word = |at: usize| u32::from_le_bytes(ids[at..at + 4].try_into().expect("4 bytes"));
+        let mut raw = Vec::with_capacity((w * h) as usize);
+        let mut kinds: std::collections::HashMap<(u32, u32), Entity> = Default::default();
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let at = y * row as usize + x * 8;
+                let (pl, id) = (word(at), word(at + 4));
+                raw.push((pl, id));
+                if pl != 0 && id & SELECTED_BIT != 0 {
+                    kinds
+                        .entry((pl, id))
+                        .or_insert_with(|| self.edge_of_segment(scene, pl - 1, id & !SELECTED_BIT));
+                }
+            }
+        }
+        drop(ids);
+        read.unmap();
+        Some(ViewIds {
+            w: w as usize,
+            h: h as usize,
+            raw,
+            edges: kinds,
+        })
+    }
+}
+
+impl ViewIds {
+    /// What can be seen of each entity in the box `lo`..`hi` of the view: how many of its pixels
+    /// are in it and how many out of it.
+    pub fn seen_in_box(&self, lo: (f32, f32), hi: (f32, f32)) -> Vec<(Entity, u32, u32)> {
+        let ids = self;
         let mut counts: std::collections::HashMap<Entity, (u32, u32)> = Default::default();
         for y in 0..ids.h {
             for x in 0..ids.w {
@@ -1764,10 +1833,13 @@ impl Renderer {
         }
         counts.into_iter().map(|(e, c)| (e, c.0, c.1)).collect()
     }
+}
 
-    /// The placement and entity under each pixel of the whole view. Draws them and waits, so for a
-    /// window let go or a message sent, not for a frame.
-    pub fn view_ids(&mut self, scene: &mut Scene, camera: &Camera) -> ViewIds {
+impl Renderer {
+    /// Draws the ids of the whole view and asks for them back (`view_ids_take` has them when
+    /// they're in; the pick's waker wakes the host then). One at a time: a second start while one
+    /// is out drops the first.
+    pub fn view_ids_start(&mut self, scene: &mut Scene, camera: &Camera) {
         let (w, h) = self.size;
         let view = camera.view_window(w, h, (w as f32 * 0.5, h as f32 * 0.5), (w as f32, h as f32));
         scene.cull(&view, self.lod_px, self.section, self.section2);
@@ -1873,32 +1945,23 @@ impl Renderer {
             id.size(),
         );
         self.queue.submit([encoder.finish()]);
-        read.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
-        let ids = read.slice(..).get_mapped_range().expect("it's been waited for");
-        let word = |at: usize| u32::from_le_bytes(ids[at..at + 4].try_into().expect("4 bytes"));
-        let mut raw = Vec::with_capacity((w * h) as usize);
-        let mut kinds: std::collections::HashMap<(u32, u32), Entity> = Default::default();
-        for y in 0..h as usize {
-            for x in 0..w as usize {
-                let at = y * row as usize + x * 8;
-                let (pl, id) = (word(at), word(at + 4));
-                raw.push((pl, id));
-                if pl != 0 && id & SELECTED_BIT != 0 {
-                    kinds
-                        .entry((pl, id))
-                        .or_insert_with(|| self.edge_of_segment(scene, pl - 1, id & !SELECTED_BIT));
-                }
+        let ready = Arc::new(AtomicBool::new(false));
+        let (done, wake) = (ready.clone(), self.pick.wake.clone());
+        read.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+            if r.is_ok() {
+                done.store(true, Ordering::Release);
             }
-        }
-        drop(ids);
-        read.unmap();
-        ViewIds {
-            w: w as usize,
-            h: h as usize,
-            raw,
-            edges: kinds,
-        }
+            if let Some(w) = &wake {
+                w();
+            }
+        });
+        self.ids_out = Some(IdsOut {
+            read,
+            w,
+            h,
+            row,
+            ready,
+        });
     }
 
     fn edge_of_segment(&self, scene: &Scene, placement: u32, segment: u32) -> Entity {

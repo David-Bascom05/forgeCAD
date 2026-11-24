@@ -723,6 +723,11 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("seq", doc.map_or(Json::Null, |s| num(s.seq as f64))),
         ("done", doc.map_or(Json::Null, |s| num(s.done as f64))),
         ("dirty", doc.is_some_and(|s| s.dirty()).into()),
+        // what's selected in the view: a test of a click or a selection window reads it
+        (
+            "selected",
+            num(g.view.as_ref().map_or(0, |v| v.nav.selected.len()) as f64),
+        ),
         ("status", g.shell.status.clone().into()),
         // the last build's time in the worker, ms
         ("build_ms", doc.map_or(Json::Null, |s| num(s.build_ms))),

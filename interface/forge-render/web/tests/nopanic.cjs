@@ -7,6 +7,8 @@
 // started while its caller held the lock the job takes, which natively runs on another thread
 // but in the single-threaded page runs before `plat::spawn` returns:
 //   - Thermoform > Check Forming (the thickness map's job, thermo_view.rs `want_heat`)
+// and a selection window (a left drag across the view), whose view ids were waited for with a
+// blocking GPU poll a page can't do: "it's been waited for: getMappedRange failed", a dead page.
 //   node web/tests/nopanic.cjs OUT   (OUT: web/build.sh's output)
 // The page is 1280x800 (offscreen), so the chrome is where these coordinates say.
 const assert = require("node:assert/strict");
@@ -48,6 +50,15 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
       await pause(800);
       t.check(p);
     };
+
+    // a selection window over the whole part, left to right: its faces selected
+    await p.mouse.move(450, 250);
+    await p.mouse.down();
+    for (let i = 1; i <= 10; i++) await p.mouse.move(450 + i * 65, 250 + i * 45);
+    await p.mouse.up();
+    const sel = await t.until(p, (s) => s.selected > 0, "the window's selection", 20000);
+    t.check(p);
+    console.log(`ok - a selection window chose ${sel.selected} faces`);
 
     await click(at.versionsTab);
     await click(at.turnOnHistory);

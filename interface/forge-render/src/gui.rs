@@ -123,6 +123,50 @@ pub type AsmPlaced = (Vec<crate::fg::Occ>, Vec<(usize, crate::scene::Rows)>);
 /// A part file, and its anchors or why not.
 pub(crate) type PartAnchors = (String, Result<Vec<String>, String>);
 
+/// A selection window let go, as it's chosen from the view's ids: its box (device pixels), its
+/// direction, and what the moment of release said (a tool taking edges, Ctrl, Shift).
+struct WindowAsk {
+    lo: (f32, f32),
+    hi: (f32, f32),
+    crossing: bool,
+    takes_edges: bool,
+    ctrl: bool,
+    shift: bool,
+}
+
+/// What a selection window chose, from the view's ids: faces into (or, with Ctrl, out of) the
+/// selection, or the edges for a tool that takes them (returned).
+fn window_chosen(v: &mut View, ids: &crate::render::ViewIds, ask: &WindowAsk) -> Option<Vec<Entity>> {
+    let seen: Vec<Entity> = ids
+        .seen_in_box(ask.lo, ask.hi)
+        .into_iter()
+        .filter(|(_, inside, outside)| *inside > 0 && (ask.crossing || *outside == 0))
+        .map(|f| f.0)
+        .collect();
+    let (edges, found): (Vec<Entity>, Vec<Entity>) =
+        seen.into_iter().partition(|e| matches!(e, Entity::Edge(_)));
+    let found: Vec<Entity> = found
+        .into_iter()
+        .filter(|e| matches!(e, Entity::Face(_)))
+        .collect();
+    if ask.takes_edges {
+        return Some(edges);
+    }
+    if ask.ctrl {
+        v.nav.selected.retain(|s| !found.contains(&s.1));
+    } else {
+        if !ask.shift {
+            v.nav.selected.clear();
+        }
+        for e in found {
+            if !v.nav.selected.contains(&(0, e)) {
+                v.nav.selected.push((0, e));
+            }
+        }
+    }
+    None
+}
+
 pub struct Gui {
     pub vers: gui_versions::VersState,
     /// The Machine Builder's scene (`gui_machine.rs`).
@@ -155,6 +199,9 @@ pub struct Gui {
     target_px: (u32, u32),
     /// When the right button went down in the view, for its menu to show if it stays down.
     mark_held: Option<f64>,
+    /// A selection window let go whose view ids are on their way back (in a page they come in a
+    /// later task: `picks` finishes it).
+    window_out: Option<WindowAsk>,
     /// A message with marks, sent once the frame showing them is drawn.
     markup_job: Option<(String, Vec<String>)>,
     /// A message with marks taken, waiting on its names; an assembly's occurrences' own names,
@@ -304,6 +351,7 @@ impl Gui {
             view_file: None,
             target_px: (1, 1),
             mark_held: None,
+            window_out: None,
             markup_job: None,
             markup_wait: None,
             markup_occ: None,
@@ -778,26 +826,7 @@ impl Gui {
             }
             if let Some((a, b)) = v.nav.window.take() {
                 v.dirty = true;
-                let lo = (a.0.min(b.0), a.1.min(b.1));
-                let hi = (a.0.max(b.0), a.1.max(b.1));
-                let camera = v.nav.camera;
-                // only what can be seen: right to left what shows in it, left to right what shows
-                // in it and nowhere else
-                let crossing = b.0 < a.0;
-                let seen: Vec<Entity> = v
-                    .renderer
-                    .seen_in_box(&mut v.scene, &camera, lo, hi)
-                    .into_iter()
-                    .filter(|(_, inside, outside)| *inside > 0 && (crossing || *outside == 0))
-                    .map(|f| f.0)
-                    .collect();
                 // a tool's edges selection takes the window's edges, as Inventor's does
-                let (edges, found): (Vec<Entity>, Vec<Entity>) =
-                    seen.into_iter().partition(|e| matches!(e, Entity::Edge(_)));
-                let found: Vec<Entity> = found
-                    .into_iter()
-                    .filter(|e| matches!(e, Entity::Face(_)))
-                    .collect();
                 let takes_edges = self
                     .shell
                     .fg
@@ -805,19 +834,25 @@ impl Gui {
                     .and_then(|p| p.tool.as_ref())
                     .and_then(|t| t.slots.get(t.active))
                     .is_some_and(|s| s.kind == crate::shell::fgtool::SlotKind::Edges);
-                if takes_edges {
-                    window_edges = Some(edges);
-                } else if v.nav.ctrl_held() {
-                    v.nav.selected.retain(|s| !found.contains(&s.1));
+                let ask = WindowAsk {
+                    lo: (a.0.min(b.0), a.1.min(b.1)),
+                    hi: (a.0.max(b.0), a.1.max(b.1)),
+                    // only what can be seen: right to left what shows in it, left to right what
+                    // shows in it and nowhere else
+                    crossing: b.0 < a.0,
+                    takes_edges,
+                    ctrl: v.nav.ctrl_held(),
+                    shift: v.nav.shift_held(),
+                };
+                let camera = v.nav.camera;
+                // natively the ids are waited for; a page can't wait for the GPU, so they're asked
+                // for and the window is chosen when they're back (`picks`)
+                if cfg!(target_arch = "wasm32") {
+                    v.renderer.view_ids_start(&mut v.scene, &camera);
+                    self.window_out = Some(ask);
                 } else {
-                    if !v.nav.shift_held() {
-                        v.nav.selected.clear();
-                    }
-                    for e in found {
-                        if !v.nav.selected.contains(&(0, e)) {
-                            v.nav.selected.push((0, e));
-                        }
-                    }
+                    let ids = v.renderer.view_ids(&mut v.scene, &camera);
+                    window_edges = window_chosen(v, &ids, &ask);
                 }
             }
             if let Some(at) = v.nav.cube_menu.take() {
@@ -889,6 +924,17 @@ impl Gui {
             && let Some(px) = v.nav.take_pick()
         {
             v.renderer.pick_start(&mut v.scene, &v.nav.camera, px);
+        }
+        // a selection window's ids back (a page's: see `view_event`)
+        if self.window_out.is_some()
+            && let Some(ids) = v.renderer.view_ids_take(&v.scene)
+            && let Some(ask) = self.window_out.take()
+        {
+            v.dirty = true;
+            if let Some(e) = window_chosen(v, &ids, &ask) {
+                self.fg_window_edges(e);
+            }
+            return true;
         }
         if let Some((px, hit, _)) = v.renderer.pick_poll(&v.scene)
             && v.nav
