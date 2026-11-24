@@ -749,3 +749,30 @@ So condition (2) reads:
 - (iii) passes start in monotone cross-sweep order. This is what guarantees (ii).
 
 Zero winding everywhere is NOT required. Retracing zigzag returns are not needed for FTO.
+
+**§9 correction (2026-11-24, after TOOLPATH-QUALITY's data on cam/quality-adaptive-wip @b5605f1f).**
+The test proposed above, winding of a pass closed by its start–end chord, is a poor proxy, and it
+is withdrawn. The chord is not a move the tool makes. An L-shaped peel (along the bottom, then up
+the far side, within ±75° of the sweep) closed by its chord "encloses" an island the tool never
+goes round. What the spiral-loop and moat claims describe is the tool *travelling round* a point.
+
+The binding reading is now:
+- (i) **Per pass:** the total heading change, |Σ Δheading|, is at most 2·PEEL (150°). A single pass
+  cannot go round anything.
+- (ii) **Whole path:** for the path as travelled (passes, links and rapids, in order, never closed
+  by a chord), the running angle swept about every island point, and about every point of material
+  uncut at that moment, stays strictly inside (−2π, 2π) at every prefix. The path never completes
+  a revolution about it. A spiral or moat accumulates whole turns; peel passes with returns
+  oscillate.
+- (iii) **Monotone cross-sweep start order** stays, as good practice. Condition (ii) is the test.
+
+PEEL = 75° may stay. An L-peel subtends at most about 180° of an island and its link returns. Lower
+PEEL only if (ii) fails.
+
+**On bands round a boss** (RPTU parts 3–6):
+- Plain offset rings of the island, outward-in, beat every peel and zigzag variant: part 3 clear
+  46 s against Autodesk's adaptive at 63 s, which is itself 3 closed offset rings. Fusion uses
+  offsets there too.
+- Offsets of boundary plus islands together are classic prior art, under the §9 reading of the
+  moat claims (Q3 open).
+- So adaptive is for deep, open levels at full flute length, and bands stay with `clear`.
