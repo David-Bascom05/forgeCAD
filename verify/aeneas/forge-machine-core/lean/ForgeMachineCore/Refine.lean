@@ -420,6 +420,15 @@ theorem put_P (x y h : Std.I64) :
   apply WP.spec_mono this
   intro r hr; rw [hr]; exact put_rel n a hx hy hz base.val hb x y h
 
+include hb hbl in
+/-- A put, as the spec's position, and its length. -/
+theorem put_P2 (x y h : Std.I64) :
+    put a base x y h ⦃ r => P n r.val = ForgeMachine.put (AX n a hx hy hz) (P n base.val) x.val y.val h.val ∧
+      r.val.length = n ⦄ := by
+  have := put_spec a base x y h (by rw [hb]; scalar_tac)
+  apply WP.spec_mono this
+  intro r hr; rw [hr]; exact ⟨put_rel n a hx hy hz base.val hb x y h, by simp [hb]⟩
+
 /-- The events of one peck at depth d (the spec's `hole`'s inner list). -/
 def pk (c : ForgeMachine.Cyc) (pc lift f x y : ℤ) (d : ℤ) : List (ForgeMachine.Ev n) :=
   let at_ := ForgeMachine.put (AX n a hx hy hz) (P n base.val) x y
@@ -1188,7 +1197,7 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
     step a pc lift st b ⦃ r =>
       match r with
       | .Ok (es, st') => ForgeMachine.step (AX n a hx hy hz) pc.val lift.val (SA n st) (BA n b) =
-          some (es.val.map (E n), SA n st')
+          some (es.val.map (E n), SA n st') ∧ st'.pos.val.length = n ∧ CycOK st'.cyc
       | .Err _ => ForgeMachine.step (AX n a hx hy hz) pc.val lift.val (SA n st) (BA n b) = none ⦄ := by
   unfold step
   simp only [or_word_eq, or_bool_eq, or_plane_eq, bind_ok]
@@ -1247,6 +1256,7 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
         split
         · contradiction
         simp only [ hv1', List.map_cons, List.map_nil, E, hfa, hPv, Option.some.injEq]
+        refine ⟨?_, by rw [hp]; simp [homePos, hvl], hcyc⟩
         rw [hp, homePos_P n _ _ hvl, hPv, plane_getD, iv_or]
   · have hh' : (BA n b).home = false := by simp [BA, hh]
     simp only [ForgeMachine.step, ht]
@@ -1271,7 +1281,11 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
       simp only [anyAx_eq n _ hax]
       subst hany
       cases hA : (b.ax.val.any fun x => x.isSome) with
-      | false => simp [alloc.vec.Vec.new]
+      | false =>
+        have hvlen : v.val.length = n := by
+          have := congrArg List.length hv; simpa [alloc.vec.Vec.deref, hpos] using this
+        simp only [alloc.vec.Vec.new, Bool.false_eq_true, ite_true, ite_false, WP.spec_ok]
+        exact ⟨by simp, by rw [hvp]; exact hvlen, hvc⟩
       | true =>
       simp only [Bool.true_eq_false, ite_false, ite_true]
       step with target_spec (b.absolute.getD st.absolute) (alloc.vec.Vec.deref st.pos) (alloc.vec.Vec.deref b.ax)
@@ -1306,6 +1320,7 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
           step with one_spec as ⟨w1, hw1⟩
           have hwv : w.val = val1.val := by simpa [alloc.vec.Vec.deref] using hw
           simp only [u0, hw1, List.map_cons, List.map_nil, E, hwv, SA, hmo, hcy, Option.map]
+          exact ⟨trivial, hvl, hcy ▸ hvc⟩
         · cases hfo : b.f.or st.feed with
           | none =>
             have : (iv b.f).or (iv st.feed) = none := by rw [← iv_or, hfo]; rfl
@@ -1318,6 +1333,7 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
             have hwv : w.val = val1.val := by simpa [alloc.vec.Vec.deref] using hw
             have : (iv b.f).or (iv st.feed) = some f.val := by rw [← iv_or, hfo]; rfl
             simp only [u1, this, Option.map, hw1, List.map_cons, List.map_nil, E, hwv, SA, hmo, hcy]
+            exact ⟨trivial, hvl, hcy ▸ hvc⟩
         · rename_i hn0 hn1
           have g0 : g.val ≠ 0 := fun e => hn0 (UScalar.eq_of_val_eq (by rw [e, u0]))
           have g1 : g.val ≠ 1 := fun e => hn1 (UScalar.eq_of_val_eq (by rw [e, u1]))
@@ -1331,9 +1347,11 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
             cases r with
             | Ok p =>
               obtain ⟨es, s3⟩ := p
-              obtain ⟨hr1, _⟩ := hr
+              obtain ⟨hr1, hs3⟩ := hr
+              subst hs3
+              refine ⟨?_, hvl, hcy ▸ hvc⟩
               simp only [SA, BA, hmo, hcy, Option.map] at hr1
-              simp only
+              simp only [SA, hmo, hcy, Option.map]
               split
               · exact hr1
               · contradiction
@@ -1393,14 +1411,15 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
               step with hole_spec n a hx hy hz (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hvl) hn c cur
                 (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r) pc lift f x y
                 (alloc.vec.Vec.new Ev) rfl hzr hzb hrb hqb hpc hlift as ⟨out, hout⟩
-              step with put_P n a hx hy hz (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hvl) hn x y
-                (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r) as ⟨pos, hp⟩
+              step with put_P2 n a hx hy hz (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hvl) hn x y
+                (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r) as ⟨pos, hp, hplen⟩
               have hbv : (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r).val =
                   (if b.retract_initial.getD st.retract_initial = true then (CY c).initial else (CY c).r) := by
                 split <;> rfl
               simp [alloc.vec.Vec.deref] at hout hp
               rw [hbv] at hout hp
               simp only [hout, SA, hp, hmo, hcy, Option.map, u80]
+              exact ⟨trivial, hplen, hcy ▸ hvc⟩
           | none =>
             simp only [Option.isSome_none, iv_none, Bool.false_eq_true, false_and, ite_false]
             step with at_spec (alloc.vec.Vec.deref val1) a.x as ⟨o1, ho1⟩
@@ -1431,14 +1450,15 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
             step with hole_spec n a hx hy hz (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hvl) hn c cur
               (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r) pc lift f x y
               (alloc.vec.Vec.new Ev) rfl hzr hzb hrb hqb hpc hlift as ⟨out, hout⟩
-            step with put_P n a hx hy hz (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hvl) hn x y
-              (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r) as ⟨pos, hp⟩
+            step with put_P2 n a hx hy hz (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hvl) hn x y
+              (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r) as ⟨pos, hp, hplen⟩
             have hbv : (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r).val =
                 (if b.retract_initial.getD st.retract_initial = true then (CY c).initial else (CY c).r) := by
               split <;> rfl
             simp [alloc.vec.Vec.deref] at hout hp
             rw [hbv] at hout hp
             simp only [hout, SA, hp, hmo, hcy, Option.map, u80]
+            exact ⟨trivial, hplen, hcy ▸ hvc⟩
         · rename_i hn80
           have g80 : g.val ≠ 80 := fun e => hn80 (UScalar.eq_of_val_eq (by rw [e, u80]))
           split
@@ -1446,6 +1466,7 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
             step with one_spec as ⟨w1, hw1⟩
             have hwv : w.val = val1.val := by simpa [alloc.vec.Vec.deref] using hw
             simp only [u0, hw1, List.map_cons, List.map_nil, E, hwv, SA, hmo, hcy, Option.map]
+            exact ⟨trivial, hvl, hcy ▸ hvc⟩
           · cases hfo : b.f.or st.feed with
             | none =>
               have : (iv b.f).or (iv st.feed) = none := by rw [← iv_or, hfo]; rfl
@@ -1458,6 +1479,7 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
               have hwv : w.val = val1.val := by simpa [alloc.vec.Vec.deref] using hw
               have : (iv b.f).or (iv st.feed) = some f.val := by rw [← iv_or, hfo]; rfl
               simp only [u1, this, Option.map, hw1, List.map_cons, List.map_nil, E, hwv, SA, hmo, hcy]
+              exact ⟨trivial, hvl, hcy ▸ hvc⟩
           · rename_i hn0 hn1
             have g0 : g.val ≠ 0 := fun e => hn0 (UScalar.eq_of_val_eq (by rw [e, u0]))
             have g1 : g.val ≠ 1 := fun e => hn1 (UScalar.eq_of_val_eq (by rw [e, u1]))
@@ -1471,9 +1493,11 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
               cases r with
               | Ok p =>
                 obtain ⟨es, s3⟩ := p
-                obtain ⟨hr1, _⟩ := hr
+                obtain ⟨hr1, hs3⟩ := hr
+                subst hs3
+                refine ⟨?_, hvl, hcy ▸ hvc⟩
                 simp only [SA, BA, hmo, hcy, Option.map] at hr1
-                simp only
+                simp only [SA, hmo, hcy, Option.map]
                 split
                 all_goals first
                   | (exfalso; rename_i h1 h2; simp only [Option.some.injEq] at h1 h2; omega)
@@ -1502,5 +1526,72 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
                 | (rename_i h1 h2; simp only [Option.some.injEq] at h1; subst h1; rw [if_neg g23])
                 | (rename_i h1; simp at h1)
                 | rfl
+
+/-! ### Runs -/
+
+/-- The shipped step, iterated over a program (the loop the shell runs, without its own words). -/
+def runT (a : Axes) (pc lift : Std.I64) : State → List Block → Result (core.result.Result (List Ev) Refuse)
+  | _, [] => ok (.Ok [])
+  | st, b :: bs => do
+    let r ← step a pc lift st b
+    match r with
+    | core.result.Result.Err e => ok (core.result.Result.Err e)
+    | core.result.Result.Ok (es, st') => do
+      let r2 ← runT a pc lift st' bs
+      match r2 with
+      | core.result.Result.Err e => ok (core.result.Result.Err e)
+      | core.result.Result.Ok rest => ok (core.result.Result.Ok (es.val ++ rest))
+
+/-- A block within the theorem's bounds. -/
+def BlkOK (n : ℕ) (b : Block) : Prop :=
+  b.ax.val.length = n ∧ (∀ o ∈ b.ax.val, BdO o) ∧ BdO b.i ∧ BdO b.j ∧ BdO b.k ∧ BdO b.r ∧ BdO b.q
+
+/-- Every position the spec's run reaches is within 2^29: a statement about the program and the
+spec only (G91 can walk out of range; the theorem is about programs that do not). -/
+def ReachBd {n : ℕ} (A : ForgeMachine.Axes n) (pc lift : ℤ) :
+    ForgeMachine.State n → List (ForgeMachine.Block n) → Prop
+  | σ, [] => ∀ k v, σ.pos k = some v → Bd v
+  | σ, b :: bs => (∀ k v, σ.pos k = some v → Bd v) ∧
+      ∀ es σ', ForgeMachine.step A pc lift σ b = some (es, σ') → ReachBd A pc lift σ' bs
+
+theorem pos_bd (n : ℕ) (st : State) (hl : st.pos.val.length = n)
+    (h : ∀ k v, (SA n st).pos k = some v → Bd v) : ∀ o ∈ st.pos.val, BdO o := by
+  intro o ho v hv
+  obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem ho
+  have := h ⟨i, by omega⟩ v.val
+  simp only [SA, P, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hi, Option.getD_some, hv, iv_some] at this
+  exact this trivial
+
+/-- The shipped interpreter, run over a program, is the spec's run (L4): the same events when it
+accepts the program, and a refusal exactly when the spec refuses. -/
+theorem run_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz : a.z.val < n)
+    (pc lift : Std.I64) (hn : n < 2 ^ 16) (hpc : Bd pc.val) (hlift : Bd lift.val) :
+    ∀ (bs : List Block) (st : State), st.pos.val.length = n → CycOK st.cyc → (∀ b ∈ bs, BlkOK n b) →
+      ReachBd (AX n a hx hy hz) pc.val lift.val (SA n st) (bs.map (BA n)) →
+      runT a pc lift st bs ⦃ r =>
+        match r with
+        | .Ok evs => ForgeMachine.runFrom (AX n a hx hy hz) pc.val lift.val (SA n st) (bs.map (BA n)) =
+            some (evs.map (E n))
+        | .Err _ => ForgeMachine.runFrom (AX n a hx hy hz) pc.val lift.val (SA n st) (bs.map (BA n)) = none ⦄ := by
+  intro bs
+  induction bs with
+  | nil => intro st _ _ _ _; simp [runT, ForgeMachine.runFrom]
+  | cons b bs ih =>
+    intro st hl hc hb hR
+    obtain ⟨hbl, hbx, hi, hj, hk, hr, hq⟩ := hb b (by simp)
+    obtain ⟨hR0, hR1⟩ := hR
+    unfold runT
+    step with step_spec n a hx hy hz pc lift st b hn hl hbl (pos_bd n st hl hR0) hbx hi hj hk hr hq hc hpc hlift
+      as ⟨r, hres⟩
+    cases r with
+    | Err e => simp [ForgeMachine.runFrom, hres]
+    | Ok p =>
+      obtain ⟨es, st'⟩ := p
+      obtain ⟨hs, hl', hc'⟩ := hres
+      simp only
+      step with ih st' hl' hc' (fun b' hb' => hb b' (by simp [hb'])) (hR1 _ _ hs) as ⟨r2, hres2⟩
+      cases r2 with
+      | Err e => simp only [WP.spec_ok, List.map_cons, ForgeMachine.runFrom, hs]; simp [hres2]
+      | Ok rest => simp only [WP.spec_ok, List.map_cons, ForgeMachine.runFrom, hs]; simp [hres2]
 
 end forge_machine_core
