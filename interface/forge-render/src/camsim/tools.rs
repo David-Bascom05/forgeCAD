@@ -201,7 +201,6 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
             });
         }
     }
-    let tris = pieces.iter().map(|p| p.tris.tri.len()).sum();
     // where the shank meets the holder (in view in a close-up), else the shank's top
     let shank_r = 0.5 * tu.tool.dcon.max(tu.tool.dc);
     let at = match holder_at.and_then(|k| bodies.get(k)) {
@@ -245,10 +244,32 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
         }),
         _ => note,
     };
-    let ghost = holder_at
+    // the holder's interface, from the cited table: a solid where it has one
+    let ghost = None;
+    let mut note = note;
+    if let Some((body, said)) = holder_at
         .and_then(|k| bodies.get(k))
         .zip(tu.holder.as_deref())
-        .and_then(|(b, id)| interface_ghost(id, b.z1));
+        .and_then(|(b, id)| interface_body(id, b.z1))
+    {
+        pieces.push(Piece {
+            tris: body,
+            colour: look::HOLDER,
+            spins: false,
+            shade: vec![],
+        });
+        note = note.map(|(a, t)| {
+            let rest: Vec<&str> = t.lines().skip(1).collect();
+            (
+                a,
+                std::iter::once(said.as_str())
+                    .chain(rest)
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
+        });
+    }
+    let tris = pieces.iter().map(|p| p.tris.tri.len()).sum();
     ToolLook {
         pieces,
         tris,
@@ -397,41 +418,48 @@ fn gashed(mut t: Tris, outline: &[[f64; 2]], z0: f64) -> (Tris, Vec<f32>) {
     (t, shade)
 }
 
-/// A holder interface's usual outline above the gauge line (z from the gauge line up, radius):
-/// the flange and the 7/24 taper of the 30, 40 and 50 sizes (BT and CAT alike in silhouette),
-/// HSK-63's flange and short taper. A generic shape for display, labelled so, never a record's;
-/// the certified checks never see it. None for an interface it does not know.
-fn interface_ghost(holder: &str, z_gauge: f64) -> Option<Tris> {
+/// A holder's spindle interface above its gauge line, from the library's cited interface table
+/// (forge-tooling `[[interface]]`, CAM-HAAS: Sumitomo, ISCAR, Maritool): the flange between its
+/// faces and the taper from the gauge diameter. The taper's small end no maker prints: it is
+/// narrowed by the cited ratio (7/24 on the diameter for BT and CAT, 1/10 for HSK); CAT's flange
+/// thickness is its faces' difference, BT50's front face its back plus its thickness. The
+/// V-groove is not published and not drawn. Display only: the certified checks never see it.
+/// Returns the solid and its note; None where the interface has no table (TTS, straight).
+fn interface_body(holder: &str, z_gauge: f64) -> Option<(Tris, String)> {
     static LIB: std::sync::OnceLock<forge_tooling::Library> = std::sync::OnceLock::new();
     let lib = LIB.get_or_init(forge_tooling::Library::builtin);
-    let iface = lib.holder(holder).ok()?.interface.to_ascii_uppercase();
-    // (flange diameter, flange thickness, taper large diameter, taper length)
-    let (fd, ft, td, tl) = if iface.contains("HSK") && iface.contains("63") {
-        (63.0, 10.0, 48.0, 32.0)
-    } else if iface.ends_with("30") || iface.contains("NO.30") {
-        (46.0, 13.0, 31.75, 48.0)
-    } else if iface.ends_with("40") || iface.contains("NO.40") {
-        (63.0, 16.0, 44.45, 65.0)
-    } else if iface.ends_with("50") || iface.contains("NO.50") {
-        (100.0, 25.0, 69.85, 102.0)
+    let iface = lib.interface(&lib.holder(holder).ok()?.interface)?;
+    let d = |k: &str| iface.dim(k);
+    let (gd, tl, fd) = (d("gauge_d")?, d("taper_length")?, d("flange_d")?);
+    let o: Vec<[f64; 2]> = if iface.kind == "hsk" {
+        // the collar (from the contact face toward the tool), then the hollow taper up
+        let ct = d("collar_t")?;
+        vec![
+            [z_gauge - ct, 0.0],
+            [z_gauge - ct, 0.5 * fd],
+            [z_gauge, 0.5 * fd],
+            [z_gauge, 0.5 * gd],
+            [z_gauge + tl, 0.5 * (gd - tl / 10.0)],
+            [z_gauge + tl, 0.0],
+        ]
     } else {
-        return None;
+        let back = d("gauge_to_flange_back")?;
+        let front = d("gauge_to_flange_front").or_else(|| Some(back + d("flange_t")?))?;
+        let at_back = gd + back * 7.0 / 24.0;
+        vec![
+            [z_gauge - front, 0.0],
+            [z_gauge - front, 0.5 * fd],
+            [z_gauge - back, 0.5 * fd],
+            [z_gauge - back, 0.5 * at_back],
+            [z_gauge + tl, 0.5 * (gd - tl * 7.0 / 24.0)],
+            [z_gauge + tl, 0.0],
+        ]
     };
-    // a 7/24 taper narrows by 7 in 24 on the diameter; HSK's is short, about 1:10
-    let small = if iface.contains("HSK") {
-        td - tl / 10.0
-    } else {
-        td - tl * 7.0 / 24.0
-    };
-    let o = [
-        [z_gauge, 0.0],
-        [z_gauge, 0.5 * fd],
-        [z_gauge + ft, 0.5 * fd],
-        [z_gauge + ft, 0.5 * td],
-        [z_gauge + ft + tl, 0.5 * small],
-        [z_gauge + ft + tl, 0.0],
-    ];
-    Some(crate::machine_mesh::revolve(&o))
+    let note = format!(
+        "{holder}: {} taper and flange from the interface table; V-groove not published, not drawn",
+        iface.id
+    );
+    Some((crate::machine_mesh::revolve(&o), note))
 }
 
 /// The generic interface, see-through, posed with the tool (it does not turn: nothing on it shows
