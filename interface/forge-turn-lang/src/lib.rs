@@ -111,6 +111,32 @@ fn num(a: &BTreeMap<String, V>, k: &str, default: Option<f64>) -> Result<f64, St
     }
 }
 
+/// `k: (z0, z1)` or `k: ((z0, z1), (z2, z3), ..)`: z ranges; none when absent.
+fn ranges(a: &BTreeMap<String, V>, k: &str) -> Result<Vec<(f64, f64)>, String> {
+    let pair = |v: &V| match v {
+        V::Tuple(p) => match p.as_slice() {
+            [V::Num(x), V::Num(y)] => Some((*x, *y)),
+            _ => None,
+        },
+        _ => None,
+    };
+    match a.get(k) {
+        None => Ok(vec![]),
+        Some(v) => {
+            if let Some(p) = pair(v) {
+                return Ok(vec![p]);
+            }
+            match v {
+                V::Tuple(xs) => xs
+                    .iter()
+                    .map(|x| pair(x).ok_or_else(|| format!("`{k}:` holds z ranges (z0, z1)")))
+                    .collect(),
+                _ => Err(format!("`{k}:` holds z ranges (z0, z1)")),
+            }
+        }
+    }
+}
+
 fn text(a: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<String, String> {
     match a.get(k) {
         Some(V::Str(s)) => Ok(s.clone()),
@@ -348,7 +374,7 @@ impl TurnCam {
                 let r = if t.left {
                     ops::finish_up(s, &t, st, leave, num(a, "from", None)?, to)
                 } else {
-                    ops::finish(s, &t, st, leave, to)
+                    ops::finish_skip(s, &t, st, leave, to, &ranges(a, "skip")?)
                 };
                 op(self, "finish", r, si)
             }

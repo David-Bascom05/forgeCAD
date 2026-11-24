@@ -1,0 +1,37 @@
+machining
+# hub.fg on the generic lathe from a Dia 66 bar, one setup: face, drill through, rough and finish
+# the outside, groove the thread relief, the O-ring groove and the neck, finish the back chamfer
+# left hand, thread M36 x 1.5; bore rough and finish, the inside relief groove, M30 x 1.5 inside;
+# part off. Placed (Z0 at machine Z 100, every station's offsets 0): G5 in full.
+shared bar = 66
+
+f     = part("hub.fg")
+t1    = lathe_tool("od-rough-cnmg", t: 1)
+t2    = lathe_tool("od-finish-dnmg", t: 2)
+t3    = lathe_tool("drill-26-4d", t: 3)
+t4    = lathe_tool("thread-60", t: 4)
+t5    = lathe_tool("groove-3", t: 5)
+t6    = lathe_tool("id-bore-ccmt", t: 6)
+t7    = lathe_tool("id-groove-2", t: 7)
+t8    = lathe_tool("id-thread-60", t: 8)
+t9    = lathe_tool("od-profile-vbmt-left", t: 9)
+t10   = lathe_tool("part-3-deep", t: 10)
+jaws  = chuck(face: -100, grip: 30, jaw: 15)
+op1   = lathe_setup(f, bar: bar, front: 1, chuck: jaws, machine: "generic-lathe", at: 100,
+                    offsets: ((1, 0, 0), (2, 0, 0), (3, 0, 0), (4, 0, 0), (5, 0, 0), (6, 0, 0),
+                              (7, 0, 0), (8, 0, 0), (9, 0, 0), (10, 0, 0)))
+face  = turn_face(op1, tool: t1, to: 0, step: 1)
+drl   = turn_drill(op1, tool: t3, to: -86, peck: 10)
+rough = turn_rough(op1, tool: t1, leave: 0.3, step: 2, to: -81)
+fin   = turn_finish(op1, tool: t2, to: -60, skip: ((-23, -20), (-56, -52)))
+relf  = turn_groove(op1, tool: t5, from: -23, to: -20, r: 16.9)
+oring = turn_groove(op1, tool: t5, from: -56, to: -52, r: 28.5)
+neck  = turn_groove(op1, tool: t5, from: -70, to: -62, r: 25)
+back  = turn_finish(op1, tool: t9, from: -63, to: -60)
+thr   = turn_thread(op1, tool: t4, d: 36, pitch: 1.5, from: 3, to: -20, passes: 8)
+bor   = bore_rough(op1, tool: t6, leave: 0.3, step: 1, to: -41, from: 26)
+bfin  = turn_finish(op1, tool: t6, to: -40, skip: (-25, -22))
+irel  = turn_groove(op1, tool: t7, from: -25, to: -22, r: 15.5, bore: 28.376)
+ithr  = turn_thread(op1, tool: t8, d: 30, pitch: 1.5, from: 2, to: -22, passes: 8)
+cut   = part_off(op1, tool: t10, at: -80)
+prog  = lathe_program(op1, post: "fanuc-lathe", number: 4)

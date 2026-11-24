@@ -276,6 +276,19 @@ fn grown(s: &Setup, d: f64) -> Result<Loop, OpError> {
     })
 }
 
+/// The left end of the grown part's front cap: its horizontal line above the part's top (the front
+/// face grown by d). On a hollow part it is where the front face's inner edge is grown to: an OD
+/// op starts there, an inside op stays left of it. None when the front has no flat face.
+fn cap_left(c: &Loop, top: f64) -> Option<f64> {
+    c.segs
+        .iter()
+        .filter_map(|sg| match *sg {
+            Seg::Line { a, b } if a.y == b.y && a.y > top => Some(a.x.min(b.x)),
+            _ => None,
+        })
+        .fold(None, |m: Option<f64>, x| Some(m.map_or(x, |m| m.min(x))))
+}
+
 /// The heights where the vertical line ρ = x meets a piece (f64; the checker certifies).
 fn meet_vertical(s: &Seg, x: f64, out: &mut Vec<f64>) {
     match *s {
@@ -382,7 +395,12 @@ pub fn rough(
     }
     xs.sort_by(|a, b| b.total_cmp(a));
     xs.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+    // a hollow part: no OD pass inside its front face's inner edge (that is the bore's)
+    let inner = cap_left(&c, s.part.bbox[3]).unwrap_or(f64::NEG_INFINITY);
     for x in xs {
+        if x < inner {
+            continue;
+        }
         let mut zs = Vec::new();
         for sg in &c.segs {
             meet_vertical(sg, x, &mut zs);
@@ -566,6 +584,9 @@ pub fn bore_rough(
     }
     xs.sort_by(|a, b| a.total_cmp(b));
     xs.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+    // no bore pass outside the front face's inner edge (that is the outside's)
+    let outer = cap_left(&c, s.part.bbox[3]).unwrap_or(f64::INFINITY);
+    xs.retain(|x| *x < outer);
     for x in xs {
         let mut zs = Vec::new();
         for sg in &c.segs {
@@ -651,6 +672,64 @@ fn clip_above(s: &Seg, z0: f64) -> Option<(Seg, bool)> {
 /// Finishing: the nose centre along the boundary of H ⊕ B_{r_ε + leave}, clockwise from where
 /// it crosses ρ = ρ_min of the part (over the front face) down to z = z_lo.
 pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Result<OpPath, OpError> {
+    finish_skip(s, tool, t, leave, z_lo, &[])
+}
+
+/// The path's pieces with each z range in `skip` bridged: from where the path first goes below
+/// the range's top (A) to where it first goes below its bottom after that (B), on the far side of
+/// the gap from the part: an outside path goes out to B's radius at A's height and down (or down
+/// at A's radius, then in), an inside one the mirror (a straight chord across the groove can cut
+/// the corner it lands on). For a groove the path would otherwise dive into, cut by its own op.
+/// The bridge is checked like any other move.
+fn bridge(segs: Vec<Seg>, skip: &[(f64, f64)], inside: bool) -> Vec<Seg> {
+    let mut segs = segs;
+    for &(lo, hi) in skip {
+        let (lo, hi) = (lo.min(hi), lo.max(hi));
+        let Some(k) = segs.iter().position(|sg| sg.end().y < hi) else {
+            continue;
+        };
+        let Some(m) = (k..segs.len()).find(|&i| segs[i].end().y < lo) else {
+            continue;
+        };
+        // the piece at k up to the crossing of z = hi; the piece at m from its crossing of lo
+        let head = if segs[k].start().y >= hi {
+            clip_above(&segs[k], hi).map(|(p, _)| p)
+        } else {
+            None
+        };
+        let tail = clip_below(&segs[m].reversed(), lo).map(|(p, _)| p.reversed());
+        let a = head.map_or(segs[k].start(), |h| h.end());
+        let b = tail.map_or(segs[m].end(), |t| t.start());
+        let mut out: Vec<Seg> = segs[..k].to_vec();
+        out.extend(head);
+        // the elbow: on the far side from the part (outside: the larger radius first)
+        let far = if inside { b.x <= a.x } else { b.x >= a.x };
+        let e = if far {
+            forge_cam_geom::region::p2(b.x, a.y)
+        } else {
+            forge_cam_geom::region::p2(a.x, b.y)
+        };
+        for (p, q) in [(a, e), (e, b)] {
+            if p != q {
+                out.push(Seg::Line { a: p, b: q });
+            }
+        }
+        out.extend(tail);
+        out.extend_from_slice(&segs[m + 1..]);
+        segs = out;
+    }
+    segs
+}
+
+/// `finish`, with z ranges bridged (`bridge`): the grooves the profile has that their own ops cut.
+pub fn finish_skip(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    leave: f64,
+    z_lo: f64,
+    skip: &[(f64, f64)],
+) -> Result<OpPath, OpError> {
     if !(leave >= 0.0) {
         return Err(OpError::Geometry(format!(
             "a leave of {leave}: below the part (G1 holds the cutter from P ⊕ B_leave, leave ≥ 0)"
@@ -681,7 +760,8 @@ pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Resu
         let (lo, hi) = (s.part.bbox[0], s.part.bbox[2]);
         lo + (0.5 * (hi - lo)).min(1.0)
     } else {
-        s.part.bbox[0].max(0.0)
+        // over the front face from its inner edge (the axis for a solid part)
+        cap_left(&c, s.part.bbox[3]).unwrap_or(s.part.bbox[0]).max(0.0)
     };
     let n = c.segs.len();
     let mut start_at = None;
@@ -726,6 +806,7 @@ pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Resu
             }
         }
     }
+    let segs = bridge(segs, skip, inside);
     let p0 = [p0.x, p0.y];
     let start = [p0[0], p0[1] + APPROACH];
     let mut steps = vec![Step::Rapid(start), Step::Feed(p0)];
@@ -958,9 +1039,23 @@ pub fn part_off(s: &Setup, tool: &TurnTool, t: u32, z_back: f64) -> Result<OpPat
     }
     let (w, rc) = (tool.width, tool.re);
     if tool.l < s.bar_r + rc {
+        // the fix: the library's part-off blades that reach
+        let reach: Vec<String> = crate::insert::library(crate::insert::BUILTIN)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|b| b.kind == Kind::Part && b.l >= s.bar_r + b.re)
+            .map(|b| format!("{} (reach {})", b.id, b.l))
+            .collect();
         return Err(OpError::Tool(format!(
-            "the blade's reach ({}) is short of the bar's radius ({})",
-            tool.l, s.bar_r
+            "the blade's reach ({}) is short of the bar's radius ({}): a blade reaching {} or more{}",
+            tool.l,
+            s.bar_r,
+            s.bar_r + rc,
+            if reach.is_empty() {
+                String::new()
+            } else {
+                format!(", in the library: {}", reach.join(", "))
+            }
         )));
     }
     let z = z_back - (w - rc);
@@ -1633,6 +1728,15 @@ fn certify_with(
         ..Default::default()
     };
     let mut part = Obstacle::of("part", &s.part.region, s.part.mu).map_err(|e| format!("{e:?}"))?;
+    // G1 for a cutter: dist(tool, P) ≥ leave − tol is checked as dist(tool, P ⊖ B_tol) ≥ leave
+    // (the same set of placements: a point y of P ⊖ B_tol has B(y, tol) ⊆ P, so |x − y| ≥
+    // dist(x, P) + tol; and P ⊆ (P ⊖ B_tol) ⊕ B_tol). A tool that touches the part (a drill the
+    // size of its hole) is then tol clear, which the checker can prove; at gap zero it cannot.
+    let shrunk = |r: &Region, name: &str| -> Result<Obstacle, String> {
+        let (l, _) = offset(r, s.tol).map_err(|e| format!("{name} less tol: {e:?}"))?;
+        Obstacle::of(name, &boolean::region_of(&l), s.part.mu).map_err(|e| format!("{e:?}"))
+    };
+    let mut part_in = shrunk(&s.part.region, "part")?;
     let mut chuck = Obstacle::of("chuck", &s.chuck_region(), 0.0).map_err(|e| format!("{e:?}"))?;
     let mut fixtures = s
         .fixtures
@@ -1701,10 +1805,11 @@ fn certify_with(
             Some(d) => {
                 rep.removals.push((oi, d.clone()));
                 let pr = region_diff(&s.part.region, d)?;
-                Some(
+                Some((
                     Obstacle::of("part less the declared removal", &pr, s.part.mu)
                         .map_err(|e| format!("{e:?}"))?,
-                )
+                    shrunk(&pr, "part less the declared removal")?,
+                ))
             }
             None => None,
         };
@@ -1777,14 +1882,11 @@ fn certify_with(
             };
             for b in &op.tool.bodies {
                 // G1 (the part, or the part less the declared removal)
-                let need = if b.cutter {
-                    op.leave - s.tol
-                } else {
-                    s.holder_clearance
-                };
-                match target.as_mut() {
-                    Some(t) => run(b, mv, t, need, "part", &mut rep),
-                    None => run(b, mv, &mut part, need, "part", &mut rep),
+                match (target.as_mut(), b.cutter) {
+                    (Some((_, t)), true) => run(b, mv, t, op.leave, "part", &mut rep),
+                    (Some((t, _)), false) => run(b, mv, t, s.holder_clearance, "part", &mut rep),
+                    (None, true) => run(b, mv, &mut part_in, op.leave, "part", &mut rep),
+                    (None, false) => run(b, mv, &mut part, s.holder_clearance, "part", &mut rep),
                 }
                 // G2
                 run(b, mv, &mut chuck, s.fixture_clearance, "chuck", &mut rep);

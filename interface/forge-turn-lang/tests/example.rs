@@ -165,3 +165,37 @@ fn maker_and_project_tooling_reach_turning_through_the_library() {
     assert!(cam.ok, "{:?} {:?}", cam.errors, cam.ops);
     assert_eq!(cam.certification(), "full");
 }
+
+#[test]
+fn the_hub_certifies_in_full() {
+    // CAM-CORE's shop test part: a hollow hub, 14 ops covering every turning op
+    let d = dir();
+    let src = std::fs::read_to_string(d.join("hub_turn.fg")).unwrap();
+    let cam = forge_turn_lang::run(&src, &d);
+    assert!(cam.ok, "{:?} {:?}", cam.errors, cam.ops);
+    assert_eq!(cam.certification(), "full");
+    assert_eq!(cam.ops.len(), 14);
+    // the finishes without their groove bridges dive into the relief grooves: refused
+    let dive = src
+        .replace(", skip: ((-23, -20), (-56, -52)))", ")")
+        .replace(", skip: (-25, -22))", ")");
+    assert_ne!(dive, src);
+    let cam = forge_turn_lang::run(&dive, &d);
+    assert!(
+        cam.ops.iter().any(|o| o.name == "fin" && o.status == "refused")
+            && cam.ops.iter().any(|o| o.name == "bfin" && o.status == "refused"),
+        "{:?}",
+        cam.ops
+    );
+    // a blade too short for the bar is refused with the library's blades that reach
+    let short = src.replace(
+        "lathe_tool(\"part-3-deep\", t: 10)",
+        "lathe_tool(\"part-3\", t: 10)",
+    );
+    let cam = forge_turn_lang::run(&short, &d);
+    assert!(
+        cam.errors.iter().any(|e| e.contains("part-3-deep (reach 40)")),
+        "{:?}",
+        cam.errors
+    );
+}
