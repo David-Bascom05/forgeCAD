@@ -33,8 +33,10 @@ pub struct BendView {
     /// The working station's place along the bed when framed: the part moved to another
     /// station, the eye follows it there.
     station: Option<u64>,
-    /// The press's parts cut away for the framed eye (the Work framing's near walls).
+    /// The press's parts cut away for the eye (the Work framing's near walls), and the framed
+    /// subject they are cut for (none in Press Overview).
     cut: Vec<String>,
+    subject: Option<([f32; 3], [f32; 3])>,
     /// The step last framed (Follow bend re-frames on a new one).
     step: Option<usize>,
     /// The part's motion at the tools through that step: (step, lo, hi).
@@ -139,10 +141,10 @@ fn crosses(a: [f32; 3], b: [f32; 3], p: [f32; 3], q: [f32; 3], r: [f32; 3]) -> b
     t > 1e-4 && t < 0.995
 }
 
-/// The bodies to see through from `eye`: the part's own pieces (and with `press`, the frame,
-/// beams and backgauge) that stand between the eye and the bend being made (its zone's corners
+/// The bodies to see through from `eye`: the part's own pieces, the punches' bodies (and with
+/// `press`, the frame, beams and backgauge) that stand between the eye and the bend being made (its zone's corners
 /// and middle) or the punch's contact with the part (its tip's lowest point). Never the bend
-/// zone itself, the tools, or a body drawn red.
+/// zone itself, the walls either side of it, a punch's tip, the dies, or a body drawn red.
 pub fn see_through(bodies: &[Body], eye: [f32; 3], press: bool) -> Vec<usize> {
     let mut aims: Vec<[f32; 3]> = Vec::new();
     let zone = bounds(
@@ -183,6 +185,9 @@ pub fn see_through(bodies: &[Body], eye: [f32; 3], press: bool) -> Vec<usize> {
         .filter(|(_, x)| !x.hit)
         .filter(|(_, x)| {
             (x.look == Look::Sheet && !touches(&x.mesh))
+                // the punch's body (not its tip, the contact) when it stands in front of the bend
+                // line: from the operator's side it is a wall over the bend being made
+                || (x.look == Look::Tool && x.name.contains("punch:") && x.name.ends_with("/body"))
                 || (press && matches!(x.look, Look::Frame | Look::Gauge))
         })
         .filter(|(_, x)| {
@@ -571,10 +576,7 @@ impl Gui {
                 Framing::Overview => None,
             };
             if let Some((cam, lo, hi)) = framing(&bodies, envelope, how, v.size) {
-                self.bend.cut = match how {
-                    Framing::Work => cutaway(&bodies, &cam, v.size, lo, hi),
-                    Framing::Overview => Vec::new(),
-                };
+                self.bend.subject = (how == Framing::Work).then_some((lo, hi));
                 if how == Framing::Work && !handling {
                     // the cube's home is the working zone
                     v.nav.home_view = Some(cam);
@@ -586,6 +588,15 @@ impl Gui {
             self.bend.station = at;
             self.bend.step = Some(step);
         }
+        // the cut-away, for the eye the view will have and the press as it stands at this instant
+        // (the ram comes down through the picture as a bend forms: it is cut as it does)
+        self.bend.cut = match self.bend.subject {
+            Some((lo, hi)) => {
+                let cam = eye.map_or(v.nav.camera, |e| e.0);
+                cutaway(&bodies, &cam, v.size, lo, hi)
+            }
+            None => Vec::new(),
+        };
         if !self.bend.cut.is_empty() {
             bodies.retain(|x| !self.bend.cut.contains(&x.name));
         }
@@ -745,6 +756,7 @@ impl Gui {
     fn bendsim_put_back(&mut self) {
         self.bend.framed = false;
         self.bend.cut.clear();
+        self.bend.subject = None;
         self.bend.shown = None;
         self.bend.names.clear();
         self.bend.ours = None;
