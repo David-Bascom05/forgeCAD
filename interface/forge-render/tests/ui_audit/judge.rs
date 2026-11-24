@@ -69,8 +69,8 @@ pub fn popup(s: &Snap, before: &Snap, region: &[Rect], screen: Rect) -> Vec<Find
     let mut out = Vec::new();
     for r in region {
         // an area's rect carries its margin and shadow: off-screen is more than that out
-        let out = r.area() - r.intersect(screen).area();
-        if !screen.expand(16.0).contains_rect(*r) || out > 0.1 * r.area() {
+        let outside = r.area() - r.intersect(screen).area();
+        if !screen.expand(16.0).contains_rect(*r) || outside > 0.1 * r.area() {
             out.push(f(
                 "off-screen",
                 true,
