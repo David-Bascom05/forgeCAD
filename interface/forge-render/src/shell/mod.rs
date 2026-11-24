@@ -1078,6 +1078,9 @@ impl Shell {
         } else {
             self.tab_order()
         };
+        // each tab's name and width, then those that fit; the rest behind a "»" at the row's end
+        // (a narrow window cut View, Manage and Environments off: the UI audit's 480 px pass)
+        let mut entries: Vec<(usize, String, f32)> = Vec::new();
         for k in order {
             // the Model tab in an assembly too (one document); Thermoform where there is one
             if k == THERMO_TAB && !self.thermo_tab() {
@@ -1086,36 +1089,60 @@ impl Shell {
             if k == HARNESS_TAB && !self.harness_tab() {
                 continue;
             }
-            let name = match k {
-                k if dwg => &dwgdoc::TABS[k],
-                k if drawing => &drawing::TABS[k],
-                SHEET_TAB => &"Sheet Metal",
-                THERMO_TAB => &"Thermoform",
-                FLAT_TAB => &"Flat Pattern",
-                ASM_TAB => &"Assemble",
-                HARNESS_TAB => &"Harness",
-                WELD_TAB => &"Weldments",
-                CAM_TAB => &"Manufacture",
-                k if k < TABS.len() => &TABS[k],
-                k => &self.env_tab_name(k).unwrap_or("?"),
+            let name: String = match k {
+                k if dwg => dwgdoc::TABS[k].to_string(),
+                k if drawing => drawing::TABS[k].to_string(),
+                SHEET_TAB => "Sheet Metal".into(),
+                THERMO_TAB => "Thermoform".into(),
+                FLAT_TAB => "Flat Pattern".into(),
+                ASM_TAB => "Assemble".into(),
+                HARNESS_TAB => "Harness".into(),
+                WELD_TAB => "Weldments".into(),
+                CAM_TAB => "Manufacture".into(),
+                k if k < TABS.len() => TABS[k].to_string(),
+                k => self.env_tab_name(k).unwrap_or("?").to_string(),
             };
-            let on = k == self.tab;
-            let w = ui
-                .fonts_mut(|f| f.layout_no_wrap(name.to_string(), sans(13.0), t.ink))
+            let tw = ui
+                .fonts_mut(|f| f.layout_no_wrap(name.clone(), sans(13.0), t.ink))
                 .size()
                 .x
                 + 28.0;
+            entries.push((k, name, tw));
+        }
+        const MORE_W: f32 = 34.0;
+        let room = w - 8.0 - x;
+        let all: f32 = entries.iter().map(|e| e.2 + 2.0).sum();
+        let mut shown: Vec<usize> = (0..entries.len()).collect();
+        if all > room {
+            shown.clear();
+            let mut used = 0.0;
+            for (i, e) in entries.iter().enumerate() {
+                if used + e.2 + 2.0 > room - MORE_W {
+                    break;
+                }
+                used += e.2 + 2.0;
+                shown.push(i);
+            }
+            // the tab that's on is always seen: in the last place that fits, if it must
+            if let Some(on) = entries.iter().position(|e| e.0 == self.tab)
+                && !shown.contains(&on)
+            {
+                while !shown.is_empty() && used + entries[on].2 + 2.0 > room - MORE_W {
+                    let last = shown.pop().unwrap_or(0);
+                    used -= entries[last].2 + 2.0;
+                }
+                shown.push(on);
+            }
+        }
+        let hidden: Vec<usize> = (0..entries.len()).filter(|i| !shown.contains(i)).collect();
+        for &i in &shown {
+            let (k, name, w) = (entries[i].0, entries[i].1.as_str(), entries[i].2);
+            let on = k == self.tab;
             let r = Rect::from_min_size(pos2(x, y + 4.0), vec2(w, 30.0));
             let resp = ui.interact(r, ui.scope_id().with(("tab", k)), Sense::click());
-            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, *name));
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, name));
             if resp.clicked() {
-                self.tab = k;
-                // Assemble's tools on a file with no components yet: placing one makes it an assembly
-                if k == ASM_TAB
-                    && let Some(f) = &mut self.fg
-                {
-                    f.asm.get_or_insert_with(Default::default);
-                }
+                self.choose_tab(k);
             }
             if on {
                 p.rect_filled(r, up, t.raised);
@@ -1129,9 +1156,78 @@ impl Shell {
             } else {
                 (sans(13.0), if resp.hovered() { t.ink } else { t.ink2 })
             };
-            p.text(r.center(), Align2::CENTER_CENTER, *name, font, ink);
+            p.text(r.center(), Align2::CENTER_CENTER, name, font, ink);
             self.note(format!("tab:{name}"), r);
             x += w + 2.0;
+        }
+        if hidden.is_empty() {
+            return;
+        }
+        let more = Rect::from_min_size(pos2(x, y + 4.0), vec2(MORE_W, 30.0));
+        let open_id = egui::Id::unique("tabs-more-open");
+        let open = ui.data(|d| d.get_temp::<bool>(open_id)).unwrap_or(false);
+        let resp = ui
+            .interact(more, ui.scope_id().with("tabs-more"), Sense::click())
+            .on_hover_text("More tabs");
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "More tabs"));
+        if open || resp.hovered() {
+            p.rect_filled(more, up, t.hover);
+        }
+        p.text(more.center(), Align2::CENTER_CENTER, "\u{00bb}", sans(15.0), t.ink);
+        self.note("tabs:more", more);
+        if resp.clicked() {
+            ui.data_mut(|d| d.insert_temp(open_id, !open));
+        }
+        if !open {
+            return;
+        }
+        let at = pos2((more.right() - 180.0).max(4.0), more.bottom() + 2.0);
+        let mut chose = None;
+        let menu = egui::Area::new(egui::Id::unique("tabs-more-menu"))
+            .fixed_pos(at)
+            .order(egui::Order::Foreground)
+            .fade_in(false)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::new()
+                    .fill(t.raised)
+                    .stroke(Stroke::new(1.0, t.line))
+                    .corner_radius(6.0)
+                    .inner_margin(4.0)
+                    .show(ui, |ui| {
+                        ui.set_min_width(172.0);
+                        for &i in &hidden {
+                            let (k, name) = (entries[i].0, entries[i].1.as_str());
+                            let b = ui.add(
+                                egui::Button::new(egui::RichText::new(name).font(sans(13.0)).color(t.ink))
+                                    .frame(false)
+                                    .min_size(vec2(164.0, 26.0)),
+                            );
+                            self.places.push((format!("tab:{name}"), b.rect));
+                            if b.clicked() {
+                                chose = Some(k);
+                            }
+                        }
+                    });
+            });
+        let pressed = ui.input(|i| i.pointer.any_pressed());
+        let inside = ui
+            .input(|i| i.pointer.interact_pos())
+            .is_some_and(|q| menu.response.rect.contains(q) || more.contains(q));
+        if let Some(k) = chose {
+            self.choose_tab(k);
+        }
+        if chose.is_some() || (pressed && !inside) || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            ui.data_mut(|d| d.insert_temp(open_id, false));
+        }
+    }
+
+    /// A tab chosen: Assemble's tools on a file with no components yet make it ready to place.
+    fn choose_tab(&mut self, k: usize) {
+        self.tab = k;
+        if k == ASM_TAB
+            && let Some(f) = &mut self.fg
+        {
+            f.asm.get_or_insert_with(Default::default);
         }
     }
 
