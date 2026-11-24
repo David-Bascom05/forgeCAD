@@ -307,6 +307,13 @@ def dmath.sin_cos (x : F64) : Result (F64 × F64) := do
   else let fl ← core.f64.F64.NAN
        ok (fl, fl)
 
+/-- [forge_math::dmath::sin]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 100:0-102:1
+    Visibility: public -/
+def dmath.sin (x : F64) : Result F64 := do
+  let (fl, _) ← dmath.sin_cos x
+  ok fl
+
 /-- [forge_math::dmath::cos]:
     Source: 'kernel/forge-math/src/dmath.rs', lines 104:0-106:1
     Visibility: public -/
@@ -1605,7 +1612,7 @@ def interval.Interval.sqrt
   interval.Interval.clamp_lo i (F64.Ops.ofBits 0)
 
 /-- [forge_math::interval::max4]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 191:0-193:1 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 238:0-240:1 -/
 def interval.max4 (c : Array F64 4#usize) : Result F64 := do
   let fl ← Array.index_usize c 0#usize
   let fl1 ← Array.index_usize c 1#usize
@@ -1616,7 +1623,7 @@ def interval.max4 (c : Array F64 4#usize) : Result F64 := do
   core.f64.F64.max fl4 fl5
 
 /-- [forge_math::interval::min4]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 187:0-189:1 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 234:0-236:1 -/
 def interval.min4 (c : Array F64 4#usize) : Result F64 := do
   let fl ← Array.index_usize c 0#usize
   let fl1 ← Array.index_usize c 1#usize
@@ -1832,123 +1839,177 @@ def interval.Interval.atan2
           ok { lo := fl14, hi := fl18 }
       else ok { lo := fl, hi := interval.Interval.atan2.PI_UP }
 
-/-- [forge_math::interval::{forge_math::interval::Interval}::shifted_cos]: loop body 0:
-    Source: 'kernel/forge-math/src/interval.rs', lines 168:8-178:9 -/
+/-- [forge_math::interval::TRIG_ERR]
+    Source: 'kernel/forge-math/src/interval.rs', lines 231:0-231:35 -/
+@[global_simps, irreducible]
+def interval.TRIG_ERR : Result F64 := core.f64.F64.EPSILON
+
+/-- [forge_math::interval::PI_UP]
+    Source: 'kernel/forge-math/src/interval.rs', lines 227:0-227:43 -/
+@[global_simps, irreducible]
+def interval.PI_UP : F64 := F64.Ops.ofBits 4614256656552045849
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::trig_at]: loop body 0:
+    Source: 'kernel/forge-math/src/interval.rs', lines 211:8-218:9 -/
 @[rust_loop_body]
-def interval.Interval.shifted_cos_loop.body
-  (fl : F64) (b : F64) (iter : core.ops.range.Range Std.I32) (lo : F64)
-  (hi : F64) (k : F64) :
-  Result (ControlFlow ((core.ops.range.Range Std.I32) × F64 × F64 × F64)
-    (F64 × F64))
+def interval.Interval.trig_at_loop.body
+  (last : F64) (lo : F64) (hi : F64) (k : F64) :
+  Result (ControlFlow (F64 × F64 × F64) (F64 × F64))
   := do
-  let (o, iter1) ←
-    core.iter.range.IteratorRange.next core.iter.range.StepI32 iter
-  match o with
-  | none => ok (done (lo, hi))
-  | some _ =>
-    let fl1 ← lift (F64.Ops.mul k fl)
-    if F64.Ops.gt fl1 b
-    then ok (done (lo, hi))
-    else
-      let i ← lift (F64.Ops.toIScalar .I64 k)
-      let i1 ← core.num.I64.rem_euclid i 2#i64
-      let (lo1, hi1) ←
-        if i1 = 0#i64
-        then ok (lo, F64.Ops.ofBits 4607182418800017408)
-        else ok (F64.Ops.ofBits 13830554455654793216, hi)
-      let k1 ← lift (F64.Ops.add k (F64.Ops.ofBits 4607182418800017408))
-      ok (cont (iter1, lo1, hi1, k1))
-
-/-- [forge_math::interval::{forge_math::interval::Interval}::shifted_cos]: loop 0:
-    Source: 'kernel/forge-math/src/interval.rs', lines 168:8-178:9 -/
-@[rust_loop]
-def interval.Interval.shifted_cos_loop
-  (fl : F64) (iter : core.ops.range.Range Std.I32) (b : F64) (lo : F64)
-  (hi : F64) (k : F64) :
-  Result (F64 × F64)
-  := do
-  loop
-    (fun (iter1, lo1, hi1, k1) => interval.Interval.shifted_cos_loop.body fl b
-      iter1 lo1 hi1 k1)
-    (iter, lo, hi, k)
-
-/-- [forge_math::interval::{forge_math::interval::Interval}::shifted_cos]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 155:4-183:5 -/
-def interval.Interval.shifted_cos
-  (self : interval.Interval) (shift : F64) : Result interval.Interval := do
-  let b ← core.f64.F64.is_finite self.lo
-  let finite ← if b
-                 then core.f64.F64.is_finite self.hi
-                 else ok false
-  if finite
+  if F64.Ops.le k last
   then
-    let fl ← interval.Interval.width self
-    let fl1 ← dmath.TAU
-    if F64.Ops.ge fl fl1
+    let i ← lift (F64.Ops.toIScalar .I64 k)
+    let i1 ← core.num.I64.rem_euclid i 2#i64
+    let (lo1, hi1) ←
+      if i1 = 0#i64
+      then ok (lo, F64.Ops.ofBits 4607182418800017408)
+      else ok (F64.Ops.ofBits 13830554455654793216, hi)
+    let k1 ← lift (F64.Ops.add k (F64.Ops.ofBits 4607182418800017408))
+    ok (cont (lo1, hi1, k1))
+  else ok (done (lo, hi))
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::trig_at]: loop 0:
+    Source: 'kernel/forge-math/src/interval.rs', lines 211:8-218:9 -/
+@[rust_loop]
+def interval.Interval.trig_at_loop
+  (lo : F64) (hi : F64) (k : F64) (last : F64) : Result (F64 × F64) := do
+  loop
+    (fun (lo1, hi1, k1) => interval.Interval.trig_at_loop.body last lo1 hi1 k1)
+    (lo, hi, k)
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::trig_at]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 195:4-223:5 -/
+def interval.Interval.trig_at
+  (self : interval.Interval) (fa : F64) (fb : F64) (half : F64) :
+  Result interval.Interval
+  := do
+  let fl ← core.f64.F64.min fa fb
+  let fl1 ← interval.TRIG_ERR
+  let fl2 ← lift (F64.Ops.sub fl fl1)
+  let lo ← core.f64.F64.next_down fl2
+  let fl3 ← core.f64.F64.max fa fb
+  let fl4 ← lift (F64.Ops.add fl3 fl1)
+  let hi ← core.f64.F64.next_up fl4
+  let fl5 ← dmath.PI
+  let fl6 ← lift (F64.Ops.div self.lo fl5)
+  let fl7 ← lift (F64.Ops.div self.lo interval.PI_UP)
+  let fl8 ← core.f64.F64.min fl6 fl7
+  let qa ← core.f64.F64.next_down fl8
+  let fl9 ← lift (F64.Ops.div self.hi fl5)
+  let fl10 ← lift (F64.Ops.div self.hi interval.PI_UP)
+  let fl11 ← core.f64.F64.max fl9 fl10
+  let qb ← core.f64.F64.next_up fl11
+  let fl12 ← lift (F64.Ops.sub qa half)
+  let k ← std.f64.F64.ceil fl12
+  let fl13 ← lift (F64.Ops.sub qb half)
+  let last ← std.f64.F64.floor fl13
+  let (lo1, hi1) ← interval.Interval.trig_at_loop lo hi k last
+  let fl14 ← core.f64.F64.max lo1 (F64.Ops.ofBits 13830554455654793216)
+  let fl15 ← core.f64.F64.min hi1 (F64.Ops.ofBits 4607182418800017408)
+  ok { lo := fl14, hi := fl15 }
+
+/-- [forge_math::interval::TRIG_MOST]
+    Source: 'kernel/forge-math/src/interval.rs', lines 229:0-229:35 -/
+@[global_simps, irreducible]
+def interval.TRIG_MOST : F64 := F64.Ops.ofBits 4697254411347427328
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::trig_whole]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 173:4-182:5 -/
+def interval.Interval.trig_whole
+  (self : interval.Interval) : Result (Option interval.Interval) := do
+  let b ← interval.Interval.is_empty self
+  if b
+  then ok (some self)
+  else
+    let b1 ← core.f64.F64.is_finite self.lo
+    if b1
     then
-      ok
-        {
-          lo := (F64.Ops.ofBits 13830554455654793216),
-          hi := (F64.Ops.ofBits 4607182418800017408)
-        }
-    else
-      let fl2 ← core.f64.F64.abs self.lo
-      let fl3 ← core.f64.F64.abs self.hi
-      let fl4 ← core.f64.F64.max fl2 fl3
-      if F64.Ops.gt fl4 (F64.Ops.ofBits 4831355200913801216)
+      let b2 ← core.f64.F64.is_finite self.hi
+      if b2
       then
-        ok
+        let fl ← core.f64.F64.abs self.lo
+        let fl1 ← core.f64.F64.abs self.hi
+        let fl2 ← core.f64.F64.max fl fl1
+        if F64.Ops.gt fl2 interval.TRIG_MOST
+        then
+          ok (some
+            {
+              lo := (F64.Ops.ofBits 13830554455654793216),
+              hi := (F64.Ops.ofBits 4607182418800017408)
+            })
+        else
+          let fl3 ← lift (F64.Ops.sub self.hi self.lo)
+          let fl4 ← dmath.TAU
+          if F64.Ops.ge fl3 fl4
+          then
+            ok (some
+              {
+                lo := (F64.Ops.ofBits 13830554455654793216),
+                hi := (F64.Ops.ofBits 4607182418800017408)
+              })
+          else ok none
+      else
+        ok (some
           {
             lo := (F64.Ops.ofBits 13830554455654793216),
             hi := (F64.Ops.ofBits 4607182418800017408)
-          }
-      else
-        let a ← lift (F64.Ops.add self.lo shift)
-        let b1 ← lift (F64.Ops.add self.hi shift)
-        let ca ← dmath.cos a
-        let cb ← dmath.cos b1
-        let lo ← core.f64.F64.min ca cb
-        let hi ← core.f64.F64.max ca cb
-        let fl5 ← dmath.PI
-        let fl6 ← lift (F64.Ops.div a fl5)
-        let k ← std.f64.F64.ceil fl6
-        let (lo1, hi1) ←
-          interval.Interval.shifted_cos_loop fl5
-            { start := 0#i32, «end» := 3#i32 } b1 lo hi k
-        let fl7 ← core.f64.F64.next_down lo1
-        let fl8 ← core.f64.F64.next_down fl7
-        let fl9 ← core.f64.F64.next_down fl8
-        let fl10 ← core.f64.F64.max fl9 (F64.Ops.ofBits 13830554455654793216)
-        let fl11 ← core.f64.F64.next_up hi1
-        let fl12 ← core.f64.F64.next_up fl11
-        let fl13 ← core.f64.F64.next_up fl12
-        let fl14 ← core.f64.F64.min fl13 (F64.Ops.ofBits 4607182418800017408)
-        ok { lo := fl10, hi := fl14 }
-  else
-    ok
-      {
-        lo := (F64.Ops.ofBits 13830554455654793216),
-        hi := (F64.Ops.ofBits 4607182418800017408)
-      }
+          })
+    else
+      ok (some
+        {
+          lo := (F64.Ops.ofBits 13830554455654793216),
+          hi := (F64.Ops.ofBits 4607182418800017408)
+        })
 
 /-- [forge_math::interval::{forge_math::interval::Interval}::sin]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 147:4-149:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 148:4-153:5
     Visibility: public -/
 def interval.Interval.sin
   (self : interval.Interval) : Result interval.Interval := do
-  let fl ← dmath.FRAC_PI_2
-  let fl1 ← lift (F64.Ops.neg fl)
-  interval.Interval.shifted_cos self fl1
+  let o ← interval.Interval.trig_whole self
+  match o with
+  | none =>
+    let fl ← dmath.sin self.lo
+    let fl1 ← dmath.sin self.hi
+    interval.Interval.trig_at self fl fl1 (F64.Ops.ofBits 4602678819172646912)
+  | some w => ok w
 
 /-- [forge_math::interval::{forge_math::interval::Interval}::cos]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 150:4-152:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 156:4-161:5
     Visibility: public -/
 def interval.Interval.cos
   (self : interval.Interval) : Result interval.Interval := do
-  interval.Interval.shifted_cos self (F64.Ops.ofBits 0)
+  let o ← interval.Interval.trig_whole self
+  match o with
+  | none =>
+    let fl ← dmath.cos self.lo
+    let fl1 ← dmath.cos self.hi
+    interval.Interval.trig_at self fl fl1 (F64.Ops.ofBits 0)
+  | some w => ok w
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::sin_cos]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 164:4-170:5
+    Visibility: public -/
+def interval.Interval.sin_cos
+  (self : interval.Interval) :
+  Result (interval.Interval × interval.Interval)
+  := do
+  let o ← interval.Interval.trig_whole self
+  match o with
+  | none =>
+    let a ← dmath.sin_cos self.lo
+    let b ← dmath.sin_cos self.hi
+    let (fl, fl1) := a
+    let (fl2, fl3) := b
+    let i ←
+      interval.Interval.trig_at self fl fl2 (F64.Ops.ofBits
+        4602678819172646912)
+    let i1 ← interval.Interval.trig_at self fl1 fl3 (F64.Ops.ofBits 0)
+    ok (i, i1)
+  | some w => ok (w, w)
 
 /-- [forge_math::interval::{impl core::ops::arith::Add<forge_math::interval::Interval, forge_math::interval::Interval> for forge_math::interval::Interval}::add]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 198:4-200:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 245:4-247:5
     Visibility: public -/
 def interval.Interval.Insts.CoreOpsArithAddIntervalInterval.add
   (self : interval.Interval) (o : interval.Interval) :
@@ -1959,7 +2020,7 @@ def interval.Interval.Insts.CoreOpsArithAddIntervalInterval.add
   interval.Interval.out fl fl1
 
 /-- Trait implementation: [forge_math::interval::{impl core::ops::arith::Add<forge_math::interval::Interval, forge_math::interval::Interval> for forge_math::interval::Interval}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 195:0-201:1 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 242:0-248:1 -/
 @[reducible]
 def interval.Interval.Insts.CoreOpsArithAddIntervalInterval :
   core.ops.arith.Add interval.Interval interval.Interval interval.Interval := {
@@ -1967,7 +2028,7 @@ def interval.Interval.Insts.CoreOpsArithAddIntervalInterval :
 }
 
 /-- [forge_math::interval::{impl core::ops::arith::Sub<forge_math::interval::Interval, forge_math::interval::Interval> for forge_math::interval::Interval}::sub]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 205:4-207:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 252:4-254:5
     Visibility: public -/
 def interval.Interval.Insts.CoreOpsArithSubIntervalInterval.sub
   (self : interval.Interval) (o : interval.Interval) :
@@ -1978,7 +2039,7 @@ def interval.Interval.Insts.CoreOpsArithSubIntervalInterval.sub
   interval.Interval.out fl fl1
 
 /-- Trait implementation: [forge_math::interval::{impl core::ops::arith::Sub<forge_math::interval::Interval, forge_math::interval::Interval> for forge_math::interval::Interval}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 202:0-208:1 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 249:0-255:1 -/
 @[reducible]
 def interval.Interval.Insts.CoreOpsArithSubIntervalInterval :
   core.ops.arith.Sub interval.Interval interval.Interval interval.Interval := {
@@ -1986,7 +2047,7 @@ def interval.Interval.Insts.CoreOpsArithSubIntervalInterval :
 }
 
 /-- [forge_math::interval::{impl core::ops::arith::Neg<forge_math::interval::Interval> for forge_math::interval::Interval}::neg]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 212:4-217:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 259:4-264:5
     Visibility: public -/
 def interval.Interval.Insts.CoreOpsArithNegInterval.neg
   (self : interval.Interval) : Result interval.Interval := do
@@ -1995,7 +2056,7 @@ def interval.Interval.Insts.CoreOpsArithNegInterval.neg
   ok { lo := fl, hi := fl1 }
 
 /-- Trait implementation: [forge_math::interval::{impl core::ops::arith::Neg<forge_math::interval::Interval> for forge_math::interval::Interval}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 209:0-218:1 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 256:0-265:1 -/
 @[reducible]
 def interval.Interval.Insts.CoreOpsArithNegInterval : core.ops.arith.Neg
   interval.Interval interval.Interval := {
@@ -2003,7 +2064,7 @@ def interval.Interval.Insts.CoreOpsArithNegInterval : core.ops.arith.Neg
 }
 
 /-- [forge_math::interval::{impl core::ops::arith::Mul<forge_math::interval::Interval, forge_math::interval::Interval> for forge_math::interval::Interval}::mul]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 222:4-225:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 269:4-272:5
     Visibility: public -/
 def interval.Interval.Insts.CoreOpsArithMulIntervalInterval.mul
   (self : interval.Interval) (o : interval.Interval) :
@@ -2018,7 +2079,7 @@ def interval.Interval.Insts.CoreOpsArithMulIntervalInterval.mul
   interval.Interval.out fl4 fl5
 
 /-- Trait implementation: [forge_math::interval::{impl core::ops::arith::Mul<forge_math::interval::Interval, forge_math::interval::Interval> for forge_math::interval::Interval}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 219:0-226:1 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 266:0-273:1 -/
 @[reducible]
 def interval.Interval.Insts.CoreOpsArithMulIntervalInterval :
   core.ops.arith.Mul interval.Interval interval.Interval interval.Interval := {
@@ -2026,7 +2087,7 @@ def interval.Interval.Insts.CoreOpsArithMulIntervalInterval :
 }
 
 /-- [forge_math::interval::{impl core::ops::arith::Mul<f64, forge_math::interval::Interval> for forge_math::interval::Interval}::mul]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 230:4-232:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 277:4-279:5
     Visibility: public -/
 def interval.Interval.Insts.CoreOpsArithMulF64Interval.mul
   (self : interval.Interval) (s : F64) : Result interval.Interval := do
@@ -2034,7 +2095,7 @@ def interval.Interval.Insts.CoreOpsArithMulF64Interval.mul
   interval.Interval.Insts.CoreOpsArithMulIntervalInterval.mul self i
 
 /-- Trait implementation: [forge_math::interval::{impl core::ops::arith::Mul<f64, forge_math::interval::Interval> for forge_math::interval::Interval}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 227:0-233:1 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 274:0-280:1 -/
 @[reducible]
 def interval.Interval.Insts.CoreOpsArithMulF64Interval : core.ops.arith.Mul
   interval.Interval F64 interval.Interval := {
@@ -2042,7 +2103,7 @@ def interval.Interval.Insts.CoreOpsArithMulF64Interval : core.ops.arith.Mul
 }
 
 /-- [forge_math::interval::{impl core::ops::arith::Add<f64, forge_math::interval::Interval> for forge_math::interval::Interval}::add]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 237:4-239:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 284:4-286:5
     Visibility: public -/
 def interval.Interval.Insts.CoreOpsArithAddF64Interval.add
   (self : interval.Interval) (s : F64) : Result interval.Interval := do
@@ -2050,7 +2111,7 @@ def interval.Interval.Insts.CoreOpsArithAddF64Interval.add
   interval.Interval.Insts.CoreOpsArithAddIntervalInterval.add self i
 
 /-- Trait implementation: [forge_math::interval::{impl core::ops::arith::Add<f64, forge_math::interval::Interval> for forge_math::interval::Interval}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 234:0-240:1 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 281:0-287:1 -/
 @[reducible]
 def interval.Interval.Insts.CoreOpsArithAddF64Interval : core.ops.arith.Add
   interval.Interval F64 interval.Interval := {
@@ -2058,28 +2119,28 @@ def interval.Interval.Insts.CoreOpsArithAddF64Interval : core.ops.arith.Add
 }
 
 /-- [forge_math::interval::{impl core::clone::Clone for forge_math::interval::Box3}::clone]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 243:9-243:14
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:9-290:14
     Visibility: public -/
 def interval.Box3.Insts.CoreCloneClone.clone
   (self : interval.Box3) : Result interval.Box3 := do
   ok self
 
 /-- Trait implementation: [forge_math::interval::{impl core::clone::Clone for forge_math::interval::Box3}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 243:9-243:14 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:9-290:14 -/
 @[reducible]
 def interval.Box3.Insts.CoreCloneClone : core.clone.Clone interval.Box3 := {
   clone := interval.Box3.Insts.CoreCloneClone.clone
 }
 
 /-- Trait implementation: [forge_math::interval::{impl core::marker::Copy for forge_math::interval::Box3}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 243:16-243:20 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:16-290:20 -/
 @[reducible]
 def interval.Box3.Insts.CoreMarkerCopy : core.marker.Copy interval.Box3 := {
   cloneInst := interval.Box3.Insts.CoreCloneClone
 }
 
 /-- [forge_math::interval::{impl core::fmt::Debug for forge_math::interval::Box3}::fmt]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 243:22-243:27
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:22-290:27
     Visibility: public -/
 def interval.Box3.Insts.CoreFmtDebug.fmt
   (self : interval.Box3) (f : core.fmt.Formatter) :
@@ -2093,21 +2154,21 @@ def interval.Box3.Insts.CoreFmtDebug.fmt
     dyn (toStr "y") dyn1 (toStr "z") dyn2
 
 /-- Trait implementation: [forge_math::interval::{impl core::fmt::Debug for forge_math::interval::Box3}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 243:22-243:27 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:22-290:27 -/
 @[reducible]
 def interval.Box3.Insts.CoreFmtDebug : core.fmt.Debug interval.Box3 := {
   fmt := interval.Box3.Insts.CoreFmtDebug.fmt
 }
 
 /-- Trait implementation: [forge_math::interval::{impl core::marker::StructuralPartialEq for forge_math::interval::Box3}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 243:29-243:38 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:29-290:38 -/
 @[reducible]
 def interval.Box3.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq interval.Box3 := {
 }
 
 /-- [forge_math::interval::{impl core::cmp::PartialEq<forge_math::interval::Box3> for forge_math::interval::Box3}::eq]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 243:29-243:38
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:29-290:38
     Visibility: public -/
 def interval.Box3.Insts.CoreCmpPartialEqBox3.eq
   (self : interval.Box3) (other : interval.Box3) : Result Bool := do
@@ -2122,7 +2183,7 @@ def interval.Box3.Insts.CoreCmpPartialEqBox3.eq
   else ok false
 
 /-- Trait implementation: [forge_math::interval::{impl core::cmp::PartialEq<forge_math::interval::Box3> for forge_math::interval::Box3}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 243:29-243:38 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 290:29-290:38 -/
 @[reducible]
 def interval.Box3.Insts.CoreCmpPartialEqBox3 : core.cmp.PartialEq interval.Box3
   interval.Box3 := {
@@ -2130,7 +2191,7 @@ def interval.Box3.Insts.CoreCmpPartialEqBox3 : core.cmp.PartialEq interval.Box3
 }
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::EMPTY]
-    Source: 'kernel/forge-math/src/interval.rs', lines 251:4-255:6
+    Source: 'kernel/forge-math/src/interval.rs', lines 298:4-302:6
     Visibility: public -/
 @[global_simps, irreducible]
 def interval.Box3.EMPTY : Result interval.Box3 := do
@@ -2138,7 +2199,7 @@ def interval.Box3.EMPTY : Result interval.Box3 := do
   ok { x := i, y := i, z := i }
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::from_point]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 257:4-263:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 304:4-310:5
     Visibility: public -/
 def interval.Box3.from_point (p : vec.Point3) : Result interval.Box3 := do
   let i ← interval.Interval.point p.x
@@ -2147,7 +2208,7 @@ def interval.Box3.from_point (p : vec.Point3) : Result interval.Box3 := do
   ok { x := i, y := i1, z := i2 }
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::include]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 271:4-275:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 318:4-322:5
     Visibility: public -/
 def interval.Box3.include
   (self : interval.Box3) (p : vec.Point3) : Result interval.Box3 := do
@@ -2157,7 +2218,7 @@ def interval.Box3.include
   ok { x := i, y := i1, z := i2 }
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::from_points]: loop body 0:
-    Source: 'kernel/forge-math/src/interval.rs', lines 266:8-268:9
+    Source: 'kernel/forge-math/src/interval.rs', lines 313:8-315:9
     Visibility: public -/
 @[rust_loop_body]
 def interval.Box3.from_points_loop.body
@@ -2176,7 +2237,7 @@ def interval.Box3.from_points_loop.body
               ok (cont (iter1, b1))
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::from_points]: loop 0:
-    Source: 'kernel/forge-math/src/interval.rs', lines 266:8-268:9
+    Source: 'kernel/forge-math/src/interval.rs', lines 313:8-315:9
     Visibility: public -/
 @[rust_loop]
 def interval.Box3.from_points_loop
@@ -2192,7 +2253,7 @@ def interval.Box3.from_points_loop
     (iter, b)
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::from_points]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 264:4-270:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 311:4-317:5
     Visibility: public -/
 def interval.Box3.from_points
   {T0 : Type _} {Clause0_IntoIter : Type _}
@@ -2208,7 +2269,7 @@ def interval.Box3.from_points
     coreitertraitscollectIntoIteratorT0Point3Clause0_IntoIterInst iter b
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::is_empty]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 276:4-278:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 323:4-325:5
     Visibility: public -/
 def interval.Box3.is_empty (self : interval.Box3) : Result Bool := do
   let b ← interval.Interval.is_empty self.x
@@ -2221,7 +2282,7 @@ def interval.Box3.is_empty (self : interval.Box3) : Result Bool := do
     else interval.Interval.is_empty self.z
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::contains]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 279:4-281:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 326:4-328:5
     Visibility: public -/
 def interval.Box3.contains
   (self : interval.Box3) (p : vec.Point3) : Result Bool := do
@@ -2235,7 +2296,7 @@ def interval.Box3.contains
   else ok false
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::overlaps]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 282:4-284:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 329:4-331:5
     Visibility: public -/
 def interval.Box3.overlaps
   (self : interval.Box3) (o : interval.Box3) : Result Bool := do
@@ -2249,7 +2310,7 @@ def interval.Box3.overlaps
   else ok false
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::hull]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 285:4-291:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 332:4-338:5
     Visibility: public -/
 def interval.Box3.hull
   (self : interval.Box3) (o : interval.Box3) : Result interval.Box3 := do
@@ -2259,7 +2320,7 @@ def interval.Box3.hull
   ok { x := i, y := i1, z := i2 }
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::grow]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 292:4-298:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 339:4-345:5
     Visibility: public -/
 def interval.Box3.grow
   (self : interval.Box3) (d : F64) : Result interval.Box3 := do
@@ -2269,7 +2330,7 @@ def interval.Box3.grow
   ok { x := i, y := i1, z := i2 }
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::center]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 299:4-301:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 346:4-348:5
     Visibility: public -/
 def interval.Box3.center (self : interval.Box3) : Result vec.Point3 := do
   let fl ← interval.Interval.mid self.x
@@ -2278,7 +2339,7 @@ def interval.Box3.center (self : interval.Box3) : Result vec.Point3 := do
   vec.Point3.new fl fl1 fl2
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::diagonal]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 302:4-305:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 349:4-352:5
     Visibility: public -/
 def interval.Box3.diagonal (self : interval.Box3) : Result F64 := do
   let a ← interval.Interval.width self.x
@@ -2292,28 +2353,28 @@ def interval.Box3.diagonal (self : interval.Box3) : Result F64 := do
   std.f64.F64.sqrt fl4
 
 /-- [forge_math::interval::{impl core::clone::Clone for forge_math::interval::Box2}::clone]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 309:9-309:14
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:9-356:14
     Visibility: public -/
 def interval.Box2.Insts.CoreCloneClone.clone
   (self : interval.Box2) : Result interval.Box2 := do
   ok self
 
 /-- Trait implementation: [forge_math::interval::{impl core::clone::Clone for forge_math::interval::Box2}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 309:9-309:14 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:9-356:14 -/
 @[reducible]
 def interval.Box2.Insts.CoreCloneClone : core.clone.Clone interval.Box2 := {
   clone := interval.Box2.Insts.CoreCloneClone.clone
 }
 
 /-- Trait implementation: [forge_math::interval::{impl core::marker::Copy for forge_math::interval::Box2}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 309:16-309:20 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:16-356:20 -/
 @[reducible]
 def interval.Box2.Insts.CoreMarkerCopy : core.marker.Copy interval.Box2 := {
   cloneInst := interval.Box2.Insts.CoreCloneClone
 }
 
 /-- [forge_math::interval::{impl core::fmt::Debug for forge_math::interval::Box2}::fmt]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 309:22-309:27
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:22-356:27
     Visibility: public -/
 def interval.Box2.Insts.CoreFmtDebug.fmt
   (self : interval.Box2) (f : core.fmt.Formatter) :
@@ -2326,21 +2387,21 @@ def interval.Box2.Insts.CoreFmtDebug.fmt
     dyn (toStr "v") dyn1
 
 /-- Trait implementation: [forge_math::interval::{impl core::fmt::Debug for forge_math::interval::Box2}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 309:22-309:27 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:22-356:27 -/
 @[reducible]
 def interval.Box2.Insts.CoreFmtDebug : core.fmt.Debug interval.Box2 := {
   fmt := interval.Box2.Insts.CoreFmtDebug.fmt
 }
 
 /-- Trait implementation: [forge_math::interval::{impl core::marker::StructuralPartialEq for forge_math::interval::Box2}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 309:29-309:38 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:29-356:38 -/
 @[reducible]
 def interval.Box2.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq interval.Box2 := {
 }
 
 /-- [forge_math::interval::{impl core::cmp::PartialEq<forge_math::interval::Box2> for forge_math::interval::Box2}::eq]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 309:29-309:38
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:29-356:38
     Visibility: public -/
 def interval.Box2.Insts.CoreCmpPartialEqBox2.eq
   (self : interval.Box2) (other : interval.Box2) : Result Bool := do
@@ -2350,7 +2411,7 @@ def interval.Box2.Insts.CoreCmpPartialEqBox2.eq
   else ok false
 
 /-- Trait implementation: [forge_math::interval::{impl core::cmp::PartialEq<forge_math::interval::Box2> for forge_math::interval::Box2}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 309:29-309:38 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 356:29-356:38 -/
 @[reducible]
 def interval.Box2.Insts.CoreCmpPartialEqBox2 : core.cmp.PartialEq interval.Box2
   interval.Box2 := {
@@ -2358,14 +2419,14 @@ def interval.Box2.Insts.CoreCmpPartialEqBox2 : core.cmp.PartialEq interval.Box2
 }
 
 /-- [forge_math::interval::{forge_math::interval::Box2}::new]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 316:4-318:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 363:4-365:5
     Visibility: public -/
 def interval.Box2.new
   (u : interval.Interval) (v : interval.Interval) : Result interval.Box2 := do
   ok { u, v }
 
 /-- [forge_math::interval::{forge_math::interval::Box2}::contains]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 319:4-321:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 366:4-368:5
     Visibility: public -/
 def interval.Box2.contains
   (self : interval.Box2) (p : vec.Point2) : Result Bool := do
@@ -2381,7 +2442,7 @@ def vec.Point2.new (x : F64) (y : F64) : Result vec.Point2 := do
   ok { x, y }
 
 /-- [forge_math::interval::{forge_math::interval::Box2}::center]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 322:4-324:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 369:4-371:5
     Visibility: public -/
 def interval.Box2.center (self : interval.Box2) : Result vec.Point2 := do
   let fl ← interval.Interval.mid self.u
@@ -2389,7 +2450,7 @@ def interval.Box2.center (self : interval.Box2) : Result vec.Point2 := do
   vec.Point2.new fl fl1
 
 /-- [forge_math::interval::{forge_math::interval::Box2}::split]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 326:4-334:5
+    Source: 'kernel/forge-math/src/interval.rs', lines 373:4-381:5
     Visibility: public -/
 def interval.Box2.split
   (self : interval.Box2) : Result (interval.Box2 × interval.Box2) := do

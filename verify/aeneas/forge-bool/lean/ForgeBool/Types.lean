@@ -33,7 +33,7 @@ def ssi.turned_flush.closure := Unit
 def ssi.spread_apart.closure := Unit
 
 /-- [forge_bool::ssi::cylinder_cylinder::{closure}]
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 395:13-395:54 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 425:13-425:54 -/
 def ssi.cylinder_cylinder.closure :=
   forge_geom.surface.Cylinder × forge_math.vec.Vec3 × F64 ×
   forge_math.vec.Vec3

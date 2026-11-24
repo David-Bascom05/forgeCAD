@@ -116,7 +116,7 @@ axiom forge_geom.curve.Line.new
     forge_geom.curve.Line
 
 /-- [forge_geom::intersect::plane_surface]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 921:0-921:62
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 931:0-931:62
     Name pattern: [forge_geom::intersect::plane_surface]
     Visibility: public -/
 @[rust_fun "forge_geom::intersect::plane_surface"]
@@ -220,7 +220,7 @@ axiom forge_math.frame.Frame.impl.z
   : forge_math.frame.Frame → Result forge_math.vec.UnitVec3
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::grow]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 292:4-292:38
+    Source: 'kernel/forge-math/src/interval.rs', lines 339:4-339:38
     Name pattern: [forge_math::interval::{forge_math::interval::Box3}::grow]
     Visibility: public -/
 @[rust_fun "forge_math::interval::{forge_math::interval::Box3}::grow"]
@@ -406,7 +406,7 @@ axiom forge_math.vec.Vec3.Insts.CoreOpsArithAddVec3Vec3.add
   : forge_math.vec.Vec3 → forge_math.vec.Vec3 → Result forge_math.vec.Vec3
 
 /-- [forge_bool::ssi::searched]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 263:0-296:1
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 292:0-326:1
     Visibility: public -/
 axiom ssi.searched
   :
