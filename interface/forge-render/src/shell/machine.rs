@@ -2578,6 +2578,7 @@ fn model_rows(
     i: usize,
     m: &mut Model,
     check: Option<&Result<Outside, String>>,
+    display_only: bool,
     touch: &mut Touch,
 ) {
     let mut ch = false;
@@ -2684,6 +2685,18 @@ fn model_rows(
                 .color(t.success),
             );
         }
+        Some(Ok(o)) if m.body.is_some() && display_only => {
+            ui.label(
+                RichText::new(format!(
+                    "{} of {} points outside the envelope: {}",
+                    o.out,
+                    o.points,
+                    forge_machine_builder::model_files::DISPLAY_ONLY
+                ))
+                .font(sans(11.0))
+                .color(t.ink2),
+            );
+        }
         Some(Ok(o)) if m.body.is_some() => {
             ui.label(
                 RichText::new(format!(
@@ -2776,7 +2789,7 @@ fn tab_bodies(
         .filter(|&i| ms.models[i].body.is_none())
         .collect();
     for &i in &whole {
-        model_rows(ui, t, i, &mut ms.models[i], ms.checks.get(i), touch);
+        model_rows(ui, t, i, &mut ms.models[i], ms.checks.get(i), false, touch);
     }
     if whole.is_empty()
         && ui
@@ -2937,7 +2950,7 @@ fn tab_bodies(
         .iter()
         .position(|m| m.body.as_deref() == Some(bname.as_str()))
     {
-        Some(i) => model_rows(ui, t, i, &mut ms.models[i], ms.checks.get(i), touch),
+        Some(i) => model_rows(ui, t, i, &mut ms.models[i], ms.checks.get(i), !b.check, touch),
         None => {
             ui.horizontal(|ui| {
                 label_w(ui, t, "Model");

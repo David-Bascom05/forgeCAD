@@ -19,4 +19,5 @@ forge-tooling = { path = "../../kernel/forge-tooling" }
 workspace = true
 
 [dev-dependencies]
+forge-lang = { path = "../forge-lang" }
 forge-machine-lang = { path = "../forge-machine-lang" }

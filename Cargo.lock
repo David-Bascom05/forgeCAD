@@ -411,6 +411,7 @@ name = "forge-machine-builder"
 version = "0.1.0"
 dependencies = [
  "forge-dirs",
+ "forge-lang",
  "forge-library",
  "forge-machine",
  "forge-machine-lang",

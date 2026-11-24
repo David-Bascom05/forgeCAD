@@ -511,10 +511,25 @@ pub fn model(env: &Env, argv: &[String]) -> Out {
                         "whole machine: not checked against an envelope".to_string(),
                         None,
                     )),
-                    Ok(Some(o)) if o.out == 0 => {
+                    Ok(Some((o, true))) => lines.push((
+                        m,
+                        if o.out == 0 {
+                            format!("inside its envelope ({} points); {}", o.points, mf::DISPLAY_ONLY)
+                        } else {
+                            format!(
+                                "outside its envelope by up to {:.2} mm ({} of {} points); {}",
+                                o.worst,
+                                o.out,
+                                o.points,
+                                mf::DISPLAY_ONLY
+                            )
+                        },
+                        Some(o),
+                    )),
+                    Ok(Some((o, false))) if o.out == 0 => {
                         lines.push((m, format!("inside its envelope ({} points)", o.points), Some(o)))
                     }
-                    Ok(Some(o)) => {
+                    Ok(Some((o, false))) => {
                         bad = true;
                         lines.push((
                             m,

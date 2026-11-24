@@ -327,3 +327,136 @@ fn model_attach_split_check_list_remove() {
     assert!(o.err.contains("STEP"), "{}", o.err);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A synthetic machine download (CAM-HAAS): a four-part STL split onto a machine's bed and its X,
+/// Y and Z bodies, then a STEP with two solids split the same way; a display-only body's report
+/// labelled and not a failure, a checked body's still one.
+#[test]
+fn model_split_onto_axes_step_solids_and_display_only() {
+    use forge_machine_builder::model_files::{self as mf, Piece};
+    let root = tmp("models-axes");
+    let e = env(&root);
+    std::fs::create_dir_all(root.join("proj")).unwrap();
+    // a user machine from the generic VMC, with a display-only enclosure added
+    let o = run(&e, &["new", "shop", "--from", "generic-vmc3", "--user"]);
+    assert_eq!(o.code, 0, "{}", o.err);
+    let f = root.join("user/shop.toml");
+    let mut text = std::fs::read_to_string(&f).unwrap();
+    text.push_str(
+        "\n[[machine.body]]\nname = \"enclosure\"\nlink = \"base\"\ncheck = false\n[[machine.body.box]]\nmin = [-10, -10, -10]\nmax = [10, 10, 10]\n",
+    );
+    std::fs::write(&f, text).unwrap();
+
+    let cube = |lo: [f64; 3], hi: [f64; 3]| {
+        let c =
+            |k: usize| -> [f64; 3] { std::array::from_fn(|a| if k >> a & 1 == 1 { hi[a] } else { lo[a] }) };
+        let faces = [
+            [0, 2, 3, 1],
+            [4, 5, 7, 6],
+            [0, 1, 5, 4],
+            [2, 6, 7, 3],
+            [0, 4, 6, 2],
+            [1, 3, 7, 5],
+        ];
+        Piece {
+            pos: (0..8).map(c).collect(),
+            tri: faces
+                .iter()
+                .flat_map(|f| [[f[0], f[1], f[2]], [f[0], f[2], f[3]]])
+                .collect(),
+        }
+    };
+    // four parts, sizes in falling order: bed, saddle, table, head
+    let four = Piece::join(&[
+        cube([0.0; 3], [1000.0, 900.0, 150.0]),
+        cube([0.0, 0.0, 200.0], [800.0, 500.0, 300.0]),
+        cube([0.0, 0.0, 400.0], [700.0, 300.0, 450.0]),
+        cube([0.0, 0.0, 600.0], [300.0, 300.0, 700.0]),
+    ]);
+    let dl = root.join("downloads");
+    std::fs::create_dir_all(&dl).unwrap();
+    std::fs::write(dl.join("vmc.stl"), four.to_stl("vmc")).unwrap();
+    let o = run(
+        &e,
+        &[
+            "model",
+            "attach",
+            "shop",
+            dl.join("vmc.stl").to_str().unwrap(),
+            "--from",
+            "a test download",
+            "--scale",
+            "1",
+        ],
+    );
+    assert_eq!(o.code, 0, "{}", o.err);
+    assert!(o.out.contains("4 separate parts"), "{}", o.out);
+    let o = run(&e, &["model", "split", "shop", "vmc.stl"]);
+    assert_eq!(o.out.lines().count(), 4, "{}", o.out);
+    let o = run(
+        &e,
+        &[
+            "model", "split", "shop", "vmc.stl", "bed", "saddle", "table", "head",
+        ],
+    );
+    assert_eq!(o.code, 0, "{}", o.err);
+    let ms = forge_machine_builder::models::load_in(&root.join("user/models/shop")).unwrap();
+    let mut bodies: Vec<_> = ms.iter().filter_map(|m| m.body.clone()).collect();
+    bodies.sort();
+    assert_eq!(bodies, ["bed", "head", "saddle", "table"]);
+    // the same placement for each part, so they sit where the download had them
+    assert!(
+        ms.windows(2)
+            .all(|w| w[0].offset == w[1].offset && w[0].scale == w[1].scale)
+    );
+
+    // a STEP with two solids: a solid each
+    let src = "sketch a(on: xy) {\n  r = rect(corner: (0, 0), size: (40, 20))\n}\nlo = extrude(a, 10)\nsketch b(on: xy) {\n  r = rect(corner: (100, 0), size: (10, 10))\n}\nhi = extrude(b, 30)\n";
+    let (run_, _) = forge_lang::run(
+        src,
+        forge_lang::Options::default(),
+        forge_lang::build::Cache::default(),
+    );
+    assert!(run_.ok(), "{:?}", run_.errors.first());
+    let step = forge_step::export(&run_.body.unwrap(), &forge_step::Options::default()).unwrap();
+    let parts = mf::read("two.step", step.text.as_bytes()).unwrap();
+    assert_eq!(parts.len(), 2, "a STEP solid each");
+
+    // display only: a model sticking out of the enclosure's envelope is labelled, not a failure
+    std::fs::write(dl.join("shell.stl"), cube([0.0; 3], [500.0; 3]).to_stl("shell")).unwrap();
+    let o = run(
+        &e,
+        &[
+            "model",
+            "attach",
+            "shop",
+            dl.join("shell.stl").to_str().unwrap(),
+            "--body",
+            "enclosure",
+            "--from",
+            "my drawing",
+            "--scale",
+            "1",
+            "--offset",
+            "0,0,0",
+        ],
+    );
+    assert_eq!(o.code, 0, "{}", o.err);
+    let o = run(&e, &["model", "remove", "shop", "vmc-head.stl"]);
+    assert_eq!(o.code, 0, "{}", o.err);
+    let o = run(&e, &["model", "check", "shop"]);
+    assert!(
+        o.out.contains("shell.stl (enclosure): outside its envelope") && o.out.contains(mf::DISPLAY_ONLY),
+        "{}",
+        o.out
+    );
+    // the parts placed for the whole machine stick out of the checked bodies' envelopes: exit 1
+    assert_eq!(o.code, 1, "{}", o.out);
+    for f in ["vmc-bed.stl", "vmc-saddle.stl", "vmc-table.stl"] {
+        let o = run(&e, &["model", "remove", "shop", f]);
+        assert_eq!(o.code, 0, "{}", o.err);
+    }
+    let o = run(&e, &["model", "check", "shop"]);
+    assert_eq!(o.code, 0, "display only alone is not a failure: {}", o.out);
+    let _ = std::fs::remove_dir_all(&root);
+}

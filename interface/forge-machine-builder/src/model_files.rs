@@ -284,8 +284,13 @@ pub fn placed_points(pos: &[V3], m: &Model) -> Vec<V3> {
     pos.iter().step_by(step).map(|p| m.place(*p)).collect()
 }
 
-/// A model against its body's envelope (a whole-machine model: not checked, None).
-pub fn check(def: &MachineDef, dir: &Path, m: &Model) -> Result<Option<Outside>, String> {
+/// What a model sticking out of a display-only body's envelope means (nothing).
+pub const DISPLAY_ONLY: &str =
+    "display only: not collision-checked, so a model sticking out of this envelope changes nothing";
+
+/// A model against its body's envelope: (what is outside, the body is display only, `check =
+/// false`). A whole-machine model: not checked, None.
+pub fn check(def: &MachineDef, dir: &Path, m: &Model) -> Result<Option<(Outside, bool)>, String> {
     let Some(b) = m.body.as_deref() else {
         return Ok(None);
     };
@@ -295,10 +300,8 @@ pub fn check(def: &MachineDef, dir: &Path, m: &Model) -> Result<Option<Outside>,
         .find(|x| x.name == b)
         .ok_or_else(|| format!("{}: its body `{b}` is not in {} any more", m.file, def.name))?;
     let all = Piece::join(&read_file(&dir.join(&m.file))?);
-    Ok(Some(models::outside(
-        &body.prims,
-        placed_points(&all.pos, m).into_iter(),
-    )))
+    let o = models::outside(&body.prims, placed_points(&all.pos, m).into_iter());
+    Ok(Some((o, !body.check)))
 }
 
 /// Splits model `i` of `ms` into its pieces: each piece given a body in `to` (None: dropped)
