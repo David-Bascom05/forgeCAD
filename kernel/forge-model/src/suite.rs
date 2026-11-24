@@ -1086,10 +1086,55 @@ pub fn loft() -> Part {
 /// A random history: a random block, then `count` features of random kind,
 /// placement and orientation (sometimes tilted). Nothing is coincident on purpose.
 pub fn fuzz(seed: u64, count: usize) -> Part {
+    fuzz_with(seed, count, false)
+}
+
+/// `fuzz`'s histories with a large tool kept (an intersect) about one feature in eight: a block,
+/// a rod or a ball over most of the part. The n-ary regen then has an `Intersect` among its tools,
+/// which the corpus of `fuzz` never gives it (research/coverage-2026-11-23, group 6). Seed for
+/// seed, the features before the first kept tool are `fuzz`'s.
+pub fn fuzz_keep(seed: u64, count: usize) -> Part {
+    fuzz_with(seed, count, true)
+}
+
+fn fuzz_with(seed: u64, count: usize, keep: bool) -> Part {
     let mut r = Rng::new(seed.wrapping_mul(0x9e37_79b9).wrapping_add(17));
     let (w, h, t) = (r.range(60.0, 200.0), r.range(60.0, 200.0), r.range(10.0, 40.0));
     let mut f = vec![block(Frame::WORLD, Point2::ORIGIN, w, h, t, Combine::New)];
     for _ in 0..count {
+        // (drawn only for the kept family, so `fuzz`'s sequence is unchanged)
+        if keep && r.below(8) == 0 {
+            let (cx, cy, cz) = (w / 2.0, h / 2.0, t / 2.0);
+            f.push(match r.below(3) {
+                0 => {
+                    let (a, b) = (w * r.range(0.75, 1.1), h * r.range(0.75, 1.1));
+                    let (x0, y0) = (r.range(-0.1, 0.25) * w, r.range(-0.1, 0.25) * h);
+                    block(
+                        up(Point3::new(0.0, 0.0, -t)),
+                        Point2::new(x0, y0),
+                        a,
+                        b,
+                        2.0 * t + r.range(0.0, t),
+                        Combine::Keep,
+                    )
+                }
+                1 => {
+                    let rad = 0.5 * w.max(h) * r.range(0.8, 1.2);
+                    rod(
+                        up(Point3::new(cx, cy, -t)),
+                        rad,
+                        2.0 * t + r.range(0.0, t),
+                        Combine::Keep,
+                    )
+                }
+                _ => ball(
+                    Point3::new(cx, cy, cz),
+                    0.5 * (w * w + h * h).sqrt() * r.range(0.75, 1.05),
+                    Combine::Keep,
+                ),
+            });
+            continue;
+        }
         let (x, y) = (r.range(0.0, w), r.range(0.0, h));
         let z = r.range(-0.3 * t, 1.1 * t);
         let o = Point3::new(x, y, z);
