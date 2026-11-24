@@ -14,7 +14,6 @@ tip_radius = 1
 tip_angle = 86
 width = 110
 max_load = 800
-outline = [[-9.0, 120.0], [-10.0, 112.8], [-9.0, 110.2], [-25.3, 109.9], [-41.6, 93.6], [-42.8, 88.7], [-42.1, 46.1], [-14.7, 16.8], [-14.8, 15.7], [-10.0, 11.9], [-10.3, 9.5], [-8.6, 9.6], [0.0, -0.5], [6.9, 6.0], [4.3, 7.5], [-3.0, 20.4], [-4.6, 23.0], [-20.3, 50.1], [-20.6, 64.8], [-19.0, 66.6], [-20.2, 79.5], [-11.2, 84.6], [-8.0, 86.4], [9.6, 96.4], [9.6, 111.8], [9.6, 115.9], [9.9, 120.0]]
 segments = [{ length = 500, count = 1 }, { length = 300, count = 1 }, { length = 200, count = 1 }, { length = 100, count = 1 }, { length = 50, count = 1 }, { length = 45, count = 1 }, { length = 40, count = 1 }, { length = 35, count = 1 }, { length = 30, count = 1 }, { length = 25, count = 1 }, { length = 20, count = 1 }, { length = 15, count = 1 }, { length = 10, count = 1 }]
 
 [[punch.cite]]
@@ -83,14 +82,6 @@ taken = "2026-11-24"
 value = "SINGLE lengths [mm] : Mat. No."
 basis = "the published single lengths, one piece of each (what a shop holds varies)"
 
-[[punch.cite]]
-path = "outline"
-status = "estimate"
-source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_brochures/TRUMPF-bending-tools-catalog-EN.pdf p.40"
-taken = "2026-11-24"
-value = "the section as drawn: printed height 120 (tip to clamping face), printed width 55 mm"
-basis = "measured off the drawing (tools/bendsim/section_from_drawing.py: page 40 at 300 dpi, --height 120 --eps 0.8 --spike 5; the clamping face at the drawn clamp's lower edge, the axis the tang's middle, both axes at the printed height's scale); printed width 55 (rear body face to tang front line) read back at 54.4 mm; the body grown 0.5 mm outward: errs large"
-
 [[punch]]
 id = "trumpf/OW280-K"
 maker = "Trumpf"
@@ -103,7 +94,6 @@ tip_radius = 0.5
 tip_angle = 80
 width = 110
 max_load = 400
-outline = [[-9.5, 140.0], [-8.8, 134.7], [-8.8, 130.7], [-8.8, 128.4], [-27.6, 128.8], [-35.6, 120.2], [-37.8, 118.2], [-42.1, 114.9], [-41.7, 51.2], [-21.5, 27.2], [-21.5, 25.3], [-15.8, 19.8], [-12.3, 14.1], [-10.9, 13.9], [-0.2, 1.1], [0.0, -0.5], [4.5, 4.0], [-2.8, 11.8], [-4.2, 19.4], [-8.9, 28.3], [-10.8, 31.8], [-21.5, 53.3], [-21.8, 93.1], [-18.5, 98.3], [9.7, 114.7], [10.6, 122.1], [9.7, 122.3], [9.6, 130.2], [9.3, 133.4], [9.5, 140.0]]
 segments = [{ length = 500, count = 1 }, { length = 300, count = 1 }, { length = 200, count = 1 }, { length = 100, count = 1 }, { length = 50, count = 1 }, { length = 45, count = 1 }, { length = 40, count = 1 }, { length = 35, count = 1 }, { length = 30, count = 1 }, { length = 25, count = 1 }, { length = 20, count = 1 }, { length = 15, count = 1 }, { length = 10, count = 1 }]
 
 [[punch.cite]]
@@ -172,14 +162,6 @@ taken = "2026-11-24"
 value = "SINGLE lengths [mm] : Mat. No."
 basis = "the published single lengths, one piece of each (what a shop holds varies)"
 
-[[punch.cite]]
-path = "outline"
-status = "estimate"
-source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_brochures/TRUMPF-bending-tools-catalog-EN.pdf p.43"
-taken = "2026-11-24"
-value = "the section as drawn: printed height 140 (tip to clamping face), printed width 55 mm"
-basis = "measured off the drawing (tools/bendsim/section_from_drawing.py: page 43 at 300 dpi, --height 140 --eps 0.8 --spike 5; the clamping face at the drawn clamp's lower edge, the axis the tang's middle, both axes at the printed height's scale); printed width 55 (rear body face to tang front line) read back at 55.0 mm; the body grown 0.5 mm outward: errs large"
-
 [[punch]]
 id = "trumpf/OW223-K"
 maker = "Trumpf"
@@ -193,7 +175,6 @@ tip_angle = 86
 width = 110
 relief = { depth = 23 }
 max_load = 430
-outline = [[-10.1, 160.0], [-10.1, 159.1], [-8.9, 159.6], [-10.1, 153.4], [-9.2, 150.9], [-25.6, 150.9], [-43.1, 133.4], [-43.1, 46.3], [-28.0, 30.1], [-27.7, 27.9], [-16.9, 16.5], [-14.9, 14.3], [-10.5, 8.5], [-8.8, 8.6], [-0.4, -0.4], [1.3, -0.5], [5.2, 2.1], [-0.7, 7.4], [-3.0, 12.6], [-2.6, 18.2], [-2.3, 23.2], [-7.7, 24.4], [-12.2, 31.6], [-14.0, 34.2], [-19.7, 43.6], [-21.7, 50.7], [-21.7, 80.1], [-21.7, 83.3], [-21.7, 100.8], [-16.7, 100.6], [-13.5, 102.1], [-21.5, 102.7], [-21.0, 114.3], [-19.5, 117.8], [-15.5, 122.1], [-0.3, 131.1], [1.7, 132.1], [10.4, 137.1], [10.5, 152.9], [11.3, 155.3], [11.3, 160.0]]
 segments = [{ length = 500, count = 1 }, { length = 300, count = 1 }, { length = 200, count = 1 }, { length = 100, count = 1 }, { length = 50, count = 1 }, { length = 45, count = 1 }, { length = 40, count = 1 }, { length = 35, count = 1 }, { length = 30, count = 1 }, { length = 25, count = 1 }, { length = 20, count = 1 }, { length = 15, count = 1 }, { length = 10, count = 1 }]
 
 [[punch.cite]]
@@ -260,14 +241,6 @@ source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_
 taken = "2026-11-24"
 value = "SINGLE lengths [mm] : Mat. No."
 basis = "the published single lengths, one piece of each (what a shop holds varies)"
-
-[[punch.cite]]
-path = "outline"
-status = "estimate"
-source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_brochures/TRUMPF-bending-tools-catalog-EN.pdf p.47"
-taken = "2026-11-24"
-value = "the section as drawn: printed height 160 (tip to clamping face), printed width 55 mm"
-basis = "measured off the drawing (tools/bendsim/section_from_drawing.py: page 47 at 300 dpi, --height 160 --eps 0.8 --spike 5; the clamping face at the drawn clamp's lower edge, the axis the tang's middle, both axes at the printed height's scale); printed width 55 (rear face to tang front line) read back at 54.9 mm; the body grown 0.5 mm outward: errs large"
 
 [[punch]]
 id = "trumpf/OW243-K"
@@ -441,7 +414,6 @@ tip_radius = 1
 tip_angle = 86
 width = 60
 max_load = 800
-outline = [[-5.8, 120.0], [-5.8, 118.1], [-5.8, 116.0], [-15.5, 115.2], [-15.5, 25.3], [-10.5, 17.3], [-7.0, 13.5], [-5.7, 14.0], [2.3, 5.5], [-0.9, 1.7], [0.0, -0.5], [3.3, 3.5], [9.8, 3.8], [4.9, 5.5], [9.3, 10.2], [11.3, 10.8], [1.7, 20.3], [1.5, 25.4], [1.7, 45.1], [1.7, 47.0], [1.7, 82.1], [14.3, 94.8], [12.9, 96.0], [13.6, 120.0]]
 segments = [{ length = 500, count = 1 }, { length = 300, count = 1 }, { length = 200, count = 1 }, { length = 100, count = 1 }, { length = 50, count = 1 }, { length = 45, count = 1 }, { length = 40, count = 1 }, { length = 35, count = 1 }, { length = 30, count = 1 }, { length = 25, count = 1 }, { length = 20, count = 1 }, { length = 15, count = 1 }, { length = 10, count = 1 }]
 
 [[punch.cite]]
@@ -509,14 +481,6 @@ source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_
 taken = "2026-11-24"
 value = "SINGLE lengths [mm] : Mat. No."
 basis = "the published single lengths, one piece of each (what a shop holds varies)"
-
-[[punch.cite]]
-path = "outline"
-status = "estimate"
-source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_brochures/TRUMPF-bending-tools-catalog-EN.pdf p.54"
-taken = "2026-11-24"
-value = "the section as drawn: printed height 120 (tip to clamping face), printed width 30 mm"
-basis = "measured off the drawing (tools/bendsim/section_from_drawing.py: page 54 at 300 dpi, --height 120 --eps 0.8 --spike 5; the clamping face at the drawn clamp's lower edge, the axis the tang's middle, both axes at the printed height's scale); printed width 30 (body width) read back at 29.4 mm; the body grown 0.5 mm outward: errs large"
 
 [[punch]]
 id = "trumpf/OW202-K"
@@ -598,7 +562,6 @@ tip_radius = 1
 tip_angle = 20
 width = 48
 max_load = 600
-outline = [[-10.8, 166.0], [-9.8, 161.7], [-13.8, 161.1], [-13.8, 76.9], [-7.5, 41.9], [-8.1, 37.6], [-7.4, 35.4], [-4.3, 16.2], [-2.7, 13.1], [-0.9, 1.9], [-1.8, 0.8], [0.4, -0.5], [2.1, 0.6], [0.8, 1.6], [2.8, 3.3], [1.8, 7.4], [3.4, 9.8], [2.2, 10.5], [2.2, 20.4], [0.2, 25.4], [-0.2, 37.1], [-0.3, 38.0], [-0.2, 98.7], [-0.2, 101.0], [0.2, 117.9], [6.5, 125.7], [11.1, 128.4], [9.9, 164.2], [12.9, 164.4], [25.3, 164.5], [25.5, 165.7], [14.7, 165.7], [13.9, 166.0]]
 segments = [{ length = 500, count = 1 }, { length = 300, count = 1 }, { length = 200, count = 1 }, { length = 100, count = 1 }, { length = 50, count = 1 }, { length = 45, count = 1 }, { length = 40, count = 1 }, { length = 35, count = 1 }, { length = 30, count = 1 }, { length = 25, count = 1 }, { length = 20, count = 1 }, { length = 15, count = 1 }, { length = 10, count = 1 }]
 
 [[punch.cite]]
@@ -658,14 +621,6 @@ source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_
 taken = "2026-11-24"
 value = "SINGLE lengths [mm] : Mat. No."
 basis = "the published single lengths, one piece of each (what a shop holds varies)"
-
-[[punch.cite]]
-path = "outline"
-status = "estimate"
-source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_brochures/TRUMPF-bending-tools-catalog-EN.pdf p.61"
-taken = "2026-11-24"
-value = "the section as drawn: printed height 166 (tip to clamping face), printed width 24 mm"
-basis = "measured off the drawing (tools/bendsim/section_from_drawing.py: page 61 at 300 dpi, --height 166 --eps 0.8 --spike 5; the clamping face at the drawn clamp's lower edge, the axis the tang's middle, both axes at the printed height's scale); printed width 24 (upper body); its overall 38.8 holds a 5 mm stub of the 166 dimension line at the clamp face, and a 1 mm bulge of the 20 deg leader, both kept (they err large) read back at 38.8 mm; the body grown 0.5 mm outward: errs large"
 
 [[punch]]
 id = "trumpf/OW282-K"
@@ -968,7 +923,6 @@ tip_angle = 86
 width = 170
 relief = { depth = 22 }
 max_load = 800
-outline = [[-36.3, 220.0], [-40.6, 219.7], [-56.4, 203.8], [-56.4, 59.6], [-11.8, 11.6], [-12.0, 10.3], [0.0, -0.8], [6.8, 6.9], [7.0, 8.5], [-22.0, 57.9], [-22.0, 144.7], [-22.0, 146.0], [-22.0, 177.3], [28.9, 206.3], [30.1, 208.1], [29.4, 220.0]]
 segments = [{ length = 300, count = 1 }, { length = 200, count = 1 }, { length = 100, count = 1 }, { length = 50, count = 1 }, { length = 45, count = 1 }, { length = 40, count = 1 }, { length = 35, count = 1 }, { length = 30, count = 1 }, { length = 25, count = 1 }, { length = 20, count = 1 }, { length = 15, count = 1 }, { length = 10, count = 1 }]
 
 [[punch.cite]]
@@ -1035,14 +989,6 @@ source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_
 taken = "2026-11-24"
 value = "SINGLE lengths [mm] : Mat. No."
 basis = "the published single lengths, one piece of each (what a shop holds varies)"
-
-[[punch.cite]]
-path = "outline"
-status = "estimate"
-source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_brochures/TRUMPF-bending-tools-catalog-EN.pdf p.78"
-taken = "2026-11-24"
-value = "the section as drawn: printed 220 (tip to clamping face), 85 (rear face to shoulder front), 33 (body), 22 (throat to tang centre line), 86 deg, R1"
-basis = "measured off the drawing (tools/bendsim/section_from_drawing.py: page 78 at 300 dpi, --height 220 --eps 0.8 --spike 5; x = 0 the tip, the tang's centre line 0.7 mm from it), both axes at the printed height's scale; the printed 85 read back at 85.2, the 33 and 22 at 32.5 and 21.9; the body grown 0.5 mm outward: errs large"
 
 [[punch]]
 id = "trumpf/OW201-S"
@@ -1280,7 +1226,6 @@ tip_radius = 1
 tip_angle = 86
 width = 202
 max_load = 800
-outline = [[-6.1, 300.0], [-6.4, 299.7], [-20.4, 300.0], [-35.0, 300.0], [-71.9, 278.5], [-71.5, 198.8], [-73.1, 192.0], [-71.9, 193.6], [-71.4, 182.4], [-72.0, 174.9], [-71.5, 172.2], [-71.7, 86.5], [-25.8, 37.4], [-26.8, 36.1], [-18.3, 27.1], [-18.9, 26.4], [-17.2, 26.0], [-6.6, 14.2], [-3.6, 13.1], [2.5, 6.4], [-0.6, 2.4], [0.0, -0.4], [3.1, 3.8], [5.5, 4.6], [6.0, 6.1], [4.9, 6.2], [9.6, 11.3], [11.0, 10.6], [11.8, 12.2], [10.9, 13.3], [9.4, 12.8], [-6.6, 40.3], [-8.3, 43.4], [-32.8, 85.7], [-36.4, 94.1], [-36.4, 173.2], [-36.1, 174.6], [-36.4, 193.6], [-36.3, 195.9], [-36.4, 241.8], [-35.7, 246.0], [-33.1, 249.9], [27.0, 285.0], [26.8, 299.7], [27.1, 300.0], [17.6, 300.0], [14.0, 299.7], [13.6, 300.0]]
 segments = [{ length = 200, count = 1 }, { length = 100, count = 1 }, { length = 50, count = 1 }, { length = 45, count = 1 }, { length = 40, count = 1 }, { length = 35, count = 1 }, { length = 30, count = 1 }, { length = 25, count = 1 }]
 
 [[punch.cite]]
@@ -1348,14 +1293,6 @@ source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_
 taken = "2026-11-24"
 value = "SINGLE lengths [mm] : Mat. No."
 basis = "the published single lengths, one piece of each (what a shop holds varies)"
-
-[[punch.cite]]
-path = "outline"
-status = "estimate"
-source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_brochures/TRUMPF-bending-tools-catalog-EN.pdf p.92"
-taken = "2026-11-24"
-value = "the section as drawn: printed height 300 (tip to clamping face), printed width 101 mm"
-basis = "measured off the drawing (tools/bendsim/section_from_drawing.py: page 92 at 300 dpi, --height 300 --eps 0.8 --spike 5; the clamping face at the drawn clamp's lower edge, the axis the tang's middle, both axes at the printed height's scale); printed width 101 (rear face to shoulder/tang front line) read back at 100.4 mm; the body grown 0.5 mm outward: errs large"
 
 [[punch]]
 id = "trumpf/OW302-S-R3"
@@ -1442,7 +1379,6 @@ tip_angle = 81
 width = 464
 relief = { depth = 143 }
 max_load = 1100
-outline = [[-8.3, 400.0], [-8.3, 399.7], [-117.3, 399.7], [-207.2, 347.8], [-207.0, 293.5], [-207.2, 291.5], [-207.0, 241.2], [-32.3, 38.0], [-29.6, 34.9], [-0.4, -0.3], [3.4, -0.4], [14.4, 12.5], [-7.8, 46.6], [-16.9, 44.4], [-18.4, 44.8], [-8.7, 48.2], [-138.9, 247.9], [-142.4, 256.8], [-143.1, 271.5], [-142.8, 273.1], [-142.6, 291.7], [-142.6, 293.3], [-143.1, 297.4], [-141.6, 306.3], [-135.9, 317.4], [-129.3, 323.6], [-121.2, 327.9], [0.9, 372.1], [2.3, 372.9], [25.5, 381.1], [25.4, 399.7], [11.7, 399.7], [11.5, 400.0]]
 segments = [{ length = 100, count = 1 }]
 
 [[punch.cite]]
@@ -1509,14 +1445,6 @@ source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_
 taken = "2026-11-24"
 value = "SINGLE lengths [mm] : Mat. No."
 basis = "the published single lengths, one piece of each (what a shop holds varies)"
-
-[[punch.cite]]
-path = "outline"
-status = "estimate"
-source = "https://www.trumpf.com/filestorage/TRUMPF_Master/Products/Services/01_brochures/TRUMPF-bending-tools-catalog-EN.pdf p.95"
-taken = "2026-11-24"
-value = "the section as drawn: printed height 400 (tip to clamping face), printed width 232 mm"
-basis = "measured off the drawing (tools/bendsim/section_from_drawing.py: page 95 at 300 dpi, --height 400 --eps 0.8 --spike 5; the clamping face at the drawn clamp's lower edge, the axis the tang's middle, both axes at the printed height's scale); printed width 232 (rear face to front of top block) read back at 231.8 mm; the body grown 0.5 mm outward: errs large"
 
 [[die]]
 id = "trumpf/EV-S-W4-30deg"

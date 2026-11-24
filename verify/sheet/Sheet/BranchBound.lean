@@ -3,17 +3,12 @@ import Mathlib.Data.Real.Basic
 import Mathlib.Tactic
 
 /-!
-# The certified branch and bound, sound (kernel/forge-bb; its first client the bend simulator, kernel/forge-brake/src/bb.rs)
-
-forge-bb's `search` is this file's `search` (its pick order a heap by `lb`); forge-brake's `bb.rs`
-is its `Problem` (the evaluator contracts below).
+# The bend simulator's branch and bound, sound (kernel/forge-brake/src/bb.rs)
 
 forge-brake certifies, for a piece of the part against a tool (or against another piece), over the
 motion parameter `s` (the fold angle `φ`, or the ram height):
 * `Clear lower`: the signed distance is at least `lower` at **every** point of the piece through
-  the whole motion, and `lower ≥ limit`: proven past the limit;
-* `Near lower`: the same with `limit − res ≤ lower < limit`: proven within the resolution of the
-  limit, not past it, and no point found under it (the caller warns);
+  the whole motion, and `lower ≥ limit − res`;
 * `Hit q`: `q` is a real point of the piece at a real motion parameter whose distance is
   **proven** below `limit` (a collision, or a clearance violation);
 * `Undecided lower`: the budget ran out; `lower` is what was proven, nothing more.
@@ -34,8 +29,8 @@ The interval primitives enter only through `encl`. `Encl` is the contract a corr
 `Interval::sin` (the trace session's fix) must meet; `Encl.comp` carries it through a formula.
 
 **The rule this file fixes for bb.rs**: a leaf (a cell too small to split) that cannot be cleared
-only lowers `lower`; when the work runs out the verdict is `Clear` only if `lower ≥ limit`, `Near`
-if `limit − res ≤ lower < limit`, otherwise `Undecided` (bb.rs `settle`, at each of its exits).
+only lowers `lower`; when the work runs out the verdict is `Clear` only if `lower ≥ limit − res`,
+otherwise `Undecided` — bb.rs today returns `Clear{lower: min(lower, upper)}` there unchecked.
 -/
 
 namespace Sheet.BB
@@ -113,7 +108,6 @@ structure Problem (X C : Type) where
 
 inductive Verdict (X : Type)
   | clear (lower : ℝ)
-  | near (lower : ℝ)
   | hit (q : X)
   | undecided (lower : ℝ)
 
@@ -122,15 +116,13 @@ closed as leaves. `pick` reorders the work at every step (bb.rs: a heap by `lb`)
 def search (pb : Problem X C) (pick : List C → List C) (limit res : ℝ) [DecidablePred (· ≥ limit)]
     [∀ r : ℝ, Decidable (r < limit)] [∀ r : ℝ, Decidable (r ≥ limit - res)] :
     ℕ → List C → ℝ → Verdict X
-  | _, [], lo =>
-      if lo ≥ limit then .clear lo else if lo ≥ limit - res then .near lo else .undecided lo
+  | _, [], lo => if lo ≥ limit - res then .clear lo else .undecided lo
   | 0, c :: rest, lo =>
       let m := (c :: rest).foldl (fun m c => min m (pb.lower c)) lo
-      if m ≥ limit then .clear m else if m ≥ limit - res then .near m else .undecided m
+      if m ≥ limit - res then .clear m else .undecided m
   | n + 1, w, lo =>
       match pick w with
-      | [] =>
-        if lo ≥ limit then .clear lo else if lo ≥ limit - res then .near lo else .undecided lo
+      | [] => if lo ≥ limit - res then .clear lo else .undecided lo
       | c :: rest =>
         if pb.lower c ≥ limit then search pb pick limit res n rest lo
         else match pb.witness c with
@@ -158,9 +150,8 @@ theorem foldl_min_le (pb : Problem X C) : ∀ (w : List C) (m : ℝ),
       · exact h2 c' hc'
 
 /-- **Soundness of the search**, for every order of work (`pick` any permutation):
-* `clear lo` ⇒ `lo ≥ limit`, and every point of the piece in a root cell is at distance at least
-  `min limit lo` (that is, `limit`), which is at least `limit − res`;
-* `near lo` ⇒ `limit − res ≤ lo < limit`, and every such point is at distance at least `lo`;
+* `clear lo` ⇒ every point of the piece in a root cell is at distance at least `min limit lo`,
+  and that is at least `limit − res`;
 * `hit q` ⇒ `q` is a point of the piece at distance below `limit`;
 * `undecided lo` ⇒ every such point is at distance at least `min limit lo` (what was proven). -/
 theorem search_sound (pb : Problem X C) (pick : List C → List C)
@@ -169,9 +160,7 @@ theorem search_sound (pb : Problem X C) (pick : List C → List C)
     [∀ r : ℝ, Decidable (r ≥ limit - res)] (roots : List C) :
     ∀ (n : ℕ) (w : List C) (lo : ℝ), Inv pb roots limit w lo →
       match search pb pick limit res n w lo with
-      | .clear l => limit ≤ l ∧ limit - res ≤ min limit l ∧
-          ∀ x, pb.D x → (∃ r ∈ roots, pb.mem r x) → min limit l ≤ pb.d x
-      | .near l => limit - res ≤ l ∧ l < limit ∧
+      | .clear l => limit - res ≤ min limit l ∧
           ∀ x, pb.D x → (∃ r ∈ roots, pb.mem r x) → min limit l ≤ pb.d x
       | .hit q => pb.D q ∧ pb.d q < limit
       | .undecided l =>
@@ -185,9 +174,8 @@ theorem search_sound (pb : Problem X C) (pick : List C → List C)
       simp only [search]
       have hall : ∀ x, pb.D x → (∃ r ∈ roots, pb.mem r x) → min limit lo ≤ pb.d x :=
         fun x hD hr => (hinv x hD hr).resolve_left (by simp)
-      split_ifs with h h'
-      · exact ⟨h, le_min (by linarith) (by linarith), hall⟩
-      · exact ⟨h', not_le.mp h, hall⟩
+      split_ifs with h
+      · exact ⟨le_min (by linarith) h, hall⟩
       · exact hall
     | cons c rest =>
       simp only [search]
@@ -198,9 +186,8 @@ theorem search_sound (pb : Problem X C) (pick : List C → List C)
         rcases hinv x hD hr with ⟨c', hc', hx⟩ | h
         · exact le_trans (min_le_right _ _) (le_trans (hmc c' hc') (pb.encl c' x hx hD))
         · exact le_trans (min_le_min_left _ hm) h
-      split_ifs with h h'
-      · exact ⟨h, le_min (by linarith) (by linarith), hall⟩
-      · exact ⟨h', not_le.mp h, hall⟩
+      split_ifs with h
+      · exact ⟨le_min (by linarith) h, hall⟩
       · exact hall
   | succ n ih =>
     intro w lo hinv
@@ -209,9 +196,8 @@ theorem search_sound (pb : Problem X C) (pick : List C → List C)
       simp only [search]
       have hall : ∀ x, pb.D x → (∃ r ∈ roots, pb.mem r x) → min limit lo ≤ pb.d x :=
         fun x hD hr => (hinv x hD hr).resolve_left (by simp)
-      split_ifs with h h'
-      · exact ⟨h, le_min (by linarith) (by linarith), hall⟩
-      · exact ⟨h', not_le.mp h, hall⟩
+      split_ifs with h
+      · exact ⟨le_min (by linarith) h, hall⟩
       · exact hall
     | cons c0 rest0 =>
     simp only [search]
@@ -261,9 +247,8 @@ theorem search_sound (pb : Problem X C) (pick : List C → List C)
         · rw [hw] at hc; exact absurd hc (by simp)
         · exact h
       simp only
-      split_ifs with h h'
-      · exact ⟨h, le_min (by linarith) (by linarith), hall⟩
-      · exact ⟨h', not_le.mp h, hall⟩
+      split_ifs with h
+      · exact ⟨le_min (by linarith) h, hall⟩
       · exact hall
     | cons c rest =>
       simp only
@@ -295,33 +280,16 @@ theorem inv_start (pb : Problem X C) (roots : List C) (limit : ℝ) :
   by_contra hm; exact pb.drop r x (by simpa using hm) hx hD
 
 /-- **The certificate**: a run from the roots is sound. A `clear` verdict means the clearance
-`limit` holds at every point of the piece through the whole motion; a `near` one that `limit − res`
-does (and no more is known). -/
+`limit − res` holds at every point of the piece through the whole motion. -/
 theorem certify_sound (pb : Problem X C) (pick : List C → List C)
     (hpick : ∀ w, (pick w).Perm w) (limit res : ℝ) (hres : 0 ≤ res)
     [DecidablePred (· ≥ limit)] [∀ r : ℝ, Decidable (r < limit)]
     [∀ r : ℝ, Decidable (r ≥ limit - res)] (roots : List C) (budget : ℕ) :
     match search pb pick limit res budget (roots.filter pb.mayHold) limit with
-    | .clear l => limit ≤ l ∧ limit - res ≤ min limit l ∧
-        ∀ x, pb.D x → (∃ r ∈ roots, pb.mem r x) → min limit l ≤ pb.d x
-    | .near l => limit - res ≤ l ∧ l < limit ∧
+    | .clear l => limit - res ≤ min limit l ∧
         ∀ x, pb.D x → (∃ r ∈ roots, pb.mem r x) → min limit l ≤ pb.d x
     | .hit q => pb.D q ∧ pb.d q < limit
     | .undecided l => ∀ x, pb.D x → (∃ r ∈ roots, pb.mem r x) → min limit l ≤ pb.d x :=
   search_sound pb pick hpick limit res hres roots budget _ _ (inv_start pb roots limit)
-
-/-- A `clear` verdict is the limit itself, everywhere: no resolution is spent on it. -/
-theorem clear_past_limit (pb : Problem X C) (pick : List C → List C)
-    (hpick : ∀ w, (pick w).Perm w) (limit res : ℝ) (hres : 0 ≤ res)
-    [DecidablePred (· ≥ limit)] [∀ r : ℝ, Decidable (r < limit)]
-    [∀ r : ℝ, Decidable (r ≥ limit - res)] (roots : List C) (budget : ℕ) (l : ℝ)
-    (h : search pb pick limit res budget (roots.filter pb.mayHold) limit = .clear l) :
-    ∀ x, pb.D x → (∃ r ∈ roots, pb.mem r x) → limit ≤ pb.d x := by
-  have hs := certify_sound pb pick hpick limit res hres roots budget
-  rw [h] at hs
-  obtain ⟨hl, -, hall⟩ := hs
-  intro x hD hr
-  have := hall x hD hr
-  rwa [min_eq_left hl] at this
 
 end Sheet.BB

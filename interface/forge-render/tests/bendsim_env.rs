@@ -319,102 +319,112 @@ fn the_cube_looks_down_the_bend_and_what_hides_it_is_seen_through() {
     assert!(h.gui.bend.ghosts.is_empty(), "off: everything solid");
 }
 
-/// Follow bend as an operator watches (David, via the coordinator): through a whole program the
-/// eye keeps its orientation, its distance grows once at most, and its speed never changes at
-/// once (eased from rest to rest: no cut, no hunting); the part's small motions (the slide to the stop, the lift,
-/// the ram's stroke, a flange's swing, a turn over) leave it still; and at the tools the part is
-/// always wholly in view (the handling may carry it past the frame's edge, the eye still).
+/// Follow bend through the operator's handling (David, via the coordinator): the part pulled
+/// out toward the operator and turned stays in view, the eye widening for it, and the next bend
+/// is framed on its station.
 #[test]
 fn following_keeps_the_handled_part_in_view() {
     for (w, ht) in [(1400.0, 860.0), (1000.0, 700.0)] {
-        follow_through_the_program(w, ht);
+        follow_through_the_handling(w, ht);
     }
 }
 
-fn follow_through_the_program(w: f32, ht: f32) {
+fn follow_through_the_handling(w: f32, ht: f32) {
     let Ok(mut h) = Headless::new((w, ht), 1.0) else {
         return;
     };
     h.step();
-    let part = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../examples/sheetmetal/load_tray.fg"
+    enter(
+        &mut h,
+        CHANNEL,
+        &format!("follow{w}"),
+        "trumpf-trubend-5130",
+        None,
     );
-    open(&mut h, part);
-    click(&mut h, "tab:Environments");
-    click(&mut h, "tool:Bend Simulation");
-    let tl = h.gui.shell.env_timeline().expect("the timeline");
-    let total = tl.duration(&h.gui.shell);
-    tl.seek(&mut h.gui.shell, 0.0);
-    for _ in 0..20 {
-        h.step();
-    }
-    let start = h.gui.view.as_ref().unwrap().nav.camera;
-    let (mut was, mut grew, mut jolt, mut inside, n) = (start, 0, 0f32, 0, 240);
-    let mut step_was = [0f32; 3];
-    let mut tools = 0;
-    for i in 0..n {
-        let tl = h.gui.shell.env_timeline().unwrap();
-        tl.seek(&mut h.gui.shell, total * i as f64 / (n - 1) as f64);
-        h.step();
-        let cam = h.gui.view.as_ref().unwrap().nav.camera;
-        assert!(
-            (cam.yaw - start.yaw).abs() < 1e-6 && (cam.pitch - start.pitch).abs() < 1e-6,
-            "{w}x{ht} frame {i}: the eye turned"
-        );
-        assert!(cam.dist >= was.dist - 1e-3, "{w}x{ht} frame {i}: the eye came in");
-        if cam.dist > was.dist + 1e-3 && was.dist <= start.dist + 1e-3 {
-            grew += 1;
+    h.gui.shell.sheet.bend_sim.as_mut().unwrap().follow = true;
+    let mut seen = Vec::new();
+    let mut handled = 0;
+    // through the handling and back to the tools as a recording goes, a frame an instant, then
+    // the bend itself
+    let instants: Vec<(f64, usize)> = (0..=60)
+        .map(|i| (i as f64 * 0.0025, 1))
+        .chain([(0.5, 30)])
+        .collect();
+    for (t, frames) in instants {
+        {
+            let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+            b.step = 1;
+            b.t = t;
         }
-        // a move's speed changes a little from frame to frame (eased); a cut changes it all at once
-        let step = [0, 1, 2].map(|k| cam.target[k] - was.target[k]);
-        let dv = (0..3)
-            .map(|k| (step[k] - step_was[k]).powi(2))
-            .sum::<f32>()
-            .sqrt();
-        jolt = jolt.max(dv);
-        step_was = step;
-        was = cam;
-        // the part wholly in view
+        for _ in 0..frames {
+            h.step();
+        }
+        // the part's middle, as the view's camera projects it
         let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
         let sim = b.sim.as_ref().unwrap();
         let mut sc = forge_brake::scene::Scene::new(&sim.model, &sim.tooling, &sim.plan);
+        let bodies = sc.bodies(1, t);
+        let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+        for x in bodies.iter().filter(|x| x.look.is_sheet()) {
+            let (a, c) = x.mesh.bounds().unwrap();
+            for k in 0..3 {
+                lo[k] = lo[k].min(a[k]);
+                hi[k] = hi[k].max(c[k]);
+            }
+        }
         let (cam, size) = h.gui.shell.camera.expect("the view's camera");
         let m = cam.view(size.0, size.1).matrix;
-        let all = sc
-            .bodies(b.step, b.t)
-            .iter()
-            .filter(|x| x.look.is_sheet())
-            .all(|x| {
-                x.mesh.pos.iter().all(|p| {
-                    let c = |r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
-                    c(3) > 0.0 && (c(0) / c(3)).abs() <= 1.0 && (c(1) / c(3)).abs() <= 1.0
-                })
-            });
-        if !all {
-            eprintln!(
-                "OUTDBG {w} frame {i} step {} t {:.3} stage {:?}",
-                b.step,
-                b.t,
-                forge_brake::scene::stage_at(b.t).0
+        let mut inside = true;
+        let (mut x0, mut x1, mut y0, mut y1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
+        for corner in 0..8 {
+            let p = [0, 1, 2].map(|k| if corner >> k & 1 == 0 { lo[k] } else { hi[k] });
+            let c = |r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
+            let w = c(3);
+            inside &= w > 0.0 && (c(0) / w).abs() <= 1.0 && (c(1) / w).abs() <= 1.0;
+            (x0, x1) = (x0.min(c(0) / w), x1.max(c(0) / w));
+            (y0, y1) = (y0.min(c(1) / w), y1.max(c(1) / w));
+        }
+        seen.push((t, inside));
+        // through the handling the part is the subject (the coordinator): it spans at least 40 %
+        // of the view one way, and the eye sees its middle past the press's frame
+        if forge_brake::scene::stage_at(t).0 == forge_brake::scene::Stage::Handle {
+            handled += 1;
+            let span = ((x1 - x0) / 2.0).max((y1 - y0) / 2.0);
+            assert!(
+                span >= 0.4,
+                "{w}x{ht} at t = {t}: the part spans {span:.2} of the view"
             );
+            let eye = cam.eye();
+            let mid = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
+            for x in bodies
+                .iter()
+                .filter(|x| x.look == forge_brake::scene::Look::Frame)
+            {
+                let (a, c) = x.mesh.bounds().unwrap();
+                let mut t0 = 0f32;
+                let mut t1 = 1f32;
+                for k in 0..3 {
+                    let d = mid[k] - eye[k];
+                    if d.abs() < 1e-9 {
+                        if eye[k] < a[k] || eye[k] > c[k] {
+                            t1 = -1.0;
+                        }
+                        continue;
+                    }
+                    let (u, v) = ((a[k] - eye[k]) / d, (c[k] - eye[k]) / d);
+                    t0 = t0.max(u.min(v));
+                    t1 = t1.min(u.max(v));
+                }
+                assert!(t0 > t1, "{w}x{ht} at t = {t}: {} stands before the part", x.name);
+            }
         }
-        // the operator's handling may carry the part past the frame's edge, the eye still
-        if forge_brake::scene::stage_at(b.t).0 == forge_brake::scene::Stage::Handle {
-            continue;
+        if (t - 0.05).abs() < 1e-9 && w == 1400.0 {
+            shot(&mut h, "13-following-the-handling");
         }
-        tools += 1;
-        inside += all as usize;
     }
-    assert!(grew <= 1, "{w}x{ht}: the eye drew back {grew} times");
-    assert!(
-        jolt <= 12.0,
-        "{w}x{ht}: the eye's speed changed {jolt:.1} mm a frame at once"
-    );
-    assert!(
-        inside == tools,
-        "{w}x{ht}: the part wholly in view at the tools in {inside} of {tools} frames"
-    );
+    assert!(handled > 10, "{w}x{ht}: {handled} instants of the handling");
+    let out: Vec<_> = seen.iter().filter(|s| !s.1).collect();
+    assert!(out.is_empty(), "{w}x{ht}: the part not wholly in view at {out:?}");
 }
 
 /// No flicker (David): the eye swept round the second bend through the views where the first
@@ -435,10 +445,7 @@ fn see_through_fades_and_never_flickers() {
     for _ in 0..4 {
         h.step();
     }
-    // a step of a fade: an x-ray's from solid to the opacity set, a cut-away's from solid to
-    // gone, each over FADE_FRAMES
-    let frames = forge_render::gui::gui_bendsim::FADE_FRAMES as f32;
-    let step = ((1.0 - opacity) / frames).max(1.0 / frames) + 0.01;
+    let step = (1.0 - opacity) / forge_render::gui::gui_bendsim::FADE_FRAMES as f32 + 0.01;
     // as it stands before the sweep (what already fades counts from there)
     let names = h.gui.bend.drawn_names();
     let mut was: std::collections::HashMap<String, f32> = h
@@ -592,10 +599,8 @@ fn bend_two_followed_shows_the_part() {
     );
 }
 
-/// Any part in the way (David), only where it is in the way: the Press Overview turned all
-/// round the press at a low eye, the bend's watched points seen from every side, nothing cut, the
-/// bend never seen through; and from some side a press part (the frame, the ram, the backgauge)
-/// stands in front of the bend and is seen through whole.
+/// Any part in the way (David): from the Press Overview the press's frame stands between the
+/// eye and the bend; it is seen through whole, nothing cut, the bend being made solid.
 #[test]
 fn a_press_part_in_the_way_is_seen_through_whole() {
     let Some(mut h) = headless() else { return };
@@ -606,42 +611,20 @@ fn a_press_part_in_the_way_is_seen_through_whole() {
         b.t = 0.6;
     }
     frame(&mut h, Framing::Overview);
-    for _ in 0..8 {
+    for _ in 0..20 {
         h.step();
     }
-    let mut press_ghosted = Vec::new();
-    for k in 0..12 {
-        {
-            let v = h.gui.view.as_mut().unwrap();
-            let mut c = v.nav.camera;
-            c.yaw = (30.0 * k as f32).to_radians();
-            c.pitch = 15f32.to_radians();
-            v.nav.jump_to(c);
-        }
-        for _ in 0..16 {
-            h.step();
-        }
-        let (seen, _) = see_metric(&h);
-        assert!(
-            seen >= 0.95,
-            "from {} degrees: {:.1} % of the bend seen",
-            30 * k,
-            seen * 100.0
-        );
-        assert!(h.gui.bend.whole(), "nothing cut");
-        let ghosted = h.gui.bend.ghosted_names();
-        let bending = h.gui.bend.bending_names();
-        assert!(ghosted.iter().all(|n| !bending.contains(n)), "{ghosted:?}");
-        press_ghosted.extend(
-            ghosted
-                .into_iter()
-                .filter(|n| !n.starts_with("part:") && !n.contains("punch:") && !n.contains("die:")),
-        );
-    }
-    assert!(
-        !press_ghosted.is_empty(),
-        "a press part in the way, seen through, from some side"
-    );
+    let ghosted = h.gui.bend.ghosted_names();
+    let press: Vec<&String> = ghosted
+        .iter()
+        .filter(|n| !n.starts_with("part:") && !n.contains("punch:") && !n.contains("die:"))
+        .collect();
+    assert!(!press.is_empty(), "a press part seen through: {ghosted:?}");
+    assert!(h.gui.bend.whole(), "nothing cut");
+    let bending = h.gui.bend.bending_names();
+    assert!(ghosted.iter().all(|n| !bending.contains(n)), "{ghosted:?}");
+    // the die can't hide the bend line from above it (UX-LEAD): it stays solid
+    assert!(ghosted.iter().all(|n| !n.contains("die:")), "{ghosted:?}");
 }
 
 /// A seen-through body is drawn, and seen (David: "it's still invisible"): where it stands,
@@ -730,25 +713,14 @@ fn a_ghost_is_seen_between_gone_and_solid() {
     let body: Vec<usize> = (0..w * ht)
         .filter(|&i| cover[i] && far(px(gone, i), px(solid, i), 24))
         .collect();
-    assert!(body.len() > w * ht / 200, "the body covers {} px", body.len());
-    // seen against what is behind it on nearly all of it; against the body solid on most (a
-    // flange in shade is a mid tone, as the flat ghost is: its blue and its outline mark it there)
-    let off_gone = body
+    assert!(body.len() > w * ht / 100, "the body covers {} px", body.len());
+    let seen = body
         .iter()
-        .filter(|&&i| far(px(ghost, i), px(gone, i), 12))
-        .count();
-    let off_solid = body
-        .iter()
-        .filter(|&&i| far(px(ghost, i), px(solid, i), 12))
+        .filter(|&&i| far(px(ghost, i), px(gone, i), 12) && far(px(ghost, i), px(solid, i), 12))
         .count();
     assert!(
-        off_gone * 20 >= body.len() * 17,
-        "the ghost seen against what is behind it over {off_gone} of the body's {} px",
-        body.len()
-    );
-    assert!(
-        off_solid * 3 >= body.len() * 2,
-        "the ghost told from the body solid over {off_solid} of its {} px",
+        seen * 4 >= body.len() * 3,
+        "the ghost seen over {seen} of the body's {} px",
         body.len()
     );
 }
@@ -797,842 +769,4 @@ fn a_ghost_is_drawn_at_its_opacity() {
         differ > floor,
         "the ghost drawn at its opacity: {differ} pixels differ, under {floor}"
     );
-}
-
-/// Near (David; UX-LEAD's words): a clearance proven only within the simulation's resolution of
-/// its limit is not a pass but a mild warning, "near", listed after the warnings and before the
-/// passes, never hidden behind the step's "Passes" badge. The panel's side of it: a step's tool
-/// clearance made a Near as forge-brake makes one (which of a part's pairs end near is the
-/// kernel's, tested there; a finer search proves most of them clear), on a narrow channel whose
-/// step also has a warning.
-#[test]
-fn a_near_clearance_is_listed_as_near() {
-    let Some(mut h) = headless() else { return };
-    let narrow = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
-sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (40, 200))\n}\n\
-base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
-right = flange(base.edge(plan.outline[1]), height: 60)\n\
-left = flange(base.edge(plan.outline[3]), height: 60)\n";
-    let d = scratch("near");
-    let f = d.join("near.fg");
-    std::fs::write(&f, narrow).unwrap();
-    open(&mut h, f.to_str().unwrap());
-    click(&mut h, "tab:Environments");
-    click(&mut h, "tool:Bend Simulation");
-    // the standard tooling alone, on no press (as `query F bendsim` asks it by default)
-    {
-        let b = h.gui.shell.sheet.bend_sim.as_mut().expect("simulated");
-        b.redo(Choice::default(), "std-eu");
-    }
-    h.step();
-    h.step();
-    let b = h.gui.shell.sheet.bend_sim.as_mut().expect("simulated");
-    let plan = &mut b.sim.as_mut().expect("a program").plan;
-    assert!(plan.feasible);
-    let at = plan.steps.len() - 1;
-    let s = &mut plan.steps[at];
-    let k = s
-        .checks
-        .iter()
-        .position(|c| c.rule == forge_brake::Rule::ToolCollision && c.pass)
-        .expect("a passing tool clearance");
-    let was = s.checks[k].clone();
-    let mut c = forge_brake::Check::near(was.rule, was.limit - 0.004, was.limit, was.limit / 4.0);
-    c.tool = was.tool.clone();
-    c.phase = was.phase;
-    s.checks[k] = c;
-    assert!(s.pass(), "a near is a warning: the step still passes");
-    let c = &s.checks[k];
-    assert!(!c.pass && c.severity == forge_brake::Severity::Warning && c.near.is_some());
-    b.step = at;
-    b.all_checks = true;
-    for _ in 0..4 {
-        h.step();
-    }
-    shot(&mut h, "16-near-in-the-checks");
-}
-
-/// A clip for David (the coordinator): `BENDSIM_CLIP=DIR` writes 270 frames (9 s at 30 fps)
-/// through the whole program of a narrow channel on the standard tooling (it has a near row),
-/// seeked on the environment's timeline as a recording seeks it, and the Checks panel at the
-/// near step. Off unless asked.
-#[test]
-#[ignore]
-fn a_clip_for_david() {
-    let Ok(dir) = std::env::var("BENDSIM_CLIP") else {
-        return;
-    };
-    let Some(mut h) = headless() else { return };
-    let narrow = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
-sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (40, 200))\n}\n\
-base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
-right = flange(base.edge(plan.outline[1]), height: 60)\n\
-left = flange(base.edge(plan.outline[3]), height: 60)\n";
-    let d = scratch("clip");
-    let f = d.join("narrow-channel.fg");
-    std::fs::write(&f, narrow).unwrap();
-    open(&mut h, f.to_str().unwrap());
-    click(&mut h, "tab:Environments");
-    click(&mut h, "tool:Bend Simulation");
-    h.gui
-        .shell
-        .sheet
-        .bend_sim
-        .as_mut()
-        .unwrap()
-        .redo(Choice::default(), "std-eu");
-    for _ in 0..4 {
-        h.step();
-    }
-    let tl = h.gui.shell.env_timeline().expect("the timeline");
-    let total = tl.duration(&h.gui.shell);
-    assert!(total > 0.0);
-    // settle on the first instant before the first frame
-    tl.seek(&mut h.gui.shell, 0.0);
-    for _ in 0..20 {
-        h.step();
-    }
-    let n = 270;
-    for i in 0..n {
-        let tl = h.gui.shell.env_timeline().unwrap();
-        tl.seek(&mut h.gui.shell, total * i as f64 / (n - 1) as f64);
-        h.step();
-        std::fs::write(format!("{dir}/frame-{i:04}.ppm"), h.ppm()).unwrap();
-    }
-    // the Checks panel at the near step, every check shown
-    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
-    let at = b
-        .sim
-        .as_ref()
-        .unwrap()
-        .plan
-        .steps
-        .iter()
-        .position(|s| s.checks.iter().any(|c| c.near.is_some()))
-        .expect("a near");
-    b.step = at;
-    b.t = 0.6;
-    b.all_checks = true;
-    for _ in 0..20 {
-        h.step();
-    }
-    std::fs::write(format!("{dir}/checks.ppm"), h.ppm()).unwrap();
-    eprintln!("clip: {n} frames over {total} s of program");
-}
-
-/// The frames the coordinator saw the bed fill (the channel on the TruBend 5130, native frame
-/// ~125 at 30 fps: t = 4.17 s, the handling before bend 2), as they stand now. Off unless asked.
-#[test]
-#[ignore]
-fn the_handling_frames_on_the_trubend() {
-    let Ok(dir) = std::env::var("BENDSIM_CLIP") else {
-        return;
-    };
-    let Some(mut h) = headless() else { return };
-    enter(&mut h, CHANNEL, "trubend-clip", "trumpf-trubend-5130", None);
-    let tl = h.gui.shell.env_timeline().expect("the timeline");
-    tl.seek(&mut h.gui.shell, 0.0);
-    for _ in 0..20 {
-        h.step();
-    }
-    for i in 0..=130u32 {
-        let tl = h.gui.shell.env_timeline().unwrap();
-        tl.seek(&mut h.gui.shell, i as f64 / 30.0);
-        h.step();
-        if i >= 120 {
-            std::fs::write(format!("{dir}/trubend-{i:04}.ppm"), h.ppm()).unwrap();
-        }
-    }
-}
-
-/// A complex part's whole program for David (the coordinator): `BENDSIM_CLIP=DIR` and
-/// `BENDSIM_CLIP_PART=FILE.fg` write 360 frames (12 s at 30 fps) through every bend, flips and
-/// turns included, seeked on the timeline as a recording seeks it; the press the environment
-/// picks if its program is feasible, else the standard tooling alone. Off unless asked.
-#[test]
-#[ignore]
-fn a_complex_part_clip() {
-    let (Ok(dir), Ok(part)) = (std::env::var("BENDSIM_CLIP"), std::env::var("BENDSIM_CLIP_PART")) else {
-        return;
-    };
-    let Some(mut h) = headless() else { return };
-    open(&mut h, &part);
-    click(&mut h, "tab:Environments");
-    click(&mut h, "tool:Bend Simulation");
-    let feasible = |h: &Headless| {
-        h.gui
-            .shell
-            .sheet
-            .bend_sim
-            .as_ref()
-            .and_then(|b| b.sim.as_ref().ok())
-            .is_some_and(|s| s.plan.feasible)
-    };
-    if !feasible(&h) {
-        h.gui
-            .shell
-            .sheet
-            .bend_sim
-            .as_mut()
-            .unwrap()
-            .redo(Choice::default(), "std-eu");
-        for _ in 0..4 {
-            h.step();
-        }
-    }
-    assert!(feasible(&h), "{}", h.gui.shell.status);
-    {
-        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
-        eprintln!("clip on {} {:?}: {} bends", b.tooling, b.choice.press, b.steps());
-    }
-    // BENDSIM_PROFILE=1: the working view end on, down the bend line; BENDSIM_ORBIT=DEG: the
-    // eye turned that much more round the subject each frame (see-through follows the live eye)
-    let profile = std::env::var("BENDSIM_PROFILE").is_ok();
-    let orbit: f32 = std::env::var("BENDSIM_ORBIT")
-        .ok()
-        .and_then(|x| x.parse().ok())
-        .unwrap_or(0.0);
-    {
-        // framed afresh in it, as the View tools frame
-        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
-        b.profile = profile;
-        b.frame = Some(Framing::Work);
-    }
-    let base = if profile {
-        forge_render::gui::gui_bendsim::PROFILE_YAW
-    } else {
-        215.0
-    };
-    let tl = h.gui.shell.env_timeline().expect("the timeline");
-    let total = tl.duration(&h.gui.shell);
-    tl.seek(&mut h.gui.shell, 0.0);
-    for _ in 0..20 {
-        h.step();
-    }
-    let n = 360;
-    for i in 0..n {
-        let tl = h.gui.shell.env_timeline().unwrap();
-        tl.seek(&mut h.gui.shell, total * i as f64 / (n - 1) as f64);
-        h.step();
-        if orbit != 0.0 {
-            let v = h.gui.view.as_mut().unwrap();
-            let mut c = v.nav.camera;
-            c.yaw = (base + orbit * i as f32).to_radians();
-            v.nav.jump_to(c);
-            h.step();
-        }
-        std::fs::write(format!("{dir}/frame-{i:04}.ppm"), h.ppm()).unwrap();
-    }
-    eprintln!("clip: {n} frames over {total} s of program");
-}
-
-/// The see-through's measure (David's "an order of magnitude"), from what is drawn alone: of the
-/// points watched (the bend zone's top along its length, the punch tip's contact, a witness), the
-/// share no solid body hides from the eye; and the share of the view the ghosts cover (a coarse
-/// raster of their triangles). Self-contained, so the same measure runs on any version.
-fn see_metric(h: &Headless) -> (f32, f32) {
-    use forge_brake::scene::{Body, Look};
-    let g = &h.gui.bend;
-    let drawn: &[Body] = g.drawn();
-    let ghosted: Vec<String> = g.ghosted_names();
-    let bending = g.bending_names();
-    let (cam, size) = h.gui.shell.camera.expect("the view's camera");
-    let eye = cam.eye();
-    // the watched points
-    let spread = |mut pts: Vec<[f32; 3]>, n: usize| -> Vec<[f32; 3]> {
-        if pts.len() <= n {
-            return pts;
-        }
-        pts.sort_by(|a, b| {
-            a[1].total_cmp(&b[1])
-                .then(a[2].total_cmp(&b[2]))
-                .then(a[0].total_cmp(&b[0]))
-        });
-        (0..n).map(|k| pts[k * (pts.len() - 1) / (n - 1)]).collect()
-    };
-    let roi_body = |x: &Body| {
-        x.look == Look::BendZone
-            || x.look == Look::Witness
-            || (x.name.starts_with("punch:") && x.name.ends_with("/tip"))
-    };
-    let mut aims = spread(forge_render::gui::gui_bendsim::zone_top(drawn), 48);
-    let tips: Vec<&Body> = drawn
-        .iter()
-        .filter(|x| x.name.starts_with("punch:") && x.name.ends_with("/tip"))
-        .collect();
-    if let Some(low) = tips
-        .iter()
-        .flat_map(|x| x.mesh.pos.iter())
-        .map(|p| p[2])
-        .reduce(f32::min)
-    {
-        aims.extend(spread(
-            tips.iter()
-                .flat_map(|x| x.mesh.pos.iter().copied())
-                .filter(|p| p[2] <= low + 1.0)
-                .collect(),
-            16,
-        ));
-    }
-    aims.extend(spread(
-        drawn
-            .iter()
-            .filter(|x| x.look == Look::Witness)
-            .flat_map(|x| x.mesh.pos.iter().copied())
-            .collect(),
-        8,
-    ));
-    if aims.is_empty() {
-        return (1.0, 0.0);
-    }
-    let sub = |a: [f32; 3], b: [f32; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-    let dot = |a: [f32; 3], b: [f32; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-    let cross = |a: [f32; 3], b: [f32; 3]| {
-        [
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0],
-        ]
-    };
-    let hides = |x: &Body, p: [f32; 3]| {
-        let d = sub(p, eye);
-        let len = dot(d, d).sqrt();
-        let tmax = 1.0 - 0.5 / len.max(1e-3);
-        x.mesh.tri.iter().any(|t| {
-            let [a, b, c] = t.map(|i| x.mesh.pos[i as usize]);
-            let (e1, e2) = (sub(b, a), sub(c, a));
-            let hh = cross(d, e2);
-            let det = dot(e1, hh);
-            if det.abs() < 1e-12 {
-                return false;
-            }
-            let f = 1.0 / det;
-            let s0 = sub(eye, a);
-            let u = f * dot(s0, hh);
-            let q = cross(s0, e1);
-            let v = f * dot(d, q);
-            let tt = f * dot(e2, q);
-            (0.0..=1.0).contains(&u) && v >= 0.0 && u + v <= 1.0 && tt > 1e-6 && tt < tmax
-        })
-    };
-    let solid: Vec<&Body> = drawn
-        .iter()
-        .filter(|x| {
-            !ghosted.contains(&x.name) && !roi_body(x) && !bending.contains(&x.name) && x.look != Look::Floor
-        })
-        .collect();
-    let seen = aims
-        .iter()
-        .filter(|&&p| !solid.iter().any(|x| hides(x, p)))
-        .count();
-    // the ghosts' cover of the view, on a coarse raster
-    let m = cam.view(size.0, size.1).matrix;
-    let (gw, gh) = (140usize, 86usize);
-    let mut cover = vec![false; gw * gh];
-    for x in drawn.iter().filter(|x| ghosted.contains(&x.name)) {
-        let to = |p: [f32; 3]| {
-            let c = |r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
-            let w = c(3);
-            (w > 1e-6).then(|| {
-                (
-                    ((c(0) / w) + 1.0) * 0.5 * gw as f32,
-                    (1.0 - c(1) / w) * 0.5 * gh as f32,
-                )
-            })
-        };
-        for t in &x.mesh.tri {
-            let [Some(a), Some(b), Some(c)] = t.map(|i| to(x.mesh.pos[i as usize])) else {
-                continue;
-            };
-            let area = (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0);
-            if area.abs() < 1e-6 {
-                continue;
-            }
-            let x0 = a.0.min(b.0).min(c.0).max(0.0) as usize;
-            let x1 = (a.0.max(b.0).max(c.0).ceil().max(0.0) as usize).min(gw);
-            let y0 = a.1.min(b.1).min(c.1).max(0.0) as usize;
-            let y1 = (a.1.max(b.1).max(c.1).ceil().max(0.0) as usize).min(gh);
-            for py in y0..y1 {
-                for px in x0..x1 {
-                    let q = (px as f32 + 0.5, py as f32 + 0.5);
-                    let e = |u: (f32, f32), v: (f32, f32)| {
-                        ((v.0 - u.0) * (q.1 - u.1) - (v.1 - u.1) * (q.0 - u.0)) * area.signum()
-                    };
-                    if e(a, b) >= 0.0 && e(b, c) >= 0.0 && e(c, a) >= 0.0 {
-                        cover[py * gw + px] = true;
-                    }
-                }
-            }
-        }
-    }
-    let ghost = cover.iter().filter(|&&c| c).count() as f32 / (gw * gh) as f32;
-    (seen as f32 / aims.len() as f32, ghost)
-}
-
-/// The see-through measured on the load tray (`BENDSIM_METRIC=1`): at each bend mid-stroke, from
-/// the default view and turned 60, 120 and 180 degrees round it, the watched points seen and the
-/// view ghosted. Off unless asked; prints a table.
-#[test]
-#[ignore]
-fn see_through_measured_on_the_load_tray() {
-    if std::env::var("BENDSIM_METRIC").is_err() {
-        return;
-    }
-    let Some(mut h) = headless() else { return };
-    let part = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../examples/sheetmetal/load_tray.fg"
-    );
-    open(&mut h, part);
-    click(&mut h, "tab:Environments");
-    click(&mut h, "tool:Bend Simulation");
-    let n = h.gui.shell.sheet.bend_sim.as_ref().unwrap().steps();
-    let mut rows = Vec::new();
-    for turn in [0f32, 60.0, 120.0, 180.0] {
-        let (mut vis, mut gh, mut ms) = (0f32, 0f32, 0f64);
-        for k in 0..n {
-            {
-                let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
-                b.follow = true;
-                b.step = k;
-                b.t = 0.6;
-            }
-            for _ in 0..4 {
-                h.step();
-            }
-            if turn != 0.0 {
-                let v = h.gui.view.as_mut().unwrap();
-                let mut c = v.nav.camera;
-                c.yaw += turn.to_radians();
-                v.nav.jump_to(c);
-            }
-            let t0 = std::time::Instant::now();
-            for _ in 0..16 {
-                h.step();
-            }
-            ms += t0.elapsed().as_secs_f64() * 1000.0 / 16.0;
-            let (a, g) = see_metric(&h);
-            vis += a;
-            gh += g;
-        }
-        rows.push((turn, vis / n as f32, gh / n as f32, ms / n as f64));
-    }
-    for (turn, vis, gh, ms) in &rows {
-        eprintln!(
-            "METRIC turn {turn:>5.0}: watched seen {:>5.1} %, view ghosted {:>5.1} %, frame {ms:.1} ms",
-            vis * 100.0,
-            gh * 100.0
-        );
-    }
-}
-
-/// David's see-through, held (the coordinator: view-dependent and minimal): on the load tray at
-/// its last bend's stroke, from the default view and from behind, every watched point (the bend's
-/// zone, the punch's contact) is seen through what hides it, and the ghosts cover little of the
-/// view (before: 88 % seen from behind, 11 % of the view ghosted).
-#[test]
-fn only_what_hides_the_bend_is_seen_through() {
-    let Some(mut h) = headless() else { return };
-    let part = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../examples/sheetmetal/load_tray.fg"
-    );
-    open(&mut h, part);
-    click(&mut h, "tab:Environments");
-    click(&mut h, "tool:Bend Simulation");
-    let last = h.gui.shell.sheet.bend_sim.as_ref().unwrap().steps() - 2;
-    for turn in [0f32, 180.0] {
-        {
-            let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
-            b.follow = true;
-            b.step = last;
-            b.t = 0.6;
-        }
-        for _ in 0..4 {
-            h.step();
-        }
-        if turn != 0.0 {
-            let v = h.gui.view.as_mut().unwrap();
-            let mut c = v.nav.camera;
-            c.yaw += turn.to_radians();
-            v.nav.jump_to(c);
-        }
-        for _ in 0..16 {
-            h.step();
-        }
-        let (seen, ghost) = see_metric(&h);
-        assert!(
-            seen >= 0.97,
-            "turned {turn}: {:.1} % of the bend seen",
-            seen * 100.0
-        );
-        assert!(
-            ghost <= 0.2,
-            "turned {turn}: {:.1} % of the view ghosted",
-            ghost * 100.0
-        );
-        assert!(h.gui.bend.whole());
-    }
-}
-
-/// A staged program's clip (BENDSIM-TOOLS): the part on a library press, its tools laid out as
-/// stations along the bed by the planner, every bend at its station. Off unless BENDSIM_CLIP
-/// names a folder; BENDSIM_CLIP_PART the part, BENDSIM_CLIP_PRESS the press
-/// (default trumpf-trubend-5130). Frames frame-NNNN.ppm, and the plan's stations on stderr.
-#[test]
-fn a_staged_clip() {
-    let (Ok(dir), Ok(part)) = (std::env::var("BENDSIM_CLIP"), std::env::var("BENDSIM_CLIP_PART")) else {
-        return;
-    };
-    let press = std::env::var("BENDSIM_CLIP_PRESS").unwrap_or_else(|_| "trumpf-trubend-5130".into());
-    let Some(mut h) = headless() else { return };
-    open(&mut h, &part);
-    click(&mut h, "tab:Environments");
-    click(&mut h, "tool:Bend Simulation");
-    let choice = Choice {
-        press: Some(press),
-        stations_auto: true,
-        ..Choice::default()
-    };
-    h.gui
-        .shell
-        .sheet
-        .bend_sim
-        .as_mut()
-        .unwrap()
-        .redo(choice, "std-eu");
-    for _ in 0..4 {
-        h.step();
-    }
-    {
-        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
-        let sim = b.sim.as_ref().expect("simulated");
-        assert!(sim.plan.feasible, "{}", h.gui.shell.status);
-        let st = sim.stage.as_ref().expect("a staged program");
-        for (k, s) in st.stations.iter().enumerate() {
-            eprintln!(
-                "station {} {} {} y {} bends {:?}",
-                k + 1,
-                s.punch,
-                s.die,
-                s.y,
-                s.steps
-            );
-        }
-    }
-    // BENDSIM_CLIP_VIEW=overview: the whole press, the eye held (the layout and the part's
-    // moves between stations in view), not following the bend
-    if std::env::var("BENDSIM_CLIP_VIEW").is_ok_and(|v| v == "overview") {
-        h.gui.shell.sheet.bend_sim.as_mut().unwrap().follow = false;
-        frame(&mut h, Framing::Overview);
-        for _ in 0..8 {
-            h.step();
-        }
-    }
-    let total = h
-        .gui
-        .shell
-        .env_timeline()
-        .expect("the timeline")
-        .duration(&h.gui.shell);
-    let n: usize = std::env::var("BENDSIM_CLIP_FRAMES")
-        .ok()
-        .and_then(|x| x.parse().ok())
-        .unwrap_or(360);
-    // settled on the first instant before the first frame
-    h.gui.shell.env_timeline().unwrap().seek(&mut h.gui.shell, 0.0);
-    for _ in 0..20 {
-        h.step();
-    }
-    for i in 0..n {
-        let tl = h.gui.shell.env_timeline().unwrap();
-        tl.seek(&mut h.gui.shell, total * i as f64 / (n - 1) as f64);
-        h.step();
-        std::fs::write(format!("{dir}/frame-{i:04}.ppm"), h.ppm()).unwrap();
-    }
-    eprintln!("clip: {n} frames over {total} s of program");
-}
-
-/// A re-plan never silently replaces what the user set in the bending document (UX-LEAD's P1,
-/// BENDSIM-TOOLS' audit): with the same press and tools it plans the order around the document's
-/// own stations (a station the user moved stays where they put it); another press or tooling asks
-/// first, and replacing is undone by Undo.
-#[test]
-fn a_replan_keeps_the_users_stations() {
-    let Some(mut h) = headless() else { return };
-    enter(&mut h, CHANNEL, "replan", "trumpf-trubend-5130", None);
-    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
-    b.write_doc().expect("the program written");
-    let file = b.companion();
-    let src = std::fs::read_to_string(&file).unwrap();
-    // the user moves the first station 40 mm along the bed
-    let at = src.find("y: ").expect("a station's place") + 3;
-    let end = at + src[at..].find(',').unwrap();
-    let y: f64 = src[at..end].trim().parse().unwrap();
-    let moved = format!("{}{}{}", &src[..at], y + 40.0, &src[end..]);
-    std::fs::write(&file, &moved).unwrap();
-    b.reload();
-    let mine = format!("y: {}", y + 40.0);
-    // simulated again, the same press and tools: planned around the user's stations
-    let (c, t) = (b.choice.clone(), b.tooling.clone());
-    b.redo(c, &t);
-    assert!(b.pending_replace.is_none(), "nothing to ask");
-    let now = std::fs::read_to_string(&file).unwrap();
-    assert!(
-        now.contains(&mine),
-        "the station stays where the user put it:\n{now}"
-    );
-    assert!(b.sim.as_ref().is_ok_and(|s| s.plan.feasible), "{:?}", b.note);
-    // a bend locked where it cannot pass (its station's stacks cut to 10 mm): refused, by name,
-    // nothing written (BENDSIM-TOOLS' replan)
-    let line = now
-        .lines()
-        .find(|l| l.contains("= bend("))
-        .expect("a bend")
-        .to_string();
-    let st = line
-        .split("at: ")
-        .nth(1)
-        .and_then(|r| r.split([',', ')']).next())
-        .expect("its station")
-        .trim()
-        .to_string();
-    let sline = now
-        .lines()
-        .find(|l| l.starts_with(&format!("{st} = station(")))
-        .expect("the station")
-        .to_string();
-    let short = cut_lengths(&sline);
-    let locked = now
-        .replace(&line, &line.replacen(')', ", lock: true)", 1))
-        .replace(&sline, &short);
-    std::fs::write(&file, &locked).unwrap();
-    b.reload();
-    let (c, t) = (b.choice.clone(), b.tooling.clone());
-    b.redo(c, &t);
-    assert_eq!(std::fs::read_to_string(&file).unwrap(), locked, "nothing written");
-    let note = b.note.clone().unwrap_or_default();
-    assert!(
-        note.contains("locked") && note.contains("unlock"),
-        "{note}\n{locked}"
-    );
-    std::fs::write(&file, &now).unwrap();
-    b.reload();
-    // stations laid out afresh: asked first, nothing written until the user says so
-    let mut c = b.choice.clone();
-    c.stations_auto = true;
-    let t = b.tooling.clone();
-    b.redo(c, &t);
-    assert!(b.pending_replace.is_some(), "asked before replacing");
-    assert_eq!(
-        std::fs::read_to_string(&file).unwrap(),
-        now,
-        "nothing written yet"
-    );
-    let ask = b.pending_replace.clone();
-    // Keep mine is the default: Enter keeps, and so does Esc (UX-LEAD)
-    for key in [egui::Key::Enter, egui::Key::Escape] {
-        h.gui.shell.sheet.bend_sim.as_mut().unwrap().pending_replace = ask.clone();
-        h.step();
-        h.step();
-        h.key(key);
-        h.step();
-        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
-        assert!(b.pending_replace.is_none(), "{key:?}: the question answered");
-        assert_eq!(
-            std::fs::read_to_string(&file).unwrap(),
-            now,
-            "{key:?} kept the user's"
-        );
-    }
-    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
-    let (c, t) = ask.unwrap();
-    b.redo_replacing(c, &t);
-    assert!(b.pending_replace.is_none());
-    // replaced, and undone
-    b.doc_step(true).expect("undo");
-    assert!(
-        std::fs::read_to_string(&file).unwrap().contains(&mine),
-        "undo brings the user's station back"
-    );
-}
-
-/// The punch and the part move on one clock (David: "the tool and the part bending do not line
-/// up"): every frame of every step, the punch tip never passes into the sheet, and while the bend
-/// turns the tip stands on the sheet, the turn growing only as the tip goes down. On the bench
-/// tooling and on the TruBend's five stations, whose 300 mm punch stands taller than the press's
-/// 385 mm open height leaves room for (the open height check fails: the punch then stood 15 mm
-/// under the sheet at the stroke's top and came up through the part).
-#[test]
-fn the_punch_meets_the_bend_every_frame() {
-    const TOL: f64 = 0.02;
-    let Some(mut h) = headless() else { return };
-    let part = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../examples/sheetmetal/load_tray.fg"
-    );
-    open(&mut h, part);
-    click(&mut h, "tab:Environments");
-    click(&mut h, "tool:Bend Simulation");
-    for staged in [false, true] {
-        if staged {
-            let c = Choice {
-                press: Some("trumpf-trubend-5130".into()),
-                stations_auto: true,
-                ..Choice::default()
-            };
-            h.gui.shell.sheet.bend_sim.as_mut().unwrap().redo(c, "std-eu");
-            h.step();
-        }
-        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
-        let sim = b.sim.as_ref().unwrap();
-        let mut sc = forge_brake::scene::Scene::new(&sim.model, &sim.tooling, &sim.plan);
-        for k in 0..sim.plan.steps.len() {
-            let rp = sim.tooling.punches[sim.plan.steps[k].setup.punch].tip_radius;
-            // the punch left standing on the sheet only where the open height check fails
-            if sc.pose(k, 0.0).tip <= sc.pose(k, 0.4).tip {
-                let st = &sim.plan.steps[k];
-                assert!(
-                    st.failures()
-                        .iter()
-                        .any(|c| c.rule == forge_brake::sim::Rule::OpenHeight),
-                    "staged {staged} step {k}: no room over the sheet, the open height check passed"
-                );
-            }
-            let mut last: Option<forge_brake::scene::Pose> = None;
-            for i in 0..=120 {
-                let t = i as f64 / 120.0;
-                let pose = sc.pose(k, t);
-                let bodies = sc.bodies(k, t);
-                // the tip's drawn bottom is the pose's (to the arc's sampling: a chord's sag)
-                let low = bodies
-                    .iter()
-                    .filter(|x| x.name.starts_with("punch:") && x.name.ends_with("/tip"))
-                    .flat_map(|x| x.mesh.pos.iter())
-                    .map(|p| p[2] as f64)
-                    .fold(f64::MAX, f64::min);
-                assert!(
-                    (low - pose.tip).abs() < 0.01,
-                    "step {k} t {t}: tip drawn at {low}, posed at {}",
-                    pose.tip
-                );
-                // the sheet's nearest point to the tip's round (inside it: in the punch)
-                let gap = bodies
-                    .iter()
-                    .filter(|x| x.look == forge_brake::scene::Look::BendZone)
-                    .flat_map(|x| x.mesh.pos.iter())
-                    .map(|q| {
-                        let (x, z) = (q[0] as f64, q[2] as f64 - (pose.tip + rp));
-                        (x * x + z * z).sqrt() - rp
-                    })
-                    .fold(f64::MAX, f64::min);
-                let what = format!(
-                    "staged {staged} step {k} t {t:.3} {:?} phi {:.2} tip {:.3} gap {gap:.3}",
-                    pose.stage,
-                    pose.phi.to_degrees(),
-                    pose.tip
-                );
-                use forge_brake::scene::Stage;
-                if pose.stage != Stage::Handle {
-                    assert!(gap > -TOL, "the punch in the sheet: {what}");
-                }
-                if matches!(pose.stage, Stage::Bend | Stage::Springback) {
-                    assert!(gap < TOL, "the bend turns with the punch off the sheet: {what}");
-                }
-                if let Some(a) = last.filter(|a| a.stage == pose.stage && pose.stage == Stage::Bend) {
-                    // the turn grows as the tip goes down, and only then
-                    assert!(
-                        pose.phi >= a.phi && pose.tip <= a.tip,
-                        "the turn against the stroke: {what}"
-                    );
-                    assert_eq!(
-                        pose.phi > a.phi,
-                        pose.tip < a.tip,
-                        "the turn without the stroke: {what}"
-                    );
-                }
-                if let Some(a) = last.filter(|a| pose.stage == Stage::Approach && a.stage == Stage::Approach)
-                {
-                    assert!(pose.tip <= a.tip, "the punch going up on its way down: {what}");
-                }
-                last = Some(pose);
-            }
-        }
-    }
-}
-
-/// UX-LEAD's shots (off unless BENDSIM_SHOTS names a folder): the TruBend's stations, the ones not
-/// at work dimmed; the re-plan question over a written bending document; bend 4's handling
-/// caption on its backing plate.
-#[test]
-fn shots_for_ux_lead() {
-    if std::env::var("BENDSIM_SHOTS").is_err() {
-        return;
-    }
-    let Some(mut h) = headless() else { return };
-    let d = scratch("ux-lead");
-    let f = d.join("load_tray.fg");
-    let src = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../examples/sheetmetal/load_tray.fg"
-    );
-    std::fs::copy(src, &f).unwrap();
-    open(&mut h, f.to_str().unwrap());
-    click(&mut h, "tab:Environments");
-    click(&mut h, "tool:Bend Simulation");
-    let c = Choice {
-        press: Some("trumpf-trubend-5130".into()),
-        stations_auto: true,
-        ..Choice::default()
-    };
-    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
-    b.redo(c, "std-eu");
-    h.step();
-    let n = h
-        .gui
-        .shell
-        .sheet
-        .bend_sim
-        .as_ref()
-        .unwrap()
-        .sim
-        .as_ref()
-        .unwrap()
-        .plan
-        .steps
-        .len();
-    for k in 0..n {
-        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
-        b.playing = false;
-        b.step = k;
-        b.t = 0.6;
-        shot(&mut h, &format!("ux-stations-bend-{}", k + 1));
-    }
-    // bend 4, the operator turning the part: the caption on its plate
-    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
-    b.step = 3.min(n - 1);
-    b.t = 0.07;
-    shot(&mut h, "ux-bend-4-handling");
-    // the re-plan question, over the written document
-    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
-    b.write_doc().expect("the program written");
-    b.reload();
-    b.pending_replace = Some((b.choice.clone(), b.tooling.clone()));
-    shot(&mut h, "ux-replan-question");
-}
-
-/// A station's line with every stack length (`length: N`, `punch_length: N`, `die_length: N`)
-/// cut to 10 mm.
-fn cut_lengths(line: &str) -> String {
-    let mut out = String::new();
-    let mut rest = line;
-    while let Some(i) = rest.find("length: ") {
-        out.push_str(&rest[..i + 8]);
-        rest = &rest[i + 8..];
-        let end = rest.find([',', ')']).unwrap_or(rest.len());
-        out.push_str("10");
-        rest = &rest[end..];
-    }
-    out.push_str(rest);
-    out
 }

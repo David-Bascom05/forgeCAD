@@ -9,7 +9,7 @@ use crate::render::Renderer;
 use crate::scene::{Placement, Scene};
 use crate::shell::bendsim::Framing;
 use crate::shell::env::EnvId;
-use forge_brake::scene::{Body, Look, Mesh};
+use forge_brake::scene::{Body, Look, Mesh, stage_at};
 
 struct Taken {
     renderer: Renderer,
@@ -30,11 +30,9 @@ pub struct BendView {
     ours: Option<u64>,
     /// The camera framed on the press once per entry.
     framed: bool,
-    /// Where the part is at the instant shown (its bounds): what Follow bend keeps in view.
-    part: Option<([f32; 3], [f32; 3])>,
-    /// Follow bend's move under way: from (target, distance), to (target, distance), and the frames
-    /// it has run; held until it is there.
-    goal: Option<(Eye, Eye, u32)>,
+    /// Follow was on the part through the operator's handling at the last instant shown: as it
+    /// ends, the eye goes back to the working zone.
+    handled: bool,
     /// The working station's place along the bed when framed: the part moved to another
     /// station, the eye follows it there.
     station: Option<u64>,
@@ -53,11 +51,6 @@ pub struct BendView {
     /// Each body's see-through state: frames it has blocked running, and how far it has faded
     /// (0 solid, 1 at the set opacity).
     fade: std::collections::HashMap<String, (u8, f32)>,
-    /// How far each press part is cut away (0 there, 1 gone), stepped a frame at a time over
-    /// FADE_FRAMES as it is cut or put back (the coordinator: no part vanishes in one frame).
-    cutfade: std::collections::HashMap<String, f32>,
-    /// What is drawn and seen (the bodies but those wholly cut away).
-    visible: Vec<Body>,
     /// A body is fading in or out, or waiting its frames to.
     fading: bool,
     /// The instant's bodies as the scene makes them (before the cut-away and the x-ray), and the
@@ -68,17 +61,12 @@ pub struct BendView {
     outline: Vec<([[f32; 3]; 2], f32)>,
 }
 
-/// Edges by their welded ends: how many triangles share it (an edge to draw marked half of
-/// usize::MAX), its ends as first seen, whether its first triangle faces the eye, and that
-/// triangle's unit normal.
-type EdgeFaces = std::collections::HashMap<([i64; 3], [i64; 3]), (usize, [f32; 3], [f32; 3], bool, [f32; 3])>;
+/// Edges by their welded ends: how many triangles share it (a silhouette edge marked half of
+/// usize::MAX), its ends as first seen, and whether its first triangle faces the eye.
+type EdgeFaces = std::collections::HashMap<([i64; 3], [i64; 3]), (usize, [f32; 3], [f32; 3], bool)>;
 
-/// The cosine past which two faces meeting at an edge make a crease drawn (about 30 degrees).
-const CREASE_COS: f32 = 0.866;
-
-/// A mesh's outline from `eye`: its silhouette (edges between a triangle facing the eye and one
-/// facing away), its creases (faces meeting at more than about 30 degrees: its shape, so a ghost
-/// reads in depth) and its open edges (the mesh's corners welded to a hundredth of a millimetre).
+/// A mesh's silhouette from `eye`: its edges between a triangle facing the eye and one facing
+/// away, and its open edges (the mesh's corners welded to a hundredth of a millimetre).
 pub fn silhouette(m: &Mesh, eye: [f32; 3]) -> Vec<[[f32; 3]; 2]> {
     let key = |p: [f32; 3]| p.map(|v| (v * 100.0).round() as i64);
     let mut faces = EdgeFaces::new();
@@ -93,21 +81,16 @@ pub fn silhouette(m: &Mesh, eye: [f32; 3]) -> Vec<[[f32; 3]; 2]> {
             u[2] * v[0] - u[0] * v[2],
             u[0] * v[1] - u[1] * v[0],
         ];
-        let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-        if len < 1e-12 {
-            continue;
-        }
-        let n = n.map(|x| x / len);
         let to = [eye[0] - a[0], eye[1] - a[1], eye[2] - a[2]];
         let front = n[0] * to[0] + n[1] * to[1] + n[2] * to[2] > 0.0;
         for (p, q) in [(a, b), (b, c), (c, a)] {
             let (kp, kq) = (key(p), key(q));
             let k = if kp <= kq { (kp, kq) } else { (kq, kp) };
-            let e = faces.entry(k).or_insert((0, p, q, front, n));
+            let e = faces.entry(k).or_insert((0, p, q, front));
             e.0 += 1;
-            let crease = e.4[0] * n[0] + e.4[1] * n[1] + e.4[2] * n[2] < CREASE_COS;
-            if e.0 > 1 && e.0 < usize::MAX / 2 && (e.3 != front || crease) {
-                // one face each way, or a crease: drawn
+            if e.0 > 1 && e.3 != front {
+                // one face each way: on the silhouette
+                e.3 = !front;
                 e.0 = usize::MAX / 2;
             }
         }
@@ -129,19 +112,6 @@ pub const XRAY_SHADE: f32 = 0.25;
 pub const XRAY_BLUE: [f32; 3] = [0.3, 0.46, 0.75];
 pub const XRAY_MIX: f32 = 0.3;
 pub const XRAY_LINE: [f32; 3] = [0.045, 0.11, 0.3];
-
-/// An eye as Follow bend moves it: its target and its distance.
-type Eye = ([f32; 3], f32);
-
-/// Follow bend's safe area: the part's middle may stray this far from the frame's (normalised
-/// device coordinates, a half-width) before the eye pans; and the frames a move takes (half a
-/// second at 30 a second), eased from rest to rest.
-pub const FOLLOW_SAFE: f32 = 0.6;
-pub const FOLLOW_FRAMES: u32 = 15;
-
-/// The profile view's yaw and pitch (degrees): looking along +y, down the bend line.
-pub const PROFILE_YAW: f32 = 262.0;
-pub const PROFILE_PITCH: f32 = 12.0;
 
 /// Frames a body must block the bend for, running, before it starts to fade (hysteresis).
 pub const FADE_AFTER: u8 = 3;
@@ -212,25 +182,6 @@ fn appearances() -> &'static crate::studio::appearance::Appearances {
 /// its neutral default), black-oxide backgauge, concrete floor; the sheet in its forge-material's
 /// appearance, or a neutral matte sheet when the material is not known; failing bodies red.
 pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
-    let t = own_tint(b, material);
-    // the other stations' tools dimmed (UX-LEAD, BENDSIM-TOOLS): the station working is the
-    // tools as they are, solid steel; the others there, set back, a light neutral and matte
-    if b.look == Look::Tool && b.name.starts_with("station") && !b.hit {
-        return [0, 1, 2, 3].map(|k| match k {
-            3 => t[3] * STATION_DIM_METAL,
-            _ => t[k] + (STATION_DIM_TO - t[k]) * STATION_DIM,
-        });
-    }
-    t
-}
-
-/// How far the other stations' tools are set back toward a light neutral, that neutral, and what
-/// of their metal's sheen they keep.
-pub const STATION_DIM: f32 = 0.8;
-pub const STATION_DIM_TO: f32 = 0.85;
-pub const STATION_DIM_METAL: f32 = 0.1;
-
-fn own_tint(b: &Body, material: Option<&str>) -> [f32; 4] {
     let id = if b.hit {
         "highlight-red"
     } else {
@@ -280,7 +231,6 @@ pub fn framing(
     envelope: Option<([f32; 3], [f32; 3])>,
     how: Framing,
     handling: bool,
-    profile: bool,
     size: (u32, u32),
 ) -> Option<(crate::camera::Camera, [f32; 3], [f32; 3])> {
     let (mut lo, mut hi) = match envelope {
@@ -342,13 +292,9 @@ pub fn framing(
     ];
     let radius = 0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
     let mut cam = crate::camera::Camera::fit(center, radius);
-    // the working view three-quarter from the operator's side and above; or (profile) end on,
-    // down the bend line from the bed's end, a little toward the operator and above: the bend's
-    // profile, as press-brake simulations show it (David to choose)
-    let (yaw, pitch) = match (how, profile) {
-        (Framing::Work, false) => (215f32, 28f32),
-        (Framing::Work, true) => (PROFILE_YAW, PROFILE_PITCH),
-        (Framing::Overview, _) => (220f32, 20f32),
+    let (yaw, pitch) = match how {
+        Framing::Work => (215f32, 28f32),
+        Framing::Overview => (220f32, 20f32),
     };
     cam.yaw = yaw.to_radians();
     cam.pitch = pitch.to_radians();
@@ -466,154 +412,85 @@ pub fn cutaway(
         .collect()
 }
 
-/// What the user watches (David): points on the bend being made (the zone's top, along it),
-/// on the punch tip where it meets the sheet, on the free edge of the flange swinging up (the
-/// coordinator), and on any check's witness. A body is seen through
-/// only where it stands between the eye and these.
-pub fn roi_samples(bodies: &[Body]) -> Vec<[f32; 3]> {
-    // up to `n` of a mesh's points, spread along its length (y: along the bed)
-    fn spread(pts: Vec<[f32; 3]>, n: usize) -> Vec<[f32; 3]> {
-        if pts.len() <= n {
-            return pts;
-        }
-        let mut pts = pts;
-        pts.sort_by(|a, b| {
-            a[1].total_cmp(&b[1])
-                .then(a[2].total_cmp(&b[2]))
-                .then(a[0].total_cmp(&b[0]))
-        });
-        (0..n).map(|k| pts[k * (pts.len() - 1) / (n - 1)]).collect()
-    }
-    let mut out = Vec::new();
-    out.extend(spread(zone_top(bodies), 48));
-    // the tip's contact edge: its points within a millimetre of its lowest
-    let tips: Vec<&Body> = bodies
-        .iter()
-        .filter(|x| x.name.starts_with("punch:") && x.name.ends_with("/tip"))
-        .collect();
-    if let Some(low) = tips
-        .iter()
-        .flat_map(|x| x.mesh.pos.iter())
-        .map(|p| p[2])
-        .reduce(f32::min)
-    {
-        let edge: Vec<[f32; 3]> = tips
-            .iter()
-            .flat_map(|x| x.mesh.pos.iter().copied())
-            .filter(|p| p[2] <= low + 1.0)
-            .collect();
-        out.extend(spread(edge, 16));
-    }
-    // the flange swinging up (a piece beside the bend that rises over it): its free edge, the
-    // points of it farthest from the bend, so a flange swinging toward the ram stays in sight
-    let zb = bounds(
+/// Where on the screen the bend being made and the punch's contact are, grown by a small
+/// margin (normalised device coordinates: xmin, xmax, ymin, ymax), and how far from the eye
+/// they begin (clip w): a body with something nearer than that inside it hides the bend.
+pub fn xray_window(bodies: &[Body], m: &[f32; 16]) -> Option<([f32; 4], f32)> {
+    let zone = bounds(
         bodies
             .iter()
             .filter(|x| x.look == Look::BendZone)
             .map(|x| &x.mesh),
-    );
-    if let Some((zl, zh)) = zb {
-        let zc = [0, 1, 2].map(|k| 0.5 * (zl[k] + zh[k]));
-        for x in bodies.iter().filter(|x| bending(x, zb)) {
-            let Some((_, top)) = x.mesh.bounds() else { continue };
-            if top[2] <= zh[2] + 1.0 {
+    )?;
+    let (lo, hi) = zone;
+    let mut aims: Vec<[f32; 3]> = (0..8)
+        .map(|k| [0, 1, 2].map(|i| if k >> i & 1 == 0 { lo[i] } else { hi[i] }))
+        .collect();
+    for x in bodies
+        .iter()
+        .filter(|x| x.name.starts_with("punch:") && x.name.ends_with("/tip"))
+    {
+        if let Some(p) = x.mesh.pos.iter().min_by(|a, b| a[2].total_cmp(&b[2])) {
+            aims.push(*p);
+        }
+    }
+    let clip = |p: [f32; 3], r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
+    let (mut x0, mut x1, mut y0, mut y1, mut w0) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN, f32::MAX);
+    for p in &aims {
+        let w = clip(*p, 3);
+        if w <= 1e-6 {
+            return None;
+        }
+        let (x, y) = (clip(*p, 0) / w, clip(*p, 1) / w);
+        x0 = x0.min(x);
+        x1 = x1.max(x);
+        y0 = y0.min(y);
+        y1 = y1.max(y);
+        w0 = w0.min(w);
+    }
+    // a margin round it: a tenth of its size, at least a fiftieth of the view
+    let (mx, my) = ((0.1 * (x1 - x0)).max(0.04), (0.1 * (y1 - y0)).max(0.04));
+    Some(([x0 - mx, x1 + mx, y0 - my, y1 + my], w0 * 0.995))
+}
+
+/// Whether a mesh hides the bend: some triangle of it, clipped to the window's frustum (its
+/// sides and nearer the eye than `wmax`, planes in clip space: Sutherland-Hodgman), is left
+/// with an area. The body is only tested, never cut: it is seen through whole or not at all.
+pub fn xray_blocks(mesh: &Mesh, m: &[f32; 16], win: [f32; 4], wmax: f32) -> bool {
+    let clip = |p: [f32; 3], r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
+    let planes: [&dyn Fn([f32; 3]) -> f32; 5] = [
+        &|p| clip(p, 0) - win[0] * clip(p, 3),
+        &|p| win[1] * clip(p, 3) - clip(p, 0),
+        &|p| clip(p, 1) - win[2] * clip(p, 3),
+        &|p| win[3] * clip(p, 3) - clip(p, 1),
+        &|p| wmax - clip(p, 3),
+    ];
+    mesh.tri.iter().any(|t| {
+        let mut poly: Vec<[f32; 3]> = t.iter().map(|&i| mesh.pos[i as usize]).collect();
+        for f in &planes {
+            let d: Vec<f32> = poly.iter().map(|&v| f(v)).collect();
+            if d.iter().all(|&x| x >= 0.0) {
                 continue;
             }
-            let far = |p: &[f32; 3]| (p[0] - zc[0]).powi(2) + (p[2] - zc[2]).powi(2);
-            let reach = x.mesh.pos.iter().map(far).fold(0f32, f32::max);
-            let edge: Vec<[f32; 3]> = x
-                .mesh
-                .pos
-                .iter()
-                .filter(|p| far(p) >= reach * 0.98)
-                .copied()
-                .collect();
-            out.extend(spread(edge, 12));
-        }
-    }
-    let wit: Vec<[f32; 3]> = bodies
-        .iter()
-        .filter(|x| x.look == Look::Witness)
-        .flat_map(|x| x.mesh.pos.iter().copied())
-        .collect();
-    out.extend(spread(wit, 8));
-    out
-}
-
-/// The bend zone's top along the bend line: at each place along it (to half a millimetre), its
-/// highest point; the bend as one looks onto it, not its outside, which lies in the die's V.
-pub fn zone_top(bodies: &[Body]) -> Vec<[f32; 3]> {
-    let mut top: std::collections::BTreeMap<i64, [f32; 3]> = Default::default();
-    for p in bodies
-        .iter()
-        .filter(|x| x.look == Look::BendZone)
-        .flat_map(|x| x.mesh.pos.iter())
-    {
-        let e = top.entry((p[1] * 2.0).round() as i64).or_insert(*p);
-        if p[2] > e[2] {
-            *e = *p;
-        }
-    }
-    top.into_values().collect()
-}
-
-/// How many of `aims` a mesh hides from `eye`: the segment to each, short of it by half a
-/// millimetre, passing through one of its triangles (Moller-Trumbore; its box first).
-pub fn roi_blocked(mesh: &Mesh, eye: [f32; 3], aims: &[[f32; 3]]) -> usize {
-    let Some((lo, hi)) = mesh.bounds() else {
-        return 0;
-    };
-    let sub = |a: [f32; 3], b: [f32; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-    let dot = |a: [f32; 3], b: [f32; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-    let cross = |a: [f32; 3], b: [f32; 3]| {
-        [
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0],
-        ]
-    };
-    aims.iter()
-        .filter(|&&p| {
-            let d = sub(p, eye);
-            let len = dot(d, d).sqrt();
-            if len < 1e-3 {
+            let mut keep = Vec::new();
+            for i in 0..poly.len() {
+                let j = (i + 1) % poly.len();
+                if d[i] >= 0.0 {
+                    keep.push(poly[i]);
+                }
+                if (d[i] >= 0.0) != (d[j] >= 0.0) {
+                    let t = d[i] / (d[i] - d[j]);
+                    keep.push([0, 1, 2].map(|k| poly[i][k] + (poly[j][k] - poly[i][k]) * t));
+                }
+            }
+            poly = keep;
+            if poly.len() < 3 {
                 return false;
             }
-            // short of the aim, so a surface it lies on does not hide it
-            let tmax = 1.0 - 0.5 / len;
-            let end = [0, 1, 2].map(|k| eye[k] + d[k] * tmax);
-            if !hits(eye, end, lo, hi) {
-                return false;
-            }
-            mesh.tri.iter().any(|t| {
-                let [a, b, c] = t.map(|i| mesh.pos[i as usize]);
-                let (e1, e2) = (sub(b, a), sub(c, a));
-                let h = cross(d, e2);
-                let det = dot(e1, h);
-                if det.abs() < 1e-12 {
-                    return false;
-                }
-                let f = 1.0 / det;
-                let s0 = sub(eye, a);
-                let u = f * dot(s0, h);
-                if !(0.0..=1.0).contains(&u) {
-                    return false;
-                }
-                let q = cross(s0, e1);
-                let v = f * dot(d, q);
-                if v < 0.0 || u + v > 1.0 {
-                    return false;
-                }
-                let tt = f * dot(e2, q);
-                tt > 1e-6 && tt < tmax
-            })
-        })
-        .count()
+        }
+        true
+    })
 }
-
-/// A body hides the bend when it hides at least this share of what is watched (and two points at
-/// least): a corner grazing one line of sight does not.
-pub const ROI_SHARE: f32 = 0.03;
 
 /// Whether a piece of the part is the bend being made or a wall either side of it (it touches
 /// the bend zone): never seen through.
@@ -625,17 +502,23 @@ fn bending(x: &Body, zone: Option<([f32; 3], [f32; 3])>) -> bool {
         }
 }
 
-/// The bodies that may be seen through: anything but the bend being made and the walls either
-/// side of it, a punch's tip (the contact), the floor and a witness; what is drawn red too, in its
-/// red. Whether one is, is the eye's: only when it hides what is watched (`roi_blocked`), the die
-/// and the bed included (seen low, a die's shoulder hides the bend in its V).
-fn xray_candidate(x: &Body, zone: Option<([f32; 3], [f32; 3])>) -> bool {
-    match x.look {
-        Look::Sheet => !bending(x, zone),
-        Look::Tool => !x.name.ends_with("/tip"),
-        Look::Frame | Look::Gauge => true,
-        Look::BendZone | Look::Floor | Look::Witness => false,
-    }
+/// The bodies that may be seen through, from `eye`: anything but the bend being made and the
+/// walls either side of it, a punch's tip (the contact), the floor, a witness and what is drawn
+/// red. A die, and what stands no higher than the dies' top (the bed), only from below its top
+/// (UX-LEAD): from above it cannot hide the bend line.
+fn xray_candidate(x: &Body, zone: Option<([f32; 3], [f32; 3])>, die_top: Option<f32>, eye: [f32; 3]) -> bool {
+    let low = match (die_top, x.mesh.bounds()) {
+        (Some(d), Some((_, top))) => (x.name.contains("die:") || top[2] <= d + 0.5) && eye[2] >= top[2],
+        _ => false,
+    };
+    !x.hit
+        && !low
+        && match x.look {
+            Look::Sheet => !bending(x, zone),
+            Look::Tool => !x.name.ends_with("/tip"),
+            Look::Frame | Look::Gauge => true,
+            Look::BendZone | Look::Floor | Look::Witness => false,
+        }
 }
 
 impl BendView {
@@ -649,7 +532,7 @@ impl BendView {
         let mut out = Vec::new();
         for (e, level) in &self.outline {
             let [r, g, b] = XRAY_LINE;
-            crate::origin::polyline(e, 1.0, [r, g, b, 0.85 * level], camera, size, &mut out);
+            crate::origin::polyline(e, 1.0, [r, g, b, 0.6 * level], camera, size, &mut out);
         }
         out
     }
@@ -657,11 +540,6 @@ impl BendView {
     /// The names of what is drawn now.
     pub fn drawn_names(&self) -> Vec<String> {
         self.bodies.iter().map(|x| x.name.clone()).collect()
-    }
-
-    /// What is drawn now, whole (not what is wholly cut away).
-    pub fn drawn(&self) -> &[Body] {
-        &self.visible
     }
 
     /// What is drawn seen through now.
@@ -740,7 +618,6 @@ impl Gui {
         let step = b.step.min(n - 1);
         let key = (sim as *const _ as usize, step, b.t.to_bits());
         if self.bend.shown == Some(key) && b.frame.is_none() {
-            self.bendsim_follow();
             self.bendsim_see_through();
             return;
         }
@@ -749,74 +626,77 @@ impl Gui {
             sc.table_height = h;
         }
         let bodies = sc.bodies(step, b.t);
-        // the station the step works at (along the bed)
+        // framed: on entry, when asked (the View tools, F), and when the part moves to another
+        // station (a new subject); held through the step otherwise
         let at = {
-            let st = &sim.plan.steps[step];
-            st.station
-                .and_then(|k| sim.tooling.stations.get(k))
-                .map(|x| x.y.to_bits())
+            let st = &sim.plan.steps[step].setup;
+            sim.tooling.station(st.punch, st.die).map(|x| x.y.to_bits())
         };
         let ask = b.frame;
-        // framed on entry and when asked (the View tools, F); otherwise the eye stands still as an
-        // operator's does at the brake, Follow bend only panning it down the bed (David: the
-        // camera stays still for the part's small motions and mostly pans down the line)
+        // with Follow bend, each new step is framed afresh, and through the operator's handling
+        // the eye keeps on the part (it alone, clear of the press), settling back on the working
+        // zone as it returns to the tools; otherwise the eye is the user's
+        let moved = self.bend.framed && b.follow && self.bend.step != Some(step);
+        let handling = b.follow && stage_at(b.t).0 == forge_brake::scene::Stage::Handle;
         let first = !self.bend.framed;
+        let back = self.bend.handled && !handling && b.follow;
+        self.bend.handled = handling;
         let mut eye = None;
-        if first || ask.is_some() {
+        if first || ask.is_some() || moved || back || (handling && self.bend.framed) {
             let how = ask.unwrap_or(Framing::Work);
-            // the part's whole motion at the tools at this station, every step made there: the eye
-            // then stands still through them (David), panning only when the part moves station;
-            // the operator's handling (the pull out toward the operator, the turns) is not fitted
-            // (fitting it draws the eye far back): it may pass out of the frame's edge and back
+            // the part's whole motion through the step at the tools, from gauging to the ram's
+            // return (kept for the step), and where the part is now
             let envelope = match how {
+                Framing::Work if handling => {
+                    bounds(bodies.iter().filter(|x| x.look.is_sheet()).map(|x| &x.mesh))
+                }
                 Framing::Work => {
-                    // the step's own station (BENDSIM-TOOLS' Step.station: a punch and die may
-                    // stand at two stations)
-                    let here = |k: usize| {
-                        let st = &sim.plan.steps[k];
-                        st.station
-                            .and_then(|j| sim.tooling.stations.get(j))
-                            .map(|x| x.y.to_bits())
-                    };
-                    let samples: Vec<Vec<Body>> = (0..n)
-                        .filter(|&k| here(k) == at)
-                        .flat_map(|k| [0.2, 0.35, 0.5, 0.6, 0.7, 0.78, 0.9].map(|tt| (k, tt)))
-                        .map(|(k, tt)| sc.bodies(k, tt))
-                        .collect();
-                    let env = bounds(
-                        samples
+                    let kept = self.bend.envelope.filter(|e| e.0 == step).map(|e| (e.1, e.2));
+                    let env = kept.or_else(|| {
+                        let samples: Vec<Vec<Body>> = [0.2, 0.35, 0.5, 0.6, 0.7, 0.78, 0.9]
                             .iter()
-                            .flatten()
-                            .filter(|x| x.look.is_sheet())
-                            .map(|x| &x.mesh),
-                    );
+                            .map(|&tt| sc.bodies(step, tt))
+                            .collect();
+                        bounds(
+                            samples
+                                .iter()
+                                .flatten()
+                                .filter(|x| x.look.is_sheet())
+                                .map(|x| &x.mesh),
+                        )
+                    });
                     if let Some((a, c)) = env {
                         self.bend.envelope = Some((step, a, c));
                     }
-                    env
+                    let now = bounds(bodies.iter().filter(|x| x.look.is_sheet()).map(|x| &x.mesh));
+                    match (env, now) {
+                        (Some((a, c)), Some((p, q))) => Some((
+                            [0, 1, 2].map(|k| a[k].min(p[k])),
+                            [0, 1, 2].map(|k| c[k].max(q[k])),
+                        )),
+                        (e, n) => e.or(n),
+                    }
                 }
                 Framing::Overview => None,
             };
-            if let Some((cam, lo, hi)) = framing(&bodies, envelope, how, false, b.profile, v.size) {
+            if let Some((cam, lo, hi)) = framing(&bodies, envelope, how, handling, v.size) {
                 self.bend.subject = (how == Framing::Work).then_some((lo, hi));
-                if how == Framing::Work {
+                if how == Framing::Work && !handling {
                     // the cube's home is the working zone
                     v.nav.home_view = Some(cam);
                 }
-                eye = Some((cam, first));
+                // tracking the handling is continuous: placed, not travelled to
+                eye = Some((cam, first || (handling && !moved && ask.is_none())));
             }
             self.bend.framed = true;
-            self.bend.goal = None;
+            self.bend.station = at;
+            self.bend.step = Some(step);
         }
-        self.bend.station = at;
-        self.bend.step = Some(step);
-        // where the part is now: what Follow bend keeps in view
-        self.bend.part = bounds(bodies.iter().filter(|x| x.look.is_sheet()).map(|x| &x.mesh));
         if let Some(b) = self.shell.sheet.bend_sim.as_mut() {
             b.frame = None;
         }
         match eye {
-            // on entry the eye is placed; asked for, it travels there
+            // on entry the eye is placed; asked for or followed, it travels there
             Some((cam, true)) => v.nav.jump_to(cam),
             Some((cam, false)) => v.nav.go_to(cam),
             None => {}
@@ -831,82 +711,7 @@ impl Gui {
         self.bend.raw = bodies;
         self.bend.derived = None;
         self.bend.shown = Some(key);
-        self.bendsim_follow();
         self.bendsim_see_through();
-    }
-
-    /// Follow bend as an operator watches (David): the eye keeps its orientation and distance (the
-    /// user's own, after an orbit); while the part stays in the frame's middle 60 % it does not
-    /// move (sliding to the stop, lifting, the ram's stroke, a flange's swing, a turn over); when
-    /// it leaves that, the eye pans along the bed (y) to it; only when it would leave the frame is
-    /// it brought back whole, and only when it cannot fit does the eye draw back, once. Every move
-    /// eased a fraction a frame (no cut, no overshoot, counted in frames: a recording is the same
-    /// each time), and a move once begun is finished before another is chosen (no hunting).
-    fn bendsim_follow(&mut self) {
-        let Some(v) = &mut self.view else { return };
-        let Some(b) = self.shell.sheet.bend_sim.as_mut() else {
-            return;
-        };
-        if !b.follow || !self.bend.framed {
-            self.bend.goal = None;
-            return;
-        }
-        let Some((lo, hi)) = self.bend.part else { return };
-        let mut cam = v.nav.camera;
-        // the operator's handling (the pull out, the turns) starts no move: the eye stands still
-        // through it and the part comes back to the tools where the eye is (David)
-        let handling = forge_brake::scene::stage_at(b.t).0 == forge_brake::scene::Stage::Handle;
-        if self.bend.goal.is_none() && !handling {
-            let m = cam.view(v.size.0.max(1), v.size.1.max(1)).matrix;
-            let ndc = |p: [f32; 3]| {
-                let c = |r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
-                let w = c(3).max(1e-6);
-                (c(0) / w, c(1) / w)
-            };
-            let mid = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
-            let (mut x0, mut x1, mut y0, mut y1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
-            for k in 0..8 {
-                let (x, y) = ndc([0, 1, 2].map(|i| if k >> i & 1 == 0 { lo[i] } else { hi[i] }));
-                (x0, x1, y0, y1) = (x0.min(x), x1.max(x), y0.min(y), y1.max(y));
-            }
-            let span = (x1 - x0).max(y1 - y0);
-            // near the frame's edge (a margin ahead of it, so the move is under way before it gets there)
-            let out = x0 < -0.85 || x1 > 0.85 || y0 < -0.85 || y1 > 0.85;
-            let (cx, cy) = ndc(mid);
-            let from = (cam.target, cam.dist);
-            if span > 1.9 {
-                // cannot fit: drawn back to fit it at about three-quarters, centred
-                self.bend.goal = Some((from, (mid, cam.dist * span / 1.5), 0));
-            } else if out {
-                self.bend.goal = Some((from, (mid, cam.dist), 0));
-            } else if cx.abs() > FOLLOW_SAFE || cy.abs() > FOLLOW_SAFE {
-                let mut t = cam.target;
-                t[1] = mid[1];
-                self.bend.goal = Some((from, (t, cam.dist), 0));
-            }
-        }
-        let Some(((t0, d0), (t1, d1), f)) = self.bend.goal else {
-            return;
-        };
-        // a smoothstep from rest to rest over FOLLOW_FRAMES: no jolt at the start, no overshoot
-        let f = f + 1;
-        let p = (f as f32 / FOLLOW_FRAMES as f32).min(1.0);
-        let e = p * p * (3.0 - 2.0 * p);
-        let before = cam.target;
-        cam.target = [0, 1, 2].map(|k| t0[k] + (t1[k] - t0[k]) * e);
-        cam.dist = d0 + (d1 - d0) * e;
-        self.bend.goal = (p < 1.0).then_some(((t0, d0), (t1, d1), f));
-        // the cut-away's subject moves with the eye
-        if let Some((a, c)) = self.bend.subject.as_mut() {
-            for k in 0..3 {
-                let dk = cam.target[k] - before[k];
-                a[k] += dk;
-                c[k] += dk;
-            }
-        }
-        v.nav.jump_to(cam);
-        v.dirty = true;
-        b.settle = b.settle.max(2);
     }
 
     /// What is drawn, kept up with the eye: the instant's bodies, the press's near walls cut
@@ -927,6 +732,7 @@ impl Gui {
             return;
         }
         self.bend.derived = Some(key);
+        let m = cam.view(v.size.0.max(1), v.size.1.max(1)).matrix;
         // the cut-away, for this eye and the press as it stands at this instant (the ram comes
         // down through the picture as a bend forms: it is cut as it does)
         self.bend.cut = match self.bend.subject {
@@ -934,46 +740,29 @@ impl Gui {
             None => Vec::new(),
         };
         let cut = self.bend.cut.clone();
-        // the cut-away faded in and out over FADE_FRAMES; a part first seen starts as it is
-        let step = 1.0 / FADE_FRAMES as f32;
-        let mut cutting = false;
-        let raw_names: Vec<String> = self.bend.raw.iter().map(|x| x.name.clone()).collect();
-        self.bend.cutfade.retain(|n, _| raw_names.contains(n));
-        for n in &raw_names {
-            let target = if cut.contains(n) { 1.0 } else { 0.0 };
-            let e = self.bend.cutfade.entry(n.clone()).or_insert(target);
-            *e = if *e < target {
-                (*e + step).min(target)
-            } else {
-                (*e - step).max(target)
-            };
-            cutting |= *e != target;
-        }
-        let cutfade = self.bend.cutfade.clone();
-        let cut_level = |n: &str| cutfade.get(n).copied().unwrap_or(0.0);
-        // all drawn (a part wholly cut away an unseen ghost: it still casts its shadow, so the
-        // floor's light does not jump as it goes); a part being cut is no see-through candidate
-        let working: Vec<&Body> = self.bend.raw.iter().collect();
-        // the x-ray, from this eye: a candidate hiding enough of what is watched (the bend's zone,
-        // the punch's contact, a witness) from it
+        let working: Vec<&Body> = self.bend.raw.iter().filter(|x| !cut.contains(&x.name)).collect();
+        // the x-ray: a candidate with something inside the window round the bend, nearer than the
+        // bend, blocks it
         let zone = bounds(
             working
                 .iter()
                 .filter(|x| x.look == Look::BendZone)
                 .map(|x| &x.mesh),
         );
-        // worked out even with see-through off: what is still fading out keeps fading until it is
-        // solid again
-        let aims = roi_samples(&self.bend.raw);
-        let need = ((aims.len() as f32 * ROI_SHARE).ceil() as usize).max(2);
+        // the window is worked out even with see-through off: what is still fading out keeps
+        // fading until it is solid again
+        let window = xray_window(&self.bend.raw, &m);
         let see = b.see_through;
         let mut blocks: std::collections::HashSet<String> = Default::default();
-        if !aims.is_empty() {
-            for x in working
+        if let Some((win, wmax)) = window {
+            let die_top = working
                 .iter()
-                .filter(|x| cut_level(&x.name) == 0.0 && xray_candidate(x, zone))
-            {
-                if roi_blocked(&x.mesh, eye, &aims) >= need {
+                .filter(|x| x.name.contains("die:"))
+                .filter_map(|x| x.mesh.bounds())
+                .map(|(_, top)| top[2])
+                .reduce(f32::max);
+            for x in working.iter().filter(|x| xray_candidate(x, zone, die_top, eye)) {
+                if xray_blocks(&x.mesh, &m, win, wmax) {
                     blocks.insert(x.name.clone());
                 }
             }
@@ -981,7 +770,7 @@ impl Gui {
         // hysteresis and a fade, counted in frames (deterministic when recorded): a body must
         // block for FADE_AFTER frames running before it starts to fade, and fades in or out over
         // FADE_FRAMES frames, so a body grazing the line of sight does not flicker
-        let mut moving = cutting;
+        let mut moving = false;
         let names: Vec<String> = working.iter().map(|x| x.name.clone()).collect();
         self.bend.fade.retain(|n, _| names.contains(n));
         for n in &names {
@@ -1027,7 +816,6 @@ impl Gui {
         let names: Vec<String> = drawn.iter().map(|x| x.name.clone()).collect();
         let mut scene = Scene::new(&info, placements);
         scene.set_explode(0.0);
-        scene.ghost_shadows = true;
         if names == self.bend.names && self.bend.taken.is_some() {
             v.renderer.set_parts(&parts);
             v.renderer.set_tints(&scene);
@@ -1069,11 +857,9 @@ impl Gui {
         for &(k, level) in &xray {
             v.scene.set_ghost(k, true);
             let t = tint(&drawn[k], material);
-            // a failing body keeps its red (no blue mixed in): what fails still reads as failing
-            let blue = if drawn[k].hit { 0.0 } else { XRAY_MIX };
             let c = [0, 1, 2].map(|i| {
                 let t = t[i] * (1.0 - (1.0 - XRAY_SHADE) * level);
-                t + (XRAY_BLUE[i] - t) * blue * level
+                t + (XRAY_BLUE[i] - t) * XRAY_MIX * level
             });
             let to8 = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
             let alpha = 1.0 - level * (1.0 - opacity);
@@ -1084,30 +870,6 @@ impl Gui {
             });
             outline.extend(silhouette(&drawn[k].mesh, eye).into_iter().map(|e| (e, level)));
         }
-        // a press part being cut away or put back: in its own colour, fading (a cut, not an x-ray)
-        for (k, x) in drawn.iter().enumerate() {
-            let level = cut_level(&x.name);
-            if level <= 0.0 || xray.iter().any(|&(j, _)| j == k) {
-                continue;
-            }
-            v.scene.set_ghost(k, true);
-            if level >= 1.0 {
-                // wholly cut away: not drawn, its shadow kept
-                continue;
-            }
-            let t = tint(x, material);
-            let to8 = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
-            self.bend.ghosts.push(crate::render::FaceColour {
-                placement: k as u32,
-                face: 0,
-                rgba: [to8(t[0]), to8(t[1]), to8(t[2]), to8(1.0 - level)],
-            });
-        }
-        self.bend.visible = drawn
-            .iter()
-            .filter(|x| cut_level(&x.name) < 1.0)
-            .cloned()
-            .collect();
         self.bend.outline = outline;
         self.bend.bodies = drawn;
         self.bend.ours = Some(v.renderer.geometry());
@@ -1120,8 +882,7 @@ impl Gui {
 
     fn bendsim_put_back(&mut self) {
         self.bend.framed = false;
-        self.bend.part = None;
-        self.bend.goal = None;
+        self.bend.handled = false;
         self.bend.cut.clear();
         self.bend.subject = None;
         self.bend.raw.clear();
@@ -1132,8 +893,6 @@ impl Gui {
         self.bend.bodies.clear();
         self.bend.ghosts.clear();
         self.bend.fade.clear();
-        self.bend.cutfade.clear();
-        self.bend.visible.clear();
         self.bend.fading = false;
         self.bend.outline.clear();
         self.bend.step = None;
@@ -1147,35 +906,5 @@ impl Gui {
             v.nav.fit_all(&v.scene);
             v.dirty = true;
         }
-    }
-}
-
-#[cfg(test)]
-mod station_tests {
-    use super::*;
-
-    fn tool(name: &str) -> Body {
-        Body {
-            name: name.into(),
-            look: Look::Tool,
-            mesh: Mesh::default(),
-            hit: false,
-            strip: None,
-        }
-    }
-
-    #[test]
-    fn the_stations_not_working_are_set_back() {
-        let working = tint(&tool("punch:trumpf/OW300-S/body"), None);
-        let other = tint(&tool("station3:punch:trumpf/OW300-S/body"), None);
-        let lum = |c: [f32; 4]| c[0] + c[1] + c[2];
-        assert!(lum(other) > lum(working), "lighter: {other:?} vs {working:?}");
-        assert!(other[3] < working[3], "less metal: {other:?} vs {working:?}");
-        // a failing tool keeps its red wherever it stands
-        let mut red = tool("station3:punch:trumpf/OW300-S/body");
-        red.hit = true;
-        let mut red_here = tool("punch:trumpf/OW300-S/body");
-        red_here.hit = true;
-        assert_eq!(tint(&red, None), tint(&red_here, None));
     }
 }

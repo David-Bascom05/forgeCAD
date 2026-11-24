@@ -12,7 +12,7 @@ rests on propext, Classical.choice and Quot.sound only). CI: .github/workflows/s
 | Rules.lean | `BA_from_rule`, `ktable_physical`, `allowance_physical` (per-row κ check suffices), K ↔ BA, `s_eq_setback` (ISSB/OSSB), `flat_length_consistent`, `deduction_is_bd`, `bd90`, `outsideReach_eq` (min flange + t tan(θ/2)) |
 | Classes.lean | Snap.lean's classes, generic: `cls_spec`, `rep_order`, `rep_class`, `rep_unique`, `conn_map` |
 | Region.lean | the 2D LINEAR rule exact over ℚ, vertex classes, spread cap, half-open crossing, loop = polygon XOR lenses, hole owner |
-| BranchBound.lean | `certify_sound`: forge-brake's Clear/Near/Hit/Undecided sound for any work order, from the primitives' contracts |
+| BranchBound.lean | `certify_sound`: forge-brake's Clear/Hit/Undecided sound for any work order, from the primitives' contracts |
 | Trig.lean | rational intervals; `sc_mem`: proven sin/cos enclosures at a rational |
 | Checker.lean | conditions 1, 3/4, 5, 7 three-valued; `kappa_sound`, `setback_sound`, `refoldVertex_sound`, `near_sound` |
 | Oracle.lean | `lake exe sheet-oracle`: reads the kernel's dumps (f64 bits, exact) |
@@ -145,9 +145,8 @@ undecided (refused): exhaustive and exclusive by construction.
 Abstract over a cell type with a cover relation, a true quantity d(p) ≥ 0-clearance, sound
 `enclose` (∀p∈cell, d p ≥ lower(cell)) and sound point bounds (d(q) ≤ upper(q)); interval
 primitives only by their contracts (the corrected `Interval::sin`'s, from the trace session).
-Theorems: `Clear` ⇒ ∀ p in the roots' cover, d p ≥ limit (`clear_past_limit`); `Near` ⇒
-limit − res ≤ lower < limit and ∀ p, d p ≥ lower; `Hit` ⇒ a real point with d < limit; budget
-exhausted ⇒ `Near` or `Undecided` unless already proven.
+Theorems: `Clear` ⇒ ∀ p in the roots' cover, d p ≥ limit − res; `Hit` ⇒ a real point with
+d < limit; budget exhausted ⇒ `Undecided` unless already proven.
 
 Found in forge-brake (d02ba8e), for the bendsim session:
 * bb.rs `search`: when the heap empties it returns `Clear{lower: min(lower, upper)}` without

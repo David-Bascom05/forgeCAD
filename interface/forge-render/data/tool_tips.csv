@@ -252,7 +252,6 @@ thermo,Finish Thermoform,Leave Thermoform for the design,
 bendsim,Choose Press,"Choose the press brake from the library (or a stand-in set) and its tools",
 bendsim,Tooling,"The press's punches and dies as cards: which the planner may use, and the stations on its bed",
 bendsim,Suggest Order,"The planner's ranked bend orders, fewest flips and turns first; one is used only when you pick it",
-bendsim,Plan Stations,"Lay the program's tools out as stations along the bed and plan each bend's station; over a bending document's own stations only when you say so"
 bendsim,Write Program,"Write the bend program as the part's bending document (its order, stations and turns), editable with undo",
 bendsim,Last Bend,The last bend at its start,
 bendsim,Press Overview,"The whole press in view: frame, beams, bed and backgauge",

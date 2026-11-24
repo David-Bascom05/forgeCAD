@@ -46,10 +46,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "forge-bb"
-version = "0.1.0"
-
-[[package]]
 name = "forge-bench"
 version = "0.1.0"
 dependencies = [
@@ -92,7 +88,6 @@ version = "0.1.0"
 name = "forge-brake"
 version = "0.1.0"
 dependencies = [
- "forge-bb",
  "forge-math",
  "forge-mesh",
  "forge-ops",

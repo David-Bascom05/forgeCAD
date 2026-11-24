@@ -9,7 +9,6 @@
 //! - [`plan`]: a bend order and tooling that pass every check, or each bend's blocking checks.
 pub mod bb;
 pub mod catalog;
-pub mod contact;
 pub mod geo;
 pub mod library;
 pub mod model;
@@ -18,19 +17,12 @@ pub mod plan;
 pub mod scene;
 pub mod schema;
 pub mod sim;
-pub mod stage;
 pub mod tooling;
 pub mod view;
 
 pub use model::{Model, ModelError};
-pub use plan::{
-    Blocking, Options, Plan, PlanJob, Planner, Program, Progress, Suggestion, plan, plan_and_programs,
-    programs, simulate,
-};
-pub use sim::{
-    Check, Contact, ContactFace, PartRef, Phase, Rule, Setup, Severity, Step, Surface, contacts_of,
-};
-pub use stage::{StageFail, Staged, StationUse, stage};
+pub use plan::{Blocking, Options, Plan, Program, Suggestion, plan, programs, simulate};
+pub use sim::{Check, PartRef, Phase, Rule, Setup, Severity, Step, Surface};
 pub use tooling::{
     Backgauge, Die, Finger, Press, Punch, PunchKind, Segment, Springback, Style, Tooling, ToolingError,
 };

@@ -315,25 +315,21 @@ speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|threa
 no-output (a shortcut of value equality: one Arc is the same curve, and two equal ones take the same path)  @ forge-bool/src/unify.rs|pointer|(Curve::Intersection(a), Curve::Intersection(b)) => !std::sync::Arc::ptr_eq(a, b) && a != b,
 speed (a counter, stats only)  @ forge-brake/src/bb.rs|atomic|pub static CELLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-brake/src/bb.rs|float|.map(|i| (wt[i] * (a[i] - b[i])).powi(2))
-no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-brake/src/contact.rs|float|.map(|i| (wt[i] * (a[i] - b[i])).powi(2))
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-brake/src/bb.rs|float|let hd = ((e.iter().map(|i| (0.5 * i.width()).powi(2)).sum::<f64>()).sqrt() + SLACK).next_up();
 speed (a counter, stats only)  @ forge-brake/src/bb.rs|static|pub static CELLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-brake/src/geo.rs|float|(s2.max(0.0).powi(2) + dy.max(0.0).powi(2)).sqrt()
 no-output (prints only)  @ forge-brake/src/plan.rs|env|if std::env::var_os("BENDSIM_TRACE").is_some() {
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|dead: HashSet<u64>,  x 2
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|fixed: HashMap<(u64, usize, bool, usize), Vec<Check>>,  x 2
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|gauges: HashMap<(u64, usize, bool), (Check, Option<crate::sim::Gauged>)>,  x 2
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|dead: HashSet<u64>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|fixed: HashMap<(u64, usize, bool, usize), Vec<Check>>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|gauges: HashMap<(u64, usize, bool), (Check, Option<crate::sim::Gauged>)>,
 no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|kept: HashMap<(u64, usize, usize, usize), Option<Step>>,
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|legs: HashMap<(u64, usize), (f64, f64, f64)>,  x 2
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|memo: HashMap<(u64, usize), Option<Step>>,  x 2
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|riding: HashMap<(u64, usize, bool, usize, u64), Vec<Check>>,  x 2
-no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|selfs: HashMap<(u64, usize), Check>,  x 2
-no-output (looked up by key only: get, insert; also moved whole into Caches, never iterated)  @ forge-brake/src/plan.rs|hash-order|contacts: HashMap<(usize, usize, u64), Contact>,  x 2
-no-output (looked up by key only: get, insert; also moved whole into Caches, never iterated)  @ forge-brake/src/plan.rs|hash-order|fulls: HashMap<(u64, usize, Setup), Step>,  x 2
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|legs: HashMap<(u64, usize), (f64, f64, f64)>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|memo: HashMap<(u64, usize), Option<Step>>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|riding: HashMap<(u64, usize, bool, usize, u64), Vec<Check>>,
+no-output (looked up by key only: get, entry, insert, contains)  @ forge-brake/src/plan.rs|hash-order|selfs: HashMap<(u64, usize), Check>,
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-brake/src/scene.rs|float|gaps.iter().map(|g| g.max(0.0).powi(2)).sum::<f64>().sqrt()
 no-output (prints only)  @ forge-brake/src/sim.rs|clock|return Some(std::time::Instant::now());
 no-output (prints only)  @ forge-brake/src/sim.rs|env|if std::env::var_os("BENDSIM_TRACE").is_some() {  x 3
-no-output (prints only)  @ forge-brake/src/stage.rs|env|if std::env::var_os("BENDSIM_TRACE").is_some() {  x 2
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-brake/src/sim.rs|float|(hd2 * hd2 + 0.25 * e[1].width().powi(2)).sqrt()
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-brake/src/sim.rs|float|(s2.max(0.0).powi(2) + dw.max(0.0).powi(2)).sqrt()
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-brake/src/sim.rs|float|(s2.max(0.0).powi(2) + dy.max(0.0).powi(2)).sqrt()

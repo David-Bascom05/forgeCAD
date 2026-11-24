@@ -62,8 +62,6 @@ pub struct BendStmt {
     pub bend: String,
     pub station: Option<String>,
     pub rotate: Option<bool>,
-    /// The user's: the bend stays at its station whatever a re-plan finds (`lock: true`).
-    pub lock: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -137,7 +135,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
         "station",
         &["punch", "die", "y", "length", "punch_length", "die_length"],
     ),
-    ("bend", &["#0", "at", "rotate", "lock"]),
+    ("bend", &["#0", "at", "rotate"]),
     ("setup_sheet", &[]),
     ("program", &["format"]),
 ];
@@ -254,20 +252,11 @@ impl Reader {
                     Some(V::Bool(b)) => Some(*b),
                     Some(_) => return Err("bend: rotate: takes true or false".into()),
                 };
-                let lock = match named.get("lock") {
-                    None => false,
-                    Some(V::Bool(b)) => *b,
-                    Some(_) => return Err("bend: lock: takes true or false".into()),
-                };
-                if lock && station.is_none() {
-                    return Err("bend: lock: true needs the station it is locked to (at:)".into());
-                }
                 self.doc.bends.push(BendStmt {
                     id: name.into(),
                     bend,
                     station,
                     rotate,
-                    lock,
                 });
             }
             "setup_sheet" => self.doc.setup_sheet = true,
@@ -454,114 +443,6 @@ pub fn run_with(src: &str, part: &str, pdir: Option<&Path>) -> Bending {
     }
 }
 
-/// A re-plan that keeps what the user set: the document's press and tooling, every station as
-/// stated (tools, place, stacks), and each locked bend at its station; the planner chooses the
-/// order and the other bends' stations among the document's. The new document is the old one
-/// with only its `bend` statements rewritten (the rest, comments and stations included, byte for
-/// byte). Refused, the document unchanged, when no order passes: the reasons name the locks in
-/// the way, with what would free them.
-pub fn replan(src: &str, part: &str, pdir: Option<&Path>) -> Result<(String, Sim), Vec<(String, String)>> {
-    let doc = read(src)?;
-    if doc.stations.is_empty() {
-        return Err(vec![(
-            "document".into(),
-            "no stations to plan around: plan the stations first (stations auto)".into(),
-        )]);
-    }
-    let index = |id: &str| doc.stations.iter().position(|s| s.id == id);
-    let mut ask = doc.ask();
-    ask.sequence = None;
-    ask.steps = Vec::new();
-    ask.locks = doc
-        .bends
-        .iter()
-        .filter(|b| b.lock)
-        .filter_map(|b| Some((b.bend.clone(), index(b.station.as_deref()?)?)))
-        .collect();
-    let sim = forge_lang::bendsim::simulate(part, pdir.map(Path::to_path_buf), None, &ask)
-        .map_err(|a| vec![("simulation".to_string(), a.text)])?;
-    if !sim.plan.feasible {
-        let mut why = Vec::new();
-        for b in &sim.plan.blocking {
-            let name = &sim.names[b.bend];
-            let rules: Vec<&str> = b.checks.iter().map(|c| c.rule.word()).collect();
-            match doc.bends.iter().find(|x| x.lock && x.bend == *name) {
-                Some(l) => why.push((
-                    l.id.clone(),
-                    format!(
-                        "bend `{name}` is locked to {} ({} on {}), where it fails {}: unlock it \
-                         (remove `lock: true`) or change {}'s tools",
-                        l.station.as_deref().unwrap_or("?"),
-                        b.punch,
-                        b.die,
-                        rules.join(", "),
-                        l.station.as_deref().unwrap_or("?"),
-                    ),
-                )),
-                None => why.push((
-                    "stations".into(),
-                    format!(
-                        "no order passes bend `{name}` at the document's stations (best: {} on {}, fails {}): \
-                         add a station for it, or plan the stations (stations auto)",
-                        b.punch,
-                        b.die,
-                        rules.join(", ")
-                    ),
-                )),
-            }
-        }
-        return Err(why);
-    }
-    // the bend statements rewritten in the plan's order, each at its station, locks kept
-    let mut lines = Vec::new();
-    for (i, st) in sim.plan.steps.iter().enumerate() {
-        let name = &sim.names[st.bend];
-        let lock = doc.bends.iter().any(|b| b.lock && b.bend == *name);
-        let at = st
-            .station
-            .and_then(|k| doc.stations.get(k))
-            .map(|s| format!(", at: {}", s.id))
-            .unwrap_or_default();
-        lines.push(format!(
-            "b{} = bend({:?}{at}{}{})",
-            i + 1,
-            name,
-            if st.setup.rotate { ", rotate: true" } else { "" },
-            if lock { ", lock: true" } else { "" }
-        ));
-    }
-    let is_bend = |l: &str| {
-        let t = l.trim_start();
-        t.split_once('=')
-            .is_some_and(|(_, rhs)| rhs.trim_start().starts_with("bend("))
-    };
-    let mut out = String::new();
-    let mut placed = false;
-    for l in src.split_inclusive('\n') {
-        if is_bend(l) {
-            if !placed {
-                for n in &lines {
-                    out.push_str(n);
-                    out.push('\n');
-                }
-                placed = true;
-            }
-            continue;
-        }
-        out.push_str(l);
-    }
-    if !placed {
-        // no bend statements yet: after the last station
-        let at = out
-            .rfind("= station(")
-            .and_then(|i| out[i..].find('\n').map(|j| i + j + 1))
-            .unwrap_or(out.len());
-        let block: String = lines.iter().map(|n| format!("{n}\n")).collect();
-        out.insert_str(at, &block);
-    }
-    Ok((out, sim))
-}
-
 /// The companion document's path for a part: `<stem>_bend.fg` beside it.
 pub fn companion(part: &Path) -> std::path::PathBuf {
     let stem = part
@@ -598,18 +479,13 @@ impl Bending {
                 .iter()
                 .enumerate()
                 .map(|(i, b)| {
-                    let mut f = vec![
+                    Json::obj(vec![
                         ("n", (i + 1).into()),
                         ("id", b.id.as_str().into()),
                         ("bend", b.bend.as_str().into()),
                         ("station", b.station.as_deref().map_or(Json::Null, Json::from)),
                         ("rotate", b.rotate.map_or(Json::Null, Json::from)),
-                    ];
-                    // only when set: a document without locks answers as before
-                    if b.lock {
-                        f.push(("lock", true.into()));
-                    }
-                    Json::obj(f)
+                    ])
                 })
                 .collect(),
         );
@@ -717,32 +593,6 @@ pub fn document(part: &str, sheet: Option<&str>, press: Option<&str>, standin: &
         Some(p) => format!("press = press({p:?})\n"),
         None => format!("press = tooling({standin:?})\n"),
     });
-    // the stations the program was simulated with (a staged program's, as laid out), each step
-    // at its own; else one per distinct punch and die, side by side
-    if !tl.stations.is_empty() && sim.plan.steps.iter().all(|s| s.station.is_some()) {
-        for (i, s) in tl.stations.iter().enumerate() {
-            out.push_str(&format!(
-                "s{} = station(punch: {:?}, die: {:?}, y: {}, punch_length: {}, die_length: {})\n",
-                i + 1,
-                tl.punches[s.punch].id,
-                tl.dies[s.die].id,
-                num(s.y),
-                num(s.punch_length),
-                num(s.die_length)
-            ));
-        }
-        for (i, st) in sim.plan.steps.iter().enumerate() {
-            out.push_str(&format!(
-                "b{} = bend({:?}, at: s{}{})\n",
-                i + 1,
-                sim.names[st.bend],
-                st.station.unwrap_or(0) + 1,
-                if st.setup.rotate { ", rotate: true" } else { "" }
-            ));
-        }
-        out.push_str("sheet = setup_sheet()\n");
-        return out;
-    }
     let mut pairs: Vec<(usize, usize, f64, f64)> = Vec::new();
     for st in &sim.plan.steps {
         let (pl, dl) = (st.punch_length.unwrap_or(0.0), st.die_length.unwrap_or(0.0));
@@ -950,14 +800,9 @@ pub fn cincinnati(sim: &Sim, doc: &Doc) -> (String, Vec<String>) {
     x.push_str("<StepData>");
     let mut no_gauge = Vec::new();
     for (i, st) in sim.plan.steps.iter().enumerate() {
-        let k = st
-            .station
-            .filter(|_| !tl.stations.is_empty())
-            .or_else(|| {
-                stations
-                    .iter()
-                    .position(|s| (s.0, s.1) == (st.setup.punch, st.setup.die))
-            })
+        let k = stations
+            .iter()
+            .position(|s| (s.0, s.1) == (st.setup.punch, st.setup.die))
             .unwrap_or(0)
             + 1;
         let included = 180.0 - st.angle.to_degrees();

@@ -32,10 +32,6 @@ pub struct Options {
     /// With `sequence`: each step's setup as the program states it (None: chosen as usual).
     /// A stated setup is simulated as stated, failing or not.
     pub setups: Option<Vec<Option<Setup>>>,
-    /// Per bend (indices into `Model::bends`), a station it must be made at (the user's lock):
-    /// only that station's punch and die are tried for it, worked at that station. The order and
-    /// every other bend's station are still searched.
-    pub locks: Vec<Option<usize>>,
 }
 
 /// What stops a bend: its best attempt's failing checks.
@@ -48,8 +44,6 @@ pub struct Blocking {
     pub punch: String,
     pub die: String,
     pub checks: Vec<Check>,
-    /// The attempt itself (its setup, station and gauge), for where it collides.
-    pub attempt: Box<Step>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -79,25 +73,6 @@ struct Search<'a> {
     m: &'a Model,
     tl: &'a Tooling,
     opts: &'a Options,
-    st: State,
-}
-
-impl std::ops::Deref for Search<'_> {
-    type Target = State;
-    fn deref(&self) -> &State {
-        &self.st
-    }
-}
-
-impl std::ops::DerefMut for Search<'_> {
-    fn deref_mut(&mut self) -> &mut State {
-        &mut self.st
-    }
-}
-
-/// A search's own state (everything but what it reads: the model, the tooling and the options),
-/// so a search can stop, be kept by its owner, and go on later (`PlanJob`).
-pub struct State {
     setups: Vec<Setup>,
     memo: HashMap<(u64, usize), Option<Step>>,
     selfs: HashMap<(u64, usize), Check>,
@@ -110,12 +85,6 @@ pub struct State {
     dead: HashSet<u64>,
     verdicts: std::rc::Rc<std::cell::RefCell<crate::sim::Memo>>,
     legs: HashMap<(u64, usize), (f64, f64, f64)>,
-    /// The shoulder's contact range through the motion, by (bend, die, overbend).
-    contacts: HashMap<(usize, usize, u64), Contact>,
-    /// The model's regions, made once.
-    regions: crate::sim::Regions,
-    /// Taken steps simulated in full, by (done, bend, setup).
-    fulls: HashMap<(u64, usize, Setup), Step>,
     /// Steps with the last step's tools kept, by (done, bend, punch, die).
     kept: HashMap<(u64, usize, usize, usize), Option<Step>>,
     /// Per bend: (bends done, failures, the attempt).
@@ -124,293 +93,6 @@ pub struct State {
     budget: usize,
     exhausted: bool,
 }
-
-/// What one search learned that holds for another over the same part, tooling and options but
-/// for `keep_tools` (which only reorders the setups tried after a step): every cache is keyed by
-/// the bends done, the bend and the setup, and holds the simulation's own answer.
-struct Caches {
-    memo: HashMap<(u64, usize), Option<Step>>,
-    selfs: HashMap<(u64, usize), Check>,
-    gauges: HashMap<(u64, usize, bool), (Check, Option<crate::sim::Gauged>)>,
-    fixed: HashMap<(u64, usize, bool, usize), Vec<Check>>,
-    riding: HashMap<(u64, usize, bool, usize, u64), Vec<Check>>,
-    dead: HashSet<u64>,
-    verdicts: std::rc::Rc<std::cell::RefCell<crate::sim::Memo>>,
-    legs: HashMap<(u64, usize), (f64, f64, f64)>,
-    fulls: HashMap<(u64, usize, Setup), Step>,
-    contacts: HashMap<(usize, usize, u64), Contact>,
-}
-
-/// A bend's search under way: the next setup to try, and what the tried ones said.
-struct Try {
-    j: usize,
-    si: usize,
-    n_done: usize,
-    rejected: Vec<(String, String, bool, Rule)>,
-    screened: Option<Setup>,
-}
-
-/// The depth-first search over the bends done, as an explicit stack, so it can stop after any
-/// simulated setup and go on later (`Planner`): bends tried in `order`, each with the first setup
-/// that passes, a state none of whose bends leads to a whole program kept as dead.
-struct Walk {
-    done: Vec<bool>,
-    steps: Vec<Step>,
-    /// Per state entered: the next place in the order, and the bend being tried or followed.
-    stack: Vec<(usize, Option<usize>)>,
-    cur: Option<Try>,
-    order: Vec<usize>,
-    /// Some(true): a whole program; Some(false): none.
-    out: Option<bool>,
-}
-
-impl Walk {
-    fn new(s: &Search) -> Walk {
-        let mut w = Walk {
-            done: vec![false; s.m.bends.len()],
-            steps: Vec::new(),
-            stack: Vec::new(),
-            cur: None,
-            order: s.order(),
-            out: None,
-        };
-        w.enter(s);
-        w
-    }
-
-    /// A new state entered: done, refused (dead, or the budget spent), or a frame to search.
-    fn enter(&mut self, s: &Search) {
-        if self.done.iter().all(|d| *d) {
-            self.out = Some(true);
-        } else if s.dead.contains(&mask(&self.done)) || s.exhausted {
-            self.back(s);
-        } else {
-            self.stack.push((0, None));
-        }
-    }
-
-    /// The state just entered (or left) has no whole program: back to the one before.
-    fn back(&mut self, s: &Search) {
-        loop {
-            let Some(top) = self.stack.last() else {
-                self.out = Some(false);
-                return;
-            };
-            let j = top.1.expect("a frame follows the bend it took");
-            self.steps.pop();
-            self.done[j] = false;
-            if !s.exhausted {
-                return;
-            }
-            // the budget spent: every state on the way back gives up (none is kept as dead)
-            self.stack.pop();
-        }
-    }
-
-    /// A bend's search ended: its step taken (a new state), or the next bend.
-    fn tried(&mut self, s: &mut Search, r: Option<Step>) {
-        let j = self.stack.last().and_then(|f| f.1).expect("a bend tried");
-        match r {
-            Some(step) => {
-                self.done[j] = true;
-                self.steps.push(step);
-                self.enter(s);
-            }
-            None => {
-                if s.exhausted {
-                    self.stack.pop();
-                    if self.stack.is_empty() {
-                        self.out = Some(false);
-                    } else {
-                        self.back(s);
-                    }
-                }
-            }
-        }
-    }
-
-    /// One move of the search (at most one setup simulated): false once it has ended.
-    fn tick(&mut self, s: &mut Search) -> bool {
-        if self.out.is_some() {
-            return false;
-        }
-        if let Some(mut t) = self.cur.take() {
-            match s.try_advance(&self.done, &mut t) {
-                None => self.cur = Some(t),
-                Some(r) => self.tried(s, r),
-            }
-            return self.out.is_none();
-        }
-        let Some(&(oi, _)) = self.stack.last() else {
-            self.out = Some(false);
-            return false;
-        };
-        let next = (oi..self.order.len()).find(|&i| !self.done[self.order[i]]);
-        match next {
-            Some(i) => {
-                let j = self.order[i];
-                *self.stack.last_mut().unwrap() = (i + 1, Some(j));
-                match s.try_begin(&self.done, j) {
-                    Ok(r) => self.tried(s, r),
-                    Err(t) => self.cur = Some(t),
-                }
-            }
-            None => {
-                // every bend tried from here: the state leads nowhere
-                s.dead.insert(mask(&self.done));
-                self.stack.pop();
-                if self.stack.is_empty() {
-                    self.out = Some(false);
-                } else {
-                    self.back(s);
-                }
-            }
-        }
-        self.out.is_none()
-    }
-}
-
-/// How far a `Planner` has got.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Progress {
-    /// Bends in the program as it stands (the deepest the search is).
-    pub bends_planned: usize,
-    pub bends: usize,
-    /// Setups simulated so far.
-    pub setups_tried: usize,
-    /// The search has ended: `Planner::plan` gives the plan.
-    pub done: bool,
-}
-
-/// `plan`, a little at a time, owning nothing it reads: its owner keeps the model, the tooling
-/// and the options (unchanged between calls) and passes them to each call, so the job can sit
-/// beside them in one struct (a page's state, a worker's). `step(.., n)` searches until about
-/// `n` more setups are simulated, then says how far it has got; once done, `plan` is the very
-/// plan `plan()` gives. With a stated sequence, the first step makes it whole.
-pub struct PlanJob {
-    st: Option<State>,
-    w: Option<Walk>,
-    seq: Option<Plan>,
-    /// The walk's steps simulated in full so far, once the walk has ended (one a call).
-    fin: Vec<Step>,
-}
-
-impl PlanJob {
-    pub fn new(m: &Model, tl: &Tooling, opts: &Options) -> PlanJob {
-        let s = Search::new(m, tl, opts);
-        let w = opts.sequence.is_none().then(|| Walk::new(&s));
-        PlanJob {
-            st: Some(s.st),
-            w,
-            seq: None,
-            fin: Vec::new(),
-        }
-    }
-
-    pub fn step(&mut self, m: &Model, tl: &Tooling, opts: &Options, n: usize) -> Progress {
-        let Some(st) = self.st.take() else {
-            return self.progress(m);
-        };
-        let mut s = Search { m, tl, opts, st };
-        if let Some(seq) = &opts.sequence
-            && self.seq.is_none()
-        {
-            self.seq = Some(simulate(m, tl, seq, opts));
-        }
-        if let Some(w) = &mut self.w {
-            if w.out.is_none() {
-                let start = s.explored;
-                while s.explored < start + n.max(1) && w.tick(&mut s) {}
-            } else if self.fin.len() < w.steps.len() {
-                // the walk has ended: its steps simulated in full, one a call
-                let k = self.fin.len();
-                let mut done = vec![false; m.bends.len()];
-                for st in &w.steps[..k] {
-                    done[st.bend] = true;
-                }
-                let full = s.finish(&done, &w.steps[k]);
-                self.fin.push(full);
-            }
-        }
-        self.st = Some(s.st);
-        self.progress(m)
-    }
-
-    pub fn progress(&self, m: &Model) -> Progress {
-        let bends = m.bends.len();
-        let tried = self.st.as_ref().map_or(0, |s| s.explored);
-        match (&self.w, &self.seq) {
-            (Some(w), _) => Progress {
-                bends_planned: w.steps.len(),
-                bends,
-                setups_tried: tried,
-                done: w.out.is_some() && self.fin.len() == w.steps.len(),
-            },
-            (None, p) => Progress {
-                bends_planned: p.as_ref().map_or(0, |p| p.steps.len()),
-                bends,
-                setups_tried: p.as_ref().map_or(0, |p| p.explored),
-                done: p.is_some(),
-            },
-        }
-    }
-
-    /// The plan, once done (else None), from the same model, tooling and options.
-    pub fn plan(mut self, m: &Model, tl: &Tooling, opts: &Options) -> Option<Plan> {
-        if let Some(p) = self.seq {
-            return Some(p);
-        }
-        let w = self.w.take()?;
-        w.out?;
-        let mut s = Search {
-            m,
-            tl,
-            opts,
-            st: self.st.take()?,
-        };
-        if self.fin.len() == w.steps.len() {
-            let fin = std::mem::take(&mut self.fin);
-            Some(conclude_with(&mut s, w, fin))
-        } else {
-            Some(conclude(&mut s, w))
-        }
-    }
-}
-
-/// `PlanJob` with what it reads borrowed for its life.
-pub struct Planner<'a> {
-    m: &'a Model,
-    tl: &'a Tooling,
-    opts: &'a Options,
-    job: PlanJob,
-}
-
-impl<'a> Planner<'a> {
-    pub fn new(m: &'a Model, tl: &'a Tooling, opts: &'a Options) -> Planner<'a> {
-        Planner {
-            m,
-            tl,
-            opts,
-            job: PlanJob::new(m, tl, opts),
-        }
-    }
-
-    pub fn step(&mut self, n: usize) -> Progress {
-        self.job.step(self.m, self.tl, self.opts, n)
-    }
-
-    pub fn progress(&self) -> Progress {
-        self.job.progress(self.m)
-    }
-
-    /// The plan, once `progress().done`; else None.
-    pub fn plan(self) -> Option<Plan> {
-        self.job.plan(self.m, self.tl, self.opts)
-    }
-}
-
-/// The shoulder's contact range: least, farthest, where the least is, certified.
-type Contact = (f64, f64, f64, bool);
 
 fn mask(done: &[bool]) -> u64 {
     done.iter()
@@ -459,8 +141,10 @@ impl<'a> Search<'a> {
                 }
             }
         }
-        let n_setups = setups.len();
-        let st = State {
+        Search {
+            m,
+            tl,
+            opts,
             setups,
             memo: HashMap::new(),
             selfs: HashMap::new(),
@@ -471,52 +155,11 @@ impl<'a> Search<'a> {
             verdicts: Default::default(),
             legs: HashMap::new(),
             kept: HashMap::new(),
-            fulls: HashMap::new(),
-            regions: crate::sim::Regions::of(m),
-            contacts: HashMap::new(),
             best: vec![None; m.bends.len()],
             explored: 0,
-            // a set's size scales the search: a whole maker's catalogue holds hundreds of setups
-            // per bend, most decided from what is kept (cheap), so 4000 would stop it short
-            budget: if opts.budget == 0 {
-                4000usize.max(16 * n_setups)
-            } else {
-                opts.budget
-            },
+            budget: if opts.budget == 0 { 4000 } else { opts.budget },
             exhausted: false,
-        };
-        Search { m, tl, opts, st }
-    }
-
-    /// The caches, when they may be reused: not after the budget cut the search short (a bend
-    /// cut off mid-way is remembered as having no setup).
-    fn caches(self) -> Option<Caches> {
-        let st = self.st;
-        (!st.exhausted).then_some(Caches {
-            memo: st.memo,
-            selfs: st.selfs,
-            gauges: st.gauges,
-            fixed: st.fixed,
-            riding: st.riding,
-            dead: st.dead,
-            verdicts: st.verdicts,
-            legs: st.legs,
-            fulls: st.fulls,
-            contacts: st.contacts,
-        })
-    }
-
-    fn adopt(&mut self, c: Caches) {
-        self.memo = c.memo;
-        self.selfs = c.selfs;
-        self.gauges = c.gauges;
-        self.fixed = c.fixed;
-        self.riding = c.riding;
-        self.dead = c.dead;
-        self.verdicts = c.verdicts;
-        self.legs = c.legs;
-        self.fulls = c.fulls;
-        self.contacts = c.contacts;
+        }
     }
 
     fn overbend(&self, j: usize) -> f64 {
@@ -524,89 +167,11 @@ impl<'a> Search<'a> {
             .overbend(self.opts.material.as_deref(), self.m.bends[j].theta)
     }
 
-    /// The station bend j is locked to, if any (and if the tooling has it).
-    fn lock(&self, j: usize) -> Option<usize> {
-        self.opts
-            .locks
-            .get(j)
-            .copied()
-            .flatten()
-            .filter(|k| *k < self.tl.stations.len())
-    }
-
-    /// Whether a setup may be tried for bend j: a locked bend only at its station's tools.
-    fn allowed(&self, j: usize, s: Setup) -> bool {
-        self.lock(j).is_none_or(|k| {
-            let st = &self.tl.stations[k];
-            (st.punch, st.die) == (s.punch, s.die)
-        })
-    }
-
-    /// The first closed-form rule a setup fails for bend j, decided before it is simulated
-    /// (the die's and the punch's angle, the punch's radius): the same arithmetic, in the same
-    /// order, as `StepCtx::rules`, so the verdict is the one the simulation would give. These read
-    /// only the bend and the tools, never the bends done: a tool that fails one fails it in every
-    /// state, and is not simulated (nor counted against the budget).
-    fn screen(&self, j: usize, setup: Setup) -> Option<Rule> {
-        screen(self.m, self.tl, j, setup, self.overbend(j))
-    }
-
     /// One setup simulated: quick stops at the first failure.
     fn run(&mut self, done: &[bool], j: usize, setup: Setup, quick: bool) -> Step {
         self.explored += 1;
-        self.sim(done, j, setup, quick)
-    }
-
-    /// A setup that passed its quick checks, taken: counted as simulated in full now (the
-    /// search's count and budget are as if it were), but simulated in full only if it ends in
-    /// the plan (`finish`): a branch the search backs out of never pays for it.
-    fn take(&mut self, quick: Step, rejected: Vec<(String, String, bool, Rule)>) -> Step {
-        self.explored += 1;
-        Step { rejected, ..quick }
-    }
-
-    /// A taken step simulated in full (once per bends done, bend and setup), its reasons kept.
-    fn finish(&mut self, done: &[bool], st: &Step) -> Step {
-        let key = (mask(done), st.bend, st.setup);
-        let mut full = match self.fulls.get(&key) {
-            Some(f) => f.clone(),
-            None => {
-                let f = self.sim(done, st.bend, st.setup, false);
-                self.fulls.insert(key, f.clone());
-                f
-            }
-        };
-        full.rejected = st.rejected.clone();
-        full
-    }
-
-    /// A taken path's steps simulated in full, in order.
-    fn finish_path(&mut self, steps: &[Step]) -> Vec<Step> {
-        let mut done = vec![false; self.m.bends.len()];
-        let mut out = Vec::with_capacity(steps.len());
-        for st in steps {
-            out.push(self.finish(&done, st));
-            done[st.bend] = true;
-        }
-        out
-    }
-
-    fn sim(&mut self, done: &[bool], j: usize, setup: Setup, quick: bool) -> Step {
         let ob = self.overbend(j);
-        let mut ctx = StepCtx::with_regions(self.m, self.tl, done, j, setup, ob, &self.regions);
-        // the shoulder's contact reads the bend, the die and the overbend only
-        let ck = (j, setup.die, ob.to_bits());
-        ctx.contact_kept = match self.contacts.get(&ck) {
-            Some(c) => Some(*c),
-            None => {
-                let c = ctx.contact_range();
-                self.contacts.insert(ck, c);
-                Some(c)
-            }
-        };
-        if let Some(k) = self.lock(j) {
-            ctx = ctx.at_station(k);
-        }
+        let mut ctx = StepCtx::new(self.m, self.tl, done, j, setup, ob);
         ctx.memo = Some(self.verdicts.clone());
         let lk = (mask(done), j);
         let legs = match self.legs.get(&lk) {
@@ -630,7 +195,6 @@ impl<'a> Search<'a> {
             die: ctx.die.id.clone(),
             punch_length: pl,
             die_length: dl,
-            station: ctx.station,
             flip: self.m.bends[j].sigma < 0.0,
             gauge: None,
             travel,
@@ -741,50 +305,14 @@ impl<'a> Search<'a> {
 
     /// The first setup that passes bend j after `done`, kept.
     fn try_bend(&mut self, done: &[bool], j: usize) -> Option<Step> {
-        match self.try_begin(done, j) {
-            Ok(r) => r,
-            Err(mut t) => loop {
-                if let Some(r) = self.try_advance(done, &mut t) {
-                    return r;
-                }
-            },
-        }
-    }
-
-    /// A bend's search begun: the kept answer, or the search to advance.
-    fn try_begin(&mut self, done: &[bool], j: usize) -> Result<Option<Step>, Try> {
         let key = (mask(done), j);
         if let Some(r) = self.memo.get(&key) {
-            return Ok(r.clone());
+            return r.clone();
         }
-        Err(Try {
-            j,
-            si: 0,
-            n_done: done.iter().filter(|d| **d).count(),
-            rejected: Vec::new(),
-            screened: None,
-        })
-    }
-
-    /// The bend's search advanced past at most one simulated setup: None while it goes on, the
-    /// answer (kept) once it ends.
-    fn try_advance(&mut self, done: &[bool], t: &mut Try) -> Option<Option<Step>> {
-        let j = t.j;
+        let n_done = done.iter().filter(|d| **d).count();
         let mut found = None;
-        let mut ended = true;
-        while t.si < self.setups.len() {
-            let s = self.setups[t.si];
-            t.si += 1;
-            if !self.allowed(j, s) {
-                continue;
-            }
-            // a tool that cannot make this bend at all is named with its rule, not simulated
-            if let Some(rule) = self.screen(j, s) {
-                let (p, d) = (&self.tl.punches[s.punch], &self.tl.dies[s.die]);
-                t.rejected.push((p.id.clone(), d.id.clone(), s.rotate, rule));
-                t.screened.get_or_insert(s);
-                continue;
-            }
+        let mut rejected = Vec::new();
+        for s in self.setups.clone() {
             if self.explored >= self.budget {
                 self.exhausted = true;
                 break;
@@ -803,40 +331,25 @@ impl<'a> Search<'a> {
                 );
             }
             if step.pass() {
-                found = Some(self.take(step, std::mem::take(&mut t.rejected)));
+                let mut full = self.run(done, j, s, false);
+                full.rejected = std::mem::take(&mut rejected);
+                found = Some(full);
                 break;
             }
             if let Some(c) = step.failures().first() {
-                t.rejected
-                    .push((step.punch.clone(), step.die.clone(), s.rotate, c.rule));
+                rejected.push((step.punch.clone(), step.die.clone(), s.rotate, c.rule));
             }
             let nf = step.failures().len();
             let better = match &self.best[j] {
                 None => true,
-                Some((d, f, _, _)) => t.n_done > *d || (t.n_done == *d && nf < *f),
+                Some((d, f, _, _)) => n_done > *d || (n_done == *d && nf < *f),
             };
             if better {
-                self.best[j] = Some((t.n_done, nf, step, mask(done)));
+                self.best[j] = Some((n_done, nf, step, mask(done)));
             }
-            // one setup simulated: the search goes on at the next call
-            ended = false;
-            break;
         }
-        if !ended && t.si < self.setups.len() {
-            return None;
-        }
-        // every setup screened out: the bend's best attempt is the first of them, simulated once
-        // so the reply can say why
-        if found.is_none()
-            && self.best[j].is_none()
-            && let Some(s) = t.screened
-        {
-            let step = self.run(done, j, s, true);
-            let nf = step.failures().len();
-            self.best[j] = Some((t.n_done, nf, step, mask(done)));
-        }
-        self.memo.insert((mask(done), j), found.clone());
-        Some(found)
+        self.memo.insert(key, found.clone());
+        found
     }
 
     /// `try_bend`, the last step's punch and die tried first (both orientations) when
@@ -857,12 +370,8 @@ impl<'a> Search<'a> {
                         continue;
                     }
                     let s = Setup { rotate, ..p };
-                    if !self.allowed(j, s) || self.screen(j, s).is_some() {
-                        break;
-                    }
-                    let q = self.run(done, j, s, true);
-                    if q.pass() {
-                        found = Some(self.take(q, Vec::new()));
+                    if self.run(done, j, s, true).pass() {
+                        found = Some(self.run(done, j, s, false));
                         break;
                     }
                 }
@@ -889,33 +398,35 @@ impl<'a> Search<'a> {
         o.sort_by(|a, b| depth(*b).cmp(&depth(*a)).then(a.cmp(b)));
         o
     }
-}
 
-/// The first closed-form rule (the die's angle, the punch's angle, its radius) a setup fails for
-/// bend j at this overbend, in `StepCtx::rules`'s order and arithmetic; None: it may pass. These
-/// read only the bend and the tools, so the planner decides them before simulating anything.
-pub fn screen(m: &Model, tl: &Tooling, j: usize, setup: Setup, overbend: f64) -> Option<Rule> {
-    let b = &m.bends[j];
-    let phimax = (b.theta + overbend).min(forge_math::dmath::PI - 1e-6);
-    let included = forge_math::dmath::PI - phimax;
-    let (p, d) = (&tl.punches[setup.punch], &tl.dies[setup.die]);
-    if !Check::rule(Rule::DieAngle, included, d.angle, false).pass {
-        return Some(Rule::DieAngle);
+    fn dfs(&mut self, done: &mut Vec<bool>, steps: &mut Vec<Step>) -> bool {
+        if done.iter().all(|d| *d) {
+            return true;
+        }
+        let key = mask(done);
+        if self.dead.contains(&key) || self.exhausted {
+            return false;
+        }
+        for j in self.order() {
+            if done[j] {
+                continue;
+            }
+            if let Some(step) = self.try_bend(done, j) {
+                done[j] = true;
+                steps.push(step);
+                if self.dfs(done, steps) {
+                    return true;
+                }
+                steps.pop();
+                done[j] = false;
+            }
+            if self.exhausted {
+                return false;
+            }
+        }
+        self.dead.insert(key);
+        false
     }
-    if !Check::rule(Rule::PunchAngle, included, p.tip_angle, false).pass {
-        return Some(Rule::PunchAngle);
-    }
-    if !Check::rule(
-        Rule::PunchRadius,
-        p.tip_radius,
-        b.inside_radius(phimax) + 1e-9,
-        true,
-    )
-    .pass
-    {
-        return Some(Rule::PunchRadius);
-    }
-    None
 }
 
 /// A bend order and tooling that pass every check, or why none does.
@@ -924,39 +435,11 @@ pub fn plan(m: &Model, tl: &Tooling, opts: &Options) -> Plan {
         return simulate(m, tl, seq, opts);
     }
     let mut s = Search::new(m, tl, opts);
-    plan_in(&mut s)
-}
-
-/// The plan (as `plan`) and up to `max` ranked programs (as `programs`), the second search
-/// reusing what the first learned: the same plan and programs as the two calls give, sooner.
-pub fn plan_and_programs(m: &Model, tl: &Tooling, opts: &Options, max: usize) -> (Plan, Vec<Program>) {
-    if opts.sequence.is_some() {
-        return (plan(m, tl, opts), programs(m, tl, opts, max));
-    }
-    let mut s = Search::new(m, tl, opts);
-    let p = plan_in(&mut s);
-    let caches = s.caches();
-    (p, programs_with(m, tl, opts, max, caches))
-}
-
-fn plan_in(s: &mut Search) -> Plan {
-    let mut w = Walk::new(s);
-    while w.tick(s) {}
-    conclude(s, w)
-}
-
-/// The plan from a finished walk: its steps simulated in full, or why none passes.
-fn conclude(s: &mut Search, w: Walk) -> Plan {
-    let steps = s.finish_path(&w.steps);
-    conclude_with(s, w, steps)
-}
-
-/// `conclude`, the walk's steps already simulated in full.
-fn conclude_with(s: &mut Search, w: Walk, steps: Vec<Step>) -> Plan {
-    let m = s.m;
-    let feasible = w.out == Some(true);
+    let mut done = vec![false; m.bends.len()];
+    let mut steps = Vec::new();
+    let feasible = s.dfs(&mut done, &mut steps);
     let sequence = steps.iter().map(|st| st.bend).collect();
-    let blocking = if feasible { Vec::new() } else { blocking(s) };
+    let blocking = if feasible { Vec::new() } else { blocking(&s) };
     let suggestions = suggest(m, &blocking);
     Plan {
         feasible,
@@ -982,7 +465,6 @@ fn blocking(s: &Search) -> Vec<Blocking> {
                 punch: step.punch.clone(),
                 die: step.die.clone(),
                 checks: step.failures().into_iter().cloned().collect(),
-                attempt: Box::new(step.clone()),
             })
         })
         .collect()
@@ -1056,7 +538,6 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
                     punch: full.punch.clone(),
                     die: full.die.clone(),
                     checks: full.failures().into_iter().cloned().collect(),
-                    attempt: Box::new(full.clone()),
                 });
             }
             steps.push(full);
@@ -1065,7 +546,7 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
         }
         let prev = steps.last().map(|st: &Step| st.setup);
         match s.try_bend_after(&done, j, prev) {
-            Some(st) => steps.push(s.finish(&done, &st)),
+            Some(st) => steps.push(st),
             None => {
                 feasible = false;
                 // its best attempt, simulated in full, stands in the plan
@@ -1079,7 +560,6 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
                         punch: full.punch.clone(),
                         die: full.die.clone(),
                         checks: full.failures().into_iter().cloned().collect(),
-                        attempt: Box::new(full.clone()),
                     });
                     steps.push(full);
                 }
@@ -1145,25 +625,12 @@ impl Program {
 /// (`keep_tools` is set). The first is the plan to offer; the rest are alternatives. Empty
 /// when none is feasible (then `plan` says why).
 pub fn programs(m: &Model, tl: &Tooling, opts: &Options, max: usize) -> Vec<Program> {
-    programs_with(m, tl, opts, max, None)
-}
-
-fn programs_with(
-    m: &Model,
-    tl: &Tooling,
-    opts: &Options,
-    max: usize,
-    caches: Option<Caches>,
-) -> Vec<Program> {
     let opts = Options {
         keep_tools: true,
         sequence: None,
         ..opts.clone()
     };
     let mut s = Search::new(m, tl, &opts);
-    if let Some(c) = caches {
-        s.adopt(c);
-    }
     let n = m.bends.len();
     let mut found: Vec<Vec<Step>> = Vec::new();
     // a bound on whole programs kept, so a part with many bends stays quick
@@ -1227,10 +694,5 @@ fn programs_with(
     // stable: the search's order breaks ties
     out.sort_by_key(Program::key);
     out.truncate(max);
-    // only the programs offered are simulated in full (the search took their steps on their
-    // quick checks, counting each as simulated)
-    for p in &mut out {
-        p.plan.steps = s.finish_path(&p.plan.steps);
-    }
     out
 }

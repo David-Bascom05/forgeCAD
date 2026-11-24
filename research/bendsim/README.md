@@ -118,10 +118,8 @@ in it included, is at least d(centre) − half-diagonal of the enclosure. Branch
 - a witness point (a real part point at a real φ) under the limit is a proven collision, reported
   with its distance, place, φ, and the part face and tool feature named;
 - cells are split until one or the other holds or they are smaller than `resolution`
-  (limit / 4, at least 0.01 mm, against a tool; 0.02 mm part against part); the verdict states
-  the certified bound: pass means distance ≥ limit everywhere, through the motion; near means
-  distance ≥ limit − resolution proven, not ≥ limit, with no point under it (a warning, the
-  program still feasible: David's call, via the coordinator).
+  (limit / 8); the verdict states the certified bound: pass means distance ≥ limit − resolution
+  everywhere, through the motion.
 
 Part-to-part uses the exact slab distance (plane offset with 2D distance to the region) the same
 way; pieces fixed relative to each other in a step are not paired, adjacent walls of the moving
