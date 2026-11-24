@@ -49,15 +49,14 @@ LGPL-2.1+ covers it; neither permits copying into MPL-2.0 files without LGPL obl
 Verdict: **read for ideas, reimplement clean; do not port, not even into `interface/`** (a port is
 a "work based on the Library" under LGPL §2 and would have to be LGPL itself).
 
-**Origin and dates (prior-art evidence).** First commit `31cbf6f6531f88832c1c38427409a9a639820349`,
+**Origin and dates.** First commit `31cbf6f6531f88832c1c38427409a9a639820349`,
 `Sun Aug 19 01:05:45 2018 +0200`, author kreso-t, "Path adaptive operation added", adding
 `src/Mod/Path/libarea/Adaptive.cpp` (1 451 lines), `Adaptive.hpp` (109), `PathAdaptive.py` (421)
 [R, git show]. Follow-ups by kreso-t through Sept 2018: linking-move optimisation (547ebe4f,
 2018-08-28), stock to leave (791435b0), cylindrical stock (3bf7fb24), clearing from outside the
 stock inwards (365227a0, 2018-09-01) [R, git log]. This is a dated, public, source-level
-disclosure of engagement-controlled clearing with keep-tool-down linking, useful next to
-Freesteel's 2004 headers (§3.3) for patents.md. Whether either anticipates any particular claim is
-for counsel.
+implementation of engagement-controlled clearing with keep-tool-down linking, alongside
+Freesteel's 2004 headers (§3.3).
 
 Recent history matters because the oracle will be a moving target [R, git log / GitHub search]:
 Clipper2 port of Adaptive merged 2026-11-06 (PR #33739, fc2c96c1; FreeCAD vendors Clipper2 2.0.1,
@@ -219,7 +218,7 @@ our and OCL's loops at the same z, via Clipper2 offset bands, §4.1).
 - Licence: license.md is the MIT text, "Copyright 2014-2018 Stewart Allen" [R]; package.json:6
   `"license": "MIT"` [R]. But 256/274 source files carry an "All Rights Reserved" header line
   [R]. MIT from the copyright holder grants the rights regardless, but the conflicting notice
-  should be cleared with the author (or counsel) **before any port**. Reading is fine.
+  should be cleared with the author **before any port**. Reading is fine.
 - CAM ops: `src/kiri/mode/cam/work/op-*.js` — rough, outline, contour, pocket, area, trace,
   drill, helical, lathe, level, shadow, xray [R, listing]. Roughing = `OpArea` in `mode: 'clear'`
   with `over: op.step`, `down`, `leave_xy`, `leave_z` on the expanded shadow of the part
@@ -361,7 +360,7 @@ OCL's COPYING]. Python oracles live in a venv outside the repo, like tools/meshc
 | Clipper2, clipper2-rust, pyclipr | BSL-1.0 (LICENSE, crates.io, PyPI) | yes | yes | no | **offset area/Hausdorff, cleared-area booleans** |
 | cavalier_contours | MIT OR Apache-2.0 | yes | yes | no | **arc-native offsets** |
 | Kiri:Moto | MIT (license.md) + "All Rights Reserved" headers | yes | after clearing headers | no | weak |
-| libactp/Freesteel | GPL-2.0-or-later | yes | no | no | — (2004 prior art) |
+| libactp/Freesteel | GPL-2.0-or-later | yes | no | no | — (2004 reference implementation) |
 | HeeksCNC | BSD-3 intended (COPYING names HeeksCAD) | yes | after per-file check | no | — |
 | PyCAM, Fabex, jscut, dxf2gcode | GPL-3.0-or-later | yes | no | no | weak |
 | CAMotics | GPL-2.0-or-later | yes | no | no | **stock STL; planner time** |

@@ -128,9 +128,8 @@ with horizontal stepover s_xy across the slope.
 - **Parabolic profile** [D]. With a periodic profile y = h·u², u ∈ [−1, 1] (the small-s limit of a
   circular cusp), the mean line is h/3 and
   **Ra = h·∫₀¹|u² − 1/3| du = 4h/(9√3) ≈ 0.257 h**, with Rt = h. So "Ra ≈ h/4" is the parabolic
-  result. The turning analogue Ra = f²/(32 r_ε), Rt = f²/(8 r_ε) (ratio 1/4) appears in a patent and
-  in calculators [S] (US 6733365, https://vibromera.eu/calculators/turning-surface-finish). The
-  patent excerpt says measured Ra from a sharp tool comes in under twice the theoretical value [S].
+  result. The turning analogue Ra = f²/(32 r_ε), Rt = f²/(8 r_ε) (ratio 1/4) appears in
+  calculators [S] (https://vibromera.eu/calculators/turning-surface-finish).
   A full cusp topography (stepover cusps × feed cusps) gives an areal Sa (ISO 25178) rather than
   a profile Ra (ISO 4287) [K].
 - **What the geometry leaves out.** Wang, Zhao, Tan, Wan (2024). "Modelling and Optimization of

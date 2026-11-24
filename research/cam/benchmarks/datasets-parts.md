@@ -199,7 +199,6 @@ NOTICE crediting NIST. The full zip is better fetched.
 - **One open derivative was found and read:** part 8 of the RPTU Zenodo set (§11) "extends the
   benchmark part introduced by Mertes et al. (2024)… which is based on ISO 10791-7" [R]. Mertes
   et al. is https://doi.org/10.1016/j.dte.2024.100024 (not read).
-- **A patent for an S-shaped test piece exists** [S]: US 8,061,052. It is not the ISO geometry.
 - **Plan (unchanged from toolpath-quality §benchmarks):** model an "ISO 10791-7-style" piece
   ourselves as `.fg`, with our own numbers. Do not copy the drawings.
 

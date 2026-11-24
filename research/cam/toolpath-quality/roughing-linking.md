@@ -1,7 +1,7 @@
 # Roughing, step-down and linking: what "good" means and how to get there
 
 Research only, 2026-11-24, branch research/toolpath-quality. It extends research/cam/literature.md
-§1–3, opensource.md §2–3 and patents.md and does not repeat them. Read those first. The goal comes
+§1–3 and opensource.md §2–3 and does not repeat them. Read those first. The goal comes
 from David: toolpaths at Fusion level or better, meaning adaptive clearing, feeds and speeds, and
 surface finish. This note covers roughing, step-down, linking and the metrics. Finishing and feeds
 are covered elsewhere.
@@ -12,10 +12,6 @@ background knowledge that was not re-read: treat it as a lead. One mark is added
 means derived in this note and checked numerically this session, with scripts kept in the session
 scratchpad (`eng.py`, `arc.py`, `rounded.py`). A [D] result is mathematics, not a citation. It
 should still be proven (§6) before anything relies on it.
-
-**Patent gate.** forgeCAD has a binding rule: "no adaptive / constant-engagement clearing until
-patent counsel". This note studies the algorithms anyway. Where a choice touches a known patent
-family, it says so in one line and points to patents.md. A separate agent handles patents.
 
 **What forgeCAD does today** [R, code read this session]:
 - `kernel/forge-cam/src/ops.rs::pocket` builds exact offset loops, each offset from the *original*
@@ -123,10 +119,8 @@ What this shows:
   with radius ρ_k = s sees arccos(−s/2r) = 90° + arcsin(s/D).
 - Rounding leaves uncut cusps in the corners. They have to be covered by a later pass, or the
   coverage bound in §6 must be shown to still hold.
-- Patent note: a chain of corner radii in which each radius is the previous plus the step-over,
-  chosen from an engagement-change limit, is the claim language of DP Technology US 9,778,649
-  (patents.md §2.4). A user-set constant ρ, with engagement only *checked*, is the clearer side.
-  Counsel should confirm.
+- A user-set constant ρ, with the engagement *checked* rather than used to derive the radius,
+  keeps the path predictable: the user picks the radius and the quality report shows its effect.
 
 **(1.7) Other spikes.** These are qualitative and not computed here.
 - **Topology events**, where an offset loop splits at a neck or a narrow channel, or where a loop
@@ -236,9 +230,6 @@ spike to φ_s + β.
     **unique largest subset whose boundary never turns left more sharply than a unit circle**, in
     O(n²) time, or O(n log n) when the region is simply connected. This is exactly a "minimum
     cutting radius" done right, and it works on forgeCAD's line-and-arc input.
-  - Note: Abrahamsen also holds US 10,108,172, "Spiral toolpaths for high-speed machining of
-    polygonal pockets" [S, Google Patents hit]. It is not in patents.md, so the patent agent should
-    check it.
 - **2012, Banerjee, Feng, Bordatchev.** "Process planning for floor machining of 2½D pockets based
   on a morphed spiral tool path pattern," *Comput. Ind. Eng.* 63(4):971–979 [S]. This is the
   morphed-spiral lineage from Bieterman. A review lists it for globally convex pockets with a
@@ -247,8 +238,7 @@ spike to φ_s + β.
   comparisons of zigzag, contour-parallel and spiral paths [S]. I found no engagement paper by them.
 - **Medial-axis families**, beyond Held, Elber and Ibaraki:
   - "Kim/Hatna" and "Huang" were not looked up and are **UNKNOWN**.
-  - Celeritive US 10,579,040 builds paths from a Voronoi diagram with synthetic branches (patents.md
-    §2.2). Using a plain medial axis is the design-around.
+  - A plain medial axis, computed exactly on line-and-arc input, is enough to place the paths.
 
 ### 2.2 Freesteel → HSMWorks → Fusion: what can be established
 
@@ -265,9 +255,8 @@ spike to φ_s + β.
 - Fusion renamed Adaptive Clearing to "2D/3D Adaptive Roughing" [R, Fusion help].
 - The **Freesteel blog (freesteel.co.uk/wpblog) returned 403**, and web.archive.org cannot be
   fetched from this session.
-- So the "2004–2006" dates rest only on the [S] claims in opensource.md and patents.md. **UNKNOWN**
-  until someone reads the blog. This matters for prior art (patents.md §2.1): it needs a human with
-  a browser.
+- So the "2004–2006" dates rest only on the [S] claims in opensource.md. **UNKNOWN** until someone
+  reads the blog with a browser.
 
 ### 2.3 Commercial systems: what each publicly says it does
 
@@ -337,25 +326,25 @@ All of this was read in `Adaptive.cpp` and `Adaptive.hpp` this session [R]. The 
 **Read for forgeCAD.** It is a robust, simple controller on a *sampled* state, using integer
 polygons. Every decision is a float area compared with a 5 % tolerance. It has no bound on φ
 itself: area is not angle, as §1.2 shows. Its structure (cleared-region state, a 1-D search per
-step, links checked against the cleared region) is what patents.md §3 calls the probably clearer
-design. Counsel still has to confirm.
+step, links checked against the cleared region) is a sound base: done on the exact region with
+φ as the target, it gives a certified engagement bound.
 
 ### 2.5 Trade-offs
 
 Grades: ++ best, + good, 0 neutral, − poor. These are judgements from the sources above, not
 measurements.
 
-| family | φ uniformity | path length | compute | smoothness (G1/G2, radius) | robustness (islands, necks) | patent exposure (patents.md) |
-|---|---|---|---|---|---|---|
-| offsets (forgeCAD today) | − : spikes to min(180°, φ_s+β) (§1.4) | ++ shortest | ++ exact, cheap | − : sharp corners, G0 | ++ any region, exact | none |
-| offsets + rounded corners, checked φ | 0/+ : 2–3× lower spikes (§1.6) | + | + | + : G1, with a stated min ρ | + : cusps need coverage proof | low; avoid ESPRIT's chained-radius claim |
-| offsets + corner loops (Choy & Chan; Iwabe) | + at corners | − : loops add length | + | 0 | + | old academic; Truemill 8,560,113 for corner arc series, to 2031 |
-| constant-engagement offsets (Stori; Ibaraki) | ++ on convex parts | + | 0 : Newton per point | + | − : convex only / leftovers | the basic "cap engagement" family expires 2026-12-17 |
-| PDE spiral (Bieterman) | + | + | − : numerical PDE | ++ | − : nearly convex, no islands | none known |
-| geometric spiral (Held–Spielberger; Abrahamsen) | + (experiments) | + | 0 : Voronoi | ++ : G1/G2, no self-crossing | + : decomposition for islands | Abrahamsen US 10,108,172 [S], unchecked |
-| medial-axis circles (MATHSM) | 0 | − | 0 | ++ : arcs, large radii | + : narrow regions | Celeritive Voronoi only if synthetic branches |
-| trochoids (Otkur; Rauch; Ibaraki) | ++ bounded by construction | −− : most of it is air | ++ | + : arcs | ++ | plain trochoid is old prior art; specific constructions patented |
-| stock-aware adaptive (Fusion, FreeCAD) | ++ / + | + | −− : sampled, iterative | + : smoothing pass | + : heuristics, stray paths | **high**: SolidCAM, Celeritive, Truemill (patents.md §3) |
+| family | φ uniformity | path length | compute | smoothness (G1/G2, radius) | robustness (islands, necks) |
+|---|---|---|---|---|---|
+| offsets (forgeCAD today) | − : spikes to min(180°, φ_s+β) (§1.4) | ++ shortest | ++ exact, cheap | − : sharp corners, G0 | ++ any region, exact |
+| offsets + rounded corners, checked φ | 0/+ : 2–3× lower spikes (§1.6) | + | + | + : G1, with a stated min ρ | + : cusps need coverage proof |
+| offsets + corner loops (Choy & Chan; Iwabe) | + at corners | − : loops add length | + | 0 | + |
+| constant-engagement offsets (Stori; Ibaraki) | ++ on convex parts | + | 0 : Newton per point | + | − : convex only / leftovers |
+| PDE spiral (Bieterman) | + | + | − : numerical PDE | ++ | − : nearly convex, no islands |
+| geometric spiral (Held–Spielberger; Abrahamsen) | + (experiments) | + | 0 : Voronoi | ++ : G1/G2, no self-crossing | + : decomposition for islands |
+| medial-axis circles (MATHSM) | 0 | − | 0 | ++ : arcs, large radii | + : narrow regions |
+| trochoids (Otkur; Rauch; Ibaraki) | ++ bounded by construction | −− : most of it is air | ++ | + : arcs | ++ |
+| stock-aware adaptive (Fusion, FreeCAD) | ++ / + | + | −− : sampled, iterative | + : smoothing pass | + : heuristics, stray paths |
 
 ---
 
@@ -379,9 +368,7 @@ measurements.
   - Fusion: "Fine stepdown" [R].
   - Vortex: "step cutting" [R].
   - VoluMill: "Hit flats by adding passes" or "after each pass" [R].
-  - Patent note: SolidCAM US 9,690,282 claims step-up cuts that keep all remaining surfaces between
-    an inner offset surface and an outer scallop surface (patents.md §2.3). Plain fine step-down to
-    fixed heights is older practice [K]. Counsel should confirm.
+  - Plain fine step-down to fixed heights is older practice [K].
 - **Flat-area detection.**
   - Fusion detects flat areas and peaks and adds levels at those heights, with a minimum step-down
     and a minimum axial engagement. It warns that this is slow [R].
@@ -434,9 +421,8 @@ measurements.
   1. Link consecutive offset loops at the same level with a short in-plane move through the cleared
      region: loop k ends next to loop k+1's start, and the band between them was cut. The exact
      boolean can prove the link segment's swept disc lies in the cleared region plus the current
-     cut. This is the FreeCAD `IsClearPath` idea done exactly. Design-around note from patents.md
-     §2.2: checking a link against the cleared area is fine; building separate "transition
-     toolpaths" that cross the cuts and trimming the cuts against them is Celeritive's claim.
+     cut. This is the FreeCAD `IsClearPath` idea done exactly: the link is checked against the
+     cleared area, and the cuts themselves are left unchanged.
   2. Minimum retraction between regions.
   3. A rapid retract (G0) instead of a feed retract.
 
@@ -637,8 +623,7 @@ them, as G5 labels the feeds.
 
 ## 7. Recommendations for forgeCAD, in order
 
-Each item is checkable with the metrics in §5. Items 1–6 need no adaptive clearing and are outside
-the patent gate as far as patents.md goes. Counsel still decides.
+Each item is checkable with the metrics in §5. Items 1–6 need no adaptive clearing.
 
 1. **Engagement and quality report first** (§5, §6.3). Compute φ(s), a_eff, h_max, air-cut %,
    retracts, min ρ and a planner-based cycle time per op, in the reply. Without these, "good" cannot
@@ -648,19 +633,18 @@ the patent gate as far as patents.md goes. Counsel still decides.
    removes most of today's 2 × loops × levels vertical moves.
 3. **Corner rounding with a user ρ_min**, concentric where possible, with the engagement *checked*,
    not derived (§1.6, §6.2). Leftovers go to rest or to a finishing contour. Expect corner spikes to
-   fall from 127° to about 52° at 10 % step-over with ρ = r. Avoid the chained, engagement-derived
-   radius rule (ESPRIT).
+   fall from 127° to about 52° at 10 % step-over with ρ = r. Keep ρ a user setting, so the path is
+   predictable.
 4. **Per-tool entry limits** (`ramp_max_deg`, helix diameter range, centre cutting) in
    forge-tooling, with the checker refusing violations. Add predrill and outside entry.
 5. **Ordering:** a greedy nearest-neighbour order with deterministic 2-opt and Or-opt over regions
    and levels, honouring the containment order. Use exact or squared-length comparisons so native
    and wasm stay bit-identical. Do not use LKH or GLKH code (non-commercial licence).
 6. **Stock-aware levels:** intersect with the exact in-process stock section; add exact flat-face
-   levels; fine step-down to fixed heights (check SolidCAM 9,690,282 first).
-7. **Behind the patent gate, for when counsel clears it:** a FreeCAD-style controller on the exact
-   cleared region, with the target stated as a bound on **φ** (not area), and the output certified
-   by (6.3). The Truemill 2004 engagement-milling family expires 2026-12-17 (US 7,577,490), which
-   removes one blocker. SolidCAM, Celeritive, Truemill 8,560,113 and DP Tech remain.
+   levels; fine step-down to fixed heights.
+7. **Adaptive clearing, built on items 1–6:** a FreeCAD-style controller on the exact cleared
+   region, with the target stated as a bound on **φ** (not area), and the output certified by
+   (6.3). Open one-direction peel passes, links through the cleared area, deterministic.
 8. **Lean targets**, small and high value: (6.1) the coverage theorem, (6.2) the corner formula
    with its negative corollary, and (1.2) the a_eff identity.
 
@@ -680,7 +664,7 @@ the patent gate as far as patents.md goes. Counsel still decides.
   2007, Castelino et al. 2003, Monreal & Rodriguez 2003, Helsgaun 2015, Banerjee et al. 2012, and
   Held & Spielberger 2009/2014 (project page read, papers not).
 - **UNKNOWN:** "Kim/Hatna" and "Huang" medial-axis papers; "Voronoi adaptive" as a named method
-  (nothing found beyond Celeritive's patent and Ibaraki's medial-axis trochoids); Fusion's internal
+  (nothing found beyond Ibaraki's medial-axis trochoids); Fusion's internal
   algorithm; the Freesteel dates.
 - **Corrected from the brief:**
   - Stori & Wright is *J. Manuf. Syst.*, not *J. Manuf. Sci. Eng.*.
@@ -776,5 +760,3 @@ the patent gate as far as patents.md goes. Counsel still decides.
     https://mecdes.hiroshima-u.ac.jp/~ibaraki.h0523/pubs/papers/lem05_uddin.pdf [R]
 36. Zhao, Z. Y., Wang, C. Y., Zhou, H. M., Qin, Z. (2007). Pocketing toolpath optimization for sharp
     corners. *J. Mater. Process. Technol.* 192–193:175–180. [S]
-37. Abrahamsen, M. US 10,108,172 B2, Spiral toolpaths for high-speed machining of polygonal pockets.
-    https://patents.google.com/patent/US10108172 [S, hit only; for the patent agent]

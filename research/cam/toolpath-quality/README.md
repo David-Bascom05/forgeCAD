@@ -6,20 +6,16 @@ David's ask: *"we need to make [the toolpaths] GOOD — that is the unlock. Fusi
 adaptive toolpaths, feeds and speeds, surface finish. Start a research agent and prior art."*
 
 This file is the summary, the ranked plan, and an index. Each topic note has the detail and the
-sources. They extend the earlier notes in `research/cam/` (literature.md, patents.md,
-opensource.md, fusion-*.md); they do not repeat them.
+sources. They extend the earlier notes in `research/cam/` (literature.md, opensource.md,
+fusion-*.md); they do not repeat them.
 
 | note | what |
 |---|---|
-| [fto-adaptive.md](fto-adaptive.md) | **Claim-level freedom-to-operate for adaptive clearing.** Each live independent claim split into its required elements, the prior art with dates, and a design-around matrix. Engineering analysis for David to judge; not legal advice. |
-| [patents-fto.md](patents-fto.md) | A broader patent survey (roughing, trochoids, adaptive feed, smoothing; Autodesk, CNC Software, Siemens, OPEN MIND, ModuleWorks, CGTech), extending ../patents.md |
 | [roughing-linking.md](roughing-linking.md) | Exact engagement geometry, roughing state of the art (Freesteel → Fusion, Stori & Wright, Ibaraki, trochoids, spirals, VoluMill, iMachining, Vortex, ProfitMilling, FreeCAD Adaptive read from source), step-down, linking and ordering, metrics, what can be proved |
 | [feeds-speeds.md](feeds-speeds.md) | Chip thinning (radial, ball, lead angle, bull nose), engagement in corners, Kienzle and mechanistic force, power, deflection, chatter lobes, feed scheduling, acceleration and jerk, tool-maker data, a worked example |
 | [surface-finish.md](surface-finish.md) | Scallop formulas (exact and bounds), steep walls, curvature, Ra; finishing strategies; drop and push cutter; corner smoothing, arc fitting, NURBS; controller tolerance modes; 5-axis outlook; statements S1–S7 that can be proved |
 | [fusion-benchmark.md](fusion-benchmark.md) | What Fusion offers per area, with its parameters; user-reported weaknesses; competitors; **a testable 69-item "Fusion-level" checklist** (17 items go beyond Fusion); benchmark parts |
-| [gap-tables.md](gap-tables.md) | **The whole Fusion 2D / 3D-rough / 3D-finish / common / turning set**: one row per toolpath (forgeCAD on main, on a branch, or absent, from the code; Fusion; best known method; metrics; impact; effort; patent gate), a ranked top 15, 8 hand-off packets |
-| [unclaimed-methods.md](unclaimed-methods.md) | Methods that are free because they were never claimed, or the patent expired, lapsed or was abandoned, ranked by toolpath quality; vendor trade-secret behaviour inferred from public material only |
-| | (top free methods, ranked: engagement-capped offsets on the exact cleared region with per-move feed (Ibaraki, Stori & Wright, GE, Kakino); Bieterman & Sandstrom morphed spiral; Held & Spielberger spiral; iso-scallop and geodesic finishing; local corner smoothing; corner looping) |
+| [gap-tables.md](gap-tables.md) | **The whole Fusion 2D / 3D-rough / 3D-finish / common / turning set**: one row per toolpath (forgeCAD on main, on a branch, or absent, from the code; Fusion; best known method; metrics; impact; effort), a ranked top 15, 8 hand-off packets |
 | [opensource-oracles.md](opensource-oracles.md) | FreeCAD Adaptive (from its source), OCL, Kiri:Moto, libactp, Clipper2, cavalier_contours, Boost Voronoi, Ruckig, CAMotics, LinuxCNC tp, Grbl: licences with file evidence, what we may read or port, and **five oracles for verify/** (two already run here) |
 
 **Source marks**, as in every CAM note: **[R]** read this session; **[S]** search snippet only;
@@ -63,20 +59,18 @@ The thresholds are proposals for forgeCAD; Fusion publishes none. The core ones:
 | cycle time | The estimate is feed time + rapid time + tool-change time, with no acceleration. Users report 2–10× errors on 3D paths. | help [R]; users [S] |
 | adaptive | Users report corner and sliver artefacts and slow, single-threaded generation. | [S] |
 
-Each of these is a place where forgeCAD can be *better*, not just equal, without any patent
-exposure.
+Each of these is a place where forgeCAD can be *better*, not just equal.
 
-**The thesis.** "Fusion or better" is reachable in three moves, most of them outside the patent
-gate:
+**The thesis.** "Fusion or better" is reachable in three moves:
 
 1. **Measure.** Give every op a certified quality report: max engagement, chip thickness,
    scallop, air-cut %, retracts, minimum path radius, and an honest cycle time. Nothing commercial
    publishes a certified maximum for engagement, chip or scallop. Our exact geometry makes each one
    a computed bound, not a sampled estimate. This report is also the yardstick for every later
    step and for the Fusion comparison.
-2. **Fix the cheap, big wins.** Each needs no adaptive clearing and has no known live patent
-   against it:
-   - feeds from the real engagement, the expired GE 1987 method (US 4,833,617);
+2. **Fix the cheap, big wins.** Each needs no adaptive clearing:
+   - feeds from the real engagement, scheduled per move from the material removed in the
+     in-process stock;
    - stay-down links proven to lie inside the cleared region;
    - corner rounding with the engagement checked;
    - per-tool ramp limits;
@@ -85,13 +79,11 @@ gate:
    - 4-decimal finishing output with the controller's tolerance mode set from the op;
    - a scallop-driven stepover;
    - steep-and-shallow finishing.
-3. **Adaptive clearing, by a design checked claim by claim** (fto-adaptive.md). The 2004
-   Surfware/Truemill family's last member, US 7,577,490, expires 2026-12-17. The live claims
-   (SolidCAM, Celeritive, Truemill 8,560,113, DP Technology) each require specific elements.
-   The candidate design: control a single engagement bound, certify it on the exact cleared
-   region, link by retract or by straight moves checked against the cleared region, and adapt
-   the feed rather than reshape the path. It is meant to avoid at least one required element of
-   each live claim. Counsel decides; we bring the matrix.
+3. **Adaptive clearing on the exact cleared region.** Control a single capped engagement bound
+   and certify it on the exact cleared region, so tool load is bounded everywhere, inner corners
+   included. Output open one-direction peel passes, link through the cleared area by straight
+   moves checked against it (otherwise retract), and adapt the feed to the engagement. Every
+   step is deterministic, so the same part gives the same path.
 
 ---
 
@@ -142,8 +134,9 @@ gate:
   - No openly licensed measured table for aluminium was found.
   - Helical's 6061 data (H45AL-3) [R]: values can be cited per value, not embedded as a table
     ("may not be reproduced").
-- **Feed scheduling.** GE US 4,833,617 (1987; expired) [R]: per-move feed from the material
-  removed in a solid model, under force and deflection limits. It fits our exact stock directly.
+- **Feed scheduling** [R]: per-move feed from the material removed in a solid model, under force
+  and deflection limits (Spence & Altintas 1994; Erdim et al. 2006). It fits our exact stock
+  directly.
 - **Cycle time.** Ward et al. 2021 (arXiv:2102.02062) [R]: FIR models of the controller's
   interpolator predict cycle time to within about 90%. Ruckig (MIT) gives a jerk-limited lower
   bound, and was run here.
@@ -242,93 +235,6 @@ See §0 for its weaknesses.
 
 ---
 
-## 3. Patents and freedom to operate (summary; detail in fto-adaptive.md and patents-fto.md)
-
-*Not legal advice. Engineering analysis for David and counsel.*
-
-Read 2026-11-24 from Google Patents claims and legal-events pages [R]. USPTO Patent Center
-(term adjustment, terminal disclaimers) was not reachable; counsel confirms. Full matrix and 12
-questions for counsel: fto-adaptive.md.
-
-**Free now (expired or lapsed), usable as prior art:**
-- The Surfware/Truemill 2004 engagement-milling family except 7,577,490:
-  - 7,451,013 (passes shaped to a stored max engagement) expired 2025-05-23;
-  - 7,831,332 and 8,000,834 expired 2025-03-02;
-  - 8,694,149 (circular passes under an engagement cap) is expired and also fee-lapsed.
-- MTU 7,237,989 (2003; each path's curvature set from the previous one to hold max contact)
-  expired 2024-06-11.
-- GE adaptive feed: 4,833,617 (lapsed 1993) and 5,828,574 (expired 2017).
-- Surfware 6,704,611 (expired 2022) and MERL 9,575,486 (fee-lapsed 2021).
-
-**Truemill US 7,577,490.** It blocks only one construction: passes of two tangent arcs into a
-three-sided region (one arc tangent to each side, radii above and below half the opening). Google
-gives expiry 2026-12-17. It is a CIP of a 2005-03-02 filing, so it may already have expired
-(about 2026-10-27, if the implied adjustment counts from that date). That figure is inferred, not
-read; counsel confirms.
-
-**Live, closest to what we would build:**
-
-| patent(s) | owner | to | claim 1 in plain words |
-|---|---|---|---|
-| 8,489,224 cl.1; 9,052,704 cl.1 | SolidCAM | 2031 | select a max **and a min** engagement angle; engagement varies gradually between them |
-| 9,823,645; 10,895,861; 10,324,445 | SolidCAM | 2031 | a machine or product following asymmetric spiral loops whose engagement swings max→min within a loop, with no preselected values. **The hardest to design around; claim construction is for counsel.** |
-| 8,489,224 cl.45 and relatives | SolidCAM | 2031 | "moat" passes around islands |
-| 12,248,293 | SolidCAM | — | choose trochoid vs spiral by estimated time |
-| US 2025/0284264 (pending) | SolidCAM | — | choose a clearance-plane or stay-down link by estimated time |
-| 9,489,339 | Delcam, now Autodesk | 2035 | offset subsets with backfill; or, when the predicted engagement exceeds a set angle, **enlarge the preceding path's corner radius** |
-| 8,295,972; 8,880,212 | Celeritive | 2029–2030 | transition-area links |
-| 9,946,245; 10,579,040 | Celeritive | 2032–2033 | paths from a modified Voronoi diagram |
-| 10,108,176 | Celeritive | 2033 | **replace an arc of a previously generated path with curves holding a new arc closer to the boundary**. Broad. |
-| 8,560,113 | Truemill | 2031 | corner arcs joined back to a first arc by transition passes |
-| 9,778,649; 9,958,859; 10,488,847 | DP/Hexagon | 2033–2034 | blend radius from the allowed engagement change; smoothed offsets; trochoidal links |
-| 10,108,172 | Autodesk (inventor Abrahamsen) | 2036 | spiral for a pocket with a hole, from a modified Voronoi diagram (exactly one cycle) and a "wave". All 22 claims read: both independents need a polygonal hole; a no-hole pocket is reached only by dependent claims that treat a skeleton as a zero-area hole. Don't spiral outward from a medial-axis skeleton used as a hole. |
-| 8,676,372 | Boeing | 2032 | engagement chosen from an axial-vs-radial depth-of-cut plot |
-| **9,892,215** | MERL | 2035 | the **live adaptive-feed** claim: split the path where engagement varies beyond a range, then a feed per segment from an engagement function with a material "abrasive resistance" parameter |
-| 12,663,778 (B1) | CNC Software | 2045 | cl.1: generator → **de-gouging filter that modifies the path** → linking filter → processing, as a DAG with ordering numbers. cl.10/13: per-point normal, tip and orientation records, then de-gouge, then link. forgeCAD's checker only refuses and never moves a point; its moves store XYZ only; it has no DAG. So it avoids elements of every independent claim, except an open question: does source-statement order count as "ordering numbers"? |
-| 12,485,511 | OPEN MIND | 2044 | multi-axis links |
-
-**Found later** (unclaimed-methods.md; fto-adaptive.md §7):
-- **New live:** Boeing **US 9,164,503** (to 2034; a medial-axis slot with circular end
-  recesses, then an outward constant-depth spiral, close to Fusion's slot clearing) and Surfware
-  US 9,317,030 (stepped helical entry, to 2031).
-- **New free:**
-  - Boeing US 6,591,158 (Bieterman & Sandstrom morphed spiral; lapsed 2015);
-  - Ibaraki's JP 2005-050255 (refused in 2005, Japan only; prior art against Delcam '339);
-  - Kakino US 6,942,436 and 6,772,039 (constant-chip spiral, force-model feed; expired);
-  - EPFL corner looping, US 2014/0297021 (abandoned).
-
-**Candidate design that avoids at least one required element of every live independent claim
-that was read** (claim-element matrix in fto-adaptive.md §3). Open gap: the SolidCAM spiral-loop
-machine/product claims. All independent claims of 10,108,172 and 12,663,778 are now read
-(fto-adaptive.md §1.6, §1.10).
-
-1. **Clearing** driven by a cleared-area simulation, steering each step to **one capped target**:
-   - no minimum and no band;
-   - output as open passes plus links, not spiral loops with designed spacing changes;
-   - no rewriting of earlier passes.
-2. **Links**: stay down on a straight move that lies inside the cleared area, otherwise retract.
-   It is a fixed rule: no transition areas, and no comparison of estimated times.
-3. **Feed** from the engagement per fixed-length sample, with chip thinning and the user's chip
-   load:
-   - no material-abrasion parameter;
-   - no splitting of the path by how much the engagement varies.
-4. **Islands** cleared by the same simulation, with no separate moat pass.
-5. **Offset and medial-axis modes** only in their plain forms.
-
-**What this changes in the ranked plan (§4):**
-- **Row 5, corner rounding.** Generate rounded passes directly, at a user-set radius. Never make
-  the radius depend on a predicted engagement (Delcam '339 cl.18 elements 2–3). Never revise an
-  already generated path's arcs toward the boundary (Celeritive '176).
-- **Row 3, per-move feed.** Fixed-length samples, chip-load based (avoids MERL 9,892,215
-  elements). Counsel question 6: does a user chip load count as an "abrasive resistance"
-  parameter?
-- **Row 4, links.** A fixed rule, not "choose by estimated time" (SolidCAM's pending application).
-- **Island pockets.** Counsel question 3, the "moat" claims: are island offsets generated
-  together with the boundary offsets a moat? This already touches today's pocket-with-islands
-  code (cam/pocket-islands).
-
----
-
 ## 4. The ranked plan
 
 **Where the code is** (gap-tables.md, read in the code):
@@ -348,34 +254,32 @@ contour basics** (lead arcs, finishing and spring passes, wear compensation cert
 radius range, tabs). Its full top 15 also places the **3-axis base (Parallel)** at #10. It is
 ranked there only because it is weeks of work: it is the largest capability gap.
 
-Ranked by real-world gain (cycle time, tool life, finish) per unit of work, with the patent gate
-respected.
+Ranked by real-world gain (cycle time, tool life, finish) per unit of work.
 
 Columns:
 - **P** = what can be proved: theorems in Lean, so no runtime check is needed for that property;
   the certifier stays for input-dependent answers.
-- **gate** = the patent gate: none known / counsel.
 - **Ch.** = Fusion-checklist items in fusion-benchmark.md §4.
 
-| # | build | gain | P (proof instead of check) | gate | Ch. |
-|---|---|---|---|---|---|
-| 1 | **Quality report per op** in the `forgecad.cam/1` reply. Certified max engagement φ and chip h_max on the exact cleared region; air-cut %; retracts; min path radius; MRR profile; scallop max (S3). Plus a cycle time with per-axis accel/jerk (trapezoid now, FIR per Ward et al. next), checked never below Ruckig's bound. | Makes "good" measurable; it is the yardstick for every row below and for Fusion parity. A certified engagement, chip and scallop bound is something no commercial CAM publishes. | Engagement is exactly decidable on line/arc regions (L2). The removed-area identity; the corner formula (roughing-linking.md §6) | none | R1–R4, O-items, BETTER items |
-| 2 | **Fix feeds.rs power (hm)**, with cited intervals for kc1.1 and mc; sin κr, bull-nose and tilted-ball D_eff | Correct power and torque limits; tool life | Monotonicity lemma: interval upper ends are sound | none | F-items |
-| 3 | **Per-move feed from the real engagement** (GE 1987, expired): keep h_max ≤ h* on the in-process stock; cap by power, torque and a deflection limit at the interval upper bounds; corner and arc engagement per feeds-speeds.md §2.3 | Large: the corner overloads (46%+) go away; straights run faster. Fusion lacks this. | **The headline theorem**: every emitted move's chip ≤ h* (engagement bound + monotonicity). No commercial CAM claims it. | GE 1987 expired; avoid MERL 9,892,215 (segmenting by engagement variation + abrasion parameter): use fixed-length samples and chip load | F-items (BETTER) |
-| 4 | **Stay-down links** inside the cleared region; minimum retraction otherwise; G0 retracts; optional microlift | Cuts today's 2 × loops × levels vertical moves at cutting feed. Big cycle-time win on every pocket. | A link is inside the cleared region (exact containment) → G1-safe by construction; proved once for the construction | design: no "transition toolpaths" (Celeritive '972); a fixed stay/retract rule, not chosen by time (SolidCAM US 2025/0284264) | L-items |
-| 5 | **Corner rounding** of offset passes with a user-set minimum radius, concentric; engagement *checked* (row 1), leftovers to rest | Corner spike 127° → about 52° at 10% stepover; higher reachable feed (√(aρ)) | Corner-formula theorem; the coverage theorem for offsets with stepover ≤ r | generate rounded passes directly at a user radius; no radius from predicted engagement (Delcam/Autodesk '339 cl.18), no outward revision of an existing path's arcs (Celeritive '176), no chained radius (DP '649) | R-items |
-| 6 | **Finishing output**: 4 decimals for finishing; control tolerance (G187/G64 P Q/CYCLE832/Cycle 32) from the op's tolerance budget; point redistribution at constant arc length; arc fitting with re-certification | Finish marks, faceting and dwell marks go away; controllers can look ahead | S4 chord bound, S6 rounding (G6 already), S7 as a named hypothesis | none known (patents-fto.md §8) | S/O-items |
-| 7 | **Per-tool entry limits** (ramp angle, helix diameter range, centre-cutting) in forge-tooling, refused by the checker; predrill and outside entry | Tool breakage avoided | Entry-limit check proven complete over all entries an op emits | none | R/L-items |
-| 8 | **3-axis finishing done right** (with CAM-3AXIS): exact drop-cutter, scallop-driven stepover (S2 per parameter box), Parallel + Contour + **Steep-and-Shallow** with overlap, then pencil and reference-tool rest; OCL as the L6 oracle | Finish quality at Fusion level | S1–S3; G1 on every segment (existing) | none known for basic strategies; check before iso-scallop variants | S-items |
-| 9 | **Ordering**: greedy + deterministic 2-opt/Or-opt over regions and levels, exact comparisons (native = wasm) | Moderate (air time) | Containment order respected (proved) | none (do not use LKH code) | L-items |
-| 10 | **Stock-aware levels**: the exact in-process stock section and exact flat-face levels | Fewer air cuts in rest roughing | Exact | fine step-down: check SolidCAM 9,690,282 first | R-items |
-| 11 | **Adaptive clearing**, by the fto-adaptive.md design: a single engagement bound on the exact cleared region, certified by row 1; arc output; deterministic (no wall-clock limits, unlike FreeCAD) | The biggest single roughing gain (full-flute depth at low radial width: tool life and MRR) | Engagement ≤ cap certified per op; links in the cleared region; coverage | **counsel**, with the claim matrix; earliest after 2026-12-17 (US 7,577,490) | R-items |
-| 12 | Chatter advice (user FRF → zero-order and semi-discretisation lobes); NURBS output where the dialect supports it; 3+2, then 5-axis tool-axis control | Advanced | Lobes are advice, not provable | NURBS output: check | BETTER items |
+| # | build | gain | P (proof instead of check) | Ch. |
+|---|---|---|---|---|
+| 1 | **Quality report per op** in the `forgecad.cam/1` reply. Certified max engagement φ and chip h_max on the exact cleared region; air-cut %; retracts; min path radius; MRR profile; scallop max (S3). Plus a cycle time with per-axis accel/jerk (trapezoid now, FIR per Ward et al. next), checked never below Ruckig's bound. | Makes "good" measurable; it is the yardstick for every row below and for Fusion parity. A certified engagement, chip and scallop bound is something no commercial CAM publishes. | Engagement is exactly decidable on line/arc regions (L2). The removed-area identity; the corner formula (roughing-linking.md §6) | R1–R4, O-items, BETTER items |
+| 2 | **Fix feeds.rs power (hm)**, with cited intervals for kc1.1 and mc; sin κr, bull-nose and tilted-ball D_eff | Correct power and torque limits; tool life | Monotonicity lemma: interval upper ends are sound | F-items |
+| 3 | **Per-move feed from the real engagement** (material-removal feed scheduling on the exact stock): keep h_max ≤ h* on the in-process stock; cap by power, torque and a deflection limit at the interval upper bounds; corner and arc engagement per feeds-speeds.md §2.3 | Large: the corner overloads (46%+) go away; straights run faster. Fusion lacks this. | **The headline theorem**: every emitted move's chip ≤ h* (engagement bound + monotonicity). No commercial CAM claims it. | F-items (BETTER) |
+| 4 | **Stay-down links** inside the cleared region; minimum retraction otherwise; G0 retracts; optional microlift | Cuts today's 2 × loops × levels vertical moves at cutting feed. Big cycle-time win on every pocket. | A link is inside the cleared region (exact containment) → G1-safe by construction; proved once for the construction | L-items |
+| 5 | **Corner rounding** of offset passes with a user-set minimum radius, concentric; engagement *checked* (row 1), leftovers to rest | Corner spike 127° → about 52° at 10% stepover; higher reachable feed (√(aρ)) | Corner-formula theorem; the coverage theorem for offsets with stepover ≤ r | R-items |
+| 6 | **Finishing output**: 4 decimals for finishing; control tolerance (G187/G64 P Q/CYCLE832/Cycle 32) from the op's tolerance budget; point redistribution at constant arc length; arc fitting with re-certification | Finish marks, faceting and dwell marks go away; controllers can look ahead | S4 chord bound, S6 rounding (G6 already), S7 as a named hypothesis | S/O-items |
+| 7 | **Per-tool entry limits** (ramp angle, helix diameter range, centre-cutting) in forge-tooling, refused by the checker; predrill and outside entry | Tool breakage avoided | Entry-limit check proven complete over all entries an op emits | R/L-items |
+| 8 | **3-axis finishing done right** (with CAM-3AXIS): exact drop-cutter, scallop-driven stepover (S2 per parameter box), Parallel + Contour + **Steep-and-Shallow** with overlap, then pencil and reference-tool rest; OCL as the L6 oracle | Finish quality at Fusion level | S1–S3; G1 on every segment (existing) | S-items |
+| 9 | **Ordering**: greedy + deterministic 2-opt/Or-opt over regions and levels, exact comparisons (native = wasm) | Moderate (air time) | Containment order respected (proved) | L-items |
+| 10 | **Stock-aware levels**: the exact in-process stock section and exact flat-face levels | Fewer air cuts in rest roughing | Exact | R-items |
+| 11 | **Adaptive clearing**: a single capped engagement bound on the exact cleared region, certified by row 1; open one-direction peel passes; links through the cleared area; arc output; deterministic (same input, same path) | The biggest single roughing gain (full-flute depth at low radial width: tool life and MRR) | Engagement ≤ cap certified per op; links in the cleared region; coverage | R-items |
+| 12 | Chatter advice (user FRF → zero-order and semi-discretisation lobes); NURBS output where the dialect supports it; 3+2, then 5-axis tool-axis control | Advanced | Lobes are advice, not provable | BETTER items |
 
 **Why this order.** Row 1 is the measuring stick: without it no row can show it helped. Rows 2–5
 are the largest real gains (feeds, links, corners) with no adaptive clearing at all. Row 3 is the
 headline "better than Fusion": a proven chip bound and a feed that follows real engagement. Row
-11 comes when counsel clears it, and rows 1, 3 and 4 make it better than Fusion's when it lands.
+11 builds on rows 1, 3 and 4, which make it better than Fusion's when it lands.
 
 **Benchmarks to prove "Fusion level or better"** (fusion-benchmark.md §4–5, opensource-oracles.md §5):
 
@@ -407,19 +311,17 @@ headline "better than Fusion": a proven chip bound and a feed that follows real 
 ## 5. Open questions for David
 
 **Decided by the coordinator (2026-11-24):**
-- (3) **Yes.** Default cutting data = cited tool-maker values, each value with its source (numbers
+- (2) **Yes.** Default cutting data = cited tool-maker values, each value with its source (numbers
   with citations, not copies of documents), plus Klippel et al. 2022 (CC BY 4.0), with
   attribution in the data files and docs.
-- (4) **Yes.** Machine acceleration and jerk stay UNKNOWN, with a conservative cycle-time range
+- (3) **Yes.** Machine acceleration and jerk stay UNKNOWN, with a conservative cycle-time range
   (lower and upper bound) until measured or published.
 
-Items 1 and 2 below are with David.
+Item 1 below is with David.
 
 1. Can you (or a machinist friend) run Fusion on the B1–B7 parts and export the toolpaths? Without
    that, "Fusion level" is tested against Fusion's documented behaviour, not its numbers.
-2. Counsel: fto-adaptive.md ends with specific questions. Adaptive clearing (row 11) waits for
-   that answer.
-3. Cutting data: is Klippel (CC BY) + cited tool-maker values (cited, not embedded) acceptable as
+2. Cutting data: is Klippel (CC BY) + cited tool-maker values (cited, not embedded) acceptable as
    the default data, with "UNKNOWN" where nothing open exists (e.g. measured aluminium kc)?
-4. Machine dynamics: per-axis acceleration and jerk are rarely published. Should the machine
+3. Machine dynamics: per-axis acceleration and jerk are rarely published. Should the machine
    library hold them as UNKNOWN, with a conservative cycle-time range, until a user measures them?

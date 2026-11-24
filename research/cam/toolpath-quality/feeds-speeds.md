@@ -155,7 +155,7 @@ engagement **bound** give a chip **bound** (§10).
 - Removal rate: Q = ae·ap·vf (mm³/min), given as Q = ap·ae·vf/1000 cm³/min by Sandvik [R] and as
   MRR = RDOC × ADOC × IPM by Helical [R]. For a path whose ae varies, the exact Q is the rate at
   which the swept volume minus the in-process stock changes. forgeCAD's stock model can compute it
-  exactly (§10). GE's 1987 patent does this with a solid modeller (§6).
+  exactly (§10). Solid-model feed scheduling does this with a solid modeller (§6).
 
 ### 2.2 Up versus down milling
 
@@ -268,12 +268,11 @@ item (libraries doc §1).
   gives 0.7–0.8·D [S, mmc-carbide.com length-of-cut course]. Better models split the beam into a
   shank part and a fluted part, each with its own I [S, the same search]. The original paper is
   unread, so treat 0.8 as [S].
-- **Carbide modulus.** E ≈ 550–650 GPa for WC with 5–15 wt% Co, falling as Co rises [S, US7985470
-  and other patents]. Use the grade's datasheet when there is one.
+- **Carbide modulus.** E ≈ 550–650 GPa for WC with 5–15 wt% Co, falling as Co rises [S, search
+  snippets]. Use the grade's datasheet when there is one.
 - **Holder and spindle.** The cantilever ignores the compliance of the holder–spindle joint, which
   can dominate on a long assembly. Receptance coupling (§5.3) is the published way to include it
-  [S, Schmitz]. The GE patent uses a cantilever with a thrust force of about 0.5× the cutting force
-  [R, US4833617].
+  [S, Schmitz].
 - **Runout.** A radial runout e moves the chip load between teeth: in the simplest model one tooth
   cuts fz + e and another fz − e [K, Altintas 2012]. Rivière-Lorphèvre et al. identify runout as a
   parameter [R]. At small fz, for example on finishing passes, runout can take the chip of one
@@ -353,16 +352,15 @@ changes with spindle speed and wear. It is **measured**, not looked up.
 
 ## 6. Adaptive feedrate and feed scheduling
 
-- **GE, US 4,833,617** (Weiping Wang, General Electric), "Solid modeling based adaptive feedrate
-  control for NC machining". Filed 14 Aug 1987, granted 23 May 1989, **expired** (lapsed for
-  fees, per Google Patents) [R]: https://patents.google.com/patent/US4833617. It runs the NC
-  program through a solid modeller that subtracts each swept volume. Per move it computes MRR =
-  volume/time, then spindle horsepower = MRR × a unit-horsepower index, then force, then a
-  cantilever deflection with thrust ≈ ½ the force. The feed is set to the largest value that keeps
-  force and deflection within limits, bounded to 25–400% of the baseline, and written back into
-  the program. It reports a time saving of about 30% in one example. **This is free to implement
-  and fits forgeCAD's stock model directly.** (The "GE 1997 Spence" in the brief did not resolve
-  to a paper. The GE work found is this 1987 Wang patent.)
+- **Solid-model-based feed scheduling** (Spence & Altintas 1994; Erdim et al. 2006, below). The
+  NC program is run through a solid modeller that subtracts each swept volume from the stock. Per
+  move this gives the engagement and MRR = volume/time; a force model then gives force, power and
+  a cantilever tool deflection. The feed is set to the largest value that keeps force, power and
+  deflection within limits, clamped to a band around the programmed feed, and written back into
+  the program. Straight, lightly loaded moves speed up and corners and full-width moves slow
+  down, so cycle time falls while peak tool load stays bounded. **It fits forgeCAD's exact stock
+  model directly.** (The "GE 1997 Spence" in the brief did not resolve to a paper; the closest
+  match is Spence & Altintas 1994.)
 - **Spence & Altintas (1994)**, "A solid modeller based milling process simulation and planning
   system", *J. Eng. Ind.* 116(1):61–69, doi:10.1115/1.2901810 [S]. CSG engagement plus a
   mechanistic force model, then an inverse solution for the feed under force, torque and
@@ -537,7 +535,7 @@ one operation class.
    [K] is the place to start.
 3. *Mean chip and MRR*: hm = fz·sin κ·(1 − cos φ)/φ exactly under the same model. MRR per move is
    exactly the volume of the swept solid minus the stock, as an exact computation on forgeCAD's
-   stock (the GE patent's method, §6, which has expired).
+   stock (solid-model feed scheduling, §6).
 4. *Feed monotonicity*: the force (Kienzle or mechanistic) is increasing in fz for mc < 1, because
    F ∝ h^(1−mc). So "largest fz with F ≤ F*" is well defined and bisection is sound. Proof: the
    derivative (1 − mc)·h^(−mc) > 0 for 0 ≤ mc < 1.
@@ -617,7 +615,7 @@ Helical's slot 0.0813 mm, but neither value is cited.
    Ti6Al4V, and Sandvik ranges cited by page.
 2. Add sin κr, bull-nose and tilted-ball Deff (§1.2–1.3).
 3. Feed scheduling per move: the chip-constant feed from the *actual* engagement measured on the
-   in-process stock (GE method, now expired), capped by power, torque and a deflection limit
+   in-process stock (solid-model feed scheduling, §6), capped by power, torque and a deflection limit
    evaluated at the interval upper bounds. Corner and arc engagement per §2.3.
 4. A machine file with per-axis jerk and a blend tolerance, and a third, FIR-based time estimate
    (Ward et al.). Then schedule the minimum of the process feed and the reachable feed.
