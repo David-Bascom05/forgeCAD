@@ -158,6 +158,47 @@ impl<'a> Setup<'a> {
             .or_else(|| self.def.mount(&self.tool_mount))
     }
 
+    /// `tip_in_part`'s tip along a segment whose rotaries stay put, s ∈ [0, 1] (removal calls it
+    /// thousands of times a move): the lookups and the fixed rotaries done once, the same
+    /// operations otherwise, so the same bits as `tip_in_part(&seg.at(s), t).0`.
+    pub fn tip_along<'s>(&'s self, seg: &'s Segment, t: u32) -> Option<impl Fn(f64) -> [f64; 3] + 's> {
+        use crate::kin;
+        let tool = self.tool(t)?;
+        let m = self.mount_for(t)?;
+        let pm = self
+            .def
+            .mount(&self.part_mount)
+            .filter(|m| m.kind == MountKind::Part)?;
+        let fixed: Vec<bool> = seg.q0.iter().zip(&seg.q1).map(|(a, b)| a == b).collect();
+        let kc = kin::Fixed::new(self.def, &seg.q0, &fixed);
+        let (tl, pl) = (self.def.joint_index(&m.link), self.def.joint_index(&pm.link));
+        let y = kin::cross(pm.dir, pm.xdir);
+        let local = kin::Rigid {
+            r: [
+                [pm.xdir[0], y[0], pm.dir[0]],
+                [pm.xdir[1], y[1], pm.dir[1]],
+                [pm.xdir[2], y[2], pm.dir[2]],
+            ],
+            p: pm.at,
+        };
+        let at = kin::add(m.at, tool.tip);
+        let def = self.def;
+        let buf = std::cell::RefCell::new((vec![0.0; seg.q0.len()], vec![kin::Rigid::ID; def.joints.len()]));
+        Some(move |s: f64| {
+            let mut b = buf.borrow_mut();
+            let (q, p) = &mut *b;
+            seg.at_into(s, q);
+            kc.pose_into(def, q, p);
+            let pick = |i: Option<usize>| match i {
+                Some(i) => p[i],
+                None => kin::Rigid::ID,
+            };
+            let tip = pick(tl).apply(at);
+            let f = pick(pl).then(&local).inverse();
+            f.apply(tip)
+        })
+    }
+
     /// A tool's tip and axis (tip toward the gauge) in the part's frame at joint values q.
     pub fn tip_in_part(&self, q: &[f64], t: u32) -> Option<([f64; 3], [f64; 3])> {
         use crate::kin;
@@ -217,6 +258,28 @@ pub struct Segment {
 }
 
 impl Segment {
+    /// `at` into a buffer of q0.len().
+    pub fn at_into(&self, s: f64, q: &mut [f64]) {
+        for (k, (a, b)) in self.q0.iter().zip(&self.q1).enumerate() {
+            q[k] = a + s * (b - a);
+        }
+        if let Path::Arc {
+            a,
+            b,
+            c,
+            r,
+            r1,
+            a0,
+            sweep,
+        } = &self.path
+        {
+            let (sn, cs) = dmath::sin_cos(a0 + s * sweep);
+            let rs = r + s * (r1 - r);
+            q[*a] = c[0] + rs * cs;
+            q[*b] = c[1] + rs * sn;
+        }
+    }
+
     /// Joint values at s ∈ [0, 1].
     pub fn at(&self, s: f64) -> Vec<f64> {
         let mut q: Vec<f64> = self

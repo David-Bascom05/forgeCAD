@@ -130,6 +130,54 @@ impl SetupSpec {
         let Some(Val::Table(s)) = root.get("setup") else {
             return Err("no [setup] table".into());
         };
+        if !tables(s, "channel").is_empty() {
+            return Err(
+                "[setup]: this setup has [[setup.channel]] blocks: read it with parse_channels".into(),
+            );
+        }
+        Self::from_table(s)
+    }
+
+    /// A setup of several channels: `[[setup.channel]]` blocks, each a channel's setup (`n`, its
+    /// `program`, its `wcs`, `tool`, `geo`, `part_mount`, ...) on top of `[setup]`'s keys. The
+    /// stock and fixtures given in `[setup]` belong to the first channel; another channel has
+    /// only those it gives itself. None if the setup has no channel blocks.
+    pub fn parse_channels(src: &str) -> Result<Option<Vec<SetupSpec>>, String> {
+        let root = toml::parse(src).map_err(|e| format!("line {}: {}", e.line, e.what))?;
+        let Some(Val::Table(s)) = root.get("setup") else {
+            return Err("no [setup] table".into());
+        };
+        let chans = tables(s, "channel");
+        if chans.is_empty() {
+            return Ok(None);
+        }
+        let mut out: Vec<SetupSpec> = Vec::new();
+        for (i, c) in chans.iter().enumerate() {
+            let mut t = s.clone();
+            t.remove("channel");
+            if i > 0 {
+                t.remove("stock");
+                t.remove("fixture");
+                t.remove("work_kg");
+            }
+            for (k, v) in c.iter() {
+                if k != "n" {
+                    t.insert(k.clone(), v.clone());
+                }
+            }
+            let n =
+                num(c, "n").ok_or_else(|| format!("[[setup.channel]] {}: give `n`, the channel", i + 1))?;
+            t.insert("channel".into(), Val::Num(n));
+            let spec = Self::from_table(&t).map_err(|e| format!("channel {n}: {e}"))?;
+            if out.iter().any(|o| o.channel == spec.channel) {
+                return Err(format!("[[setup.channel]]: channel {n} twice"));
+            }
+            out.push(spec);
+        }
+        Ok(Some(out))
+    }
+
+    fn from_table(s: &Table) -> Result<SetupSpec, String> {
         let rec = "[setup]";
         let txt = |k: &str| -> Result<String, String> {
             text(s, k)

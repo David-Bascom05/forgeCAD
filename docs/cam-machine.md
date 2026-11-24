@@ -273,6 +273,33 @@ What is claimed, for every timing the bounds allow:
 Not modelled: superimposition and synchronised spindles (a transfer is a wait with both chucks
 closed on the part).
 
+A setup of several channels gives `[[setup.channel]]` blocks; each is a channel's setup (`n`, its
+`program`, its `wcs`, `tool`, `geo`, `part_mount`, `start_tool`, ...) on top of `[setup]`'s keys.
+The stock and fixtures in `[setup]` belong to the first channel; another channel has only those it
+gives itself. `forgecad machine SETUP.toml` then answers `forgecad.machine-multi/1`: per channel its
+timeline, segment windows, own collisions and not-checked values; the cross-channel contacts; the
+whole run's [earliest, latest] end; the open windows (`conservative`); a deadlock as
+`{"deadlock": [{channel, line, wait}]}`. Exit 0 with no violation and no contact, 1 refused.
+
+```toml
+[setup]
+machine = "generic-mill-turn"
+dialect = "millturn-2ch"        # a dialect with wait_m = [100, 199]
+
+[[setup.channel]]
+n = 1
+program = "millturn_ch1.nc"
+
+[[setup.channel]]
+n = 2
+program = "millturn_ch2.nc"
+part_mount = "sub"
+```
+
+Examples: examples/machine/millturn_2ch.toml (the head leaves before the sub-spindle comes in, at a
+wait: ok) and millturn_2ch_nowait.toml (no wait: some timing within the bounds meets the head:
+refused).
+
 ## Setup files
 
 ```toml
