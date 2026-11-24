@@ -76,6 +76,27 @@ pub struct OpRes {
     pub hex: Option<f64>,
     pub vc: Option<f64>,
     pub power_kw: Option<f64>,
+    /// The cutting data as resolved (forge-tooling `resolve`): each value with its source.
+    pub resolved: Option<forge_tooling::resolve::Resolved>,
+}
+
+/// The resolved value a Feeds & Speeds argument stands for, when there is one.
+pub fn resolved_val<'a>(r: &'a forge_tooling::resolve::Resolved, arg: &str) -> Option<&'a forge_tooling::resolve::Val> {
+    Some(match arg {
+        "vc" => &r.vc,
+        "rpm" => &r.rpm,
+        "chip" => &r.chip,
+        "fz" => &r.fz,
+        "feed" => &r.feed,
+        "ap" => &r.ap,
+        "ae" => &r.ae,
+        "plunge_feed" => &r.plunge,
+        "ramp_feed" => &r.ramp,
+        "lead_in_feed" => &r.lead_in,
+        "min_feed" => &r.min_feed,
+        "max_feed" => &r.max_feed,
+        _ => return None,
+    })
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -257,6 +278,7 @@ pub fn run(text: &str, dir: &Path) -> Run {
                 hex: f.and_then(|f| n(f, "hex")),
                 vc: f.and_then(|f| n(f, "vc")),
                 power_kw: f.and_then(|f| n(f, "power_kw")),
+                resolved: o.resolved.clone(),
             }
         })
         .collect();

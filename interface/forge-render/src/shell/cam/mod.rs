@@ -183,6 +183,8 @@ pub struct OpDlg {
     pub args: Vec<(String, String)>,
     pub was: Vec<(String, String)>,
     pub error: Option<String>,
+    /// Feeds & Speeds: the limits (least and most feed, engagement, power, torque) shown.
+    pub limits: bool,
 }
 
 impl OpDlg {
@@ -505,9 +507,7 @@ impl CamWs {
         let Some(spec) = schema::spec(&d.func) else {
             return String::new();
         };
-        let Some(field) = spec
-            .fields
-            .iter()
+        let Some(field) = schema::fields(spec)
             .find(|f| matches!(f.kind, schema::Kind::Hole | schema::Kind::Sketch))
         else {
             return format!("Picked {anchor}: {} takes no geometry from the model", spec.label);
@@ -806,7 +806,7 @@ impl CamWs {
         };
         let name = doc::free_name(&self.stmts, base);
         let mut args = vec![];
-        if spec.is_some_and(|s| s.fields.iter().any(|f| f.arg == "tool")) {
+        if spec.is_some_and(|s| schema::fields(s).any(|f| f.arg == "tool")) {
             // the last tool used in the setup, else the first tool
             let tool = self
                 .ops_of(setup)
@@ -833,6 +833,7 @@ impl CamWs {
             was: vec![],
             args,
             error: None,
+            limits: false,
         }
     }
 

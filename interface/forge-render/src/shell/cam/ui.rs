@@ -1260,6 +1260,12 @@ fn op_dialog(
         .map(|s| (format!("{}.{s}", part.name), s.clone()))
         .collect();
     let new = d.id.is_none();
+    // what the last run resolved this op's cutting data to
+    let resolved = d
+        .id
+        .as_ref()
+        .and_then(|id| w.run.as_ref()?.ops.iter().find(|o| &o.name == id))
+        .and_then(|o| o.resolved.clone());
     let r = egui::Window::new("cam-op")
         .id(egui::Id::unique("cam-op-dialog"))
         .title_bar(false)
@@ -1291,11 +1297,35 @@ fn op_dialog(
                 d.name = name;
                 fact(ui, t, "Setup", &d.setup, DLG_W, t.ink);
             }
-            for f in spec.fields.iter().filter(|f| f.tab == tab) {
+            let mut limits_drawn = false;
+            for f in schema::fields(spec).filter(|f| f.tab == tab) {
+                if schema::LIMITS.contains(&f.arg) {
+                    if !limits_drawn {
+                        limits_drawn = true;
+                        ui.horizontal(|ui| {
+                            ui.add_space(14.0);
+                            let words = if d.limits { "Hide limits" } else { "Limits: feed range, engagement, power, torque" };
+                            if button(ui, t, words, false, "cam:op:limits".into(), places) {
+                                d.limits = !d.limits;
+                            }
+                        });
+                    }
+                    if !d.limits && d.get(f.arg).trim().is_empty() {
+                        continue;
+                    }
+                }
                 let key = format!("cam:op:arg:{}", f.arg);
                 let mut val = d.get(f.arg).to_string();
-                let hint = if f.required { "required".to_string() } else { format!("default: {}", f.default) };
+                // a cutting value left out shows what the run resolved it to, and from where
+                let hint = match resolved.as_ref().and_then(|r| super::run::resolved_val(r, f.arg)) {
+                    Some(v) if d.get(f.arg).trim().is_empty() => {
+                        format!("{} {} ({})", cut_num(v.v), v.unit, v.source.name())
+                    }
+                    _ if f.required => "required".to_string(),
+                    _ => format!("default: {}", f.default),
+                };
                 match f.kind {
+                    Kind::Num(unit) => arg_field(ui, t, f.label, &mut val, &hint, unit, &key, places),
                     Kind::Len => arg_field(ui, t, f.label, &mut val, &hint, "mm", &key, places),
                     Kind::Deg => arg_field(ui, t, f.label, &mut val, &hint, "deg", &key, places),
                     Kind::Z => arg_field(ui, t, f.label, &mut val, &hint, "mm z", &key, places),
@@ -1397,6 +1427,9 @@ fn op_dialog(
             ui.add_space(2.0);
             note(ui, spec.what, DLG_W, t.ink2);
             note(ui, &CamWs::op_text(d), DLG_W, t.ink2);
+            if tab == Tab::Feeds {
+                feeds_facts(ui, t, resolved.as_ref());
+            }
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
             }
@@ -1404,9 +1437,7 @@ fn op_dialog(
         });
     let rect = r.map(|r| r.response.rect);
     if ok || apply {
-        let missing: Vec<&str> = spec
-            .fields
-            .iter()
+        let missing: Vec<&str> = schema::fields(spec)
             .filter(|f| f.required && d.get(f.arg).trim().is_empty())
             .map(|f| f.label)
             .collect();
@@ -2768,4 +2799,73 @@ pub fn status_line(w: &CamWs) -> String {
         w.path.rsplit('/').next().unwrap_or(""),
         if w.dirty() { " · unsaved" } else { "" }
     )
+}
+
+/// The Feeds & Speeds tab's facts: what the run worked out at the resolved values, and its
+/// checks (one line; a note for each that is not a pass).
+fn feeds_facts(ui: &mut Ui, t: &Theme, r: Option<&forge_tooling::resolve::Resolved>) {
+    use forge_tooling::resolve::Verdict;
+    let Some(r) = r else {
+        note(ui, "Generate to see the values resolved from the tool's and the material's data.", DLG_W, t.ink2);
+        return;
+    };
+    let g = cut_num;
+    let f = &r.feeds;
+    let pct = |v: f64, avail: Option<f64>| match avail {
+        Some(a) if a > 0.0 => format!("{} ({}%)", g(v), (100.0 * v / a).round()),
+        _ => g(v),
+    };
+    fact(
+        ui,
+        t,
+        "Cut",
+        &format!("{} deep · {} wide · {}° · D {}", g(r.ap.v), g(r.ae.v), g(f.phi.to_degrees()), g(f.d_eff)),
+        DLG_W,
+        t.ink,
+    );
+    fact(
+        ui,
+        t,
+        "Chip peak · mean",
+        &format!("{} · {} mm{}", g(f.hex), g(f.hm), if r.held_chip { " (held)" } else { "" }),
+        DLG_W,
+        t.ink,
+    );
+    fact(
+        ui,
+        t,
+        "cm³/min · kW · N·m",
+        &format!("{} · {} · {}", g(r.mrr), pct(f.power, r.power_avail), pct(f.torque, r.torque_avail)),
+        DLG_W,
+        t.ink,
+    );
+    if r.checks.is_empty() {
+        return;
+    }
+    let worst = r.checks.iter().map(|c| c.verdict).fold(Verdict::Pass, |a, b| match (a, b) {
+        (Verdict::Fail, _) | (_, Verdict::Fail) => Verdict::Fail,
+        (Verdict::Warn, _) | (_, Verdict::Warn) => Verdict::Warn,
+        _ => Verdict::Pass,
+    });
+    let ink = |v: Verdict| match v {
+        Verdict::Pass => t.success,
+        Verdict::Warn => t.warn,
+        Verdict::Fail => t.error,
+        Verdict::NotChecked => t.ink2,
+    };
+    let line: Vec<String> = r.checks.iter().map(|c| format!("{} {}", c.what, c.verdict.name())).collect();
+    note(ui, &format!("Checks: {}", line.join(" · ")), DLG_W, ink(worst));
+    for c in r.checks.iter().filter(|c| matches!(c.verdict, Verdict::Warn | Verdict::Fail)) {
+        note(ui, &format!("{}: {}", c.what, c.why), DLG_W, ink(c.verdict));
+    }
+}
+
+/// A cutting value as shown: three decimals under 1 (chips, feeds per tooth), two to 100, one over.
+fn cut_num(v: f64) -> String {
+    let k: f64 = match v.abs() {
+        a if a < 1.0 => 1000.0,
+        a if a < 100.0 => 100.0,
+        _ => 10.0,
+    };
+    format!("{}", (v * k).round() / k)
 }

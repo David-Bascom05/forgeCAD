@@ -19,7 +19,7 @@ closes it:
 | Tool / Geometry / Heights / Passes / Linking tabs | the same five, data-driven from schema.rs, every op (Linking always) | done |
 | Tool tab: tool picker with its geometry | document tools, type, D, flutes, flute length; Tool Library… | done |
 | Tool tab: feeds and speeds shown (rpm, vc, feed, fz) | from the run's cutting data, with thinned chip | done |
-| Tool tab: override rpm ⇄ vc, feed ⇄ fz; ramp / plunge / lead / transition feeds; feed per rev (drilling) (F1) | none: feeds are computed only | LANG (`rpm:`, `vc:`, `feed:`, `fz:`, `plunge_feed:`, `ramp_feed:`) |
+| Tool tab: override rpm ⇄ vc, feed ⇄ fz; ramp / plunge / lead / transition feeds; feed per rev (drilling) (F1) | Feeds & Speeds tab on every milling op (branch cam/ui-feeds, on FEEDS-SPEEDS' feeds/model): vc, rpm, chip, fz, feed, plunge/ramp/lead-in feeds, limits; each left out shows its resolved value and source; derived chip, engagement, power, torque and the checks | done on cam/ui-feeds (lands with feeds/model); drilling feed per rev: not yet |
 | Named cutting-data presets per tool, expressions of tool geometry (F2) | cutting groups P M K N S H, no presets | LANG + library (forge-tooling `[[preset]]`) |
 | Presets filtered by stock material (F3) | the part's `group:` picks the cutting data | partly (group); presets LANG |
 | Geometry: pick model edges / faces / holes / sketches | holes and sketches from history or picked in the view | done (holes, sketches); edge chains LANG |

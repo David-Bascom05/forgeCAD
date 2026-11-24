@@ -9,17 +9,20 @@ pub enum Tab {
     Geometry,
     Heights,
     Passes,
+    /// Feeds & Speeds: the cutting data an op asks for (forge-tooling `resolve`).
+    Feeds,
     Linking,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 5] = [Tab::Tool, Tab::Geometry, Tab::Heights, Tab::Passes, Tab::Linking];
+    pub const ALL: [Tab; 6] = [Tab::Tool, Tab::Geometry, Tab::Heights, Tab::Passes, Tab::Feeds, Tab::Linking];
     pub fn label(self) -> &'static str {
         match self {
             Tab::Tool => "Tool",
             Tab::Geometry => "Geometry",
             Tab::Heights => "Heights",
             Tab::Passes => "Passes",
+            Tab::Feeds => "Feeds & Speeds",
             Tab::Linking => "Linking",
         }
     }
@@ -44,6 +47,8 @@ pub enum Kind {
     Z,
     /// A count (passes).
     Count,
+    /// A number in this unit (m/min, rpm, mm/min, kW, N·m).
+    Num(&'static str),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -337,6 +342,36 @@ pub fn spec(func: &str) -> Option<&'static OpSpec> {
     OPS.iter().chain(TURN_OPS).find(|s| s.func == func)
 }
 
+/// The cutting data every milling op takes, and its tool too (the op's wins): all optional,
+/// resolved from the tool's and the material's data when left out.
+pub const FEEDS: &[Field] = &[
+    f("vc", "Cutting speed", Tab::Feeds, Kind::Num("m/min"), "the material's"),
+    f("rpm", "Spindle speed", Tab::Feeds, Kind::Num("rpm"), "from the cutting speed; wins over it"),
+    f("chip", "Chip to hold", Tab::Feeds, Len, "the tool's or the material's"),
+    f("fz", "Feed per tooth", Tab::Feeds, Len, "from the chip, thinned"),
+    f("feed", "Cutting feed", Tab::Feeds, Kind::Num("mm/min"), "from the feed per tooth"),
+    f("plunge_feed", "Plunge feed", Tab::Feeds, Kind::Num("mm/min"), "30% of the feed"),
+    f("ramp_feed", "Ramp feed", Tab::Feeds, Kind::Num("mm/min"), "30% of the feed"),
+    f("lead_in_feed", "Lead-in feed", Tab::Feeds, Kind::Num("mm/min"), "the feed"),
+    f("min_feed", "Least feed", Tab::Feeds, Kind::Num("mm/min"), "none"),
+    f("max_feed", "Most feed", Tab::Feeds, Kind::Num("mm/min"), "the machine's"),
+    f("max_angle", "Most engagement", Tab::Feeds, Deg, "180"),
+    f("max_power", "Most power", Tab::Feeds, Kind::Num("kW"), "the spindle's"),
+    f("max_torque", "Most torque", Tab::Feeds, Kind::Num("N·m"), "the spindle's"),
+];
+
+/// The `FEEDS` that bound the others (shown on asking, or when set).
+pub const LIMITS: &[&str] = &["min_feed", "max_feed", "max_angle", "max_power", "max_torque"];
+
+/// The milling ops that take `FEEDS` (the drilling cycles keep their own feeds).
+const FED: &[&str] = &["facing", "clear", "contour", "pocket", "slot", "engrave", "thread_mill", "edge_break"];
+
+/// Every field of `s`: its own, then the cutting data when it takes them.
+pub fn fields(s: &OpSpec) -> impl Iterator<Item = &'static Field> + '_ {
+    let feeds: &'static [Field] = if FED.contains(&s.func) { FEEDS } else { &[] };
+    s.fields.iter().chain(feeds)
+}
+
 /// Whether an op built-in is turning's.
 pub fn is_turning_op(func: &str) -> bool {
     TURN_OPS.iter().any(|s| s.func == func)
@@ -348,7 +383,7 @@ pub fn is_turning_op(func: &str) -> bool {
 pub fn tabs(s: &OpSpec) -> Vec<Tab> {
     Tab::ALL
         .into_iter()
-        .filter(|t| *t == Tab::Linking || s.fields.iter().any(|f| f.tab == *t))
+        .filter(|t| *t == Tab::Linking || fields(s).any(|f| f.tab == *t))
         .collect()
 }
 

@@ -253,3 +253,30 @@ fn the_tool_library_adds_a_tool_to_the_document() {
     h.step();
     assert!(text(&h).contains("tool(\"flat-6\", t: 2"), "{}", text(&h));
 }
+
+/// Feeds & Speeds: a milling op's tab shows each value as the run resolved it (its source as the
+/// placeholder) with the power, torque and checks; a value typed is the op's argument.
+#[test]
+fn feeds_and_speeds_tab_writes_the_ops_cutting_data() {
+    use forge_render::shell::cam::schema::{Tab, spec, tabs};
+    let Some((mut h, _)) = open("feeds") else { return };
+    let w = h.gui.shell.cam.as_mut().unwrap();
+    w.auto = false;
+    let r = w.run.as_ref().unwrap().ops.iter().find(|o| o.name == "prof").unwrap().resolved.clone();
+    let r = r.expect("prof's cutting data resolved");
+    assert!(r.rpm.v > 0.0 && r.feed.v > 0.0);
+    w.command(forge_render::shell::cam::Cmd::Edit("prof".into()));
+    h.step();
+    let k = tabs(spec("contour").unwrap()).iter().position(|t| *t == Tab::Feeds).expect("a Feeds & Speeds tab");
+    assert!(!tabs(spec("drill").unwrap()).contains(&Tab::Feeds), "drilling keeps its own feeds");
+    assert!(h.click(&format!("cam:op:tab:{k}")));
+    h.step();
+    shot(&mut h, "cam-feeds");
+    assert!(h.click("cam:op:arg:rpm"));
+    h.text("6000");
+    h.step();
+    assert!(h.click("cam:op:ok"));
+    h.step();
+    let t = text(&h);
+    assert!(t.lines().any(|l| l.starts_with("prof") && l.contains("rpm: 6000")), "{t}");
+}
