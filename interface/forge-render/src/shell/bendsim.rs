@@ -58,6 +58,21 @@ pub struct BendSimUi {
     pub as_given: bool,
     /// The step and instant last asked to be drawn.
     pub painted: Option<(usize, u64)>,
+    /// The part's bending document (`<stem>_bend.fg`), when it has one: the program's source of
+    /// truth, every edit an op on its text.
+    pub doc: Option<DocState>,
+}
+
+/// The bending document as last read.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DocState {
+    pub path: std::path::PathBuf,
+    pub src: String,
+    /// Its `bend` statements' names, in order (one per step), and its stations' names.
+    pub bends: Vec<String>,
+    pub stations: Vec<String>,
+    /// Its own refusals (a statement it does not take, a program format, ..).
+    pub errors: Vec<(String, String)>,
 }
 
 fn dir_of(path: &str) -> Option<std::path::PathBuf> {
@@ -72,8 +87,21 @@ impl BendSimUi {
         BendSimUi::open_with(source, path, tooling, Choice::default())
     }
 
-    /// Simulates the part's text as `choice` says.
+    /// Simulates the part's text: as its bending document states, if it has one, else as
+    /// `choice` says.
     pub fn open_with(source: &str, path: &str, tooling: &str, choice: Choice) -> BendSimUi {
+        let companion = forge_bend_lang::companion(std::path::Path::new(path));
+        if let Some(src) = forge_dirs::fs::read_to_string(&companion)
+            .ok()
+            .filter(|s| forge_bend_lang::is_bending(s))
+        {
+            return BendSimUi::from_doc(source, path, tooling, companion, src);
+        }
+        BendSimUi::plan_with(source, path, tooling, choice)
+    }
+
+    /// Simulates the part's text as `choice` says (the planner's where it says nothing).
+    pub fn plan_with(source: &str, path: &str, tooling: &str, choice: Choice) -> BendSimUi {
         let dir = dir_of(path);
         let ask = Ask {
             tooling: choice.press.is_none().then(|| tooling.to_string()),
@@ -126,11 +154,125 @@ impl BendSimUi {
             catalog: None,
             as_given,
             painted: None,
+            doc: None,
         };
         if let Some(p) = b.choice.press.clone() {
             b.table_height = b.catalog().and_then(|c| c.press(&p)).and_then(|r| r.table_height);
         }
         b
+    }
+
+    /// The part simulated as its bending document states.
+    fn from_doc(source: &str, path: &str, tooling: &str, file: std::path::PathBuf, src: String) -> BendSimUi {
+        let dir = dir_of(path);
+        let run = forge_bend_lang::run_with(&src, source, dir.as_deref());
+        let d = run.doc.clone();
+        let sim = run.sim.ok_or_else(|| {
+            run.errors
+                .iter()
+                .map(|(a, e)| format!("{a}: {e}"))
+                .collect::<Vec<_>>()
+                .join("; ")
+        });
+        let material = sim.as_ref().ok().and_then(|s| {
+            s.answer
+                .json
+                .get("material")
+                .and_then(|m| m.str().map(str::to_string))
+        });
+        let mut b = BendSimUi {
+            sim,
+            step: 0,
+            t: 0.0,
+            playing: false,
+            tooling: d.tooling.clone().unwrap_or_else(|| tooling.to_string()),
+            choice: Choice {
+                press: d.press.clone(),
+                ..Choice::default()
+            },
+            material,
+            table_height: None,
+            source: source.into(),
+            path: path.into(),
+            catalog: None,
+            as_given: false,
+            painted: None,
+            doc: Some(DocState {
+                path: file,
+                src,
+                bends: d.bends.iter().map(|b| b.id.clone()).collect(),
+                stations: d.stations.iter().map(|s| s.id.clone()).collect(),
+                errors: run.errors,
+            }),
+        };
+        if let Some(p) = b.choice.press.clone() {
+            b.table_height = b.catalog().and_then(|c| c.press(&p)).and_then(|r| r.table_height);
+        }
+        b
+    }
+
+    /// The bending document's path for this part.
+    pub fn companion(&self) -> std::path::PathBuf {
+        forge_bend_lang::companion(std::path::Path::new(&self.path))
+    }
+
+    /// The program shown written as the part's bending document (its first edit, or a whole
+    /// program applied): the file's undo log keeps what was there.
+    pub fn write_doc(&mut self) -> Result<(), String> {
+        let sim = self.sim.as_ref().map_err(Clone::clone)?;
+        let part = std::path::Path::new(&self.path)
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let text = forge_bend_lang::document(&part, None, self.choice.press.as_deref(), &self.tooling, sim);
+        self.commit_doc(text)
+    }
+
+    /// One edit op on the document (written first, from the program shown, if there is none).
+    pub fn doc_op(&mut self, op: &forge_lang::error::Op) -> Result<(), String> {
+        if self.doc.is_none() {
+            self.write_doc()?;
+        }
+        let src = self.doc.as_ref().map(|d| d.src.clone()).unwrap_or_default();
+        let after = forge_lang::edit::apply(&src, op).map_err(|e| format!("{e:?}"))?;
+        self.commit_doc(after)
+    }
+
+    fn commit_doc(&mut self, after: String) -> Result<(), String> {
+        let file = self.companion();
+        let before = forge_dirs::fs::read_to_string(&file).unwrap_or_default();
+        forge_lang::undo::write(&file, &before, &after).map_err(|e| format!("{}: {e}", file.display()))?;
+        self.reload();
+        Ok(())
+    }
+
+    /// Undo or redo the document's last edit.
+    pub fn doc_step(&mut self, undo: bool) -> Result<(), String> {
+        let step = if undo {
+            forge_lang::undo::Step::Undo
+        } else {
+            forge_lang::undo::Step::Redo
+        };
+        forge_lang::undo::step(&self.companion(), step)?;
+        self.reload();
+        Ok(())
+    }
+
+    /// Read again from the document (or the choice, if the document is gone), step kept.
+    fn reload(&mut self) {
+        let cat = self.catalog.take();
+        let (source, path, tooling, choice) = (
+            self.source.clone(),
+            self.path.clone(),
+            self.tooling.clone(),
+            self.choice.clone(),
+        );
+        let mut fresh = BendSimUi::open_with(&source, &path, &tooling, choice);
+        if fresh.catalog.is_none() {
+            fresh.catalog = cat;
+        }
+        fresh.resume(self);
+        *self = fresh;
     }
 
     /// The library, read once.
@@ -142,8 +284,20 @@ impl BendSimUi {
         self.catalog.as_ref().and_then(|c| c.as_ref().ok())
     }
 
-    /// Simulated again with a changed choice; the step kept where it still is one.
+    /// Simulated again with a changed choice; the step kept where it still is one. With a
+    /// bending document, the choice planned and written to it (one undo step).
     pub fn redo(&mut self, choice: Choice, tooling: &str) {
+        if self.doc.is_some() {
+            let cat = self.catalog.take();
+            let mut planned = BendSimUi::plan_with(&self.source.clone(), &self.path.clone(), tooling, choice);
+            planned.catalog = cat;
+            planned.resume(self);
+            if let Err(e) = planned.write_doc() {
+                planned.sim = Err(e);
+            }
+            *self = planned;
+            return;
+        }
         let cat = self.catalog.take();
         let mut fresh = BendSimUi::open_with(&self.source.clone(), &self.path.clone(), tooling, choice);
         if fresh.catalog.is_none() {
@@ -482,11 +636,25 @@ pub fn setup_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
     }
 }
 
-/// The Sequence panel: the order simulated (the planner's or edited), moved with the arrows.
+/// The Sequence panel: the program's steps, edited in place. With the part's bending document
+/// every edit is an op on its text (reorder: MoveFeature; orientation and station: SetArg),
+/// with the document's undo and redo; without one, the first edit writes it from the program
+/// shown. The planner's ranked programs are offered beside it, applied only by a click.
 pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
-    let Ok(sim) = &st.sim else { return };
+    use forge_lang::error::Op;
+    let Ok(sim) = &st.sim else {
+        if let Some(d) = &st.doc {
+            ui.colored_label(look::FAIL, format!("{}:", d.path.display()));
+            for (a, e) in &d.errors {
+                ui.colored_label(look::FAIL, format!("{a}: {e}"));
+            }
+        }
+        doc_buttons(ui, st);
+        return;
+    };
     let names: Vec<String> = sim.plan.steps.iter().map(|s| sim.names[s.bend].clone()).collect();
     let passes: Vec<bool> = sim.plan.steps.iter().map(fb::Step::pass).collect();
+    let rotated: Vec<bool> = sim.plan.steps.iter().map(|s| s.setup.rotate).collect();
     let progs: Vec<(Vec<String>, [usize; 4])> = sim
         .programs
         .iter()
@@ -497,26 +665,54 @@ pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
             )
         })
         .collect();
-    let mut order = names.clone();
-    let mut moved = None;
+    // the station each step works at (its punch and die), and the stations there are
+    let stations: Vec<String> = st.doc.as_ref().map(|d| d.stations.clone()).unwrap_or_default();
+    let at: Vec<Option<usize>> = sim
+        .plan
+        .steps
+        .iter()
+        .map(|s| {
+            sim.tooling
+                .stations
+                .iter()
+                .position(|x| (x.punch, x.die) == (s.setup.punch, s.setup.die))
+        })
+        .collect();
+    let ids: Vec<String> = match &st.doc {
+        Some(d) => d.bends.clone(),
+        // as the document written from this program will name them
+        None => (1..=names.len()).map(|k| format!("b{k}")).collect(),
+    };
+    let mut op: Option<Op> = None;
     let mut go = None;
     ui.horizontal(|ui| {
-        ui.strong("Sequence");
-        ui.label(if st.as_given {
-            "(no feasible order: the part's own, as given)"
-        } else if st.choice.sequence.is_some() {
-            "(edited)"
-        } else {
-            "(planned)"
+        ui.strong("Program");
+        ui.label(match (&st.doc, st.as_given) {
+            (Some(d), _) => format!(
+                "({})",
+                d.path
+                    .file_name()
+                    .map(|f| f.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            ),
+            (None, true) => "(no feasible order: the part's own, as given)".into(),
+            (None, false) if st.choice.sequence.is_some() => "(edited, not yet written)".into(),
+            _ => "(planned)".into(),
         });
     });
     for (i, n) in names.iter().enumerate() {
         ui.horizontal(|ui| {
             if ui.small_button("up").clicked() && i > 0 {
-                moved = Some((i, i - 1));
+                op = Some(Op::MoveFeature {
+                    id: ids[i].clone(),
+                    before: Some(ids[i - 1].clone()),
+                });
             }
             if ui.small_button("dn").clicked() && i + 1 < names.len() {
-                moved = Some((i, i + 1));
+                op = Some(Op::MoveFeature {
+                    id: ids[i + 1].clone(),
+                    before: Some(ids[i].clone()),
+                });
             }
             let c = if passes[i] { look::PASS } else { look::FAIL };
             if ui
@@ -528,12 +724,40 @@ pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
             {
                 go = Some(i);
             }
+            let mut r = rotated[i];
+            if ui.checkbox(&mut r, "end for end").changed() {
+                op = Some(Op::SetArg {
+                    id: ids[i].clone(),
+                    arg: "rotate".into(),
+                    text: if r { "true".into() } else { "false".into() },
+                });
+            }
+            if !stations.is_empty() {
+                let shown = at[i]
+                    .and_then(|k| stations.get(k))
+                    .cloned()
+                    .unwrap_or_else(|| "planner".into());
+                egui::ComboBox::from_id_salt(("bendsim-station", i))
+                    .selected_text(shown)
+                    .width(70.0)
+                    .show_ui(ui, |ui| {
+                        for s in &stations {
+                            if ui.selectable_label(false, s).clicked() {
+                                op = Some(Op::SetArg {
+                                    id: ids[i].clone(),
+                                    arg: "at".into(),
+                                    text: s.clone(),
+                                });
+                            }
+                        }
+                    });
+            }
         });
     }
     if let Some(i) = go {
         st.go(i);
     }
-    let planned = st.choice.sequence.is_some() && ui.button("Plan the order").clicked();
+    doc_buttons(ui, st);
     // the planner's ranked programs: offered, applied only by a click
     let mut apply: Option<Vec<String>> = None;
     if !progs.is_empty() {
@@ -572,18 +796,39 @@ pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
         c.keep_tools = true;
         let t = st.tooling.clone();
         st.redo(c, &t);
-    } else if let Some((a, b)) = moved {
-        order.swap(a, b);
-        let mut c = st.choice.clone();
-        c.sequence = Some(order);
-        let t = st.tooling.clone();
-        st.redo(c, &t);
-    } else if planned {
-        let mut c = st.choice.clone();
-        c.sequence = None;
-        let t = st.tooling.clone();
-        st.redo(c, &t);
+    } else if let Some(op) = op
+        && let Err(e) = st.doc_op(&op)
+    {
+        st.sim = Err(e);
     }
+}
+
+/// The document's own buttons: write it, undo and redo its edits, plan it afresh.
+fn doc_buttons(ui: &mut egui::Ui, st: &mut BendSimUi) {
+    ui.horizontal(|ui| {
+        if st.doc.is_none() {
+            if ui.button("Write program").clicked()
+                && let Err(e) = st.write_doc()
+            {
+                st.sim = Err(e);
+            }
+        } else {
+            if ui.button("Undo").clicked() {
+                let _ = st.doc_step(true);
+            }
+            if ui.button("Redo").clicked() {
+                let _ = st.doc_step(false);
+            }
+            if ui.button("Plan again").clicked() {
+                let c = Choice {
+                    press: st.choice.press.clone(),
+                    ..Choice::default()
+                };
+                let t = st.tooling.clone();
+                st.redo(c, &t);
+            }
+        }
+    });
 }
 
 /// The step's results: tooling, gauge, force, springback and every check. Returns the bend's
@@ -882,6 +1127,59 @@ mod tests {
         assert!(!ui.playing && ui.t == 1.0);
         let bad = BendSimUi::open(L, "l.fg", "nope");
         assert!(bad.sim.is_err());
+    }
+
+    #[test]
+    fn edits_are_ops_on_the_bending_document_with_undo() {
+        const C: &str = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
+            sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (100, 200))\n}\n\
+            base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+            right = flange(base.edge(plan.outline[1]), height: 30)\n\
+            left = flange(base.edge(plan.outline[3]), height: 30)\n";
+        let d = std::env::temp_dir().join(format!("fg-bendsim-doc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let part = d.join("channel.fg");
+        std::fs::write(&part, C).unwrap();
+        let c = Choice {
+            press: Some("trumpf-trubend-5130".into()),
+            ..Default::default()
+        };
+        let mut ui = BendSimUi::open_with(C, part.to_str().unwrap(), "std-eu", c);
+        assert!(ui.doc.is_none());
+        let order = |u: &BendSimUi| -> Vec<String> {
+            let s = u.sim.as_ref().unwrap();
+            s.plan.sequence.iter().map(|b| s.names[*b].clone()).collect()
+        };
+        let before = order(&ui);
+        // the first edit writes the document, then moves the second bend first
+        ui.doc_op(&forge_lang::error::Op::MoveFeature {
+            id: "b2".into(),
+            before: Some("b1".into()),
+        })
+        .unwrap();
+        let doc = ui.doc.as_ref().expect("a document");
+        assert!(doc.path.ends_with("channel_bend.fg") && doc.src.starts_with("bending"));
+        assert_eq!(order(&ui), vec![before[1].clone(), before[0].clone()]);
+        // turned end for end: an argument in the text
+        ui.doc_op(&forge_lang::error::Op::SetArg {
+            id: "b1".into(),
+            arg: "rotate".into(),
+            text: "true".into(),
+        })
+        .unwrap();
+        assert!(ui.doc.as_ref().unwrap().src.contains("rotate: true"));
+        // undone twice: the order the program was written with
+        ui.doc_step(true).unwrap();
+        ui.doc_step(true).unwrap();
+        assert_eq!(order(&ui), before);
+        ui.doc_step(false).unwrap();
+        assert_eq!(order(&ui), vec![before[1].clone(), before[0].clone()]);
+        // opened again: the document says what is simulated
+        let again = BendSimUi::open(C, part.to_str().unwrap(), "std-eu");
+        assert!(again.doc.is_some());
+        assert_eq!(order(&again), vec![before[1].clone(), before[0].clone()]);
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

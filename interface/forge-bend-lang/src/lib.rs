@@ -312,8 +312,34 @@ impl Doc {
     }
 }
 
-/// The document read and simulated; the part's file beside it.
+/// The document read and simulated; the part's file beside it (read through forge-dirs: the
+/// browser's files too).
 pub fn run(src: &str, dir: &Path) -> Bending {
+    let file = match read(src) {
+        Ok(d) => d.part.map(|p| p.0),
+        Err(errors) => {
+            return Bending {
+                ok: false,
+                errors,
+                doc: Doc::default(),
+                sim: None,
+            };
+        }
+    };
+    let path = dir.join(file.unwrap_or_default());
+    match forge_dirs::fs::read_to_string(&path) {
+        Ok(part) => run_with(src, &part, path.parent()),
+        Err(e) => Bending {
+            ok: false,
+            errors: vec![("part".into(), format!("{}: {e}", path.display()))],
+            doc: read(src).unwrap_or_default(),
+            sim: None,
+        },
+    }
+}
+
+/// The document simulated on the part's text already in hand (its own files beside `pdir`).
+pub fn run_with(src: &str, part: &str, pdir: Option<&Path>) -> Bending {
     let doc = match read(src) {
         Ok(d) => d,
         Err(errors) => {
@@ -325,20 +351,6 @@ pub fn run(src: &str, dir: &Path) -> Bending {
             };
         }
     };
-    let (file, _) = doc.part.clone().unwrap();
-    let path = dir.join(&file);
-    let part = match std::fs::read_to_string(&path) {
-        Ok(s) => s,
-        Err(e) => {
-            return Bending {
-                ok: false,
-                errors: vec![("part".into(), format!("{}: {e}", path.display()))],
-                doc,
-                sim: None,
-            };
-        }
-    };
-    let pdir = path.parent().map(Path::to_path_buf);
     let mut errors = Vec::new();
     if let Some(f) = &doc.program {
         errors.push((
@@ -349,7 +361,7 @@ pub fn run(src: &str, dir: &Path) -> Bending {
             ),
         ));
     }
-    match forge_lang::bendsim::simulate(&part, pdir, None, &doc.ask()) {
+    match forge_lang::bendsim::simulate(part, pdir.map(Path::to_path_buf), None, &doc.ask()) {
         Ok(sim) => Bending {
             ok: errors.is_empty(),
             errors,
@@ -366,6 +378,15 @@ pub fn run(src: &str, dir: &Path) -> Bending {
             }
         }
     }
+}
+
+/// The companion document's path for a part: `<stem>_bend.fg` beside it.
+pub fn companion(part: &Path) -> std::path::PathBuf {
+    let stem = part
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    part.with_file_name(format!("{stem}_bend.fg"))
 }
 
 impl Bending {
