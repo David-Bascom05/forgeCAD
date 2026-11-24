@@ -109,7 +109,21 @@ fn profile(r: f64, corner: f64, d: f64) -> Option<f64> {
     Some(corner - (corner * corner - e * e).max(0.0).sqrt())
 }
 
-fn tip_path<'a>(s: &'a Setup<'a>, seg: &'a Segment, t: u32) -> Result<impl Fn(f64) -> V3 + 'a, RemovalError> {
+/// Which form of the tip removal evaluates: `Affine` (what `mill` uses) or `Chained` (the pose
+/// chain at every s, `Setup::tip_along`; kept to check the affine form against).
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TipForm {
+    Affine,
+    Chained,
+}
+
+fn tip_path<'a>(
+    s: &'a Setup<'a>,
+    seg: &'a Segment,
+    t: u32,
+    form: TipForm,
+) -> Result<Box<dyn Fn(f64) -> V3 + 'a>, RemovalError> {
     // rotaries fixed over the segment, the axis the part's +Z at both ends
     for (j, jt) in s.def.joints.iter().enumerate() {
         if jt.ty == crate::def::JointType::Rotary && seg.q0[j] != seg.q1[j] {
@@ -122,8 +136,13 @@ fn tip_path<'a>(s: &'a Setup<'a>, seg: &'a Segment, t: u32) -> Result<impl Fn(f6
     if (ax[0].abs() > 1e-12) || (ax[1].abs() > 1e-12) || (ax[2] - 1.0).abs() > 1e-12 {
         return Err(RemovalError::Tilted { line: seg.line });
     }
-    s.tip_along(seg, t)
-        .ok_or(RemovalError::NoTool { line: seg.line, t })
+    let p: Option<Box<dyn Fn(f64) -> V3 + 'a>> = match form {
+        TipForm::Affine => s
+            .tip_affine(seg, t)
+            .map(|f| Box::new(f) as Box<dyn Fn(f64) -> V3>),
+        TipForm::Chained => s.tip_along(seg, t).map(|f| Box::new(f) as Box<dyn Fn(f64) -> V3>),
+    };
+    p.ok_or(RemovalError::NoTool { line: seg.line, t })
 }
 
 /// Least of f over [a, b] for f convex there (ternary search, endpoints included).
@@ -186,6 +205,19 @@ fn within(a: [f64; 2], b: [f64; 2], p: [f64; 2], r: f64) -> Option<(f64, f64)> {
 
 /// Mills a box stock (part coordinates) through a timeline on a grid of `step`.
 pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<MillResult, RemovalError> {
+    mill_with(s, tl, min, max, step, TipForm::Affine)
+}
+
+/// `mill` with the tip's form chosen (tests check the affine form against the chained one).
+#[doc(hidden)]
+pub fn mill_with(
+    s: &Setup,
+    tl: &Timeline,
+    min: V3,
+    max: V3,
+    step: f64,
+    form: TipForm,
+) -> Result<MillResult, RemovalError> {
     if step.is_nan() || step <= 0.0 || (0..3).any(|k| min[k].is_nan() || max[k].is_nan() || min[k] >= max[k])
     {
         return Err(RemovalError::Grid(
@@ -225,7 +257,7 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
                 });
             }
         };
-        let p = tip_path(s, seg, t)?;
+        let p = tip_path(s, seg, t, form)?;
         let (a, b) = (p(0.0), p(1.0));
         // the cells under the move's box, grown by r
         let (mut lo, mut hi) = ([a[0].min(b[0]), a[1].min(b[1])], [a[0].max(b[0]), a[1].max(b[1])]);
@@ -265,6 +297,13 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
             }
             continue;
         }
+        // no piece above the cutter can come down to the stock's top on this move: then only the
+        // cutter changes cells, and none farther than r (the same results, a smaller window)
+        let reach = if lowest + lowest_from - 1e-6 >= map.top {
+            r
+        } else {
+            reach
+        };
         let i0 = (((lo[0] - reach - map.x0) / step).floor().max(0.0)) as usize;
         let i1 = (((hi[0] + reach - map.x0) / step).ceil().max(0.0) as usize).min(nx - 1);
         let j0 = (((lo[1] - reach - map.y0) / step).floor().max(0.0)) as usize;
