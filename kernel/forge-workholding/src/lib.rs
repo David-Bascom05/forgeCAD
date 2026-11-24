@@ -489,7 +489,8 @@ impl Record {
             let source = text(c, "source").unwrap_or("").to_string();
             let taken = text(c, "taken").unwrap_or("").to_string();
             // a user's value carries provenance "user" and needs no date read
-            let user = source.starts_with("user") || source == "given in the job";
+            let user =
+                source.starts_with("user") || source.starts_with("stand-in") || source == "given in the job";
             if fields.is_empty() || source.is_empty() || (taken.is_empty() && !user) {
                 return Err(bad(
                     &rec,
@@ -658,6 +659,11 @@ impl Record {
         let mut r = self.clone();
         r.unknown.retain(|u| u != k);
         r.vals.insert(k.to_string(), v);
+        // the given value replaces the cited one: no older cite may claim it
+        for c in &mut r.cites {
+            c.fields.retain(|f| f != k);
+        }
+        r.cites.retain(|c| !c.fields.is_empty());
         r.cites.push(Cite {
             fields: vec![k.to_string()],
             source: "given in the job".into(),

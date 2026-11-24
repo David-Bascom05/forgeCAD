@@ -400,26 +400,23 @@ pub fn new_from(lib: &Library, name: &str, from: &str, given: &[(&str, f64)]) ->
     } else {
         src.vendor.clone()
     };
-    r.product = format!("user record from {from}");
+    r.product = format!("derived from {from}");
     r.source = String::new();
-    let mut fields: Vec<String> = r.vals.keys().chain(r.lists.keys()).cloned().collect();
-    fields.sort();
-    r.cites = if fields.is_empty() {
-        vec![]
-    } else {
-        vec![Cite {
-            fields,
-            source: format!(
-                "user (from {from}: {})",
-                if src.standin {
-                    format!("stand-in, {}", src.source)
-                } else {
-                    "its cited sources".into()
-                }
-            ),
-            taken: String::new(),
-        }]
-    };
+    // the source's cites stay with the values they cite; a stand-in's numbers are cited as
+    // copied from it, with its basis (not a maker's value); given values become the user's
+    if src.standin {
+        let mut fields: Vec<String> = r.vals.keys().chain(r.lists.keys()).cloned().collect();
+        fields.sort();
+        r.cites = if fields.is_empty() {
+            vec![]
+        } else {
+            vec![Cite {
+                fields,
+                source: format!("stand-in (copied from {from}): {}", src.source),
+                taken: String::new(),
+            }]
+        };
+    }
     for (k, v) in given {
         r = r.with(k, *v)?;
         for c in &mut r.cites {
@@ -465,7 +462,19 @@ mod tests {
         let r = new_from(&l, "my-dx6", "kurt-dx6", &[("jaw_thickness", 22.0)]).unwrap();
         assert_eq!(r.get("jaw_thickness"), Ok(22.0));
         assert!(r.cite("jaw_thickness").unwrap().starts_with("user"));
-        assert!(r.cite("jaw_width").unwrap().starts_with("user (from kurt-dx6"));
+        // a copied value keeps its maker's cite; a stand-in's copied numbers say so
+        assert!(
+            r.cite("jaw_width").unwrap().starts_with("https://"),
+            "{:?}",
+            r.cite("jaw_width")
+        );
+        let s = new_from(&l, "my-vise", "standin-vise-150", &[]).unwrap();
+        assert!(
+            s.cite("jaw_width")
+                .unwrap()
+                .starts_with("stand-in (copied from standin-vise-150)")
+        );
+        assert!(crate::parse_file("x.toml", &s.to_toml()).is_ok());
         // it reads back as a user's file would
         let back = crate::parse_file("cam/workholding/mine.toml", &r.to_toml()).unwrap();
         assert_eq!(back[0].get("jaw_thickness"), Ok(22.0));
