@@ -91,9 +91,12 @@ fn certify_memo(
 ) -> ops::CheckSummary {
     // the faces by what they are made from (each `*_key` names its faces exactly: see the
     // caller), the rest by their full text
+    // each stand-in Debug-printed as a string (quoted and escaped): the components cannot run
+    // into each other, so distinct inputs give distinct keys by construction
     let key = format!(
-        "certify_with/2 {:?} {part_key} {stages_key} {fixture_key}",
-        (p, tool, fclear, tol, clearance, column)
+        "certify_with/3 {:?} {:?}",
+        (p, tool, fclear, tol, clearance, column),
+        (part_key, stages_key, fixture_key)
     );
     CERTIFIED.get_or(key, || {
         ops::certify_with(p, tool, part, stages, fixture, fclear, tol, clearance, column)
@@ -4287,7 +4290,7 @@ impl Cam {
         // function of the paths, the in-process stock they start from, the tool's profile and
         // the schedule's numbers (the cell and sample length among them) alone; the feeds are
         // set from them below as before
-        let key = format!("engagement/2 {:?} {:?}", (&paths, &s.ip), (prof, sc));
+        let key = format!("engagement/3 {:?}", ((&paths, &s.ip), (prof, sc)));
         let all = SCHEDULED.get_or(key, || {
             let mut map = HeightMap::of_stock(&s.ip, cell);
             paths
@@ -5654,17 +5657,20 @@ impl Cam {
         // A generator that starts reading the in-process stock (s.ip, stock_before) must put it
         // in this key: the voids it returns feed later ops' stock stages.
         let key = format!(
-            "surfacing/2 {kind} {:?} {:?}",
-            (a, &part.faces, body, d, ti, h, feed, leave),
+            "surfacing/3 {:?}",
             (
-                s.tol,
-                floor,
-                area,
-                grid,
-                part.bbox,
-                &s.stock,
-                c.ramp_feed,
-                c.lead_feed
+                kind,
+                (a, &part.faces, body, d, ti, h, feed, leave),
+                (
+                    s.tol,
+                    floor,
+                    area,
+                    grid,
+                    part.bbox,
+                    &s.stock,
+                    c.ramp_feed,
+                    c.lead_feed
+                )
             )
         );
         let made = SURFACED.get_or(key, || -> Surfaced {
@@ -5749,9 +5755,12 @@ impl Cam {
             _ => None,
         };
         let key = format!(
-            "finish3d/1 {kind} {:?} {:?}",
-            (a, &part.faces, part.bbox, &t.tool, cutter(t), after),
-            (s.tol, ti, h, feed)
+            "finish3d/2 {:?}",
+            (
+                kind,
+                (a, &part.faces, part.bbox, &t.tool, cutter(t), after),
+                (s.tol, ti, h, feed)
+            )
         );
         let (paths, plan, finish) = FINISHED.get_or(key, || {
             let (mut plan, mut finish) = (Vec::new(), None);
@@ -8032,12 +8041,9 @@ impl Cam {
             .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
         // what each stage's faces are made from, in order (the memo key's: `faces_of` is a
         // function of the in-process stock and, on its error, the setup's stock alone)
-        let stage_ips = std::cell::RefCell::new(String::new());
+        let stage_ips: std::cell::RefCell<Vec<String>> = std::cell::RefCell::new(Vec::new());
         let faces_of = |ip: &forge_cam::stock::InProcess| {
-            {
-                use std::fmt::Write;
-                let _ = write!(stage_ips.borrow_mut(), "{ip:?};");
-            }
+            stage_ips.borrow_mut().push(format!("{ip:?}"));
             // a clock only when asked: std's panics in a browser page
             let t0 = std::env::var("FORGE_CAM_DEBUG")
                 .is_ok()
@@ -8285,10 +8291,13 @@ impl Cam {
             None => part.faces_key().into(),
         };
         let stages_key = format!(
-            "{stock_needed} {:?} {:?} {}",
-            stages.iter().map(|x| x.0).collect::<Vec<_>>(),
-            s.stock,
-            stage_ips.borrow()
+            "{:?}",
+            (
+                stock_needed,
+                stages.iter().map(|x| x.0).collect::<Vec<_>>(),
+                &s.stock,
+                &*stage_ips.borrow()
+            )
         );
         let fixture_key = format!("{:?} {:?}", s.fixture, s.stock);
         let mut sum = certify_memo(
@@ -8541,7 +8550,7 @@ impl Cam {
         // from an earlier run when the program and the dialect are the same (memo.rs): the
         // round trip prints, reads back and compares, a function of these alone; the key is
         // the quantised program (integers) and the dialect, each in full
-        let rt = ROUND_TRIPS.get_or(format!("round_trip/1 {q:?} {d:?}"), || {
+        let rt = ROUND_TRIPS.get_or(format!("round_trip/2 {:?}", (&q, &d)), || {
             forge_post::round_trip(&q, &d)
         });
         match rt {
