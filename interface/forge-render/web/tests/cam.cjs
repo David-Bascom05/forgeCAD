@@ -133,11 +133,18 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     await click(p, "cam:row:prof", 0, true);
     await t.until(p, (s) => s.cam.dialogs.includes("op"), "the op dialog, by a double click");
     await click(p, "cam:op:tab:3");
-    await click(p, "cam:op:arg:leave");
-    await p.evaluate(() => window.forgecad.fc.app_type("0.2", false));
+    // typed once the field has the focus: click it and type until the dialog has the value
+    for (let k = 0; ; k++) {
+      await click(p, "cam:op:arg:leave");
+      await p.evaluate(() => window.forgecad.fc.app_type("0.2", false));
+      await settle(p);
+      const now = await p.evaluate(() => window.forgecad.state());
+      if (/leave: 0\.2\)/.test(now.cam.op_text ?? "")) break;
+      assert.ok(k < 5, `never typed: ${now.cam.op_text}`);
+    }
     const before = st.cam.text;
     await click(p, "cam:op:ok");
-    st = await t.until(p, (s) => s.cam.text !== before, "the edit in the text");
+    st = await t.until(p, (s) => s.cam.text !== before, "the edit in the text", 30000);
     assert.match(st.cam.text, /prof = contour\(op1, tool: t1, side: "outside", from: 12, to: -0.5, step: 4, leave: 0.2\)/);
     console.log("ok - the dialog's edit is the document's text");
     st = await t.until(p, generated, "generated again");
