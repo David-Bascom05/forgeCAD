@@ -15,15 +15,8 @@ fn check(h: &mut Headless, what: &str, width: f32) {
     let inside = |r: egui::Rect| r.min.x >= -0.5 && r.max.x <= width + 0.5;
     for (group, tool) in tools {
         let direct = h.gui.shell.place(&format!("tool:{tool}")).filter(|r| inside(*r));
-        let folded = h
-            .gui
-            .shell
-            .place(&format!("ribbon:in:{group}:{tool}"))
-            .filter(|r| inside(*r));
-        assert!(
-            direct.is_some() || folded.is_some(),
-            "{what} at {width}: `{tool}` ({group}) clips or is missing"
-        );
+        let folded = h.gui.shell.place(&format!("ribbon:in:{group}:{tool}")).filter(|r| inside(*r));
+        assert!(direct.is_some() || folded.is_some(), "{what} at {width}: `{tool}` ({group}) clips or is missing");
     }
 }
 
@@ -59,11 +52,7 @@ fn every_tool_fits_or_folds() {
         h.gui.shell.tab = forge_render::shell::CAM_TAB;
         check(&mut h, "Manufacture", width);
         if let (Ok(d), Ok(png)) = (std::env::var("FORGE_UI_SHOTS"), h.png()) {
-            std::fs::write(
-                std::path::Path::new(&d).join(format!("ribbon-cam-{width}.png")),
-                png,
-            )
-            .unwrap();
+            std::fs::write(std::path::Path::new(&d).join(format!("ribbon-cam-{width}.png")), png).unwrap();
         }
         assert!(h.gui.shell.cam.is_some(), "the machining document opened");
         // folded groups (the narrowest): one opens its menu, its tools placed in it
@@ -90,11 +79,7 @@ fn every_tool_fits_or_folds() {
                 h.step();
             }
             for tool in &inner {
-                let r = h
-                    .gui
-                    .shell
-                    .place(&format!("tool:{tool}"))
-                    .unwrap_or_else(|| panic!("`{tool}` not in {g}'s menu"));
+                let r = h.gui.shell.place(&format!("tool:{tool}")).unwrap_or_else(|| panic!("`{tool}` not in {g}'s menu"));
                 assert!(r.max.x <= width + 0.5, "{tool} at {r:?}");
             }
             if let (Ok(d), Ok(png)) = (std::env::var("FORGE_UI_SHOTS"), h.png()) {
