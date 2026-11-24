@@ -1,0 +1,27 @@
+# Fanuc-style ISO turning (generic, group A G-codes): restated from common Fanuc lathe practice;
+# facts only, no vendor post copied. Verify with your control's manual.
+[dialect]
+name = "fanuc-lathe"
+extension = "nc"
+decimals = 3
+feed_decimals = 3
+pitch_decimals = 4
+point = "always"
+program_open = ["%", "O{num} ({title})"]
+program_close = ["M30", "%"]
+comment = "({text})"
+comment_strip = "()"
+line_numbers = true
+line_start = 10
+line_step = 10
+safe_start = ["G18 G21 G40 G99"]
+tool_change = ["T{tt}{tt} ({name})"]
+css = ["G50 S{max}", "G96 S{vc} M03"]
+rpm = ["G97 S{rpm} M03"]
+spindle_stop = "M05"
+home = ["G28 U0. W0."]
+thread = "G32"
+thread_word = "F"
+source = "forgecad, restated from common Fanuc lathe practice"
+taken = "2026-11-23"
+note = "verify with your control's manual"
