@@ -137,7 +137,7 @@ pub struct Run {
     /// The setup sheet (HTML).
     pub sheet: String,
     /// The run itself: the ops' paths for the views (milling).
-    pub cam: Option<forge_cam_lang::Cam>,
+    pub cam: Option<std::sync::Arc<forge_cam_lang::Cam>>,
     /// A turning document's run (forge-turn-lang).
     pub turn: Option<forge_turn_lang::TurnCam>,
     /// "milling" or "turning".
@@ -174,6 +174,23 @@ fn strs(j: &Json, k: &str) -> Vec<String> {
 
 /// Generates `text` (its files beside it in `dir`).
 pub fn run(text: &str, dir: &Path) -> Run {
+    let mut r = run_unmeasured(text, dir);
+    r.quality = measure(&r);
+    r
+}
+
+/// The run's toolpath quality (forge-cam-quality), for a milling run.
+pub fn measure(r: &Run) -> Option<forge_cam_quality::JobQ> {
+    r.cam.as_deref().map(measure_cam)
+}
+
+/// A milling run's toolpath quality.
+pub fn measure_cam(cam: &forge_cam_lang::Cam) -> forge_cam_quality::JobQ {
+    forge_cam_quality::measure_cam(cam, String::new(), &forge_cam_quality::Config::default())
+}
+
+/// `run` without the quality (`measure`): the app shows the paths first and measures after.
+pub fn run_unmeasured(text: &str, dir: &Path) -> Run {
     if forge_turn_lang::is_turning(text) {
         return run_turning(text, dir);
     }
@@ -313,12 +330,8 @@ pub fn run(text: &str, dir: &Path) -> Run {
         leftover_done: matches!(lo.and_then(|l| l.get("computed")), Some(Json::Bool(true))),
         json,
         sheet: cam.sheet(),
-        quality: Some(forge_cam_quality::measure_cam(
-            &cam,
-            String::new(),
-            &forge_cam_quality::Config::default(),
-        )),
-        cam: Some(cam),
+        quality: None,
+        cam: Some(std::sync::Arc::new(cam)),
         turn: None,
         process: "milling",
     }

@@ -244,6 +244,8 @@ pub struct CamWs {
     pub running: Option<String>,
     /// Where the host's run lands.
     pub job: Arc<Mutex<Option<run::Run>>>,
+    /// A run's quality measured after the run was shown (the text it is for, and it).
+    pub quality_job: Arc<Mutex<Option<(String, forge_cam_quality::JobQ)>>>,
     pub auto: bool,
     pub selected: Option<String>,
     pub focus: Focus,
@@ -330,6 +332,7 @@ impl CamWs {
             want_check: false,
             running: None,
             job: Arc::new(Mutex::new(None)),
+            quality_job: Arc::new(Mutex::new(None)),
             auto: true,
             selected: None,
             focus: Focus::default(),
