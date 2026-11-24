@@ -260,22 +260,49 @@ pub fn framing(
         Some(e) => e,
         None => bounds(bodies.iter().filter(|x| x.look.is_sheet()).map(|x| &x.mesh))?,
     };
-    let (ylo, yhi) = (lo[1] - 60.0, hi[1] + 60.0);
-    for x in bodies {
-        let on = match how {
-            Framing::Work => {
-                x.look == Look::Tool && (x.name.starts_with("punch:") || x.name.starts_with("die:"))
+    let (ylo, yhi) = (lo[1], hi[1]);
+    let mut grow = |p: [f32; 3]| {
+        for k in 0..3 {
+            lo[k] = lo[k].min(p[k]);
+            hi[k] = hi[k].max(p[k]);
+        }
+    };
+    match how {
+        // the working zone is the part's, scaled to it (David): the punch's tip and the die's V
+        // where they meet it, never the tools' height or the press
+        Framing::Work => {
+            let tip = bodies
+                .iter()
+                .filter(|x| x.name.starts_with("punch:") && x.name.ends_with("/tip"))
+                .flat_map(|x| x.mesh.pos.iter())
+                .map(|p| p[2])
+                .fold(f32::INFINITY, f32::min);
+            for x in bodies.iter().filter(|x| x.look == Look::Tool) {
+                let die = x.name.starts_with("die:");
+                let punch = x.name.starts_with("punch:") && x.name.ends_with("/tip");
+                if !die && !punch {
+                    continue;
+                }
+                let top = x.mesh.pos.iter().map(|p| p[2]).fold(f32::MIN, f32::max);
+                for p in &x.mesh.pos {
+                    // the die's V and shoulders (its top 12 mm); the tip's last 12 mm
+                    let near = if die {
+                        p[2] >= top - 12.0
+                    } else {
+                        p[2] <= tip + 12.0
+                    };
+                    if near && p[1] >= ylo && p[1] <= yhi {
+                        grow(*p);
+                    }
+                }
             }
-            Framing::Overview => !matches!(x.look, Look::Floor),
-        };
-        if let (true, Some((mut a, mut c))) = (on, x.mesh.bounds()) {
-            if how == Framing::Work {
-                a[1] = a[1].max(ylo);
-                c[1] = c[1].min(yhi);
-            }
-            for k in 0..3 {
-                lo[k] = lo[k].min(a[k]);
-                hi[k] = hi[k].max(c[k]);
+        }
+        Framing::Overview => {
+            for x in bodies.iter().filter(|x| !matches!(x.look, Look::Floor)) {
+                if let Some((a, c)) = x.mesh.bounds() {
+                    grow(a);
+                    grow(c);
+                }
             }
         }
     }
@@ -287,13 +314,17 @@ pub fn framing(
     let radius = 0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
     let mut cam = crate::camera::Camera::fit(center, radius);
     let (yaw, pitch) = match how {
-        Framing::Work => (215f32, 24f32),
+        Framing::Work => (215f32, 28f32),
         Framing::Overview => (220f32, 20f32),
     };
     cam.yaw = yaw.to_radians();
     cam.pitch = pitch.to_radians();
-    // the bounding sphere fills ~70 % of the shorter side
-    cam.dist = cam.fit_dist(radius, size.0.max(1), size.1.max(1)) / 0.7;
+    // the subject's sphere fits the view with a margin of about 15 % (the press: ~70 %)
+    let margin = match how {
+        Framing::Work => 1.15,
+        Framing::Overview => 1.0 / 0.7,
+    };
+    cam.dist = cam.fit_dist(radius, size.0.max(1), size.1.max(1)) * margin;
     Some((cam, lo, hi))
 }
 
@@ -544,6 +575,15 @@ impl Gui {
         };
         self.bend.ghosts.clear();
         let material = b.material.as_deref();
+        // their outlines, for the panel to draw over the view (a ghost must read, not vanish)
+        let outlines: Vec<Vec<[f32; 3]>> = ghosts
+            .iter()
+            .map(|&k| {
+                let m = &self.bend.bodies[k].mesh;
+                let step = (m.pos.len() / 600).max(1);
+                m.pos.iter().step_by(step).copied().collect()
+            })
+            .collect();
         for k in 0..self.bend.bodies.len() {
             let on = ghosts.contains(&k);
             v.scene.set_ghost(k, on);
@@ -558,6 +598,9 @@ impl Gui {
             }
         }
         v.dirty = true;
+        if let Some(b) = self.shell.sheet.bend_sim.as_mut() {
+            b.outlines = outlines;
+        }
     }
 
     fn bendsim_put_back(&mut self) {

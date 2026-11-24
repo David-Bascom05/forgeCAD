@@ -268,6 +268,15 @@ fn the_cube_looks_down_the_bend_and_what_hides_it_is_seen_through() {
     let f = cam.axes().0;
     assert!(f[1].abs() > 0.99, "looking along the bend line: {f:?}");
     shot(&mut h, "10-down-the-bend-line");
+    {
+        let v = h.gui.view.as_mut().unwrap();
+        let mut c = v.nav.camera;
+        c.yaw = 180f32.to_radians();
+        c.pitch = 70f32.to_radians();
+        v.nav.jump_to(c);
+    }
+    // the cube from above, the operator's side below: TOP reads upright
+    shot(&mut h, "12-cube-from-above");
     // from the operator's side and above, the part's first flange (already bent) stands in
     // front of the second bend: seen through (the walls either side of the bend being made never)
     let v = h.gui.view.as_mut().unwrap();
