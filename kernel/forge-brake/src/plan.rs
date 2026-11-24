@@ -100,6 +100,21 @@ struct Search<'a> {
     exhausted: bool,
 }
 
+/// What one search learned that holds for another over the same part, tooling and options but
+/// for `keep_tools` (which only reorders the setups tried after a step): every cache is keyed by
+/// the bends done, the bend and the setup, and holds the simulation's own answer.
+struct Caches {
+    memo: HashMap<(u64, usize), Option<Step>>,
+    selfs: HashMap<(u64, usize), Check>,
+    gauges: HashMap<(u64, usize, bool), (Check, Option<crate::sim::Gauged>)>,
+    fixed: HashMap<(u64, usize, bool, usize), Vec<Check>>,
+    riding: HashMap<(u64, usize, bool, usize, u64), Vec<Check>>,
+    dead: HashSet<u64>,
+    verdicts: std::rc::Rc<std::cell::RefCell<crate::sim::Memo>>,
+    legs: HashMap<(u64, usize), (f64, f64, f64)>,
+    fulls: HashMap<(u64, usize, Setup), Step>,
+}
+
 fn mask(done: &[bool]) -> u64 {
     done.iter()
         .enumerate()
@@ -174,6 +189,34 @@ impl<'a> Search<'a> {
             },
             exhausted: false,
         }
+    }
+
+    /// The caches, when they may be reused: not after the budget cut the search short (a bend
+    /// cut off mid-way is remembered as having no setup).
+    fn caches(self) -> Option<Caches> {
+        (!self.exhausted).then_some(Caches {
+            memo: self.memo,
+            selfs: self.selfs,
+            gauges: self.gauges,
+            fixed: self.fixed,
+            riding: self.riding,
+            dead: self.dead,
+            verdicts: self.verdicts,
+            legs: self.legs,
+            fulls: self.fulls,
+        })
+    }
+
+    fn adopt(&mut self, c: Caches) {
+        self.memo = c.memo;
+        self.selfs = c.selfs;
+        self.gauges = c.gauges;
+        self.fixed = c.fixed;
+        self.riding = c.riding;
+        self.dead = c.dead;
+        self.verdicts = c.verdicts;
+        self.legs = c.legs;
+        self.fulls = c.fulls;
     }
 
     fn overbend(&self, j: usize) -> f64 {
@@ -568,12 +611,29 @@ pub fn plan(m: &Model, tl: &Tooling, opts: &Options) -> Plan {
         return simulate(m, tl, seq, opts);
     }
     let mut s = Search::new(m, tl, opts);
+    plan_in(&mut s)
+}
+
+/// The plan (as `plan`) and up to `max` ranked programs (as `programs`), the second search
+/// reusing what the first learned: the same plan and programs as the two calls give, sooner.
+pub fn plan_and_programs(m: &Model, tl: &Tooling, opts: &Options, max: usize) -> (Plan, Vec<Program>) {
+    if opts.sequence.is_some() {
+        return (plan(m, tl, opts), programs(m, tl, opts, max));
+    }
+    let mut s = Search::new(m, tl, opts);
+    let p = plan_in(&mut s);
+    let caches = s.caches();
+    (p, programs_with(m, tl, opts, max, caches))
+}
+
+fn plan_in(s: &mut Search) -> Plan {
+    let m = s.m;
     let mut done = vec![false; m.bends.len()];
     let mut steps = Vec::new();
     let feasible = s.dfs(&mut done, &mut steps);
     let steps = s.finish_path(&steps);
     let sequence = steps.iter().map(|st| st.bend).collect();
-    let blocking = if feasible { Vec::new() } else { blocking(&s) };
+    let blocking = if feasible { Vec::new() } else { blocking(s) };
     let suggestions = suggest(m, &blocking);
     Plan {
         feasible,
@@ -759,12 +819,25 @@ impl Program {
 /// (`keep_tools` is set). The first is the plan to offer; the rest are alternatives. Empty
 /// when none is feasible (then `plan` says why).
 pub fn programs(m: &Model, tl: &Tooling, opts: &Options, max: usize) -> Vec<Program> {
+    programs_with(m, tl, opts, max, None)
+}
+
+fn programs_with(
+    m: &Model,
+    tl: &Tooling,
+    opts: &Options,
+    max: usize,
+    caches: Option<Caches>,
+) -> Vec<Program> {
     let opts = Options {
         keep_tools: true,
         sequence: None,
         ..opts.clone()
     };
     let mut s = Search::new(m, tl, &opts);
+    if let Some(c) = caches {
+        s.adopt(c);
+    }
     let n = m.bends.len();
     let mut found: Vec<Vec<Step>> = Vec::new();
     // a bound on whole programs kept, so a part with many bends stays quick

@@ -365,6 +365,7 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
     let mut tooling = tooling;
     let mut staged: Option<fb::Staged> = None;
     let mut stage_json: Option<Json> = None;
+    let mut shared: Option<Vec<fb::Program>> = None;
     let mut plan = if ask.stage && tooling.stations.is_empty() && opts.sequence.is_none() {
         match fb::stage(&model, &tooling, &opts, 8) {
             Ok(s) => {
@@ -396,11 +397,19 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
                 fb::plan(&model, &tooling, &opts)
             }
         }
+    } else if let Some(n) = ask.programs {
+        // the plan and the ranked programs from one search's learning
+        let (p, r) = fb::plan_and_programs(&model, &tooling, &opts, n);
+        shared = Some(r);
+        p
     } else {
         fb::plan(&model, &tooling, &opts)
     };
     ph.lap(if ask.stage { "stage" } else { "plan" });
-    let ranked = ask.programs.map(|n| fb::programs(&model, &tooling, &opts, n));
+    let ranked = match shared {
+        Some(r) => Some(r),
+        None => ask.programs.map(|n| fb::programs(&model, &tooling, &opts, n)),
+    };
     ph.lap("programs");
     // the operator's move into each step after the first, checked (a warning if not proven clear)
     fb::scene::annotate_handling(&model, &tooling, &mut plan);
