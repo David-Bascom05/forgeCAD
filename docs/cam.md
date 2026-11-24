@@ -60,7 +60,7 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:, relief: "corners", min_contact:)` | soft jaws cut to what `from:` left, turned over, `grip` deep: the pocket is the opening of that outline by `tool`'s radius, grown by `fit` (default 0.02), with a relief of radius r + fit at each corner if asked. Refused unless what `from:` left seats in the pocket (exactly), the seat is at least `min_contact` mm² (default a quarter of the largest section), the blank keeps 3 mm of wall and the part stands more than the fixture clearance above the jaws. The value is a part (the jaws closed, pocketed: `setup(jaws, ..)` cuts them, held by the vise) and a fixture (`setup(f, from: op1, fixture: jaws)`) |
 | `facing(SETUP, tool:, to:, step:, leave_axial:)` | zig-zag over the stock down to `to` |
 | `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:, leave_axial:, ramp:)` | everything between the stock outline and the part's section, as offset passes |
-| `adaptive(SETUP, tool:, from:, to:, step:, engagement:, step_length:, leave:, sweep:, passes:)` | **opt-in, never the default**: roughing around the part (clear's region) with the radial engagement held under one cap (`engagement`, degrees, default 60) by simulating the cleared area step by step, so the full flute can cut at a steady load. Passes are one-direction peels within 75° of `sweep` (degrees from +x), or with `passes: "two_way"` a zigzag across the sweep; a pass curves no tighter than the tool's radius. Where a sweep stops with material left away from the walls, the level is swept again from the other directions; anything still left is reported as a warning. Links stay at depth where the cleared area allows (straight, back along the pass, or through the cleared area) and run at a link feed just under the machine's limit; else a low retract just over the stock. Then plain offset rings where material is left, and a wall pass. Closed pockets are not offered (use `pocket`). **It reduces and steadies tool load. On deep open levels (≥ 2 D) it was faster than clear on our jerk-limited benchmark in steel (2–44 %) and on an open slot in aluminium (27–39 %); round several islands, on shallow levels and on deep_boss in aluminium it was slower** (table below). Check cycle time on your machine. The voids it claims are only cells provably inside the tool's flat end's sweep |
+| `adaptive(SETUP, tool:, from:, to:, step:, engagement:, step_length:, leave:, sweep:, passes:)` | **opt-in, never the default**: roughing around the part (clear's region) with the radial engagement held under one cap (`engagement`, degrees, default 60) by simulating the cleared area step by step, so the full flute can cut at a steady load. Passes are one-direction peels within 75° of `sweep` (degrees from +x), or with `passes: "two_way"` a zigzag across the sweep; a pass curves no tighter than the tool's radius. Where a sweep stops with material left away from the walls, the level is swept again from the other directions; anything still left is reported as a warning. Links stay at depth where the cleared area allows (straight, back along the pass, or through the cleared area) and run at a link feed just under the machine's limit; else a hop over the material (below). Then plain offset rings where material is left, and a wall pass. Closed pockets are not offered (use `pocket`). **It reduces and steadies tool load. On deep open levels (≥ 2 D) it was faster than clear on our jerk-limited benchmark in steel (2–44 %) and on an open slot in aluminium (27–39 %); round several islands, on shallow levels and on deep_boss in aluminium it was slower** (table below). Check cycle time on your machine. The voids it claims are only cells provably inside the tool's flat end's sweep |
 | `contour(SETUP, tool:, side:, from:, to:, step:, leave:, leave_axial:, direction:, finish:, finish_step:, spring:, lead:, lead_radius:, lead_sweep:, lead_length:, entry:, overlap:, tabs:, tab_spacing:, tab_at:, tab_width:, tab_height:, tab_shape:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
 | `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:, leave_axial:, ramp:)` | a hole feature's circle, to its depth |
 | `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, leave_axial:, ramp:)` | every hole and slot of the part's section between the heights, each less the part's section there (islands standing in it, a boss in a well, are kept: examples/machined/well_island_cam.fg) |
@@ -252,6 +252,41 @@ the top and the outline down to just above the jaws; `soft_jaw(.., from: op1)` m
 op1 left; `opj` cuts the jaws' pocket; op2 holds the part turned over in them and cuts the rest.
 Edit the part and every step follows: the jaws are recomputed from the new outline.
 
+### Hops between cuts
+
+`clear`, `contour` and `adaptive` replace a retract between two cuts (up, across at the retract
+height, down: blocks that each start and stop) with a **hop**: up, across and down as G1 moves
+at the machine's feed limit, only as high as the material it crosses needs. Each hop is posted
+after a `(HOP)` comment, and the reply and the simulation show it as a link (phase `hop`).
+
+- It is G1, not G0: a G0 path is the control's own (some controls move each axis at its own
+  rapid, a dog-leg), a G1 is the line posted.
+- Its clearance is checked against **the in-process stock as a map**: the stock the setup's
+  earlier ops proved removed, less this op's own moves so far (the uncut stock when an earlier
+  op of the setup did not build). The map holds a height at each cell's centre, so the test
+  reads r + h around the tool (r its radius, h a cell), wider than that sampling's error: the
+  tip stays 0.5 mm above all material within it at every cell of the way. That is the test
+  every link at depth passes. Afterwards the certificate checks every non-cutting body, and
+  the feed scheduler holds any contact to the chip rule (a hop that met material would be fed
+  as a cut).
+- It climbs straight up from a cut's end that stands beside a wall (as the retract did),
+  otherwise on a ramp; it is never higher than the retract it replaces; it lands only on a
+  start whose tool disk is clear of material. A retract that ends by entering material keeps
+  its own descent.
+
+Measured (rough op, steel, equal volume, every op certified; jerk-limited S-curve planner
+over four sets of acceleration, jerk and blend tolerance, with G0 blended and with an exact
+stop at every G0, the honest default where a control's rapid blending is not known):
+
+| part | op | retracts → left after hops | time saved (G0 blended) | (stop at every G0) |
+| --- | --- | --- | --- | --- |
+| deep_islands | adaptive | 397 → 204 | 3.5–4.6 % | 4.6–6.1 % |
+| deep_boss | adaptive | 157 → 43 | 4.8–6.3 % | 6.5–8.8 % |
+| deep_open_slot | adaptive | 19 → 8 | 0.9–1.4 % | 1.4–2.3 % |
+| deep_islands | clear | 12 → 6 | 1.0–1.2 % | 1.0–1.2 % |
+| deep_boss | clear | 8 → 4 | 0.8 % | 0.8–0.9 % |
+| deep_open_slot | clear | 21 → 5 | 2.8–4.4 % | 3.0–4.7 % |
+
 ### Adaptive against clear: measured
 
 verify/forge-cam-quality, rough op only, Ø6 flat end mill on generic-vmc3, every level cleared to
@@ -349,7 +384,7 @@ ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|slot|thread_mil
            path {moves, length_cut, length_rapid, time_s},
            certificate {verdict (pass|fail), certified, pairs, cells, least_cutter_distance, against},
            checks[] (failures only) {rule, verdict (fail|undecided), certified, value, limit, unit,
-                    at, tool_part (cutter|shank/holder), other, phase (cut|plunge|link|rapid), move, path (which of a hole plan's paths `move` counts in)},
+                    at, tool_part (cutter|shank/holder), other, phase (cut|plunge|link|hop|rapid), move, path (which of a hole plan's paths `move` counts in)},
            removals[] (declared Δ, e.g. cosmetic threads), leftover {status}, refusal | null
 blocking[] {op, why}      fixes[] {op, fix}      suggestions[] {kind: NeedTool, op, why}
 programs[] {name, post, lines, round_trip, certified (full | except G5 (unchecked: no `at:`) | full except G4 (leftover not computed) | except G4 and G5 (..) | no),

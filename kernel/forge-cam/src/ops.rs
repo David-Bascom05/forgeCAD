@@ -89,6 +89,9 @@ pub enum Phase {
     Cut,
     Plunge,
     Link,
+    /// A hop (forge_cam::hop): a link up over the material and down, in place of a retract;
+    /// checked and fed as a link, posted with a comment so a reader can tell it from a cut.
+    Hop,
     Rapid,
     /// A probe move's approach: from its start to its contact window (nothing may touch).
     Probe,
@@ -103,6 +106,7 @@ impl Phase {
             Phase::Cut => "cut",
             Phase::Plunge => "plunge",
             Phase::Link => "link",
+            Phase::Hop => "hop",
             Phase::Rapid => "rapid",
             Phase::Probe => "probe",
             Phase::Touch => "touch",
@@ -1753,7 +1757,7 @@ fn trim_air(
         };
         let level = to[2] == at[2];
         let (air, len) = match *m {
-            PMove::Line { phase, .. } if level && matches!(phase, Phase::Cut | Phase::Link) => {
+            PMove::Line { phase, .. } if level && matches!(phase, Phase::Cut | Phase::Link | Phase::Hop) => {
                 let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
                 let again = done.contains(&(key(at), key(to))) || done.contains(&(key(to), key(at)));
                 if phase == Phase::Cut {

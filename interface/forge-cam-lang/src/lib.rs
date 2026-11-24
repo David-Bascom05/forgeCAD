@@ -4205,7 +4205,7 @@ impl Cam {
     /// from the uncut stock.
     fn hop_links(&mut self, su: usize, kind: &str, out: &OpOut, paths: Vec<OpPath>) -> Vec<OpPath> {
         use forge_cam::engage::{HeightMap, Profile};
-        if std::env::var_os("FORGE_HOP").is_none() || !matches!(kind, "clear" | "adaptive" | "contour") {
+        if !matches!(kind, "clear" | "adaptive" | "contour") {
             return paths;
         }
         let Some(ti) = out.tool else {
@@ -4225,6 +4225,14 @@ impl Cam {
         else {
             return paths;
         };
+        // the bodies above the cutter (shank, holder): (lowest point above the tip, radius)
+        let bodies: Vec<(f64, f64)> = t
+            .shape
+            .bodies
+            .iter()
+            .filter(|b| b.z0 > 1e-9)
+            .map(|b| (b.z0, b.rmax))
+            .collect();
         let cell = (t.tool.dc / 30.0).clamp(0.05, 0.25);
         let trusted = !self.ops.iter().any(|o| o.setup == su && o.status != "built");
         let mut map = if trusted {
@@ -4235,7 +4243,7 @@ impl Cam {
         paths
             .into_iter()
             .map(|mut p| {
-                let (moves, _) = forge_cam::hop::hops(&p.moves, p.start, &mut map, &prof, feed);
+                let (moves, _) = forge_cam::hop::hops(&p.moves, p.start, &mut map, &prof, &bodies, feed);
                 p.moves = moves;
                 p
             })
@@ -8148,8 +8156,10 @@ impl Cam {
                     ..
                 }
                 | PMove::Arc { to, .. } => cut_z = Some(cut_z.map_or(to[2], |c: f64| c.min(to[2]))),
+                // (a hop, forge_cam::hop, ends a level as the retract it replaced did)
                 PMove::Line {
-                    phase: Phase::Link, ..
+                    phase: Phase::Link | Phase::Hop,
+                    ..
                 }
                 | PMove::Rapid { .. } => {
                     let z = cut_z.take();
@@ -8432,7 +8442,23 @@ impl Cam {
                     spans.push((oi, pi, start, recs.len()));
                     continue;
                 }
-                for m in &p.moves {
+                // a hop (forge_cam::hop) is posted with a comment before it naming its blocks,
+                // `(HOP n)`, so a reader (and the certificate's reading of the text) can tell them
+                // from cuts
+                let is_hop = |m: &PMove| {
+                    matches!(
+                        m,
+                        PMove::Line {
+                            phase: Phase::Hop,
+                            ..
+                        }
+                    )
+                };
+                for (mi, m) in p.moves.iter().enumerate() {
+                    if is_hop(m) && (mi == 0 || !is_hop(&p.moves[mi - 1])) {
+                        let n = p.moves[mi..].iter().take_while(|m| is_hop(m)).count();
+                        recs.push(Rec::Comment(format!("HOP {n}")));
+                    }
                     let from = cur;
                     cur = match *m {
                         PMove::Rapid { to }
@@ -8585,6 +8611,41 @@ impl Cam {
             // them; the path is certified so that any value in [0, the depth already drilled]
             // gives the same verdicts (CYCLE_PARAMS: tests/peck.rs)
             let ms = forge_post::motions_with(&sub, *CYCLE_PARAMS.lock().unwrap_or_else(|e| e.into_inner()));
+            // the hops, as the text names them: `(HOP n)` before n feed blocks (a path with a
+            // canned cycle has none; elsewhere each record is one motion, comments none)
+            let hop_at: Vec<bool> = if sub
+                .recs
+                .iter()
+                .any(|r| matches!(r, forge_post::QRec::Cycle { .. }))
+            {
+                vec![false; ms.len()]
+            } else {
+                let mut left = 0usize;
+                let mut v = Vec::with_capacity(ms.len());
+                for r in &sub.recs {
+                    match r {
+                        forge_post::QRec::Comment(c) => {
+                            if let Some(n) = c.strip_prefix("HOP ").and_then(|n| n.parse::<usize>().ok()) {
+                                left = n;
+                            }
+                        }
+                        forge_post::QRec::Wcs(_) => {}
+                        forge_post::QRec::Line(..) => {
+                            v.push(left > 0);
+                            left = left.saturating_sub(1);
+                        }
+                        _ => {
+                            left = 0;
+                            v.push(false);
+                        }
+                    }
+                }
+                if v.len() == ms.len() {
+                    v
+                } else {
+                    vec![false; ms.len()]
+                }
+            };
             // G5's runtime half: what the text commands the spindle and the feed, as read back
             let runtime = self.runtime_limits(oi, &ms, d.feed_decimals);
             let back = |p: [i64; 3]| {
@@ -8610,7 +8671,7 @@ impl Cam {
             let (mut lc, mut lr, mut time) = (0.0, 0.0, 0.0);
             let mut column: Option<([f64; 2], f64, f64)> = None;
             let mut at = [0.0; 3];
-            for m in &ms {
+            for (mk, m) in ms.iter().enumerate() {
                 let (to, ph, f) = match m {
                     forge_post::Motion::Rapid(p) => (back(*p), Phase::Rapid, 0.0),
                     forge_post::Motion::Feed(p, f) => {
@@ -8631,7 +8692,11 @@ impl Cam {
                             at = to;
                             continue;
                         }
-                        (to, Phase::Cut, *f as f64 / fscale)
+                        (
+                            to,
+                            if hop_at[mk] { Phase::Hop } else { Phase::Cut },
+                            *f as f64 / fscale,
+                        )
                     }
                     forge_post::Motion::Arc { to, c, cw, f, full } => {
                         let t = back(*to);

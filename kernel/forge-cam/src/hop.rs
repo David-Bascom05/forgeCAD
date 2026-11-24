@@ -27,12 +27,15 @@ use forge_math::dmath;
 pub const CLEAR: f64 = 0.5;
 
 /// `moves` from `start` with every retract between cuts that a hop can replace replaced, the
-/// map left as the path leaves the stock. `feed`: the link feed. The number of hops made.
+/// map left as the path leaves the stock. `feed`: the link feed. `bodies`: the tool's bodies
+/// above the cutter (shank, holder), each as (its lowest point above the tip, its largest
+/// radius). The number of hops made.
 pub fn hops(
     moves: &[PMove],
     start: [f64; 3],
     map: &mut HeightMap,
     prof: &Profile,
+    bodies: &[(f64, f64)],
     feed: f64,
 ) -> (Vec<PMove>, usize) {
     // canned cycles and probe moves: not walked here (left as they are)
@@ -43,7 +46,9 @@ pub fn hops(
         return (moves.to_vec(), 0);
     }
     let r = prof.r();
-    let rr = r + map.h;
+    // r + 2h: a point between two samples (h apart) is within h/2 of one, and a cell's centre
+    // stands within h/√2 of any point of it: 1.21 h in all, under 2 h
+    let rr = r + 2.0 * map.h;
     let mut out: Vec<PMove> = Vec::with_capacity(moves.len());
     let mut at = start;
     let mut n_hops = 0;
@@ -52,7 +57,7 @@ pub fn hops(
             m,
             PMove::Rapid { .. }
                 | PMove::Line {
-                    phase: Phase::Link,
+                    phase: Phase::Link | Phase::Hop,
                     ..
                 }
         )
@@ -71,7 +76,7 @@ pub fn hops(
             }
             if j < moves.len()
                 && top > at[2].max(b[2]) + 1e-9
-                && let Some(h) = hop(map, rr, at, b, top, feed)
+                && let Some(h) = hop(map, rr, bodies, at, b, top, feed)
             {
                 for m in &h {
                     sweep(map, prof, at, m);
@@ -89,6 +94,26 @@ pub fn hops(
         i += 1;
     }
     (out, n_hops)
+}
+
+/// The highest material on the map's cells meeting the box [lo, hi] (−∞: none).
+fn box_top(map: &HeightMap, lo: [f64; 2], hi: [f64; 2]) -> f64 {
+    let cell = |v: f64, o: f64| ((v - o) / map.h).floor();
+    let i0 = cell(lo[0], map.x0).max(0.0) as usize;
+    let j0 = cell(lo[1], map.y0).max(0.0) as usize;
+    let i1 = cell(hi[0], map.x0);
+    let j1 = cell(hi[1], map.y0);
+    if i1 < 0.0 || j1 < 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    let (i1, j1) = ((i1 as usize).min(map.nx - 1), (j1 as usize).min(map.ny - 1));
+    let mut t = f64::NEG_INFINITY;
+    for j in j0..=j1 {
+        for i in i0..=i1 {
+            t = t.max(map.z[j * map.nx + i]);
+        }
+    }
+    t
 }
 
 /// The highest material within rr of (x, y) on the map (−∞: none).
@@ -109,7 +134,15 @@ fn top_near(map: &HeightMap, x: f64, y: f64, rr: f64) -> f64 {
 
 /// The hop from a to b (no higher than `ceiling`), or None: the end's disk meets material above
 /// it, or the way needs more height than the run it replaces had.
-fn hop(map: &HeightMap, rr: f64, a: [f64; 3], b: [f64; 3], ceiling: f64, feed: f64) -> Option<Vec<PMove>> {
+fn hop(
+    map: &HeightMap,
+    rr: f64,
+    bodies: &[(f64, f64)],
+    a: [f64; 3],
+    b: [f64; 3],
+    ceiling: f64,
+    feed: f64,
+) -> Option<Vec<PMove>> {
     if top_near(map, b[0], b[1], rr) > b[2] + 1e-9 {
         return None;
     }
@@ -120,10 +153,25 @@ fn hop(map: &HeightMap, rr: f64, a: [f64; 3], b: [f64; 3], ceiling: f64, feed: f
         [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]
     };
     // the tip's least height at each sample
+    // the bodies above the cutter (wider: a holder): the tip high enough that each body's lowest
+    // point clears by CLEAR the highest material in the box round the way, widened by its radius
+    // and 2h (a bound on the material within that radius of any point of the way)
+    let floor = bodies
+        .iter()
+        .map(|&(z0, rb)| {
+            let w = rb + 2.0 * map.h;
+            box_top(
+                map,
+                [a[0].min(b[0]) - w, a[1].min(b[1]) - w],
+                [a[0].max(b[0]) + w, a[1].max(b[1]) + w],
+            ) + CLEAR
+                - z0
+        })
+        .fold(f64::NEG_INFINITY, f64::max);
     let need: Vec<f64> = (0..=n)
         .map(|k| {
             let q = p(k);
-            top_near(map, q[0], q[1], rr) + CLEAR
+            (top_near(map, q[0], q[1], rr) + CLEAR).max(floor)
         })
         .collect();
     let hc = need.iter().copied().fold(a[2].max(b[2]), f64::max);
@@ -134,19 +182,29 @@ fn hop(map: &HeightMap, rr: f64, a: [f64; 3], b: [f64; 3], ceiling: f64, feed: f
     // the way (from the end: the same, reversed)
     let ramp = |z0: f64, need_at: &dyn Fn(usize) -> f64| -> usize {
         let mut best = 0;
+        // (the end itself is exempt: the tool stands there, beside the wall it cut, or lands
+        // there on a clear disk; from the next sample on the line clears the need)
         for k in 1..=n / 2 {
-            if (0..=k).all(|i| z0 + (hc - z0) * (i as f64 / k as f64) >= need_at(i)) {
+            if (1..=k).all(|i| z0 + (hc - z0) * (i as f64 / k as f64) >= need_at(i)) {
                 best = k;
             }
         }
         best
     };
-    let ku = ramp(a[2], &|i| need[i]);
+    // an end ramps only where no material within rr of it stands above its level (else the tool
+    // stands beside a wall and goes straight up from it, or down onto it): then a point between
+    // two samples is within h of both, the material near it counted at both, and the line there
+    // no lower than either sample
+    let ku = if top_near(map, a[0], a[1], rr) <= a[2] + 1e-9 {
+        ramp(a[2], &|i| need[i])
+    } else {
+        0
+    };
     let kd = ramp(b[2], &|i| need[n - i]);
     let line = |q: [f64; 2], z: f64| PMove::Line {
         to: [q[0], q[1], z],
         f: feed,
-        phase: Phase::Link,
+        phase: Phase::Hop,
     };
     let mut h = vec![line(p(ku), hc)];
     if n - kd > ku {
@@ -155,7 +213,7 @@ fn hop(map: &HeightMap, rr: f64, a: [f64; 3], b: [f64; 3], ceiling: f64, feed: f
     h.push(PMove::Line {
         to: b,
         f: feed,
-        phase: Phase::Link,
+        phase: Phase::Hop,
     });
     Some(h)
 }
@@ -202,5 +260,205 @@ fn sweep(map: &mut HeightMap, prof: &Profile, at: [f64; 3], m: &PMove) {
             }
         }
         PMove::Probe { .. } | PMove::Cycle { .. } => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const R: f64 = 3.0;
+
+    /// A 60 × 20 block 10 deep, top at 0, with two pockets 5 deep cut at its ends, the material
+    /// between them standing at 0.
+    fn stock() -> (HeightMap, Profile) {
+        let prof = Profile::Bull { r: R, re: 0.0 };
+        let mut m = HeightMap::new([0.0, 0.0, -10.0], [60.0, 20.0, 0.0], 0.25);
+        for x in [[4.0, 16.0], [44.0, 56.0]] {
+            for y in [6.0, 10.0, 14.0] {
+                m.sweep([x[0], y, -5.0], [x[1], y, -5.0], &prof);
+            }
+        }
+        (m, prof)
+    }
+
+    fn line(to: [f64; 3], phase: Phase) -> PMove {
+        PMove::Line { to, f: 500.0, phase }
+    }
+
+    /// A cut in the left pocket, a retract to 5 over the material, down into the right pocket
+    /// (or, `into`, onto a point of the material), a cut there.
+    fn path(into: [f64; 3]) -> (Vec<PMove>, [f64; 3]) {
+        let start = [6.0, 10.0, -5.0];
+        let mv = vec![
+            line([14.0, 10.0, -5.0], Phase::Cut),
+            PMove::Rapid {
+                to: [14.0, 10.0, 5.0],
+            },
+            PMove::Rapid {
+                to: [into[0], into[1], 5.0],
+            },
+            PMove::Rapid { to: into },
+            line([into[0] + 4.0, into[1], into[2]], Phase::Cut),
+        ];
+        (mv, start)
+    }
+
+    /// Replays `out` on a fresh map, checking every hop: at each sample (a cell apart) the tip
+    /// is CLEAR above the material within r + h, it lands where the disk has no material above
+    /// it, and it rises no higher than `ceiling`.
+    fn check(out: &[PMove], start: [f64; 3], ceiling: f64) -> usize {
+        let (mut m, prof) = stock();
+        let rr = R + 2.0 * m.h;
+        let mut at = start;
+        let mut hops = 0;
+        let mut a0 = start;
+        for (i, mv) in out.iter().enumerate() {
+            let first = !matches!(
+                i.checked_sub(1).and_then(|j| out.get(j)),
+                Some(PMove::Line {
+                    phase: Phase::Hop,
+                    ..
+                })
+            );
+            if first {
+                a0 = at;
+            }
+            if let PMove::Line {
+                to,
+                phase: Phase::Hop,
+                ..
+            } = *mv
+            {
+                let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                let n = (l / m.h).ceil().max(1.0) as usize;
+                for k in 0..=n {
+                    let t = k as f64 / n as f64;
+                    let q = [
+                        at[0] + t * (to[0] - at[0]),
+                        at[1] + t * (to[1] - at[1]),
+                        at[2] + t * (to[2] - at[2]),
+                    ];
+                    let need = top_near(&m, q[0], q[1], rr) + CLEAR;
+                    // exempt: the climb straight up from the cut's end (where the retract it
+                    // replaced climbed too), and the landing (checked below)
+                    let at_a = q[0] == a0[0] && q[1] == a0[1];
+                    let landing = q == to
+                        && !matches!(
+                            out.get(i + 1),
+                            Some(PMove::Line {
+                                phase: Phase::Hop,
+                                ..
+                            })
+                        );
+                    assert!(
+                        q[2] >= need - 1e-9 || at_a || landing,
+                        "hop {i} sample {k}: tip {} under {need}",
+                        q[2]
+                    );
+                    assert!(q[2] <= ceiling + 1e-9, "hop {i} above the retract it replaced");
+                }
+                let last = !matches!(
+                    out.get(i + 1),
+                    Some(PMove::Line {
+                        phase: Phase::Hop,
+                        ..
+                    })
+                );
+                if last {
+                    assert!(
+                        top_near(&m, to[0], to[1], rr) <= to[2] + 1e-9,
+                        "hop {i} ends on a disk with material above it"
+                    );
+                    hops += 1;
+                }
+            }
+            sweep(&mut m, &prof, at, mv);
+            at = end(mv);
+        }
+        hops
+    }
+
+    #[test]
+    fn a_retract_over_material_becomes_one_hop_clear_of_it() {
+        let (mv, start) = path([46.0, 10.0, -5.0]);
+        let (mut m, prof) = stock();
+        let (out, n) = hops(&mv, start, &mut m, &prof, &[], 9000.0);
+        assert_eq!(n, 1);
+        assert!(out.iter().all(|m| !matches!(m, PMove::Rapid { .. })), "{out:?}");
+        assert_eq!(check(&out, start, 5.0), 1);
+        // it crosses just over the material (top 0), not at the retract's 5
+        let top = out
+            .iter()
+            .filter_map(|m| match *m {
+                PMove::Line {
+                    to,
+                    phase: Phase::Hop,
+                    ..
+                } => Some(to[2]),
+                _ => None,
+            })
+            .fold(f64::NEG_INFINITY, f64::max);
+        assert!((top - CLEAR).abs() < 1e-9, "crossing at {top}");
+        // both ends ramp (the pockets leave room beside the cut's end and the landing): no
+        // move of the hop is vertical
+        let mut at = [14.0, 10.0, -5.0];
+        for m in out.iter().skip(1) {
+            if let PMove::Line {
+                to,
+                phase: Phase::Hop,
+                ..
+            } = *m
+            {
+                assert!(
+                    to[0] != at[0] || to[1] != at[1],
+                    "a vertical move in the hop: {out:?}"
+                );
+                at = to;
+            }
+        }
+    }
+
+    #[test]
+    fn a_cut_ending_against_a_wall_climbs_straight_up() {
+        // the cut ends at x = 16, its disk reaching the wall of the material at 19
+        let start = [6.0, 10.0, -5.0];
+        let mv = vec![
+            line([16.0, 10.0, -5.0], Phase::Cut),
+            PMove::Rapid {
+                to: [16.0, 10.0, 5.0],
+            },
+            PMove::Rapid {
+                to: [46.0, 10.0, 5.0],
+            },
+            PMove::Rapid {
+                to: [46.0, 10.0, -5.0],
+            },
+            line([50.0, 10.0, -5.0], Phase::Cut),
+        ];
+        let (mut m, prof) = stock();
+        let (out, n) = hops(&mv, start, &mut m, &prof, &[], 9000.0);
+        assert_eq!(n, 1);
+        match out[1] {
+            PMove::Line {
+                to,
+                phase: Phase::Hop,
+                ..
+            } => {
+                assert!(to[0] == 16.0 && to[1] == 10.0, "not straight up: {out:?}")
+            }
+            _ => panic!("{out:?}"),
+        }
+        assert_eq!(check(&out, start, 5.0), 1);
+    }
+
+    #[test]
+    fn a_retract_that_enters_material_keeps_its_descent() {
+        // the next start stands in the material between the pockets
+        let (mv, start) = path([30.0, 10.0, -5.0]);
+        let (mut m, prof) = stock();
+        let (out, n) = hops(&mv, start, &mut m, &prof, &[], 9000.0);
+        assert_eq!(n, 0);
+        assert_eq!(out, mv);
     }
 }
