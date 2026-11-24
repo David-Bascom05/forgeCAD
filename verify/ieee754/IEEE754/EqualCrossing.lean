@@ -325,4 +325,148 @@ theorem len_gt_sq_gt {q : FP f} (hq : q.isFinite) (hq0 : 0 ≤ q.val) {k : ℤ} 
   · have := (sqrt_le_two_pow f hq hpos hk hk2 hle).2
     linarith
 
+/-- The f64 sum of three squares is non-negative (given its intermediate results finite). -/
+lemma sq3_nonneg {x y z : FP f} (hx : x.isFinite) (hy : y.isFinite) (hz : z.isFinite)
+    (f1 : (FP.mul x x).isFinite) (f2 : (FP.mul y y).isFinite) (f3 : (FP.mul z z).isFinite)
+    (fs : (FP.add (FP.mul x x) (FP.mul y y)).isFinite) :
+    0 ≤ (FP.add (FP.add (FP.mul x x) (FP.mul y y)) (FP.mul z z)).val := by
+  have p1 : 0 ≤ (FP.mul x x).val := by
+    rw [mul_eq_round hx hx]; exact round_val_nonneg f (mul_self_nonneg _)
+  have p2 : 0 ≤ (FP.mul y y).val := by
+    rw [mul_eq_round hy hy]; exact round_val_nonneg f (mul_self_nonneg _)
+  have p3 : 0 ≤ (FP.mul z z).val := by
+    rw [mul_eq_round hz hz]; exact round_val_nonneg f (mul_self_nonneg _)
+  have ps : 0 ≤ (FP.add (FP.mul x x) (FP.mul y y)).val := by
+    rw [add_eq_round f1 f2]; exact round_val_nonneg f (by linarith)
+  rw [add_eq_round fs f3]; exact round_val_nonneg f (by linarith)
+
+/-! ## binary64: the caller's test gives the exact cross product a size -/
+
+/-- Rust's `Vec3::cross` component: `p*q - r*s`. -/
+def cx (p q r s : F64) : F64 := FP.sub (FP.mul p q) (FP.mul r s)
+
+/-- Rust's `Vec3::length_sq`: `x*x + y*y + z*z`, left to right. -/
+def lsq (x y z : F64) : F64 := FP.add (FP.add (FP.mul x x) (FP.mul y y)) (FP.mul z z)
+
+lemma u64 : (2 : ℚ) ^ (-(binary64.prec : ℤ)) = 1 / 9007199254740992 := by
+  rw [binary64_prec]; norm_num
+
+lemma η64_le : (2 : ℚ) ^ (binary64.qmin - 1) ≤ 1 / 2 ^ 1000 := by
+  rw [binary64_qmin]; norm_num
+  exact inv_anti₀ (by positivity) (pow_le_pow_right₀ (by norm_num) (by norm_num))
+
+lemma emax64 : (2 : ℚ) ^ binary64.emax = 2 ^ 1023 := by rw [binary64_emax]; norm_num
+
+/-- The caller's arithmetic over ℚ: f64 components `d` within `5u + 4 eta` of exact `c`, an f64
+squared length `Q` within `4u S + 6 eta` of `S = Σ d²` and above `2^-74`: then `Σ c² >= 2^-76`
+(`u = 2^-53`, `eta <= 2^-1000`). -/
+lemma caller_core (c1 c2 c3 d1 d2 d3 Q η : ℚ) (hη0 : 0 ≤ η) (hη : η ≤ 1 / 2 ^ 1000)
+    (e1 : |d1 - c1| ≤ 5 * (1 / 9007199254740992) * 1 + 4 * η)
+    (e2 : |d2 - c2| ≤ 5 * (1 / 9007199254740992) * 1 + 4 * η)
+    (e3 : |d3 - c3| ≤ 5 * (1 / 9007199254740992) * 1 + 4 * η)
+    (hq : Q - (d1 * d1 + d2 * d2 + d3 * d3) ≤
+      4 * (1 / 9007199254740992) * (d1 * d1 + d2 * d2 + d3 * d3) + 6 * η)
+    (hgt : 1 / 2 ^ 74 < Q) : 1 / 2 ^ 76 ≤ c1 * c1 + c2 * c2 + c3 * c3 := by
+  have hη' : η ≤ 1 / 2 ^ 100 :=
+    le_trans hη (one_div_le_one_div_of_le (by positivity) (pow_le_pow_right₀ (by norm_num) (by norm_num)))
+  have hδ : 5 * (1 / 9007199254740992) * 1 + 4 * η ≤ (6 : ℚ) / 9007199254740992 := by
+    have : (4 : ℚ) / 2 ^ 100 ≤ 1 / 9007199254740992 := by norm_num
+    linarith
+  have sq_of_abs : ∀ d c : ℚ, |d - c| ≤ 6 / 9007199254740992 →
+      (d - c) * (d - c) ≤ (6 / 9007199254740992) * (6 / 9007199254740992) := fun d c h => by
+    have := abs_le.mp h; nlinarith
+  have s1 := sq_of_abs d1 c1 (le_trans e1 hδ)
+  have s2 := sq_of_abs d2 c2 (le_trans e2 hδ)
+  have s3 := sq_of_abs d3 c3 (le_trans e3 hδ)
+  have h1 := sq_ge_half_sub c1 d1; have h2 := sq_ge_half_sub c2 d2; have h3 := sq_ge_half_sub c3 d3
+  simp only [sq] at h1 h2 h3
+  -- S = Σ d² is at least (2^-74 - 6 eta) / (1 + 4u)
+  have hS : (1 / 2 ^ 74 - 6 / 2 ^ 100 : ℚ) ≤ (d1 * d1 + d2 * d2 + d3 * d3) * (1 + 4 * (1 / 9007199254740992)) := by
+    linarith
+  have hnum : (1 : ℚ) / 2 ^ 76 + 3 * ((6 / 9007199254740992) * (6 / 9007199254740992)) ≤
+      (1 / 2 ^ 74 - 6 / 2 ^ 100) / (2 * (1 + 4 * (1 / 9007199254740992))) := by norm_num
+  have hd : (1 / 2 ^ 74 - 6 / 2 ^ 100) / (2 * (1 + 4 * (1 / 9007199254740992))) ≤
+      (d1 * d1 + d2 * d2 + d3 * d3) / 2 := by
+    rw [div_le_div_iff₀ (by norm_num) (by norm_num)]; linarith
+  linarith
+
+/-- **`caller_bound`**: where `cylinder_cylinder` goes on to `equal_crossing`, the f64
+`|a × b|` exceeds `ANGULAR = 1e-11 > 2^-37`; then the exact `|a × b|²` is at least `2^-76`
+(for `a`, `b` with components finite and at most 1, as unit vectors' are). -/
+theorem caller_bound {a1 a2 a3 b1 b2 b3 : F64} (ha1 : a1.isFinite) (ha2 : a2.isFinite)
+    (ha3 : a3.isFinite) (hb1 : b1.isFinite) (hb2 : b2.isFinite) (hb3 : b3.isFinite)
+    (ba1 : |a1.val| ≤ 1) (ba2 : |a2.val| ≤ 1) (ba3 : |a3.val| ≤ 1)
+    (bb1 : |b1.val| ≤ 1) (bb2 : |b2.val| ≤ 1) (bb3 : |b3.val| ≤ 1)
+    (hL : (2 : ℚ) ^ (-37 : ℤ) < (lsq (cx a2 b3 a3 b2) (cx a3 b1 a1 b3) (cx a1 b2 a2 b1)).sqrt.val) :
+    (2 : ℚ) ^ (-76 : ℤ) ≤ (a2.val * b3.val - a3.val * b2.val) * (a2.val * b3.val - a3.val * b2.val) +
+      (a3.val * b1.val - a1.val * b3.val) * (a3.val * b1.val - a1.val * b3.val) +
+      (a1.val * b2.val - a2.val * b1.val) * (a1.val * b2.val - a2.val * b1.val) := by
+  have hu8 : (2 : ℚ) ^ (-(binary64.prec : ℤ)) ≤ 1 / 8 := by rw [u64]; norm_num
+  have hη1 : (2 : ℚ) ^ (binary64.qmin - 1) ≤ 1 :=
+    le_trans η64_le (by rw [one_div]; exact inv_le_one_of_one_le₀ (one_le_pow₀ (by norm_num)))
+  have hM : 4 * (1 : ℚ) + 8 ≤ 2 ^ binary64.emax := by
+    rw [emax64]; norm_num
+    exact le_trans (by norm_num : (12 : ℚ) ≤ 2 ^ 4) (pow_le_pow_right₀ (by norm_num) (by norm_num))
+  have pb : ∀ {p q : F64}, |p.val| ≤ 1 → |q.val| ≤ 1 → |p.val * q.val| ≤ 1 := fun hp hq => by
+    rw [abs_mul]; exact mul_le_one₀ hp (abs_nonneg _) hq
+  obtain ⟨fc1, ec1⟩ := diff_prod_err binary64 ha2 hb3 ha3 hb2 (pb ba2 bb3) (pb ba3 bb2) hM hu8 hη1
+  obtain ⟨fc2, ec2⟩ := diff_prod_err binary64 ha3 hb1 ha1 hb3 (pb ba3 bb1) (pb ba1 bb3) hM hu8 hη1
+  obtain ⟨fc3, ec3⟩ := diff_prod_err binary64 ha1 hb2 ha2 hb1 (pb ba1 bb2) (pb ba2 bb1) hM hu8 hη1
+  rw [u64] at ec1 ec2 ec3
+  have hη := η64_le
+  have η0 : (0 : ℚ) ≤ 2 ^ (binary64.qmin - 1) := (two_zpow_pos _).le
+  -- each f64 component at most 3 (the exact one at most 2, the error at most 1)
+  have hδ1 : 5 * (1 / 9007199254740992 : ℚ) * 1 + 4 * 2 ^ (binary64.qmin - 1) ≤ 1 := by
+    have : (2 : ℚ) ^ (binary64.qmin - 1) ≤ 1 / 8 :=
+      le_trans hη (one_div_le_one_div_of_le (by norm_num)
+        (le_trans (by norm_num : (8 : ℚ) ≤ 2 ^ 3) (pow_le_pow_right₀ (by norm_num) (by norm_num))))
+    linarith
+  have small : ∀ (p q r t : F64) (c : FP binary64), |p.val * q.val| ≤ 1 → |r.val * t.val| ≤ 1 →
+      |c.val - (p.val * q.val - r.val * t.val)| ≤ 5 * (1 / 9007199254740992) * 1 + 4 * 2 ^ (binary64.qmin - 1) →
+      c.val * c.val ≤ 9 := fun p q r t c h1 h2 hc => by
+    have := abs_le.mp h1; have := abs_le.mp h2; have := abs_le.mp hc
+    have hc3 : |c.val| ≤ 3 := abs_le.mpr ⟨by linarith, by linarith⟩
+    have := abs_le.mp hc3; nlinarith
+  have q1 := small a2 b3 a3 b2 _ (pb ba2 bb3) (pb ba3 bb2) ec1
+  have q2 := small a3 b1 a1 b3 _ (pb ba3 bb1) (pb ba1 bb3) ec2
+  have q3 := small a1 b2 a2 b1 _ (pb ba1 bb2) (pb ba2 bb1) ec3
+  have e10 : (10 : ℚ) ≤ 2 ^ binary64.emax := by
+    rw [emax64]; exact le_trans (by norm_num : (10 : ℚ) ≤ 2 ^ 4) (pow_le_pow_right₀ (by norm_num) (by norm_num))
+  have e116 : (116 : ℚ) ≤ 2 ^ binary64.emax := by
+    rw [emax64]; exact le_trans (by norm_num : (116 : ℚ) ≤ 2 ^ 7) (pow_le_pow_right₀ (by norm_num) (by norm_num))
+  have hS : 4 * ((FP.sub (FP.mul a2 b3) (FP.mul a3 b2)).val * (FP.sub (FP.mul a2 b3) (FP.mul a3 b2)).val +
+      (FP.sub (FP.mul a3 b1) (FP.mul a1 b3)).val * (FP.sub (FP.mul a3 b1) (FP.mul a1 b3)).val +
+      (FP.sub (FP.mul a1 b2) (FP.mul a2 b1)).val * (FP.sub (FP.mul a1 b2) (FP.mul a2 b1)).val) + 8 ≤
+      2 ^ binary64.emax := by linarith
+  obtain ⟨fq, eq⟩ := sq3_err binary64 fc1 fc2 fc3 hu8 hη1 hS
+  rw [u64] at eq
+  -- the squares and their first sum are finite, so the f64 squared length is non-negative
+  have m1 := (mul_err_le binary64 fc1 fc1 (by rw [abs_of_nonneg (mul_self_nonneg _)]; linarith)).1
+  have m2 := (mul_err_le binary64 fc2 fc2 (by rw [abs_of_nonneg (mul_self_nonneg _)]; linarith)).1
+  have m3 := (mul_err_le binary64 fc3 fc3 (by rw [abs_of_nonneg (mul_self_nonneg _)]; linarith)).1
+  have r1 : (FP.mul (FP.sub (FP.mul a2 b3) (FP.mul a3 b2)) (FP.sub (FP.mul a2 b3) (FP.mul a3 b2))).val ≤ 10 := by
+    have := (mul_err_le binary64 fc1 fc1 (by rw [abs_of_nonneg (mul_self_nonneg _)]; linarith)).2
+    rw [u64, abs_of_nonneg (mul_self_nonneg (FP.sub (FP.mul a2 b3) (FP.mul a3 b2)).val)] at this
+    have := (abs_le.mp this).2
+    have : (2 : ℚ) ^ (binary64.qmin - 1) ≤ 1 := hη1
+    nlinarith
+  have r2 : (FP.mul (FP.sub (FP.mul a3 b1) (FP.mul a1 b3)) (FP.sub (FP.mul a3 b1) (FP.mul a1 b3))).val ≤ 10 := by
+    have := (mul_err_le binary64 fc2 fc2 (by rw [abs_of_nonneg (mul_self_nonneg _)]; linarith)).2
+    rw [u64, abs_of_nonneg (mul_self_nonneg (FP.sub (FP.mul a3 b1) (FP.mul a1 b3)).val)] at this
+    have := (abs_le.mp this).2
+    have : (2 : ℚ) ^ (binary64.qmin - 1) ≤ 1 := hη1
+    nlinarith
+  have n1 : 0 ≤ (FP.mul (FP.sub (FP.mul a2 b3) (FP.mul a3 b2)) (FP.sub (FP.mul a2 b3) (FP.mul a3 b2))).val := by
+    rw [mul_eq_round fc1 fc1]; exact round_val_nonneg _ (mul_self_nonneg _)
+  have n2 : 0 ≤ (FP.mul (FP.sub (FP.mul a3 b1) (FP.mul a1 b3)) (FP.sub (FP.mul a3 b1) (FP.mul a1 b3))).val := by
+    rw [mul_eq_round fc2 fc2]; exact round_val_nonneg _ (mul_self_nonneg _)
+  have ms := (add_err_le binary64 m1 m2 (by rw [abs_of_nonneg (by linarith)]; linarith)).1
+  have q0 := sq3_nonneg binary64 fc1 fc2 fc3 m1 m2 m3 ms
+  have hgt := len_gt_sq_gt binary64 (q := lsq (cx a2 b3 a3 b2) (cx a3 b1 a1 b3) (cx a1 b2 a2 b1))
+    fq q0 (k := -37) (by rw [binary64_qmin]; norm_num) (by rw [binary64_emax]; norm_num) hL
+  have h74 : (2 : ℚ) ^ (2 * (-37 : ℤ)) = 1 / 2 ^ 74 := by norm_num
+  have h76 : (2 : ℚ) ^ (-76 : ℤ) = 1 / 2 ^ 76 := by norm_num
+  rw [h74] at hgt; rw [h76]
+  exact caller_core _ _ _ _ _ _ _ _ η0 hη ec1 ec2 ec3 (abs_le.mp eq).2 hgt
+
 end IEEE754
