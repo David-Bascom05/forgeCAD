@@ -558,17 +558,24 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 if s.control.lathe {
                     let turret = def.turrets.first();
                     if let Some(tu) = turret {
-                        if *tn > tu.stations || *tn == 0 {
+                        // stations or index time unknown: not checked, 0 s (t_min stays a bound)
+                        if let Some(stations) = tu.stations
+                            && (*tn > stations || *tn == 0)
+                        {
                             tl.violations.push(Violation::Pocket {
                                 line: ln,
                                 t: *tn,
-                                max: tu.stations,
+                                max: stations,
                             });
                         }
-                        let from = tool.unwrap_or(1) as i64;
-                        let d = (*tn as i64 - from).rem_euclid(tu.stations as i64);
-                        let steps = d.min(tu.stations as i64 - d) as f64;
-                        let sec = steps * tu.index_s;
+                        let sec = match (tu.stations, tu.index_s) {
+                            (Some(stations), Some(index_s)) => {
+                                let from = tool.unwrap_or(1) as i64;
+                                let d = (*tn as i64 - from).rem_euclid(stations as i64);
+                                d.min(stations as i64 - d) as f64 * index_s
+                            }
+                            _ => 0.0,
+                        };
                         mark(
                             &mut tl,
                             t,
@@ -596,7 +603,8 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     }
                 } else {
                     let (sec, max) = match &def.changer {
-                        Some(c) => (c.change_s, c.pockets),
+                        // unknowns: no pocket check, 0 s (t_min stays a lower bound)
+                        Some(c) => (c.change_s.unwrap_or(0.0), c.pockets),
                         None => {
                             return Err(SimError::At {
                                 line: ln,
@@ -604,7 +612,9 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                             });
                         }
                     };
-                    if *tn > max {
+                    if let Some(max) = max
+                        && *tn > max
+                    {
                         tl.violations.push(Violation::Pocket {
                             line: ln,
                             t: *tn,
@@ -639,7 +649,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 css_now = if *css {
                     let cap = rpm_clamp
                         .map(|c| c as f64)
-                        .or(def.spindles.first().map(|sd| sd.rpm[1]))
+                        .or(def.spindles.first().and_then(|sd| sd.rpm.map(|r| r[1])))
                         .unwrap_or(f64::INFINITY);
                     Some((*sp as f64, cap))
                 } else {
@@ -651,15 +661,15 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 } else {
                     *sp
                 };
-                if let Some(sd) = def.spindles.first() {
+                if let Some(range) = def.spindles.first().and_then(|sd| sd.rpm) {
                     let check = if *css { rpm_clamp } else { Some(rpm) };
                     if let Some(r) = check
-                        && ((r as f64) < sd.rpm[0] || (r as f64) > sd.rpm[1])
+                        && ((r as f64) < range[0] || (r as f64) > range[1])
                     {
                         tl.violations.push(Violation::Rpm {
                             line: ln,
                             rpm: r,
-                            range: sd.rpm,
+                            range,
                         });
                     }
                 }
@@ -716,7 +726,8 @@ fn rapid(
             if d == 0.0 {
                 continue;
             }
-            let v = def.joints[j].rapid / 60.0;
+            // an unknown rapid is unbounded: no time from it (t_min stays a lower bound)
+            let v = def.joints[j].rapid.unwrap_or(f64::INFINITY) / 60.0;
             tmin = tmin.max(d / v);
             match def.joints[j].accel {
                 Some(acc) => tstop = tstop.max(trap(v / d, acc / d)),
@@ -744,7 +755,7 @@ fn rapid(
     }
     // dog-leg: every joint at its own rate; breakpoints where each arrives
     let times: Vec<f64> = (0..n)
-        .map(|j| (q1[j] - q0[j]).abs() / (def.joints[j].rapid / 60.0))
+        .map(|j| (q1[j] - q0[j]).abs() / (def.joints[j].rapid.unwrap_or(f64::INFINITY) / 60.0))
         .collect();
     let mut cuts: Vec<f64> = times.iter().copied().filter(|x| *x > 0.0).collect();
     cuts.sort_by(f64::total_cmp);
@@ -780,15 +791,16 @@ fn rapid(
 
 fn check_range(s: &Setup, ln: usize, q: &[f64], tl: &mut Timeline) {
     for (j, jt) in s.def.joints.iter().enumerate() {
-        if jt.cyclic {
+        // a cyclic rotary has no stop; an unknown range is not checked (sim::unchecked says so)
+        let Some(range) = jt.range.filter(|_| !jt.cyclic) else {
             continue;
-        }
-        if q[j] < jt.range[0] - 1e-9 || q[j] > jt.range[1] + 1e-9 {
+        };
+        if q[j] < range[0] - 1e-9 || q[j] > range[1] + 1e-9 {
             tl.violations.push(Violation::Overtravel {
                 line: ln,
                 joint: jt.name.clone(),
                 value: q[j],
-                range: jt.range,
+                range,
             });
         }
     }
@@ -826,12 +838,13 @@ fn check_arc_range(s: &Setup, seg: &Segment, tl: &mut Timeline) {
             q[*b] = c[1] + rs * sv;
             for j in [*a, *b] {
                 let jt = &s.def.joints[j];
-                if q[j] < jt.range[0] - 1e-9 || q[j] > jt.range[1] + 1e-9 {
+                let Some(range) = jt.range else { continue };
+                if q[j] < range[0] - 1e-9 || q[j] > range[1] + 1e-9 {
                     tl.violations.push(Violation::Overtravel {
                         line: seg.line,
                         joint: jt.name.clone(),
                         value: q[j],
-                        range: jt.range,
+                        range,
                     });
                 }
             }
@@ -950,7 +963,11 @@ fn feed_seg(
         if travel[j] == 0.0 {
             continue;
         }
-        let need = travel[j] / (def.joints[j].max_feed / 60.0);
+        // an unknown max feed is unbounded: no clamp (sim::unchecked says so)
+        let Some(max_feed) = def.joints[j].max_feed else {
+            continue;
+        };
+        let need = travel[j] / (max_feed / 60.0);
         if need > tmin * (1.0 + 1e-12) {
             tl.violations.push(Violation::FeedClamped {
                 line: ln,
@@ -960,7 +977,7 @@ fn feed_seg(
                 } else {
                     f64::INFINITY
                 },
-                max: def.joints[j].max_feed,
+                max: max_feed,
             });
             tmin = need;
         }
@@ -1123,4 +1140,124 @@ pub fn timeline_json(tl: &Timeline) -> String {
     }
     o.push_str("]}");
     o
+}
+
+/// A check the timeline could not make: the value it needs is unknown (omitted) or only an
+/// estimate (docs/cam-machine.md, "Provenance": never a silent pass on a stand-in).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Unchecked {
+    /// The value, as a cite path: `joint.X.range`, `spindle.S1.rpm`, `changer.pockets`, `body.head`.
+    pub path: String,
+    /// "unknown" or "estimated".
+    pub why: &'static str,
+    /// The first program line whose check needed it (0: the machine itself, e.g. a body).
+    pub line: usize,
+    /// What was not checked.
+    pub check: &'static str,
+}
+
+/// Every check of `tl` against `def` made against an unknown or estimated value, or not made at
+/// all for want of one, each value once (its first line).
+pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
+    use crate::def::CiteStatus;
+    let mut out: Vec<Unchecked> = Vec::new();
+    let mut note = |path: String, known: bool, line: usize, check: &'static str| {
+        let why = if !known {
+            "unknown"
+        } else {
+            match def.cite_status(&path) {
+                Some(CiteStatus::Unknown) => "unknown",
+                Some(CiteStatus::Estimate) => "estimated",
+                _ => return,
+            }
+        };
+        if !out.iter().any(|u| u.path == path) {
+            out.push(Unchecked {
+                path,
+                why,
+                line,
+                check,
+            });
+        }
+    };
+    for sg in &tl.segments {
+        for (j, jt) in def.joints.iter().enumerate() {
+            if sg.q0.get(j) == sg.q1.get(j) {
+                continue;
+            }
+            if !jt.cyclic {
+                note(
+                    format!("joint.{}.range", jt.name),
+                    jt.range.is_some(),
+                    sg.line,
+                    "overtravel",
+                );
+            }
+            match sg.kind {
+                SegKind::Rapid => note(
+                    format!("joint.{}.rapid", jt.name),
+                    jt.rapid.is_some(),
+                    sg.line,
+                    "rapid time",
+                ),
+                SegKind::Feed | SegKind::Arc => note(
+                    format!("joint.{}.max_feed", jt.name),
+                    jt.max_feed.is_some(),
+                    sg.line,
+                    "feed clamp",
+                ),
+            }
+        }
+    }
+    for m in &tl.marks {
+        match &m.what {
+            Happening::Spindle { .. } => {
+                if let Some(sd) = def.spindles.first() {
+                    note(
+                        format!("spindle.{}.rpm", sd.name),
+                        sd.rpm.is_some(),
+                        m.line,
+                        "rpm range",
+                    );
+                }
+            }
+            Happening::ToolChange { .. } => {
+                if let Some(c) = &def.changer {
+                    note(
+                        "changer.pockets".into(),
+                        c.pockets.is_some(),
+                        m.line,
+                        "pocket count",
+                    );
+                    note(
+                        "changer.change_s".into(),
+                        c.change_s.is_some(),
+                        m.line,
+                        "tool change time",
+                    );
+                }
+            }
+            Happening::Index { .. } => {
+                if let Some(tu) = def.turrets.first() {
+                    note(
+                        format!("turret.{}.stations", tu.name),
+                        tu.stations.is_some(),
+                        m.line,
+                        "station count",
+                    );
+                    note(
+                        format!("turret.{}.index_s", tu.name),
+                        tu.index_s.is_some(),
+                        m.line,
+                        "index time",
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    for b in &def.bodies {
+        note(format!("body.{}", b.name), !b.prims.is_empty(), 0, "collision");
+    }
+    out
 }

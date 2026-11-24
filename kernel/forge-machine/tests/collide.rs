@@ -23,7 +23,7 @@ fn builtin_machines_are_clear_through_their_travel() {
         for j in 0..n {
             for end in 0..2 {
                 let mut q: Vec<f64> = m.joints.iter().map(|j| j.home).collect();
-                q[j] = m.joints[j].range[end];
+                q[j] = m.joints[j].range.unwrap()[end];
                 corners.push(q);
             }
         }
@@ -169,7 +169,7 @@ fn clear_is_never_contradicted_by_samples() {
         let q: Vec<f64> = m
             .joints
             .iter()
-            .map(|j| j.range[0] + rnd() * (j.range[1] - j.range[0]))
+            .map(|j| j.range.unwrap()[0] + rnd() * (j.range.unwrap()[1] - j.range.unwrap()[0]))
             .collect();
         let seg = forge_machine::sim::Segment {
             line: 1,
@@ -260,21 +260,32 @@ fn builtin_machines_have_no_self_collision_in_travel() {
                 js.sort();
                 let mut segs = Vec::new();
                 for (k, &j) in js.iter().enumerate() {
-                    let others: Vec<usize> = js.iter().enumerate().filter(|(i, _)| *i != k).map(|(_, x)| *x).collect();
+                    let others: Vec<usize> = js
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, _)| *i != k)
+                        .map(|(_, x)| *x)
+                        .collect();
                     for c in 0..(1usize << others.len()) {
                         let mut base = home.clone();
                         for (bit, &o) in others.iter().enumerate() {
-                            base[o] = m.joints[o].range[(c >> bit) & 1];
+                            base[o] = m.joints[o].range.unwrap()[(c >> bit) & 1];
                         }
                         let (mut q0, mut q1) = (base.clone(), base);
-                        q0[j] = m.joints[j].range[0];
-                        q1[j] = m.joints[j].range[1];
+                        q0[j] = m.joints[j].range.unwrap()[0];
+                        q1[j] = m.joints[j].range.unwrap()[1];
                         segs.push(rapid(q0, q1));
                     }
                 }
                 let mut d2 = m.clone();
                 d2.bodies = vec![a.clone(), b.clone()];
-                let mount = |k: MountKind| d2.mounts.iter().find(|x| x.kind == k).map(|x| x.name.clone()).unwrap();
+                let mount = |k: MountKind| {
+                    d2.mounts
+                        .iter()
+                        .find(|x| x.kind == k)
+                        .map(|x| x.name.clone())
+                        .unwrap()
+                };
                 let s2 = Setup {
                     def: &d2,
                     control: Control::mill3(3, 0, false),
@@ -307,7 +318,10 @@ fn builtin_machines_have_no_self_collision_in_travel() {
                             Verdict::Near { s0, s1, .. } => tl.segments[0].at(0.5 * (s0 + s1)),
                             Verdict::Clear => continue,
                         };
-                        bad.push(format!("{}: {} vs {} at {q:?}: {:?}", m.name, a.name, b.name, c.verdict));
+                        bad.push(format!(
+                            "{}: {} vs {} at {q:?}: {:?}",
+                            m.name, a.name, b.name, c.verdict
+                        ));
                         break;
                     }
                 }

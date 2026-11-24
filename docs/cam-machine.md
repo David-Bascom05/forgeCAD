@@ -104,15 +104,28 @@ in the record is an error. A path may be cited more than once (sources that agre
 | field | | meaning |
 |---|---|---|
 | path | required | the value, as above |
-| status | required | `published` (the source states it), `estimate` (not published: derived as `basis` says), `unknown` (nothing to derive it from), `conflict` (sources disagree) |
+| status | required | `published` (the source states it), `estimate` (not published: derived as `basis` says), `unknown` (nothing to derive it from), `conflict` (sources disagree), `user` (the user's own measured or entered value; source and taken optional) |
 | source | published, conflict: required | URL or document; restate, never copy |
 | taken | with a source: required | YYYY-MM-DD the source was read |
 | value | optional | the source's statement, restated with its units ("30 in (762 mm)") |
 | basis | estimate, unknown: required | how it was derived, and which way it errs |
 | note | conflict: required | what disagrees and which value the record holds |
 
-The record's number is always usable: an estimate or unknown is the *conservative* value (a larger
-collision envelope, a lower rate or acceleration, a smaller travel), never a silent default.
+**Unknown numbers may be omitted.** A required number (a joint's `range`, `rapid`, `max_feed`; a
+spindle's `rpm`, `max`; a turret's `stations`, `index_s`; the changer's `pockets`, `change_s`,
+`max_tool_kg`; a body's envelope) may be left out if and only if a cite names it with
+`status = "unknown"`; leaving one out otherwise is an error that says so. Structural fields (a
+joint's type, axis, parent, pivot; a mount's link and `at`; a spindle's nose) stay required.
+
+**Never a silent pass on a stand-in.** Every check that needs an omitted value, or one cited
+`unknown` or `estimate`, is reported as *not checked* (`sim::unchecked`; the setup reply's
+`not_checked`, each value once with the first line that needed it), not as OK: overtravel against
+a range, the feed clamp against a max feed, rapid time against a rapid rate, the rpm range, pocket
+and station counts, tool change and index times, and collision of a body with no envelope (left
+out of the check). Time bounds stay sound: an omitted rate is unbounded and an omitted change or
+index time is 0, so `t_min` is still a lower bound. Values given with an `estimate` cite are
+still used (the record's number, chosen conservatively as `basis` says) and the checks against
+them are listed as estimated.
 
 ## Self-collision through travel
 

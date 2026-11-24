@@ -74,10 +74,12 @@ pub struct Report {
     pub contacts: Vec<Contact>,
 }
 
-/// The machine's bodies.
+/// The machine's bodies (a body with no envelope, cited unknown, is left out: sim::unchecked
+/// reports it).
 pub fn machine_bodies(def: &MachineDef) -> Vec<CBody> {
     def.bodies
         .iter()
+        .filter(|b| !b.prims.is_empty())
         .map(|b| CBody {
             name: b.name.clone(),
             link: def.joint_index(&b.link),
