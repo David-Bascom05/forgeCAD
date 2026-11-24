@@ -77,7 +77,8 @@ documents in `examples/machined/` included. Headers that are names add no syntax
 A built-in's arguments are its keywords and positionals (`#0`, `#1`, ..). Where a crate lists
 them (`pub const ARGS: &[(&str, &[&str])]`, the list `named` checks and CAM-UI's dialog schema is
 checked against), each built-in has a row here whose names are its list's; until then the kind
-has one row, a GAP. The check: `FamiliesArgs.checkArgs_ok_iff` (a call is taken exactly when every
+has one row, a GAP; a built-in of a listed kind that has no entry yet has a row saying `GAP no
+list` (its keywords unchecked) until its entry lands. The check: `FamiliesArgs.checkArgs_ok_iff` (a call is taken exactly when every
 argument it gives is listed), `FamiliesArgs.misspelled_refused`, and for an extension
 `FamiliesArgs.checkArgs_extend` (a built-in that gains arguments takes every call it took) and
 `FamiliesArgs.checkArgs_new`.
