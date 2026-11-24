@@ -323,3 +323,104 @@ pub fn pin_line(r: &Row) -> String {
         f(r.r_f())
     )
 }
+
+/// The maker's own cutting speed for a row, m/min.
+pub fn theirs_vc(r: &Row) -> f64 {
+    r.theirs_rpm * std::f64::consts::PI * r.d / 1000.0
+}
+
+fn median(mut v: Vec<f64>) -> Option<f64> {
+    v.retain(|x| x.is_finite());
+    if v.is_empty() {
+        return None;
+    }
+    v.sort_by(f64::total_cmp);
+    Some(v[(v.len() - 1) / 2])
+}
+
+/// A slot row (the chip is the peak chip: no thinning credit).
+fn is_slot(r: &Row) -> bool {
+    r.kind == "flat" && (r.op == "slot" || r.ae.is_some_and(|a| a >= 0.5 * r.d))
+}
+
+/// Leave one maker out: for each row, the generic speed (and, for the groups whose chip comes
+/// from maker slot rows, the slot chip at its diameter) re-derived from the OTHER makers' rows
+/// only, as the shipped table was derived from all; the row's ratios then scored against that.
+/// Returns (row index, held-out rpm ratio, held-out chip ratio); a row whose group no other
+/// maker covers is left out (no hold-out possible).
+pub fn held_out(rows: &[Row], current_vc: &dyn Fn(&str, bool) -> f64, chip_groups: &[&str]) -> Vec<(usize, f64, Option<f64>)> {
+    let mut out = Vec::new();
+    for (i, r) in rows.iter().enumerate() {
+        let drill = r.kind == "drill";
+        let others = |f: &dyn Fn(&Row) -> bool| -> Vec<&Row> {
+            rows.iter()
+                .filter(|o| o.vendor != r.vendor && o.group == r.group && (o.kind == "drill") == drill && o.substrate == r.substrate && f(o))
+                .collect()
+        };
+        let Some(vc_cal) = median(others(&|_| true).iter().map(|o| theirs_vc(o)).collect()) else { continue };
+        let k = vc_cal / current_vc(r.group, drill);
+        let r_rpm = r.r_rpm() * k;
+        // the chip: re-derived at the row's diameter from the others' slot rows (bins of the
+        // same diameter, within 2%), where this group's chip came from slot rows
+        let r_f = if !drill && chip_groups.contains(&r.group) {
+            let same_d = others(&|o| is_slot(o) && (o.d - r.d).abs() <= 0.02 * r.d);
+            let mine = rows.iter().filter(|o| o.group == r.group && is_slot(o) && (o.d - r.d).abs() <= 0.02 * r.d);
+            match (median(same_d.iter().filter_map(|o| o.theirs_f).collect()), median(mine.filter_map(|o| o.theirs_f).collect())) {
+                (Some(cal), Some(all)) => r.r_f().map(|f| f * cal / all),
+                _ => None,
+            }
+        } else if drill {
+            // a drill's feed per rev is not re-derived without its maker: no hold-out
+            None
+        } else {
+            r.r_f()
+        };
+        out.push((i, r_rpm, r_f));
+    }
+    out
+}
+
+/// Our shipped generic speed for a group (carbide end mills; or a carbide/HSS drill row).
+pub fn shipped_vc(lib: &Library, group: &str, drill: bool, substrate: &str) -> f64 {
+    let sub = if substrate == "HSS" { "hss" } else { "carbide" };
+    if drill {
+        lib.drilling(group, sub).map_or(f64::NAN, |r| r.vc)
+    } else {
+        lib.group(group).map_or(f64::NAN, |g| if sub == "hss" { g.vc_hss } else { g.vc_carbide })
+    }
+}
+
+/// The groups whose generic slot chip comes from the makers' slot rows (cutting.toml fz_rows).
+pub fn chip_groups(lib: &Library) -> Vec<&'static str> {
+    ["P", "M", "K", "N", "S", "H"].into_iter().filter(|g| lib.group(g).is_some_and(|x| !x.fz_rows.is_empty())).collect()
+}
+
+/// Held-out stats per maker: (maker, rows held out, rpm stats, chip stats).
+#[allow(clippy::type_complexity)]
+pub fn held_out_by_maker(rows: &[Row]) -> Vec<(String, usize, Option<(f64, f64, f64, usize)>, Option<(f64, f64, f64, usize)>)> {
+    let lib = Library::builtin();
+    let cg = chip_groups(&lib);
+    let ho = held_out(
+        rows,
+        &|g: &str, drill: bool| {
+            // the substrate is carbide for every compared end mill; drills look theirs up by row
+            shipped_vc(&lib, g, drill, "carbide")
+        },
+        &cg,
+    );
+    let mut makers: Vec<String> = rows.iter().map(|r| r.vendor.clone()).collect();
+    makers.sort();
+    makers.dedup();
+    makers
+        .into_iter()
+        .map(|m| {
+            let sel: Vec<&(usize, f64, Option<f64>)> = ho.iter().filter(|x| rows[x.0].vendor == m).collect();
+            (
+                m,
+                sel.len(),
+                stats(sel.iter().map(|x| x.1).collect()),
+                stats(sel.iter().filter_map(|x| x.2).collect()),
+            )
+        })
+        .collect()
+}

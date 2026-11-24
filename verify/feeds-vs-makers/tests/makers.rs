@@ -63,3 +63,20 @@ fn medians_stay_in_band() {
     let r = med(drill.iter().map(|r| r.r_rpm()).collect());
     assert!((0.6..=1.6).contains(&r), "drill rpm median {r}");
 }
+
+/// Each maker against a table derived without it: no maker's held-out median is more than 3x
+/// from the others' consensus (the makers' own spread reaches ~2.5x: Harvey's slot chips,
+/// Guhring's drill speeds; the per-row pins catch any drift of ours).
+#[test]
+fn held_out_makers_stay_in_band() {
+    for (m, n, rpm, chip) in feeds_vs_makers::held_out_by_maker(&rows()) {
+        if n == 0 {
+            continue;
+        }
+        let r = rpm.unwrap().0;
+        assert!((0.33..=3.0).contains(&r), "{m}: held-out rpm median {r}");
+        if let Some((c, ..)) = chip {
+            assert!((0.33..=3.0).contains(&c), "{m}: held-out chip median {c}");
+        }
+    }
+}
