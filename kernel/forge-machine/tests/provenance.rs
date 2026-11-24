@@ -129,6 +129,8 @@ fn a_body_with_no_envelope_is_left_out_and_reported() {
         t_stop: 0.0,
         joints: Vec::new(),
         accel_missing: false,
+        t_la: 0.0,
+        seg_la: Vec::new(),
     };
     let u = sim::unchecked(m, &tl);
     assert!(
