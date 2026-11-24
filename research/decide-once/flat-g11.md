@@ -113,3 +113,27 @@ Listed in flat-g11-sites.tsv beside this note (the full tolsites.py output). A o
 tolerance test whose other outcome the flat corpus never needs: its proof obligation is that
 outcome's soundness, with no evidence either way; a never-evaluated site is curved-only or dead
 on flat input.
+
+## Triage, batch 1 (the twelve busiest live flat sites; line numbers at main f04c533)
+
+An added class **N**: the test only names (the edge or vertex names E.names asks about), and no
+geometry depends on it.
+
+| site | class | the argument, and what is still owed |
+|---|---|---|
+| classify.rs:1234 `di.abs() < 1e-300` (ray_hits_box slab) | S | `ray_hits_box` is a filter (a box missed by the exact ray needs no test). A component below 1e-300 is taken as parallel: to cross a slab whose gap is at least the coordinates' resolution under InputSize (no nonzero below INPUT_FLOOR = 2^-480 ≫ 1e-300) the ray would go past every box of the model on the other axes first. Owed: that sentence as a lemma over InputSize. |
+| boolean.rs:5095 `di.abs() < 1e-300` | S | the same guard, in boolean.rs's box test: same lemma. |
+| boolean.rs:289 `on_edge`'s `d <= edge.tol` | T | the base tolerance predicate: a cut accepted here is within `edge.tol` of the stored edge, itself within δ of its exact meet (Faithful input), so within δ + `edge.tol` of it. Owed: the δ-accumulation lemma (the core of class T: how far a chain of tolerance merges may carry a vertex, and the bound that keeps it ≤ δ in the result), then each T site cites it. |
+| boolean.rs:3057–3058 trim's on-edge accept (with the box test) | T | `on_edge` (above), plus the box-only accept proven harmless (G14.lean, given D4). |
+| boolean.rs:2877 a line within 1e-6 of a straight edge's direction, both its ends within `vx.tol` of the curve: they run together | T | proven geometry: `TolOn.near_segment` gives the whole edge within `vx.tol` of the curve's line when both its ends are. Owed: cite it here, and the δ budget (vx.tol ≤ δ). |
+| boolean.rs:2911 an edge's end within `vx.tol` of the curve is a cut at that vertex | T | a vertex merge within its own tolerance: the δ-accumulation lemma. |
+| boolean.rs:5019 `coincide`: an edge's end within `vx.tol` of the other's carrier | T | same. |
+| nary.rs:1514 a vertex and a cut within `max(vx.tol, c.tol)` are one | T | same, with both tolerances: the lemma must take the larger. |
+| unify.rs:298 the two faces' keys differ by > 1e-3: not one surface | S | a loose pre-filter before `same_surface` decides. Owed: that two faces of one surface (within tolerance) have keys within 1e-3 (a bound on the key's sensitivity under InputSize), else the filter could drop a true merge. |
+| boolean.rs:3521 trim_in's sampler skips samples within 4·LINEAR of a stretch end | U | chooses where the stretch is sampled, not what a sample says. Whether the samples kept decide the stretch exactly is the open part of trim_in (B2's `off_near_ends` covers one shape). |
+| boolean.rs:3611 a stretch with `t1 - t0 <= 1e-12` is skipped | T | for a line (t in mm) the stretch is shorter than 1e-12 ≪ MIN_LENGTH = LINEAR: dropping it moves nothing by more than δ. Owed: the same for a conic's parameter (radius × angle). |
+| boolean.rs:3638 `edge_name`'s `near` (cuts within each other's tolerance named together) | N | names only: E.names, not geometry. |
+
+So far: 3 S (each owing one bound lemma), 7 T (all resting on one δ-accumulation lemma plus
+`near_segment`), 1 U, 1 N. The δ-accumulation lemma is the next proof: it would close the T class
+for every site that merges within a stored tolerance.
