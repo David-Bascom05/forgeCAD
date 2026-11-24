@@ -4,4 +4,5 @@ import ForgeBoolFallback.Batch
 import ForgeBoolFallback.Cache
 import ForgeBoolFallback.Ladder
 import ForgeBoolFallback.Member
+import ForgeBoolFallback.Walk
 import ForgeBoolFallback.Unneeded
