@@ -267,7 +267,7 @@ pub fn hole(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let f = crate::bodies::wrap_in(ev, &a, Feature::Hole(Box::new(h)))?;
     let (idx, hid) = ev.push_feature(&id, "hole", f, span, dims)?;
     if let Some(c) = class {
-        ev.hole_fits.insert(id.clone(), c);
+        ev.hole_fits.push((id.clone(), c));
     }
     Ok(feat(id, "hole", idx, hid, Some((at[0], z))))
 }
