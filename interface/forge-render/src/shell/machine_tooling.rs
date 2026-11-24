@@ -31,7 +31,6 @@ pub struct ToolingUi {
     pub new_id: String,
     pub filter: String,
     pub message: String,
-    thumbs: std::collections::HashMap<String, Vec<Vec<[f64; 2]>>>,
 }
 
 fn user_cam() -> Option<PathBuf> {
@@ -54,7 +53,6 @@ impl ToolingUi {
             new_id: format!("my-{}", word.replace('_', "-")),
             filter: String::new(),
             message: String::new(),
-            thumbs: Default::default(),
         };
         t.reload(project);
         if let Some(e) = t.entries.first().cloned() {
@@ -150,7 +148,13 @@ impl ToolingUi {
     /// The preview from the record's dimensions: a cutting tool's fluted length (at its helix
     /// angle, straight when the record gives none), neck and shank; a turned record's profile.
     pub fn library_preview(&self) -> Option<crate::library_mesh::Preview> {
-        let r = self.cur.as_ref()?;
+        preview_of(self.cur.as_ref()?)
+    }
+}
+
+/// A record's preview (the view's, and its thumbnail's).
+pub fn preview_of(r: &Rec) -> Option<crate::library_mesh::Preview> {
+    {
         let o = dynamic::outline(r)?;
         Some(match &r.typed {
             forge_tooling::build::Record::Tool(tl) => {
@@ -160,7 +164,9 @@ impl ToolingUi {
             _ => crate::library_mesh::turned(&o),
         })
     }
+}
 
+impl ToolingUi {
     /// The preview: the record's turned outline, revolved; a cutting tool with its flutes drawn
     /// over the fluted length (at its helix angle when the record gives one, else straight).
     pub fn preview(&self) -> Option<crate::machine_mesh::Tris> {
@@ -197,22 +203,21 @@ pub fn library(
     places.push(("tooling:search".into(), r.rect));
     let want = st.filter.trim().to_lowercase();
     let mut chosen = None;
-    // the thumbnails: each record's turned silhouette, worked out once
-    for e in &st.entries {
-        if !st.thumbs.contains_key(&e.def.id) {
-            let v = dynamic::outline(&e.def)
-                .map(|o| vec![super::lib_form::silhouette(&o)])
-                .unwrap_or_default();
-            st.thumbs.insert(e.def.id.clone(), v);
-        }
-    }
-    let thumbs = st.thumbs.clone();
     egui::ScrollArea::vertical()
         .id_salt(("tooling:list", st.word))
         .max_height((ui.available_height() - 200.0).max(80.0))
         .show(ui, |ui| {
+            let shown = super::lib_form::level_filter(
+                ui,
+                t,
+                st.word,
+                super::lib_form::level_counts(st.entries.iter().map(|e| e.level)),
+            );
             super::lib_form::empty_levels(ui, t, st.entries.iter().any(|e| e.level != Level::Builtin));
             for lv in [Level::Project, Level::User, Level::Builtin] {
+                if !super::lib_form::level_shown(shown, lv) {
+                    continue;
+                }
                 let here: Vec<&Entry<Rec>> = st
                     .entries
                     .iter()
@@ -235,17 +240,37 @@ pub fn library(
                         for e in here.into_iter().take(400) {
                             let on = st.cur.as_ref().is_some_and(|c| c.id == e.def.id)
                                 && st.origin.as_ref().is_some_and(|(l, _)| *l == e.level);
-                            let mut txt = e.def.id.clone();
+                            let lf = super::lib_form::product_name;
+                            let word = |k: &str| match e.def.table.get(k) {
+                                Some(Val::Str(s)) => s.clone(),
+                                _ => String::new(),
+                            };
+                            let mut txt =
+                                lf(&word("vendor"), &word("product_id")).unwrap_or_else(|| e.def.id.clone());
                             if !e.hides.is_empty() {
-                                txt.push_str("  (hides)");
+                                txt.push_str("  (hides another)");
                             }
-                            let polys = thumbs.get(&e.def.id).cloned().unwrap_or_default();
-                            let r = ui
-                                .horizontal(|ui| {
-                                    super::lib_form::thumb(ui, t, &polys, 26.0);
-                                    ui.selectable_label(on, RichText::new(txt).font(sans(12.0)))
-                                })
-                                .inner;
+                            // the secondary line: what a person picks a tool by
+                            let sub = match &e.def.typed {
+                                forge_tooling::build::Record::Tool(tl) => {
+                                    let mut v = vec![format!("Ø{}", super::lib_form::len_text(tl.dc))];
+                                    if tl.nof > 0 {
+                                        v.push(format!("{} fl", tl.nof));
+                                    }
+                                    let m = word("material");
+                                    if !m.is_empty() {
+                                        v.push(m);
+                                    }
+                                    v.push(e.def.id.clone());
+                                    v.join(" · ")
+                                }
+                                _ => e.def.id.clone(),
+                            };
+                            let key =
+                                super::lib_form::row_key(&[st.word, &e.def.id, &e.file, e.level.name()]);
+                            let r = super::lib_form::record_row(ui, t, key, on, &txt, &sub, || {
+                                preview_of(&e.def)
+                            });
                             places.push((format!("tooling:pick:{}", e.def.id), r.rect));
                             if r.clicked() {
                                 chosen = Some(e.clone());
@@ -346,15 +371,12 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut ToolingUi) {
         );
         return;
     };
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(&cur.id).font(semi(14.0)).color(t.ink));
-        ui.add_space(8.0);
-        ui.label(
-            RichText::new(st.word.replace('_', " "))
-                .font(sans(11.0))
-                .color(t.ink2),
-        );
-    });
+    let word = |k: &str| match st.table.get(k) {
+        Some(Val::Str(s)) => s.clone(),
+        _ => String::new(),
+    };
+    let name = lf::product_name(&word("vendor"), &word("product_id"));
+    lf::title(ui, t, name.as_deref(), &cur.id, &st.word.replace('_', " "));
     let from = match &st.origin {
         Some((l, f)) => format!("{} level · {f}", l.name()),
         None => "not saved yet".into(),
@@ -451,7 +473,15 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut ToolingUi) {
                                     }
                                 }
                                 Some(Val::Str(s0)) => {
-                                    if let Some(s) = lf::text_cell(ui, t, ("tooling:text", k), &s0, 140.0) {
+                                    let word = (k == "coating").then(|| lf::coating_word(&s0)).flatten();
+                                    if let Some(s) = lf::text_cell_as(
+                                        ui,
+                                        t,
+                                        ("tooling:text", k),
+                                        &s0,
+                                        word.as_deref(),
+                                        140.0,
+                                    ) {
                                         edit = Some((k.clone(), Val::Str(s)));
                                     }
                                 }

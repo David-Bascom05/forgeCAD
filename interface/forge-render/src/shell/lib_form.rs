@@ -174,6 +174,71 @@ pub fn unknown_slot(ui: &mut Ui, t: &Theme, w: f32) -> bool {
         .clicked()
 }
 
+/// A record's heading: its product name ("Trumpf TruBend 5085") with the id and kind under it,
+/// or, with no name, the id. A long name is cut with "…" and shown whole on hover.
+pub fn title(ui: &mut Ui, t: &Theme, name: Option<&str>, id: &str, kind: &str) {
+    match name.map(str::trim).filter(|n| !n.is_empty()) {
+        Some(n) => {
+            ui.add(egui::Label::new(RichText::new(n).font(semi(14.0)).color(t.ink)).truncate())
+                .on_hover_text(n);
+            ui.label(
+                RichText::new(format!("{id} · {kind}"))
+                    .font(sans(11.0))
+                    .color(t.ink2),
+            );
+        }
+        None => {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(id).font(semi(14.0)).color(t.ink));
+                ui.add_space(6.0);
+                ui.label(RichText::new(kind).font(sans(11.0)).color(t.ink2));
+            });
+        }
+    }
+}
+
+/// "Maker product": the product's words up to its first parenthesis (the rest is detail).
+pub fn product_name(maker: &str, product: &str) -> Option<String> {
+    let p = product.split(" (").next().unwrap_or(product).trim();
+    let s = format!("{} {p}", maker.trim());
+    let s = s.trim();
+    (!s.is_empty()).then(|| s.to_string())
+}
+
+/// A value the record does not publish but the view draws (a conflict's first cited value, an
+/// estimate by its rule): shown as drawn, in its chip's colour, the reason on hover; a click takes
+/// it as the user's own value. Lengths in the document's units.
+pub fn drawn_cell(ui: &mut Ui, t: &Theme, d: &crate::library_mesh::Drawn, unit: &str, w: f32) -> bool {
+    let p = match d.basis {
+        crate::library_mesh::Basis::Conflict => Prov::Conflict,
+        _ => Prov::Estimate,
+    };
+    let doc = DOC_UNITS.with(|c| c.get());
+    // an estimate to a tenth (its rule is no finer); a cited value as cited
+    let near = |x: f64| match d.basis {
+        crate::library_mesh::Basis::Estimate => (x * 10.0).round() / 10.0,
+        _ => x,
+    };
+    let shown = match forge_units::lookup(doc) {
+        Some((_, top, bottom)) if unit == "mm" && doc != "mm" => {
+            value_text(near(d.value / (top / bottom)), doc)
+        }
+        _ => value_text(near(d.value), unit),
+    };
+    let text = match d.basis {
+        crate::library_mesh::Basis::Estimate => format!("≈ {shown}"),
+        _ => shown,
+    };
+    let col = p.colour(t);
+    let b = egui::Button::new(RichText::new(text).font(sans(12.0)).color(t.ink))
+        .fill(col.gamma_multiply(0.08))
+        .stroke(Stroke::new(1.0, col.gamma_multiply(0.45)))
+        .min_size(vec2(w, 18.0));
+    ui.add(b)
+        .on_hover_text(format!("{} Click to take it as your own value.", d.why))
+        .clicked()
+}
+
 /// A section heading.
 pub fn section(ui: &mut Ui, t: &Theme, s: &str) {
     ui.add_space(4.0);
@@ -266,7 +331,7 @@ pub fn brake_label(key: &str, group: &str) -> (String, &'static str) {
         "relief.z0" => "Relief from",
         "relief.z1" => "Relief to",
         "max_load" => "Max load",
-        "segments" => "Segments (length, count)",
+        "segments" => "Segments",
         "outline" => "Section outline (x, z)",
         "v" => "V opening",
         "angle" => "V angle",
@@ -504,9 +569,168 @@ pub fn level_head(ui: &mut Ui, t: &Theme, level: &str, n: usize) {
     );
 }
 
+/// A length in the document's units, trimmed ("10 mm", "0.394 in").
+pub fn len_text(mm: f64) -> String {
+    let doc = doc_units();
+    match forge_units::lookup(doc) {
+        Some((_, top, bottom)) if doc != "mm" => {
+            value_text(((mm / (top / bottom)) * 1000.0).round() / 1000.0, doc)
+        }
+        _ => value_text((mm * 100.0).round() / 100.0, "mm"),
+    }
+}
+
+/// A part as the thumbnail rasteriser takes it: positions, triangles, colour.
+type ThumbPart<'a> = (Vec<[f32; 3]>, &'a Vec<[u32; 3]>, [f32; 3]);
+
+/// A record's preview as a thumbnail (its solid parts at their appearances; the floor and the
+/// ghosts left out), 96 px for a 48 px row.
+pub fn thumb_of(p: &crate::library_mesh::Preview) -> Option<crate::thumb::Image> {
+    let parts: Vec<ThumbPart> = p
+        .parts
+        .iter()
+        .filter(|(_, l)| *l != crate::library_mesh::Look::Floor)
+        .map(|(t, l)| {
+            let c = l.tint();
+            (
+                t.pos.iter().map(|q| q.map(|x| x as f32)).collect(),
+                &t.tri,
+                [c[0], c[1], c[2]],
+            )
+        })
+        .collect();
+    let meshes: Vec<crate::thumb::Mesh> = parts
+        .iter()
+        .map(|(pos, tri, colour)| crate::thumb::Mesh {
+            pos,
+            tri,
+            colour: *colour,
+        })
+        .collect();
+    crate::thumb::render(&meshes, 96, 0.82)
+}
+
+/// A thumbnail key for a listed record: changes when the library is saved (a record edited).
+pub fn row_key(parts: &[&str]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    parts.hash(&mut h);
+    forge_library::generation().hash(&mut h);
+    h.finish()
+}
+
+/// A library row (docs/ux/STANDARD.md §8): a 48 px thumbnail of the record's real geometry
+/// (drawn once per `key`, which must change with the record), its name and a secondary line,
+/// the whole row one target.
+pub fn record_row(
+    ui: &mut Ui,
+    t: &Theme,
+    key: u64,
+    on: bool,
+    name: &str,
+    sub: &str,
+    preview: impl FnOnce() -> Option<crate::library_mesh::Preview>,
+) -> egui::Response {
+    let h = 54.0;
+    let w = ui.available_width().max(120.0);
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, h), Sense::click());
+    let fill = if on {
+        t.accent.gamma_multiply(0.22)
+    } else if resp.hovered() {
+        t.hover
+    } else {
+        egui::Color32::TRANSPARENT
+    };
+    ui.painter().rect_filled(rect, CornerRadius::same(4), fill);
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect.shrink2(vec2(4.0, 3.0)))
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+    );
+    super::ux::thumbnail(&mut child, t, key, 48.0, || preview().and_then(|p| thumb_of(&p)));
+    child.add_space(6.0);
+    child.vertical(|ui| {
+        ui.add_space(6.0);
+        ui.add(
+            egui::Label::new(RichText::new(name).font(sans(12.0)).color(t.ink))
+                .truncate()
+                .selectable(false),
+        );
+        if !sub.is_empty() {
+            ui.add(
+                egui::Label::new(RichText::new(sub).font(sans(10.5)).color(t.ink2))
+                    .truncate()
+                    .selectable(false),
+            );
+        }
+    });
+    resp.on_hover_text(name)
+}
+
 /// The document's length unit word ("mm", "in"), for a table's column heading.
 pub fn doc_units() -> &'static str {
     DOC_UNITS.with(|c| c.get())
+}
+
+/// A library list's level filter (docs/ux/STANDARD.md §8): All · Project · User · Built-in as one
+/// segmented row with each level's count, kept per list; a level with nothing in it is greyed.
+/// Returns whether each level ([Project, User, Built-in]) is shown.
+pub fn level_filter(ui: &mut Ui, t: &Theme, salt: &str, counts: [usize; 3]) -> [bool; 3] {
+    let id = ui.make_persistent_id(("level-filter", salt));
+    let mut on: u8 = ui.data(|d| d.get_temp(id)).unwrap_or(0);
+    // a level emptied since it was chosen: back to all
+    if on > 0 && counts[usize::from(on) - 1] == 0 {
+        on = 0;
+    }
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        let total: usize = counts.iter().sum();
+        for (k, (w, n)) in [
+            ("All", total),
+            ("Project", counts[0]),
+            ("User", counts[1]),
+            ("Built-in", counts[2]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let k = k as u8;
+            let text = RichText::new(format!("{w} {n}"))
+                .font(sans(11.0))
+                .color(if n == 0 { t.ink2.gamma_multiply(0.6) } else { t.ink });
+            let r = ui.add_enabled(n > 0 || k == 0, egui::Button::selectable(on == k, text));
+            if r.clicked() {
+                on = k;
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(id, on));
+    match on {
+        0 => [true; 3],
+        k => std::array::from_fn(|i| i + 1 == usize::from(k)),
+    }
+}
+
+/// Whether a level is shown by `level_filter`'s answer.
+pub fn level_shown(shown: [bool; 3], lv: forge_library::Level) -> bool {
+    match lv {
+        forge_library::Level::Project => shown[0],
+        forge_library::Level::User => shown[1],
+        forge_library::Level::Builtin => shown[2],
+    }
+}
+
+/// The count of entries per level ([Project, User, Built-in]).
+pub fn level_counts(levels: impl Iterator<Item = forge_library::Level>) -> [usize; 3] {
+    let mut c = [0; 3];
+    for l in levels {
+        c[match l {
+            forge_library::Level::Project => 0,
+            forge_library::Level::User => 1,
+            forge_library::Level::Builtin => 2,
+        }] += 1;
+    }
+    c
 }
 
 /// Above a library list with no records of the user's own yet: what to do next.
@@ -578,6 +802,35 @@ pub fn text_cell(
     value: &str,
     w: f32,
 ) -> Option<String> {
+    text_cell_as(ui, t, salt, value, None, w)
+}
+
+/// A maker's coating code in words, the code kept ("Uncoated (UN)"); a symbol the maker does not
+/// name says so. None: shown as written.
+pub fn coating_word(code: &str) -> Option<String> {
+    let w = match code.to_ascii_uppercase().as_str() {
+        "UN" => "Uncoated",
+        "BRIGHT" => "Bright (uncoated)",
+        "TIALN" => "TiAlN",
+        "ALTIN" => "AlTiN",
+        "TICN" => "TiCN",
+        "TIN" => "TiN",
+        "APLUS" => "Aplus",
+        "F" | "S" => return Some(format!("\"{code}\" (the maker's symbol, not named)")),
+        _ => return None,
+    };
+    (w != code).then(|| format!("{w} ({code})"))
+}
+
+/// `text_cell` showing `shown` in place of the value while not editing (the value on hover).
+pub fn text_cell_as(
+    ui: &mut Ui,
+    t: &Theme,
+    salt: impl std::hash::Hash + std::fmt::Debug,
+    value: &str,
+    shown: Option<&str>,
+    w: f32,
+) -> Option<String> {
     let id = ui.make_persistent_id(salt);
     let editing = ui.data(|d| d.get_temp::<String>(id));
     if let Some(mut buf) = editing {
@@ -615,7 +868,11 @@ pub fn text_cell(
                     start(ui);
                 }
             } else {
-                let shown = if value.is_empty() { "(none)" } else { value };
+                let shown = match shown {
+                    Some(s) => s,
+                    None if value.is_empty() => "(none)",
+                    None => value,
+                };
                 let r = ui
                     .add(
                         egui::Label::new(RichText::new(shown).font(sans(12.0)).color(t.ink))
@@ -630,4 +887,31 @@ pub fn text_cell(
         },
     );
     None
+}
+
+#[cfg(test)]
+mod words_tests {
+    use super::*;
+
+    #[test]
+    fn makers_codes_and_names_read_as_words() {
+        assert_eq!(coating_word("UN").as_deref(), Some("Uncoated (UN)"));
+        assert_eq!(coating_word("TIALN").as_deref(), Some("TiAlN (TIALN)"));
+        assert_eq!(coating_word("TiAlN"), None);
+        assert!(coating_word("F").unwrap().contains("not named"));
+        assert_eq!(coating_word("C3"), None);
+        assert_eq!(
+            product_name(
+                "Haas",
+                "6 in single-station CrossOver vise, 9 in opening (PN 05-0404, Kurt)"
+            )
+            .as_deref(),
+            Some("Haas 6 in single-station CrossOver vise, 9 in opening")
+        );
+        assert_eq!(
+            product_name("Trumpf", "TruBend 5085").as_deref(),
+            Some("Trumpf TruBend 5085")
+        );
+        assert_eq!(product_name("", ""), None);
+    }
 }

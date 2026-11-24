@@ -169,23 +169,33 @@ impl WorkholdingUi {
     /// the record's sizes, what it does not give as ghosts); other kinds as forge-workholding
     /// places their bodies.
     pub fn library_preview(&self) -> Option<crate::library_mesh::Preview> {
-        let r = self.cur.as_ref()?;
-        match r.kind.name() {
-            "vise" | "self_centring" => Some(crate::library_mesh::vise(r)),
-            "chuck" => Some(crate::library_mesh::chuck(r)),
-            _ => {
-                let mut p = crate::library_mesh::Preview::default();
-                for t in self.preview()? {
-                    p.parts.push((t, crate::library_mesh::Look::ToolSteel));
-                }
-                Some(p)
-            }
-        }
+        preview_of(self.cur.as_ref()?)
     }
 
     /// The record placed as the check places it, as triangles.
     pub fn preview(&self) -> Option<Vec<crate::machine_mesh::Tris>> {
-        let r = self.cur.as_ref()?;
+        bodies_of(self.cur.as_ref()?)
+    }
+}
+
+/// A record's preview (the view's, and its thumbnail's).
+pub fn preview_of(r: &Record) -> Option<crate::library_mesh::Preview> {
+    match r.kind.name() {
+        "vise" | "self_centring" => Some(crate::library_mesh::vise(r)),
+        "chuck" => Some(crate::library_mesh::chuck(r)),
+        _ => {
+            let mut p = crate::library_mesh::Preview::default();
+            for t in bodies_of(r)? {
+                p.parts.push((t, crate::library_mesh::Look::ToolSteel));
+            }
+            Some(p)
+        }
+    }
+}
+
+/// A record placed as the check places it, as triangles.
+pub fn bodies_of(r: &Record) -> Option<Vec<crate::machine_mesh::Tris>> {
+    {
         let bodies = forge_workholding_builder::preview(r).ok()?;
         Some(
             bodies
@@ -259,8 +269,17 @@ pub fn library(
         .id_salt("workholding:list")
         .max_height((ui.available_height() - 200.0).max(80.0))
         .show(ui, |ui| {
+            let shown = super::lib_form::level_filter(
+                ui,
+                t,
+                "workholding",
+                super::lib_form::level_counts(st.entries.iter().map(|e| e.level)),
+            );
             super::lib_form::empty_levels(ui, t, st.entries.iter().any(|e| e.level != Level::Builtin));
             for lv in [Level::Project, Level::User, Level::Builtin] {
+                if !super::lib_form::level_shown(shown, lv) {
+                    continue;
+                }
                 let here: Vec<&Entry<Record>> = st
                     .entries
                     .iter()
@@ -291,16 +310,32 @@ pub fn library(
                         for e in inner {
                             let on = st.cur.as_ref().is_some_and(|c| c.name == e.def.name)
                                 && st.origin.as_ref().is_some_and(|(l, _)| *l == e.level);
-                            let mut txt = e.def.name.clone();
-                            if e.def.standin {
+                            let r0 = &e.def;
+                            let mut txt = super::lib_form::product_name(&r0.vendor, &r0.product)
+                                .unwrap_or_else(|| r0.name.clone());
+                            if r0.standin {
                                 txt.push_str("  · stand-in");
                             }
-                            let r = ui
-                                .horizontal(|ui| {
-                                    super::lib_form::thumb(ui, t, &thumb(&e.def), 26.0);
-                                    ui.selectable_label(on, RichText::new(txt).font(sans(12.0)))
-                                })
-                                .inner;
+                            // the secondary line: its size people pick it by, and its id
+                            let size = ["jaw_width", "grip_max", "max_opening", "body_d"]
+                                .iter()
+                                .find_map(|k| r0.vals.get(*k).map(|v| (k, *v)))
+                                .map(|(k, v)| {
+                                    format!(
+                                        "{} {}",
+                                        super::lib_form::workholding_label(k),
+                                        super::lib_form::len_text(v)
+                                    )
+                                });
+                            let sub = size
+                                .into_iter()
+                                .chain(std::iter::once(r0.name.clone()))
+                                .collect::<Vec<_>>()
+                                .join(" · ");
+                            let key =
+                                super::lib_form::row_key(&["workholding", &r0.name, &e.file, e.level.name()]);
+                            let r =
+                                super::lib_form::record_row(ui, t, key, on, &txt, &sub, || preview_of(r0));
                             places.push((format!("workholding:pick:{}", e.def.name), r.rect));
                             if r.clicked() {
                                 chosen = Some((*e).clone());
@@ -343,25 +378,38 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
         );
         return;
     };
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(&r.name).font(semi(14.0)).color(t.ink));
-        ui.add_space(6.0);
-        ui.label(RichText::new(r.kind.name()).font(sans(11.0)).color(t.ink2));
-    });
+    super::lib_form::title(
+        ui,
+        t,
+        super::lib_form::product_name(&r.vendor, &r.product).as_deref(),
+        &r.name,
+        &r.kind.name().replace('_', " "),
+    );
     let from = match &st.origin {
         Some((l, f)) => format!("{} level · {f}", l.name()),
         None => "not saved yet".into(),
     };
     ui.label(RichText::new(from).font(sans(10.5)).color(t.ink2));
-    if !r.vendor.is_empty() || !r.product.is_empty() {
-        ui.label(
-            RichText::new(format!("{} {}", r.vendor, r.product))
-                .font(sans(11.0))
-                .color(t.ink2),
-        );
+    // the product's detail after its name (part numbers, what it is made by)
+    if let Some((_, rest)) = r.product.split_once(" (") {
+        ui.add(
+            egui::Label::new(
+                RichText::new(rest.trim_end_matches(')'))
+                    .font(sans(11.0))
+                    .color(t.ink2),
+            )
+            .truncate(),
+        )
+        .on_hover_text(&r.product);
     }
     super::lib_form::legend(ui, t);
     ui.separator();
+    // what the view draws that the record does not publish: the sheet shows the same values
+    let drawn = match r.kind.name() {
+        "vise" | "self_centring" => crate::library_mesh::vise_drawn(&r),
+        "chuck" => crate::library_mesh::chuck_drawn(&r),
+        _ => Vec::new(),
+    };
     let mut set: Option<(String, f64)> = None;
     let mut set_list: Option<(String, Vec<f64>)> = None;
     let mut set_word: Option<(String, String)> = None;
@@ -398,11 +446,18 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                                             set = Some((f.path.clone(), x));
                                         }
                                     }
-                                    None => {
-                                        if super::lib_form::unknown_slot(ui, t, 140.0) {
-                                            set = Some((f.path.clone(), 1.0));
+                                    None => match drawn.iter().find(|d| d.key == f.path) {
+                                        Some(d) => {
+                                            if super::lib_form::drawn_cell(ui, t, d, f.unit.suffix(), 140.0) {
+                                                set = Some((f.path.clone(), d.value));
+                                            }
                                         }
-                                    }
+                                        None => {
+                                            if super::lib_form::unknown_slot(ui, t, 140.0) {
+                                                set = Some((f.path.clone(), 1.0));
+                                            }
+                                        }
+                                    },
                                 },
                                 Ty::Points(_) => {
                                     let mut v = r.lists.get(&f.path).cloned().unwrap_or_default();
@@ -444,10 +499,20 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                                 }
                             }
                             let (w, _) = status(t, &r, &f.path);
+                            let shown = drawn
+                                .iter()
+                                .find(|d| d.key == f.path && !r.vals.contains_key(&f.path));
                             let not_given = matches!(&f.need, forge_library::schema::Need::Optional(_))
                                 && !r.vals.contains_key(&f.path)
-                                && !r.unknown.contains(&f.path);
-                            if not_given {
+                                && !r.unknown.contains(&f.path)
+                                && shown.is_none();
+                            if let Some(d) = shown {
+                                let p = match d.basis {
+                                    crate::library_mesh::Basis::Conflict => super::lib_form::Prov::Conflict,
+                                    _ => super::lib_form::Prov::Estimate,
+                                };
+                                super::lib_form::chip(ui, t, p, &d.why, false);
+                            } else if not_given {
                                 ui.label(RichText::new("not given").font(sans(10.5)).color(t.ink2));
                             } else {
                                 let detail = r
@@ -473,11 +538,21 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                 ui.separator();
                 ui.label(RichText::new("Checks").font(semi(12.0)).color(t.ink));
                 for f in &st.findings {
-                    let col = if f.not_checked { t.warn } else { t.error };
+                    // in words: which value, then what to do; the record's own words on hover
+                    let field = super::lib_form::workholding_label(&f.path);
+                    let (line, col) = if f.not_checked && r.conflict.contains(&f.path) {
+                        (format!("Not checked: {field} (its sources disagree)"), t.warn)
+                    } else if f.not_checked {
+                        (format!("Not checked: {field} is unknown"), t.warn)
+                    } else {
+                        (format!("{field}: {}", f.what), t.error)
+                    };
+                    ui.label(RichText::new(line).font(sans(11.0)).color(col))
+                        .on_hover_text(format!("{}: {}", f.path, f.what));
                     ui.label(
-                        RichText::new(format!("{}: {} — {}", f.path, f.what, f.fix))
-                            .font(sans(11.0))
-                            .color(col),
+                        RichText::new(format!("  {}", f.fix))
+                            .font(sans(10.5))
+                            .color(t.ink2),
                     );
                 }
             }
@@ -499,34 +574,4 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
     {
         st.set_word(&k, &v);
     }
-}
-
-/// A record's thumbnail: its placed bodies seen from the front.
-fn thumb(r: &Record) -> Vec<Vec<[f64; 2]>> {
-    use super::lib_form::{cyl_pts, rect_xz};
-    let Ok(bodies) = forge_workholding_builder::preview(r) else {
-        return Vec::new();
-    };
-    bodies
-        .iter()
-        .flat_map(|(_, prims)| prims.iter())
-        .map(|p| match p {
-            forge_workholding::Prim::Block { o, axes, size } => {
-                let mut pts = Vec::new();
-                for i in 0..8 {
-                    let mut q = *o;
-                    for (k, ax) in axes.iter().enumerate() {
-                        if i >> k & 1 == 1 {
-                            for d in 0..3 {
-                                q[d] += ax[d] * size[k];
-                            }
-                        }
-                    }
-                    pts.push(q);
-                }
-                rect_xz(&pts)
-            }
-            forge_workholding::Prim::Cyl { base, axis, r, h } => rect_xz(&cyl_pts(*base, *axis, *r, *h)),
-        })
-        .collect()
 }
