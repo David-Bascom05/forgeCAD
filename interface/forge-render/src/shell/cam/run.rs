@@ -360,7 +360,8 @@ fn run_turning(text: &str, dir: &Path) -> Run {
                 assurance: Assurance::CheckedAtGenerate,
                 tool,
                 tool_t: t,
-                tool_d: rec.map(|r| 2.0 * r.re),
+                // a lathe tool has no cutting diameter: its nose radius is in its record
+                tool_d: None,
                 refusal: o.refusal.clone(),
                 fix: None,
                 checks: refusals

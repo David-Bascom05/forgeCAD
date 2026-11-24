@@ -6,6 +6,8 @@ const t = require("./lib.cjs");
 const root = process.argv[2];
 const TURN = "/project/examples/machined/shaft_turn.fg";
 const SHOTS = [
+  ["cam-25-section.png", ["select rough"], (s) => s.cam.selected === "rough", TURN],
+  ["cam-26-section-full.png", ["select fin"], (s) => s.cam.selected === "fin", TURN],
   ["cam-21-lathe-setup.png", ["edit op1"], (s) => s.cam.dialogs.includes("setup"), TURN],
   ["cam-22-turn-rough.png", ["select rough", "edit rough", "tab 2"], (s) => s.cam.dialogs.includes("op"), TURN],
   ["cam-23-lathe-tools.png", ["tools"], (s) => s.cam.dialogs.includes("tools"), TURN],

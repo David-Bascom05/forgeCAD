@@ -9,6 +9,7 @@
 pub mod doc;
 pub mod run;
 pub mod schema;
+pub mod turnview;
 mod ui;
 pub use ui::{groups, status_line};
 
@@ -58,6 +59,7 @@ pub enum Ask {
     ToggleText,
     AutoGenerate,
     CheckNow,
+    SectionView,
 }
 
 impl From<Ask> for Cmd {
@@ -77,6 +79,7 @@ impl From<Ask> for Cmd {
             Ask::ToggleText => Cmd::ToggleText,
             Ask::AutoGenerate => Cmd::AutoGenerate,
             Ask::CheckNow => Cmd::CheckNow,
+            Ask::SectionView => Cmd::SectionView,
         }
     }
 }
@@ -113,6 +116,8 @@ pub enum Cmd {
     AutoGenerate,
     /// Run the certified checker now on what is generated (today: a generate, which checks).
     CheckNow,
+    /// The turning view, shown or not.
+    SectionView,
 }
 
 /// The setup dialog's state: the args as edited, by keyword.
@@ -209,6 +214,8 @@ pub struct CamWs {
     /// A rename in the browser: the row and its text.
     pub renaming: Option<(String, String)>,
     pub lib: forge_tooling::Library,
+    /// The turning view (a lathe setup in section).
+    pub turnview: turnview::TurnView,
 }
 
 impl CamWs {
@@ -260,6 +267,10 @@ impl CamWs {
             want_write: vec![],
             renaming: None,
             lib,
+            turnview: turnview::TurnView {
+                open: true,
+                ..Default::default()
+            },
         };
         ws.read_parts();
         ws.restale();
@@ -559,6 +570,7 @@ impl CamWs {
                 self.text_edit = self.text.clone();
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
+            Cmd::SectionView => self.turnview.open = !self.turnview.open,
             // forge-cam-lang checks as it generates: until an on-demand checker of a run's
             // posted paths is exposed, checking now is generating again
             Cmd::CheckNow => {
@@ -1028,21 +1040,14 @@ pub const LATHE_KW: [&str; 8] = [
     "clearance",
 ];
 
-/// The lathes the built-in library holds (forge-turn's machines-lathe.toml).
+/// The lathes of the machine library (forge-machine's built-in definitions).
 pub fn lathes() -> Vec<String> {
-    let mut out = vec![];
-    let mut in_machine = false;
-    for l in forge_turn::machine::BUILTIN.lines() {
-        let l = l.trim();
-        if l.starts_with("[[") {
-            in_machine = l == "[[machine]]";
-        } else if in_machine && let Some(v) = l.strip_prefix("name") {
-            let v = v.trim_start().trim_start_matches('=').trim().trim_matches('"');
-            out.push(v.to_string());
-            in_machine = false;
-        }
-    }
-    out
+    use forge_machine::def::Kind;
+    forge_machine::library::builtin()
+        .into_iter()
+        .filter(|m| m.kind == Kind::Lathe)
+        .map(|m| m.name)
+        .collect()
 }
 
 /// A setup statement's arguments as the dialog edits them.
