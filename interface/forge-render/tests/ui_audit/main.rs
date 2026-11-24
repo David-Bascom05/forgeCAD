@@ -64,6 +64,24 @@ fn hover_tip(h: &mut Headless, r: Rect) -> String {
             }
         }
     }
+    // no tooltip: a reason may be written under the item itself, small and muted
+    let s = Snap::take(h);
+    let under: Vec<String> = judge::new_texts_in(
+        &s,
+        &before,
+        &[Rect::from_min_max(
+            pos2(r.left() - 4.0, r.bottom() - 2.0),
+            pos2(r.right() + 400.0, r.bottom() + 20.0),
+        )],
+    )
+    .iter()
+    .filter(|t| t.size <= 11.5 && t.rect.top() >= r.bottom() - 2.0)
+    .map(|t| t.s.trim().to_string())
+    .collect();
+    if !under.is_empty() {
+        TIP_SHOT.with(|t| *t.borrow_mut() = s.png());
+        return under.join(" / ");
+    }
     String::new()
 }
 
