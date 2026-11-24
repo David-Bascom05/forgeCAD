@@ -1046,6 +1046,13 @@ fn edit_distance(a: &str, b: &str) -> usize {
 // machines, cutting) first, then every vendor file under data/{tools,holders,collets,turning}/.
 include!(concat!(env!("OUT_DIR"), "/builtin.rs"));
 
+/// The built-in library files, in reading order: (`builtin/<path>`, contents). The generic files
+/// come first, then each vendor file (`builtin/tools/<vendor>.toml`, `builtin/holders/...`,
+/// `builtin/collets/...`, `builtin/turning/...`), so a library builder can group records by file.
+pub fn builtin_files() -> &'static [(&'static str, &'static str)] {
+    BUILTIN
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

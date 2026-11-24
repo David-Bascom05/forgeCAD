@@ -157,3 +157,23 @@ min_bore = 25
         .is_err()
     );
 }
+
+#[test]
+fn builtin_files_are_named_by_vendor() {
+    let files = forge_tooling::builtin_files();
+    assert_eq!(files[0].0, "builtin/fixtures.toml");
+    for f in [
+        "builtin/tools/harvey.toml",
+        "builtin/holders/schunk.toml",
+        "builtin/collets/rego-fix.toml",
+        "builtin/turning/sumitomo.toml",
+    ] {
+        assert!(files.iter().any(|(n, _)| *n == f), "{f}");
+    }
+    // the files read back to the same library
+    let mut l = Library::default();
+    for (n, s) in files {
+        l.add(n, s).unwrap();
+    }
+    assert_eq!(l, Library::builtin());
+}
