@@ -209,6 +209,48 @@ impl HeightMap {
         self.z[j as usize * self.nx + i as usize]
     }
 
+    /// The highest stock within w of a point in x and in y: the most of every cell meeting the
+    /// square [x ± w] × [y ± w] (−∞ where none is on the map). `engage` reads the edge through it.
+    pub fn top_near(&self, x: f64, y: f64, w: f64) -> f64 {
+        match self.near_cells(x, y, w) {
+            Some(b) => self.top_cells(b),
+            None => f64::NEG_INFINITY,
+        }
+    }
+
+    /// The cells meeting the square [x ± w] × [y ± w] on the map: (i0, i1, j0, j1), inclusive;
+    /// None where none is (or a NaN point).
+    fn near_cells(&self, x: f64, y: f64, w: f64) -> Option<(usize, usize, usize, usize)> {
+        let i0 = ((x - w - self.x0) / self.h).floor().max(0.0);
+        let i1 = ((x + w - self.x0) / self.h).floor().min(self.nx as f64 - 1.0);
+        let j0 = ((y - w - self.y0) / self.h).floor().max(0.0);
+        let j1 = ((y + w - self.y0) / self.h).floor().min(self.ny as f64 - 1.0);
+        // (a NaN bound fails these)
+        (i0 <= i1 && j0 <= j1).then_some((i0 as usize, i1 as usize, j0 as usize, j1 as usize))
+    }
+
+    /// The highest of a block of cells (a NaN cell counts as material: +∞, never read as air).
+    fn top_cells(&self, (i0, i1, j0, j1): (usize, usize, usize, usize)) -> f64 {
+        let mut hi = f64::NEG_INFINITY;
+        for j in j0..=j1 {
+            for &z in &self.z[j * self.nx + i0..=j * self.nx + i1] {
+                if z.is_nan() {
+                    return f64::INFINITY;
+                }
+                hi = hi.max(z);
+            }
+        }
+        hi
+    }
+
+    /// How far round an edge point `engage` looks for stock: the cell's half-diagonal (the model
+    /// holds material only to within a cell: a cell is lowered whole when its centre is cut, and
+    /// the stock's own edges fall anywhere in a cell), and at least half the 1° between edge
+    /// points at radius r.
+    pub fn reach(&self, r: f64) -> f64 {
+        (std::f64::consts::FRAC_1_SQRT_2 * self.h).max(0.5 * r * std::f64::consts::PI / (EDGE_N - 1) as f64)
+    }
+
     /// Sweeps the tool's body with its tip along a → b (height linear): cells whose centre is
     /// within r of the segment are lowered to the body. The volume removed (mm³).
     pub fn sweep(&mut self, a: [f64; 3], b: [f64; 3], p: &Profile) -> f64 {
@@ -311,8 +353,11 @@ impl HeightMap {
     }
 
     /// What the side edge's front half meets at tip c moving along u (θ from the direction of
-    /// travel, + left): the stock standing above the tip by more than `eps`, the edge read at
-    /// r + h/2, a little outside the tool, so the cells' error errs toward more engagement.
+    /// travel, + left): the stock standing above the tip by more than `eps`. Each edge point (at
+    /// r, 1° apart) counts as meeting stock where any cell within `reach` of it stands that high,
+    /// so the estimate is at least the true engagement wherever the stock's edges and earlier cuts
+    /// fall on the grid (a read at one point, a little outside the tool, erred low where the edge
+    /// leaves stock: the feed went over the chip there; tests/engage_conservative.rs).
     /// None: the edge meets nothing.
     pub fn engage(&self, c: [f64; 3], u: [f64; 2], r: f64, eps: f64) -> Option<Engage> {
         self.engage_in(c, u, r, eps, None)
@@ -330,8 +375,10 @@ impl HeightMap {
         eps: f64,
         tiles: Option<&Tiles>,
     ) -> Option<Engage> {
+        let w = self.reach(r);
         if let Some(t) = tiles {
-            let rr = r + 0.5 * self.h;
+            // every cell an edge read can meet: within r + w of c (in x and in y)
+            let rr = r + w;
             let thr = c[2] + eps;
             // the cells `top` can read for points within rr of c: their indices, a cell wider
             let i0 = ((c[0] - rr - self.x0) / self.h).floor() - 1.0;
@@ -361,14 +408,49 @@ impl HeightMap {
                 }
             }
         }
-        let rr = r + 0.5 * self.h;
         let n = EDGE_N;
         let step = std::f64::consts::PI / (n - 1) as f64;
         let mut e: Option<Engage> = None;
+        let mut last: Option<((usize, usize, usize, usize), f64)> = None;
         for (k, &(th, s, co)) in edge().iter().enumerate() {
             let dx = u[0] * co - u[1] * s;
             let dy = u[0] * s + u[1] * co;
-            let t = self.top(c[0] + rr * dx, c[1] + rr * dy);
+            // the point's own cell first (inside the stock it is material: one read); where it is
+            // not, the cells within w of it (the last block's answer kept: neighbouring points
+            // mostly read the same cells)
+            let (px, py) = (c[0] + r * dx, c[1] + r * dy);
+            let own = self.top(px, py);
+            let t = if own > c[2] + eps || own.is_nan() {
+                own
+            } else {
+                match self.near_cells(px, py, w) {
+                    None => f64::NEG_INFINITY,
+                    Some(b) => match last {
+                        Some((lb, lt)) if lb == b => lt,
+                        _ => {
+                            // the tiles holding the block, each at or below the threshold: no
+                            // cell of it stands that high (a tile's maximum is at or above its
+                            // cells', +∞ with a NaN), so it reads as air without reading a cell
+                            let low = tiles.is_some_and(|tl| {
+                                let thr = c[2] + eps;
+                                (b.2 / TILE..=b.3 / TILE).all(|tj| {
+                                    (b.0 / TILE..=b.1 / TILE).all(|ti| {
+                                        matches!(
+                                            tl.max[tj * tl.ntx + ti].partial_cmp(&thr),
+                                            Some(std::cmp::Ordering::Less | std::cmp::Ordering::Equal)
+                                        )
+                                    })
+                                })
+                            });
+                            let t = if low { f64::NEG_INFINITY } else { self.top_cells(b) };
+                            last = Some((b, t));
+                            t
+                        }
+                    },
+                }
+            };
+            // (a NaN cell is material: never read as air)
+            let t = if t.is_nan() { f64::INFINITY } else { t };
             if t > c[2] + eps {
                 let g = e.get_or_insert(Engage {
                     cos_max: co,
@@ -382,7 +464,10 @@ impl HeightMap {
                 g.th_lo = g.th_lo.min(th);
                 g.th_hi = g.th_hi.max(th);
                 g.phi += if k == 0 || k == n - 1 { 0.5 * step } else { step };
-                g.ap = g.ap.max(t - c[2]);
+                // (a NaN cell's +∞ engages the edge but gives no depth)
+                if t.is_finite() {
+                    g.ap = g.ap.max(t - c[2]);
+                }
             }
         }
         if let Some(g) = &mut e {
