@@ -859,6 +859,10 @@ pub fn export_mesh(
     Ok(said)
 }
 
+/// How many sketches a build worker kept after its last step (`forge_keep::kept` on its thread):
+/// none, as each step frees what its runs made. What the tests hold bounded.
+pub static WORKER_KEPT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 /// Stops the build threads this thread's documents started, and waits for each.
 pub fn stop_builders() {
     let me = std::thread::current().id();
@@ -1002,6 +1006,7 @@ impl Worker {
         // the sketches this step's runs made: freed now (each with a named entity is an Rc cycle,
         // and a run lets none go: every edit kept its sketches, without bound)
         crate::plat::release_sketches();
+        WORKER_KEPT.store(forge_keep::kept(), std::sync::atomic::Ordering::Relaxed);
         go_on
     }
 

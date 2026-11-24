@@ -34,6 +34,11 @@ pub fn keep(x: Rc<dyn Any>) {
     }
 }
 
+/// How many are kept on this thread (what a long-lived loop's tests hold bounded).
+pub fn kept() -> usize {
+    COUNT.get() + MORE.with(|m| m.borrow().len())
+}
+
 /// Everything kept on this thread so far, no longer kept.
 pub fn take_all() -> Vec<Rc<dyn Any>> {
     let n = COUNT.replace(0);

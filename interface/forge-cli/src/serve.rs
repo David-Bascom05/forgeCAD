@@ -247,31 +247,39 @@ pub fn run(mcp: bool, root: &str, writable: bool) -> ExitCode {
         if line.trim().is_empty() {
             continue;
         }
-        let reply = match Json::parse(&line) {
-            // a request that panics answers with an error, and the session starts afresh
-            Ok(req) => {
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| answer(&mut forge, &req, mcp)))
-                    .unwrap_or_else(|_| {
-                        forge = fg::Session::new(Some(root.clone()), writable);
-                        let id = req.get("id").cloned().unwrap_or(Json::Null);
-                        Some(error(
-                            id,
-                            -32603,
-                            "internal error: the request failed; the session was reset",
-                        ))
-                    })
-            }
-            Err(e) => Some(error(Json::Null, -32700, &e)),
-        };
-        // the sketches the request's runs made: freed between requests (a run lets none go)
-        release_sketches();
-        if let Some(r) = reply
+        if let Some(r) = respond(&mut forge, &line, mcp, (&root, writable))
             && writeln!(out, "{r}").and_then(|_| out.flush()).is_err()
         {
             break;
         }
     }
     ExitCode::SUCCESS
+}
+
+/// One request's answer (none for an MCP notification), and the sketches its runs kept freed.
+fn respond(
+    forge: &mut fg::Session,
+    line: &str,
+    mcp: bool,
+    (root, writable): (&std::path::Path, bool),
+) -> Option<Json> {
+    let reply = match Json::parse(line) {
+        // a request that panics answers with an error, and the session starts afresh
+        Ok(req) => std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| answer(forge, &req, mcp)))
+            .unwrap_or_else(|_| {
+                *forge = fg::Session::new(Some(root.to_path_buf()), writable);
+                let id = req.get("id").cloned().unwrap_or(Json::Null);
+                Some(error(
+                    id,
+                    -32603,
+                    "internal error: the request failed; the session was reset",
+                ))
+            }),
+        Err(e) => Some(error(Json::Null, -32700, &e)),
+    };
+    // the sketches the request's runs made: freed between requests (a run lets none go)
+    release_sketches();
+    reply
 }
 
 fn error(id: Json, code: i32, msg: &str) -> Json {
@@ -609,5 +617,47 @@ fn release_sketches() {
             let named = std::mem::take(&mut sk.borrow_mut().named);
             drop(named);
         }
+    }
+}
+
+#[cfg(test)]
+mod bounded {
+    use super::*;
+
+    /// A long session keeps no more sketches than one request's runs made: each request's are
+    /// freed as it is answered (`release_sketches`), in `serve` and in `mcp` alike. Without it
+    /// every build of a part kept its sketches (a sketch with a named entity is an `Rc` cycle).
+    #[test]
+    fn a_session_frees_each_requests_sketches() {
+        let dir = std::env::temp_dir().join(format!("forge-serve-bounded-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let part = dir.join("plate.fg");
+        std::fs::write(
+            &part,
+            "shared t = 6\nsketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (60, 30))\n}\nbase = extrude(plan, t)\n",
+        )
+        .unwrap();
+        let root = std::fs::canonicalize(&dir).unwrap();
+        let file = part.to_str().unwrap().to_string();
+        for mcp in [false, true] {
+            let mut forge = fg::Session::new(Some(root.clone()), true);
+            for k in 0..20 {
+                let req = if mcp {
+                    format!(
+                        r#"{{"jsonrpc":"2.0","id":{k},"method":"tools/call","params":{{"name":"build","arguments":{{"file":{file:?}}}}}}}"#
+                    )
+                } else {
+                    format!(r#"{{"jsonrpc":"2.0","id":{k},"method":"build","params":{{"file":{file:?}}}}}"#)
+                };
+                let r = respond(&mut forge, &req, mcp, (&root, true)).expect("an answer");
+                assert!(r.get("error").is_none(), "{r}");
+                assert_eq!(
+                    forge_keep::kept(),
+                    0,
+                    "mcp {mcp}, request {k}: sketches kept after it"
+                );
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

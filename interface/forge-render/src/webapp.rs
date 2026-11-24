@@ -1263,6 +1263,14 @@ pub fn app_store_failed(path: String, why: String) {
     ask(Ask::StoreFailed(path, why));
 }
 
+/// How many sketches this thread keeps (`forge_keep::kept`): none between frames, as each frame
+/// frees what its runs made (in the single-threaded page, every build's). What the page's tests
+/// hold bounded.
+#[wasm_bindgen]
+pub fn app_sketches_kept() -> usize {
+    forge_keep::kept()
+}
+
 /// The app's next frame as `{width, height, rgba}`, through a callback (see `Host::pixels`).
 #[wasm_bindgen]
 pub fn app_pixels(then: js_sys::Function) {
