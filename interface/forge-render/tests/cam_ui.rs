@@ -752,6 +752,40 @@ fn export_nc_answers_its_click() {
     assert!(w.export.as_ref().is_some_and(|x| x.files.len() == 1), "handed to the host's Save As");
 }
 
+/// A host that does not answer an export (no dialog showing, or one the user has not seen): 10 s
+/// on, the line says it is still waiting, never that none opened (the app cannot know), with Try
+/// again; Try again asks again; the host's answer ends the wait.
+#[test]
+fn an_unanswered_export_says_it_is_waiting_and_asks_again() {
+    use forge_render::shell::cam::nc::{EXPORT_WAIT_MS, RETRY_TIP};
+    let Some((mut h, _)) = open("export-wait") else { return };
+    tap(&mut h, "tool:Export NC");
+    h.step();
+    // headless, nothing takes the export: as a host that never answers. 10 s on:
+    let w = h.gui.shell.cam.as_mut().unwrap();
+    w.export = None;
+    w.export_asked.as_mut().expect("asked").at_ms -= EXPORT_WAIT_MS + 1.0;
+    h.step();
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert_eq!(forge_render::shell::cam::status_line(w), "Export NC: waiting for the save dialog");
+    assert_eq!(h.gui.shell.status, "Export NC: waiting for the save dialog", "the shell's status too");
+    assert_eq!(forge_render::shell::cam::status_fix_tip(w), Some(RETRY_TIP));
+    // Try again: asked again, the click's words again
+    tap(&mut h, "status:fix");
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.export.is_some(), "asked of the host again");
+    assert_eq!(forge_render::shell::cam::status_line(w), "Export NC: choose where to save prog.nc\u{2026}");
+    assert!(w.export_asked.as_ref().is_some_and(|a| !a.waiting));
+    // the host answers: the wait ends, its words stand
+    h.gui.shell.cam.as_mut().unwrap().said = Some("Export cancelled".into());
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.export_asked.is_none(), "no longer waiting");
+    assert_eq!(forge_render::shell::cam::status_line(w), "Export cancelled");
+}
+
 /// A cycle time is the lower bound and the estimate together (never the estimate alone), and the
 /// estimate counts the tool change the bound counts (the flange changes T1 for T12).
 #[test]

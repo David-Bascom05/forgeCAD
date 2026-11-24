@@ -194,6 +194,26 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     const [z] = await Promise.all([p.waitForEvent("download", { timeout: 30000 }), cam("export-sheet")]);
     assert.equal(z.suggestedFilename(), "shaft_turn-sheet.zip");
     await t.until(p, (s) => s.cam.said === "Downloaded shaft_turn-sheet.zip", "the sheet's download said", 30000);
+    // the browser's save picker (stood in for: the real one needs the user's own click):
+    // cancelled, the app says so; saved, "Exported" with the name chosen; never before
+    await p.evaluate(() => {
+      window.FORGE_DOWNLOAD_ONLY = false;
+      window.showSaveFilePicker = async () => {
+        throw new DOMException("The user aborted a request.", "AbortError");
+      };
+    });
+    await cam("export prog");
+    await t.until(p, (s) => s.cam.said === "Export cancelled", "the cancel said", 30000);
+    await p.evaluate(() => {
+      window.showSaveFilePicker = async () => ({
+        name: "op10.nc",
+        createWritable: async () => ({ write: async () => {}, close: async () => {} }),
+      });
+    });
+    await cam("export prog");
+    await t.until(p, (s) => s.cam.said === "Exported op10.nc", "the picker's save said", 30000);
+    await p.evaluate(() => (window.FORGE_DOWNLOAD_ONLY = true));
+    console.log("ok - an export is said as done: downloaded, cancelled, or saved where the user chose");
     const zb = fs.readFileSync(await z.path());
     assert.equal(zb.readUInt32LE(0), 0x04034b50, "a zip");
     assert.ok(zb.includes(Buffer.from("shaft_turn-tools.txt")), "the tool list in it");

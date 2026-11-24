@@ -26,7 +26,7 @@ pub mod schema;
 pub mod turnview;
 mod ui;
 pub use ui::{CYCLE_TIP, alt_clear_words, certified_words, check_lines, cycle_words, text_panel_h};
-pub use ui::{Blocked, disabled_why, groups, release_block, release_words, status_fix, status_line};
+pub use ui::{Blocked, disabled_why, groups, release_block, release_words, status_fix, status_fix_tip, status_line};
 
 use doc::{Edit, Role, Stmt};
 use std::path::PathBuf;
@@ -91,6 +91,8 @@ pub enum Ask {
     SectionView,
     /// The unplaced setup's dialog (a refusal's fix: G5 needs its `at:`).
     PlaceSetup,
+    /// The export asked again (the host's save dialog never answered, or is not showing).
+    RetryExport,
     /// NC Programs: every program's files with the host's Save As.
     ExportNc,
     /// The setup sheet and tool list with the host's Save As.
@@ -120,6 +122,7 @@ impl From<Ask> for Cmd {
             Ask::CheckNow => Cmd::CheckNow,
             Ask::SectionView => Cmd::SectionView,
             Ask::PlaceSetup => Cmd::PlaceSetup,
+            Ask::RetryExport => Cmd::RetryExport,
             Ask::ExportNc => Cmd::ExportNc(None),
             Ask::ExportSheet => Cmd::ExportSheet,
             Ask::RepostStale => Cmd::RepostStale,
@@ -165,6 +168,8 @@ pub enum Cmd {
     SectionView,
     /// The unplaced setup's dialog.
     PlaceSetup,
+    /// The export asked again (the host's save dialog never answered, or is not showing).
+    RetryExport,
     /// Post program NAME (or all) into the document's folder.
     PostNc(Option<String>),
     /// The Post Process dialog at the K-th program.
@@ -297,6 +302,9 @@ pub struct CamWs {
     pub said: Option<String>,
     /// `said` as last put in the shell's status (it is put there once, when it changes).
     pub said_shown: Option<String>,
+    /// An export handed to the host: when, what, and the words said then; while those words
+    /// stand 10 s on, the host has not answered (`nc::EXPORT_WAIT_MS`).
+    pub export_asked: Option<nc::ExportAsked>,
     /// The setup sheet and program asked to be written (path, text).
     pub want_write: Vec<(String, String)>,
     /// A rename in the browser: the row and its text.
@@ -386,6 +394,7 @@ impl CamWs {
             redo: vec![],
             parts: vec![],
             said_shown: None,
+            export_asked: None,
             said: None,
             want_write: vec![],
             renaming: None,
@@ -735,6 +744,11 @@ impl CamWs {
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
             Cmd::SectionView => self.turnview.open = !self.turnview.open,
+            Cmd::RetryExport => match self.export_asked.take() {
+                Some(a) if a.sheet => self.export_sheet(),
+                Some(a) => self.export_programs(a.which.as_deref()),
+                None => {}
+            },
             // the first setup with no `at:` (its work offset in machine coordinates), opened
             Cmd::PlaceSetup => {
                 let su = self

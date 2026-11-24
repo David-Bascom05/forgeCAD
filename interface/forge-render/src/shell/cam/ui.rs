@@ -3870,9 +3870,18 @@ fn release_short(w: &CamWs) -> &'static str {
 /// The status bar's fix for what blocks release, where one click gets there: a setup with no
 /// `at:` opens its dialog.
 pub fn status_fix(w: &CamWs) -> Option<(&'static str, Action)> {
+    // an export the host has not answered: ask again
+    if w.export_asked.as_ref().is_some_and(|a| a.waiting) {
+        return Some(("Try again", Action::Cam(Ask::RetryExport)));
+    }
     let r = w.run.as_ref()?;
     (release_block(w).is_some() && r.programs.iter().any(|p| p.certified.contains("G5")))
         .then_some(("Place the setup\u{2026}", Action::Cam(Ask::PlaceSetup)))
+}
+
+/// The status bar's fix's hover, where it needs one.
+pub fn status_fix_tip(w: &CamWs) -> Option<&'static str> {
+    w.export_asked.as_ref().is_some_and(|a| a.waiting).then_some(super::nc::RETRY_TIP)
 }
 
 /// Why a Manufacture tool is off, for its tooltip.

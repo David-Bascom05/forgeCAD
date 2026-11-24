@@ -1229,6 +1229,10 @@ impl Shell {
             let fr = Rect::from_min_size(pos2(said.right() + 12.0, st.top() + 2.0), vec2(g.size().x + 16.0, STATUS_H - 4.0));
             let r = ui.interact(fr, ui.scope_id().with("status-fix"), Sense::click());
             r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+            let r = match self.cam.as_ref().and_then(cam::status_fix_tip) {
+                Some(tip) => r.on_hover_text(tip),
+                None => r,
+            };
             p.rect_filled(fr, 3.0, Color32::from_white_alpha(if r.hovered() { 56 } else { 36 }));
             p.galley(pos2(fr.left() + 8.0, fr.center().y - g.size().y * 0.5), g, Color32::WHITE);
             self.note("status:fix", fr);
