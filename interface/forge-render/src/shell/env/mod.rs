@@ -229,7 +229,7 @@ impl Shell {
             Ok(Entered::Mode) => {
                 self.env = Some(id);
                 self.tab = e.tabs()[0].0;
-                self.status = format!("{}: Finish {} goes back to the design", id.name(), id.name());
+                // the status bar keeps the document's line (or the environment's own: env_status)
                 Ok(Entered::Mode)
             }
             Ok(Entered::Opened) => Ok(Entered::Opened),
