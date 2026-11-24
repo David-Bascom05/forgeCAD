@@ -63,3 +63,4 @@ import ForgeCurved.EventCover
 import ForgeCurved.VertexScreen
 import ForgeCurved.AngleOrder
 import ForgeCurved.G14
+import ForgeCurved.PlaceMerge
