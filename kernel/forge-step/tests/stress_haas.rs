@@ -301,3 +301,36 @@ fn a_far_anchor_on_an_axis_or_a_plane_is_read() {
     let bad = edge_off_at(&text, pt, Vec3::new(6e5, 0.0, 0.0));
     assert!(import(bad.as_bytes(), &Limits::default()).map_or(true, |i| !i.refusals.is_empty()));
 }
+
+/// A body written as a surface model, its shell an OPEN_SHELL that closes (TRT160: the whole
+/// machine so, "the file holds no solid"): read as a solid. A shell that does not close is a
+/// sheet, refused as one.
+#[test]
+fn a_surface_model_shell_that_closes_is_a_solid() {
+    let text = export(&bar(5.0, 10.0), &Options::default()).unwrap().text;
+    let sm = text
+        .replace("CLOSED_SHELL(", "OPEN_SHELL(")
+        .replace("MANIFOLD_SOLID_BREP(", "SHELL_BASED_SURFACE_MODEL(")
+        .replace(
+            "ADVANCED_BREP_SHAPE_REPRESENTATION(",
+            "MANIFOLD_SURFACE_SHAPE_REPRESENTATION(",
+        );
+    // the model's shell given as a list, as the schema has it
+    let at = sm.find("SHELL_BASED_SURFACE_MODEL('',").unwrap() + 29;
+    let end = at + sm[at..].find(')').unwrap();
+    let sm = format!("{}({}){}", &sm[..at], &sm[at..end], &sm[end..]);
+    let imp = import(sm.as_bytes(), &Limits::default()).unwrap();
+    assert!(imp.refusals.is_empty(), "{:?}", imp.refusals);
+    let b = &imp.solids[0].body;
+    assert!(check(b).is_empty(), "{:?}", check(b));
+    let want = forge_math::dmath::PI * 25.0 * 10.0;
+    let v = forge_topo::mass::mass(b).unwrap().volume;
+    assert!((v - want).abs() < 1e-6 * want, "{v} vs {want}");
+    // one face less: a sheet
+    let sh = sm.find("OPEN_SHELL('',(").unwrap() + 15;
+    let comma = sh + sm[sh..].find(',').unwrap();
+    let sheet = format!("{}{}", &sm[..sh], &sm[comma + 1..]);
+    let r = import(sheet.as_bytes(), &Limits::default());
+    assert!(r.map_or(true, |i| i.solids.is_empty()
+        && i.refusals.iter().any(|x| x.kind == "OPEN_SHELL")));
+}

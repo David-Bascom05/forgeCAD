@@ -1146,8 +1146,13 @@ impl Build<'_, '_> {
         } else {
             (id, flip)
         };
-        let a = self.r.args_of(id, "CLOSED_SHELL")?;
-        let faces = self.r.list(id, "CLOSED_SHELL", a.get(1))?;
+        let kind = if kw(self.r.f, id) == Some("OPEN_SHELL") {
+            "OPEN_SHELL"
+        } else {
+            "CLOSED_SHELL"
+        };
+        let a = self.r.args_of(id, kind)?;
+        let faces = self.r.list(id, kind, a.get(1))?;
         let shell = self.p.shells;
         self.p.shells += 1;
         for x in faces {
@@ -1504,12 +1509,29 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
     let mut ctx_of: BTreeMap<u32, u32> = BTreeMap::new();
     let mut any_ctx = None;
     let mut roots = Vec::new();
+    // open shells read as solids, and the surface model each is in (for its context)
+    let mut open_of: Vec<(u32, u32)> = Vec::new();
     for &(id, at, n) in &f.ids {
         let recs = &f.records[at as usize..(at + n) as usize];
         for r in recs {
             let name = f.name(r);
             if name == "MANIFOLD_SOLID_BREP" || name == "BREP_WITH_VOIDS" {
                 roots.push((id, *r));
+            }
+            // a surface model's shells: SolidWorks writes some whole machines so (TRT160), each
+            // body a shell of faces that closes; read as a solid when it does
+            if name == "SHELL_BASED_SURFACE_MODEL"
+                && let Some(Value::List(l, ln)) = f.args(r).get(1)
+            {
+                for v in f.run(*l, *ln) {
+                    if let Value::Ref(x) = v
+                        && kw(&f, *x) == Some("OPEN_SHELL")
+                        && let Some(sr) = f.records_of(*x).and_then(|rs| rs.first())
+                    {
+                        roots.push((*x, *sr));
+                        open_of.push((*x, id));
+                    }
+                }
             }
             if name.ends_with("_REPRESENTATION") || name == "SHAPE_REPRESENTATION" {
                 let a = f.args(r);
@@ -1522,6 +1544,11 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                     }
                 }
             }
+        }
+    }
+    for &(shell, model) in &open_of {
+        if let Some(&c) = ctx_of.get(&model) {
+            ctx_of.entry(shell).or_insert(c);
         }
     }
     if let Some(u) = any_ctx.and_then(|c| units_of(&f, c)) {
@@ -1559,6 +1586,9 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                 salt: Name::feature(u64::from(id)).with_str("step"),
             };
             let built = (|| {
+                if f.name(&r) == "OPEN_SHELL" {
+                    return b.shell(id, false);
+                }
                 let a = f.args(&r);
                 let outer = b.r.reference(id, "solid", a.get(1))?;
                 b.shell(outer, false)?;
@@ -1571,6 +1601,28 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                 Ok(())
             })();
             let proto = b.p;
+            // an open shell is a solid only if it closes: every edge between two faces' uses
+            let built = built.and_then(|()| {
+                if f.name(&r) != "OPEN_SHELL" {
+                    return Ok(());
+                }
+                let mut uses = vec![0u32; proto.edges.len()];
+                for face in &proto.faces {
+                    for l in &face.loops {
+                        for &(e, _) in l {
+                            uses[e] += 1;
+                        }
+                    }
+                }
+                match uses.iter().filter(|&&n| n != 2).count() {
+                    0 => Ok(()),
+                    n => refuse(
+                        id,
+                        "OPEN_SHELL",
+                        format!("a sheet, not a solid: {n} edges not between two faces"),
+                    ),
+                }
+            });
             match built {
                 Ok(()) => {
                     if only_measure {
