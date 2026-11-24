@@ -74,6 +74,41 @@ pub fn hops(
                 top = top.max(b[2]);
                 j += 1;
             }
+            // a run that ends above a plunge straight down (an entry into material): the hop
+            // lands just over the material the map holds there, and the plunge goes on from
+            // there (its feed only through the stock, not through the air above it)
+            if let Some(PMove::Line {
+                to: p,
+                f: fp,
+                phase: Phase::Plunge,
+            }) = moves.get(j).copied()
+                && p[0] == b[0]
+                && p[1] == b[1]
+                && p[2] < b[2]
+                && std::env::var_os("FORGE_HOP_ENTRY").is_some()
+            {
+                let zt = (top_near(map, b[0], b[1], rr) + CLEAR).max(p[2]);
+                let land = [b[0], b[1], zt];
+                if zt < b[2] - 1e-9
+                    && top > at[2] + 1e-9
+                    && let Some(h) = hop(map, rr, bodies, at, land, top, feed)
+                {
+                    let plunge = PMove::Line {
+                        to: p,
+                        f: fp,
+                        phase: Phase::Plunge,
+                    };
+                    for m in h.iter().chain(std::iter::once(&plunge)) {
+                        sweep(map, prof, at, m);
+                        at = end(m);
+                    }
+                    out.extend(h);
+                    out.push(plunge);
+                    n_hops += 1;
+                    i = j + 1;
+                    continue;
+                }
+            }
             if j < moves.len()
                 && top > at[2].max(b[2]) + 1e-9
                 && let Some(h) = hop(map, rr, bodies, at, b, top, feed)
@@ -449,6 +484,49 @@ mod tests {
             }
             _ => panic!("{out:?}"),
         }
+        assert_eq!(check(&out, start, 5.0), 1);
+    }
+
+    #[test]
+    fn a_retract_onto_an_entry_hops_down_to_just_over_the_material() {
+        // the next start stands in the material between the pockets (top 0): the retract
+        // crosses at 5 and plunges from there; the hop lands at 0.5 and the plunge goes on
+        let start = [6.0, 10.0, -5.0];
+        let mv = vec![
+            line([14.0, 10.0, -5.0], Phase::Cut),
+            PMove::Rapid {
+                to: [14.0, 10.0, 5.0],
+            },
+            PMove::Rapid {
+                to: [30.0, 10.0, 5.0],
+            },
+            line([30.0, 10.0, -5.0], Phase::Plunge),
+            line([34.0, 10.0, -5.0], Phase::Cut),
+        ];
+        let (mut m, prof) = stock();
+        let (out, n) = hops(&mv, start, &mut m, &prof, &[], 9000.0);
+        assert_eq!(n, 1);
+        let k = out
+            .iter()
+            .position(|m| {
+                matches!(
+                    m,
+                    PMove::Line {
+                        phase: Phase::Plunge,
+                        ..
+                    }
+                )
+            })
+            .unwrap();
+        assert_eq!(end(&out[k - 1]), [30.0, 10.0, CLEAR], "{out:?}");
+        assert_eq!(out[k], mv[3]);
+        assert!(out[1..k].iter().all(|m| matches!(
+            m,
+            PMove::Line {
+                phase: Phase::Link,
+                ..
+            }
+        )));
         assert_eq!(check(&out, start, 5.0), 1);
     }
 
