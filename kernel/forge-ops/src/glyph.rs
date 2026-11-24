@@ -70,10 +70,7 @@ pub fn flat(s: &GlyphSeg) -> Flat {
                 return Flat::Line { a: p0, b: p2 };
             };
             Flat::Parabola {
-                curve: Parabola {
-                    frame,
-                    focal: uy * uy / (4.0 * wl),
-                },
+                curve: Parabola::new(frame, uy * uy / (4.0 * wl)),
                 range: Interval::new(-uy * tv, uy * (1.0 - tv)),
             }
         }
@@ -126,10 +123,10 @@ impl Level {
         Some(match (self.place, *f) {
             (Place::Flat(_), Flat::Line { .. }) => line()?,
             (Place::Flat(fr), Flat::Parabola { curve, range }) => (
-                Curve::Parabola(Parabola {
-                    frame: Level::lifted(&fr, self.at).compose(&curve.frame),
-                    focal: curve.focal,
-                }),
+                Curve::Parabola(Parabola::new(
+                    Level::lifted(&fr, self.at).compose(&curve.frame),
+                    curve.focal,
+                )),
                 range,
                 true,
             ),
