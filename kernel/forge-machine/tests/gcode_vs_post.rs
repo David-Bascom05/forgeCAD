@@ -309,3 +309,55 @@ fn dialect_shell_edges() {
     // a stray % in a Heidenhain block is refused too
     assert!(gcode::run(&format!("{head}N20 G01 X+1 % F100*\n"), &hc).is_err());
 }
+
+/// The same with a post's options (forge_post::PostOptions): fewer decimals, line numbers on and
+/// off, no safe start. The control reads the text at its own increment, so forge-post's reader is
+/// given the dialect itself, as the control is.
+#[test]
+fn interpreter_agrees_with_forge_post_reader_under_post_options() {
+    use forge_post::PostOptions;
+    let mut r = Lcg(0x0b7);
+    let mut n = 0;
+    for (name, src) in forge_post::DIALECTS {
+        let d = Dialect::get(name).unwrap();
+        let def = &forge_machine::library::builtin()[0];
+        let c = Control::for_machine(def, src, 1).unwrap();
+        let opts = [
+            PostOptions {
+                decimals: Some(d.decimals.saturating_sub(1)),
+                feed_decimals: Some(0),
+                ..Default::default()
+            },
+            PostOptions {
+                line_numbers: Some(true),
+                safe_start: Some(false),
+                ..Default::default()
+            },
+            PostOptions {
+                line_numbers: Some(false),
+                ..Default::default()
+            },
+        ];
+        for o in &opts {
+            let Ok(dw) = d.with(o) else { continue };
+            for _ in 0..15 {
+                let prog = fit(random_program(&mut r, name), &d);
+                let q = forge_post::quantize(&prog, &dw).unwrap();
+                let text = forge_post::print(&q, &dw).unwrap();
+                let theirs =
+                    forge_post::read(&text, &d).unwrap_or_else(|e| panic!("{name} {o:?}: {e:?}\n{text}"));
+                let (evs, _) = gcode::run(&text, &c)
+                    .unwrap_or_else(|e| panic!("{name} {o:?} line {}: {}\n{text}", e.line, e.what));
+                let evs: Vec<Ev> = evs.into_iter().map(|b| b.ev).collect();
+                let ours = as_motions(&evs, &c);
+                assert_eq!(
+                    forge_post::normalize(&ours),
+                    forge_post::normalize(&theirs),
+                    "{name} {o:?}\n{text}"
+                );
+                n += 1;
+            }
+        }
+    }
+    assert!(n >= 15 * 2 * forge_post::DIALECTS.len(), "{n}");
+}

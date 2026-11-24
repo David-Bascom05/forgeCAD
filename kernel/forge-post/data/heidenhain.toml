@@ -18,6 +18,7 @@ comment_eol = ";"
 comment_strip = ";*"
 block_end = "*"
 line_numbers = true
+line_numbers_required = true
 line_start = 10
 line_step = 10
 safe_start = ["G40 G90"]
@@ -79,6 +80,13 @@ source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-1
 taken = "2026-11-23"
 where = "3.5 p. 93; address table p. 633"
 note = "every block has an N number"
+
+[[dialect.cite]]
+key = "line_numbers_required"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "3.5 p. 93; address table p. 633"
+note = "every block has an N number: they cannot be left out"
 
 [[dialect.cite]]
 key = "block_end"

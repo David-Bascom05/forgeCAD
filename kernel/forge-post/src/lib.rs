@@ -99,7 +99,26 @@ pub struct Dialect {
     /// Where each code comes from (`[[dialect.cite]]`): a dialect restated from a control maker's
     /// manual cites every code it uses (`cite_required = true`).
     pub cites: Vec<Cite>,
+    /// The modes this dialect's program assumes the control is in at its start, because the
+    /// safe start that would set them is left out (`PostOptions::safe_start = Some(false)`): the
+    /// safe start's lines. Empty when the program sets them itself.
+    pub assumes_modes: Vec<String>,
     t: Table,
+}
+
+/// What a post may change of its dialect (`Dialect::with`). None keeps the dialect's own.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PostOptions {
+    /// Inch: not yet (refused with a fix).
+    pub inch: bool,
+    /// Coordinate digits after the point, at most the dialect's (its control's increment).
+    pub decimals: Option<u32>,
+    /// Feed digits after the point, at most the dialect's.
+    pub feed_decimals: Option<u32>,
+    /// N-words on or off (off refused where the control numbers every block).
+    pub line_numbers: Option<bool>,
+    /// The dialect's safe start written, or left out (then `assumes_modes` lists its lines).
+    pub safe_start: Option<bool>,
 }
 
 /// One code's source: the dialect key (`dwell`, `cycle_peck`, ...), the document and where in it.
@@ -115,7 +134,7 @@ pub struct Cite {
 }
 
 /// The template keys a dialect may set; with `cite_required`, each one it sets is cited.
-pub const KEYS: [&str; 37] = [
+pub const KEYS: [&str; 38] = [
     "program_open",
     "program_close",
     "comment",
@@ -153,6 +172,7 @@ pub const KEYS: [&str; 37] = [
     "sign",
     "g_digits",
     "tool_word",
+    "line_numbers_required",
 ];
 
 impl Dialect {
@@ -225,6 +245,7 @@ impl Dialect {
         }
         Ok(Dialect {
             cites,
+            assumes_modes: Vec::new(),
             extension: text(&t, "extension").unwrap_or("nc").to_string(),
             feed_decimals: num(&t, "feed_decimals").unwrap_or(1.0) as u32,
             name,
@@ -232,6 +253,54 @@ impl Dialect {
             point,
             t,
         })
+    }
+
+    /// The dialect with a post's options: every change is one the dialect allows, else a typed
+    /// refusal with its fix; the result is what `quantize`, `print`, `read` and `round_trip` take,
+    /// so the certified text is the one written.
+    pub fn with(&self, o: &PostOptions) -> Result<Dialect, PostError> {
+        let mut d = self.clone();
+        if o.inch {
+            return Err(PostError::Unsupported {
+                what: format!("inch output ({})", self.name),
+                fix: "post in mm (units: \"mm\")".into(),
+            });
+        }
+        if let Some(k) = o.decimals {
+            if k > self.decimals {
+                return Err(PostError::Unsupported {
+                    what: format!("{k} decimals: {} writes at most {}", self.name, self.decimals),
+                    fix: format!("decimals: {} or fewer", self.decimals),
+                });
+            }
+            d.decimals = k;
+        }
+        if let Some(k) = o.feed_decimals {
+            if k > self.feed_decimals {
+                return Err(PostError::Unsupported {
+                    what: format!(
+                        "{k} feed decimals: {} writes at most {}",
+                        self.name, self.feed_decimals
+                    ),
+                    fix: format!("feed_decimals: {} or fewer", self.feed_decimals),
+                });
+            }
+            d.feed_decimals = k;
+        }
+        if let Some(on) = o.line_numbers {
+            if !on && self.t.get("line_numbers_required") == Some(&toml::Val::Bool(true)) {
+                return Err(PostError::Unsupported {
+                    what: format!("no line numbers: {} numbers every block", self.name),
+                    fix: "line_numbers: true".into(),
+                });
+            }
+            d.t.insert("line_numbers".into(), toml::Val::Bool(on));
+        }
+        if o.safe_start == Some(false) {
+            d.assumes_modes = self.lines("safe_start");
+            d.t.remove("safe_start");
+        }
+        Ok(d)
     }
 
     fn s(&self, k: &str) -> &str {
@@ -731,7 +800,9 @@ pub fn motions_with(p: &QProgram, params: (f64, f64)) -> Vec<Motion> {
                 f,
             } => {
                 for h in holes {
-                    expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, params, &mut out);
+                    expand_hole(
+                        *kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, params, &mut out,
+                    );
                 }
             }
             QRec::Dwell(ms) => out.push(Motion::Dwell(*ms)),
@@ -987,7 +1058,19 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 if tpl == "expand" {
                     let mut ms = Vec::new();
                     for h in holes {
-                        expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, k, (PECK_CLEAR, CHIP_LIFT), &mut ms);
+                        expand_hole(
+                            *kind,
+                            *h,
+                            *z,
+                            *r,
+                            *clear,
+                            *q,
+                            *dwell,
+                            *f,
+                            k,
+                            (PECK_CLEAR, CHIP_LIFT),
+                            &mut ms,
+                        );
                     }
                     for m in ms {
                         let rr = match m {
@@ -1443,7 +1526,19 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             Some(80) => {
                 let (kind, z, r, q, dw, clear) = cycle.unwrap();
                 let (x, y) = (to[0].unwrap_or(0), to[1].unwrap_or(0));
-                expand_hole(kind, [x, y], z, r, clear, q, dw, feed, k, (PECK_CLEAR, CHIP_LIFT), &mut out);
+                expand_hole(
+                    kind,
+                    [x, y],
+                    z,
+                    r,
+                    clear,
+                    q,
+                    dw,
+                    feed,
+                    k,
+                    (PECK_CLEAR, CHIP_LIFT),
+                    &mut out,
+                );
                 pos = [Some(x), Some(y), Some(clear)];
                 continue;
             }
@@ -1526,14 +1621,18 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
 
 /// A block that is a tape mark or a `%` header: `%`, `%NAME ...`, or `N<digits> %NAME ...`.
 fn pct_block(s: &str) -> bool {
+    strip_n(s).starts_with('%')
+}
+
+/// A block without its leading `N<digits>` (and the spaces around it).
+fn strip_n(s: &str) -> &str {
     let t = s.trim_start();
-    let t = match t.strip_prefix(['N', 'n']) {
+    match t.strip_prefix(['N', 'n']) {
         Some(r) if r.starts_with(|c: char| c.is_ascii_digit()) => {
             r.trim_start_matches(|c: char| c.is_ascii_digit()).trim_start()
         }
         _ => t,
-    };
-    t.starts_with('%')
+    }
 }
 
 /// The motion without its null moves (a rapid or feed to where the tool already is), which
@@ -1562,7 +1661,7 @@ pub fn normalize(m: &[Motion]) -> Vec<Motion> {
 fn raw_tool(text_: &str, ln: usize) -> u32 {
     let lines: Vec<&str> = text_.lines().collect();
     if ln >= 2
-        && let Some(r) = lines[ln - 2].trim().strip_prefix("(TOOL ")
+        && let Some(r) = strip_n(lines[ln - 2]).trim_end().strip_prefix("(TOOL ")
     {
         return r
             .split(':')

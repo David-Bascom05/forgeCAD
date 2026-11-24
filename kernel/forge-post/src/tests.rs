@@ -562,3 +562,87 @@ fn machine_configured_codes_are_refused_not_guessed() {
         assert!(!Dialect::get(n).unwrap().cites.is_empty(), "{n}");
     }
 }
+
+/// A post's options, applied to every dialect: what each allows round-trips (the certified text is
+/// the one written), and what it does not is refused with a fix.
+#[test]
+fn post_options_round_trip_or_are_refused() {
+    for (name, _) in DIALECTS {
+        let d = Dialect::get(name).unwrap();
+        let p = prog_for(&d, false);
+        // no options: the dialect itself
+        assert_eq!(d.with(&PostOptions::default()).unwrap(), d, "{name}");
+        // coarser numbers, lines on and off, no safe start: each round-trips
+        let mut cases = vec![
+            PostOptions {
+                decimals: Some(d.decimals.saturating_sub(1)),
+                feed_decimals: Some(0),
+                ..Default::default()
+            },
+            PostOptions {
+                safe_start: Some(false),
+                ..Default::default()
+            },
+            PostOptions {
+                line_numbers: Some(true),
+                ..Default::default()
+            },
+        ];
+        let required = d.t.get("line_numbers_required") == Some(&toml::Val::Bool(true));
+        if !required {
+            cases.push(PostOptions {
+                line_numbers: Some(false),
+                ..Default::default()
+            });
+        }
+        for o in &cases {
+            let dw = d.with(o).unwrap();
+            let q = quantize(&p, &dw).unwrap();
+            let (txt, back) = round_trip(&q, &dw).unwrap_or_else(|e| panic!("{name} {o:?}: {e}"));
+            assert!(back.len() > 20, "{name} {o:?}");
+            if o.line_numbers == Some(false) {
+                assert!(!txt.lines().any(|l| l.starts_with('N')), "{name}: {txt}");
+            }
+            if o.line_numbers == Some(true) {
+                assert!(txt.lines().any(|l| l.starts_with('N')), "{name}: {txt}");
+            }
+            if o.safe_start == Some(false) {
+                assert_eq!(dw.assumes_modes, d.lines("safe_start"), "{name}");
+                for l in d.lines("safe_start") {
+                    assert!(
+                        !txt.lines().any(|t| t.contains(l.as_str())),
+                        "{name}: `{l}` in {txt}"
+                    );
+                }
+            } else {
+                assert!(dw.assumes_modes.is_empty());
+            }
+        }
+        // finer than the control's increment, numbers off where every block is numbered, inch
+        let finer = d.with(&PostOptions {
+            decimals: Some(d.decimals + 1),
+            ..Default::default()
+        });
+        assert!(matches!(finer, Err(PostError::Unsupported { .. })), "{name}");
+        let ffiner = d.with(&PostOptions {
+            feed_decimals: Some(d.feed_decimals + 1),
+            ..Default::default()
+        });
+        assert!(matches!(ffiner, Err(PostError::Unsupported { .. })), "{name}");
+        let off = d.with(&PostOptions {
+            line_numbers: Some(false),
+            ..Default::default()
+        });
+        assert_eq!(off.is_err(), required, "{name}");
+        assert!(
+            d.with(&PostOptions {
+                inch: true,
+                ..Default::default()
+            })
+            .is_err()
+        );
+    }
+    // the control that numbers every block
+    let h = Dialect::get("heidenhain").unwrap();
+    assert!(h.t.get("line_numbers_required") == Some(&toml::Val::Bool(true)));
+}
