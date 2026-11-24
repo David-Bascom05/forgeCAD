@@ -1301,6 +1301,8 @@ dependencies = [
  "forge-library",
  "forge-machine",
  "forge-math",
+ "forge-mesh",
+ "forge-step",
  "forge-tooling",
 ]
 
