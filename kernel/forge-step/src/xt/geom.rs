@@ -362,6 +362,12 @@ impl<'s> Geo<'s> {
             68 => {
                 let c = self.curve(n.p("profile"))?;
                 let (o, z) = (self.point(&n, "base")?, self.dir(&n, "axis")?);
+                // a line or a circle turned is a cylinder, cone, plane, sphere or torus: the
+                // kernel's own, which seam and draw as its other faces do
+                if let Some(s) = revolved(&c, o, z) {
+                    let natural = self.agrees(idx, &s)?;
+                    return Ok((s, natural == sense(&n)));
+                }
                 let net = net_of_curve(&c).ok_or(Refusal {
                     entity: idx,
                     kind: "SPUN_SURF".into(),
@@ -803,6 +809,19 @@ impl<'s> Geo<'s> {
     /// on both surfaces and filled in to within SPINE_TOL: the exact curve finds each point by
     /// searching both offsets, and a blend asks for its spine at every point it is asked for.
     fn spine(&mut self, idx: u32) -> R<Curve> {
+        if let Curve::Ellipse(e) = self.curve(idx)? {
+            // an ellipse's seam is its major axis, where a file is apt to have split the blend's
+            // faces: the same ellipse as a spline started an odd part of the way round
+            let a0 = 0.137 * dmath::TAU;
+            let (x, y): (Vec3, Vec3) = (e.frame.x().into(), e.frame.y().into());
+            return match Spline::ellipse(e.frame.origin, x * e.major, y * e.minor, a0, dmath::TAU) {
+                Some(s) => {
+                    let d = s.domain();
+                    Ok(SplineCurve::curve(Arc::new(s), d))
+                }
+                None => refuse(idx, 32, "the spine's ellipse makes no spline"),
+            };
+        }
         let Some(n) = self.s.of(idx, 38) else {
             return self.curve(idx);
         };
@@ -810,7 +829,21 @@ impl<'s> Geo<'s> {
             return self.curve(idx);
         };
         let _ = n;
-        let pts = densify_to(&ic.a, &ic.b, ic.pts.clone(), ic.closed, SPINE_TOL);
+        let mut pts = densify_to(&ic.a, &ic.b, ic.pts.clone(), ic.closed, SPINE_TOL);
+        if ic.closed && pts.len() > 3 {
+            // a closed spine's start is its pipe's seam: the chart starts where the file split
+            // the blend's faces, and a face whose edge runs along a seam cannot be measured.
+            // Started at an odd part of the way round instead.
+            let len: Vec<f64> = pts.iter().scan(0.0, |acc, _| Some(*acc)).collect::<Vec<_>>();
+            let _ = len;
+            let mut run = vec![0.0];
+            for w in pts.windows(2) {
+                run.push(run[run.len() - 1] + w[0].distance(w[1]));
+            }
+            let total = run[run.len() - 1] + pts[pts.len() - 1].distance(pts[0]);
+            let at = run.iter().position(|&r| r >= 0.137 * total).unwrap_or(0);
+            pts.rotate_left(at);
+        }
         let m = pts.len();
         let mut tans = Vec::with_capacity(m);
         for i in 0..m {
@@ -874,27 +907,37 @@ impl<'s> Geo<'s> {
             [a, b] if a.is_finite() && b.is_finite() => (*a, *b),
             _ => return refuse(idx, ty, "its offsets are null"),
         };
-        let (a, aa) = self.surface(sa)?;
         let k = self.xf.k;
-        // offsets along each surface's oriented normal, the kernel's natural one where they agree
-        let da = if aa { ra * k } else { -ra * k };
-        // a cliff-edge blend's second surface is a blend of no radius whose spine is the cliff:
-        // the ball rolls on that edge, as the kernel's rail of it (a tube of no thickness)
-        let (b, db) = if cliff {
-            let Some(rim) = self.s.of(sb, 56) else {
-                return refuse(idx, ty, "a cliff-edge blend with no cliff");
-            };
-            let edge = self.curve(rim.p("spine"))?;
-            let Some(rail) = forge_geom::tube::Tube::rail(&edge, edge.domain().interval()) else {
-                return refuse(idx, ty, "the cliff's curve makes no rail");
-            };
-            (rail, da.abs())
-        } else {
-            let (b, ab) = self.surface(sb)?;
-            (b, if ab { rb * k } else { -rb * k })
+        // a cliff-edge blend: one of its surfaces is a blend of no radius whose spine is the
+        // cliff, on which the ball rolls, as the kernel's rail of it (a tube of no thickness)
+        let is_rail = |g: &Self, i: u32| {
+            g.s.of(i, 56)
+                .is_some_and(|r| r.all("range").iter().all(|x| *x == 0.0))
         };
-        let radius = da.abs();
-        if (db.abs() - radius).abs() > 1e-9 * k.max(1.0) || radius <= tol::LINEAR {
+        let side = |g: &mut Self, i: u32, r: f64, other: f64| -> R<(Surface, f64)> {
+            if cliff && is_rail(g, i) {
+                let rim = g.s.of(i, 56).ok_or(Refusal {
+                    entity: idx,
+                    kind: "BLENDED_EDGE".into(),
+                    why: "a cliff-edge blend with no cliff".into(),
+                })?;
+                let edge = g.curve(rim.p("spine"))?;
+                return match forge_geom::tube::Tube::rail(&edge, edge.domain().interval()) {
+                    Some(rail) => Ok((rail, other.abs() * k)),
+                    None => refuse(idx, ty, "the cliff's curve makes no rail"),
+                };
+            }
+            // along the surface's oriented normal, the kernel's natural one where they agree
+            let (s, agree) = g.surface(i)?;
+            Ok((s, if agree { r * k } else { -r * k }))
+        };
+        if cliff && !is_rail(self, sa) && !is_rail(self, sb) {
+            return refuse(idx, ty, "a cliff-edge blend with no cliff");
+        }
+        let (a, da) = side(self, sa, ra, rb)?;
+        let (b, db) = side(self, sb, rb, ra)?;
+        let radius = da.abs().max(db.abs());
+        if (db.abs() - da.abs()).abs() > 1e-9 * k.max(1.0) || radius <= tol::LINEAR {
             return refuse(idx, ty, format!("offsets {ra} and {rb}: not one ball"));
         }
         let spine = self.spine(n.p("spine"))?;
@@ -947,6 +990,70 @@ impl<'s> Geo<'s> {
         let x = f0 - d.p;
         let y = f1 - d.p;
         d.d1.dot(x.cross(y)) < 0.0
+    }
+}
+
+/// A line or circle turned about the axis through `o` along `z`, as an analytic surface: None
+/// for any other curve, a line askew of the axis, or a circle out of a plane through it.
+fn revolved(c: &Curve, o: Point3, z: UnitVec3) -> Option<Surface> {
+    let zv: Vec3 = z.into();
+    let eps = 1e-9;
+    let foot = |p: Point3| o + zv * zv.dot(p - o);
+    match c {
+        Curve::Line(l) => {
+            let d: Vec3 = l.dir.into();
+            let f = foot(l.origin);
+            let off = l.origin - f;
+            if d.cross(zv).length() <= eps {
+                // along the axis: a cylinder
+                let r = off.length();
+                let frame = Frame::from_zx(f, z, off)?;
+                return (r > tol::LINEAR).then_some(Surface::Cylinder(Cylinder { frame, radius: r }));
+            }
+            // where the line meets the axis, if it does
+            let n = d.cross(zv);
+            if (l.origin - o).dot(n).abs() > eps * (1.0 + (l.origin - o).length()) {
+                return None;
+            }
+            let cos = d.dot(zv);
+            if cos.abs() <= eps {
+                // across the axis, meeting it: a plane
+                let frame = Frame::from_zx(f, z, off).unwrap_or_else(|| Frame::from_z(f, z));
+                return Some(Surface::Plane(Plane { frame }));
+            }
+            // the apex: origin + t d on the axis
+            let w = l.origin - o;
+            let t = -(w - zv * zv.dot(w)).dot(d - zv * cos) / (d - zv * cos).dot(d - zv * cos);
+            let apex = l.origin + d * t;
+            let up = if cos > 0.0 { z } else { -z };
+            let half = dmath::acos_clamped(cos.abs());
+            let side = (l.origin + d * (t + if cos > 0.0 { 1.0 } else { -1.0 })) - apex;
+            let frame = Frame::from_zx(apex, up, side)?;
+            Cone::new(frame, 0.0, half).map(Surface::Cone)
+        }
+        Curve::Circle(k) => {
+            let n: Vec3 = k.frame.z().into();
+            let c0 = k.frame.origin;
+            // in a plane through the axis
+            if n.dot(zv).abs() > eps || (c0 - o).dot(n).abs() > eps * (1.0 + (c0 - o).length()) {
+                return None;
+            }
+            let f = foot(c0);
+            let off = c0 - f;
+            let major = off.length();
+            if major <= tol::LINEAR {
+                let frame = Frame::from_zx(f, z, k.frame.x().into())?;
+                return Some(Surface::Sphere(Sphere {
+                    frame,
+                    radius: k.radius,
+                }));
+            }
+            let frame = Frame::from_zx(f, z, off)?;
+            Torus::new(frame, major, k.radius)
+                .or_else(|| Torus::spindle(frame, major, k.radius))
+                .map(Surface::Torus)
+        }
+        _ => None,
     }
 }
 

@@ -2,7 +2,7 @@
 reaches, the file's own schema words for each type. For small test files and reproducers from
 the corpus.
 
-    python3 research/parasolid/extract.py IN.x_t BODY_INDEX OUT.x_t
+    python3 research/parasolid/extract.py IN.x_t BODY_INDEX OUT.x_t [--bare]
     python3 research/parasolid/extract.py IN.x_t list      (each body: index, faces, surface kinds)
 """
 import collections
@@ -13,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 import xtproto  # noqa: E402
 
 LEAVE = {10, 11, 100}  # assembly, instance, transform: the cut stands where its part does
+# attributes and their lists, definitions and values: names and colours, left out by --bare
+ATTRIBUTES = {70, 74, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 98, 99}
 
 
 def num(x):
@@ -46,8 +48,9 @@ def emit(typ, k, v, cnt):
     return "".join(out)
 
 
-def reach(nodes, schema, body):
+def reach(nodes, schema, body, bare=False):
     """Every node the body reaches by its pointers, but other parts and the assembly."""
+    leave = LEAVE | (ATTRIBUTES if bare else set())
     keep = set()
     stack = [body]
     while stack:
@@ -55,7 +58,7 @@ def reach(nodes, schema, body):
         if i in keep or i not in nodes:
             continue
         ty, r = nodes[i]
-        if ty in LEAVE or (ty == 12 and i != body):
+        if ty in leave or (ty == 12 and i != body):
             continue
         keep.add(i)
         for name, typ, k in schema[ty]:
@@ -81,7 +84,7 @@ def main():
         return
     body = int(which)
     assert nodes[body][0] == 12, "not a body"
-    keep = reach(nodes, schema, body)
+    keep = reach(nodes, schema, body, "--bare" in sys.argv)
     order = [body] + sorted(keep - {body})
     renum = {i: i for i in keep}
     renum[body] = 1

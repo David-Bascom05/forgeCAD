@@ -17,6 +17,9 @@ fn esc(s: &str) -> String {
 
 struct Sum {
     faces: usize,
+    /// Area by surface kind: what a face-by-face comparison can rest on where one file splits a
+    /// closed face in two and the other does not.
+    kind_area: BTreeMap<&'static str, f64>,
     volume: f64,
     area: f64,
     bx: [f64; 6],
@@ -52,11 +55,15 @@ fn sum(s: &forge_step::Solid) -> Sum {
     let m = s.mass.clone().or_else(|| mass::mass_rel(b, 1e-6).ok());
     let bx = edge_box(b);
     let mut kinds = BTreeMap::new();
+    let mut kind_area: BTreeMap<&'static str, f64> = BTreeMap::new();
     for f in b.face_ids() {
-        *kinds.entry(kind(&b.face(f).surface)).or_default() += 1;
+        let k = kind(&b.face(f).surface);
+        *kinds.entry(k).or_default() += 1;
+        *kind_area.entry(k).or_default() += mass::face_area(b, f).unwrap_or(f64::NAN);
     }
     Sum {
         faces: b.face_ids().count(),
+        kind_area,
         volume: m.as_ref().map_or(f64::NAN, |m| m.volume),
         area: m.as_ref().map_or(f64::NAN, |m| m.area),
         bx: [bx.x.lo, bx.x.hi, bx.y.lo, bx.y.hi, bx.z.lo, bx.z.hi],
@@ -180,6 +187,8 @@ fn main() {
             // pair each XT solid with the unused STEP solid nearest in box and volume
             let mut used = vec![false; ssum.len()];
             let (mut paired, mut face_eq, mut vol_ok, mut box_ok, mut kinds_eq) = (0, 0, 0, 0, 0);
+            let (mut area_ok, mut kind_area_ok, mut vol_unknown) = (0, 0, 0);
+            let mut worst_area: f64 = 0.0;
             let mut worst_vol: f64 = 0.0;
             let mut worst_box: f64 = 0.0;
             for a in &xsum {
@@ -210,6 +219,29 @@ fn main() {
                 if dv <= 1e-4 {
                     vol_ok += 1;
                 }
+                if !dv.is_finite() {
+                    vol_unknown += 1;
+                }
+                let da = (a.area - b.area).abs() / b.area.abs().max(1e-12);
+                if da <= 1e-4 {
+                    area_ok += 1;
+                }
+                if da.is_finite() {
+                    worst_area = worst_area.max(da);
+                }
+                // each kind's area within 1e-3 of the body's: the faces are of the same surfaces
+                let total = b.area.abs().max(1e-12);
+                let keys: std::collections::BTreeSet<&&str> =
+                    a.kind_area.keys().chain(b.kind_area.keys()).collect();
+                if keys.iter().all(|k| {
+                    let (x, y) = (
+                        a.kind_area.get(*k).copied().unwrap_or(0.0),
+                        b.kind_area.get(*k).copied().unwrap_or(0.0),
+                    );
+                    (x - y).abs() <= 1e-3 * total
+                }) {
+                    kind_area_ok += 1;
+                }
                 if dv.is_finite() {
                     worst_vol = worst_vol.max(dv);
                 }
@@ -219,7 +251,7 @@ fn main() {
                 worst_box = worst_box.max(dbox);
             }
             out += &format!(
-                ",\"paired\":{paired},\"faces_equal\":{face_eq},\"kinds_equal\":{kinds_eq},\"volume_ok\":{vol_ok},\"box_ok\":{box_ok},\"worst_volume\":{worst_vol:.3e},\"worst_box\":{worst_box:.3e}"
+                ",\"paired\":{paired},\"faces_equal\":{face_eq},\"kinds_equal\":{kinds_eq},\"volume_ok\":{vol_ok},\"volume_unknown\":{vol_unknown},\"area_ok\":{area_ok},\"kind_area_ok\":{kind_area_ok},\"box_ok\":{box_ok},\"worst_volume\":{worst_vol:.3e},\"worst_area\":{worst_area:.3e},\"worst_box\":{worst_box:.3e}"
             );
             let xf: usize = xsum.iter().map(|s| s.faces).sum();
             let sf: usize = ssum.iter().map(|s| s.faces).sum();
@@ -316,6 +348,49 @@ fn main() {
             for (k, s) in i.solids.iter().enumerate() {
                 if let Some(u) = &s.body.unverified {
                     eprintln!("unverified {k} ({} faces): {u}", s.body.face_ids().count());
+                    for f in s.body.face_ids() {
+                        if let Err(e) = mass::face_area(&s.body, f) {
+                            let fc = s.body.face(f);
+                            eprintln!(
+                                "  face {f:?} {} same {} loops {}: {e:?}",
+                                fc.surface.kind(),
+                                fc.same_sense,
+                                fc.loops.len()
+                            );
+                            if std::env::var_os("XT_UV").is_some() {
+                                use forge_geom::{CurveGeom, SurfaceGeom};
+                                let b = &s.body;
+                                eprintln!("   domain {:?}", fc.surface.domain());
+                                for lp in fc.loops.iter() {
+                                    for c in b.loops[lp.0 as usize].coedges() {
+                                        let ce = &b.coedges[c.0 as usize];
+                                        let e = &b.edges[ce.edge.0 as usize];
+                                        let uv: Vec<String> = (0..=4)
+                                            .map(|k| {
+                                                let t = e.range.lo + e.range.width() * f64::from(k) / 4.0;
+                                                let p = e.curve.eval(t);
+                                                let q = fc.surface.project(p);
+                                                format!(
+                                                    "({:.3},{:.3} d{:.1e})",
+                                                    q.x,
+                                                    q.y,
+                                                    fc.surface.eval(q).distance(p)
+                                                )
+                                            })
+                                            .collect();
+                                        let ck =
+                                            format!("{:?}", e.curve).chars().take(12).collect::<String>();
+                                        eprintln!(
+                                            "    {:?} fwd {} {ck} {}",
+                                            ce.edge,
+                                            ce.forward,
+                                            uv.join(" ")
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

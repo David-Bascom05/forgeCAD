@@ -577,9 +577,11 @@ fn orient_blends(p: &mut Proto, blends: &[usize]) {
             }
         }
     }
+    // du x dv, as faces are measured and drawn by: a pipe's `normal` need not be it
     let normal = |p: &Proto, f: usize, at: Point3| {
         let face = &p.faces[f];
-        let n = face.surface.normal(face.surface.project(at))?;
+        let d = face.surface.deriv(face.surface.project(at));
+        let n = d.du.cross(d.dv).normalize()?;
         let n: forge_math::Vec3 = n.into();
         Some(if face.same_sense { n } else { -n })
     };
@@ -597,12 +599,18 @@ fn orient_blends(p: &mut Proto, blends: &[usize]) {
                     let at = ed.curve.eval(ed.range.mid());
                     if let (Some(a), Some(b)) = (normal(p, f, at), normal(p, g, at)) {
                         let d = a.dot(b);
+                        if std::env::var_os("XT_TRACE").is_some() {
+                            eprintln!("  blend {f} edge {e} with {g}: {d:.3}");
+                        }
                         if d.abs() > 0.9 {
                             vote += if d > 0.0 { 1 } else { -1 };
                         }
                     }
                 }
             }
+        }
+        if std::env::var_os("XT_TRACE").is_some() {
+            eprintln!("blend face {f} vote {vote}");
         }
         if vote < 0 {
             p.faces[f].same_sense = !p.faces[f].same_sense;
@@ -679,7 +687,9 @@ pub(crate) fn import(b: &[u8], lim: &Limits, place: bool) -> Result<Imported, Im
             let blends = std::mem::take(&mut b.blends);
             let mut proto = b.p;
             if built.is_ok() {
-                orient_blends(&mut proto, &blends);
+                if std::env::var_os("XT_NOORIENT").is_none() {
+                    orient_blends(&mut proto, &blends);
+                }
             }
             if proto.vtol.len() < proto.verts.len() {
                 proto.vtol.resize(proto.verts.len(), 0.0);
