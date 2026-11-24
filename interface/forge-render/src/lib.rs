@@ -9,6 +9,7 @@ pub mod dwgview;
 pub mod explode;
 pub mod frame;
 pub mod ghost;
+pub mod library_mesh;
 pub mod livegpu;
 pub mod look;
 pub mod machine_mesh;
@@ -41,8 +42,8 @@ pub mod live;
 pub mod load;
 pub mod measure;
 pub mod snaps;
-pub mod studio;
 pub mod speech;
+pub mod studio;
 pub mod tess;
 pub mod thermo_view;
 #[cfg(target_arch = "wasm32")]

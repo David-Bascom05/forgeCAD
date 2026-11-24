@@ -1,0 +1,15 @@
+[package]
+name = "forge-workholding-builder"
+description = "Workholding as a library-builder kind (research/cam/library-builder.md): forge-workholding's records in forge-library's catalog, forms, checks, previews and CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-dirs = { path = "../../kernel/forge-dirs" }
+forge-library = { path = "../forge-library" }
+forge-workholding = { path = "../../kernel/forge-workholding" }
+
+[lints]
+workspace = true

@@ -30,6 +30,23 @@ fn wrap(x: f64) -> f64 {
 }
 
 impl Seg {
+    /// The segment moved by (dx, dy).
+    pub fn shifted(&self, dx: f64, dy: f64) -> Seg {
+        let d = Point2::new(dx, dy);
+        match *self {
+            Seg::Line { a, b } => Seg::Line {
+                a: Point2::new(a.x + d.x, a.y + d.y),
+                b: Point2::new(b.x + d.x, b.y + d.y),
+            },
+            Seg::Arc { c, r, start, sweep } => Seg::Arc {
+                c: Point2::new(c.x + d.x, c.y + d.y),
+                r,
+                start,
+                sweep,
+            },
+        }
+    }
+
     pub fn line(a: (f64, f64), b: (f64, f64)) -> Seg {
         Seg::Line {
             a: Point2::new(a.0, a.1),

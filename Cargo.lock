@@ -51,6 +51,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-bend-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-brake",
+ "forge-dirs",
+ "forge-lang",
+]
+
+[[package]]
 name = "forge-bool"
 version = "0.1.0"
 dependencies = [
@@ -71,8 +81,19 @@ name = "forge-brake"
 version = "0.1.0"
 dependencies = [
  "forge-math",
+ "forge-mesh",
  "forge-ops",
  "forge-sheet",
+ "forge-vendor",
+]
+
+[[package]]
+name = "forge-brake-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-brake",
+ "forge-library",
+ "forge-vendor",
 ]
 
 [[package]]
@@ -150,6 +171,7 @@ name = "forge-cli"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-bend-lang",
  "forge-cam-lang",
  "forge-dirs",
  "forge-geom",
@@ -163,9 +185,10 @@ dependencies = [
  "forge-model",
  "forge-ops",
  "forge-step",
+ "forge-tooling-builder",
  "forge-topo",
  "forge-turn-lang",
- "forge-workholding",
+ "forge-workholding-builder",
 ]
 
 [[package]]
@@ -595,6 +618,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-tooling-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-topo"
 version = "0.1.0"
 dependencies = [
@@ -681,6 +714,15 @@ dependencies = [
  "forge-mesh",
  "forge-post",
  "forge-tooling",
+]
+
+[[package]]
+name = "forge-workholding-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-workholding",
 ]
 
 [[package]]

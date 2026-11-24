@@ -430,3 +430,40 @@ fn plates_zero_point_patterns_and_custom() {
     .unwrap();
     assert_eq!(e.bodies[0].bounds().1[0], 50.0);
 }
+
+#[test]
+fn fixtures_for_the_machine_simulation() {
+    let l = Library::builtin();
+    let stock = Box3 {
+        min: [0.0; 3],
+        max: [100.0, 60.0, 30.0],
+    };
+    // a strap across a corner: an oriented block
+    let r = 0.5f64.sqrt();
+    let c = mill::strap_clamp(
+        "clamp",
+        l.get("standin-strap-m12").unwrap(),
+        l.get("standin-step-block-25").unwrap(),
+        &stock,
+        0.0,
+        [100.0, 60.0],
+        [-r, -r],
+        10.0,
+        40.0,
+    )
+    .unwrap();
+    let w = Workholding { placed: vec![c] };
+    let exact = w.fixtures(false);
+    let aligned = w.fixtures(true);
+    assert_eq!(exact.len(), 3);
+    assert_eq!(exact[0].0, "clamp/strap");
+    for ((_, e), (_, a)) in exact.iter().zip(&aligned) {
+        for (pe, pa) in e.iter().zip(a) {
+            if let forge_workholding::Prim::Block { axes, .. } = pa {
+                assert_eq!(*axes, forge_workholding::geom::IDENT);
+            }
+            let ((lo, hi), (alo, ahi)) = (pe.bounds(), pa.bounds());
+            assert!((0..3).all(|k| alo[k] <= lo[k] + 1e-9 && ahi[k] >= hi[k] - 1e-9));
+        }
+    }
+}
