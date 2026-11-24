@@ -1,0 +1,13 @@
+# mazak-variaxis-c-600 nose: the spindle housing around the tool: radius an estimate, kept large.
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared d = 580
+shared u = 0
+shared v = 0
+shared r = 110
+shared h = 150
+
+sketch plan(on: offset(xy, d)) {
+  outline = circle((u, v), r)
+}
+body = extrude(plan.outline, h)

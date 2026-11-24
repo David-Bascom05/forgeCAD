@@ -921,39 +921,13 @@ pub fn certify(body: &Body) -> Vec<Problem> {
 }
 
 fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
-    // the distinct edges and vertices of each shell, counted by stamping each with the shell
-    // (the same counts as sorting and dedup, without the sorts)
-    let mut edge_at = vec![u32::MAX; body.edges.len()];
-    let mut vert_at = vec![u32::MAX; body.vertices.len()];
-    for (si, shell) in body.shells.iter().enumerate() {
-        let stamp = si as u32;
-        let (mut f, mut l, mut e, mut v) = (0i64, 0i64, 0i64, 0i64);
-        for &face in &shell.faces {
-            f += 1;
-            for &lp in &body.face(face).loops {
-                l += 1;
-                for c in body.lp(lp).coedges() {
-                    let ed = body.coedge(c).edge;
-                    if edge_at[ed.index()] != stamp {
-                        edge_at[ed.index()] = stamp;
-                        e += 1;
-                    }
-                    for x in [body.edge(ed).start, body.edge(ed).end] {
-                        if vert_at[x.index()] != stamp {
-                            vert_at[x.index()] = stamp;
-                            v += 1;
-                        }
-                    }
-                }
-            }
-        }
-        let value = v - e + 2 * f - l;
-        if value % 2 != 0 || value > 2 {
-            out.push(Problem::ShellEuler {
-                shell: crate::body::ShellId(si as u32),
-                value,
-            });
-        }
+    crate::topo_euler::shell_euler(&ShellView::of(body), out);
+}
+
+impl crate::topo_euler::EulerSink for Vec<Problem> {
+    #[inline]
+    fn shell_euler(&mut self, s: usize, value: i64) {
+        self.push(Problem::ShellEuler { shell: crate::body::ShellId(s as u32), value });
     }
 }
 
@@ -1138,7 +1112,34 @@ fn check_sides_of(body: &Body, faces: &[FaceId], known: Option<&Known>, out: &mu
                             fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))),
                         )
                 };
-                if ![1.0, 0.1, 0.01].iter().any(|&k| inside(k * step)) {
+                // where no step finds the face, steps short of the edge's own far stretches too: a
+                // curve can double back past a tip within a hair of itself (a thin lens's two arms
+                // are one edge). Its drawing's chords, all but the two at the probe's sample.
+                let own = || match e.curve {
+                    forge_geom::Curve::Line(_)
+                    | forge_geom::Curve::Circle(_)
+                    | forge_geom::Curve::Ellipse(_) => f64::INFINITY,
+                    _ => {
+                        let n = default_segments(e);
+                        let at =
+                            |j: usize| e.curve.eval(e.range.lo + e.range.width() * (j as f64 / n as f64));
+                        let m = n / 2;
+                        let mut prev = at(0);
+                        let mut near = f64::INFINITY;
+                        for j in 0..n {
+                            let next = at(j + 1);
+                            if j + 1 != m && j != m {
+                                near = near.min(segment_distance(d.p, prev, next));
+                            }
+                            prev = next;
+                        }
+                        near
+                    }
+                };
+                if ![1.0, 0.1, 0.01].iter().any(|&k| inside(k * step)) && {
+                    let short = step.min(0.25 * own());
+                    ![1.0, 0.1, 0.01].iter().any(|&k| inside(k * short))
+                } {
                     out.push(Problem::FaceWrongSide { face: f, coedge: c });
                 }
             }
@@ -1528,4 +1529,16 @@ pub mod face_log {
             }
         });
     }
+}
+
+/// The distance from `p` to the segment from `a` to `b`.
+fn segment_distance(p: Point3, a: Point3, b: Point3) -> f64 {
+    let ab = b - a;
+    let l2 = ab.dot(ab);
+    let t = if l2 > 0.0 {
+        ((p - a).dot(ab) / l2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (a + ab * t).distance(p)
 }

@@ -48,6 +48,7 @@ jobs:
           lake build
       - name: the axioms
         run: |
+          set -o pipefail
           lake env lean Axioms.lean | tee axioms.txt
           ! grep -E "sorryAx|ofReduceBool" axioms.txt
           # every theorem listed, each on the standard axioms (or fewer)
@@ -63,6 +64,7 @@ jobs:
       - name: L6, slab::dist against the ℚ oracle (2000 cases)
         working-directory: .
         run: |
+          set -o pipefail
           cargo run --release --locked -p forge-cam-geom --example oracle_segseg -- gen 2000 cases ours
           (cd verify/forge-cam && lake env lean --run Oracle.lean < ../../cases > ../../answers)
           test "$(wc -l < answers)" -eq 2000

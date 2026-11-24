@@ -69,3 +69,24 @@ fn the_shaft_job_certifies() {
         rep.leftover_reasons
     );
 }
+
+#[test]
+fn the_normal_path_certifies_the_job_with_the_stock_as_columns() {
+    let s = setup();
+    let job = job(&s);
+    let t0 = std::time::Instant::now();
+    let fast = ops::certify_fast(&s, &job, None).unwrap();
+    let tf = t0.elapsed();
+    for r in &fast.refusals {
+        eprintln!(
+            "FAST REFUSED op {} step {} {} {} {}",
+            r.op, r.step, r.body, r.rule, r.verdict
+        );
+    }
+    let t0 = std::time::Instant::now();
+    let full = ops::certify(&s, &job, None).unwrap();
+    eprintln!("fast {tf:?} ({} checks), exact {:?}", fast.checks, t0.elapsed());
+    assert!(fast.ok() && full.ok());
+    assert_eq!(fast.stock_model, "columns");
+    assert!(!fast.leftover_done && full.leftover_done);
+}
