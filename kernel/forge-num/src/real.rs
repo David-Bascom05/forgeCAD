@@ -730,7 +730,7 @@ impl Ctx {
 
     pub fn dy(&mut self, d: Dy) -> R {
         let d = Dy::norm(d.neg, d.mag, d.exp);
-        let key = Key::Lit(d.neg, d.mag.limbs.clone(), d.exp);
+        let key = Key::Lit(d.neg, d.mag.limbs.to_vec(), d.exp);
         if let Some(r) = self.find(&key) {
             return r;
         }
