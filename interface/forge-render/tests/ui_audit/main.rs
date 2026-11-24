@@ -317,6 +317,13 @@ fn start(f: &Fixture, size: (f32, f32)) -> Option<Headless> {
         }
         Setup::NewDrawing => {
             h.gui.shell.out.push(Action::NewDrawing);
+            settled(&mut h, 10.0);
+            // its dialog's OK (the dialog places no names: found by its words)
+            let ok = Snap::take(&mut h).texts.iter().find(|t| t.s.trim() == "OK").map(|t| t.rect.center());
+            if let Some(c) = ok {
+                h.click_at(c.x, c.y);
+            }
+            let _ = h.until(|g| g.shell.drawing.as_ref().is_some_and(|d| !d.busy));
         }
     }
     settled(&mut h, 60.0);
