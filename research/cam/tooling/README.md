@@ -86,6 +86,14 @@ by the test, not failed.
   bottom, estimate; Sumitomo's flute length is its neck length LUX, estimate), Guhring 5518
   (carbide) and 1131 (HSCO) drills at 5.5, 6 and 18.5 mm, and the Tungaloy MTEC0807C171.5ISO
   thread mill (pitch 1.5). Feeds tabulated per diameter column take the first (smaller) column.
+- Reamers and counterbores (raw/real-tools/reamers-<maker>.json): Guhring HR 500 solid carbide H7
+  reamers, Series 1686 (steel) and 7286 (aluminium), 3/4/5/6/8/10/12 mm (HR 500 catalogue 11/26
+  p.8/14, cutting data p.26/29, cross-checked on Guhring's webshop item pages); Guhring Series 324
+  DIN 373 counterbores (fine grade, fixed pilot) for M3-M12, Ø 6/8/10/11/15/18/20 (webshop item
+  pages; the pilot Ø and screw size come from Guhring's DIN 4000 XML, whose codes are not
+  labelled: in the note only). RUKO's DIN 373 counterbores (same sizes) print no cutting length,
+  so no record is made from them; their pilot Ø agree with Guhring's. Reamer feeds are tabulated
+  for Ø 3/4/6/8/10/12, not 5 mm: the 5 mm reamers carry no preset.
 - Inconsistencies found in the sources are kept in the raw facts (e.g. Rego-Fix ER20 nut thread
   M25x1.5 in the catalogue vs M24x1.5 on the pocket sheet; Tormach BT30 "Gage length is 60mm
   (1.97 inches)"; Lakeshore ".0003.0010" chip load); the generator never resolves them silently.

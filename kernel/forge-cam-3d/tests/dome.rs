@@ -21,6 +21,7 @@ fn ball6() -> ToolUse {
         holder: Some("bt40-er32".into()),
         stickout: 60.0,
         shape,
+        probe: false,
     }
 }
 

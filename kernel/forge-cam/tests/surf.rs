@@ -84,6 +84,7 @@ fn tool(id: &str, t: u32) -> ToolUse {
         holder: Some("bt40-er32".into()),
         stickout: 0.0,
         shape,
+        probe: false,
     }
 }
 
@@ -180,6 +181,7 @@ fn zlevel_roughing_certifies_and_the_map_holds_the_stock() {
             }
             PMove::Rapid { to } | PMove::Arc { to, .. } => at = to,
             PMove::Cycle { .. } => {}
+            PMove::Probe { .. } => panic!("no probe in a surfacing path"),
         }
     }
     let mut lowered = 0;
@@ -266,6 +268,7 @@ fn surfacing_paths_are_the_same_bits_everywhere() {
                     c.iter().for_each(|&x| eat(x));
                 }
                 PMove::Cycle { .. } => {}
+                PMove::Probe { .. } => panic!("no probe in a surfacing path"),
             }
         }
     }

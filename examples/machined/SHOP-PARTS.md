@@ -51,47 +51,30 @@ A threaded hub turned from a Ø66 bar in one chucking.
 Measured on cam/parity (tip of this commit), release build, one run (`forgecad cam F --json`). Native and
 wasm32-wasip1 tests all pass.
 
-### manifold_cam.fg: 21.3 s in total (p1 almost all of it, certification; p2 3 ms). Refused.
+### manifold_cam.fg: 0.43 s in total. Refused (tools and 3D roughing).
 
-(At e11804e6: 146 s, with well and crn refused. The section pocket then cut every drilled hole
-of its mid-height section down to `to:`. A dowel's drill point was gouged, and 281k cells went to
-certifying it. Holes that end above the bottom are now left to their own ops (bc164b71), and so are
-holes and slots the tool only just fits (shal was pocketing the dowels and the groove: 199k cells
-to 103k).)
+`prof` runs `from: 32`, the stock's top over the outline: the strip zlevel's grid leaves at the
+outline (x −4.757..0, z 26–28.5) is real stock, so the profile takes it. A loop-major contour is
+now staged with its own earlier levels' band gone (per-loop and mid-loop stages in
+`certify_posted`), so its finishing levels are checked against the stock they meet, not the
+saw-cut block.
 
-With CAM-HAAS's catalogue tools (tools/turn-presets @b8d58f49, merged for the run, with t5 the
-Tungaloy MTEC0807C171.5ISO thread mill): 22.4 s, 12 of 15 ops certified. Every refusal left is
-stock that `rough` did not remove.
+On cam/parity alone (no zlevel, the library built in):
 
 | op | result | what blocks it |
 |---|---|---|
-| skim | certified | |
-| rough | not built | the 2.5D section at z = 29 meets the boss's foot fillet: `NotPrism { face: 38 }`. Needs 3D roughing (CAM-3AXIS's zlevel) |
-| prof | refused | the holder meets stock (−1.43) on a plunge: stock that `rough` would have removed |
-| well | certified | 3,519 cells |
-| crn | certified | 23,302 cells |
-| shal | certified | 103,298 cells: most of the time (the deep well's top, the shallow pocket, the bore's top) |
-| grv | certified | |
-| bored | certified | Guhring 18.5 drill (tools/turn-presets); refused NeedTool without it |
-| thr | certified | Tungaloy 1.5-pitch thread mill (tools/turn-presets); refused on pitch without it |
-| dwl | refused | the dowels are now 6 H7 in the part (66c073d8): the plan is a 5.8 drill then a 6 mm reamer (6d91b24f). The 5.8 drill is on CAM-HAAS's tools/libraries; no 6 H7 reamer record exists yet (NeedTool). Before that: a rapid 0.088 into the stock `rough` leaves |
-| tap | refused | the same rapid into the same unremoved stock |
-| brk | certified | |
-| face2, rel | certified | |
-| cbh | certified | Guhring 5.5 drill, its point stopped on the flat floor (e7b3cd87: it was a −0.52 gouge through the floor); then the Ø10 × 5 counterbore pocketed by the largest end mill under 10 (9b4e598a). The floor's ring is said |
+| skim, prof, well, crn, shal, grv, brk, face2, rel | certified | |
+| rough | not built | the 2.5D section at z = 29 meets the boss's foot fillet: `NotPrism { face: 38 }`. Needs CAM-3AXIS's zlevel |
+| bored, cbh | refused | NeedTool: no 18.5 / 5.5 mm drill (on CAM-HAAS's tool libraries) |
+| thr | refused | the only thread mill's pitch is 1, the thread's 1.5 |
+| dwl | refused | NeedTool: no 6 mm H7 reamer record exists yet |
+| tap | refused | the holder meets stock `rough` would remove (−0.81 on a plunge) |
 
-With 3D roughing (merge-train/4b, which has CAM-3AXIS's `zlevel`, merged with cam/parity
-f462f977), `rough = zlevel(op1, tool: t1, from: 33.5, to: 26, down: 3, stepover: 4)` gives
-19.3 s in total:
-- `rough` is certified (18,090 cells; with `grid: 0.5`, 1,068,604 cells and 34 s);
-- `bored` and `cbh` are certified (4b has the drills);
-- three ops are still refused:
-  - `prof` by −0.056: the shank or holder meets stock on a plunge at (−5.3, 6, 7.6), outside the stock's x;
-  - `tap` by −0.011: a rapid into stock;
-  - `thr` and `dwl` lack their tools (4b has neither the 1.5-pitch thread mill nor a 6 H7 reamer).
-
-The two small misses are the next work. Either the stock model keeps slivers that zlevel's sweep
-does not record as cleared, or the material is real.
+On merge-train/4b (zlevel and the drills) merged with cam/parity, with
+`rough = zlevel(op1, tool: t1, from: 33.5, to: 26, down: 3, stepover: 4)`: 13 of 15 built and
+certified. Left: `thr` (no 1.5-pitch thread mill) and `dwl` (no 6 H7 reamer). The tap is now
+certified against its declared thread (568bbddf, 32abf3c3), its R plane lifted over the
+in-process stock (195b4712).
 
 ### hub_turn.fg: certified in full on claude/cam-turn-hub @f8b0152f (14 ops, 1811 checks, 0.58 s)
 

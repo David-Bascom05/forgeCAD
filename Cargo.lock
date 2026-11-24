@@ -3,6 +3,14 @@
 version = 4
 
 [[package]]
+name = "feeds-vs-makers"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-agent"
 version = "0.1.0"
 dependencies = [
@@ -188,6 +196,7 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-bend-lang",
+ "forge-cam-import",
  "forge-cam-lang",
  "forge-dirs",
  "forge-geom",
@@ -204,6 +213,7 @@ dependencies = [
  "forge-tooling-builder",
  "forge-topo",
  "forge-turn-lang",
+ "forge-urdf",
  "forge-workholding-builder",
 ]
 
@@ -700,6 +710,19 @@ dependencies = [
 [[package]]
 name = "forge-units"
 version = "0.1.0"
+
+[[package]]
+name = "forge-urdf"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-asm",
+ "forge-lang",
+ "forge-material",
+ "forge-math",
+ "forge-mesh",
+ "forge-topo",
+]
 
 [[package]]
 name = "forge-vendor"

@@ -90,3 +90,39 @@ fn the_rational_path_agrees_with_refinement() {
     }
     assert!(zeros >= 150 && nonzero >= 100, "{zeros} zeros, {nonzero} nonzero");
 }
+
+/// A zero broken by a hair is not a zero: each built zero of the sampling test (a*b - b*a,
+/// (a/b)*b - a), plus or minus 2^-200 (a product of four 2^-50 literals, far under any f64
+/// filter's reach), has that hair's sign on the rational path, as refinement says; unperturbed,
+/// it is an exact zero. A path that rounded, truncated or called a small enough value zero fails.
+#[test]
+fn a_zero_broken_by_a_hair_is_not_a_zero() {
+    use std::cmp::Ordering;
+    let mut g = Rng(29);
+    for case in 0..60 {
+        let mut cx = Ctx::new();
+        let leaves: Vec<R> = (0..4).map(|_| cx.lit(g.r(-50.0, 50.0))).collect();
+        let (a, b) = (leaves[0], leaves[1]);
+        let zero = if case % 2 == 0 {
+            let ab = cx.mul(a, b);
+            let ba = cx.mul(b, a);
+            let s = cx.add(ab, leaves[2]);
+            let t = cx.add(ba, leaves[2]);
+            cx.sub(s, t)
+        } else {
+            let q = cx.div(a, b);
+            let m = cx.mul(q, b);
+            cx.sub(m, a)
+        };
+        assert_eq!(cx.sign(zero), Ordering::Equal, "case {case}: the built zero");
+        let e = cx.lit(2f64.powi(-50));
+        let e2 = cx.mul(e, e);
+        let e4 = cx.mul(e2, e2);
+        let up = cx.add(zero, e4);
+        let down = cx.sub(zero, e4);
+        assert_eq!(cx.sign(up), Ordering::Greater, "case {case}: zero + 2^-200");
+        assert_eq!(cx.sign(down), Ordering::Less, "case {case}: zero - 2^-200");
+        assert_eq!(cx.sign_by_refinement(up), Ordering::Greater);
+        assert_eq!(cx.sign_by_refinement(down), Ordering::Less);
+    }
+}

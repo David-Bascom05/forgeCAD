@@ -45,7 +45,7 @@ per_doc!(
         ctx, egui, shell, device, queue, adapter, waker, captured, over_view, pointer_px,
         pixels_per_point, warm_textures, target_px, mark_held, gpu_failed, settings_was, docs,
         active, watch, doc_later, agent, apps, markup_job, format, markup_wait, markup_occ, markup_occ_rx,
-        speech, env_asked, studio, mach, window_out,
+        speech, env_asked, studio, mach, window_out, photo, recording,
     ]
 );
 

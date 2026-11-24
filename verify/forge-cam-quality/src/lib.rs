@@ -57,10 +57,12 @@ pub fn override_moves(start: [f64; 3], moves: &[PMove], cut: f64, plunge: f64) -
                     }
                 }
                 PMove::Arc { to, c, cw, .. } => PMove::Arc { to, c, cw, f: cut },
-                PMove::Cycle { .. } | PMove::Rapid { .. } => *m,
+                PMove::Cycle { .. } | PMove::Rapid { .. } | PMove::Probe { .. } => *m,
             };
-            if let PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } = *m {
-                at = to;
+            match *m {
+                PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => at = to,
+                PMove::Probe { to, back: false, .. } => at = to,
+                _ => {}
             }
             out
         })
@@ -230,6 +232,12 @@ pub struct OpQ {
     pub slotting: f64,
     /// Feed per tooth the cutting data asks for this diameter (mm).
     pub fz_target: f64,
+    /// The op's own resolved chip targets (forge-cam-lang `resolved`): the chip held at a full
+    /// cut (`chip`, its class factor already in for finish), and for a rough op the slot chip
+    /// times its class factor, the target where a sample engages under 90° (engagement feed's
+    /// rule). 0: not resolved (thin/thick then fall back to fz_target).
+    pub fz_class: f64,
+    pub fz_class_rough: f64,
     /// Max chip thickness after thinning: min, time-weighted mean, max (mm).
     pub hex_min: f64,
     pub hex_mean: f64,
@@ -333,6 +341,8 @@ fn pieces(from: [f64; 3], m: &PMove, l: f64) -> Vec<[f64; 3]> {
                 .collect()
         }
         PMove::Cycle { .. } => vec![],
+        // a probe cuts nothing
+        PMove::Probe { .. } => vec![],
     }
 }
 
@@ -517,6 +527,13 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
             q.side = side_mill(t.kind);
             q.fz_target = group.map(|g| g.fz_at(t.dc)).unwrap_or(0.0);
         }
+        if let Some(r) = op.resolved.as_ref().filter(|r| r.held_chip) {
+            q.fz_class = r.chip.v;
+            q.fz_class_rough = match &r.class {
+                Some((name, f)) if name == "rough" && r.slot_chip.is_finite() => r.slot_chip * f,
+                _ => r.chip.v,
+            };
+        }
         let ov = cfg
             .feeds
             .iter()
@@ -608,10 +625,17 @@ pub fn measure_op(
                     q.removed += m.sweep_in(top, [holes[0], holes[1], z], &prof, Some(&mut tiles));
                     continue;
                 }
+                // a probe cuts nothing: no quality measure
+                PMove::Probe { to, back, .. } => {
+                    if !back {
+                        at = to;
+                    }
+                    continue;
+                }
             };
             let to = match *mv {
                 PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
-                PMove::Cycle { .. } => unreachable!(),
+                PMove::Cycle { .. } | PMove::Probe { .. } => unreachable!(),
             };
             let dxy = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
             let dz = to[2] - at[2];
@@ -658,6 +682,7 @@ pub fn measure_op(
                 mv: mi,
                 ..MoveQ::default()
             };
+            let mut mq_target: f64 = 0.0;
             let mut a = at;
             for b in pieces(at, mv, l) {
                 let len = dist(a, b);
@@ -705,12 +730,20 @@ pub fn measure_op(
                         hex_t += hex * dt;
                         hex_tt += dt;
                         hexes.push((hex, dt));
-                        if hex < 0.5 * q.fz_target {
+                        // the target at this sample: the op's own (rough's class chip under
+                        // 90°), else the group's slot chip
+                        let target = if q.fz_class > 0.0 {
+                            if e.phi < 90.0 { q.fz_class_rough } else { q.fz_class }
+                        } else {
+                            q.fz_target
+                        };
+                        if hex < 0.5 * target {
                             q.thin += dt;
                         }
-                        if hex > 1.25 * q.fz_target {
+                        if hex > 1.25 * target {
                             q.thick += dt;
                         }
+                        mq_target = mq_target.max(target);
                         if let Some(g) = group {
                             let ap = e.ap.min(p.tool.lcf.max(1e-3));
                             let hm = (fz * e.cos_mean).max(1e-4);
@@ -735,8 +768,9 @@ pub fn measure_op(
                 }
                 a = b;
             }
-            if q.fz_target > 0.0 {
-                mq.load = mq.hex / q.fz_target;
+            let t = if mq_target > 0.0 { mq_target } else { q.fz_target };
+            if t > 0.0 {
+                mq.load = mq.hex / t;
             }
             q.moves_q.push(mq);
             let descending = dz < -1e-9 && dxy >= 1e-9;
@@ -915,6 +949,34 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                         cur = Some(*k);
                     }
                     op_of[i + 1] = cur;
+                }
+                // FORGE_QUALITY_BREAKDOWN=OP: where that op's time goes, by kind of move
+                if let Ok(want) = std::env::var("FORGE_QUALITY_BREAKDOWN") {
+                    let mut acc: std::collections::BTreeMap<&str, (usize, f64, f64, f64)> = Default::default();
+                    for (si, sg) in tl.segments.iter().enumerate() {
+                        let Some(Some(k)) = op_of.get(sg.line) else { continue };
+                        if job.ops[*k].name != want {
+                            continue;
+                        }
+                        let dz = (sg.q1.get(2).copied().unwrap_or(0.0) - sg.q0.get(2).copied().unwrap_or(0.0)).abs();
+                        let dxy = ((sg.q1[0] - sg.q0[0]).powi(2) + (sg.q1[1] - sg.q0[1]).powi(2)).sqrt();
+                        let cat = match sg.kind {
+                            forge_machine::sim::SegKind::Rapid => "rapid",
+                            forge_machine::sim::SegKind::Arc => "arc",
+                            forge_machine::sim::SegKind::Feed if dz > 1e-6 && dxy < 1e-6 => "feed z",
+                            forge_machine::sim::SegKind::Feed if dxy < 1.0 => "feed xy <1",
+                            forge_machine::sim::SegKind::Feed if dxy < 5.0 => "feed xy 1-5",
+                            forge_machine::sim::SegKind::Feed => "feed xy >5",
+                        };
+                        let e = acc.entry(cat).or_default();
+                        e.0 += 1;
+                        e.1 += sg.t_min;
+                        e.2 += seg_la.get(si).copied().unwrap_or(sg.t_stop);
+                        e.3 += dxy + dz;
+                    }
+                    for (c, (n, tm, tl, l)) in acc {
+                        eprintln!("breakdown {want} {c:12} n {n:6} len {l:8.0} t_min {tm:7.1} t_plan {tl:7.1} over {:6.1}", tl - tm);
+                    }
                 }
                 for (si, sg) in tl.segments.iter().enumerate() {
                     if let Some(Some(k)) = op_of.get(sg.line) {
@@ -1109,7 +1171,7 @@ pub fn json(jobs: &[JobQ]) -> String {
 \"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\
 \"retracts\":{},\"plunges\":{},\"ramps\":{},\"cycles\":{},\"corners30\":{},\"corners90\":{},\"turn_max\":{},\
 \"side\":{},\"phi_max\":{},\"phi_mean\":{},\"phi_hist\":[{}],\"climb\":{},\"conventional\":{},\"slotting\":{},\
-\"fz_target\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
+\"fz_target\":{},\"fz_class\":{},\"fz_class_rough\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
 \"fc_max\":{},\"p_max\":{},\"p_avail\":{},\"rapid_cuts\":{},\"f_rev\":{}}}",
                 js(&q.name),
                 q.setup,
@@ -1143,6 +1205,8 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(q.conventional),
                 jn(q.slotting),
                 jn(q.fz_target),
+                jn(q.fz_class),
+                jn(q.fz_class_rough),
                 jn(q.hex_min),
                 jn(q.hex_mean),
                 jn(q.hex_max),
