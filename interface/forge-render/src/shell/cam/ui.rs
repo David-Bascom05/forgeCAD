@@ -502,7 +502,8 @@ impl Shell {
     pub(in crate::shell) fn cam_ui(&mut self, ctx: &egui::Context) {
         let Some(mut w) = self.cam.take() else { return };
         let t = self.theme;
-        let v = self.view_rect;
+        // the view less what the simulation's panel and timeline cover: the windows keep inside
+        let v = self.camsim_free(self.view_rect);
         let mut places: Places = vec![];
         let mut blocks: Vec<Rect> = vec![];
         if let Some(mut d) = w.op_dlg.take() {
@@ -1267,7 +1268,8 @@ fn op_dialog(
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1505,7 +1507,8 @@ fn setup_dialog(
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1702,7 +1705,8 @@ fn lathe_dialog(
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1783,7 +1787,8 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .filter(|s| s.role == super::doc::Role::Program)
         .map(|s| s.name.clone())
         .collect();
-    let width = 620.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 620.0_f32.min(v.width() - 32.0).max(360.0);
     let mut edits: Vec<super::doc::Edit> = vec![];
     let mut write: Option<(String, String)> = None;
     let (mut post_it, mut export_it): (Option<String>, Option<String>) = (None, None);
@@ -1795,7 +1800,8 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .default_pos(pos2(v.right() - width - 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_post", "Post Process", width, places, "cam:post");
             if progs.is_empty() {
@@ -1970,7 +1976,8 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_tools", "Tool Library", width, places, "cam:tools");
             let mut f = w.tools_filter.clone();
@@ -1987,23 +1994,34 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
                 return;
             }
             heading(ui, t, "Cutters", width);
-            let (r, _) = ui.allocate_exact_size(vec2(width, 300.0), Sense::hover());
+            // the list gives way on a small view, so the window keeps inside it
+            let list_h = (v.height() - 330.0).clamp(120.0, 300.0);
+            let (r, _) = ui.allocate_exact_size(vec2(width, list_h), Sense::hover());
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
             egui::ScrollArea::vertical().id_salt("cam-tools-list").auto_shrink([false, false]).show(&mut child, |ui| {
                 for tool in &w.lib.tools {
                     // what a machinist reads: the id, the kind in words, Ø, flutes, flute length
-                    let line = format!(
-                        "{}  ·  {}  ·  Ø{} mm  ·  {} flutes  ·  {} mm flute",
-                        tool.id,
-                        kind_words(tool.kind),
-                        num(tool.dc),
-                        tool.nof,
-                        num(tool.lcf)
-                    );
-                    if !f.is_empty() && !line.to_lowercase().contains(&f) {
+                    let parts = [
+                        tool.id.clone(),
+                        kind_words(tool.kind).to_string(),
+                        format!("Ø{} mm", num(tool.dc)),
+                        format!("{} flutes", tool.nof),
+                        format!("{} mm flute", num(tool.lcf)),
+                    ];
+                    // as much as fits before "Add" on a narrow window, the rest dropped from the end
+                    let room = width - 12.0 - 38.0 - 96.0;
+                    let mut k = parts.len();
+                    let mut line = parts.join("  ·  ");
+                    while k > 2 && ui.painter().layout_no_wrap(line.clone(), sans(12.0), t.ink).size().x > room {
+                        k -= 1;
+                        line = parts[..k].join("  ·  ");
+                    }
+                    let full = parts.join("  ·  ");
+                    if !f.is_empty() && !full.to_lowercase().contains(&f) {
                         continue;
                     }
                     let (r, resp) = ui.allocate_exact_size(vec2(width - 12.0, 26.0), Sense::click());
+                    let resp = if k < parts.len() { resp.on_hover_text(&full) } else { resp };
                     if resp.hovered() {
                         ui.painter().rect_filled(r, 0.0, t.hover);
                     }
@@ -2188,8 +2206,11 @@ fn section_window(
     places: &mut Places,
 ) -> Option<Rect> {
     let mut close = false;
-    // half the view at most: the floating windows keep the other half
-    let width = 560.0_f32.min(v.width() * 0.5).max(360.0);
+    // half the view at most, and beside a floating window (620 wide at the view's left) when one
+    // is open
+    let floating = w.programs_open || w.quality_open || w.tools_open || w.checks_open || w.text_open || w.post_dlg.is_some();
+    let room = if floating { v.width() - 620.0 - 64.0 } else { v.width() * 0.5 };
+    let width = 560.0_f32.min(room).max(320.0);
     let r = egui::Window::new("cam-section")
         .id(egui::Id::unique("cam-section-window"))
         .title_bar(false)
@@ -2200,7 +2221,8 @@ fn section_window(
         .fixed_pos(pos2(v.right() - 16.0, v.bottom() - 16.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(
                 ui,
@@ -2234,7 +2256,8 @@ fn programs_window(
 ) -> Option<Rect> {
     use super::nc::Posted;
     let mut close = false;
-    let width = 620.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 620.0_f32.min(v.width() - 32.0).max(360.0);
     let mut edits: Vec<super::doc::Edit> = vec![];
     let mut cmds: Vec<Cmd> = vec![];
     let progs: Vec<super::doc::Stmt> = w
@@ -2257,7 +2280,8 @@ fn programs_window(
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_sheet", "NC Programs", width, places, "cam:programs");
             if progs.is_empty() {
@@ -2493,7 +2517,7 @@ fn program_row(
     }
     // its file: name, folder, extension, header
     let ext_default = forge_cam_lang::export::ext_of(&p.arg_str("post").unwrap_or_default()).to_string();
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.add_space(14.0);
         prog_field(ui, t, "File", 110.0, p, "file", &p.name, field, edits, places);
         prog_field(ui, t, "Folder", 90.0, p, "out", "beside it", field, edits, places);
@@ -2501,7 +2525,7 @@ fn program_row(
         prog_field(ui, t, "Comment", 140.0, p, "comment", "header line", field, edits, places);
     });
     // posting: one file per setup, decimals, coolant (forge-post's options, certified as posted)
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.add_space(14.0);
         let had = p.arg_str("split").as_deref() == Some("setup");
         let mut on = had;
@@ -2630,7 +2654,8 @@ fn quality_window(
     places: &mut Places,
 ) -> Option<Rect> {
     let mut close = false;
-    let width = 720.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 720.0_f32.min(v.width() - 32.0).max(360.0);
     let mut select: Option<String> = None;
     let mut colour = w.focus.colour_by;
     let r = egui::Window::new("cam-quality")
@@ -2641,7 +2666,8 @@ fn quality_window(
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_check", "Toolpath Quality", width, places, "cam:quality");
             // the toolpath's colouring in the view (the simulation view draws it)
@@ -2790,7 +2816,8 @@ fn checks_window(
     places: &mut Places,
 ) -> Option<Rect> {
     let mut close = false;
-    let width = 460.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 460.0_f32.min(v.width() - 32.0).max(360.0);
     let mut locate: Option<Locate> = None;
     let r = egui::Window::new("cam-checks")
         .id(egui::Id::unique("cam-checks-window"))
@@ -2800,7 +2827,8 @@ fn checks_window(
         .default_pos(pos2(v.right() - width - 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_check", "Checks", width, places, "cam:checks");
             let Some(run) = &w.run else {
@@ -2851,7 +2879,8 @@ fn checks_window(
 fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &mut Places) -> Option<Rect> {
     let mut close = false;
     let mut apply = false;
-    let width = 640.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 640.0_f32.min(v.width() - 32.0).max(360.0);
     let r = egui::Window::new("cam-text")
         .id(egui::Id::unique("cam-text-window"))
         .title_bar(false)
@@ -2860,7 +2889,8 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(
                 ui,
