@@ -234,15 +234,24 @@ def make_presets(vendor, ty, f, r, skips):
         rows.append(dict(g=g, cls=CLASS[op], vc=vc, fz=fz, vr=vr, fr=fr, dfz=derived_fz,
                          printed=printed, fzx=fzx, c=c))
     # a diameter on the boundary of two of the maker's diameter columns gets a row from each:
-    # keep the lower feed (then speed) and say so
+    # keep the column whose lower edge is the diameter (its range's low end, which a preset
+    # takes, is the value for that diameter), else the lower feed; and say so
+    def lower_edge(y):
+        m = re.search(r"column\s+(\d+)(?:/(\d+))?\s*-", str(y["c"].get("condition") or ""))
+        if not m:
+            return None
+        return float(m.group(1)) / float(m.group(2) or 1) * 25.4
     uniq = {}
     for x in rows:
         k = (x["g"], x["cls"], mat_of(x["c"]))
         if k in uniq:
             skips["boundary-column rows merged"] += 1
-            keep = min(uniq[k], x, key=lambda y: (y["fz"], y["vc"]))
+            at_edge = [y for y in (uniq[k], x) if lower_edge(y) is not None
+                       and abs(lower_edge(y) - f["dc"]) < 1e-6]
+            keep = at_edge[0] if len(at_edge) == 1 else min(uniq[k], x, key=lambda y: (y["fz"], y["vc"]))
             other = x if keep is uniq[k] else uniq[k]
-            keep = dict(keep, boundary=(keep["c"].get("condition"), other["c"].get("condition")))
+            why = "the one whose lower edge is the diameter" if len(at_edge) == 1 else "the lower feed"
+            keep = dict(keep, boundary=(keep["c"].get("condition"), other["c"].get("condition"), why))
             uniq[k] = keep
         else:
             uniq[k] = x
@@ -283,8 +292,8 @@ def preset(vendor, ty, f, r, x, name, how):
     if vendor == "helical" and cls == "finish" and ae is not None:
         notes.append("programmed at ae: the finishing column is a programmed feed at the stated RDOC")
     if x.get("boundary"):
-        a, b = x["boundary"]
-        notes.append(f"the tool's diameter lies in two of the source's columns ({a}; {b}): the lower feed is kept")
+        a, b, why = x["boundary"]
+        notes.append(f"the tool's diameter lies in two of the source's columns ({a}; {b}): the first is kept, {why}")
     if x["dfz"]:
         notes.append("fz is the tap's pitch per revolution (a tap feeds its pitch); the source prints vc only")
     elif ty in ("drill", "spot") or (x["fzx"] or {}).get("unit") == "mm/rev":
