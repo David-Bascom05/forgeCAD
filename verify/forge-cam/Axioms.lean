@@ -85,6 +85,7 @@ import ForgeCam
 #print axioms ForgeCam.Shadow.arc_coord
 #print axioms ForgeCam.Shadow.cone_factor
 #print axioms ForgeCam.Shadow.cone_radius
+#print axioms ForgeCam.Shadow.torus_radius
 #print axioms ForgeCam.Shadow.axis_gap
 #print axioms ForgeCam.Shadow.line_far
 #print axioms ForgeCam.Shadow.arc_far
@@ -142,3 +143,8 @@ import ForgeCam
 #print axioms ForgeCam.Quad.quad_sign_same
 #print axioms ForgeCam.Quad.quad_sign_opp
 #print axioms ForgeCam.Quad.quad_sign_opp'
+#print axioms ForgeCam.Rational.sign_div
+#print axioms ForgeCam.Rational.add_quot
+#print axioms ForgeCam.Rational.sub_quot
+#print axioms ForgeCam.Rational.mul_quot
+#print axioms ForgeCam.Rational.div_quot
