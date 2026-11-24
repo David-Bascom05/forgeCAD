@@ -215,3 +215,15 @@ document's run, the reply above.
 
 Code: interface/forge-render/src/shell/cam/ and src/gui_cam.rs; notes and screenshots in
 research/cam/ui/.
+
+## Tool life (prediction and tracking)
+
+`Cam::tool_life` predicts each loaded tool's life use over the job: Taylor's
+v T^n f^a ap^b = C from cited rows (`kernel/forge-tooling/data/life.toml`), summed per
+fixed-length sample of the posted path (each sample's own speed, chip and depth; Miner's
+rule). The part must name its material (`part("p.fg", group: "S", material: "Ti-6Al-4V")`);
+a tool × material with no cited row is "not estimated". A program that would use more life
+than the loaded tool has left gets a warning with a change point or a sister tool, never an
+error. Physical tools are tracked in `cam/tool-instances.toml` (`forgecad tool log ...`), and
+logged worn tools calibrate the shop's own C (and n), shown beside the cited values.
+Details, sources and the honest validation: research/cam/toollife/model.md, validation.md.
