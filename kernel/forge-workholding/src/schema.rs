@@ -278,7 +278,7 @@ pub fn schema_json() -> String {
         })
         .collect();
     format!(
-        "{{\"schema\":\"forgecad.workholding-schema/1\",\"provenance\":[\"cited\",\"standin\",\"user\"],\"kinds\":[{}]}}",
+        "{{\"schema\":\"forgecad.workholding-schema/1\",\"provenance\":[\"cited\",\"standin\",\"user\",\"unknown\",\"conflict\"],\"kinds\":[{}]}}",
         kinds.join(",")
     )
 }
@@ -319,6 +319,10 @@ impl Record {
         if !self.unknown.is_empty() {
             let u: Vec<String> = self.unknown.iter().map(|x| js(x)).collect();
             o += &format!("unknown = [{}]\n", u.join(", "));
+        }
+        if !self.conflict.is_empty() {
+            let u: Vec<String> = self.conflict.iter().map(|x| js(x)).collect();
+            o += &format!("conflict = [{}]\n", u.join(", "));
         }
         for (k, v) in &self.vals {
             o += &format!("{k} = {}\n", num(*v));

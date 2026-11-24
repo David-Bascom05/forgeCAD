@@ -238,7 +238,8 @@ fn main() -> ExitCode {
             let json = args.iter().any(|a| a == "--json");
             let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
             let here = std::env::current_dir().ok();
-            let user = forge_dirs::config();
+            // the user's libraries: <config>/forgecad/cam/<folder> (as forge-library keeps them)
+            let user = forge_dirs::config().map(|c| c.join("forgecad"));
             match forge_workholding::cli::tool(&rest, user.as_deref(), here.as_deref()) {
                 Ok((j, text)) => {
                     if json {

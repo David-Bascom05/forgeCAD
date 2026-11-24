@@ -311,6 +311,8 @@ pub struct Record {
     pub lists: BTreeMap<String, Vec<f64>>,
     pub words: BTreeMap<String, String>,
     pub unknown: Vec<String>,
+    /// Fields whose published values disagree (each said in `note`): no value, as unknown.
+    pub conflict: Vec<String>,
     pub cites: Vec<Cite>,
     pub source: String,
     pub taken: String,
@@ -420,12 +422,13 @@ impl Record {
             Kind::parse(ks).ok_or_else(|| bad(&rec, "kind", format!("`{ks}` is not a workholding kind")))?;
         let (need, may) = kind.fields();
         let unknown = toml::texts(t, "unknown").unwrap_or_default();
+        let conflict = toml::texts(t, "conflict").unwrap_or_default();
         let mut vals = BTreeMap::new();
         let mut lists = BTreeMap::new();
         let mut words = BTreeMap::new();
         let skip = [
-            "name", "kind", "vendor", "product", "standin", "basis", "unknown", "source", "taken", "note",
-            "cite", "part", "body",
+            "name", "kind", "vendor", "product", "standin", "basis", "unknown", "conflict", "source",
+            "taken", "note", "cite", "part", "body",
         ];
         for (k, v) in t {
             if skip.contains(&k.as_str()) {
@@ -462,7 +465,7 @@ impl Record {
                 }
             }
         }
-        for u in &unknown {
+        for u in unknown.iter().chain(&conflict) {
             if vals.contains_key(u) || lists.contains_key(u) {
                 return Err(bad(&rec, u, "has a value and is listed as unknown"));
             }
@@ -475,7 +478,10 @@ impl Record {
             }
         }
         for f in need {
-            if !vals.contains_key(*f) && !lists.contains_key(*f) && !unknown.iter().any(|u| u == f) {
+            if !vals.contains_key(*f)
+                && !lists.contains_key(*f)
+                && !unknown.iter().chain(&conflict).any(|u| u == f)
+            {
                 return Err(WhError::Missing {
                     record: rec.clone(),
                     field: f.to_string(),
@@ -598,6 +604,7 @@ impl Record {
             lists,
             words,
             unknown,
+            conflict,
             cites,
             source,
             taken: s("taken"),
@@ -617,6 +624,15 @@ impl Record {
     pub fn get(&self, k: &str) -> Result<f64, WhError> {
         if let Some(v) = self.vals.get(k) {
             return Ok(*v);
+        }
+        if self.conflict.iter().any(|u| u == k) {
+            return Err(WhError::Unpublished {
+                record: self.label(),
+                field: k.to_string(),
+                fix: format!(
+                    "its published values disagree (see the record's note): measure it and give `{k}` with the device"
+                ),
+            });
         }
         if self.unknown.iter().any(|u| u == k) {
             return Err(WhError::Unpublished {
@@ -658,6 +674,7 @@ impl Record {
         }
         let mut r = self.clone();
         r.unknown.retain(|u| u != k);
+        r.conflict.retain(|u| u != k);
         r.vals.insert(k.to_string(), v);
         // the given value replaces the cited one: no older cite may claim it
         for c in &mut r.cites {
