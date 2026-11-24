@@ -64,7 +64,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | T.ovf | the five forge-topo functions above, translated overflow-checked: no `usize`/`u32` overflow (Checked.lean) | SPINE | proven | verify/aeneas/forge-topo/lean (`usize_add_wspec`, `usize_sub_wspec`, the `_refines` theorems) |
 | T.euler | `topo_euler::shell_euler` refines `checkShellEuler` (L4; stamped distinct count = eraseDups) | SPINE | proven (overflow-checked; hyp `EulerSmall`: a shell's listed faces, loops, coedges fit i64) | `forge_topo.shell_euler_refines` |
 | T.fans | `check_fans` (corner table as an opaque view method) | SPINE | open | — |
-| T.all | `check_known`'s combinatorial part composed (`Model.check`) | SPINE | open | — |
+| T.all | `check_known`'s combinatorial part composed (`Model.check`) | SPINE | proven (ruling (b), no Rust change): over each call's output, the problems `check_known` pushes that the model decides are `Body.check corners`, whatever the geometric calls push. Opaque, not covered: the geometric calls' outputs (`check_geometry`, `stray_edges`, `check_sides`, `check_shells`, `check_names`, `check_euler`, `EdgeDegenerate`) and the geometric half of the `out.is_empty()` gates (they only decide whether `check_sides`/`check_shells` run). By inspection of check.rs, not a translation: the call order, and that only the topological calls push the model's problems (`EdgeUses`, `LoopBroken`). Each topological call's part is its L4 refinement (T.links, T.edges, T.euler, T.fans, T.shells, T.strays) | verify/forge-topo-check/lean `TopoCheck.known_topo` |
 | T.valid | `Valid` (topology) ∧ geometry ⇒ `WellFormed` of the exact counterpart | SPINE | open | — |
 
 ## D. The chain of contracts (boolean.rs `general`)

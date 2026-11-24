@@ -36,6 +36,11 @@ guarantee. Line references are to `kernel/forge-topo/src/{body,check}.rs` at 825
   - `check_sound`: `b.check corners = [] → b.Valid corners`, for any corner table, with no
     hypothesis.
   - `one_cycle`: with no corner table, loop order's rotation round every vertex is a single cycle.
+- `TopoCheck/Known.lean` (ledger T.all): `known_topo`. `check_known` is modelled as the sequence of
+  its calls over each call's output, geometric problems opaque (`RP.geo`). Whatever the geometric
+  calls push, the problems the model decides are `Body.check corners`, in order. The geometric
+  outputs and the geometric half of the `out.is_empty()` gates are not covered. The call order,
+  and that only the topological calls push the model's problems, are read off check.rs.
 
   `Axioms.lean` fails the build unless both use only `propext`, `Classical.choice` and
   `Quot.sound`. No `sorry`.
