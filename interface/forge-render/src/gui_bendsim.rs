@@ -58,12 +58,15 @@ pub struct BendView {
     outline: Vec<([[f32; 3]; 2], f32)>,
 }
 
+/// Edges by their welded ends: how many triangles share it (a silhouette edge marked half of
+/// usize::MAX), its ends as first seen, and whether its first triangle faces the eye.
+type EdgeFaces = std::collections::HashMap<([i64; 3], [i64; 3]), (usize, [f32; 3], [f32; 3], bool)>;
+
 /// A mesh's silhouette from `eye`: its edges between a triangle facing the eye and one facing
 /// away, and its open edges (the mesh's corners welded to a hundredth of a millimetre).
 pub fn silhouette(m: &Mesh, eye: [f32; 3]) -> Vec<[[f32; 3]; 2]> {
-    use std::collections::HashMap;
     let key = |p: [f32; 3]| p.map(|v| (v * 100.0).round() as i64);
-    let mut faces: HashMap<([i64; 3], [i64; 3]), (usize, [f32; 3], [f32; 3], bool)> = HashMap::new();
+    let mut faces = EdgeFaces::new();
     for t in &m.tri {
         let [a, b, c] = t.map(|i| m.pos[i as usize]);
         let (u, v) = (
