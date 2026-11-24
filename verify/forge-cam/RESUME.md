@@ -212,7 +212,8 @@ The checker of drop.rs (the tool's column, research/cam/phase3.md). 10 theorems,
 - `ring_rho_ge`, `ring_bound`, `line_rho_ge`, `line_bound`: spheres, horizontal cylinders and tori
   about a vertical axis reduce to the vertical plane through the tool's axis (b monotone).
 
-Open: the 1D closed forms' candidates (`disk_drop`, `bowl_drop`, `plane_support`) contain the
+Open: the 1D closed forms' candidates (`disk_drop`, `bowl_drop`, `plane_support`, and `conj`'s
+maximiser ρ* and bound B(λ) for Concave.lean, all L6-tested) contain the
 maximum; the sphere bound S − sd(centre) for a convex column (supporting half-space); each
 cutter lies in its column (`Column::of`, L6-tested); the z-map's soundness; L5.
 

@@ -1369,3 +1369,82 @@ fn the_mould_core_is_surfaced_and_certified() {
     assert!(!cam.ok);
     assert!(cam.ops.iter().any(|o| o.status == "refused"));
 }
+
+/// Z-level roughing on a prism part takes the material exactly (its bands' sections grown by the
+/// tool), over the whole stock: above `to`, the stock's margin and the well's long sides are
+/// cleared to within the tool's widening, and the part's own section is never voided.
+#[test]
+fn zlevel_on_a_prism_part_clears_to_the_walls_and_the_margin() {
+    use forge_cam::stock::InProcess;
+    use forge_cam_geom::boolean::{Op, boolean, region_of};
+    use forge_cam_geom::region::{Loop, Region, Seg, p2};
+    use forge_tooling::Library;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("well_island.fg")).unwrap();
+    let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+    let body = run.body.unwrap();
+    let faces = forge_cam::lower::lower(&body).unwrap();
+    let lib = Library::builtin();
+    let tl = lib.tool("flat-10").unwrap().clone();
+    let shape = tl.shape(32.0, Some(lib.holder("bt40-er32").unwrap())).unwrap();
+    let sf = forge_cam::surf::Surfacer::new(&faces, &shape.bodies[0], 0.0, 0.01, 0.0).unwrap();
+    let tool = forge_cam::ops::ToolUse {
+        t: 1,
+        tool: tl,
+        holder: None,
+        stickout: 32.0,
+        shape,
+    };
+    let c = forge_cam::ops::Cut {
+        tool: &tool,
+        tidx: 0,
+        h: forge_cam::ops::Heights {
+            clear: 30.0,
+            retract: 20.0,
+        },
+        feed: (1000.0, 300.0),
+    };
+    // the stock: 3 over each side, 1 over the top; tool centres a diameter past it
+    let (smin, smax) = ([-3.0, -3.0, 0.0], [63.0, 43.0, 13.0]);
+    let area = [smin[0] - 10.0, smin[1] - 10.0, smax[0] + 10.0, smax[1] + 10.0];
+    let (_, voids) = forge_cam::surf::zlevel_voids(&sf, c, area, 13.0, 6.0, 3.0, 4.0, 1.0).unwrap();
+    let mut ip = InProcess::new(smin, smax);
+    for (v, f) in voids {
+        ip.cut(v, f);
+    }
+    let rect = |x0: f64, y0: f64, x1: f64, y1: f64| Region {
+        loops: vec![Loop {
+            segs: vec![
+                Seg::Line {
+                    a: p2(x0, y0),
+                    b: p2(x1, y0),
+                },
+                Seg::Line {
+                    a: p2(x1, y0),
+                    b: p2(x1, y1),
+                },
+                Seg::Line {
+                    a: p2(x1, y1),
+                    b: p2(x0, y1),
+                },
+                Seg::Line {
+                    a: p2(x0, y1),
+                    b: p2(x0, y0),
+                },
+            ],
+        }],
+    };
+    let m = ip.material(6.5).unwrap().expect("material at 6.5");
+    let gone = |r: Region| region_of(&boolean(&m, &r, Op::Inter).unwrap()).loops.is_empty();
+    // the margin outside the plate, up to 0.01 from its side
+    assert!(gone(rect(-3.0, 5.0, -0.01, 35.0)), "the margin's sliver stays");
+    // the well's long side, away from its corners (a flat end leaves those) and from the boss
+    // (the 7 mm between them is narrower than the tool), 0.01 from the wall
+    assert!(
+        gone(rect(14.0, 8.01, 20.0, 9.0)),
+        "a sliver on the well's wall stays"
+    );
+    // never more than the tool took: the part's section is all still material
+    let sec = forge_cam::section::section(&faces, 6.5, 1e-5).unwrap();
+    assert!(region_of(&boolean(&sec, &m, Op::Diff).unwrap()).loops.is_empty());
+}
