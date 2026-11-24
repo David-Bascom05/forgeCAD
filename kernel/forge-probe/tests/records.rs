@@ -97,3 +97,25 @@ fn the_renishaw_sheets_values() {
     let e = forge_probe::find(&ds, "renishaw-omp40").unwrap_err().to_string();
     assert!(e.contains("renishaw-omp40-2"), "{e}");
 }
+
+#[test]
+fn body_rings_read_write_and_outline() {
+    let src = TOY.replace(
+        "[[probe.cyl]]\nbase = [0, 0, 50]\naxis = [0, 0, 1]\nr = 20\nh = 50\n",
+        "body = [[20, 50, 100], [8, 100, 120]]\n[[probe.box]]\nmin = [-1, -1, -1]\nmax = [1, 1, 0]\n",
+    );
+    let ds = parse(&src).unwrap();
+    let w = write::file("", &ds);
+    assert!(w.contains("body = [[20, 50, 100], [8, 100, 120]]"), "{w}");
+    assert_eq!(parse(&w).unwrap(), ds);
+    // a box is not turned: no outline
+    assert_eq!(forge_probe::outline(&ds[0]), None);
+    let toy = parse(TOY).unwrap();
+    assert_eq!(
+        forge_probe::outline(&toy[0]),
+        Some(vec![[50.0, 0.0], [50.0, 20.0], [100.0, 20.0], [100.0, 0.0]])
+    );
+    // the built-in work probes have outlines
+    let b = builtin();
+    assert!(forge_probe::outline(forge_probe::find(&b, "renishaw-omp40-2").unwrap()).is_some());
+}

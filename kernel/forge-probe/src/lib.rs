@@ -210,7 +210,7 @@ fn positive(t: &Table, k: &'static str, rec: &str) -> Result<Option<f64>, LibErr
     }
 }
 
-const KEYS: [&str; 20] = [
+const KEYS: [&str; 21] = [
     "id",
     "kind",
     "vendor",
@@ -227,11 +227,44 @@ const KEYS: [&str; 20] = [
     "disc_d",
     "min_tool_d",
     "mass",
+    "body",
     "cyl",
     "box",
     "offer",
     "cite",
 ];
+
+impl Prim {
+    /// A cylinder about the device's z axis (written as a `body` ring): (r, from, to).
+    pub fn ring(&self) -> Option<(f64, f64, f64)> {
+        match self {
+            Prim::Cyl { base, axis, r, h }
+                if base[0] == 0.0 && base[1] == 0.0 && *axis == [0.0, 0.0, 1.0] =>
+            {
+                Some((*r, base[2], base[2] + h))
+            }
+            _ => None,
+        }
+    }
+}
+
+/// The device's turned outline for a preview: (z, r) points around its rings, from the lowest
+/// z up and back down the axis (None when it has a body that is not coaxial, or none).
+pub fn outline(d: &Device) -> Option<Vec<[f64; 2]>> {
+    let rings: Vec<(f64, f64, f64)> = d.bodies.iter().map(Prim::ring).collect::<Option<_>>()?;
+    if rings.is_empty() {
+        return None;
+    }
+    let mut rs = rings;
+    rs.sort_by(|a, b| a.1.total_cmp(&b.1));
+    let mut out = vec![[rs[0].1, 0.0]];
+    for (r, a, b) in &rs {
+        out.push([*a, *r]);
+        out.push([*b, *r]);
+    }
+    out.push([rs[rs.len() - 1].2, 0.0]);
+    Some(out)
+}
 
 /// One `[[probe]]` table.
 pub fn read(t: &Table) -> Result<Device, LibError> {
@@ -306,6 +339,39 @@ pub fn read(t: &Table) -> Result<Device, LibError> {
     let min_tool_d = positive(t, "min_tool_d", &rec)?;
     let mass = positive(t, "mass", &rec)?;
     let mut bodies = Vec::new();
+    // coaxial rings: `body = [[r, from, to], ...]`, along +z from the origin (the turned form)
+    if let Some(v) = t.get("body") {
+        let Val::Arr(rows) = v else {
+            return Err(bad(&rec, "body", "is a list of [r, from, to] rows"));
+        };
+        for row in rows {
+            let Val::Arr(c) = row else {
+                return Err(bad(&rec, "body", "is a list of [r, from, to] rows"));
+            };
+            let n: Vec<f64> = c
+                .iter()
+                .filter_map(|x| if let Val::Num(n) = x { Some(*n) } else { None })
+                .collect();
+            match n.as_slice() {
+                [r, a, b]
+                    if c.len() == 3
+                        && r.is_finite()
+                        && *r > 0.0
+                        && a.is_finite()
+                        && b.is_finite()
+                        && a < b =>
+                {
+                    bodies.push(Prim::Cyl {
+                        base: [0.0, 0.0, *a],
+                        axis: [0.0, 0.0, 1.0],
+                        r: *r,
+                        h: b - a,
+                    })
+                }
+                _ => return Err(bad(&rec, "body", "rows are [r > 0, from, to > from], mm")),
+            }
+        }
+    }
     for c in tables(t, "cyl") {
         let base = vec3(c, "base", &rec)?.ok_or_else(|| missing(&rec, "base", "cyl: base = [x, y, z]"))?;
         let axis = vec3(c, "axis", &rec)?.ok_or_else(|| missing(&rec, "axis", "cyl: axis = [x, y, z]"))?;
@@ -326,6 +392,8 @@ pub fn read(t: &Table) -> Result<Device, LibError> {
         }
         bodies.push(Prim::Box { min, max });
     }
+    // rings first (as the writer writes them), each kind in its order
+    bodies.sort_by_key(|p| p.ring().is_none());
     let mut offers = Vec::new();
     for o in tables(t, "offer") {
         let st = text(o, "status").unwrap_or("");

@@ -16,11 +16,7 @@ transmission = "optical"
 repeat = 0.001
 overtravel = [12.5, 6]
 mass = 0.25
-[[probe.cyl]]
-base = [0, 0, 0]
-axis = [0, 0, 1]
-r = 20
-h = 69
+body = [[20, 0, 69]]
 [[probe.cite]]
 path = "transmission"
 status = "published"
@@ -73,11 +69,7 @@ transmission = "radio"
 repeat = 0.001
 overtravel = [12.5, 6]
 mass = 0.25
-[[probe.cyl]]
-base = [0, 0, 0]
-axis = [0, 0, 1]
-r = 20
-h = 69
+body = [[20, 0, 69]]
 [[probe.cite]]
 path = "transmission"
 status = "published"
@@ -130,11 +122,7 @@ transmission = "optical"
 repeat = 0.001
 overtravel = [18, 11]
 mass = 0.885
-[[probe.cyl]]
-base = [0, 0, 0]
-axis = [0, 0, 1]
-r = 31.5
-h = 95
+body = [[31.5, 0, 95]]
 [[probe.cite]]
 path = "transmission"
 status = "published"
@@ -187,11 +175,7 @@ transmission = "radio"
 repeat = 0.001
 overtravel = [18, 11]
 mass = 0.876
-[[probe.cyl]]
-base = [0, 0, 0]
-axis = [0, 0, 1]
-r = 31.5
-h = 95
+body = [[31.5, 0, 95]]
 [[probe.cite]]
 path = "transmission"
 status = "published"

@@ -97,7 +97,19 @@ fn record(o: &mut String, d: &Device) {
     if let Some(x) = d.mass {
         kv("mass", n(x));
     }
+    let rings: Vec<String> = d
+        .bodies
+        .iter()
+        .filter_map(Prim::ring)
+        .map(|(r, a, b)| arr(&[r, a, b]))
+        .collect();
+    if !rings.is_empty() {
+        let _ = writeln!(o, "body = [{}]", rings.join(", "));
+    }
     for b in &d.bodies {
+        if b.ring().is_some() {
+            continue;
+        }
         if let Prim::Cyl { base, axis, r, h } = b {
             let _ = writeln!(
                 o,
