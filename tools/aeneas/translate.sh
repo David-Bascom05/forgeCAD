@@ -16,6 +16,9 @@
 #                                  here: their items are defined once, by that translation (below)
 #   SRC_CRATE=forge-bool           the kernel crate, when it is not the directory's name (a second
 #                                  translation of one crate, in a package of its own)
+#   DROP_FIELDS=(size_hint)        trait-method fields to drop from the generated trait instances,
+#                                  where Aeneas's Lean structure for the trait has no such field
+#                                  (a Rust impl overriding a method the library does not model)
 #   OVERFLOW_CHECKS=false          interim, per crate: translate without overflow checks (integer ops
 #                                  as wrapping). The default, and the target, is true (below); a crate
 #                                  set to false carries a TODO in its translate.conf.
@@ -54,6 +57,7 @@ conf=$dir/translate.conf
 [ -f "$conf" ] || { echo "no $conf" >&2; exit 2; }
 PKG=
 SRC_CRATE=
+DROP_FIELDS=()
 BRIDGE=
 DEPS=()
 OVERFLOW_CHECKS=true
@@ -94,6 +98,22 @@ done
 if [ "$BRIDGE" != none ]; then
   sed -i 's/^import Aeneas$/import Aeneas\nimport AeneasF64/' "$work/gen/Types.lean"
 fi
+if [ ${#DROP_FIELDS[@]} -gt 0 ] && [ -f "$work/gen/Funs.lean" ]; then
+  python3 - "$work/gen/Funs.lean" "${DROP_FIELDS[@]}" <<'PY'
+import re, sys
+path, fields = sys.argv[1], sys.argv[2:]
+out, skip = [], False
+for line in open(path).read().split("\n"):
+    if re.match(r"^  (%s) :=" % "|".join(map(re.escape, fields)), line):
+        skip = True
+        continue
+    if skip and line.startswith("    "):
+        continue
+    skip = False
+    out.append(line)
+open(path, "w").write("\n".join(out))
+PY
+fi
 
 # DEPS: the kernel crates this one calls whose own translations (verify/aeneas/DEP) define them.
 # Their items keep one definition, the dependency's: the types and functions Charon brings along
@@ -101,13 +121,16 @@ fi
 # Types.lean imports the dependency's package. A dependency's functions are opaque here (Charon
 # keeps another crate's bodies opaque), and the dependency's translation defines them.
 dep_pkgs=()
+dep_srcs=()
 for d in "${DEPS[@]}"; do
   dconf=$root/verify/aeneas/$d/translate.conf
   [ -f "$dconf" ] || { echo "$crate: DEPS names $d, which has no $dconf" >&2; exit 2; }
   dep_pkgs+=("$(PKG=; . "$dconf" > /dev/null; echo "$PKG")")
+  # a dependency's items are those of its kernel crate (its SRC_CRATE, else its name)
+  dep_srcs+=("$(SRC_CRATE=; . "$dconf" > /dev/null; echo "${SRC_CRATE:-$d}")")
 done
 if [ ${#DEPS[@]} -gt 0 ]; then
-  python3 - "$work/gen" "${DEPS[*]}" "${dep_pkgs[*]}" <<'PY'
+  python3 - "$work/gen" "${dep_srcs[*]}" "${dep_pkgs[*]}" <<'PY'
 import os, re, sys
 gen, deps, pkgs = sys.argv[1], sys.argv[2].split(), sys.argv[3].split()
 def from_dep(chunk):

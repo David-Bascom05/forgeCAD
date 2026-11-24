@@ -1,0 +1,17 @@
+name = "forgetopobody"
+version = "0.1.0"
+defaultTargets = ["ForgeTopoBody"]
+# Mathlib, Aeneas and the float bridge from verify/forge-curved's checkout (the same pins).
+packagesDir = "../../../forge-curved/.lake/packages"
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+# forge-geom's translation (and through it forge-math's and the float bridge).
+[[require]]
+name = "forgegeom"
+path = "../../forge-geom/lean"
+
+[[lean_lib]]
+name = "ForgeTopoBody"

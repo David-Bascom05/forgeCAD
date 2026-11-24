@@ -20,5 +20,10 @@ subDir = "backends/lean"
 name = "forgeboolproof"
 path = "../../../forge-bool-proof"
 
+# Body's methods (forge-topo-body's translation; through it forge-geom's, forge-math's, the bridge).
+[[require]]
+name = "forgetopobody"
+path = "../../forge-topo-body/lean"
+
 [[lean_lib]]
 name = "ForgeBoolApply"
