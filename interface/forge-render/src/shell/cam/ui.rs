@@ -305,7 +305,7 @@ impl Shell {
                         Cert::Certified => ("certified".into(), t.success),
                         // not a failure: a rule this run does not decide (G4's leftover not
                         // computed; G5's travel by span only until a setup is placed)
-                        Cert::Unchecked(g) => (format!("certified · {g} unchecked"), t.ink2),
+                        Cert::Unchecked(g) => (format!("certified · {}", unchecked_chip(g)), t.ink2),
                         Cert::Refused => ("refused".into(), t.error),
                     },
                     None => ("not generated".into(), t.ink2),
@@ -3306,23 +3306,32 @@ pub(crate) fn cert_of(ok: bool, certification: &str) -> Cert {
     }
 }
 
-/// What an unchecked rule means, for the hover and the Checks panel.
-fn unchecked_words(g: &str) -> String {
-    let g4 = "the leftover (G4: the stock left against the part) is not computed in this run";
-    let g5 = "machine travel (G5) is checked against each axis's span only: a setup is not placed on \
-              the machine (`at:`, the work offset in machine coordinates); place it in the setup \
-              dialog to check the positions too";
+/// The header chip's words for an unchecked rule: what it means, never the rule's code (UX-LEAD).
+fn unchecked_chip(g: &str) -> &'static str {
     match g {
-        "G4" => format!("Every op certified, every program released; {g4}."),
-        "G5" => format!("Every op certified; {g5}."),
-        "G4 and G5" => format!("Every op certified; {g4}, and {g5}."),
-        _ => "Every op certified; a rule is not decided in this run.".into(),
+        "G4" => "leftover not checked",
+        "G5" => "travel checked by span",
+        "G4 and G5" => "2 checks partial",
+        _ => "a check partial",
+    }
+}
+
+/// What an unchecked rule means, for the hover and the Checks panel: the rule's code first.
+fn unchecked_words(g: &str) -> String {
+    let g4 = "G4: the leftover (the stock left against the part) is not computed in this run.";
+    let g5 = "G5: machine travel is checked against each axis's span only, because this setup isn't \
+              placed on the machine. Set its position (at:) in the setup dialog to check positions too.";
+    match g {
+        "G4" => format!("{g4}\nEvery op is certified and every program released."),
+        "G5" => format!("{g5}\nEvery op is certified."),
+        "G4 and G5" => format!("{g4}\n{g5}\nEvery op is certified."),
+        _ => "A check is not decided in this run. Every op is certified.".into(),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Cert, cert_of, choice_words, default_value};
+    use super::{Cert, cert_of, choice_words, default_value, unchecked_chip, unchecked_words};
 
     /// A run whose ops and programs all certify reads certified, naming what it leaves
     /// unchecked (mold_core_cam: "full except G4 (leftover not computed)" read "refused"); only a
@@ -3339,6 +3348,12 @@ mod tests {
         assert_eq!(cert_of(false, "refused"), Cert::Refused);
         assert_eq!(cert_of(false, "full"), Cert::Refused);
         assert_eq!(cert_of(true, "refused"), Cert::Refused);
+        // the chip in words, the code first on the hover
+        assert_eq!(unchecked_chip("G4"), "leftover not checked");
+        assert_eq!(unchecked_chip("G5"), "travel checked by span");
+        assert_eq!(unchecked_chip("G4 and G5"), "2 checks partial");
+        assert!(unchecked_words("G4").starts_with("G4: "));
+        assert!(unchecked_words("G5").starts_with("G5: machine travel is checked"));
     }
 
     /// mold_core_cam end to end: its five ops and its program certify, G4 is not computed: the
