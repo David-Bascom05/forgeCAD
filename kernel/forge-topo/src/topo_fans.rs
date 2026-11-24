@@ -43,13 +43,16 @@ fn face_of<T: FanTopo>(t: &T, c: usize) -> usize {
     t.loop_face(t.coedge_loop(c))
 }
 
-/// The coedge before `c` in its loop.
+/// The coedge before `c` in its loop (`c` one of its loop's coedges).
 #[inline]
 fn prev_of<T: FanTopo>(t: &T, c: usize) -> usize {
     let l = t.coedge_loop(c);
     let first = t.loop_first(l);
-    let n = t.loop_len(l);
-    first + (c - first + n - 1) % n
+    if c == first {
+        first + t.loop_len(l) - 1
+    } else {
+        c - 1
+    }
 }
 
 /// The first use of `c`'s edge that is not `c`, or `NONE`.

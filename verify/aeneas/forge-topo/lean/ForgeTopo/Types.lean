@@ -96,7 +96,7 @@ structure topo_fans.FanSink (Self : Type _) where
   vertex_fans : Self → Std.Usize → Std.Usize → Result Self
 
 /-- [forge_topo::topo_fans::Closes]
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 87:0-91:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 90:0-94:1 -/
 structure topo_fans.Closes where
   cf : alloc.vec.Vec Std.Usize
   cl : alloc.vec.Vec (Std.Usize × Std.Usize)
