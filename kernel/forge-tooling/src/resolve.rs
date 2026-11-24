@@ -633,6 +633,314 @@ pub fn milling(
     })
 }
 
+/// The user's turning values (all optional).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TurnAsk {
+    /// Constant surface speed, m/min (G96); or a fixed spindle speed, rpm (G97; wins).
+    pub vc: Option<f64>,
+    pub rpm: Option<f64>,
+    /// The CSS top speed (G50), rpm.
+    pub max_rpm: Option<f64>,
+    /// Feed per revolution, mm/rev; depth of cut, mm.
+    pub f: Option<f64>,
+    pub ap: Option<f64>,
+    pub max_power: Option<f64>,
+}
+
+/// The turning tool's own cutting data (the library layer) and its entering angle.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TurnData {
+    /// m/min, mm/rev, mm; None where the tool states none.
+    pub vc: Option<f64>,
+    pub f: Option<f64>,
+    pub ap: Option<f64>,
+    /// Where the tool's data comes from (its cite or record source).
+    pub source: String,
+    /// The entering angle κr, degrees (the holder's `kr`); None: not known.
+    pub kr: Option<f64>,
+}
+
+/// The cut at one diameter of the op's range.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TurnPoint {
+    /// Diameter, mm.
+    pub d: f64,
+    pub rpm: f64,
+    /// The surface speed actually cut at, m/min (under vc where the top speed clamps).
+    pub vc: f64,
+    /// mm/min.
+    pub feed: f64,
+    /// kW, N·m (NaN: no kc data).
+    pub power: f64,
+    pub torque: f64,
+    /// Spindle power available at that rpm (None: outside the curve or no curve).
+    pub power_avail: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TurnResolved {
+    /// G96 surface speed, or the speed of a fixed rpm at the largest diameter.
+    pub vc: Val,
+    /// G97 spindle speed, when fixed.
+    pub rpm: Option<Val>,
+    /// The CSS top speed (G50).
+    pub max_rpm: Val,
+    pub f: Val,
+    pub ap: Val,
+    pub kr: Val,
+    /// The chip, mm: hm = f sin κr (Sandvik, "Turning formulas": hex = fn sin κr).
+    pub hm: f64,
+    /// Below this diameter CSS is clamped at `max_rpm` (the surface speed falls), mm.
+    pub d_clamp: f64,
+    /// The cut at the op's largest diameter, at d_clamp when inside the range, and at its least.
+    pub at: Vec<TurnPoint>,
+    pub checks: Vec<Check>,
+}
+
+/// Resolve a turning op's speed, feed and depth over the diameters it cuts, [d_min, d_max] mm.
+/// Layers: library (the tool's own vc, f, ap) → user; the material gives only kc1.1/mc (the
+/// milling group's speeds are not turning data and are not used). CSS: n(d) = 1000 vc/(π d),
+/// clamped to the top speed; Pc = vc ap f kc/60e3 kW with kc = kc1.1 hm^(−mc), hm = f sin κr
+/// (Sandvik Coromant, "Turning formulas and definitions"); Mc = Pc 30e3/(π n). None when no
+/// speed, feed or depth is known.
+pub fn turning(
+    ask: &TurnAsk,
+    tool: &TurnData,
+    group: Option<&Group>,
+    spindle: &Spindle,
+    d_range: [f64; 2],
+) -> Option<TurnResolved> {
+    let lib = |v: Option<f64>, unit: &'static str| {
+        v.map(|x| Val::new(x, unit, Source::Library, tool.source.clone()))
+    };
+    let user = |v: Option<f64>, unit: &'static str| v.map(|x| Val::new(x, unit, Source::User, ""));
+    let f = user(ask.f, "mm/rev").or_else(|| lib(tool.f, "mm/rev"))?;
+    let ap = user(ask.ap, "mm").or_else(|| lib(tool.ap, "mm"))?;
+    let (d_min, d_max) = (d_range[0].max(0.0), d_range[1].max(d_range[0]).max(1e-6));
+    let mut checks = Vec::new();
+    // the top speed: the user's, held to the machine's; else the machine's own
+    let max_rpm = match ask.max_rpm {
+        Some(m) if m > spindle.rpm[1] => {
+            let why = format!(
+                "asked a top speed of {m:.0} rpm; the spindle's is {:.0}",
+                spindle.rpm[1]
+            );
+            checks.push(Check {
+                what: "rpm",
+                verdict: Verdict::Warn,
+                value: m,
+                limit: spindle.rpm[1],
+                unit: "rpm",
+                why: format!("clamped: {why}"),
+            });
+            Val::new(spindle.rpm[1], "rpm", Source::MachineClamped, why)
+        }
+        Some(m) => Val::new(m, "rpm", Source::User, "G50"),
+        None => Val::new(
+            spindle.rpm[1],
+            "rpm",
+            Source::MachineClamped,
+            "the spindle's top speed (G50)",
+        ),
+    };
+    let rpm_fixed = ask.rpm.map(|n| {
+        let c = n.clamp(spindle.rpm[0], max_rpm.v);
+        if c != n {
+            let why = format!(
+                "asked {n:.0} rpm; the spindle runs {:.0}–{:.0}",
+                spindle.rpm[0], max_rpm.v
+            );
+            checks.push(Check {
+                what: "rpm",
+                verdict: Verdict::Warn,
+                value: n,
+                limit: if n > c { max_rpm.v } else { spindle.rpm[0] },
+                unit: "rpm",
+                why: format!("clamped: {why}"),
+            });
+            Val::new(c, "rpm", Source::MachineClamped, why)
+        } else {
+            Val::new(n, "rpm", Source::User, "G97")
+        }
+    });
+    let vc = match &rpm_fixed {
+        Some(n) => Val::new(
+            PI * d_max * n.v / 1000.0,
+            "m/min",
+            n.source,
+            "at the largest diameter",
+        ),
+        None => user(ask.vc, "m/min").or_else(|| lib(tool.vc, "m/min"))?,
+    };
+    let kr = match tool.kr {
+        Some(k) => Val::new(k, "deg", Source::Library, "the holder's entering angle"),
+        None => Val::new(
+            90.0,
+            "deg",
+            Source::Default,
+            "not known: 90° (sin κr = 1, the largest chip, the most power)",
+        ),
+    };
+    let hm = f.v * forge_math::dmath::sin(kr.v.to_radians());
+    let d_clamp = if rpm_fixed.is_none() {
+        1000.0 * vc.v / (PI * max_rpm.v)
+    } else {
+        0.0
+    };
+    let mut ds = vec![d_max];
+    if d_clamp > d_min && d_clamp < d_max {
+        ds.push(d_clamp);
+    }
+    if d_min < d_max {
+        ds.push(d_min);
+    }
+    let kc = group.map(|g| g.kc1_1 * forge_math::dmath::powf(hm.max(1e-4), -g.mc));
+    let at: Vec<TurnPoint> = ds
+        .iter()
+        .map(|&d| {
+            let n = match &rpm_fixed {
+                Some(n) => n.v,
+                None => {
+                    let n0 = 1000.0 * vc.v / (PI * d.max(1e-6));
+                    // CSS under the top speed; at the large end the spindle's least speed holds
+                    n0.min(max_rpm.v).max(spindle.rpm[0])
+                }
+            };
+            let vcd = PI * d * n / 1000.0;
+            let power = kc.map_or(f64::NAN, |kc| vcd * ap.v * f.v * kc / 60.0e3);
+            TurnPoint {
+                d,
+                rpm: n,
+                vc: vcd,
+                feed: f.v * n,
+                power,
+                torque: if power.is_finite() {
+                    torque_of(power, n)
+                } else {
+                    f64::NAN
+                },
+                power_avail: power_at(spindle.power, n),
+            }
+        })
+        .collect();
+    if rpm_fixed.is_none() && 1000.0 * vc.v / (PI * d_max) < spindle.rpm[0] {
+        checks.push(Check {
+            what: "rpm",
+            verdict: Verdict::Warn,
+            value: 1000.0 * vc.v / (PI * d_max),
+            limit: spindle.rpm[0],
+            unit: "rpm",
+            why: format!(
+                "at Ø{d_max:.1} CSS asks under the spindle's least speed: the surface speed there is over vc"
+            ),
+        });
+    }
+    // power and torque: the worst point against what the curve gives at its rpm
+    for (what, unit) in [("power", "kW"), ("torque", "N·m")] {
+        let worst = at
+            .iter()
+            .map(|p| {
+                let (have, lim) = if what == "power" {
+                    (p.power, p.power_avail)
+                } else {
+                    (p.torque, p.power_avail.map(|a| torque_of(a, p.rpm)))
+                };
+                (have, lim, p)
+            })
+            .max_by(|a, b| {
+                let r = |x: &(f64, Option<f64>, &TurnPoint)| x.1.map_or(f64::NEG_INFINITY, |l| x.0 / l);
+                r(a).total_cmp(&r(b))
+            });
+        let check = match (group, worst) {
+            (None, _) => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: f64::NAN,
+                limit: f64::NAN,
+                unit,
+                why: "no cutting-force data (kc1.1, mc) for the part's material".into(),
+            },
+            (Some(_), Some((have, Some(lim), p))) if at.iter().all(|q| q.power_avail.is_some()) => Check {
+                what,
+                verdict: if have > lim { Verdict::Fail } else { Verdict::Pass },
+                value: have,
+                limit: lim,
+                unit,
+                why: format!("worst at Ø{:.1}, {:.0} rpm", p.d, p.rpm),
+            },
+            (Some(_), _) => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: at
+                    .iter()
+                    .map(|p| if what == "power" { p.power } else { p.torque })
+                    .fold(f64::NAN, f64::max),
+                limit: f64::NAN,
+                unit,
+                why: if spindle.power.is_empty() {
+                    "the machine has no spindle power curve".into()
+                } else {
+                    "an rpm the op runs at is outside the machine's power curve".into()
+                },
+            },
+        };
+        checks.push(check);
+    }
+    if let Some(cap) = ask.max_power {
+        let top = at.iter().map(|p| p.power).fold(f64::NAN, f64::max);
+        checks.push(Check {
+            what: "power",
+            verdict: if top > cap {
+                Verdict::Fail
+            } else if top.is_finite() {
+                Verdict::Pass
+            } else {
+                Verdict::NotChecked
+            },
+            value: top,
+            limit: cap,
+            unit: "kW",
+            why: "the user's max_power".into(),
+        });
+    }
+    let top_feed = at.iter().map(|p| p.feed).fold(0.0, f64::max);
+    checks.push(if spindle.max_feed > 0.0 {
+        Check {
+            what: "feed",
+            verdict: if top_feed > spindle.max_feed {
+                Verdict::Fail
+            } else {
+                Verdict::Pass
+            },
+            value: top_feed,
+            limit: spindle.max_feed,
+            unit: "mm/min",
+            why: "f × the highest rpm the op runs at".into(),
+        }
+    } else {
+        Check {
+            what: "feed",
+            verdict: Verdict::NotChecked,
+            value: top_feed,
+            limit: f64::NAN,
+            unit: "mm/min",
+            why: "the machine's maximum feed is not known".into(),
+        }
+    });
+    Some(TurnResolved {
+        vc,
+        rpm: rpm_fixed,
+        max_rpm,
+        f,
+        ap,
+        kr,
+        hm,
+        d_clamp,
+        at,
+        checks,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -876,5 +1184,95 @@ mod tests {
         assert_eq!(power_at(&CURVE, 10_000.0), Some(7.5));
         assert_eq!(power_at(&CURVE, 10_001.0), None);
         assert_eq!(power_at(&[], 1000.0), None);
+    }
+
+    fn turn_tool() -> TurnData {
+        TurnData {
+            vc: Some(200.0),
+            f: Some(0.3),
+            ap: Some(3.0),
+            source: "test insert".into(),
+            kr: Some(90.0),
+        }
+    }
+
+    /// Sandvik's turning power Pc = vc ap fn kc / 60e3 at kc = kc1.1 hm^(−mc), hm = fn sin κr:
+    /// vc 200, ap 3, fn 0.3, κr 90°, kc1.1 1700, mc 0.25: kc = 1700·0.3^−0.25 = 2297.0,
+    /// Pc = 200·3·0.3·2297.0/60e3 = 6.891 kW. CSS clamps at 3000 rpm below Ø21.22.
+    #[test]
+    fn turning_css_and_power() {
+        let mut g = group();
+        g.kc1_1 = 1700.0;
+        const C: [[f64; 2]; 2] = [[0.0, 15.0], [6000.0, 15.0]];
+        let sp = Spindle {
+            rpm: [50.0, 6000.0],
+            max_feed: 5000.0,
+            power: &C,
+        };
+        let ask = TurnAsk {
+            max_rpm: Some(3000.0),
+            ..TurnAsk::default()
+        };
+        let r = turning(&ask, &turn_tool(), Some(&g), &sp, [10.0, 80.0]).unwrap();
+        assert_eq!((r.vc.v, r.vc.source), (200.0, Source::Library));
+        assert_eq!((r.max_rpm.v, r.max_rpm.source), (3000.0, Source::User));
+        assert!((r.d_clamp - 21.2207).abs() < 1e-4, "{}", r.d_clamp);
+        assert_eq!(r.at.len(), 3);
+        let big = r.at[0];
+        assert!((big.rpm - 1000.0 * 200.0 / (PI * 80.0)).abs() < 1e-9);
+        assert!((big.power - 6.891).abs() < 5e-4, "{}", big.power);
+        // under d_clamp the speed holds at the top speed and the surface speed falls
+        let small = r.at[2];
+        assert_eq!((small.d, small.rpm), (10.0, 3000.0));
+        assert!((small.vc - PI * 10.0 * 3.0).abs() < 1e-9);
+        assert!(small.power < big.power);
+        // torque is largest at the largest diameter (the lowest rpm)
+        assert!(big.torque > r.at[1].torque);
+        assert!(
+            r.checks.iter().all(|c| c.verdict == Verdict::Pass),
+            "{:?}",
+            r.checks
+        );
+        // no top speed given: the machine's, labelled
+        let r = turning(&TurnAsk::default(), &turn_tool(), Some(&g), &sp, [10.0, 80.0]).unwrap();
+        assert_eq!((r.max_rpm.v, r.max_rpm.source), (6000.0, Source::MachineClamped));
+        // a top speed over the machine's is clamped and reported
+        let ask = TurnAsk {
+            max_rpm: Some(9000.0),
+            ..TurnAsk::default()
+        };
+        let r = turning(&ask, &turn_tool(), Some(&g), &sp, [10.0, 80.0]).unwrap();
+        assert_eq!(r.max_rpm.v, 6000.0);
+        assert!(
+            r.checks
+                .iter()
+                .any(|c| c.what == "rpm" && c.verdict == Verdict::Warn)
+        );
+        // an entering angle of 45° thins the chip: hm = f sin 45°
+        let mut t = turn_tool();
+        t.kr = Some(45.0);
+        let r = turning(&TurnAsk::default(), &t, Some(&g), &sp, [10.0, 80.0]).unwrap();
+        assert!((r.hm - 0.3 * std::f64::consts::FRAC_1_SQRT_2).abs() < 1e-12);
+        // a weak spindle: refused at the worst point; no data: not checked
+        const W: [[f64; 2]; 2] = [[0.0, 2.0], [6000.0, 2.0]];
+        let weak = Spindle { power: &W, ..sp };
+        let r = turning(&TurnAsk::default(), &turn_tool(), Some(&g), &weak, [10.0, 80.0]).unwrap();
+        assert_eq!(
+            r.checks.iter().find(|c| c.what == "power").unwrap().verdict,
+            Verdict::Fail
+        );
+        let r = turning(&TurnAsk::default(), &turn_tool(), None, &weak, [10.0, 80.0]).unwrap();
+        assert_eq!(
+            r.checks.iter().find(|c| c.what == "power").unwrap().verdict,
+            Verdict::NotChecked
+        );
+        // user G97 rpm wins over CSS
+        let ask = TurnAsk {
+            rpm: Some(1000.0),
+            ..TurnAsk::default()
+        };
+        let r = turning(&ask, &turn_tool(), Some(&g), &sp, [10.0, 80.0]).unwrap();
+        assert!(r.at.iter().all(|p| p.rpm == 1000.0));
+        assert!((r.vc.v - PI * 80.0).abs() < 1e-9);
     }
 }
