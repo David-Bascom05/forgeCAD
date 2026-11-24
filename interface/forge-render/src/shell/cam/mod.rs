@@ -264,6 +264,8 @@ pub struct CamWs {
     pub tools_sel: Option<String>,
     pub tools_recent: Vec<String>,
     pub tools_form: Option<toollib::ToolForm>,
+    /// The library page's right side in place of a tool: 1 the Fusion import, 2 the holders.
+    pub tools_aux: u8,
     pub checks_open: bool,
     pub text_open: bool,
     pub text_edit: String,
@@ -341,6 +343,7 @@ impl CamWs {
             tools_sel: None,
             tools_recent: vec![],
             tools_form: None,
+            tools_aux: 0,
             checks_open: false,
             text_open: false,
             text_edit: String::new(),
@@ -1113,6 +1116,10 @@ impl CamWs {
             self.op_dlg = None;
         } else if self.setup_dlg.is_some() {
             self.setup_dlg = None;
+        } else if self.tools_open && (self.tools_form.is_some() || self.tools_aux != 0) {
+            // the library page: a tool being made, or the holders / import, first
+            self.tools_form = None;
+            self.tools_aux = 0;
         } else {
             self.close_windows();
         }

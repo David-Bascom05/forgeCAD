@@ -314,7 +314,7 @@ fn the_tool_library_adds_a_tool_to_the_document() {
     h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
     h.text("40");
     h.step();
-    assert!(h.click("cam:tools:inst:t1:apply"));
+    assert!(h.click("cam:tools:apply"));
     h.step();
     assert!(text(&h).contains("stickout: 40"), "{}", text(&h));
     // derived: a longer flute, saved to the project's cam/tools.toml and shown
@@ -333,6 +333,24 @@ fn the_tool_library_adds_a_tool_to_the_document() {
     assert!(w.lib.tools.iter().any(|t| t.id == "flat-10-custom" && t.lcf == 40.0));
     assert_eq!(w.tools_sel.as_deref(), Some("flat-10-custom"));
     let _ = std::fs::remove_file(w.dir.join("cam/tools.toml"));
+    // a page in place of the view and the column; Back (or Esc) returns to Manufacture
+    let page = h.placed("cam:tools:page").expect("the library page");
+    let view = h.gui.shell.view_rect;
+    assert!(page.min.x <= view.min.x + 1.0 && page.max.x > view.max.x, "{page:?} over {view:?}");
+    assert!(h.click("cam:tools:back"));
+    h.step();
+    assert!(!h.gui.shell.cam.as_ref().unwrap().tools_open);
+    assert!(h.click("tool:Tool Library"));
+    h.step();
+    assert!(h.click("cam:tools:derive"));
+    h.step();
+    h.key(egui::Key::Escape);
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.tools_open && w.tools_form.is_none(), "Esc leaves the form first");
+    h.key(egui::Key::Escape);
+    h.step();
+    assert!(!h.gui.shell.cam.as_ref().unwrap().tools_open);
 }
 
 /// The dialogs' parity arguments are the language's: a contour with axial stock, conventional

@@ -570,7 +570,12 @@ impl Shell {
             blocks.extend(programs_window(ctx, &t, v, &mut w, &mut places));
         }
         if w.tools_open {
-            blocks.extend(tools_window(ctx, &t, v, &mut w, &mut places));
+            // milling: a page in place of the view and the properties column; turning: a window
+            if w.turning() {
+                blocks.extend(tools_window(ctx, &t, v, &mut w, &mut places));
+            } else {
+                blocks.extend(tools_page(ctx, &t, self.view_rect, &mut w, &mut places));
+            }
         }
         if w.checks_open {
             blocks.extend(checks_window(ctx, &t, v, &mut w, &mut places));
@@ -2080,10 +2085,6 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
         .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_tools", "Tool Library", width, places, "cam:tools");
-            if !w.turning() {
-                mill_library(ui, t, v, w, width, &mut add, places);
-                return;
-            }
             let mut f = w.tools_filter.clone();
             row(ui, t, "Filter", width, 30.0, |ui| {
                 let r = ui.add(egui::TextEdit::singleline(&mut f).font(sans(13.0)).hint_text("type, id or diameter").desired_width(ui.available_width() - 6.0));
@@ -2119,39 +2120,7 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
         add = None;
     }
     if let Some(id) = add {
-        super::toollib::touch(&mut w.tools_recent, &id);
-        let n = w.tools().len() + 1;
-        let tn = (1..)
-            .find(|k| !w.tools().iter().any(|s| s.arg("t") == Some(&k.to_string())))
-            .unwrap_or(n);
-        let name = super::doc::free_name(&w.stmts, &format!("t{tn}"));
-        let holder = w
-            .lib
-            .holders
-            .first()
-            .map(|h| format!(", holder: \"{}\"", h.id))
-            .unwrap_or_default();
-        let stick = w
-            .lib
-            .tools
-            .iter()
-            .find(|x| x.id == id)
-            .map_or(30.0, |x| (x.lcf + 10.0).round());
-        // after the last tool, else before the first setup
-        let before = w
-            .tools()
-            .last()
-            .and_then(|s| w.stmts.iter().position(|x| x.name == s.name))
-            .and_then(|k| w.stmts.get(k + 1))
-            .or_else(|| w.stmts.iter().find(|s| s.role == super::doc::Role::Setup))
-            .map(|s| s.name.clone());
-        w.edit(&super::doc::Edit::Add {
-            before,
-            text: format!(
-                "{name} = tool(\"{id}\", t: {tn}, stickout: {}{holder})",
-                num(stick)
-            ),
-        });
+        add_mill_tool(w, id);
     }
     if close {
         w.tools_open = false;
@@ -2159,86 +2128,53 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
     r.map(|r| r.response.rect)
 }
 
-/// The milling tool library: find (words, type, diameter, material), the document's tools, the
-/// recent ones, then the library; the tool shown with its cross-section, added, edited in the
-/// document (number, stick-out, holder), or a new one made from it or from nothing.
-#[allow(clippy::too_many_arguments)]
-fn mill_library(
-    ui: &mut Ui,
-    t: &Theme,
-    v: Rect,
-    w: &mut CamWs,
-    width: f32,
-    add: &mut Option<String>,
-    places: &mut Places,
-) {
-    use super::toollib::{self, KIND_CHIPS};
-    let two = width >= 700.0;
-    let left_w = if two { 330.0 } else { width };
-    let right_w = if two { width - left_w - 8.0 } else { width };
-    // the search, and New tool
-    ui.horizontal(|ui| {
-        ui.add_space(14.0);
-        let r = ui.add(
-            egui::TextEdit::singleline(&mut w.tools_find.text)
-                .font(sans(13.0))
-                .hint_text("Search: id, type, \u{d8} or maker")
-                .desired_width(left_w - 130.0)
-                .margin(vec2(7.0, 5.0)),
-        );
-        places.push(("cam:tools:search".into(), r.rect));
-        places.push(("cam:tools:filter".into(), r.rect));
-        if button(ui, t, "New tool\u{2026}", false, "cam:tools:new".into(), places) {
-            w.tools_form = Some(toollib::ToolForm::blank(&w.lib, forge_tooling::Kind::Flat));
-        }
+/// A library tool into the document: `tool("id", t: N, stickout: .., holder: ..)` at the next
+/// free number, after the document's last tool (else before its first setup); it is recent.
+fn add_mill_tool(w: &mut CamWs, id: String) {
+    super::toollib::touch(&mut w.tools_recent, &id);
+    let n = w.tools().len() + 1;
+    let tn = (1..)
+        .find(|k| !w.tools().iter().any(|s| s.arg("t") == Some(&k.to_string())))
+        .unwrap_or(n);
+    let name = super::doc::free_name(&w.stmts, &format!("t{tn}"));
+    let holder = w
+        .lib
+        .holders
+        .first()
+        .map(|h| format!(", holder: \"{}\"", h.id))
+        .unwrap_or_default();
+    let stick = w
+        .lib
+        .tools
+        .iter()
+        .find(|x| x.id == id)
+        .map_or(30.0, |x| (x.lcf + 10.0).round());
+    // after the last tool, else before the first setup
+    let before = w
+        .tools()
+        .last()
+        .and_then(|s| w.stmts.iter().position(|x| x.name == s.name))
+        .and_then(|k| w.stmts.get(k + 1))
+        .or_else(|| w.stmts.iter().find(|s| s.role == super::doc::Role::Setup))
+        .map(|s| s.name.clone());
+    w.edit(&super::doc::Edit::Add {
+        before,
+        text: format!(
+            "{name} = tool(\"{id}\", t: {tn}, stickout: {}{holder})",
+            num(stick)
+        ),
     });
-    // the type chips
-    ui.add_space(4.0);
-    ui.horizontal_wrapped(|ui| {
-        ui.add_space(14.0);
-        ui.set_max_width(left_w - 14.0);
-        ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
-        let all = ui.selectable_label(w.tools_find.kind.is_none(), "All");
-        places.push(("cam:tools:kind:all".into(), all.rect));
-        if all.clicked() {
-            w.tools_find.kind = None;
-        }
-        for (k, (name, _)) in KIND_CHIPS.iter().enumerate() {
-            let on = w.tools_find.kind == Some(k);
-            let r = ui.selectable_label(on, *name);
-            places.push((format!("cam:tools:kind:{}", name.to_lowercase()), r.rect));
-            if r.clicked() {
-                w.tools_find.kind = if on { None } else { Some(k) };
-            }
-        }
-    });
-    // diameter and material
-    ui.add_space(2.0);
-    ui.horizontal(|ui| {
-        ui.add_space(14.0);
-        ui.label(egui::RichText::new("\u{d8}").font(sans(12.0)).color(t.ink2));
-        for (k, hint) in [("min", "from"), ("max", "to")] {
-            let s = if k == "min" { &mut w.tools_find.dmin } else { &mut w.tools_find.dmax };
-            let r = ui.add(egui::TextEdit::singleline(s).font(sans(12.0)).hint_text(hint).desired_width(44.0));
-            places.push((format!("cam:tools:d{k}"), r.rect));
-        }
-        ui.label(egui::RichText::new("mm").font(sans(12.0)).color(t.ink2));
-        ui.add_space(8.0);
-        let mats = toollib::materials(&w.lib);
-        let shown = if w.tools_find.material.is_empty() { "Any material".to_string() } else { w.tools_find.material.clone() };
-        let r = egui::ComboBox::from_id_salt("cam-tools-material").selected_text(shown).width(120.0).show_ui(ui, |ui| {
-            ui.selectable_value(&mut w.tools_find.material, String::new(), "Any material");
-            for m in mats {
-                ui.selectable_value(&mut w.tools_find.material, m.clone(), m);
-            }
-        });
-        places.push(("cam:tools:material".into(), r.response.rect));
-        if !w.tools_find.is_open() && ui.small_button("Clear").clicked() {
-            w.tools_find = toollib::Find::default();
-        }
-    });
-    ui.add_space(4.0);
-    // the document's tools: library id to its statement's number
+}
+
+/// The milling tool library as a page in place of the view and the properties column (UX-LEAD:
+/// browsing tools is a task of its own, the part need not be in view): a header with the way
+/// back, the finder on the left (search, type, diameter, material; the document's tools, the
+/// recent ones, the library), the tool shown on the right. Esc goes back too.
+fn tools_page(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &mut Places) -> Option<Rect> {
+    let page = Rect::from_min_max(v.min, pos2(ctx.content_rect().right(), v.bottom()));
+    let mut add: Option<String> = None;
+    let mut back = false;
+    // the document's tools: library id to its statement's number and name
     let in_doc: Vec<(String, String, String)> = w
         .tools()
         .iter()
@@ -2247,118 +2183,193 @@ fn mill_library(
     if w.tools_sel.is_none() {
         w.tools_sel = in_doc.first().map(|d| d.0.clone()).or_else(|| w.lib.tools.first().map(|x| x.id.clone()));
     }
-    // one pane over the other on a small view: a short list, the tool under it
-    let list_h = if two { (v.height() - 330.0).clamp(180.0, 440.0) } else { (v.height() * 0.3).clamp(120.0, 200.0) };
-    let mut pick: Option<String> = None;
-    ui.horizontal_top(|ui| {
-        // the list
-        ui.allocate_ui_with_layout(vec2(left_w, list_h), egui::Layout::top_down(egui::Align::Min), |ui| {
-            let (r, _) = ui.allocate_exact_size(vec2(left_w, list_h), Sense::hover());
-            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
-            egui::ScrollArea::vertical().id_salt("cam-tools-list").auto_shrink([false, false]).show(&mut child, |ui| {
-                let shown: Vec<&forge_tooling::Tool> =
-                    toollib::sorted(&w.lib.tools).into_iter().filter(|x| toollib::matches(&w.tools_find, x)).collect();
-                let doc: Vec<&forge_tooling::Tool> =
-                    shown.iter().copied().filter(|x| in_doc.iter().any(|d| d.0 == x.id)).collect();
-                let recent: Vec<&forge_tooling::Tool> = w
-                    .tools_recent
-                    .iter()
-                    .filter_map(|id| shown.iter().copied().find(|x| &x.id == id))
-                    .filter(|x| !in_doc.iter().any(|d| d.0 == x.id))
-                    .collect();
-                let rest: Vec<&forge_tooling::Tool> = shown
-                    .iter()
-                    .copied()
-                    .filter(|x| !in_doc.iter().any(|d| d.0 == x.id) && !w.tools_recent.contains(&x.id))
-                    .collect();
-                if shown.is_empty() {
-                    note(ui, "No tool matches: clear the search, or make one with New tool\u{2026}", left_w, t.ink2);
-                }
-                for (title, list) in [("In this document", doc), ("Recent", recent), ("Library", rest)] {
-                    if list.is_empty() {
-                        continue;
+    egui::Area::new(egui::Id::unique("cam-tools-page"))
+        .fixed_pos(page.min)
+        .order(egui::Order::Foreground)
+        .constrain(false)
+        .default_size(page.size())
+        .fade_in(false)
+        .show(ctx, |ui| {
+            ui.set_min_size(page.size());
+            ui.set_max_size(page.size());
+            ui.set_clip_rect(page);
+            // the page takes the pointer: nothing under it (the view, the column) is reached
+            let (bg, _) = ui.allocate_exact_size(page.size(), Sense::click_and_drag());
+            ui.painter().rect_filled(bg, 0.0, t.bg);
+            places.push(("cam:tools:page".into(), bg));
+            // the header
+            let head = Rect::from_min_size(page.min, vec2(page.width(), 48.0));
+            ui.painter().rect_filled(head, 0.0, t.surface);
+            ui.painter().hline(head.x_range(), head.bottom(), Stroke::new(1.0, t.line));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(head.shrink2(vec2(12.0, 8.0))), |ui| {
+                ui.horizontal_centered(|ui| {
+                    if button(ui, t, "Back to Manufacture", false, "cam:tools:back".into(), places) {
+                        back = true;
                     }
-                    heading(ui, t, &format!("{title} \u{b7} {}", list.len()), left_w - 12.0);
-                    for x in list {
-                        let badge = in_doc.iter().find(|d| d.0 == x.id).map(|d| format!("T{}", d.1));
-                        let sel = w.tools_sel.as_deref() == Some(x.id.as_str());
-                        let resp = tool_row(ui, t, x, left_w - 12.0, sel, badge.as_deref());
-                        places.push((format!("cam:tools:row:{}", x.id), resp.rect));
-                        if resp.clicked() {
-                            pick = Some(x.id.clone());
+                    ui.add_space(16.0);
+                    ui.label(egui::RichText::new("Tool Library").font(medium(16.0)).color(t.ink));
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new(format!("{} tools", w.lib.tools.len())).font(sans(12.0)).color(t.ink2));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        for (aux, word, key) in [(2u8, "Holders", "cam:tools:holders"), (1, "Import Fusion library\u{2026}", "cam:tools:import-open")] {
+                            if button(ui, t, word, false, key.into(), places) {
+                                w.tools_aux = if w.tools_aux == aux { 0 } else { aux };
+                                w.tools_form = None;
+                            }
                         }
-                        if resp.double_clicked() && badge.is_none() {
-                            *add = Some(x.id.clone());
+                        if button(ui, t, "New tool\u{2026}", false, "cam:tools:new".into(), places) {
+                            w.tools_aux = 0;
+                            w.tools_form = Some(super::toollib::ToolForm::blank(&w.lib, forge_tooling::Kind::Flat));
                         }
+                    });
+                });
+            });
+            let body = Rect::from_min_max(pos2(page.left(), head.bottom() + 1.0), page.max);
+            let list_w = 360.0_f32.min(body.width() * 0.45);
+            let left = Rect::from_min_max(body.min, pos2(body.left() + list_w, body.bottom()));
+            let right = Rect::from_min_max(pos2(left.right() + 1.0, body.top()), body.max);
+            ui.painter().vline(left.right(), body.y_range(), Stroke::new(1.0, t.line));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(left.shrink2(vec2(0.0, 8.0))), |ui| {
+                finder(ui, t, w, left.width(), &in_doc, &mut add, places);
+            });
+            ui.scope_builder(egui::UiBuilder::new().max_rect(right), |ui| {
+                detail_pane(ui, t, w, right, &in_doc, &mut add, places);
+            });
+        });
+    if let Some(id) = add {
+        add_mill_tool(w, id);
+    }
+    if back {
+        w.tools_open = false;
+        w.tools_form = None;
+        w.tools_aux = 0;
+    }
+    Some(page)
+}
+
+/// The finder: the search, the type chips (one row, scrolling), the diameter range and the
+/// material; then the document's tools (their numbers), the recent ones and the library.
+fn finder(
+    ui: &mut Ui,
+    t: &Theme,
+    w: &mut CamWs,
+    width: f32,
+    in_doc: &[(String, String, String)],
+    add: &mut Option<String>,
+    places: &mut Places,
+) {
+    use super::toollib::{self, KIND_CHIPS};
+    ui.horizontal(|ui| {
+        ui.add_space(12.0);
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut w.tools_find.text)
+                .font(sans(13.0))
+                .hint_text("Search: id, type, \u{d8} or maker")
+                .desired_width(width - 24.0)
+                .margin(vec2(7.0, 5.0)),
+        );
+        places.push(("cam:tools:search".into(), r.rect));
+    });
+    ui.add_space(4.0);
+    // the type chips: one row, scrolled sideways where it does not fit
+    ui.horizontal(|ui| {
+        ui.add_space(12.0);
+        egui::ScrollArea::horizontal().id_salt("cam-tools-chips").max_width(width - 24.0).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                let all = ui.selectable_label(w.tools_find.kind.is_none(), "All");
+                places.push(("cam:tools:kind:all".into(), all.rect));
+                if all.clicked() {
+                    w.tools_find.kind = None;
+                }
+                for (k, (name, _)) in KIND_CHIPS.iter().enumerate() {
+                    let on = w.tools_find.kind == Some(k);
+                    let r = ui.selectable_label(on, *name);
+                    places.push((format!("cam:tools:kind:{}", name.to_lowercase()), r.rect));
+                    if r.clicked() {
+                        w.tools_find.kind = if on { None } else { Some(k) };
                     }
                 }
             });
         });
-        if two {
-            ui.add_space(8.0);
-            ui.allocate_ui_with_layout(vec2(right_w - 1.0, list_h), egui::Layout::top_down(egui::Align::Min), |ui| {
-                egui::ScrollArea::vertical().id_salt("cam-tools-detail").auto_shrink([false, false]).max_height(list_h).show(ui, |ui| {
-                    tool_detail(ui, t, w, right_w - 12.0, &in_doc, add, places);
-                });
-            });
+    });
+    ui.add_space(4.0);
+    // "Ø from [ ] to [ ] mm", the material
+    ui.horizontal(|ui| {
+        ui.add_space(12.0);
+        let word = |ui: &mut Ui, s: &str| ui.label(egui::RichText::new(s).font(sans(12.0)).color(t.ink2));
+        word(ui, "\u{d8} from");
+        let r = ui.add(egui::TextEdit::singleline(&mut w.tools_find.dmin).font(sans(12.0)).desired_width(40.0));
+        places.push(("cam:tools:dmin".into(), r.rect));
+        word(ui, "to");
+        let r = ui.add(egui::TextEdit::singleline(&mut w.tools_find.dmax).font(sans(12.0)).desired_width(40.0));
+        places.push(("cam:tools:dmax".into(), r.rect));
+        word(ui, "mm");
+        ui.add_space(6.0);
+        let mats = toollib::materials(&w.lib);
+        let shown = if w.tools_find.material.is_empty() { "Any material".to_string() } else { w.tools_find.material.clone() };
+        let r = egui::ComboBox::from_id_salt("cam-tools-material").selected_text(shown).width(104.0).show_ui(ui, |ui| {
+            ui.selectable_value(&mut w.tools_find.material, String::new(), "Any material");
+            for m in mats {
+                ui.selectable_value(&mut w.tools_find.material, m.clone(), m);
+            }
+        });
+        places.push(("cam:tools:material".into(), r.response.rect));
+    });
+    if !w.tools_find.is_open() {
+        ui.horizontal(|ui| {
+            ui.add_space(12.0);
+            if ui.small_button("Clear the search").clicked() {
+                w.tools_find = toollib::Find::default();
+            }
+        });
+    }
+    ui.add_space(4.0);
+    let mut pick: Option<String> = None;
+    egui::ScrollArea::vertical().id_salt("cam-tools-list").auto_shrink([false, false]).show(ui, |ui| {
+        let shown: Vec<&forge_tooling::Tool> =
+            toollib::sorted(&w.lib.tools).into_iter().filter(|x| toollib::matches(&w.tools_find, x)).collect();
+        let doc: Vec<&forge_tooling::Tool> = shown.iter().copied().filter(|x| in_doc.iter().any(|d| d.0 == x.id)).collect();
+        let recent: Vec<&forge_tooling::Tool> = w
+            .tools_recent
+            .iter()
+            .filter_map(|id| shown.iter().copied().find(|x| &x.id == id))
+            .filter(|x| !in_doc.iter().any(|d| d.0 == x.id))
+            .collect();
+        let rest: Vec<&forge_tooling::Tool> = shown
+            .iter()
+            .copied()
+            .filter(|x| !in_doc.iter().any(|d| d.0 == x.id) && !w.tools_recent.contains(&x.id))
+            .collect();
+        if shown.is_empty() {
+            note(ui, "No tool matches: clear the search, or make one with New tool\u{2026}", width, t.ink2);
+        }
+        for (title, list) in [("In this document", doc), ("Recent", recent), ("Library", rest)] {
+            if list.is_empty() {
+                continue;
+            }
+            heading(ui, t, &format!("{title} \u{b7} {}", list.len()), width - 12.0);
+            for x in list {
+                let badge = in_doc.iter().find(|d| d.0 == x.id).map(|d| format!("T{}", d.1));
+                let sel = w.tools_sel.as_deref() == Some(x.id.as_str());
+                let resp = tool_row(ui, t, x, width - 12.0, sel, badge.as_deref());
+                places.push((format!("cam:tools:row:{}", x.id), resp.rect));
+                if resp.clicked() {
+                    pick = Some(x.id.clone());
+                }
+                if resp.double_clicked() && badge.is_none() {
+                    *add = Some(x.id.clone());
+                }
+            }
         }
     });
     if let Some(id) = pick {
         if w.tools_sel.as_deref() != Some(id.as_str()) {
             w.tools_form = None;
         }
+        w.tools_aux = 0;
         w.tools_sel = Some(id);
     }
-    if !two {
-        egui::ScrollArea::vertical()
-            .id_salt("cam-tools-detail")
-            .max_height((v.height() - list_h - 300.0).max(140.0))
-            .show(ui, |ui| tool_detail(ui, t, w, right_w - 12.0, &in_doc, add, places));
-    }
-            ui.add_space(4.0);
-    egui::CollapsingHeader::new(egui::RichText::new("Import a Fusion tool library").font(medium(13.0)).color(t.ink))
-        .id_salt("cam-tools-import")
-        .default_open(false)
-        .show(ui, |ui| {
-    let mut ip = w.import_path.clone();
-    let mut go = false;
-    row(ui, t, "JSON file", width, 30.0, |ui| {
-        let r = ui.add(
-            egui::TextEdit::singleline(&mut ip)
-                .font(sans(13.0))
-                .hint_text("beside the document, e.g. shop.json")
-                .desired_width(ui.available_width() - 80.0),
-        );
-        places.push(("cam:tools:import:path".into(), r.rect));
-        go = button(ui, t, "Import", true, "cam:tools:import".into(), places);
-    });
-    w.import_path = ip;
-    if go {
-        let f = w.import_path.clone();
-        w.said = Some(match w.import_fusion(&f) {
-            Ok(m) => m,
-            Err(e) => format!("import: {e}"),
-        });
-    }
-    if let Some(s) = &w.said {
-        note(ui, s, width, t.ink2);
-    }
-        });
-    egui::CollapsingHeader::new(egui::RichText::new(format!("Holders \u{b7} {}", w.lib.holders.len())).font(medium(13.0)).color(t.ink))
-        .id_salt("cam-tools-holders")
-        .default_open(false)
-        .show(ui, |ui| {
-    for h in &w.lib.holders {
-        fact(ui, t, &h.id, &format!("{} · gauge {} mm · max {} rpm", h.interface, num(h.gauge_length), grouped(h.max_rpm)), width, t.ink);
-    }
-        });
-    // one line (a small view keeps it whole); the rest on hover
-    ui.horizontal(|ui| {
-        ui.add_space(14.0);
-        ui.label(egui::RichText::new("Built in: generic, our own numbers · verify with the vendor").font(sans(12.0)).color(t.ink2))
-            .on_hover_text("Generic tools and conservative holders, our own numbers: verify with the vendor. A project adds its own in cam/*.toml beside the document.");
-    });
-    ui.add_space(8.0);
 }
 
 /// One tool in the list: its glyph, "Ø10 · Flat end mill", the id and what else matters under
@@ -2397,103 +2408,182 @@ fn tool_row(ui: &mut Ui, t: &Theme, x: &forge_tooling::Tool, w: f32, sel: bool, 
     resp
 }
 
-/// The tool shown: its cross-section and facts, then what to do with it (add it, edit it in the
-/// document, derive a new one); or the new tool being made.
+/// The page's right side: the tool shown (its cross-section large on top, its facts in a sheet,
+/// its words in the document), the new tool being made, or the holders / the Fusion import;
+/// what to do with it in a footer pinned at the bottom (UX-LEAD: the commit buttons always seen).
 #[allow(clippy::too_many_arguments)]
-fn tool_detail(
+fn detail_pane(
     ui: &mut Ui,
     t: &Theme,
     w: &mut CamWs,
-    width: f32,
+    r: Rect,
     in_doc: &[(String, String, String)],
     add: &mut Option<String>,
     places: &mut Places,
 ) {
-    if w.tools_form.is_some() {
-        return tool_form(ui, t, w, width, places);
-    }
-    let Some(x) = w.tools_sel.as_ref().and_then(|id| w.lib.tools.iter().find(|x| &x.id == id)).cloned() else {
-        note(ui, "Choose a tool on the left.", width, t.ink2);
-        return;
-    };
-    ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        ui.add_space(14.0);
-        ui.label(egui::RichText::new(&x.id).font(medium(15.0)).color(t.ink));
-        ui.add_space(8.0);
-        ui.label(egui::RichText::new(super::toollib::kind_words(x.kind)).font(sans(13.0)).color(t.ink2));
-    });
-    let origin = if x.real {
-        format!("{} {} \u{b7} the maker's values, cited", x.vendor, x.product_id)
-    } else if x.source.starts_with("derived from") || x.source == "made in the tool library" {
-        format!("Project tool ({})", x.source)
-    } else {
-        "Built in \u{b7} generic numbers: verify with the tool's maker".to_string()
-    };
-    note(ui, &origin, width, t.ink2);
-    // what to do with it first, then what it is
-    ui.horizontal(|ui| {
-        ui.add_space(14.0);
-        match in_doc.iter().find(|d| d.0 == x.id) {
-            Some((_, n, name)) => {
-                ui.label(egui::RichText::new(format!("In this document as {name} (T{n})")).font(sans(13.0)).color(t.ink2));
-            }
-            None => {
-                if button(ui, t, "Add to document", true, "cam:tools:add".into(), places) {
-                    *add = Some(x.id.clone());
+    let foot = Rect::from_min_max(pos2(r.left(), r.bottom() - FOOT_H - 8.0), r.max);
+    let body = Rect::from_min_max(r.min, pos2(r.right(), foot.top()));
+    let x = w.tools_sel.as_ref().and_then(|id| w.lib.tools.iter().find(|x| &x.id == id)).cloned();
+    let doc_name = x.as_ref().and_then(|x| in_doc.iter().find(|d| d.0 == x.id)).map(|d| d.2.clone());
+    let inst_id = |name: &str| egui::Id::unique(("cam-tool-inst", name.to_string()));
+    // the footer first (its buttons are read by the body below, this same frame)
+    ui.painter().rect_filled(foot, 0.0, t.surface);
+    ui.painter().hline(foot.x_range(), foot.top(), Stroke::new(1.0, t.line));
+    let mut apply = false;
+    ui.scope_builder(egui::UiBuilder::new().max_rect(foot.shrink2(vec2(14.0, 8.0))), |ui| {
+        ui.horizontal_centered(|ui| {
+            if w.tools_aux != 0 {
+                if button(ui, t, "Close", false, "cam:tools:aux-close".into(), places) {
+                    w.tools_aux = 0;
+                }
+            } else if let Some(f) = w.tools_form.clone() {
+                let preview = f.toml(&w.lib);
+                if button(ui, t, "Save to project", preview.is_ok(), "cam:tools:save".into(), places) {
+                    match preview.and_then(|text| w.save_tool(&text, f.id.trim())) {
+                        Ok(m) => {
+                            w.said = Some(m);
+                            w.tools_sel = Some(f.id.trim().to_string());
+                            w.tools_form = None;
+                        }
+                        Err(e) => w.said = Some(e),
+                    }
+                }
+                if button(ui, t, "Cancel", false, "cam:tools:cancel".into(), places) {
+                    w.tools_form = None;
+                }
+            } else if let Some(x) = &x {
+                match &doc_name {
+                    Some(name) => {
+                        let changed = ui.data(|d| d.get_temp::<(String, String, String)>(inst_id(name)).is_some());
+                        apply = button(ui, t, "Apply", changed, "cam:tools:apply".into(), places) && changed;
+                    }
+                    None => {
+                        if button(ui, t, "Add to document", true, "cam:tools:add".into(), places) {
+                            *add = Some(x.id.clone());
+                        }
+                    }
+                }
+                if button(ui, t, "Derive from this tool\u{2026}", false, "cam:tools:derive".into(), places) {
+                    w.tools_form = Some(super::toollib::ToolForm::derived(&w.lib, x));
                 }
             }
-        }
-        if button(ui, t, "Derive from this tool\u{2026}", false, "cam:tools:derive".into(), places) {
-            w.tools_form = Some(super::toollib::ToolForm::derived(&w.lib, &x));
-        }
+            if let Some(s) = &w.said {
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new(s).font(sans(12.0)).color(t.ink2));
+            }
+        });
     });
-    // in the document: its number, stick-out and holder, edited there
-    if let Some((_, _, name)) = in_doc.iter().find(|d| d.0 == x.id) {
-        heading(ui, t, &format!("{name} in this document"), width);
-        tool_instance(ui, t, w, name, places);
-    }
-    let mut facts = vec![
-        ("Diameter", format!("{} mm", num(x.dc))),
-        ("Flutes", x.nof.to_string()),
-        ("Flute length", format!("{} mm", num(x.lcf))),
-        ("Shank", format!("\u{d8}{} mm", num(x.dcon))),
-        ("Overall length", format!("{} mm", num(x.oal))),
-    ];
-    use forge_tooling::Kind as K;
-    match x.kind {
-        K::Bull => facts.push(("Corner radius", format!("{} mm", num(x.re)))),
-        K::Drill => facts.push(("Point angle", format!("{}\u{b0}", num(x.angle)))),
-        K::Chamfer | K::Engrave | K::Spot | K::Countersink => {
-            facts.push(("Included angle", format!("{}\u{b0}", num(x.angle))));
-            if x.tip_d > 0.0 {
-                facts.push(("Tip diameter", format!("{} mm", num(x.tip_d))));
+    let width = (body.width() - 8.0).min(640.0);
+    ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
+        egui::ScrollArea::vertical().id_salt("cam-tools-detail").auto_shrink([false, false]).show(ui, |ui| {
+            ui.set_width(body.width() - 8.0);
+            if w.tools_aux == 1 {
+                return import_pane(ui, t, w, width, places);
             }
-        }
-        K::Tap | K::ThreadMill => facts.push(("Pitch", format!("{} mm", num(x.tp)))),
-        _ => {}
-    }
-    if !x.material.is_empty() {
-        facts.push(("Material", x.material.clone()));
-    }
-    // the cross-section to scale, its facts beside it
-    let pw = (width * 0.4).clamp(150.0, 220.0);
-    ui.horizontal_top(|ui| {
-        let (pr, _) = ui.allocate_exact_size(vec2(pw, 170.0), Sense::hover());
-        places.push(("cam:tools:profile".into(), pr));
-        tool_profile(ui.painter(), pr.shrink2(vec2(10.0, 6.0)), &x, t);
-        ui.vertical(|ui| {
-            for (k, val) in &facts {
-                fact(ui, t, k, val, width - pw - 8.0, t.ink);
+            if w.tools_aux == 2 {
+                heading(ui, t, &format!("Holders \u{b7} {}", w.lib.holders.len()), width);
+                for h in &w.lib.holders {
+                    fact(ui, t, &h.id, &format!("{} \u{b7} gauge {} mm \u{b7} max {} rpm", h.interface, num(h.gauge_length), grouped(h.max_rpm)), width, t.ink);
+                }
+                return;
             }
+            if w.tools_form.is_some() {
+                return form_body(ui, t, w, width, body.height(), places);
+            }
+            let Some(x) = &x else {
+                note(ui, "Choose a tool on the left.", width, t.ink2);
+                return;
+            };
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label(egui::RichText::new(&x.id).font(medium(17.0)).color(t.ink));
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new(super::toollib::kind_words(x.kind)).font(sans(14.0)).color(t.ink2));
+                if let Some(name) = &doc_name {
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new(format!("in this document as {name}")).font(sans(12.0)).color(t.ink2));
+                }
+            });
+            // where its numbers come from
+            let (origin, tip) = if x.real {
+                (format!("{} {} \u{b7} the maker's values, each cited", x.vendor, x.product_id), "Every value is cited to the maker's published data.")
+            } else if x.source.starts_with("derived from") || x.source == "made in the tool library" {
+                (format!("Project tool \u{b7} {} \u{b7} cam/tools.toml", x.source), "The project's own record, beside the document.")
+            } else {
+                (
+                    "Built in: generic, our own numbers \u{b7} verify with the vendor".to_string(),
+                    "Generic tools and conservative holders, our own numbers: verify with the vendor. A project adds its own in cam/*.toml beside the document.",
+                )
+            };
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label(egui::RichText::new(origin).font(sans(12.0)).color(t.ink2)).on_hover_text(tip);
+            });
+            // the cross-section, large
+            let ph = (body.height() * 0.42).clamp(180.0, 320.0);
+            let (pr, _) = ui.allocate_exact_size(vec2(width, ph), Sense::hover());
+            places.push(("cam:tools:profile".into(), pr));
+            tool_profile(ui.painter(), pr.shrink2(vec2(24.0, 8.0)), x, t);
+            // its facts, in a sheet
+            let mut facts = vec![
+                ("Diameter", format!("{} mm", num(x.dc))),
+                ("Flutes", x.nof.to_string()),
+                ("Flute length", format!("{} mm", num(x.lcf))),
+                ("Shank", format!("\u{d8}{} mm", num(x.dcon))),
+                ("Overall length", format!("{} mm", num(x.oal))),
+            ];
+            use forge_tooling::Kind as K;
+            match x.kind {
+                K::Bull => facts.push(("Corner radius", format!("{} mm", num(x.re)))),
+                K::Drill => facts.push(("Point angle", format!("{}\u{b0}", num(x.angle)))),
+                K::Chamfer | K::Engrave | K::Spot | K::Countersink => {
+                    facts.push(("Included angle", format!("{}\u{b0}", num(x.angle))));
+                    if x.tip_d > 0.0 {
+                        facts.push(("Tip diameter", format!("{} mm", num(x.tip_d))));
+                    }
+                }
+                K::Tap | K::ThreadMill => facts.push(("Pitch", format!("{} mm", num(x.tp)))),
+                _ => {}
+            }
+            if !x.material.is_empty() {
+                facts.push(("Material", x.material.clone()));
+            }
+            sheet(ui, t, width, |ui, iw| {
+                for (k, val) in &facts {
+                    fact(ui, t, k, val, iw, t.ink);
+                }
+            });
+            // in the document: its number, stick-out and holder (Apply in the footer)
+            if let Some(name) = &doc_name {
+                heading(ui, t, &format!("{name} in this document"), width);
+                tool_instance(ui, t, w, name, inst_id(name), apply, places);
+            }
+            ui.add_space(12.0);
         });
     });
 }
 
-/// A document tool's own words: its number, stick-out and holder, set in its statement.
-fn tool_instance(ui: &mut Ui, t: &Theme, w: &mut CamWs, name: &str, places: &mut Places) {
+/// A boxed group of facts (UX's sheet): `body` gets the inner width.
+fn sheet(ui: &mut Ui, t: &Theme, width: f32, body: impl FnOnce(&mut Ui, f32)) {
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        egui::Frame::new()
+            .fill(t.surface)
+            .stroke(Stroke::new(1.0, t.line))
+            .corner_radius(6.0)
+            .inner_margin(egui::Margin::symmetric(0, 6))
+            .show(ui, |ui| {
+                ui.set_width(width - 28.0);
+                ui.vertical(|ui| body(ui, width - 28.0));
+            });
+    });
+}
+
+/// A document tool's own words: its number, stick-out and holder, set in its statement when
+/// `apply` (the footer's Apply); the edits kept meanwhile under `id`.
+fn tool_instance(ui: &mut Ui, t: &Theme, w: &mut CamWs, name: &str, id: egui::Id, apply: bool, places: &mut Places) {
     let Some(st) = w.stmt(name).cloned() else { return };
-    let id = egui::Id::unique(("cam-tool-inst", name.to_string()));
     let now = (
         st.arg("t").unwrap_or("").to_string(),
         st.arg("stickout").unwrap_or("").to_string(),
@@ -2506,30 +2596,28 @@ fn tool_instance(ui: &mut Ui, t: &Theme, w: &mut CamWs, name: &str, places: &mut
         .chain(w.lib.holders.iter().map(|h| (h.id.clone(), format!("{} \u{b7} {}", h.id, h.interface))))
         .collect();
     arg_choice(ui, t, "Holder", &mut ed.2, &holders, &format!("cam:tools:inst:{name}:holder"), places);
-    let changed = ed != now;
-    ui.horizontal(|ui| {
-        ui.add_space(146.0);
-        if button(ui, t, "Apply", changed, format!("cam:tools:inst:{name}:apply"), places) && changed {
-            let mut edits = vec![];
-            for (arg, new, old, quote) in [("t", &ed.0, &now.0, false), ("stickout", &ed.1, &now.1, false), ("holder", &ed.2, &now.2, true)] {
-                if new == old {
-                    continue;
+    let mut changed = ed != now;
+    if apply && changed {
+        let mut edits = vec![];
+        for (arg, new, old, quote) in [("t", &ed.0, &now.0, false), ("stickout", &ed.1, &now.1, false), ("holder", &ed.2, &now.2, true)] {
+            if new == old {
+                continue;
+            }
+            edits.push(if new.trim().is_empty() {
+                super::doc::Edit::Unset { id: name.to_string(), arg: arg.into() }
+            } else {
+                super::doc::Edit::Set {
+                    id: name.to_string(),
+                    arg: arg.into(),
+                    text: if quote { format!("\"{}\"", new.trim()) } else { new.trim().to_string() },
                 }
-                edits.push(if new.trim().is_empty() {
-                    super::doc::Edit::Unset { id: name.to_string(), arg: arg.into() }
-                } else {
-                    super::doc::Edit::Set {
-                        id: name.to_string(),
-                        arg: arg.into(),
-                        text: if quote { format!("\"{}\"", new.trim()) } else { new.trim().to_string() },
-                    }
-                });
-            }
-            if let Err(e) = w.edits(&edits) {
-                w.said = Some(e);
-            }
+            });
         }
-    });
+        match w.edits(&edits) {
+            Ok(()) => changed = false,
+            Err(e) => w.said = Some(e),
+        }
+    }
     ui.data_mut(|d| {
         if changed {
             d.insert_temp(id, ed);
@@ -2539,20 +2627,42 @@ fn tool_instance(ui: &mut Ui, t: &Theme, w: &mut CamWs, name: &str, places: &mut
     });
 }
 
-/// A new tool: from nothing (its type chosen) or derived (the source's type); saved to the
-/// project's library.
-fn tool_form(ui: &mut Ui, t: &Theme, w: &mut CamWs, width: f32, places: &mut Places) {
+/// A new tool: from nothing (its type chosen) or derived (the source's type), its cross-section
+/// drawn as typed; Save and Cancel are the footer's.
+fn form_body(ui: &mut Ui, t: &Theme, w: &mut CamWs, width: f32, h: f32, places: &mut Places) {
     use super::toollib;
     let Some(mut f) = w.tools_form.take() else { return };
-    ui.add_space(6.0);
+    ui.add_space(10.0);
     let title = match &f.from {
         Some(src) => format!("Derived from {src}"),
         None => "New tool".to_string(),
     };
     ui.horizontal(|ui| {
         ui.add_space(14.0);
-        ui.label(egui::RichText::new(title).font(medium(15.0)).color(t.ink));
+        ui.label(egui::RichText::new(title).font(medium(17.0)).color(t.ink));
     });
+    note(
+        ui,
+        if f.from.is_some() {
+            "Its values, under a new id: change what differs. What you change is cited as yours; the rest keeps the source's cites. Saved to cam/tools.toml beside the document."
+        } else {
+            "A tool of your own, saved to cam/tools.toml beside the document."
+        },
+        width,
+        t.ink2,
+    );
+    // what it would be, drawn as typed (when it reads)
+    let preview = f.toml(&w.lib);
+    let ph = (h * 0.32).clamp(150.0, 240.0);
+    let (pr, _) = ui.allocate_exact_size(vec2(width, ph), Sense::hover());
+    if let Ok(text) = &preview {
+        let mut l = w.lib.clone();
+        if l.add("preview", text).is_ok()
+            && let Some(x) = l.tools.iter().find(|x| x.id == f.id.trim())
+        {
+            tool_profile(ui.painter(), pr.shrink2(vec2(24.0, 8.0)), x, t);
+        }
+    }
     if f.from.is_none() {
         let kinds: Vec<(String, String)> = toollib::KIND_CHIPS
             .iter()
@@ -2567,31 +2677,6 @@ fn tool_form(ui: &mut Ui, t: &Theme, w: &mut CamWs, width: f32, places: &mut Pla
             f.set_kind(k);
         }
     }
-    // saved or not first (the record as typed, read back), then its values
-    let preview = f.toml(&w.lib);
-    let mut keep = true;
-    ui.horizontal(|ui| {
-        ui.add_space(14.0);
-        if button(ui, t, "Save to project", preview.is_ok(), "cam:tools:save".into(), places) {
-            match &preview {
-                Ok(text) => match w.save_tool(text, f.id.trim()) {
-                    Ok(m) => {
-                        w.said = Some(m);
-                        w.tools_sel = Some(f.id.trim().to_string());
-                        keep = false;
-                    }
-                    Err(e) => w.said = Some(e),
-                },
-                Err(e) => w.said = Some(e.clone()),
-            }
-        }
-        if button(ui, t, "Cancel", false, "cam:tools:cancel".into(), places) {
-            keep = false;
-        }
-    });
-    if let Err(e) = &preview {
-        note(ui, e, width, t.warn);
-    }
     let mut id = f.id.clone();
     arg_field(ui, t, "Id", &mut id, "", "", "cam:tools:form:id", places);
     f.id = id;
@@ -2600,18 +2685,36 @@ fn tool_form(ui: &mut Ui, t: &Theme, w: &mut CamWs, width: f32, places: &mut Pla
         arg_field(ui, t, label, &mut val, "", unit, &format!("cam:tools:form:{k}"), places);
         f.set(k, val);
     }
-    // what it would be, drawn as typed (when it reads)
-    if let Ok(text) = &preview {
-        let mut l = w.lib.clone();
-        if l.add("preview", text).is_ok()
-            && let Some(x) = l.tools.iter().find(|x| x.id == f.id.trim())
-        {
-            let (pr, _) = ui.allocate_exact_size(vec2(width, 150.0), Sense::hover());
-            tool_profile(ui.painter(), pr.shrink2(vec2(14.0, 6.0)), x, t);
-        }
+    if let Err(e) = &preview {
+        note(ui, e, width, t.warn);
     }
-    if keep {
-        w.tools_form = Some(f);
+    ui.add_space(12.0);
+    w.tools_form = Some(f);
+}
+
+/// The Fusion import, on the page's right side.
+fn import_pane(ui: &mut Ui, t: &Theme, w: &mut CamWs, width: f32, places: &mut Places) {
+    heading(ui, t, "Import a Fusion tool library", width);
+    note(ui, "A Fusion 360 tool library (its .json export) beside the document, converted into the project's cam/<name>.toml.", width, t.ink2);
+    let mut ip = w.import_path.clone();
+    let mut go = false;
+    row(ui, t, "JSON file", width, 30.0, |ui| {
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut ip)
+                .font(sans(13.0))
+                .hint_text("beside the document, e.g. shop.json")
+                .desired_width(ui.available_width() - 80.0),
+        );
+        places.push(("cam:tools:import:path".into(), r.rect));
+        go = button(ui, t, "Import", true, "cam:tools:import".into(), places);
+    });
+    w.import_path = ip;
+    if go {
+        let f = w.import_path.clone();
+        w.said = Some(match w.import_fusion(&f) {
+            Ok(m) => m,
+            Err(e) => format!("import: {e}"),
+        });
     }
 }
 
