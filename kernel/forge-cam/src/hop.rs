@@ -135,7 +135,7 @@ fn hop(map: &HeightMap, rr: f64, a: [f64; 3], b: [f64; 3], ceiling: f64, feed: f
     let ramp = |z0: f64, need_at: &dyn Fn(usize) -> f64| -> usize {
         let mut best = 0;
         for k in 1..=n / 2 {
-            if (0..=k).all(|i| z0 + (hc - z0) * (i as f64 / k as f64) >= need_at(i)) {
+            if (1..=k).all(|i| z0 + (hc - z0) * (i as f64 / k as f64) >= need_at(i)) {
                 best = k;
             }
         }
