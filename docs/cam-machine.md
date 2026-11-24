@@ -293,6 +293,7 @@ pieces into material, the removal summary, and what is claimed.
 | interpreter (forge-machine-core, gcode.rs) | words to control events in exact integers. The block core (kernel/forge-machine-core: motion, modal words, arcs, canned cycles, G28) is proven, through Aeneas, to be the Lean spec's `step` and, over a program, its `runFrom` (verify/aeneas/forge-machine-core, L4, within 2^29 units); the spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine). The shell (text to words, tools, spindle, offsets) agrees with forge-post's reader on its subset (L6: random programs on all 11 dialects, also under the post options: fewer decimals, line numbers on and off, no safe start, inches; with probe moves on the dialects that cite `probe_move` and the probing macros on those that cite them) |
 | skip moves (gcode.rs shell, sim.rs) | G38.2–G38.5 / G31, only where the dialect's `probe_move` cites the code (otherwise refused as outside the subset). Outside the proven core: a skip move stops somewhere unknown along its segment, so the collision and removal checks sweep the whole segment as if it ran to its end, its `t_min` is 0 (it may trigger at once), the moved axes' program positions become unknown (an incremental word from them is refused) and the motion mode is cleared. The timeline marks it (`skip`); the moves after it start from the segment's end, or from the stock model's trigger when `removal::mill_probing` found one (a simulation-level estimate for time and display, not the machine's stop), and are always reported not checked (`skip.end`: unknown, or estimated with a model trigger). Collision checks them for every stop: each move after a skip, until every probed axis is set by an absolute word, has the joints still at the stop depend on u ∈ [0, 1], and collide checks it over (u, s) ∈ [0, 1]² with interval poses (`check_after_skip`). When every such move is proven clear, `skip.end` narrows to the material removal after it. It is not narrowed when a move is not one straight segment (an arc, a dogleg rapid, a tool change), or when a skip follows a skip before its axes are set again (`skip_unmodelled`). |
 | probing macros (gcode.rs shell, sim.rs) | G65 P<n> only where the dialect's `probe_on` / `probe_off` / `probe_protected` / `probe_surface` templates cite the macro (Renishaw Inspection Plus on Haas: P9832, P9833, P9810, P9811), modelled from the macros' published descriptions, outside the proven core. Probe on/off: a small Z move of unpublished size, not simulated (`probe.switch` not checked; Z unknown to the interpreter afterwards). Protected positioning: a feed move to the target at its own modal F (a probe contact on it is a crash). Single-surface measure: the search along its axis to `Q` past the surface, swept like a skip move (the trigger from the stock as cut), then back to the start, so the position after it is known; its time is not modelled (`probe.measure_time` not checked). Positions in G91 are refused. The switch macros' rules (H-2000-6222 p. 9-23) are enforced here and in forge-post: no tool change while the probe is on, and the move after switching it off is a G28 reference return |
+| SINUMERIK 840D native (siemens.rs) | the `siemens-840d` control (data/controls/siemens-840d.toml): a subset of 840D native programs read, each block rewritten into the shell's words, outside the proven core; anything outside the subset refused by name (see "SINUMERIK 840D programs" below) |
 | kinematics (kin.rs) | joint values to link placements, dmath rotations (exact at multiples of 90°), and the same over intervals |
 | timing (sim.rs, lookahead.rs) | `t_min` a lower bound (feed and axis limits; G95 with G96 integrated exactly on lines, the clamp's bound on arcs); `t_stop` exact stops with trapezoidal acceleration, an estimate; `t_la` (and `seg_la` per segment) a lookahead estimate: grbl v1.1h's planner restated (planner.c, motion_control.c): each block's acceleration limited by every axis along it, a junction's speed v² = a δ sin(θ/2)/(1 − sin(θ/2)) from the junction deviation δ, trapezoids planned by a reverse and a forward pass over a window of the next blocks ending at rest, arcs cut into chords by the arc tolerance; each block's cruise is the simulation's own feed bound (`t_min`'s). The plan stops at tool changes, dwells, spindle and coolant changes and jumps. Defaults grbl's (15 blocks, δ 0.01 mm, arc tolerance 0.002 mm); a joint with no `accel` takes 1000 mm/s² or 3600 deg/s² (`accel_missing` says so). `lookahead::plan` takes other parameters (acceleration scale, δ, window). An estimate of one class of control, not a bound; on lines t_min ≤ t_la ≤ t_stop. `t_scurve` (and `seg_scurve`): the cycle-time ESTIMATE, a jerk-limited planner (`lookahead::plan_scurve`): per-axis acceleration and jerk along each block, S-curve speed changes, corners smoothed within a tolerance (SINUMERIK G642, the blend radius by grbl's geometry), arcs held to √(A r) and ∛(J r²), passes over each run between stops; cited: SINUMERIK SOFT (PGAsl 03/2013 10.3.1 p. 457, PGsl 11.2 p. 315), G642 (PGsl 11.2 p. 309), CYCLE832 (PGZ 11/2006 3.17). Its assumptions are a stated DEFAULT set (`SCurve::default()`: 1000 mm/s², 20,000 mm/s³, 0.02 mm; a record's `accel` where it has one; jerk is in no record), to be replaced by the machine's values; records keep both UNKNOWN. Shown beside `t_min`, the guaranteed lower bound, never alone. Against the one real machine seen (research/cam/timing/rptu-u5-620: three programs on a Spinner U5-620, SINUMERIK 840D) a parameter set fitted on one program predicts the other two programs' totals within 11 %, per operation within 12-50 %; the parameters are not identified across programs. Open: on that machine 3+2 arcs under TRAORI ran at about 40 % of F (CYCLE832's tolerance on rotary axes is a candidate), not modelled |
 | collision (collide.rs) | every pair of bodies on different links through every segment: interval poses and separating-axis lower bounds prove Clear; a penetration witness gives Hit; otherwise Near (refused). A Hit's witness is a point in the base (machine) frame at the segment parameter `s` |
@@ -398,6 +399,36 @@ test asserts the heights are within the bound on its grids, and they are; that s
 other grids. The affine form alone left the pinned digests (tests/bits.rs, and the flange pocket's
 0xa9118efcb77c7167) unchanged; the closed form moves both.
 
+## SINUMERIK 840D programs
+
+`dialect = "siemens-840d"` reads the 840D native programs of the Spinner U5-620 dataset
+(tests/data/spinner-u5, CC BY 4.0, ElMoe production data set @b8003660): the subset they use,
+from Siemens' published manuals. The control's `[[dialect.cite]]` entries give the page of each
+word: PGsl (SINUMERIK 840D sl Fundamentals 03/2013, 6FC5398-1BP40-3BA1), PGAsl (Job Planning
+03/2013), PGZ (Cycles 11/2006). Each block is rewritten into the shell's words and run by the
+same core; what the subset does not hold is refused with the block's line and the word named.
+
+| read | as |
+|---|---|
+| `;` comments, `N` numbers, `MSG("…")` | comments (PGsl 14.1 p. 367) |
+| `DEF REAL a, b`; a block of only assignments `a=1.5 b=-2.` | declared variables with number values (PGAsl 1.1.4 p. 24); a block that mixes assignments and words, an expression, or an undeclared name is refused |
+| `X=a` (an axis letter `=` a variable or number) | the word with the value; `AC(…)`/`IC(…)` refused |
+| G0 G1 G2 G3 G17 G90 G94 G4 | the core's (PGsl 9.4–9.6, 8.2, 8.3.1, 7.1, 14.7); `TURN=0` read, `TURN=n` (n > 0) refused (PGsl 9.7 p. 211) |
+| `G710` | `G21` (metric, PGsl 8.3.5 p. 165) |
+| `G60 G601 FNORM COMPOF TRAFOOF` | no effect here: exact stop (what `t_stop` models), the default feed, no compressor, no transformation (PGsl 11.1; PGAsl 10.2, 4.4, 6.11) |
+| `SUPA` | `G53` for the block (PGsl 8.1 p. 149, 12.9 p. 354). SUPA suppresses frames, not the tool offset: a SUPA block with Z and an offset in force (D ≠ 0) is refused |
+| `T="name"`, `T0`, `M6` | the setup tool of that `name`; T0 M6 empties the spindle (PGsl 4.2.2 pp. 58–59). An unknown name is refused |
+| `D0`, `D1` | G49 / the loaded tool's length (G43 H of its number) (PGsl 5.6 p. 73). After M6 the length is machine data until a D is programmed: a Z move before it is refused. A D with no tool loaded by the program selects an offset the manual does not state: reported not modelled, and a Z move under it is refused. D2 and up refused |
+| `MCALL CYCLE81(RTP, RFP, SDIS, DP)` … `MCALL` | modal drilling: after each later block with path motion, rapid to RFP + SDIS (toward RTP), feed to DP, rapid to RTP (PGZ 2.1.3 pp. 42–44; PGAsl 1.24.3.4 p. 191). All four given; DPR and other cycles refused |
+| `CYCLE832(…)` | not modelled (`unchecked`: `cycle832`): its tolerance and mode select the machine's smoothing, compression and velocity control (PGZ 3.17 pp. 265–268), so the time under it is not `t_min`'s; `t_min` stays a lower bound only up to that, `t_stop` assumes exact stops |
+| `CYCLE800()` | taken as no motion, reported not modelled (`cycle800`): it deselects the swivel data record (PGZ 3.16 p. 216); a machine's cycle settings may retract |
+| an M in the setup's `m_no_motion` | no motion, reported not modelled (`M27` …) |
+
+Refused by name (not in the subset): TRAORI, TRANS/ATRANS, ROT/AROT/AROTS, MIRROR, SCALE, COMPON
+and the other compressors, G64x, FFWON/FFWOF, SOFT/BRISK, other transformations, IF/GOTO and any
+token that is not a single address letter with a number. The dataset's 3+2 programs (TRAORI with
+AROT) need the U5-620's kinematics and are not read yet.
+
 ## Several channels (`multi`)
 
 A Swiss lathe, a twin-turret lathe, a mill-turn's sub-spindle: each channel's program runs on its
@@ -462,6 +493,8 @@ units = "inch"             # optional ("mm"): the program is in inches (G20)
 program = "op1.nc"         # beside the setup
 step = 0.5                 # removal grid, mm (optional: 1)
 start_tool = 1             # the tool in the spindle at the start (optional)
+m_no_motion = [27, 29]     # optional: machine-specific M codes the maker documents as moving
+                           # nothing (each reported not modelled; any other unknown M is refused)
 work_kg = 40               # part, fixture and pallet top on the part mount (optional)
 # optional: channel = 1, tool_mount, part_mount, dogleg = false, feed_combined = true
 
@@ -471,6 +504,7 @@ z = -500
 
 [[setup.tool]]
 t = 1
+name = "e10"               # optional: the name a 840D program's T="e10" selects
 tip = [0, 0, -100]         # gauge point to tip, home pose
 body = [5, 0, 30, 20, 30, 100]   # (radius, from, to) from the tip; the first is the cutting part
 mill = [5, 0]              # radius, corner (or nose = [rn, dr, dz] for an insert, or probe = r:

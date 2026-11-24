@@ -404,6 +404,12 @@ impl Segment {
 /// A non-motion happening on the timeline.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Happening {
+    /// A construct read whose effect is the machine's (gcode::Ev::NotModelled): reported by
+    /// `unchecked`.
+    NotModelled {
+        path: String,
+        check: &'static str,
+    },
     ToolChange {
         t: u32,
         seconds: f64,
@@ -553,7 +559,12 @@ fn trap(v: f64, a: f64) -> f64 {
 
 /// Runs a program on a setup.
 pub fn simulate(text: &str, s: &Setup) -> Result<Timeline, SimError> {
-    let (blocks, _) = gcode::run(text, &s.control).map_err(SimError::G)?;
+    // a control that calls tools by name (SINUMERIK T="name") takes the setup's names
+    let mut c = s.control.clone();
+    if c.lex.native840d && c.tool_names.is_empty() {
+        c.tool_names = s.tools.iter().map(|t| (t.name.clone(), t.t)).collect();
+    }
+    let (blocks, _) = gcode::run(text, &c).map_err(SimError::G)?;
     simulate_blocks(&blocks, s)
 }
 
@@ -959,6 +970,23 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     })?;
             }
             Ev::Comment(c) => mark(&mut tl, t, Happening::Comment(c.clone())),
+            Ev::NotModelled { path, check } => mark(
+                &mut tl,
+                t,
+                Happening::NotModelled {
+                    path: path.clone(),
+                    check,
+                },
+            ),
+            Ev::Tool { t: tn, offset } if *tn == 0 && s.control.lex.native840d => {
+                // SINUMERIK T0 M6: the spindle emptied (PGsl 4.2.2)
+                let _ = offset;
+                let sec = def.changer.as_ref().and_then(|c| c.change_s).unwrap_or(0.0);
+                mark(&mut tl, t, Happening::ToolChange { t: 0, seconds: sec });
+                t += sec;
+                t_est += sec;
+                tool = None;
+            }
             Ev::Tool { t: tn, offset } => {
                 if s.tool(*tn).is_none() {
                     tl.violations.push(Violation::NoTool { line: ln, t: *tn });
@@ -1722,6 +1750,13 @@ pub fn timeline_json(tl: &Timeline) -> String {
             Happening::Coolant(c) => format!("\"coolant\",\"mode\":\"{c:?}\""),
             Happening::Stop { optional } => format!("\"stop\",\"optional\":{optional}"),
             Happening::Comment(c) => format!("\"comment\",\"text\":\"{}\"", esc(c)),
+            Happening::NotModelled { path, check } => {
+                format!(
+                    "\"not_modelled\",\"path\":\"{}\",\"check\":\"{}\"",
+                    esc(path),
+                    esc(check)
+                )
+            }
             Happening::End => "\"end\"".into(),
             Happening::PalletChange { seconds } => format!("\"pallet\",\"seconds\":{}", num(*seconds)),
             Happening::Wait { n } => format!("\"wait\",\"n\":{n}"),
@@ -1930,6 +1965,7 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
             // where a skip move stops is never known here (the real part's position is what the
             // probing is for): the moves after it are checked from one stop only
             Happening::Skip { stop, .. } => skips.push((m.line, stop.is_some())),
+            Happening::NotModelled { path, check } => note(path.clone(), false, m.line, check),
             // a probing macro's own motion and time are not modelled
             Happening::ProbeSwitch { .. } => note(
                 "probe.switch".into(),

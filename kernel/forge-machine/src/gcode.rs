@@ -86,6 +86,10 @@ fn macro_codes(d: &forge_tooling::toml::Table) -> Vec<(u32, Macro)> {
     out
 }
 
+/// Controls the shell reads that forge-post does not write (data/controls): their dialect files.
+pub const CONTROLS: [(&str, &str); 1] =
+    [("siemens-840d", include_str!("../data/controls/siemens-840d.toml"))];
+
 /// What the interpreter needs to know about the control and the machine's words.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Control {
@@ -120,6 +124,10 @@ pub struct Control {
     pub channel: u8,
     /// The dialect's lexical extras, read in this shell before the words reach the core.
     pub lex: Lex,
+    /// Tools by name (840D `T="name"`): the setup's names and numbers (sim::simulate fills it).
+    pub tool_names: Vec<(String, u32)>,
+    /// Machine-specific M codes the setup names as moving nothing (reported as the setup's word).
+    pub m_no_motion: Vec<u32>,
     /// The skip (probe) moves this dialect cites, in tenths (G38.2 = 382, G31 = 310): from its
     /// `probe_move` template. Empty: a skip move is refused as outside the subset.
     pub skip: Vec<u16>,
@@ -160,6 +168,9 @@ pub struct Lex {
     /// The tool change is a comment naming the tool, then M0 (GRBL, which has no M6): the
     /// comment's text before the number ("TOOL "). The M0 that follows changes the tool.
     pub tool_comment: Option<String>,
+    /// SINUMERIK 840D's native language (`native = "840d"`): blocks go through
+    /// `crate::siemens::block` first.
+    pub native840d: bool,
 }
 
 impl Default for Lex {
@@ -172,6 +183,7 @@ impl Default for Lex {
             dwell_letter: 'P',
             cycle_p_ms: false,
             tool_comment: None,
+            native840d: false,
         }
     }
 }
@@ -197,6 +209,8 @@ impl Control {
             channel: 1,
             lex: Lex::default(),
             skip: Vec::new(),
+            tool_names: Vec::new(),
+            m_no_motion: Vec::new(),
             macros: Vec::new(),
         }
     }
@@ -265,6 +279,7 @@ impl Control {
                 let i = first.find("{t}")?;
                 Some(first[1..i].to_string())
             }),
+            native840d: toml::text(d, "native") == Some("840d"),
         };
         let inch_units = (toml::text(d, "units_inch").is_some_and(|t| !t.is_empty())
             && !toml::tables(d, "cite").iter().any(|c| {
@@ -297,6 +312,8 @@ impl Control {
                 _ => None,
             }),
             skip: skip_codes(d),
+            tool_names: Vec::new(),
+            m_no_motion: Vec::new(),
             macros: macro_codes(d),
         })
     }
@@ -318,17 +335,14 @@ impl Control {
     pub fn dialect_src(name: &str) -> Option<&'static str> {
         forge_post::DIALECTS
             .iter()
+            .chain(CONTROLS.iter())
             .find(|(n, _)| *n == name)
             .map(|(_, s)| *s)
     }
 
     /// For a built-in forge-post dialect by name.
     pub fn for_dialect(def: &crate::def::MachineDef, dialect: &str, channel: u8) -> Result<Control, String> {
-        let src = forge_post::DIALECTS
-            .iter()
-            .find(|(n, _)| *n == dialect)
-            .ok_or_else(|| format!("no built-in dialect `{dialect}`"))?
-            .1;
+        let src = Self::dialect_src(dialect).ok_or_else(|| format!("no built-in dialect `{dialect}`"))?;
         Control::for_machine(def, src, channel)
     }
 
@@ -368,6 +382,13 @@ pub enum Centre {
 /// the diameter), one entry per `Control::letters`; None where the program has not yet said.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Ev {
+    /// A check the shell cannot make for this block (a construct read but whose effect is the
+    /// machine's: SINUMERIK CYCLE832, CYCLE800(), an M code the setup names): reported by
+    /// sim::unchecked.
+    NotModelled {
+        path: String,
+        check: &'static str,
+    },
     Rapid(Vec<Option<Q>>),
     Feed {
         to: Vec<Option<Q>>,
@@ -483,6 +504,8 @@ pub struct State {
     pub probe_on: bool,
     /// The probe was switched off and the G28 reference return its macro requires has not come.
     pub probe_off_pending: bool,
+    /// SINUMERIK 840D native state (variables, the modal cycle call, the tool offset).
+    pub s840: crate::siemens::S840,
 }
 
 impl State {
@@ -506,6 +529,7 @@ impl State {
             protected_f: None,
             probe_on: false,
             probe_off_pending: false,
+            s840: Default::default(),
         }
     }
 }
@@ -640,7 +664,7 @@ pub fn pct_block(s: &str) -> bool {
 }
 
 /// A value in integer units of 10^-k as a decimal word.
-fn q_text(q: Q, k: u32) -> String {
+pub(crate) fn q_text(q: Q, k: u32) -> String {
     let p = pow10(k);
     let (sign, a) = if q < 0 { ("-", -q) } else { ("", q) };
     if k == 0 {
@@ -745,6 +769,20 @@ pub fn run(text: &str, c: &Control) -> Result<(Vec<Block>, State), GError> {
 
 /// One block: its events appended to `out`, the state advanced.
 pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Block>) -> Result<(), GError> {
+    if c.lex.native840d {
+        return crate::siemens::block(raw, ln, c, st, out);
+    }
+    block_fanuc(raw, ln, c, st, out)
+}
+
+/// One block in the core's (Fanuc) words with the dialect's extras.
+pub(crate) fn block_fanuc(
+    raw: &str,
+    ln: usize,
+    c: &Control,
+    st: &mut State,
+    out: &mut Vec<Block>,
+) -> Result<(), GError> {
     let mut comments = Vec::new();
     let parsed = words(raw, ln, &mut comments, &c.lex)?;
     let push = |out: &mut Vec<Block>, ev: Ev| out.push(Block { line: ln, ev });
