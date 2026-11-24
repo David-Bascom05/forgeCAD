@@ -733,3 +733,55 @@ fn an_oriented_box_is_exact_where_its_bound_is_not() {
         "{c:?}"
     );
 }
+
+#[test]
+fn a_guide_bushing_passes_the_stock_and_keeps_its_own_clearance() {
+    use forge_machine::collide::{self, Role};
+    use forge_machine::def::Prim;
+    // a static ring-like body on the base around the part (a guide bushing stand-in), and a
+    // block on Z 0.5 mm from it at home
+    let extra = |passes: &str, cl: &str| {
+        format!(
+            "\n[[machine.body]]\nname = \"bushing\"\nlink = \"base\"\nignore = [\"bed\", \"column\", \"saddle\", \"table\", \"head\"]\n{passes}{cl}[[machine.body.box]]\nmin = [-30, -30, 50]\nmax = [30, 30, 60]\n\n[[machine.body]]\nname = \"post\"\nlink = \"Z\"\nignore = [\"bed\", \"column\", \"saddle\", \"table\", \"head\"]\n[[machine.body.box]]\nmin = [30.5, -5, 50]\nmax = [40, 5, 60]\n"
+        )
+    };
+    let def = |passes: &str, cl: &str| {
+        MachineDef::parse_all(&(vmc3() + &extra(passes, cl)))
+            .unwrap()
+            .remove(0)
+    };
+    let stock_hits = |m: &MachineDef| {
+        let mut s = Setup::new(m, Control::for_dialect(m, "fanuc", 1).unwrap()).unwrap();
+        s.wcs = vec![(54, vec![0.0, 0.0, -500.0])];
+        // the stock as a bar standing through the bushing (part frame = base at home)
+        let stock = collide::part_body(
+            &s,
+            "stock",
+            &[Prim::Box {
+                min: [-10.0, -10.0, 0.0],
+                max: [10.0, 10.0, 100.0],
+            }],
+            Role::Stock,
+        );
+        let tl = sim::simulate("G0 X0 Y0 Z200.\n", &s).unwrap();
+        collide::check(&s, &tl, &[stock])
+            .contacts
+            .into_iter()
+            .filter(|c| c.a == "stock" || c.b == "stock")
+            .count()
+    };
+    assert!(stock_hits(&def("", "")) > 0);
+    assert_eq!(stock_hits(&def("passes = \"stock\"\n", "")), 0);
+    // bushing and post 0.5 apart: not proven clear at the machine's 1 mm; clear at its own 0.2
+    let gap = |m: &MachineDef| {
+        let q: Vec<f64> = m.joints.iter().map(|j| j.home).collect();
+        collide::check_pose(m, &q)
+    };
+    assert!(
+        gap(&def("", ""))
+            .iter()
+            .any(|(a, b, _)| a == "bushing" && b == "post")
+    );
+    assert!(gap(&def("", "clearance = 0.2\n")).is_empty());
+    assert!(MachineDef::parse_all(&(vmc3() + &extra("passes = \"chips\"\n", ""))).is_err());
+}

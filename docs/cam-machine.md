@@ -117,7 +117,10 @@ each; a mill-turn has two part mounts (main, sub).
 
 `name`, `link`, one or more `[[machine.body.box]]` (`min`, `max`, home pose) or
 `[[machine.body.cyl]]` (`base`, `axis`, `r`, `h`). Optional: `part` (the real `.fg` part the
-primitives envelope), `ignore` (bodies it touches by construction: ways, neighbours). Bodies on one
+primitives envelope), `ignore` (bodies it touches by construction: ways, neighbours), `clearance`
+(its own least gap, mm, in place of the machine's for any pair it is in; the smaller of two bodies'
+wins), `passes = "stock"` (the bar runs through it by construction, as through a Swiss guide
+bushing: stock against it is never a contact). Bodies on one
 link are never checked against each other.
 
 ## Provenance: `[[machine.cite]]`

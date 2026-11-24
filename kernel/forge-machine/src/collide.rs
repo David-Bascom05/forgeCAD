@@ -48,6 +48,19 @@ pub struct CBody {
     pub prims: Vec<Prim>,
     pub ignore: Vec<String>,
     pub role: Role,
+    /// Its own least gap (a machine body's `clearance`), else the machine's.
+    pub clearance: Option<f64>,
+    /// The stock runs through it (a guide bushing): no contact with Role::Stock.
+    pub passes_stock: bool,
+}
+
+/// The least gap a pair keeps: the smaller of their own, else the machine's.
+fn pair_clearance(def: &MachineDef, a: &CBody, b: &CBody) -> f64 {
+    match (a.clearance, b.clearance) {
+        (Some(x), Some(y)) => x.min(y),
+        (Some(x), None) | (None, Some(x)) => x,
+        (None, None) => def.clearance,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -86,6 +99,8 @@ pub fn machine_bodies(def: &MachineDef) -> Vec<CBody> {
             prims: b.prims.clone(),
             ignore: b.ignore.clone(),
             role: Role::Machine,
+            clearance: b.clearance,
+            passes_stock: b.passes_stock,
         })
         .collect()
 }
@@ -115,6 +130,8 @@ pub fn tool_bodies(s: &Setup, t: u32) -> Vec<CBody> {
             }],
             ignore: Vec::new(),
             role: Role::Tool { cutting: i == 0 },
+            clearance: None,
+            passes_stock: false,
         })
         .collect()
 }
@@ -173,6 +190,8 @@ pub fn part_body(s: &Setup, name: &str, prims_in_part: &[Prim], role: Role) -> C
         prims,
         ignore: Vec::new(),
         role,
+        clearance: None,
+        passes_stock: false,
     }
 }
 
@@ -581,7 +600,8 @@ fn may_pair(a: &CBody, b: &CBody, kind: SegKind) -> bool {
     let cut = |x: &CBody, y: &CBody| {
         matches!(x.role, Role::Tool { cutting: true }) && y.role == Role::Stock && kind != SegKind::Rapid
     };
-    !(cut(a, b) || cut(b, a))
+    let through = |x: &CBody, y: &CBody| x.passes_stock && y.role == Role::Stock;
+    !(cut(a, b) || cut(b, a) || through(a, b) || through(b, a))
 }
 
 /// Checks every pair of bodies through every segment. `work` are the workpiece bodies (stock,
@@ -609,7 +629,17 @@ pub fn check(s: &Setup, tl: &Timeline, work: &[CBody]) -> Report {
                     continue;
                 }
                 rep.pairs_checked += 1;
-                let v = check_span(def, seg, a, b, 0.0, 1.0, def.clearance, MAX_DEPTH, &mut rep.spans);
+                let v = check_span(
+                    def,
+                    seg,
+                    a,
+                    b,
+                    0.0,
+                    1.0,
+                    pair_clearance(def, a, b),
+                    MAX_DEPTH,
+                    &mut rep.spans,
+                );
                 if v != Verdict::Clear {
                     rep.contacts.push(Contact {
                         line: seg.line,
@@ -649,7 +679,17 @@ pub fn check_pose(def: &MachineDef, q: &[f64]) -> Vec<(String, String, Verdict)>
             if !may_pair(a, b, SegKind::Rapid) {
                 continue;
             }
-            let v = check_span(def, &seg, a, b, 0.0, 1.0, def.clearance, 4, &mut spans);
+            let v = check_span(
+                def,
+                &seg,
+                a,
+                b,
+                0.0,
+                1.0,
+                pair_clearance(def, a, b),
+                4,
+                &mut spans,
+            );
             if v != Verdict::Clear {
                 out.push((a.name.clone(), b.name.clone(), v));
             }

@@ -338,6 +338,12 @@ pub struct Body {
     pub part: Option<String>,
     /// Bodies it may touch by construction (neighbours in the chain, ways): not checked pairwise.
     pub ignore: Vec<String>,
+    /// Its own least gap, mm, in place of the machine's `clearance` for any pair it is in (the
+    /// smaller of two bodies' wins); None: the machine's.
+    pub clearance: Option<f64>,
+    /// The stock runs through it by construction (a Swiss guide bushing): stock against it is
+    /// never a contact (`passes = "stock"`).
+    pub passes_stock: bool,
 }
 
 /// A region of joint space the control forbids (Fanuc stored stroke check 2/3, an interference
@@ -1153,6 +1159,28 @@ impl MachineDef {
                 prims: if no_envelope { Vec::new() } else { prims(s, &rec)? },
                 part: text(s, "part").map(str::to_string),
                 ignore: texts(s, "ignore").unwrap_or_default(),
+                clearance: match num(s, "clearance") {
+                    Some(c) if c >= 0.0 && c.is_finite() => Some(c),
+                    Some(c) => {
+                        return Err(DefError::Bad {
+                            record: rec,
+                            field: "clearance",
+                            why: format!("must be >= 0 (is {c})"),
+                        });
+                    }
+                    None => None,
+                },
+                passes_stock: match text(s, "passes") {
+                    None => false,
+                    Some("stock") => true,
+                    Some(other) => {
+                        return Err(DefError::Bad {
+                            record: rec,
+                            field: "passes",
+                            why: format!("`{other}`: only \"stock\" runs through a body"),
+                        });
+                    }
+                },
                 name: bn,
             });
         }
