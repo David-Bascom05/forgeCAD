@@ -171,7 +171,7 @@ fn pictures(j: Option<&Json>) -> Result<Vec<(&'static str, String)>, String> {
             // base64 whole: groups of 4, its alphabet, `=` only as the last one or two
             let body = data.trim_end_matches('=');
             let fine = !data.is_empty()
-                && data.len() % 4 == 0
+                && data.len().is_multiple_of(4)
                 && data.len() - body.len() <= 2
                 && body
                     .bytes()
