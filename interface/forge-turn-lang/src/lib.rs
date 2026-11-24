@@ -251,8 +251,13 @@ impl TurnCam {
         let (mut t, st) = self.tools[ti].clone();
         self.pending_cut = None;
         if let Ok(si) = self.setup_of(a)
-            && let Some(c) = self.cut_for(ti, si)?
+            && let Some(mut c) = self.cut_for(ti, si)?
         {
+            // the op's own `step:` is the depth it cuts at: reported as it is, not the data's ap
+            if let Some(V::Num(step)) = a.get("step") {
+                c.ap = *step;
+                c.source = format!("{}; ap: the op's step", c.source);
+            }
             t.vc = c.vc;
             t.f = c.f;
             t.ap = c.ap;

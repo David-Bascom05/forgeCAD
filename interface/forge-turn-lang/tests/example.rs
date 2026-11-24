@@ -230,7 +230,10 @@ fn a_named_stock_turns_at_cited_cutting_data() {
             ins.presets.iter().any(|p| p.group == "P" && p.vc == rough.vc),
             "{stock}: {rough:?}"
         );
-        assert_eq!(op("face").cutting, op("rough").cutting);
+        // the op's step is the ap it reports (shaft_turn: face step 1, rough step 2)
+        assert_eq!(rough.ap, 2.0);
+        let face = op("face").cutting.clone().unwrap();
+        assert_eq!((face.vc, face.f, face.ap), (rough.vc, rough.f, 1.0));
         let fin = op("fin").cutting.clone().unwrap();
         assert!(fin.source.contains("10th percentile"), "{}", fin.source);
         assert!(op("thr").cutting.is_none() && op("cut").cutting.is_none());
