@@ -103,25 +103,54 @@ ops and the same tool: face 1 mm, the surrounding step (`clear`), the holes and
 pockets (`pocket`), all certified; part 1 its through slot by `clear` (a part with no sketch has no
 `slot` op to use). Parts 7–10 have freeform (3-axis finishing).
 
-Whole program, t_stop on generic-vmc3 (2026-11-24, with `air_down` and side entries):
+### Like for like (2026-11-24)
 
-| part | Autodesk | ours, step by `clear` | ours, step by `adaptive` (branch cam/quality, experimental) |
+**1. The same end state.** `--part FILE.fg DX DY DZ` rasterises the part's top surface (its
+tessellation) into the stock's grid and compares each program's final stock against it over the
+part's footprint (src/endstate.rs). Their programs are in their own frame: G54 at the corner of
+an 81 × 81 CAM stock for parts 1–4, 82 × 82 for 5–6, the part's top at Z −1 (NOTICE says how that
+was read and checked). Left above the part / cut below it, mm³ (cell 0.1 mm):
+
+| part | theirs: left / below | ours: left / below |
+|---|---|---|
+| 1 | 0 / 0 | 0 / 0 |
+| 2 | 1 / 1 | 2 / 1 |
+| 3 | 0 / 3 | 3 / 2 |
+| 4 | 2 / 23 | 5 / 2 |
+| 5 | 1 / 13 | 4 / 2 |
+| 6 | 31 / 2 | 2 / 10 |
+
+Both leave the part: what remains is the cells straddling vertical walls (each a full wall
+height deep, a few mm³ in all). Neither has a separate finishing op; their 2D pocket and our
+pocket each finish their walls in the same op (tests/foreign.rs pins part 3's).
+
+Ops, theirs → ours: PLANEN (facing, one-way, a lift per pass) → `facing`; 2D ADAPTIVE (the
+surrounding step: three closed offset rings round the boss) → `clear`; 2D-TASCHE (holes, a
+shallow helix to depth then rings) → `pocket`; part 1's NUT (the slot) → `clear`; part 6's
+2D ADAPTIVE4 (circular pocket) and 2D-TASCHE2 (holes) → one `pocket`.
+
+**2. The same feeds.** `--feeds NAME=CUT,PLUNGE` runs an op at given feeds, in the planned moves
+and in the posted text the timeline reads (straight-down moves at the plunge feed). Ours at
+theirs: facing and step 2000 mm/min, pockets and the slot 1000, plunges 333.33 (part 6: its one
+pocket at 1000, though theirs cut the circular pocket at 2000). t_stop, generic-vmc3:
+
+| part | theirs | ours, our feeds | ours, their feeds |
 |---|---|---|---|
-| 1 (through slot) | 194.4 s | 134.8 s (slot by `clear`: 47.5 s vs their 23.0 s) | – |
-| 2 (4 holes) | 315.7 s | 102.6 s | – |
-| 3 (+ rectangular step) | 474.4 s | 149.5 s | 316.3 s |
-| 4 (+ circular step) | 514.7 s | 213.5 s | 194.2 s |
-| 5 (+ mixed step) | 463.8 s | 194.9 s | 189.5 s |
-| 6 (+ circular pocket) | 681.8 s | 251.2 s | 417.9 s |
+| 1 (through slot) | 194.4 s | 134.8 s | 185.6 s |
+| 2 (4 holes) | 315.7 s | 102.6 s | 89.0 s |
+| 3 (+ rectangular step) | 474.4 s | 149.5 s | 138.3 s |
+| 4 (+ circular step) | 514.7 s | 213.5 s | 184.9 s |
+| 5 (+ mixed step) | 463.8 s | 194.9 s | 175.9 s |
+| 6 (+ circular pocket) | 681.8 s | 251.2 s | 279.2 s |
 
-(`adaptive` is not in this tree; its parts/rptu/*_adaptive_cam.fg are on cam/quality.)
+At the same feeds the difference is the paths: their facing is one-way with a lift and a 5 mm
+plunge at 333 mm/min per pass (part 3: 172.8 s vs ours 66.6 s at their feed); their holes go
+down a 0.22 mm-per-turn helix (part 3: 238.5 s vs 26.8 s). Their step (63.2 s) and ours (44.9 s
+at their feed) are close. Part 1's slot is where ours is worse (clear wanders round a slot the
+tool's width: 66% air), and part 6 at their feeds loses on the circular pocket.
 
-Read with care: the feeds differ as well as the paths. Theirs: S18000 (generic-vmc3 stops at
-12000: one `Rpm` violation, the timeline runs the programmed F), F2000 side cutting (0.111
-mm/rev), F1000 in pockets, F333 plunging, facing one-way with a lift per pass, holes by a
-shallow helix (0.22 mm per turn) to depth. Ours: the cutting data's fz 0.039 × 3 flutes at 12000
-(F1402, raised where the engagement thins the chip). Their adaptive holds the engagement
-(φmax 80°, 2% air on part 3's step: 63 s); ours does not yet (part 3: 211 s, 80% air, 109
-retracts): that is the work. Their offset pocket for part 6's circular pocket meets 180° as ours
-does. The block: the dataset says 80 × 80 × 50; the models are 50–52 mm tall and every program
-faces 1 mm off: measured as Z −50..0 with the part's top at Z −1 (NOTICE).
+**3. What the times are.** generic-vmc3's rates and accelerations are placeholders (kernel/
+forge-machine/data/machines/generic.toml), so these are times on one model for both programs,
+not either program's time on the RPTU machine. The model is still to be checked against a
+measured log (the Spinner U5-620 set, tools/bench: its programs are Siemens 840D with variables,
+which forge-machine's interpreter does not read yet).

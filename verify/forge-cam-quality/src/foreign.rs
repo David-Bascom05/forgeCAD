@@ -448,6 +448,7 @@ pub fn measure_text(text: &str, file: String, f: &Foreign) -> JobQ {
         op_index.push(Some(job.ops.len()));
         job.ops.push(measure_op(q, &paths, &mut m, None, &curve, f.cell));
     }
+    job.ends = vec![Some(m.clone())];
     // the timeline: the text itself on the machine
     let mut pq = ProgQ {
         name: job.file.clone(),

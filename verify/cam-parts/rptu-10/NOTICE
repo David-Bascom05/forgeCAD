@@ -11,10 +11,15 @@ From the record's description (not ours): all parts are made from a raw block of
 with one end mill of at most 6 mm diameter, single setup, on a three-axis machine; the programs
 were made with Autodesk CAM (their header: "HERSTELLER AUTODESK", "MODEL GENERIC 3-AXIS").
 
-What we read off the programs (verify/forge-cam-quality, --ngc): every program faces the block at
-Z -1 (X from about -3.6 to 84.9, Y from about -0.5 to 78, the tool 6 mm) with one 6 mm flat end mill (T1 D=6. CR=0.), so the block is taken as
-X 0..80, Y 0..80, Z -50..0 in the program's frame (G54). That is our reading, not the authors'
-statement: their description gives the block's size, not where G54 is on it.
+What we read off the programs (verify/forge-cam-quality, --ngc, --part): G54 is the corner of
+the CAM stock, the part's top is at Z -1 (every program faces 1 mm off at Z -1; ZMIN in each tool
+comment is the part's deepest floor below Z -1), and the part sits inside the stock by 0.5 mm per
+side for parts 1-4 (stock 81 x 81: the arc centres of part 3's holes are at 15.5 and 65.5, the
+model's at -25 and 25) and by 1 mm for parts 5-6 (82 x 82: centres 23.5/58.5 and 13.5/68.5).
+Checked: with these frames each program's end state over the part's footprint is the part, to
+within the cells straddling its walls (forge-cam-quality README, "like for like"). Parts 7-10:
+taken as 81 x 81, not checked. These are our readings, not the authors' statements: their
+description gives the raw block (80 x 80 x 50), not the CAM stock or where G54 is.
 
 Used here as an outside reference: the same parts, another CAM system's toolpaths, measured with
 the same model as forge-cam's own (verify/forge-cam-quality/README.md, "Foreign programs").

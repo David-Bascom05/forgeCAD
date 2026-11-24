@@ -7,7 +7,7 @@ fn run(n: u32) -> forge_cam_quality::JobQ {
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../cam-parts/rptu-10");
     let text = std::fs::read_to_string(root.join(format!("{n}.ngc"))).unwrap();
     let f = Foreign {
-        stock: ([0.0, 0.0, -50.0], [80.0, 80.0, 0.0]),
+        stock: ([0.0, 0.0, -50.0], [81.0, 81.0, 0.0]),
         flutes: None,
         dialect: "linuxcnc".into(),
         machine: "generic-vmc3".into(),
@@ -48,4 +48,30 @@ fn rptu_part_2_machined_by_forge_cam_from_its_step() {
         j.ops.iter().map(|o| &o.status).collect::<Vec<_>>()
     );
     assert!(j.progs[0].error.is_none());
+}
+
+#[test]
+fn rptu_part_3_both_programs_leave_the_part() {
+    // their program in its frame (G54 at the corner of an 81 mm block, the part 0.5 mm in, its
+    // top at Z -1), ours in the part's: each against the part from its STEP model
+    use forge_cam_quality::endstate::{end_state, footprint, part_tops, part_triangles};
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let part = root.join("parts/rptu/rptu3.fg");
+    let theirs = run(3);
+    let ours = forge_cam_quality::measure(
+        &root.join("parts/rptu/rptu3_clear_cam.fg"),
+        &forge_cam_quality::Config::default(),
+    );
+    for (j, shift) in [(&theirs, [40.5, 40.5, -53.0]), (&ours, [0.0, 0.0, 0.0])] {
+        let tris = part_triangles(&part, shift).unwrap();
+        let m = j.ends[0].as_ref().unwrap();
+        let e = end_state(m, &part_tops(&tris, m), footprint(&tris), 0.02);
+        // what is left or cut past the part is the cells straddling its walls: a few mm³ of the
+        // 25600 mm³ the programs remove
+        assert!(
+            e.left_vol < 10.0 && e.gouge_vol < 10.0 && e.left_area < 2.0,
+            "{}: {e:?}",
+            j.file
+        );
+    }
 }

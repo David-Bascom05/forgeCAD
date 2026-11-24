@@ -15,6 +15,7 @@
 //! The stock is a height map (map.rs) over the setup's stock box: a measurement model within
 //! about a cell of the exact sweep. Spindle rotation is taken as M03 (clockwise from above), so
 //! material right of the direction of travel is climb. Everything here is deterministic.
+pub mod endstate;
 pub mod foreign;
 pub mod map;
 
@@ -32,6 +33,135 @@ pub struct Config {
     pub cell: Option<f64>,
     /// The machine whose timeline gives cycle time; None: the setup's own.
     pub machine: Option<String>,
+    /// Feeds to run ops at instead of their own, by op name: (name, cut mm/min, plunge mm/min).
+    /// Straight-down feed moves take the plunge feed, every other feed move the cut feed; the
+    /// planned moves and the posted text alike (to compare paths at another program's feeds).
+    pub feeds: Vec<(String, f64, f64)>,
+}
+
+/// `moves` with every feed set from (cut, plunge): straight-down moves the plunge feed.
+pub fn override_moves(start: [f64; 3], moves: &[PMove], cut: f64, plunge: f64) -> Vec<PMove> {
+    let mut at = start;
+    moves
+        .iter()
+        .map(|m| {
+            let out = match *m {
+                PMove::Line { to, phase, .. } => {
+                    let down = to[2] < at[2] && (to[0] - at[0]).abs() < 1e-9 && (to[1] - at[1]).abs() < 1e-9;
+                    PMove::Line {
+                        to,
+                        f: if down { plunge } else { cut },
+                        phase,
+                    }
+                }
+                PMove::Arc { to, c, cw, .. } => PMove::Arc { to, c, cw, f: cut },
+                PMove::Cycle { .. } | PMove::Rapid { .. } => *m,
+            };
+            if let PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } = *m {
+                at = to;
+            }
+            out
+        })
+        .collect()
+}
+
+/// A posted program's text with the feeds of the lines `who` gives an override for (by 1-based
+/// line) set to it: on every feed motion line (G1 G2 G3 modal) its F replaced, straight-down Z
+/// moves at the plunge feed. Comments and rapids are left as they are.
+pub fn override_text(text: &str, who: &dyn Fn(usize) -> Option<(f64, f64)>) -> String {
+    let mut out = String::with_capacity(text.len() + text.len() / 8);
+    let mut g = 0u32;
+    let mut z = f64::INFINITY;
+    for (i, line) in text.lines().enumerate() {
+        // the words outside comments
+        let mut code = String::new();
+        let mut depth = 0;
+        for ch in line.chars() {
+            match ch {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ if depth == 0 => code.push(ch),
+                _ => {}
+            }
+        }
+        if code.contains(';') {
+            code.truncate(code.find(';').unwrap());
+        }
+        let up = code.to_uppercase();
+        let words: Vec<(char, String)> = {
+            let mut w = Vec::new();
+            let cs: Vec<char> = up.chars().collect();
+            let mut k = 0;
+            while k < cs.len() {
+                if cs[k].is_ascii_alphabetic() {
+                    let l = cs[k];
+                    let mut v = String::new();
+                    k += 1;
+                    while k < cs.len()
+                        && (cs[k].is_ascii_digit() || cs[k] == '.' || cs[k] == '-' || cs[k] == '+')
+                    {
+                        v.push(cs[k]);
+                        k += 1;
+                    }
+                    w.push((l, v));
+                } else {
+                    k += 1;
+                }
+            }
+            w
+        };
+        for (l, v) in &words {
+            if *l == 'G'
+                && let Ok(n) = v.parse::<f64>()
+                && (n == 0.0 || n == 1.0 || n == 2.0 || n == 3.0)
+            {
+                g = n as u32;
+            }
+        }
+        let has = |c: char| words.iter().any(|(l, _)| *l == c);
+        let nz = words
+            .iter()
+            .find(|(l, _)| *l == 'Z')
+            .and_then(|(_, v)| v.parse::<f64>().ok());
+        let motion = has('X') || has('Y') || has('Z');
+        let ov = who(i + 1);
+        if let (Some((cut, plunge)), true, true) = (ov, motion, g >= 1) {
+            let down = !has('X') && !has('Y') && nz.is_some_and(|v| v < z) && g == 1;
+            // the line without its F word
+            let mut kept = String::new();
+            let cs: Vec<char> = line.chars().collect();
+            let mut k = 0;
+            let mut depth = 0;
+            while k < cs.len() {
+                let ch = cs[k];
+                if ch == '(' {
+                    depth += 1;
+                }
+                if ch == ')' {
+                    depth -= 1;
+                }
+                if depth == 0 && (ch == 'F' || ch == 'f') {
+                    k += 1;
+                    while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') {
+                        k += 1;
+                    }
+                    continue;
+                }
+                kept.push(ch);
+                k += 1;
+            }
+            let f = if down { plunge } else { cut };
+            out.push_str(kept.trim_end());
+            out.push_str(&format!(" F{f:.1}"));
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+        if let Some(v) = nz {
+            z = v;
+        }
+    }
+    out
 }
 
 /// Engagement-angle bins (degrees), upper ends: air is φ = 0.
@@ -143,6 +273,8 @@ pub struct JobQ {
     pub ops: Vec<OpQ>,
     pub progs: Vec<ProgQ>,
     pub errors: Vec<String>,
+    /// The stock after every op, per setup (as `OpQ::setup`; a foreign program's is setup 0).
+    pub ends: Vec<Option<HeightMap>>,
 }
 
 fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
@@ -288,6 +420,9 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
         if maps.len() <= op.setup {
             maps.resize_with(op.setup + 1, || None);
         }
+        if std::env::var_os("FORGE_QUALITY_STOCK").is_some() {
+            eprintln!("stock {:?} {:?}", sv.stock.min, sv.stock.max);
+        }
         let m = maps[op.setup].get_or_insert_with(|| HeightMap::new(sv.stock.min, sv.stock.max, cell));
         let group = cam.cutting_group(sv.group);
         let mdef = mlib.get(cfg.machine.as_deref().unwrap_or(sv.machine)).ok();
@@ -312,10 +447,24 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
             q.side = side_mill(t.kind);
             q.fz_target = group.map(|g| g.fz_at(t.dc)).unwrap_or(0.0);
         }
+        let ov = cfg
+            .feeds
+            .iter()
+            .find(|(n, ..)| *n == op.name)
+            .map(|(_, c, p)| (*c, *p));
+        let owned: Vec<Vec<PMove>> = op
+            .paths
+            .iter()
+            .map(|p| match ov {
+                Some((c, pl)) => override_moves(p.start, &p.moves, c, pl),
+                None => p.moves.clone(),
+            })
+            .collect();
         let paths: Vec<PathIn> = op
             .paths
             .iter()
-            .map(|p| PathIn {
+            .zip(&owned)
+            .map(|(p, mvs)| PathIn {
                 tool: &tools[p.tool].tool,
                 // as the post does (forge-cam-lang): the path's speed, else the op's feeds', else 3000
                 rpm: if p.rpm > 0.0 {
@@ -324,12 +473,13 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
                     op.feeds.map(|f| f.rpm).unwrap_or(3000.0)
                 },
                 start: p.start,
-                moves: &p.moves,
+                moves: mvs,
             })
             .collect();
         job.ops.push(measure_op(q, &paths, m, group, &curve, cell));
     }
     timeline(cam, cfg, &mlib, &mut job);
+    job.ends = maps;
     job
 }
 
@@ -633,7 +783,38 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                 });
                 s.h.push((tu.t, 100.0));
             }
-            sim::simulate(text, &s).map_err(|e| e.to_string())
+            if cfg.feeds.is_empty() {
+                return sim::simulate(text, &s).map_err(|e| e.to_string());
+            }
+            // the ops' feeds overridden: their blocks from their "(name kind)" comments on
+            let heads: Vec<(String, (f64, f64))> = cam
+                .ops
+                .iter()
+                .filter(|o| p.setups.contains(&o.setup))
+                .filter_map(|o| {
+                    let (_, c, pl) = cfg.feeds.iter().find(|(n, ..)| *n == o.name)?;
+                    Some((format!("({} {})", o.name, o.kind), (*c, *pl)))
+                })
+                .collect();
+            let all: Vec<String> = cam
+                .ops
+                .iter()
+                .filter(|o| p.setups.contains(&o.setup))
+                .map(|o| format!("({} {})", o.name, o.kind))
+                .collect();
+            let mut cur: Vec<Option<(f64, f64)>> = vec![None];
+            let mut now = None;
+            for line in text.lines() {
+                if all.iter().any(|h| line.contains(h.as_str())) {
+                    now = heads
+                        .iter()
+                        .find(|(h, _)| line.contains(h.as_str()))
+                        .map(|(_, v)| *v);
+                }
+                cur.push(now);
+            }
+            let t2 = override_text(text, &|l| cur.get(l).copied().flatten());
+            sim::simulate(&t2, &s).map_err(|e| e.to_string())
         })();
         match res {
             Ok(tl) => {

@@ -9,6 +9,35 @@ fn main() {
     let mut files: Vec<PathBuf> = Vec::new();
     let mut ngc: Vec<(PathBuf, ([f64; 3], [f64; 3]))> = Vec::new();
     let mut flutes: Option<u32> = None;
+    let mut part: Option<(PathBuf, [f64; 3])> = None;
+    // each job's stock against the part, after the table
+    let ends = |jobs: &[forge_cam_quality::JobQ], part: &Option<(PathBuf, [f64; 3])>| {
+        let Some((pf, shift)) = part else { return };
+        let tris = forge_cam_quality::endstate::part_triangles(pf, *shift).expect("the part");
+        for j in jobs {
+            for (si, m) in j.ends.iter().enumerate() {
+                let Some(m) = m else { continue };
+                let tops = forge_cam_quality::endstate::part_tops(&tris, m);
+                let e = forge_cam_quality::endstate::end_state(
+                    m,
+                    &tops,
+                    forge_cam_quality::endstate::footprint(&tris),
+                    0.02,
+                );
+                println!(
+                    "{} setup {si}: end state vs {}: left {:.0} mm3 (max {:.2} mm, {:.0} mm2 over 0.05), gouge {:.0} mm3 (max {:.2} mm); cell {} mm",
+                    j.file,
+                    pf.display(),
+                    e.left_vol,
+                    e.left_max,
+                    e.left_area,
+                    e.gouge_vol,
+                    e.gouge_max,
+                    m.h
+                );
+            }
+        }
+    };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -69,6 +98,26 @@ fn main() {
                     .collect();
                 ngc.push((f, ([v[0], v[1], v[2]], [v[3], v[4], v[5]])));
             }
+            "--part" => {
+                // the end state against a part: --part FILE.fg DX DY DZ (part frame -> map frame)
+                let f = PathBuf::from(args.next().expect("--part FILE DX DY DZ"));
+                let v: Vec<f64> = (0..3)
+                    .map(|_| {
+                        args.next()
+                            .and_then(|x| x.parse().ok())
+                            .expect("--part: three numbers")
+                    })
+                    .collect();
+                part = Some((f, [v[0], v[1], v[2]]));
+            }
+            "--feeds" => {
+                // NAME=CUT,PLUNGE: run op NAME at these feeds (mm/min)
+                let a = args.next().expect("--feeds NAME=CUT,PLUNGE");
+                let (n, v) = a.split_once('=').expect("NAME=CUT,PLUNGE");
+                let (c, p) = v.split_once(',').expect("NAME=CUT,PLUNGE");
+                cfg.feeds
+                    .push((n.to_string(), c.parse().expect("CUT"), p.parse().expect("PLUNGE")));
+            }
             "--flutes" => flutes = args.next().and_then(|s| s.parse().ok()),
             "--cell" => cfg.cell = args.next().and_then(|s| s.parse().ok()),
             _ => files.push(PathBuf::from(a)),
@@ -90,6 +139,7 @@ fn main() {
             })
             .collect();
         print!("{}", table(&jobs));
+        ends(&jobs, &part);
         if let Some(o) = out {
             std::fs::write(&o, json(&jobs)).expect("write the JSON");
         }
@@ -110,6 +160,7 @@ fn main() {
     }
     let jobs: Vec<_> = files.iter().map(|f| measure(f, &cfg)).collect();
     print!("{}", table(&jobs));
+    ends(&jobs, &part);
     if let Some(o) = out {
         std::fs::write(&o, json(&jobs)).expect("write the JSON");
     }
