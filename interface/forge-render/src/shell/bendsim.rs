@@ -417,6 +417,7 @@ fn status_mark(s: Option<Status>) -> (&'static str, egui::Color32) {
     match s {
         Some(Status::Published) => ("P", look::PASS),
         Some(Status::Estimate) => ("E", look::WARN),
+        Some(Status::User) => ("Y", egui::Color32::from_rgb(0xA0, 0x80, 0xE0)),
         Some(Status::Conflict) => ("C", look::WARN),
         Some(Status::Unknown) | None => ("U", look::MUTED),
     }

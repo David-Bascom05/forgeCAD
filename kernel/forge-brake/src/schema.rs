@@ -588,7 +588,7 @@ pub const CITE: &[Field] = &[
         "the value cited (a field's path), or `record`",
     ),
     Field {
-        choices: &["published", "estimate", "unknown", "conflict"],
+        choices: &["published", "estimate", "unknown", "conflict", "user"],
         ..f(
             "status",
             Kind::Choice,
