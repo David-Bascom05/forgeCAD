@@ -1301,7 +1301,7 @@ pub fn pocket(
     leave: f64,
     ramp: Option<f64>,
 ) -> Result<OpPath, OpError> {
-    pocket_in(rg, c, sp, stepover, leave, ramp, None)
+    pocket_in(rg, c, sp, stepover, leave, ramp, None, false)
 }
 
 /// `pocket`, with the stock's xy box S given: with stepover ≤ r, a pass is left out when all
@@ -1340,6 +1340,7 @@ fn air_down(to: [f64; 3], cleared: bool, feed: (f64, f64)) -> PMove {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn pocket_in(
     rg: &Region,
     c: Cut,
@@ -1348,6 +1349,7 @@ pub fn pocket_in(
     leave: f64,
     ramp: Option<f64>,
     within: Option<&Region>,
+    blend: bool,
 ) -> Result<OpPath, OpError> {
     let Cut {
         tool, tidx, h, feed, ..
@@ -1428,6 +1430,9 @@ pub fn pocket_in(
             });
         }
         passes.retain(|ls| !ls.is_empty());
+    }
+    if blend {
+        blend_corners(&mut passes, r);
     }
     passes.reverse();
     let helix_fits = |s: forge_cam_geom::region::P2| -> bool {
@@ -2050,6 +2055,72 @@ fn region_box(r: &Region) -> ([f64; 2], [f64; 2]) {
 
 /// Whether a closed loop runs counter-clockwise (its signed area, arcs as chords): for choosing
 /// which loops to test, never for a check.
+/// The convex corners of each pass's outer loops rounded, from the second pass in (outermost
+/// first; the first, a wall or an air ring, stays sharp): a loop L is replaced by its opening
+/// (L ⊖ ρ) ⊕ ρ, which rounds exactly its convex corners to radius ρ, for the largest ρ of r,
+/// r/2, r/4 such that what the rounded loop no longer sweeps of what L swept (the band within
+/// r of the loop) lies in the band the pass outside it sweeps (as kept). By induction from the
+/// sharp first pass, the passes together sweep all they swept before: a pocket's opening, and
+/// what it claims cleared, are unchanged. A corner no ρ passes for stays sharp. (`clear` only:
+/// in a pocket the outer pass is the wall's, cut last, and taking the corners' leftovers there
+/// cost more than the corners saved on pocket_islands, +8.5 %.)
+fn blend_corners(passes: &mut [Vec<forge_cam_geom::offset::OLoop>], r: f64) {
+    use forge_cam_geom::boolean::{Op, boolean, region_of};
+    // the band within r of a set of loops: (R ⊕ r) ∖ (R ⊖ r), R the region they bound
+    let band = |rg: &Region| -> Option<Region> {
+        let (out, _) = offset(rg, -r).ok()?;
+        match offset(rg, r) {
+            Ok((inn, _)) if !inn.is_empty() => boolean(&region_of(&out), &region_of(&inn), Op::Diff)
+                .ok()
+                .map(|b| region_of(&b)),
+            Ok(_) => Some(region_of(&out)),
+            Err(_) => None,
+        }
+    };
+    for k in 1..passes.len() {
+        let Some(prev) = band(&region_of(&passes[k - 1])) else {
+            continue;
+        };
+        for li in 0..passes[k].len() {
+            if !loop_ccw_approx(&passes[k][li].segs) {
+                continue;
+            }
+            let lr = region_of(std::slice::from_ref(&passes[k][li]));
+            // L ⊕ r: what the loop's band reaches out to (its inner edge, L ⊖ r, is the opening's
+            // too: ((L ⊖ ρ) ⊕ ρ) ⊖ r = L ⊖ r for ρ ≤ r)
+            let Ok((grown, _)) = offset(&lr, -r) else {
+                continue;
+            };
+            let grown = region_of(&grown);
+            for rho in [r, 0.5 * r, 0.25 * r] {
+                let Ok((inner, _)) = offset(&lr, rho) else {
+                    continue;
+                };
+                if inner.is_empty() {
+                    continue;
+                }
+                let Ok((opened, _)) = offset(&region_of(&inner), -rho) else {
+                    continue;
+                };
+                if opened.len() != 1 {
+                    continue;
+                }
+                let Ok((og, _)) = offset(&region_of(&opened), -r) else {
+                    continue;
+                };
+                // L ⊕ r within (L' ⊕ r) ∪ (the outer pass's band): what the rounding gives up,
+                // the outer pass sweeps
+                let left = boolean(&region_of(&og), &prev, Op::Union)
+                    .and_then(|u| boolean(&grown, &region_of(&u), Op::Diff));
+                if matches!(left, Ok(d) if d.is_empty()) {
+                    passes[k][li] = opened.into_iter().next().unwrap();
+                    break;
+                }
+            }
+        }
+    }
+}
+
 fn loop_ccw_approx(segs: &[Seg]) -> bool {
     let mut pts: Vec<(f64, f64)> = Vec::new();
     for sg in segs {
