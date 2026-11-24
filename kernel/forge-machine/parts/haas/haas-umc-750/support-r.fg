@@ -1,13 +1,33 @@
 # haas-umc-750 trunnion support r (measured on Haas's model)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
 shared x0 = -269
-shared y0 = 371
+shared y0 = 401
 shared z0 = -319
 shared lx = 538
-shared ly = 303
-shared lz = 628
+shared ly = 158
+shared lz = 608
 
 sketch plan(on: offset(xy, z0)) {
   outline = rect(corner: (x0, y0), size: (lx, ly))
 }
 block = extrude(plan, lz)
+shared mx1 = -269
+shared my1 = 371
+shared mz1 = -319
+shared ml1 = 538
+shared mw1 = 28
+shared mh1 = 448
+sketch more1(on: offset(xy, mz1)) {
+  outline = rect(corner: (mx1, my1), size: (ml1, mw1))
+}
+block1 = extrude(more1, mh1)
+shared mx2 = -269
+shared my2 = 561
+shared mz2 = -319
+shared ml2 = 538
+shared mw2 = 113
+shared mh2 = 628
+sketch more2(on: offset(xy, mz2)) {
+  outline = rect(corner: (mx2, my2), size: (ml2, mw2))
+}
+block2 = extrude(more2, mh2)

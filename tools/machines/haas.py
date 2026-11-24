@@ -23,9 +23,10 @@ TAKEN = "2026-11-23"
 # frame and decimated into kernel/forge-machine/data/models/haas/<machine> by
 # tools/machines/import_haas.py; sizes below were measured on those meshes in the record's frame.
 MODEL_TAKEN = "2026-11-24"
+MODEL_REPO = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/"
 MODEL_SRC = {
-    "haas-vf-2": "Haas solid model VF-2_STEP__1_2023.step (kernel/forge-machine/data/models/haas/haas-vf-2)",
-    "haas-umc-750": "Haas solid model rpl_modular_umc-750_09-2026 1.STEP (kernel/forge-machine/data/models/haas/haas-umc-750)",
+    "haas-vf-2": MODEL_REPO + "haas-vf-2 (Haas solid model VF-2_STEP__1_2023.step)",
+    "haas-umc-750": MODEL_REPO + "haas-umc-750 (Haas solid model rpl_modular_umc-750_09-2026 1.STEP)",
 }
 # measured: the spindle axis (x, y) at home where the model stands at home (the VF-2's does: its nose
 # face is 609.6 mm over the table, the published 610), the nose (radius, height over the nose face),
@@ -33,10 +34,15 @@ MODEL_SRC = {
 MODEL = {
     "haas-vf-2": dict(spindle_xy=(381.0, 211.6), nose=(70.0, 70.0), housing=([176, 96], [700, 674, 1070]),
                       table=([-674, -201, -210], [674, 201, 0])),
-    "haas-umc-750": dict(nose=(70.0, 45.0), housing=([202, -35], [560, 507, 2143]), pivot_z=51.2,
-                         cradle=([-225, -470, -360], [225, 370, 10]),
+    # the UMC-750's head narrow under z 800 (its housing above), its B drive housing rising in steps
+    "haas-umc-750": dict(nose=(70.0, 45.0), housing=([217, -35], [496, 395, 800]),
+                         housing_more=[([202, -35, 800], [560, 507, 2143])], pivot_z=51.2,
+                         cradle=([-225, -420, -360], [225, 370, -55]),
+                         cradle_more=[([-110, -470, -170], [110, -420, 120])],
                          supports={"l": ([-160, -560, -360], [160, -470, 120]),
-                                   "r": ([-270, 370, -320], [270, 675, 310])}),
+                                   "r": ([-270, 400, -320], [270, 560, 290]),
+                                   "r+": [([-270, 370, -320], [270, 400, 130]), ([-270, 560, -320], [270, 675, 310])]},
+                         column=([-47, 539, 500], [803, 1319, 2212])),
 }
 # Records whose own bodies can meet within published travel (tests/collide.rs pins those contacts):
 # they cite `zones` unknown (train 4b, d6d9c62d).
@@ -222,6 +228,18 @@ def power_curve(r, spindle):
 
 # ---------------------------------------------------------------------------------------------
 # .fg parts: each body a real part inside its envelope
+
+
+def fg_more(boxes):
+    """Further boxes of a part (each (lo, hi), shrunk 1 mm like the first): one extrude each."""
+    s = []
+    for i, (lo, hi) in enumerate(boxes, 1):
+        lo, hi = shrink_box(lo, hi)
+        s += [f"shared mx{i} = {tv(lo[0])}", f"shared my{i} = {tv(lo[1])}", f"shared mz{i} = {tv(lo[2])}",
+              f"shared ml{i} = {tv(hi[0] - lo[0])}", f"shared mw{i} = {tv(hi[1] - lo[1])}", f"shared mh{i} = {tv(hi[2] - lo[2])}",
+              f"sketch more{i}(on: offset(xy, mz{i})) {{", f"  outline = rect(corner: (mx{i}, my{i}), size: (ml{i}, mw{i}))", "}",
+              f"block{i} = extrude(more{i}, mh{i})"]
+    return "\n".join(s) + ("\n" if s else "")
 
 
 def fg_box(title, lo, hi, cut=None):
@@ -486,9 +504,11 @@ def umc(r):
     msrc = dict(status="published", source=MODEL_SRC.get(r.name, ""), taken=MODEL_TAKEN)
     if "cradle" in mdl:
         cl, ch = [float(x) for x in mdl["cradle"][0]], [float(x) for x in mdl["cradle"][1]]
-        body(r, "cradle", "B", [("box", cl, ch)], fg_box(f"{r.name} trunnion cradle (measured on Haas's model)", *shrink_box(cl, ch)),
+        more = [("box", [float(x) for x in a], [float(x) for x in b]) for a, b in mdl.get("cradle_more", [])]
+        body(r, "cradle", "B", [("box", cl, ch)] + more, fg_box(f"{r.name} trunnion cradle (measured on Haas's model)", *shrink_box(cl, ch)) + fg_more([m[1:] for m in more]),
              ignore=["platter", "support-l", "support-r"], **msrc,
-             value=f"the cradle hung under the platter between its B shaft and drive: {cl} .. {ch} mm at B = 0, measured on the model")
+             value=(f"the cradle hung under the platter between its B shaft and drive: {cl} .. {ch} mm and its shaft-end "
+                    f"hub {[list(m[1:]) for m in more]} at B = 0, measured on the model"))
     else:
         cl, ch = [-(pr + 60), -(pr + 20), pivot_z - 90], [pr + 60, pr + 20, -60]
         body(r, "cradle", "B", [("box", cl, ch)], fg_box(f"{r.name} trunnion cradle (unpublished, conservative)", *shrink_box(cl, ch)),
@@ -497,8 +517,9 @@ def umc(r):
     for side, s in (("l", -1), ("r", 1)):
         if "supports" in mdl:
             lo_, hi_ = [float(x) for x in mdl["supports"][side][0]], [float(x) for x in mdl["supports"][side][1]]
-            body(r, f"support-{side}", "base", [("box", lo_, hi_)],
-                 fg_box(f"{r.name} trunnion support {side} (measured on Haas's model)", *shrink_box(lo_, hi_)),
+            more = [("box", [float(x) for x in a], [float(x) for x in b]) for a, b in mdl["supports"].get(side + "+", [])]
+            body(r, f"support-{side}", "base", [("box", lo_, hi_)] + more,
+                 fg_box(f"{r.name} trunnion support {side} (measured on Haas's model)", *shrink_box(lo_, hi_)) + fg_more([m[1:] for m in more]),
                  ignore=["cradle"], **msrc,
                  value=f"the {'shaft-side support tower (base casting)' if side == 'l' else 'B drive housing'}: {lo_} .. {hi_} mm, measured on the model")
             continue
@@ -514,10 +535,12 @@ def umc(r):
         nr, nh = mdl["nose"]
         hb_lo = [float(mdl["housing"][0][0]), float(mdl["housing"][0][1]), nmax + nh]
         hb_hi = [float(x) for x in mdl["housing"][1]]
-        body(r, "head", "Z", [("cyl", [ax, ay, nmax], [0, 0, 1], nr, nh), ("box", hb_lo, hb_hi)],
+        more = [("box", [float(x) for x in a], [float(x) for x in b]) for a, b in mdl.get("housing_more", [])]
+        body(r, "head", "Z", [("cyl", [ax, ay, nmax], [0, 0, 1], nr, nh), ("box", hb_lo, hb_hi)] + more,
              fg_head(f"{r.name} head (measured on Haas's model)", ax, ay, nmax + 1, nr - 1, nh - 1,
-                     [hb_lo[0] + 1, hb_lo[1] + 1, hb_lo[2]], [hb_hi[0] - 1, hb_hi[1] - 1, hb_hi[2] - 1]),
-             **msrc, value=(f"nose r {nr:g} x {nh:g} mm and housing with its Z ram {hb_lo} .. {hb_hi} mm, measured on "
+                     [hb_lo[0] + 1, hb_lo[1] + 1, hb_lo[2]], [hb_hi[0] - 1, hb_hi[1] - 1, hb_hi[2] - 1]) + fg_more([m[1:] for m in more]),
+             **msrc, value=(f"nose r {nr:g} x {nh:g} mm, housing {hb_lo} .. {hb_hi} mm and above it "
+                            f"{[list(m[1:]) for m in more]} with its Z ram, measured on "
                             "the model (its head moved to the record's home: the model stands at Z 319 mm below it)"))
     else:
         body(r, "head", "Z", [("cyl", [ax, ay, nmax], [0, 0, 1], nr, nh), ("box", hb_lo, hb_hi)],
@@ -599,12 +622,19 @@ def frame_bodies(r, kind):
                     f"{v['overall_h']['stated']} but no platter or base height): a 350 mm slab under the trunnion supports, "
                     "under the whole column X travel (stand-in)"))
         c_lo, c_hi = [ax - 400, head_back, -550], [ax + 400, head_back + 500, 1500]
-        lbody(r, "column", "X", [("box", c_lo, c_hi)],
-             fg_box(f"{r.name} column (envelope: unpublished casting)", *shrink_box(c_lo, c_hi)),
-             ignore=["head", "base"], status="estimate", source=src("overall_h"), value=v["overall_h"]["stated"],
-             basis=("the column is not dimensioned; Haas UMCs carry Y and Z on a column moving in X (record kinematics): "
-                    "an 800 x 500 mm box behind the head housing, from the base top to 1500 mm above the platter, under the "
-                    f"published overall height ({v['overall_h']['v']:g} mm above the floor)"))
+        if "column" in MODEL.get(r.name, {}):
+            c_lo, c_hi = [float(x) for x in MODEL[r.name]["column"][0]], [float(x) for x in MODEL[r.name]["column"][1]]
+            body(r, "column", "X", [("box", c_lo, c_hi)],
+                 fg_box(f"{r.name} X carriage (measured on Haas's model)", *shrink_box(c_lo, c_hi)),
+                 ignore=["head", "base"], status="published", source=MODEL_SRC[r.name], taken=MODEL_TAKEN,
+                 value=f"the X carriage carrying Y and Z: {c_lo} .. {c_hi} mm at home, measured on the model")
+        else:
+            lbody(r, "column", "X", [("box", c_lo, c_hi)],
+                 fg_box(f"{r.name} column (envelope: unpublished casting)", *shrink_box(c_lo, c_hi)),
+                 ignore=["head", "base"], status="estimate", source=src("overall_h"), value=v["overall_h"]["stated"],
+                 basis=("the column is not dimensioned; Haas UMCs carry Y and Z on a column moving in X (record kinematics): "
+                        "an 800 x 500 mm box behind the head housing, from the base top to 1500 mm above the platter, under the "
+                        f"published overall height ({v['overall_h']['v']:g} mm above the floor)"))
         y_hi = c_hi[1] + 400
         e_lo, e_hi = [-v["overall_w_body"]["v"] / 2, y_hi - v["overall_d"]["v"], b_lo[2]], \
                      [v["overall_w_body"]["v"] / 2, y_hi, b_lo[2] + top_h]

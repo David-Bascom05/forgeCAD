@@ -1,7 +1,7 @@
 # haas-umc-750 enclosure outline (display only: drawn see-through, never collided)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
 shared x0 = -1421.4
-shared y0 = -1295.2
+shared y0 = -1150.2
 shared z0 = -899
 shared lx = 2842.8
 shared ly = 2868.2

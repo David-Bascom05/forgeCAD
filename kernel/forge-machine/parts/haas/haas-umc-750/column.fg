@@ -1,11 +1,11 @@
-# haas-umc-750 column (envelope: unpublished casting)
+# haas-umc-750 X carriage (measured on Haas's model)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared x0 = -18
-shared y0 = 675
-shared z0 = -549
-shared lx = 798
-shared ly = 498
-shared lz = 2048
+shared x0 = -46
+shared y0 = 540
+shared z0 = 501
+shared lx = 848
+shared ly = 778
+shared lz = 1710
 
 sketch plan(on: offset(xy, z0)) {
   outline = rect(corner: (x0, y0), size: (lx, ly))
