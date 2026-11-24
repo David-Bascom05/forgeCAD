@@ -787,12 +787,12 @@ fn cutter_comp_rules_print_and_read() {
         Err(PostError::Unsupported { what, .. }) => assert!(what.contains("cutter compensation"), "{what}"),
         r => panic!("{r:?}"),
     }
-    // every dialect: one that sets and cites all four keys round-trips the events; any other
-    // refuses (none declares its corner behaviour yet)
+    // every dialect: one that sets and cites the five keys round-trips the events; any other
+    // refuses
     for (name, _) in DIALECTS {
         let d = Dialect::get(name).unwrap();
         let q = quantize(&comp_prog(), &d).unwrap();
-        let full = ["comp_left", "comp_right", "comp_off", "comp_corner"]
+        let full = ["comp_left", "comp_right", "comp_off", "comp_corner", "comp_entry"]
             .iter()
             .all(|k| !d.s(k).is_empty() && !d.cites.iter().any(|c| c.key == *k && c.status == "refused"));
         if full {
@@ -809,13 +809,22 @@ fn cutter_comp_rules_print_and_read() {
             );
         }
     }
-    // LinuxCNC cites G41/G42/G40 but not its corner behaviour: refused too
+    // LinuxCNC cites all five (its interpreter's source): posted; Fanuc and Haas cite no corner
+    // behaviour: refused
     let lc = Dialect::get("linuxcnc").unwrap();
     let ql = quantize(&comp_prog(), &lc).unwrap();
-    assert!(matches!(print(&ql, &lc), Err(PostError::Unsupported { .. })));
-    // a test dialect with the four keys
+    let txt = print(&ql, &lc).unwrap();
+    assert!(txt.lines().any(|l| l.contains("G41 D3")), "{txt}");
+    for name in ["fanuc", "haas"] {
+        let d = Dialect::get(name).unwrap();
+        assert!(matches!(
+            print(&quantize(&comp_prog(), &d).unwrap(), &d),
+            Err(PostError::Unsupported { .. })
+        ));
+    }
+    // a test dialect with the keys
     let src = format!(
-        "{}\ncomp_left = \"G41 D{{d}}\"\ncomp_right = \"G42 D{{d}}\"\ncomp_off = \"G40\"\ncomp_corner = \"arc\"\n",
+        "{}\ncomp_left = \"G41 D{{d}}\"\ncomp_right = \"G42 D{{d}}\"\ncomp_off = \"G40\"\ncomp_corner = \"arc\"\ncomp_entry = \"perpendicular\"\n",
         DIALECTS
             .iter()
             .find(|d| d.0 == "fanuc")

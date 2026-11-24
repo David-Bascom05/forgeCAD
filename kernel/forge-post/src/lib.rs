@@ -150,7 +150,7 @@ pub struct Cite {
 }
 
 /// The template keys a dialect may set; with `cite_required`, each one it sets is cited.
-pub const KEYS: [&str; 51] = [
+pub const KEYS: [&str; 53] = [
     "program_open",
     "program_close",
     "comment",
@@ -194,12 +194,16 @@ pub const KEYS: [&str; 51] = [
     "inch_decimals",
     "inch_feed_decimals",
     // cutter radius compensation (CAM-2D-FINISH): G41/G42 with the register, G40, and what the
-    // control does at an outside corner under it (`arc` or `intersection`); comp is posted only
-    // where all four are set and cited
+    // control does at an outside corner under it (`arc` or `intersection`), where the first move
+    // under it ends (`comp_entry`: `norm`, displaced perpendicular to the next block; or
+    // `perpendicular`, to the entry move itself) and the turn below which a corner gets neither
+    // (`comp_corner_tolerance`, radians); comp is posted only where the first five are set and cited (no tolerance: exact)
     "comp_left",
     "comp_right",
     "comp_off",
     "comp_corner",
+    "comp_entry",
+    "comp_corner_tolerance",
     "probe_move",
     "probe_on",
     "probe_off",
@@ -1291,12 +1295,17 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                     None => "comp_off",
                 };
                 let tpl = d.s(key).to_string();
-                let refused = ["comp_left", "comp_right", "comp_off", "comp_corner"]
+                let refused = ["comp_left", "comp_right", "comp_off", "comp_corner", "comp_entry"]
                     .iter()
                     .any(|k| d.cites.iter().any(|c| c.key == *k && c.status == "refused"));
-                if tpl.is_empty() || tpl == "refuse" || d.s("comp_corner").is_empty() || refused {
+                if tpl.is_empty()
+                    || tpl == "refuse"
+                    || d.s("comp_corner").is_empty()
+                    || d.s("comp_entry").is_empty()
+                    || refused
+                {
                     return Err(PostError::Unsupported {
-                        what: format!("cutter compensation on {} (no cited G41/G42/G40 or corner behaviour)", d.name),
+                        what: format!("cutter compensation on {} (no cited G41/G42/G40, corner or entry behaviour)", d.name),
                         fix: "post the tool centre (comp: \"computer\"), or a dialect that declares compensation".into(),
                     });
                 }

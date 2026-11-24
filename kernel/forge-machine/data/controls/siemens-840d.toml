@@ -35,3 +35,10 @@ source = "https://cache.industry.siemens.com/dl/files/633/109443633/att_829767/v
 taken = "2026-11-24"
 where = "PGZ: CYCLE81 2.1.3 pp42-44, CYCLE800 3.16 p216, CYCLE832 3.17 pp265-268"
 note = "CYCLE81: G0 to the reference plane shifted by the safety clearance, G1 to the final depth at the programmed feed, G0 to the retraction plane. CYCLE832 sets continuous-path mode, compression and velocity control from machine-specific settings: not modelled. CYCLE800() deselects the swivel data record and deletes the swivel frames"
+
+[[dialect.cite]]
+key = "native"
+source = "https://cache.industry.siemens.com/dl/files/554/74475554/att_56792/v1/PGsl_0313_en_en-US.pdf"
+taken = "2026-11-24"
+where = "PGsl: tool radius compensation G40/G41/G42 10.1 pp257-266, NORM 10.2 pp267-270, G450/G451/DISC 10.3 pp274-275, collision detection CDON/CDOF 10.5 p293, G function groups 17, 18 and 7 (defaults set by MD20150) 16.4"
+note = "G41/G42 need G0 or G1 and an axis of the plane in the block; a negative radius is the other side; no change of plane while on; NORM: straight to (and from) the contour's point displaced perpendicular to its tangent; G450: a circle of the tool radius about an outside corner; G451: the equidistants' intersection; the defaults of NORM/KONT and G450/G451 are machine data, so a program must state them (comp.rs)"

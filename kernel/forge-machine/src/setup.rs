@@ -71,6 +71,8 @@ pub struct SetupSpec {
     pub wcs: Vec<(u32, Vec<(char, f64)>)>,
     pub tools: Vec<SimTool>,
     pub h: Vec<(u32, f64)>,
+    /// Each tool's cutter radius register (`radius` on its [[setup.tool]]): see sim::Setup::radius.
+    pub radius: Vec<(u32, f64)>,
     pub geo: Vec<(u32, Vec<(char, f64)>)>,
     pub stock: Option<Stock>,
     /// Workholding (vises, clamps, plates, chucks), part frame.
@@ -208,6 +210,7 @@ impl SetupSpec {
         }
         let mut tools = Vec::new();
         let mut h = Vec::new();
+        let mut radius = Vec::new();
         for t in tables(s, "tool") {
             let r = "[[setup.tool]]";
             let tn = whole(need_num(t, r, "t")?, r, "t")?;
@@ -238,6 +241,12 @@ impl SetupSpec {
             };
             if let Some(hv) = num(t, "h") {
                 h.push((tn, hv));
+            }
+            if let Some(rv) = num(t, "radius") {
+                if !rv.is_finite() {
+                    return Err(format!("{rec}: `radius` must be finite"));
+                }
+                radius.push((tn, rv));
             }
             tools.push(SimTool {
                 t: tn,
@@ -349,6 +358,7 @@ impl SetupSpec {
             wcs,
             tools,
             h,
+            radius,
             geo,
             stock,
             fixture,
@@ -402,6 +412,7 @@ impl SetupSpec {
         s.geo = geo;
         s.tools = self.tools.clone();
         s.h = self.h.clone();
+        s.radius = self.radius.clone();
         s.dogleg = self.dogleg;
         s.feed_combined = self.feed_combined;
         s.start_tool = self.start_tool;

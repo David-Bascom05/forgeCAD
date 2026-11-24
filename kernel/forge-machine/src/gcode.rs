@@ -62,6 +62,45 @@ fn skip_codes(d: &forge_tooling::toml::Table) -> Vec<u16> {
     out
 }
 
+/// The dialect's cutter compensation, where every key is set and none is cited refused: the
+/// SINUMERIK native control's from its words (G450/G451 per program), LinuxCNC's from its keys.
+fn comp_model(d: &forge_tooling::toml::Table) -> Option<CompModel> {
+    use forge_tooling::toml;
+    if toml::text(d, "native") == Some("840d") {
+        return Some(CompModel {
+            entry_norm: true,
+            corner_arc: true,
+            tol: 0.0,
+        });
+    }
+    let keys = ["comp_left", "comp_right", "comp_off", "comp_corner", "comp_entry"];
+    let set = keys
+        .iter()
+        .all(|k| toml::text(d, k).is_some_and(|t| !t.is_empty() && t != "refuse"));
+    let refused = toml::tables(d, "cite").iter().any(|c| {
+        toml::text(c, "status") == Some("refused") && toml::text(c, "key").is_some_and(|k| keys.contains(&k))
+    });
+    if !set || refused {
+        return None;
+    }
+    let corner_arc = match toml::text(d, "comp_corner")? {
+        "arc" => true,
+        "intersection" => false,
+        _ => return None,
+    };
+    let entry_norm = match toml::text(d, "comp_entry")? {
+        "norm" => true,
+        "perpendicular" => false,
+        _ => return None,
+    };
+    let tol = toml::num(d, "comp_corner_tolerance").unwrap_or(0.0);
+    Some(CompModel {
+        entry_norm,
+        corner_arc,
+        tol,
+    })
+}
+
 /// The probing macros a dialect's templates call: (P number, which).
 fn macro_codes(d: &forge_tooling::toml::Table) -> Vec<(u32, Macro)> {
     use forge_tooling::toml;
@@ -134,6 +173,23 @@ pub struct Control {
     /// The probing macros this dialect cites (G65 P<n>): each template's P number and what it is
     /// (`probe_on`, `probe_off`, `probe_protected`, `probe_surface`). Others are refused.
     pub macros: Vec<(u32, Macro)>,
+    /// Cutter radius compensation as the control does it, where the dialect cites it
+    /// (`comp_left`/`comp_right`/`comp_off`/`comp_corner`/`comp_entry`, none refused; or the
+    /// SINUMERIK native reader): None, G41/G42 are refused.
+    pub comp: Option<CompModel>,
+}
+
+/// How a control compensates (comp.rs).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CompModel {
+    /// The first move under compensation ends displaced perpendicular to the next block (NORM,
+    /// SINUMERIK) or to itself (LinuxCNC); the entry and the next block then meet at a corner.
+    pub entry_norm: bool,
+    /// An outside corner: a circle about it (true) or the equidistants' intersection.
+    pub corner_arc: bool,
+    /// A turn of at most this (radians) gets neither a circle nor a trim: the next block starts
+    /// where the last ended (LinuxCNC's TOLERANCE_CONCAVE_CORNER); 0: exact.
+    pub tol: f64,
 }
 
 /// A probing macro the simulation models from its published description.
@@ -212,6 +268,7 @@ impl Control {
             tool_names: Vec::new(),
             m_no_motion: Vec::new(),
             macros: Vec::new(),
+            comp: None,
         }
     }
 
@@ -315,6 +372,7 @@ impl Control {
             tool_names: Vec::new(),
             m_no_motion: Vec::new(),
             macros: macro_codes(d),
+            comp: comp_model(d),
         })
     }
 
@@ -388,6 +446,16 @@ pub enum Ev {
     NotModelled {
         path: String,
         check: &'static str,
+    },
+    /// Cutter radius compensation (SINUMERIK G41/G42 with NORM, PGsl 10.1-10.3): on, to the
+    /// left (G41) or right (G42) of the programmed path, or off (G40); `arc`: an outside corner on
+    /// a circle about it (G450) or to the equidistants' intersection (G451). The next move is the
+    /// approach (on) or the retract (off). sim applies it (comp::apply) from the setup's radii.
+    Comp {
+        left: Option<bool>,
+        arc: bool,
+        /// The D word (LinuxCNC: the tool whose radius; None the loaded tool's).
+        d: Option<u32>,
     },
     Rapid(Vec<Option<Q>>),
     Feed {
@@ -506,6 +574,8 @@ pub struct State {
     pub probe_off_pending: bool,
     /// SINUMERIK 840D native state (variables, the modal cycle call, the tool offset).
     pub s840: crate::siemens::S840,
+    /// Cutter compensation on (G41/G42 on a dialect that cites it).
+    pub comp_on: bool,
 }
 
 impl State {
@@ -530,6 +600,7 @@ impl State {
             probe_on: false,
             probe_off_pending: false,
             s840: Default::default(),
+            comp_on: false,
         }
     }
 }
@@ -883,6 +954,7 @@ pub(crate) fn block_fanuc(
             );
         // the program's units: its own code, never the other's (no switch within a program)
         let ok = ok || (*g == 210 && !c.inch) || (*g == 200 && c.inch);
+        let ok = ok || ((*g == 410 || *g == 420) && c.comp.is_some());
         if !ok {
             let what = match g {
                 200 => "G20 (inch) in a program read in mm: read it with the control in inches".to_string(),
@@ -1048,6 +1120,44 @@ pub(crate) fn block_fanuc(
     }
     if has_g(49) {
         push(out, Ev::Length(None));
+    }
+    // 4b. cutter compensation where the dialect cites it (comp.rs applies it): before this
+    // block's move, which is the entry (on) or the exit (off)
+    if let Some(cm) = c.comp.filter(|_| !c.lex.native840d) {
+        let on = [has_g(41), has_g(42)];
+        if on[0] || on[1] {
+            if st.comp_on {
+                return Err(ge(ln, "G41/G42 while compensation is on"));
+            }
+            if st.core.plane != 17 || has_g(18) || has_g(19) {
+                return Err(ge(ln, "cutter compensation outside G17 is not modelled"));
+            }
+            let d = whole('D')?;
+            if d.is_some_and(|d| d < 0) {
+                return Err(ge(ln, "a negative D"));
+            }
+            st.comp_on = true;
+            push(
+                out,
+                Ev::Comp {
+                    left: Some(on[0]),
+                    arc: cm.corner_arc,
+                    d: d.map(|d| d as u32),
+                },
+            );
+        } else if has_g(40) && st.comp_on {
+            st.comp_on = false;
+            push(
+                out,
+                Ev::Comp {
+                    left: None,
+                    arc: cm.corner_arc,
+                    d: None,
+                },
+            );
+        } else if st.comp_on && (has_g(18) || has_g(19)) {
+            return Err(ge(ln, "a change of plane while compensation is on"));
+        }
     }
     for n in 54..=59u16 {
         if has_g(n) {

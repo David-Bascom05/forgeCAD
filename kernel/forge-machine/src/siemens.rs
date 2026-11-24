@@ -37,6 +37,13 @@ pub struct S840 {
     pub d_unknown: bool,
     /// The active D (0 or 1).
     pub d: u32,
+    /// NORM stated (group 17: the approach and retract of compensation, PGsl 10.2).
+    pub norm: bool,
+    /// G450 (Some(true): a circle about an outside corner) or G451 (Some(false): the
+    /// equidistants' intersection), once stated (group 18, PGsl 10.3).
+    pub corner: Option<bool>,
+    /// Cutter radius compensation on (G41/G42).
+    pub comp: bool,
 }
 
 fn err(line: usize, what: impl Into<String>) -> GError {
@@ -218,6 +225,8 @@ pub fn block(
     let mut d_word: Option<u32> = None;
     let mut m6 = false;
     let mut mcall_set: Option<Option<[String; 4]>> = None;
+    // G41 (Some(true)), G42 (Some(false)) or G40 (None) in this block
+    let mut comp_set: Option<Option<bool>> = None;
     let mut notes: Vec<(String, &'static str)> = Vec::new();
     let mut i = 0;
     while i < toks.len() {
@@ -275,6 +284,42 @@ pub fn block(
             continue;
         }
         match t {
+            // cutter radius compensation (PGsl 10.1-10.3)
+            "G40" | "G41" | "G42" => {
+                comp_set = Some(match t {
+                    "G41" => Some(true),
+                    "G42" => Some(false),
+                    _ => None,
+                });
+                continue;
+            }
+            "NORM" => {
+                s.norm = true;
+                continue;
+            }
+            "G450" | "G451" => {
+                let arc = t == "G450";
+                if s.comp && s.corner != Some(arc) {
+                    return Err(err(
+                        ln,
+                        format!(
+                            "`{t}` while compensation is on: a change of corner behaviour is not modelled"
+                        ),
+                    ));
+                }
+                s.corner = Some(arc);
+                continue;
+            }
+            // DISC=0 is G450's transition circle itself; OFFN=0 no allowance (PGsl 10.3, 10.1);
+            // the collision detection setting matters only where compensated blocks do not meet,
+            // which is refused (PGsl 10.5)
+            "DISC=0" | "OFFN=0" | "CDON" | "CDOF" | "CDOF2" => continue,
+            "KONT" | "KONTC" | "KONTT" => {
+                return Err(err(
+                    ln,
+                    format!("`{t}`: only NORM's approach and retract are read (PGsl 10.2)"),
+                ));
+            }
             "SUPA" => {
                 supa = true;
                 continue;
@@ -394,6 +439,71 @@ pub fn block(
             "SUPA with Z and a tool offset in force: SUPA suppresses frames, not the offset (PGsl 12.9); not modelled",
         ));
     }
+    if s.comp && (d_word.is_some_and(|d| d != s.d) || m6) {
+        return Err(err(
+            ln,
+            "a D or a tool change while compensation is on is not modelled",
+        ));
+    }
+    let names_xy = words.iter().any(|w| w.starts_with('X') || w.starts_with('Y'));
+    // the compensation event, sent just before the block's move (comp::apply reads the next move
+    // as the approach or the retract)
+    let mut comp_ev: Option<Ev> = None;
+    match comp_set {
+        Some(Some(left)) => {
+            if s.comp {
+                return Err(err(
+                    ln,
+                    "G41/G42 while compensation is on (a change of side) is not modelled",
+                ));
+            }
+            if !s.norm {
+                return Err(err(
+                    ln,
+                    "G41/G42 with the approach not stated: program NORM (its default is machine data, MD20150; PGsl 10.2, 16.4 group 17)",
+                ));
+            }
+            let arc = s.corner.ok_or_else(|| {
+                err(
+                    ln,
+                    "G41/G42 with the corner behaviour not stated: program G450 or G451 (its default is machine data, MD20150; PGsl 10.3, 16.4 group 18)",
+                )
+            })?;
+            if d_word.unwrap_or(s.d) == 0 {
+                return Err(err(ln, "G41/G42 with D0: no tool radius in force"));
+            }
+            if st.core.plane != 17 {
+                return Err(err(ln, "G41/G42 outside G17 is not modelled"));
+            }
+            if !names_xy {
+                return Err(err(
+                    ln,
+                    "G41/G42 needs an X or Y move in its block (PGsl 10.1 p. 258)",
+                ));
+            }
+            s.comp = true;
+            comp_ev = Some(Ev::Comp {
+                left: Some(left),
+                arc,
+                d: None,
+            });
+        }
+        Some(None) if s.comp => {
+            if !names_xy {
+                return Err(err(
+                    ln,
+                    "G40 with no X or Y move in its block: the retract is not modelled",
+                ));
+            }
+            s.comp = false;
+            comp_ev = Some(Ev::Comp {
+                left: None,
+                arc: s.corner.unwrap_or(true),
+                d: None,
+            });
+        }
+        _ => {}
+    }
     let mut lines: Vec<String> = Vec::new();
     if let Some(d) = d_word {
         if d == 0 {
@@ -427,8 +537,21 @@ pub fn block(
     }
     // run them
     let n = n_word.map(|n| format!("{n} ")).unwrap_or_default();
-    for l in &lines {
+    let last = lines.len();
+    for (i, l) in lines.iter().enumerate() {
+        if i + 1 == last
+            && !words.is_empty()
+            && let Some(e) = comp_ev.take()
+        {
+            push(out, e);
+        }
         block_fanuc(&format!("{n}{l}"), ln, c, st, out)?;
+    }
+    if st.s840.comp && st.core.plane != 17 {
+        return Err(err(
+            ln,
+            "a change of plane while compensation is on (PGsl 10.1 p. 265)",
+        ));
     }
     for (path, check) in notes {
         push(out, Ev::NotModelled { path, check });

@@ -12,6 +12,7 @@
 //! - `collide`: every body through the motion; `removal`: the stock as cut; `multi`: several
 //!   channels synchronised at waits, checked over every timing within the bounds.
 pub mod collide;
+pub mod comp;
 pub mod def;
 pub mod gcode;
 pub mod homing;
