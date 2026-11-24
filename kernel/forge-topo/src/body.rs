@@ -813,6 +813,14 @@ impl Body {
         self.bound_vertex_tol(t);
     }
 
+    /// The bound raised to at least `tol`, for a writer that raised vertices' tolerances in place
+    /// itself (a scale): `grow_vertex_tol` does both for one vertex.
+    pub fn note_vertex_tol(&mut self, tol: f64) {
+        if tol > forge_math::tol::LINEAR {
+            self.bound_vertex_tol(tol);
+        }
+    }
+
     /// The bound at least `tol` (an f32 at or above it).
     fn bound_vertex_tol(&mut self, tol: f64) {
         if tol > f64::from(self.vertex_tol) {
