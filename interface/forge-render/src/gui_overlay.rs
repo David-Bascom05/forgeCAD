@@ -217,6 +217,7 @@ impl Gui {
         if o.grid {
             crate::overlay::grid(c, r, cam, size, px, ink, &mut out);
         }
+        self.machine_ghost_world(cam, size, &mut out);
         {
             let blue = crate::viewcube::rgb(0x5A9BE0);
             let shown = |id: &str| p.eyes.get(id).copied().unwrap_or(o.planes);

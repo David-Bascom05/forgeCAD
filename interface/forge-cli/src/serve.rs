@@ -17,7 +17,16 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 16] = [
+const TOOLS: [Tool; 17] = [
+    (
+        "bend",
+        "Run a bending document (.fg starting with `bending`): the press-brake program simulated as it states (certified tool clearance through each bend, handling between steps); reply forgecad.bending/1. what=sheet: the setup sheet",
+        1,
+        &[
+            ("file", "path to a bending .fg"),
+            ("what", "sheet: the setup sheet"),
+        ],
+    ),
     (
         "cam",
         "Run a machining document (.fg starting with `machining`): every op's path certified against the exact part (gouge, holder, rapids) or refused with the check and a fix; reply forgecad.cam/1. what=sheet: the setup sheet",
@@ -390,7 +399,7 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
         };
     }
     let mut r = forge.run(name, &a, p);
-    if name == "cam"
+    if (name == "cam" || name == "bend")
         && let Some(b) = r.png.take()
     {
         // the program or the sheet is text: it goes as text, never as an image

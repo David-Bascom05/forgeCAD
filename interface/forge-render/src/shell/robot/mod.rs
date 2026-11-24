@@ -60,13 +60,53 @@ pub fn open_for(source: &str) -> Result<RobotWs, String> {
     Ok(p)
 }
 
+/// The property sheet's width, docked at the window's right.
+pub const PROPS_W: f32 = 360.0;
+
+/// May the environment be entered: a robot document open, or a part or assembly saved to a file
+/// (its companion robot document is opened or made, `open_for`).
+pub(in crate::shell) fn available(s: &Shell) -> Result<(), String> {
+    if s.robot.is_some() {
+        return Ok(());
+    }
+    match s.fg.as_ref().map(|f| f.path.as_str()) {
+        Some(p) if !p.is_empty() => Ok(()),
+        Some(_) => Err("save the part or assembly first: its robot is a document beside it".into()),
+        None => Err("open a part, an assembly or a robot document first".into()),
+    }
+}
+
+/// Into it: the robot document open (the open document's companion, made linked to it if there
+/// is none), its panel up, the view to be fitted to it.
+pub(in crate::shell) fn enter(s: &mut Shell) -> Result<(), String> {
+    if s.robot.is_none() {
+        let path =
+            s.fg.as_ref()
+                .map(|f| f.path.clone())
+                .filter(|p| !p.is_empty())
+                .ok_or("save the part or assembly first")?;
+        s.robot = Some(open_for(&path)?);
+    }
+    if let Some(p) = &mut s.robot {
+        p.open = true;
+        p.framed = false;
+    }
+    Ok(())
+}
+
+/// Out of it (Finish Robot): the source stays open in 3D Model; the robot kept for coming back.
+pub(in crate::shell) fn exit(s: &mut Shell) {
+    if let Some(p) = &mut s.robot {
+        p.open = false;
+    }
+}
+
 /// Its ribbon commands.
 pub const EXPORT: u16 = 1;
 pub const UNDO: u16 = 2;
 pub const HOME: u16 = 3;
 pub const AXES: u16 = 4;
 pub const COM: u16 = 5;
-pub const FINISH: u16 = 6;
 const TREE: [(u16, TreeOp); 6] = [
     (10, TreeOp::MakeRoot),
     (11, TreeOp::Drop),
@@ -112,25 +152,11 @@ pub(in crate::shell) fn groups(s: &Shell, act: &dyn Fn(u16) -> Action) -> Vec<Gr
                 .collect(),
             icons: vec![],
         },
-        Group {
-            name: "Exit",
-            big: vec![tool("Finish Robot", "finish", FINISH, false, true)],
-            small: vec![],
-            icons: vec![],
-        },
     ]
 }
 
 /// One of the ribbon's commands.
 pub fn command(s: &mut Shell, c: u16) {
-    if c == FINISH {
-        // out of the environment: the source stays open in 3D Model, the robot kept for coming back
-        if let Some(p) = &mut s.robot {
-            p.open = false;
-        }
-        s.tab = 0;
-        return;
-    }
     let Some(p) = &mut s.robot else { return };
     match c {
         EXPORT => p.out.push(RobotAct::Export),

@@ -1,6 +1,7 @@
 //! Exact planar arrangements of line segments and circular arcs: where two pieces meet, whether a
 //! point lies on a piece's span, and the order of points along a piece. Every decision is an
 //! exact sign (`real::Ctx::sign`).
+use crate::ival::Ival;
 use crate::real::{Ctx, Dy, R};
 use std::cmp::Ordering;
 
@@ -192,9 +193,27 @@ pub fn on_span(cx: &mut Ctx, pc: &Piece, x: Pt) -> bool {
 
 /// A point within this many f64 of an interval box: the cheap reject.
 fn boxes_apart(cx: &Ctx, a: &Piece, b: &Piece) -> bool {
-    let ba = piece_box(cx, a);
-    let bb = piece_box(cx, b);
-    ba.0 > bb.2 || bb.0 > ba.2 || ba.1 > bb.3 || bb.1 > ba.3
+    let apart = |ba: (f64, f64, f64, f64), bb: (f64, f64, f64, f64)| {
+        ba.0 > bb.2 || bb.0 > ba.2 || ba.1 > bb.3 || bb.1 > ba.3
+    };
+    // the coarse boxes first (an arc's whole circle: no interval work), then the tight ones
+    apart(coarse_box(cx, a), coarse_box(cx, b)) || apart(piece_box(cx, a), piece_box(cx, b))
+}
+
+/// A box holding the piece, cheaply: a line's ends', an arc's whole circle's.
+pub fn coarse_box(cx: &Ctx, pc: &Piece) -> (f64, f64, f64, f64) {
+    match pc.curve {
+        Curve::Line { .. } => piece_box(cx, pc),
+        Curve::Circle { c, rad, .. } => {
+            let (x, y, r) = (cx.iv(c.x), cx.iv(c.y), cx.iv(rad));
+            (
+                (x.lo - r.hi).next_down(),
+                (y.lo - r.hi).next_down(),
+                (x.hi + r.hi).next_up(),
+                (y.hi + r.hi).next_up(),
+            )
+        }
+    }
 }
 
 /// An f64 box (xmin, ymin, xmax, ymax) holding the piece.
@@ -209,15 +228,79 @@ pub fn piece_box(cx: &Ctx, pc: &Piece) -> (f64, f64, f64, f64) {
                 sy.hi.max(ey.hi),
             )
         }
-        Curve::Circle { c, rad, .. } => {
+        Curve::Circle { c, rad, ccw, .. } => {
             let (x, y, r) = (cx.iv(c.x), cx.iv(c.y), cx.iv(rad));
-            (
+            // the circle's box: west, south, east, north
+            let circle = [
                 (x.lo - r.hi).next_down(),
                 (y.lo - r.hi).next_down(),
                 (x.hi + r.hi).next_up(),
                 (y.hi + r.hi).next_up(),
-            )
+            ];
+            if pc.full {
+                return (circle[0], circle[1], circle[2], circle[3]);
+            }
+            // an arc: its ends' box, grown to each of the circle's extremes the span may hold
+            // (the extent in a direction is an end's unless the extreme point is inside the
+            // span); undecided in intervals, the extreme is taken, so the box only grows
+            let (sx, sy, ex, ey) = (cx.iv(pc.s.x), cx.iv(pc.s.y), cx.iv(pc.e.x), cx.iv(pc.e.y));
+            let mut b = [
+                sx.lo.min(ex.lo),
+                sy.lo.min(ey.lo),
+                sx.hi.max(ex.hi),
+                sy.hi.max(ey.hi),
+            ];
+            let us = (sx.sub(x), sy.sub(y));
+            let ue = (ex.sub(x), ey.sub(y));
+            // west (-1, 0), south (0, -1), east (1, 0), north (0, 1): which box side each grows
+            let dirs: [((f64, f64), usize); 4] = [
+                ((-1.0, 0.0), 0),
+                ((0.0, -1.0), 1),
+                ((1.0, 0.0), 2),
+                ((0.0, 1.0), 3),
+            ];
+            for (d, k) in dirs {
+                if span_may_hold(us, ue, d, ccw) {
+                    b[k] = circle[k];
+                }
+            }
+            (b[0], b[1], b[2], b[3])
         }
+    }
+}
+
+/// Whether direction d (a unit axis vector) may lie strictly inside the arc's span from us to
+/// ue (in the arc's sense): false only when interval signs prove it outside.
+fn span_may_hold(us: (Ival, Ival), ue: (Ival, Ival), d: (f64, f64), ccw: bool) -> bool {
+    let dv = (Ival::pt(d.0), Ival::pt(d.1));
+    let sense = if ccw { 1 } else { -1 };
+    let cross = |a: (Ival, Ival), b: (Ival, Ival)| a.0.mul(b.1).sub(a.1.mul(b.0)).sign() * sense;
+    let dot = |a: (Ival, Ival), b: (Ival, Ival)| a.0.mul(b.0).add(a.1.mul(b.1)).sign();
+    // the half-turn of v from us in the arc's sense: 0 for [0, π), 1 for [π, 2π); None undecided
+    let half = |v: (Ival, Ival)| -> Option<u8> {
+        match cross(us, v) {
+            1 => Some(0),
+            -1 => Some(1),
+            _ => match dot(us, v) {
+                // on us's line: along it (angle 0) or against it (π)
+                1 => Some(0),
+                -1 => Some(1),
+                _ => None,
+            },
+        }
+    };
+    let (Some(hd), Some(he)) = (half(dv), half(ue)) else {
+        return true;
+    };
+    // d outside: further round than ue (or at angle 0, at us, an end: covered by the ends' box)
+    if hd != he {
+        return hd < he;
+    }
+    match cross(dv, ue) {
+        // ue further round than d: d inside
+        1 => true,
+        -1 => false,
+        _ => true,
     }
 }
 
@@ -570,46 +653,47 @@ pub fn rep_point(cx: &mut Ctx, pc: &Piece, a: Pt, b: Pt) -> Pt {
                     }
                 }
             };
-            // a dyadic direction near w, checked strictly inside (a, b)
-            let mut prec = 53u64;
-            loop {
-                let (wx, wy) = (dy_near(cx, w.x, prec), dy_near(cx, w.y, prec));
-                let mk = cx.mark();
-                let (nx, ny) = (cx.dy(wx.clone()), cx.dy(wy.clone()));
-                let nv = Pt { x: nx, y: ny };
-                let n2 = norm2(cx, nv);
-                let ok = sgn(cx, n2) > 0 && {
-                    let after_a = angle_cmp(cx, ua, ua, nv, ccw) == Ordering::Less;
-                    let before_b = same(cx, a, b) || angle_cmp(cx, ua, nv, ub, ccw) == Ordering::Less;
-                    after_a && before_b
-                };
-                cx.release(mk);
-                if ok {
-                    let (nx, ny) = (cx.dy(wx), cx.dy(wy));
-                    let nv = Pt { x: nx, y: ny };
-                    let n2 = norm2(cx, nv);
-                    let n = cx.sqrt(n2);
-                    let k = cx.div(rad, n);
-                    let off = scale(cx, nv, k);
-                    return add(cx, c, off);
-                }
-                prec *= 2;
-                assert!(prec < (1 << 20), "rep_point: empty sub-span");
-            }
+            // a dyadic direction near w (from the f64 enclosures, a low-degree point), checked
+            // strictly inside (a, b)
+            let (wx, wy) = (dy_near(cx, w.x), dy_near(cx, w.y));
+            let mk = cx.mark();
+            let (nx, ny) = (cx.dy(wx.clone()), cx.dy(wy.clone()));
+            let nv = Pt { x: nx, y: ny };
+            let n2 = norm2(cx, nv);
+            let ok = sgn(cx, n2) > 0 && {
+                let after_a = angle_cmp(cx, ua, ua, nv, ccw) == Ordering::Less;
+                let before_b = same(cx, a, b) || angle_cmp(cx, ua, nv, ub, ccw) == Ordering::Less;
+                after_a && before_b
+            };
+            cx.release(mk);
+            // else w itself: strictly inside by construction (the bisector of a sub-span short
+            // of a half turn, its opposite for one beyond, the perpendicular in the sense of
+            // travel for a half turn, the opposite of a for the whole circle; w ≠ 0 in each),
+            // where a tiny sub-span (a near-tangent corner's arc) would take a dyadic of
+            // ever more bits
+            let nv = if ok {
+                let (nx, ny) = (cx.dy(wx), cx.dy(wy));
+                Pt { x: nx, y: ny }
+            } else {
+                w
+            };
+            let n2 = norm2(cx, nv);
+            let n = cx.sqrt(n2);
+            let k = cx.div(rad, n);
+            let off = scale(cx, nv, k);
+            add(cx, c, off)
         }
     }
 }
 
-/// A dyadic within about 2^-prec (relative) of the node's value.
-fn dy_near(cx: &mut Ctx, a: R, prec: u64) -> Dy {
-    if prec <= 53 {
-        return Dy::from_f64(cx.approx(a));
+/// A dyadic near the node's value: its f64 enclosure's midpoint (no big-float evaluation; the
+/// caller checks what it makes), or the nearest f64 if the enclosure is unbounded.
+fn dy_near(cx: &mut Ctx, a: R) -> Dy {
+    let iv = cx.iv(a);
+    if iv.lo.is_finite() && iv.hi.is_finite() {
+        return Dy::from_f64(iv.mid());
     }
-    let v = cx.eval(a, prec);
-    match (v.lo, v.hi) {
-        (Some(l), Some(h)) => l.add(&h).half().round(prec, false),
-        _ => Dy::from_f64(cx.approx(a)),
-    }
+    Dy::from_f64(cx.approx(a))
 }
 
 /// The unit tangent's direction (not normalised) at a point of the piece's curve.

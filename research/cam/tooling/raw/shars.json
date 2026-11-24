@@ -1,0 +1,3424 @@
+{
+ "vendor": "Shars",
+ "blocked": [
+  "https://www.shars.com/products/toolholding-workholding/er-collet-chuck-tool-holders (and other product listing pages): HTTP 202 with x-amzn-waf-action: challenge (AWS WAF bot challenge); not bypassed. Data taken from the openly linked 2026 Master Catalog PDF instead."
+ ],
+ "records": [
+  {
+   "kind": "holder",
+   "id": "202-1578",
+   "name": "CAT40-ER16-2.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 281, printed page 278)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-ER16-2.0"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Series ER16"
+    },
+    "grip_range": {
+     "v": "1/32-3/8 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/32-3/8"
+    },
+    "nut_style": {
+     "v": "Hex",
+     "unit": "text",
+     "stated": "Nut Style Hex"
+    },
+    "nose_d": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.10 (inch column)"
+    },
+    "gauge_length": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "Projection L = 2.0 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 rpm at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 50.8,
+     "d": 27.94,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ],
+   "note": "Column headed 'Projection L' on the CAT40 table; the BT30/BT40 table heads the same column 'Gage Length'."
+  },
+  {
+   "kind": "holder",
+   "id": "202-1451G",
+   "name": "CAT40-ER16-3.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 281, printed page 278)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-ER16-3.0"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Series ER16"
+    },
+    "grip_range": {
+     "v": "1/32-3/8 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/32-3/8"
+    },
+    "nut_style": {
+     "v": "Hex",
+     "unit": "text",
+     "stated": "Nut Style Hex"
+    },
+    "nose_d": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.10 (inch column)"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Projection L = 3.0 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 rpm at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 27.94,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ],
+   "note": "Column headed 'Projection L' on the CAT40 table; the BT30/BT40 table heads the same column 'Gage Length'."
+  },
+  {
+   "kind": "holder",
+   "id": "202-1452G",
+   "name": "CAT40-ER16-4.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 281, printed page 278)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-ER16-4.0"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Series ER16"
+    },
+    "grip_range": {
+     "v": "1/32-3/8 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/32-3/8"
+    },
+    "nut_style": {
+     "v": "Hex",
+     "unit": "text",
+     "stated": "Nut Style Hex"
+    },
+    "nose_d": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.10 (inch column)"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "Projection L = 4.0 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 rpm at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 101.6,
+     "d": 27.94,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ],
+   "note": "Column headed 'Projection L' on the CAT40 table; the BT30/BT40 table heads the same column 'Gage Length'."
+  },
+  {
+   "kind": "holder",
+   "id": "202-1580",
+   "name": "CAT40-ER16-3.0M",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 281, printed page 278)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-ER16-3.0M"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Series ER16"
+    },
+    "grip_range": {
+     "v": "1/32-3/8 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/32-3/8"
+    },
+    "nut_style": {
+     "v": "Mini",
+     "unit": "text",
+     "stated": "Nut Style Mini"
+    },
+    "nose_d": {
+     "v": 22.098,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 0.87 (inch column)"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Projection L = 3.0 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 rpm at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 22.098,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ],
+   "note": "Column headed 'Projection L' on the CAT40 table; the BT30/BT40 table heads the same column 'Gage Length'."
+  },
+  {
+   "kind": "holder",
+   "id": "202-1587",
+   "name": "CAT40-ER20-2.5",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 281, printed page 278)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-ER20-2.5"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Collet Series ER20"
+    },
+    "grip_range": {
+     "v": "1/16-1/2 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/16-1/2"
+    },
+    "nut_style": {
+     "v": "Hex",
+     "unit": "text",
+     "stated": "Nut Style Hex"
+    },
+    "nose_d": {
+     "v": 34.036,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.34 (inch column)"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Projection L = 2.5 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 rpm at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 63.5,
+     "d": 34.036,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ],
+   "note": "Column headed 'Projection L' on the CAT40 table; the BT30/BT40 table heads the same column 'Gage Length'."
+  },
+  {
+   "kind": "holder",
+   "id": "202-1588",
+   "name": "CAT40-ER20-3.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 281, printed page 278)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-ER20-3.0"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Collet Series ER20"
+    },
+    "grip_range": {
+     "v": "1/16-1/2 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/16-1/2"
+    },
+    "nut_style": {
+     "v": "Hex",
+     "unit": "text",
+     "stated": "Nut Style Hex"
+    },
+    "nose_d": {
+     "v": 34.036,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.34 (inch column)"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Projection L = 3.0 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 rpm at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 34.036,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ],
+   "note": "Column headed 'Projection L' on the CAT40 table; the BT30/BT40 table heads the same column 'Gage Length'."
+  },
+  {
+   "kind": "holder",
+   "id": "202-1453G",
+   "name": "CAT40-ER25-2.5",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 281, printed page 278)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-ER25-2.5"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "Collet Series ER25"
+    },
+    "grip_range": {
+     "v": "1/16-5/8 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/16-5/8"
+    },
+    "nut_style": {
+     "v": "Slotted",
+     "unit": "text",
+     "stated": "Nut Style Slotted"
+    },
+    "nose_d": {
+     "v": 41.91,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.65 (inch column)"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Projection L = 2.5 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 rpm at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 63.5,
+     "d": 41.91,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ],
+   "note": "Column headed 'Projection L' on the CAT40 table; the BT30/BT40 table heads the same column 'Gage Length'."
+  },
+  {
+   "kind": "holder",
+   "id": "202-1456G",
+   "name": "CAT40-ER32-3.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 281, printed page 278)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-ER32-3.0"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "Collet Series ER32"
+    },
+    "grip_range": {
+     "v": "3/32-25/32 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 3/32-25/32"
+    },
+    "nut_style": {
+     "v": "Slotted",
+     "unit": "text",
+     "stated": "Nut Style Slotted"
+    },
+    "nose_d": {
+     "v": 50.038,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.97 (inch column)"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Projection L = 3.0 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 rpm at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 50.038,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ],
+   "note": "Column headed 'Projection L' on the CAT40 table; the BT30/BT40 table heads the same column 'Gage Length'."
+  },
+  {
+   "kind": "holder",
+   "id": "202-1457G",
+   "name": "CAT40-ER32-4.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 281, printed page 278)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-ER32-4.0"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "Collet Series ER32"
+    },
+    "grip_range": {
+     "v": "3/32-25/32 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 3/32-25/32"
+    },
+    "nut_style": {
+     "v": "Slotted",
+     "unit": "text",
+     "stated": "Nut Style Slotted"
+    },
+    "nose_d": {
+     "v": 50.038,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.97 (inch column)"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "Projection L = 4.0 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 rpm at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 101.6,
+     "d": 50.038,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ],
+   "note": "Column headed 'Projection L' on the CAT40 table; the BT30/BT40 table heads the same column 'Gage Length'."
+  },
+  {
+   "kind": "holder",
+   "id": "202-1641",
+   "name": "CAT40-ER40-3.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 281, printed page 278)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-ER40-3.0"
+    },
+    "clamp": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "Collet Series ER40"
+    },
+    "grip_range": {
+     "v": "1/8-1 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/8-1"
+    },
+    "nut_style": {
+     "v": "Slotted",
+     "unit": "text",
+     "stated": "Nut Style Slotted"
+    },
+    "nose_d": {
+     "v": 62.992,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 2.48 (inch column)"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Projection L = 3.0 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 rpm at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 62.992,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ],
+   "note": "Column headed 'Projection L' on the CAT40 table; the BT30/BT40 table heads the same column 'Gage Length'."
+  },
+  {
+   "kind": "holder",
+   "id": "202-6522",
+   "name": "BT30-ER16-60",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 282, printed page 279)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30-ER16-60"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Series ER16"
+    },
+    "grip_range": {
+     "v": "1/32-3/8 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/32-3/8"
+    },
+    "nut_style": {
+     "v": "Hex",
+     "unit": "text",
+     "stated": "Nut Style Hex"
+    },
+    "nose_d": {
+     "v": 27.432,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.08 (inch column)"
+    },
+    "gauge_length": {
+     "v": 59.944,
+     "unit": "mm",
+     "stated": "Gage Length = 2.36 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 59.944,
+     "d": 27.432,
+     "stated": "collet nut diameter at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-6569",
+   "name": "BT30-ER20-60",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 282, printed page 279)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30-ER20-60"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Collet Series ER20"
+    },
+    "grip_range": {
+     "v": "1/16-1/2 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/16-1/2"
+    },
+    "nut_style": {
+     "v": "Hex",
+     "unit": "text",
+     "stated": "Nut Style Hex"
+    },
+    "nose_d": {
+     "v": 34.036,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.34 (inch column)"
+    },
+    "gauge_length": {
+     "v": 59.944,
+     "unit": "mm",
+     "stated": "Gage Length = 2.36 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 59.944,
+     "d": 34.036,
+     "stated": "collet nut diameter at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-6570",
+   "name": "BT30-ER25-60",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 282, printed page 279)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30-ER25-60"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "Collet Series ER25"
+    },
+    "grip_range": {
+     "v": "1/16-5/8 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/16-5/8"
+    },
+    "nut_style": {
+     "v": "Slotted",
+     "unit": "text",
+     "stated": "Nut Style Slotted"
+    },
+    "nose_d": {
+     "v": 41.91,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.65 (inch column)"
+    },
+    "gauge_length": {
+     "v": 59.944,
+     "unit": "mm",
+     "stated": "Gage Length = 2.36 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 59.944,
+     "d": 41.91,
+     "stated": "collet nut diameter at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-6571",
+   "name": "BT30-ER32-60",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 282, printed page 279)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30-ER32-60"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "Collet Series ER32"
+    },
+    "grip_range": {
+     "v": "3/32-25/32 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 3/32-25/32"
+    },
+    "nut_style": {
+     "v": "Slotted",
+     "unit": "text",
+     "stated": "Nut Style Slotted"
+    },
+    "nose_d": {
+     "v": 50.038,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.97 (inch column)"
+    },
+    "gauge_length": {
+     "v": 59.944,
+     "unit": "mm",
+     "stated": "Gage Length = 2.36 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 59.944,
+     "d": 50.038,
+     "stated": "collet nut diameter at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-5994",
+   "name": "BT40-ER16-70",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 282, printed page 279)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40-ER16-70"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Series ER16"
+    },
+    "grip_range": {
+     "v": "1/32-3/8 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/32-3/8"
+    },
+    "nut_style": {
+     "v": "Hex",
+     "unit": "text",
+     "stated": "Nut Style Hex"
+    },
+    "nose_d": {
+     "v": 27.432,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.08 (inch column)"
+    },
+    "gauge_length": {
+     "v": 69.85,
+     "unit": "mm",
+     "stated": "Gage Length = 2.75 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 69.85,
+     "d": 27.432,
+     "stated": "collet nut diameter at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7633",
+   "name": "BT40-ER20-80",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 282, printed page 279)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40-ER20-80"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Collet Series ER20"
+    },
+    "grip_range": {
+     "v": "1/16-1/2 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/16-1/2"
+    },
+    "nut_style": {
+     "v": "Hex",
+     "unit": "text",
+     "stated": "Nut Style Hex"
+    },
+    "nose_d": {
+     "v": 34.036,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.34 (inch column)"
+    },
+    "gauge_length": {
+     "v": 80.01,
+     "unit": "mm",
+     "stated": "Gage Length = 3.15 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.01,
+     "d": 34.036,
+     "stated": "collet nut diameter at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7637",
+   "name": "BT40-ER25-80",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 282, printed page 279)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40-ER25-80"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "Collet Series ER25"
+    },
+    "grip_range": {
+     "v": "1/16-5/8 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/16-5/8"
+    },
+    "nut_style": {
+     "v": "Slotted",
+     "unit": "text",
+     "stated": "Nut Style Slotted"
+    },
+    "nose_d": {
+     "v": 41.91,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.65 (inch column)"
+    },
+    "gauge_length": {
+     "v": 80.01,
+     "unit": "mm",
+     "stated": "Gage Length = 3.15 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.01,
+     "d": 41.91,
+     "stated": "collet nut diameter at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-5906",
+   "name": "BT40-ER32-100",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 282, printed page 279)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40-ER32-100"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "Collet Series ER32"
+    },
+    "grip_range": {
+     "v": "3/32-25/32 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 3/32-25/32"
+    },
+    "nut_style": {
+     "v": "Slotted",
+     "unit": "text",
+     "stated": "Nut Style Slotted"
+    },
+    "nose_d": {
+     "v": 50.038,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.97 (inch column)"
+    },
+    "gauge_length": {
+     "v": 99.822,
+     "unit": "mm",
+     "stated": "Gage Length = 3.93 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 99.822,
+     "d": 50.038,
+     "stated": "collet nut diameter at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7640",
+   "name": "BT40-ER40-80",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 282, printed page 279)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40-ER40-80"
+    },
+    "clamp": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "Collet Series ER40"
+    },
+    "grip_range": {
+     "v": "1/8-1 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/8-1"
+    },
+    "nut_style": {
+     "v": "Slotted",
+     "unit": "text",
+     "stated": "Nut Style Slotted"
+    },
+    "nose_d": {
+     "v": 62.992,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 2.48 (inch column)"
+    },
+    "gauge_length": {
+     "v": 80.01,
+     "unit": "mm",
+     "stated": "Gage Length = 3.15 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 20,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.01,
+     "d": 62.992,
+     "stated": "collet nut diameter at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)",
+    "coolant"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-6466",
+   "name": "HSK63A ER16-3.15",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 283, printed page 280)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A ER16-3.15"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Series ER16"
+    },
+    "grip_range": {
+     "v": "1/32-3/8 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/32-3/8"
+    },
+    "nose_d": {
+     "v": 32.004,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.26 (inch column)"
+    },
+    "gauge_length": {
+     "v": 80.01,
+     "unit": "mm",
+     "stated": "Projection L = 3.15 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Dynamically balanced to G2.5 25,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.01,
+     "d": 32.004,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "213-0552",
+   "name": "HSK63A ER20-4.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 283, printed page 280)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A ER20-4.0"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Collet Series ER20"
+    },
+    "grip_range": {
+     "v": "1/16-1/2 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/16-1/2"
+    },
+    "nose_d": {
+     "v": 35.052,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.38 (inch column)"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "Projection L = 4.0 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Dynamically balanced to G2.5 25,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 101.6,
+     "d": 35.052,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "213-0554",
+   "name": "HSK63A ER32-4.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 283, printed page 280)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A ER32-4.0"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "Collet Series ER32"
+    },
+    "grip_range": {
+     "v": "3/32-25/32 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 3/32-25/32"
+    },
+    "nose_d": {
+     "v": 50.038,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 1.97 (inch column)"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "Projection L = 4.00 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Dynamically balanced to G2.5 25,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 101.6,
+     "d": 50.038,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-6470",
+   "name": "HSK63A ER40-3.15",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 283, printed page 280)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "HSK63A ER40-3.15"
+    },
+    "clamp": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "Collet Series ER40"
+    },
+    "grip_range": {
+     "v": "1/8-1 in",
+     "unit": "text",
+     "stated": "Collet Grip Range 1/8-1"
+    },
+    "nose_d": {
+     "v": 62.992,
+     "unit": "mm",
+     "stated": "Collet Nut Diameter = 2.48 (inch column)"
+    },
+    "gauge_length": {
+     "v": 80.01,
+     "unit": "mm",
+     "stated": "Projection L = 3.15 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Dynamically balanced to G2.5 25,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.01,
+     "d": 62.992,
+     "stated": "collet nut diameter at Projection L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "body diameters",
+    "datum of L (no dimensioned drawing on the page)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7116G",
+   "name": "CAT40-EM.250-1.75",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 289, printed page 286)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-EM.250-1.75"
+    },
+    "clamp": {
+     "v": "end mill 1/4 in",
+     "unit": "text",
+     "stated": "Bore Dia. 1/4"
+    },
+    "bore": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Bore Dia. = 1/4 (inch column)"
+    },
+    "gauge_length": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "Gage Length = 1.75 (inch column)"
+    },
+    "nose_d": {
+     "v": 22.352,
+     "unit": "mm",
+     "stated": "Nose Dia. = 0.88 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "G2.5: Balanced to 20,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 44.45,
+     "d": 22.352,
+     "stated": "Nose Dia. at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the nose diameter section",
+    "datum of the gage length (no dimensioned drawing)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7121G",
+   "name": "CAT40-EM.375-3.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 289, printed page 286)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-EM.375-3.0"
+    },
+    "clamp": {
+     "v": "end mill 3/8 in",
+     "unit": "text",
+     "stated": "Bore Dia. 3/8"
+    },
+    "bore": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Bore Dia. = 3/8 (inch column)"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage Length = 3 (inch column)"
+    },
+    "nose_d": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "Nose Dia. = 1.00 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "G2.5: Balanced to 20,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 25.4,
+     "stated": "Nose Dia. at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the nose diameter section",
+    "datum of the gage length (no dimensioned drawing)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7125G",
+   "name": "CAT40-EM.500-3.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 289, printed page 286)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-EM.500-3.0"
+    },
+    "clamp": {
+     "v": "end mill 1/2 in",
+     "unit": "text",
+     "stated": "Bore Dia. 1/2"
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Bore Dia. = 1/2 (inch column)"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage Length = 3.00 (inch column)"
+    },
+    "nose_d": {
+     "v": 34.798,
+     "unit": "mm",
+     "stated": "Nose Dia. = 1.37 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "G2.5: Balanced to 20,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 34.798,
+     "stated": "Nose Dia. at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the nose diameter section",
+    "datum of the gage length (no dimensioned drawing)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7129G",
+   "name": "CAT40-EM.750-3.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 289, printed page 286)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-EM.750-3.0"
+    },
+    "clamp": {
+     "v": "end mill 3/4 in",
+     "unit": "text",
+     "stated": "Bore Dia. 3/4"
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "Bore Dia. = 3/4 (inch column)"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage Length = 3.00 (inch column)"
+    },
+    "nose_d": {
+     "v": 43.18,
+     "unit": "mm",
+     "stated": "Nose Dia. = 1.70 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "G2.5: Balanced to 20,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 43.18,
+     "stated": "Nose Dia. at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the nose diameter section",
+    "datum of the gage length (no dimensioned drawing)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7132G",
+   "name": "CAT40-EM1.0-3.0",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 289, printed page 286)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40-EM1.0-3.0"
+    },
+    "clamp": {
+     "v": "end mill 1 in",
+     "unit": "text",
+     "stated": "Bore Dia. 1"
+    },
+    "bore": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "Bore Dia. = 1 (inch column)"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage Length = 3.00 (inch column)"
+    },
+    "nose_d": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "Nose Dia. = 2.00 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "G2.5: Balanced to 20,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 50.8,
+     "stated": "Nose Dia. at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the nose diameter section",
+    "datum of the gage length (no dimensioned drawing)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7144G",
+   "name": "BT-40 End Mill Holder 1/4 x 2.50",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 288, printed page 285)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT-40 End Mill Holder 1/4 x 2.50"
+    },
+    "clamp": {
+     "v": "end mill 1/4 in",
+     "unit": "text",
+     "stated": "Bore Dia. 1/4"
+    },
+    "bore": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Bore Dia. = 1/4 (inch column)"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Gage Length = 2.50 (inch column)"
+    },
+    "nose_d": {
+     "v": 22.352,
+     "unit": "mm",
+     "stated": "Nose Dia. = 0.88 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "G2.5: Balanced to 20,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 63.5,
+     "d": 22.352,
+     "stated": "Nose Dia. at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the nose diameter section",
+    "datum of the gage length (no dimensioned drawing)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7150G",
+   "name": "BT-40 End Mill Holder 1/2 x 3.00",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 288, printed page 285)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT-40 End Mill Holder 1/2 x 3.00"
+    },
+    "clamp": {
+     "v": "end mill 1/2 in",
+     "unit": "text",
+     "stated": "Bore Dia. 1/2"
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Bore Dia. = 1/2 (inch column)"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage Length = 3.00 (inch column)"
+    },
+    "nose_d": {
+     "v": 34.798,
+     "unit": "mm",
+     "stated": "Nose Dia. = 1.37 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "G2.5: Balanced to 20,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 34.798,
+     "stated": "Nose Dia. at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the nose diameter section",
+    "datum of the gage length (no dimensioned drawing)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7154G",
+   "name": "BT-40 End Mill Holder 3/4 x 3.00",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 288, printed page 285)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT-40 End Mill Holder 3/4 x 3.00"
+    },
+    "clamp": {
+     "v": "end mill 3/4 in",
+     "unit": "text",
+     "stated": "Bore Dia. 3/4"
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "Bore Dia. = 3/4 (inch column)"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage Length = 3.00 (inch column)"
+    },
+    "nose_d": {
+     "v": 43.18,
+     "unit": "mm",
+     "stated": "Nose Dia. = 1.70 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "G2.5: Balanced to 20,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 76.2,
+     "d": 43.18,
+     "stated": "Nose Dia. at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the nose diameter section",
+    "datum of the gage length (no dimensioned drawing)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7536",
+   "name": "BT-30 End Mill Holder 1/2 x 2.00",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 288, printed page 285)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT-30 End Mill Holder 1/2 x 2.00"
+    },
+    "clamp": {
+     "v": "end mill 1/2 in",
+     "unit": "text",
+     "stated": "Bore Dia. 1/2"
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Bore Dia. = 1/2 (inch column)"
+    },
+    "gauge_length": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "Gage Length = 2.00 (inch column)"
+    },
+    "nose_d": {
+     "v": 34.798,
+     "unit": "mm",
+     "stated": "Nose Dia. = 1.37 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "G2.5: Balanced to 20,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 50.8,
+     "d": 34.798,
+     "stated": "Nose Dia. at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the nose diameter section",
+    "datum of the gage length (no dimensioned drawing)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7540",
+   "name": "BT-30 End Mill Holder 3/4 x 2.00",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 288, printed page 285)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT-30 End Mill Holder 3/4 x 2.00"
+    },
+    "clamp": {
+     "v": "end mill 3/4 in",
+     "unit": "text",
+     "stated": "Bore Dia. 3/4"
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "Bore Dia. = 3/4 (inch column)"
+    },
+    "gauge_length": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "Gage Length = 2.00 (inch column)"
+    },
+    "nose_d": {
+     "v": 43.18,
+     "unit": "mm",
+     "stated": "Nose Dia. = 1.70 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "G2.5: Balanced to 20,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 50.8,
+     "d": 43.18,
+     "stated": "Nose Dia. at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the nose diameter section",
+    "datum of the gage length (no dimensioned drawing)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7551",
+   "name": "BT-30 Metric End Mill Holder 12 mm x 50 mm",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 288, printed page 285)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT-30 Metric End Mill Holder 12 mm x 50 mm"
+    },
+    "clamp": {
+     "v": "end mill 12mm in",
+     "unit": "text",
+     "stated": "Bore Dia. 12mm"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Bore Dia. = 12mm"
+    },
+    "gauge_length": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "Gage Length = 50mm"
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "Nose Dia. = 42mm"
+    },
+    "balance": {
+     "v": "G2.5 at 20,000 rpm",
+     "unit": "text",
+     "stated": "G2.5: Balanced to 20,000 RPM"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Coolant through capability"
+    }
+   },
+   "profile": [
+    {
+     "z": 50.0,
+     "d": 42.0,
+     "stated": "Nose Dia. at Gage Length"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "length of the nose diameter section",
+    "datum of the gage length (no dimensioned drawing)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "202-7891",
+   "name": "BT30 shrink fit tool holder 3/8\" x 3.15\"",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 291, printed page 288)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "Taper BT30"
+    },
+    "clamp": {
+     "v": "shrink 3/8 in",
+     "unit": "text",
+     "stated": "D1 = 3/8"
+    },
+    "bore": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "D1 (bore) = 3/8 (inch column)"
+    },
+    "nose_d": {
+     "v": 23.876,
+     "unit": "mm",
+     "stated": "D2 (nose diameter) = 0.94 (inch column)"
+    },
+    "D3": {
+     "v": 32.004,
+     "unit": "mm",
+     "stated": "D3 (larger diameter, drawn near the nose; axial position not dimensioned) = 1.26 (inch column)"
+    },
+    "bore_depth": {
+     "v": 41.91,
+     "unit": "mm",
+     "stated": "L (bore depth from nose) = 1.65 (inch column)"
+    },
+    "gauge_length": {
+     "v": 80.01,
+     "unit": "mm",
+     "stated": "A (taper-side flange face to nose) = 3.15 (inch column)"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5° (drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 30,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 30,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.01,
+     "d": 23.876,
+     "stated": "D2 at A (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "axial position of D3"
+   ],
+   "note": "z from the start of dimension A (taper-side flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "202-7893",
+   "name": "BT30 shrink fit tool holder 1/2\" x 3.15\"",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 291, printed page 288)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "Taper BT30"
+    },
+    "clamp": {
+     "v": "shrink 1/2 in",
+     "unit": "text",
+     "stated": "D1 = 1/2"
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "D1 (bore) = 1/2 (inch column)"
+    },
+    "nose_d": {
+     "v": 23.876,
+     "unit": "mm",
+     "stated": "D2 (nose diameter) = 0.94 (inch column)"
+    },
+    "D3": {
+     "v": 32.004,
+     "unit": "mm",
+     "stated": "D3 (larger diameter, drawn near the nose; axial position not dimensioned) = 1.26 (inch column)"
+    },
+    "bore_depth": {
+     "v": 46.99,
+     "unit": "mm",
+     "stated": "L (bore depth from nose) = 1.85 (inch column)"
+    },
+    "gauge_length": {
+     "v": 80.01,
+     "unit": "mm",
+     "stated": "A (taper-side flange face to nose) = 3.15 (inch column)"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5° (drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 30,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 30,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.01,
+     "d": 23.876,
+     "stated": "D2 at A (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "axial position of D3"
+   ],
+   "note": "z from the start of dimension A (taper-side flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "202-7802",
+   "name": "CAT40 shrink fit tool holder 1/4\" x 3.15\"",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 291, printed page 288)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper CAT40"
+    },
+    "clamp": {
+     "v": "shrink 1/4 in",
+     "unit": "text",
+     "stated": "D1 = 1/4"
+    },
+    "bore": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "D1 (bore) = 1/4 (inch column)"
+    },
+    "nose_d": {
+     "v": 21.082,
+     "unit": "mm",
+     "stated": "D2 (nose diameter) = 0.83 (inch column)"
+    },
+    "D3": {
+     "v": 26.924,
+     "unit": "mm",
+     "stated": "D3 (larger diameter, drawn near the nose; axial position not dimensioned) = 1.06 (inch column)"
+    },
+    "bore_depth": {
+     "v": 36.068,
+     "unit": "mm",
+     "stated": "L (bore depth from nose) = 1.42 (inch column)"
+    },
+    "gauge_length": {
+     "v": 80.01,
+     "unit": "mm",
+     "stated": "A (taper-side flange face to nose) = 3.15 (inch column)"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5° (drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 30,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 30,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.01,
+     "d": 21.082,
+     "stated": "D2 at A (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "axial position of D3"
+   ],
+   "note": "z from the start of dimension A (taper-side flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "202-7808",
+   "name": "CAT40 shrink fit tool holder 3/8\" x 3.15\"",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 291, printed page 288)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper CAT40"
+    },
+    "clamp": {
+     "v": "shrink 3/8 in",
+     "unit": "text",
+     "stated": "D1 = 3/8"
+    },
+    "bore": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "D1 (bore) = 3/8 (inch column)"
+    },
+    "nose_d": {
+     "v": 23.876,
+     "unit": "mm",
+     "stated": "D2 (nose diameter) = 0.94 (inch column)"
+    },
+    "D3": {
+     "v": 32.004,
+     "unit": "mm",
+     "stated": "D3 (larger diameter, drawn near the nose; axial position not dimensioned) = 1.26 (inch column)"
+    },
+    "bore_depth": {
+     "v": 41.91,
+     "unit": "mm",
+     "stated": "L (bore depth from nose) = 1.65 (inch column)"
+    },
+    "gauge_length": {
+     "v": 80.01,
+     "unit": "mm",
+     "stated": "A (taper-side flange face to nose) = 3.15 (inch column)"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5° (drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 30,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 30,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.01,
+     "d": 23.876,
+     "stated": "D2 at A (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "axial position of D3"
+   ],
+   "note": "z from the start of dimension A (taper-side flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "202-7811",
+   "name": "CAT40 shrink fit tool holder 1/2\" x 3.15\"",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 291, printed page 288)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper CAT40"
+    },
+    "clamp": {
+     "v": "shrink 1/2 in",
+     "unit": "text",
+     "stated": "D1 = 1/2"
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "D1 (bore) = 1/2 (inch column)"
+    },
+    "nose_d": {
+     "v": 23.876,
+     "unit": "mm",
+     "stated": "D2 (nose diameter) = 0.94 (inch column)"
+    },
+    "D3": {
+     "v": 32.004,
+     "unit": "mm",
+     "stated": "D3 (larger diameter, drawn near the nose; axial position not dimensioned) = 1.26 (inch column)"
+    },
+    "bore_depth": {
+     "v": 46.99,
+     "unit": "mm",
+     "stated": "L (bore depth from nose) = 1.85 (inch column)"
+    },
+    "gauge_length": {
+     "v": 80.01,
+     "unit": "mm",
+     "stated": "A (taper-side flange face to nose) = 3.15 (inch column)"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5° (drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 30,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 30,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.01,
+     "d": 23.876,
+     "stated": "D2 at A (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "axial position of D3"
+   ],
+   "note": "z from the start of dimension A (taper-side flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "202-7817",
+   "name": "CAT40 shrink fit tool holder 3/4\" x 3.15\"",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 291, printed page 288)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper CAT40"
+    },
+    "clamp": {
+     "v": "shrink 3/4 in",
+     "unit": "text",
+     "stated": "D1 = 3/4"
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "D1 (bore) = 3/4 (inch column)"
+    },
+    "nose_d": {
+     "v": 33.02,
+     "unit": "mm",
+     "stated": "D2 (nose diameter) = 1.30 (inch column)"
+    },
+    "D3": {
+     "v": 41.91,
+     "unit": "mm",
+     "stated": "D3 (larger diameter, drawn near the nose; axial position not dimensioned) = 1.65 (inch column)"
+    },
+    "bore_depth": {
+     "v": 55.118,
+     "unit": "mm",
+     "stated": "L (bore depth from nose) = 2.17 (inch column)"
+    },
+    "gauge_length": {
+     "v": 80.01,
+     "unit": "mm",
+     "stated": "A (taper-side flange face to nose) = 3.15 (inch column)"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5° (drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 30,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 30,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 80.01,
+     "d": 33.02,
+     "stated": "D2 at A (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "axial position of D3"
+   ],
+   "note": "z from the start of dimension A (taper-side flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "202-7873",
+   "name": "HSK63A shrink fit tool holder 1/2\" x 3.54\"",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 291, printed page 288)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "Taper HSK63A"
+    },
+    "clamp": {
+     "v": "shrink 1/2 in",
+     "unit": "text",
+     "stated": "D1 = 1/2"
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "D1 (bore) = 1/2 (inch column)"
+    },
+    "nose_d": {
+     "v": 23.876,
+     "unit": "mm",
+     "stated": "D2 (nose diameter) = 0.94 (inch column)"
+    },
+    "D3": {
+     "v": 32.004,
+     "unit": "mm",
+     "stated": "D3 (larger diameter, drawn near the nose; axial position not dimensioned) = 1.26 (inch column)"
+    },
+    "bore_depth": {
+     "v": 46.99,
+     "unit": "mm",
+     "stated": "L (bore depth from nose) = 1.85 (inch column)"
+    },
+    "gauge_length": {
+     "v": 89.916,
+     "unit": "mm",
+     "stated": "A (taper-side flange face to nose) = 3.54 (inch column)"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5° (drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 30,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 30,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 89.916,
+     "d": 23.876,
+     "stated": "D2 at A (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "axial position of D3"
+   ],
+   "note": "z from the start of dimension A (taper-side flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "202-7879",
+   "name": "HSK63A shrink fit tool holder 3/4\" x 3.94\"",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 291, printed page 288)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "Taper HSK63A"
+    },
+    "clamp": {
+     "v": "shrink 3/4 in",
+     "unit": "text",
+     "stated": "D1 = 3/4"
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "D1 (bore) = 3/4 (inch column)"
+    },
+    "nose_d": {
+     "v": 33.02,
+     "unit": "mm",
+     "stated": "D2 (nose diameter) = 1.30 (inch column)"
+    },
+    "D3": {
+     "v": 41.91,
+     "unit": "mm",
+     "stated": "D3 (larger diameter, drawn near the nose; axial position not dimensioned) = 1.65 (inch column)"
+    },
+    "bore_depth": {
+     "v": 55.118,
+     "unit": "mm",
+     "stated": "L (bore depth from nose) = 2.17 (inch column)"
+    },
+    "gauge_length": {
+     "v": 100.076,
+     "unit": "mm",
+     "stated": "A (taper-side flange face to nose) = 3.94 (inch column)"
+    },
+    "nose_cone_angle": {
+     "v": 4.5,
+     "unit": "deg",
+     "stated": "4.5° (drawing)"
+    },
+    "balance": {
+     "v": "G2.5 at 30,000 rpm",
+     "unit": "text",
+     "stated": "Balanced to 30,000 RPM at G2.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 100.076,
+     "d": 33.02,
+     "stated": "D2 at A (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "axial position of D3"
+   ],
+   "note": "z from the start of dimension A (taper-side flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "213-0205",
+   "name": "CAT40 hydraulic tool holder 1/4\" x 2.5\"",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 279, printed page 276)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper CAT40"
+    },
+    "clamp": {
+     "v": "hydraulic 1/4 in",
+     "unit": "text",
+     "stated": "Bore Diameter 1/4"
+    },
+    "bore": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Bore Diameter = 1/4 (inch column)"
+    },
+    "nose_d": {
+     "v": 26.01,
+     "unit": "mm",
+     "stated": "Nose Diameter D = 1.024 (inch column)"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Gage Length L = 2.5 (inch column)"
+    },
+    "L1": {
+     "v": 25.908,
+     "unit": "mm",
+     "stated": "L1 (length of the nose section D, on drawing) = 1.02 (inch column)"
+    },
+    "bore_depth": {
+     "v": "1.10 - 1.97 in",
+     "unit": "text",
+     "stated": "Bore Depth H printed as 11.10\" – 1.97\" (first figure read as 1.10, matching Min Clamping Length E; flagged)"
+    },
+    "min_clamp_length": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "Min Clamping Length E = 1.10 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Dynamically balanced to 25,000 RPM at G2.5 by Haimer balancing machine"
+    }
+   },
+   "profile": [
+    {
+     "z": 37.592,
+     "d": 26.01,
+     "stated": "D from L - L1"
+    },
+    {
+     "z": 63.5,
+     "d": 26.01,
+     "stated": "D at L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameter behind the nose section"
+   ],
+   "note": "z from the start of dimension L (taper-side flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "213-0211",
+   "name": "CAT40 hydraulic tool holder 1/2\" x 2.5\"",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 279, printed page 276)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper CAT40"
+    },
+    "clamp": {
+     "v": "hydraulic 1/2 in",
+     "unit": "text",
+     "stated": "Bore Diameter 1/2"
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Bore Diameter = 1/2 (inch column)"
+    },
+    "nose_d": {
+     "v": 32.995,
+     "unit": "mm",
+     "stated": "Nose Diameter D = 1.299 (inch column)"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Gage Length L = 2.5 (inch column)"
+    },
+    "L1": {
+     "v": 24.892,
+     "unit": "mm",
+     "stated": "L1 (length of the nose section D, on drawing) = 0.98 (inch column)"
+    },
+    "bore_depth": {
+     "v": "1.50 - 2.36 in",
+     "unit": "text",
+     "stated": "Bore Depth H 1.50 - 2.36"
+    },
+    "min_clamp_length": {
+     "v": 38.1,
+     "unit": "mm",
+     "stated": "Min Clamping Length E = 1.50 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Dynamically balanced to 25,000 RPM at G2.5 by Haimer balancing machine"
+    }
+   },
+   "profile": [
+    {
+     "z": 38.608,
+     "d": 32.995,
+     "stated": "D from L - L1"
+    },
+    {
+     "z": 63.5,
+     "d": 32.995,
+     "stated": "D at L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameter behind the nose section"
+   ],
+   "note": "z from the start of dimension L (taper-side flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "213-0212",
+   "name": "CAT40 hydraulic tool holder 1/2\" x 4\"",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 279, printed page 276)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper CAT40"
+    },
+    "clamp": {
+     "v": "hydraulic 1/2 in",
+     "unit": "text",
+     "stated": "Bore Diameter 1/2"
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "Bore Diameter = 1/2 (inch column)"
+    },
+    "nose_d": {
+     "v": 32.995,
+     "unit": "mm",
+     "stated": "Nose Diameter D = 1.299 (inch column)"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "Gage Length L = 4 (inch column)"
+    },
+    "L1": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "L1 (length of the nose section D, on drawing) = 1.75 (inch column)"
+    },
+    "bore_depth": {
+     "v": "1.50 - 2.36 in",
+     "unit": "text",
+     "stated": "Bore Depth H 1.50 - 2.36"
+    },
+    "min_clamp_length": {
+     "v": 38.1,
+     "unit": "mm",
+     "stated": "Min Clamping Length E = 1.50 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Dynamically balanced to 25,000 RPM at G2.5 by Haimer balancing machine"
+    }
+   },
+   "profile": [
+    {
+     "z": 57.15,
+     "d": 32.995,
+     "stated": "D from L - L1"
+    },
+    {
+     "z": 101.6,
+     "d": 32.995,
+     "stated": "D at L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameter behind the nose section"
+   ],
+   "note": "z from the start of dimension L (taper-side flange face)"
+  },
+  {
+   "kind": "holder",
+   "id": "213-0218",
+   "name": "CAT40 hydraulic tool holder 3/4\" x 4\"",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 279, printed page 276)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper CAT40"
+    },
+    "clamp": {
+     "v": "hydraulic 3/4 in",
+     "unit": "text",
+     "stated": "Bore Diameter 3/4"
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "Bore Diameter = 3/4 (inch column)"
+    },
+    "nose_d": {
+     "v": 42.012,
+     "unit": "mm",
+     "stated": "Nose Diameter D = 1.654 (inch column)"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "Gage Length L = 4 (inch column)"
+    },
+    "L1": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "L1 (length of the nose section D, on drawing) = 2.00 (inch column)"
+    },
+    "bore_depth": {
+     "v": "1.69 - 2.76 in",
+     "unit": "text",
+     "stated": "Bore Depth H 1.69 - 2.76"
+    },
+    "min_clamp_length": {
+     "v": 42.926,
+     "unit": "mm",
+     "stated": "Min Clamping Length E = 1.69 (inch column)"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 rpm",
+     "unit": "text",
+     "stated": "Dynamically balanced to 25,000 RPM at G2.5 by Haimer balancing machine"
+    }
+   },
+   "profile": [
+    {
+     "z": 50.8,
+     "d": 42.012,
+     "stated": "D from L - L1"
+    },
+    {
+     "z": 101.6,
+     "d": 42.012,
+     "stated": "D at L"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "body diameter behind the nose section"
+   ],
+   "note": "z from the start of dimension L (taper-side flange face)"
+  },
+  {
+   "kind": "pull_stud",
+   "id": "202-5921",
+   "name": "Pull stud retention knob BT30 style C 45°",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 303, printed page 300)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 TAPER M12-1.75 Thread"
+    },
+    "thread": {
+     "v": "M12-1.75",
+     "unit": "text",
+     "stated": "BT30 ... M12-1.75 Thread"
+    },
+    "length": {
+     "v": 42.926,
+     "unit": "mm",
+     "stated": "L (overall) = 1.690 (inch column)"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "A = 45° (style C; as drawn at the head)"
+    },
+    "coolant_hole": {
+     "v": "no",
+     "unit": "text",
+     "stated": "Hole (Y/N) = N"
+    },
+    "head_d": {
+     "v": 10.947,
+     "unit": "mm",
+     "stated": "D1 Knob = 0.431 (inch column)"
+    },
+    "neck_d": {
+     "v": 6.96,
+     "unit": "mm",
+     "stated": "D2 Neck = 0.274 (inch column)"
+    },
+    "style": {
+     "v": "C",
+     "unit": "text",
+     "stated": "Style C"
+    },
+    "L1": {
+     "v": 17.958,
+     "unit": "mm",
+     "stated": "L1 (under-head to collar face, drawing) = 0.707 (inch column)"
+    },
+    "L2": {
+     "v": 22.962,
+     "unit": "mm",
+     "stated": "L2 SHOU TO END (collar face to head end) = 0.904 (inch column)"
+    },
+    "pilot_d": {
+     "v": 12.492,
+     "unit": "mm",
+     "stated": "D4 Pilot = 0.4918 (inch column)"
+    },
+    "cross_ref": {
+     "v": "3003TRK",
+     "unit": "text",
+     "stated": "Parlec 3003TRK"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "202-5935",
+   "name": "Pull stud retention knob BT30 style C 45°",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 303, printed page 300)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "BT30 TAPER M12-1.75 Thread"
+    },
+    "thread": {
+     "v": "M12-1.75",
+     "unit": "text",
+     "stated": "BT30 ... M12-1.75 Thread"
+    },
+    "length": {
+     "v": 42.926,
+     "unit": "mm",
+     "stated": "L (overall) = 1.690 (inch column)"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "A = 45° (style C; as drawn at the head)"
+    },
+    "coolant_hole": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Hole (Y/N) = Y"
+    },
+    "head_d": {
+     "v": 10.947,
+     "unit": "mm",
+     "stated": "D1 Knob = 0.431 (inch column)"
+    },
+    "neck_d": {
+     "v": 6.96,
+     "unit": "mm",
+     "stated": "D2 Neck = 0.274 (inch column)"
+    },
+    "style": {
+     "v": "C",
+     "unit": "text",
+     "stated": "Style C"
+    },
+    "L1": {
+     "v": 17.958,
+     "unit": "mm",
+     "stated": "L1 (under-head to collar face, drawing) = 0.707 (inch column)"
+    },
+    "L2": {
+     "v": 22.962,
+     "unit": "mm",
+     "stated": "L2 SHOU TO END (collar face to head end) = 0.904 (inch column)"
+    },
+    "coolant_hole_d": {
+     "v": 2.794,
+     "unit": "mm",
+     "stated": "D3 Hole = 0.110 (inch column)"
+    },
+    "pilot_d": {
+     "v": 12.492,
+     "unit": "mm",
+     "stated": "D4 Pilot = 0.4918 (inch column)"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "202-5928",
+   "name": "Pull stud retention knob CAT40 style C 45°",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 303, printed page 300)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 TAPER 5/8\"-11 Thread"
+    },
+    "thread": {
+     "v": "5/8\"-11",
+     "unit": "text",
+     "stated": "CAT40 ... 5/8\"-11 Thread"
+    },
+    "length": {
+     "v": 41.275,
+     "unit": "mm",
+     "stated": "L (overall) = 1.625 (inch column)"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "A = 45° (style C; as drawn at the head)"
+    },
+    "coolant_hole": {
+     "v": "no",
+     "unit": "text",
+     "stated": "Hole (Y/N) = N"
+    },
+    "head_d": {
+     "v": 18.796,
+     "unit": "mm",
+     "stated": "D1 Knob = 0.740 (inch column)"
+    },
+    "neck_d": {
+     "v": 12.446,
+     "unit": "mm",
+     "stated": "D2 Neck = 0.490 (inch column)"
+    },
+    "style": {
+     "v": "C",
+     "unit": "text",
+     "stated": "Style C"
+    },
+    "L1": {
+     "v": 11.176,
+     "unit": "mm",
+     "stated": "L1 (under-head to collar face, drawing) = 0.440 (inch column)"
+    },
+    "L2": {
+     "v": 16.256,
+     "unit": "mm",
+     "stated": "L2 SHOU TO END (collar face to head end) = 0.640 (inch column)"
+    },
+    "pilot_d": {
+     "v": 16.154,
+     "unit": "mm",
+     "stated": "D4 Pilot = 0.6360 (inch column)"
+    },
+    "cross_ref": {
+     "v": "40NTRK",
+     "unit": "text",
+     "stated": "Parlec 40NTRK"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "202-5927",
+   "name": "Pull stud retention knob CAT40 style A 45°",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 303, printed page 300)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 TAPER 5/8\"-11 Thread"
+    },
+    "thread": {
+     "v": "5/8\"-11",
+     "unit": "text",
+     "stated": "CAT40 ... 5/8\"-11 Thread"
+    },
+    "length": {
+     "v": 41.275,
+     "unit": "mm",
+     "stated": "L (overall) = 1.625 (inch column)"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "A = 45° (style A; as drawn at the head)"
+    },
+    "coolant_hole": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Hole (Y/N) = Y"
+    },
+    "head_d": {
+     "v": 18.796,
+     "unit": "mm",
+     "stated": "D1 Knob = 0.740 (inch column)"
+    },
+    "neck_d": {
+     "v": 12.446,
+     "unit": "mm",
+     "stated": "D2 Neck = 0.490 (inch column)"
+    },
+    "style": {
+     "v": "A",
+     "unit": "text",
+     "stated": "Style A"
+    },
+    "L1": {
+     "v": 11.176,
+     "unit": "mm",
+     "stated": "L1 (under-head to collar face, drawing) = 0.440 (inch column)"
+    },
+    "L2": {
+     "v": 16.256,
+     "unit": "mm",
+     "stated": "L2 SHOU TO END (collar face to head end) = 0.640 (inch column)"
+    },
+    "coolant_hole_d": {
+     "v": 7.112,
+     "unit": "mm",
+     "stated": "D3 Hole = 0.280 (inch column)"
+    },
+    "pilot_d": {
+     "v": 16.154,
+     "unit": "mm",
+     "stated": "D4 Pilot = 0.6360 (inch column)"
+    },
+    "cross_ref": {
+     "v": "40TRK",
+     "unit": "text",
+     "stated": "Parlec 40TRK"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "202-5925",
+   "name": "Pull stud retention knob CAT40 style C 45°",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 303, printed page 300)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 TAPER 5/8\"-11 Thread"
+    },
+    "thread": {
+     "v": "5/8\"-11",
+     "unit": "text",
+     "stated": "CAT40 ... 5/8\"-11 Thread"
+    },
+    "length": {
+     "v": 57.15,
+     "unit": "mm",
+     "stated": "L (overall) = 2.250 (inch column)"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "A = 45° (style C; as drawn at the head)"
+    },
+    "coolant_hole": {
+     "v": "no",
+     "unit": "text",
+     "stated": "Hole (Y/N) = N"
+    },
+    "head_d": {
+     "v": 14.961,
+     "unit": "mm",
+     "stated": "D1 Knob = 0.589 (inch column)"
+    },
+    "neck_d": {
+     "v": 9.957,
+     "unit": "mm",
+     "stated": "D2 Neck = 0.392 (inch column)"
+    },
+    "style": {
+     "v": "C",
+     "unit": "text",
+     "stated": "Style C"
+    },
+    "L1": {
+     "v": 25.095,
+     "unit": "mm",
+     "stated": "L1 (under-head to collar face, drawing) = 0.988 (inch column)"
+    },
+    "L2": {
+     "v": 32.106,
+     "unit": "mm",
+     "stated": "L2 SHOU TO END (collar face to head end) = 1.264 (inch column)"
+    },
+    "pilot_d": {
+     "v": 16.154,
+     "unit": "mm",
+     "stated": "D4 Pilot = 0.6360 (inch column)"
+    },
+    "cross_ref": {
+     "v": "4009TRK",
+     "unit": "text",
+     "stated": "Parlec 4009TRK"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "202-6290",
+   "name": "Pull stud retention knob CAT40 style F 15°",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 303, printed page 300)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CAT40 TAPER 5/8\"-11 Thread"
+    },
+    "thread": {
+     "v": "5/8\"-11",
+     "unit": "text",
+     "stated": "CAT40 ... 5/8\"-11 Thread"
+    },
+    "length": {
+     "v": 50.825,
+     "unit": "mm",
+     "stated": "L (overall) = 2.001 (inch column)"
+    },
+    "angle": {
+     "v": 15.0,
+     "unit": "deg",
+     "stated": "A = 15° (style F; as drawn at the head)"
+    },
+    "coolant_hole": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Hole (Y/N) = Y"
+    },
+    "head_d": {
+     "v": 18.974,
+     "unit": "mm",
+     "stated": "D1 Knob = 0.747 (inch column)"
+    },
+    "neck_d": {
+     "v": 13.945,
+     "unit": "mm",
+     "stated": "D2 Neck = 0.549 (inch column)"
+    },
+    "style": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Style F"
+    },
+    "L1": {
+     "v": 19.99,
+     "unit": "mm",
+     "stated": "L1 (under-head to collar face, drawing) = 0.787 (inch column)"
+    },
+    "L2": {
+     "v": 26.01,
+     "unit": "mm",
+     "stated": "L2 SHOU TO END (collar face to head end) = 1.024 (inch column)"
+    },
+    "coolant_hole_d": {
+     "v": 7.137,
+     "unit": "mm",
+     "stated": "D3 Hole = 0.281 (inch column)"
+    },
+    "pilot_d": {
+     "v": 16.281,
+     "unit": "mm",
+     "stated": "D4 Pilot = 0.641 (inch column)"
+    },
+    "cross_ref": {
+     "v": "4030TRK",
+     "unit": "text",
+     "stated": "Parlec 4030TRK"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "202-5923",
+   "name": "Pull stud retention knob BT40 style C 45°",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 303, printed page 300)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 TAPER M16-2.0 Thread"
+    },
+    "thread": {
+     "v": "M16-2.0",
+     "unit": "text",
+     "stated": "BT40 ... M16-2.0 Thread"
+    },
+    "length": {
+     "v": 59.944,
+     "unit": "mm",
+     "stated": "L (overall) = 2.360 (inch column)"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "A = 45° (style C; as drawn at the head)"
+    },
+    "coolant_hole": {
+     "v": "no",
+     "unit": "text",
+     "stated": "Hole (Y/N) = N"
+    },
+    "head_d": {
+     "v": 14.961,
+     "unit": "mm",
+     "stated": "D1 Knob = 0.589 (inch column)"
+    },
+    "neck_d": {
+     "v": 9.957,
+     "unit": "mm",
+     "stated": "D2 Neck = 0.392 (inch column)"
+    },
+    "style": {
+     "v": "C",
+     "unit": "text",
+     "stated": "Style C"
+    },
+    "L1": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "L1 (under-head to collar face, drawing) = 1.100 (inch column)"
+    },
+    "L2": {
+     "v": 34.95,
+     "unit": "mm",
+     "stated": "L2 SHOU TO END (collar face to head end) = 1.376 (inch column)"
+    },
+    "pilot_d": {
+     "v": 16.993,
+     "unit": "mm",
+     "stated": "D4 Pilot = 0.669 (inch column)"
+    },
+    "cross_ref": {
+     "v": "4003TRK",
+     "unit": "text",
+     "stated": "Parlec 4003TRK"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "202-7221",
+   "name": "Pull stud retention knob BT40 style C 45°",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 303, printed page 300)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 TAPER M16-2.0 Thread"
+    },
+    "thread": {
+     "v": "M16-2.0",
+     "unit": "text",
+     "stated": "BT40 ... M16-2.0 Thread"
+    },
+    "length": {
+     "v": 59.944,
+     "unit": "mm",
+     "stated": "L (overall) = 2.360 (inch column)"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "A = 45° (style C; as drawn at the head)"
+    },
+    "coolant_hole": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Hole (Y/N) = Y"
+    },
+    "head_d": {
+     "v": 14.961,
+     "unit": "mm",
+     "stated": "D1 Knob = 0.589 (inch column)"
+    },
+    "neck_d": {
+     "v": 9.957,
+     "unit": "mm",
+     "stated": "D2 Neck = 0.392 (inch column)"
+    },
+    "style": {
+     "v": "C",
+     "unit": "text",
+     "stated": "Style C"
+    },
+    "L1": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "L1 (under-head to collar face, drawing) = 1.100 (inch column)"
+    },
+    "L2": {
+     "v": 34.95,
+     "unit": "mm",
+     "stated": "L2 SHOU TO END (collar face to head end) = 1.376 (inch column)"
+    },
+    "coolant_hole_d": {
+     "v": 5.004,
+     "unit": "mm",
+     "stated": "D3 Hole = 0.197 (inch column)"
+    },
+    "pilot_d": {
+     "v": 16.993,
+     "unit": "mm",
+     "stated": "D4 Pilot = 0.669 (inch column)"
+    },
+    "cross_ref": {
+     "v": "4003TRKC",
+     "unit": "text",
+     "stated": "Parlec 4003TRKC"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "202-6291",
+   "name": "Pull stud retention knob BT40 style F 15°",
+   "url": "https://www.shars.com/media/flip/2026_catalog/2026%20catalog.pdf (Shars 2026 Master Catalog, linked from https://www.shars.com/company/online-catalog; PDF page 303, printed page 300)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "BT40 TAPER M16-2.0 Thread"
+    },
+    "thread": {
+     "v": "M16-2.0",
+     "unit": "text",
+     "stated": "BT40 ... M16-2.0 Thread"
+    },
+    "length": {
+     "v": 54.254,
+     "unit": "mm",
+     "stated": "L (overall) = 2.136 (inch column)"
+    },
+    "angle": {
+     "v": 15.0,
+     "unit": "deg",
+     "stated": "A = 15° (style F; as drawn at the head)"
+    },
+    "coolant_hole": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Hole (Y/N) = Y"
+    },
+    "head_d": {
+     "v": 18.969,
+     "unit": "mm",
+     "stated": "D1 Knob = 0.7468 (inch column)"
+    },
+    "neck_d": {
+     "v": 13.95,
+     "unit": "mm",
+     "stated": "D2 Neck = 0.5492 (inch column)"
+    },
+    "style": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Style F"
+    },
+    "L1": {
+     "v": 22.987,
+     "unit": "mm",
+     "stated": "L1 (under-head to collar face, drawing) = 0.905 (inch column)"
+    },
+    "L2": {
+     "v": 29.007,
+     "unit": "mm",
+     "stated": "L2 SHOU TO END (collar face to head end) = 1.142 (inch column)"
+    },
+    "coolant_hole_d": {
+     "v": 7.049,
+     "unit": "mm",
+     "stated": "D3 Hole = 0.2775 (inch column)"
+    },
+    "pilot_d": {
+     "v": 16.993,
+     "unit": "mm",
+     "stated": "D4 Pilot = 0.669 (inch column)"
+    },
+    "cross_ref": {
+     "v": "4020TRK",
+     "unit": "text",
+     "stated": "Parlec 4020TRK"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  }
+ ]
+}

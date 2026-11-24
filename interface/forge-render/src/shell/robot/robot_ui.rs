@@ -758,10 +758,15 @@ impl Shell {
         self.robot = Some(p);
     }
 
+    /// The Robot environment is up (the framework's active one): its tab, browser and sheet.
+    pub fn robot_on(&self) -> bool {
+        self.env == Some(crate::shell::env::EnvId::Robot) && self.robot.as_ref().is_some_and(|p| p.open)
+    }
+
     /// Its properties panel's width (the Environment trait's `properties_width`): docked right
     /// while the environment is up.
     pub fn robot_properties_width(&self) -> Option<f32> {
-        self.robot_on().then_some(crate::shell::ROBOT_PROPS_W)
+        self.robot_on().then_some(super::PROPS_W)
     }
 
     /// Its line in the status bar (the trait's `status`): what you are in, and the robot.

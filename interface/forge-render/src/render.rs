@@ -92,6 +92,64 @@ struct PickIndex {
     faces: Vec<FaceRange>,
     edges: Vec<EdgeRange>,
     first_segment: u32,
+    /// (face, edge) for each B-rep edge on a face's boundary, by face: a selected face's outline.
+    /// The part's, shared by its levels.
+    face_edges: std::sync::Arc<Vec<(u32, u32)>>,
+}
+
+/// Which B-rep edges bound which faces, from a part's finest tessellated level (edge ids are the
+/// B-rep's, the same on every level): an edge's middle segment has both its ends at vertices of
+/// the face (a face's boundary vertices are its edges' polyline points). Only those few points
+/// are hashed; each face's own vertices are looked up in them once.
+fn face_edges(p: &PartMesh) -> Vec<(u32, u32)> {
+    let Some(l) = p
+        .lods
+        .iter()
+        .find(|l| !l.segments.is_empty() && l.faces.iter().any(|f| f.vertices > 0))
+    else {
+        return vec![];
+    };
+    let word = |b: &[u8], at: usize| u32::from_le_bytes(b[at..at + 4].try_into().expect("4 bytes"));
+    let end = |s: u32, k: usize| {
+        let at = s as usize * crate::mesh::SEGMENT + 16 * k;
+        [0, 1, 2].map(|i| word(&l.segments, at + 4 * i))
+    };
+    // each edge's middle segment's two ends: point -> (edge, which end)
+    let mut ends: std::collections::HashMap<[u32; 3], Vec<(u32, u8)>> = Default::default();
+    for e in l.edges.iter().filter(|e| e.count > 0) {
+        let s = e.first + e.count / 2;
+        if (s as usize + 1) * crate::mesh::SEGMENT > l.segments.len() {
+            continue;
+        }
+        for k in 0..2 {
+            ends.entry(end(s, k)).or_default().push((e.edge, k as u8));
+        }
+    }
+    let mut out = vec![];
+    let mut seen: Vec<(u32, u8)> = vec![];
+    for f in &l.faces {
+        seen.clear();
+        for v in f.first_vertex..f.first_vertex + f.vertices {
+            let at = v as usize * crate::mesh::VERTEX;
+            if at + 12 > l.vertices.len() {
+                break;
+            }
+            if let Some(hit) = ends.get(&[0, 1, 2].map(|k| word(&l.vertices, at + 4 * k))) {
+                seen.extend(hit);
+            }
+        }
+        seen.sort_unstable();
+        seen.dedup();
+        // both ends of an edge's middle segment on this face
+        out.extend(
+            seen.windows(2)
+                .filter(|w| w[0].0 == w[1].0)
+                .map(|w| (f.face, w[0].0)),
+        );
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 /// What a frame drew.
@@ -307,6 +365,15 @@ impl ViewIds {
     }
 }
 
+/// A whole view's ids on their way back: the buffer, its size and row, set ready when mapped.
+struct IdsOut {
+    read: wgpu::Buffer,
+    w: u32,
+    h: u32,
+    row: u32,
+    ready: Arc<AtomicBool>,
+}
+
 struct PickState {
     id: wgpu::Texture,
     id_view: wgpu::TextureView,
@@ -352,6 +419,8 @@ struct Timer {
 pub struct Renderer {
     /// Counts each change to the geometry drawn: a pick asked of other geometry is no answer.
     geometry: u64,
+    /// The parts' finest meshes, kept for the Render Studio's tracer (`studio/`).
+    pub cpu_parts: std::sync::Arc<Vec<PartMesh>>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub adapter: wgpu::AdapterInfo,
@@ -402,6 +471,8 @@ pub struct Renderer {
     dot: wgpu::RenderPipeline,
     marks: wgpu::Buffer,
     pick: PickState,
+    /// The whole view's ids drawn and on their way back (`view_ids_start`): one at a time.
+    ids_out: Option<IdsOut>,
     binds: wgpu::BindGroup,
     globals: wgpu::Buffer,
     placements: wgpu::Buffer,
@@ -576,6 +647,20 @@ pub async fn open_device(
     Ok((device, queue, adapter))
 }
 
+/// Each part's finest level alone: what the Render Studio traces.
+fn finest(parts: &[PartMesh]) -> std::sync::Arc<Vec<PartMesh>> {
+    std::sync::Arc::new(
+        parts
+            .iter()
+            .map(|p| PartMesh {
+                center: p.center,
+                radius: p.radius,
+                lods: p.lods.first().cloned().into_iter().collect(),
+            })
+            .collect(),
+    )
+}
+
 /// A parts' meshes on the GPU.
 struct Geometry {
     lods: Vec<Vec<LodDraw>>,
@@ -710,6 +795,7 @@ fn geometry(device: &wgpu::Device, queue: &wgpu::Queue, parts: &[PartMesh]) -> G
         .iter()
         .zip(&lods)
         .map(|(p, row)| {
+            let outline = std::sync::Arc::new(face_edges(p));
             p.lods
                 .iter()
                 .zip(row)
@@ -717,6 +803,7 @@ fn geometry(device: &wgpu::Device, queue: &wgpu::Queue, parts: &[PartMesh]) -> G
                     faces: l.faces.clone(),
                     edges: l.edges.clone(),
                     first_segment: d.first_segment,
+                    face_edges: outline.clone(),
                 })
                 .collect()
         })
@@ -1420,6 +1507,7 @@ impl Renderer {
         });
         Renderer {
             geometry: 0,
+            cpu_parts: finest(parts),
             device,
             queue,
             adapter,
@@ -1461,6 +1549,7 @@ impl Renderer {
             dot,
             marks,
             pick,
+            ids_out: None,
             binds,
             globals,
             placements,
@@ -1523,6 +1612,7 @@ impl Renderer {
     /// New meshes for the parts, the same parts in the same places.
     pub fn set_parts(&mut self, parts: &[PartMesh]) {
         self.geometry += 1;
+        self.cpu_parts = finest(parts);
         let g = geometry(&self.device, &self.queue, parts);
         let layout = &self.bind_layout;
         let all = |globals| [globals, &self.placements, &g.segments, &self.tints];
@@ -1748,7 +1838,64 @@ impl Renderer {
         lo: (f32, f32),
         hi: (f32, f32),
     ) -> Vec<(Entity, u32, u32)> {
-        let ids = self.view_ids(scene, camera);
+        self.view_ids(scene, camera).seen_in_box(lo, hi)
+    }
+
+    /// The placement and entity under each pixel of the whole view. Draws them and waits, so for a
+    /// window let go or a message sent, not for a frame. Natively only: a page can't wait for the
+    /// GPU (its read back comes in a later task), so it starts them (`view_ids_start`) and takes
+    /// them when they're back (`view_ids_take`).
+    pub fn view_ids(&mut self, scene: &mut Scene, camera: &Camera) -> ViewIds {
+        self.view_ids_start(scene, camera);
+        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+        self.view_ids_take(scene).expect("it's been waited for")
+    }
+
+    /// Whether a whole view's ids are on their way back.
+    pub fn view_ids_busy(&self) -> bool {
+        self.ids_out.is_some()
+    }
+
+    /// The whole view's ids, once they're back (`view_ids_start`); None while they aren't.
+    pub fn view_ids_take(&mut self, scene: &Scene) -> Option<ViewIds> {
+        let out = self.ids_out.as_ref()?;
+        let _ = self.device.poll(wgpu::PollType::Poll);
+        if !out.ready.load(Ordering::Acquire) {
+            return None;
+        }
+        let IdsOut { read, w, h, row, .. } = self.ids_out.take()?;
+        let ids = read.slice(..).get_mapped_range().ok()?;
+        let word = |at: usize| u32::from_le_bytes(ids[at..at + 4].try_into().expect("4 bytes"));
+        let mut raw = Vec::with_capacity((w * h) as usize);
+        let mut kinds: std::collections::HashMap<(u32, u32), Entity> = Default::default();
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let at = y * row as usize + x * 8;
+                let (pl, id) = (word(at), word(at + 4));
+                raw.push((pl, id));
+                if pl != 0 && id & SELECTED_BIT != 0 {
+                    kinds
+                        .entry((pl, id))
+                        .or_insert_with(|| self.edge_of_segment(scene, pl - 1, id & !SELECTED_BIT));
+                }
+            }
+        }
+        drop(ids);
+        read.unmap();
+        Some(ViewIds {
+            w: w as usize,
+            h: h as usize,
+            raw,
+            edges: kinds,
+        })
+    }
+}
+
+impl ViewIds {
+    /// What can be seen of each entity in the box `lo`..`hi` of the view: how many of its pixels
+    /// are in it and how many out of it.
+    pub fn seen_in_box(&self, lo: (f32, f32), hi: (f32, f32)) -> Vec<(Entity, u32, u32)> {
+        let ids = self;
         let mut counts: std::collections::HashMap<Entity, (u32, u32)> = Default::default();
         for y in 0..ids.h {
             for x in 0..ids.w {
@@ -1764,10 +1911,13 @@ impl Renderer {
         }
         counts.into_iter().map(|(e, c)| (e, c.0, c.1)).collect()
     }
+}
 
-    /// The placement and entity under each pixel of the whole view. Draws them and waits, so for a
-    /// window let go or a message sent, not for a frame.
-    pub fn view_ids(&mut self, scene: &mut Scene, camera: &Camera) -> ViewIds {
+impl Renderer {
+    /// Draws the ids of the whole view and asks for them back (`view_ids_take` has them when
+    /// they're in; the pick's waker wakes the host then). One at a time: a second start while one
+    /// is out drops the first.
+    pub fn view_ids_start(&mut self, scene: &mut Scene, camera: &Camera) {
         let (w, h) = self.size;
         let view = camera.view_window(w, h, (w as f32 * 0.5, h as f32 * 0.5), (w as f32, h as f32));
         scene.cull(&view, self.lod_px, self.section, self.section2);
@@ -1873,32 +2023,23 @@ impl Renderer {
             id.size(),
         );
         self.queue.submit([encoder.finish()]);
-        read.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
-        let ids = read.slice(..).get_mapped_range().expect("it's been waited for");
-        let word = |at: usize| u32::from_le_bytes(ids[at..at + 4].try_into().expect("4 bytes"));
-        let mut raw = Vec::with_capacity((w * h) as usize);
-        let mut kinds: std::collections::HashMap<(u32, u32), Entity> = Default::default();
-        for y in 0..h as usize {
-            for x in 0..w as usize {
-                let at = y * row as usize + x * 8;
-                let (pl, id) = (word(at), word(at + 4));
-                raw.push((pl, id));
-                if pl != 0 && id & SELECTED_BIT != 0 {
-                    kinds
-                        .entry((pl, id))
-                        .or_insert_with(|| self.edge_of_segment(scene, pl - 1, id & !SELECTED_BIT));
-                }
+        let ready = Arc::new(AtomicBool::new(false));
+        let (done, wake) = (ready.clone(), self.pick.wake.clone());
+        read.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+            if r.is_ok() {
+                done.store(true, Ordering::Release);
             }
-        }
-        drop(ids);
-        read.unmap();
-        ViewIds {
-            w: w as usize,
-            h: h as usize,
-            raw,
-            edges: kinds,
-        }
+            if let Some(w) = &wake {
+                w();
+            }
+        });
+        self.ids_out = Some(IdsOut {
+            read,
+            w,
+            h,
+            row,
+            ready,
+        });
     }
 
     fn edge_of_segment(&self, scene: &Scene, placement: u32, segment: u32) -> Entity {
@@ -2234,7 +2375,10 @@ impl Renderer {
         let live = self.live_part();
         for (k, m) in marks.iter().take(MARKS).enumerate() {
             let k = k as u32;
-            let part = scene.placements[m.placement as usize].part;
+            let Some(pl) = scene.placements.get(m.placement as usize) else {
+                continue;
+            };
+            let part = pl.part;
             let Some(lod) = scene.lod_on_screen(m.placement) else {
                 continue;
             };
@@ -2272,16 +2416,31 @@ impl Renderer {
             pass.set_pipeline(pipeline);
             for (k, m) in marks.iter().take(MARKS).enumerate() {
                 let k = k as u32;
-                let part = scene.placements[m.placement as usize].part;
+                let Some(pl) = scene.placements.get(m.placement as usize) else {
+                    continue;
+                };
+                let part = pl.part;
                 let Some(lod) = scene.lod_on_screen(m.placement) else {
                     continue;
                 };
                 let lod = self.pick_lod(part, lod);
-                if let Entity::Edge(e) = m.entity
-                    && let Some(r) = self.index[part as usize][lod].edges.iter().find(|r| r.edge == e)
-                {
-                    let first = self.lods[part as usize][lod].first_segment + r.first;
-                    pass.draw_indexed(0..r.count * 6, first as i32 * 4, k..k + 1);
+                let ix = &self.index[part as usize][lod];
+                let draw = |pass: &mut wgpu::RenderPass<'_>, e: u32| {
+                    if let Some(r) = ix.edges.iter().find(|r| r.edge == e) {
+                        let first = self.lods[part as usize][lod].first_segment + r.first;
+                        pass.draw_indexed(0..r.count * 6, first as i32 * 4, k..k + 1);
+                    }
+                };
+                match m.entity {
+                    Entity::Edge(e) => draw(pass, e),
+                    // a selected face's outline: its edges, in the selection's colour
+                    Entity::Face(f) if m.selected => {
+                        let from = ix.face_edges.partition_point(|x| x.0 < f);
+                        for &(_, e) in ix.face_edges[from..].iter().take_while(|x| x.0 == f) {
+                            draw(pass, e);
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -3044,7 +3203,10 @@ impl Renderer {
             pass.set_pipeline(&self.ao_pipe.apply);
             pass.draw(0..3, 0..1);
         }
-        if overlay.marks.iter().any(|m| matches!(m.entity, Entity::Edge(_))) {
+        // marked edges, and a selected face's outline
+        if overlay.marks.iter().any(|m| {
+            matches!(m.entity, Entity::Edge(_)) || (m.selected && matches!(m.entity, Entity::Face(_)))
+        }) {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("marked edges"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {

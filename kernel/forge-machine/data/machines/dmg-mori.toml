@@ -345,6 +345,12 @@ basis = "the spindle head (estimate); one box/cylinder from published overall si
 # ---------------------------------------------------------------------------------------------
 # DMG MORI NHX 4000: NHX.
 # X 560 Y 560 Z 660; 20000 rpm #40 / HSK-A63 (speedMASTER); 60 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "dmg-mori-nhx-4000"
 kind = "vmc4"
@@ -644,6 +650,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # DMG MORI NHX 5000: NHX.
 # X 730 Y 730 Z 880; 20000 rpm #40 / HSK-A63 (speedMASTER); 60 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "dmg-mori-nhx-5000"
 kind = "vmc4"
@@ -943,6 +955,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # DMG MORI NLX 2500 | 700: NLX.
 # X 260 Y 120 Z 795; 5000 rpm.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "dmg-mori-nlx-2500-700"
 kind = "lathe"

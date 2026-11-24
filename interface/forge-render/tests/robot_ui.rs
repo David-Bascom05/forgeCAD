@@ -92,7 +92,8 @@ fn a_robot_opens_with_its_panel_and_its_joints_move_the_parts() {
     let view = p.view.as_ref().expect("the view");
     assert_eq!(view.root, "base");
     // the environment entered: its tab, and the view fitted to the robot
-    assert_eq!(h.gui.shell.tab, forge_render::shell::ROBOT_TAB);
+    assert_eq!(h.gui.shell.env, Some(forge_render::shell::env::EnvId::Robot));
+    assert_eq!(h.gui.shell.tab, forge_render::shell::env::ROBOT_TAB);
     assert!(p.framed, "the view is fitted to the robot on entering");
     assert!(
         p.q.is_empty(),

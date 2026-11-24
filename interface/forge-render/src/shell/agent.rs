@@ -882,6 +882,32 @@ impl Shell {
     /// The Agent tab: the backend's switcher, what it's working on, the chat, the input.
     pub(super) fn agent_ui(&mut self, ui: &mut Ui, area: Rect) {
         let t = self.theme;
+        // in a page no agent can run (Claude Code and Codex are programs on the computer, speech
+        // its engine; an endpoint isn't reached from the page yet): said plainly, no Send to fail
+        if cfg!(target_arch = "wasm32") {
+            ui.scope_builder(
+                egui::UiBuilder::new().max_rect(area.shrink2(vec2(PAD, 12.0))),
+                |ui| {
+                    ui.label(
+                        egui::RichText::new("The agent runs in the desktop app")
+                            .font(medium(13.0))
+                            .color(t.ink),
+                    );
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new(
+                            "Claude Code and Codex are programs on your computer, and talking to the \
+                         agent uses its speech engine: a browser page can start neither, and it \
+                         doesn't reach an OpenAI-compatible endpoint yet. Open this project in the \
+                         desktop app to work with the agent.",
+                        )
+                        .font(sans(12.0))
+                        .color(t.ink2),
+                    );
+                },
+            );
+            return;
+        }
         self.agent.selection = self.agent_selection();
         let drawing = self.drawing.as_ref().map(|d| d.name());
         self.agent.file = drawing

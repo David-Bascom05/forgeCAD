@@ -164,6 +164,15 @@ pub fn clear(
         return (None, 0);
     };
     let lim_clear = limit + f.mu;
+    // a plane face lies in its plane: a tool that stays in {N·x − c ≥ D} through the whole move
+    // has signed distance ≥ D from every point of the face (Halfspace.lean, either side), in
+    // one cell
+    if let Kind::Plane { o, e, g, .. } = &kd
+        && let Some(d) = halfspace_bound(body, mv, Ival::new(0.0, 1.0), *o, *e, *g)
+        && d >= lim_clear
+    {
+        return (Some(d - f.mu), 1);
+    }
     // a plane's unit direction along e
     let ev = match &kd {
         // n = (−e.y, e.x)/|e|, so e/|e| = (n.y, −n.x)
@@ -294,13 +303,23 @@ pub fn clear(
             lower = lower.min(lb);
             continue;
         }
+        // a plane: the move's piece on one side of it, for the whole face at once
+        if let Kind::Plane { o, e, g, .. } = &kd
+            && let Some(d) = halfspace_bound(body, mv, s, *o, *e, *g)
+            && d >= lim_clear
+        {
+            lower = lower.min(d);
+            continue;
+        }
         let (ts, ss) = (t.width() * scale, size(s));
         if ts <= res && ss <= res {
             return (None, cells);
         }
         // the face first, against the whole move taken exactly; the move is split only under
-        // a face cell already at the resolution
-        if ts > res {
+        // a face cell already at the resolution (a plane: the larger first, so the bound for a
+        // piece of the move on one side of the plane gets its chance)
+        let plane = matches!(kd, Kind::Plane { .. });
+        if ts > res && !(plane && ss > ts) {
             let (a, b) = t.split();
             stack.push((s, a));
             stack.push((s, b));
@@ -311,4 +330,210 @@ pub fn clear(
         }
     }
     (Some(lower - f.mu), cells)
+}
+
+/// The least of N·x − c over the moved tool (the move over `sr` of its parameter), N the plane's unit normal (either sense: the
+/// larger bound), c = N·o: a lower bound, outward-rounded. Over the move by the box of its tip
+/// positions; over the body by its (ρ, z) profile (a point at radius ρ and height z above the
+/// tip reaches N·(ρ cos φ, ρ sin φ, z) ≥ −ρ|N_xy| + z N_z; an arc piece by its centre less its
+/// radius). None where the plane's normal cannot be formed.
+fn halfspace_bound(body: &Body, mv: &Move, sr: Ival, o: [f64; 3], e: [f64; 3], g: [f64; 3]) -> Option<f64> {
+    let n = [
+        p(e[1]).mul(p(g[2])).sub(p(e[2]).mul(p(g[1]))),
+        p(e[2]).mul(p(g[0])).sub(p(e[0]).mul(p(g[2]))),
+        p(e[0]).mul(p(g[1])).sub(p(e[1]).mul(p(g[0]))),
+    ];
+    let len = n[0].sqr().add(n[1].sqr()).add(n[2].sqr()).sqrt();
+    if !(len.lo > 0.0) {
+        return None;
+    }
+    let u = [n[0].div(len), n[1].div(len), n[2].div(len)];
+    let nh = u[0].sqr().add(u[1].sqr()).sqrt();
+    let unit = nh.sqr().add(u[2].sqr()).sqrt();
+    let c = u[0].mul(p(o[0])).add(u[1].mul(p(o[1]))).add(u[2].mul(p(o[2])));
+    // N·A over the move: a line's at its ends (linear in s); an arc's or helix's by its centre
+    // less the radius times N's horizontal part, over its heights
+    let dotn = |b: [Ival; 3]| u[0].mul(b[0]).add(u[1].mul(b[1])).add(u[2].mul(b[2]));
+    let na = match *mv {
+        Move::Line { .. } => dotn(mv.at(Ival::pt(sr.lo))).hull(dotn(mv.at(Ival::pt(sr.hi)))),
+        Move::Arc { c, r, .. } | Move::Helix { c, r, .. } => {
+            // the horizontal part: its least is at an end unless the radial direction against
+            // N's horizontal part, −N_xy, lies within the arc's turn (pieces are under a half
+            // turn, counter-clockwise or not); then the circle's least, centre − r|N_xy|
+            let (a0, a1) = (mv.at(Ival::pt(sr.lo)), mv.at(Ival::pt(sr.hi)));
+            let dxy = |b: [Ival; 3]| u[0].mul(b[0]).add(u[1].mul(b[1]));
+            let ends = dxy(a0).hull(dxy(a1));
+            let (r0, r1) = (
+                [a0[0].sub(p(c[0])), a0[1].sub(p(c[1]))],
+                [a1[0].sub(p(c[0])), a1[1].sub(p(c[1]))],
+            );
+            let cr = |a: [Ival; 2], b: [Ival; 2]| a[0].mul(b[1]).sub(a[1].mul(b[0]));
+            // the turn's sense from its ends (under a half turn: cross(r0, r1)'s sign)
+            let turn = cr(r0, r1);
+            // whether the radial direction m may lie within the arc's turn
+            let within = |m: [Ival; 2]| {
+                if turn.lo > 0.0 {
+                    !(cr(r0, m).hi < 0.0 || cr(m, r1).hi < 0.0)
+                } else if turn.hi < 0.0 {
+                    !(cr(r0, m).lo > 0.0 || cr(m, r1).lo > 0.0)
+                } else {
+                    true
+                }
+            };
+            // the least at −N_xy's direction, the greatest at N_xy's, if within the turn
+            let h = u[0].mul(p(c[0])).add(u[1].mul(p(c[1])));
+            let rr = p(r).mul(nh);
+            let lo = if within([u[0].neg(), u[1].neg()]) {
+                h.sub(rr).lo.min(ends.lo)
+            } else {
+                ends.lo
+            };
+            let hi = if within([u[0], u[1]]) {
+                h.add(rr).hi.max(ends.hi)
+            } else {
+                ends.hi
+            };
+            let hx = Ival::new(lo, hi);
+            let zs = mv.at(sr)[2];
+            hx.add(u[2].mul(zs))
+        }
+    };
+    let mut best = f64::NEG_INFINITY;
+    for sense in [1.0, -1.0] {
+        let nz = u[2].scale(sense);
+        // the profile's least −ρ nh + z nz
+        let lin = |q: [f64; 2]| p(q[0]).mul(nh).neg().add(p(q[1]).mul(nz));
+        let mut m = lin([0.0, body.z0]).lo.min(lin([0.0, body.z1]).lo);
+        for sg in &body.chain {
+            match *sg {
+                crate::tool::PSeg::Line { a, b } => {
+                    m = m.min(lin(a).lo).min(lin(b).lo);
+                }
+                crate::tool::PSeg::Arc { c, r, .. } => {
+                    m = m.min(lin(c).sub(p(r).mul(unit)).lo);
+                }
+            }
+        }
+        let d = na.scale(sense).add(p(m)).sub(c.scale(sense));
+        if d.lo.is_finite() {
+            best = best.max(d.lo);
+        }
+    }
+    if best.is_finite() { Some(best) } else { None }
+}
+
+#[cfg(test)]
+mod halfspace_tests {
+    use super::*;
+    use crate::tool::{Cutter, PSeg, assemble};
+
+    /// A unit vector from a parameter (the rational map: no libm, as on every target).
+    fn cs(t: f64) -> (f64, f64) {
+        let w = 1.0 + t * t;
+        ((1.0 - t * t) / w, 2.0 * t / w)
+    }
+
+    struct Rng(u64);
+    impl Rng {
+        fn f(&mut self) -> f64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            (self.0 >> 11) as f64 / (1u64 << 53) as f64
+        }
+        fn r(&mut self, a: f64, b: f64) -> f64 {
+            a + (b - a) * self.f()
+        }
+    }
+
+    /// The bound is at most the sampled least of N·x − c over the moved tool, for the better of
+    /// the two senses (that sense's points all satisfy it, which is what the clearance rests on):
+    /// random tilted planes, line and arc moves (whole and in pieces), flat, ball and chamfer
+    /// tools, sampled densely over the profile, the turn and the move.
+    #[test]
+    fn the_halfspace_bound_is_below_the_samples() {
+        let mut g = Rng(0x2545f4914f6cdd1d);
+        let tools = [
+            assemble(&Cutter::Flat { d: 6.0 }, 15.0, 6.0, 30.0, None).unwrap(),
+            assemble(&Cutter::Ball { d: 6.0 }, 15.0, 6.0, 30.0, None).unwrap(),
+            assemble(
+                &Cutter::Chamfer {
+                    d_tip: 1.0,
+                    angle: 90.0,
+                    d: 10.0,
+                },
+                8.0,
+                10.0,
+                25.0,
+                None,
+            )
+            .unwrap(),
+        ];
+        let mut checked = 0;
+        for case in 0..300 {
+            let body = &tools[case % 3].bodies[0];
+            // a plane through o, spanned by a horizontal e and a sloped g
+            let (tc, ts) = cs(g.r(-4.0, 4.0));
+            let e = [tc, ts, 0.0];
+            let (sc, ss) = cs(g.r(0.1, 0.9));
+            let gg = [-ts * sc, tc * sc, -ss];
+            let o = [g.r(-5.0, 5.0), g.r(-5.0, 5.0), g.r(-3.0, 3.0)];
+            let z = g.r(-4.0, 4.0);
+            let mv = if case % 2 == 0 {
+                Move::Line {
+                    a: [g.r(-8.0, 8.0), g.r(-8.0, 8.0), z],
+                    b: [g.r(-8.0, 8.0), g.r(-8.0, 8.0), z + g.r(-1.0, 1.0)],
+                }
+            } else {
+                let (pc, ps) = cs(g.r(-4.0, 4.0));
+                Move::Arc {
+                    c: [g.r(-6.0, 6.0), g.r(-6.0, 6.0), z],
+                    x: [pc, ps, 0.0],
+                    y: [-ps, pc, 0.0],
+                    r: g.r(1.0, 6.0),
+                    t0: -g.r(0.05, 0.4),
+                    t1: g.r(0.05, 0.4),
+                }
+            };
+            for sr in [Ival::new(0.0, 1.0), Ival::new(0.0, 0.5), Ival::new(0.25, 0.75)] {
+                let Some(d) = halfspace_bound(body, &mv, sr, o, e, gg) else {
+                    continue;
+                };
+                // the unit normal, both senses' sampled least
+                let n = [
+                    e[1] * gg[2] - e[2] * gg[1],
+                    e[2] * gg[0] - e[0] * gg[2],
+                    e[0] * gg[1] - e[1] * gg[0],
+                ];
+                let l = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+                let n = [n[0] / l, n[1] / l, n[2] / l];
+                let c = n[0] * o[0] + n[1] * o[1] + n[2] * o[2];
+                let (mut lo_p, mut lo_m) = (f64::INFINITY, f64::INFINITY);
+                for k in 0..=40 {
+                    let s = sr.lo + (sr.hi - sr.lo) * k as f64 / 40.0;
+                    let a = mv.at(Ival::pt(s));
+                    let a = [a[0].mid(), a[1].mid(), a[2].mid()];
+                    for sg in &body.chain {
+                        let (pa, pb) = match *sg {
+                            PSeg::Line { a, b } | PSeg::Arc { a, b, .. } => (a, b),
+                        };
+                        for q in [pa, pb, [0.5 * (pa[0] + pb[0]), 0.5 * (pa[1] + pb[1])]] {
+                            for j in 0..36 {
+                                // round the axis: the rational map over t in [-4, 4], and its mirror
+                                let (pc, ps) = cs(-4.0 + 8.0 * (j / 2) as f64 / 17.0);
+                                let pc = if j % 2 == 0 { pc } else { -pc };
+                                let x = [a[0] + q[0] * pc, a[1] + q[0] * ps, a[2] + q[1]];
+                                let v = n[0] * x[0] + n[1] * x[1] + n[2] * x[2] - c;
+                                lo_p = lo_p.min(v);
+                                lo_m = lo_m.min(-v);
+                            }
+                        }
+                    }
+                }
+                assert!(d <= lo_p.max(lo_m) + 1e-9, "case {case}: {d} vs {lo_p} / {lo_m}");
+                checked += 1;
+            }
+        }
+        assert!(checked > 600, "{checked}");
+    }
 }

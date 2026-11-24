@@ -24,12 +24,16 @@ pub mod gui_apptools;
 mod gui_asm;
 #[path = "gui_asmdrag.rs"]
 mod gui_asmdrag;
+#[path = "gui_bendsim.rs"]
+pub mod gui_bendsim;
 #[path = "gui_cam.rs"]
 mod gui_cam;
 #[path = "gui_camsim.rs"]
 pub mod gui_camsim;
 #[path = "gui_docs.rs"]
 pub mod gui_docs;
+#[path = "gui_env.rs"]
+mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
 #[path = "gui_fgmarks.rs"]
@@ -48,6 +52,8 @@ pub mod gui_robot;
 mod gui_sheet;
 #[path = "gui_speech.rs"]
 pub mod gui_speech;
+#[path = "gui_studio.rs"]
+mod gui_studio;
 #[path = "gui_thermo.rs"]
 mod gui_thermo;
 #[path = "gui_versions.rs"]
@@ -125,8 +131,57 @@ pub type AsmPlaced = (Vec<crate::fg::Occ>, Vec<(usize, crate::scene::Rows)>);
 /// A part file, and its anchors or why not.
 pub(crate) type PartAnchors = (String, Result<Vec<String>, String>);
 
+/// A selection window let go, as it's chosen from the view's ids: its box (device pixels), its
+/// direction, and what the moment of release said (a tool taking edges, Ctrl, Shift).
+struct WindowAsk {
+    lo: (f32, f32),
+    hi: (f32, f32),
+    crossing: bool,
+    takes_edges: bool,
+    ctrl: bool,
+    shift: bool,
+}
+
+/// What a selection window chose, from the view's ids: faces into (or, with Ctrl, out of) the
+/// selection, or the edges for a tool that takes them (returned).
+fn window_chosen(v: &mut View, ids: &crate::render::ViewIds, ask: &WindowAsk) -> Option<Vec<Entity>> {
+    let seen: Vec<Entity> = ids
+        .seen_in_box(ask.lo, ask.hi)
+        .into_iter()
+        .filter(|(_, inside, outside)| *inside > 0 && (ask.crossing || *outside == 0))
+        .map(|f| f.0)
+        .collect();
+    let (edges, found): (Vec<Entity>, Vec<Entity>) =
+        seen.into_iter().partition(|e| matches!(e, Entity::Edge(_)));
+    let found: Vec<Entity> = found
+        .into_iter()
+        .filter(|e| matches!(e, Entity::Face(_)))
+        .collect();
+    if ask.takes_edges {
+        return Some(edges);
+    }
+    if ask.ctrl {
+        v.nav.selected.retain(|s| !found.contains(&s.1));
+    } else {
+        if !ask.shift {
+            v.nav.selected.clear();
+        }
+        for e in found {
+            if !v.nav.selected.contains(&(0, e)) {
+                v.nav.selected.push((0, e));
+            }
+        }
+    }
+    None
+}
+
 pub struct Gui {
+    /// The Render Studio's tracer and queue while its environment is open (`gui_studio.rs`).
+    studio: Option<gui_studio::StudioHost>,
     pub vers: gui_versions::VersState,
+    pub bend: gui_bendsim::BendView,
+    /// An environment asked by name (a deep link, `--env`): entered once the document built.
+    pub env_asked: Option<String>,
     /// The Machine Builder's scene (`gui_machine.rs`).
     pub mach: gui_machine::MachHost,
     pub ctx: egui::Context,
@@ -157,6 +212,9 @@ pub struct Gui {
     target_px: (u32, u32),
     /// When the right button went down in the view, for its menu to show if it stays down.
     mark_held: Option<f64>,
+    /// A selection window let go whose view ids are on their way back (in a page they come in a
+    /// later task: `picks` finishes it).
+    window_out: Option<WindowAsk>,
     /// A message with marks, sent once the frame showing them is drawn.
     markup_job: Option<(String, Vec<String>)>,
     /// A message with marks taken, waiting on its names; an assembly's occurrences' own names,
@@ -285,7 +343,10 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            studio: None,
             vers: Default::default(),
+            bend: Default::default(),
+            env_asked: None,
             mach: Default::default(),
             agent: Default::default(),
             apps: Default::default(),
@@ -306,6 +367,7 @@ impl Gui {
             view_file: None,
             target_px: (1, 1),
             mark_held: None,
+            window_out: None,
             markup_job: None,
             markup_wait: None,
             markup_occ: None,
@@ -579,7 +641,10 @@ impl Gui {
             .map(|(_, i)| i)
             .collect();
         let (c, r) = v.scene.bounds();
-        let empty = v.nav.marks().iter().all(|m| m.selected);
+        // the part under the pointer, selected or not, is what's there: a plane behind it isn't
+        // (with the face under the pointer selected its hover mark wasn't there, and the plane
+        // behind the face lit up instead of it)
+        let empty = v.nav.hover_hit().is_none();
         crate::origin::hit(
             &shown,
             crate::origin::reach(c, r),
@@ -786,26 +851,7 @@ impl Gui {
             }
             if let Some((a, b)) = v.nav.window.take() {
                 v.dirty = true;
-                let lo = (a.0.min(b.0), a.1.min(b.1));
-                let hi = (a.0.max(b.0), a.1.max(b.1));
-                let camera = v.nav.camera;
-                // only what can be seen: right to left what shows in it, left to right what shows
-                // in it and nowhere else
-                let crossing = b.0 < a.0;
-                let seen: Vec<Entity> = v
-                    .renderer
-                    .seen_in_box(&mut v.scene, &camera, lo, hi)
-                    .into_iter()
-                    .filter(|(_, inside, outside)| *inside > 0 && (crossing || *outside == 0))
-                    .map(|f| f.0)
-                    .collect();
                 // a tool's edges selection takes the window's edges, as Inventor's does
-                let (edges, found): (Vec<Entity>, Vec<Entity>) =
-                    seen.into_iter().partition(|e| matches!(e, Entity::Edge(_)));
-                let found: Vec<Entity> = found
-                    .into_iter()
-                    .filter(|e| matches!(e, Entity::Face(_)))
-                    .collect();
                 let takes_edges = self
                     .shell
                     .fg
@@ -813,19 +859,25 @@ impl Gui {
                     .and_then(|p| p.tool.as_ref())
                     .and_then(|t| t.slots.get(t.active))
                     .is_some_and(|s| s.kind == crate::shell::fgtool::SlotKind::Edges);
-                if takes_edges {
-                    window_edges = Some(edges);
-                } else if v.nav.ctrl_held() {
-                    v.nav.selected.retain(|s| !found.contains(&s.1));
+                let ask = WindowAsk {
+                    lo: (a.0.min(b.0), a.1.min(b.1)),
+                    hi: (a.0.max(b.0), a.1.max(b.1)),
+                    // only what can be seen: right to left what shows in it, left to right what
+                    // shows in it and nowhere else
+                    crossing: b.0 < a.0,
+                    takes_edges,
+                    ctrl: v.nav.ctrl_held(),
+                    shift: v.nav.shift_held(),
+                };
+                let camera = v.nav.camera;
+                // natively the ids are waited for; a page can't wait for the GPU, so they're asked
+                // for and the window is chosen when they're back (`picks`)
+                if cfg!(target_arch = "wasm32") {
+                    v.renderer.view_ids_start(&mut v.scene, &camera);
+                    self.window_out = Some(ask);
                 } else {
-                    if !v.nav.shift_held() {
-                        v.nav.selected.clear();
-                    }
-                    for e in found {
-                        if !v.nav.selected.contains(&(0, e)) {
-                            v.nav.selected.push((0, e));
-                        }
-                    }
+                    let ids = v.renderer.view_ids(&mut v.scene, &camera);
+                    window_edges = window_chosen(v, &ids, &ask);
                 }
             }
             if let Some(at) = v.nav.cube_menu.take() {
@@ -898,6 +950,17 @@ impl Gui {
         {
             v.renderer.pick_start(&mut v.scene, &v.nav.camera, px);
         }
+        // a selection window's ids back (a page's: see `view_event`)
+        if self.window_out.is_some()
+            && let Some(ids) = v.renderer.view_ids_take(&v.scene)
+            && let Some(ask) = self.window_out.take()
+        {
+            v.dirty = true;
+            if let Some(e) = window_chosen(v, &ids, &ask) {
+                self.fg_window_edges(e);
+            }
+            return true;
+        }
         if let Some((px, hit, _)) = v.renderer.pick_poll(&v.scene)
             && v.nav
                 .on_pick(px, hit.filter(|h| !crate::thermo_view::unpicked(h)))
@@ -931,6 +994,18 @@ impl Gui {
                     s.set_toggle(g, !s.toggle(g));
                     continue;
                 }
+                Action::EnterEnv(id) => {
+                    self.env_enter(id);
+                    continue;
+                }
+                Action::ExitEnv => {
+                    self.env_exit();
+                    continue;
+                }
+                Action::Env(id, c) => {
+                    self.shell.env_command(id, c);
+                    continue;
+                }
                 a => a,
             };
             if let Action::PartColours(on) = a {
@@ -940,6 +1015,7 @@ impl Gui {
             }
             match a {
                 Action::MachineBuilder => self.machine_toggle(),
+                Action::Machine(c) => self.machine_cmd(c),
                 Action::Versions(c) => {
                     use crate::shell::versions::{VersionsAct, VersionsCmd};
                     let v = &mut self.shell.versions;
@@ -1084,10 +1160,6 @@ impl Gui {
                         if let Some(w) = &mut self.shell.cam {
                             w.command(c.into());
                         }
-                        continue;
-                    }
-                    Action::Robot(c) => {
-                        crate::shell::robot::command(&mut self.shell, c);
                         continue;
                     }
                     Action::Fg(c) => {
@@ -1316,6 +1388,8 @@ impl Gui {
         self.save_settings();
         self.inspect_tick();
         self.sheet_frame();
+        self.env_frame();
+        self.bendsim_frame();
         self.machine_frame();
         self.fg_hole_guess();
         self.fg_preview();
@@ -1497,7 +1571,9 @@ impl Gui {
                         .nav
                         .marks()
                         .into_iter()
-                        .filter(|m| !m.selected && !quiet)
+                        // what's selected drawn in the chosen colour (it wasn't drawn at all:
+                        // a face clicked showed nothing once the pointer left it)
+                        .filter(|_| !quiet)
                         .collect(),
                 };
                 m.extend(self.fg_located_marks.iter().copied());
@@ -1511,11 +1587,17 @@ impl Gui {
                     selected: true,
                     second: false,
                 }));
+                // the bend simulation's bodies are not the design's: none of its marks
+                if self.bend.showing() {
+                    m.clear();
+                }
                 m
             };
             // the build's flags on the faces of what they're of; Compare's colours over them
             let flagged;
-            let colours: &[crate::render::FaceColour] = if self.vers.colours.is_empty() {
+            let colours: &[crate::render::FaceColour] = if self.bend.showing() {
+                &[]
+            } else if self.vers.colours.is_empty() {
                 flagged = self.fg_marks_was.1.clone();
                 &flagged
             } else {
@@ -1525,7 +1607,11 @@ impl Gui {
                 hud: None,
                 cube: Some((v.nav.cube_place(), v.nav.cube_hover)),
                 face_colours: colours,
-                face_ghosts: &self.vers.ghosts,
+                face_ghosts: if self.bend.showing() {
+                    &self.bend.ghosts
+                } else {
+                    &self.vers.ghosts
+                },
                 marks: &marks,
                 world: &world,
                 behind: &behind,
@@ -1548,6 +1634,7 @@ impl Gui {
             v.dirty = false;
             times.view_drawn = true;
         }
+        let studio_busy = self.studio_frame();
         times.view = now_ms() - t1;
 
         let t2 = now_ms();
@@ -1615,7 +1702,10 @@ impl Gui {
             .next()
             .map(|v| v.repaint_delay)
             .unwrap_or(std::time::Duration::MAX);
-        let again_in = if animating || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
+        let again_in = if animating
+            || studio_busy
+            || self.mark_held.is_some()
+            || self.view.as_ref().is_some_and(|v| v.dirty)
         {
             Some(std::time::Duration::ZERO)
         } else if delay == std::time::Duration::MAX {

@@ -192,7 +192,7 @@ impl Gui {
         self.robot_reload(&mut panel);
         self.shell.robot = Some(panel);
         // into the environment: its tab, browser and sheet; the view framed once the parts are placed
-        self.shell.tab = crate::shell::ROBOT_TAB;
+        let _ = self.shell.enter_env(crate::shell::env::EnvId::Robot);
         true
     }
 

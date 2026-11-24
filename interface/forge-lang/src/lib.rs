@@ -350,59 +350,140 @@ fn fit_sizes(src: &str, opts: &Options, run: &mut Run, mut cache: Cache) -> Cach
             continue;
         };
         let (id, key, top, dim) = (id.clone(), (**key).clone(), d.num.v, d.num.dim);
-        let builds = |v: f64, cache: Cache| -> (bool, Cache) {
+        // None: it builds; else the kernel's words for the refusal
+        let mut cache_cell = Some(cache);
+        let found = fit_search(top, |v| {
             let op = error::Op::SetParam {
                 param: key.clone(),
                 value: error::Literal { value: v, dim },
             };
             let Ok(text) = edit::apply(src, &op) else {
-                return (false, cache);
+                return Some("the edit does not apply".into());
             };
-            let (r, c) = run_once(&text, inner.clone(), cache);
-            let ok = !r
-                .errors
-                .iter()
-                .any(|e| matches!(e, Error::Build { id: i, .. } if *i == id));
-            (ok && r.feats.iter().any(|f| f.id == id), c)
-        };
-        let mut bad = top;
-        let mut good = None;
-        for h in 1..=FIT_HALVINGS {
-            let v = top * 0.5f64.powi(h);
-            let (ok, c) = builds(v, cache);
-            cache = c;
-            if ok {
-                good = Some(v);
-                break;
+            let (r, c) = run_once(&text, inner.clone(), cache_cell.take().unwrap_or_default());
+            cache_cell = Some(c);
+            let refused = r.errors.iter().find_map(|e| match e {
+                Error::Build { id: i, error, .. } if *i == id => Some(match error {
+                    // which of the fillet's refusals: "fillet" alone tells nothing
+                    forge_model::RegenError::Fillet { error: f, .. } => {
+                        format!("fillet: {}", error::words(f))
+                    }
+                    _ => error::regen_text(error),
+                }),
+                _ => None,
+            });
+            match refused {
+                Some(why) => Some(why),
+                None if r.feats.iter().any(|f| f.id == id) => None,
+                None => Some("not built".into()),
             }
-            bad = v;
-        }
-        let Some(mut lo) = good else { continue };
-        for _ in 0..FIT_STEPS {
-            let mid = (lo + bad) * 0.5;
-            let (ok, c) = builds(mid, cache);
-            cache = c;
-            if ok {
-                lo = mid;
-            } else {
-                bad = mid;
-            }
-        }
-        // three figures, rounded down so it still builds
-        let p = 10f64.powi(2 - lo.abs().log10().floor() as i32);
-        let shown = (lo * p).floor() / p;
-        let value = if shown > 0.0 && shown < lo {
-            let (ok, c) = builds(shown, cache);
-            cache = c;
-            if ok { shown } else { lo }
-        } else {
-            lo
+        });
+        cache = cache_cell.take().unwrap_or_default();
+        let Some((value, intermittent)) = found else {
+            continue;
         };
         if let Error::Build { fit, .. } = &mut run.errors[k] {
-            *fit = Some(Box::new((key, error::Literal { value, dim })));
+            *fit = Some(Box::new(error::Fit {
+                param: key,
+                value: error::Literal { value, dim },
+                intermittent,
+            }));
         }
     }
     cache
+}
+
+/// Sizes spread evenly over the halving's bracket (the size that built, the one refused above
+/// it), built to look for refusals and sizes that build that the bisection stepped over.
+const FIT_SCAN: usize = 8;
+
+/// The search for a refused size `top`'s largest value that builds; `refused(v)` builds at
+/// `v`, `None` if it builds, else the kernel's words. Halvings to a size that builds, then
+/// bisection, then `FIT_SCAN` sizes across the halving's bracket (a larger one that builds is
+/// the answer). The value offered is one the reply shows
+/// as is (`forge_agent::short`, so a fix sent back unchanged is this very number) and was
+/// built: three figures rounded down, else the reply's last decimal rounded down, else the
+/// bisection's own. The kernel's yes need not be monotone in the size (a smaller one can be
+/// refused): when any size tried below one that built was refused, the answer says so
+/// (`Intermittent`) rather than passing a bisection's hole off as a limit.
+fn fit_search(
+    top: f64,
+    mut refused: impl FnMut(f64) -> Option<String>,
+) -> Option<(f64, Option<error::Intermittent>)> {
+    let mut tried: Vec<(f64, Option<String>)> = vec![];
+    let mut probe = |v: f64| {
+        let r = refused(v);
+        let ok = r.is_none();
+        tried.push((v, r));
+        ok
+    };
+    let mut bad = top;
+    let mut good = None;
+    for h in 1..=FIT_HALVINGS {
+        let v = top * 0.5f64.powi(h);
+        if probe(v) {
+            good = Some(v);
+            break;
+        }
+        bad = v;
+    }
+    let first = good?;
+    let ceiling = bad;
+    let mut lo = first;
+    for _ in 0..FIT_STEPS {
+        let mid = (lo + bad) * 0.5;
+        if probe(mid) {
+            lo = mid;
+        } else {
+            bad = mid;
+        }
+    }
+    // the bisection stops at the edge of whatever refusal it met first; sizes spread over the
+    // halving's bracket find a larger one that builds past a hole, or refusals below `lo`
+    for i in 1..=FIT_SCAN {
+        let v = first + (ceiling - first) * i as f64 / (FIT_SCAN + 1) as f64;
+        if v != lo && probe(v) && v > lo {
+            lo = v;
+        }
+    }
+    let down = |p: f64| (lo * p).floor() / p;
+    let figures = 10f64.powi(2 - lo.abs().log10().floor() as i32);
+    let decimals = 10f64.powi(if lo.abs() >= 1000.0 {
+        1
+    } else if lo.abs() >= 1.0 {
+        3
+    } else {
+        4
+    });
+    let shown_as_is = |v: f64| forge_agent::short(v).parse::<f64>() == Ok(v);
+    let mut value = None;
+    for v in [down(figures), down(decimals), lo] {
+        if v > 0.0 && v <= lo && shown_as_is(v) && (v == lo || probe(v)) {
+            value = Some(v);
+            break;
+        }
+    }
+    let value = value?;
+    let most = tried
+        .iter()
+        .filter(|(_, r)| r.is_none())
+        .map(|(v, _)| *v)
+        .fold(f64::MIN, f64::max);
+    let below = tried
+        .iter()
+        .filter_map(|(v, r)| Some((*v, r.as_ref()?)))
+        .filter(|(v, _)| *v < most)
+        .min_by(|a, b| a.0.total_cmp(&b.0));
+    let intermittent = below.map(|(from, why)| error::Intermittent {
+        from,
+        to: tried
+            .iter()
+            .filter(|(v, r)| r.is_some() && *v > most)
+            .map(|(v, _)| *v)
+            .fold(top, f64::min),
+        why: why.clone(),
+    });
+    Some((value, intermittent))
 }
 
 /// Bodies' mass properties as one: volumes and areas summed, the centroid weighed by volume, each
@@ -969,4 +1050,48 @@ pub fn render(body: &forge_topo::Body, view: &str, px: usize) -> Result<Vec<u8>,
     let faces = cache.faces(body);
     let mesh = forge_agent::facemesh::join(&faces);
     forge_agent::render::render(body, &mesh, view, px, &[])
+}
+
+#[cfg(test)]
+mod fit_search_tests {
+    use super::fit_search;
+
+    fn shown_as_is(v: f64) -> bool {
+        forge_agent::short(v).parse::<f64>() == Ok(v)
+    }
+
+    #[test]
+    fn a_monotone_limit_gives_the_largest_shown_that_builds_and_no_note() {
+        let mut built = vec![];
+        let (v, note) = fit_search(25.0, |r| {
+            let ok = r <= 12.49389;
+            if ok {
+                built.push(r);
+            }
+            (!ok).then(|| "overflow".to_string())
+        })
+        .unwrap();
+        assert!(v <= 12.49389 && shown_as_is(v) && built.contains(&v), "{v}");
+        assert_eq!(note, None);
+    }
+
+    #[test]
+    fn refusals_below_a_size_that_builds_are_reported_not_passed_off_as_a_limit() {
+        // refused from 10.9 on in holes, and wholly from 12.495; the reply's 3-figure rounding
+        // of the bisection's answer (12.4) falls in a hole
+        let hole =
+            |r: f64| (10.9..12.495).contains(&r) && ((r * 7.0).fract() < 0.2 || (r - 12.4).abs() < 0.005);
+        let (v, note) =
+            fit_search(25.0, |r| (r >= 12.495 || hole(r)).then(|| format!("hole at {r}"))).unwrap();
+        assert!(v < 12.495 && !hole(v) && shown_as_is(v), "{v}");
+        let note = note.unwrap_or_else(|| panic!("the holes are reported: {v}"));
+        assert!(note.from < v && hole(note.from), "{note:?}");
+        assert!(note.to >= 12.495 && note.to <= 25.0, "{note:?}");
+        assert_eq!(note.why, format!("hole at {}", note.from));
+    }
+
+    #[test]
+    fn nothing_that_builds_gives_no_fix() {
+        assert_eq!(fit_search(25.0, |_| Some("no".into())), None);
+    }
 }

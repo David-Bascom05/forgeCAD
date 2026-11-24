@@ -1,0 +1,53 @@
+# Tool-entry guidance (makers' published practice), for a warning about load at entry: NOT a
+# tool-life estimate. Each limit is quoted from its source; where the source gives a range the
+# limit is its upper end. Groups are ISO 513 letters the guidance applies to (empty: all).
+
+[[entry]]
+id = "entry-feed-50"
+check = "entry_feed"
+limit = 0.5
+groups = []
+source = "Helical Solutions, Machining Guidebook (2016), p. 5 'Types of Tool Entry'; Sandvik Coromant, 'Cutter path and chip formation in milling' (knowledge page)"
+taken = "Helical p. 5 (straight entry); Sandvik page"
+value = "Helical: 'Until the cutter is fully engaged, the feed rate upon entry must be reduced by at least 50%.' Sandvik: 'Reduce feed to 50% until the cutter is fully engaged.'"
+note = "Checked as: the feed of a sample where the tool meets stock after air, over the op's largest cutting feed."
+
+[[entry]]
+id = "plunge-feed-50"
+check = "plunge_feed"
+limit = 0.5
+groups = []
+source = "Garr Tool, General Solid Carbide Milling Guide, catalogue p. 262 (2018)"
+taken = "p. 262"
+value = "'When plunging into a solid, drop feed by approximately 50%.'"
+note = "Checked as: a straight-down feed move ending in stock, its feed over the op's largest cutting feed. Helical p. 4 calls a straight plunge 'the least preferred method and one that can easily break a tool'."
+
+[[entry]]
+id = "ramp-angle-ferrous"
+check = "ramp_angle"
+limit = 3.0
+groups = ["P", "M", "K", "H"]
+source = "Helical Solutions, Machining Guidebook (2016), p. 4"
+taken = "p. 4, ramping"
+value = "'suggested starting ramp angles: Non-Ferrous Materials: 3º – 10º; Ferrous Materials: 1º – 3º'"
+note = "Degrees. A suggested starting angle, not a breakage limit."
+
+[[entry]]
+id = "ramp-angle-nonferrous"
+check = "ramp_angle"
+limit = 10.0
+groups = ["N"]
+source = "Helical Solutions, Machining Guidebook (2016), p. 4"
+taken = "p. 4, ramping"
+value = "'suggested starting ramp angles: Non-Ferrous Materials: 3º – 10º; Ferrous Materials: 1º – 3º'"
+note = "Degrees. Titanium and superalloys (group S) are in neither class of the source: not checked."
+
+[[entry]]
+id = "helix-diameter-110"
+check = "helix_diameter"
+limit = 1.1
+groups = []
+source = "Helical Solutions, Machining Guidebook (2016), p. 4"
+taken = "p. 4, helical interpolation"
+value = "'We recommend a programmed helix diameter >110-120% of tool diameter.'"
+note = "Read as the diameter the helix cuts (2 x the centre path radius + D) over D; the lower end of the source's range."
