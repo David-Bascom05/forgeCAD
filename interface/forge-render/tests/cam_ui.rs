@@ -531,3 +531,20 @@ fn adaptive_is_an_opt_in_op_whose_fields_generate() {
     assert!(op.refusal.is_none(), "{:?}", op.refusal);
     assert!(op.moves > 0, "adaptive made no moves");
 }
+
+/// Suppressing an op generates again (Generate as I edit): the ops after it are made, not left
+/// stale.
+#[test]
+fn suppressing_an_op_generates_again() {
+    use forge_render::shell::cam::Cmd;
+    let Some((mut h, _)) = open("suppress") else { return };
+    h.gui.shell.cam.as_mut().unwrap().command(Cmd::Suppress("top".into()));
+    settle(&mut h);
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert_eq!(w.status("top"), "suppressed");
+    // made again (bolts may be refused: its drill now meets the stock top would have cleared)
+    for op in ["prof", "bore", "bolts"] {
+        assert!(["built", "refused"].contains(&w.status(op)), "{op}: {}", w.status(op));
+    }
+    assert_eq!(w.status("prof"), "built");
+}

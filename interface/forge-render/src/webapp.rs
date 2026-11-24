@@ -909,6 +909,13 @@ fn cam_words(g: &mut Gui, words: &str) -> Result<(), String> {
             let (k, v) = rest.split_once(' ').unwrap_or((rest, ""));
             w.op_dlg.as_mut().ok_or("no op dialog")?.set(k, v.into());
         }
+        "earlier" => w.command(Cmd::Move(rest.into(), true)),
+        "suppress" => w.command(Cmd::Suppress(rest.into())),
+        "ok" => {
+            // the op dialog's OK
+            let d = w.op_dlg.take().ok_or("no op dialog")?;
+            w.op_ok(&d)?;
+        }
         "post" => w.command(Cmd::PostProcess),
         "tools" => w.command(Cmd::ToolLibrary),
         "programs" => w.command(Cmd::Programs),
