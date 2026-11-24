@@ -2772,6 +2772,11 @@ impl Cam {
                 if let Some(why) = machines::conflict(&self.lib, &n) {
                     return Err(why);
                 }
+                for w in machines::unchecked(&self.lib, &n) {
+                    if !self.warnings.contains(&w) {
+                        self.warnings.push(w);
+                    }
+                }
                 Ok(V::Machine(n))
             }
             "tool" => {
@@ -9872,7 +9877,7 @@ impl Cam {
             ));
         }
         // the cycle time as the app shows it: the lower bound and the estimate together
-        let ct = self.cycle_times(&forge_machine::library::Library::with_builtin(), None);
+        let ct = self.cycle_times(machines::library(), None);
         let time_of = |i: usize, feed: f64| match ct.ops.get(i) {
             Some(t) if t.t_min > 0.0 => cycle::cycle_words(t.t_min, t.t_scurve),
             _ => format!("{feed:.0} s feed time"),

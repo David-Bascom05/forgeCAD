@@ -182,31 +182,79 @@ fn records() -> &'static [MachineDef] {
     R.get_or_init(forge_machine::library::builtin)
 }
 
-/// The library's machines made one list: each forge-machine record in it (added, or combined
-/// with the library's record of that name). A name whose two records disagree keeps the
-/// library's own; `conflict` refuses it where a document names it.
+/// The library's machines made one list: each forge-machine record in it, added, or combined
+/// with every library record of its name (the built-in tool library's, the user's, a project's:
+/// `Library::add` keeps duplicates, and `Library::machine` would answer with the first alone).
+/// Where every one of them agrees with the record, and they with each other, they become one;
+/// where any disagrees they are all left, and `conflict` refuses the name.
 pub fn merge(lib: &mut Library) {
     for d in records() {
-        match lib.machines.iter().position(|m| m.name == d.name) {
-            None => {
-                if let Ok(m) = combine(d, None) {
-                    lib.machines.push(m);
-                }
+        let at: Vec<usize> = (0..lib.machines.len())
+            .filter(|&i| lib.machines[i].name == d.name)
+            .collect();
+        if at.is_empty() {
+            if let Ok(m) = combine(d, None) {
+                lib.machines.push(m);
             }
-            Some(i) => {
-                if let Ok(m) = combine(d, Some(&lib.machines[i])) {
-                    lib.machines[i] = m;
-                }
+            continue;
+        }
+        let made: Result<Vec<Machine>, String> =
+            at.iter().map(|&i| combine(d, Some(&lib.machines[i]))).collect();
+        if let Ok(made) = made
+            && made.windows(2).all(|w| w[0] == w[1])
+        {
+            lib.machines[at[0]] = made[0].clone();
+            for &i in at[1..].iter().rev() {
+                lib.machines.remove(i);
             }
         }
     }
 }
 
-/// Why a machine name can't be used: its record and the library's disagree. None if it can.
+/// Why a machine name can't be used: its record and a library record of the name disagree, or
+/// two library records of it fill what the record lacks differently. None if it can.
 pub fn conflict(lib: &Library, name: &str) -> Option<String> {
     let d = records().iter().find(|d| d.name == name)?;
-    let m = lib.machine(name).ok()?;
-    combine(d, Some(m)).err()
+    let all: Vec<&Machine> = lib.machines.iter().filter(|m| m.name == name).collect();
+    let mut made = vec![];
+    for m in &all {
+        match combine(d, Some(m)) {
+            Ok(c) => made.push(c),
+            Err(e) => return Some(e),
+        }
+    }
+    (!made.windows(2).all(|w| w[0] == w[1])).then(|| {
+        format!(
+            "machine `{name}` is defined {} times in the tool libraries, and they fill what its machine record lacks differently; keep one",
+            all.len()
+        )
+    })
+}
+
+/// What the planner cannot check on a machine, said: a linear joint whose travel neither its
+/// record nor the tool library gives (its moves are then not held to any travel).
+pub fn unchecked(lib: &Library, name: &str) -> Vec<String> {
+    let Some(d) = records().iter().find(|d| d.name == name) else {
+        return vec![];
+    };
+    let have = lib.machine(name).ok();
+    d.joints
+        .iter()
+        .filter(|j| j.ty == JointType::Linear && j.range.is_none())
+        .filter(|j| have.is_none_or(|m| !m.joints.iter().any(|q| q.name == j.name)))
+        .map(|j| {
+            format!(
+                "machine `{name}`: joint {}'s travel is in neither its record nor the tool library: the toolpath is not checked against it",
+                j.name
+            )
+        })
+        .collect()
+}
+
+/// forge-machine's built-in records as its library (the cycle-time estimate's), made once.
+pub fn library() -> &'static forge_machine::library::Library {
+    static L: std::sync::OnceLock<forge_machine::library::Library> = std::sync::OnceLock::new();
+    L.get_or_init(forge_machine::library::Library::with_builtin)
 }
 
 /// The forge-machine record of a name, if it has one.
