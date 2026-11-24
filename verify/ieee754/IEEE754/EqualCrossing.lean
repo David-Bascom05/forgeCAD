@@ -131,4 +131,168 @@ theorem sq3_err {x y z : FP f} (hx : x.isFinite) (hy : y.isFinite) (hz : z.isFin
     constructor <;> linarith
   exact ⟨fq, hgoal⟩
 
+/-- **`diff_prod_err`**: a cross product's component, the f64 `p*q - r*s`, is within `5u M + 4 eta` of
+the exact `pq - rs` when `|pq|, |rs| <= M`, `4 M + 8 <= 2^emax`, `u <= 1/8`, `eta <= 1`. -/
+theorem diff_prod_err {p q r s : FP f} (hp : p.isFinite) (hq : q.isFinite) (hr : r.isFinite)
+    (hs : s.isFinite) {M : ℚ} (h1 : |p.val * q.val| ≤ M) (h2 : |r.val * s.val| ≤ M)
+    (hM : 4 * M + 8 ≤ 2 ^ f.emax)
+    (hu : (2 : ℚ) ^ (-(f.prec : ℤ)) ≤ 1 / 8) (hη : (2 : ℚ) ^ (f.qmin - 1) ≤ 1) :
+    (FP.sub (FP.mul p q) (FP.mul r s)).isFinite ∧
+      |(FP.sub (FP.mul p q) (FP.mul r s)).val - (p.val * q.val - r.val * s.val)| ≤
+        5 * 2 ^ (-(f.prec : ℤ)) * M + 4 * 2 ^ (f.qmin - 1) := by
+  have M0 : 0 ≤ M := le_trans (abs_nonneg _) h1
+  obtain ⟨f1, e1⟩ := mul_err_le f hp hq (by linarith)
+  obtain ⟨f2, e2⟩ := mul_err_le f hr hs (by linarith)
+  have u0 : (0 : ℚ) ≤ 2 ^ (-(f.prec : ℤ)) := (two_zpow_pos _).le
+  have η0 : (0 : ℚ) ≤ 2 ^ (f.qmin - 1) := (two_zpow_pos _).le
+  generalize hu_eq : (2 : ℚ) ^ (-(f.prec : ℤ)) = u at *
+  generalize hη_eq : (2 : ℚ) ^ (f.qmin - 1) = η at *
+  have a1 : u * |p.val * q.val| ≤ u * M := mul_le_mul_of_nonneg_left h1 u0
+  have a2 : u * |r.val * s.val| ≤ u * M := mul_le_mul_of_nonneg_left h2 u0
+  have uM : u * M ≤ M / 8 := by have := mul_le_mul_of_nonneg_right hu M0; linarith
+  have uη : u * η ≤ η / 8 := by have := mul_le_mul_of_nonneg_right hu η0; linarith
+  -- the two products, each within u M + eta, so their difference is at most 2 M + 2 u M + 2 eta
+  have b1 := abs_le.mp e1; have b2 := abs_le.mp e2
+  have c1 := abs_le.mp h1; have c2 := abs_le.mp h2
+  have hd : |(FP.mul p q).val - (FP.mul r s).val| ≤ 2 * M + 2 * (u * M) + 2 * η := by
+    rw [abs_le]; constructor <;> linarith
+  obtain ⟨fd, ed⟩ := sub_err_le f f1 f2 (by linarith)
+  rw [hu_eq, hη_eq] at ed
+  have a3 : u * |(FP.mul p q).val - (FP.mul r s).val| ≤ u * (2 * M + 2 * (u * M) + 2 * η) :=
+    mul_le_mul_of_nonneg_left hd u0
+  have k : u * (2 * M + 2 * (u * M) + 2 * η) = 2 * (u * M) + 2 * (u * (u * M)) + 2 * (u * η) := by
+    ring
+  have uuM : u * (u * M) ≤ u * (M / 8) := mul_le_mul_of_nonneg_left uM u0
+  have k2 : u * (M / 8) = (u * M) / 8 := by ring
+  have k3 : 5 * u * M = 5 * (u * M) := by ring
+  have uM0 : 0 ≤ u * M := mul_nonneg u0 M0
+  have uη0 : 0 ≤ u * η := mul_nonneg u0 η0
+  refine ⟨fd, ?_⟩
+  rw [k3]
+  have b3 := abs_le.mp ed
+  rw [abs_le]; constructor <;> linarith
+
+section Sqrt
+
+variable {K : Type*} [Field K] [LinearOrder K] [IsStrictOrderedRing K] [FloorRing K]
+
+/-- `round_finite_of_le_emax` (TwoProduct.lean) over any field: a value at most `2^emax` rounds
+to a finite datum. -/
+lemma round_finite_of_le_emax_K {zs : Bool} {r : K} (h : |r| ≤ 2 ^ f.emax) :
+    (round f zs r).isFinite := by
+  by_cases hr : r = 0
+  · subst hr; simp [round, FP.isFinite]
+  rw [round_finite_iff (K := K) f hr]
+  have hpow : (2 : K) ^ f.emax = ((2 ^ (f.prec - 1) : ℕ) : K) * 2 ^ f.qmax := by
+    push_cast
+    rw [← zpow_natCast, ← two_zpow_add, f.prec_sub_one]; congr 1; unfold Format.qmax; ring
+  have hex : uround f ((2 : K) ^ f.emax) = 2 ^ f.emax := by
+    rw [hpow, uround_exact f (by positivity) f.qmin_le_qmax
+      (Nat.pow_le_pow_right (by norm_num) (by omega))]
+  calc uround f |r| ≤ uround f (2 ^ f.emax) := uround_mono f (abs_pos.mpr hr) h
+    _ = 2 ^ f.emax := hex
+    _ < 2 ^ (f.emax + 1) := two_zpow_lt (by omega)
+
+end Sqrt
+
+lemma one_le_two_pow_int (n : ℕ) : (1 : ℤ) ≤ 2 ^ n := one_le_pow₀ (by norm_num)
+
+/-- `2^k` rounds to itself (`qmin <= k <= emax`), over ℝ. -/
+lemma round_two_pow_real (zs : Bool) {k : ℤ} (hk : f.qmin ≤ k) (hk2 : k ≤ f.emax) :
+    (round f zs ((2 : ℝ) ^ k)).isFinite ∧ ((round f zs ((2 : ℝ) ^ k)).val : ℝ) = 2 ^ k := by
+  have h := round_exact (K := ℝ) f zs (k := 1) (e := k)
+    (by simpa using (one_le_two_pow_int f.prec)) hk
+    (by simpa using two_zpow_lt (K := ℝ) (by omega : k < f.emax + 1))
+  simpa using h
+
+/-- **`sqrt_ge_two_pow`**: the f64 square root of a finite `x >= 2^(2k)` is finite and at least
+`2^k` (`qmin <= k`, `2k <= emax`). -/
+theorem sqrt_ge_two_pow {x : FP f} (hx : x.isFinite) {k : ℤ} (hk : f.qmin ≤ k)
+    (hk2 : 2 * k ≤ f.emax) (hq : (2 : ℚ) ^ (2 * k) ≤ x.val) :
+    x.sqrt.isFinite ∧ (2 : ℚ) ^ k ≤ x.sqrt.val := by
+  have he1 := f.one_le_emax
+  have hpos : (0 : ℚ) < x.val := lt_of_lt_of_le (two_zpow_pos _) hq
+  have hvlt := FP.abs_val_lt hx
+  cases x with
+  | zero s => simp [FP.val] at hpos
+  | inf s => simp [FP.isFinite] at hx
+  | nan => simp [FP.isFinite] at hx
+  | fin s m e h =>
+    cases s with
+    | true =>
+      exfalso
+      have hval : (FP.fin true m e h : FP f).val = -((m : ℚ) * 2 ^ e) := by
+        simp [FP.val, FP.sgn]
+      have : (0 : ℚ) ≤ (m : ℚ) * 2 ^ e := mul_nonneg (Nat.cast_nonneg m) (two_zpow_pos e).le
+      rw [hval] at hpos; linarith
+    | false =>
+      rw [sqrt_eq_round]
+      set v : ℝ := ((FP.fin false m e h : FP f).val : ℝ) with hv
+      have hv0 : (0 : ℝ) ≤ v := by rw [hv]; exact_mod_cast hpos.le
+      have hqR : (2 : ℝ) ^ (2 * k) ≤ v := by
+        rw [hv]; have h' := (Rat.cast_le (K := ℝ)).mpr hq; push_cast at h'; exact h'
+      have hsq : (2 : ℝ) ^ k ≤ Real.sqrt v := by
+        rw [Real.le_sqrt (two_zpow_pos _).le hv0, sq_two_zpow]; exact hqR
+      -- finite: sqrt v <= 2^emax, as v < 2^(emax+1) <= 2^(2 emax)
+      have hvlt' : v < 2 ^ (f.emax + 1) := by
+        rw [hv]; have h' := (Rat.cast_lt (K := ℝ)).mpr (abs_lt.mp hvlt).2; push_cast at h'; exact h'
+      have hsqrt_le : Real.sqrt v ≤ 2 ^ f.emax := by
+        rw [Real.sqrt_le_left (two_zpow_pos _).le, sq_two_zpow]
+        exact le_trans hvlt'.le (two_zpow_le (by omega))
+      have hfin : (round f false (Real.sqrt v)).isFinite :=
+        round_finite_of_le_emax_K f (by rw [abs_of_nonneg (Real.sqrt_nonneg _)]; exact hsqrt_le)
+      refine ⟨hfin, ?_⟩
+      obtain ⟨hf2, hv2⟩ := round_two_pow_real f false hk (by omega)
+      have hle := round_mono (K := ℝ) f (s₁ := false) (s₂ := false) hsq
+      have hle' := (FP.le_iff hf2 hfin).mp hle
+      have hv2' : (round f false ((2 : ℝ) ^ k)).val = (2 : ℚ) ^ k := by
+        have : ((round f false ((2 : ℝ) ^ k)).val : ℝ) = (((2 : ℚ) ^ k : ℚ) : ℝ) := by
+          rw [hv2]; push_cast; rfl
+        exact_mod_cast this
+      linarith
+
+/-- **`sqrt_le_two_pow`**: the f64 square root of a finite positive `x <= 2^(2k)` is at most `2^k`
+(`qmin <= k`, `2k <= emax`): so an f64 length above `2^k` has a squared length above `2^(2k)`. -/
+theorem sqrt_le_two_pow {x : FP f} (hx : x.isFinite) (hpos : 0 < x.val) {k : ℤ} (hk : f.qmin ≤ k)
+    (hk2 : 2 * k ≤ f.emax) (hq : x.val ≤ (2 : ℚ) ^ (2 * k)) :
+    x.sqrt.isFinite ∧ x.sqrt.val ≤ (2 : ℚ) ^ k := by
+  have he1 := f.one_le_emax
+  have hvlt := FP.abs_val_lt hx
+  cases x with
+  | zero s => simp [FP.val] at hpos
+  | inf s => simp [FP.isFinite] at hx
+  | nan => simp [FP.isFinite] at hx
+  | fin s m e h =>
+    cases s with
+    | true =>
+      exfalso
+      have hval : (FP.fin true m e h : FP f).val = -((m : ℚ) * 2 ^ e) := by
+        simp [FP.val, FP.sgn]
+      have : (0 : ℚ) ≤ (m : ℚ) * 2 ^ e := mul_nonneg (Nat.cast_nonneg m) (two_zpow_pos e).le
+      rw [hval] at hpos; linarith
+    | false =>
+      rw [sqrt_eq_round]
+      set v : ℝ := ((FP.fin false m e h : FP f).val : ℝ) with hv
+      have hv0 : (0 : ℝ) ≤ v := by rw [hv]; exact_mod_cast hpos.le
+      have hqR : v ≤ (2 : ℝ) ^ (2 * k) := by
+        rw [hv]; have h' := (Rat.cast_le (K := ℝ)).mpr hq; push_cast at h'; exact h'
+      have hsq : Real.sqrt v ≤ (2 : ℝ) ^ k := by
+        rw [Real.sqrt_le_left (two_zpow_pos _).le, sq_two_zpow]; exact hqR
+      have hvlt' : v < 2 ^ (f.emax + 1) := by
+        rw [hv]; have h' := (Rat.cast_lt (K := ℝ)).mpr (abs_lt.mp hvlt).2; push_cast at h'; exact h'
+      have hsqrt_le : Real.sqrt v ≤ 2 ^ f.emax := by
+        rw [Real.sqrt_le_left (two_zpow_pos _).le, sq_two_zpow]
+        exact le_trans hvlt'.le (two_zpow_le (by omega))
+      have hfin : (round f false (Real.sqrt v)).isFinite :=
+        round_finite_of_le_emax_K f (by rw [abs_of_nonneg (Real.sqrt_nonneg _)]; exact hsqrt_le)
+      refine ⟨hfin, ?_⟩
+      obtain ⟨hf2, hv2⟩ := round_two_pow_real f false hk (by omega)
+      have hle := round_mono (K := ℝ) f (s₁ := false) (s₂ := false) hsq
+      have hle' := (FP.le_iff hfin hf2).mp hle
+      have hv2' : (round f false ((2 : ℝ) ^ k)).val = (2 : ℚ) ^ k := by
+        have : ((round f false ((2 : ℝ) ^ k)).val : ℝ) = (((2 : ℚ) ^ k : ℚ) : ℝ) := by
+          rw [hv2]; push_cast; rfl
+        exact_mod_cast this
+      linarith
+
 end IEEE754

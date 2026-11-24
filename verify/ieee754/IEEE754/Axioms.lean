@@ -60,7 +60,7 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.mul_pos_finite IEEE754.mul_nonneg_finite
   -- ssi equal_crossing's divisor (in progress): one operation, a sum of three squares
   IEEE754.round_err_le IEEE754.add_err_le IEEE754.sub_err_le IEEE754.mul_err_le IEEE754.div_err_le
-  IEEE754.sq3_err
+  IEEE754.sq3_err IEEE754.diff_prod_err IEEE754.sqrt_ge_two_pow IEEE754.sqrt_le_two_pow
   -- rounding
   IEEE754.round_rel_err IEEE754.round_abs_err IEEE754.round_err IEEE754.round_mono
   IEEE754.round_val IEEE754.round_exact
