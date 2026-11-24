@@ -705,6 +705,10 @@ pub struct Library {
     /// Chip factors per op class (rough, finish) against the slot chip.
     pub op_classes: Vec<feeds::OpClassData>,
     pub generics: Vec<feeds::Generic>,
+    /// Reaming data: `[[ream]]` rows (the drilling row's shape: vc, and f/rev by diameter) and
+    /// the allowance tables.
+    pub reaming: Vec<feeds::DrillRow>,
+    pub ream_allowances: Vec<feeds::ReamAllowance>,
     pub turn_generics: Vec<feeds::TurnGeneric>,
     /// Elastic data per tool substrate (deflection).
     pub substrates: Vec<feeds::SubstrateData>,
@@ -1051,6 +1055,12 @@ impl Library {
         for r in tables(&t, "generic") {
             self.generics.push(feeds::Generic::from_table(r)?);
         }
+        for r in tables(&t, "ream") {
+            self.reaming.push(feeds::DrillRow::from_table(r)?);
+        }
+        for r in tables(&t, "ream_allowance") {
+            self.ream_allowances.push(feeds::ReamAllowance::from_table(r)?);
+        }
         for r in tables(&t, "turn_generic") {
             self.turn_generics.push(feeds::TurnGeneric::from_table(r)?);
         }
@@ -1192,6 +1202,19 @@ impl Library {
                 .find(|g| g.group == group && g.family == f)
         };
         family.and_then(find).or_else(|| find("*"))
+    }
+    /// The group's reaming row for a substrate ("carbide" | "hss").
+    pub fn ream(&self, group: &str, substrate: &str) -> Option<&feeds::DrillRow> {
+        self.reaming
+            .iter()
+            .find(|r| r.group == group && r.substrate == substrate)
+    }
+    /// The reaming allowance table for a substrate (its own, else one for any substrate).
+    pub fn ream_allowance(&self, substrate: &str) -> Option<&feeds::ReamAllowance> {
+        self.ream_allowances
+            .iter()
+            .find(|a| a.substrate == substrate)
+            .or_else(|| self.ream_allowances.iter().find(|a| a.substrate == "*"))
     }
     pub fn op_class(&self, name: &str) -> Option<&feeds::OpClassData> {
         self.op_classes.iter().find(|x| x.name == name)

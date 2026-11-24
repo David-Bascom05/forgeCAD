@@ -1675,6 +1675,239 @@ pub fn drilling(
     })
 }
 
+/// The user's reaming values (all optional).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ReamAsk {
+    pub vc: Option<f64>,
+    pub rpm: Option<f64>,
+    /// mm/rev, or mm/min.
+    pub f: Option<f64>,
+    pub feed: Option<f64>,
+    /// The stock the reamer takes off the diameter, mm.
+    pub allowance: Option<f64>,
+    pub max_power: Option<f64>,
+    pub max_torque: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReamResolved {
+    pub vc: Val,
+    pub rpm: Val,
+    pub f: Val,
+    pub feed: Val,
+    /// On the diameter, mm (NaN: no allowance data; the pre-drill is then not set).
+    pub allowance: Val,
+    /// The hole the reamer is given: d − allowance, mm.
+    pub predrill: Val,
+    /// The reamer's lead chamfer κr, degrees.
+    pub kr: Val,
+    /// The chip per edge, mm: (fn/z) sin κr.
+    pub h: f64,
+    /// cm³/min: π/4 (D² − d²) vf / 1000.
+    pub mrr: f64,
+    pub power: f64,
+    pub torque: f64,
+    pub power_avail: Option<f64>,
+    pub checks: Vec<Check>,
+}
+
+/// Resolve a reaming op. Speed and feed per revolution in layers as drilling's: material (the
+/// group's `[[ream]]` row for the reamer's substrate) → library (the reamer's preset) → user;
+/// machine clamps. The allowance: the user's, else the `[[ream_allowance]]` table for the
+/// substrate by diameter; it sets the pre-drill d − allowance. The cut is the annulus from the
+/// pre-drill to D: Q = π/4 (D² − d²) vf, Pc = Q kc / 60e3 kW (kc in N/mm², Q in cm³/min: the
+/// energy per volume times the volume rate), Mc = Pc 30e3/(π n); kc = kc1.1 h^(−mc) at the
+/// chip per edge h = (fn/z) sin κr, κr the reamer's lead chamfer (the tool's `angle` where
+/// given as the included angle, else 45°: stated as a default). The user's power/torque limits
+/// lower the feed only (P ∝ fn^(1 − mc)).
+pub fn reaming(
+    ask: &ReamAsk,
+    tool: &DrillTool,
+    group: Option<&Group>,
+    stock: Option<&Stock>,
+    row: Option<&DrillRow>,
+    allowance: Option<&feeds::ReamAllowance>,
+    spindle: &Spindle,
+) -> Option<ReamResolved> {
+    let base = drilling(
+        &DrillAsk {
+            vc: ask.vc,
+            rpm: ask.rpm,
+            f: ask.f,
+            feed: ask.feed,
+            peck: Some(0.0),
+            max_power: None,
+            max_torque: None,
+        },
+        &DrillTool { point: 0.0, ..*tool },
+        group,
+        stock,
+        row,
+        spindle,
+        0.0,
+    )?;
+    let d = tool.d.max(1e-6);
+    let n = base.rpm.v;
+    let relabel = |v: Val| Val {
+        note: v
+            .note
+            .replace("drilling data", "reaming data")
+            .replace("the drill's preset", "the reamer's preset"),
+        ..v
+    };
+    let (vc_v, rpm_v) = (relabel(base.vc), relabel(base.rpm));
+    let (mut f, mut feed) = (relabel(base.f), relabel(base.feed));
+    let mut checks: Vec<Check> = base
+        .checks
+        .into_iter()
+        .filter(|c| c.what != "power" && c.what != "torque")
+        .collect();
+    let allow = match (ask.allowance, allowance) {
+        (Some(a), _) => Val::new(a, "mm", Source::User, ""),
+        (None, Some(t)) => match t.at(d) {
+            Some(a) => Val::new(
+                a,
+                "mm",
+                Source::Material,
+                format!(
+                    "ream allowance for D {d} ({}); {}",
+                    t.substrate,
+                    t.cites
+                        .iter()
+                        .find(|c| c.path == "allowance")
+                        .map_or("uncited".to_string(), |c| c.source.clone())
+                ),
+            ),
+            None => Val::new(
+                f64::NAN,
+                "mm",
+                Source::Default,
+                format!("D {d} is over the allowance table"),
+            ),
+        },
+        (None, None) => Val::new(
+            f64::NAN,
+            "mm",
+            Source::Default,
+            "no allowance data for the reamer's substrate",
+        ),
+    };
+    if !allow.v.is_finite() {
+        checks.push(Check {
+            what: "allowance",
+            verdict: Verdict::NotChecked,
+            value: f64::NAN,
+            limit: f64::NAN,
+            unit: "mm",
+            why: format!(
+                "{}: give `allowance:` (the stock on the diameter) to set the pre-drill",
+                allow.note
+            ),
+        });
+    }
+    let predrill = Val::new(d - allow.v, "mm", allow.source, "D − allowance");
+    let kr = if tool.point > 0.0 {
+        Val::new(
+            0.5 * tool.point,
+            "deg",
+            Source::Library,
+            "half the reamer's chamfer included angle",
+        )
+    } else {
+        Val::new(
+            45.0,
+            "deg",
+            Source::Default,
+            "the reamer's lead chamfer is not stated: 45° (machine reamers' usual lead)",
+        )
+    };
+    let sk = forge_math::dmath::sin(kr.v.to_radians());
+    let z = tool.flutes.max(1) as f64;
+    let kz: Option<Group> = group.map(|g| match stock {
+        Some(st) => st.apply(g, vc_v.v),
+        None => g.clone(),
+    });
+    let area = if allow.v.is_finite() {
+        0.25 * PI * (d * d - (d - allow.v).max(0.0).powi(2))
+    } else {
+        f64::NAN
+    };
+    let pw = |kc1: f64, mc: f64, fv: f64| {
+        let h = (fv / z * sk).max(1e-4);
+        let kc = kc1 * forge_math::dmath::powf(h, -mc);
+        area * fv * n / 1000.0 * kc / 60.0e3
+    };
+    if let Some(g) = kz.as_ref().filter(|_| area.is_finite()) {
+        for (cap, what) in [(ask.max_power, "max power"), (ask.max_torque, "max torque")] {
+            let Some(cap) = cap else { continue };
+            let p = pw(g.kc1_1, g.mc, f.v);
+            let now = if what == "max power" { p } else { torque_of(p, n) };
+            if now > cap && g.mc < 1.0 {
+                let s = forge_math::dmath::powf(cap / now, 1.0 / (1.0 - g.mc));
+                let why = format!("lowered to hold {what} {cap} (was {now:.3})");
+                f = Val::new(f.v * s, "mm/rev", Source::Limited, why.clone());
+                feed = Val::new(feed.v * s, "mm/min", Source::Limited, why);
+            }
+        }
+    }
+    let power = match kz.as_ref() {
+        Some(g) if area.is_finite() => pw(g.kc1_1, g.mc, f.v),
+        _ => f64::NAN,
+    };
+    let torque = if power.is_finite() {
+        torque_of(power, n)
+    } else {
+        f64::NAN
+    };
+    let power_avail = power_at(spindle.power, n);
+    for (what, have, avail, unit) in [
+        ("power", power, power_avail, "kW"),
+        ("torque", torque, power_avail.map(|a| torque_of(a, n)), "N·m"),
+    ] {
+        checks.push(match (have.is_finite(), avail) {
+            (false, _) => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: f64::NAN,
+                limit: avail.unwrap_or(f64::NAN),
+                unit,
+                why: "no cutting-force data for the material, or no allowance".into(),
+            },
+            (true, None) => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: have,
+                limit: f64::NAN,
+                unit,
+                why: "no spindle power at this rpm (no curve, or outside it)".into(),
+            },
+            (true, Some(lim)) => Check {
+                what,
+                verdict: if have > lim { Verdict::Fail } else { Verdict::Pass },
+                value: have,
+                limit: lim,
+                unit,
+                why: format!("{:.0}% of the spindle's at {n:.0} rpm", 100.0 * have / lim),
+            },
+        });
+    }
+    Some(ReamResolved {
+        h: f.v / z * sk,
+        mrr: area * feed.v / 1000.0,
+        vc: vc_v,
+        rpm: rpm_v,
+        f,
+        feed,
+        allowance: allow,
+        predrill,
+        kr,
+        power,
+        torque,
+        power_avail,
+        checks,
+    })
+}
+
 /// A tap's speed: the user's `vc`|`rpm` over the tap's preset over the group's `[[tap]]` row
 /// for its substrate; clamped to the machine (reported). The feed is not a parameter: a tap
 /// feeds its pitch per revolution (vf = p n), so it follows the speed exactly. None without a
@@ -2565,5 +2798,87 @@ mod tests {
         assert!((s.hex - r.feeds.hex).abs() < 1e-12 && (s.power - r.feeds.power).abs() < 1e-9);
         let thin = at_sample(&g, &t, r.rpm.v, r.fz.v, 1.0, 6.0, 0.0);
         assert!(thin.hex < s.hex && thin.power < s.power);
+    }
+
+    /// Reaming: speed and feed from the group's row, the allowance from the table by diameter
+    /// band, the pre-drill D − allowance, and the power of the annulus by hand:
+    /// D 10, allowance 0.2 (pre-drill 9.8), z 6, κr 45°, vc 20 → n = 636.6 rpm, f 0.3 mm/rev →
+    /// vf 191.0 mm/min; area π/4 (100 − 96.04) = 3.1102 mm²; Q = 0.5940 cm³/min;
+    /// h = 0.05 · sin 45° = 0.035355; kc = 700 · h^(−0.25) = 1614.4; Pc = Q kc / 60e3 = 0.01598 kW.
+    #[test]
+    fn reaming_from_the_allowance_annulus() {
+        let mut g = group();
+        g.kc1_1 = 700.0;
+        g.mc = 0.25;
+        let row = DrillRow {
+            group: "N".into(),
+            substrate: "carbide".into(),
+            vc: 20.0,
+            d_rows: vec![5.0, 20.0],
+            f_rows: vec![0.3, 0.3],
+            real: false,
+            cites: Vec::new(),
+        };
+        let table = feeds::ReamAllowance {
+            substrate: "carbide".into(),
+            d_to: vec![5.0, 20.0],
+            allowance: vec![0.1, 0.2],
+            real: false,
+            cites: Vec::new(),
+        };
+        let tool = DrillTool {
+            d: 10.0,
+            flutes: 6,
+            point: 0.0,
+            substrate: Substrate::Carbide,
+            preset: None,
+        };
+        let r = reaming(
+            &ReamAsk::default(),
+            &tool,
+            Some(&g),
+            None,
+            Some(&row),
+            Some(&table),
+            &spindle(),
+        )
+        .unwrap();
+        assert!((r.rpm.v - 636.6198).abs() < 1e-3 && (r.f.v - 0.3).abs() < 1e-12);
+        assert_eq!((r.allowance.v, r.predrill.v), (0.2, 9.8));
+        assert!((r.mrr - 0.59397).abs() < 1e-4, "{}", r.mrr);
+        assert!((r.power - 0.015981).abs() < 2e-6, "{}", r.power);
+        assert_eq!(r.kr.source, Source::Default);
+        assert!(r.f.note.contains("reaming data"), "{}", r.f.note);
+        // the user's allowance wins; none at all is reported, not guessed
+        let u = reaming(
+            &ReamAsk {
+                allowance: Some(0.3),
+                ..ReamAsk::default()
+            },
+            &tool,
+            Some(&g),
+            None,
+            Some(&row),
+            Some(&table),
+            &spindle(),
+        )
+        .unwrap();
+        assert_eq!((u.allowance.source, u.predrill.v), (Source::User, 9.7));
+        let none = reaming(
+            &ReamAsk::default(),
+            &tool,
+            Some(&g),
+            None,
+            Some(&row),
+            None,
+            &spindle(),
+        )
+        .unwrap();
+        assert!(none.allowance.v.is_nan());
+        assert!(
+            none.checks
+                .iter()
+                .any(|c| c.what == "allowance" && c.verdict == Verdict::NotChecked)
+        );
     }
 }

@@ -937,6 +937,53 @@ pub fn family_of_text(text: &str) -> Option<&'static str> {
     }
 }
 
+/// The reaming allowance: the stock a reamer takes off the diameter (so the hole is drilled
+/// that much under), by diameter band (cutting.toml `[[ream_allowance]]`, cited): for a reamer
+/// diameter d, the first band with d <= `d_to`. On the diameter, mm.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReamAllowance {
+    /// "carbide" | "hss" | "*".
+    pub substrate: String,
+    pub d_to: Vec<f64>,
+    pub allowance: Vec<f64>,
+    pub real: bool,
+    pub cites: Vec<Cite>,
+}
+
+impl ReamAllowance {
+    pub fn from_table(t: &Table) -> Result<ReamAllowance, LibError> {
+        let substrate = text(t, "substrate").unwrap_or("*").to_string();
+        let rec = format!("ream allowance {substrate}");
+        let (d_to, allowance) = (
+            nums(t, "d_to").unwrap_or_default(),
+            nums(t, "allowance").unwrap_or_default(),
+        );
+        if d_to.is_empty() || d_to.len() != allowance.len() || d_to.windows(2).any(|w| w[0] >= w[1]) {
+            return Err(LibError::Bad {
+                record: rec,
+                field: "d_to",
+                why: "d_to and allowance are the same length (at least one), d_to increasing".into(),
+            });
+        }
+        let required = ["d_to", "allowance"].map(String::from);
+        let (real, cites) = cite::read(t, &rec, &required, &["substrate"])?;
+        Ok(ReamAllowance {
+            substrate,
+            d_to,
+            allowance,
+            real,
+            cites,
+        })
+    }
+    /// The allowance on the diameter for a reamer of diameter d (None: over the table).
+    pub fn at(&self, d: f64) -> Option<f64> {
+        self.d_to
+            .iter()
+            .position(|&hi| d <= hi + 1e-9)
+            .map(|i| self.allowance[i])
+    }
+}
+
 /// What the engine was asked for.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Cut {
