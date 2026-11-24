@@ -17,6 +17,12 @@ what their absence means.
 ## Frames and units
 
 - mm, degrees, mm/min (deg/min for rotaries), seconds, rpm, kW.
+- A program may be posted in inches (forge-post `PostOptions::inch`; a setup's `units = "inch"`,
+  `Control::in_inches`). Its words are read at the dialect's inch decimals, and a linear word
+  w becomes w·254·10^-(k+1) mm at the boundary, exactly as an integer before the one division.
+  Everything else stays in mm: the machine, offsets, tools, stock. G20 is refused in a mm
+  program and G21 in an inch one: a program does not switch units. A feed move that turns a
+  rotary axis is refused in inches, because F would mix inches and degrees.
 - All geometry is in the **base frame with every joint at 0** (the home pose).
 - A **linear** joint at value q translates its link and everything below it by q·`axis`.
 - A **rotary** joint at value q turns its link by q degrees about the line through `pivot`
@@ -249,7 +255,7 @@ pieces into material, the removal summary, and what is claimed.
 
 | part | what it is |
 |---|---|
-| interpreter (forge-machine-core, gcode.rs) | words to control events in exact integers. The block core (kernel/forge-machine-core: motion, modal words, arcs, canned cycles, G28) is proven, through Aeneas, to be the Lean spec's `step` and, over a program, its `runFrom` (verify/aeneas/forge-machine-core, L4, within 2^29 units); the spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine). The shell (text to words, tools, spindle, offsets) agrees with forge-post's reader on its subset (L6, 240 programs × 4 dialects) |
+| interpreter (forge-machine-core, gcode.rs) | words to control events in exact integers. The block core (kernel/forge-machine-core: motion, modal words, arcs, canned cycles, G28) is proven, through Aeneas, to be the Lean spec's `step` and, over a program, its `runFrom` (verify/aeneas/forge-machine-core, L4, within 2^29 units); the spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine). The shell (text to words, tools, spindle, offsets) agrees with forge-post's reader on its subset (L6: random programs on all 11 dialects, also under the post options: fewer decimals, line numbers on and off, no safe start, inches; with probe moves on the dialects that cite `probe_move` and the probing macros on those that cite them) |
 | skip moves (gcode.rs shell, sim.rs) | G38.2–G38.5 / G31, only where the dialect's `probe_move` cites the code (otherwise refused as outside the subset). Outside the proven core: a skip move stops somewhere unknown along its segment, so the collision and removal checks sweep the whole segment as if it ran to its end, its `t_min` is 0 (it may trigger at once), the moved axes' program positions become unknown (an incremental word from them is refused) and the motion mode is cleared. The timeline marks it (`skip`); the moves after it start from the segment's end, or from the stock model's trigger when `removal::mill_probing` found one (a simulation-level estimate for time and display, not the machine's stop), and are always reported not checked (`skip.end`: unknown, or estimated with a model trigger) |
 | probing macros (gcode.rs shell, sim.rs) | G65 P<n> only where the dialect's `probe_on` / `probe_off` / `probe_protected` / `probe_surface` templates cite the macro (Renishaw Inspection Plus on Haas: P9832, P9833, P9810, P9811), modelled from the macros' published descriptions, outside the proven core. Probe on/off: a small Z move of unpublished size, not simulated (`probe.switch` not checked; Z unknown to the interpreter afterwards). Protected positioning: a feed move to the target at its own modal F (a probe contact on it is a crash). Single-surface measure: the search along its axis to `Q` past the surface, swept like a skip move (the trigger from the stock as cut), then back to the start, so the position after it is known; its time is not modelled (`probe.measure_time` not checked). Positions in G91 are refused |
 | kinematics (kin.rs) | joint values to link placements, dmath rotations (exact at multiples of 90°), and the same over intervals |
@@ -417,6 +423,7 @@ refused).
 [setup]
 machine = "generic-vmc3"
 dialect = "fanuc"          # a forge-post dialect, or NAME.toml beside the setup
+units = "inch"             # optional ("mm"): the program is in inches (G20)
 program = "op1.nc"         # beside the setup
 step = 0.5                 # removal grid, mm (optional: 1)
 start_tool = 1             # the tool in the spindle at the start (optional)

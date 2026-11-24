@@ -224,7 +224,11 @@ fn the_trigger_is_the_balls_first_contact_with_the_stock_as_cut() {
 
 /// The haas dialect with the Inspection Plus templates forge-post's probing/post adds.
 fn haas_with_macros() -> String {
-    Control::dialect_src("haas").unwrap().replacen(
+    let src = Control::dialect_src("haas").unwrap();
+    if src.contains("probe_on") {
+        return src.to_string();
+    }
+    src.replacen(
         "[dialect]\n",
         "[dialect]\nprobe_on = \"G65 P9832\"\nprobe_off = \"G65 P9833\"\nprobe_protected = \"G65 P9810 X{x} Y{y} Z{z} F{f}\"\nprobe_surface = \"G65 P9811 {axis}{at} Q{q}{set}\"\n",
         1,
@@ -247,7 +251,7 @@ fn inspection_plus_macros_are_read_and_simulated() {
         ]
     );
     // refused where the dialect does not cite them
-    let plain = Control::for_dialect(&m, "haas", 1).unwrap();
+    let plain = Control::for_dialect(&m, "fanuc", 1).unwrap();
     assert!(gcode::run("G90 G0 X0. Y0. Z10.\nG65 P9810 Z5. F3000.\n", &plain).is_err());
     let mut s = Setup::new(&m, c.clone()).unwrap();
     s.wcs = vec![(54, vec![0.0, 0.0, -300.0])];

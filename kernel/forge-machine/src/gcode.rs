@@ -91,6 +91,11 @@ fn macro_codes(d: &forge_tooling::toml::Table) -> Vec<(u32, Macro)> {
 pub struct Control {
     pub decimals: u32,
     pub feed_decimals: u32,
+    /// The program is in inches (G20; `in_inches`): words are counts of 10^-decimals inch, feeds
+    /// of 10^-feed_decimals inch/min; G21 is refused, as G20 is in a mm program.
+    pub inch: bool,
+    /// The dialect's inch decimals and feed decimals, when it has an inch code.
+    pub inch_units: Option<(u32, u32)>,
     /// The axis words, in the order of the position vector.
     pub letters: Vec<char>,
     /// Which of `letters` are rotary (values in degrees).
@@ -177,6 +182,8 @@ impl Control {
         Control {
             decimals,
             feed_decimals,
+            inch: false,
+            inch_units: None,
             letters: vec!['X', 'Y', 'Z'],
             rotary: vec![false; 3],
             diameter: None,
@@ -259,10 +266,22 @@ impl Control {
                 Some(first[1..i].to_string())
             }),
         };
+        let inch_units = (toml::text(d, "units_inch").is_some_and(|t| !t.is_empty())
+            && !toml::tables(d, "cite").iter().any(|c| {
+                toml::text(c, "key") == Some("units_inch") && toml::text(c, "status") == Some("refused")
+            }))
+        .then(|| {
+            (
+                toml::num(d, "inch_decimals").map_or(decimals + 1, |x| x as u32),
+                toml::num(d, "inch_feed_decimals").map_or(feed_decimals + 1, |x| x as u32),
+            )
+        });
         Ok(Control {
             lex,
             decimals,
             feed_decimals,
+            inch: false,
+            inch_units,
             letters,
             rotary,
             diameter,
@@ -280,6 +299,19 @@ impl Control {
             skip: skip_codes(d),
             macros: macro_codes(d),
         })
+    }
+
+    /// The control reading an inch program (posted with forge-post's `PostOptions::inch`): the
+    /// dialect's inch decimals; refused where the dialect has no inch code.
+    pub fn in_inches(&self) -> Result<Control, String> {
+        let (k, fk) = self
+            .inch_units
+            .ok_or("the dialect has no inch code (post in mm)")?;
+        let mut c = self.clone();
+        c.inch = true;
+        c.decimals = k;
+        c.feed_decimals = fk;
+        Ok(c)
     }
 
     /// A built-in forge-post dialect's text by name.
@@ -415,11 +447,13 @@ pub enum Ev {
     /// A single-surface measure macro along letter index `axis` toward `at`, `q` past it (`to`:
     /// that end, the only word set), then back to the start (the macro's own feeds are not
     /// modelled: its time is unknown).
+    /// `wcs`: the work offset (54..59) the macro sets from the error (S1..S6), if any.
     Surface {
         axis: usize,
         at: Q,
         q: Q,
         to: Vec<Option<Q>>,
+        wcs: Option<u32>,
     },
 }
 
@@ -772,7 +806,6 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
                     | 170
                     | 180
                     | 190
-                    | 210
                     | 280
                     | 400
                     | 430
@@ -804,9 +837,12 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
                     | 990
                     | 1870
             );
+        // the program's units: its own code, never the other's (no switch within a program)
+        let ok = ok || (*g == 210 && !c.inch) || (*g == 200 && c.inch);
         if !ok {
             let what = match g {
-                200 => "G20 (inch) is not modelled: post in mm".to_string(),
+                200 => "G20 (inch) in a program read in mm: read it with the control in inches".to_string(),
+                210 => "G21 (mm) in a program read in inches".to_string(),
                 410 | 420 => {
                     "cutter compensation (G41/G42) is not modelled: post the compensated path".to_string()
                 }
@@ -876,7 +912,10 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         }
         let s = s_word.ok_or_else(|| ge(ln, "G50 with no S"))?;
         push(out, Ev::Clamp(s));
-    } else if let Some(s) = s_word {
+    } else if let Some(s) = s_word
+        && !has_g(65)
+    {
+        // (a probing macro's S is the work offset it sets, not a speed)
         st.rpm = s;
     }
     // 2. T, M6
@@ -1119,7 +1158,21 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
                 .ok_or_else(|| ge(ln, "a coordinate past the word range"))?;
                 let mut to = vec![None; axis.len()];
                 to[ax] = Some(end);
-                push(out, Ev::Surface { axis: ax, at, q, to });
+                let wcs = match s_word {
+                    None => None,
+                    Some(n @ 1..=6) => Some(n as u32 + 53),
+                    Some(n) => return Err(ge(ln, format!("S{n}: only S1..S6 (G54..G59) are modelled"))),
+                };
+                push(
+                    out,
+                    Ev::Surface {
+                        axis: ax,
+                        at,
+                        q,
+                        to,
+                        wcs,
+                    },
+                );
             }
         }
         st.core.mode = None;
@@ -1269,8 +1322,17 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         z: c.idx('Z').unwrap_or(usize::MAX),
     };
     // the machine's peck clearance and chip-break lift (forge-post's when the record is silent)
-    let pc = forge_post::quant(c.peck_clear, k).unwrap_or(0);
-    let lift = forge_post::quant(c.chip_lift, k).unwrap_or(0);
+    let (pc, lift) = if c.inch {
+        (
+            forge_post::quant_ratio(c.peck_clear, k, 10, 254).unwrap_or(0),
+            forge_post::quant_ratio(c.chip_lift, k, 10, 254).unwrap_or(0),
+        )
+    } else {
+        (
+            forge_post::quant(c.peck_clear, k).unwrap_or(0),
+            forge_post::quant(c.chip_lift, k).unwrap_or(0),
+        )
+    };
     let (evs, next) = mcore::step(&axes, pc, lift, &st.core, &b).map_err(|r| ge(ln, refusal(r)))?;
     st.core = next;
     let mode = st.feed_mode;

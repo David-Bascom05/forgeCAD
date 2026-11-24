@@ -8,16 +8,18 @@ name = "heidenhain"
 extension = "i"
 decimals = 3
 feed_decimals = 0
+units_mm = "G71"
 point = "never"
 sign = "always"
 g_digits = 2
-program_open = ["%P{num} G71 *"]
-program_close = ["M30", "N99999999 %P{num} G71 *"]
+program_open = ["%P{num} {units} *"]
+program_close = ["M30", "N99999999 %P{num} {units} *"]
 comment = ";{text}"
 comment_eol = ";"
 comment_strip = ";*"
 block_end = "*"
 line_numbers = true
+line_numbers_required = true
 line_start = 10
 line_step = 10
 safe_start = ["G40 G90"]
@@ -79,6 +81,13 @@ source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-1
 taken = "2026-11-23"
 where = "3.5 p. 93; address table p. 633"
 note = "every block has an N number"
+
+[[dialect.cite]]
+key = "line_numbers_required"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "3.5 p. 93; address table p. 633"
+note = "every block has an N number: they cannot be left out"
 
 [[dialect.cite]]
 key = "block_end"
@@ -241,3 +250,16 @@ note = "G207 RIGID TAPPING takes Q239 pitch and S, not modelled; tapping is refu
 
 # Not in the open manual (refused): mist and through-spindle coolant; a machine-home retract (M91 positions in
 # machine coordinates, which depend on the machine).
+
+[[dialect.cite]]
+key = "units_mm"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "3.5 p. 93; example p. 63"
+note = "%NAME G71 * opens an ISO program in mm"
+
+[[dialect.cite]]
+key = "units_inch"
+status = "refused"
+where = "File management, new NC program (MM or INCH soft key); program examples (all %NAME G71 *); feed input (F in 1/10 inch/min in inch programs)"
+note = "the control writes the first and last blocks itself from the unit chosen on a soft key; the manual gives no inch header code, and inch feeds are in 1/10 inch/min: inch refused"
