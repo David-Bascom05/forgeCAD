@@ -183,6 +183,8 @@ struct PartIn {
     /// The stock material's family (forge-material: aluminium, copper, steel, ...), for the
     /// generic class of a tool with no maker data.
     family: Option<String>,
+    /// The stock's hardness band from its record's cited hardness (feeds::hardness_band_of_hb).
+    hardness: Option<&'static str>,
     /// Where the material and group came from, for the reply and the fixes.
     material_note: String,
     /// The material's machining data (its record's machining.* keys), read once.
@@ -1632,6 +1634,7 @@ impl Cam {
             group: p.group.clone(),
             material: p.material.clone(),
             family: p.family.clone(),
+            hardness: p.hardness,
             material_note: p.material_note.clone(),
             stock: p.stock.clone(),
         };
@@ -2673,6 +2676,7 @@ impl Cam {
                     stock: material.as_deref().map(|m| stock_of(m, &group, dir)),
                     group,
                     family: material.as_deref().and_then(|m| Self::stock_family(m, dir)),
+                    hardness: material.as_deref().and_then(|m| Self::stock_hardness(m, dir)),
                     material,
                     material_note,
                 });
@@ -3188,6 +3192,9 @@ impl Cam {
                 .as_deref()
                 .map(|m| stock_of(m, &jaw_group, Path::new("."))),
             group: jaw_group,
+            hardness: jaw_material
+                .as_deref()
+                .and_then(|m| Self::stock_hardness(m, Path::new("."))),
             family: jaw_material
                 .as_deref()
                 .and_then(|m| Self::stock_family(m, Path::new("."))),
@@ -4345,7 +4352,11 @@ impl Cam {
                 });
                 let chosen = |k: usize| -> f64 {
                     match (&rough_feed, samples[k].engage) {
-                        (Some((rf, _)), Some(g)) if g.phi < std::f64::consts::FRAC_PI_2 && g.cos_max < 1.0 => rf[k],
+                        (Some((rf, _)), Some(g))
+                            if g.phi < std::f64::consts::FRAC_PI_2 && g.cos_max < 1.0 =>
+                        {
+                            rf[k]
+                        }
                         (Some((_, sf)), _) => sf[k],
                         (None, _) => base[k],
                     }
@@ -4411,14 +4422,12 @@ impl Cam {
                         PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
                         _ => 0.0,
                     };
-                    // adaptive: one F per move, the lowest its samples call for, the move posted
-                    // whole (its passes are long arcs and lines; engage::schedule_per_move's rule,
-                    // TOOLPATH-QUALITY)
+                    // adaptive's passes are long arcs and lines: each move whole, one F, the lowest
+                    // its samples call for (a move wholly in air keeps its own feed where higher)
                     if kind == "adaptive" {
-                        let mut f = (start..k).map(|i| feed[i].0).fold(f64::INFINITY, f64::min);
-                        if (start..k).all(|i| samples[i].engage.is_none()) && own > f {
-                            f = own.min(sc.f_max.max(sc.f_min));
-                        }
+                        let air = samples[start..k].iter().all(|sm| sm.engage.is_none());
+                        let lo = feed[start..k].iter().map(|x| x.0).fold(f64::INFINITY, f64::min);
+                        let f = if air && own > lo { own.min(sc.f_max.max(sc.f_min)) } else { lo };
                         moves.push(match *mv {
                             PMove::Line { to, phase, .. } => PMove::Line { to, f, phase },
                             PMove::Arc { to, c, cw, .. } => PMove::Arc { to, c, cw, f },
@@ -4558,6 +4567,23 @@ impl Cam {
     /// found). The group is the material's `[[stock]]` record's, else its family's ISO 513
     /// class; None when the name is unknown or its family has no class.
     /// A forge-material record's family, by its name.
+    /// A forge-material record's hardness band: its `machining.hardness_hb`, else its
+    /// `machining.hardness_hrc` read as Brinell (feeds::hb_of_hrc), banded at the makers' class
+    /// edges (feeds::hardness_band_of_hb); None where the record cites no hardness.
+    fn stock_hardness(name: &str, dir: &Path) -> Option<&'static str> {
+        let libs = forge_material::Libraries::cached(Some(dir));
+        let (_, m) = libs.find(name)?;
+        let hb = match (
+            m.extra("machining.hardness_hb"),
+            m.extra("machining.hardness_hrc"),
+        ) {
+            (Some(forge_material::Value::Num(hb)), _) => *hb,
+            (_, Some(forge_material::Value::Num(hrc))) => feeds::hb_of_hrc(*hrc),
+            _ => return None,
+        };
+        feeds::hardness_band_of_hb(hb)
+    }
+
     fn stock_family(name: &str, dir: &Path) -> Option<String> {
         forge_material::Libraries::cached(Some(dir))
             .find(name)
@@ -4657,6 +4683,7 @@ impl Cam {
         let gu = if preset.is_none() {
             let tc = feeds::ToolClass {
                 family: self.parts[self.setups[su].part].family.as_deref(),
+                hardness: self.parts[self.setups[su].part].hardness,
                 tier: None,
                 flutes: Some(t.tool.nof.max(1)),
                 coated: feeds::ToolClass::coated(&t.tool.coating),
@@ -4688,9 +4715,31 @@ impl Cam {
             (None, Some(c)) => Some((c.name.as_str(), c.chip_factor, class_src)),
             _ => None,
         };
+        // hardness unknown where the group's classes split by hardness: the pooled class is
+        // the conservative default, and the note says what would sharpen it (coordinator's rule)
+        let pooled_note = gu
+            .filter(|_| self.parts[self.setups[su].part].hardness.is_none())
+            .and_then(|u| {
+                let banded = ["soft", "21-36HRC", "36-50HRC"].into_iter().any(|b| {
+                    let tc = feeds::ToolClass {
+                        family: self.parts[self.setups[su].part].family.as_deref(),
+                        hardness: Some(b),
+                        tier: None,
+                        flutes: Some(t.tool.nof.max(1)),
+                        coated: feeds::ToolClass::coated(&t.tool.coating),
+                        helix: None,
+                    };
+                    self.lib
+                        .generic(group_name, class, &tc)
+                        .is_some_and(|g| g.hardness == b && g.vc.p10 != u.op.vc.p10)
+                });
+                banded.then_some(
+                    "; hardness unknown: pooled over the hardness classes (conservative) — name the alloy and condition (e.g. material: \"1045 cold drawn\") for realistic speeds",
+                )
+            });
         let part = &self.parts[self.setups[su].part];
         let stock = part.stock.as_ref();
-        resolve::milling_on(
+        let mut r = resolve::milling_on(
             &asked,
             &resolve::ToolData {
                 d: t.tool.dc,
@@ -4712,7 +4761,11 @@ impl Cam {
                 power: &m.power,
             },
             nominal,
-        )
+        )?;
+        if let Some(n) = pooled_note {
+            r.vc.note.push_str(n);
+        }
+        Some(r)
     }
 
     /// A probing op: `probe_wcs` (a feature's position for a work offset) or `inspect` (one
