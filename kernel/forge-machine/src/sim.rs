@@ -1384,6 +1384,9 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
             match def.cite_status(&path) {
                 Some(CiteStatus::Unknown) => "unknown",
                 Some(CiteStatus::Estimate) => "estimated",
+                // an uncited value of a record that is not a real machine (the generic ones'
+                // placeholders) is no more than an estimate
+                None if !def.real => "estimated",
                 _ => return,
             }
         };
@@ -1445,12 +1448,14 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
                         m.line,
                         "tool change move",
                     );
-                    note(
-                        "changer.pockets".into(),
-                        c.pockets.is_some() || c.manual,
-                        m.line,
-                        "pocket count",
-                    );
+                    if !c.manual {
+                        note(
+                            "changer.pockets".into(),
+                            c.pockets.is_some(),
+                            m.line,
+                            "pocket count",
+                        );
+                    }
                     note(
                         "changer.change_s".into(),
                         c.change_s.is_some(),
@@ -1471,12 +1476,14 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
             }
             Happening::Index { .. } => {
                 if let Some(tu) = def.turrets.first() {
-                    note(
-                        format!("turret.{}.stations", tu.name),
-                        tu.stations.is_some() || tu.manual,
-                        m.line,
-                        "station count",
-                    );
+                    if !tu.manual {
+                        note(
+                            format!("turret.{}.stations", tu.name),
+                            tu.stations.is_some(),
+                            m.line,
+                            "station count",
+                        );
+                    }
                     note(
                         format!("turret.{}.index_s", tu.name),
                         tu.index_s.is_some(),
@@ -1532,6 +1539,7 @@ pub fn unchecked_cycles(def: &MachineDef, program: &str) -> Vec<Unchecked> {
             let why = match (value, def.cite_status(path)) {
                 (None, _) | (_, Some(CiteStatus::Unknown)) => "unknown",
                 (_, Some(CiteStatus::Estimate)) => "estimated",
+                (_, None) if !def.real => "estimated",
                 _ => continue,
             };
             out.push(Unchecked {

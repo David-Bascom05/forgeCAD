@@ -853,6 +853,37 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         }
         return Ok(());
     }
+    // 5b. G91 G28 with every axis word 0 (posts write `G91 G28 Z0.` before M6): the intermediate
+    // point is where the axes already are, so they go straight to their reference, exactly so
+    // whether or not their position is known. The shell's, like G53 (the core refuses any
+    // incremental word from an unknown position); the homed axes' program position becomes
+    // unknown, as after the core's G28.
+    if has_g(28)
+        && !absolute.unwrap_or(st.core.absolute)
+        && any_axis
+        && axis.iter().all(|a| a.is_none_or(|v| v == 0))
+        && (0..axis.len()).any(|i| axis[i].is_some() && st.core.pos[i].is_none())
+        && gs.iter().all(|g| matches!(g, 280 | 900 | 910))
+    {
+        let axes: Vec<usize> = (0..axis.len()).filter(|&i| axis[i].is_some()).collect();
+        push(
+            out,
+            Ev::Home {
+                via: vec![None; axis.len()],
+                axes: axes.clone(),
+            },
+        );
+        if let Some(a) = absolute {
+            st.core.absolute = a;
+        }
+        for i in axes {
+            st.core.pos[i] = None;
+        }
+        if let Some(e) = stop {
+            push(out, e);
+        }
+        return Ok(());
+    }
     if nonmodal_used_words && !any_axis {
         if let Some(e) = stop {
             push(out, e);

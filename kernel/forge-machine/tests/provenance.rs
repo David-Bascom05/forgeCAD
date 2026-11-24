@@ -92,12 +92,10 @@ fn checks_on_unknowns_and_estimates_are_reported_not_passed() {
     ] {
         assert!(got.contains(&want), "{want:?} not in {got:?}");
     }
-    // published or user values are checked, not listed
-    assert!(
-        !got.iter()
-            .any(|(p, _)| *p == "joint.Z.range" || *p == "spindle.S1.rpm"),
-        "{got:?}"
-    );
+    // a user value is checked, not listed; an uncited one of a record that is not a real
+    // machine (here generic-vmc3's placeholders) is an estimate
+    assert!(!got.iter().any(|(p, _)| *p == "spindle.S1.rpm"), "{got:?}");
+    assert!(got.contains(&("joint.Z.range", "estimated")), "{got:?}");
 }
 
 #[test]
@@ -151,10 +149,11 @@ fn m6_moves_to_the_change_position_and_that_move_is_checked() {
     assert_eq!(up.len(), 1, "{:?}", tl.segments);
     assert_eq!((up[0].q0[z], up[0].q1[z]), (-600.0, 0.0));
     assert!(up[0].t_min > 0.0);
+    // stated (the generic record's placeholder: an estimate, never unknown)
     assert!(
-        !sim::unchecked(m, &tl)
+        sim::unchecked(m, &tl)
             .iter()
-            .any(|u| u.path == "changer.position")
+            .all(|u| u.path != "changer.position" || u.why == "estimated")
     );
     // a changer that does not state its move: the move is not checked, and the reply says so
     let mut m2 = m.clone();
@@ -186,7 +185,8 @@ fn the_machine_states_its_peck_parameters_and_the_interpreter_uses_them() {
     // after the peck to -4 it comes back down to -4 + 1.0 (forge-post's 0.5 would give -3.5)
     let text = format!("{blocks:?}");
     assert!(text.contains("-3000") && !text.contains("-3500"), "{text}");
-    assert!(sim::unchecked_cycles(m, prog).is_empty());
+    // stated (on a record that is not a real machine: an estimate, never unknown)
+    assert!(sim::unchecked_cycles(m, prog).iter().all(|u| u.why == "estimated"));
     // not stated: forge-post's numbers, and the reply says so
     let g = &forge_machine::library::builtin_named("generic-vmc3").unwrap();
     let u = sim::unchecked_cycles(
@@ -512,4 +512,32 @@ fn a_trunnion_may_turn_on_its_c() {
     );
     // a turning spindle not on a table rotary's C does not fit
     assert!(MachineDef::parse_all(&with.replace("c_joint = \"C\"\n", "")).is_err());
+}
+
+/// CAM-CORE's posts retract with `G91 G28 Z0.` / `G90` before every M06, also before the first
+/// absolute move, when no position is known yet.
+#[test]
+fn g91_g28_z0_homes_z_without_a_known_position() {
+    let m = &forge_machine::library::builtin_named("generic-vmc3").unwrap();
+    let mut s = Setup::new(m, Control::for_dialect(m, "fanuc", 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -500.0])];
+    s.h = vec![(1, 100.0)];
+    s.start = vec![0.0, 0.0, -300.0];
+    let z = m.joint_index("Z").unwrap();
+    let home = m.joint("Z").unwrap().home;
+    let prog =
+        "G91 G28 Z0.\nG90\nT1 M6\nG0 G54 X0. Y0.\nG43 H1 Z50.\nG1 Z10. F500.\nG91 G28 Z0.\nG90\nT2 M6\n";
+    let tl = sim::simulate(prog, &s).unwrap_or_else(|e| panic!("{e:?}"));
+    // line 1: Z straight to its reference from the start pose, no intermediate move
+    let l1: Vec<&sim::Segment> = tl.segments.iter().filter(|sg| sg.line == 1).collect();
+    assert_eq!(l1.len(), 1, "{l1:?}");
+    assert_eq!((l1[0].q0[z], l1[0].q1[z]), (-300.0, home));
+    // line 7: from Z10 (joint -500 + 100 + 10) straight up
+    let l7: Vec<&sim::Segment> = tl.segments.iter().filter(|sg| sg.line == 7).collect();
+    assert_eq!(l7.len(), 1, "{l7:?}");
+    assert_eq!((l7[0].q0[z], l7[0].q1[z]), (-390.0, home));
+    // a non-zero incremental G28 from an unknown position is still refused
+    assert!(sim::simulate("G91 G28 Z5.\n", &s).is_err());
+    // and the same word list reads as before where the position is known
+    sim::simulate("G90 G0 X0 Y0 Z10.\nG91 G28 Z5.\nG90\n", &s).unwrap();
 }
