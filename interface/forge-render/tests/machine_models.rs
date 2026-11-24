@@ -75,6 +75,11 @@ fn a_users_model_is_kept_in_their_library_placed_drawn_and_checked() {
     m.user = Some(user.clone());
     m.reload_catalog();
     m.pick_record("haas-vf-2").unwrap();
+    // the user's own models from nothing: forgecad's shipped Haas model (drawn where it is
+    // downloaded, tests/machine_shipped.rs) left out
+    m.models.clear();
+    m.models_shipped = None;
+    m.model_checks.clear();
     m.tab = Tab::Bodies;
     let d = m.def.clone().unwrap();
     let b = d
