@@ -57,11 +57,11 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | B.types | the translated `Body`, `Face`, `Loop`, `Coedge`, `Edge`, `Vertex`, `Surface`, `Curve` | TRANSLATE | open | verify/aeneas/forge-bool |
 | B.abs | `abs : Body → BodyModel`, the abstraction function | TRANSLATE (def), SPINE (use) | open | — |
 | T.model | forge-topo `check` returning no problem ⇒ `Valid` (L1/L3) | SPINE | proven | verify/forge-topo-check/lean `check_sound` |
-| T.strays | `topo::strays` refines `checkStrays` (L4) | SPINE | proven on rebase-fundamentals | `forge_topo.strays_refines` |
-| T.links | `topo::links` refines `checkLinks` (L4) | SPINE | proven on rebase-fundamentals | `forge_topo.links_refines` |
-| T.shells | `topo_shell::shell_faces` refines `checkShellFaces` (L4) | SPINE | proven on rebase-fundamentals | `forge_topo.shell_faces_refines` |
-| T.edges | `topo_edges::edges`, `loops` refine `checkEdges`, `checkLoops` (L4) | SPINE | proven on rebase-fundamentals | `forge_topo.edges_refines`, `loops_refines` |
-| T.ovf | the L4 refinements above hold for the overflow-checked translation (today they are proven on the wrapping one, `OVERFLOW_CHECKS=false` in translate.conf): every `+ 1` on a count needs the count below `usize::MAX`/`u32::MAX`, from the view's hypotheses | SPINE | open (gap) | verify/aeneas/forge-topo/translate.conf |
+| T.strays | `topo::strays` refines `checkStrays` (L4) | SPINE | proven (overflow-checked translation) | `forge_topo.strays_refines` |
+| T.links | `topo::links` refines `checkLinks` (L4) | SPINE | proven (overflow-checked translation) | `forge_topo.links_refines` |
+| T.shells | `topo_shell::shell_faces` refines `checkShellFaces` (L4) | SPINE | proven (overflow-checked translation) | `forge_topo.shell_faces_refines` |
+| T.edges | `topo_edges::edges`, `loops` refine `checkEdges`, `checkLoops` (L4) | SPINE | proven (overflow-checked translation) | `forge_topo.edges_refines`, `loops_refines` |
+| T.ovf | the five forge-topo functions above, translated overflow-checked: no `usize`/`u32` overflow (Checked.lean) | SPINE | proven | verify/aeneas/forge-topo/lean (`usize_add_wspec`, `usize_sub_wspec`, the `_refines` theorems) |
 | T.euler | `check_shell_euler` (stamped distinct count = eraseDups) | SPINE | open | — |
 | T.fans | `check_fans` (corner table as an opaque view method) | SPINE | open | — |
 | T.all | `check_known`'s combinatorial part composed (`Model.check`) | SPINE | open | — |
@@ -139,6 +139,23 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | C.g5.spindle | spindle and horn tori (tube ≥ centre radius) | CURVED-SITES | open: no corpus evidence (coverage 2026-11-23 group 5): proof must cover it, or add a fuzz family; family `spindle_tori` added: all 60 refused at creation (CrossesAxis, "a whole circle touching the axis pinches the solid"), so not reachable by revolve; reachable only by import (UNKNOWN) | adversarial.rs `spindle_tori` |
 | C.g5.spun | spun-spline meets (forge-geom spline/meet.rs: meet_spline, roots, spline_surface, through_axis) | CURVED-SITES | open: no corpus evidence (coverage 2026-11-23 group 5): proof must cover it, or add a fuzz family (existing family `spline_revolve` not in the coverage corpus; outside the exact reference's scope) | — |
 | C.g5.ruled | ruled–ruled walls and `parabola_wall` (forge-geom ruled/meet.rs) | CURVED-SITES | open: no corpus evidence (coverage 2026-11-23 group 5): proof must cover it, or add a fuzz family | — |
+
+## NC. No corpus evidence (FALLBACK's groups of research/coverage-2026-11-23, on main 103dfb8b)
+
+Code the corpus (gate parts, bench parts, suite fuzz 1–300 seq and nary1, the exact-reference repros)
+never runs. A count of 0 is no evidence either way: each row is UNKNOWN until a proof covers it or a
+fuzz family reaches it.
+
+| id | site | owner | status | file / theorem |
+|---|---|---|---|---|
+| NC.ref | the 17 refusal sites that run under nothing, unit tests included: boolean.rs `RetryInvalid`, the `undecided_touch` refusal, `OpenCurve`, `Uncut`, `NoNormal`, `DegenerateEdge`, `SplitOpen`, `EmptyCycle`, `HoleOutside`, `NoInteriorPoint`, `UntouchedOnOther`; nary.rs `NoClosedForm`, `ToolVerticesMeet`, `NoNormal`, `NoInteriorPoint`, `EmptyCycle`, `MergedRegion` (refusal-sites.tsv) | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.fences | the FENCES rung (G2): `ODD` is set 21× (bench frame, sweep-diff), never with an error, so the fenced retry never runs | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.careful | the CAREFUL rung (G2): never runs in the corpus | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.retried | a retried boolean returning `Ok` (G3's after-retry check): none in the corpus; only 6 unit-test cases reach the check | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.pinch | `pinched_new` finding a pinch (G6), `refuse_strays` refusing (G7): never in the corpus | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.nary.isect | n-ary with an `Intersect` tool: no corpus n-ary run has one (every `any_intersect` path skipped) | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.nary.par | n-ary's threaded `par_map` arms: only nary1 (one thread) runs | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.nary.touch | touches inside an n-ary boolean: never reached | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
 
 ## A8, the flat fallback
 

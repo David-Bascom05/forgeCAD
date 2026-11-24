@@ -1,0 +1,15 @@
+[package]
+name = "forge-machine"
+description = "ForgeCAD machine tools: the machine-definition format (kinematic tree, spindles, turrets, collision bodies), a library of generic machines, and simulation of posted G-code against the kinematics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../forge-math" }
+forge-tooling = { path = "../forge-tooling" }
+forge-post = { path = "../forge-post" }
+
+[lints]
+workspace = true

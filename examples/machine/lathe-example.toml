@@ -1,0 +1,7 @@
+# The numbers forge-machine's interpreter reads from a dialect, for this example only: the lathe
+# dialect itself (fanuc-lathe) is CAM-TURN's (kernel/forge-post).
+[dialect]
+name = "lathe-example"
+decimals = 3
+feed_decimals = 3
+dwell = "G04 P{ms}"

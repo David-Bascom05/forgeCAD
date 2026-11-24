@@ -1,0 +1,20 @@
+# generic-trunnion-bc support (left, y in [-330, -250]): carries the B axis's bearing,
+# its bore on the axis (along y through z = -50).
+# frame: the machine's base frame at the home pose. The xz plane offset d lies at y = -d, its
+# normal -y; the extrude runs -y.
+shared L = 240
+shared T = 80
+shared H = 300
+shared off = 250
+shared z0 = -300
+shared axis_z = -50
+shared bore = 90
+
+sketch plan(on: offset(xz, off)) {
+  outline = rect(corner: (-L / 2, z0), size: (L, H))
+}
+block = extrude(plan, T)
+sketch br(on: block.end) {
+  c = pt(0, axis_z)
+}
+bearing = hole(at: br.c, d: bore, depth: thru)
