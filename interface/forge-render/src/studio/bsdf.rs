@@ -33,7 +33,8 @@ pub struct Bsdf {
     /// Albedo for dielectrics, F0 (normal reflectance) for conductors, the tint for glass.
     pub base: V3,
     pub metal: f32,
-    /// A conductor's reflectance at 82 degrees (F82), its edge colour.
+    /// A conductor's specular tint: its reflectance at 82 degrees over Schlick's there (the
+    /// F82-tint model; OpenPBR's specular_color), its edge colour.
     pub f82: V3,
     /// Perceptual roughness: GGX's alpha is its square.
     pub rough: f32,

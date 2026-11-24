@@ -24,6 +24,10 @@ path = "src/bin/forge_app.rs"
 name = "forge-parity"
 path = "src/bin/forge_parity.rs"
 
+[[bin]]
+name = "forge-studio"
+path = "src/bin/forge_studio.rs"
+
 [dependencies]
 forge-dirs = { path = "../../kernel/forge-dirs" }
 # the kernel's scoped threads: the threaded browser build gives them its Web Workers

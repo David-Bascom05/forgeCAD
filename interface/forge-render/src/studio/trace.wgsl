@@ -712,6 +712,9 @@ fn trace_main(@builtin(global_invocation_id) id: vec3u) {
     var normal = vec3f(0.0);
     var depth = 0.0;
     let ground_on = P.ground.y > 0.5;
+    // path regularisation: after a rough bounce, sharper lobes are blurred to at least this, so
+    // caustics through a mirror off a matte floor don't arrive as fireflies
+    var blur = 0.0;
     let scale = max(length(P.eye.xyz), 1.0);
     for (var bounce = 0u; bounce < P.counts.w; bounce += 1u) {
         rng.dim = 8u + bounce * 16u;
@@ -760,6 +763,11 @@ fn trace_main(@builtin(global_invocation_id) id: vec3u) {
             ng = to_world_normal(i, cross(t1.xyz, t2.xyz));
             mat = material(bitcast<u32>(row3(i, 3u).y));
         }
+        if bounce > 0u {
+            mat.rough = max(mat.rough, blur);
+            mat.coat_rough = max(mat.coat_rough, blur);
+        }
+        blur = max(blur, min(mat.rough, 0.6) * 0.7);
         let wo_w = -d;
         // opaque surfaces face the eye; glass keeps its outward normal to know inside from out
         if mat.transmission <= 0.0 || on_ground {
@@ -793,7 +801,8 @@ fn trace_main(@builtin(global_invocation_id) id: vec3u) {
             }
             if !blocked {
                 let mis = power(ls.pdf, e.pdf);
-                radiance += min(through * e.f * abs(wi_l.z) * ls.rgb * (mis / ls.pdf), vec3f(P.lens.w));
+                let add = through * e.f * abs(wi_l.z) * ls.rgb * (mis / ls.pdf);
+                radiance += select(add, min(add, vec3f(P.lens.w)), bounce > 0u);
             }
         }
         // the next direction, by the BSDF
@@ -818,6 +827,7 @@ fn trace_main(@builtin(global_invocation_id) id: vec3u) {
     accum[pixel] += vec4f(radiance, alpha);
     if P.misc.z == 1u {
         aov[pixel * 2u] += vec4f(albedo, depth);
-        aov[pixel * 2u + 1u] += vec4f(normal, 1.0);
+        let l = dot(radiance, vec3f(0.2126, 0.7152, 0.0722));
+        aov[pixel * 2u + 1u] += vec4f(normal, l * l);
     }
 }

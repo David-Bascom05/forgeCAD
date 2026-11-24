@@ -157,8 +157,43 @@ fn a_fixed_seed_gives_the_same_picture() {
         t.set_scene(&f.built, &f.materials, &f.lut).unwrap();
         t.set_env(&f.env);
         t.step(&f.view, &f.settings, 8);
-        t.show(0.0);
+        t.show(0.0, false);
         t.read_rgba()
     };
     assert_eq!(run(), run());
+}
+
+#[test]
+fn the_denoiser_brings_a_few_samples_closer_to_many() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let f = fixture();
+    let size = (96, 64);
+    let mut t = Tracer::new(&device, &queue, size);
+    t.set_scene(&f.built, &f.materials, &f.lut).unwrap();
+    t.set_env(&f.env);
+    let settings = Settings { clamp: 16.0, ..f.settings };
+    t.step(&f.view, &settings, 1024);
+    t.wait();
+    let truth = t.read_mean();
+    let mut t = Tracer::new(&device, &queue, size);
+    t.set_scene(&f.built, &f.materials, &f.lut).unwrap();
+    t.set_env(&f.env);
+    let few = Settings { seed: 7, ..settings };
+    t.step(&f.view, &few, 16);
+    t.show(0.0, true);
+    t.wait();
+    let raw = t.read_mean();
+    let clean = t.read_denoised();
+    // compared as shown: tone-mapped, so a bright outlier counts as it looks
+    let shown = |v: &[[f32; 4]]| cpu::to_rgba8(v, 0.0);
+    let (truth, raw, clean) = (shown(&truth), shown(&raw), shown(&clean));
+    let rmse = |a: &[u8]| {
+        let s: f64 = a.iter().zip(&truth).enumerate().filter(|(k, _)| k % 4 != 3).map(|(_, (x, y))| (*x as f64 - *y as f64).powi(2)).sum();
+        (s / (a.len() as f64 * 0.75)).sqrt()
+    };
+    let (r, c) = (rmse(&raw), rmse(&clean));
+    eprintln!("16 spp against 1024: raw {r:.2}, denoised {c:.2} (8-bit levels)");
+    assert!(c < 0.6 * r, "denoised {c} vs raw {r}");
 }

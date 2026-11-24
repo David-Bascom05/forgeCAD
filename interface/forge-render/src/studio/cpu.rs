@@ -75,6 +75,7 @@ pub fn sample(s: &Scene, view: &View, set: &Settings, size: (u32, u32), x: u32, 
     let clamp = V3::splat(set.clamp);
     let turn = set.env_turn;
     let env_rad = |d: V3| s.env.radiance(d, turn) * set.env_strength;
+    let mut blur: f32 = 0.0;
     for bounce in 0..set.bounces {
         let mut dim = 8 + bounce * 16;
         let mut next = || {
@@ -110,13 +111,18 @@ pub fn sample(s: &Scene, view: &View, set: &Settings, size: (u32, u32), x: u32, 
             break;
         }
         let p = o + d * t;
-        let (mut n, mut ng, mat) = match hit {
+        let (mut n, mut ng, mut mat) = match hit {
             Some(h) => {
                 let (n, g) = s.built.normals(&h);
                 (n, g, s.materials[s.built.instances[h.instance as usize].material as usize])
             }
             None => (v3(0.0, 0.0, 1.0), v3(0.0, 0.0, 1.0), s.materials[set.ground.unwrap().1 as usize]),
         };
+        if bounce > 0 {
+            mat.rough = mat.rough.max(blur);
+            mat.coat_rough = mat.coat_rough.max(blur);
+        }
+        blur = blur.max(mat.rough.min(0.6) * 0.7);
         let wo_w = -d;
         if mat.transmission <= 0.0 || on_ground {
             if ng.dot(wo_w) < 0.0 {
@@ -145,7 +151,8 @@ pub fn sample(s: &Scene, view: &View, set: &Settings, size: (u32, u32), x: u32, 
             }
             if !blocked {
                 let mis = power(lpdf, pdf_b);
-                radiance = radiance + (through.mul(f).mul(lrgb) * (wi_l.z.abs() * mis / lpdf)).min(clamp);
+                let add = through.mul(f).mul(lrgb) * (wi_l.z.abs() * mis / lpdf);
+                radiance = radiance + if bounce > 0 { add.min(clamp) } else { add };
             }
         }
         let Some((wi, f, pdf)) = bsdf::sample(&mat, s.lut, wo, [next(), next(), next()]) else {

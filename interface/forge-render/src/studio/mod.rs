@@ -4,12 +4,15 @@
 //! `research/render/studio.md`. The modules without a GPU (`bsdf`, `bvh`, `env`, `scene`, `cpu`)
 //! are the tracer's maths in plain Rust, tested on any machine.
 
+pub mod appearance;
 pub mod bsdf;
 pub mod bvh;
 pub mod cpu;
 pub mod env;
 pub mod gpu;
 pub mod scene;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod shot;
 pub mod v3;
 
 #[cfg(test)]

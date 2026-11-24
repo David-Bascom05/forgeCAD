@@ -10,6 +10,86 @@ use wgpu::util::DeviceExt;
 
 const TRACE: &str = include_str!("trace.wgsl");
 const SHOW: &str = include_str!("show.wgsl");
+const DENOISE: &str = include_str!("denoise.wgsl");
+
+/// The denoiser's passes: prepare, five a-trous steps, finish; each pass's uniform 256 bytes
+/// apart (the alignment a dynamic offset needs everywhere).
+const PASSES: u64 = 7;
+const SLOT: u64 = 256;
+
+struct Denoiser {
+    layout: wgpu::BindGroupLayout,
+    prepare: wgpu::ComputePipeline,
+    atrous: wgpu::ComputePipeline,
+    finish: wgpu::ComputePipeline,
+    uniforms: wgpu::Buffer,
+    a: wgpu::Buffer,
+    b: wgpu::Buffer,
+    /// (src b, dst a) and (src a, dst b).
+    groups: Option<[wgpu::BindGroup; 2]>,
+    show_group: Option<wgpu::BindGroup>,
+}
+
+impl Denoiser {
+    fn new(device: &wgpu::Device, px: usize) -> Denoiser {
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("studio denoise"),
+            source: wgpu::ShaderSource::Wgsl(DENOISE.into()),
+        });
+        let buf = |b: u32, ty: wgpu::BufferBindingType, dynamic: bool| wgpu::BindGroupLayoutEntry {
+            binding: b,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer {
+                ty,
+                has_dynamic_offset: dynamic,
+                min_binding_size: None,
+            },
+            count: None,
+        };
+        let read = wgpu::BufferBindingType::Storage { read_only: true };
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("studio denoise"),
+            entries: &[
+                buf(0, wgpu::BufferBindingType::Uniform, true),
+                buf(1, read, false),
+                buf(2, read, false),
+                buf(3, read, false),
+                buf(4, wgpu::BufferBindingType::Storage { read_only: false }, false),
+            ],
+        });
+        let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("studio denoise"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
+        let pipe = |entry: &str| {
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some(entry),
+                layout: Some(&pl),
+                module: &module,
+                entry_point: Some(entry),
+                compilation_options: Default::default(),
+                cache: None,
+            })
+        };
+        Denoiser {
+            prepare: pipe("prepare"),
+            atrous: pipe("atrous"),
+            finish: pipe("finish"),
+            layout,
+            uniforms: device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("studio denoise passes"),
+                size: PASSES * SLOT,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+            a: storage(device, "studio denoise a", &vec![0u8; px * 16], true),
+            b: storage(device, "studio denoise b", &vec![0u8; px * 16], true),
+            groups: None,
+            show_group: None,
+        }
+    }
+}
 
 /// WebGPU's guaranteed largest storage binding: a scene past it is refused, not truncated.
 pub const MAX_BINDING: u64 = 128 << 20;
@@ -32,6 +112,9 @@ pub struct Tracer {
     pub picture_view: wgpu::TextureView,
     trace_group: Option<wgpu::BindGroup>,
     show_group: Option<wgpu::BindGroup>,
+    denoiser: Denoiser,
+    /// Whether `picture` shows the denoised sum.
+    pub denoised: bool,
     pub size: (u32, u32),
     /// Samples summed so far.
     pub samples: u32,
@@ -163,6 +246,8 @@ impl Tracer {
             picture_view,
             trace_group: None,
             show_group: None,
+            denoiser: Denoiser::new(device, px),
+            denoised: false,
             size,
             samples: 0,
             top: 0,
@@ -190,6 +275,7 @@ impl Tracer {
         self.placements = built.instances.len() as u32;
         self.lut_at = at;
         self.trace_group = None;
+        self.denoiser.groups = None;
         self.reset();
         Ok(())
     }
@@ -218,6 +304,7 @@ impl Tracer {
         self.accum = storage(&self.device, "studio accum", &vec![0u8; px * 16], true);
         self.aov = storage(&self.device, "studio aov", &vec![0u8; px * 32], true);
         (self.picture, self.picture_view) = picture(&self.device, size);
+        self.denoiser = Denoiser::new(&self.device, px);
         self.size = size;
         self.samples = 0;
         self.trace_group = None;
@@ -331,20 +418,122 @@ impl Tracer {
         }
     }
 
-    /// The sum so far into `picture`, exposed by `ev` stops.
-    pub fn show(&mut self, ev: f32) {
+    /// The sum so far into `picture`, exposed by `ev` stops; denoised first when asked.
+    pub fn show(&mut self, ev: f32, denoise: bool) {
         self.group();
-        let v = [self.samples as f32, 2f32.powf(ev), 0.0, 0.0];
+        if denoise {
+            self.denoise();
+        }
+        self.denoised = denoise;
+        let n = if denoise { 1.0 } else { self.samples as f32 };
+        let v = [n, 2f32.powf(ev), 0.0, 0.0];
         self.queue.write_buffer(&self.show_params, 0, &bytes(&v));
         let (w, h) = self.size;
+        if denoise && self.denoiser.show_group.is_none() {
+            let layout = self.show.get_bind_group_layout(0);
+            self.denoiser.show_group = Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("studio show denoised"),
+                layout: &layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.show_params.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.denoiser.a.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&self.picture_view),
+                    },
+                ],
+            }));
+        }
+        let group = if denoise { &self.denoiser.show_group } else { &self.show_group };
         let mut e = self.device.create_command_encoder(&Default::default());
         {
             let mut pass = e.begin_compute_pass(&Default::default());
             pass.set_pipeline(&self.show);
-            pass.set_bind_group(0, self.show_group.as_ref(), &[]);
+            pass.set_bind_group(0, group.as_ref(), &[]);
             pass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
         }
         self.queue.submit([e.finish()]);
+    }
+
+    /// The denoised mean into the denoiser's first buffer.
+    fn denoise(&mut self) {
+        let (w, h) = self.size;
+        let dn = &mut self.denoiser;
+        if dn.groups.is_none() {
+            let group = |src: &wgpu::Buffer, dst: &wgpu::Buffer| {
+                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("studio denoise"),
+                    layout: &dn.layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: &dn.uniforms,
+                                offset: 0,
+                                size: wgpu::BufferSize::new(32),
+                            }),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: self.accum.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: self.aov.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: src.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: dst.as_entire_binding(),
+                        },
+                    ],
+                })
+            };
+            dn.groups = Some([group(&dn.b, &dn.a), group(&dn.a, &dn.b)]);
+        }
+        // the passes' uniforms: prepare, steps 1..16, finish
+        let mut u = vec![0u8; (PASSES * SLOT) as usize];
+        for k in 0..PASSES as usize {
+            let step = if (1..6).contains(&k) { 1u32 << (k - 1) } else { 1 };
+            let sigma_c = 4.0f32;
+            let words: [u32; 8] = [w, h, step, self.samples, sigma_c.to_bits(), 64f32.to_bits(), 1.0f32.to_bits(), 0];
+            u[k * SLOT as usize..][..32].copy_from_slice(&bytes(&words));
+        }
+        self.queue.write_buffer(&dn.uniforms, 0, &u);
+        let groups = dn.groups.as_ref().expect("made above");
+        let mut e = self.device.create_command_encoder(&Default::default());
+        {
+            let mut pass = e.begin_compute_pass(&Default::default());
+            let (gx, gy) = (w.div_ceil(8), h.div_ceil(8));
+            // prepare: into a; steps: a -> b -> a -> b -> a -> b; finish: b -> a
+            pass.set_pipeline(&dn.prepare);
+            pass.set_bind_group(0, &groups[0], &[0]);
+            pass.dispatch_workgroups(gx, gy, 1);
+            pass.set_pipeline(&dn.atrous);
+            for k in 1..6u32 {
+                let g = if k % 2 == 1 { &groups[1] } else { &groups[0] };
+                pass.set_bind_group(0, g, &[k * SLOT as u32]);
+                pass.dispatch_workgroups(gx, gy, 1);
+            }
+            pass.set_pipeline(&dn.finish);
+            pass.set_bind_group(0, &groups[0], &[6 * SLOT as u32]);
+            pass.dispatch_workgroups(gx, gy, 1);
+        }
+        self.queue.submit([e.finish()]);
+    }
+
+    /// The denoised mean, linear RGBA per pixel (after `show(_, true)`; native only).
+    pub fn read_denoised(&self) -> Vec<[f32; 4]> {
+        self.read_buffer(&self.denoiser.a).as_chunks::<4>().0.to_vec()
     }
 
     pub fn wait(&self) {
@@ -381,7 +570,7 @@ impl Tracer {
             .collect()
     }
 
-    /// First-hit albedo + depth, normal + coverage, per pixel, averaged.
+    /// First-hit albedo + depth, normal + the luminance's square, per pixel, averaged.
     pub fn read_aov(&self) -> Vec<[f32; 8]> {
         let n = self.samples.max(1) as f32;
         self.read_buffer(&self.aov)
