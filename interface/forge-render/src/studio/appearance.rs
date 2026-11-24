@@ -265,7 +265,7 @@ impl Appearances {
         let names: Vec<String> = std::iter::once(&m.name).chain(&m.aliases).map(|s| forge_material::norm(s)).collect();
         self.all()
             .find(|a| a.materials.iter().any(|x| names.contains(&forge_material::norm(x))))
-            .or_else(|| self.all().find(|a| a.families.iter().any(|f| *f == m.family)))
+            .or_else(|| self.all().find(|a| a.families.contains(&m.family)))
     }
 
     /// What a part looks like: its own appearance if it names one, else its material's, else

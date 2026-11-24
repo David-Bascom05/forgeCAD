@@ -206,8 +206,8 @@ pub fn hit_triangle(o: V3, d: V3, p0: V3, e1: V3, e2: V3, t_max: f32) -> Option<
 
 /// Where a ray enters a box, if before `t_max` (the slab test with a precomputed inverse).
 pub fn hit_box(o: V3, inv: V3, min: V3, max: V3, t_max: f32) -> Option<f32> {
-    let t0 = (min - o).mul(inv);
-    let t1 = (max - o).mul(inv);
+    let t0 = (min - o).times(inv);
+    let t1 = (max - o).times(inv);
     let near = t0.min(t1).max_elem().max(0.0);
     let far = t0.max(t1);
     let far = far.x.min(far.y).min(far.z).min(t_max);
@@ -235,9 +235,7 @@ pub fn closest(
     let mut sp = 0;
     let mut at = root;
     let r = nodes[root as usize];
-    if hit_box(o, inv, r.min, r.max, t_max).is_none() {
-        return None;
-    }
+    hit_box(o, inv, r.min, r.max, t_max)?;
     loop {
         let n = nodes[at as usize];
         if n.count > 0 {

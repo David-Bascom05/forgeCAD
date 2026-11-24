@@ -8,7 +8,7 @@ use forge_render::studio::env::{self, Env};
 use forge_render::studio::gpu::Tracer;
 use forge_render::studio::scene::{Built, Instance};
 use forge_render::studio::v3::{V3, v3};
-use forge_render::studio::{Settings, View, cpu};
+use forge_render::studio::{Settings, View, cpu, golden};
 
 fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
     let instance = render::native_instance();
@@ -232,18 +232,6 @@ fn the_queue_writes_a_turntable_frame_by_frame() {
     assert!(q.jobs.is_empty() && q.log.iter().all(|l| l.is_ok()));
 }
 
-/// The golden scene's picture, as the GPU shows it: 96x64, 128 samples, seed 0, not denoised.
-fn golden_picture(device: &wgpu::Device, queue: &wgpu::Queue) -> Vec<u8> {
-    let f = fixture();
-    let size = (96, 64);
-    let mut t = Tracer::new(device, queue, size);
-    t.set_scene(&f.built, &f.materials, &f.lut).unwrap();
-    t.set_env(&f.env);
-    t.step(&f.view, &f.settings, 128);
-    t.show(0.0, false);
-    t.read_rgba()
-}
-
 const GOLDEN: &str = "tests/fixtures/studio_golden.png";
 
 fn read_png(path: &str) -> ((u32, u32), Vec<u8>) {
@@ -254,6 +242,17 @@ fn read_png(path: &str) -> ((u32, u32), Vec<u8>) {
     ((info.width, info.height), buf[..(info.width * info.height * 4) as usize].to_vec())
 }
 
+/// The golden scene's picture as the browser makes it: the GPU's mean, tone-mapped on the CPU.
+fn golden_picture(device: &wgpu::Device, queue: &wgpu::Queue) -> Vec<u8> {
+    let g = golden::scene().unwrap();
+    let mut t = Tracer::new(device, queue, golden::SIZE);
+    t.set_scene(&g.built, &g.materials, &g.lut).unwrap();
+    t.set_env(&g.env);
+    t.step(&g.view, &g.settings, golden::SPP);
+    let mean = render::block_on(t.read_mean_async()).unwrap();
+    cpu::to_rgba8(&mean, 0.0)
+}
+
 #[test]
 fn the_golden_scene_looks_as_it_did() {
     let Some((device, queue)) = device() else {
@@ -261,20 +260,30 @@ fn the_golden_scene_looks_as_it_did() {
     };
     let got = golden_picture(&device, &queue);
     if std::env::var("STUDIO_BLESS").is_ok() {
-        save(GOLDEN, (96, 64), &got);
+        save(GOLDEN, golden::SIZE, &got);
         return;
     }
     let (size, want) = read_png(GOLDEN);
-    assert_eq!(size, (96, 64));
+    assert_eq!(size, golden::SIZE);
     // another GPU rounds differently and its noise lands elsewhere: the picture must agree on
-    // the whole (RMSE) and nearly everywhere (99th percentile of the per-channel difference)
-    let mut d: Vec<i32> = got.iter().zip(&want).enumerate().filter(|(k, _)| k % 4 != 3).map(|(_, (a, b))| (*a as i32 - *b as i32).abs()).collect();
-    let rmse = (d.iter().map(|x| (x * x) as f64).sum::<f64>() / d.len() as f64).sqrt();
-    d.sort();
-    let p99 = d[d.len() * 99 / 100];
+    // the whole (RMSE) and nearly everywhere (99th percentile)
+    let (rmse, p99) = golden::compare(&got, &want);
     eprintln!("golden: rmse {rmse:.2}, p99 {p99} (8-bit levels)");
-    if rmse > 1e-9 {
-        save("target/studio_golden_got.png", (96, 64), &got);
+    if rmse > 0.0 {
+        save("target/studio_golden_got.png", golden::SIZE, &got);
     }
-    assert!(rmse < 6.0 && p99 < 40, "rmse {rmse}, p99 {p99}: see target/studio_golden_got.png");
+    assert!(
+        rmse < golden::MAX_RMSE && p99 < golden::MAX_P99,
+        "rmse {rmse}, p99 {p99}: see target/studio_golden_got.png"
+    );
+    // and the shader's own tone map agrees with the CPU's
+    let g = golden::scene().unwrap();
+    let mut t = Tracer::new(&device, &queue, golden::SIZE);
+    t.set_scene(&g.built, &g.materials, &g.lut).unwrap();
+    t.set_env(&g.env);
+    t.step(&g.view, &g.settings, golden::SPP);
+    t.show(0.0, false);
+    let shown = t.read_rgba();
+    let (r2, p2) = golden::compare(&shown, &got);
+    assert!(r2 < 0.6 && p2 <= 1, "GPU tone map vs CPU: rmse {r2}, p99 {p2}");
 }

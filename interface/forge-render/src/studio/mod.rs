@@ -9,6 +9,7 @@ pub mod bsdf;
 pub mod bvh;
 pub mod cpu;
 pub mod env;
+pub mod golden;
 pub mod gpu;
 pub mod live;
 pub mod scene;

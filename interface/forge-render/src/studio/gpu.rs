@@ -136,10 +136,7 @@ fn storage(device: &wgpu::Device, label: &str, words: &[u8], write: bool) -> wgp
     })
 }
 
-fn bytes<T: Copy>(v: &[T]) -> Vec<u8>
-where
-    T: ToBytes,
-{
+fn bytes<T: ToBytes>(v: &[T]) -> Vec<u8> {
     v.iter().flat_map(|x| x.le()).collect()
 }
 
@@ -263,7 +260,7 @@ impl Tracer {
         let (nodes, tris, inst) = built.words();
         for (what, n) in [("nodes", nodes.len()), ("triangles", tris.len()), ("placements", inst.len())] {
             if (n * 4) as u64 > MAX_BINDING {
-                return Err(format!("the scene's {what} need {} MB, past the GPU's 128 MB", n * 4 >> 20));
+                return Err(format!("the scene's {what} need {} MB, past the GPU's 128 MB", (n * 4) >> 20));
             }
         }
         let (mats, at) = material_words(materials, lut);
@@ -557,6 +554,51 @@ impl Tracer {
         self.wait();
         let map = staging.slice(..).get_mapped_range().expect("it was waited for");
         map.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect()
+    }
+
+    /// The running mean, linear RGBA per pixel, without blocking (the browser's way).
+    pub async fn read_mean_async(&self) -> Result<Vec<[f32; 4]>, String> {
+        let size = self.accum.size();
+        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut e = self.device.create_command_encoder(&Default::default());
+        e.copy_buffer_to_buffer(&self.accum, 0, &staging, 0, size);
+        self.queue.submit([e.finish()]);
+        #[cfg(target_arch = "wasm32")]
+        {
+            let slice = staging.slice(..);
+            let done = js_sys::Promise::new(&mut |resolve, reject| {
+                slice.map_async(wgpu::MapMode::Read, move |r| {
+                    let f = if r.is_ok() { &resolve } else { &reject };
+                    let _ = f.call0(&wasm_bindgen::JsValue::NULL);
+                });
+            });
+            wasm_bindgen_futures::JsFuture::from(done)
+                .await
+                .map_err(|_| "the GPU could not map the picture".to_string())?;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let ok = std::sync::Arc::new(std::sync::Mutex::new(None));
+            let o = ok.clone();
+            staging.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+                *o.lock().expect("one writer") = Some(r.is_ok());
+            });
+            self.wait();
+            if *ok.lock().expect("one writer") != Some(true) {
+                return Err("the GPU could not map the picture".into());
+            }
+        }
+        let n = self.samples.max(1) as f32;
+        let map = staging.slice(..).get_mapped_range().map_err(|e| e.to_string())?;
+        Ok(map.as_chunks::<16>().0.iter().map(|b| {
+            let f = |k: usize| f32::from_le_bytes(b[k * 4..k * 4 + 4].try_into().unwrap()) / n;
+            [f(0), f(1), f(2), f(3)]
+        }).collect())
     }
 
     /// The running mean, linear RGBA per pixel (native only: it waits).

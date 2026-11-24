@@ -100,13 +100,13 @@ pub fn sample(s: &Scene, view: &View, set: &Settings, size: (u32, u32), x: u32, 
         if hit.is_none() && !on_ground {
             if bounce == 0 {
                 match set.backdrop {
-                    Backdrop::Environment => radiance = radiance + through.mul(env_rad(d)),
-                    Backdrop::Colour(c) => radiance = radiance + through.mul(V3::from(c)),
+                    Backdrop::Environment => radiance = radiance + through.times(env_rad(d)),
+                    Backdrop::Colour(c) => radiance = radiance + through.times(V3::from(c)),
                     Backdrop::Transparent => alpha = 0.0,
                 }
             } else {
                 let mis = if last_pdf <= 0.0 { 1.0 } else { power(last_pdf, s.env.pdf(d, turn)) };
-                radiance = radiance + (through.mul(env_rad(d)) * mis).min(clamp);
+                radiance = radiance + (through.times(env_rad(d)) * mis).min(clamp);
             }
             break;
         }
@@ -151,14 +151,14 @@ pub fn sample(s: &Scene, view: &View, set: &Settings, size: (u32, u32), x: u32, 
             }
             if !blocked {
                 let mis = power(lpdf, pdf_b);
-                let add = through.mul(f).mul(lrgb) * (wi_l.z.abs() * mis / lpdf);
+                let add = through.times(f).times(lrgb) * (wi_l.z.abs() * mis / lpdf);
                 radiance = radiance + if bounce > 0 { add.min(clamp) } else { add };
             }
         }
         let Some((wi, f, pdf)) = bsdf::sample(&mat, s.lut, wo, [next(), next(), next()]) else {
             break;
         };
-        through = through.mul(f) * (wi.z.abs() / pdf);
+        through = through.times(f) * (wi.z.abs() / pdf);
         last_pdf = pdf;
         let wi_w = world(wi).norm();
         let side = if wi_w.dot(ng) > 0.0 { 1.0 } else { -1.0 };

@@ -43,7 +43,7 @@ impl V3 {
     pub fn norm(self) -> V3 {
         self / self.len()
     }
-    pub fn mul(self, o: V3) -> V3 {
+    pub fn times(self, o: V3) -> V3 {
         v3(self.x * o.x, self.y * o.y, self.z * o.z)
     }
     pub fn min(self, o: V3) -> V3 {
