@@ -7,6 +7,7 @@
 //! the setup and op selected and a check's witness asked to be located, and `run`'s paths.
 
 pub mod doc;
+pub mod nc;
 pub mod run;
 pub mod schema;
 pub mod turnview;
@@ -40,6 +41,18 @@ pub struct Focus {
     pub stock_at: Option<String>,
     /// The toolpaths shown: every op of the setup, or the selected one only.
     pub only_selected: bool,
+    /// The toolpath coloured by a measured value per move (forge-cam-quality's), drawn by the
+    /// simulation view; None: by op as before.
+    pub colour_by: Option<ColourBy>,
+}
+
+/// A per-move value the toolpath can be coloured by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColourBy {
+    /// The chip thickness after thinning against the op's target feed per tooth.
+    ChipLoad,
+    /// The engagement angle.
+    Engagement,
 }
 
 /// What the ribbon asks for (an `Action` is Copy: the browser's asks carry names, `Cmd`).
@@ -52,6 +65,8 @@ pub enum Ask {
     PostProcess,
     SetupSheet,
     ToolLibrary,
+    Programs,
+    Quality,
     Checks,
     Undo,
     Redo,
@@ -60,6 +75,12 @@ pub enum Ask {
     AutoGenerate,
     CheckNow,
     SectionView,
+    /// NC Programs: every program's files with the host's Save As.
+    ExportNc,
+    /// The setup sheet and tool list with the host's Save As.
+    ExportSheet,
+    /// Re-post every program whose file is stale.
+    RepostStale,
 }
 
 impl From<Ask> for Cmd {
@@ -72,6 +93,8 @@ impl From<Ask> for Cmd {
             Ask::PostProcess => Cmd::PostProcess,
             Ask::SetupSheet => Cmd::SetupSheet,
             Ask::ToolLibrary => Cmd::ToolLibrary,
+            Ask::Programs => Cmd::Programs,
+            Ask::Quality => Cmd::Quality,
             Ask::Checks => Cmd::Checks,
             Ask::Undo => Cmd::Undo,
             Ask::Redo => Cmd::Redo,
@@ -80,6 +103,9 @@ impl From<Ask> for Cmd {
             Ask::AutoGenerate => Cmd::AutoGenerate,
             Ask::CheckNow => Cmd::CheckNow,
             Ask::SectionView => Cmd::SectionView,
+            Ask::ExportNc => Cmd::ExportNc(None),
+            Ask::ExportSheet => Cmd::ExportSheet,
+            Ask::RepostStale => Cmd::RepostStale,
         }
     }
 }
@@ -106,6 +132,8 @@ pub enum Cmd {
     PostProcess,
     SetupSheet,
     ToolLibrary,
+    Programs,
+    Quality,
     Checks,
     Undo,
     Redo,
@@ -118,6 +146,14 @@ pub enum Cmd {
     CheckNow,
     /// The turning view, shown or not.
     SectionView,
+    /// Post program NAME (or all) into the document's folder.
+    PostNc(Option<String>),
+    /// The Post Process dialog at the K-th program.
+    PostAt(usize),
+    /// Program NAME's (or all) files with the host's Save As.
+    ExportNc(Option<String>),
+    ExportSheet,
+    RepostStale,
 }
 
 /// The setup dialog's state: the args as edited, by keyword.
@@ -202,6 +238,12 @@ pub struct CamWs {
     pub setup_dlg: Option<SetupDlg>,
     pub post_dlg: Option<PostDlg>,
     pub tools_open: bool,
+    /// The NC programs window.
+    pub programs_open: bool,
+    /// The toolpath quality window.
+    pub quality_open: bool,
+    /// The tool library's import field: a Fusion tool library's file, beside the document.
+    pub import_path: String,
     pub tools_filter: String,
     pub checks_open: bool,
     pub text_open: bool,
@@ -218,6 +260,17 @@ pub struct CamWs {
     pub lib: forge_tooling::Library,
     /// The turning view (a lathe setup in section).
     pub turnview: turnview::TurnView,
+    /// Files for the host's Save As (taken by the host: a dialog natively, a download in the browser).
+    pub export: Option<nc::ExportAsk>,
+    /// Post and export programs not certified in full (their headers say so).
+    pub allow_uncertified: bool,
+    /// Files written so far (the posted states are read again after each).
+    pub write_gen: u64,
+    /// Exports handed to the host so far.
+    pub exported: u64,
+    /// A program setting being typed (its key, the text so far).
+    pub prog_field: Option<(String, String)>,
+    pub posted_cache: Option<(u64, Vec<nc::PostedRow>)>,
 }
 
 impl CamWs {
@@ -226,19 +279,7 @@ impl CamWs {
         let dir = std::path::Path::new(path)
             .parent()
             .map_or_else(|| PathBuf::from("."), std::path::Path::to_path_buf);
-        let mut lib = forge_tooling::Library::builtin();
-        if let Ok(rd) = forge_dirs::fs::read_dir(dir.join("cam")) {
-            let mut files: Vec<PathBuf> = rd
-                .filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| p.extension().is_some_and(|x| x == "toml"))
-                .collect();
-            files.sort();
-            for f in files {
-                if let Ok(s) = forge_dirs::fs::read_to_string(&f) {
-                    let _ = lib.add(&f.display().to_string(), &s);
-                }
-            }
-        }
+        let lib = library(&dir);
         let mut ws = CamWs {
             path: path.to_string(),
             dir,
@@ -259,6 +300,9 @@ impl CamWs {
             setup_dlg: None,
             post_dlg: None,
             tools_open: false,
+            programs_open: false,
+            quality_open: false,
+            import_path: String::new(),
             tools_filter: String::new(),
             checks_open: false,
             text_open: false,
@@ -274,6 +318,12 @@ impl CamWs {
                 open: true,
                 ..Default::default()
             },
+            export: None,
+            allow_uncertified: false,
+            write_gen: 0,
+            exported: 0,
+            posted_cache: None,
+            prog_field: None,
         };
         ws.read_parts();
         ws.restale();
@@ -553,6 +603,8 @@ impl CamWs {
                 None => self.said = Some("generate first".into()),
             },
             Cmd::ToolLibrary => self.tools_open = !self.tools_open,
+            Cmd::Programs => self.programs_open = !self.programs_open,
+            Cmd::Quality => self.quality_open = !self.quality_open,
             Cmd::Checks => self.checks_open = !self.checks_open,
             Cmd::Undo => {
                 if let Some(t) = self.undo.pop() {
@@ -574,6 +626,11 @@ impl CamWs {
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
             Cmd::SectionView => self.turnview.open = !self.turnview.open,
+            Cmd::PostNc(n) => self.post_programs(n.as_deref()),
+            Cmd::PostAt(k) => self.post_dlg = Some(PostDlg { program: k }),
+            Cmd::ExportNc(n) => self.export_programs(n.as_deref()),
+            Cmd::ExportSheet => self.export_sheet(),
+            Cmd::RepostStale => self.repost_stale(),
             // forge-cam-lang checks as it generates: until an on-demand checker of a run's
             // posted paths is exposed, checking now is generating again
             Cmd::CheckNow => {
@@ -1037,6 +1094,68 @@ pub fn open_for(part_path: &str) -> Result<CamWs, String> {
     Ok(ws)
 }
 
+/// The tool library a document sees: the built-in one and the project's `cam/*.toml` beside it.
+pub fn library(dir: &std::path::Path) -> forge_tooling::Library {
+    let mut lib = forge_tooling::Library::builtin();
+    if let Ok(rd) = forge_dirs::fs::read_dir(dir.join("cam")) {
+        let mut files: Vec<PathBuf> = rd
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+            .collect();
+        files.sort();
+        for f in files {
+            if let Ok(s) = forge_dirs::fs::read_to_string(&f) {
+                let _ = lib.add(&f.display().to_string(), &s);
+            }
+        }
+    }
+    lib
+}
+
+impl CamWs {
+    /// A Fusion tool library (its JSON, at `file` beside the document) converted into the
+    /// project's `cam/<name>.toml` (forge-cam-import: read back before it is written), and the
+    /// library reloaded. Says what happened.
+    pub fn import_fusion(&mut self, file: &str) -> Result<String, String> {
+        let src_path = self.dir.join(file.trim());
+        let src =
+            forge_dirs::fs::read_to_string(&src_path).map_err(|e| format!("{}: {e}", src_path.display()))?;
+        let stem = src_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("fusion")
+            .replace(|c: char| !(c.is_alphanumeric() || c == '-' || c == '_'), "_");
+        let imported = forge_cam_import::fusion(&src, file.trim(), "imported in the app")?;
+        let dir = self.dir.join("cam");
+        let _ = forge_dirs::fs::create_dir_all(&dir);
+        let out = dir.join(format!("{stem}.toml"));
+        forge_dirs::fs::write(&out, imported.toml.as_bytes())
+            .map_err(|e| format!("{}: {e}", out.display()))?;
+        self.lib = library(&self.dir);
+        let mut said = format!("{} tools imported into {}", imported.tools, out.display());
+        if !imported.warnings.is_empty() {
+            said.push_str(&format!(
+                " ({} warnings: {})",
+                imported.warnings.len(),
+                imported.warnings.join("; ")
+            ));
+        }
+        Ok(said)
+    }
+
+    /// Each setup's machining time from the run: (setup, its ops' time, s).
+    pub fn setup_times(&self) -> Vec<(String, f64)> {
+        let Some(r) = &self.run else { return vec![] };
+        self.setups()
+            .iter()
+            .map(|s| {
+                let t: f64 = r.ops.iter().filter(|o| o.setup == s.name).map(|o| o.time_s).sum();
+                (s.name.clone(), t)
+            })
+            .collect()
+    }
+}
+
 /// A lathe setup's keywords, in the order they are written (docs/cam-turning.md).
 pub const LATHE_KW: [&str; 8] = [
     "bar",
@@ -1251,6 +1370,76 @@ prog = program(op1, post: \"fanuc\", number: 1001)
         w.setup_ok(&d).expect("edited");
         assert!(w.text.contains("lathe_setup(f, bar: 36, front: 2"), "{}", w.text);
         assert!(lathes().contains(&"generic-lathe".to_string()));
+    }
+
+    #[test]
+    fn a_fusion_library_is_imported_into_the_project() {
+        let dir = std::env::temp_dir().join(format!("fg-cam-import-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("shop.json"),
+            r#"{"version": 36, "data": [
+              {"guid": "a", "type": "flat end mill", "unit": "millimeters", "description": "6mm 3fl",
+               "geometry": {"DC": 6, "LCF": 18, "OAL": 57, "SFDM": 6, "NOF": 3, "LB": 24},
+               "post-process": {"number": 7}, "start-values": {}}]}"#,
+        )
+        .unwrap();
+        let mut w = CamWs::open(dir.join("job.fg").to_str().unwrap(), DOC);
+        let before = w.lib.tools.len();
+        let said = w.import_fusion("shop.json").expect("imported");
+        assert!(said.starts_with("1 tools imported"), "{said}");
+        assert!(dir.join("cam/shop.toml").exists());
+        assert_eq!(w.lib.tools.len(), before + 1);
+        // and a document opened there sees it
+        assert_eq!(library(&dir).tools.len(), before + 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_program_over_two_setups_generates() {
+        let dir = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+        let text = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+        let mut w = CamWs::open(dir.join("flange_cam.fg").to_str().unwrap(), &text);
+        w.auto = false;
+        w.command(Cmd::NewSetup);
+        let d = w.setup_dlg.take().unwrap();
+        w.setup_ok(&d).expect("second setup");
+        // prog posts both
+        // a program reads its setups: refused above op2, made after moving below it
+        assert!(!w.edit(&Edit::Set {
+            id: "prog".into(),
+            arg: "#0".into(),
+            text: "[op1, op2]".into()
+        }));
+        w.edits(&[
+            Edit::Move {
+                id: "prog".into(),
+                before: None,
+            },
+            Edit::Set {
+                id: "prog".into(),
+                arg: "#0".into(),
+                text: "[op1, op2]".into(),
+            },
+        ])
+        .expect("moved and set");
+        assert!(w.text.contains("prog = program([op1, op2], post:"), "{}", w.text);
+        let r = run::run(&w.text, &dir);
+        assert!(r.errors.is_empty(), "{:?}", r.errors);
+        assert_eq!(
+            r.programs
+                .iter()
+                .find(|p| p.name == "prog")
+                .map(|p| p.text.is_some()),
+            Some(true),
+            "{:?}",
+            r.programs
+        );
+        w.running = Some(r.text.clone());
+        w.ran(r);
+        let times = w.setup_times();
+        assert_eq!(times.len(), 2);
+        assert!(times[0].1 > 0.0);
     }
 
     #[test]

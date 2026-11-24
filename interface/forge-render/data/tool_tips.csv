@@ -266,3 +266,5 @@ cam,Thread,"An ISO metric external thread (60°), radial infeed of equal chip ar
 cam,Turn Drill,"A drill on the centre line, pecking if asked",
 cam,Part Off,"Part the work off at a z, the blade's side on the part's back face",
 cam,Section View,"The lathe setup in section: the part's half-profile, the bar, the chuck, every op's path and the tool at a step",
+cam,NC Programs,"Every NC program: the setups it posts, its dialect and number, what it made; a new program over chosen setups; write them all",
+cam,Quality,"Every op's toolpath quality: feed time and air cutting, plunges, engagement, slotting, chip load against the feed per tooth, material removal and spindle power; each setup's totals",

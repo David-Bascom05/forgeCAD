@@ -146,12 +146,28 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                     a(Ask::PostProcess),
                     w.post_dlg.is_some(),
                 ),
+                ("NC Programs", "cam_sheet", a(Ask::Programs), w.programs_open),
+                (
+                    "Quality",
+                    "cam_check",
+                    w.run
+                        .as_ref()
+                        .is_some_and(|r| r.quality.is_some())
+                        .then_some(Action::Cam(Ask::Quality)),
+                    w.quality_open,
+                ),
             ],
             vec![
                 (
                     "Setup Sheet",
                     "cam_sheet",
                     w.run.is_some().then_some(Action::Cam(Ask::SetupSheet)),
+                    false,
+                ),
+                (
+                    "Export NC",
+                    "cam_post",
+                    w.run.is_some().then_some(Action::Cam(Ask::ExportNc)),
                     false,
                 ),
                 ("Checks", "cam_check", a(Ask::Checks), w.checks_open),
@@ -183,6 +199,11 @@ pub fn num(x: f64) -> String {
     if s == "-0" { "0".into() } else { s.into() }
 }
 
+/// A time as m:ss.
+fn short_time(s: f64) -> String {
+    format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0).floor() as u32)
+}
+
 /// A work offset's word: G54 for the first.
 fn wcs_word(k: u32) -> String {
     if k < 6 {
@@ -193,8 +214,10 @@ fn wcs_word(k: u32) -> String {
 }
 
 fn time(s: f64) -> String {
+    // whole seconds (a 59.6 s rounds to 1:00, not 0:60)
+    let s = s.round();
     if s >= 60.0 {
-        format!("{}:{:02} min", (s / 60.0).floor(), (s % 60.0).round() as u32)
+        format!("{}:{:02} min", (s / 60.0).floor(), (s % 60.0) as u32)
     } else {
         format!("{} s", num(s))
     }
@@ -294,7 +317,14 @@ impl Shell {
                     let lathe = w.stmt(&su).is_some_and(|s| s.func == "lathe_setup");
                     let label = match w.run.as_ref().and_then(|r| r.setup(&su)) {
                         Some(_) if lathe => format!("{su}  ·  lathe"),
-                        Some(s) => format!("{su}  ·  {}", wcs_word(s.offset)),
+                        Some(s) => {
+                            let tsum: f64 = w.run.as_ref().map_or(0.0, |r| r.ops.iter().filter(|o| o.setup == su).map(|o| o.time_s).sum());
+                            if tsum > 0.0 {
+                                format!("{su}  ·  {}  ·  {}", wcs_word(s.offset), short_time(tsum))
+                            } else {
+                                format!("{su}  ·  {}", wcs_word(s.offset))
+                            }
+                        }
                         None => su.clone(),
                     };
                     let resp = tree_row(
@@ -486,6 +516,12 @@ impl Shell {
         if w.post_dlg.is_some() {
             blocks.extend(post_window(ctx, &t, v, &mut w, &mut places));
         }
+        if w.quality_open {
+            blocks.extend(quality_window(ctx, &t, v, &mut w, &mut places));
+        }
+        if w.programs_open {
+            blocks.extend(programs_window(ctx, &t, v, &mut w, &mut places));
+        }
         if w.tools_open {
             blocks.extend(tools_window(ctx, &t, v, &mut w, &mut places));
         }
@@ -669,6 +705,27 @@ fn details(
             };
             fact(ui, t, "Machine", &su.machine, width, t.ink);
             fact(ui, t, "Work offset", &wcs_word(su.offset), width, t.ink);
+            if let Some(r) = run {
+                let ops: Vec<&super::run::OpRes> = r.ops.iter().filter(|o| o.setup == id).collect();
+                let total: f64 = ops.iter().map(|o| o.time_s).sum();
+                heading(ui, t, &format!("Cycle time {}", time(total)), width);
+                for o in &ops {
+                    fact(
+                        ui,
+                        t,
+                        &format!("  {} · {}", o.name, o.kind),
+                        &time(o.time_s),
+                        width,
+                        t.ink2,
+                    );
+                }
+                note(
+                    ui,
+                    "Feeds and rapids at their programmed rates, tool changes not counted; the machine-timeline time comes with the quality measure.",
+                    width,
+                    t.ink2,
+                );
+            }
             fact(
                 ui,
                 t,
@@ -879,6 +936,9 @@ fn details(
             if o.pairs > 0 {
                 fact(ui, t, "Certified pairs", &o.pairs.to_string(), width, t.ink);
             }
+            if let Some(q) = run.and_then(|r| r.quality(id)) {
+                quality_facts(ui, t, q, width);
+            }
             for r in &o.removals {
                 note(ui, &format!("Declared removal: {r}"), width, t.ink2);
             }
@@ -908,6 +968,126 @@ fn details(
             }
         }
         _ => {}
+    }
+}
+
+/// A percentage of a share in [0, 1].
+fn pct(x: f64) -> String {
+    if x.is_finite() {
+        format!("{:.0}%", 100.0 * x)
+    } else {
+        "—".into()
+    }
+}
+
+/// An op's toolpath quality (forge-cam-quality): what its path is like to run.
+fn quality_facts(ui: &mut Ui, t: &Theme, q: &forge_cam_quality::OpQ, width: f32) {
+    heading(ui, t, "Toolpath quality", width);
+    let cut_air = q.t_cut + q.t_air;
+    if q.t_stop > 0.0 {
+        fact(ui, t, "Cycle (machine timeline)", &time(q.t_stop), width, t.ink);
+    }
+    if cut_air > 0.0 {
+        let air = q.t_air / cut_air;
+        fact(
+            ui,
+            t,
+            "Feed time · in air",
+            &format!("{} · {}", time(cut_air), pct(air)),
+            width,
+            if air > 0.3 { t.warn } else { t.ink },
+        );
+    }
+    fact(
+        ui,
+        t,
+        "Retracts · plunges · ramps",
+        &format!("{} · {} · {}", q.retracts, q.plunges, q.ramps),
+        width,
+        if q.plunges > 0 { t.warn } else { t.ink },
+    );
+    if q.side {
+        fact(
+            ui,
+            t,
+            "Engagement max · mean",
+            &format!("{}° · {}°", num(q.phi_max.round()), num(q.phi_mean.round())),
+            width,
+            if q.phi_max > 170.0 { t.warn } else { t.ink },
+        );
+        fact(
+            ui,
+            t,
+            "Climb · conv. · slotting",
+            &format!("{} · {} · {}", pct(q.climb), pct(q.conventional), pct(q.slotting)),
+            width,
+            if q.slotting > 0.05 { t.warn } else { t.ink },
+        );
+        fact(
+            ui,
+            t,
+            "Chip (thinned) mean · max",
+            &format!("{} · {} mm", num(q.hex_mean), num(q.hex_max)),
+            width,
+            t.ink,
+        );
+        fact(
+            ui,
+            t,
+            "Feed per tooth target",
+            &format!("{} mm", num(q.fz_target)),
+            width,
+            t.ink2,
+        );
+        fact(
+            ui,
+            t,
+            "Rubbing · overloaded",
+            &format!("{} · {}", pct(q.thin), pct(q.thick)),
+            width,
+            if q.thin > 0.1 || q.thick > 0.1 {
+                t.warn
+            } else {
+                t.ink
+            },
+        );
+    }
+    if q.mrr > 0.0 {
+        fact(
+            ui,
+            t,
+            "Material removal",
+            &format!("{} cm3/min", num(q.mrr / 1000.0)),
+            width,
+            t.ink,
+        );
+    }
+    if q.p_max > 0.0 {
+        let over = q.p_avail > 0.0 && q.p_max > q.p_avail;
+        let avail = if q.p_avail > 0.0 {
+            format!(" of {} kW", num(q.p_avail))
+        } else {
+            String::new()
+        };
+        fact(
+            ui,
+            t,
+            "Spindle power peak",
+            &format!("{} kW{avail}", num(q.p_max)),
+            width,
+            if over { t.error } else { t.ink },
+        );
+    }
+    if q.rapid_cuts > 0 {
+        note(
+            ui,
+            &format!(
+                "{} rapid move(s) meet material in the measure model",
+                q.rapid_cuts
+            ),
+            width,
+            t.warn,
+        );
     }
 }
 
@@ -1577,6 +1757,7 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
     let width = 620.0;
     let mut edits: Vec<super::doc::Edit> = vec![];
     let mut write: Option<(String, String)> = None;
+    let (mut post_it, mut export_it): (Option<String>, Option<String>) = (None, None);
     let r = egui::Window::new("cam-post")
         .id(egui::Id::unique("cam-post-window"))
         .title_bar(false)
@@ -1713,9 +1894,13 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
-                if !text.is_empty() && button(ui, t, "Write NC File", true, "cam:post:write".into(), places) {
-                    let p = w.dir.join(format!("{id}.nc"));
-                    write = Some((p.display().to_string(), text.clone()));
+                // posted as the NC Programs window posts it: named by the statement, refused
+                // when not certified in full unless allowed
+                if !text.is_empty() && button(ui, t, "Post", true, "cam:post:write".into(), places) {
+                    post_it = Some(id.clone());
+                }
+                if !text.is_empty() && button(ui, t, "Export…", false, "cam:post:export".into(), places) {
+                    export_it = Some(id.clone());
                 }
                 if button(ui, t, "Setup Sheet", false, "cam:post:sheet".into(), places)
                     && let Some(r) = &w.run
@@ -1731,6 +1916,12 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
     }
     if let Some(x) = write {
         w.want_write.push(x);
+    }
+    if let Some(n) = post_it {
+        w.post_programs(Some(&n));
+    }
+    if let Some(n) = export_it {
+        w.export_programs(Some(&n));
     }
     if close {
         w.post_dlg = None;
@@ -1801,6 +1992,30 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
                     }
                 }
             });
+            heading(ui, t, "Import a Fusion tool library", width);
+            let mut ip = w.import_path.clone();
+            let mut go = false;
+            row(ui, t, "JSON file", width, 30.0, |ui| {
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut ip)
+                        .font(sans(13.0))
+                        .hint_text("beside the document, e.g. shop.json")
+                        .desired_width(ui.available_width() - 80.0),
+                );
+                places.push(("cam:tools:import:path".into(), r.rect));
+                go = button(ui, t, "Import", true, "cam:tools:import".into(), places);
+            });
+            w.import_path = ip;
+            if go {
+                let f = w.import_path.clone();
+                w.said = Some(match w.import_fusion(&f) {
+                    Ok(m) => m,
+                    Err(e) => format!("import: {e}"),
+                });
+            }
+            if let Some(s) = &w.said {
+                note(ui, s, width, t.ink2);
+            }
             heading(ui, t, "Holders", width);
             for h in &w.lib.holders {
                 fact(ui, t, &h.id, &format!("{} · gauge {} mm · {} rpm", h.interface, num(h.gauge_length), num(h.max_rpm)), width, t.ink);
@@ -1967,6 +2182,444 @@ fn section_window(
         });
     if close {
         w.turnview.open = false;
+    }
+    r.map(|r| r.response.rect)
+}
+
+/// The NC programs, Fusion's NC Program manager: every program, the setups it posts, its
+/// dialect and number, what it made, its file (name, folder, extension, header) and whether that
+/// file is posted and current; Post (into the document's folder), Export… (the host's Save As),
+/// Re-post Stale, the setup sheet and tool list. Every setting is an argument of the program's
+/// statement, saved with the document (forge_cam_lang::export).
+fn programs_window(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    places: &mut Places,
+) -> Option<Rect> {
+    use super::nc::Posted;
+    let mut close = false;
+    let width = 620.0;
+    let mut edits: Vec<super::doc::Edit> = vec![];
+    let mut cmds: Vec<Cmd> = vec![];
+    let progs: Vec<super::doc::Stmt> = w
+        .stmts
+        .iter()
+        .filter(|s| s.role == super::doc::Role::Program)
+        .cloned()
+        .collect();
+    let setups: Vec<String> = w.setups().iter().map(|s| s.name.clone()).collect();
+    let lathe = w.turning();
+    let posted = w.posted();
+    let ops_changed = !w.stale.is_empty();
+    let mut field = w.prog_field.take();
+    let mut allow = w.allow_uncertified;
+    let r = egui::Window::new("cam-programs")
+        .id(egui::Id::unique("cam-programs-window"))
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
+        .fixed_size(vec2(width, 0.0))
+        .frame(frame(t))
+        .constrain_to(crate::shell::dialog_area(ctx))
+        .show_placed(ctx, places, |ui, places| {
+            close = head(ui, t, "cam_sheet", "NC Programs", width, places, "cam:programs");
+            if progs.is_empty() {
+                note(ui, "No program yet: a new setup comes with one, or add one below.", width, t.ink2);
+            }
+            for (k, p) in progs.iter().enumerate() {
+                program_row(ui, t, w, p, k, &setups, &posted, ops_changed, width, &mut field, &mut edits, &mut cmds, places);
+            }
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                let r = ui.checkbox(&mut allow, "Allow uncertified (their headers say what was not checked)");
+                places.push(("cam:programs:allow".into(), r.rect));
+            });
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                if !setups.is_empty() && button(ui, t, "New Program", false, "cam:programs:new".into(), places) {
+                    let n = super::doc::free_name(&w.stmts, &format!("prog{}", progs.len() + 1));
+                    let num = progs.len() + if lathe { 1 } else { 1001 };
+                    let (f, post) = if lathe { ("lathe_program", "fanuc-lathe") } else { ("program", "fanuc") };
+                    edits.push(super::doc::Edit::Add {
+                        before: None,
+                        text: format!("{n} = {f}({}, post: \"{post}\", number: {num})", setups[0]),
+                    });
+                }
+                let any = w.run.is_some() && !progs.is_empty();
+                if any && button(ui, t, "Post All", true, "cam:programs:write".into(), places) {
+                    cmds.push(Cmd::PostNc(None));
+                }
+                if posted.iter().any(|p| p.1 == Posted::Stale)
+                    && button(ui, t, "Re-post Stale", false, "cam:programs:repost".into(), places)
+                {
+                    cmds.push(Cmd::RepostStale);
+                }
+                if any && button(ui, t, "Export All…", false, "cam:programs:export".into(), places) {
+                    cmds.push(Cmd::ExportNc(None));
+                }
+                if w.run.is_some() && button(ui, t, "Setup Sheet & Tools…", false, "cam:programs:sheet".into(), places) {
+                    cmds.push(Cmd::ExportSheet);
+                }
+            });
+            if let Some(s) = &w.said {
+                note(ui, s, width, t.ink2);
+            }
+            note(
+                ui,
+                "Post writes a program's file beside the document (File, Folder, Ext.); Export… saves a copy where you choose (several in a folder, or a zip in the browser).",
+                width,
+                t.ink2,
+            );
+            ui.add_space(8.0);
+        });
+    w.prog_field = field;
+    w.allow_uncertified = allow;
+    if !edits.is_empty()
+        && let Err(e) = w.edits(&edits)
+    {
+        w.said = Some(e);
+    }
+    for c in cmds {
+        w.command(c);
+    }
+    if close {
+        w.programs_open = false;
+    }
+    r.map(|r| r.response.rect)
+}
+
+/// One program in the NC Programs window.
+#[allow(clippy::too_many_arguments)]
+fn program_row(
+    ui: &mut Ui,
+    t: &Theme,
+    w: &CamWs,
+    p: &super::doc::Stmt,
+    k: usize,
+    setups: &[String],
+    posted: &[super::nc::PostedRow],
+    ops_changed: bool,
+    width: f32,
+    field: &mut Option<(String, String)>,
+    edits: &mut Vec<super::doc::Edit>,
+    cmds: &mut Vec<Cmd>,
+    places: &mut Places,
+) {
+    use super::nc::Posted;
+    let res = w.run.as_ref().and_then(|r| r.programs.iter().find(|x| x.name == p.name)).cloned();
+    let state = posted.iter().find(|x| x.0 == p.name);
+    // the name, and its file's state as a painted mark
+    let (r, _) = ui.allocate_exact_size(vec2(width, 26.0), Sense::hover());
+    let ink = match state.map(|s| s.1) {
+        Some(Posted::Current) => t.success,
+        Some(Posted::Stale) => t.warn,
+        Some(Posted::Refused) => t.error,
+        _ => t.ink2,
+    };
+    ui.painter().circle_filled(pos2(r.left() + 19.0, r.center().y), 4.0, ink);
+    ui.painter().text(pos2(r.left() + 30.0, r.center().y), Align2::LEFT_CENTER, &p.name, medium(14.0), t.ink);
+    let words = match state {
+        Some((_, s, path)) if !path.is_empty() => format!("{path}: {}", s.words()),
+        Some((_, s, _)) => s.words().to_string(),
+        None => "not generated".into(),
+    };
+    ui.painter().text(pos2(r.right() - 14.0, r.center().y), Align2::RIGHT_CENTER, words, sans(12.0), ink);
+    places.push((format!("cam:programs:{}:state", p.name), r));
+    // its setups: a check each (the first positional argument: one name or a list)
+    let now = p.pos(0).unwrap_or("").to_string();
+    let had: Vec<String> = now
+        .trim_matches(|c| c == '[' || c == ']' || c == '(' || c == ')')
+        .split(',')
+        .map(|x| x.trim().to_string())
+        .filter(|x| !x.is_empty())
+        .collect();
+    let mut want = had.clone();
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new("Setups").font(sans(13.0)).color(t.ink2));
+        for su in setups {
+            let mut on = want.contains(su);
+            let r = ui.checkbox(&mut on, su.as_str());
+            places.push((format!("cam:programs:{}:{su}", p.name), r.rect));
+            if on && !want.contains(su) {
+                want.push(su.clone());
+            }
+            if !on {
+                want.retain(|x| x != su);
+            }
+        }
+    });
+    if want != had && !want.is_empty() {
+        let ordered: Vec<String> = setups.iter().filter(|s| want.contains(s)).cloned().collect();
+        let text = if ordered.len() == 1 { ordered[0].clone() } else { format!("[{}]", ordered.join(", ")) };
+        // a program reads its setups: below the last of them first
+        let at = |n: &str| w.stmts.iter().position(|x| x.name == n);
+        if ordered.iter().any(|su| at(su) > at(&p.name)) {
+            edits.push(super::doc::Edit::Move { id: p.name.clone(), before: None });
+        }
+        edits.push(super::doc::Edit::Set { id: p.name.clone(), arg: "#0".into(), text });
+    }
+    let line = format!(
+        "{} · O{} · {}",
+        p.arg_str("post").unwrap_or_else(|| "the machine's".into()),
+        p.arg("number").unwrap_or("?"),
+        match &res {
+            Some(r) if r.text.is_some() => format!("{} lines, certified {}", r.lines, r.certified),
+            Some(r) => format!("not released: {}", r.error.clone().unwrap_or_default()),
+            None => "not generated".into(),
+        }
+    );
+    note(ui, &line, width, if res.as_ref().is_some_and(|r| r.text.is_some()) { t.ink } else { t.warn });
+    if ops_changed && state.is_some_and(|s| s.1 == Posted::Current) {
+        note(ui, "Ops changed since the run: generate, then re-post.", width, t.warn);
+    }
+    // its file: name, folder, extension, header
+    let ext_default = forge_cam_lang::export::ext_of(&p.arg_str("post").unwrap_or_default()).to_string();
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        prog_field(ui, t, "File", 110.0, p, "file", &p.name, field, edits, places);
+        prog_field(ui, t, "Folder", 90.0, p, "out", "beside it", field, edits, places);
+        prog_field(ui, t, "Ext.", 44.0, p, "ext", &ext_default, field, edits, places);
+        prog_field(ui, t, "Comment", 140.0, p, "comment", "header line", field, edits, places);
+    });
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        let had = p.arg_str("tools").as_deref() == Some("list");
+        let mut on = had;
+        let r = ui.checkbox(&mut on, "Tool list in header");
+        places.push((format!("cam:programs:{}:tools", p.name), r.rect));
+        if on != had {
+            edits.push(if on {
+                super::doc::Edit::Set { id: p.name.clone(), arg: "tools".into(), text: "\"list\"".into() }
+            } else {
+                super::doc::Edit::Unset { id: p.name.clone(), arg: "tools".into() }
+            });
+        }
+        ui.add_space(12.0);
+        let ok = res.as_ref().is_some_and(|r| r.text.is_some());
+        if ok && button(ui, t, "Post", true, format!("cam:programs:{}:post", p.name), places) {
+            cmds.push(Cmd::PostNc(Some(p.name.clone())));
+        }
+        if ok && button(ui, t, "Export…", false, format!("cam:programs:{}:export", p.name), places) {
+            cmds.push(Cmd::ExportNc(Some(p.name.clone())));
+        }
+        if button(ui, t, "Post Process", false, format!("cam:programs:{}:open", p.name), places) {
+            cmds.push(Cmd::PostAt(k));
+        }
+    });
+    ui.add_space(6.0);
+}
+
+/// A program's export setting `arg` as a short field: the statement's value, written when the
+/// field is left (empty: the default, the argument taken out).
+#[allow(clippy::too_many_arguments)]
+fn prog_field(
+    ui: &mut Ui,
+    t: &Theme,
+    label: &str,
+    wide: f32,
+    p: &super::doc::Stmt,
+    arg: &str,
+    hint: &str,
+    field: &mut Option<(String, String)>,
+    edits: &mut Vec<super::doc::Edit>,
+    places: &mut Places,
+) {
+    let key = format!("cam:programs:{}:{arg}", p.name);
+    let now = p.arg_str(arg).unwrap_or_default();
+    let mut v = match field {
+        Some((k, b)) if *k == key => b.clone(),
+        _ => now.clone(),
+    };
+    ui.add_space(6.0);
+    ui.label(egui::RichText::new(label).font(sans(12.0)).color(t.ink2));
+    let r = ui.add(
+        egui::TextEdit::singleline(&mut v)
+            .font(sans(12.0))
+            .hint_text(hint)
+            .desired_width(wide)
+            .margin(vec2(5.0, 3.0)),
+    );
+    places.push((key.clone(), r.rect));
+    if r.changed() {
+        *field = Some((key.clone(), v.clone()));
+    }
+    if r.lost_focus() && field.as_ref().is_some_and(|f| f.0 == key) {
+        *field = None;
+        let v = v.trim().replace(['"', '\\'], "");
+        if v != now {
+            edits.push(if v.is_empty() {
+                super::doc::Edit::Unset { id: p.name.clone(), arg: arg.into() }
+            } else {
+                super::doc::Edit::Set { id: p.name.clone(), arg: arg.into(), text: format!("\"{v}\"") }
+            });
+        }
+    }
+}
+
+/// Every op's toolpath quality in one table, each setup's totals, and the programs' time on the
+/// machine's timeline (forge-cam-quality).
+fn quality_window(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    places: &mut Places,
+) -> Option<Rect> {
+    let mut close = false;
+    let width = 720.0;
+    let mut select: Option<String> = None;
+    let mut colour = w.focus.colour_by;
+    let r = egui::Window::new("cam-quality")
+        .id(egui::Id::unique("cam-quality-window"))
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
+        .fixed_size(vec2(width, 0.0))
+        .frame(frame(t))
+        .constrain_to(crate::shell::dialog_area(ctx))
+        .show_placed(ctx, places, |ui, places| {
+            close = head(ui, t, "cam_check", "Toolpath Quality", width, places, "cam:quality");
+            // the toolpath's colouring in the view (the simulation view draws it)
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label(egui::RichText::new("Colour toolpath by").font(sans(13.0)).color(t.ink2));
+                use super::ColourBy;
+                for (label, c, key) in [
+                    ("Op", None, "op"),
+                    ("Chip load", Some(ColourBy::ChipLoad), "chip"),
+                    ("Engagement", Some(ColourBy::Engagement), "engagement"),
+                ] {
+                    let r = ui.selectable_label(colour == c, label);
+                    places.push((format!("cam:quality:colour:{key}"), r.rect));
+                    if r.clicked() {
+                        colour = c;
+                    }
+                }
+            });
+            let Some(run) = &w.run else { return };
+            let Some(job) = &run.quality else {
+                note(ui, "Not measured (turning runs are not yet).", width, t.ink2);
+                return;
+            };
+            let cols: [(&str, f32); 10] = [
+                ("op", 110.0),
+                ("feed time", 70.0),
+                ("air", 50.0),
+                ("plunges", 56.0),
+                ("eng. max", 60.0),
+                ("slot", 48.0),
+                ("chip mean", 70.0),
+                ("rub / over", 80.0),
+                ("MRR cm3/min", 86.0),
+                ("kW", 50.0),
+            ];
+            let header = |ui: &mut Ui| {
+                let (r, _) = ui.allocate_exact_size(vec2(width, 22.0), Sense::hover());
+                let mut x = r.left() + 14.0;
+                for (c, wd) in cols {
+                    ui.painter().text(pos2(x, r.center().y), Align2::LEFT_CENTER, c, sans(11.0), t.ink2);
+                    x += wd;
+                }
+            };
+            for su in w.setups() {
+                let ops: Vec<&forge_cam_quality::OpQ> = job
+                    .ops
+                    .iter()
+                    .filter(|q| run.op(&q.name).is_some_and(|o| o.setup == su.name))
+                    .collect();
+                if ops.is_empty() {
+                    continue;
+                }
+                let feed: f64 = ops.iter().map(|q| q.t_cut + q.t_air).sum();
+                let air: f64 = ops.iter().map(|q| q.t_air).sum();
+                heading(
+                    ui,
+                    t,
+                    &format!("{} · feed time {} · {} in air", su.name, time(feed), if feed > 0.0 { pct(air / feed) } else { "—".into() }),
+                    width,
+                );
+                header(ui);
+                for q in ops {
+                    let (r, resp) = ui.allocate_exact_size(vec2(width, 22.0), Sense::click());
+                    if resp.hovered() {
+                        ui.painter().rect_filled(r, 0.0, t.hover);
+                    }
+                    if resp.clicked() {
+                        select = Some(q.name.clone());
+                    }
+                    places.push((format!("cam:quality:row:{}", q.name), r));
+                    let side = |s: String| if q.side { s } else { "—".into() };
+                    let cells = [
+                        q.name.clone(),
+                        time(q.t_cut + q.t_air),
+                        if q.t_cut + q.t_air > 0.0 { pct(q.t_air / (q.t_cut + q.t_air)) } else { "—".into() },
+                        q.plunges.to_string(),
+                        side(format!("{}°", num(q.phi_max.round()))),
+                        side(pct(q.slotting)),
+                        side(num(q.hex_mean)),
+                        side(format!("{} / {}", pct(q.thin), pct(q.thick))),
+                        if q.mrr > 0.0 { num((q.mrr / 1000.0 * 10.0).round() / 10.0) } else { "—".into() },
+                        if q.p_max > 0.0 { num((q.p_max * 100.0).round() / 100.0) } else { "—".into() },
+                    ];
+                    let warn = [
+                        false,
+                        false,
+                        q.t_cut + q.t_air > 0.0 && q.t_air / (q.t_cut + q.t_air) > 0.3,
+                        q.plunges > 0,
+                        q.side && q.phi_max > 170.0,
+                        q.side && q.slotting > 0.05,
+                        false,
+                        q.side && (q.thin > 0.1 || q.thick > 0.1),
+                        false,
+                        q.p_avail > 0.0 && q.p_max > q.p_avail,
+                    ];
+                    let mut x = r.left() + 14.0;
+                    for ((c, (_, wd)), wn) in cells.iter().zip(cols).zip(warn) {
+                        ui.painter().text(pos2(x, r.center().y), Align2::LEFT_CENTER, c, mono(11.0), if wn { t.warn } else { t.ink });
+                        x += wd;
+                    }
+                }
+            }
+            if !job.progs.is_empty() {
+                heading(ui, t, "Programs on the machine's timeline", width);
+                for p in &job.progs {
+                    let words = match &p.error {
+                        Some(e) => format!("not timed: {e}"),
+                        None => format!(
+                            "{} with stops ({} at least) · {} tool changes{}",
+                            time(p.t_stop),
+                            time(p.t_min),
+                            p.tool_changes,
+                            if p.accel_missing { " · the machine gives no accelerations" } else { "" }
+                        ),
+                    };
+                    fact(ui, t, &format!("{} on {}", p.name, p.machine), &words, width, if p.error.is_some() { t.warn } else { t.ink });
+                }
+            }
+            note(
+                ui,
+                &format!(
+                    "Measured on a height map of {} mm cells (forge-cam-quality): rubbing is a chip under half the feed per tooth, overloaded over 1.25 times it. Amber: worth a look.",
+                    num(job.cell)
+                ),
+                width,
+                t.ink2,
+            );
+            ui.add_space(8.0);
+        });
+    if let Some(op) = select {
+        w.command(Cmd::Select(op));
+    }
+    w.focus.colour_by = colour;
+    if close {
+        w.quality_open = false;
     }
     r.map(|r| r.response.rect)
 }

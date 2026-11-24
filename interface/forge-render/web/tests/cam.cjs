@@ -161,6 +161,35 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     );
     await shot(p, "cam-20-turning.png");
     console.log("ok - a turning document: every op certified, as natively");
+
+    // NC export: Post writes the program into the project beside the document; Export… is the
+    // page's save (here a download: the save picker needs the user's own click)
+    await p.evaluate(() => (window.FORGE_DOWNLOAD_ONLY = true));
+    const read = (f) =>
+      p.evaluate((x) => {
+        const b = window.forgecad.fc.fs_read(x);
+        return b ? new TextDecoder().decode(b) : null;
+      }, f);
+    const ncPath = doc.replace("flange_cam.fg", "prog.nc");
+    await cam("programs");
+    st = await t.until(p, (s) => s.cam.posted.length === 1, "the program's state");
+    assert.deepEqual(st.cam.posted[0], { name: "prog", state: "no", path: "prog.nc" });
+    await cam("post-nc prog");
+    st = await t.until(p, (s) => s.cam.posted[0]?.state === "current", "posted and current");
+    const posted = await read(ncPath);
+    assert.ok(posted && posted.split("\n").length > 50, `${posted}`);
+    await shot(p, "cam-21-nc-programs.png");
+    const [dl] = await Promise.all([p.waitForEvent("download", { timeout: 30000 }), cam("export prog")]);
+    assert.equal(dl.suggestedFilename(), "prog.nc");
+    const got = fs.readFileSync(await dl.path(), "utf8");
+    assert.equal(got, posted, "the download is the posted program");
+    // several files: one zip (the setup sheet and the tool list)
+    const [z] = await Promise.all([p.waitForEvent("download", { timeout: 30000 }), cam("export-sheet")]);
+    assert.equal(z.suggestedFilename(), "shaft_turn-sheet.zip");
+    const zb = fs.readFileSync(await z.path());
+    assert.equal(zb.readUInt32LE(0), 0x04034b50, "a zip");
+    assert.ok(zb.includes(Buffer.from("shaft_turn-tools.txt")), "the tool list in it");
+    console.log("ok - NC export: posted into the project, exported as a download, several as a zip");
     t.check(p);
   } finally {
     await b.close();

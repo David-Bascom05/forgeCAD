@@ -59,6 +59,10 @@ forge-vendor = { path = "../../kernel/forge-vendor" }
 forge-step = { path = "../../kernel/forge-step" }
 # the Manufacture workspace: the machining document's run (forgecad.cam/1), its libraries and posts
 forge-cam-lang = { path = "../forge-cam-lang" }
+# a Fusion tool library brought into the project's cam/*.toml
+forge-cam-import = { path = "../forge-cam-import" }
+# toolpath quality per op (cycle time on the machine, engagement, chip load, air cutting)
+forge-cam-quality = { path = "../../verify/forge-cam-quality" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
 forge-post = { path = "../../kernel/forge-post" }
 forge-cam = { path = "../../kernel/forge-cam" }

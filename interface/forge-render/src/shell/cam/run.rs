@@ -140,6 +140,9 @@ pub struct Run {
     pub turn: Option<forge_turn_lang::TurnCam>,
     /// "milling" or "turning".
     pub process: &'static str,
+    /// The toolpaths' quality (forge-cam-quality: cycle time on the machine, engagement, chip,
+    /// air cutting), measured on the run; milling only for now.
+    pub quality: Option<forge_cam_quality::JobQ>,
 }
 
 fn s(j: &Json, k: &str) -> String {
@@ -307,6 +310,11 @@ pub fn run(text: &str, dir: &Path) -> Run {
         leftover_done: matches!(lo.and_then(|l| l.get("computed")), Some(Json::Bool(true))),
         json,
         sheet: cam.sheet(),
+        quality: Some(forge_cam_quality::measure_cam(
+            &cam,
+            String::new(),
+            &forge_cam_quality::Config::default(),
+        )),
         cam: Some(cam),
         turn: None,
         process: "milling",
@@ -478,6 +486,7 @@ fn run_turning(text: &str, dir: &Path) -> Run {
         cam: None,
         turn: Some(tc),
         process: "turning",
+        quality: None,
     }
 }
 
@@ -522,7 +531,9 @@ fn turning_sheet(text: &str, tc: &forge_turn_lang::TurnCam) -> String {
 pub fn recheck(mut r: Run) -> Run {
     let Some(cam) = &r.cam else { return r };
     for oc in cam.check(None) {
-        let Some(o) = r.ops.iter_mut().find(|o| o.name == oc.op) else { continue };
+        let Some(o) = r.ops.iter_mut().find(|o| o.name == oc.op) else {
+            continue;
+        };
         o.checks = oc
             .checks
             .iter()
@@ -548,6 +559,11 @@ pub fn recheck(mut r: Run) -> Run {
 }
 
 impl Run {
+    /// An op's quality, if measured.
+    pub fn quality(&self, op: &str) -> Option<&forge_cam_quality::OpQ> {
+        self.quality.as_ref()?.ops.iter().find(|q| q.name == op)
+    }
+
     pub fn op(&self, name: &str) -> Option<&OpRes> {
         self.ops.iter().find(|o| o.name == name)
     }
@@ -693,7 +709,16 @@ mod tests {
     fn check_now_checks_the_posted_paths_again() {
         let (text, dir) = flange();
         let r = recheck(run(&text, &dir));
-        assert!(r.ops.iter().all(|o| o.status == "built" && o.assurance == Assurance::CheckedOnDemand), "{:?}", r.ops.iter().map(|o| (&o.name, &o.status, o.assurance)).collect::<Vec<_>>());
+        assert!(
+            r.ops
+                .iter()
+                .all(|o| o.status == "built" && o.assurance == Assurance::CheckedOnDemand),
+            "{:?}",
+            r.ops
+                .iter()
+                .map(|o| (&o.name, &o.status, o.assurance))
+                .collect::<Vec<_>>()
+        );
         assert!(r.ops.iter().all(|o| o.pairs > 0 || o.kind == "drill"));
     }
 
