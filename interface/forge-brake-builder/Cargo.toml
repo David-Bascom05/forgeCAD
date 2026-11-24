@@ -1,0 +1,15 @@
+[package]
+name = "forge-brake-builder"
+description = "Press-brake punches, dies and presses (forge-brake's library) as forge-library kinds: the library builder's forms, checks and previews"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-brake = { path = "../../kernel/forge-brake" }
+forge-library = { path = "../forge-library" }
+forge-vendor = { path = "../../kernel/forge-vendor" }
+
+[lints]
+workspace = true

@@ -1,0 +1,27 @@
+# Model files committed only when ours or licensed to be here (tools/ci/model-licences.py): a
+# maker's model needs a MODEL-LICENCE.toml beside it quoting terms that permit redistribution;
+# without one it stays the user's own file, attached in the Machine Builder and kept in their
+# library. Every push and pull request: one git ls-files and a few small reads.
+name: model-licences
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: every model file ours or licensed
+        run: python3 tools/ci/model-licences.py .

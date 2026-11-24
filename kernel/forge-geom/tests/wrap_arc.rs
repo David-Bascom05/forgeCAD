@@ -130,7 +130,7 @@ fn parabola() -> Flat {
     )
     .expect("a frame");
     Flat::Parabola {
-        curve: Parabola { frame, focal: 0.5 },
+        curve: Parabola::new(frame, 0.5),
         range: Interval::new(-3.0, 3.0),
     }
 }
@@ -271,12 +271,12 @@ fn random_flat(r: &mut Rng) -> Flat {
         1 => {
             let lo = r.range(-2.0, 0.0);
             Flat::Parabola {
-                curve: Parabola {
-                    frame: Frame::WORLD
+                curve: Parabola::new(
+                    Frame::WORLD
                         .rotated_about_z(r.range(0.0, 6.0))
                         .with_origin(Point3::new(r.range(-1.0, 1.0), r.range(-1.0, 1.0), 0.0)),
-                    focal: r.range(0.3, 3.0),
-                },
+                    r.range(0.3, 3.0),
+                ),
                 range: Interval::new(lo, lo + r.range(1.0, 3.0)),
             }
         }

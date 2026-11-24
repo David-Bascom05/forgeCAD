@@ -934,15 +934,104 @@ impl crate::topo_euler::EulerSink for Vec<Problem> {
 /// Round each vertex, coedge to coedge: from one leaving it, back along its loop to the one
 /// arriving, then across to that one's partner, which leaves it again. One cycle is one fan.
 fn check_fans(body: &Body, out: &mut Vec<Problem>) {
-    let mut prev = Vec::new();
-    for (v, cs) in body.leaving().iter().enumerate() {
-        let fans = body.fans(cs, &mut prev);
-        if fans.len() > 1 {
-            out.push(Problem::VertexFans {
-                vertex: VertexId(v as u32),
-                fans: fans.len(),
-            });
-        }
+    crate::topo_fans::fans(&FanView { view: View::of(body), body }, out);
+}
+
+impl crate::topo_fans::FanSink for Vec<Problem> {
+    #[inline]
+    fn vertex_fans(&mut self, v: usize, n: usize) {
+        self.push(Problem::VertexFans { vertex: VertexId(v as u32), fans: n });
+    }
+}
+
+/// What `topo_fans`'s test reads: `View`, and the body for the corners (geometry).
+pub struct FanView<'a> {
+    view: View<'a>,
+    body: &'a Body,
+}
+
+impl crate::topo::Topo for FanView<'_> {
+    #[inline]
+    fn n_vertices(&self) -> usize {
+        self.view.n_vertices()
+    }
+    #[inline]
+    fn n_edges(&self) -> usize {
+        self.view.n_edges()
+    }
+    #[inline]
+    fn edge_alive(&self, e: usize) -> bool {
+        self.view.edge_alive(e)
+    }
+    #[inline]
+    fn edge_ends(&self, e: usize) -> (usize, usize) {
+        self.view.edge_ends(e)
+    }
+    #[inline]
+    fn edge_n_uses(&self, e: usize) -> usize {
+        self.view.edge_n_uses(e)
+    }
+    #[inline]
+    fn edge_use(&self, e: usize, i: usize) -> usize {
+        self.view.edge_use(e, i)
+    }
+    #[inline]
+    fn n_coedges(&self) -> usize {
+        self.view.n_coedges()
+    }
+    #[inline]
+    fn coedge_edge(&self, c: usize) -> usize {
+        self.view.coedge_edge(c)
+    }
+    #[inline]
+    fn coedge_loop(&self, c: usize) -> usize {
+        self.view.coedge_loop(c)
+    }
+    #[inline]
+    fn n_loops(&self) -> usize {
+        self.view.n_loops()
+    }
+    #[inline]
+    fn loop_first(&self, l: usize) -> usize {
+        self.view.loop_first(l)
+    }
+    #[inline]
+    fn loop_len(&self, l: usize) -> usize {
+        self.view.loop_len(l)
+    }
+    #[inline]
+    fn loop_face(&self, l: usize) -> usize {
+        self.view.loop_face(l)
+    }
+    #[inline]
+    fn n_faces(&self) -> usize {
+        self.view.n_faces()
+    }
+    #[inline]
+    fn face_alive(&self, f: usize) -> bool {
+        self.view.face_alive(f)
+    }
+    #[inline]
+    fn face_n_loops(&self, f: usize) -> usize {
+        self.view.face_n_loops(f)
+    }
+    #[inline]
+    fn face_loop(&self, f: usize, i: usize) -> usize {
+        self.view.face_loop(f, i)
+    }
+}
+
+impl crate::topo_fans::FanTopo for FanView<'_> {
+    #[inline]
+    fn coedge_forward(&self, c: usize) -> bool {
+        crate::topo_edges::EdgeTopo::coedge_forward(&self.view, c)
+    }
+    fn corners(&self, f: usize, v: usize) -> Vec<(usize, usize)> {
+        self.body
+            .corners(FaceId(f as u32), VertexId(v as u32))
+            .into_iter()
+            .map(|(a, b)| (a.index(), b.index()))
+            .collect()
     }
 }
 

@@ -1,0 +1,4510 @@
+{
+ "vendor": "Schunk",
+ "blocked": [],
+ "records": [
+  {
+   "kind": "holder",
+   "id": "1388977",
+   "name": "ER CAT 40 | ASME B5.50 ER collet chucks ER 16 L1=63.5",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 869 = printed page 869)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "ER CAT 40 | ASME B5.50 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "ER ER 16"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "L1 = 63.5"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 28"
+    },
+    "body_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 28"
+    },
+    "nut_length": {
+     "v": 17.5,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 17.5"
+    },
+    "L5": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 44.45"
+    },
+    "clamp_range": {
+     "v": "1-10 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 1 - 10 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 28.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 46.0,
+     "d": 28.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 46.0,
+     "d": 28.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 63.5,
+     "d": 28.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1388990",
+   "name": "ER CAT 40 | ASME B5.50 ER collet chucks ER 20 L1=63.5",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 869 = printed page 869)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "ER CAT 40 | ASME B5.50 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER ER 20"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "L1 = 63.5"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 34"
+    },
+    "body_d": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 34"
+    },
+    "nut_length": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 19"
+    },
+    "L5": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 44.45"
+    },
+    "clamp_range": {
+     "v": "1-13 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 1 - 13 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 34.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 44.5,
+     "d": 34.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 44.5,
+     "d": 34.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 63.5,
+     "d": 34.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1388992",
+   "name": "ER CAT 40 | ASME B5.50 ER collet chucks ER 25 L1=63.5",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 869 = printed page 869)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "ER CAT 40 | ASME B5.50 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "ER ER 25"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "L1 = 63.5"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 42"
+    },
+    "body_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 42"
+    },
+    "nut_length": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 20"
+    },
+    "L5": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 44.45"
+    },
+    "clamp_range": {
+     "v": "1-16 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 1 - 16 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 42.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 43.5,
+     "d": 42.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 43.5,
+     "d": 42.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 63.5,
+     "d": 42.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1388994",
+   "name": "ER CAT 40 | ASME B5.50 ER collet chucks ER 32 L1=63.5",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 869 = printed page 869)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "ER CAT 40 | ASME B5.50 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER ER 32"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "L1 = 63.5"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 50"
+    },
+    "body_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 50"
+    },
+    "nut_length": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 23"
+    },
+    "L5": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 44.45"
+    },
+    "clamp_range": {
+     "v": "2-20 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 2 - 20 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 50.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 40.5,
+     "d": 50.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 40.5,
+     "d": 50.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 63.5,
+     "d": 50.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1389047",
+   "name": "ER CAT 40 | ASME B5.50 ER collet chucks ER 11 L1=101.6",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 869 = printed page 869)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "ER CAT 40 | ASME B5.50 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER11",
+     "unit": "text",
+     "stated": "ER ER 11"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "L1 = 101.6"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 19"
+    },
+    "body_d": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 19"
+    },
+    "nut_length": {
+     "v": 11.3,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 11.3"
+    },
+    "L5": {
+     "v": 82.55,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 82.55"
+    },
+    "clamp_range": {
+     "v": "1-7 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 1 - 7 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 19.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 90.3,
+     "d": 19.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 90.3,
+     "d": 19.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 101.6,
+     "d": 19.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1389018",
+   "name": "ER CAT 40 | ASME B5.50 ER collet chucks ER 16 L1=101.6",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 869 = printed page 869)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "ER CAT 40 | ASME B5.50 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "ER ER 16"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "L1 = 101.6"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 28"
+    },
+    "body_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 28"
+    },
+    "nut_length": {
+     "v": 17.5,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 17.5"
+    },
+    "L5": {
+     "v": 82.55,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 82.55"
+    },
+    "clamp_range": {
+     "v": "1-10 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 1 - 10 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 28.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 84.1,
+     "d": 28.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 84.1,
+     "d": 28.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 101.6,
+     "d": 28.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1389021",
+   "name": "ER CAT 40 | ASME B5.50 ER collet chucks ER 32 L1=101.6",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 869 = printed page 869)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "ER CAT 40 | ASME B5.50 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER ER 32"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "L1 = 101.6"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 50"
+    },
+    "body_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 50"
+    },
+    "nut_length": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 23"
+    },
+    "L5": {
+     "v": 82.55,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 82.55"
+    },
+    "clamp_range": {
+     "v": "2-20 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 2 - 20 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 50.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 78.6,
+     "d": 50.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 78.6,
+     "d": 50.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 101.6,
+     "d": 50.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1342369",
+   "name": "ER P CAT 40 | ASME B5.50 ER precision collet chucks ER 32 L1=63.5",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 870 = printed page 870)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "ER P CAT 40 | ASME B5.50 ER precision collet chucks"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER ER 32"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "L1 = 63.5"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 52.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 52"
+    },
+    "body_d": {
+     "v": 52.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 52"
+    },
+    "nut_length": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 26"
+    },
+    "L5": {
+     "v": 44.4,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 44.4"
+    },
+    "clamp_range": {
+     "v": "2-20 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 2 - 20 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.1,
+     "d": 52.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 37.5,
+     "d": 52.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 37.5,
+     "d": 52.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 63.5,
+     "d": 52.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "26002041",
+   "name": "CELSIO CAT 40 | ASME B5.50 heat shrinking toolholder D1=12 L1=80",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 868 = printed page 868)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CELSIO CAT 40 | ASME B5.50 heat shrinking toolholder"
+    },
+    "clamp": {
+     "v": "shrink 12 mm",
+     "unit": "text",
+     "stated": "D1 = 12"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L1 = 80"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "D1 = 12mm"
+    },
+    "nose_d": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 24"
+    },
+    "body_d": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 32"
+    },
+    "L4": {
+     "v": 61.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 61"
+    },
+    "L2": {
+     "v": 47.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 47"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.0,
+     "d": 32.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 80.0,
+     "d": 24.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "26002045",
+   "name": "CELSIO CAT 40 | ASME B5.50 heat shrinking toolholder D1=16 L1=80",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 868 = printed page 868)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CELSIO CAT 40 | ASME B5.50 heat shrinking toolholder"
+    },
+    "clamp": {
+     "v": "shrink 16 mm",
+     "unit": "text",
+     "stated": "D1 = 16"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L1 = 80"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "D1 = 16mm"
+    },
+    "nose_d": {
+     "v": 27.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 27"
+    },
+    "body_d": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 34"
+    },
+    "L4": {
+     "v": 61.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 61"
+    },
+    "L2": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 50"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.0,
+     "d": 34.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 80.0,
+     "d": 27.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "26002555",
+   "name": "CELSIO CAT 40 | ASME B5.50 heat shrinking toolholder D1=20 L1=80",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 868 = printed page 868)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CELSIO CAT 40 | ASME B5.50 heat shrinking toolholder"
+    },
+    "clamp": {
+     "v": "shrink 20 mm",
+     "unit": "text",
+     "stated": "D1 = 20"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L1 = 80"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "D1 = 20mm"
+    },
+    "nose_d": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 33"
+    },
+    "body_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 42"
+    },
+    "L4": {
+     "v": 61.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 61"
+    },
+    "L2": {
+     "v": 52.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 52"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.0,
+     "d": 42.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 80.0,
+     "d": 33.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1485910",
+   "name": "CELSIO CAT 40 | ASME B5.50 heat shrinking toolholder D1=1/2\" L1=80",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 868 = printed page 868)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CELSIO CAT 40 | ASME B5.50 heat shrinking toolholder"
+    },
+    "clamp": {
+     "v": "shrink 1/2\"",
+     "unit": "text",
+     "stated": "D1 = 1/2\""
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L1 = 80"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "D1 = 1/2\""
+    },
+    "nose_d": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 24"
+    },
+    "body_d": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 32"
+    },
+    "L4": {
+     "v": 61.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 61"
+    },
+    "L2": {
+     "v": 47.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 47"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.0,
+     "d": 32.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 80.0,
+     "d": 24.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1485917",
+   "name": "CELSIO CAT 40 | ASME B5.50 heat shrinking toolholder D1=3/4\" L1=80",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 868 = printed page 868)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "CELSIO CAT 40 | ASME B5.50 heat shrinking toolholder"
+    },
+    "clamp": {
+     "v": "shrink 3/4\"",
+     "unit": "text",
+     "stated": "D1 = 3/4\""
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L1 = 80"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "D1 = 3/4\""
+    },
+    "nose_d": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 33"
+    },
+    "body_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 42"
+    },
+    "L4": {
+     "v": 61.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 61"
+    },
+    "L2": {
+     "v": 52.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 52"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.0,
+     "d": 42.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 80.0,
+     "d": 33.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1479973",
+   "name": "TENDO Silver CAT 40 | ASME B5.50 hydraulic expansion toolholder D1=6 L1=63.5",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 859 = printed page 859)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "TENDO Silver CAT 40 | ASME B5.50 hydraulic expansion toolholder"
+    },
+    "clamp": {
+     "v": "hydraulic 6 mm",
+     "unit": "text",
+     "stated": "D1 = 6"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "L1 = 63.5"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "D1 = 6mm"
+    },
+    "nose_d": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "D6 (nose tip diameter) = 23"
+    },
+    "sleeve_d": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "D2 (clamping sleeve diameter) = 26"
+    },
+    "body_d": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "D3 (body diameter behind the sleeve) = 44.45"
+    },
+    "L4": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "L4 (length of the D2 sleeve section to nose) = 24"
+    },
+    "L5": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 44.45"
+    },
+    "L2": {
+     "v": 37.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 37"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 44.45,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 39.5,
+     "d": 44.45,
+     "stated": "D3 to L1 - L4"
+    },
+    {
+     "z": 39.5,
+     "d": 26.0,
+     "stated": "D2 sleeve from L1 - L4"
+    },
+    {
+     "z": 63.5,
+     "d": 23.0,
+     "stated": "D6 at nose (D2-to-D6 transition position not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position where D2 reduces to D6"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1479978",
+   "name": "TENDO Silver CAT 40 | ASME B5.50 hydraulic expansion toolholder D1=12 L1=63.5",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 859 = printed page 859)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "TENDO Silver CAT 40 | ASME B5.50 hydraulic expansion toolholder"
+    },
+    "clamp": {
+     "v": "hydraulic 12 mm",
+     "unit": "text",
+     "stated": "D1 = 12"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "L1 = 63.5"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "D1 = 12mm"
+    },
+    "nose_d": {
+     "v": 28.9,
+     "unit": "mm",
+     "stated": "D6 (nose tip diameter) = 28.9"
+    },
+    "sleeve_d": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D2 (clamping sleeve diameter) = 32"
+    },
+    "body_d": {
+     "v": 49.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter behind the sleeve) = 49"
+    },
+    "L4": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "L4 (length of the D2 sleeve section to nose) = 26"
+    },
+    "L5": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 44.45"
+    },
+    "L2": {
+     "v": 46.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 46"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 49.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 37.5,
+     "d": 49.0,
+     "stated": "D3 to L1 - L4"
+    },
+    {
+     "z": 37.5,
+     "d": 32.0,
+     "stated": "D2 sleeve from L1 - L4"
+    },
+    {
+     "z": 63.5,
+     "d": 28.9,
+     "stated": "D6 at nose (D2-to-D6 transition position not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position where D2 reduces to D6"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1479980",
+   "name": "TENDO Silver CAT 40 | ASME B5.50 hydraulic expansion toolholder D1=16 L1=63.5",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 859 = printed page 859)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "TENDO Silver CAT 40 | ASME B5.50 hydraulic expansion toolholder"
+    },
+    "clamp": {
+     "v": "hydraulic 16 mm",
+     "unit": "text",
+     "stated": "D1 = 16"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "L1 = 63.5"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "D1 = 16mm"
+    },
+    "nose_d": {
+     "v": 34.9,
+     "unit": "mm",
+     "stated": "D6 (nose tip diameter) = 34.9"
+    },
+    "sleeve_d": {
+     "v": 38.0,
+     "unit": "mm",
+     "stated": "D2 (clamping sleeve diameter) = 38"
+    },
+    "body_d": {
+     "v": 49.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter behind the sleeve) = 49"
+    },
+    "L4": {
+     "v": 27.0,
+     "unit": "mm",
+     "stated": "L4 (length of the D2 sleeve section to nose) = 27"
+    },
+    "L5": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 44.45"
+    },
+    "L2": {
+     "v": 49.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 49"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 49.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 36.5,
+     "d": 49.0,
+     "stated": "D3 to L1 - L4"
+    },
+    {
+     "z": 36.5,
+     "d": 38.0,
+     "stated": "D2 sleeve from L1 - L4"
+    },
+    {
+     "z": 63.5,
+     "d": 34.9,
+     "stated": "D6 at nose (D2-to-D6 transition position not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position where D2 reduces to D6"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1436818",
+   "name": "TENDO Silver CAT 40 | ASME B5.50 hydraulic expansion toolholder D1=1/2\" L1=63.5",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 859 = printed page 859)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "TENDO Silver CAT 40 | ASME B5.50 hydraulic expansion toolholder"
+    },
+    "clamp": {
+     "v": "hydraulic 1/2\"",
+     "unit": "text",
+     "stated": "D1 = 1/2\""
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "L1 = 63.5"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "D1 = 1/2\""
+    },
+    "nose_d": {
+     "v": 29.55,
+     "unit": "mm",
+     "stated": "D6 (nose tip diameter) = 29.55"
+    },
+    "sleeve_d": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D2 (clamping sleeve diameter) = 32"
+    },
+    "body_d": {
+     "v": 49.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter behind the sleeve) = 49"
+    },
+    "L4": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "L4 (length of the D2 sleeve section to nose) = 24"
+    },
+    "L5": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 44.45"
+    },
+    "L2": {
+     "v": 46.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 46"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 49.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 39.5,
+     "d": 49.0,
+     "stated": "D3 to L1 - L4"
+    },
+    {
+     "z": 39.5,
+     "d": 32.0,
+     "stated": "D2 sleeve from L1 - L4"
+    },
+    {
+     "z": 63.5,
+     "d": 29.55,
+     "stated": "D6 at nose (D2-to-D6 transition position not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position where D2 reduces to D6"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1414694",
+   "name": "TENDO Slim 4ax CAT 40 | ASME B5.50 hydraulic expansion toolholder D1=12 L1=80",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 860 = printed page 860)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "TENDO Slim 4ax CAT 40 | ASME B5.50 hydraulic expansion toolholder"
+    },
+    "clamp": {
+     "v": "hydraulic 12 mm",
+     "unit": "text",
+     "stated": "D1 = 12"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L1 = 80"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "D1 = 12mm"
+    },
+    "nose_d": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 24"
+    },
+    "body_d": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 32"
+    },
+    "L4": {
+     "v": 60.95,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 60.95"
+    },
+    "L2": {
+     "v": 47.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 47"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 32.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 80.0,
+     "d": 24.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1414697",
+   "name": "TENDO Slim 4ax CAT 40 | ASME B5.50 hydraulic expansion toolholder D1=20 L1=80",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 860 = printed page 860)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "TENDO Slim 4ax CAT 40 | ASME B5.50 hydraulic expansion toolholder"
+    },
+    "clamp": {
+     "v": "hydraulic 20 mm",
+     "unit": "text",
+     "stated": "D1 = 20"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L1 = 80"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "D1 = 20mm"
+    },
+    "nose_d": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 33"
+    },
+    "body_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 42"
+    },
+    "L4": {
+     "v": 60.95,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 60.95"
+    },
+    "L2": {
+     "v": 52.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 52"
+    }
+   },
+   "profile": [
+    {
+     "z": 19.05,
+     "d": 42.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 80.0,
+     "d": 33.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263359",
+   "name": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks ER 16 L1=75",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 708 = printed page 708)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "ER ER 16"
+    },
+    "gauge_length": {
+     "v": 75.0,
+     "unit": "mm",
+     "stated": "L1 = 75"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 28"
+    },
+    "body_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 28"
+    },
+    "nut_length": {
+     "v": 17.5,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 17.5"
+    },
+    "L5": {
+     "v": 49.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 49"
+    },
+    "clamp_range": {
+     "v": "1-10 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 1 - 10 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 28.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 57.5,
+     "d": 28.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 57.5,
+     "d": 28.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 75.0,
+     "d": 28.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263362",
+   "name": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks ER 25 L1=75",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 708 = printed page 708)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "ER ER 25"
+    },
+    "gauge_length": {
+     "v": 75.0,
+     "unit": "mm",
+     "stated": "L1 = 75"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 42"
+    },
+    "body_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 42"
+    },
+    "nut_length": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 20"
+    },
+    "L5": {
+     "v": 49.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 49"
+    },
+    "clamp_range": {
+     "v": "1-16 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 1 - 16 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 42.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 55.0,
+     "d": 42.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 55.0,
+     "d": 42.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 75.0,
+     "d": 42.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263365",
+   "name": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks ER 32 L1=75",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 708 = printed page 708)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER ER 32"
+    },
+    "gauge_length": {
+     "v": 75.0,
+     "unit": "mm",
+     "stated": "L1 = 75"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 50"
+    },
+    "body_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 50"
+    },
+    "nut_length": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 23"
+    },
+    "L5": {
+     "v": 49.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 49"
+    },
+    "clamp_range": {
+     "v": "2-20 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 2 - 20 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 50.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 52.0,
+     "d": 50.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 52.0,
+     "d": 50.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 75.0,
+     "d": 50.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263368",
+   "name": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks ER 40 L1=85",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 708 = printed page 708)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "ER ER 40"
+    },
+    "gauge_length": {
+     "v": 85.0,
+     "unit": "mm",
+     "stated": "L1 = 85"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 63"
+    },
+    "body_d": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 63"
+    },
+    "nut_length": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 26"
+    },
+    "L5": {
+     "v": 59.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 59"
+    },
+    "clamp_range": {
+     "v": "4-26 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 4 - 26 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 63.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 59.0,
+     "d": 63.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 59.0,
+     "d": 63.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 85.0,
+     "d": 63.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1454439",
+   "name": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks ER 20 L1=100",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 708 = printed page 708)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER ER 20"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L1 = 100"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 34"
+    },
+    "body_d": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 34"
+    },
+    "nut_length": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 19"
+    },
+    "L5": {
+     "v": 74.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 74"
+    },
+    "clamp_range": {
+     "v": "1-13 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 1 - 13 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 34.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 81.0,
+     "d": 34.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 81.0,
+     "d": 34.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 100.0,
+     "d": 34.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263366",
+   "name": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks ER 32 L1=100",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 708 = printed page 708)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER ER 32"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L1 = 100"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 50"
+    },
+    "body_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 50"
+    },
+    "nut_length": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 23"
+    },
+    "L5": {
+     "v": 74.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 74"
+    },
+    "clamp_range": {
+     "v": "2-20 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 2 - 20 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 50.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 77.0,
+     "d": 50.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 77.0,
+     "d": 50.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 100.0,
+     "d": 50.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263367",
+   "name": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks ER 32 L1=160",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 708 = printed page 708)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "ER HSK-A 63 | DIN ISO 12164-1 ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER ER 32"
+    },
+    "gauge_length": {
+     "v": 160.0,
+     "unit": "mm",
+     "stated": "L1 = 160"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 50"
+    },
+    "body_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 50"
+    },
+    "nut_length": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 23"
+    },
+    "L5": {
+     "v": 134.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 134"
+    },
+    "clamp_range": {
+     "v": "2-20 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 2 - 20 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 50.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 137.0,
+     "d": 50.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 137.0,
+     "d": 50.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 160.0,
+     "d": 50.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0208121",
+   "name": "CELSIO HSK-A 63 | DIN ISO 12164-1 heat shrinking toolholder D1=8 L1=80",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 706 = printed page 706)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "CELSIO HSK-A 63 | DIN ISO 12164-1 heat shrinking toolholder"
+    },
+    "clamp": {
+     "v": "shrink 8 mm",
+     "unit": "text",
+     "stated": "D1 = 8"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L1 = 80"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "D1 = 8mm"
+    },
+    "nose_d": {
+     "v": 21.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 21"
+    },
+    "body_d": {
+     "v": 27.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 27"
+    },
+    "L4": {
+     "v": 54.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 54"
+    },
+    "L2": {
+     "v": 37.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 37"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 27.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 80.0,
+     "d": 21.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0208123",
+   "name": "CELSIO HSK-A 63 | DIN ISO 12164-1 heat shrinking toolholder D1=12 L1=90",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 706 = printed page 706)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "CELSIO HSK-A 63 | DIN ISO 12164-1 heat shrinking toolholder"
+    },
+    "clamp": {
+     "v": "shrink 12 mm",
+     "unit": "text",
+     "stated": "D1 = 12"
+    },
+    "gauge_length": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "L1 = 90"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "D1 = 12mm"
+    },
+    "nose_d": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 24"
+    },
+    "body_d": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 32"
+    },
+    "L4": {
+     "v": 64.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 64"
+    },
+    "L2": {
+     "v": 48.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 48"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 32.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 90.0,
+     "d": 24.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0208125",
+   "name": "CELSIO HSK-A 63 | DIN ISO 12164-1 heat shrinking toolholder D1=16 L1=95",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 706 = printed page 706)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "CELSIO HSK-A 63 | DIN ISO 12164-1 heat shrinking toolholder"
+    },
+    "clamp": {
+     "v": "shrink 16 mm",
+     "unit": "text",
+     "stated": "D1 = 16"
+    },
+    "gauge_length": {
+     "v": 95.0,
+     "unit": "mm",
+     "stated": "L1 = 95"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "D1 = 16mm"
+    },
+    "nose_d": {
+     "v": 27.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 27"
+    },
+    "body_d": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 34"
+    },
+    "L4": {
+     "v": 69.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 69"
+    },
+    "L2": {
+     "v": 51.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 51"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 34.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 95.0,
+     "d": 27.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0208127",
+   "name": "CELSIO HSK-A 63 | DIN ISO 12164-1 heat shrinking toolholder D1=20 L1=100",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 706 = printed page 706)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "CELSIO HSK-A 63 | DIN ISO 12164-1 heat shrinking toolholder"
+    },
+    "clamp": {
+     "v": "shrink 20 mm",
+     "unit": "text",
+     "stated": "D1 = 20"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L1 = 100"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "D1 = 20mm"
+    },
+    "nose_d": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 33"
+    },
+    "body_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 42"
+    },
+    "L4": {
+     "v": 74.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 74"
+    },
+    "L2": {
+     "v": 53.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 53"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 42.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 100.0,
+     "d": 33.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1360924",
+   "name": "TENDO Silver HSK-A 63 | DIN ISO 12164-1 hydraulic expansion toolholder D1=8 L1=70",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 694 = printed page 694)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "TENDO Silver HSK-A 63 | DIN ISO 12164-1 hydraulic expansion toolholder"
+    },
+    "clamp": {
+     "v": "hydraulic 8 mm",
+     "unit": "text",
+     "stated": "D1 = 8"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "L1 = 70"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "D1 = 8mm"
+    },
+    "nose_d": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "D6 (nose tip diameter) = 24"
+    },
+    "sleeve_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D2 (clamping sleeve diameter) = 28"
+    },
+    "body_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter behind the sleeve) = 50"
+    },
+    "L4": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "L4 (length of the D2 sleeve section to nose) = 25"
+    },
+    "L5": {
+     "v": 44.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 44"
+    },
+    "L2": {
+     "v": 37.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 37"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 50.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 45.0,
+     "d": 50.0,
+     "stated": "D3 to L1 - L4"
+    },
+    {
+     "z": 45.0,
+     "d": 28.0,
+     "stated": "D2 sleeve from L1 - L4"
+    },
+    {
+     "z": 70.0,
+     "d": 24.0,
+     "stated": "D6 at nose (D2-to-D6 transition position not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position where D2 reduces to D6"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1360926",
+   "name": "TENDO Silver HSK-A 63 | DIN ISO 12164-1 hydraulic expansion toolholder D1=12 L1=85",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 694 = printed page 694)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "TENDO Silver HSK-A 63 | DIN ISO 12164-1 hydraulic expansion toolholder"
+    },
+    "clamp": {
+     "v": "hydraulic 12 mm",
+     "unit": "text",
+     "stated": "D1 = 12"
+    },
+    "gauge_length": {
+     "v": 85.0,
+     "unit": "mm",
+     "stated": "L1 = 85"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "D1 = 12mm"
+    },
+    "nose_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D6 (nose tip diameter) = 28"
+    },
+    "sleeve_d": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D2 (clamping sleeve diameter) = 32"
+    },
+    "body_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter behind the sleeve) = 50"
+    },
+    "L4": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "L4 (length of the D2 sleeve section to nose) = 40"
+    },
+    "L5": {
+     "v": 59.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 59"
+    },
+    "L2": {
+     "v": 46.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 46"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 50.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 45.0,
+     "d": 50.0,
+     "stated": "D3 to L1 - L4"
+    },
+    {
+     "z": 45.0,
+     "d": 32.0,
+     "stated": "D2 sleeve from L1 - L4"
+    },
+    {
+     "z": 85.0,
+     "d": 28.0,
+     "stated": "D6 at nose (D2-to-D6 transition position not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position where D2 reduces to D6"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1360930",
+   "name": "TENDO Silver HSK-A 63 | DIN ISO 12164-1 hydraulic expansion toolholder D1=20 L1=90",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 694 = printed page 694)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "TENDO Silver HSK-A 63 | DIN ISO 12164-1 hydraulic expansion toolholder"
+    },
+    "clamp": {
+     "v": "hydraulic 20 mm",
+     "unit": "text",
+     "stated": "D1 = 20"
+    },
+    "gauge_length": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "L1 = 90"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "D1 = 20mm"
+    },
+    "nose_d": {
+     "v": 38.0,
+     "unit": "mm",
+     "stated": "D6 (nose tip diameter) = 38"
+    },
+    "sleeve_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D2 (clamping sleeve diameter) = 42"
+    },
+    "body_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter behind the sleeve) = 50"
+    },
+    "L4": {
+     "v": 48.0,
+     "unit": "mm",
+     "stated": "L4 (length of the D2 sleeve section to nose) = 48"
+    },
+    "L5": {
+     "v": 64.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 64"
+    },
+    "L2": {
+     "v": 51.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 51"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 50.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 42.0,
+     "d": 50.0,
+     "stated": "D3 to L1 - L4"
+    },
+    {
+     "z": 42.0,
+     "d": 42.0,
+     "stated": "D2 sleeve from L1 - L4"
+    },
+    {
+     "z": 90.0,
+     "d": 38.0,
+     "stated": "D6 at nose (D2-to-D6 transition position not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position where D2 reduces to D6"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "23000633",
+   "name": "WEL S HSK-A 63 | DIN ISO 12164-1 WELDON Slim D1=6 L1=100",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 712 = printed page 712)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "WEL S HSK-A 63 | DIN ISO 12164-1 WELDON Slim"
+    },
+    "clamp": {
+     "v": "Weldon 6 mm",
+     "unit": "text",
+     "stated": "D1 = 6"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L1 = 100"
+    },
+    "balance": {
+     "v": "G6.3 at 8,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G6.3 at 8,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "bore": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "D1 = 6mm"
+    },
+    "nose_d": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 20"
+    },
+    "body_d": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 24"
+    },
+    "L4": {
+     "v": 74.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 74"
+    },
+    "L2": {
+     "v": 36.5,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 36.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 24.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 100.0,
+     "d": 20.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "L2 meaning (shown from nose into bore)"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "23000635",
+   "name": "WEL S HSK-A 63 | DIN ISO 12164-1 WELDON Slim D1=10 L1=100",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 712 = printed page 712)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "WEL S HSK-A 63 | DIN ISO 12164-1 WELDON Slim"
+    },
+    "clamp": {
+     "v": "Weldon 10 mm",
+     "unit": "text",
+     "stated": "D1 = 10"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L1 = 100"
+    },
+    "balance": {
+     "v": "G6.3 at 8,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G6.3 at 8,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "bore": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "D1 = 10mm"
+    },
+    "nose_d": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 23"
+    },
+    "body_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 28"
+    },
+    "L4": {
+     "v": 74.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 74"
+    },
+    "L2": {
+     "v": 40.5,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 40.5"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 28.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 100.0,
+     "d": 23.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "L2 meaning (shown from nose into bore)"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263440",
+   "name": "ER JIS-BT 40 | DIN ISO 7388-2 JD/JF ER collet chucks ER 16 L1=70",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 832 = printed page 832)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "ER JIS-BT 40 | DIN ISO 7388-2 JD/JF ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "ER ER 16"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "L1 = 70"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 28"
+    },
+    "body_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 28"
+    },
+    "nut_length": {
+     "v": 17.5,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 17.5"
+    },
+    "L5": {
+     "v": 43.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 43"
+    },
+    "clamp_range": {
+     "v": "1-10 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 1 - 10 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 28.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 52.5,
+     "d": 28.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 52.5,
+     "d": 28.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 70.0,
+     "d": 28.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263445",
+   "name": "ER JIS-BT 40 | DIN ISO 7388-2 JD/JF ER collet chucks ER 25 L1=70",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 832 = printed page 832)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "ER JIS-BT 40 | DIN ISO 7388-2 JD/JF ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER25",
+     "unit": "text",
+     "stated": "ER ER 25"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "L1 = 70"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 42"
+    },
+    "body_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 42"
+    },
+    "nut_length": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 20"
+    },
+    "L5": {
+     "v": 43.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 43"
+    },
+    "clamp_range": {
+     "v": "1-16 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 1 - 16 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 42.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 50.0,
+     "d": 42.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 50.0,
+     "d": 42.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 70.0,
+     "d": 42.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263448",
+   "name": "ER JIS-BT 40 | DIN ISO 7388-2 JD/JF ER collet chucks ER 32 L1=70",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 832 = printed page 832)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "ER JIS-BT 40 | DIN ISO 7388-2 JD/JF ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER ER 32"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "L1 = 70"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 50"
+    },
+    "body_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 50"
+    },
+    "nut_length": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 23"
+    },
+    "L5": {
+     "v": 43.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 43"
+    },
+    "clamp_range": {
+     "v": "2-20 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 2 - 20 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 50.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 47.0,
+     "d": 50.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 47.0,
+     "d": 50.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 70.0,
+     "d": 50.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263451",
+   "name": "ER JIS-BT 40 | DIN ISO 7388-2 JD/JF ER collet chucks ER 40 L1=70",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 832 = printed page 832)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "ER JIS-BT 40 | DIN ISO 7388-2 JD/JF ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER40",
+     "unit": "text",
+     "stated": "ER ER 40"
+    },
+    "gauge_length": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "L1 = 70"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 63"
+    },
+    "body_d": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 63"
+    },
+    "nut_length": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 26"
+    },
+    "L5": {
+     "v": 43.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 43"
+    },
+    "clamp_range": {
+     "v": "4-26 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 4 - 26 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 63.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 44.0,
+     "d": 63.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 44.0,
+     "d": 63.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 70.0,
+     "d": 63.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263449",
+   "name": "ER JIS-BT 40 | DIN ISO 7388-2 JD/JF ER collet chucks ER 32 L1=100",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 832 = printed page 832)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "ER JIS-BT 40 | DIN ISO 7388-2 JD/JF ER collet chucks"
+    },
+    "clamp": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER ER 32"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L1 = 100"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D2 (nut outside diameter) = 50"
+    },
+    "body_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D3 (body diameter between flange and nut) = 50"
+    },
+    "nut_length": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "L4 (nut length) = 23"
+    },
+    "L5": {
+     "v": 73.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 73"
+    },
+    "clamp_range": {
+     "v": "2-20 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 2 - 20 mm"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 50.0,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 77.0,
+     "d": 50.0,
+     "stated": "D3 to nut back (L1 - L4)"
+    },
+    {
+     "z": 77.0,
+     "d": 50.0,
+     "stated": "D2 nut from L1 - L4"
+    },
+    {
+     "z": 100.0,
+     "d": 50.0,
+     "stated": "D2 nut at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "flange-to-body fillet/undercut sizes"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0208501",
+   "name": "CELSIO JIS-BT 40 | DIN ISO 7388-2 JD/JF heat shrinking toolholder D1=8 L1=90",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 830 = printed page 830)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "CELSIO JIS-BT 40 | DIN ISO 7388-2 JD/JF heat shrinking toolholder"
+    },
+    "clamp": {
+     "v": "shrink 8 mm",
+     "unit": "text",
+     "stated": "D1 = 8"
+    },
+    "gauge_length": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "L1 = 90"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "D1 = 8mm"
+    },
+    "nose_d": {
+     "v": 21.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 21"
+    },
+    "body_d": {
+     "v": 27.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 27"
+    },
+    "L4": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 63"
+    },
+    "L2": {
+     "v": 37.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 37"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 27.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 90.0,
+     "d": 21.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0208503",
+   "name": "CELSIO JIS-BT 40 | DIN ISO 7388-2 JD/JF heat shrinking toolholder D1=12 L1=90",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 830 = printed page 830)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "CELSIO JIS-BT 40 | DIN ISO 7388-2 JD/JF heat shrinking toolholder"
+    },
+    "clamp": {
+     "v": "shrink 12 mm",
+     "unit": "text",
+     "stated": "D1 = 12"
+    },
+    "gauge_length": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "L1 = 90"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "D1 = 12mm"
+    },
+    "nose_d": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 24"
+    },
+    "body_d": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 32"
+    },
+    "L4": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 63"
+    },
+    "L2": {
+     "v": 48.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 48"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 32.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 90.0,
+     "d": 24.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0208507",
+   "name": "CELSIO JIS-BT 40 | DIN ISO 7388-2 JD/JF heat shrinking toolholder D1=20 L1=90",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 830 = printed page 830)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "CELSIO JIS-BT 40 | DIN ISO 7388-2 JD/JF heat shrinking toolholder"
+    },
+    "clamp": {
+     "v": "shrink 20 mm",
+     "unit": "text",
+     "stated": "D1 = 20"
+    },
+    "gauge_length": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "L1 = 90"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "D1 = 20mm"
+    },
+    "nose_d": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "D6 (nose diameter) = 33"
+    },
+    "body_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D2 (diameter at the front flange end of the nose) = 42"
+    },
+    "L4": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 63"
+    },
+    "L2": {
+     "v": 53.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 53"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 42.0,
+     "stated": "D2 at L1 - L4 (front flange face)"
+    },
+    {
+     "z": 90.0,
+     "d": 33.0,
+     "stated": "D6 at L1 (nose)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1417055",
+   "name": "TENDO Silver JIS-BT 40 | DIN ISO 7388-2 JD/JF hydraulic expansion toolholder D1=8 L1=90",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 821 = printed page 821)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "TENDO Silver JIS-BT 40 | DIN ISO 7388-2 JD/JF hydraulic expansion toolholder"
+    },
+    "clamp": {
+     "v": "hydraulic 8 mm",
+     "unit": "text",
+     "stated": "D1 = 8"
+    },
+    "gauge_length": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "L1 = 90"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "D1 = 8mm"
+    },
+    "nose_d": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "D6 (nose tip diameter) = 24"
+    },
+    "sleeve_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D2 (clamping sleeve diameter) = 28"
+    },
+    "body_d": {
+     "v": 44.5,
+     "unit": "mm",
+     "stated": "D3 (body diameter behind the sleeve) = 44.5"
+    },
+    "L4": {
+     "v": 44.5,
+     "unit": "mm",
+     "stated": "L4 (length of the D2 sleeve section to nose) = 44.5"
+    },
+    "L5": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 63"
+    },
+    "L2": {
+     "v": 37.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 37"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 44.5,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 45.5,
+     "d": 44.5,
+     "stated": "D3 to L1 - L4"
+    },
+    {
+     "z": 45.5,
+     "d": 28.0,
+     "stated": "D2 sleeve from L1 - L4"
+    },
+    {
+     "z": 90.0,
+     "d": 24.0,
+     "stated": "D6 at nose (D2-to-D6 transition position not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position where D2 reduces to D6"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1417057",
+   "name": "TENDO Silver JIS-BT 40 | DIN ISO 7388-2 JD/JF hydraulic expansion toolholder D1=12 L1=90",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 821 = printed page 821)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "TENDO Silver JIS-BT 40 | DIN ISO 7388-2 JD/JF hydraulic expansion toolholder"
+    },
+    "clamp": {
+     "v": "hydraulic 12 mm",
+     "unit": "text",
+     "stated": "D1 = 12"
+    },
+    "gauge_length": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "L1 = 90"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "D1 = 12mm"
+    },
+    "nose_d": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "D6 (nose tip diameter) = 28"
+    },
+    "sleeve_d": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D2 (clamping sleeve diameter) = 32"
+    },
+    "body_d": {
+     "v": 44.5,
+     "unit": "mm",
+     "stated": "D3 (body diameter behind the sleeve) = 44.5"
+    },
+    "L4": {
+     "v": 44.5,
+     "unit": "mm",
+     "stated": "L4 (length of the D2 sleeve section to nose) = 44.5"
+    },
+    "L5": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 63"
+    },
+    "L2": {
+     "v": 46.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 46"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 44.5,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 45.5,
+     "d": 44.5,
+     "stated": "D3 to L1 - L4"
+    },
+    {
+     "z": 45.5,
+     "d": 32.0,
+     "stated": "D2 sleeve from L1 - L4"
+    },
+    {
+     "z": 90.0,
+     "d": 28.0,
+     "stated": "D6 at nose (D2-to-D6 transition position not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position where D2 reduces to D6"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "1417060",
+   "name": "TENDO Silver JIS-BT 40 | DIN ISO 7388-2 JD/JF hydraulic expansion toolholder D1=20 L1=90",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 821 = printed page 821)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "TENDO Silver JIS-BT 40 | DIN ISO 7388-2 JD/JF hydraulic expansion toolholder"
+    },
+    "clamp": {
+     "v": "hydraulic 20 mm",
+     "unit": "text",
+     "stated": "D1 = 20"
+    },
+    "gauge_length": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "L1 = 90"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "coolant": {
+     "v": "internal cooling up to 80 bar",
+     "unit": "text",
+     "stated": "Internal cooling up to 80 bar"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "D1 = 20mm"
+    },
+    "nose_d": {
+     "v": 38.0,
+     "unit": "mm",
+     "stated": "D6 (nose tip diameter) = 38"
+    },
+    "sleeve_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D2 (clamping sleeve diameter) = 42"
+    },
+    "body_d": {
+     "v": 44.5,
+     "unit": "mm",
+     "stated": "D3 (body diameter behind the sleeve) = 44.5"
+    },
+    "L4": {
+     "v": 47.5,
+     "unit": "mm",
+     "stated": "L4 (length of the D2 sleeve section to nose) = 47.5"
+    },
+    "L5": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "L5 (front flange face to nose) = 63"
+    },
+    "L2": {
+     "v": 51.0,
+     "unit": "mm",
+     "stated": "L2 (from nose face into the bore, on drawing) = 51"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 44.5,
+     "stated": "D3 from front flange face (L1 - L5)"
+    },
+    {
+     "z": 42.5,
+     "d": 44.5,
+     "stated": "D3 to L1 - L4"
+    },
+    {
+     "z": 42.5,
+     "d": 42.0,
+     "stated": "D2 sleeve from L1 - L4"
+    },
+    {
+     "z": 90.0,
+     "d": 38.0,
+     "stated": "D6 at nose (D2-to-D6 transition position not given)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "axial position where D2 reduces to D6"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263603",
+   "name": "WEL JIS-BT 40 | DIN ISO 7388-2 JD/JF WELDON D1=12 L1=63",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 835 = printed page 835)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "WEL JIS-BT 40 WELDON"
+    },
+    "clamp": {
+     "v": "Weldon 12 mm",
+     "unit": "text",
+     "stated": "D1 = 12"
+    },
+    "gauge_length": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "L1 = 63"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "bore": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "D1 = 12"
+    },
+    "nose_d": {
+     "v": 42.0,
+     "unit": "mm",
+     "stated": "D2 (body outside diameter) = 42"
+    },
+    "D6": {
+     "v": 29.5,
+     "unit": "mm",
+     "stated": "D6 (label at the nose face; meaning not clear) = 29.5"
+    },
+    "L4": {
+     "v": 46.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 46"
+    },
+    "L2": {
+     "v": 48.0,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 48"
+    },
+    "clamp_screw": {
+     "v": "M12",
+     "unit": "text",
+     "stated": "G1 = M12"
+    }
+   },
+   "profile": [
+    {
+     "z": 17.0,
+     "d": 42.0,
+     "stated": "D2 from L1 - L4"
+    },
+    {
+     "z": 63.0,
+     "d": 42.0,
+     "stated": "D2 at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "meaning of D6",
+    "meaning of L2"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263605",
+   "name": "WEL JIS-BT 40 | DIN ISO 7388-2 JD/JF WELDON D1=20 L1=63",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 835 = printed page 835)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "WEL JIS-BT 40 WELDON"
+    },
+    "clamp": {
+     "v": "Weldon 20 mm",
+     "unit": "text",
+     "stated": "D1 = 20"
+    },
+    "gauge_length": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "L1 = 63"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "D1 = 20"
+    },
+    "nose_d": {
+     "v": 52.0,
+     "unit": "mm",
+     "stated": "D2 (body outside diameter) = 52"
+    },
+    "D6": {
+     "v": 39.5,
+     "unit": "mm",
+     "stated": "D6 (label at the nose face; meaning not clear) = 39.5"
+    },
+    "L4": {
+     "v": 46.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 46"
+    },
+    "L2": {
+     "v": 53.0,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 53"
+    },
+    "clamp_screw": {
+     "v": "M16",
+     "unit": "text",
+     "stated": "G1 = M16"
+    }
+   },
+   "profile": [
+    {
+     "z": 17.0,
+     "d": 52.0,
+     "stated": "D2 from L1 - L4"
+    },
+    {
+     "z": 63.0,
+     "d": 52.0,
+     "stated": "D2 at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "meaning of D6",
+    "meaning of L2"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0263606",
+   "name": "WEL JIS-BT 40 | DIN ISO 7388-2 JD/JF WELDON D1=32 L1=100",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 835 = printed page 835)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "WEL JIS-BT 40 WELDON"
+    },
+    "clamp": {
+     "v": "Weldon 32 mm",
+     "unit": "text",
+     "stated": "D1 = 32"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L1 = 100"
+    },
+    "balance": {
+     "v": "G2.5 at 25,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G2.5 at 25,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "bore": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "D1 = 32"
+    },
+    "nose_d": {
+     "v": 72.0,
+     "unit": "mm",
+     "stated": "D2 (body outside diameter) = 72"
+    },
+    "D6": {
+     "v": 55.5,
+     "unit": "mm",
+     "stated": "D6 (label at the nose face; meaning not clear) = 55.5"
+    },
+    "L4": {
+     "v": 73.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 73"
+    },
+    "L2": {
+     "v": 64.0,
+     "unit": "mm",
+     "stated": "L2 (drawing label) = 64"
+    },
+    "clamp_screw": {
+     "v": "M20x2",
+     "unit": "text",
+     "stated": "G1 = M20x2"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 72.0,
+     "stated": "D2 from L1 - L4"
+    },
+    {
+     "z": 100.0,
+     "d": 72.0,
+     "stated": "D2 at L1"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "coolant",
+    "meaning of D6",
+    "meaning of L2"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face"
+  },
+  {
+   "kind": "holder",
+   "id": "0204469",
+   "name": "CNC SDC HSK-A 63 | DIN ISO 12164-1 CNC short drill chuck",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 716 = printed page 716)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "HSK63A",
+     "unit": "text",
+     "stated": "CNC SDC HSK-A 63 | DIN ISO 12164-1 CNC short drill chuck"
+    },
+    "clamp": {
+     "v": "drill chuck 1-16 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 1 - 16"
+    },
+    "gauge_length": {
+     "v": 98.0,
+     "unit": "mm",
+     "stated": "L1 = 98"
+    },
+    "balance": {
+     "v": "G6.3 at 18,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G6.3 at 18,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "D2 (chuck body diameter) = 50"
+    },
+    "L4": {
+     "v": 72.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 72"
+    }
+   },
+   "profile": [
+    {
+     "z": 26.0,
+     "d": 50.0,
+     "stated": "D2 from L1 - L4"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "nose cone dimensions",
+    "length of the D2 section"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face (drill chuck clamping range: 1 - 16 mm)"
+  },
+  {
+   "kind": "holder",
+   "id": "0204584",
+   "name": "CNC SDC JIS-BT 40 | DIN ISO 7388-2 JD CNC short drill chuck",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 838 = printed page 838)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "CNC SDC JIS-BT 40 | DIN ISO 7388-2 JD CNC short drill chuck"
+    },
+    "clamp": {
+     "v": "drill chuck 1-16 mm",
+     "unit": "text",
+     "stated": "Clamping range D1 1 - 16"
+    },
+    "gauge_length": {
+     "v": 88.0,
+     "unit": "mm",
+     "stated": "L1 = 88"
+    },
+    "balance": {
+     "v": "G6.3 at 18,000 RPM",
+     "unit": "text",
+     "stated": "Balancing grade G6.3 at 18,000 RPM* (*or Umax < 1 gmm)"
+    },
+    "nose_d": {
+     "v": 56.0,
+     "unit": "mm",
+     "stated": "D2 (chuck body diameter) = 56"
+    },
+    "L4": {
+     "v": 61.0,
+     "unit": "mm",
+     "stated": "L4 (front flange face to nose) = 61"
+    }
+   },
+   "profile": [
+    {
+     "z": 27.0,
+     "d": 56.0,
+     "stated": "D2 from L1 - L4"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "nose cone dimensions",
+    "length of the D2 section"
+   ],
+   "note": "z measured from the start of L1 as drawn: flange face on the taper side (CAT/BT) or HSK flange contact face (drill chuck clamping range: 1 - 16 mm)"
+  },
+  {
+   "kind": "pull_stud",
+   "id": "1491329",
+   "name": "AZB MAZAK CAT 40 45° 5/8\"-11 UNC L1=41,26",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 989 = printed page 989)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "AZB MAZAK CAT 40 45° 5/8\"-11 UNC L1=41,26"
+    },
+    "thread": {
+     "v": "5/8\"-11 UNC (table: M5/8\")",
+     "unit": "text",
+     "stated": "G1 = M5/8\"; description 'AZB MAZAK CAT 40 45° 5/8\"-11 UNC L1=41,26'"
+    },
+    "length": {
+     "v": 41.3,
+     "unit": "mm",
+     "stated": "L1 (overall length on drawing) = 41.3"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "a = 45°"
+    },
+    "coolant_hole": {
+     "v": "not stated",
+     "unit": "text",
+     "stated": "heading/description"
+    },
+    "head_d": {
+     "v": 18.796,
+     "unit": "mm",
+     "stated": "D1 (head diameter) = 18.796"
+    },
+    "neck_d": {
+     "v": 12.446,
+     "unit": "mm",
+     "stated": "D2 (diameter under the head) = 12.446"
+    },
+    "D3": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "D3 (labelled at the thread end, beside G1) = 17"
+    },
+    "L2": {
+     "v": 16.3,
+     "unit": "mm",
+     "stated": "L2 (head end to collar face) = 16.3"
+    },
+    "L3": {
+     "v": 11.2,
+     "unit": "mm",
+     "stated": "L3 (under-head to collar face) = 11.2"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "coolant_hole"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "9150116",
+   "name": "AZB JIS-BT 40 15° JIS-BT 6339",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 986 = printed page 986)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "AZB JIS-BT 40 15° JIS-BT 6339"
+    },
+    "thread": {
+     "v": "M16",
+     "unit": "text",
+     "stated": "G1 = M16; description 'AZB JIS-BT 40 15° JIS-BT 6339'"
+    },
+    "length": {
+     "v": 54.0,
+     "unit": "mm",
+     "stated": "L1 (overall length on drawing) = 54"
+    },
+    "angle": {
+     "v": 15.0,
+     "unit": "deg",
+     "stated": "a = 15°"
+    },
+    "coolant_hole": {
+     "v": "through-hole",
+     "unit": "text",
+     "stated": "Retention knob with through-hole"
+    },
+    "head_d": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "D1 (head diameter) = 19"
+    },
+    "neck_d": {
+     "v": 14.0,
+     "unit": "mm",
+     "stated": "D2 (diameter under the head) = 14"
+    },
+    "D3": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "D3 (labelled at the thread end, beside G1) = 17"
+    },
+    "L2": {
+     "v": 29.0,
+     "unit": "mm",
+     "stated": "L2 (head end to collar face) = 29"
+    },
+    "L3": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "L3 (under-head to collar face) = 23"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "23003032",
+   "name": "AZB JIS-BT 40 45° JIS-BT 6339",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 986 = printed page 986)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "AZB JIS-BT 40 45° JIS-BT 6339"
+    },
+    "thread": {
+     "v": "M16",
+     "unit": "text",
+     "stated": "G1 = M16; description 'AZB JIS-BT 40 45° JIS-BT 6339'"
+    },
+    "length": {
+     "v": 60.0,
+     "unit": "mm",
+     "stated": "L1 (overall length on drawing) = 60"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "a = 45°"
+    },
+    "coolant_hole": {
+     "v": "through-hole",
+     "unit": "text",
+     "stated": "Retention knob with through-hole"
+    },
+    "head_d": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "D1 (head diameter) = 15"
+    },
+    "neck_d": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "D2 (diameter under the head) = 10"
+    },
+    "D3": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "D3 (labelled at the thread end, beside G1) = 17"
+    },
+    "L2": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "L2 (head end to collar face) = 35"
+    },
+    "L3": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "L3 (under-head to collar face) = 28"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "20043221",
+   "name": "AZB JIS-BT 30 45° JIS-BT 6339",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 986 = printed page 986)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "AZB JIS-BT 30 45° JIS-BT 6339"
+    },
+    "thread": {
+     "v": "M12",
+     "unit": "text",
+     "stated": "G1 = M12; description 'AZB JIS-BT 30 45° JIS-BT 6339'"
+    },
+    "length": {
+     "v": 43.0,
+     "unit": "mm",
+     "stated": "L1 (overall length on drawing) = 43"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "a = 45°"
+    },
+    "coolant_hole": {
+     "v": "through-hole",
+     "unit": "text",
+     "stated": "Retention knob with through-hole"
+    },
+    "head_d": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "D1 (head diameter) = 11"
+    },
+    "neck_d": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "D2 (diameter under the head) = 8"
+    },
+    "D3": {
+     "v": 12.5,
+     "unit": "mm",
+     "stated": "D3 (labelled at the thread end, beside G1) = 12.5"
+    },
+    "L2": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "L2 (head end to collar face) = 23"
+    },
+    "L3": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "L3 (under-head to collar face) = 18"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "9150122",
+   "name": "AZB JIS-BT 40 45° MAS 403 (DIN ISO 7388-3 form JF)",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 987 = printed page 987)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "AZB JIS-BT 40 45° MAS 403 (DIN ISO 7388-3 form JF)"
+    },
+    "thread": {
+     "v": "M16",
+     "unit": "text",
+     "stated": "G1 = M16; description 'AZB JIS-BT 40 45° MAS 403 (DIN ISO 7388-3 form JF)'"
+    },
+    "length": {
+     "v": 60.0,
+     "unit": "mm",
+     "stated": "L1 (overall length on drawing) = 60"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "a = 45°"
+    },
+    "coolant_hole": {
+     "v": "not stated for form JF",
+     "unit": "text",
+     "stated": "heading/description"
+    },
+    "head_d": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "D1 (head diameter) = 15"
+    },
+    "neck_d": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "D2 (diameter under the head) = 10"
+    },
+    "D3": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "D3 (labelled at the thread end, beside G1) = 17"
+    },
+    "L2": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "L2 (head end to collar face) = 35"
+    },
+    "L3": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "L3 (under-head to collar face) = 28"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "coolant_hole"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "23003307",
+   "name": "AZB JIS-BT 30 45° MAS 403 (DIN ISO 7388-3 form JF)",
+   "url": "https://d16vz4puxlsxm1.cloudfront.net/asset/076200133045-Prod/document_kmlji8l73t7ct7evc469p6bk4s?content-disposition=inline (SCHUNK overall catalog toolholding and workholding, linked from https://schunk.com/us/en/services/downloads/catalogs-and-brochures; PDF page 987 = printed page 987)",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "AZB JIS-BT 30 45° MAS 403 (DIN ISO 7388-3 form JF)"
+    },
+    "thread": {
+     "v": "M12",
+     "unit": "text",
+     "stated": "G1 = M12; description 'AZB JIS-BT 30 45° MAS 403 (DIN ISO 7388-3 form JF)'"
+    },
+    "length": {
+     "v": 43.0,
+     "unit": "mm",
+     "stated": "L1 (overall length on drawing) = 43"
+    },
+    "angle": {
+     "v": 45.0,
+     "unit": "deg",
+     "stated": "a = 45°"
+    },
+    "coolant_hole": {
+     "v": "not stated for form JF",
+     "unit": "text",
+     "stated": "heading/description"
+    },
+    "head_d": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "D1 (head diameter) = 11"
+    },
+    "neck_d": {
+     "v": 7.0,
+     "unit": "mm",
+     "stated": "D2 (diameter under the head) = 7"
+    },
+    "D3": {
+     "v": 12.5,
+     "unit": "mm",
+     "stated": "D3 (labelled at the thread end, beside G1) = 12.5"
+    },
+    "L2": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "L2 (head end to collar face) = 23"
+    },
+    "L3": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "L3 (under-head to collar face) = 18"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "coolant_hole"
+   ]
+  }
+ ]
+}

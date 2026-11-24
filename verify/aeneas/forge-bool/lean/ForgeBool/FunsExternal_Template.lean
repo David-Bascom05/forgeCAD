@@ -105,8 +105,16 @@ axiom
     Visibility: public -/
 @[rust_fun "std::f64::{f64}::sqrt"] axiom std.f64.F64.sqrt : F64 → Result F64
 
+/-- [forge_geom::curve::{forge_geom::curve::Ellipse}::new]:
+    Source: 'kernel/forge-geom/src/curve.rs', lines 85:4-85:63
+    Name pattern: [forge_geom::curve::{forge_geom::curve::Ellipse}::new]
+    Visibility: public -/
+@[rust_fun "forge_geom::curve::{forge_geom::curve::Ellipse}::new"]
+axiom forge_geom.curve.Ellipse.new
+  : forge_math.frame.Frame → F64 → F64 → Result forge_geom.curve.Ellipse
+
 /-- [forge_geom::curve::{forge_geom::curve::Line}::new]:
-    Source: 'kernel/forge-geom/src/curve.rs', lines 187:4-187:53
+    Source: 'kernel/forge-geom/src/curve.rs', lines 219:4-219:53
     Name pattern: [forge_geom::curve::{forge_geom::curve::Line}::new]
     Visibility: public -/
 @[rust_fun "forge_geom::curve::{forge_geom::curve::Line}::new"]
@@ -116,7 +124,7 @@ axiom forge_geom.curve.Line.new
     forge_geom.curve.Line
 
 /-- [forge_geom::intersect::plane_surface]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 931:0-931:62
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 975:0-975:62
     Name pattern: [forge_geom::intersect::plane_surface]
     Visibility: public -/
 @[rust_fun "forge_geom::intersect::plane_surface"]
@@ -220,12 +228,20 @@ axiom forge_math.frame.Frame.impl.z
   : forge_math.frame.Frame → Result forge_math.vec.UnitVec3
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::grow]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 339:4-339:38
+    Source: 'kernel/forge-math/src/interval.rs', lines 340:4-340:38
     Name pattern: [forge_math::interval::{forge_math::interval::Box3}::grow]
     Visibility: public -/
 @[rust_fun "forge_math::interval::{forge_math::interval::Box3}::grow"]
 axiom forge_math.interval.Box3.grow
   : forge_math.interval.Box3 → F64 → Result forge_math.interval.Box3
+
+/-- [forge_math::interval::{forge_math::interval::Box3}::center]:
+    Source: 'kernel/forge-math/src/interval.rs', lines 347:4-347:34
+    Name pattern: [forge_math::interval::{forge_math::interval::Box3}::center]
+    Visibility: public -/
+@[rust_fun "forge_math::interval::{forge_math::interval::Box3}::center"]
+axiom forge_math.interval.Box3.center
+  : forge_math.interval.Box3 → Result forge_math.vec.Point3
 
 /-- [forge_math::tol::LINEAR]
     Source: 'kernel/forge-math/src/tol.rs', lines 12:0-12:21
@@ -256,6 +272,13 @@ axiom forge_math.vec.Vec3.dot
 @[rust_fun "forge_math::vec::{forge_math::vec::Vec3}::cross"]
 axiom forge_math.vec.Vec3.cross
   : forge_math.vec.Vec3 → forge_math.vec.Vec3 → Result forge_math.vec.Vec3
+
+/-- [forge_math::vec::{forge_math::vec::Vec3}::length_sq]:
+    Source: 'kernel/forge-math/src/vec.rs', lines 115:4-115:33
+    Name pattern: [forge_math::vec::{forge_math::vec::Vec3}::length_sq]
+    Visibility: public -/
+@[rust_fun "forge_math::vec::{forge_math::vec::Vec3}::length_sq"]
+axiom forge_math.vec.Vec3.length_sq : forge_math.vec.Vec3 → Result F64
 
 /-- [forge_math::vec::{forge_math::vec::Vec3}::length]:
     Source: 'kernel/forge-math/src/vec.rs', lines 118:4-118:30
@@ -406,7 +429,7 @@ axiom forge_math.vec.Vec3.Insts.CoreOpsArithAddVec3Vec3.add
   : forge_math.vec.Vec3 → forge_math.vec.Vec3 → Result forge_math.vec.Vec3
 
 /-- [forge_bool::ssi::searched]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 292:0-326:1
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 344:0-378:1
     Visibility: public -/
 axiom ssi.searched
   :

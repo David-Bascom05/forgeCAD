@@ -1,0 +1,12 @@
+[package]
+name = "forge-machine-core"
+description = "The G-code interpreter's core, written for Aeneas: one block of parsed integer words against the control's modal state (verify/forge-machine's step), no floats"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

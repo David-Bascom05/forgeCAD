@@ -1089,6 +1089,20 @@ pub fn certify_shared(
     budget: usize,
     shared: &mut Option<(Ival, f64)>,
 ) -> (Verdict, usize) {
+    // a line move of a capsule-shaped body (a ball end mill's cutter) against a sphere, a
+    // cylinder that is not a prism, or a plane that is not a prism on a move that is not
+    // planar: closed form (contact.rs), which proves Clear or passes on. Those pairs are 3D
+    // finishing's; the 2.5D ops' pairs (prisms, planar moves on planes) keep their paths
+    let fast = match f.surf {
+        Surf::Sphere { .. } => true,
+        Surf::Cyl { .. } => f.prism.is_none(),
+        Surf::Plane { .. } => f.prism.is_none() && mv.planar().is_none(),
+        Surf::Torus { .. } | Surf::Cone { .. } => f.prism.is_none(),
+    };
+    // (an early Clear leaves `shared` as it was: the next body's call recomputes what it needs)
+    if fast && let Some(v) = crate::contact::clear(body, f, mv, limit) {
+        return (v, 0);
+    }
     // a planar move against a face that is a prism along z: closed form (slab.rs)
     if let (Some(pl), Some(pr)) = (mv.planar(), f.prism.as_ref()) {
         let (v, n) = crate::slab::certify_shared(body, f, pr, &pl, limit, res, budget, shared, mv.path_gap());
@@ -1190,7 +1204,11 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
     let mut lower = f64::INFINITY;
     let mut spent = 0usize;
     let mut undecided = false;
-    let show_cells = std::env::var("FORGE_CAM_CELLS").is_ok();
+    // a print switch, read once per process (an env read per call was measurable here)
+    let show_cells = {
+        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ON.get_or_init(|| std::env::var_os("FORGE_CAM_CELLS").is_some())
+    };
     while let Some((key, c, sd0)) = heap.pop() {
         if key >= lim_clear {
             // the least bound left clears: so does every other cell

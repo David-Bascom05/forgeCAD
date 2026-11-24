@@ -35,7 +35,7 @@ fn random_program(r: &mut Lcg, dialect: &str) -> Program {
     let mut p = [0.0, 0.0, 25.0];
     recs.push(Rec::Rapid(p));
     for _ in 0..40 {
-        match r.pick(10) {
+        match r.pick(12) {
             0 => {
                 p = [r.f(-50.0, 50.0), r.f(-50.0, 50.0), r.f(-5.0, 30.0)];
                 recs.push(Rec::Rapid(p));
@@ -120,6 +120,47 @@ fn random_program(r: &mut Lcg, dialect: &str) -> Program {
                     c
                 }));
             }
+            // a probe move (linuxcnc, grbl), then a rapid to a known point
+            10 => {
+                recs.push(Rec::Probe {
+                    to: [r.f(-50.0, 50.0), r.f(-50.0, 50.0), r.f(-5.0, 5.0)],
+                    f: r.f(50.0, 500.0),
+                });
+                p = [r.f(-50.0, 50.0), r.f(-50.0, 50.0), 25.0];
+                recs.push(Rec::Rapid(p));
+            }
+            // the probing macros (haas): switch on, protected move, a measure, switch off
+            11 => {
+                recs.push(Rec::ProbeOn(true));
+                p = [r.f(-50.0, 50.0), r.f(-50.0, 50.0), r.f(5.0, 30.0)];
+                recs.push(Rec::Rapid(p));
+                p = [p[0], p[1], r.f(0.0, 5.0)];
+                recs.push(Rec::ProbeProtected {
+                    to: p,
+                    f: r.f(500.0, 3000.0),
+                });
+                let axis = r.pick(3) as u8;
+                let at = p[axis as usize]
+                    + if r.pick(2) == 0 {
+                        -r.f(1.0, 10.0)
+                    } else {
+                        r.f(1.0, 10.0)
+                    };
+                recs.push(Rec::ProbeSurface {
+                    axis,
+                    at,
+                    q: r.f(1.0, 10.0),
+                    wcs: if r.pick(2) == 0 {
+                        None
+                    } else {
+                        Some(54 + r.pick(6) as u32)
+                    },
+                });
+                recs.push(Rec::ProbeOn(false));
+                recs.push(Rec::Home);
+                p = [p[0], p[1], 25.0];
+                recs.push(Rec::Rapid(p));
+            }
             _ => {
                 tool += 1;
                 if dialect != "grbl" {
@@ -147,47 +188,80 @@ fn random_program(r: &mut Lcg, dialect: &str) -> Program {
     }
 }
 
+/// The program without what the dialect refuses by design (forge-post's typed refusals are tested
+/// in forge-post): a coolant it has no code for, a dwell whose units no open source gives, a
+/// refused tap, a machine-home retract it cannot write, a work offset past its count.
+fn fit(mut p: Program, d: &Dialect) -> Program {
+    let key = |c: &Coolant| match c {
+        Coolant::Flood => "coolant_flood",
+        Coolant::Mist => "coolant_mist",
+        Coolant::Through => "coolant_through",
+        Coolant::Off => "coolant_off",
+    };
+    p.recs.retain(|r| match r {
+        Rec::Coolant(c) => !d.template(key(c)).is_empty(),
+        Rec::Dwell(_) => !d.template("dwell").is_empty(),
+        Rec::Cycle {
+            kind: CycleKind::Dwell,
+            ..
+        } => !d.template("dwell").is_empty() || d.template("cycle_dwell") != "expand",
+        Rec::Cycle {
+            kind: CycleKind::Tap, ..
+        } => !matches!(d.template("cycle_tap"), "refuse" | ""),
+        Rec::Home => d.has_lines("retract_home"),
+        Rec::Probe { .. } => !d.template("probe_move").is_empty(),
+        Rec::ProbeOn(_) => !d.template("probe_on").is_empty(),
+        Rec::ProbeProtected { .. } => !d.template("probe_protected").is_empty(),
+        Rec::ProbeSurface { .. } => !d.template("probe_surface").is_empty(),
+        _ => true,
+    });
+    p
+}
+
 /// Our events in forge-post's Motion vocabulary.
 fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
     let ix = |l: char| c.letters.iter().position(|x| *x == l).unwrap();
     let (xi, yi, zi) = (ix('X'), ix('Y'), ix('Z'));
     let mut out = Vec::new();
-    let mut pos: Option<[i64; 3]> = None;
-    let mut last_comment = String::new();
     let full3 = |v: &Vec<Option<i64>>| [v[xi].unwrap(), v[yi].unwrap(), v[zi].unwrap()];
     for e in evs {
         match e {
             Ev::Rapid(v) => {
                 let p = full3(v);
                 out.push(Motion::Rapid(p));
-                pos = Some(p);
             }
             Ev::Feed { to, f, .. } => {
                 let p = full3(to);
                 out.push(Motion::Feed(p, *f));
-                pos = Some(p);
             }
             Ev::Arc {
                 to,
                 plane: 17,
-                centre: Centre::Offset([i, j]),
+                centre: Centre::Abs([i, j]),
                 cw,
                 full,
                 f,
                 ..
             } => {
-                let s = pos.unwrap();
                 let p = full3(to);
                 out.push(Motion::Arc {
                     to: p,
-                    c: [s[0] + i, s[1] + j],
+                    c: [*i, *j],
                     cw: *cw,
                     f: *f,
                     full: *full,
                 });
-                pos = Some(p);
             }
             Ev::Arc { .. } => panic!("an arc forge-post does not write"),
+            Ev::Skip { to, f, .. } => out.push(Motion::Probe(full3(to), *f)),
+            Ev::ProbeSwitch(on) => out.push(Motion::ProbeOn(*on)),
+            Ev::Protected { to, f } => out.push(Motion::ProbeProtected(full3(to), *f)),
+            Ev::Surface { axis, at, q, wcs, .. } => out.push(Motion::ProbeSurface {
+                axis: [xi, yi, zi].iter().position(|i| i == axis).unwrap() as u8,
+                at: *at,
+                q: *q,
+                wcs: *wcs,
+            }),
             Ev::Dwell { ms } => out.push(Motion::Dwell(*ms)),
             Ev::Tool { t, .. } => out.push(Motion::Tool(*t)),
             Ev::Spindle { s, cw, .. } => out.push(Motion::Spindle(*s, *cw)),
@@ -202,19 +276,16 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
                 if out.last() != Some(&Motion::Home) {
                     out.push(Motion::Home);
                 }
-                pos = None;
             }
-            Ev::Comment(c) => last_comment = c.clone(),
-            // grbl: the tool is named in the comment before M0
-            Ev::Stop { optional: false } => {
-                let t = last_comment
-                    .strip_prefix("TOOL ")
-                    .and_then(|r| r.split(':').next())
-                    .and_then(|n| n.parse().ok())
-                    .unwrap_or(0);
-                out.push(Motion::Tool(t));
-            }
-            Ev::Select(_) | Ev::Length(_) | Ev::Wcs(_) | Ev::Clamp(_) | Ev::Stop { .. } | Ev::End => {}
+            Ev::Comment(_) | Ev::NotModelled { .. } | Ev::Comp { .. } | Ev::Frame(_) => {}
+            Ev::Select(_)
+            | Ev::Length(_)
+            | Ev::Wcs(_)
+            | Ev::Clamp(_)
+            | Ev::Stop { .. }
+            | Ev::End
+            | Ev::Pallet
+            | Ev::Wait(_) => {}
         }
     }
     out
@@ -224,15 +295,19 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
 fn interpreter_agrees_with_forge_post_reader() {
     let mut r = Lcg(0x5eed);
     let mut n = 0;
+    // programs that carried a probe move and a probing macro
+    let (mut probes, mut macros) = (0, 0);
     for (name, src) in forge_post::DIALECTS {
         let d = Dialect::get(name).unwrap();
         let def = &forge_machine::library::builtin()[0];
         let c = Control::for_machine(def, src, 1).unwrap();
         for _ in 0..60 {
-            let prog = random_program(&mut r, name);
+            let prog = fit(random_program(&mut r, name), &d);
             let q = forge_post::quantize(&prog, &d).unwrap();
             let text = forge_post::print(&q, &d).unwrap();
             let theirs = forge_post::read(&text, &d).unwrap();
+            probes += usize::from(text.contains("G38.2"));
+            macros += usize::from(text.contains("G65 P9811"));
             let (evs, _) = gcode::run(&text, &c)
                 .unwrap_or_else(|e| panic!("{name} line {}: {}\n{text}", e.line, e.what));
             let evs: Vec<Ev> = evs.into_iter().map(|b| b.ev).collect();
@@ -254,4 +329,142 @@ fn interpreter_agrees_with_forge_post_reader() {
         }
     }
     assert_eq!(n, 60 * forge_post::DIALECTS.len());
+    assert!(probes > 0 && macros > 0, "{probes} {macros}");
+}
+
+/// CAM-MACHINE review R1/R2: a `%` is skipped only as a tape mark or a `%` header/last block;
+/// an absolute-centre dialect's R arc keeps its R; an absolute-centre arc outside G17 is refused.
+#[test]
+fn dialect_shell_edges() {
+    let def = &forge_machine::library::builtin()[0];
+    let fanuc = Control::for_dialect(def, "fanuc", 1).unwrap();
+    let f = Dialect::get("fanuc").unwrap();
+    // R1: a block with % inside is refused, by both readers; % alone is a tape mark
+    let bad = "%\nG0 X0. Y0. Z5.\nG1 X10. F100. %\n";
+    assert!(gcode::run(bad, &fanuc).is_err());
+    assert!(forge_post::read(bad, &f).is_err());
+    assert!(gcode::run("%\nG0 X0. Y0. Z5.\n%\n", &fanuc).is_ok());
+    // Heidenhain: the header and the numbered last block are skipped
+    let hc = Control::for_dialect(def, "heidenhain", 1).unwrap();
+    let h = Dialect::get("heidenhain").unwrap();
+    let head = "%P1 G71 *\nN10 G00 X+0 Y+0 Z+5*\n";
+    let tail = "N99999999 %P1 G71 *\n";
+    // R2a: G02 with R after a centre block: no I/J added (the core takes the R arc)
+    let r_arc = format!("{head}N20 I+5 J+0*\nN30 G01 Z-1 F100*\nN40 G02 X+10 Y+0 R+5*\n{tail}");
+    let (blocks, _) = gcode::run(&r_arc, &hc).unwrap_or_else(|e| panic!("line {}: {}", e.line, e.what));
+    let r_ev = blocks.iter().find_map(|b| match &b.ev {
+        Ev::Arc { centre, .. } => Some(*centre),
+        _ => None,
+    });
+    assert!(matches!(r_ev, Some(Centre::R(_))), "{r_ev:?}");
+    // the centre form gives the same arc as the R form here (a half circle about (5, 0))
+    let c_arc = format!("{head}N20 I+5 J+0*\nN30 G01 Z-1 F100*\nN40 G02 X+10 Y+0*\n{tail}");
+    assert!(gcode::run(&c_arc, &hc).is_ok());
+    assert!(forge_post::read(&c_arc, &h).is_ok());
+    // R2b: an absolute-centre arc in G18 is refused (I K / J K are not modelled)
+    let g18 = format!("{head}N20 G18*\nN30 I+5 J+0*\nN40 G02 X+10 Z+5*\n{tail}");
+    let e = gcode::run(&g18, &hc).unwrap_err();
+    assert!(e.what.contains("outside G17"), "{}", e.what);
+    // a stray % in a Heidenhain block is refused too
+    assert!(gcode::run(&format!("{head}N20 G01 X+1 % F100*\n"), &hc).is_err());
+}
+
+/// The same with a post's options (forge_post::PostOptions): fewer decimals, line numbers on and
+/// off, no safe start. The control reads the text at its own increment, so forge-post's reader is
+/// given the dialect itself, as the control is.
+#[test]
+fn interpreter_agrees_with_forge_post_reader_under_post_options() {
+    use forge_post::PostOptions;
+    let mut r = Lcg(0x0b7);
+    let mut n = 0;
+    for (name, src) in forge_post::DIALECTS {
+        let d = Dialect::get(name).unwrap();
+        let def = &forge_machine::library::builtin()[0];
+        let c = Control::for_machine(def, src, 1).unwrap();
+        let opts = [
+            PostOptions {
+                decimals: Some(d.decimals.saturating_sub(1)),
+                feed_decimals: Some(0),
+                ..Default::default()
+            },
+            PostOptions {
+                line_numbers: Some(true),
+                safe_start: Some(false),
+                ..Default::default()
+            },
+            PostOptions {
+                line_numbers: Some(false),
+                ..Default::default()
+            },
+        ];
+        for o in &opts {
+            let Ok(dw) = d.with(o) else { continue };
+            for _ in 0..15 {
+                let prog = fit(random_program(&mut r, name), &d);
+                let q = forge_post::quantize(&prog, &dw).unwrap();
+                let text = forge_post::print(&q, &dw).unwrap();
+                let theirs =
+                    forge_post::read(&text, &d).unwrap_or_else(|e| panic!("{name} {o:?}: {e:?}\n{text}"));
+                let (evs, _) = gcode::run(&text, &c)
+                    .unwrap_or_else(|e| panic!("{name} {o:?} line {}: {}\n{text}", e.line, e.what));
+                let evs: Vec<Ev> = evs.into_iter().map(|b| b.ev).collect();
+                let ours = as_motions(&evs, &c);
+                assert_eq!(
+                    forge_post::normalize(&ours),
+                    forge_post::normalize(&theirs),
+                    "{name} {o:?}\n{text}"
+                );
+                n += 1;
+            }
+        }
+    }
+    assert!(n >= 15 * 2 * forge_post::DIALECTS.len(), "{n}");
+}
+
+/// Inch programs (forge_post::PostOptions::inch): the interpreter reading with the control in
+/// inches agrees with forge-post's reader, on every dialect with an inch code; a mm reading of the
+/// inch text, and an inch reading of a mm text, are refused.
+#[test]
+fn interpreter_agrees_with_forge_post_reader_in_inches() {
+    use forge_post::PostOptions;
+    let mut r = Lcg(0x1c4);
+    let mut n = 0;
+    for (name, src) in forge_post::DIALECTS {
+        let d = Dialect::get(name).unwrap();
+        let def = &forge_machine::library::builtin()[0];
+        let c = Control::for_machine(def, src, 1).unwrap();
+        let Ok(di) = d.with(&PostOptions {
+            inch: true,
+            ..Default::default()
+        }) else {
+            assert!(c.in_inches().is_err(), "{name}");
+            continue;
+        };
+        let ci = c.in_inches().unwrap();
+        assert_eq!(
+            (ci.decimals, ci.feed_decimals),
+            (di.decimals, di.feed_decimals),
+            "{name}"
+        );
+        for _ in 0..20 {
+            let prog = fit(random_program(&mut r, name), &d);
+            let q = forge_post::quantize(&prog, &di).unwrap();
+            let text = forge_post::print(&q, &di).unwrap();
+            let theirs = forge_post::read(&text, &di).unwrap_or_else(|e| panic!("{name}: {e:?}\n{text}"));
+            let (evs, _) = gcode::run(&text, &ci)
+                .unwrap_or_else(|e| panic!("{name} line {}: {}\n{text}", e.line, e.what));
+            let evs: Vec<Ev> = evs.into_iter().map(|b| b.ev).collect();
+            let ours = as_motions(&evs, &ci);
+            assert_eq!(
+                forge_post::normalize(&ours),
+                forge_post::normalize(&theirs),
+                "{name}\n{text}"
+            );
+            assert!(gcode::run(&text, &c).is_err(), "{name}: the mm control read G20");
+            let mm = forge_post::print(&forge_post::quantize(&prog, &d).unwrap(), &d).unwrap();
+            assert!(gcode::run(&mm, &ci).is_err(), "{name}: the inch control read G21");
+            n += 1;
+        }
+    }
+    assert!(n >= 20 * 8, "{n}");
 }

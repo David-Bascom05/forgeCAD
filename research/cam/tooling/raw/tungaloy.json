@@ -1,0 +1,1647 @@
+{
+ "source": "Tungaloy (tungaloy.com General Catalogue 2023-2024 PDFs)",
+ "blocked": [
+  {
+   "url": "https://catalog.tungaloy.com/Grade.aspx?grade=AH6225&item=6903353&fnum=973&mapp=IS&app=162&lang=EN",
+   "why": "HTTP 403 bot challenge (\"Just a moment... Enable JavaScript and cookies\") - not pursued"
+  },
+  {
+   "url": "https://catalog.tungaloy.com/Default.aspx?s=1&qw=CNM%E&search=F&choose=c&mapp=IS&tooltype=I&GFSTYP=M&lang=EN",
+   "why": "HTTP 403 bot challenge - not pursued"
+  }
+ ],
+ "records": [
+  {
+   "kind": "insert",
+   "iso_code": "CNMG120404",
+   "id": "CNMG120404-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert CNMG120404-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=57",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "RE 0.4"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9205",
+      "T9215",
+      "T9225",
+      "T9235",
+      "T6215",
+      "T515",
+      "AH8015",
+      "AH6225",
+      "AH6235",
+      "AH120"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CNMG120408",
+   "id": "CNMG120408-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert CNMG120408-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=57",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9205",
+      "T9215",
+      "T9225",
+      "T9235",
+      "T6215",
+      "T515",
+      "AH8015",
+      "AH6225",
+      "AH6235",
+      "AH725",
+      "AH120"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150404",
+   "id": "DNMG150404-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert DNMG150404-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=69",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "RE 0.4"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9205",
+      "T9215",
+      "T9225",
+      "T9235",
+      "T6215",
+      "T515",
+      "AH8015",
+      "AH6225",
+      "AH6235",
+      "AH120"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150408",
+   "id": "DNMG150408-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert DNMG150408-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=69",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9205",
+      "T9215",
+      "T9225",
+      "T9235",
+      "T6215",
+      "T515",
+      "AH8015",
+      "AH6225",
+      "AH6235",
+      "AH120"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150604",
+   "id": "DNMG150604-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert DNMG150604-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=69",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "RE 0.4"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "s": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "S 6.35"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9205",
+      "T9215",
+      "T9225",
+      "T9235",
+      "T6215",
+      "AH8015",
+      "AH6225",
+      "AH120"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DNMG150608",
+   "id": "DNMG150608-PM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert DNMG150608-PM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=69",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "s": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "S 6.35"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "PM",
+     "unit": "text",
+     "stated": "PM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9215",
+      "T9225",
+      "T6215",
+      "AH8015",
+      "AH6225"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "TNMG160404",
+   "id": "TNMG160404-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert TNMG160404-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=90",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "RE 0.4"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "IC 9.525"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "hole_d": {
+     "v": 3.81,
+     "unit": "mm",
+     "stated": "D1 3.81"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9215",
+      "T9225",
+      "T9235",
+      "T6215",
+      "AH8015",
+      "AH6225",
+      "AH725",
+      "AH120"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "TNMG160408",
+   "id": "TNMG160408-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert TNMG160408-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=90",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "IC 9.525"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "hole_d": {
+     "v": 3.81,
+     "unit": "mm",
+     "stated": "D1 3.81"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9205",
+      "T9215",
+      "T9225",
+      "T9235",
+      "T6215",
+      "AH8015",
+      "AH6225",
+      "AH725",
+      "AH120"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "VNMG160404",
+   "id": "VNMG160404-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert VNMG160404-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=99",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "RE 0.4"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "IC 9.525"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "hole_d": {
+     "v": 3.81,
+     "unit": "mm",
+     "stated": "D1 3.81"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9205",
+      "T9215",
+      "T9225",
+      "T9235",
+      "T6215",
+      "AH8015",
+      "AH6225",
+      "AH120"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "VNMG160408",
+   "id": "VNMG160408-PM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert VNMG160408-PM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=99",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "IC 9.525"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "hole_d": {
+     "v": 3.81,
+     "unit": "mm",
+     "stated": "D1 3.81"
+    },
+    "chipbreaker": {
+     "v": "PM",
+     "unit": "text",
+     "stated": "PM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9215",
+      "T9225",
+      "T6215",
+      "AH8015",
+      "AH6225"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "WNMG080404",
+   "id": "WNMG080404-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert WNMG080404-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=105",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "RE 0.4"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9205",
+      "T9215",
+      "T9225",
+      "T9235",
+      "T6215",
+      "T515",
+      "AH8015",
+      "AH6225",
+      "AH6235",
+      "AH725",
+      "AH120"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "WNMG080408",
+   "id": "WNMG080408-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert WNMG080408-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=105",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8"
+    },
+    "ic": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "IC 12.7"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "hole_d": {
+     "v": 5.16,
+     "unit": "mm",
+     "stated": "D1 5.16"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9205",
+      "T9215",
+      "T9225",
+      "T9235",
+      "T6215",
+      "T515",
+      "AH8015",
+      "AH6225",
+      "AH6235",
+      "AH725",
+      "AH120"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CCMT09T304",
+   "id": "CCMT09T304-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert CCMT09T304-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=116",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "RE 0.4"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "IC 9.525"
+    },
+    "s": {
+     "v": 3.97,
+     "unit": "mm",
+     "stated": "S 3.97"
+    },
+    "hole_d": {
+     "v": 4.4,
+     "unit": "mm",
+     "stated": "D1 4.4"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9215",
+      "T9225",
+      "T6215",
+      "AH8015",
+      "AH6225",
+      "NS9530"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "CCMT09T308",
+   "id": "CCMT09T308-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert CCMT09T308-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=116",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "IC 9.525"
+    },
+    "s": {
+     "v": 3.97,
+     "unit": "mm",
+     "stated": "S 3.97"
+    },
+    "hole_d": {
+     "v": 4.4,
+     "unit": "mm",
+     "stated": "D1 4.4"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9215",
+      "T9225",
+      "T6215",
+      "AH8015",
+      "AH6225",
+      "NS9530"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DCMT11T304",
+   "id": "DCMT11T304-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert DCMT11T304-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=126",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "RE 0.4"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "IC 9.525"
+    },
+    "s": {
+     "v": 3.97,
+     "unit": "mm",
+     "stated": "S 3.97"
+    },
+    "hole_d": {
+     "v": 4.4,
+     "unit": "mm",
+     "stated": "D1 4.4"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9215",
+      "T9225",
+      "T6215",
+      "AH8015",
+      "AH6225",
+      "NS9530"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "DCMT11T308",
+   "id": "DCMT11T308-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert DCMT11T308-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=126",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "IC 9.525"
+    },
+    "s": {
+     "v": 3.97,
+     "unit": "mm",
+     "stated": "S 3.97"
+    },
+    "hole_d": {
+     "v": 4.4,
+     "unit": "mm",
+     "stated": "D1 4.4"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9215",
+      "T9225",
+      "T6215",
+      "AH8015",
+      "AH6225",
+      "NS9530"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "insert",
+   "iso_code": "VBMT160404",
+   "id": "VBMT160404-TM",
+   "maker": "Tungaloy",
+   "name": "Tungaloy turning insert VBMT160404-TM (General Catalogue 2023-2024, B Insert)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=154",
+   "taken": "2026-11-24",
+   "values": {
+    "re": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "RE 0.4"
+    },
+    "ic": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "IC 9.525"
+    },
+    "s": {
+     "v": 4.76,
+     "unit": "mm",
+     "stated": "S 4.76"
+    },
+    "hole_d": {
+     "v": 4.4,
+     "unit": "mm",
+     "stated": "D1 4.4"
+    },
+    "chipbreaker": {
+     "v": "TM",
+     "unit": "text",
+     "stated": "TM"
+    },
+    "grades_marked": {
+     "v": [
+      "T9215",
+      "T9225",
+      "T6215",
+      "AH8015",
+      "AH6225",
+      "NS9530"
+     ],
+     "unit": "text",
+     "stated": "grade columns carrying the table mark (glyph U+EA02) on this row"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "meaning of the grade-column mark glyph not given in this chapter (assumed availability mark, not verified)",
+    "cutting edge length, clearance angle and vc/f/ap not stated in this table"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "PCLNR/L2020K12",
+   "id": "PCLNR/L2020K12E",
+   "maker": "Tungaloy",
+   "name": "Tungaloy PCLNR/L lever-lock external holder (E version)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=18",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "H 20"
+    },
+    "b": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "B 20"
+    },
+    "l1": {
+     "v": 125.0,
+     "unit": "mm",
+     "stated": "LF 125"
+    },
+    "lh": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "LH 28"
+    },
+    "hf": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "HF 20"
+    },
+    "f": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "WF 25"
+    },
+    "re_std": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8 (standard corner radius)"
+    },
+    "insert": {
+     "v": "CN**/GNGA1204...",
+     "unit": "text",
+     "stated": "CN**/GNGA1204..."
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (page figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R/L in designation"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "plain PCLNR/L2020K12 row text is garbled by page-edge tab letters in extraction; E version used"
+   ]
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "PCLNR/L2525M12",
+   "id": "PCLNR/L2525M12E",
+   "maker": "Tungaloy",
+   "name": "Tungaloy PCLNR/L lever-lock external holder (E version)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=18",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "H 25"
+    },
+    "b": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "B 25"
+    },
+    "l1": {
+     "v": 150.0,
+     "unit": "mm",
+     "stated": "LF 150"
+    },
+    "lh": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "LH 28"
+    },
+    "hf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "HF 25"
+    },
+    "f": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "WF 32"
+    },
+    "re_std": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8 (standard corner radius)"
+    },
+    "insert": {
+     "v": "CN**/GNGA1204...",
+     "unit": "text",
+     "stated": "CN**/GNGA1204..."
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (page figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R/L in designation"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "PCLNR/L2020K12",
+   "id": "PCLNR/L2020K12-CHP",
+   "maker": "Tungaloy",
+   "name": "Tungaloy PCLNR/L-CHP coolant holder",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=19",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "H 20"
+    },
+    "b": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "B 20"
+    },
+    "l1": {
+     "v": 125.0,
+     "unit": "mm",
+     "stated": "LF 125"
+    },
+    "lh": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "LH 33"
+    },
+    "hf": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "HF 20"
+    },
+    "f": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "WF 32"
+    },
+    "re_std": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8 (standard corner radius)"
+    },
+    "insert": {
+     "v": "CN**/GNGA1204...",
+     "unit": "text",
+     "stated": "CN**/GNGA1204..."
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (page figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R/L in designation"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "DDJNR/L2525M15",
+   "id": "DDJNR/L2525M15",
+   "maker": "Tungaloy",
+   "name": "Tungaloy DDJNR/L double-clamp external holder",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=35",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "H 25"
+    },
+    "b": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "B 25"
+    },
+    "l1": {
+     "v": 150.0,
+     "unit": "mm",
+     "stated": "LF 150"
+    },
+    "lh": {
+     "v": 38.0,
+     "unit": "mm",
+     "stated": "LH 38"
+    },
+    "hf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "HF 25"
+    },
+    "f": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "WF 32"
+    },
+    "re_std": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8 (standard corner radius)"
+    },
+    "insert": {
+     "v": "DN**/FNGA1504...",
+     "unit": "text",
+     "stated": "DN**/FNGA1504..."
+    },
+    "kr": {
+     "v": 93,
+     "unit": "deg",
+     "stated": "93° (page figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R/L in designation"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "turn_holder",
+   "iso_code": "PDJNR/L2525M15",
+   "id": "PDJNR/L2525M15E",
+   "maker": "Tungaloy",
+   "name": "Tungaloy PDJNR/L lever-lock external holder (E version)",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=36",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "H 25"
+    },
+    "b": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "B 25"
+    },
+    "l1": {
+     "v": 150.0,
+     "unit": "mm",
+     "stated": "LF 150"
+    },
+    "lh": {
+     "v": 36.0,
+     "unit": "mm",
+     "stated": "LH 36"
+    },
+    "hf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "HF 25"
+    },
+    "f": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "WF 32"
+    },
+    "re_std": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8 (standard corner radius)"
+    },
+    "insert": {
+     "v": "DN**/FNGA1506...",
+     "unit": "text",
+     "stated": "DN**/FNGA1506..."
+    },
+    "kr": {
+     "v": 93,
+     "unit": "deg",
+     "stated": "93° (page figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R/L in designation"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "A16Q-SCLCR/L09",
+   "id": "A16Q-SCLCR/L09-D180",
+   "maker": "Tungaloy",
+   "name": "Tungaloy A-SCLCR/L boring bar",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=14",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "DMIN 18"
+    },
+    "dmm": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "DCONMS 16"
+    },
+    "f": {
+     "v": 9.0,
+     "unit": "mm",
+     "stated": "WF 9"
+    },
+    "l1": {
+     "v": 180.0,
+     "unit": "mm",
+     "stated": "LF 180"
+    },
+    "lh": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "LH 32"
+    },
+    "h": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "H 15"
+    },
+    "gamp": {
+     "v": 0.0,
+     "unit": "deg",
+     "stated": "GAMP 0°"
+    },
+    "gamf": {
+     "v": -10.0,
+     "unit": "deg",
+     "stated": "GAMF -10°"
+    },
+    "re_std": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8 (standard corner radius)"
+    },
+    "insert": {
+     "v": "CC**09T3...",
+     "unit": "text",
+     "stated": "CC**09T3..."
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (page figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R/L in designation"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "A20R-SCLCR/L09",
+   "id": "A20R-SCLCR/L09-D220",
+   "maker": "Tungaloy",
+   "name": "Tungaloy A-SCLCR/L boring bar",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=14",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 22.0,
+     "unit": "mm",
+     "stated": "DMIN 22"
+    },
+    "dmm": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "DCONMS 20"
+    },
+    "f": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "WF 11"
+    },
+    "l1": {
+     "v": 200.0,
+     "unit": "mm",
+     "stated": "LF 200"
+    },
+    "lh": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "LH 32"
+    },
+    "h": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "H 18"
+    },
+    "gamp": {
+     "v": 0.0,
+     "unit": "deg",
+     "stated": "GAMP 0°"
+    },
+    "gamf": {
+     "v": -8.0,
+     "unit": "deg",
+     "stated": "GAMF -8°"
+    },
+    "re_std": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8 (standard corner radius)"
+    },
+    "insert": {
+     "v": "CC**09T3...",
+     "unit": "text",
+     "stated": "CC**09T3..."
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (page figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R/L in designation"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "A25S-SCLCR/L09",
+   "id": "A25S-SCLCR/L09-D270",
+   "maker": "Tungaloy",
+   "name": "Tungaloy A-SCLCR/L boring bar",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=14",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 27.0,
+     "unit": "mm",
+     "stated": "DMIN 27"
+    },
+    "dmm": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "DCONMS 25"
+    },
+    "f": {
+     "v": 13.5,
+     "unit": "mm",
+     "stated": "WF 13.5"
+    },
+    "l1": {
+     "v": 250.0,
+     "unit": "mm",
+     "stated": "LF 250"
+    },
+    "lh": {
+     "v": 45.0,
+     "unit": "mm",
+     "stated": "LH 45"
+    },
+    "h": {
+     "v": 23.0,
+     "unit": "mm",
+     "stated": "H 23"
+    },
+    "gamp": {
+     "v": 0.0,
+     "unit": "deg",
+     "stated": "GAMP 0°"
+    },
+    "gamf": {
+     "v": -6.0,
+     "unit": "deg",
+     "stated": "GAMF -6°"
+    },
+    "re_std": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8 (standard corner radius)"
+    },
+    "insert": {
+     "v": "CC**09T3...",
+     "unit": "text",
+     "stated": "CC**09T3..."
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (page figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R/L in designation"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "S32S-PCLNR/L12",
+   "id": "S32S-PCLNR/L12",
+   "maker": "Tungaloy",
+   "name": "Tungaloy S-PCLNR/L boring bar",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=27",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "DMIN 40"
+    },
+    "dmm": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "DCONMS 32"
+    },
+    "f": {
+     "v": 22.0,
+     "unit": "mm",
+     "stated": "WF 22"
+    },
+    "l1": {
+     "v": 250.0,
+     "unit": "mm",
+     "stated": "LF 250"
+    },
+    "lh": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "LH 50"
+    },
+    "h": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "H 30"
+    },
+    "b": {
+     "v": 29.5,
+     "unit": "mm",
+     "stated": "B 29.5"
+    },
+    "gamp": {
+     "v": -6.0,
+     "unit": "deg",
+     "stated": "GAMP -6°"
+    },
+    "gamf": {
+     "v": -11.0,
+     "unit": "deg",
+     "stated": "GAMF -11°"
+    },
+    "re_std": {
+     "v": 0.8,
+     "unit": "mm",
+     "stated": "RE 0.8 (standard corner radius)"
+    },
+    "insert": {
+     "v": "CN**/GNGA1204...",
+     "unit": "text",
+     "stated": "CN**/GNGA1204..."
+    },
+    "kr": {
+     "v": 95,
+     "unit": "deg",
+     "stated": "95° (page figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R/L in designation"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "column \"B\" on this table kept as stated (bar, not shank width)"
+   ]
+  },
+  {
+   "kind": "boring_bar",
+   "iso_code": "A16Q-SDUCR/L07",
+   "id": "A16Q-SDUCR/L07-D200",
+   "maker": "Tungaloy",
+   "name": "Tungaloy A-SDUCR/L boring bar",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=56",
+   "taken": "2026-11-24",
+   "values": {
+    "min_bore": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "DMIN 20"
+    },
+    "dmm": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "DCONMS 16"
+    },
+    "f": {
+     "v": 11.3,
+     "unit": "mm",
+     "stated": "WF 11.3"
+    },
+    "l1": {
+     "v": 180.0,
+     "unit": "mm",
+     "stated": "LF 180"
+    },
+    "lh": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "LH 32"
+    },
+    "h": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "H 15"
+    },
+    "f2": {
+     "v": 3.3,
+     "unit": "mm",
+     "stated": "f2 3.3"
+    },
+    "gamp": {
+     "v": 0.0,
+     "unit": "deg",
+     "stated": "GAMP 0°"
+    },
+    "gamf": {
+     "v": -5.0,
+     "unit": "deg",
+     "stated": "GAMF -5°"
+    },
+    "re_std": {
+     "v": 0.4,
+     "unit": "mm",
+     "stated": "RE 0.4 (standard corner radius)"
+    },
+    "insert": {
+     "v": "DC**0702...",
+     "unit": "text",
+     "stated": "DC**0702..."
+    },
+    "kr": {
+     "v": 93,
+     "unit": "deg",
+     "stated": "93° (page figure)"
+    },
+    "hand": {
+     "v": "R/L",
+     "unit": "text",
+     "stated": "R/L in designation"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  }
+ ],
+ "notes": [
+  "PDFs listed on https://tungaloy.com/publications/catalog/"
+ ]
+}

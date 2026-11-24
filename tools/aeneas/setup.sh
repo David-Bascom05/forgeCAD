@@ -75,6 +75,17 @@ patches "$H/aeneas" 'aeneas-*.patch'
 patches "$H/charon" 'charon-*.patch'
 CHARON_KEY="$PIN $(cat "$(cd "$(dirname "$0")" && pwd)"/patches/charon-*.patch 2>/dev/null | sha256sum | cut -c1-16)"
 
+# tools/aeneas/patches/charon-*.patch: fixes to Charon at its pin (charon-vtable-assoc: a vtable
+# instance's trait reference gets its lifted associated types, so a closure coerced to `&dyn Fn`
+# typechecks). Applied the same way.
+for p in "$(cd "$(dirname "$0")" && pwd)"/patches/charon-*.patch; do
+  [ -e "$p" ] || continue
+  if git -C "$H/charon" apply --check "$p" 2>/dev/null; then git -C "$H/charon" apply "$p"
+  elif git -C "$H/charon" apply -R --check "$p" 2>/dev/null; then :
+  else echo "cannot apply $p to charon $PIN"; exit 4; fi
+done
+CHARON_KEY="$PIN $(cat "$(cd "$(dirname "$0")" && pwd)"/patches/charon-*.patch 2>/dev/null | sha256sum | cut -c1-16)"
+
 say "opam $OPAM_VERSION, OCaml $OCAML_SWITCH"
 if [ ! -x "$H/bin/opam" ]; then
   curl -fsSL -o "$H/bin/opam" "https://github.com/ocaml/opam/releases/download/$OPAM_VERSION/opam-$OPAM_VERSION-x86_64-linux"
