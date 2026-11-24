@@ -152,6 +152,9 @@ fn a_channel_on_a_trubend_in_3d() {
         let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
         b.step = step;
         b.t = t;
+        h.step();
+        // as "Part and Tools" frames it at that instant
+        frame(&mut h, Framing::Work);
         shot(&mut h, name);
     }
     // the program written as the part's bending document: the editor's layout and steps
