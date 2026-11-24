@@ -30,6 +30,13 @@ pub enum Look {
     Cutting,
     /// A cast, painted body: vise bases, press frames.
     MachinePaint,
+    /// A dark beam (a press's bed and ram), so the frame's parts separate.
+    DarkSteel,
+    /// What stands in for a part of the scene the record does not hold (a press's stand-in punch
+    /// and die): a contrasting warm tone, so it is never taken for the record's own.
+    StandIn,
+    /// The floor the machine stands on.
+    Floor,
 }
 
 impl Look {
@@ -40,6 +47,9 @@ impl Look {
             Look::Steel => "Steel, machined",
             Look::Cutting => "Steel, black oxide",
             Look::MachinePaint => "Paint, machine gloss",
+            Look::DarkSteel => "Steel, black oxide",
+            Look::StandIn => "Brass",
+            Look::Floor => "Concrete floor",
         }
     }
 
@@ -77,6 +87,8 @@ pub struct Preview {
     pub section: Option<Inset>,
     /// Look along the length (a die, a punch, a press): the axis the subject is long on.
     pub long_axis: Option<usize>,
+    /// Framed as its operator sees it (front, lower), not from the 3/4 iso.
+    pub operator: bool,
 }
 
 impl Preview {
@@ -580,10 +592,10 @@ pub fn press(t: &forge_vendor::toml::Table) -> Preview {
     let th = or(g("table_height"), 900.0, "table height");
     let throat = or(g("throat"), 400.0, "throat depth");
     let stroke = g("stroke");
-    let ft = or(g("frame.thickness"), 60.0, "housing thickness");
-    let fd = or(g("frame.depth"), throat * 2.2, "housing depth");
-    let (bf, bb) = (or(g("bed.front"), 70.0, "bed"), or(g("bed.back"), 70.0, "bed"));
-    let (rf, rb) = (or(g("ram.front"), 70.0, "ram"), or(g("ram.back"), 70.0, "ram"));
+    let ft = or(g("frame.thickness"), 90.0, "housing thickness");
+    let fd = or(g("frame.depth"), throat * 2.4, "housing depth");
+    let (bf, bb) = (or(g("bed.front"), 90.0, "bed"), or(g("bed.back"), 90.0, "bed"));
+    let (rf, rb) = (or(g("ram.front"), 90.0, "ram"), or(g("ram.back"), 90.0, "ram"));
     let est: Vec<&str> = {
         let mut e = est;
         e.dedup();
@@ -593,15 +605,11 @@ pub fn press(t: &forge_vendor::toml::Table) -> Preview {
     let bed_h = th * 0.45;
     let ram_h = oh * 1.6;
     let ram_z = th + oh;
-    p.solid_box(
-        [-bl / 2.0, -bf, th - bed_h],
-        [bl / 2.0, bb, th],
-        Look::MachinePaint,
-    );
+    p.solid_box([-bl / 2.0, -bf, th - bed_h], [bl / 2.0, bb, th], Look::DarkSteel);
     p.solid_box(
         [-bl / 2.0, -rf, ram_z],
         [bl / 2.0, rb, ram_z + ram_h],
-        Look::MachinePaint,
+        Look::DarkSteel,
     );
     // the housings: a C in (y, z), the throat cut in front between the table and the ram
     let top = ram_z + ram_h + oh * 0.4;
@@ -613,10 +621,12 @@ pub fn press(t: &forge_vendor::toml::Table) -> Preview {
         [y1, 0.0],
         [y1, top],
         [y0, top],
-        [y0, ram_z + ram_h * 0.3],
-        [yt, ram_z + ram_h * 0.3],
-        [yt, th - bed_h * 0.6],
-        [y0, th - bed_h * 0.6],
+        // the throat: the working gap's height (table to ram, plus a margin), cut back to the
+        // throat depth, so it shows as the C's mouth between the beams
+        [y0, ram_z + oh * 0.15],
+        [yt, ram_z + oh * 0.15],
+        [yt, th - oh * 0.15],
+        [y0, th - oh * 0.15],
     ];
     for s in [-1.0, 1.0] {
         let (a, b) = (s * gap / 2.0, s * (gap / 2.0 + ft));
@@ -650,7 +660,7 @@ pub fn press(t: &forge_vendor::toml::Table) -> Preview {
                 .map(|q| [q[0], if flip { dz - q[1].abs() } else { dz + q[1] }])
                 .collect();
             p.parts
-                .push((sweep_x(&yz, -tool_len / 2.0, tool_len / 2.0), Look::ToolSteel));
+                .push((sweep_x(&yz, -tool_len / 2.0, tool_len / 2.0), Look::StandIn));
         }
         tool_len *= 1.0;
     }
@@ -660,10 +670,10 @@ pub fn press(t: &forge_vendor::toml::Table) -> Preview {
         [-gap / 2.0 - ft, (-bf).min(-rf), th],
         format!("Throat {} mm", forge_units::trim(throat)),
     );
-    p.ghosts.last_mut().map(|g| {
-        // the throat is cited: no dashes, only its label
+    // the throat is cited: no dashes, only its label
+    if let Some(g) = p.ghosts.last_mut() {
         g.edges.clear();
-    });
+    }
     if !est.is_empty() {
         p.mark(
             [gap / 2.0 + ft, y1, 0.0],
@@ -674,9 +684,21 @@ pub fn press(t: &forge_vendor::toml::Table) -> Preview {
     p.mark(
         [0.0, -bf, th + 2.0],
         [tool_len / 2.0, -bf, th + 2.0],
-        "Punch and die · forgecad's stand-in set",
+        "Punch and die (brass tone) · forgecad's stand-in set",
     );
-    p.ghosts.last_mut().map(|g| g.edges.clear());
+    if let Some(g) = p.ghosts.last_mut() {
+        g.edges.clear();
+    }
+    // the floor it stands on: context, not the record
+    let m = bl.max(fd) * 0.25;
+    p.parts.push((
+        prims_tris(&[Prim::Box {
+            min: [-bl / 2.0 - ft - m, y0 - m * 2.0, -20.0],
+            max: [bl / 2.0 + ft + m, y1 + m, 0.0],
+        }]),
+        Look::Floor,
+    ));
+    p.operator = true;
     p
 }
 
@@ -737,5 +759,38 @@ mod tests {
         let e = dashed_box([0.0; 3], [10.0, 10.0, 10.0]);
         assert!(e.len() > 12);
         assert!(e.iter().all(|d| d.len() == 2));
+    }
+}
+
+#[cfg(test)]
+mod c_frame_tests {
+    /// A press housing's C (the throat cut in front): its side face covers the plate less the
+    /// notch, so the throat shows.
+    #[test]
+    fn a_housing_c_has_its_throat_cut() {
+        let c = [
+            [-150.0, 0.0],
+            [900.0, 0.0],
+            [900.0, 2600.0],
+            [-150.0, 2600.0],
+            [-150.0, 1600.0],
+            [330.0, 1600.0],
+            [330.0, 900.0],
+            [-150.0, 900.0],
+        ];
+        let t = super::sweep_x(&c, 875.0, 965.0);
+        // the +x side face's triangles, in (y, z)
+        let area: f64 = t
+            .tri
+            .iter()
+            .filter(|tr| tr.iter().all(|&i| (t.pos[i as usize][0] - 965.0).abs() < 1e-9))
+            .map(|tr| {
+                let [a, b, c] = tr.map(|i| t.pos[i as usize]);
+                0.5 * ((b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1])).abs()
+            })
+            .sum();
+        let full = 1050.0 * 2600.0;
+        let notch = 480.0 * 700.0;
+        assert!((area - (full - notch)).abs() < 1e-6, "{area} vs {}", full - notch);
     }
 }

@@ -150,7 +150,16 @@ fn frame_preview(p: &crate::library_mesh::Preview, size: (u32, u32)) -> crate::c
         let near = Bounds::new(f(lo), f([hi[0], lo[1] + 4.0 * sec, hi[2]]));
         return crate::frame::frame_from(near, view, 0.7, -62.0, 22.0);
     }
-    crate::frame::frame(Bounds::new(f(lo), f(hi)), view, Framing::default(), &[]).camera
+    let how = if p.operator {
+        Framing {
+            // front-right 3/4, lower than the iso: the housings' C (the throat) shows on their side
+            dir: crate::frame::Dir::Custom(-38.0, 18.0),
+            ..Framing::default()
+        }
+    } else {
+        Framing::default()
+    };
+    crate::frame::frame(Bounds::new(f(lo), f(hi)), view, how, &[]).camera
 }
 
 impl super::Gui {
