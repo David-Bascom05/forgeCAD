@@ -91,8 +91,14 @@ pub struct OpQ {
     pub climb: f64,
     pub conventional: f64,
     pub slotting: f64,
-    /// Feed per tooth the cutting data asks for this diameter (mm).
+    /// Feed per tooth the cutting data asks for this diameter (mm): the group's slot chip.
     pub fz_target: f64,
+    /// The op's own resolved chip targets (forge-cam-lang `resolved`): the chip held at a full
+    /// cut (`chip`, its class factor already in for finish), and for a rough op the slot chip
+    /// times its class factor, the target where a sample engages under 90° (engagement feed's
+    /// rule). 0: not resolved (thin/thick then fall back to fz_target).
+    pub fz_class: f64,
+    pub fz_class_rough: f64,
     /// Max chip thickness after thinning: min, time-weighted mean, max (mm).
     pub hex_min: f64,
     pub hex_mean: f64,
@@ -311,6 +317,13 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
             q.side = side_mill(t.kind);
             q.fz_target = group.map(|g| g.fz_at(t.dc)).unwrap_or(0.0);
         }
+        if let Some(r) = op.resolved.as_ref().filter(|r| r.held_chip) {
+            q.fz_class = r.chip.v;
+            q.fz_class_rough = match &r.class {
+                Some((name, f)) if name == "rough" && r.slot_chip.is_finite() => r.slot_chip * f,
+                _ => r.chip.v,
+            };
+        }
         let mut phi_t = 0.0; // Σ φ dt
         let mut side_t = 0.0; // time of side-engaged cutting
         let mut hex_t = 0.0;
@@ -402,6 +415,7 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
                     mv: mi,
                     ..MoveQ::default()
                 };
+                let mut mq_target: f64 = 0.0;
                 let mut a = at;
                 for b in pieces(at, mv, l) {
                     let len = dist(a, b);
@@ -449,12 +463,24 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
                             hex_t += hex * dt;
                             hex_tt += dt;
                             hexes.push((hex, dt));
-                            if hex < 0.5 * q.fz_target {
+                            // the target at this sample: the op's own (rough's class chip
+                            // under 90°), else the group's slot chip
+                            let target = if q.fz_class > 0.0 {
+                                if e.phi < 90.0 {
+                                    q.fz_class_rough
+                                } else {
+                                    q.fz_class
+                                }
+                            } else {
+                                q.fz_target
+                            };
+                            if hex < 0.5 * target {
                                 q.thin += dt;
                             }
-                            if hex > 1.25 * q.fz_target {
+                            if hex > 1.25 * target {
                                 q.thick += dt;
                             }
+                            mq_target = mq_target.max(target);
                             if let Some(g) = group {
                                 let ap = e.ap.min(tu.tool.lcf.max(1e-3));
                                 let hm = (fz * e.cos_mean).max(1e-4);
@@ -480,8 +506,9 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
                     }
                     a = b;
                 }
-                if q.fz_target > 0.0 {
-                    mq.load = mq.hex / q.fz_target;
+                let t = if mq_target > 0.0 { mq_target } else { q.fz_target };
+                if t > 0.0 {
+                    mq.load = mq.hex / t;
                 }
                 q.moves_q.push(mq);
                 let descending = dz < -1e-9 && dxy >= 1e-9;
@@ -816,7 +843,7 @@ pub fn json(jobs: &[JobQ]) -> String {
 \"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\
 \"retracts\":{},\"plunges\":{},\"ramps\":{},\"cycles\":{},\"corners30\":{},\"corners90\":{},\"turn_max\":{},\
 \"side\":{},\"phi_max\":{},\"phi_mean\":{},\"phi_hist\":[{}],\"climb\":{},\"conventional\":{},\"slotting\":{},\
-\"fz_target\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
+\"fz_target\":{},\"fz_class\":{},\"fz_class_rough\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
 \"fc_max\":{},\"p_max\":{},\"p_avail\":{},\"rapid_cuts\":{},\"f_rev\":{}}}",
                 js(&q.name),
                 q.setup,
@@ -849,6 +876,8 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(q.conventional),
                 jn(q.slotting),
                 jn(q.fz_target),
+                jn(q.fz_class),
+                jn(q.fz_class_rough),
                 jn(q.hex_min),
                 jn(q.hex_mean),
                 jn(q.hex_max),
