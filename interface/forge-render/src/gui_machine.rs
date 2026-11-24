@@ -165,7 +165,7 @@ impl Gui {
             return;
         };
         // a tooling record: its revolved outline is the scene (one body on the base)
-        let tooling = (m.lib != "machine").then(|| m.tooling.as_ref().and_then(|t| t.preview()));
+        let tooling = m.preview_bodies();
         let def = match (&tooling, m.def.clone()) {
             (Some(_), _) => forge_machine::library::builtin().remove(0),
             (None, Some(d)) => d,
@@ -182,7 +182,9 @@ impl Gui {
             };
             let unsaved_parts = m.parts.clone();
             let mut meshes: Vec<PartMesh> = if let Some(prev) = &tooling {
-                self.mach.bodies = vec![("preview".into(), "base".into())];
+                self.mach.bodies = (0..prev.len())
+                    .map(|k| (format!("preview{k}"), "base".into()))
+                    .collect();
                 prev.iter().map(body_mesh).collect()
             } else {
                 def.bodies

@@ -106,6 +106,8 @@ pub struct MachineUi {
     pub lib: &'static str,
     /// The tooling tab's state, while a tooling kind is chosen.
     pub tooling: Option<super::machine_tooling::ToolingUi>,
+    /// The workholding tab's state, while it is chosen.
+    pub workholding: Option<super::machine_workholding::WorkholdingUi>,
     /// The tooling record last shown (its text): the host is told when it changes.
     tooling_seen: String,
 }
@@ -159,6 +161,7 @@ impl MachineUi {
             in_env: false,
             lib: "machine",
             tooling: None,
+            workholding: None,
             tooling_seen: String::new(),
         };
         if let Some(e) = m.cat.entries.first() {
@@ -723,23 +726,28 @@ impl Shell {
     pub fn machine_ui(&mut self, ctx: &egui::Context) {
         let Some(mut st) = self.machine.take() else { return };
         // the tooling record changed: the host draws it again
-        if let Some(tu) = &st.tooling {
-            let k = format!("{:?}", tu.cur.as_ref().map(|r| &r.typed));
-            if k != st.tooling_seen {
-                // another record (not an edit of this one): the view fits it
-                let id = |x: &str| {
-                    x.split("id: \"")
-                        .nth(1)
-                        .and_then(|r| r.split('"').next())
-                        .map(str::to_string)
-                };
-                if id(&k) != id(&st.tooling_seen) {
-                    st.fit += 1;
-                }
-                st.tooling_seen = k;
-                st.geom += 1;
-                st.pose += 1;
+        let shown = match (&st.tooling, &st.workholding) {
+            (Some(tu), _) => Some(format!("{:?}", tu.cur.as_ref().map(|r| &r.typed))),
+            (None, Some(w)) => Some(format!("{:?}", w.cur.as_ref().map(|r| (&r.name, &r.vals)))),
+            _ => None,
+        };
+        if let Some(k) = shown
+            && k != st.tooling_seen
+        {
+            // another record (not an edit of this one): the view fits it
+            let id = |x: &str| {
+                x.split("id: \"")
+                    .nth(1)
+                    .or_else(|| x.split("((\"").nth(1))
+                    .and_then(|r| r.split('"').next())
+                    .map(str::to_string)
+            };
+            if id(&k) != id(&st.tooling_seen) {
+                st.fit += 1;
             }
+            st.tooling_seen = k;
+            st.geom += 1;
+            st.pose += 1;
         }
         if st.cat_gen != catalog::generation() {
             st.reload_catalog();
@@ -773,6 +781,8 @@ impl Shell {
                     lib_choice(ui, &mut st, &mut places);
                     if st.lib == "machine" {
                         library(ui, &t, &mut st, &mut places);
+                    } else if st.lib == "workholding" {
+                        workholding_library(ui, &t, &mut st, &mut places);
                     } else {
                         tooling_library(ui, &t, &mut st, &mut places);
                     }
@@ -792,6 +802,8 @@ impl Shell {
                     editor(ui, &t, &mut st, &mut places)
                 } else if let Some(tu) = &mut st.tooling {
                     super::machine_tooling::editor(ui, &t, tu)
+                } else if let Some(w) = &mut st.workholding {
+                    super::machine_workholding::editor(ui, &t, w)
                 }
             });
         // the jog bar
@@ -806,6 +818,8 @@ impl Shell {
             .show(ctx, |ui| {
                 if st.lib == "machine" {
                     jog(ui, &t, &mut st, &mut places)
+                } else if st.lib == "workholding" {
+                    workholding_bar(ui, &t, &mut st, &mut places)
                 } else {
                     tooling_bar(ui, &t, &mut st, &mut places)
                 }
@@ -824,6 +838,8 @@ fn lib_choice(ui: &mut Ui, st: &mut MachineUi, places: &mut Vec<(String, egui::R
     let title = |w: &str| {
         if w == "machine" {
             "Machines"
+        } else if w == "workholding" {
+            "Workholding"
         } else {
             forge_tooling_builder::KINDS
                 .iter()
@@ -840,6 +856,7 @@ fn lib_choice(ui: &mut Ui, st: &mut MachineUi, places: &mut Vec<(String, egui::R
             for (w, _, t) in forge_tooling_builder::KINDS {
                 ui.selectable_value(&mut want, *w, *t);
             }
+            ui.selectable_value(&mut want, "workholding", "Workholding");
         });
     places.push(("machine:lib".into(), r.response.rect));
     if want != st.lib {
@@ -851,8 +868,10 @@ impl MachineUi {
     /// Switches the library edited: "machine" or a tooling kind.
     pub fn set_lib(&mut self, word: &'static str) {
         self.lib = word;
-        self.tooling = (word != "machine")
+        self.tooling = (word != "machine" && word != "workholding")
             .then(|| super::machine_tooling::ToolingUi::new(word, self.project.as_deref()));
+        self.workholding = (word == "workholding")
+            .then(|| super::machine_workholding::WorkholdingUi::new(self.project.as_deref()));
         self.tooling_seen.clear();
         self.geom += 1;
         self.pose += 1;
@@ -884,6 +903,72 @@ fn tooling_library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<
     if !tu.message.is_empty() {
         ui.label(RichText::new(&tu.message).font(sans(11.0)).color(t.ink2));
     }
+}
+
+impl MachineUi {
+    /// The scene for a library other than machines: the chosen record's bodies (None: machines;
+    /// Some(empty): nothing to draw).
+    pub fn preview_bodies(&self) -> Option<Vec<crate::machine_mesh::Tris>> {
+        match self.lib {
+            "machine" => None,
+            "workholding" => Some(
+                self.workholding
+                    .as_ref()
+                    .and_then(|w| w.preview())
+                    .unwrap_or_default(),
+            ),
+            _ => Some(
+                self.tooling
+                    .as_ref()
+                    .and_then(|t| t.preview())
+                    .into_iter()
+                    .collect(),
+            ),
+        }
+    }
+}
+
+fn workholding_library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let project = st.project.clone();
+    let Some(w) = &mut st.workholding else { return };
+    super::machine_workholding::library(ui, t, w, project.as_deref(), places);
+    ui.separator();
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Save to");
+        ui.selectable_value(&mut st.level, Level::User, "User");
+        ui.add_enabled_ui(st.project.is_some(), |ui| {
+            ui.selectable_value(&mut st.level, Level::Project, "Project");
+        });
+    });
+    let Some(w) = &mut st.workholding else { return };
+    let r = ui.add_enabled(
+        w.cur.is_some(),
+        egui::Button::new(if w.changed { "Save *" } else { "Save" }),
+    );
+    places.push(("workholding:save".into(), r.rect));
+    if r.clicked() {
+        w.save(st.level, project.as_deref());
+    }
+    if !w.message.is_empty() {
+        ui.label(RichText::new(&w.message).font(sans(11.0)).color(t.ink2));
+    }
+}
+
+fn workholding_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let Some(w) = &mut st.workholding else { return };
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Checks").font(semi(12.0)).color(t.ink));
+        let r = ui.add_enabled(w.cur.is_some(), egui::Button::new("Check"));
+        places.push(("workholding:check".into(), r.rect));
+        if r.clicked() {
+            w.check();
+        }
+        ui.label(RichText::new(&w.message).font(sans(11.0)).color(t.ink2));
+    });
+    ui.label(small(
+        t,
+        "The preview places the record as its check does (a mill device on a reference stock, a lathe device about +z from the chuck face).",
+    ));
 }
 
 fn tooling_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {

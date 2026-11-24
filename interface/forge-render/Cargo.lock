@@ -1314,6 +1314,8 @@ dependencies = [
  "forge-tooling-builder",
  "forge-topo",
  "forge-vendor",
+ "forge-workholding",
+ "forge-workholding-builder",
  "js-sys",
  "keyring-core",
  "png",
@@ -1424,6 +1426,24 @@ version = "0.1.0"
 dependencies = [
  "forge-math",
  "forge-ops",
+]
+
+[[package]]
+name = "forge-workholding"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-workholding-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-workholding",
 ]
 
 [[package]]

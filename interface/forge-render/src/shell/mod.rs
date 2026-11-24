@@ -39,6 +39,7 @@ pub mod inspect;
 pub mod machine;
 mod machine_parts;
 pub mod machine_tooling;
+pub mod machine_workholding;
 pub mod markup;
 pub mod materials;
 mod measure_ui;

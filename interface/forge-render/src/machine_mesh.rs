@@ -168,6 +168,55 @@ pub fn revolve(outline: &[[f64; 2]]) -> Tris {
     t
 }
 
+/// An oriented box: corner `o`, unit edge directions `axes`, edge lengths `size`.
+pub fn obox_tris(o: [f64; 3], axes: [[f64; 3]; 3], size: [f64; 3], out: &mut Tris) {
+    let (t0, v0) = (out.tri.len(), out.pos.len());
+    let c = |i: usize| {
+        let mut p = o;
+        for k in 0..3 {
+            if i >> k & 1 == 1 {
+                p = kin::add(p, kin::scale(axes[k], size[k]));
+            }
+        }
+        p
+    };
+    // the box's own frame may be left-handed: wind each face by its outward normal
+    let mut face = |idx: [usize; 4], n: [f64; 3]| {
+        let p = idx.map(c);
+        let w = kin::cross(kin::sub(p[1], p[0]), kin::sub(p[2], p[0]));
+        let p = if kin::dot(w, n) >= 0.0 {
+            p
+        } else {
+            [p[0], p[3], p[2], p[1]]
+        };
+        out.quad(p, n);
+    };
+    let neg = |v: [f64; 3]| kin::scale(v, -1.0);
+    face([0, 2, 3, 1], neg(axes[2]));
+    face([4, 5, 7, 6], axes[2]);
+    face([0, 1, 5, 4], neg(axes[1]));
+    face([2, 6, 7, 3], axes[1]);
+    face([0, 4, 6, 2], neg(axes[0]));
+    face([1, 3, 7, 5], axes[0]);
+    for (i, j) in [
+        (0, 1),
+        (2, 3),
+        (4, 5),
+        (6, 7),
+        (0, 2),
+        (1, 3),
+        (4, 6),
+        (5, 7),
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
+    ] {
+        out.edges.push(vec![c(i), c(j)]);
+    }
+    out.patch(t0, v0);
+}
+
 /// A body's primitives.
 pub fn prims_tris(prims: &[Prim]) -> Tris {
     let mut t = Tris::default();
