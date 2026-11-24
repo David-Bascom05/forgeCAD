@@ -271,7 +271,6 @@ impl InProcess {
         let n = zs.len() - 1;
         let mats: Vec<Result<Option<Region>, String>> = forge_math::par::map(n, |k| self.material(zs[k]));
         let exposed_at = |k: usize| -> Result<Vec<Region>, String> {
-            let z0 = zs[k];
             let (Ok(m), Ok(below)) = (&mats[k], if k == 0 { &Ok(None) } else { &mats[k - 1] }) else {
                 // an earlier error is reported in its place
                 return Ok(vec![]);
