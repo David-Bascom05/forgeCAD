@@ -807,7 +807,20 @@ impl Crawl {
             && after.places.contains_key(item)
         {
             rec.class = Class::Disabled;
-            rec.detail = "off: the menu stays open".into();
+            let tip = TIP.with(|t| std::mem::take(&mut *t.borrow_mut()));
+            rec.detail = if tip.is_empty() {
+                rec.findings.push(judge::finding(
+                    "no-reason",
+                    true,
+                    "off, and its hover says no reason",
+                ));
+                "off: the menu stays open, no reason on hover".into()
+            } else {
+                if let Some(png) = TIP_SHOT.with(|t| t.borrow_mut().take()) {
+                    rec.thumb = self.write(&format!("{slug}.hover.png"), &png);
+                }
+                format!("off: {}", judge::short(&tip))
+            };
             rec.ms = t0.elapsed().as_millis();
             let fresh = restore(h, &before, base_env, tab, self.noisy);
             return (rec, fresh);
