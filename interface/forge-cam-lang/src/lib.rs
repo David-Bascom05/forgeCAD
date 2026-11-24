@@ -4810,8 +4810,6 @@ impl Cam {
             deepest: f64::INFINITY,
             finish: None,
             probe: None,
-            resolved: None,
-            drilled: vec![],
         };
         let built = match normal {
             // inspect: one point along its own normal
