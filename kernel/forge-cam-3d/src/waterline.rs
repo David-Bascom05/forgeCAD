@@ -10,7 +10,7 @@
 //!    loops run climb-wise around a boss for a right-hand spindle: the material on the left);
 //! 3. each crossing on a grid edge is bisected down to `tol_xy`, keeping the free end, so every
 //!    vertex of a pass is a proven-free point within `tol_xy` of the blocked region;
-//! 4. each chord between vertices is proven free with `drop_seg` (its maximum CL height ≤ z);
+//! 4. each chord between vertices is proven free (`seg3_below` at z, within tol_xy/2 below);
 //!    a chord that is not is split at its midpoint pushed outward to a free point, and a chord
 //!    whose midpoint lies more than `tol_xy` outside the boundary (it would leave material) is
 //!    split at a point refined onto the boundary.
@@ -54,8 +54,11 @@ fn free(dc: &dyn DropCutter, p: [f64; 2], z: f64) -> bool {
     }
 }
 
-fn seg_free(dc: &dyn DropCutter, a: [f64; 2], b: [f64; 2], z: f64) -> bool {
-    dc.seg_below(a, b, z)
+/// A level chord proven free within half of `tol_xy` below (the certifier allows the op's
+/// tolerance; a chord hugging a wall at exactly zero clearance is not provable against a face
+/// known only to within its lowering's μ, and costs a full search to fail).
+fn seg_free(dc: &dyn DropCutter, a: [f64; 2], b: [f64; 2], z: f64, slack: f64) -> bool {
+    dc.seg3_below([a[0], a[1], z], [b[0], b[1], z], slack)
 }
 
 /// Bisects between a free point `f` and a blocked point `b` until they are within `tol` of each
@@ -235,7 +238,7 @@ fn split(
     // the right-hand normal points to the free side (blocked on the left)
     let nr = [d[1] / len, -d[0] / len];
     let m = [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1])];
-    let ok = seg_free(dc, a, b, z);
+    let ok = seg_free(dc, a, b, z, 0.5 * p.tol_xy);
     // sag: a point tol_xy inside the chord's midpoint should be blocked, or the chord is too far
     let inner = [m[0] - nr[0] * p.tol_xy, m[1] - nr[1] * p.tol_xy];
     let close = len <= p.tol_xy || !free(dc, inner, z);
@@ -363,7 +366,11 @@ mod tests {
             let n = l.pts.len();
             let mut k = 0;
             while k < n {
-                assert!(d.seg_below(l.pts[k], l.pts[(k + 1) % n], 8.0));
+                assert!(d.seg3_below(
+                    [l.pts[k][0], l.pts[k][1], 8.0],
+                    [l.pts[(k + 1) % n][0], l.pts[(k + 1) % n][1], 8.0],
+                    0.005
+                ));
                 k += 1;
             }
         }

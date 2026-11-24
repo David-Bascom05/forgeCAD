@@ -12,7 +12,9 @@
 //!   (pattern.rs). Neither grows from a medial axis (US 10,108,172 avoided).
 //! - Flat area: the heights where the CL surface is flat (a flat face under a flat or bull
 //!   tool), each finished by raster passes at exactly that height, kept where the tool stands on
-//!   the face (its CL band within [z − tol, z]) and proven free at that height.
+//!   the face (its CL band within [z − tol, z]) and each chord proven at that height within half
+//!   the tolerance (the certifier allows the tolerance; exactly 0 at a face's own height is not
+//!   provable against a face only known to its lowering's μ).
 
 use crate::contain::Containment;
 use crate::drape::{self, Drape, DrapeError, Pass};
@@ -198,7 +200,7 @@ pub fn flat(
                         } else {
                             let last = cur.last().copied();
                             if let Some(lq) = last
-                                && dc.seg_below([lq[0], lq[1]], e, z)
+                                && dc.seg3_below(lq, [e[0], e[1], z], 0.5 * tol)
                             {
                                 cur.push([e[0], e[1], z]);
                             }
@@ -212,7 +214,7 @@ pub fn flat(
                 }
                 if on {
                     match cur.last().copied() {
-                        Some(lq) if !dc.seg_below([lq[0], lq[1]], p, z) => {
+                        Some(lq) if !dc.seg3_below(lq, [p[0], p[1], z], 0.5 * tol) => {
                             // something stands up between: end the run, start anew here
                             if cur.len() > 1 {
                                 out.push(core::mem::take(&mut cur));
@@ -264,7 +266,7 @@ mod tests {
         for p in &ps {
             let mut k = 0;
             while k + 1 < p.len() {
-                assert!(dc.seg_below([p[k][0], p[k][1]], [p[k + 1][0], p[k + 1][1]], p[k][2]));
+                assert!(dc.seg3_below(p[k], p[k + 1], 0.005));
                 k += 1;
             }
             // passes at the pad's height stay over the pad (the tool's centre within the pad)

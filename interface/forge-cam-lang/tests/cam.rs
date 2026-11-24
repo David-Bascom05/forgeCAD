@@ -1008,3 +1008,41 @@ fn the_mould_core_is_surfaced_and_certified() {
     assert!(!cam.ok);
     assert!(cam.ops.iter().any(|o| o.status == "refused"));
 }
+
+/// forge-cam-3d's finishing ops in the document (steep_shallow, spiral, flat), after z-level
+/// roughing on the mould core: built, every move certified (column route), the spacing derived
+/// from the cusp and reported.
+#[test]
+fn the_mould_core_is_finished_by_cusp() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    // the example's ops, lighter for the test's time: a 0.05 mm cusp, the steep band 26 to 20
+    let src = std::fs::read_to_string(dir.join("mold_core_finish_cam.fg"))
+        .unwrap()
+        .replace("cusp: 0.01", "cusp: 0.05")
+        .replace("from: 26, to: 10.5", "from: 26, to: 20");
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.ops
+            .iter()
+            .map(|o| (
+                &o.name,
+                &o.refusal,
+                o.checks
+                    .iter()
+                    .filter(|c| c.verdict != "pass")
+                    .take(3)
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>()
+    );
+    for name in ["ss", "top", "plate"] {
+        let op = cam.ops.iter().find(|o| o.name == name).unwrap();
+        assert!(op.status == "built" && op.pairs > 0, "{name}: {:?}", op.refusal);
+        let f = op.finish.as_ref().unwrap();
+        assert_eq!(f.cusp, Some(0.05));
+        assert!(f.cusp_bound.unwrap() <= 0.05, "{name}: {f:?}");
+        assert!(f.stepover > 0.0, "{name}: {f:?}");
+    }
+}

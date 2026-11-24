@@ -201,6 +201,7 @@ mod tests {
             bottom: 0.5,
             grid: 1.0,
             tol: 0.002,
+            area: None,
         };
         let (st, sh) = steep::steep_and_shallow(&dc, p).unwrap();
         let mut all = st;

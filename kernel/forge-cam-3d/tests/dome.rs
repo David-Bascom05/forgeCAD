@@ -121,6 +121,7 @@ fn dome_waterline_is_certified() {
         link::Rules {
             max_stay: 2.0 * dz,
             lift: 0.5,
+            slack: 0.0,
         },
         e,
     );
@@ -286,6 +287,7 @@ fn other_strategies_certify_on_the_dome() {
         link::Rules {
             max_stay: 1.0,
             lift: 0.5,
+            slack: 0.0,
         },
         e,
     );

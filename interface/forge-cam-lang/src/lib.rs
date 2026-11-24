@@ -132,6 +132,21 @@ struct SetupIn {
 }
 
 /// One operation, as made and as checked.
+/// What a 3-axis finishing op derived and did, for the reply and the dialogs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Finish {
+    /// The cusp asked for (mm), when the spacing was derived from one.
+    pub cusp: Option<f64>,
+    /// The cusp the spacing is proven to bound on a plane at the op's slopes (mm): the scallop
+    /// module's certified enclosure, upper end (an upper bound only for a bull on a slope).
+    pub cusp_bound: Option<f64>,
+    /// The horizontal stepover and the step-down used (mm; 0 when the op has none).
+    pub stepover: f64,
+    pub stepdown: f64,
+    /// Links: stayed down, lifted, retracted.
+    pub links: [usize; 3],
+}
+
 pub struct OpOut {
     pub name: String,
     pub kind: &'static str,
@@ -163,6 +178,8 @@ pub struct OpOut {
     voids: Vec<(Option<Region>, f64)>,
     /// The lowest tool tip of its posted paths, as the text reads back (∞ until posted).
     pub deepest: f64,
+    /// 3-axis finishing (forge-cam-3d's ops): the derived spacing and the links.
+    pub finish: Option<Finish>,
 }
 
 pub struct ProgramOut {
@@ -953,9 +970,8 @@ impl Cam {
                 Ok(V::Setup(self.setups.len() - 1))
             }
             "facing" | "contour" | "pocket" | "clear" | "drill" | "engrave" | "slot" | "thread_mill"
-            | "edge_break" | "parallel" | "waterline" | "zlevel" | "pencil" | "scallop" | "rest" => {
-                self.op(name, f, a)
-            }
+            | "edge_break" | "parallel" | "waterline" | "zlevel" | "pencil" | "scallop" | "rest"
+            | "steep_shallow" | "spiral" | "radial" | "ramping" | "flat" => self.op(name, f, a),
             "soft_jaw" => self.soft_jaw(name, a),
             "program" => {
                 let su: Vec<usize> = match a.get("#0") {
@@ -979,7 +995,7 @@ impl Cam {
                 Ok(V::Num(0.0))
             }
             _ => Err(format!(
-                "`{f}` is not a machining built-in (part, machine, tool, setup, facing, contour, pocket, drill, engrave, thread_mill, edge_break, parallel, waterline, zlevel, pencil, scallop, rest, program, box)"
+                "`{f}` is not a machining built-in (part, machine, tool, setup, facing, contour, pocket, drill, engrave, thread_mill, edge_break, parallel, waterline, zlevel, pencil, scallop, rest, steep_shallow, spiral, radial, ramping, flat, program, box)"
             )),
         }
     }
@@ -2095,6 +2111,11 @@ impl Cam {
                 "pencil" => "pencil",
                 "scallop" => "scallop",
                 "rest" => "rest",
+                "steep_shallow" => "steep_shallow",
+                "spiral" => "spiral",
+                "radial" => "radial",
+                "ramping" => "ramping",
+                "flat" => "flat",
                 _ => "drill",
             },
             setup: su,
@@ -2119,6 +2140,7 @@ impl Cam {
             stock_before: Some(s.ip.clone()),
             voids: vec![],
             deepest: f64::INFINITY,
+            finish: None,
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
         let paths: Result<Vec<OpPath>, String> = match kind {
@@ -2154,6 +2176,9 @@ impl Cam {
                     "slot" => self.engrave(su, a, t, ti, h, (vf, vp), step, true, &mut voids),
                     "parallel" | "waterline" | "zlevel" | "pencil" | "scallop" | "rest" => {
                         self.surfacing(su, kind, a, ti, h, (vf, vp), &mut voids)
+                    }
+                    "steep_shallow" | "spiral" | "radial" | "ramping" | "flat" => {
+                        self.finish3d(su, kind, a, ti, h, (vf, vp), &mut out)
                     }
                     "thread_mill" => self.thread_mill(su, a, t, ti, h, (vf, vp), &mut out, &mut voids),
                     "edge_break" => self.edge_break(su, a, t, ti, h, (vf, vp), &mut out),
@@ -2550,6 +2575,340 @@ impl Cam {
                 .map_err(e)?
             }
         };
+        Ok(vec![p])
+    }
+
+    /// forge-cam-3d's finishing ops on CAM-3AXIS's drop-cutter: steep_shallow, spiral, radial,
+    /// ramping, flat. The passes are draped or sliced on the certified CL surface, ordered and
+    /// linked (stay down / lift / retract by a fixed rule), and certified afterwards by the
+    /// column route like the surfacing ops. With `cusp:` the stepover and step-down are the
+    /// largest the scallop module proves leave at most that cusp on a plane at the op's slopes.
+    #[allow(clippy::too_many_arguments)]
+    fn finish3d(
+        &self,
+        su: usize,
+        kind: &str,
+        a: &BTreeMap<String, V>,
+        ti: usize,
+        h: Heights,
+        feed: (f64, f64),
+        out: &mut OpOut,
+    ) -> Result<Vec<OpPath>, String> {
+        use forge_cam::surf::Surfacer;
+        use forge_cam_3d::contain::Containment;
+        use forge_cam_3d::drape::Drape;
+        use forge_cam_3d::scallop::{Contact, cusp, raster_step, step_for, waterline_step};
+        use forge_cam_3d::{link, ramp, steep, strategy, waterline};
+        use forge_cam_geom::ival::Ival;
+        let t_start = std::time::Instant::now();
+        let s = &self.setups[su];
+        let part = &self.parts[s.part];
+        let t = &self.tools[ti];
+        let d = t.tool.dc;
+        let body = t
+            .shape
+            .bodies
+            .iter()
+            .find(|b| b.part == forge_cam_geom::tool::Part::Cutter)
+            .ok_or("the tool has no cutter")?;
+        let leave = get_num(a, "leave", Some(0.0))?;
+        let floor = get_num(a, "floor", Some(part.bbox.0[2]))?;
+        let sf = Surfacer::new(&part.faces, body, leave, s.tol, floor).map_err(|e| format!("{e:?}"))?;
+        let dc = forge_cam_3d::surfdrop::SurfDrop::new(&sf).ok_or("leave: not a usable stock to leave")?;
+        let area = match a.get("area") {
+            None => [part.bbox.0[0], part.bbox.0[1], part.bbox.1[0], part.bbox.1[1]],
+            Some(V::Tuple(v)) if v.len() == 4 => {
+                let mut r = [0.0; 4];
+                for (i, x) in v.iter().enumerate() {
+                    match x {
+                        V::Num(n) => r[i] = *n,
+                        _ => return Err("area: (x0, y0, x1, y1), tool centres".into()),
+                    }
+                }
+                r
+            }
+            Some(_) => return Err("area: (x0, y0, x1, y1), tool centres".into()),
+        };
+        let top = get_num(a, "from", Some(part.bbox.1[2]))?;
+        let bottom = get_num(a, "to", Some(floor))?;
+        let grid = get_num(a, "grid", Some(0.25 * d))?;
+        let tol = s.tol;
+        let within = Containment {
+            boundary: Some(vec![
+                [area[0], area[1]],
+                [area[2], area[1]],
+                [area[2], area[3]],
+                [area[0], area[3]],
+            ]),
+            zmin: bottom,
+            zmax: top + 1e-9,
+            ..Default::default()
+        };
+        // sin and cos of an angle in degrees, enclosed (dmath is within a few ulps)
+        let sc = |deg: f64| -> (Ival, Ival) {
+            let (sn, cs) = forge_math::dmath::sin_cos(deg * (std::f64::consts::PI / 180.0));
+            let w = |x: f64| {
+                let e = 8.0 * f64::EPSILON * x.abs() + f64::MIN_POSITIVE;
+                Ival::new((x - e).max(0.0), (x + e).min(1.0))
+            };
+            (w(sn), w(cs))
+        };
+        let cut = t.tool.cutter();
+        // the spacing along the surface from the cusp, at the slope that bounds the op's passes
+        let cusp_at = |deg: f64| -> Result<Option<(f64, f64, Ival, Ival)>, String> {
+            match a.get("cusp") {
+                None => Ok(None),
+                Some(V::Num(h)) => {
+                    let (sn, cs) = sc(deg);
+                    let c = Contact::of(&cut, sn, cs).map_err(|e| format!("cusp: {e:?} for this tool"))?;
+                    let sp = step_for(c, *h, 2.0 * d).map_err(|e| format!("cusp: {e:?}"))?;
+                    Ok(Some((*h, cusp(c, Ival::pt(sp)).hi, sn, cs)))
+                }
+                Some(_) => Err("cusp: a height in mm".into()),
+            }
+        };
+        let dr = Drape {
+            step: get_num(a, "step", Some(0.5 * d))?,
+            slack: 0.5 * tol,
+            leave: tol,
+            zmin: floor,
+        };
+        let mut fin = Finish {
+            cusp: None,
+            cusp_bound: None,
+            stepover: 0.0,
+            stepdown: 0.0,
+            links: [0; 3],
+        };
+        let e = |x: String| format!("{kind}: {x}");
+        let passes = match kind {
+            "steep_shallow" => {
+                let th = get_num(a, "threshold", Some(45.0))?;
+                if !(th > 0.0 && th < 90.0) {
+                    return Err(
+                        "threshold: the slope between the strategies, over 0 and under 90 degrees".into(),
+                    );
+                }
+                let (sn, cs) = sc(th);
+                let (dz, so) = match cusp_at(th)? {
+                    Some((h0, hb, sn, cs)) => {
+                        fin.cusp = Some(h0);
+                        fin.cusp_bound = Some(hb);
+                        let sp = step_for(
+                            Contact::of(&cut, sn, cs).map_err(|x| format!("{x:?}"))?,
+                            h0,
+                            2.0 * d,
+                        )
+                        .map_err(|x| format!("{x:?}"))?;
+                        (waterline_step(sp, sn), raster_step(sp, cs))
+                    }
+                    None => (
+                        get_num(a, "down", Some(0.1 * d))?,
+                        get_num(a, "stepover", Some(0.1 * d))?,
+                    ),
+                };
+                fin.stepover = so;
+                fin.stepdown = dz;
+                let p = steep::Params {
+                    sin0: sn.mid(),
+                    cos0: cs.mid(),
+                    overlap: get_num(a, "overlap", Some(2.0 * so))?,
+                    dz,
+                    stepover: so,
+                    angle_deg: get_num(a, "angle", Some(0.0))?,
+                    top,
+                    bottom,
+                    grid,
+                    tol,
+                    area: Some([[area[0], area[1]], [area[2], area[3]]]),
+                };
+                let (st, sh) = steep::steep_and_shallow(&dc, p).map_err(|x| e(format!("{x:?}")))?;
+                vec![within.clip(st, None), within.clip(sh, None)]
+            }
+            "spiral" | "radial" => {
+                let so = match cusp_at(0.0)? {
+                    Some((h0, hb, ..)) => {
+                        fin.cusp = Some(h0);
+                        fin.cusp_bound = Some(hb);
+                        step_for(
+                            Contact::of(&cut, Ival::pt(0.0), Ival::pt(1.0)).map_err(|x| format!("{x:?}"))?,
+                            h0,
+                            2.0 * d,
+                        )
+                        .map_err(|x| format!("{x:?}"))?
+                        .min(0.9 * d)
+                    }
+                    None => get_num(a, "stepover", Some(0.1 * d))?,
+                };
+                fin.stepover = so;
+                let cx = 0.5 * (area[0] + area[2]);
+                let cy = 0.5 * (area[1] + area[3]);
+                let centre = match a.get("center") {
+                    None => [cx, cy],
+                    Some(V::Tuple(v)) if v.len() == 2 => match (&v[0], &v[1]) {
+                        (V::Num(x), V::Num(y)) => [*x, *y],
+                        _ => return Err("center: (x, y)".into()),
+                    },
+                    Some(_) => return Err("center: (x, y)".into()),
+                };
+                let reach = ((area[2] - area[0]).powi(2) + (area[3] - area[1]).powi(2)).sqrt();
+                let r0 = get_num(a, "r0", Some(0.0))?;
+                let r1 = get_num(a, "r1", Some(reach))?;
+                let ps = if kind == "spiral" {
+                    let inward = match get_str(a, "direction", Some("out"))?.as_str() {
+                        "out" => false,
+                        "in" => true,
+                        _ => return Err("direction: \"in\" or \"out\"".into()),
+                    };
+                    strategy::spiral(&dc, centre, r0, r1, so, inward, dr, &within)
+                } else {
+                    strategy::radial(&dc, centre, r0.max(0.5 * so), r1, so, dr, &within)
+                };
+                vec![ps.map_err(|x| e(format!("{x:?}")))?]
+            }
+            "ramping" => {
+                let slope = get_num(a, "slope_min", Some(30.0))?;
+                let dz = match cusp_at(slope)? {
+                    Some((h0, hb, sn, cs)) => {
+                        fin.cusp = Some(h0);
+                        fin.cusp_bound = Some(hb);
+                        let sp = step_for(
+                            Contact::of(&cut, sn, cs).map_err(|x| format!("{x:?}"))?,
+                            h0,
+                            2.0 * d,
+                        )
+                        .map_err(|x| format!("{x:?}"))?;
+                        waterline_step(sp, sn)
+                    }
+                    None => get_num(a, "down", Some(0.1 * d))?,
+                };
+                fin.stepdown = dz;
+                let mut lv = vec![
+                    waterline::level(
+                        &dc,
+                        top,
+                        waterline::Params {
+                            grid,
+                            tol_xy: 0.5 * tol,
+                        },
+                    )
+                    .map_err(|x| e(format!("{x:?}")))?,
+                ];
+                for z in waterline::levels(top, bottom, dz) {
+                    lv.push(
+                        waterline::level(
+                            &dc,
+                            z,
+                            waterline::Params {
+                                grid,
+                                tol_xy: 0.5 * tol,
+                            },
+                        )
+                        .map_err(|x| e(format!("{x:?}")))?,
+                    );
+                }
+                // the top level is only the first ramp's partner, not cut itself
+                let rp = ramp::ramps(&dc, &lv, dr).map_err(|x| e(format!("{x:?}")))?;
+                // ramps() drapes the top level's loops first, as they are: that many passes
+                let skip = ramp::ramps(&dc, &lv[..1], dr)
+                    .map_err(|x| e(format!("{x:?}")))?
+                    .len();
+                vec![within.clip(rp.into_iter().skip(skip).collect(), None)]
+            }
+            _ => {
+                // flat: the flat heights within the band, raster passes at each
+                let so = match cusp_at(0.0)? {
+                    Some((h0, hb, ..)) => {
+                        fin.cusp = Some(h0);
+                        fin.cusp_bound = Some(hb);
+                        step_for(
+                            Contact::of(&cut, Ival::pt(0.0), Ival::pt(1.0)).map_err(|x| format!("{x:?}"))?,
+                            h0,
+                            2.0 * d,
+                        )
+                        .map_err(|x| format!("{x:?}"))?
+                        .min(0.9 * d)
+                    }
+                    None => get_num(a, "stepover", Some(0.5 * d))?,
+                };
+                fin.stepover = so;
+                let sm = steep::slope_map(&dc, grid);
+                if std::env::var("FORGE_CAM3D_TIME").is_ok() {
+                    eprintln!(
+                        "flat: slope map {} nodes at {:.1} s, faces {}",
+                        sm.tan.len(),
+                        t_start.elapsed().as_secs_f64(),
+                        part.faces.len()
+                    );
+                }
+                let levels: Vec<f64> = strategy::flat_levels(&dc, &sm, 1e-3, tol, 4)
+                    .into_iter()
+                    .filter(|z| *z >= bottom - 1e-9 && *z <= top + 1e-9)
+                    .collect();
+                out.plan.push(format!("flat heights: {levels:?}"));
+                if std::env::var("FORGE_CAM3D_TIME").is_ok() {
+                    eprintln!("flat: levels at {:.1} s", t_start.elapsed().as_secs_f64());
+                }
+                vec![strategy::flat(
+                    &dc,
+                    &levels,
+                    get_num(a, "angle", Some(0.0))?,
+                    so,
+                    0.25 * so.max(grid),
+                    tol,
+                    &within,
+                )]
+            }
+        };
+        let groups: Vec<Vec<forge_cam_3d::drape::Pass>> = passes;
+        if std::env::var("FORGE_CAM3D_TIME").is_ok() {
+            eprintln!(
+                "{kind}: passes generated in {:.1} s",
+                t_start.elapsed().as_secs_f64()
+            );
+        }
+        let n: usize = groups.iter().map(|g| g.len()).sum();
+        if n == 0 {
+            return Err(format!("{kind}: no passes in the area and heights given"));
+        }
+        let start = [0.5 * (area[0] + area[2]), 0.5 * (area[1] + area[3]), h.clear];
+        let ordered = link::order(groups, start, kind != "ramping");
+        let stay = get_num(a, "stay", Some(2.0 * fin.stepover.max(fin.stepdown).max(0.1 * d)))?;
+        let lift = get_num(a, "lift", Some(0.5))?;
+        let em = forge_cam_3d::path::Emit {
+            tool: ti,
+            h,
+            feed,
+            rpm: 0.0,
+            coolant: forge_post::Coolant::Flood,
+        };
+        let (p, c) = link::path(
+            &dc,
+            &ordered,
+            link::Rules {
+                max_stay: stay,
+                lift,
+                slack: 0.25 * tol,
+            },
+            em,
+        );
+        fin.links = [c.stay, c.lift, c.retract];
+        if std::env::var("FORGE_CAM3D_TIME").is_ok() {
+            eprintln!("{kind}: linked at {:.1} s", t_start.elapsed().as_secs_f64());
+        }
+        if let Some(h0) = fin.cusp {
+            out.plan.push(format!(
+                "cusp {h0} mm: stepover {:.4} mm, step-down {:.4} mm (proven cusp on a plane at the op's slopes ≤ {:.5} mm)",
+                fin.stepover,
+                fin.stepdown,
+                fin.cusp_bound.unwrap_or(f64::NAN)
+            ));
+        }
+        out.plan.push(format!(
+            "links: {} stayed down, {} lifted, {} retracted",
+            c.stay, c.lift, c.retract
+        ));
+        out.finish = Some(fin);
         Ok(vec![p])
     }
 
@@ -3716,7 +4075,17 @@ impl Cam {
             let target = self.ops[oi].target.as_ref().unwrap_or(&part.faces);
             let surfacing = matches!(
                 self.ops[oi].kind,
-                "parallel" | "waterline" | "zlevel" | "pencil" | "scallop" | "rest"
+                "parallel"
+                    | "waterline"
+                    | "zlevel"
+                    | "pencil"
+                    | "scallop"
+                    | "rest"
+                    | "steep_shallow"
+                    | "spiral"
+                    | "radial"
+                    | "ramping"
+                    | "flat"
             );
             let mut sum = ops::certify_with(
                 &posted,

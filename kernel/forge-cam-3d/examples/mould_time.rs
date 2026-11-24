@@ -37,7 +37,7 @@ impl DropCutter for Count<'_> {
         let t0 = Instant::now();
         let r = self.tick(2, || self.i.seg3_below(a, b, s));
         let dt = t0.elapsed().as_secs_f64();
-        if dt > 0.5 {
+        if dt > 5.0 {
             println!("  slow seg3 {dt:.2} s {a:?} -> {b:?} = {r}");
         }
         r
@@ -98,8 +98,13 @@ fn main() {
         t0.elapsed().as_secs_f64()
     );
     let t0 = Instant::now();
+    let wc = Count {
+        i: &dc,
+        n: Default::default(),
+        t: Default::default(),
+    };
     let ls = waterline::level(
-        &dc,
+        &wc,
         20.0,
         waterline::Params {
             grid: 1.0,
@@ -112,6 +117,33 @@ fn main() {
         ls.len(),
         ls.iter().map(|l| l.pts.len()).sum::<usize>(),
         t0.elapsed().as_secs_f64()
+    );
+    println!(
+        "  waterline calls drop/seg_below/seg3: {:?} secs {:?}",
+        wc.n.iter().map(|c| c.get()).collect::<Vec<_>>(),
+        wc.t.iter().map(|c| c.get()).collect::<Vec<_>>()
+    );
+    let t0f = Instant::now();
+    let fc = Count {
+        i: &dc,
+        n: Default::default(),
+        t: Default::default(),
+    };
+    let fl = forge_cam_3d::strategy::flat(
+        &fc,
+        &[10.0],
+        0.0,
+        0.49,
+        0.12,
+        0.01,
+        &forge_cam_3d::contain::Containment::default(),
+    );
+    println!(
+        "flat at 10: {} passes {:.1} s; calls drop/seg_below/seg3: {:?} secs {:?}",
+        fl.len(),
+        t0f.elapsed().as_secs_f64(),
+        fc.n.iter().map(|c| c.get()).collect::<Vec<_>>(),
+        fc.t.iter().map(|c| c.get()).collect::<Vec<_>>()
     );
     // the chords of that line at 2 mm, each check timed
     let mut worst = Vec::new();

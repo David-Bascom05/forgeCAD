@@ -7,8 +7,8 @@
 //!
 //! From the end a of one pass to the start b of the next:
 //! 1. **stay down**: a straight feed move a → b when it is at most `max_stay` long in xy and the
-//!    CL height is proven at or below it all along (`seg3_below` with no slack: a link never
-//!    dips into the surface);
+//!    CL height is proven at most `slack` above it all along (`seg3_below`; slack at most the
+//!    op's inner tolerance, so the certifier's G1 holds);
 //! 2. **lift**: else up to z_l = (the proven maximum CL height along a → b) + `lift`, across at
 //!    z_l, and down to b, all at feed, when z_l is below the retract height;
 //! 3. **retract**: else up to the retract height at feed, a rapid across, and a plunge to b.
@@ -27,6 +27,9 @@ pub struct Rules {
     pub max_stay: f64,
     /// The height a lifted link keeps above the CL surface.
     pub lift: f64,
+    /// How far a stay-down link may dip below the CL surface (at most the op's inner
+    /// tolerance; a link exactly on a face is not provable against its lowering's μ).
+    pub slack: f64,
 }
 
 /// What a linked path did, for the quality report.
@@ -190,7 +193,7 @@ fn link(
     count: &mut LinkCount,
 ) {
     let ab = [[a[0], a[1]], [b[0], b[1]]];
-    if dxy(a, b) <= r.max_stay && dc.seg3_below(a, b, 0.0) {
+    if dxy(a, b) <= r.max_stay && dc.seg3_below(a, b, r.slack) {
         count.stay += 1;
         moves.push(PMove::Line {
             to: b,
@@ -266,6 +269,7 @@ mod tests {
             bottom: 0.0,
             grid: 1.0,
             tol: 0.01,
+            area: None,
         };
         let (st, sh) = steep::steep_and_shallow(&dc, p).unwrap();
         let e = Emit {
@@ -285,6 +289,7 @@ mod tests {
             Rules {
                 max_stay: 2.0,
                 lift: 0.5,
+                slack: 0.0,
             },
             e,
         );

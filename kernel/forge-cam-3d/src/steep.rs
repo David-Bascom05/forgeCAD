@@ -227,6 +227,8 @@ pub struct Params {
     pub grid: f64,
     /// Tolerances: waterline xy, drape slack and leave.
     pub tol: f64,
+    /// The xy box the parallel passes span (None: the part's extent).
+    pub area: Option<[[f64; 2]; 2]>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -267,7 +269,7 @@ pub fn steep_and_shallow(dc: &dyn DropCutter, p: Params) -> Result<(Vec<Pass>, V
             sp.extend(clip_loop(l, &steep));
         }
     }
-    let [lo, hi] = dc.extent();
+    let [lo, hi] = p.area.unwrap_or(dc.extent());
     let d = Drape {
         step: p.grid,
         slack: p.tol,
@@ -307,6 +309,7 @@ mod tests {
             bottom: 0.0,
             grid: 1.0,
             tol: 0.01,
+            area: None,
         };
         let (steep, shallow) = steep_and_shallow(&dc, p).unwrap();
         assert!(!steep.is_empty() && !shallow.is_empty());

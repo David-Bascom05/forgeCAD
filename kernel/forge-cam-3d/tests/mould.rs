@@ -60,6 +60,7 @@ fn certify(dc: &dyn DropCutter, what: &str, ps: Vec<Pass>, faces: &[Face], tool:
         link::Rules {
             max_stay: 2.0,
             lift: 0.5,
+            slack: 0.0,
         },
         emit(),
     );
@@ -117,6 +118,7 @@ fn every_strategy_on_the_mould_core_is_certified() {
         bottom: 10.5,
         grid: 1.0,
         tol: 0.01,
+        area: None,
     };
     let (st, sh) = steep::steep_and_shallow(&dc, p).unwrap();
     let mut ss = quarter.clip(st, None);

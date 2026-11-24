@@ -11,6 +11,7 @@ forge-lang = { path = "../forge-lang" }
 forge-agent = { path = "../forge-agent" }
 forge-cam = { path = "../../kernel/forge-cam" }
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
+forge-cam-3d = { path = "../../kernel/forge-cam-3d" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
 forge-post = { path = "../../kernel/forge-post" }
 forge-model = { path = "../../kernel/forge-model" }
