@@ -154,6 +154,13 @@ pub fn prims_bounds(prims: &[Prim]) -> Option<(V3, V3)> {
                 kin::add(top, e),
             ]
         }
+        // an oriented box: its eight corners
+        Prim::OBox { o, axes, size } => (0..8)
+            .map(|c| {
+                let f = [(c & 1) as f64, ((c >> 1) & 1) as f64, ((c >> 2) & 1) as f64];
+                Prim::obox_at(o, axes, size, f)
+            })
+            .collect(),
     });
     bounds(corners)
 }
@@ -172,6 +179,15 @@ pub fn outside_prim(p: &Prim, x: V3) -> f64 {
             let a = (-t).max(t - h).max(0.0);
             let b = (radial - r).max(0.0);
             (a * a + b * b).sqrt()
+        }
+        // an oriented box: the distance in its own (orthonormal) frame
+        Prim::OBox { o, axes, size } => {
+            let v = kin::sub(x, *o);
+            let d: V3 = std::array::from_fn(|k| {
+                let s = kin::dot(v, axes[k]);
+                (-s).max(s - size[k]).max(0.0)
+            });
+            kin::norm(d)
         }
     }
 }

@@ -478,6 +478,9 @@ impl Gui {
                                 .collect()
                         })
                         .unwrap_or_default(),
+                    Prim::OBox { o, axes, size } => (0..8u8)
+                        .map(|i| Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from)))
+                        .collect(),
                 };
                 if let Some((lo, hi)) =
                     forge_machine_builder::models::bounds(pts.into_iter().map(|x| at.apply(x)))

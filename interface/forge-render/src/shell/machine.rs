@@ -2786,7 +2786,7 @@ fn tab_bodies(
                                 ch |= super::lib_form::num_edit_in(ui, &mut size[k], "mm", "", Some(110.0));
                             });
                         }
-                        ui.label(small(t, &format!("Axes {axes:?} (set in the record)")));
+                        ui.label(small(t, format!("Axes {axes:?} (set in the record)")));
                     }
                 }
             }
@@ -3054,7 +3054,14 @@ fn motion(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
         if i >= st.q.len() {
             break;
         }
-        let (lo, hi) = (j.range[0].min(j.range[1]), j.range[0].max(j.range[1]));
+        let Some(r) = j.range else {
+            ui.horizontal(|ui| {
+                label_w(ui, t, &j.name);
+                ui.label(RichText::new("travel UNKNOWN").font(sans(11.0)).color(t.error));
+            });
+            continue;
+        };
+        let (lo, hi) = (r[0].min(r[1]), r[0].max(r[1]));
         ui.horizontal(|ui| {
             label_w(ui, t, &j.name);
             ui.spacing_mut().slider_width = (w - 90.0).max(60.0);

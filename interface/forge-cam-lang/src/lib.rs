@@ -8249,6 +8249,7 @@ mod loop_band_tests {
             holder: None,
             stickout: 0.0,
             shape,
+            probe: false,
         }
     }
 
