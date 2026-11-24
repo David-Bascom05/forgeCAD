@@ -48,6 +48,13 @@ The paths are the run's: `w.run.as_ref().unwrap().cam.ops[k].paths` (forge-cam's
 coordinates; part frame = WCS + the setup's origin, for a setup not turned over). The workspace
 redraws the view when `Focus` changes (`Gui::cam_key`).
 
+## Environments
+
+For the Environments tab (research/ui/environments.md §5, ENVIRONMENTS integrates it):
+`cam::groups(s)`, `Shell::cam_side`, `Shell::cam_ui` stay as they are, and
+`cam::open_for(part_path) -> Result<CamWs, String>` opens the part's `<part>_cam.fg` (or makes a
+new one linked to it, unsaved). No more tab or side branches are added here.
+
 ## Native and browser
 
 The same code on both: the workspace is shell code; the run goes through `plat::spawn` (a thread
