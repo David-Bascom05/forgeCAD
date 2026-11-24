@@ -103,8 +103,11 @@ pub fn popup(s: &Snap, before: &Snap, region: &[Rect], screen: Rect) -> Vec<Find
     for t in &texts {
         let visible = t.rect.intersect(t.clip);
         let partly = visible.is_positive() && !t.clip.expand(1.0).contains_rect(t.rect);
-        if t.elided || partly {
+        if partly {
             out.push(f("clipped", true, format!("\"{}\"", short(&t.s))));
+        } else if t.elided {
+            // cut short on purpose with an ellipsis (egui's truncate: the whole line on hover)
+            out.push(f("truncated", false, format!("\"{}\"", short(&t.s))));
         }
         if t.size > 0.0 && t.size < 10.5 && visible.is_positive() {
             out.push(f(
