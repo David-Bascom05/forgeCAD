@@ -133,11 +133,121 @@ pub fn rim_unique(c: &forge_geom::Circle, s: &Surface, p: Point3, reach: f64) ->
     root_unique(&Curve::Circle(*c), s, p, reach)
 }
 
+/// A surface's implicit and its gradient over the enclosed point `q` (world axes): plane,
+/// cylinder, sphere, torus.
+fn implicit3(s: &Surface, q: I3) -> Option<(Interval, I3)> {
+    let axes = |f: &Frame| (v(f.x().get()), v(f.y().get()), v(f.z().get()));
+    let world = |f: &Frame, g: I3| {
+        let (x, y, z) = axes(f);
+        add(add(scale(x, g[0]), scale(y, g[1])), scale(z, g[2]))
+    };
+    match s {
+        Surface::Plane(p) => {
+            let l = local(&p.frame, q);
+            Some((l[2], v(p.frame.z().get())))
+        }
+        Surface::Cylinder(c) => {
+            let l = local(&c.frame, q);
+            let r = iv(c.radius);
+            let g = world(&c.frame, [iv(2.0) * l[0], iv(2.0) * l[1], iv(0.0)]);
+            Some((l[0] * l[0] + l[1] * l[1] - r * r, g))
+        }
+        Surface::Sphere(sp) => {
+            let l = local(&sp.frame, q);
+            let r = iv(sp.radius);
+            let g = world(&sp.frame, [iv(2.0) * l[0], iv(2.0) * l[1], iv(2.0) * l[2]]);
+            Some((dot(l, l) - r * r, g))
+        }
+        Surface::Torus(t) => {
+            let l = local(&t.frame, q);
+            let (big, small) = (iv(t.major), iv(t.minor));
+            let w = dot(l, l) + big * big - small * small;
+            let b4 = iv(4.0) * big * big;
+            let f = w * w - b4 * (l[0] * l[0] + l[1] * l[1]);
+            let four_w = iv(4.0) * w;
+            let b8 = iv(2.0) * b4;
+            let g = world(
+                &t.frame,
+                [
+                    four_w * l[0] - b8 * l[0],
+                    four_w * l[1] - b8 * l[1],
+                    four_w * l[2],
+                ],
+            );
+            Some((f, g))
+        }
+        _ => None,
+    }
+}
+
+/// Whether three surfaces meet in exactly one point within the box of half-width `reach` about
+/// `p` (3D Krawczyk: K = m − Y G(m) + (I − Y J(X))(X − m) inside the box's interior and
+/// ‖I − Y J(X)‖∞ < 1, Y the inverse of the Jacobian at the middle in floats, any Y being sound). For a cut on a traced
+/// edge (a branch of A ∩ B) by S: its exact point is that one point.
+pub fn point_unique(s: [&Surface; 3], p: Point3, reach: f64) -> bool {
+    let x = [
+        Interval::new(p.x - reach, p.x + reach),
+        Interval::new(p.y - reach, p.y + reach),
+        Interval::new(p.z - reach, p.z + reach),
+    ];
+    let m = [iv(p.x), iv(p.y), iv(p.z)];
+    let mut gm = [iv(0.0); 3];
+    let mut jx = [[iv(0.0); 3]; 3];
+    let mut jm = [[0.0f64; 3]; 3];
+    for k in 0..3 {
+        let (Some((f, _)), Some((_, gx)), Some((_, gmid))) =
+            (implicit3(s[k], m), implicit3(s[k], x), implicit3(s[k], m))
+        else {
+            return false;
+        };
+        gm[k] = f;
+        jx[k] = gx;
+        jm[k] = [gmid[0].mid(), gmid[1].mid(), gmid[2].mid()];
+    }
+    // Y = jm⁻¹ by the adjugate
+    let a = jm;
+    let det = a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+        - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+        + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+    if det == 0.0 || !det.is_finite() {
+        return false;
+    }
+    let c = |i: usize, j: usize| {
+        let (r0, r1) = ((i + 1) % 3, (i + 2) % 3);
+        let (c0, c1) = ((j + 1) % 3, (j + 2) % 3);
+        a[r0][c0] * a[r1][c1] - a[r0][c1] * a[r1][c0]
+    };
+    let y: [[f64; 3]; 3] = std::array::from_fn(|i| std::array::from_fn(|j| c(j, i) / det));
+    let dx: I3 = std::array::from_fn(|j| x[j] - m[j]);
+    // and ‖I − Y A‖∞ < 1 for every A ∈ J(X) (each row's magnitudes summed): with K ⊂ X these are
+    // `unique_zero`'s hypotheses (verify/krawczyk Step.lean, on branch claude/repo-review-mbdrlj-trace)
+    (0..3).all(|i| {
+        let mut k = m[i];
+        for (l, g) in gm.iter().enumerate() {
+            k = k - iv(y[i][l]) * *g;
+        }
+        let mut row = iv(0.0);
+        for j in 0..3 {
+            let mut r = if i == j { iv(1.0) } else { iv(0.0) };
+            for l in 0..3 {
+                r = r - iv(y[i][l]) * jx[l][j];
+            }
+            k = k + r * dx[j];
+            row = row + iv(r.lo.abs().max(r.hi.abs()));
+        }
+        k.lo > x[i].lo && k.hi < x[i].hi && row.hi < 1.0
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use forge_geom::{Circle, Cylinder, Plane};
     use forge_math::Frame;
+
+    fn mid(a: Point3, b: Point3) -> Point3 {
+        Point3::new(0.5 * (a.x + b.x), 0.5 * (a.y + b.y), 0.5 * (a.z + b.z))
+    }
 
     fn frame(o: [f64; 3], x: [f64; 3], y: [f64; 3], z: [f64; 3]) -> Frame {
         let v = |a: [f64; 3]| Vec3::new(a[0], a[1], a[2]);
@@ -411,5 +521,144 @@ mod tests {
         });
         assert!(!root_unique(&line, &ball, Point3::new(1.0, 0.0, 0.0), 3.0));
         assert!(root_unique(&line, &ball, Point3::new(1.0, 0.0, 0.0), 0.5));
+    }
+
+    /// C.place's K1 merges on traced edges (fuzz2 x2, mixed): the edge is a branch of A ∩ B (its
+    /// two faces' surfaces), so the cut is a point of A ∩ B ∩ S; that point is unique within the
+    /// reach of both cuts (`point_unique`: 3D Krawczyk), so the two cuts are one exact point (the box about their middle holds both within reach − d/2).
+    #[test]
+    fn traced_k1_points_are_unique_within_reach() {
+        let reach = forge_math::tol::LINEAR;
+        // fuzz2
+        let (a, b, s) = (
+            Surface::Torus(forge_geom::Torus {
+                frame: frame(
+                    [157.82806095366016, 141.86556170195794, 13.284638932397382],
+                    [1.0, -0.0, 0.0],
+                    [0.0, -1.0, -0.0],
+                    [0.0, 0.0, -1.0],
+                ),
+                major: 18.07399562718312,
+                minor: 2.0463295861920963,
+            }),
+            Surface::Cylinder(Cylinder {
+                frame: frame(
+                    [151.97106811931855, 160.32230852177383, 6.376271558291485],
+                    [0.4365687640207922, 0.8996708922052319, 0.0],
+                    [-0.8996708922052319, 0.4365687640207922, 0.0],
+                    [0.0, 0.0, 1.0],
+                ),
+                radius: 18.381419464308944,
+            }),
+            Surface::Sphere(forge_geom::Sphere {
+                frame: frame(
+                    [134.07719180400713, 144.0366858040045, 2.2009285072965294],
+                    [1.0, -0.0, 0.0],
+                    [0.0, -1.0, -0.0],
+                    [0.0, 0.0, -1.0],
+                ),
+                radius: 14.737991065411364,
+            }),
+        );
+        let (p, q) = (
+            Point3::new(140.56122927997308, 145.91077983176172, 15.302585282565191),
+            Point3::new(140.56122929202888, 145.91077982221708, 15.302585276918217),
+        );
+        for x in [p, q, mid(p, q)] {
+            assert!(point_unique([&a, &b, &s], x, reach), "fuzz2");
+        }
+        // fuzz2
+        let (a, b, s) = (
+            Surface::Torus(forge_geom::Torus {
+                frame: frame(
+                    [157.82806095366016, 141.86556170195794, 13.284638932397382],
+                    [1.0, -0.0, 0.0],
+                    [0.0, -1.0, -0.0],
+                    [0.0, 0.0, -1.0],
+                ),
+                major: 18.07399562718312,
+                minor: 2.0463295861920963,
+            }),
+            Surface::Sphere(forge_geom::Sphere {
+                frame: frame(
+                    [177.76883010985694, 155.08959997873154, 14.774635198488863],
+                    [1.0, -0.0, 0.0],
+                    [0.0, -1.0, -0.0],
+                    [0.0, 0.0, -1.0],
+                ),
+                radius: 7.183625182707714,
+            }),
+            Surface::Torus(forge_geom::Torus {
+                frame: frame(
+                    [164.89485431485457, 162.30141897427592, 9.10152315604436],
+                    [1.0, -0.0, 0.0],
+                    [0.0, -1.0, -0.0],
+                    [0.0, 0.0, -1.0],
+                ),
+                major: 20.46797490004698,
+                minor: 4.069578069493464,
+            }),
+        );
+        let (p, q) = (
+            Point3::new(175.86342478428503, 148.88880105119586, 11.688538315501283),
+            Point3::new(175.86342478579405, 148.88880105008897, 11.6885383167934),
+        );
+        for x in [p, q, mid(p, q)] {
+            assert!(point_unique([&a, &b, &s], x, reach), "fuzz2");
+        }
+        // mixed
+        let (a, b, s) = (
+            Surface::Torus(forge_geom::Torus {
+                frame: frame(
+                    [40.596768670194116, 71.47574462532398, 20.82463624368874],
+                    [1.0, -0.0, 0.0],
+                    [0.0, -1.0, -0.0],
+                    [0.0, 0.0, -1.0],
+                ),
+                major: 6.980695451242271,
+                minor: 1.649272487377479,
+            }),
+            Surface::Sphere(forge_geom::Sphere {
+                frame: frame(
+                    [30.46848668315109, 79.29329463982346, 15.421095003781547],
+                    [1.0, -0.0, 0.0],
+                    [0.0, -1.0, -0.0],
+                    [0.0, 0.0, -1.0],
+                ),
+                radius: 9.765793144774815,
+            }),
+            Surface::Torus(forge_geom::Torus {
+                frame: frame(
+                    [48.755555243584375, 77.90341678126386, 20.691940270065963],
+                    [1.0, -0.0, 0.0],
+                    [0.0, -1.0, -0.0],
+                    [0.0, 0.0, -1.0],
+                ),
+                major: 14.589007922087752,
+                minor: 1.383880540131929,
+            }),
+        );
+        let (p, q) = (
+            Point3::new(35.40006916236437, 73.91692827172511, 21.913004944101637),
+            Point3::new(35.400069142339134, 73.91692826604626, 21.913004954610916),
+        );
+        for x in [p, q, mid(p, q)] {
+            assert!(point_unique([&a, &b, &s], x, reach), "mixed");
+        }
+    }
+
+    /// Three planes through one line (a singular system): not certified; three through one point: certified.
+    #[test]
+    fn a_singular_system_is_not_certified() {
+        let pl = |n: [f64; 3]| {
+            let z = Vec3::new(n[0], n[1], n[2]);
+            Surface::Plane(Plane {
+                frame: Frame::from_z(Point3::ORIGIN, forge_math::UnitVec3::new_unchecked(z)),
+            })
+        };
+        let s2 = std::f64::consts::FRAC_1_SQRT_2;
+        let (a, b) = (pl([1.0, 0.0, 0.0]), pl([0.0, 1.0, 0.0]));
+        assert!(!point_unique([&a, &b, &pl([s2, s2, 0.0])], Point3::ORIGIN, 1e-3));
+        assert!(point_unique([&a, &b, &pl([0.0, 0.0, 1.0])], Point3::ORIGIN, 1e-3));
     }
 }
