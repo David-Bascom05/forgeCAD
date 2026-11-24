@@ -60,7 +60,7 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:, relief: "corners", min_contact:)` | soft jaws cut to what `from:` left, turned over, `grip` deep: the pocket is the opening of that outline by `tool`'s radius, grown by `fit` (default 0.02), with a relief of radius r + fit at each corner if asked. Refused unless what `from:` left seats in the pocket (exactly), the seat is at least `min_contact` mm² (default a quarter of the largest section), the blank keeps 3 mm of wall and the part stands more than the fixture clearance above the jaws. The value is a part (the jaws closed, pocketed: `setup(jaws, ..)` cuts them, held by the vise) and a fixture (`setup(f, from: op1, fixture: jaws)`) |
 | `facing(SETUP, tool:, to:, step:, leave_axial:)` | zig-zag over the stock down to `to` |
 | `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:, leave_axial:, ramp:)` | everything between the stock outline and the part's section, as offset passes |
-| `contour(SETUP, tool:, side:, from:, to:, step:, leave:, leave_axial:, direction:, finish:, finish_step:, spring:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
+| `contour(SETUP, tool:, side:, from:, to:, step:, leave:, leave_axial:, direction:, finish:, finish_step:, spring:, lead:, lead_radius:, lead_sweep:, lead_length:, entry:, overlap:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
 | `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:, leave_axial:, ramp:)` | a hole feature's circle, to its depth |
 | `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, leave_axial:, ramp:)` | every hole and slot of the part's section between the heights, each less the part's section there (islands standing in it, a boss in a well, are kept: examples/machined/well_island_cam.fg) |
 | `slot(SETUP, PART.SKETCH, tool:, depth:, step:, from:, ramp:)` | an end mill (flat or bull) along the sketch's lines, arcs and circles (not construction), on a plane facing +z, in levels down to `depth`: the groove the tool's width, modelled in the part (G1 against the part). `ramp: DEG` enters along each curve's first line, back and forth at that angle from the level above; else a plunge. The stock records each curve's band of the tool's radius as cleared (above the corner radius for a bull). examples/machined/slot_plate_cam.fg |
@@ -83,7 +83,19 @@ take `leave_axial:`, the others refuse it. G4 grows the part by the larger of th
 A contour's `direction:` is `"climb"` (the part on the tool's right, with the spindle M03) or
 `"conventional"` (default climb, as pockets and clearing are). `finish: n` (default 1) cuts n radial passes at each level,
 `finish_step:` apart (default a tenth of the tool's diameter), the last at the contour's own offset;
-`spring: n` (default 0) repeats the last pass n times. Only `contour` takes these four.
+`spring: n` (default 0) repeats the last pass n times. Only `contour` takes these and the leads below.
+
+A contour's leads (Fusion's Linking tab): `lead: "arc"` joins each loop at each level on a
+circular arc tangent to it (G1-continuous) of `lead_radius:` (default half the tool's diameter)
+through `lead_sweep:` degrees (default 90, at most 180), preceded by a tangent line of
+`lead_length:` (default 0), and leaves it the same way; `lead: "line"` is the tangent line alone
+(`lead_length:`, default half the tool's diameter). Leads lie on the air side (with climb, the
+tool's left). With leads each level comes down at the lead-in's start, off the wall, and goes up at
+the lead-out's end. `entry: (x, y)` starts each loop at its point nearest that point (the piece
+there split); `overlap:` cuts on past the start by that length before the lead-out, to hide the
+witness mark. Default `lead: "none"`: the path is the one without these. Every lead is certified as
+any move is; a lead that does not fit (an arc bigger than the hole it is in) is refused with the
+gouge it makes, so make `lead_radius:` smaller. Method: plain tangent arcs and lines.
 
 Heights (`from:`, `to:`) are numbers in the part's frame, or the model's own: a horizontal face or
 plane of the part named as in the part's text (`f.plate.end`, `f.boss.end`, `f.plate.start`),

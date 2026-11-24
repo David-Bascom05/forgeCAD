@@ -5,9 +5,10 @@
 //!
 //! Linking is by retract: up to the retract height (above everything the op cuts), across at it,
 //! and down at the plunge feed. Rapids run at the clearance height, above the stock.
+use crate::leads::{self, Leads};
 use forge_cam_geom::check::{self, Face, Move, Verdict};
 use forge_cam_geom::offset::offset;
-use forge_cam_geom::region::{Loop, Region, Seg};
+use forge_cam_geom::region::{Loop, P2, Region, Seg};
 use forge_cam_geom::tool::{Part, Shape};
 use forge_math::dmath;
 use forge_tooling::Tool;
@@ -637,6 +638,22 @@ pub fn contour_passes(
     outside: bool,
     ps: Passes,
 ) -> Result<OpPath, OpError> {
+    contour_leads(rg, c, sp, leave, outside, ps, &Leads::default())
+}
+
+/// `contour_passes` with each loop's entry position, leads and overlap (leads.rs). With no
+/// leads the path is `contour_passes`' own; with them, each level comes down at the lead-in's
+/// start, runs the lead-in, the loop, the overlap and the lead-out, and goes up at the
+/// lead-out's end.
+pub fn contour_leads(
+    rg: &Region,
+    c: Cut,
+    sp: Span,
+    leave: f64,
+    outside: bool,
+    ps: Passes,
+    ld: &Leads,
+) -> Result<OpPath, OpError> {
     let Cut { tool, tidx, h, feed } = c;
     let Span { top, bottom, step } = sp;
     let n = ps.finish.max(1);
@@ -670,6 +687,9 @@ pub fn contour_passes(
     }
     for _ in 0..ps.spring {
         passes.push(passes[n - 1].clone());
+    }
+    if !ld.is_none() {
+        return Ok(led(&passes, tidx, h, sp, feed, ps.climb, ld));
     }
     let mut mv = Vec::new();
     let first = passes[0][0][0].start();
@@ -708,6 +728,59 @@ pub fn contour_passes(
         rpm: 0.0,
         coolant: forge_post::Coolant::Flood,
     })
+}
+
+/// The contour's passes with leads: per loop, per level, down at the lead-in's start (in the
+/// air), lead-in, loop, overlap, lead-out, up at the lead-out's end at feed, across at the
+/// retract height to the next start.
+fn led(
+    passes: &[Vec<Vec<Seg>>],
+    tidx: usize,
+    h: Heights,
+    sp: Span,
+    feed: (f64, f64),
+    climb: bool,
+    ld: &Leads,
+) -> OpPath {
+    let mut mv = Vec::new();
+    let mut first = None;
+    for loops in passes {
+        for l in loops {
+            let (li, body, tail) = leads::wrap(l, climb, ld, 1e-6);
+            let s = li.first().unwrap_or(&body[0]).start();
+            let e = tail.last().unwrap_or(&body[body.len() - 1]).end();
+            first.get_or_insert(s);
+            for z in levels(sp.top, sp.bottom, sp.step) {
+                mv.push(PMove::Rapid {
+                    to: [s.x, s.y, h.retract],
+                });
+                mv.push(PMove::Line {
+                    to: [s.x, s.y, z],
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+                push_loop(&mut mv, &li, z, feed.0);
+                push_loop(&mut mv, &body, z, feed.0);
+                push_loop(&mut mv, &tail, z, feed.0);
+                mv.push(PMove::Line {
+                    to: [e.x, e.y, h.retract],
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            }
+        }
+    }
+    let first = first.unwrap_or(P2 { x: 0.0, y: 0.0 });
+    mv.push(PMove::Rapid {
+        to: [first.x, first.y, h.clear],
+    });
+    OpPath {
+        tool: tidx,
+        start: [first.x, first.y, h.clear],
+        moves: mv,
+        rpm: 0.0,
+        coolant: forge_post::Coolant::Flood,
+    }
 }
 
 /// Pocket: the region cleared by offset passes, each offset from the original boundary at

@@ -2625,7 +2625,7 @@ impl Cam {
             posted: vec![],
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
-        for k in ["direction", "finish", "finish_step", "spring"] {
+        for k in CONTOUR_ONLY {
             if a.contains_key(k) && kind != "contour" {
                 return Err(format!("{kind} does not take `{k}:` (contour does)"));
             }
@@ -2754,6 +2754,7 @@ impl Cam {
                         let side = get_str(a, "side", Some("outside"))?;
                         let leave = get_num(a, "leave", Some(0.0))?;
                         let passes = contour_passes(a, d)?;
+                        let leads = contour_leads(a, d)?;
                         let zmid = 0.5 * (top + bottom);
                         let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
                             .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
@@ -2779,7 +2780,7 @@ impl Cam {
                                     voids.push((Some(forge_cam_geom::boolean::region_of(&band)), bottom));
                                 }
                             }
-                            ops::contour_passes(
+                            ops::contour_leads(
                                 &rg,
                                 ops::Cut {
                                     tool: t,
@@ -2791,11 +2792,12 @@ impl Cam {
                                 leave,
                                 true,
                                 passes,
+                                &leads,
                             )
                             .map(|p| vec![p])
                             .map_err(|e| format!("{e:?}"))
                         } else {
-                            ops::contour_passes(
+                            ops::contour_leads(
                                 &rg,
                                 ops::Cut {
                                     tool: t,
@@ -2807,6 +2809,7 @@ impl Cam {
                                 leave,
                                 false,
                                 passes,
+                                &leads,
                             )
                             .map(|p| vec![p])
                             .map_err(|e| format!("{e:?}"))
@@ -3491,6 +3494,97 @@ fn contour_passes(a: &BTreeMap<String, V>, d: f64) -> Result<ops::Passes, String
         finish: count("finish", 1.0, 1.0)?,
         finish_step,
         spring: count("spring", 0.0, 0.0)?,
+    })
+}
+
+/// The arguments only `contour` takes.
+const CONTOUR_ONLY: [&str; 10] = [
+    "direction",
+    "finish",
+    "finish_step",
+    "spring",
+    "lead",
+    "lead_radius",
+    "lead_sweep",
+    "lead_length",
+    "entry",
+    "overlap",
+];
+
+/// A contour's leads from its arguments: `lead: "none" | "arc" | "line"` (default none: the
+/// tool comes down on the loop), `lead_radius:` (an arc's, default half the tool's diameter),
+/// `lead_sweep:` (degrees, default 90), `lead_length:` (the tangent line before the arc in and
+/// after it out; default 0 for an arc, half the tool's diameter for a line), `entry: (x, y)`
+/// (start each loop at its point nearest this one) and `overlap:` (cut on past the start by
+/// this length before leaving, default 0). The same lead goes in and out.
+fn contour_leads(a: &BTreeMap<String, V>, d: f64) -> Result<forge_cam::leads::Leads, String> {
+    use forge_cam::leads::{Lead, Leads};
+    let kind = get_str(a, "lead", Some("none"))?;
+    let len_arg = |k: &str, default: f64| -> Result<f64, String> {
+        let x = get_num(a, k, Some(default))?;
+        if !(x >= 0.0 && x.is_finite()) {
+            return Err(format!("{k}: a length, 0 or more"));
+        }
+        Ok(x)
+    };
+    let lead = match kind.as_str() {
+        "none" => {
+            for k in ["lead_radius", "lead_sweep", "lead_length"] {
+                if a.contains_key(k) {
+                    return Err(format!(
+                        "`{k}:` needs a lead: add `lead: \"arc\"` or `lead: \"line\"`"
+                    ));
+                }
+            }
+            None
+        }
+        "arc" => {
+            let radius = len_arg("lead_radius", 0.5 * d)?;
+            let sweep_deg = get_num(a, "lead_sweep", Some(90.0))?;
+            if !(sweep_deg > 0.0 && sweep_deg <= 180.0) {
+                return Err("lead_sweep: degrees, over 0 and at most 180".into());
+            }
+            if radius <= 0.0 {
+                return Err("lead_radius: a length over 0 (or `lead: \"line\"`)".into());
+            }
+            Some(Lead {
+                radius,
+                sweep_deg,
+                length: len_arg("lead_length", 0.0)?,
+            })
+        }
+        "line" => {
+            if a.contains_key("lead_radius") || a.contains_key("lead_sweep") {
+                return Err(
+                    "a line lead takes `lead_length:` only (an arc takes `lead_radius:` and `lead_sweep:`)"
+                        .into(),
+                );
+            }
+            let length = len_arg("lead_length", 0.5 * d)?;
+            if length <= 0.0 {
+                return Err("lead_length: a length over 0".into());
+            }
+            Some(Lead {
+                radius: 0.0,
+                sweep_deg: 0.0,
+                length,
+            })
+        }
+        k => return Err(format!("lead: \"none\", \"arc\" or \"line\", not \"{k}\"")),
+    };
+    let entry = match a.get("entry") {
+        None => None,
+        Some(V::Tuple(t)) if t.len() == 2 => match (num(&t[0]), num(&t[1])) {
+            (Some(x), Some(y)) if x.is_finite() && y.is_finite() => Some([x, y]),
+            _ => return Err("entry: a point (x, y)".into()),
+        },
+        Some(_) => return Err("entry: a point (x, y)".into()),
+    };
+    Ok(Leads {
+        lead_in: lead,
+        lead_out: lead,
+        entry,
+        overlap: len_arg("overlap", 0.0)?,
     })
 }
 
