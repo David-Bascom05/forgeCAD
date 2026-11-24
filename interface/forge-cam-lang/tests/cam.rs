@@ -186,7 +186,9 @@ fn refusals_name_the_check_and_a_fix() {
         cam.program_text().is_none(),
         "no program is released with a refused op"
     );
-    // the bolt holes before the plate top is cleared: the rapids would enter stock
+    // the bolt holes before the plate top is cleared: each cycle's R plane is lifted above the
+    // stock left over the holes (18, posted R-1. with Z0 on the stock top at 20), so the rapids
+    // stay out of it and the drill feeds through
     let cam = forge_cam_lang::run(
         &doc(
             "skim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n",
@@ -194,8 +196,14 @@ fn refusals_name_the_check_and_a_fix() {
         &dir,
     );
     let b = cam.ops.iter().find(|o| o.name == "bolts").unwrap();
-    assert_eq!(b.status, "refused", "{:?}", b.checks);
-    assert!(b.checks.iter().any(|c| c.rule == "rapid_clear"));
+    assert_eq!(b.status, "built", "{:?}", b.checks);
+    let (txt, _) = cam.program_text().unwrap();
+    assert!(
+        txt.lines()
+            .filter(|l| l.contains("G81") || l.contains("G83"))
+            .all(|l| l.contains("R-1.")),
+        "{txt}"
+    );
     // a typed error for an unknown name
     let cam = forge_cam_lang::run(&doc("x = drill(op1, f.nope)\n"), &dir);
     assert!(

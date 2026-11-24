@@ -1631,7 +1631,7 @@ impl Cam {
                     Err(_) => ok = false,
                 }
                 (found_lo, ok)
-                        });
+            });
             for (found_lo, ok) in bands {
                 self.leftover.extend(found_lo);
                 all_ok &= ok;
@@ -3967,6 +3967,25 @@ impl Cam {
             paths.push(p);
             plan.push(format!("tap {} (pitch {}) at {rpm} rpm", t.tool.id, t.tool.tp));
         }
+        // each cycle's R plane above the stock the earlier ops left over the widest tool's
+        // footprint (a rough leaves cusps beside a fillet above a hole's mouth): a rapid down to
+        // R then meets no stock. Certified like any move; this only keeps it from being refused
+        let rmax = paths
+            .iter()
+            .map(|p| 0.5 * self.tools[p.tool].tool.dc)
+            .fold(0.0, f64::max);
+        let ip = self.setups[su].ip.clone();
+        for p in &mut paths {
+            for m in &mut p.moves {
+                if let PMove::Cycle { holes, r, clear, .. } = m {
+                    let top = stock_top_over(&ip, *holes, rmax + 0.5, *r - 2.0);
+                    let lift = (top + 1.0).min(*clear);
+                    if lift > *r {
+                        *r = lift;
+                    }
+                }
+            }
+        }
         out.plan = plan;
         // the plan's paths are posted one after the other, each with its tool
         Ok(paths)
@@ -4255,6 +4274,31 @@ fn tan_rad(x: f64) -> f64 {
 /// The length of (x, y).
 fn len2(x: f64, y: f64) -> f64 {
     (x * x + y * y).sqrt()
+}
+
+/// The top of the stock `ip` within radius r of c, above height `from` (`from` where there is
+/// none above it): the highest band of the stock's levels whose material meets that disk. On an
+/// error in the stock's material, its top (the safe answer).
+fn stock_top_over(ip: &forge_cam::stock::InProcess, c: [f64; 2], r: f64, from: f64) -> f64 {
+    use forge_cam_geom::boolean::{Op, boolean};
+    let disk = forge_cam::stock::disk(p2(c[0], c[1]), r);
+    let lv = ip.levels();
+    let mut top = from;
+    for w in lv.windows(2) {
+        let (z0, z1) = (w[0].max(from), w[1]);
+        if z1 <= from || z1 <= top {
+            continue;
+        }
+        match ip.material(0.5 * (z0 + z1)) {
+            Ok(None) => {}
+            Ok(Some(m)) => match boolean(&disk, &m, Op::Inter) {
+                Ok(i) if i.is_empty() => {}
+                _ => top = z1,
+            },
+            Err(_) => return ip.max[2],
+        }
+    }
+    top
 }
 
 /// A region's box: its segments' ends and each arc's extreme points that lie on it (in f64).
