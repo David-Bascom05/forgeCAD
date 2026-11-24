@@ -3645,6 +3645,9 @@ impl Cam {
                                 &prm,
                             )
                             .map_err(|e| format!("{e:?}"))?;
+                            for n in &out.notes {
+                                self.warnings.push(format!("{name}: {n}"));
+                            }
                             for (v, z) in out.voids {
                                 voids.push((Some(v), z));
                             }
