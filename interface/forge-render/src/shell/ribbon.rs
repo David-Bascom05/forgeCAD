@@ -10,6 +10,7 @@ pub(super) mod tips;
 
 pub(super) use sketch_tab::close_drop;
 
+#[derive(Clone)]
 pub(in crate::shell) struct Tool {
     pub(super) name: &'static str,
     pub(super) icon: &'static str,
@@ -482,7 +483,10 @@ fn groups(s: &Shell) -> Vec<Group> {
                     go("Fit All", "fit", Action::FitAll, false),
                 ],
             ),
-        ],
+        ]
+        .into_iter()
+        .chain(super::capture::group(s))
+        .collect(),
         _ => vec![
             g(
                 "Parameters",
@@ -619,6 +623,15 @@ fn small_width(ui: &mut Ui, tools: &[Tool]) -> f32 {
 }
 
 impl Shell {
+    /// The ribbon's tools on the tab shown, (group, tool), for tests: each is placed inside the
+    /// window (`tool:NAME`) or reached through its folded group (`ribbon:in:GROUP:NAME`).
+    pub fn ribbon_tools(&self) -> Vec<(&'static str, &'static str)> {
+        groups(self)
+            .iter()
+            .flat_map(|g| g.big.iter().chain(&g.small).chain(&g.icons).map(move |x| (g.name, x.name)))
+            .collect()
+    }
+
     pub(super) fn ribbon(&mut self, ui: &mut Ui, w: f32) {
         let t = self.theme;
         let y = TITLE_H + TABS_H;
@@ -634,26 +647,63 @@ impl Shell {
             return self.sketch_ribbon(ui, w);
         }
         let mut gx = 0.0;
-        let mut gs = groups(self);
-        // the Machine Builder's own commands, on the Manage tab while it is open
-        if self.machine.is_some() && self.tab == 4 {
-            gs.extend(super::machine::groups(self));
-        }
-        // too wide for the window: small buttons lose their words, as Inventor's ribbon shrinks
-        let full: f32 = gs
+        let gs = groups(self);
+        // too wide for the window: the ribbon gives way a step at a time, each step a group at a
+        // time from the right, only until it fits (docs/ux/STANDARD.md §10: nothing clips):
+        // 1, small buttons lose their words; 2, big buttons become icons too; 3, a group folds
+        // into one button whose menu holds its tools (never the group with Exit or Finish)
+        let name_w = |ui: &mut Ui, n: &str| ui.fonts_mut(|f| f.layout_no_wrap(n.to_string(), sans(11.0), t.ink2)).size().x;
+        let sizes: Vec<[f32; 4]> = gs
             .iter()
             .map(|g| {
-                12.0 + g.big.iter().map(|tool| big_width(ui, tool)).sum::<f32>()
-                    + g.small.chunks(3).map(|c| small_width(ui, c)).sum::<f32>()
-                    + g.icons.len().div_ceil(3) as f32 * ICON_W
+                let label = name_w(ui, g.name) + 16.0;
+                let base = 12.0 + g.big.iter().map(|tool| big_width(ui, tool)).sum::<f32>();
+                let words = g.small.chunks(3).map(|c| small_width(ui, c)).sum::<f32>()
+                    + g.icons.len().div_ceil(3) as f32 * ICON_W;
+                let icons = (g.small.len() + g.icons.len()).div_ceil(3) as f32 * ICON_W;
+                let all = 12.0 + (g.big.len() + g.small.len() + g.icons.len()).div_ceil(3) as f32 * ICON_W;
+                let folded = (name_w(ui, g.name) + 46.0).max(70.0);
+                [(base + words).max(label), (base + icons).max(label), all.max(label), folded]
             })
-            .sum();
-        let compact = full > w;
-        for mut g in gs {
-            if compact {
+            .collect();
+        let keep = |g: &Group| {
+            g.big.iter().chain(&g.small).chain(&g.icons).any(|x| matches!(x.action, Some(super::Action::ExitEnv)))
+                || (self.dwgdoc.is_some() && g.name == "Layers")
+        };
+        let mut level = vec![0usize; gs.len()];
+        let mut total: f32 = sizes.iter().map(|s| s[0]).sum();
+        for step in 1..=3 {
+            for k in (0..gs.len()).rev() {
+                if total <= w {
+                    break;
+                }
+                if step == 3 && keep(&gs[k]) {
+                    continue;
+                }
+                let (now, then) = (sizes[k][level[k]], sizes[k][step]);
+                if then < now {
+                    total -= now - then;
+                    level[k] = step;
+                }
+            }
+        }
+        for (k, mut g) in gs.into_iter().enumerate() {
+            if level[k] == 3 {
+                let width = sizes[k][3];
+                self.folded_group(ui, &g, gx, y, width);
+                p.vline(gx + width, y..=y + RIBBON_H - 1.0, Stroke::new(1.0, t.line));
+                gx += width;
+                continue;
+            }
+            if level[k] >= 1 {
                 let mut small = std::mem::take(&mut g.small);
                 small.append(&mut g.icons);
                 g.icons = small;
+            }
+            if level[k] == 2 {
+                let mut all = std::mem::take(&mut g.big);
+                all.append(&mut g.icons);
+                g.icons = all;
             }
             let bigs: Vec<f32> = g.big.iter().map(|tool| big_width(ui, tool)).collect();
             let cols: Vec<f32> = g.small.chunks(3).map(|c| small_width(ui, c)).collect();
@@ -714,18 +764,24 @@ impl Shell {
         }
     }
 
-    /// Nothing open: no part, drawing or DWG.
+    /// Nothing open: no part, drawing, DWG or machining document (one opened alone, its part
+    /// not in a tab of its own, is a document all the same).
     pub(super) fn no_document(&self) -> bool {
-        self.fg.is_none() && self.drawing.is_none() && self.dwgdoc.is_none()
+        self.fg.is_none() && self.drawing.is_none() && self.dwgdoc.is_none() && self.cam.is_none()
     }
 
     /// A tool that does nothing without a document is drawn off then, its tooltip saying why;
-    /// what makes or opens one, Settings, and Thermoform's own tab stay on.
+    /// what makes or opens one, Settings, Thermoform's own tab, the Machine Builder's tools (its
+    /// libraries need no document) and every environment's Finish stay on.
     fn needs_document(&self, tool: &Tool) -> bool {
         self.no_document()
             && tool.action.is_some()
             && self.tab != super::THERMO_TAB
             && !matches!(tool.name, "Settings" | "Open" | "New" | "New Sheet Metal")
+            && !matches!(
+                tool.action,
+                Some(super::Action::ExitEnv) | Some(super::Action::Machine(_))
+            )
     }
 
     pub(super) fn tool_response(
@@ -783,6 +839,79 @@ impl Shell {
         (ink, resp)
     }
 
+    /// A group folded into one button (the ribbon's last step at a narrow window): its first
+    /// tool's icon, its name and a menu mark; its tools in a menu under it.
+    fn folded_group(&mut self, ui: &mut Ui, g: &Group, x: f32, y: f32, width: f32) {
+        let t = self.theme;
+        let r = Rect::from_min_size(pos2(x + 4.0, y + 6.0), vec2(width - 8.0, 72.0));
+        let id = egui::Id::unique(("ribbon-fold", g.name));
+        let resp = ui.interact(r, id, Sense::click());
+        let open_id = egui::Id::unique("ribbon-fold-open");
+        let open = ui.data(|d| d.get_temp::<&'static str>(open_id)) == Some(g.name);
+        let p = ui.painter();
+        if open {
+            p.rect_filled(r, 4.0, t.on);
+        } else if resp.hovered() {
+            p.rect_filled(r, 4.0, t.hover);
+        }
+        let ink = if open { t.on_ink } else { t.ink };
+        let first = g.big.iter().chain(&g.small).chain(&g.icons).next();
+        if let Some(f) = first {
+            icons::draw(p, pos2(r.center().x - 14.0, y + 8.0), 28.0, f.icon, 1.25, ink);
+        }
+        p.text(pos2(r.center().x, y + 50.0), Align2::CENTER_CENTER, g.name, sans(12.0), ink);
+        // the menu mark, drawn (a small chevron, no glyph)
+        let c = pos2(r.center().x, y + 64.0);
+        p.line_segment([c + vec2(-4.0, -2.0), c + vec2(0.0, 2.0)], Stroke::new(1.3, ink));
+        p.line_segment([c + vec2(0.0, 2.0), c + vec2(4.0, -2.0)], Stroke::new(1.3, ink));
+        self.places.push((format!("ribbon:group:{}", g.name), r));
+        let tools: Vec<Tool> = g.big.iter().chain(&g.small).chain(&g.icons).cloned().collect();
+        if resp.clicked() {
+            ui.data_mut(|d| {
+                if open {
+                    d.remove::<&'static str>(open_id);
+                } else {
+                    d.insert_temp(open_id, g.name);
+                }
+            });
+        }
+        if !open {
+            // folded tools are reached through the group's button
+            for tool in &tools {
+                self.places.push((format!("ribbon:in:{}:{}", g.name, tool.name), r));
+            }
+            return;
+        }
+        let rows = tools.len() as f32;
+        let mw = tools.iter().map(|x| small_width(ui, std::slice::from_ref(x))).fold(160.0, f32::max);
+        let at = pos2(r.left(), r.bottom() + 4.0);
+        let before = self.out.len();
+        let menu = egui::Area::new(id.with("menu"))
+            .fixed_pos(at)
+            .order(egui::Order::Foreground)
+            .fade_in(false)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::new()
+                    .fill(t.raised)
+                    .stroke(Stroke::new(1.0, t.line))
+                    .corner_radius(6.0)
+                    .inner_margin(4.0)
+                    .show(ui, |ui| {
+                        let (area, _) = ui.allocate_exact_size(vec2(mw, rows * SMALL_H), Sense::hover());
+                        for (k, tool) in tools.iter().enumerate() {
+                            self.small_button(ui, tool, area.left(), area.top() + k as f32 * SMALL_H, mw);
+                        }
+                    });
+            });
+        // a tool chosen, or a press elsewhere: the menu closes
+        let pressed = ui.input(|i| i.pointer.any_pressed());
+        let inside = ui.input(|i| i.pointer.interact_pos()).is_some_and(|q| menu.response.rect.contains(q) || r.contains(q));
+        if self.out.len() > before || (pressed && !inside) {
+            ui.data_mut(|d| d.remove::<&'static str>(open_id));
+        }
+        self.view_blocks.push(menu.response.rect);
+    }
+
     fn big_button(&mut self, ui: &mut Ui, tool: &Tool, x: f32, y: f32, w: f32) {
         let r = Rect::from_min_size(pos2(x, y), vec2(w - 2.0, 72.0));
         let (ink, _) = self.tool_response(ui, tool, r);
@@ -810,5 +939,30 @@ impl Shell {
             sans(12.0),
             ink,
         );
+    }
+}
+
+#[cfg(test)]
+mod document_tests {
+    use super::*;
+
+    /// With no part open, the Machine Builder's tools and every Finish stay on (its libraries
+    /// need no document); a part's tools are off.
+    #[test]
+    fn the_machine_builder_and_finish_need_no_document() {
+        let s = Shell::default();
+        assert!(s.no_document());
+        let t = |name, action| Tool {
+            name,
+            icon: "check",
+            action: Some(action),
+            on: false,
+        };
+        assert!(!s.needs_document(&t("Finish Machine Builder", Action::ExitEnv)));
+        assert!(!s.needs_document(&t(
+            "Check",
+            Action::Machine(super::super::machine::MachineCmd::Check)
+        )));
+        assert!(s.needs_document(&t("Undo", Action::Undo)));
     }
 }

@@ -55,6 +55,13 @@ fn log_a_job_on_a_physical_tool() {
     let p = r("predict job.fg --use T1=EM6-a");
     assert_eq!(p.code, 0, "{}", p.err);
     assert_eq!(r("run job.fg --use T2=EM6-a").code, 1);
+    // mounted once, a run needs no --use
+    assert_eq!(r("mount T1=EM6-a").code, 0);
+    assert!(tmp.join(".forgecad/cam-mounts.toml").exists());
+    let o = r("run job.fg");
+    assert!(o.out.contains("logged on EM6-a"), "{} {}", o.out, o.err);
+    assert_eq!(r("mount T1=nobody").code, 1);
+    assert!(r("unmount T1").out.contains("mounted: none"));
     let o = r("worn EM6-a --vb 0.3");
     assert_eq!(o.code, 0, "{}", o.err);
     let c = r("calibrate");

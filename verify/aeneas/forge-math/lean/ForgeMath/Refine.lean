@@ -57,12 +57,12 @@ theorem two_sum_exact (a b : F64) (ha : a.isFinite) (hb : b.isFinite)
 
 /-- **`split` is Veltkamp's split** (σ = 27): for finite nonzero `a` with `SPLITTER ⊗ a` finite
 and `a` a multiple of `2^lam`, the shipped `split` returns finite `(hi, lo)` with the properties
-`IEEE754.Split` states: `hi + lo = a`, `hi` on the grid `2^(ε+27)`, `lo` on `2^ε`, their sizes,
+`IEEE754.Split` states: `hi + lo = a`, `hi` on the grid `2^(eps+27)`, `lo` on `2^eps`, their sizes,
 and both on every grid of `a`. -/
 theorem split_veltkamp (a : F64) {lam : ℤ} (ha : a.isFinite) (hca : (FP.mul splitter a).isFinite)
     (ha0 : a.val ≠ 0) (hlam : Mult a.val lam) :
     ∃ hi lo, predicates.split a = ok (hi, lo) ∧ hi.isFinite ∧ lo.isFinite ∧
-      ∃ ε, Split binary64 27 a.val hi.val lo.val ε lam := by
+      ∃ eps, Split binary64 27 a.val hi.val lo.val eps lam := by
   obtain ⟨h1, h2, h3⟩ := IEEE754.veltkamp (f := binary64) (σ := 27) (by norm_num) (by decide)
     splitter_spec.1 (by rw [splitter_spec.2]) ha hca ha0 hlam
   exact ⟨_, _, split_eq a, h1, h2, h3⟩

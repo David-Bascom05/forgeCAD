@@ -56,6 +56,7 @@ fn ti64_altin_carbide_is_estimated_and_warns_when_worn() {
     let rep = forge_cam_lang::life::estimate(&cam, &rows, &lim);
     let v = rep.tools.iter().find(|t| t.t == 1).unwrap();
     assert_eq!(v.wear_limit_at.as_ref().unwrap().op, "skim");
+    assert_eq!(v.row.as_deref(), Some("ti64-carbide-alti-n-highfeed-vb03"));
     assert!(v.warning.is_some() && v.source.contains("work condition"));
     assert!(rep.ops.iter().any(|o| o.op == "skim2" && o.fraction.is_none()));
 }

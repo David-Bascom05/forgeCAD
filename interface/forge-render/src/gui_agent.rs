@@ -252,6 +252,11 @@ impl Gui {
 
     /// Publish a terminal connection for this window without starting a model session.
     pub fn start_agent_bridge(&mut self) {
+        // a page has no terminal to connect (the agent runs in the desktop app): it failed there,
+        // and "Agent connection: operation not supported on this platform" stood in the status bar
+        if cfg!(target_arch = "wasm32") {
+            return;
+        }
         if self.agent.bridge.is_none() {
             match forge_agent::chat_bridge::Bridge::start(self.waker.clone()) {
                 Ok(bridge) => self.agent.bridge = Some(bridge),

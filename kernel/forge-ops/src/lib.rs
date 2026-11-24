@@ -15,6 +15,7 @@ pub mod revolve;
 pub mod roles;
 mod selfx;
 pub mod shell;
+pub mod simple;
 mod skin;
 pub mod strip;
 pub mod sweep;

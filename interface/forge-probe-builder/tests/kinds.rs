@@ -50,3 +50,15 @@ fn forms_checks_and_previews() {
         assert!(preview(&t).is_ok());
     }
 }
+
+#[test]
+fn every_offer_names_a_machine_in_the_library() {
+    let machines: Vec<String> = forge_machine::library::builtin().into_iter().map(|m| m.name).collect();
+    for d in forge_probe::builtin() {
+        for o in &d.offers {
+            for m in &o.machines {
+                assert!(machines.contains(m), "{}: offer names `{m}`, not a built-in machine", d.id);
+            }
+        }
+    }
+}

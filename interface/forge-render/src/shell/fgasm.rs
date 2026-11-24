@@ -1906,7 +1906,22 @@ pub(super) fn dialog_head(
         if r.hovered() { t.ink } else { t.ink2 },
     );
     places.push((format!("{name}:close"), x));
-    r.clicked()
+    // Esc, given to this dialog this frame (`escape_to`): its ×, as if clicked
+    let escaped =
+        ui.ctx().data(|d| d.get_temp::<String>(egui::Id::unique(ESCAPED))) == Some(name.to_string());
+    r.clicked() || escaped
+}
+
+const ESCAPED: &str = "dialog-escaped";
+
+/// Esc backs out of the dialog headed `name` (`dialog_head`'s): its × this frame.
+pub(super) fn escape_to(ctx: &egui::Context, name: &str) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::unique(ESCAPED), name.to_string()));
+}
+
+/// The frame's start: no Esc given to a dialog yet.
+pub(super) fn escape_clear(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.remove::<String>(egui::Id::unique(ESCAPED)));
 }
 
 impl Shell {

@@ -184,7 +184,8 @@ pub fn body(ui: &mut Ui, t: &Theme, w: &mut CamWs, width: f32, places: &mut Vec<
             places.push(("cam:turn:step".into(), r.rect));
         }
     });
-    let h = 300.0;
+    // half as tall as wide, within reason: a small view keeps room for a window beside it
+    let h = (width * 0.5).clamp(160.0, 300.0);
     let (r, _) = ui.allocate_exact_size(vec2(width, h), Sense::hover());
     places.push(("cam:turn:view".into(), r));
     let p = ui.painter_at(r);

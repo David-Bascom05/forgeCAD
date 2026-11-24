@@ -296,6 +296,28 @@ impl Scene {
         all
     }
 
+    /// The corners of each shown part's own box, placed: a framing's subject, tighter than the
+    /// box round them all (an arm bent into an L fills little of its box).
+    pub fn shown_corners(&self) -> Vec<[f32; 3]> {
+        let mut out = vec![];
+        for p in &self.placements {
+            if squashed(&p.rows) {
+                continue;
+            }
+            let Some((lo, hi)) = self.boxes.get(p.part as usize) else {
+                continue;
+            };
+            for k in 0..8 {
+                let q = [0, 1, 2].map(|i| if k >> i & 1 == 1 { hi[i] } else { lo[i] });
+                out.push([0, 1, 2].map(|i| {
+                    let r = p.rows[i];
+                    r[0] * q[0] + r[1] * q[1] + r[2] * q[2] + r[3]
+                }));
+            }
+        }
+        out
+    }
+
     /// A sphere holding the whole scene.
     pub fn bounds(&self) -> ([f32; 3], f32) {
         if let Some((lo, hi)) = self.shown_box() {
