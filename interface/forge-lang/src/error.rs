@@ -129,6 +129,26 @@ pub fn parse_path(s: &str) -> Option<Vec<Seg>> {
     Some(out)
 }
 
+/// A refused size's fix (`Options::fit_sizes`): the param driving it, a value built with it,
+/// and, when the search met a refusal below a size that built, where the kernel's answer was
+/// not monotone in the size.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fit {
+    pub param: ParamKey,
+    pub value: Literal,
+    pub intermittent: Option<Intermittent>,
+}
+
+/// Sizes the search found refused below one that built: from `from` (the least such) up to
+/// `to` (the least refused above the largest built), refused here and there, so the fix is
+/// the largest the search built, not a limit. `why` is the kernel's refusal at `from`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Intermittent {
+    pub from: f64,
+    pub to: f64,
+    pub why: String,
+}
+
 /// A literal value as a param definition writes it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Literal {
@@ -596,6 +616,12 @@ pub enum Error {
         what: &'static str,
         value: f64,
     },
+    /// A through-spline's points `index` and the next (the first, closing a closed one) within the
+    /// kernel's tolerance of each other: the curve through them has no parameter between them.
+    SplinePointsMeet {
+        span: Span,
+        index: usize,
+    },
     UnknownName {
         span: Span,
         name: String,
@@ -716,7 +742,7 @@ pub enum Error {
         id: String,
         error: forge_model::RegenError,
         /// The largest value of the param driving a refused size that builds (`Options::fit_sizes`).
-        fit: Option<Box<(ParamKey, Literal)>>,
+        fit: Option<Box<Fit>>,
     },
     /// A tapered extrude whose outline closes up before its depth (a lint): built to where it
     /// closes, the pyramid or ridge its walls make, `at` from its sketch where `depth` was asked.
@@ -911,6 +937,7 @@ impl Error {
             | WrongDim { span, .. }
             | NotWhole { span, .. }
             | BadValue { span, .. }
+            | SplinePointsMeet { span, .. }
             | UnknownName { span, .. }
             | UnknownMember { span, .. }
             | UnknownArg { span, .. }
@@ -988,6 +1015,7 @@ impl Error {
             WrongDim { .. } => "WrongDim",
             NotWhole { .. } => "NotWhole",
             BadValue { .. } => "BadValue",
+            SplinePointsMeet { .. } => "SplinePointsMeet",
             UnknownName { .. } => "UnknownName",
             UnknownMember { .. } => "UnknownMember",
             UnknownArg { .. } => "UnknownArg",
@@ -1091,8 +1119,8 @@ impl Error {
             EntityStillRead { reader, .. } => vec![Op::DeleteFeature { id: reader.clone() }],
             // a size too big for where it goes: as large as builds
             Build { fit: Some(fit), .. } => vec![Op::SetParam {
-                param: fit.0.clone(),
-                value: fit.1,
+                param: fit.param.clone(),
+                value: fit.value,
             }],
             // as deep as it closes, or as steep as reaches the depth
             TaperCloses { fixes, .. } => fixes
@@ -1207,6 +1235,9 @@ impl Error {
             } => format!("{what}: needs a {want:?}, found a {found:?}"),
             NotWhole { value, .. } => format!("{value} is not a whole number"),
             BadValue { what, value, .. } => format!("{what} cannot be {}", crate::values::fmt(*value)),
+            SplinePointsMeet { index, .. } => {
+                format!("the spline's points {index} and {} are one point", index + 1)
+            }
             UnknownName { name, .. } => format!("unknown name {name}"),
             UnknownMember { ty, member, .. } => format!("{ty:?} has no member {member}"),
             UnknownArg { func, arg, .. } => format!("{func} takes no argument {arg}"),
@@ -1245,7 +1276,19 @@ impl Error {
             }
             SketchKernel { sketch, error, .. } => format!("sketch {sketch}: {}", words(error)),
             SketchProfile { sketch, error, .. } => format!("sketch {sketch}: {}", words(error)),
-            Build { id, error, .. } => format!("{id}: the kernel refused it: {}", regen_text(error)),
+            Build { id, error, fit, .. } => {
+                let mut t = format!("{id}: the kernel refused it: {}", regen_text(error));
+                if let Some(Intermittent { from, to, why }) = fit.as_ref().and_then(|f| f.intermittent.as_ref()) {
+                    let (n, v) = (forge_agent::short, fit.as_ref().map_or(0.0, |f| f.value.value));
+                    t.push_str(&format!(
+                        "; the search for the largest that builds met refusals below sizes that built, the least at {} \
+                         (the kernel: {why}), so up to {} the kernel's answer is not monotone in \
+                         the size: {} is the largest verified, not a limit",
+                        n(*from), n(*to), n(v)
+                    ));
+                }
+                t
+            }
             NoFace { id, role, .. } => format!("{id}.{role:?}: no such face on the part here"),
             NotPlanar { id, role, .. } => format!("{id}.{role:?} is not planar"),
             EmptySelection { .. } => "the selection picks nothing".into(),
@@ -1387,6 +1430,7 @@ impl Error {
             }
             NotWhole { value, .. } => vec![("value", (*value).into())],
             BadValue { what, value, .. } => vec![("what", s(what)), ("value", (*value).into())],
+            SplinePointsMeet { index, .. } => vec![("index", (*index as f64).into())],
             UnknownName { name, .. } => vec![("name", s(name))],
             UnknownMember { ty, member, .. } => vec![("type", s(&format!("{ty:?}"))), ("member", s(member))],
             UnknownArg { func, arg, .. } => vec![("func", s(func)), ("arg", s(arg))],
@@ -1520,7 +1564,7 @@ impl Warning {
 }
 
 /// A kernel refusal in words: the boolean's own text, else the error's variant names.
-fn regen_text(e: &forge_model::RegenError) -> String {
+pub(crate) fn regen_text(e: &forge_model::RegenError) -> String {
     use forge_model::{EditError, RegenError as G};
     match e {
         G::Boolean { error, .. }

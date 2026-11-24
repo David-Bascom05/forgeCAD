@@ -186,7 +186,9 @@ fn refusals_name_the_check_and_a_fix() {
         cam.program_text().is_none(),
         "no program is released with a refused op"
     );
-    // the bolt holes before the plate top is cleared: the rapids would enter stock
+    // the bolt holes before the plate top is cleared: each cycle's R plane is lifted above the
+    // stock left over the holes (18, posted R-1. with Z0 on the stock top at 20), so the rapids
+    // stay out of it and the drill feeds through
     let cam = forge_cam_lang::run(
         &doc(
             "skim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n",
@@ -194,8 +196,14 @@ fn refusals_name_the_check_and_a_fix() {
         &dir,
     );
     let b = cam.ops.iter().find(|o| o.name == "bolts").unwrap();
-    assert_eq!(b.status, "refused", "{:?}", b.checks);
-    assert!(b.checks.iter().any(|c| c.rule == "rapid_clear"));
+    assert_eq!(b.status, "built", "{:?}", b.checks);
+    let (txt, _) = cam.program_text().unwrap();
+    assert!(
+        txt.lines()
+            .filter(|l| l.contains("G81") || l.contains("G83"))
+            .all(|l| l.contains("R-1.")),
+        "{txt}"
+    );
     // a typed error for an unknown name
     let cam = forge_cam_lang::run(&doc("x = drill(op1, f.nope)\n"), &dir);
     assert!(
@@ -831,32 +839,50 @@ fn posted_speeds_and_feeds_are_within_the_machine() {
         cam.errors,
         cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
     );
-    // a feed limit under the profile's feed: refused by the posted F, with the limit
-    machine("[100, 12000]", "1000");
+    // a feed limit under the profile's cutting data: the resolved feed is clamped to the
+    // machine and says so (forge_tooling::resolve), and the posted F passes the runtime check
+    machine("[100, 12000]", "200");
     let cam = forge_cam_lang::run(&src, &dir);
-    assert!(!cam.ok && cam.program_text().is_none());
-    let c = cam
-        .ops
-        .iter()
-        .flat_map(|o| o.checks.iter())
-        .find(|c| c.rule == "machine_limit")
-        .expect("a feed over the limit");
-    assert!(c.value > 1000.0 && c.limit == 1000.0, "{c:?}");
-    // a material group with no cutting data: the ops fall back to S3000, under this
-    // spindle's least speed: refused by the posted S
-    machine("[5000, 24000]", "10000");
-    let cam = forge_cam_lang::run(&src.replace("group: \"N\"", "group: \"X\""), &dir);
-    assert!(!cam.ok && cam.program_text().is_none());
-    let c = cam
-        .ops
-        .iter()
-        .flat_map(|o| o.checks.iter())
-        .find(|c| c.rule == "machine_limit")
-        .expect("a spindle speed under the range");
     assert!(
-        c.value == 3000.0 && c.limit == 5000.0 && c.other.starts_with("spindle"),
-        "{c:?}"
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
     );
+    let clamped: Vec<_> = cam
+        .ops
+        .iter()
+        .filter_map(|o| o.resolved.as_ref())
+        .filter(|r| r.feed.source == forge_tooling::resolve::Source::MachineClamped)
+        .collect();
+    assert!(!clamped.is_empty());
+    for r in clamped {
+        assert!(
+            r.feed.v < 200.0 && r.feed.note.contains("at most 200"),
+            "{:?}",
+            r.feed
+        );
+    }
+    assert!(
+        cam.warnings.iter().any(|w| w.contains("feed clamped")),
+        "{:?}",
+        cam.warnings
+    );
+    // a material group with no cutting data: no op falls back to a guessed speed (it was S3000,
+    // refused at post by the spindle's range): each is refused before posting, with the fix
+    machine("[5000, 24000]", "10000");
+    let cam = forge_cam_lang::run(&src.replace("material: \"6061-T6\"", "group: \"X\""), &dir);
+    assert!(!cam.ok && cam.program_text().is_none());
+    for o in &cam.ops {
+        assert_eq!(o.status, "refused", "{}", o.name);
+        let why = o.refusal.as_deref().unwrap();
+        assert!(
+            matches!(o.code.as_deref(), Some("NoCuttingData") | Some("NoDrillingData")),
+            "{:?}: {why}",
+            o.code
+        );
+        assert!(o.fix.is_some() || why.contains("give"), "{}", o.name);
+    }
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -908,6 +934,8 @@ fn cycle_time_counts_arcs() {
                         at = to;
                     }
                     forge_cam::ops::PMove::Cycle { .. } => {}
+                    // (no probing op in this document)
+                    forge_cam::ops::PMove::Probe { .. } => panic!("a probe move in a cutting op"),
                 }
             }
         }
@@ -925,6 +953,96 @@ fn cycle_time_counts_arcs() {
         );
     }
     assert!(arcs_seen > 0);
+}
+
+/// Feeds and speeds are op (and tool) params, resolved in layers with a source per value
+/// (forge_tooling::resolve): the tool's `rpm:` under the op's, the op's `fz:` used as given, the
+/// group's chip otherwise; a user power limit lowers the feed only; a cut over the spindle's
+/// power at its rpm is refused, with the numbers.
+#[test]
+fn feeds_and_speeds_are_params() {
+    use forge_tooling::resolve::{Source, Verdict};
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace(
+            "t1   = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")",
+            "t1   = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\", rpm: 9000)",
+        )
+        .replace(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)",
+            "skim = facing(op1, tool: t1, to: 18, step: 1, fz: 0.05, plunge_feed: 200)",
+        )
+        .replace(
+            "prof = contour(op1, tool: t1, side: \"outside\", from: 12, to: -0.5, step: 4)",
+            "prof = contour(op1, tool: t1, side: \"outside\", from: 12, to: -0.5, step: 4, rpm: 11000, ae: 2, max_power: 0.2)",
+        );
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    let op = |n: &str| {
+        cam.ops
+            .iter()
+            .find(|o| o.name == n)
+            .unwrap()
+            .resolved
+            .clone()
+            .unwrap()
+    };
+    let skim = op("skim");
+    assert_eq!((skim.rpm.v, skim.rpm.source), (9000.0, Source::User));
+    assert_eq!((skim.fz.v, skim.fz.source), (0.05, Source::User));
+    assert_eq!(
+        (skim.feed.v, skim.feed.source),
+        (0.05 * 9000.0 * 3.0, Source::User)
+    );
+    assert_eq!((skim.plunge.v, skim.plunge.source), (200.0, Source::User));
+    assert_eq!((skim.ap.v, skim.ap.source), (1.0, Source::User));
+    let top = op("top");
+    assert_eq!((top.ae.v, top.ae.source), (4.0, Source::User));
+    assert_eq!(top.chip.source, Source::Material);
+    assert!((top.feeds.hex - top.chip.v).abs() < 1e-12);
+    let prof = op("prof");
+    assert_eq!((prof.rpm.v, prof.rpm.source), (11000.0, Source::User));
+    assert_eq!(prof.feed.source, Source::Limited);
+    assert!((prof.feeds.power - 0.2).abs() < 1e-9 && (prof.ae.v, prof.ap.v) == (2.0, 4.0));
+    let json = cam.json().to_string();
+    assert!(
+        json.contains("\"feeds_speeds\"") && json.contains("\"source\":\"limited\""),
+        "{json}"
+    );
+
+    // a machine whose spindle gives 0.1 kW at most: the profile at 11,000 rpm is refused
+    let tmp = forge_dirs::temp_dir().join(format!("forge-cam-feeds-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(tmp.join("cam")).unwrap();
+    std::fs::copy(dir.join("flange.fg"), tmp.join("flange.fg")).unwrap();
+    let m = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kernel/forge-tooling/data/machines.toml"),
+    )
+    .unwrap();
+    let vmc = m.split("[[machine]]").nth(1).unwrap();
+    let curve = vmc.lines().find(|l| l.starts_with("curve_kw")).unwrap();
+    let rec = vmc
+        .replace("\"generic-vmc3\"", "\"weak-vmc\"")
+        .replace(curve, "curve_kw = [0.1, 0.1, 0.1]");
+    std::fs::write(tmp.join("cam/weak.toml"), format!("[[machine]]{rec}")).unwrap();
+    let cam = forge_cam_lang::run(&src.replace("generic-vmc3", "weak-vmc"), &tmp);
+    let prof = cam.ops.iter().find(|o| o.name == "prof").unwrap();
+    assert_eq!(prof.status, "refused");
+    assert_eq!(prof.code.as_deref(), Some("OverLimit"));
+    assert!(
+        prof.refusal.as_deref().unwrap().starts_with("Power would be "),
+        "{:?}",
+        prof.refusal
+    );
+    let r = prof.resolved.as_ref().unwrap();
+    let p = r.checks.iter().find(|c| c.what == "power").unwrap();
+    assert_eq!((p.verdict, p.limit), (Verdict::Fail, 0.1));
+    std::fs::remove_dir_all(&tmp).ok();
 }
 
 /// Every tool change is preceded by Z to the machine's safe position (the dialect's
@@ -1025,6 +1143,193 @@ fn the_posted_paths_check_again_on_demand() {
     assert!(cam.check(Some("no-such-op")).is_empty());
 }
 
+/// The stock material drives the cutting data: `part(.., material:)` names it (the flange
+/// document has none), its group comes from its record or family, and a material with measured
+/// Kienzle rows (Ti-6Al-4V, Klippel et al. 2022) sets kc1.1/mc at the cut's speed. No material
+/// and no group: the ops are refused with a fix, never cut at a guessed group.
+#[test]
+fn stock_material_sets_the_cutting_data() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    // aluminium by name: group N from the family
+    // (the example names its alloy)
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    let skim = cam
+        .ops
+        .iter()
+        .find(|o| o.name == "skim")
+        .unwrap()
+        .resolved
+        .clone()
+        .unwrap();
+    assert_eq!(skim.vc.source, Source::Material);
+    assert!(skim.chip.note.contains("group N"), "{}", skim.chip.note);
+    // titanium: group S, and the measured rows at the cut's speed (55 m/min asked: the
+    // generic S default, the lower quartile of the makers' S rows, is under the rows' 40 m/min)
+    let cam = forge_cam_lang::run(
+        &src.replace(
+            "part(\"flange.fg\", material: \"6061-T6\")",
+            "part(\"flange.fg\", material: \"Ti-6Al-4V annealed\")",
+        )
+        .replace("facing(op1, tool: t1,", "facing(op1, tool: t1, vc: 55,"),
+        &dir,
+    );
+    let skim = cam
+        .ops
+        .iter()
+        .find(|o| o.name == "skim")
+        .unwrap()
+        .resolved
+        .clone()
+        .unwrap();
+    let vc = skim.vc.v;
+    assert_eq!((vc, skim.vc.source), (55.0, Source::User));
+    let p = skim.checks.iter().find(|c| c.what == "power").unwrap();
+    assert!(
+        p.why
+            .contains("Ti-6Al-4V annealed kc1.1/mc between the rows at vc 52 and 60"),
+        "{}",
+        p.why
+    );
+    // between the rows at 52 (1156, 0.27) and 60 (1146, 0.27)
+    let u = (vc - 52.0) / 8.0;
+    let (kc1, mc) = (1156.0 + u * (1146.0 - 1156.0), 0.27);
+    let hm = skim.feeds.hm.max(1e-4);
+    let kc = kc1 * forge_math::dmath::powf(hm, -mc);
+    let want = skim.ap.v * skim.ae.v * skim.feed.v * kc / 6.0e7;
+    assert!(
+        (skim.feeds.power - want).abs() < 1e-9 * want,
+        "{} {want}",
+        skim.feeds.power
+    );
+    // nothing known: refused, with the fix
+    let cam = forge_cam_lang::run(
+        &src.replace(
+            "part(\"flange.fg\", material: \"6061-T6\")",
+            "part(\"flange.fg\")",
+        ),
+        &dir,
+    );
+    assert!(!cam.ok);
+    let skim = cam.ops.iter().find(|o| o.name == "skim").unwrap();
+    assert_eq!(skim.status, "refused");
+    assert!(
+        skim.refusal
+            .as_deref()
+            .unwrap()
+            .contains("the part has no material"),
+        "{:?}",
+        skim.refusal
+    );
+    assert!(skim.fix.as_deref().unwrap().contains("material"));
+    // but speeds and chips given on the tool are enough (power then not checked)
+    let cam = forge_cam_lang::run(
+        &src.replace(
+            "part(\"flange.fg\", material: \"6061-T6\")",
+            "part(\"flange.fg\")",
+        )
+        .replace(
+            "holder: \"bt40-er32\")",
+            "holder: \"bt40-er32\", rpm: 8000, chip: 0.04)",
+        ),
+        &dir,
+    );
+    let skim = cam.ops.iter().find(|o| o.name == "skim").unwrap();
+    assert_eq!(skim.status, "built", "{:?}", skim.refusal);
+    let r = skim.resolved.as_ref().unwrap();
+    let p = r.checks.iter().find(|c| c.what == "power").unwrap();
+    assert_eq!(p.verdict, forge_tooling::resolve::Verdict::NotChecked);
+}
+
+/// Drilling is its own model (forge_tooling::resolve::drilling), not a fraction of the milling
+/// feed: the flange's 6.6 mm HSS drill in group N takes OSG's HSS jobber row (vc at the middle
+/// of its printed SFM, feed per rev at the low end, between its 6 and 10 mm rows), was 0.0085
+/// mm/rev; the user's `f:`, `rpm:` and `peck:` win.
+#[test]
+fn drilling_is_its_own_model() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    let bolts = cam.ops.iter().find(|o| o.name == "bolts").unwrap();
+    let (_, id, r) = bolts.drilled.iter().find(|(role, ..)| *role == "drill").unwrap();
+    assert_eq!(id, "drill-6.6");
+    assert_eq!(r.vc.source, Source::Material);
+    assert!((r.vc.v - 155.0 * 0.3048).abs() < 1e-3);
+    let want = 0.127 + (0.2032 - 0.127) * (6.6 - 6.0) / 4.0;
+    assert!((r.f.v - want).abs() < 1e-9, "{}", r.f.v);
+    assert!(r.f.note.contains("osgtool.com"), "{}", r.f.note);
+    assert!((r.feed.v - r.f.v * r.rpm.v).abs() < 1e-9);
+    let (_, _, spot) = bolts.drilled.iter().find(|(role, ..)| *role == "spot").unwrap();
+    assert!(
+        spot.f.note.contains("borrowed for a spot drill"),
+        "{}",
+        spot.f.note
+    );
+    // the user's values
+    let cam = forge_cam_lang::run(
+        &src.replace("plan: \"auto\")", "plan: \"auto\", f: 0.1, rpm: 2000, peck: 2)"),
+        &dir,
+    );
+    let bolts = cam.ops.iter().find(|o| o.name == "bolts").unwrap();
+    let (_, _, r) = bolts.drilled.iter().find(|(role, ..)| *role == "drill").unwrap();
+    assert_eq!((r.f.v, r.f.source), (0.1, Source::User));
+    assert_eq!((r.rpm.v, r.peck.v, r.peck.source), (2000.0, 2.0, Source::User));
+    assert!(
+        bolts
+            .plan
+            .iter()
+            .any(|p| p.starts_with("peck") && p.contains("q 2")),
+        "{:?}",
+        bolts.plan
+    );
+}
+
+/// Taps run at a cited speed for the group (OSG's cut-tap tables, the low end), not a fixed
+/// 300 rpm; their feed is the pitch per revolution; `tap_rpm:` wins.
+#[test]
+fn taps_run_at_a_resolved_speed() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("block_m6_cam.fg"))
+        .unwrap()
+        .replace("plan: \"drill\"", "plan: \"auto\"");
+    let cam = forge_cam_lang::run(&src, &dir);
+    // the block does not model its thread, so a tap is refused by G1 (a gouge): what the
+    // feeds resolved is recorded all the same (the example thread-mills it for that reason)
+    let d = cam.ops.iter().find(|o| o.name == "tapd").unwrap();
+    assert!(
+        d.status == "built" || d.refusal.as_deref().unwrap_or("").contains("gouge"),
+        "{:?}",
+        d.refusal
+    );
+    let (_, id, r) = d.drilled.iter().find(|(role, ..)| *role == "tap").unwrap();
+    assert!(id.contains("m6"), "{id}");
+    assert_eq!(r.vc.source, Source::Material);
+    assert!(r.vc.note.contains("OSG"), "{}", r.vc.note);
+    assert!((r.rpm.v - 1000.0 * r.vc.v / (std::f64::consts::PI * 6.0)).abs() < 1e-9);
+    assert!((r.feed.v - 1.0 * r.rpm.v).abs() < 1e-9);
+    let cam = forge_cam_lang::run(
+        &src.replace("plan: \"auto\"", "plan: \"auto\", tap_rpm: 400"),
+        &dir,
+    );
+    let d = cam.ops.iter().find(|o| o.name == "tapd").unwrap();
+    let (_, _, r) = d.drilled.iter().find(|(role, ..)| *role == "tap").unwrap();
+    assert_eq!((r.rpm.v, r.rpm.source), (400.0, Source::User));
+}
+
 /// A bare call after the header did nothing and reported nothing (LANG-PROOFS): it is refused,
 /// with the named form as the fix.
 #[test]
@@ -1043,6 +1348,226 @@ fn a_bare_operation_is_refused_with_its_named_form() {
     let cam = forge_cam_lang::run(&doc("face1 = facing(op1, tool: t1, to: 14, step: 1)\n"), &dir);
     assert!(cam.errors.is_empty(), "{:?}", cam.errors);
     assert_eq!(cam.ops.len(), 1);
+}
+
+/// Engagement feed holds the user's power limit per fixed-length sample (feed only): with
+/// `max_power:` the clear's cutting feeds are never above the uncapped ones, some are lower, and
+/// the run says so.
+#[test]
+fn engagement_feed_holds_max_power_per_sample() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let feeds = |cam: &forge_cam_lang::Cam| -> Vec<f64> {
+        let o = cam.ops.iter().find(|o| o.name == "top").unwrap();
+        o.paths
+            .iter()
+            .flat_map(|p| p.moves.iter())
+            .filter_map(|m| match m {
+                forge_cam::ops::PMove::Line { f, phase, .. } if *phase == forge_cam::ops::Phase::Cut => {
+                    Some(*f)
+                }
+                forge_cam::ops::PMove::Arc { f, .. } => Some(*f),
+                _ => None,
+            })
+            .collect()
+    };
+    let free = forge_cam_lang::run(&src, &dir);
+    let capped = forge_cam_lang::run(
+        &src.replace("step: 3, stepover: 4)", "step: 3, stepover: 4, max_power: 0.15)"),
+        &dir,
+    );
+    assert!(
+        capped.ok,
+        "{:?}",
+        capped.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    let (a, b) = (feeds(&free), feeds(&capped));
+    // air samples carry no power and keep their feed; the engaged ones come down
+    let low_free = a.iter().copied().fold(f64::INFINITY, f64::min);
+    let low_capped = b.iter().copied().fold(f64::INFINITY, f64::min);
+    assert!(low_capped < low_free, "{low_capped} {low_free}");
+    assert!(b.iter().copied().fold(0.0, f64::max) <= a.iter().copied().fold(0.0, f64::max));
+    assert!(
+        capped
+            .warnings
+            .iter()
+            .any(|w| w.starts_with("top: the feed was lowered on")),
+        "{:?}",
+        capped.warnings
+    );
+}
+
+/// A thread mill's feeds follow its arc in the bore (feeds-speeds.md §2.3): the engagement from
+/// cos φ = (r_b² − r_c² − r_t²)/(2 r_c r_t), and the centre fed r_c/r_m of the edge's feed.
+#[test]
+fn thread_mill_feeds_follow_the_arc() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("block_m6_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    let o = cam.ops.iter().find(|o| o.name == "thr").unwrap();
+    let r = o.resolved.as_ref().unwrap();
+    let dt = cam.tool_uses()[o.tool.unwrap()].tool.dc;
+    // M6: major radius 3; the bore is the 5.0 tap drill
+    let (rb, rm, rt) = (2.5, 3.0, 0.5 * dt);
+    let rc = rm - rt;
+    let c = (rb * rb - rc * rc - rt * rt) / (2.0 * rc * rt);
+    assert_eq!(r.ae.source, Source::Default);
+    assert!(
+        (r.ae.v - 0.5 * dt * (1.0 - c)).abs() < 1e-12,
+        "{} {}",
+        r.ae.v,
+        0.5 * dt * (1.0 - c)
+    );
+    assert!(r.ae.note.contains("arc in the bore"), "{}", r.ae.note);
+    assert!((r.feed.v - r.feeds.vf * rc / rm).abs() < 1e-9 * r.feeds.vf);
+    assert!(r.feed.note.contains("centre"));
+}
+
+/// A material whose record carries a maker's group Kienzle value (ISCAR, no speed stated) and
+/// its own ISO class: Inconel 718 is S, its kc1.1 3300 / mc 0.24 set the power.
+#[test]
+fn material_group_kienzle_value() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace(
+            "part(\"flange.fg\", material: \"6061-T6\")",
+            "part(\"flange.fg\", material: \"Inconel 718 aged\")",
+        );
+    let cam = forge_cam_lang::run(&src, &dir);
+    let skim = cam
+        .ops
+        .iter()
+        .find(|o| o.name == "skim")
+        .unwrap()
+        .resolved
+        .clone()
+        .unwrap();
+    let p = skim.checks.iter().find(|c| c.what == "power").unwrap();
+    assert!(p.why.contains("kc1.1 3300 mc 0.24"), "{}", p.why);
+    assert!(
+        p.why.contains("a single value (no cutting speed stated)"),
+        "{}",
+        p.why
+    );
+    assert!(p.why.contains("group S"), "{}", p.why);
+}
+
+/// Plastics: the family's group O (Harvey's plastics sheet: speed and chip by diameter), no
+/// Kienzle data, so power and torque are 'not checked', never a pass.
+#[test]
+fn plastics_have_their_own_group_and_no_power_check() {
+    use forge_tooling::resolve::{Source, Verdict};
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace(
+            "part(\"flange.fg\", material: \"6061-T6\")",
+            "part(\"flange.fg\", material: \"PEEK\")",
+        );
+    let cam = forge_cam_lang::run(&src, &dir);
+    let top = cam
+        .ops
+        .iter()
+        .find(|o| o.name == "top")
+        .unwrap()
+        .resolved
+        .clone()
+        .unwrap();
+    assert_eq!((top.vc.v, top.vc.source), (304.8, Source::Material));
+    assert!(top.chip.note.contains("group O"), "{}", top.chip.note);
+    for w in ["power", "torque"] {
+        let c = top.checks.iter().find(|c| c.what == w).unwrap();
+        assert_eq!(c.verdict, Verdict::NotChecked, "{w}: {}", c.why);
+    }
+    assert!(top.deflection.is_nan());
+}
+
+/// With a maker's tool, the part's stock material picks the maker's row for it (brass C36000 on
+/// Harvey's "C3xxxx" row, not the tool's wrought-aluminium representative), and the cite says so.
+#[test]
+fn a_makers_tool_takes_its_row_for_the_stock_material() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace("tool(\"flat-10\"", "tool(\"harvey-942324\"");
+    let run = |m: &str| {
+        let cam = forge_cam_lang::run(
+            &src.replace(
+                "part(\"flange.fg\", material: \"6061-T6\")",
+                &format!("part(\"flange.fg\", material: \"{m}\")"),
+            ),
+            &dir,
+        );
+        let skim = cam.ops.iter().find(|o| o.name == "skim").unwrap();
+        skim.resolved
+            .clone()
+            .unwrap_or_else(|| panic!("{:?} {:?}", cam.errors, skim.refusal))
+    };
+    let brass = run("C36000 H02");
+    let al = run("6061-T6");
+    assert_eq!(brass.vc.source, Source::Library);
+    assert!(brass.chip.note.contains("Brass"), "{}", brass.chip.note);
+    assert!(al.chip.note.contains("Wrought"), "{}", al.chip.note);
+    assert!(brass.vc.v < al.vc.v, "{} {}", brass.vc.v, al.vc.v);
+}
+
+/// A tool with no maker data resolves at the 10th percentile of its class, and the class keys
+/// on the part's material family: 6061-T6 (aluminium) takes the makers' aluminium rows; a part
+/// that names only group N could be copper, so it takes all of N (copper's speeds among them).
+/// The value carries the class's spread.
+#[test]
+fn generic_tools_take_their_class_by_material_family() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let skim = |src: &str| {
+        let cam = forge_cam_lang::run(src, &dir);
+        cam.ops
+            .iter()
+            .find(|o| o.name == "skim")
+            .unwrap()
+            .resolved
+            .clone()
+            .unwrap()
+    };
+    let al = skim(&src);
+    let n = skim(&src.replace("material: \"6061-T6\"", "group: \"N\""));
+    assert_eq!(al.vc.source, Source::Material);
+    let sp = al.spread.clone().unwrap();
+    assert!(sp.class.contains("aluminium"), "{}", sp.class);
+    assert_eq!(al.vc.v, sp.vc.p10);
+    assert!(al.vc.note.contains("10th percentile"), "{}", al.vc.note);
+    let spn = n.spread.clone().unwrap();
+    assert!(
+        !spn.class.contains("aluminium") && !spn.class.contains("copper"),
+        "{}",
+        spn.class
+    );
+    assert!(n.vc.v < al.vc.v, "{} {}", n.vc.v, al.vc.v);
+}
+
+/// A part that names only its material group is linted: the generic defaults then cover the
+/// whole group; naming the alloy is not.
+#[test]
+fn a_group_only_part_is_linted() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let lint = |src: &str| {
+        forge_cam_lang::run(src, &dir)
+            .warnings
+            .iter()
+            .any(|w| w.contains("names only a material group"))
+    };
+    assert!(!lint(&src));
+    assert!(lint(&src.replace("material: \"6061-T6\"", "group: \"N\"")));
 }
 
 /// A tool made in the builder (a project record, not built in) reaches CAM through the library
@@ -1351,7 +1876,7 @@ fn a_statements_params_are_its_own() {
 fn the_mould_core_is_surfaced_and_certified() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
     let head = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01, at: (-200, -150, -250))\n";
-    let rough = "rough = zlevel(op1, tool: t1, leave: 0.5, down: 3, stepover: 4, area: (-45, -35, 45, 35), grid: 1)\n";
+    let rough = "rough = zlevel(op1, tool: t1, leave: 0.5, step: 3, stepover: 4, area: (-45, -35, 45, 35), grid: 1)\n";
     let fin = "fin = parallel(op1, tool: t2, stepover: 4, area: (-30, -24, 30, 24))\ncorner = pencil(op1, tool: t2, area: (-30, -24, 30, 24), grid: 1)\n";
     let prog = "prog = program(op1, post: \"fanuc\", number: 1002)\n";
     let cam = forge_cam_lang::run(&format!("{head}{rough}{fin}{prog}"), &dir);
@@ -1368,4 +1893,233 @@ fn the_mould_core_is_surfaced_and_certified() {
     let cam = forge_cam_lang::run(&format!("{head}{fin}{prog}"), &dir);
     assert!(!cam.ok);
     assert!(cam.ops.iter().any(|o| o.status == "refused"));
+}
+
+/// Z-level roughing on a prism part takes the material exactly (its bands' sections grown by the
+/// tool), over the whole stock: above `to`, the stock's margin and the well's long sides are
+/// cleared to within the tool's widening, and the part's own section is never voided.
+#[test]
+fn zlevel_on_a_prism_part_clears_to_the_walls_and_the_margin() {
+    use forge_cam::stock::InProcess;
+    use forge_cam_geom::boolean::{Op, boolean, region_of};
+    use forge_cam_geom::region::{Loop, Region, Seg, p2};
+    use forge_tooling::Library;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("well_island.fg")).unwrap();
+    let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+    let body = run.body.unwrap();
+    let faces = forge_cam::lower::lower(&body).unwrap();
+    let lib = Library::builtin();
+    let tl = lib.tool("flat-10").unwrap().clone();
+    let shape = tl.shape(32.0, Some(lib.holder("bt40-er32").unwrap())).unwrap();
+    let sf = forge_cam::surf::Surfacer::new(&faces, &shape.bodies[0], 0.0, 0.01, 0.0).unwrap();
+    let tool = forge_cam::ops::ToolUse {
+        t: 1,
+        tool: tl,
+        holder: None,
+        stickout: 32.0,
+        shape,
+        probe: false,
+    };
+    let c = forge_cam::ops::Cut {
+        tool: &tool,
+        tidx: 0,
+        h: forge_cam::ops::Heights {
+            clear: 30.0,
+            retract: 20.0,
+        },
+        feed: (1000.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
+    };
+    // the stock: 3 over each side, 1 over the top; tool centres a diameter past it
+    let (smin, smax) = ([-3.0, -3.0, 0.0], [63.0, 43.0, 13.0]);
+    let area = [smin[0] - 10.0, smin[1] - 10.0, smax[0] + 10.0, smax[1] + 10.0];
+    let (_, voids) = forge_cam::surf::zlevel_voids(&sf, c, area, 13.0, 6.0, 3.0, 4.0, 1.0).unwrap();
+    let mut ip = InProcess::new(smin, smax);
+    for (v, f) in voids {
+        ip.cut(v, f);
+    }
+    let rect = |x0: f64, y0: f64, x1: f64, y1: f64| Region {
+        loops: vec![Loop {
+            segs: vec![
+                Seg::Line {
+                    a: p2(x0, y0),
+                    b: p2(x1, y0),
+                },
+                Seg::Line {
+                    a: p2(x1, y0),
+                    b: p2(x1, y1),
+                },
+                Seg::Line {
+                    a: p2(x1, y1),
+                    b: p2(x0, y1),
+                },
+                Seg::Line {
+                    a: p2(x0, y1),
+                    b: p2(x0, y0),
+                },
+            ],
+        }],
+    };
+    let m = ip.material(6.5).unwrap().expect("material at 6.5");
+    let gone = |r: Region| region_of(&boolean(&m, &r, Op::Inter).unwrap()).loops.is_empty();
+    // the margin outside the plate, up to 0.01 from its side
+    assert!(gone(rect(-3.0, 5.0, -0.01, 35.0)), "the margin's sliver stays");
+    // the well's long side, away from its corners (a flat end leaves those) and from the boss
+    // (the 7 mm between them is narrower than the tool), 0.01 from the wall
+    assert!(
+        gone(rect(14.0, 8.01, 20.0, 9.0)),
+        "a sliver on the well's wall stays"
+    );
+    // never more than the tool took: the part's section is all still material
+    let sec = forge_cam::section::section(&faces, 6.5, 1e-5).unwrap();
+    assert!(region_of(&boolean(&sec, &m, Op::Diff).unwrap()).loops.is_empty());
+}
+
+/// forge-cam-3d's finishing ops in the document (steep_shallow, spiral, flat), after z-level
+/// roughing on the mould core: built, every move certified (column route), the spacing derived
+/// from the cusp and reported.
+#[test]
+fn the_mould_core_is_finished_by_cusp() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    // the example's ops, lighter for the test's time: a 0.05 mm cusp, the steep band 26 to 20
+    let src = std::fs::read_to_string(dir.join("mold_core_finish_cam.fg"))
+        .unwrap()
+        .replace("cusp: 0.01", "cusp: 0.05")
+        .replace("from: 26, to: 10.5", "from: 26, to: 20");
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.ops
+            .iter()
+            .map(|o| (
+                &o.name,
+                &o.refusal,
+                o.checks
+                    .iter()
+                    .filter(|c| c.verdict != "pass")
+                    .take(3)
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>()
+    );
+    for name in ["ss", "top", "plate"] {
+        let op = cam.ops.iter().find(|o| o.name == name).unwrap();
+        assert!(op.status == "built" && op.pairs > 0, "{name}: {:?}", op.refusal);
+        let f = op.finish.as_ref().unwrap();
+        assert_eq!(f.cusp, Some(0.05));
+        assert!(f.cusp_bound.unwrap() <= 0.05, "{name}: {f:?}");
+        assert!(f.stepover > 0.0, "{name}: {f:?}");
+    }
+}
+
+/// The 3-axis ops' step-down is `step:` (as in 2D); `down:` is its old name, accepted with a
+/// warning for one train; both given is refused, and parallel refuses `step:` (it used to be
+/// its sample spacing, now `sample:`), so no old document silently changes meaning.
+#[test]
+fn the_3axis_step_down_is_step() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let head = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\n";
+    let run = |op: &str| forge_cam_lang::run(&format!("{head}{op}\n"), &dir);
+    let both = run(
+        "w = waterline(op1, tool: t2, from: 24, to: 20, step: 2, down: 2, area: (-30, -24, 30, 24), grid: 1)",
+    );
+    assert!(
+        !both.ok
+            && format!(
+                "{:?}{:?}",
+                both.errors,
+                both.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+            )
+            .contains("both given")
+    );
+    let par = run("p = parallel(op1, tool: t2, stepover: 4, step: 1, area: (-5, -5, 5, 5))");
+    assert!(
+        !par.ok
+            && format!(
+                "{:?}{:?}",
+                par.errors,
+                par.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+            )
+            .contains("sample:")
+    );
+    let old =
+        run("w = waterline(op1, tool: t2, from: 24, to: 22, down: 2, area: (-30, -24, 30, 24), grid: 1)");
+    assert!(
+        old.warnings.iter().any(|w| w.contains("`down:` is now `step:`")),
+        "{:?}",
+        old.warnings
+    );
+    // (no program: the op is made, not posted or certified; accepted, no error)
+    assert!(old.errors.is_empty(), "{:?}", old.errors);
+    assert!(
+        old.ops
+            .iter()
+            .any(|o| o.name == "w" && o.paths.iter().any(|p| !p.moves.is_empty()))
+    );
+}
+
+/// A named steel resolves in its hardness band (its forge-material record's cited hardness:
+/// 1018 cold drawn, 126 HB, soft), not over every P row down to 50 HRC; a part naming only P
+/// takes the whole group, slower.
+#[test]
+fn a_named_steel_resolves_in_its_hardness_band() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let skim = |src: &str| {
+        let cam = forge_cam_lang::run(src, &dir);
+        cam.ops
+            .iter()
+            .find(|o| o.name == "skim")
+            .unwrap()
+            .resolved
+            .clone()
+            .unwrap()
+    };
+    let mild = skim(&src.replace("material: \"6061-T6\"", "material: \"1018 cold drawn\""));
+    let p = skim(&src.replace("material: \"6061-T6\"", "group: \"P\""));
+    let sp = mild.spread.clone().unwrap();
+    assert!(sp.class.contains("soft"), "{}", sp.class);
+    assert!(mild.vc.v > p.vc.v, "{} {}", mild.vc.v, p.vc.v);
+    // a group-only part's pooled default says how to sharpen it; a named alloy's does not
+    assert!(p.vc.note.contains("hardness unknown"), "{}", p.vc.note);
+    assert!(!mild.vc.note.contains("hardness unknown"), "{}", mild.vc.note);
+}
+
+/// A maker's tool always takes its maker's own row, never a pooled default: a Lakeshore end
+/// mill on a steel part (named or group-only) and on 6061-T6 resolves at one of its own
+/// presets' speeds, with no generic class spread.
+#[test]
+fn a_makers_tool_always_takes_its_own_row() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace("tool(\"flat-10\"", "tool(\"lakeshore-LC204012\"");
+    let lib = forge_tooling::Library::builtin();
+    let tool = lib.tool("lakeshore-LC204012").unwrap();
+    for (stock, group) in [
+        ("material: \"6061-T6\"", "N"),
+        ("material: \"1045 cold drawn\"", "P"),
+        ("group: \"P\"", "P"),
+    ] {
+        let cam = forge_cam_lang::run(&src.replace("material: \"6061-T6\"", stock), &dir);
+        let skim = cam.ops.iter().find(|o| o.name == "skim").unwrap();
+        let r = skim
+            .resolved
+            .clone()
+            .unwrap_or_else(|| panic!("{stock}: {:?} {:?}", cam.errors, skim.refusal));
+        assert_eq!(r.vc.source, Source::Library, "{stock}: {}", r.vc.note);
+        assert!(r.spread.is_none(), "{stock}");
+        assert!(!r.vc.note.contains("percentile"), "{stock}: {}", r.vc.note);
+        assert!(
+            tool.presets
+                .iter()
+                .any(|p| p.group == group && (p.vc - r.vc.v).abs() < 1e-9),
+            "{stock}: vc {} is not one of the tool's {group} rows",
+            r.vc.v
+        );
+    }
 }

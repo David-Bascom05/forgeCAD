@@ -5,8 +5,8 @@
 use crate::Cam;
 use forge_cam::engage::{HeightMap, Profile};
 use forge_cam::life::{Entry, ToolGeom, measure};
-use forge_tooling::entry::{self, Check, Finding};
 use forge_tooling::Kind;
+use forge_tooling::entry::{self, Check, Finding};
 use forge_tooling::life::{self, Cut, Limit, Row, ToolLife, Warning};
 use std::collections::BTreeMap;
 
@@ -33,7 +33,9 @@ pub struct ToolLifeOut {
 /// library has it (an alias such as "AISI 1045" resolves to the library's "1045 cold drawn",
 /// and a row for another condition of the grade must not match it by the alias), else as given.
 pub fn work_name(m: &str) -> String {
-    forge_material::find(m).map(|f| f.name.clone()).unwrap_or_else(|| m.to_string())
+    forge_material::find(m)
+        .map(|f| f.name.clone())
+        .unwrap_or_else(|| m.to_string())
 }
 
 #[derive(Default)]
@@ -231,6 +233,8 @@ pub struct ToolLifeView {
     /// Fraction of the cited life used (1 = the row's wear criterion); None: not estimated.
     pub life_used: Option<f64>,
     pub wear_limit_at: Option<LimitAt>,
+    /// The tool-life row used (its id in life.toml), for `Instance::used`; None: not estimated.
+    pub row: Option<String>,
     /// The cite (or why not estimated).
     pub source: String,
     /// Minutes outside the data's fitted range, and plunge/ramp minutes not sampled.
@@ -320,6 +324,7 @@ pub fn estimate(cam: &Cam, rows: &[Row], limits: &BTreeMap<u32, Limit>) -> LifeR
                 mv: a.mv,
                 minutes: a.minutes,
             }),
+            row: t.life.row.clone(),
             source: t.life.note.clone(),
             outside_minutes: t.life.outside,
             unsampled_minutes: t.unsampled_minutes,

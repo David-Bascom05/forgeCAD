@@ -1,0 +1,1 @@
+body = import(file: "../../../cam-parts/rptu-10/4.step")

@@ -190,7 +190,7 @@ fn roots_into(c: &[f64], lo: f64, hi: f64, out: &mut Vec<Root>, mut turns: Optio
             push_root(out, mark, c, d, a);
         }
         if !za && !zb && (fa < 0.0) != (fb < 0.0) {
-            push_root(out, mark, c, d, bisect(c, d, a, b, fa));
+            push_root(out, mark, c, d, bisect(c, d, a, b, fa, 0.0));
         }
         if zb {
             push_root(out, mark, c, d, b);
@@ -213,7 +213,74 @@ fn push_root(out: &mut Vec<Root>, mark: usize, c: &[f64], d: &[f64], x: f64) {
     });
 }
 
-fn bisect(c: &[f64], d: &[f64], mut a: f64, mut b: f64, fa: f64) -> f64 {
+/// Small real roots: [`real_roots`] for degree at most 4, written to `out` with no allocation and
+/// no touching flags. Only exactly zero leading coefficients are dropped, a quadratic is bisected
+/// like any other degree, and roots closer than `1e-14 (1 + |x|)` to the one before count once.
+/// Each end of `[lo, hi]` and each turn where the value is zero within rounding is a root.
+#[inline]
+pub fn real_roots_small(c: &[f64], lo: f64, hi: f64, out: &mut [f64; 4]) -> usize {
+    let mut deg = c.len();
+    while deg > 0 && c[deg - 1] == 0.0 {
+        deg -= 1;
+    }
+    let c = &c[..deg];
+    let mut n = 0;
+    let push = |x: f64, out: &mut [f64; 4], n: &mut usize| {
+        if *n < 4 && (*n == 0 || x - out[*n - 1] > 1e-14 * (1.0 + x.abs())) {
+            out[*n] = x;
+            *n += 1;
+        }
+    };
+    match deg {
+        0 | 1 => return 0,
+        2 => {
+            let x = -c[0] / c[1];
+            if lo <= x && x <= hi {
+                out[0] = x;
+                return 1;
+            }
+            return 0;
+        }
+        _ => {}
+    }
+    let mut d = [0.0; 4];
+    for k in 1..deg {
+        d[k - 1] = c[k] * k as f64;
+    }
+    let mut crit = [0.0; 4];
+    let nc = real_roots_small(&d[..deg - 1], lo, hi, &mut crit);
+    let mut cuts = [0.0; 6];
+    cuts[0] = lo;
+    cuts[1..=nc].copy_from_slice(&crit[..nc]);
+    cuts[nc + 1] = hi;
+    for w in cuts[..nc + 2].windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let (fa, ea) = eval_with_bound(c, a);
+        let (fb, eb) = eval_with_bound(c, b);
+        let (za, zb) = (fa.abs() <= ea, fb.abs() <= eb);
+        if za {
+            push(a, out, &mut n);
+        }
+        if !za && !zb && (fa < 0.0) != (fb < 0.0) {
+            push(
+                bisect(c, &d[..deg - 1], a, b, fa, 2.0 * f64::EPSILON),
+                out,
+                &mut n,
+            );
+        }
+        if zb {
+            push(b, out, &mut n);
+        }
+    }
+    n
+}
+
+/// The root of `c` in `[a, b]`, where `c` changes sign and `d` is its derivative: bisection
+/// polished with Newton. It stops when a step moves `x` by at most `rel |x|` (`rel == 0`: not at
+/// all) or the bracket is down to rounding. Inlined into each caller, so `rel` folds to a constant
+/// there.
+#[inline(always)]
+fn bisect(c: &[f64], d: &[f64], mut a: f64, mut b: f64, fa: f64, rel: f64) -> f64 {
     let neg_at_a = fa < 0.0;
     let mut x = 0.5 * (a + b);
     for _ in 0..200 {
@@ -233,7 +300,12 @@ fn bisect(c: &[f64], d: &[f64], mut a: f64, mut b: f64, fa: f64) -> f64 {
         } else {
             0.5 * (a + b)
         };
-        if next == x || b - a <= f64::EPSILON * (a.abs().max(b.abs())) {
+        let still = if rel == 0.0 {
+            next == x
+        } else {
+            (next - x).abs() <= rel * x.abs()
+        };
+        if still || b - a <= f64::EPSILON * (a.abs().max(b.abs())) {
             return next;
         }
         x = next;
@@ -343,6 +415,33 @@ mod tests {
                 assert!(!f.touching);
             }
         }
+    }
+
+    #[test]
+    fn small_roots_match_the_general_ones() {
+        let mut rng = 0x2545_f491_4f6c_dd1du64;
+        let mut next = || {
+            rng ^= rng << 13;
+            rng ^= rng >> 7;
+            rng ^= rng << 17;
+            (rng >> 11) as f64 / (1u64 << 53) as f64 * 8.0 - 4.0
+        };
+        for deg in 1..=4 {
+            for _ in 0..200 {
+                let rs: Vec<f64> = (0..deg).map(|_| next()).collect();
+                let c = from_roots(&rs);
+                let mut xs = [0.0; 4];
+                let k = real_roots_small(&c, -5.0, 5.0, &mut xs);
+                let want = real_roots(&c, -5.0, 5.0);
+                assert_eq!(k, want.len(), "{rs:?}");
+                for (x, r) in xs[..k].iter().zip(&want) {
+                    assert!((x - r.x).abs() < 1e-6, "{rs:?}: {x} {}", r.x);
+                }
+            }
+        }
+        let mut xs = [0.0; 4];
+        assert_eq!(real_roots_small(&[1.0, 0.0, 0.0], -1.0, 1.0, &mut xs), 0);
+        assert_eq!(real_roots_small(&[-1.0, 1.0, 0.0], -1.0, 0.5, &mut xs), 0);
     }
 
     #[test]

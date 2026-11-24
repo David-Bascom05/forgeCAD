@@ -2,6 +2,8 @@
 //! a private local connection of this app's own (`forge_agent::ipc`: a unix socket in the user's
 //! runtime folder; on Windows a token-checked loopback port). Claude Code starts
 //! `forge-app --mcp-bridge SOCKET`, which carries its stdio to it.
+// desktop only: a page serves no socket (it needs `forge-app`, see `agent_send`)
+#![cfg_attr(target_arch = "wasm32", allow(clippy::disallowed_methods))]
 
 use super::apptools::{AppTools, base64, schemas};
 use forge_agent::ipc;

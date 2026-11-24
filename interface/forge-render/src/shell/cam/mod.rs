@@ -8,10 +8,24 @@
 
 pub mod doc;
 pub mod nc;
+
+/// The Manufacture environment's properties column, px: a dialog (its 382 px body) and its
+/// frame; the same in a narrow window (the sheet's fields set the floor), which shows the sheet
+/// or the simulation as tabs instead of both.
+pub fn dock_w(_screen_w: f32) -> f32 {
+    410.0
+}
+
+/// A window too narrow for the sheet and the simulation stacked (UX-LEAD: under 1280 px).
+pub fn narrow(screen_w: f32) -> bool {
+    screen_w > 0.0 && screen_w < 1280.0
+}
 pub mod run;
+pub mod toollib;
 pub mod schema;
 pub mod turnview;
 mod ui;
+pub use ui::{CYCLE_TIP, certified_words, check_lines, cycle_words, text_panel_h};
 pub use ui::{groups, status_line};
 
 use doc::{Edit, Role, Stmt};
@@ -213,6 +227,10 @@ pub struct PartInfo {
     pub sketches: Vec<String>,
 }
 
+/// An adaptive op's comparison with clear: (op, the run's text it was measured on, clear's bound
+/// and estimate, or None when clear does not build there).
+pub type AltClear = (String, String, Option<(f64, f64)>);
+
 pub struct CamWs {
     pub path: String,
     pub dir: PathBuf,
@@ -230,6 +248,15 @@ pub struct CamWs {
     pub running: Option<String>,
     /// Where the host's run lands.
     pub job: Arc<Mutex<Option<run::Run>>>,
+    /// A run's quality measured after the run was shown (the text it is for, and it).
+    pub quality_job: Arc<Mutex<Option<(String, forge_cam_quality::JobQ)>>>,
+    /// An adaptive op's comparison: the same setup, tool and heights as `clear` at its defaults
+    /// (forge-cam-quality's alternative_clear), measured off the UI thread: (op, the run's text
+    /// it is for, its bound and estimate, or None when it does not build). `alt_job` is the
+    /// worker's slot; `alt_asked` the (op, text) asked last.
+    pub alt: Option<AltClear>,
+    pub alt_job: Arc<Mutex<Option<AltClear>>>,
+    pub alt_asked: Option<(String, String)>,
     pub auto: bool,
     pub selected: Option<String>,
     pub focus: Focus,
@@ -245,6 +272,14 @@ pub struct CamWs {
     /// The tool library's import field: a Fusion tool library's file, beside the document.
     pub import_path: String,
     pub tools_filter: String,
+    /// The tool library: what it is narrowed to, the tool shown, the tools used lately (most
+    /// recent first), and a new tool being made.
+    pub tools_find: toollib::Find,
+    pub tools_sel: Option<String>,
+    pub tools_recent: Vec<String>,
+    pub tools_form: Option<toollib::ToolForm>,
+    /// The library page's right side in place of a tool: 1 the Fusion import, 2 the holders.
+    pub tools_aux: u8,
     pub checks_open: bool,
     pub text_open: bool,
     pub text_edit: String,
@@ -270,6 +305,24 @@ pub struct CamWs {
     pub exported: u64,
     /// A program setting being typed (its key, the text so far).
     pub prog_field: Option<(String, String)>,
+    /// The rect of the environment's properties column the op and setup dialogs dock in (None:
+    /// they float); set by the Manufacture environment each frame.
+    pub dock: Option<egui::Rect>,
+    /// The column's tab NC Programs or Quality dock in this frame (None: they float).
+    pub dock_aux: Option<egui::Rect>,
+    /// The window's width, px (the environment's column narrows below 1280).
+    pub screen_w: f32,
+    /// A narrow window's column shows the sheet or the simulation, as tabs: the sheet hidden
+    /// (the Simulation tab chosen) keeps its dialog open, not drawn.
+    pub sheet_hidden: bool,
+    /// The narrow column's tab: the simulation chosen over an open sheet.
+    pub sim_tab: bool,
+    /// The view's width last frame (re-framed when the column comes or goes), and the camera
+    /// this workspace last framed (the user's own moves are left alone).
+    pub view_w: f32,
+    /// The view's bottom the panels cover (the timeline, Document Text) when last framed.
+    pub view_cover: f32,
+    pub framed: Option<crate::camera::Camera>,
     pub posted_cache: Option<(u64, Vec<nc::PostedRow>)>,
 }
 
@@ -292,6 +345,10 @@ impl CamWs {
             want_check: false,
             running: None,
             job: Arc::new(Mutex::new(None)),
+            quality_job: Arc::new(Mutex::new(None)),
+            alt: None,
+            alt_job: Arc::new(Mutex::new(None)),
+            alt_asked: None,
             auto: true,
             selected: None,
             focus: Focus::default(),
@@ -304,6 +361,11 @@ impl CamWs {
             quality_open: false,
             import_path: String::new(),
             tools_filter: String::new(),
+            tools_find: toollib::Find::default(),
+            tools_sel: None,
+            tools_recent: vec![],
+            tools_form: None,
+            tools_aux: 0,
             checks_open: false,
             text_open: false,
             text_edit: String::new(),
@@ -323,6 +385,14 @@ impl CamWs {
             write_gen: 0,
             exported: 0,
             posted_cache: None,
+            dock: None,
+            dock_aux: None,
+            screen_w: 0.0,
+            sheet_hidden: false,
+            sim_tab: false,
+            view_w: 0.0,
+            view_cover: 0.0,
+            framed: None,
             prog_field: None,
         };
         ws.read_parts();
@@ -590,9 +660,10 @@ impl CamWs {
             }
             Cmd::StockAt(op) => self.focus.stock_at = op,
             Cmd::PostProcess => {
-                self.post_dlg = match self.post_dlg {
-                    Some(_) => None,
-                    None => Some(PostDlg::default()),
+                let open = self.post_dlg.is_none();
+                self.close_windows();
+                if open {
+                    self.post_dlg = Some(PostDlg::default());
                 }
             }
             Cmd::SetupSheet => match &self.run {
@@ -602,10 +673,27 @@ impl CamWs {
                 }
                 None => self.said = Some("generate first".into()),
             },
-            Cmd::ToolLibrary => self.tools_open = !self.tools_open,
-            Cmd::Programs => self.programs_open = !self.programs_open,
-            Cmd::Quality => self.quality_open = !self.quality_open,
-            Cmd::Checks => self.checks_open = !self.checks_open,
+            // the floating windows: one at a time (each opens where the last was, over the view)
+            Cmd::ToolLibrary => {
+                let open = !self.tools_open;
+                self.close_windows();
+                self.tools_open = open;
+            }
+            Cmd::Programs => {
+                let open = !self.programs_open;
+                self.close_windows();
+                self.programs_open = open;
+            }
+            Cmd::Quality => {
+                let open = !self.quality_open;
+                self.close_windows();
+                self.quality_open = open;
+            }
+            Cmd::Checks => {
+                let open = !self.checks_open;
+                self.close_windows();
+                self.checks_open = open;
+            }
             Cmd::Undo => {
                 if let Some(t) = self.undo.pop() {
                     self.redo.push(std::mem::replace(&mut self.text, t));
@@ -621,13 +709,18 @@ impl CamWs {
             Cmd::Save => self.want_write.push((self.path.clone(), self.text.clone())),
             Cmd::Text(t) => self.set_text(t),
             Cmd::ToggleText => {
-                self.text_open = !self.text_open;
+                let open = !self.text_open;
+                self.close_windows();
+                self.text_open = open;
                 self.text_edit = self.text.clone();
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
             Cmd::SectionView => self.turnview.open = !self.turnview.open,
             Cmd::PostNc(n) => self.post_programs(n.as_deref()),
-            Cmd::PostAt(k) => self.post_dlg = Some(PostDlg { program: k }),
+            Cmd::PostAt(k) => {
+                self.close_windows();
+                self.post_dlg = Some(PostDlg { program: k });
+            }
             Cmd::ExportNc(n) => self.export_programs(n.as_deref()),
             Cmd::ExportSheet => self.export_sheet(),
             Cmd::RepostStale => self.repost_stale(),
@@ -1025,6 +1118,47 @@ impl CamWs {
         }
     }
 
+    /// Whether Esc has a level here to back out of: a dialog or a floating window.
+    pub fn escape_level(&self) -> bool {
+        self.op_dlg.is_some()
+            || self.setup_dlg.is_some()
+            || self.post_dlg.is_some()
+            || self.tools_open
+            || self.programs_open
+            || self.quality_open
+            || self.checks_open
+            || self.text_open
+            || self.renaming.is_some()
+    }
+
+    /// Esc: one level out. A rename or a dialog is cancelled (nothing written), else the
+    /// floating window closes.
+    pub fn escape(&mut self) {
+        if self.renaming.is_some() {
+            self.renaming = None;
+        } else if self.op_dlg.is_some() {
+            self.op_dlg = None;
+        } else if self.setup_dlg.is_some() {
+            self.setup_dlg = None;
+        } else if self.tools_open && (self.tools_form.is_some() || self.tools_aux != 0) {
+            // the library page: a tool being made, or the holders / import, first
+            self.tools_form = None;
+            self.tools_aux = 0;
+        } else {
+            self.close_windows();
+        }
+    }
+
+    /// Every floating window closed (the dialogs of an op or a setup stay: they are edits).
+    pub fn close_windows(&mut self) {
+        self.post_dlg = None;
+        self.tools_open = false;
+        self.programs_open = false;
+        self.quality_open = false;
+        self.checks_open = false;
+        self.text_open = false;
+    }
+
     /// The setup dialog's keyword arguments, in the order they are written ("" left out).
     pub fn setup_kw(d: &SetupDlg) -> Vec<(&'static str, String)> {
         let get = |k: &str| {
@@ -1125,6 +1259,27 @@ pub fn library(dir: &std::path::Path) -> forge_tooling::Library {
 }
 
 impl CamWs {
+    /// A tool made in the library (`toml`, read back already) appended to the project's
+    /// `cam/tools.toml` beside the document, and the library read again. Says what happened.
+    pub fn save_tool(&mut self, toml: &str, id: &str) -> Result<String, String> {
+        let dir = self.dir.join("cam");
+        let file = dir.join("tools.toml");
+        let mut text = forge_dirs::fs::read_to_string(&file).unwrap_or_default();
+        if text.is_empty() {
+            text.push_str("# The project's own tools (the Manufacture workspace's tool library writes here).\n");
+        }
+        text.push('\n');
+        text.push_str(toml);
+        // the whole file as it will be, read first: a file the library refuses is not written
+        let mut check = library(&self.dir);
+        check.add("cam/tools.toml", toml).map_err(|e| format!("{e:?}"))?;
+        let _ = forge_dirs::fs::create_dir_all(&dir);
+        forge_dirs::fs::write(&file, text.as_bytes()).map_err(|e| format!("{}: {e}", file.display()))?;
+        self.lib = library(&self.dir);
+        toollib::touch(&mut self.tools_recent, id);
+        Ok(format!("`{id}` saved to cam/tools.toml beside the document"))
+    }
+
     /// A Fusion tool library (its JSON, at `file` beside the document) converted into the
     /// project's `cam/<name>.toml` (forge-cam-import: read back before it is written), and the
     /// library reloaded. Says what happened.

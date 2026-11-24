@@ -42,6 +42,7 @@ pub const USAGE: &str = "usage: forgecad tool log add LABEL --tool ID [--serial 
        forgecad tool log observe|worn|chipped|broken|regrind LABEL [--vb MM] [--note TEXT]
        forgecad tool log predict JOB.fg [--use T1=LABEL ..]
        forgecad tool log run JOB.fg --use T1=LABEL [--use T2=LABEL ..] [--posted] [--program NAME]
+       forgecad tool log mount T1=LABEL [T2=LABEL ..] | unmount T1 [T2 ..]   (.forgecad/cam-mounts.toml; --use overrides)
        forgecad tool log calibrate
        (any: --project to keep a new instance with the project, --date YYYY-MM-DD)";
 
@@ -202,8 +203,29 @@ fn list(lib: &Library, rows: &[Row], all: &[Instance], json: bool) -> String {
 }
 
 /// `--use T1=LABEL` pairs.
-fn uses(a: &Args) -> Result<BTreeMap<u32, String>, String> {
-    let mut m = BTreeMap::new();
+fn mounts_path(env: &Env) -> PathBuf {
+    env.project.join(instances::MOUNTS_FILE)
+}
+
+fn load_mounts(env: &Env) -> Result<instances::Mounts, String> {
+    match forge_dirs::fs::read_to_string(mounts_path(env)) {
+        Ok(s) => instances::Mounts::read(&s),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(instances::Mounts::default()),
+        Err(e) => Err(format!("{}: {e}", mounts_path(env).display())),
+    }
+}
+
+fn save_mounts(env: &Env, m: &instances::Mounts) -> Result<(), String> {
+    let p = mounts_path(env);
+    if let Some(d) = p.parent() {
+        forge_dirs::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
+    }
+    forge_dirs::fs::write(&p, m.write()).map_err(|e| format!("{}: {e}", p.display()))
+}
+
+/// `--use T1=LABEL` pairs over the project's mounts (`.forgecad/cam-mounts.toml`).
+fn uses(env: &Env, a: &Args) -> Result<BTreeMap<u32, String>, String> {
+    let mut m = load_mounts(env)?.by_t;
     for u in a.opts.get("--use").into_iter().flatten() {
         let (t, l) = u
             .split_once('=')
@@ -228,7 +250,7 @@ fn job(env: &Env, a: &Args, all: &mut [Instance], write_runs: bool) -> Result<St
         return Err(format!("the job does not build: {}", cam.errors.join("; ")));
     }
     let rows = life::builtin();
-    let u = uses(a)?;
+    let u = uses(env, a)?;
     let mut limits = BTreeMap::new();
     for (t, l) in &u {
         let i = all.iter().find(|i| &i.label == l).ok_or(format!(
@@ -244,7 +266,10 @@ fn job(env: &Env, a: &Args, all: &mut [Instance], write_runs: bool) -> Result<St
         limits.insert(*t, Limit { at: 1.0, start });
     }
     let rep = cam.tool_life(&rows, &[], &limits);
-    let work = cam.material().map(|m| crate::life::work_name(&m)).unwrap_or_default();
+    let work = cam
+        .material()
+        .map(|m| crate::life::work_name(&m))
+        .unwrap_or_default();
     let mut o = String::new();
     for r in &rep {
         o += &format!(
@@ -274,7 +299,11 @@ fn job(env: &Env, a: &Args, all: &mut [Instance], write_runs: bool) -> Result<St
         for f in &r.entry {
             let e = by.entry(f.check.name()).or_insert((0, f));
             e.0 += 1;
-            let worse = if f.check.max() { f.value > e.1.value } else { f.value < e.1.value };
+            let worse = if f.check.max() {
+                f.value > e.1.value
+            } else {
+                f.value < e.1.value
+            };
             if worse {
                 e.1 = f;
             }
@@ -355,13 +384,57 @@ pub fn run(env: &Env, store: &mut dyn Store, argv: &[String]) -> Out {
                 .iter_mut()
                 .find(|i| i.label == l)
                 .ok_or(format!("no tool instance `{l}`"))?;
-            i.event(Event::parse(ev).expect("listed"), &date, vb, a.opt("--note").unwrap_or(""));
+            i.event(
+                Event::parse(ev).expect("listed"),
+                &date,
+                vb,
+                a.opt("--note").unwrap_or(""),
+            );
             Ok((format!("{l}: {ev} logged\n"), true))
         })(),
         "predict" => job(env, &a, &mut all, false).map(|o| (o, false)),
+        "mount" | "unmount" => (|| {
+            let mut m = load_mounts(env)?;
+            for w in &a.words[1..] {
+                if cmd == "mount" {
+                    let (t, l) = w
+                        .split_once('=')
+                        .ok_or(format!("mount {w}: give T<number>=LABEL"))?;
+                    let n: u32 = t
+                        .trim_start_matches(['T', 't'])
+                        .parse()
+                        .map_err(|_| format!("mount {w}: `{t}` is not a tool number"))?;
+                    if !all.iter().any(|i| i.label == l) {
+                        return Err(format!(
+                            "no tool instance `{l}` (add it: forgecad tool log add {l} --tool ID)"
+                        ));
+                    }
+                    m.by_t.insert(n, l.to_string());
+                } else {
+                    let n: u32 = w
+                        .trim_start_matches(['T', 't'])
+                        .parse()
+                        .map_err(|_| format!("unmount {w}: not a tool number"))?;
+                    m.by_t.remove(&n);
+                }
+            }
+            save_mounts(env, &m)?;
+            let list: Vec<String> = m.by_t.iter().map(|(t, l)| format!("T{t}={l}")).collect();
+            Ok((
+                format!(
+                    "mounted: {}\n",
+                    if list.is_empty() {
+                        "none".into()
+                    } else {
+                        list.join(" ")
+                    }
+                ),
+                false,
+            ))
+        })(),
         "run" => {
-            if !a.opts.contains_key("--use") {
-                Err("give --use T<n>=LABEL for each tool to log".into())
+            if !a.opts.contains_key("--use") && load_mounts(env).map(|m| m.by_t.is_empty()).unwrap_or(true) {
+                Err("give --use T<n>=LABEL for each tool to log, or mount them (forgecad tool log mount T1=LABEL)".into())
             } else {
                 job(env, &a, &mut all, true).map(|o| (o, true))
             }

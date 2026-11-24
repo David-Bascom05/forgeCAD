@@ -252,14 +252,20 @@ fn cutters_from_the_tools_profiles() {
     assert!(Timeline::of(&sim.cam).total > 0.0);
 }
 
-/// A refused op's checks are markers at the time of their move.
+/// A refused op's checks are markers at the time of their move: the bolt holes drilled under a
+/// clear height set below the stock's top (`clear: -0.5`) rapid into the stock. (Drilling before
+/// the top is faced is certified since 195b4712: each cycle's R plane is lifted over the stock.)
 #[test]
 fn a_refused_ops_check_is_a_marker_on_its_move() {
     let dir = machined();
-    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01, clear: -0.5, retract: -1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
     let sim = Sim::open(src, &dir);
     let b = sim.cam.ops.iter().position(|o| o.name == "bolts").unwrap();
     assert_eq!(sim.cam.ops[b].status, "refused");
+    assert!(
+        !sim.cam.ops[b].checks.is_empty(),
+        "refused by its checks, on moves"
+    );
     let m: Vec<_> = sim.markers.iter().filter(|m| m.op == Some(b)).collect();
     assert!(!m.is_empty());
     let sp = &sim.tl.ops[b];
@@ -272,12 +278,39 @@ fn a_refused_ops_check_is_a_marker_on_its_move() {
             sp.t1
         );
         assert!(m.severe());
+        assert_ne!(m.rule, "refused", "a check's marker, not the op's");
     }
-    // facing alone leaves the plate's sides: leftover markers once the setup is done
+    // drilling alone leaves the plate's top and sides: leftover markers once the setup is done
     assert!(
         sim.markers
             .iter()
             .any(|m| m.rule == "leftover" && m.region.is_some())
+    );
+}
+
+/// An op refused before it has moves (here: drilling through with no stock under the part) is a
+/// marker all the same, at its place on the timeline, saying why.
+#[test]
+fn an_op_refused_without_moves_is_a_marker() {
+    let dir = machined();
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
+    let sim = Sim::open(src, &dir);
+    let b = sim.cam.ops.iter().position(|o| o.name == "bolts").unwrap();
+    let op = &sim.cam.ops[b];
+    assert_eq!(op.status, "refused");
+    if !op.checks.is_empty() {
+        // refused by its checks after all (planning changed): the case above covers it
+        return;
+    }
+    let m: Vec<_> = sim.markers.iter().filter(|m| m.op == Some(b)).collect();
+    assert_eq!(m.len(), 1, "{m:?}");
+    assert_eq!(m[0].rule, "refused");
+    assert!(m[0].severe());
+    assert_eq!(m[0].t, sim.tl.ops[b].t0);
+    assert!(
+        m[0].text.contains(op.refusal.as_deref().unwrap()),
+        "{}",
+        m[0].text
     );
 }
 
@@ -299,6 +332,15 @@ fn the_flanges_posted_program_on_its_machine() {
         }
     };
     let m = &mv.run;
+    // the playback clock (feeds as programmed, rapids at the machine's published rates, the
+    // axes together) is never longer than the machine run's own lower bound, which adds tool
+    // changes and dwells to the same motion
+    assert!(
+        sim.tl.total <= m.tl.t_min + 1e-6,
+        "playback {} s over the machine's least {} s",
+        sim.tl.total,
+        m.tl.t_min
+    );
     assert_eq!(m.def.name, "generic-vmc3");
     assert!(m.wcs_given, "the flange gives its `at:` (CAM-CORE 8cae054a)");
     assert!(m.tl.segments.len() > 300);
@@ -463,8 +505,8 @@ fn feed_move_values_land_on_lines_and_arcs() {
 }
 
 /// Rapids and holders against the stock as cut, on the grid: none on the certified flange
-/// (milliseconds, the whole program); the bolt holes drilled before the plate's top is cleared
-/// rapid into the stock, as the certified checker also says.
+/// (milliseconds, the whole program); the bolt holes drilled under a clear height below the
+/// stock's top rapid into the stock, as the certified checker also says.
 #[test]
 fn rapids_and_holders_against_the_stock_as_cut() {
     let sim = flange();
@@ -476,7 +518,7 @@ fn rapids_and_holders_against_the_stock_as_cut() {
     );
     assert!(issues.is_empty(), "{:?}", issues.first());
     let dir = machined();
-    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01, clear: -0.5, retract: -1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
     let sim = Sim::open(src, &dir);
     let b = sim.cam.ops.iter().position(|o| o.name == "bolts").unwrap();
     assert_eq!(sim.cam.ops[b].status, "refused");
@@ -531,4 +573,173 @@ fn the_flanges_measured_chip_load_colours_its_moves() {
         );
     }
     assert!(measured > 0, "the flange's ops measured per move");
+}
+
+/// The tools as drawn: every tool of a document meshed once from its record (a fluted cutter
+/// with the record's flute count, then neck, shank and holder); a tap's thread cut in; drawing
+/// one is well within a frame. Display only: the checks keep the revolved profiles.
+#[test]
+fn tools_are_drawn_from_their_records() {
+    use forge_render::camsim::tools;
+    let dir = machined();
+    for doc in ["flange_cam.fg", "manifold_cam.fg", "mold_core_finish_cam.fg"] {
+        let src = std::fs::read_to_string(dir.join(doc)).unwrap();
+        let t0 = std::time::Instant::now();
+        let sim = Sim::open(&src, &dir);
+        let open_ms = t0.elapsed().as_secs_f64() * 1e3;
+        assert_eq!(sim.looks.len(), sim.cam.sim_tools().len(), "{doc}");
+        let t1 = std::time::Instant::now();
+        let helix = tools::helices();
+        let built: Vec<_> = sim
+            .cam
+            .sim_tools()
+            .iter()
+            .map(|t| tools::build(t, helix.get(&t.tool.id).copied()))
+            .collect();
+        let build_ms = t1.elapsed().as_secs_f64() * 1e3;
+        for (tu, lk) in sim.cam.sim_tools().iter().zip(&built) {
+            assert!(lk.tris > 0, "{doc} {}", tu.tool.id);
+            // a fluted cutter's flutes are the builder's: one cutting edge per flute
+            if tu.tool.nof > 0 && !tu.probe {
+                let edges = lk.pieces.first().map_or(0, |p| p.tris.edges.len());
+                assert!(
+                    edges > tu.tool.nof as usize,
+                    "{doc} {}: {edges} edges",
+                    tu.tool.id
+                );
+            }
+            if tu.holder.is_some() {
+                assert!(
+                    lk.pieces.iter().any(|p| !p.spins),
+                    "{doc} {}: a holder",
+                    tu.tool.id
+                );
+            }
+        }
+        // drawing the biggest, turned
+        let big = built.iter().max_by_key(|l| l.tris).unwrap();
+        let mut out = vec![];
+        let t2 = std::time::Instant::now();
+        for k in 0..20 {
+            out.clear();
+            tools::draw(big, [1.0, 2.0, 3.0], k as f64 * 0.3, false, &mut out);
+        }
+        let draw_ms = t2.elapsed().as_secs_f64() * 1e3 / 20.0;
+        eprintln!(
+            "{doc}: {} tools, meshed in {build_ms:.1} ms (sim opened in {open_ms:.0} ms), the largest {} triangles drawn in {draw_ms:.2} ms",
+            built.len(),
+            big.tris
+        );
+        assert!(draw_ms < 8.0, "{doc}: {draw_ms} ms a frame for a tool");
+    }
+    // a tap: its thread at its pitch, cut into the fluted length
+    let sim = Sim::open(
+        &std::fs::read_to_string(dir.join("manifold_cam.fg")).unwrap(),
+        &dir,
+    );
+    if let Some((tu, lk)) = sim
+        .cam
+        .sim_tools()
+        .iter()
+        .zip(&sim.looks)
+        .find(|(t, _)| t.tool.kind == forge_tooling::Kind::Tap)
+    {
+        let p = &lk.pieces[0].tris.pos;
+        let r: Vec<f64> = p.iter().map(|q| (q[0] * q[0] + q[1] * q[1]).sqrt()).collect();
+        let (lo, hi) = r
+            .iter()
+            .fold((f64::INFINITY, 0.0f64), |a, &x| (a.0.min(x), a.1.max(x)));
+        assert!(
+            hi - lo > 0.5 * tu.tool.tp,
+            "{}: thread depth {}",
+            tu.tool.id,
+            hi - lo
+        );
+    }
+}
+
+/// A failed check and a run's message in words (docs/ux/STANDARD.md §5/§7): rounded, with units,
+/// never a Debug dump.
+#[test]
+fn checks_and_problems_in_words() {
+    use forge_render::camsim::{check_sentence, tidy};
+    let c = forge_cam::ops::CheckOut {
+        rule: "holder_collision",
+        verdict: "fail",
+        value: -2.749999884242636,
+        limit: -0.01,
+        at: [0.0; 3],
+        tool_part: "holder",
+        other: "stock face 2158".into(),
+        phase: "plunge",
+        move_index: 3,
+        path: 0,
+    };
+    assert_eq!(
+        check_sentence(&c),
+        "Holder hits the stock on the plunge at move 3 (2.75 mm into it)"
+    );
+    assert_eq!(
+        tidy("the part's section at z = 29: NotPrism { face: 38 }"),
+        "the part's section at z = 29: isn't a prism (face 38)"
+    );
+    assert_eq!(tidy("-2.749999884242636 vs -0.01"), "-2.750 vs -0.01");
+    // a run's op key does not lead a sentence
+    assert_eq!(
+        tidy("thread_mill: the tool's pitch 1 is not the thread's 1.5"),
+        "The tool's pitch 1 is not the thread's 1.5"
+    );
+}
+
+/// A fluted cutter reads as one: its cutting length at least 15 % darker than its shank
+/// (luminance of the colours drawn), its valleys darker than its lands.
+#[test]
+fn a_cutters_flutes_stand_out_from_its_shank() {
+    let sim = flange();
+    let lum = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    let lk = &sim.looks[0];
+    let cut = lk
+        .pieces
+        .iter()
+        .find(|p| !p.shade.is_empty())
+        .expect("a fluted piece");
+    let shank = lk
+        .pieces
+        .iter()
+        .find(|p| p.spins && p.shade.is_empty())
+        .expect("a shank");
+    let mean = cut.shade.iter().sum::<f32>() / cut.shade.len() as f32;
+    let (lc, ls) = (lum(cut.colour) * mean, lum(shank.colour));
+    assert!(lc < 0.85 * ls, "cutting {lc} vs shank {ls}");
+    let (lo, hi) = cut
+        .shade
+        .iter()
+        .fold((f32::MAX, f32::MIN), |a, &x| (a.0.min(x), a.1.max(x)));
+    assert!(hi - lo > 0.4, "valleys {lo} lands {hi}");
+    // the holder drawn from records: its ER nut (bt40-er32 names none: ER32's largest, 50 x 22.5)
+    // and its interface's flange (BT40: 63 mm)
+    use forge_render::camsim::draw::look;
+    let rmax = |p: &forge_render::camsim::tools::Piece| {
+        p.tris
+            .pos
+            .iter()
+            .map(|q| (q[0] * q[0] + q[1] * q[1]).sqrt())
+            .fold(0.0, f64::max)
+    };
+    let nut = lk.pieces.iter().find(|p| p.colour == look::NUT).expect("a nut");
+    assert!((rmax(nut) - 25.0).abs() < 0.1, "nut radius {}", rmax(nut));
+    let flange = lk
+        .pieces
+        .iter()
+        .filter(|p| p.colour == look::HOLDER)
+        .map(rmax)
+        .fold(0.0, f64::max);
+    assert!((flange - 31.5).abs() < 0.1, "flange radius {flange}");
+    assert!(
+        lk.note
+            .as_ref()
+            .is_some_and(|n| n.1.contains("interface table") && n.1.contains("nut ER32 from")),
+        "{:?}",
+        lk.note
+    );
 }

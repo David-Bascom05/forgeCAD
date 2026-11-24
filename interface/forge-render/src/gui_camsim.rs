@@ -79,6 +79,17 @@ impl Gui {
             }
         }
         let Some(w) = &self.shell.cam else { return };
+        // a lathe document: the simulation is milling's (forge-cam-lang): nothing to show, rather
+        // than milling's refusals of every turning built-in (the section view is turning's)
+        if w.turning() {
+            if self.shell.camsim.take().is_some() {
+                self.shell.camsim_job.focus = None;
+                if let Some(v) = &mut self.view {
+                    v.dirty = true;
+                }
+            }
+            return;
+        }
         // the workspace has a run of text the simulation is not of: simulate it
         if let Some(run) = &w.run {
             // keyed by the text and what its run came to: the same text run again with the
@@ -175,14 +186,9 @@ impl Gui {
         }
         // the view not under the panel (right) and the timeline (bottom), as fractions
         let vr = self.shell.view_rect;
-        let panel = if st.folded {
-            36.0
-        } else {
-            crate::gui_camsim_panel::PANEL_W
-        } + 16.0;
-        let bar = crate::gui_camsim_panel::TIMELINE_H + 16.0;
-        let fx = (panel / vr.width().max(1.0)).clamp(0.0, 0.6);
-        let fy = (bar / vr.height().max(1.0)).clamp(0.0, 0.6);
+        let free = self.shell.camsim_free(vr);
+        let fx = ((vr.right() - free.right()) / vr.width().max(1.0)).clamp(0.0, 0.6);
+        let fy = ((vr.bottom() - free.bottom()) / vr.height().max(1.0)).clamp(0.0, 0.6);
         if lo[0].is_finite()
             && let Some(v) = &mut self.view
         {
@@ -209,6 +215,21 @@ impl Gui {
             v.nav.camera = cam;
             v.nav.home_view = Some(v.nav.camera);
             v.dirty = true;
+        }
+    }
+
+    /// Every open document made again from its files as they are now: the page asks once the
+    /// project's files have all come (a deep-linked file opened before them), so a part, a
+    /// machining document's parts and a drawing's part that were not there yet are read.
+    pub fn rebuild_open(&mut self) {
+        if let Some(s) = &mut self.fg {
+            s.rebuild();
+        }
+        // a machining document reads its parts: run again with what arrived
+        self.camsim_reload();
+        // a drawing's part: it read "no such file", and nothing watched the file that wasn't there
+        if let Some(d) = &mut self.shell.drawing {
+            d.rebuild();
         }
     }
 
@@ -336,7 +357,14 @@ pub fn geometry(
             .markers
             .iter()
             .any(|m| m.severe() && m.op == Some(g.op as usize) && (m.t - st.t).abs() <= g.dt.max(1e-6));
-        draw::tool(&tu.shape, p, fail, &mut solid);
+        match st.sim.looks.get(tool) {
+            Some(lk) => {
+                crate::camsim::tools::draw(lk, p, st.spin, fail, &mut solid);
+                crate::camsim::tools::edges(lk, p, st.spin, &eye, world);
+                crate::camsim::tools::ghost(lk, p, world);
+            }
+            None => draw::tool(&tu.shape, p, fail, &mut solid),
+        }
     }
     // the machine about the part, when its run plays; a body in a collision now, red
     if st.machine
@@ -398,6 +426,7 @@ impl Gui {
             .camsim
             .as_deref_mut()
             .ok_or("no machining document is open")?;
+        let mut refit = false;
         for cmd in cmds.split(';').map(str::trim).filter(|c| !c.is_empty()) {
             let (k, v) = cmd.split_once('=').unwrap_or((cmd, ""));
             let num = || {
@@ -460,6 +489,8 @@ impl Gui {
                     st.jump(f * total);
                 }
                 "machine" => st.machine = on()?,
+                // the simulation's own framing: the stock and the tool's tip now (STANDARD §2)
+                "fit" if v == "sim" => refit = true,
                 "fit" => {
                     // the view on the stock, or on the whole machine about it
                     let mut tris = vec![];
@@ -467,6 +498,19 @@ impl Gui {
                         "machine" => {
                             let mv = st.sim.machine().ok_or("`fit=machine`: no machine run plays")?;
                             mv.draw(st.t, &[], &mut tris);
+                        }
+                        // the tool now, close: its cutting end and the stock about it
+                        "tool" => {
+                            let (tool, p, _) = st.tool_now().ok_or("`fit=tool`: no tool plays now")?;
+                            let tl = &st.sim.cam.sim_tools()[tool].tool;
+                            let r = (0.5 * tl.dc).max(2.0);
+                            let up = tl.lcf.max(4.0 * r);
+                            draw::solid_box(
+                                [p[0] - 1.6 * r, p[1] - 1.6 * r, p[2] - 1.5 * r],
+                                [p[0] + 1.6 * r, p[1] + 1.6 * r, p[2] + up],
+                                [1.0; 3],
+                                &mut tris,
+                            );
                         }
                         _ => {
                             let s = st.sim.setups.get(st.setup_now()).ok_or("no setup")?;
@@ -488,6 +532,7 @@ impl Gui {
                             * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2))
                                 .sqrt();
                         view.nav.camera = super::view_camera(c, r, self.shell.view.parallel, view.size);
+                        view.dirty = true;
                     }
                 }
                 "rapids" => st.rapids = on()?,
@@ -520,6 +565,9 @@ impl Gui {
                 }
                 _ => return Err(format!("`{cmd}`: not a simulation word")),
             }
+        }
+        if refit {
+            self.camsim_fit();
         }
         if let Some(v) = &mut self.view {
             v.dirty = true;
