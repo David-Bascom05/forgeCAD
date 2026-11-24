@@ -5,9 +5,11 @@
 //!
 //! Linking is by retract: up to the retract height (above everything the op cuts), across at it,
 //! and down at the plunge feed. Rapids run at the clearance height, above the stock.
+use crate::leads::{self, Leads};
+use crate::tabs::{self, TabShape, Tabs};
 use forge_cam_geom::check::{self, Face, Move, Verdict};
 use forge_cam_geom::offset::offset;
-use forge_cam_geom::region::{Loop, Region, Seg};
+use forge_cam_geom::region::{Loop, P2, Region, Seg};
 use forge_cam_geom::tool::{Part, Shape};
 use forge_math::dmath;
 use forge_tooling::Tool;
@@ -631,12 +633,22 @@ impl Default for Passes {
 /// Contour: the region's boundary, offset by the tool radius plus `leave` (outside for the
 /// part's outline: `outside` true), climb, each loop through all its levels in turn.
 pub fn contour(rg: &Region, c: Cut, sp: Span, leave: f64, outside: bool) -> Result<OpPath, OpError> {
-    contour_passes(rg, c, sp, leave, outside, Passes::default())
+    contour_passes(rg, c, sp, leave, outside, Passes::default(), &Finish2d::default())
+}
+
+/// A contour's 2D finishing (leads.rs, tabs.rs): each loop's entry, leads and overlap, and its
+/// holding tabs. The default is none: the path is the contour's passes alone.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Finish2d {
+    pub leads: Leads,
+    pub tabs: Option<Tabs>,
 }
 
 /// `contour` with its passes: the radial passes from the farthest in to the contour's own,
 /// then the spring passes, each loop of each through all its levels; every loop in the
-/// direction asked.
+/// direction asked. With `fin`'s leads, each level comes down at the lead-in's start, runs the
+/// lead-in, the loop, the overlap and the lead-out; with its tabs, the levels below the tabs'
+/// top lift over each tab.
 pub fn contour_passes(
     rg: &Region,
     c: Cut,
@@ -644,9 +656,15 @@ pub fn contour_passes(
     leave: f64,
     outside: bool,
     ps: Passes,
+    fin: &Finish2d,
 ) -> Result<OpPath, OpError> {
     let Cut {
-        tool, tidx, h, feed, ..
+        tool,
+        tidx,
+        h,
+        feed,
+        lead_feed,
+        ..
     } = c;
     let Span { top, bottom, step } = sp;
     let n = ps.finish.max(1);
@@ -680,6 +698,20 @@ pub fn contour_passes(
     }
     for _ in 0..ps.spring {
         passes.push(passes[n - 1].clone());
+    }
+    if !fin.leads.is_none() || fin.tabs.is_some() {
+        return led(
+            &passes,
+            tidx,
+            tool.tool.dc,
+            h,
+            sp,
+            feed,
+            lead_feed.unwrap_or(feed.0),
+            ps.climb,
+            &fin.leads,
+            fin.tabs.as_ref(),
+        );
     }
     let mut mv = Vec::new();
     let first = passes[0][0][0].start();
@@ -718,6 +750,156 @@ pub fn contour_passes(
         rpm: 0.0,
         coolant: forge_post::Coolant::Flood,
     })
+}
+
+/// The contour's passes with leads and tabs: per loop, down at the lead-in's start (in the air)
+/// from the retract height, then per level: lead-in, loop (lifting over each tab on the levels
+/// below the tabs' top), overlap, lead-out, and across at that level from the lead-out's end
+/// back to the lead-in's start (both off the wall, on the air side) and down to the next level
+/// there; up once at the end. The loop stays down through its levels, as without leads. The
+/// link back is certified as every move is.
+#[allow(clippy::too_many_arguments)]
+fn led(
+    passes: &[Vec<Vec<Seg>>],
+    tidx: usize,
+    tool_d: f64,
+    h: Heights,
+    sp: Span,
+    feed: (f64, f64),
+    lead_f: f64,
+    climb: bool,
+    ld: &Leads,
+    tabs: Option<&Tabs>,
+) -> Result<OpPath, OpError> {
+    let mut mv = Vec::new();
+    let mut first = None;
+    for loops in passes {
+        for l in loops {
+            let (li, body, ov, lo) = leads::wrap(l, climb, ld, 1e-6);
+            let s = li.first().unwrap_or(&body[0]).start();
+            let e = lo.last().or(ov.last()).unwrap_or(&body[body.len() - 1]).end();
+            first.get_or_insert(s);
+            // the loop cut at its tabs' ends: even pieces cut, odd ones lifted
+            let tabbed = match tabs {
+                Some(t) => {
+                    let iv = tabs::intervals(&body, t, tool_d, ld.overlap.max(0.0) + 1e-6)
+                        .map_err(OpError::Region)?;
+                    let cuts: Vec<f64> = iv.iter().flat_map(|&(a, b)| [a, b]).collect();
+                    Some((tabs::cut(&body, &cuts), sp.bottom + t.height, t.shape))
+                }
+                None => None,
+            };
+            mv.push(PMove::Rapid {
+                to: [s.x, s.y, h.retract],
+            });
+            let zs = levels(sp.top, sp.bottom, sp.step);
+            for (k, &z) in zs.iter().enumerate() {
+                if k > 0 {
+                    // back to the lead-in's start at the level just cut
+                    mv.push(PMove::Line {
+                        to: [s.x, s.y, zs[k - 1]],
+                        f: feed.0,
+                        phase: Phase::Link,
+                    });
+                }
+                mv.push(PMove::Line {
+                    to: [s.x, s.y, z],
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+                push_loop(&mut mv, &li, z, lead_f);
+                match &tabbed {
+                    Some((pieces, ztab, shape)) if z < *ztab => {
+                        for (k, p) in pieces.iter().enumerate() {
+                            if k % 2 == 0 {
+                                push_loop(&mut mv, p, z, feed.0);
+                            } else {
+                                push_tab(&mut mv, p, z, *ztab, *shape, feed);
+                            }
+                        }
+                    }
+                    _ => push_loop(&mut mv, &body, z, feed.0),
+                }
+                push_loop(&mut mv, &ov, z, feed.0);
+                push_loop(&mut mv, &lo, z, lead_f);
+            }
+            mv.push(PMove::Line {
+                to: [e.x, e.y, h.retract],
+                f: feed.0,
+                phase: Phase::Link,
+            });
+        }
+    }
+    let first = first.unwrap_or(P2 { x: 0.0, y: 0.0 });
+    mv.push(PMove::Rapid {
+        to: [first.x, first.y, h.clear],
+    });
+    Ok(OpPath {
+        tool: tidx,
+        start: [first.x, first.y, h.clear],
+        moves: mv,
+        rpm: 0.0,
+        coolant: forge_post::Coolant::Flood,
+    })
+}
+
+/// One tab's piece of the loop at level z: a rectangle goes straight up to `ztab` at its start,
+/// along at `ztab`, and straight down at its end (into the uncut level: at the plunge feed); a
+/// triangle ramps up to its middle and down to its end, its height linear in the length along.
+fn push_tab(mv: &mut Vec<PMove>, p: &[Seg], z: f64, ztab: f64, shape: TabShape, feed: (f64, f64)) {
+    let Some(a) = p.first().map(|x| x.start()) else {
+        return;
+    };
+    let b = p[p.len() - 1].end();
+    match shape {
+        TabShape::Rect => {
+            mv.push(PMove::Line {
+                to: [a.x, a.y, ztab],
+                f: feed.0,
+                phase: Phase::Link,
+            });
+            push_loop(mv, p, ztab, feed.0);
+            mv.push(PMove::Line {
+                to: [b.x, b.y, z],
+                f: feed.1,
+                phase: Phase::Plunge,
+            });
+        }
+        TabShape::Triangle => {
+            let total: f64 = p.iter().map(leads::seg_len).sum();
+            let halves = tabs::cut(p, &[0.5 * total]);
+            let mut done = 0.0;
+            for (k, half) in halves.iter().enumerate() {
+                for sg in half {
+                    done += leads::seg_len(sg);
+                    let u = (done / (0.5 * total)).min(2.0);
+                    let zz = if k == 0 {
+                        z + (ztab - z) * u.min(1.0)
+                    } else {
+                        ztab - (ztab - z) * (u - 1.0).max(0.0)
+                    };
+                    let (f, phase) = if k == 0 {
+                        (feed.0, Phase::Cut)
+                    } else {
+                        (feed.1, Phase::Plunge)
+                    };
+                    match *sg {
+                        Seg::Line { b, .. } => mv.push(PMove::Line {
+                            to: [b.x, b.y, zz],
+                            f,
+                            phase,
+                        }),
+                        Seg::Arc { b, c, ccw, .. } => mv.push(PMove::Arc {
+                            to: [b.x, b.y, zz],
+                            c: [c.x, c.y],
+                            cw: !ccw,
+                            f,
+                        }),
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Pocket: the region cleared by offset passes, each offset from the original boundary at
