@@ -14,7 +14,12 @@
 //!   exact distance in the section across the edge;
 //! - the cone: ||P − o| − |A − o|| ≤ |P − A|, o its axis; the face's radius over a cell of t
 //!   against the move's distances from the axis. When the move is an arc about the axis (an
-//!   edge break's corner) that is again the exact distance in the section.
+//!   edge break's corner) that is again the exact distance in the section;
+//! - the torus with a vertical axis (a fillet round a boss or a hole) by the same inequality:
+//!   its radius from the axis and its height over a cell of the tube's parameter. An arc about
+//!   the axis is again exact in the section, and an arc whose centre is ε off the axis (a
+//!   posted arc, its centre from rounded words) loses only ε: its distances from the axis are
+//!   within r ± ε.
 //!
 //! The whole move is taken exactly (its line or arc), a piece of it by the box `Move::at`
 //! encloses it in. The search splits the face's t to the resolution against the whole move,
@@ -51,7 +56,23 @@ enum Kind {
         k: f64,
         rf: Ival,
     },
+    /// Radius |big + r cos φ| · |c x + s y| (`rf` the second factor), height o.z + az r sin φ,
+    /// φ = φm + 2 atan q over a cell of q.
+    Torus {
+        axis: [f64; 2],
+        oz: f64,
+        az: f64,
+        big: f64,
+        r: f64,
+        cm: f64,
+        sm: f64,
+        rf: Ival,
+    },
 }
+
+/// How far an arc's centre may be from a torus's axis, in x and in y, for the torus's bound to be
+/// tried (mm): a pocket's arcs about a bore sit within the posted words' rounding of its axis.
+const COAXIAL: f64 = 1e-2;
 
 fn kind(f: &Face) -> Option<(Kind, Ival)> {
     match f.surf {
@@ -102,8 +123,59 @@ fn kind(f: &Face) -> Option<(Kind, Ival)> {
                 f.q,
             ))
         }
+        Surf::Torus {
+            o,
+            x,
+            y,
+            ax,
+            big,
+            r,
+            cm,
+            sm,
+        } => {
+            if !(ax[0] == 0.0
+                && ax[1] == 0.0
+                && (ax[2] == 1.0 || ax[2] == -1.0)
+                && x[2] == 0.0
+                && y[2] == 0.0
+                && big.is_finite()
+                && r.is_finite()
+                && cm.is_finite()
+                && sm.is_finite())
+            {
+                return None;
+            }
+            let rf = horizontal_factor(x, y)?;
+            Some((
+                Kind::Torus {
+                    axis: [o[0], o[1]],
+                    oz: o[2],
+                    az: ax[2],
+                    big,
+                    r,
+                    cm,
+                    sm,
+                    rf,
+                },
+                f.q,
+            ))
+        }
         _ => None,
     }
+}
+
+/// An enclosure of |c x + s y| over every angle (c² + s² = 1), x and y horizontal: from
+/// c²|x|² + s²|y|² + 2cs x·y with 2|cs| ≤ 1. None unless it is bounded away from 0.
+fn horizontal_factor(x: [f64; 3], y: [f64; 3]) -> Option<Ival> {
+    let xx = p(x[0]).sqr().add(p(x[1]).sqr());
+    let yy = p(y[0]).sqr().add(p(y[1]).sqr());
+    let xy = p(x[0]).mul(p(y[0])).add(p(x[1]).mul(p(y[1]))).abs();
+    let lo = Ival::pt(xx.lo.min(yy.lo)).sub(Ival::pt(xy.hi)).lo;
+    let hi = Ival::pt(xx.hi.max(yy.hi)).add(Ival::pt(xy.hi)).hi;
+    if !(lo > 0.0 && hi.is_finite()) {
+        return None;
+    }
+    Some(Ival::new(lo, hi).sqrt())
 }
 
 /// The path's xy curve and the tip's heights.
@@ -163,6 +235,22 @@ pub fn clear(
     let Some((kd, t0)) = kind(f) else {
         return (None, 0);
     };
+    // a torus only against an arc or helix about (within COAXIAL of) its axis, where the bound
+    // is tight; elsewhere it rarely clears, and its tries cost cells before the branch and bound
+    // (manifold's tap: 373k cells, against 33k without them), and where it does clear, the
+    // branch and bound's least is tighter (manifold's grv: −0.0099 against −0.0005). A choice
+    // of route only: either proves what it proves
+    if let Kind::Torus { axis, .. } = &kd {
+        let about = match *pl {
+            Planar::Arc { c, .. } | Planar::Helix { c, .. } => {
+                (c[0] - axis[0]).abs() <= COAXIAL && (c[1] - axis[1]).abs() <= COAXIAL
+            }
+            _ => false,
+        };
+        if !about {
+            return (None, 0);
+        }
+    }
     let lim_clear = limit + f.mu;
     // a plane face lies in its plane: a tool that stays in {N·x − c ≥ D} through the whole move
     // has signed distance ≥ D from every point of the face (Halfspace.lean, either side), in
@@ -177,7 +265,7 @@ pub fn clear(
     let ev = match &kd {
         // n = (−e.y, e.x)/|e|, so e/|e| = (n.y, −n.x)
         Kind::Plane { n, .. } => [n[1], n[0].neg()],
-        Kind::Cone { .. } => [p(0.0), p(0.0)],
+        Kind::Cone { .. } | Kind::Torus { .. } => [p(0.0), p(0.0)],
     };
     let whole = |pl: &Planar| -> Option<Piece> {
         let (sec, zt) = path(pl);
@@ -196,7 +284,7 @@ pub fn clear(
                     zt,
                 }
             }
-            Kind::Cone { axis, .. } => {
+            Kind::Cone { axis, .. } | Kind::Torus { axis, .. } => {
                 // the path arc's stored ends: lowered by Move::path_gap
                 let dmin = Ival::pt(pt_sec(*axis, &sec).lo).sub(p(mv.path_gap())).lo.max(0.0);
                 let far = |q: [f64; 2]| {
@@ -230,7 +318,7 @@ pub fn clear(
                 along: dot2([b[0], b[1]], ev),
                 zt: b[2],
             },
-            Kind::Cone { axis, .. } => Piece {
+            Kind::Cone { axis, .. } | Kind::Torus { axis, .. } => Piece {
                 w: b[0].sub(p(axis[0])).sqr().add(b[1].sub(p(axis[1])).sqr()).sqrt(),
                 along: p(0.0),
                 zt: b[2],
@@ -267,6 +355,24 @@ pub fn clear(
                 let dz = p(*oz).add(t.mul(p(*az))).sub(pc.zt);
                 (gap(r, pc.w).unwrap_or(0.0), dz)
             }
+            Kind::Torus {
+                oz,
+                az,
+                big,
+                r,
+                cm,
+                sm,
+                rf,
+                ..
+            } => {
+                // cos φ, sin φ over the cell of q (φ = φm + ψ, q = tan(ψ/2))
+                let (cp, sp) = crate::check::circ(t);
+                let cf = cp.mul(p(*cm)).sub(sp.mul(p(*sm)));
+                let sf = cp.mul(p(*sm)).add(sp.mul(p(*cm)));
+                let rad = p(*big).add(p(*r).mul(cf)).abs().mul(*rf);
+                let dz = p(*oz).add(p(*az).mul(p(*r)).mul(sf)).sub(pc.zt);
+                (gap(rad, pc.w).unwrap_or(0.0), dz)
+            }
         };
         body.sd_rz(Ival::pt(h.max(0.0)), dz).lo
     };
@@ -280,6 +386,8 @@ pub fn clear(
             .hi
             .max(1.0),
         Kind::Cone { k, rf, .. } => (k.abs() * rf.hi).max(1.0) * 2.0,
+        // a point moves at most 2 r per unit of q (dψ/dq = 2 / (1 + q²))
+        Kind::Torus { r, rf, .. } => (2.0 * r.abs() * rf.hi).max(1.0) * 2.0,
     };
     let size = |s: Ival| -> f64 {
         let b = mv.at(s);

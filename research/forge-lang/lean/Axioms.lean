@@ -190,9 +190,11 @@ open ForgeLang ForgeLang.Counter
 #print axioms Families.run_ext_avoid
 #print axioms Families.cam_conservative
 #print axioms Families.turn_conservative
+#print axioms Families.bending_conservative
 #print axioms Families.families_not_keywords
 #print axioms LL1.Documents.milling_doc_accepted
 #print axioms LL1.Documents.turning_doc_accepted
+#print axioms LL1.Documents.bending_doc_accepted
 #print axioms LL1.Documents.assembly_header_accepted
 #print axioms LL1.Documents.header_glued_refused
 #print axioms closure_runs
@@ -200,6 +202,7 @@ open ForgeLang ForgeLang.Counter
 #print axioms Families.rename_run
 #print axioms Families.rename_accepted
 #print axioms Families.exec_new_refused
+#print axioms Families.robot_conservative
 #print axioms LL1.Documents.robot_doc_accepted
 #print axioms Families.run_append
 #print axioms Families.edit_prefix
