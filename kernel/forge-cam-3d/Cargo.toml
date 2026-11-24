@@ -1,0 +1,14 @@
+[package]
+name = "forge-cam-3d"
+description = "ForgeCAD CAM: 3-axis finishing (scallop-driven stepover, finishing strategies, 3D linking), every move certified by forge-cam-geom"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-cam-geom = { path = "../forge-cam-geom" }
+forge-math = { path = "../forge-math" }
+
+[lints]
+workspace = true
