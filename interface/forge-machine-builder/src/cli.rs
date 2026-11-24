@@ -37,7 +37,11 @@ pub struct Out {
 
 pub const USAGE: &str = "forgecad machine list [--json]\n       \
 forgecad machine new NAME (--from MACHINE | --template vmc3|trunnion|head-table|lathe|mill-turn|gantry) [--project | --user] [--own | --keep-cites] [--force]\n       \
-forgecad machine check FILE.toml|NAME [--json] [--no-parts]";
+forgecad machine check FILE.toml|NAME [--json] [--no-parts]\n       \
+forgecad machine model attach MACHINE FILE --from TEXT [--body BODY] [--scale S] [--rotate X,Y,Z] [--offset X,Y,Z]\n       \
+forgecad machine model list|check MACHINE [--json]\n       \
+forgecad machine model remove MACHINE FILE\n       \
+forgecad machine model split MACHINE FILE BODY|-..   (one per part, largest first; - drops it)";
 
 fn fail(code: u8, err: String) -> Out {
     Out {
@@ -368,6 +372,295 @@ fn add_envelopes(r: &mut CheckReport, found: Vec<(String, EnvelopeCheck)>) {
     }
 }
 
+/// `machine model ...`: the user's own model files for a machine (model_files), kept in the user's
+/// library only.
+pub fn model(env: &Env, argv: &[String]) -> Out {
+    use crate::model_files as mf;
+    use crate::models;
+    let usage = || fail(2, format!("usage: {USAGE}"));
+    let Some(user) = env.user.clone() else {
+        return fail(
+            2,
+            "no user folder (no config directory): models are kept in the user's library".into(),
+        );
+    };
+    let (Some(verb), Some(name)) = (argv.first(), argv.get(1)) else {
+        return usage();
+    };
+    let cat = env.catalog();
+    let Some(e) = cat.get(name) else {
+        return fail(2, format!("no machine `{name}`"));
+    };
+    let def = e.def.clone();
+    let dir = mf::dir_for(&user, &def.name);
+    let mut ms = match models::load_in(&dir) {
+        Ok(m) => m,
+        Err(e) => return fail(2, e),
+    };
+    let json = argv.iter().any(|a| a == "--json");
+    let save = |ms: &[models::Model]| models::save_in(&dir, ms);
+    let three = |s: &str| -> Option<[f64; 3]> {
+        let v: Vec<f64> = s
+            .split(',')
+            .map(|x| x.trim().parse().ok())
+            .collect::<Option<_>>()?;
+        (v.len() == 3).then(|| [v[0], v[1], v[2]])
+    };
+    match verb.as_str() {
+        "attach" => {
+            let Some(file) = argv.get(2).filter(|f| !f.starts_with("--")) else {
+                return usage();
+            };
+            let (mut body, mut from) = (None, String::new());
+            let mut how = mf::Placing::default();
+            let mut it = argv[3..].iter();
+            while let Some(a) = it.next() {
+                let v = it.next();
+                match (a.as_str(), v) {
+                    ("--body", Some(v)) => body = Some(v.clone()),
+                    ("--from", Some(v)) => from = v.clone(),
+                    ("--scale", Some(v)) => match v.parse::<f64>() {
+                        Ok(x) if x > 0.0 => how.scale = Some(x),
+                        _ => return fail(2, format!("--scale {v}: a number above 0 (25.4 for inches)")),
+                    },
+                    ("--rotate", Some(v)) => match three(v) {
+                        Some(r) => how.rotate = Some(r),
+                        None => return fail(2, format!("--rotate {v}: three angles, X,Y,Z in degrees")),
+                    },
+                    ("--offset", Some(v)) => match three(v) {
+                        Some(o) => how.offset = Some(o),
+                        None => return fail(2, format!("--offset {v}: three lengths, X,Y,Z in mm")),
+                    },
+                    _ => return usage(),
+                }
+            }
+            if body.is_some() && ms.iter().any(|m| m.body == body) {
+                return fail(
+                    1,
+                    format!(
+                        "`{}` has a model already: remove it first (forgecad machine model remove {} FILE)",
+                        body.unwrap_or_default(),
+                        def.name
+                    ),
+                );
+            }
+            match mf::attach(&def, &dir, &ms, body.as_deref(), Path::new(file), &from, &how) {
+                Ok((m, said)) => {
+                    ms.push(m);
+                    if let Err(e) = save(&ms) {
+                        return fail(2, e);
+                    }
+                    Out {
+                        code: 0,
+                        out: format!("{said}\nkept in {}\n", dir.display()),
+                        err: String::new(),
+                    }
+                }
+                Err(e) => fail(1, e),
+            }
+        }
+        "list" => {
+            let out = if json {
+                let rows: Vec<String> = ms
+                    .iter()
+                    .map(|m| {
+                        format!(
+                            "{{\"file\":{},\"body\":{},\"from\":{},\"scale\":{},\"rotate\":[{},{},{}],\"offset\":[{},{},{}]}}",
+                            jstr(&m.file),
+                            m.body.as_ref().map_or("null".into(), |b| jstr(b)),
+                            jstr(&m.from),
+                            m.scale,
+                            m.rotate[0],
+                            m.rotate[1],
+                            m.rotate[2],
+                            m.offset[0],
+                            m.offset[1],
+                            m.offset[2]
+                        )
+                    })
+                    .collect();
+                format!("[{}]\n", rows.join(","))
+            } else if ms.is_empty() {
+                format!("{}: no models attached\n", def.name)
+            } else {
+                ms.iter()
+                    .map(|m| {
+                        format!(
+                            "{}  {}  scale {}  from: {}\n",
+                            m.body.as_deref().unwrap_or("(whole machine)"),
+                            m.file,
+                            m.scale,
+                            m.from
+                        )
+                    })
+                    .collect()
+            };
+            Out {
+                code: 0,
+                out,
+                err: String::new(),
+            }
+        }
+        "check" => {
+            let mut lines = Vec::new();
+            let mut bad = false;
+            for m in &ms {
+                match mf::check(&def, &dir, m) {
+                    Ok(None) => lines.push((
+                        m,
+                        "whole machine: not checked against an envelope".to_string(),
+                        None,
+                    )),
+                    Ok(Some((o, true))) => lines.push((
+                        m,
+                        if o.out == 0 {
+                            format!("inside its envelope ({} points); {}", o.points, mf::DISPLAY_ONLY)
+                        } else {
+                            format!(
+                                "outside its envelope by up to {:.2} mm ({} of {} points); {}",
+                                o.worst,
+                                o.out,
+                                o.points,
+                                mf::DISPLAY_ONLY
+                            )
+                        },
+                        Some(o),
+                    )),
+                    Ok(Some((o, false))) if o.out == 0 => {
+                        lines.push((m, format!("inside its envelope ({} points)", o.points), Some(o)))
+                    }
+                    Ok(Some((o, false))) => {
+                        bad = true;
+                        lines.push((
+                            m,
+                            format!(
+                                "outside its envelope by up to {:.2} mm ({} of {} points), farthest at ({:.1}, {:.1}, {:.1}): collisions there are not found",
+                                o.worst, o.out, o.points, o.at[0], o.at[1], o.at[2]
+                            ),
+                            Some(o),
+                        ))
+                    }
+                    Err(e) => {
+                        bad = true;
+                        lines.push((m, e, None));
+                    }
+                }
+            }
+            let out = if json {
+                let rows: Vec<String> = lines
+                    .iter()
+                    .map(|(m, w, o)| match o {
+                        Some(o) => format!(
+                            "{{\"file\":{},\"body\":{},\"points\":{},\"outside\":{},\"worst_mm\":{},\"note\":{}}}",
+                            jstr(&m.file),
+                            jstr(m.body.as_deref().unwrap_or("")),
+                            o.points,
+                            o.out,
+                            o.worst,
+                            jstr(w)
+                        ),
+                        None => format!("{{\"file\":{},\"note\":{}}}", jstr(&m.file), jstr(w)),
+                    })
+                    .collect();
+                format!("[{}]\n", rows.join(","))
+            } else {
+                lines
+                    .iter()
+                    .map(|(m, w, _)| {
+                        format!(
+                            "{} ({}): {w}\n",
+                            m.file,
+                            m.body.as_deref().unwrap_or("whole machine")
+                        )
+                    })
+                    .collect()
+            };
+            Out {
+                code: u8::from(bad),
+                out,
+                err: String::new(),
+            }
+        }
+        "remove" => {
+            let Some(file) = argv.get(2) else { return usage() };
+            let before = ms.len();
+            ms.retain(|m| &m.file != file);
+            if ms.len() == before {
+                return fail(1, format!("{}: no model `{file}`", def.name));
+            }
+            match save(&ms) {
+                Ok(()) => Out {
+                    code: 0,
+                    out: format!("{file} removed (and its copy in your library)\n"),
+                    err: String::new(),
+                },
+                Err(e) => fail(2, e),
+            }
+        }
+        "split" => {
+            let Some(file) = argv.get(2) else { return usage() };
+            let Some(i) = ms.iter().position(|m| &m.file == file) else {
+                return fail(1, format!("{}: no model `{file}`", def.name));
+            };
+            let to: Vec<Option<String>> = argv[3..].iter().map(|b| (b != "-").then(|| b.clone())).collect();
+            if let Some(b) = to
+                .iter()
+                .flatten()
+                .find(|b| !def.bodies.iter().any(|x| &x.name == *b))
+            {
+                return fail(
+                    1,
+                    format!(
+                        "{} has no body `{b}` (its bodies: {})",
+                        def.name,
+                        mf::body_names(&def)
+                    ),
+                );
+            }
+            if to.is_empty() {
+                // what there is to split: its parts, largest first
+                return match mf::read_file(&dir.join(file)) {
+                    Ok(ps) => Out {
+                        code: 0,
+                        out: ps
+                            .iter()
+                            .enumerate()
+                            .map(|(k, p)| {
+                                let (lo, hi) = p.bounds().unwrap_or(([0.0; 3], [0.0; 3]));
+                                format!(
+                                    "part {}: {} triangles, {:.1} x {:.1} x {:.1} (file units)\n",
+                                    k + 1,
+                                    p.tri.len(),
+                                    hi[0] - lo[0],
+                                    hi[1] - lo[1],
+                                    hi[2] - lo[2]
+                                )
+                            })
+                            .collect(),
+                        err: String::new(),
+                    },
+                    Err(e) => fail(1, e),
+                };
+            }
+            match mf::split(&dir, &mut ms, i, &to) {
+                Ok(made) => match save(&ms) {
+                    Ok(()) => Out {
+                        code: 0,
+                        out: made
+                            .iter()
+                            .map(|m| format!("{} -> {}\n", m.file, m.body.as_deref().unwrap_or("")))
+                            .collect(),
+                        err: String::new(),
+                    },
+                    Err(e) => fail(2, e),
+                },
+                Err(e) => fail(1, e),
+            }
+        }
+        _ => usage(),
+    }
+}
+
 /// `machine list|new|check ...`; None if `argv[0]` is none of those (a setup file).
 pub fn run(env: &Env, argv: &[String]) -> Option<Out> {
     let rest = &argv[1..];
@@ -375,6 +668,7 @@ pub fn run(env: &Env, argv: &[String]) -> Option<Out> {
         "list" => list(env, rest.iter().any(|a| a == "--json")),
         "new" => new(env, rest),
         "check" => check(env, rest),
+        "model" => model(env, rest),
         _ => return None,
     })
 }

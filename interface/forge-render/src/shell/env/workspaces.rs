@@ -75,7 +75,8 @@ impl Environment for Manufacture {
     fn properties_width(&self, s: &Shell) -> Option<f32> {
         let w = s.cam.as_ref()?;
         let sheet = w.op_dlg.is_some() || w.setup_dlg.is_some();
-        (sheet || s.camsim.is_some() || w.programs_open || w.quality_open).then_some(super::super::cam::dock_w(w.screen_w))
+        (sheet || s.camsim.is_some() || w.programs_open || w.quality_open)
+            .then_some(super::super::cam::dock_w(w.screen_w))
     }
 
     /// Wide (1280 px and over): the sheet on top (80 % of the height while one is open), the
@@ -118,13 +119,23 @@ impl Environment for Manufacture {
             return;
         };
         let sheet_tab = sheet && narrow;
-        let now = if sheet_tab && !w.sim_tab { Col::Sheet } else { lower };
+        let now = if sheet_tab && !w.sim_tab {
+            Col::Sheet
+        } else {
+            lower
+        };
         let mut tabs: Vec<(Col, String, &str)> = vec![];
         if sheet_tab {
             let title = w
                 .op_dlg
                 .as_ref()
-                .map(|d| format!("{} \u{b7} {}", d.name, super::super::cam::schema::spec(&d.func).map_or("", |sp| sp.label)))
+                .map(|d| {
+                    format!(
+                        "{} \u{b7} {}",
+                        d.name,
+                        super::super::cam::schema::spec(&d.func).map_or("", |sp| sp.label)
+                    )
+                })
                 .or_else(|| w.setup_dlg.as_ref().map(|d| format!("{} \u{b7} Setup", d.name)))
                 .unwrap_or_default();
             tabs.push((Col::Sheet, title, "cam:dock:sheet"));
@@ -140,7 +151,8 @@ impl Environment for Manufacture {
         // wide with a sheet: the sheet on top, the tabs in what is left
         let (dock, area) = if sheet && !narrow {
             let split = r.top() + r.height() * 0.8;
-            ui.painter().hline(r.x_range(), split, egui::Stroke::new(1.0, t.line));
+            ui.painter()
+                .hline(r.x_range(), split, egui::Stroke::new(1.0, t.line));
             (
                 Some(Rect::from_min_max(r.min, egui::pos2(r.right(), split))),
                 Rect::from_min_max(egui::pos2(r.left(), split + 1.0), r.max),
@@ -150,18 +162,22 @@ impl Environment for Manufacture {
         };
         let bar = Rect::from_min_max(area.min, egui::pos2(area.right(), area.top() + 32.0));
         let mut pick = None;
-        ui.scope_builder(egui::UiBuilder::new().max_rect(bar.shrink2(egui::vec2(8.0, 4.0))), |ui| {
-            ui.horizontal(|ui| {
-                for (tab, words, key) in &tabs {
-                    let r = ui.selectable_label(*tab == now, words.as_str());
-                    s.places.push(((*key).into(), r.rect));
-                    if r.clicked() {
-                        pick = Some(*tab);
+        ui.scope_builder(
+            egui::UiBuilder::new().max_rect(bar.shrink2(egui::vec2(8.0, 4.0))),
+            |ui| {
+                ui.horizontal(|ui| {
+                    for (tab, words, key) in &tabs {
+                        let r = ui.selectable_label(*tab == now, words.as_str());
+                        s.places.push(((*key).into(), r.rect));
+                        if r.clicked() {
+                            pick = Some(*tab);
+                        }
                     }
-                }
-            });
-        });
-        ui.painter().hline(area.x_range(), bar.bottom(), egui::Stroke::new(1.0, t.line));
+                });
+            },
+        );
+        ui.painter()
+            .hline(area.x_range(), bar.bottom(), egui::Stroke::new(1.0, t.line));
         let rest = Rect::from_min_max(egui::pos2(area.left(), bar.bottom() + 1.0), area.max);
         let now = pick.unwrap_or(now);
         if let Some(w) = &mut s.cam {
