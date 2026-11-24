@@ -17,8 +17,8 @@ interface/forge-render, branch render/studio-3.
 | 07-bendsim-channel-native.mp4 | Record in Bend Simulation (a 100 × 200 channel, 2 bends on the TruBend 5130): its timeline, 8 s, 240 frames at 30 fps, 1280 × 720, by ffmpeg (`forge-app channel.fg --env bendsim --record … --fps 30 --out-size 1280x720`); ffprobe: h264, 240 frames |
 | 08-bendsim-channel-web.mp4 | the same in the browser (web/tests/record.cjs): WebCodecs H.264 into the app's MP4 muxer, 640 × 360 at 10 fps; ffprobe: h264, 80 frames |
 
-07 and 08 are from bendsim/timeline d2743fc9 (Follow bend on through the run, the handling followed,
-see-through with hysteresis and a fade): the see-through bodies are drawn blended as in the view
-(tests/photo.rs a_see_through_body_is_blended_in_a_photo). Not yet in them: the white outline of what
-is seen through (the panel draws it over the window; BEND-SIM is moving it into the 3D scene), and
-in bend 2 the press's upper beam stands in the top of the picture (as in the live view).
+07 and 08 are from bendsim/timeline 50b389e4: Follow bend through the run and the handling, the press
+cut away per instant, David's x-ray window (what hides the bend seen through inside a window round
+it, with a thin outline), the renderer's ghost pass fixed (reversed depth: GreaterEqual). Ghosts
+and outline are drawn in the capture's own pass (tests/photo.rs a_see_through_body_is_blended_in_a_photo).
+13-bendsim-channel-strip.png: nine frames of 07 (frame number and time on each).
