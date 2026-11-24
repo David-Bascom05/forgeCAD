@@ -295,7 +295,7 @@ mod tests {
             assert!(a.bsdf.metal == 0.0 || a.bsdf.metal == 1.0, "{}", a.name);
             assert!(!(a.bsdf.metal > 0.0 && a.bsdf.transmission > 0.0), "{}", a.name);
             // every roughness is marked a stand-in until measured
-            assert_eq!(a.kind_of("rough") == Kind::StandIn || a.name == "Grey card" || a.name == "Rubber, black", true, "{}", a.name);
+            assert!(a.kind_of("rough") == Kind::StandIn || a.name == "Grey card" || a.name == "Rubber, black", "{}", a.name);
         }
     }
 
