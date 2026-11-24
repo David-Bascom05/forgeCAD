@@ -3,6 +3,7 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 -/
 import ForgeBoolApply.ApplySense
 import ForgeCurved.BodyModel
+import ForgeBoolProof.Orient
 
 /-!
 # D8.read: a translated `Body` read as faces
@@ -116,5 +117,23 @@ theorem read_written {S : Type _} (R : Reading E) (inst : imprint.Src S) (a : bo
     simp only [proj, Prod.mk.injEq] at hp
     exact Or.inr ⟨si, flip, s, σ, srf, hkm, hs, hσ, hsrf,
       by simp [readFace, hp.2], by simp [readFace, hp.1]⟩
+
+/-- **`WritesSense` from equal carriers and senses.** If each read face's points on a facet lie on
+the facet of a kept region whose carrier is the face's and whose written sense is the face's, the
+faces are written with senses (`WritesSense`): near such a point both sides agree outright. What
+is left of D8.sense is that premise: its carrier and sense half from `read_written` and the plan's
+correspondence to the arrangement (each kept spec's source a kept region's carrier and written
+sense), its point half the regions' geometry (D8.writes). -/
+theorem writesSense_of_eq (R : Reading E) (r : body.Body) (a : ForgeBoolProof.Arr E)
+    (op : ForgeBoolProof.Op) (k : Nat → Bool)
+    (h : ∀ F ∈ (readBody R r).faces, ∀ y ∈ F.region, y ∈ ForgeCurved.FaceLocal.FacetPts a.G →
+      ∃ f ∈ a.regions, k f = true ∧ y ∈ a.G.facet (a.gf f) ∧ F.carrier = a.cf (a.gf f) ∧
+        F.sense = ForgeBoolProof.writtenSense op (a.src f) (a.sense f)) :
+    ForgeBoolProof.WritesSense a op k (readBody R r) := by
+  intro F hF y hy hyf
+  obtain ⟨f, hf, hk, hfac, hc, hs⟩ := h F hF y hy hyf
+  refine ⟨f, hf, hk, hfac, Filter.Eventually.of_forall fun z => ?_⟩
+  rw [hc, hs]
+  exact ⟨Iff.rfl, Iff.rfl⟩
 
 end ForgeBoolApply
