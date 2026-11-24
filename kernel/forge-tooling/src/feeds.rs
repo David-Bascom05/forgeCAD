@@ -274,7 +274,9 @@ impl Stock {
             ]
         };
         let (lo, hi) = (self.vc_rows[0], self.vc_rows[n - 1]);
-        let (kc, mc, how) = if vc <= lo || n == 1 {
+        let (kc, mc, how) = if n == 1 && lo == 0.0 {
+            (self.kc1_1_rows[0], self.mc_rows[0], "a single value (no cutting speed stated)".to_string())
+        } else if vc <= lo || n == 1 {
             (
                 self.kc1_1_rows[0],
                 self.mc_rows[0],

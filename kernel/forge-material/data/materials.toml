@@ -3,7 +3,7 @@
 #
 # Keys and units:
 #   name      canonical name a user types          aliases  other spellings
-#   family    steel | stainless | aluminium | copper | iron | titanium | plastic | rubber | wood
+#   family    steel | stainless | aluminium | copper | iron | titanium | nickel | plastic | rubber | wood
 #   density   kg/m^3 (required)                    youngs   Young's modulus, GPa
 #   poisson   Poisson's ratio (dimensionless)      yield    tensile yield, MPa (0.2% offset unless noted)
 #   uts       ultimate tensile / tensile strength at break, MPa
@@ -16,6 +16,9 @@
 #   machining.vc_rows, machining.kc1_1_rows, machining.mc_rows
 #                        measured Kienzle data: kc1.1 (N/mm^2) and mc at each cutting speed vc
 #                        (m/min), same length, vc increasing (CAM power and torque)
+#   machining.kc1_1, machining.mc  a single Kienzle value (a maker's material-group table, no
+#                        cutting speed stated); rows above win where both are given
+#   machining.hardness_hb, machining.hardness_hrc  hardness as the source prints it
 #   Every machining.* value has its own source_machining.<key>; kind_ "stand-in" where another
 #   material's measurement is held for this one (the source says which).
 #
@@ -66,6 +69,12 @@ uts = 440
 colour = "#8C8F93"
 source = "Elgin Fasteners / MW Components, 'Carbon Steel Grade 1018 Data Sheet - AISI 1018 Steel, cold drawn' (MatWeb-derived), https://www.mwcomponents.com/uploads/Resource-Center/Elgin-Material-Sheets/Carbon-Steel-Grade-1018-Data-Sheet_Elgin.pdf"
 note = "Cold drawn bar, typical values (AZoM ArticleID=9138 gives the same 440/370 MPa). cte omitted: no reachable source gives a 1018 value (MatWeb and the Lucefin card were blocked); ASM Ready Reference lists AISI 1020 annealed at 11.7e-6/K, 0-100 C, as the nearest grade."
+machining.kc1_1 = 1350
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 1 (Non-alloy steel <0.25 %C, annealed, 125 HB): Kc1 1350 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.21
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 1 (Non-alloy steel <0.25 %C, annealed, 125 HB): mc 0.21 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
 
 [[material]]
 name = "ASTM A36"
@@ -133,6 +142,12 @@ cte = 17.3
 colour = "#C4C7CA"
 source = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 304 Stainless Steel', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-304-Stainless-Steel.pdf"
 note = "Annealed condition typical values. Sheet gives E as 193-200 GPa; lower bound used. CTE 0-100 C."
+machining.kc1_1 = 2150
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 14 (Stainless steel, austenitic/duplex, 180 HB): Kc1 2150 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.2
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 14 (Stainless steel, austenitic/duplex, 180 HB): mc 0.2 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
 
 [[material]]
 name = "316 annealed"
@@ -148,6 +163,12 @@ colour = "#C1C4C7"
 source = "ASM Aerospace Specification Metals / MatWeb, 'AISI Type 316 Stainless Steel, annealed sheet', https://www.aerospacemetals.com/wp-content/uploads/2023/07/AISI-Type-316-Stainless-Steel-annealed-sheet.pdf"
 source_poisson = "AZoM, 'Properties: Stainless Steel - Grade 316 (UNS S31600)', https://www.azom.com/properties.aspx?ArticleID=863"
 note = "Annealed sheet, typical values (annealed bar: yield 240, uts 550 MPa). CTE 0-100 C. Poisson is the midpoint of AZoM's 0.265-0.275 range; the ASM sheet gives none."
+machining.kc1_1 = 2150
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 14 (Stainless steel, austenitic/duplex, 180 HB): Kc1 2150 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.2
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 14 (Stainless steel, austenitic/duplex, 180 HB): mc 0.2 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
 
 [[material]]
 name = "430 annealed"
@@ -193,6 +214,12 @@ cte = 23.6
 colour = "#B5B9BF"
 source = "ASM Aerospace Specification Metals / MatWeb, 'Aluminum 6061-T6; 6061-T651', https://www.aerospacemetals.com/wp-content/uploads/2023/06/Aluminum-6061-T6-6061-T651.pdf"
 note = "Aluminum Association typical values (not design minimums). Poisson is estimated by ASM from similar alloys. CTE averaged over 20-100 C."
+machining.kc1_1 = 800
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 22 (Aluminum wrought alloy, hardenable, 100 HB): Kc1 800 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.25
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 22 (Aluminum wrought alloy, hardenable, 100 HB): mc 0.25 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
 
 [[material]]
 name = "6063-T5"
@@ -221,6 +248,12 @@ cte = 23.6
 colour = "#B0B4BA"
 source = "ASM Aerospace Specification Metals / MatWeb, 'Aluminum 7075-T6; 7075-T651', https://www.aerospacemetals.com/wp-content/uploads/2023/06/Aluminum-7075-T6-7075-T651.pdf"
 note = "Aluminum Association typical values (not design minimums). CTE averaged over 20-100 C."
+machining.kc1_1 = 800
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 22 (Aluminum wrought alloy, hardenable, 100 HB): Kc1 800 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.25
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 22 (Aluminum wrought alloy, hardenable, 100 HB): mc 0.25 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
 
 # ---------------------------------------------------------------- copper alloys
 
@@ -238,6 +271,12 @@ colour = "#B87333"
 source = "National Bronze & Metals, 'C11000 data sheet' (CDA standard data), https://www.nationalbronze.com/pdfs/C11000.pdf"
 source_poisson = "AZoM, 'Electrolytic Tough Pitch Copper (UNS C11000)', https://www.azom.com/article.aspx?ArticleID=6312"
 note = "H02 half hard, flat product 1 mm, typical values (yield at 0.5% extension under load). Converted from US units: 0.322 lb/in3, E 17,000 ksi, CTE 9.40e-6/F over 20-100 C, 42/36 ksi. Annealed (O60) is much weaker: about 221 MPa uts, 69 MPa yield. AZoM's Poisson 0.34 is a generic copper value."
+machining.kc1_1 = 700
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 28 (Electrolytic copper, 100 HB): Kc1 700 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.27
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 28 (Electrolytic copper, 100 HB): mc 0.27 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
 
 [[material]]
 name = "C36000 H02"
@@ -253,6 +292,12 @@ colour = "#C9A64B"
 source = "National Bronze & Metals, 'C36000 data sheet' (CDA standard data; ASTM B16 rod minimums), https://www.nationalbronze.com/pdfs/C36000.pdf"
 source_poisson = "AZoM, 'Free Cutting Brass UNS C36000', https://www.azom.com/article.aspx?ArticleID=6391"
 note = "H02 half hard rod, 38 mm (1.5 in): uts and yield are ASTM B16 MINIMUMS (50 / 20 ksi), not typicals; small rod is stronger (under 12.7 mm: 57 ksi min uts). Converted from US units: 0.307 lb/in3, E 14,000 ksi, CTE 11.4e-6/F over 20-300 C (no 20-100 C value given). AZoM's Poisson 0.34 is a generic copper-alloy value."
+machining.kc1_1 = 700
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 26 (Copper alloys >1% Pb, free cutting, 110 HB): Kc1 700 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.27
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 26 (Copper alloys >1% Pb, free cutting, 110 HB): mc 0.27 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
 
 [[material]]
 name = "C26000 H02"
@@ -287,6 +332,12 @@ source_poisson = "AmesWeb, 'Poissons Ratio of Iron' (gray iron G3000; citing Cal
 source_cte = "AmesWeb, 'Linear Thermal Expansion Coefficient of Metals' (gray iron G1800/G3000/G4000, room temperature), https://amesweb.info/Materials/Linear-Thermal-Expansion-Coefficient-Metals.aspx"
 source_uts = "ASTM A48/A48M: class 30 = 30 ksi (207 MPa) minimum tensile strength of a separately cast test bar"
 note = "No yield key: gray iron has no defined yield point (flake graphite, non-linear stress-strain). E is the midpoint of the ASM range 90-113 GPa (secant modulus, varies with section size). Density is the ASM generic gray iron value (range 6.95-7.35)."
+machining.kc1_1 = 1150
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 15 (Grey cast iron, ferritic/pearlitic, 180 HB): Kc1 1150 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.2
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 15 (Grey cast iron, ferritic/pearlitic, 180 HB): mc 0.2 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
 
 [[material]]
 name = "Ductile iron 65-45-12"
@@ -303,6 +354,12 @@ source_density = "Dura-Bar, 'Dura-Bar Density' technical brief (ductile iron 0.2
 source_youngs = "AmesWeb, 'Youngs Modulus of Iron' (citing J.R. Davis, Metals Handbook Desk Edition, ASM 1998), https://amesweb.info/Materials/Youngs-Modulus-of-Iron.aspx"
 source_poisson = "AmesWeb, 'Poissons Ratio of Iron' (citing Callister 7th ed. and ASM Metals Handbook Desk Edition), https://amesweb.info/Materials/Poissons_Ratio_of_Iron.aspx"
 note = "Ferritic as-cast ductile iron. yield and uts are ASTM A536 MINIMUMS (45 / 65 ksi). cte omitted: no grade-specific value found; ASM/Callister list 60-40-18 at 11.2 and 80-55-06 at 10.6 e-6/K."
+machining.kc1_1 = 1225
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 17 (Nodular cast iron, ferritic, 160 HB): Kc1 1225 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.25
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 17 (Nodular cast iron, ferritic, 160 HB): mc 0.25 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
 
 # ---------------------------------------------------------------- titanium
 
@@ -1164,6 +1221,12 @@ source_uts = "ASM Aerospace Specification Metals / MatWeb, 'Nickelvac A-286 Spec
 note = "Austenitic iron-base superalloy, solution treated at 982 C and aged (32 HRC); non-magnetic. PEM uses 'Age Hardened A286 Stainless' for SP and SMPP nuts and FHP studs (bulletins CL p. CL-9, https://damlite.pemnet.com/CLS-M6-1_pdf_2.pdf, and FH p. FH-17, https://damlite.pemnet.com/FH-M5-12ZC_pdf_1.pdf) for clinching into stainless sheet. yield/uts are the Nickelvac sheet's values (150 / 110 ksi), not stated as typical or minimum. Density, E (dynamic), Poisson and CTE (20-93 C) from the Allegheny sheet (solution treated; solution-treated strength there is only 275 / 620 MPa)."
 machining.iso513 = "S"
 source_machining.iso513 = "ISO 513 class S: heat-resistant super alloys; A286 (UNS S66286) is an iron-base superalloy per this record source (Allegheny Ludlum Altemp A286 datasheet)"
+machining.kc1_1 = 3100
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 32 (High temperature alloys, Fe based, hardened, 280 HB): Kc1 3100 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.24
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 32 (High temperature alloys, Fe based, hardened, 280 HB): mc 0.24 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
 
 # ---------------------------------------------------------------- standard parts: rings, keys, seals
 
@@ -1219,3 +1282,219 @@ colour = "#1C1C1C"
 source = "Freudenberg FST, material data sheet '75 FKM V75' v12 (2023-11-13), https://products.fst.com/medialibrary/materialdatasheets/75%20FKM%20V75_en.pdf"
 source_cte = "Parker Hannifin O-Ring Division, 'Parker O-Ring Handbook' ORD 5700, Table 2-5, fluorocarbon elastomer 9.0e-5 in/in/F (24-191 C), https://mfc.arizona.edu/sites/default/files/2022-02/parker_o-ring_handbook.pdf"
 note = "Bisphenol-cured black FKM seal compound, 77 Shore A typical (nominal 75). Density 1.85 g/cm3 (ISO 1183-1). uts is typical tensile strength at break, DIN 53504 S2 (ASTM D412 min 13 MPa); elongation 156%. No yield (rubber). youngs omitted: only stress at 100% elongation (9.2 MPa) is given. poisson omitted: not given (rubber is nearly incompressible). CTE is Parker's generic fluorocarbon value, not this compound."
+
+# ---------------------------------------------------------------- added for CAM coverage (FEEDS-SPEEDS)
+
+[[material]]
+name = "2024-T3"
+aliases = ["Aluminium 2024-T3", "Aluminum 2024-T3", "AL2024-T3", "2024 T3", "2024-T351", "2024"]
+family = "aluminium"
+density = 2780
+youngs = 73.1
+poisson = 0.33
+yield = 345
+uts = 483
+cte = 23.2
+colour = "#C9CCCF"
+source = "ASM Aerospace Specification Metals / MatWeb, Aluminum 2024-T3, https://www.aerospacemetals.com/wp-content/uploads/2023/06/Aluminum-2024-T3.pdf"
+note = "Typical values (the sheet marks AA data NOT FOR DESIGN). E is the average of tension and compression. CTE 20-100 C (68-212 F); 24.7 e-6/K over 20-300 C."
+machining.hardness_hb = 120
+source_machining.hardness_hb = "ASM Aerospace Specification Metals / MatWeb, Aluminum 2024-T3, https://www.aerospacemetals.com/wp-content/uploads/2023/06/Aluminum-2024-T3.pdf; Hardness, Brinell 120 (AA; Typical; 500 g load; 10 mm ball)"
+machining.kc1_1 = 800
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 22 (Aluminum wrought alloy, hardenable, 100 HB): Kc1 800 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.25
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 22 (Aluminum wrought alloy, hardenable, 100 HB): mc 0.25 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
+
+[[material]]
+name = "1045 cold drawn"
+aliases = ["AISI 1045", "SAE 1045", "1045 steel", "1045 CD", "1045 cold finished"]
+family = "steel"
+density = 7850
+youngs = 212
+yield = 517
+uts = 627
+cte = 12.5
+colour = "#8A8D91"
+source = "Alro, 1045 Cold Finished Steel Bar, https://www.myalro.com/gradeinfo/Metals_Gridpt.aspx?gp=0004"
+source_density = "thyssenkrupp Materials Services, Werkstoffblatt C40ER-C60ER (MX/TIS-TS_00/01.2017), Anhaltsangaben ueber physikalische Eigenschaften, https://ucpcdn.thyssenkrupp.com/_binary/UCPthyssenkruppBAMaterialsSchulte/ccfb51ed-5bbe-4c6f-a09b-7b56d74147f2/C40ER-C45ER-C50ER-C55ER-C60ER.pdf; Dichte bei 20 C 7,85 kg/dm3 (C45E/C45R, the EN near-equivalent of 1045)"
+source_youngs = "thyssenkrupp Materials Services, Werkstoffblatt C40ER-C60ER (MX/TIS-TS_00/01.2017), Anhaltsangaben ueber physikalische Eigenschaften, https://ucpcdn.thyssenkrupp.com/_binary/UCPthyssenkruppBAMaterialsSchulte/ccfb51ed-5bbe-4c6f-a09b-7b56d74147f2/C40ER-C45ER-C50ER-C55ER-C60ER.pdf; Elastizitaetsmodul 212 kN/mm2 at 20 C (C45E/C45R)"
+source_cte = "thyssenkrupp Materials Services, Werkstoffblatt C40ER-C60ER (MX/TIS-TS_00/01.2017), Anhaltsangaben ueber physikalische Eigenschaften, https://ucpcdn.thyssenkrupp.com/_binary/UCPthyssenkruppBAMaterialsSchulte/ccfb51ed-5bbe-4c6f-a09b-7b56d74147f2/C40ER-C45ER-C50ER-C55ER-C60ER.pdf; linearer Waermeausdehnungskoeffizient 12,5 e-6/K between 20 and 100 C (C45E/C45R)"
+note = "Cold finished bar. yield 75,000 psi and uts 91,000 psi are Alro TYPICAL values (not required by the grade). Density, E and CTE are thyssenkrupp guide values for C45E/C45R (EN near-equivalent). Poisson and hardness: no source reached."
+machining.kc1_1 = 1500
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 2 (Non-alloy steel >=0.25 %C, annealed, 190 HB (cold drawn bar is not annealed)): Kc1 1500 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.22
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 2 (Non-alloy steel >=0.25 %C, annealed, 190 HB (cold drawn bar is not annealed)): mc 0.22 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
+
+[[material]]
+name = "4140 annealed"
+aliases = ["AISI 4140 annealed", "42CrMo4+A", "4140 soft annealed"]
+family = "steel"
+density = 7850
+youngs = 212
+cte = 12.1
+colour = "#7E8287"
+source = "thyssenkrupp Materials Services, Werkstoffblatt 42CrMo4-42CrMoS4 1.7225-1.7227 (01.2017), https://ucpcdn.thyssenkrupp.com/_binary/UCPthyssenkruppBAMaterialsSchulte/dc4e3d67-9afe-4b41-8794-a82c0d3ab7bb/42CrMo4-42CrMoS4-1.7225-1.7227.pdf"
+note = "42CrMo4 (EN near-equivalent of 4140), soft annealed (+A). Density 7,85 kg/dm3, E 212 kN/mm2 (20 C) and mean CTE 12,1 e-6/K (20-100 C) are guide values printed for the grade. yield, uts and Poisson: not published for the annealed condition by the sources reached."
+machining.hardness_hb = 241
+source_machining.hardness_hb = "thyssenkrupp Materials Services, Werkstoffblatt 42CrMo4-42CrMoS4 1.7225-1.7227 (01.2017), https://ucpcdn.thyssenkrupp.com/_binary/UCPthyssenkruppBAMaterialsSchulte/dc4e3d67-9afe-4b41-8794-a82c0d3ab7bb/42CrMo4-42CrMoS4-1.7225-1.7227.pdf; Haerte fuer den Lieferzustand weichgegluht (+A): max. 241 HBW (a MAXIMUM)"
+machining.kc1_1 = 1775
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 6 (Low alloy steel, annealed, 200 HB): Kc1 1775 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.24
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 6 (Low alloy steel, annealed, 200 HB): mc 0.24 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
+
+[[material]]
+name = "4140 pre-hardened"
+aliases = ["4140 PH", "4140 Q&T", "4140 HT", "42CrMo4+QT", "4140 quenched and tempered"]
+family = "steel"
+density = 7850
+youngs = 212
+yield = 740
+uts = 930
+cte = 12.1
+colour = "#6F7378"
+source = "voestalpine High Performance Metals Australia, AISI 4140 / 1.7225 datasheet (Quench & Tempered, condition U or T/U), https://www.voestalpine.com/highperformancemetals/australia/app/uploads/sites/265/2024/08/Datasheet-4140-2026-v2.pdf"
+source_density = "thyssenkrupp Materials Services, Werkstoffblatt 42CrMo4-42CrMoS4 1.7225-1.7227 (01.2017), https://ucpcdn.thyssenkrupp.com/_binary/UCPthyssenkruppBAMaterialsSchulte/dc4e3d67-9afe-4b41-8794-a82c0d3ab7bb/42CrMo4-42CrMoS4-1.7225-1.7227.pdf; Dichte 7,85 kg/dm3 (42CrMo4, printed for the grade)"
+source_youngs = "thyssenkrupp Materials Services, Werkstoffblatt 42CrMo4-42CrMoS4 1.7225-1.7227 (01.2017), https://ucpcdn.thyssenkrupp.com/_binary/UCPthyssenkruppBAMaterialsSchulte/dc4e3d67-9afe-4b41-8794-a82c0d3ab7bb/42CrMo4-42CrMoS4-1.7225-1.7227.pdf; Elastizitaetsmodul 212 kN/mm2 at 20 C (printed for the grade)"
+source_cte = "thyssenkrupp Materials Services, Werkstoffblatt 42CrMo4-42CrMoS4 1.7225-1.7227 (01.2017), https://ucpcdn.thyssenkrupp.com/_binary/UCPthyssenkruppBAMaterialsSchulte/dc4e3d67-9afe-4b41-8794-a82c0d3ab7bb/42CrMo4-42CrMoS4-1.7225-1.7227.pdf; 12,1 e-6/K 20-100 C (printed for the grade)"
+note = "Quenched and tempered, condition U or T/U, 10-100 mm: yield is the MINIMUM Rp0.2 740 N/mm2 and uts the bottom of the 930-1080 N/mm2 range; 269-331 HB. Density, E and CTE: thyssenkrupp guide values for 42CrMo4 without a condition."
+machining.hardness_hb = 269
+source_machining.hardness_hb = "voestalpine High Performance Metals Australia, AISI 4140 / 1.7225 datasheet (Quench & Tempered, condition U or T/U), https://www.voestalpine.com/highperformancemetals/australia/app/uploads/sites/265/2024/08/Datasheet-4140-2026-v2.pdf; Hardness (HB) 269-331 HB for 10-100 mm (the low end)"
+machining.kc1_1 = 1725
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 8 (Low alloy steel, 1000 N/mm2, 300 HB): Kc1 1725 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.24
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 8 (Low alloy steel, 1000 N/mm2, 300 HB): mc 0.24 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
+
+[[material]]
+name = "A2 annealed"
+aliases = ["AISI A2", "A2 tool steel", "1.2363", "Uddeholm Rigor"]
+family = "steel"
+density = 7750
+youngs = 190
+cte = 11.6
+colour = "#787C82"
+source = "Uddeholm, Uddeholm Rigor (AISI A2, W.-Nr. 1.2363) technical datasheet, https://uddeholm.com/app/uploads/sites/247/2024/09/Tech-Uddeholm-Rigor-EN.pdf"
+kind_density = "stand-in"
+kind_youngs = "stand-in"
+kind_cte = "stand-in"
+note = "Uddeholm's equivalent grade. Density, E and CTE (11.6 e-6/K from 20 to 200 C) are printed only for material hardened and tempered to 62 HRC: held for the soft-annealed state (stand-in; physical constants move little with temper). Delivery condition soft annealed to approx. 215 HB. yield, uts and Poisson for the annealed state: not published by the source."
+machining.hardness_hb = 215
+source_machining.hardness_hb = "Uddeholm, Uddeholm Rigor (AISI A2, W.-Nr. 1.2363) technical datasheet, https://uddeholm.com/app/uploads/sites/247/2024/09/Tech-Uddeholm-Rigor-EN.pdf; Delivery condition soft annealed to approx. 215 HB"
+machining.kc1_1 = 2450
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 10 (High alloyed steel and tool steel, annealed, 200 HB): Kc1 2450 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.23
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 10 (High alloyed steel and tool steel, annealed, 200 HB): mc 0.23 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
+
+[[material]]
+name = "D2 annealed"
+aliases = ["AISI D2", "D2 tool steel", "1.2379", "Uddeholm Sverker 21"]
+family = "steel"
+density = 7700
+youngs = 210
+cte = 12.3
+colour = "#787C82"
+source = "Uddeholm, Uddeholm Sverker 21 (AISI D2, W.-Nr. 1.2379) technical datasheet, https://uddeholm.com/app/uploads/sites/247/2024/09/Tech-Uddeholm-Sverker-21-EN.pdf"
+kind_density = "stand-in"
+kind_youngs = "stand-in"
+kind_cte = "stand-in"
+note = "Uddeholm's equivalent grade. Density, E and CTE (12.3 e-6/K from 20 to 200 C (low-temperature tempering)) are printed only for material hardened and tempered to 62 HRC: held for the soft-annealed state (stand-in; physical constants move little with temper). Delivery condition soft annealed to approx. 210 HB. yield, uts and Poisson for the annealed state: not published by the source."
+machining.hardness_hb = 210
+source_machining.hardness_hb = "Uddeholm, Uddeholm Sverker 21 (AISI D2, W.-Nr. 1.2379) technical datasheet, https://uddeholm.com/app/uploads/sites/247/2024/09/Tech-Uddeholm-Sverker-21-EN.pdf; Delivery condition soft annealed to approx. 210 HB"
+machining.kc1_1 = 2450
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 10 (High alloyed steel and tool steel, annealed, 200 HB): Kc1 2450 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.23
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 10 (High alloyed steel and tool steel, annealed, 200 HB): mc 0.23 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
+
+[[material]]
+name = "O1 annealed"
+aliases = ["AISI O1", "O1 tool steel", "1.2510", "Uddeholm Arne"]
+family = "steel"
+density = 7800
+youngs = 190
+cte = 11.7
+colour = "#787C82"
+source = "Uddeholm, Uddeholm Arne (AISI O1, W.-Nr. 1.2510) technical datasheet, https://uddeholm.com/app/uploads/sites/240/2024/05/Tech-Uddeholm-Arne-EN.pdf"
+kind_density = "stand-in"
+kind_youngs = "stand-in"
+kind_cte = "stand-in"
+note = "Uddeholm's equivalent grade. Density, E and CTE (11.7 e-6/K from 20 to 200 C) are printed only for material hardened and tempered to 62 HRC: held for the soft-annealed state (stand-in; physical constants move little with temper). Delivery condition soft annealed to approx. 190 HB. yield, uts and Poisson for the annealed state: not published by the source."
+machining.hardness_hb = 190
+source_machining.hardness_hb = "Uddeholm, Uddeholm Arne (AISI O1, W.-Nr. 1.2510) technical datasheet, https://uddeholm.com/app/uploads/sites/240/2024/05/Tech-Uddeholm-Arne-EN.pdf; Delivery condition soft annealed to approx. 190 HB"
+machining.kc1_1 = 2450
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 10 (High alloyed steel and tool steel, annealed, 200 HB): Kc1 2450 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.23
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 10 (High alloyed steel and tool steel, annealed, 200 HB): mc 0.23 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
+
+[[material]]
+name = "17-4PH H1150"
+aliases = ["17-4 PH H1150", "17-4PH", "17-4 PH", "630 H1150", "1.4542 H1150"]
+family = "stainless"
+density = 7820
+youngs = 197
+poisson = 0.272
+yield = 896
+uts = 1034
+cte = 11.9
+colour = "#A3A7AC"
+source = "Cleveland-Cliffs, 17-4 PH Stainless Steel product data bulletin (CLF_ProductData_17-4-PHSS_052021), https://d1io3yog0oux5.cloudfront.net/_7ce3a04c09e74bf31ff5f89fc888db25/clevelandcliffs/db/1190/10503/file/CLF_ProductData_17-4-PHSS_052021.pdf"
+kind_youngs = "stand-in"
+note = "Condition H 1150, Table 2 TYPICAL (150 ksi uts, 130 ksi yield, 33 HRC); density Table 9 0.284 lb/in3 (7.82 g/cm3). E: the bulletin prints a modulus only for H 900 (28.5 x 10^6 psi, 197 x 10^3 MPa): held for H 1150. Poisson 0.272 printed for all conditions. CTE 70-200 F (21-93 C) 6.6 x 10-6 /F (11.9 um/m/K), read by matching Table 9 entries to rows: check against p. 8 of the bulletin."
+machining.hardness_hrc = 33
+source_machining.hardness_hrc = "Cleveland-Cliffs, 17-4 PH Stainless Steel product data bulletin (CLF_ProductData_17-4-PHSS_052021), https://d1io3yog0oux5.cloudfront.net/_7ce3a04c09e74bf31ff5f89fc888db25/clevelandcliffs/db/1190/10503/file/CLF_ProductData_17-4-PHSS_052021.pdf; Table 2 typical, Condition H 1150: Rockwell C 33"
+machining.kc1_1 = 1875
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 13 (Stainless steel and cast steel, martensitic, 240 HB): Kc1 1875 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.21
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 13 (Stainless steel and cast steel, martensitic, 240 HB): mc 0.21 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
+machining.iso513 = "P"
+source_machining.iso513 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 13 is listed under ISO P"
+
+[[material]]
+name = "Inconel 718 aged"
+aliases = ["INCONEL 718", "Inconel 718", "alloy 718", "UNS N07718", "2.4668", "718"]
+family = "nickel"
+density = 8221
+youngs = 199.9
+poisson = 0.294
+yield = 1034
+uts = 1276
+cte = 13.16
+colour = "#9A9C98"
+source = "Special Metals, INCONEL alloy 718, Publication SMC-045 (2007), https://www.specialmetals.com/documents/technical-bulletins/inconel/inconel-alloy-718.pdf"
+note = "Annealed and aged. density 0.297 lb/in3; E 29.0 x 10^3 ksi and Poisson 0.294 at 70 F (Table 4, computed by the maker from (E-2G)/2G); yield 150 ksi and uts 185 ksi are AMS 5662/5663 MINIMUMS (bars and forgings); CTE 7.31 x 10-6 in/in/F from 70 to 200 F (Table 5). Converted from US units."
+machining.hardness_hb = 331
+source_machining.hardness_hb = "Special Metals, INCONEL alloy 718, Publication SMC-045 (2007), https://www.specialmetals.com/documents/technical-bulletins/inconel/inconel-alloy-718.pdf; AMS 5662/5663: Hardness 331 BHN or equivalent (minimum)"
+machining.kc1_1 = 3300
+source_machining.kc1_1 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 34 (High temperature alloys, Ni or Co based, hardened, 350 HB): Kc1 3300 N/mm2 (specific cutting force for 1 mm2 chip section), no cutting speed stated; this material held in that group row"
+kind_machining.kc1_1 = "stand-in"
+machining.mc = 0.24
+source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 34 (High temperature alloys, Ni or Co based, hardened, 350 HB): mc 0.24 (chip thickness factor); this material held in that group row"
+kind_machining.mc = "stand-in"
+machining.iso513 = "S"
+source_machining.iso513 = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 34 is listed under ISO S"
+
+[[material]]
+name = "PEEK"
+aliases = ["polyetheretherketone", "PEEK 450G", "VICTREX PEEK 450G", "TECAPEEK natural", "PEEK natural"]
+family = "plastic"
+density = 1300
+youngs = 4.0
+yield = 98
+cte = 55
+colour = "#C8B89A"
+source = "Victrex, VICTREX PEEK 450G datasheet, revision November 2019 (copy hosted by Protolabs), https://Protolabs.com/media/n3vggz1p/victrex_tds_450g.pdf"
+note = "Unfilled PEEK, typical values: density (crystalline) 1.30 g/cm3 ISO 1183; tensile modulus 4.0 GPa and tensile strength at yield 98 MPa at 23 C, ISO 527; CTE 55 ppm/K average below Tg (45 along flow), ISO 11359. Tg 143 C onset (150 midpoint), melting point 343 C. Poisson: not published by the source."

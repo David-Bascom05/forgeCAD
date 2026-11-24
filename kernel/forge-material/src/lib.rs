@@ -809,6 +809,13 @@ mod tests {
                 Some(Value::Nums(v)) => Some(v.clone()),
                 _ => None,
             };
+            // a single Kienzle value comes as a pair
+            assert_eq!(
+                m.extra("machining.kc1_1").is_some(),
+                m.extra("machining.mc").is_some(),
+                "{}: machining.kc1_1 and machining.mc go together",
+                m.name
+            );
             if let Some(vc) = rows("machining.vc_rows") {
                 let (kc, mc) = (
                     rows("machining.kc1_1_rows").unwrap(),

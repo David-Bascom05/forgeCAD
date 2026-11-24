@@ -1394,3 +1394,33 @@ fn thread_mill_feeds_follow_the_arc() {
     assert!((r.feed.v - r.feeds.vf * rc / rm).abs() < 1e-9 * r.feeds.vf);
     assert!(r.feed.note.contains("centre"));
 }
+
+/// A material whose record carries a maker's group Kienzle value (ISCAR, no speed stated) and
+/// its own ISO class: Inconel 718 is S, its kc1.1 3300 / mc 0.24 set the power.
+#[test]
+fn material_group_kienzle_value() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace(
+            "part(\"flange.fg\", group: \"N\")",
+            "part(\"flange.fg\", material: \"Inconel 718 aged\")",
+        );
+    let cam = forge_cam_lang::run(&src, &dir);
+    let skim = cam
+        .ops
+        .iter()
+        .find(|o| o.name == "skim")
+        .unwrap()
+        .resolved
+        .clone()
+        .unwrap();
+    let p = skim.checks.iter().find(|c| c.what == "power").unwrap();
+    assert!(p.why.contains("kc1.1 3300 mc 0.24"), "{}", p.why);
+    assert!(
+        p.why.contains("a single value (no cutting speed stated)"),
+        "{}",
+        p.why
+    );
+    assert!(p.why.contains("group S"), "{}", p.why);
+}

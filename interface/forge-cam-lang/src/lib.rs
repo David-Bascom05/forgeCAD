@@ -592,15 +592,26 @@ fn stock_of(name: &str, group: &str, dir: &Path) -> feeds::Stock {
         Some(forge_material::Value::Nums(v)) => Some(v.clone()),
         _ => None,
     };
-    let rows = match (
+    let num = |k: &str| match m.extra(k) {
+        Some(forge_material::Value::Num(v)) => Some(*v),
+        _ => None,
+    };
+    // measured rows against the speed, else a single stated value (a maker's group table:
+    // machining.kc1_1 / machining.mc, no speed stated: one row at vc 0)
+    let (rows, src) = match (
         nums("machining.vc_rows"),
         nums("machining.kc1_1_rows"),
         nums("machining.mc_rows"),
     ) {
-        (Some(v), Some(k), Some(c)) => Some((v, k, c)),
-        _ => None,
+        (Some(v), Some(k), Some(c)) => (Some((v, k, c)), m.source_of("machining.kc1_1_rows").to_string()),
+        _ => match (num("machining.kc1_1"), num("machining.mc")) {
+            (Some(k), Some(c)) => (
+                Some((vec![0.0], vec![k], vec![c])),
+                m.source_of("machining.kc1_1").to_string(),
+            ),
+            _ => (None, String::new()),
+        },
     };
-    let src = m.source_of("machining.kc1_1_rows").to_string();
     feeds::Stock::new(&m.name, group, rows, &src)
 }
 
