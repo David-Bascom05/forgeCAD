@@ -21,6 +21,11 @@ lavapipe in the cloud VM):
 - `05-robot-conflict.png`: the source's elbow limit changed under the robot's override: the
   export refused with the conflict, Keep and Reset on its row.
 
+- `06-robot-tree-edited.png`: the tree changed from the panel: the elbow frozen at -60°, the
+  forearm merged into the upper arm (bodies upper, fore, finger), the upper arm made the root
+  (the base now hangs from the shoulder), a `cam` frame added, the upper arm's collision its
+  convex hull; the robot's own elbow override is now moot and the Checks say so.
+
 The panel's edits are edits of the robot document's text (`forge_lang::robot::edit`), each
 undoable; Apply to assembly writes the source's joint (`SetArg`, one undo step there) and drops
 the robot's override; Export URDF writes NAME_urdf/ beside the document.

@@ -865,6 +865,9 @@ pub enum Edit {
     Add { text: String },
     /// The statement on this line taken out.
     Remove { line: usize },
+    /// The document's one `call(..)` statement (as `root(..)`, `collisions(..)`) replaced by
+    /// `text`, or `text` added where it has none.
+    Put { call: String, text: String },
 }
 
 /// The document's statements as calls: (statement span, call name, its arguments).
@@ -912,6 +915,21 @@ pub fn edit(src: &str, e: &Edit) -> Result<String, String> {
             s.push('\n');
             s
         }
+        Edit::Put { call, text } => match cs.iter().find(|c| c.1 == *call) {
+            Some(c) => {
+                let (a, b) = line_span(src, c.0.span.lo as usize);
+                format!("{}{}\n{}", &src[..a], text.trim_end(), &src[b..])
+            }
+            None => {
+                let mut s = src.to_string();
+                if !s.ends_with('\n') {
+                    s.push('\n');
+                }
+                s.push_str(text.trim_end());
+                s.push('\n');
+                s
+            }
+        },
         Edit::Remove { line } => {
             let c = on_line(*line)?;
             let (a, b) = line_span(src, c.0.span.lo as usize);

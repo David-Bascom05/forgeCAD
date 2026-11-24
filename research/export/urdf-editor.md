@@ -153,9 +153,12 @@ statement, recording `FIELD_was` when it was linked; reset a field, the statemen
 empty; add/remove statements); the panel's limits / effort / velocity / damping / friction /
 mass overrides, Reset to linked, Apply to assembly (SetArg on the source joint, then reset),
 Keep/Reset on conflicts, Undo, Export URDF. Headless tests and screenshots: research/export/urdf-ui/.
-Not yet: `decimate(n)`; 3D overlays (joint axes, frames, limit arcs, centres of mass, collision
-wireframes); drag-in-view; tree editing (merge by drag, re-root, drop, frames) and geometry
-simplification from the panel; Import in the app (the CLI has it); a new robot from an
+Then: joint frames and axes and centres of mass drawn in the view; tree editing from the panel
+(Make root, Drop, Merge into parent across a fixed joint, Freeze here, Add frame, Collision:
+hull) as `Put`/`Add` edits; a merged link found by its old name; an override of a joint that is
+now fixed or merged away reported as a warning (line named), not a refusal.
+Not yet: `decimate(n)`; limit arcs and collision wireframes in the view; drag-in-view; box /
+cylinder / capsule fits from the panel; Import in the app (the CLI has it); a new robot from an
 assembly from a menu.
 
 ## 8. Order

@@ -190,6 +190,14 @@ impl RobotPanel {
         }));
     }
 
+    /// How the document names a link: `src.B` by a source instance it holds, else its name.
+    pub fn link_target(&self, l: &forge_lang::urdf::ViewLink) -> String {
+        match l.bodies.first() {
+            Some(b) if self.source.is_some() => format!("src.{b}"),
+            _ => format!("\"{}\"", l.name),
+        }
+    }
+
     fn overridden(&self, what: &str, field: &str) -> Option<&str> {
         self.overrides
             .iter()
@@ -362,27 +370,39 @@ impl Shell {
 
     fn robot_tree(ui: &mut Ui, t: &super::theme::Theme, p: &mut RobotPanel, view: &RobotView) {
         ui.label(RichText::new("Links and joints").font(medium(12.0)).color(t.ink));
-        // depth first from the root, joints in document order
+        // depth first from the root: each joint, then the subtree it carries (document order)
+        enum Item {
+            Link(String, usize),
+            Joint(usize, usize),
+        }
         let mut rows: Vec<(usize, Sel, String)> = vec![];
-        let mut stack = vec![(view.root.clone(), 0usize)];
-        while let Some((link, d)) = stack.pop() {
-            let l = view.links.iter().find(|l| l.name == link);
-            let tag = match l {
-                Some(l) if l.dummy => " (massless)".to_string(),
-                Some(l) => l.mass.map_or(String::new(), |m| format!("  {m:.3} kg")),
-                None => String::new(),
-            };
-            rows.push((d, Sel::Link(link.clone()), format!("{link}{tag}")));
-            for j in view.joints.iter().filter(|j| j.parent == link).rev() {
-                stack.push((j.child.clone(), d + 2));
-            }
-            for j in view.joints.iter().filter(|j| j.parent == link) {
-                let k = if j.mimic.is_some() {
-                    format!("{} · mimic", j.kind)
-                } else {
-                    j.kind.to_string()
-                };
-                rows.push((d + 1, Sel::Joint(j.name.clone()), format!("· {} ({k})", j.name)));
+        let mut stack = vec![Item::Link(view.root.clone(), 0)];
+        while let Some(it) = stack.pop() {
+            match it {
+                Item::Link(link, d) => {
+                    let tag = match view.links.iter().find(|l| l.name == link) {
+                        Some(l) if l.dummy => " (massless)".to_string(),
+                        Some(l) => l.mass.map_or(String::new(), |m| format!("  {m:.3} kg")),
+                        None => String::new(),
+                    };
+                    rows.push((d, Sel::Link(link.clone()), format!("{link}{tag}")));
+                    let kids: Vec<usize> = (0..view.joints.len())
+                        .filter(|&k| view.joints[k].parent == link)
+                        .collect();
+                    for &k in kids.iter().rev() {
+                        stack.push(Item::Joint(k, d + 1));
+                    }
+                }
+                Item::Joint(k, d) => {
+                    let j = &view.joints[k];
+                    let kind = if j.mimic.is_some() {
+                        format!("{} · mimic", j.kind)
+                    } else {
+                        j.kind.to_string()
+                    };
+                    rows.push((d, Sel::Joint(j.name.clone()), format!("· {} ({kind})", j.name)));
+                    stack.push(Item::Link(j.child.clone(), d + 1));
+                }
             }
         }
         for (d, sel, text) in rows {
@@ -567,6 +587,27 @@ impl Shell {
                         });
                     }
                 }
+                // fixed at its value now: a freeze, the robot's own (merging across it needs one)
+                if j.position.len() == 1 && j.of == j.name && p.source.is_some() {
+                    let v = p.value(&j);
+                    let at = if j.kind == "prismatic" {
+                        format!("{}", (v * 1000.0 * 1e6).round() / 1e6)
+                    } else {
+                        format!("{}deg", (v.to_degrees() * 1e6).round() / 1e6)
+                    };
+                    if ui
+                        .button("Freeze here")
+                        .on_hover_text(format!(
+                            "freeze(src.{}, at: {at}): a fixed joint in the robot",
+                            j.of
+                        ))
+                        .clicked()
+                    {
+                        p.out.push(RobotAct::Edit(Edit::Add {
+                            text: format!("freeze(src.{}, at: {at})", j.of),
+                        }));
+                    }
+                }
                 // what URDF adds: actuation and dynamics, the robot's own
                 ui.add_space(4.0);
                 egui::Grid::new("robot-act")
@@ -719,6 +760,7 @@ impl Shell {
                         }));
                     }
                 });
+                Self::link_actions(ui, p, view, &l);
             }
             None => {
                 ui.label(
@@ -728,5 +770,76 @@ impl Shell {
                 );
             }
         }
+    }
+
+    /// The selected link's place in the tree, changed: made the root, dropped, merged into its
+    /// parent (across a fixed joint only), a frame hung on it, its collision made its hull.
+    fn link_actions(ui: &mut Ui, p: &mut RobotPanel, view: &RobotView, l: &forge_lang::urdf::ViewLink) {
+        let target = p.link_target(l);
+        let up = view.joints.iter().find(|j| j.child == l.name).cloned();
+        let has_kids = view.joints.iter().any(|j| j.parent == l.name);
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            let linked = p.source.is_some() && !l.bodies.is_empty();
+            if ui
+                .add_enabled(linked && view.root != l.name, egui::Button::new("Make root"))
+                .clicked()
+            {
+                p.out.push(RobotAct::Edit(Edit::Put {
+                    call: "root".into(),
+                    text: format!("root({target})"),
+                }));
+            }
+            if ui
+                .add_enabled(view.root != l.name && !has_kids, egui::Button::new("Drop"))
+                .on_hover_text("out of the robot: no visual, collision or mass (a leaf only)")
+                .clicked()
+            {
+                p.out.push(RobotAct::Edit(Edit::Add {
+                    text: format!("drop({target})"),
+                }));
+            }
+            let fixed_up = up.as_ref().is_some_and(|j| j.kind == "fixed");
+            let r = ui.add_enabled(fixed_up, egui::Button::new("Merge into parent"));
+            let r = if fixed_up {
+                r
+            } else {
+                r.on_disabled_hover_text("the joint above moves: freeze it first")
+            };
+            if r.clicked()
+                && let Some(j) = &up
+                && let Some(parent) = view.links.iter().find(|x| x.name == j.parent)
+            {
+                p.out.push(RobotAct::Edit(Edit::Add {
+                    text: format!("merge({}, {target})", p.link_target(parent)),
+                }));
+            }
+            if ui.button("Collision: hull").clicked() {
+                p.out.push(RobotAct::Edit(Edit::Add {
+                    text: format!("collision({target}, hull)"),
+                }));
+            }
+            if ui
+                .button("Add frame")
+                .on_hover_text("a tool or sensor frame on this link")
+                .clicked()
+            {
+                let mut k = 0;
+                let name = loop {
+                    let n = if k == 0 {
+                        "tool".to_string()
+                    } else {
+                        format!("tool{k}")
+                    };
+                    if !view.links.iter().any(|x| x.name == n) {
+                        break n;
+                    }
+                    k += 1;
+                };
+                p.out.push(RobotAct::Edit(Edit::Add {
+                    text: format!("{name} = frame(on: {target}, at: pose())"),
+                }));
+            }
+        });
     }
 }
