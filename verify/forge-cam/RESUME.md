@@ -51,6 +51,17 @@ Expect about 2 min with the Mathlib cache. Post.lean's `step` takes about 45 s.
   B_{r+m} as computed, m = 1e-6, contains the opening (F ⊖ B_r) ⊕ B_r. Not in Lean (hyp). It
   bears only on the label "tool radius", never on G1–G6.
 
+- **H.contact (contact.rs, contact_rev.rs: the closed-form clearance, CAM-3D-FINISH / CURVED-SITES,
+  2026-11-24).** Open in Lean; reviewed by CAM-CORE and CURVED-SITES (no counterexample), tested
+  differentially against the branch and bound and against dense sampling. The steps to prove:
+  (1) sd_K ≤ sd_B for a body B inside a capsule K (outside K by distance monotonicity; inside B
+  by the inscribed ball), with sd_K = dist(core) − ρ; (2) the shell step: distance to a point or
+  a line is 1-Lipschitz, so a set whose distances lie in [d_min, d_max] is at least
+  max(d_min − s_hi, s_lo − d_max, 0) from a shell of radii [s_lo, s_hi]; (3) the tangent-plane
+  lower bound of a convex quadratic over a box (minimum at a corner); (4) the full surface bounds
+  the trimmed patch below (Clear only). Dist2.lean has the metric pieces. Non-finite or
+  overflowing data is refused in the code (no Clear), tested.
+
 ## The vise code (3e8a91d, 0a4c189): done
 
 ForgeCam/Vise.lean adds 7 theorems (41 in all).

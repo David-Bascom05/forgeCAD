@@ -100,7 +100,11 @@ pub fn store(project: &Path, user_cam: Option<&Path>, project_level: bool) -> Le
     LevelStore::new(
         Some(project),
         user_cam,
-        if project_level || user_cam.is_none() { Level::Project } else { Level::User },
+        if project_level || user_cam.is_none() {
+            Level::Project
+        } else {
+            Level::User
+        },
     )
 }
 

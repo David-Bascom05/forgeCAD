@@ -116,14 +116,8 @@ fn finishing_ops_certify_on_the_dome() {
         "waterline",
         surf::waterline(&sf, c, area, &[2.0, 6.0], 1.0).unwrap(),
     ));
-    paths.push(("scallop", surf::scallop(&sf, c, area, 2.5, 1.0).unwrap()));
-    paths.push(("pencil", surf::pencil(&sf, c, area, 0.5, 0.02).unwrap()));
-    let bull = tool("bull-10-r1", 2);
-    let sfb = Surfacer::new(&faces, &bull.shape.bodies[0], 0.0, TOL, 0.0).unwrap();
-    paths.push((
-        "rest",
-        surf::rest(&sf, &sfb, c, area, 2.0, 1.0, 1.0, 0.05).unwrap(),
-    ));
+    // scallop, pencil and rest are forge-cam-3d's now (its tests certify them on the dome and
+    // the mould core)
     for (name, p) in &paths {
         let s = certified(p, &ball, &faces);
         assert!(s.clear, "{name}: {:?}", s.checks);

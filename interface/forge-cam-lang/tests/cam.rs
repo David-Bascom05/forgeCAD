@@ -1351,7 +1351,7 @@ fn a_statements_params_are_its_own() {
 fn the_mould_core_is_surfaced_and_certified() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
     let head = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01, at: (-200, -150, -250))\n";
-    let rough = "rough = zlevel(op1, tool: t1, leave: 0.5, down: 3, stepover: 4, area: (-45, -35, 45, 35), grid: 1)\n";
+    let rough = "rough = zlevel(op1, tool: t1, leave: 0.5, step: 3, stepover: 4, area: (-45, -35, 45, 35), grid: 1)\n";
     let fin = "fin = parallel(op1, tool: t2, stepover: 4, area: (-30, -24, 30, 24))\ncorner = pencil(op1, tool: t2, area: (-30, -24, 30, 24), grid: 1)\n";
     let prog = "prog = program(op1, post: \"fanuc\", number: 1002)\n";
     let cam = forge_cam_lang::run(&format!("{head}{rough}{fin}{prog}"), &dir);
@@ -1447,4 +1447,86 @@ fn zlevel_on_a_prism_part_clears_to_the_walls_and_the_margin() {
     // never more than the tool took: the part's section is all still material
     let sec = forge_cam::section::section(&faces, 6.5, 1e-5).unwrap();
     assert!(region_of(&boolean(&sec, &m, Op::Diff).unwrap()).loops.is_empty());
+/// forge-cam-3d's finishing ops in the document (steep_shallow, spiral, flat), after z-level
+/// roughing on the mould core: built, every move certified (column route), the spacing derived
+/// from the cusp and reported.
+#[test]
+fn the_mould_core_is_finished_by_cusp() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    // the example's ops, lighter for the test's time: a 0.05 mm cusp, the steep band 26 to 20
+    let src = std::fs::read_to_string(dir.join("mold_core_finish_cam.fg"))
+        .unwrap()
+        .replace("cusp: 0.01", "cusp: 0.05")
+        .replace("from: 26, to: 10.5", "from: 26, to: 20");
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.ops
+            .iter()
+            .map(|o| (
+                &o.name,
+                &o.refusal,
+                o.checks
+                    .iter()
+                    .filter(|c| c.verdict != "pass")
+                    .take(3)
+                    .collect::<Vec<_>>()
+            ))
+            .collect::<Vec<_>>()
+    );
+    for name in ["ss", "top", "plate"] {
+        let op = cam.ops.iter().find(|o| o.name == name).unwrap();
+        assert!(op.status == "built" && op.pairs > 0, "{name}: {:?}", op.refusal);
+        let f = op.finish.as_ref().unwrap();
+        assert_eq!(f.cusp, Some(0.05));
+        assert!(f.cusp_bound.unwrap() <= 0.05, "{name}: {f:?}");
+        assert!(f.stepover > 0.0, "{name}: {f:?}");
+    }
+}
+
+/// The 3-axis ops' step-down is `step:` (as in 2D); `down:` is its old name, accepted with a
+/// warning for one train; both given is refused, and parallel refuses `step:` (it used to be
+/// its sample spacing, now `sample:`), so no old document silently changes meaning.
+#[test]
+fn the_3axis_step_down_is_step() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let head = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\n";
+    let run = |op: &str| forge_cam_lang::run(&format!("{head}{op}\n"), &dir);
+    let both = run(
+        "w = waterline(op1, tool: t2, from: 24, to: 20, step: 2, down: 2, area: (-30, -24, 30, 24), grid: 1)",
+    );
+    assert!(
+        !both.ok
+            && format!(
+                "{:?}{:?}",
+                both.errors,
+                both.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+            )
+            .contains("both given")
+    );
+    let par = run("p = parallel(op1, tool: t2, stepover: 4, step: 1, area: (-5, -5, 5, 5))");
+    assert!(
+        !par.ok
+            && format!(
+                "{:?}{:?}",
+                par.errors,
+                par.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+            )
+            .contains("sample:")
+    );
+    let old =
+        run("w = waterline(op1, tool: t2, from: 24, to: 22, down: 2, area: (-30, -24, 30, 24), grid: 1)");
+    assert!(
+        old.warnings.iter().any(|w| w.contains("`down:` is now `step:`")),
+        "{:?}",
+        old.warnings
+    );
+    // (no program: the op is made, not posted or certified; accepted, no error)
+    assert!(old.errors.is_empty(), "{:?}", old.errors);
+    assert!(
+        old.ops
+            .iter()
+            .any(|o| o.name == "w" && o.paths.iter().any(|p| !p.moves.is_empty()))
+    );
 }

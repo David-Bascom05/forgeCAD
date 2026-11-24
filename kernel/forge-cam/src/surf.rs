@@ -619,41 +619,69 @@ impl ClGrid {
 /// generator, split where not).
 pub fn waterline(sf: &Surfacer, c: Cut, area: [f64; 4], zs: &[f64], h: f64) -> Result<OpPath, OpError> {
     let g = ClGrid::new(sf, area, h)?;
-    // every loop of every level traced on its own (on all cores), kept in order
+    // every loop of every level traced on its own, kept in order. A loop's vertices, and then
+    // its pieces between consecutive vertices, are independent of each other (each a function
+    // of its own ends): both are made on all cores (forge_math::par) as flat lists over every
+    // loop, so a few long loops do not leave cores idle, and assembled in order as one pass would
     let mut jobs: Vec<(f64, Contour)> = Vec::new();
     for &z in zs {
         for lp in contours(&g, z) {
             jobs.push((z, lp));
         }
     }
-    let traced: Vec<Result<Option<Vec<[f64; 3]>>, SurfError>> = forge_math::par::map(jobs.len(), |j| {
+    // each vertex: the crossing on its grid edge, bisected to the free side
+    let edges: Vec<(usize, usize)> = jobs
+        .iter()
+        .enumerate()
+        .flat_map(|(j, (_, lp))| (0..lp.len()).map(move |e| (j, e)))
+        .collect();
+    let verts: Vec<[f64; 3]> = forge_math::par::map(edges.len(), |i| {
+        let (j, e) = edges[i];
         let (z, lp) = &jobs[j];
-        let z = *z;
-        // each vertex: the crossing on its grid edge, bisected to the free side
-        let mut pts: Vec<[f64; 3]> = Vec::new();
-        for &(a, b) in lp {
-            let p = match push(sf, a, b, z, h) {
-                Some((s, _)) => [a[0] + s * (b[0] - a[0]), a[1] + s * (b[1] - a[1])],
-                None => a,
-            };
-            pts.push([p[0], p[1], z]);
+        let (a, b) = lp[e];
+        let p = match push(sf, a, b, *z, h) {
+            Some((s, _)) => [a[0] + s * (b[0] - a[0]), a[1] + s * (b[1] - a[1])],
+            None => a,
+        };
+        [p[0], p[1], *z]
+    });
+    // each loop's vertices, closed (a loop of fewer than three is dropped)
+    let mut loops: Vec<Vec<[f64; 3]>> = Vec::with_capacity(jobs.len());
+    let mut k = 0;
+    for (_, lp) in &jobs {
+        let mut pts = verts[k..k + lp.len()].to_vec();
+        k += lp.len();
+        if pts.len() >= 3 {
+            let first = pts[0];
+            pts.push(first);
+        } else {
+            pts.clear();
         }
-        if pts.len() < 3 {
-            return Ok(None);
-        }
-        let first = pts[0];
-        pts.push(first);
-        let mut run = vec![pts[0]];
-        for &p in &pts[1..] {
-            level_refine(sf, run[run.len() - 1], p, 0, &mut run)?;
-        }
-        Ok(Some(run))
+        loops.push(pts);
+    }
+    // each piece refined from its start (the vertex before it: a refinement ends at its end)
+    let pieces: Vec<(usize, usize)> = loops
+        .iter()
+        .enumerate()
+        .flat_map(|(j, pts)| (1..pts.len()).map(move |i| (j, i)))
+        .collect();
+    let refined: Vec<Result<Vec<[f64; 3]>, SurfError>> = forge_math::par::map(pieces.len(), |i| {
+        let (j, k) = pieces[i];
+        let mut out = Vec::new();
+        level_refine(sf, loops[j][k - 1], loops[j][k], 0, &mut out)?;
+        Ok(out)
     });
     let mut runs: Vec<Vec<[f64; 3]>> = Vec::new();
-    for t in traced {
-        if let Some(r) = t? {
-            runs.push(r);
+    let mut refined = refined.into_iter();
+    for pts in &loops {
+        if pts.is_empty() {
+            continue;
         }
+        let mut run = vec![pts[0]];
+        for _ in 1..pts.len() {
+            run.extend(refined.next().expect("a piece per pair")?);
+        }
+        runs.push(run);
     }
     as_paths(c, &runs).ok_or(OpError::ToolTooBig {
         tool_d: 2.0 * sf.check.r,
@@ -793,329 +821,8 @@ fn contours(g: &ClGrid, z: f64) -> Vec<Vec<([f64; 2], [f64; 2])>> {
     loops
 }
 
-/// Pencil finishing: along rows over the area, the points where the CL surface creases (the
-/// tool touches the part on two sides at once: the CL's slope jumps), chained into runs.
-/// A crease shows as a second difference of the CL rows above `kink` (in mm over the grid
-/// spacing).
-pub fn pencil(sf: &Surfacer, c: Cut, area: [f64; 4], h: f64, kink: f64) -> Result<OpPath, OpError> {
-    let g = ClGrid::new(sf, area, h)?;
-    let mut mark = vec![false; g.nx * g.ny];
-    for iy in 0..g.ny {
-        for ix in 0..g.nx {
-            let k = iy * g.nx + ix;
-            let mut v = false;
-            if ix > 0 && ix + 1 < g.nx {
-                let d2 = g.hi[k - 1] + g.hi[k + 1] - 2.0 * g.hi[k];
-                v |= d2 > kink;
-            }
-            if iy > 0 && iy + 1 < g.ny {
-                let d2 = g.hi[k - g.nx] + g.hi[k + g.nx] - 2.0 * g.hi[k];
-                v |= d2 > kink;
-            }
-            // a crease is a valley of the CL surface: concave up and at the floor of neither
-            mark[k] = v && g.hi[k] > sf.floor;
-        }
-    }
-    // chain marked nodes into runs by 8-neighbour walks
-    let mut used = vec![false; mark.len()];
-    let mut runs2: Vec<Vec<[f64; 2]>> = Vec::new();
-    for s in 0..mark.len() {
-        if !mark[s] || used[s] {
-            continue;
-        }
-        let mut run = vec![s];
-        used[s] = true;
-        let mut cur = s;
-        loop {
-            let (cx, cy) = ((cur % g.nx) as i64, (cur / g.nx) as i64);
-            let mut found = None;
-            for (dx, dy) in [
-                (1, 0),
-                (0, 1),
-                (-1, 0),
-                (0, -1),
-                (1, 1),
-                (-1, 1),
-                (1, -1),
-                (-1, -1),
-            ] {
-                let (x, y) = (cx + dx, cy + dy);
-                if x < 0 || y < 0 || x >= g.nx as i64 || y >= g.ny as i64 {
-                    continue;
-                }
-                let k = y as usize * g.nx + x as usize;
-                if mark[k] && !used[k] {
-                    found = Some(k);
-                    break;
-                }
-            }
-            match found {
-                Some(k) => {
-                    used[k] = true;
-                    run.push(k);
-                    cur = k;
-                }
-                None => break,
-            }
-        }
-        if run.len() >= 2 {
-            runs2.push(run.iter().map(|&k| g.at(k % g.nx, k / g.nx)).collect());
-        }
-    }
-    let mut runs = Vec::new();
-    for r in &runs2 {
-        runs.push(sf.drop_polyline(r, h)?);
-    }
-    as_paths(c, &runs).ok_or(OpError::ToolTooBig {
-        tool_d: 2.0 * sf.check.r,
-        why: "no crease the tool rides in".into(),
-    })
-}
-
-/// The lowest a tool's cutter reaches over each node of a grid, ideally: E(q) = min over the
-/// grid's tool positions X within R of q of CL(X) + b(|q − X|), from a CL grid of that tool.
-/// An estimate of the material the tool leaves (the true envelope of a tool moving over every
-/// position is lower by at most the grid's scallop), for planning only.
-fn envelope(g: &ClGrid, col: &Column) -> Vec<f64> {
-    let k = (col.r / g.h).floor() as i64;
-    let mut out = vec![f64::INFINITY; g.nx * g.ny];
-    // the offsets within reach and the profile's height there, once
-    let mut offs: Vec<(i64, i64, f64)> = Vec::new();
-    for dy in -k..=k {
-        for dx in -k..=k {
-            let rho = ((dx * dx + dy * dy) as f64).sqrt() * g.h;
-            if rho <= col.r {
-                offs.push((dx, dy, col.b_at(rho).mid()));
-            }
-        }
-    }
-    let rows: Vec<Vec<f64>> = forge_math::par::map(g.ny, |iy| {
-        let mut row = vec![f64::INFINITY; g.nx];
-        for (ix, o) in row.iter_mut().enumerate() {
-            let mut m = f64::INFINITY;
-            for &(dx, dy, bz) in &offs {
-                {
-                    let (x, y) = (ix as i64 + dx, iy as i64 + dy);
-                    if x < 0 || y < 0 || x >= g.nx as i64 || y >= g.ny as i64 {
-                        continue;
-                    }
-                    let v = g.hi[y as usize * g.nx + x as usize] + bz;
-                    if v < m {
-                        m = v;
-                    }
-                }
-            }
-            *o = m;
-        }
-        row
-    });
-    for (iy, r) in rows.into_iter().enumerate() {
-        out[iy * g.nx..(iy + 1) * g.nx].copy_from_slice(&r);
-    }
-    out
-}
-
-/// Rest finishing: parallel rows of this tool, cut only over the tool positions whose reach
-/// holds material an earlier tool (`before`) left more than `min_rest` thick: where the earlier
-/// tool's envelope stands that much above this tool's (both estimated on a grid at spacing
-/// `h`). Rows are broken into runs over the marked stretches.
-#[allow(clippy::too_many_arguments)]
-pub fn rest(
-    sf: &Surfacer,
-    before: &Surfacer,
-    c: Cut,
-    area: [f64; 4],
-    stepover: f64,
-    step: f64,
-    h: f64,
-    min_rest: f64,
-) -> Result<OpPath, OpError> {
-    // the grid covers the area grown by the larger reach, so every envelope over it is whole
-    // (whole millimetres: a grid laid from the reach itself lands its nodes on the widened
-    // rims of tools beside walls at round coordinates)
-    let pad = before.make.r.max(sf.make.r).ceil();
-    let big = [area[0] - pad, area[1] - pad, area[2] + pad, area[3] + pad];
-    let ga = ClGrid::new(before, big, h)?;
-    let gb = ClGrid::new(sf, big, h)?;
-    let ea = envelope(&ga, &before.make);
-    let eb = envelope(&gb, &sf.make);
-    let rest: Vec<bool> = (0..ea.len())
-        .map(|i| ea[i] - eb[i] > min_rest && eb[i] > sf.floor)
-        .collect();
-    // a tool position is wanted when a rest node lies within its reach
-    let k = (sf.make.r / h).ceil() as i64;
-    let wanted = |x: f64, y: f64| -> bool {
-        let ix = ((x - ga.x0) / h).round() as i64;
-        let iy = ((y - ga.y0) / h).round() as i64;
-        for dy in -k..=k {
-            for dx in -k..=k {
-                let (u, v) = (ix + dx, iy + dy);
-                if u < 0 || v < 0 || u >= ga.nx as i64 || v >= ga.ny as i64 {
-                    continue;
-                }
-                if ((dx * dx + dy * dy) as f64).sqrt() * h > sf.make.r {
-                    continue;
-                }
-                if rest[v as usize * ga.nx + u as usize] {
-                    return true;
-                }
-            }
-        }
-        false
-    };
-    let rows = raster(area, stepover, 0.0)?;
-    let mut runs = Vec::new();
-    let mut r = 0;
-    while r + 1 < rows.len() {
-        let (a, b) = (rows[r], rows[r + 1]);
-        let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
-        let n = ((len / step).ceil() as usize).max(1);
-        let on: Vec<bool> = (0..=n)
-            .map(|i| {
-                let t = i as f64 / n as f64;
-                wanted(a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]))
-            })
-            .collect();
-        let mut i = 0;
-        while i <= n {
-            if !on[i] {
-                i += 1;
-                continue;
-            }
-            let s0 = i;
-            while i <= n && on[i] {
-                i += 1;
-            }
-            let s1 = (i - 1).max(s0);
-            let at = |j: usize| {
-                [
-                    a[0] + j as f64 / n as f64 * (b[0] - a[0]),
-                    a[1] + j as f64 / n as f64 * (b[1] - a[1]),
-                ]
-            };
-            if s1 > s0 {
-                runs.push(sf.drop_polyline(&[at(s0), at(s1)], step)?);
-            }
-        }
-        r += 2;
-    }
-    as_paths(c, &runs).ok_or(OpError::ToolTooBig {
-        tool_d: 2.0 * sf.check.r,
-        why: "nothing left for this tool".into(),
-    })
-}
-
-/// Scallop (constant stepover) finishing: passes `stepover` apart measured along the part,
-/// as the level sets of the distance over the CL surface (on a grid at spacing h, by Dijkstra
-/// with each grid step's 3D length) from the area's boundary, each traced by marching squares
-/// and dropped.
-pub fn scallop(sf: &Surfacer, c: Cut, area: [f64; 4], stepover: f64, h: f64) -> Result<OpPath, OpError> {
-    if stepover.is_nan() || stepover <= 0.0 {
-        return Err(SurfError::Bad("stepover").into());
-    }
-    let g = ClGrid::new(sf, area, h)?;
-    let (nx, ny) = (g.nx, g.ny);
-    let mut dist = vec![f64::INFINITY; nx * ny];
-    let mut heap = std::collections::BinaryHeap::new();
-    for iy in 0..ny {
-        for ix in 0..nx {
-            if ix == 0 || iy == 0 || ix + 1 == nx || iy + 1 == ny {
-                let k = iy * nx + ix;
-                dist[k] = 0.0;
-                heap.push((std::cmp::Reverse(Ord64(0.0)), k));
-            }
-        }
-    }
-    while let Some((std::cmp::Reverse(Ord64(d)), k)) = heap.pop() {
-        if d > dist[k] {
-            continue;
-        }
-        let (ix, iy) = ((k % nx) as i64, (k / nx) as i64);
-        for (dx, dy) in [
-            (1, 0),
-            (-1, 0),
-            (0, 1),
-            (0, -1),
-            (1, 1),
-            (1, -1),
-            (-1, 1),
-            (-1, -1),
-        ] {
-            let (x, y) = (ix + dx, iy + dy);
-            if x < 0 || y < 0 || x >= nx as i64 || y >= ny as i64 {
-                continue;
-            }
-            let j = y as usize * nx + x as usize;
-            let dz = g.hi[j] - g.hi[k];
-            let w = (((dx * dx + dy * dy) as f64) * h * h + dz * dz).sqrt();
-            if d + w < dist[j] {
-                dist[j] = d + w;
-                heap.push((std::cmp::Reverse(Ord64(d + w)), j));
-            }
-        }
-    }
-    let far = dist.iter().cloned().fold(0.0f64, f64::max);
-    let mut runs: Vec<Vec<[f64; 3]>> = Vec::new();
-    let mut level = 0.5 * stepover;
-    while level < far {
-        let field = ClGrid {
-            x0: g.x0,
-            y0: g.y0,
-            h,
-            nx,
-            ny,
-            hi: dist.clone(),
-            lo: dist.clone(),
-        };
-        for lp in contours(&field, level) {
-            // each crossing interpolated on its edge
-            let mut pts: Vec<[f64; 2]> = Vec::new();
-            for (a, b) in lp {
-                let ia = node_of(&g, a);
-                let ib = node_of(&g, b);
-                let (da, db) = (dist[ia], dist[ib]);
-                let t = if db != da {
-                    ((level - da) / (db - da)).clamp(0.0, 1.0)
-                } else {
-                    0.5
-                };
-                pts.push([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]);
-            }
-            if pts.len() < 3 {
-                continue;
-            }
-            let first = pts[0];
-            pts.push(first);
-            runs.push(sf.drop_polyline(&pts, h)?);
-        }
-        level += stepover;
-    }
-    as_paths(c, &runs).ok_or(OpError::ToolTooBig {
-        tool_d: 2.0 * sf.check.r,
-        why: "no scallop pass in the area".into(),
-    })
-}
-
-fn node_of(g: &ClGrid, p: [f64; 2]) -> usize {
-    let ix = ((p[0] - g.x0) / g.h).round() as usize;
-    let iy = ((p[1] - g.y0) / g.h).round() as usize;
-    iy.min(g.ny - 1) * g.nx + ix.min(g.nx - 1)
-}
-
-/// f64 ordered by total_cmp, for the Dijkstra heap.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Ord64(f64);
-impl Eq for Ord64 {}
-impl PartialOrd for Ord64 {
-    fn partial_cmp(&self, o: &Ord64) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(o))
-    }
-}
-impl Ord for Ord64 {
-    fn cmp(&self, o: &Ord64) -> std::cmp::Ordering {
-        self.0.total_cmp(&o.0)
-    }
-}
+// pencil, rest and scallop finishing live in forge-cam-3d (pencil.rs, rest.rs, geodesic.rs),
+// on this module's Surfacer through its DropCutter adapter (surfdrop.rs).
 
 /// The in-process stock as a height map: cell (ix, iy) is the square [x0 + ix h, + h] ×
 /// [y0 + iy h, + h]; `top` is at or above the material's highest point in it, `bottom` the

@@ -13,7 +13,10 @@ fn main() {
         let dt = t0.elapsed().as_secs_f64();
         total += dt;
         if let Ok(d) = std::env::var("CAM_TIME_JSON") {
-            let name = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let name = p
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
             let mut text = cam.json().to_string();
             for pr in &cam.programs {
                 text.push_str(&format!("\n{:?}", pr.text));
