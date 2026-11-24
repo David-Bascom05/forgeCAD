@@ -281,14 +281,14 @@ impl Agent {
         drop(st);
         let said = Arc::new(Mutex::new(String::new()));
         let said2 = said.clone();
-        std::thread::spawn(move || {
+        let errs_read = std::thread::spawn(move || {
             for l in BufReader::new(errs).lines().map_while(Result::ok) {
                 let mut s = said2.lock().unwrap_or_else(|e| e.into_inner());
                 *s = l;
             }
         });
         let me = self.clone();
-        std::thread::spawn(move || me.read(out, run, said));
+        std::thread::spawn(move || me.read(out, run, said, errs_read));
         (
             200,
             Json::obj(vec![("from", from.into()), ("running", false.into())]),
@@ -296,7 +296,13 @@ impl Agent {
     }
 
     /// Claude Code's lines, kept and told; the project's changed files after each tool.
-    fn read(&self, out: std::process::ChildStdout, run: u64, said: Arc<Mutex<String>>) {
+    fn read(
+        &self,
+        out: std::process::ChildStdout,
+        run: u64,
+        said: Arc<Mutex<String>>,
+        errs_read: std::thread::JoinHandle<()>,
+    ) {
         for line in BufReader::new(out).lines().map_while(Result::ok) {
             let j = Json::parse(line.trim()).ok();
             let kind = j.as_ref().and_then(|j| s(j, "type")).unwrap_or("").to_string();
@@ -359,7 +365,12 @@ impl Agent {
             }
             self.cv.notify_all();
         }
-        // ended: mid-turn, said as the turn's failure
+        // ended: its last word on stderr read first (a second at most: a process it started may
+        // hold stderr open), then, mid-turn, said as the turn's failure
+        let t = Instant::now();
+        while !errs_read.is_finished() && t.elapsed() < Duration::from_secs(1) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
         let mut st = self.lock();
         if st.run != run {
             return;

@@ -55,7 +55,7 @@ pub struct Val {
 }
 
 impl Val {
-    fn new(v: f64, unit: &'static str, source: Source, note: impl Into<String>) -> Val {
+    pub fn new(v: f64, unit: &'static str, source: Source, note: impl Into<String>) -> Val {
         Val {
             v,
             unit,
