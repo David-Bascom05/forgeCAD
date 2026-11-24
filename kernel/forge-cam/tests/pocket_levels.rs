@@ -81,6 +81,8 @@ fn a_pocket_emits_every_nonempty_level() {
                     tidx: 0,
                     h,
                     feed: (500.0, 100.0),
+                    ramp_feed: None,
+                    lead_feed: None,
                 },
                 ops::Span {
                     top: 0.0,

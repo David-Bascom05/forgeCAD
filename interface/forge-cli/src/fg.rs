@@ -322,8 +322,16 @@ impl Session {
         text.push_str(&match cam.certification() {
             "full" => "certification: full (G1-G6, every position within the machine's travel)\n".to_string(),
             "except G5" => {
-                "certification: except G5 (unchecked: no `at:` on a setup; the spans fit the travel)\n"
-                    .to_string()
+                let unplaced: Vec<String> = cam
+                    .warnings
+                    .iter()
+                    .filter(|w| w.contains("is not placed"))
+                    .cloned()
+                    .collect();
+                format!(
+                    "certification: except G5 (unchecked: no `at:` on a setup; the spans fit the travel)\n{}",
+                    unplaced.iter().map(|w| format!("  {w}\n")).collect::<String>()
+                )
             }
             c => format!("certification: {c}\n"),
         });
