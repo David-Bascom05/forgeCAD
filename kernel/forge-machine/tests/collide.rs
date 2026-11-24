@@ -276,14 +276,95 @@ fn outside_zones(m: &forge_machine::MachineDef, q0: &[f64], q1: &[f64]) -> Vec<(
     out
 }
 
+/// The contacts the sweep finds in vendor records' published travel (machine, body, body, Hit or
+/// Near), pinned: each such record cites its crash zones unknown (`zones`), and a run whose moves
+/// reach the pair reports a possible contact, not checked. A new contact fails here (look at the
+/// record), and so does one that went away (take it off the list).
+const VENDOR_CONTACTS: &[(&str, &str, &str, &str)] = &[
+    ("brother-speedio-m140x2", "support-l", "nose", "Hit"),
+    ("brother-speedio-m140x2", "support-r", "nose", "Hit"),
+    ("brother-speedio-m200x3", "support-l", "nose", "Hit"),
+    ("brother-speedio-m200x3", "support-r", "nose", "Hit"),
+    ("dmg-mori-dmu-50-3rd-generation", "cradle", "nose", "Hit"),
+    ("dmg-mori-dmu-50-3rd-generation", "rotary", "nose", "Near"),
+    ("dmg-mori-nhx-4000", "pallet", "nose", "Hit"),
+    ("dmg-mori-nhx-5000", "pallet", "nose", "Hit"),
+    ("dmg-mori-nhx-5000", "pallet", "head", "Hit"),
+    ("dn-solutions-nhp-4000", "pallet", "nose", "Hit"),
+    ("dn-solutions-nhp-5000", "pallet", "nose", "Hit"),
+    ("dn-solutions-nhp-5000", "pallet", "head", "Hit"),
+    ("dn-solutions-nhp-6300", "pallet", "nose", "Hit"),
+    ("dn-solutions-nhp-6300", "pallet", "head", "Hit"),
+    ("dn-solutions-nhp-6300-2nd", "pallet", "nose", "Hit"),
+    ("dn-solutions-nhp-6300-2nd", "pallet", "head", "Hit"),
+    ("haas-umc-750", "platter", "head", "Near"),
+    ("haas-umc-750", "cradle", "head", "Near"),
+    ("haas-st-10", "chuck", "turret", "Hit"),
+    ("haas-st-20", "chuck", "turret", "Hit"),
+    ("haas-st-30", "chuck", "turret", "Hit"),
+    ("haas-st-10y", "chuck", "turret", "Hit"),
+    ("haas-st-20y", "chuck", "turret", "Hit"),
+    ("haas-st-30y", "chuck", "turret", "Hit"),
+    ("haas-ds-30y", "chuck", "turret", "Hit"),
+    ("haas-ds-30y", "subchuck", "turret", "Hit"),
+    ("haas-umc-500", "cradle", "head", "Hit"),
+    ("haas-umc-750ss", "platter", "head", "Near"),
+    ("haas-umc-750ss", "cradle", "head", "Near"),
+    ("haas-umc-1000", "platter", "head", "Hit"),
+    ("haas-umc-1000", "cradle", "head", "Hit"),
+    ("haas-st-15", "chuck", "turret", "Hit"),
+    ("haas-st-25", "chuck", "turret", "Hit"),
+    ("haas-st-35", "chuck", "turret", "Hit"),
+    ("haas-st-40", "chuck", "turret", "Hit"),
+    ("haas-tl-1", "chuck", "turret", "Hit"),
+    ("haas-tl-2", "chuck", "turret", "Hit"),
+    ("hermle-c-32-u", "cradle", "nose", "Hit"),
+    ("hermle-c-42-u", "cradle", "nose", "Hit"),
+    ("hermle-c-650", "cradle", "nose", "Hit"),
+    ("hurco-tm6i", "chuck", "turret", "Hit"),
+    ("hurco-tm8i", "chuck", "turret", "Hit"),
+    ("hurco-tm10i", "chuck", "turret", "Hit"),
+    ("hurco-tm12i", "chuck", "turret", "Hit"),
+    ("hyundai-wia-hs4000-ii", "pallet", "nose", "Hit"),
+    ("hyundai-wia-hs5000-ii", "pallet", "nose", "Hit"),
+    ("hyundai-wia-hs5000-ii", "pallet", "head", "Hit"),
+    ("kitamura-mycenter-hx400ig", "pallet", "nose", "Hit"),
+    ("makino-a51nx", "pallet", "nose", "Hit"),
+    ("makino-a61nx", "pallet", "nose", "Hit"),
+    ("makino-a61nx", "pallet", "head", "Hit"),
+    ("makino-d500", "cradle", "nose", "Hit"),
+    ("makino-d500", "rotary", "nose", "Near"),
+    ("mazak-variaxis-i-600", "cradle", "nose", "Hit"),
+    ("mazak-variaxis-i-600", "rotary", "nose", "Hit"),
+    ("mazak-variaxis-i-700", "cradle", "nose", "Hit"),
+    ("mazak-variaxis-i-700", "rotary", "nose", "Hit"),
+    ("mazak-hcn-5000", "pallet", "nose", "Hit"),
+    ("mazak-hcn-5000", "pallet", "head", "Hit"),
+    ("mazak-integrex-i-200", "headstock", "bhead", "Hit"),
+    ("mazak-integrex-i-200", "chuck", "bnose", "Hit"),
+    ("mazak-integrex-i-200", "chuck", "bhead", "Hit"),
+    ("mazak-variaxis-c-600", "cradle", "nose", "Hit"),
+    ("mazak-variaxis-c-600", "rotary", "nose", "Hit"),
+    ("mazak-hcn-4000", "pallet", "nose", "Hit"),
+    ("mazak-hcn-6000", "pallet", "nose", "Hit"),
+    ("okuma-ma-500hii", "pallet", "nose", "Hit"),
+    ("okuma-ma-500hii", "pallet", "head", "Hit"),
+    ("okuma-ma-600hiii", "pallet", "nose", "Hit"),
+    ("okuma-ma-600hiii", "pallet", "head", "Hit"),
+    ("romi-dcm-620-5x", "cradle", "nose", "Hit"),
+    ("romi-dcm-620-5x", "rotary", "nose", "Near"),
+    ("spinner-u5-630", "cradle", "nose", "Hit"),
+    ("tormach-8l", "chuck", "turret", "Hit"),
+    ("tormach-15lx-turret", "chuck", "turret", "Hit"),
+];
+
 /// Every pair of bodies through the joints that move one relative to the other: each such joint
 /// swept through its whole range with the others at every combination of their ends. A Hit is a
 /// pose inside the declared travel where the machine's own bodies collide; a Near is one not
 /// proven clear. Neither may happen in our generic records, whose zones mark where the machine
-/// may not go. A vendor's record states the published travel: a real lathe's turret does reach
-/// its chuck, an HMC's spindle its pallet, and vendors do not publish the crash zones; there the
-/// sweep runs and what it finds is printed (the simulation reports such a contact on a program
-/// that reaches it), not asserted absent.
+/// may not go. In a vendor's record (published travel: a real lathe's turret does reach its
+/// chuck, an HMC's spindle its pallet, and vendors do not publish the crash zones) what the sweep
+/// finds is exactly VENDOR_CONTACTS.
 #[test]
 fn builtin_machines_have_no_self_collision_in_travel() {
     let mut bad = Vec::new();
@@ -379,10 +460,65 @@ fn builtin_machines_have_no_self_collision_in_travel() {
             }
         }
     }
-    println!(
-        "vendor records: {} contacts in published travel\n{}",
-        vendor.len(),
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+    // the vendor contacts, exactly as pinned
+    let found: std::collections::BTreeSet<(String, String, String, String)> = vendor
+        .iter()
+        .map(|l| {
+            let (m, rest) = l.split_once(": ").unwrap();
+            let (a, rest) = rest.split_once(" vs ").unwrap();
+            let (b, rest) = rest.split_once(" at ").unwrap();
+            let v = if rest.contains(": Hit") { "Hit" } else { "Near" };
+            (m.to_string(), a.to_string(), b.to_string(), v.to_string())
+        })
+        .collect();
+    let pinned: std::collections::BTreeSet<(String, String, String, String)> = VENDOR_CONTACTS
+        .iter()
+        .map(|(m, a, b, v)| (m.to_string(), a.to_string(), b.to_string(), v.to_string()))
+        .collect();
+    let new: Vec<_> = found.difference(&pinned).collect();
+    let gone: Vec<_> = pinned.difference(&found).collect();
+    assert!(
+        new.is_empty() && gone.is_empty(),
+        "vendor contacts changed: new {new:?}; gone {gone:?}\n{}",
         vendor.join("\n")
     );
-    assert!(bad.is_empty(), "{}", bad.join("\n"));
+    // each such record says its crash zones are not published
+    for (m, ..) in VENDOR_CONTACTS {
+        let d = forge_machine::library::builtin_named(m).unwrap();
+        assert!(d.zones_unpublished(), "{m}: cite `zones` unknown");
+    }
+}
+
+/// A run whose moves reach a pinned vendor contact: the contact, and a possible contact not
+/// checked (crash zones not published), never a clear. Our generic records publish their zones.
+#[test]
+fn a_vendor_contact_in_a_run_is_a_possible_contact_not_checked() {
+    let m = forge_machine::library::builtin_named("haas-st-10").unwrap();
+    assert!(m.zones_unpublished());
+    let dialect = "[dialect]\nname = \"t\"\ndecimals = 3\nfeed_decimals = 3\ndwell = \"G04 P{ms}\"\n";
+    let c = forge_machine::gcode::Control::for_machine(&m, dialect, 1).unwrap();
+    assert_eq!(c.letters, vec!['Z', 'X']);
+    let mut s = forge_machine::sim::Setup::new(&m, c).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0])];
+    // the sweep's pose: Z 0.003, X joint -47.5 (a diameter word of -95)
+    let tl = forge_machine::sim::simulate("G18 G21\nG0 Z100. X100.\nG0 Z0.003 X-95.\n", &s).unwrap();
+    let r = collide::check(&s, &tl, &[]);
+    assert!(
+        r.contacts
+            .iter()
+            .any(|c| c.line == 3 && c.a == "chuck" && c.b == "turret"),
+        "{:?}",
+        r.contacts
+    );
+    let u = r
+        .unchecked
+        .iter()
+        .find(|u| u.path == "zones (chuck / turret)")
+        .unwrap();
+    assert_eq!((u.why, u.line), ("unknown", 3));
+    assert!(u.check.contains("crash zones not published"));
+    for g in builtin().iter().filter(|g| g.name.starts_with("generic-")) {
+        assert!(!g.zones_unpublished(), "{}", g.name);
+    }
 }

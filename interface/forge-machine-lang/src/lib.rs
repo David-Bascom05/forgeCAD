@@ -294,6 +294,7 @@ pub fn run_setup(path: &Path) -> Result<Outcome, String> {
     // checks made against an unknown or estimated value: never a silent pass
     let mut unchecked = forge_machine::sim::unchecked(def, &tl);
     unchecked.extend(forge_machine::sim::unchecked_cycles(def, &prog));
+    unchecked.extend(col.unchecked.iter().cloned());
     for u in &unchecked {
         text.push_str(&format!(
             "not checked: {} {} ({}{})\n",

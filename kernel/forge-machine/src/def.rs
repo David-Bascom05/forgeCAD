@@ -1319,6 +1319,12 @@ impl MachineDef {
         out
     }
 
+    /// The maker does not publish where this machine's own bodies can meet within travel (the
+    /// record cites `zones` unknown): a contact between them is possible, not checked.
+    pub fn zones_unpublished(&self) -> bool {
+        self.cite_status("zones") == Some(CiteStatus::Unknown)
+    }
+
     /// A zone's joints as indexes into `joints` (validated to exist).
     pub fn zone_joints(&self, z: &Zone) -> Vec<usize> {
         z.joints.iter().filter_map(|j| self.joint_index(j)).collect()
@@ -1369,6 +1375,9 @@ impl MachineDef {
                 (Some("changer"), Some("position"), None) => self.changer.is_some(),
                 (Some("zone"), Some(n), None) => self.zones.iter().any(|z| z.name == n),
                 (Some("pallets"), Some(_), None) => self.pallets.is_some(),
+                // where the machine's own bodies may meet in travel (crash zones), as a whole:
+                // cited `unknown` when the maker does not publish them
+                (Some("zones"), None, None) => true,
                 _ => false,
             }
         };
