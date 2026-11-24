@@ -600,9 +600,15 @@ pub fn rep_point(cx: &mut Ctx, pc: &Piece, a: Pt, b: Pt) -> Pt {
     }
 }
 
-/// A dyadic within about 2^-prec (relative) of the node's value.
+/// A dyadic near the node's value: at prec ≤ 53, its f64 enclosure's midpoint (no big-float
+/// evaluation; rep_point checks the direction it makes and asks again, more precisely, if it
+/// falls outside the sub-span), else within about 2^-prec (relative).
 fn dy_near(cx: &mut Ctx, a: R, prec: u64) -> Dy {
     if prec <= 53 {
+        let iv = cx.iv(a);
+        if iv.lo.is_finite() && iv.hi.is_finite() {
+            return Dy::from_f64(iv.mid());
+        }
         return Dy::from_f64(cx.approx(a));
     }
     let v = cx.eval(a, prec);
