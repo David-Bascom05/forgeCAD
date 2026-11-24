@@ -1,5 +1,5 @@
---- a/kernel/forge-bool/src/boolean.rs	2026-11-24 10:10:57.125220562 +0000
-+++ b/kernel/forge-bool/src/boolean.rs	2026-11-24 10:10:57.162967847 +0000
+--- a/kernel/forge-bool/src/boolean.rs	2026-11-24 10:33:09.231897924 +0000
++++ b/kernel/forge-bool/src/boolean.rs	2026-11-24 10:33:09.267859078 +0000
 @@ -2112,18 +2112,7 @@
              as_is[si] = true;
          }
@@ -16,7 +16,7 @@
 -            .map(|&(si, _)| specs[si].from),
 -    );
 -    staying.extend(untouched_kept.iter().copied());
-+    let mut staying = staying_faces(specs, &as_is, kept, untouched_kept);
++    let (mut staying, as_is) = staying_faces(specs, as_is, kept, untouched_kept);
      staying.sort_unstable();
      staying.dedup();
      for &f in involved {
@@ -48,13 +48,13 @@
 +/// (translation only, tools/aeneas: apply's `staying` chain, moved here verbatim)
 +fn staying_faces(
 +    specs: &[Spec],
-+    as_is: &[bool],
++    as_is: Vec<bool>,
 +    kept: &[(usize, bool)],
 +    untouched_kept: &[FaceId],
-+) -> Vec<FaceId> {
++) -> (Vec<FaceId>, Vec<bool>) {
 +    let mut staying: Vec<FaceId> = specs
 +        .iter()
-+        .zip(as_is)
++        .zip(&as_is)
 +        .filter(|(_, k)| **k)
 +        .map(|(s, _)| s.from)
 +        .collect();
@@ -64,7 +64,7 @@
 +            .map(|&(si, _)| specs[si].from),
 +    );
 +    staying.extend(untouched_kept.iter().copied());
-+    staying
++    (staying, as_is)
 +}
 +
 +/// (translation only, tools/aeneas: apply's loop dropping the replaced loops, moved here verbatim)

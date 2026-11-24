@@ -419,14 +419,14 @@ def stayingKept (specs : Slice boolean.Spec) : List (Std.Usize × Bool) → Resu
     ok (if s.extend && !flip then s.from :: r else r)
 
 /-- **`staying_faces`, as boolean.rs reads** (a model, to prove): the specs kept as they are
-(`zip`, `filter`, `map`), the extended ones, then A's faces kept untouched. -/
-def boolean.staying_faces (specs : Slice boolean.Spec) (as_is : Slice Bool)
+(`zip`, `filter`, `map`), the extended ones, then A's faces kept untouched; `as_is` handed back. -/
+def boolean.staying_faces (specs : Slice boolean.Spec) (as_is : alloc.vec.Vec Bool)
     (kept : Slice (Std.Usize × Bool)) (untouched : Slice forge_topo.body.FaceId) :
-    Result (alloc.vec.Vec forge_topo.body.FaceId) := do
+    Result ((alloc.vec.Vec forge_topo.body.FaceId) × (alloc.vec.Vec Bool)) := do
   let l1 := ((specs.val.zip as_is.val).filter (fun p => p.2)).map (fun p => p.1.from)
   let l2 ← stayingKept specs kept.val
   let l := l1 ++ l2 ++ untouched.val
-  if h : l.length ≤ Usize.max then ok (alloc.vec.Vec.from l h) else fail .panic
+  if h : l.length ≤ Usize.max then ok (alloc.vec.Vec.from l h, as_is) else fail .panic
 
 /-- `for &l in &s.remove { a.remove_loop(s.from, l) }`. -/
 def removeLoops (a : forge_topo.body.Body) (f : forge_topo.body.FaceId) :

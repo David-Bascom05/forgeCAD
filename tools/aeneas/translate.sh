@@ -20,7 +20,11 @@
 #                                  before Charon reads it: code motion only, so that a block Aeneas
 #                                  does not take sits in a function of its own (then --opaque and
 #                                  modelled) while the shipped code keeps its exact form, at no cost
-#                                  to speed. The patched code is a model of the shipped (LEDGER)
+#                                  to speed. PATCH_FNS=(f g) names the functions it moves code
+#                                  into: tools/aeneas/patch_motion.py checks (in --check too, under a
+#                                  second) that the patch is code motion only, each removed block
+#                                  verbatim inside one of them, nothing else added but their
+#                                  wrappers and call sites; the translation fails otherwise
 #   DROP_FIELDS=(size_hint)        trait-method fields to drop from the generated trait instances,
 #                                  where Aeneas's Lean structure for the trait has no such field
 #                                  (a Rust impl overriding a method the library does not model)
@@ -64,6 +68,7 @@ PKG=
 SRC_CRATE=
 DROP_FIELDS=()
 SRC_PATCH=
+PATCH_FNS=()
 BRIDGE=
 DEPS=()
 OVERFLOW_CHECKS=true
@@ -76,6 +81,8 @@ src=$root/kernel/${SRC_CRATE:-$crate}
 
 work=$(mktemp -d)
 if [ -n "$SRC_PATCH" ]; then
+  python3 "$root/tools/aeneas/patch_motion.py" "$dir/$SRC_PATCH" "${PATCH_FNS[@]}" >&2 \
+    || { echo "$crate: $SRC_PATCH is not code motion only" >&2; exit 1; }
   # the workspace's files (tracked, and untracked ones not ignored) copied with their times, then
   # the patch applied there: Charon reads the patched copy, the checkout is untouched
   mkdir "$work/root"

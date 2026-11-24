@@ -1251,14 +1251,13 @@ def boolean.apply
       alloc.alloc.Global plan.kept
   let as_is1 ← boolean.apply_loop1 iter1 plan.specs as_is
   let s := alloc.vec.Vec.deref plan.specs
-  let s1 := alloc.vec.Vec.deref as_is1
-  let s2 := alloc.vec.Vec.deref plan.kept
-  let s3 := alloc.vec.Vec.deref plan.untouched_kept
-  let staying ← boolean.staying_faces s s1 s2 s3
-  let (s4, deref_mut_back) ← lift (alloc.vec.Vec.deref_mut staying)
-  let s5 ←
-    core.slice.Slice.sort_unstable forge_topo.body.FaceId.Insts.CoreCmpOrd s4
-  let staying1 := deref_mut_back s5
+  let s1 := alloc.vec.Vec.deref plan.kept
+  let s2 := alloc.vec.Vec.deref plan.untouched_kept
+  let (staying, as_is2) ← boolean.staying_faces s as_is1 s1 s2
+  let (s3, deref_mut_back) ← lift (alloc.vec.Vec.deref_mut staying)
+  let s4 ←
+    core.slice.Slice.sort_unstable forge_topo.body.FaceId.Insts.CoreCmpOrd s3
+  let staying1 := deref_mut_back s4
   let staying2 ←
     alloc.vec.Vec.dedup alloc.alloc.Global
       forge_topo.body.FaceId.Insts.CoreCmpPartialEqFaceId staying1
@@ -1266,9 +1265,9 @@ def boolean.apply
     SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
       alloc.alloc.Global plan.involved
   let a2 ← boolean.apply_loop2 iter2 a1 staying2
-  let s6 := alloc.vec.Vec.deref plan.specs
-  let s7 := alloc.vec.Vec.deref plan.kept
-  let (new_outer, a3) ← boolean.drop_replaced_loops a2 s6 s7
+  let s5 := alloc.vec.Vec.deref plan.specs
+  let s6 := alloc.vec.Vec.deref plan.kept
+  let (new_outer, a3) ← boolean.drop_replaced_loops a2 s5 s6
   let i1 ← imprintSrcInst.vertex_count b
   let v ←
     alloc.vec.from_elem (core.option.Option.Insts.CoreCloneClone
@@ -1294,8 +1293,8 @@ def boolean.apply
     if i4 > 1#usize
     then
       do
-      let s8 := alloc.vec.Vec.deref plan.specs
-      let i5 ← core.slice.Slice.iter s8
+      let s7 := alloc.vec.Vec.deref plan.specs
+      let i5 ← core.slice.Slice.iter s7
       let (other_shell1, _) ←
         core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.any
           (boolean.apply.closure.Insts.CoreOpsFunctionFnMutTupleShared0SpecBool
@@ -1309,7 +1308,7 @@ def boolean.apply
     boolean.apply_loop3 imprintSrcInst iter3 a4 b plan.pieces plan.split
       plan.survivors plan.specs plan.kept plan.points plan.vnames plan.flush
       plan.tols plan.grown plan.alias plan.wholes plan.involved
-      plan.untouched_kept plan.pieces plan.specs as_is1 new_outer
+      plan.untouched_kept plan.pieces plan.specs as_is2 new_outer
       { new_vertex := v1, b_vertex := v } emap shell
   let iter4 ←
     SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
@@ -1318,16 +1317,16 @@ def boolean.apply
   if other_shell
   then forge_topo.body.Body.rebuild_shells a6
   else
-    let s8 := alloc.vec.Vec.deref plan.pieces
-    let i5 ← core.slice.Slice.iter s8
+    let s7 := alloc.vec.Vec.deref plan.pieces
+    let i5 ← core.slice.Slice.iter s7
     let (b2, _) ←
       core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.all
         (boolean.apply.closure_1.Insts.CoreOpsFunctionFnMutTupleShared0PieceBool
         imprintSrcInst) i5 ()
     if b2
     then
-      let s9 := alloc.vec.Vec.deref plan.kept
-      let i6 ← core.slice.Slice.iter s9
+      let s8 := alloc.vec.Vec.deref plan.kept
+      let i6 ← core.slice.Slice.iter s8
       let (b3, _) ←
         core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.any
           (boolean.apply.closure_2.Insts.CoreOpsFunctionFnMutTupleShared0PairUsizeBoolBool

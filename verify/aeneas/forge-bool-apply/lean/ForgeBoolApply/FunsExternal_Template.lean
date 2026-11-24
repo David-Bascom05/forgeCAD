@@ -651,6 +651,7 @@ axiom boolean.drop_replaced_loops
     Source: 'kernel/forge-bool/src/boolean.rs', lines 2218:0-2237:1 -/
 axiom boolean.staying_faces
   :
-  Slice boolean.Spec → Slice Bool → Slice (Std.Usize × Bool) → Slice
-    forge_topo.body.FaceId → Result (alloc.vec.Vec forge_topo.body.FaceId)
+  Slice boolean.Spec → alloc.vec.Vec Bool → Slice (Std.Usize × Bool) →
+    Slice forge_topo.body.FaceId → Result ((alloc.vec.Vec
+    forge_topo.body.FaceId) × (alloc.vec.Vec Bool))
 
