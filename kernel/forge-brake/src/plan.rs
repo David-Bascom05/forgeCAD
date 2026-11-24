@@ -89,6 +89,8 @@ struct Search<'a> {
     dead: HashSet<u64>,
     verdicts: std::rc::Rc<std::cell::RefCell<crate::sim::Memo>>,
     legs: HashMap<(u64, usize), (f64, f64, f64)>,
+    /// Taken steps simulated in full, by (done, bend, setup).
+    fulls: HashMap<(u64, usize, Setup), Step>,
     /// Steps with the last step's tools kept, by (done, bend, punch, die).
     kept: HashMap<(u64, usize, usize, usize), Option<Step>>,
     /// Per bend: (bends done, failures, the attempt).
@@ -160,6 +162,7 @@ impl<'a> Search<'a> {
             verdicts: Default::default(),
             legs: HashMap::new(),
             kept: HashMap::new(),
+            fulls: HashMap::new(),
             best: vec![None; m.bends.len()],
             explored: 0,
             // a set's size scales the search: a whole maker's catalogue holds hundreds of setups
@@ -208,6 +211,44 @@ impl<'a> Search<'a> {
     /// One setup simulated: quick stops at the first failure.
     fn run(&mut self, done: &[bool], j: usize, setup: Setup, quick: bool) -> Step {
         self.explored += 1;
+        self.sim(done, j, setup, quick)
+    }
+
+    /// A setup that passed its quick checks, taken: counted as simulated in full now (the
+    /// search's count and budget are as if it were), but simulated in full only if it ends in
+    /// the plan (`finish`): a branch the search backs out of never pays for it.
+    fn take(&mut self, quick: Step, rejected: Vec<(String, String, bool, Rule)>) -> Step {
+        self.explored += 1;
+        Step { rejected, ..quick }
+    }
+
+    /// A taken step simulated in full (once per bends done, bend and setup), its reasons kept.
+    fn finish(&mut self, done: &[bool], st: &Step) -> Step {
+        let key = (mask(done), st.bend, st.setup);
+        let mut full = match self.fulls.get(&key) {
+            Some(f) => f.clone(),
+            None => {
+                let f = self.sim(done, st.bend, st.setup, false);
+                self.fulls.insert(key, f.clone());
+                f
+            }
+        };
+        full.rejected = st.rejected.clone();
+        full
+    }
+
+    /// A taken path's steps simulated in full, in order.
+    fn finish_path(&mut self, steps: &[Step]) -> Vec<Step> {
+        let mut done = vec![false; self.m.bends.len()];
+        let mut out = Vec::with_capacity(steps.len());
+        for st in steps {
+            out.push(self.finish(&done, st));
+            done[st.bend] = true;
+        }
+        out
+    }
+
+    fn sim(&mut self, done: &[bool], j: usize, setup: Setup, quick: bool) -> Step {
         let ob = self.overbend(j);
         let mut ctx = StepCtx::new(self.m, self.tl, done, j, setup, ob);
         if let Some(k) = self.lock(j) {
@@ -384,9 +425,7 @@ impl<'a> Search<'a> {
                 );
             }
             if step.pass() {
-                let mut full = self.run(done, j, s, false);
-                full.rejected = std::mem::take(&mut rejected);
-                found = Some(full);
+                found = Some(self.take(step, std::mem::take(&mut rejected)));
                 break;
             }
             if let Some(c) = step.failures().first() {
@@ -436,8 +475,9 @@ impl<'a> Search<'a> {
                     if !self.allowed(j, s) || self.screen(j, s).is_some() {
                         break;
                     }
-                    if self.run(done, j, s, true).pass() {
-                        found = Some(self.run(done, j, s, false));
+                    let q = self.run(done, j, s, true);
+                    if q.pass() {
+                        found = Some(self.take(q, Vec::new()));
                         break;
                     }
                 }
@@ -531,6 +571,7 @@ pub fn plan(m: &Model, tl: &Tooling, opts: &Options) -> Plan {
     let mut done = vec![false; m.bends.len()];
     let mut steps = Vec::new();
     let feasible = s.dfs(&mut done, &mut steps);
+    let steps = s.finish_path(&steps);
     let sequence = steps.iter().map(|st| st.bend).collect();
     let blocking = if feasible { Vec::new() } else { blocking(&s) };
     let suggestions = suggest(m, &blocking);
@@ -639,7 +680,7 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
         }
         let prev = steps.last().map(|st: &Step| st.setup);
         match s.try_bend_after(&done, j, prev) {
-            Some(st) => steps.push(st),
+            Some(st) => steps.push(s.finish(&done, &st)),
             None => {
                 feasible = false;
                 // its best attempt, simulated in full, stands in the plan
@@ -787,5 +828,10 @@ pub fn programs(m: &Model, tl: &Tooling, opts: &Options, max: usize) -> Vec<Prog
     // stable: the search's order breaks ties
     out.sort_by_key(Program::key);
     out.truncate(max);
+    // only the programs offered are simulated in full (the search took their steps on their
+    // quick checks, counting each as simulated)
+    for p in &mut out {
+        p.plan.steps = s.finish_path(&p.plan.steps);
+    }
     out
 }

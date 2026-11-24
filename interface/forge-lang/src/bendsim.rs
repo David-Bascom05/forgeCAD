@@ -187,6 +187,32 @@ pub struct Sim {
     pub stage: Option<fb::Staged>,
 }
 
+/// `BENDSIM_TIME=1`: each phase's wall time on stderr (native only: no clock on wasm32).
+struct Phases {
+    #[cfg(not(target_arch = "wasm32"))]
+    at: Option<std::time::Instant>,
+}
+
+impl Phases {
+    fn start() -> Phases {
+        Phases {
+            #[cfg(not(target_arch = "wasm32"))]
+            at: std::env::var_os("BENDSIM_TIME").map(|_| std::time::Instant::now()),
+        }
+    }
+
+    fn lap(&mut self, _what: &str) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(t) = &mut self.at {
+            eprintln!(
+                "bendsim time: {_what:<10} {:>8.1} ms",
+                t.elapsed().as_secs_f64() * 1e3
+            );
+            *t = std::time::Instant::now();
+        }
+    }
+}
+
 /// The part's sheet simulated: Err is the typed error reply.
 pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask) -> Result<Sim, Answer> {
     let opts = Options {
@@ -194,7 +220,9 @@ pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &As
         root,
         ..Options::default()
     };
+    let mut ph = Phases::start();
     let (r, _) = run(src, opts, Default::default());
+    ph.lap("build");
     if r.sheets.is_empty() {
         return Err(match r.errors.first() {
             Some(e) => {
@@ -251,7 +279,9 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         ask.dies.get_or_insert(ds);
     }
     let ask = &ask;
+    let mut ph = Phases::start();
     let (mut tooling, tsource) = tooling(ask, dir, sh.vendor.as_ref().map(|v| v.id.as_str()))?;
+    ph.lap("tooling");
     for st in &ask.stations {
         let (Some(p), Some(d)) = (
             tooling.punches.iter().position(|x| x.id == st.punch),
@@ -282,6 +312,7 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         Err(e) => return Err(model_err(sh, &e)),
     };
     let bend_names: Vec<String> = model.bends.iter().map(|b| joint_name(sh, b.joint)).collect();
+    ph.lap("model");
     let sequence = match &ask.sequence {
         None => None,
         Some(s) => Some(sequence(s, &bend_names)?),
@@ -368,10 +399,14 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
     } else {
         fb::plan(&model, &tooling, &opts)
     };
+    ph.lap(if ask.stage { "stage" } else { "plan" });
     let ranked = ask.programs.map(|n| fb::programs(&model, &tooling, &opts, n));
+    ph.lap("programs");
     // the operator's move into each step after the first, checked (a warning if not proven clear)
     fb::scene::annotate_handling(&model, &tooling, &mut plan);
+    ph.lap("handling");
     let mut answer = answer(sh, &model, &tooling, &plan, &bend_names);
+    ph.lap("reply");
     if let Json::Obj(f) = &mut answer.json {
         f.insert(4, ("tooling_source".into(), tsource));
         if let Some(r) = &ranked {
