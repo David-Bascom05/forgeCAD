@@ -9,7 +9,7 @@ use forge_machine_builder::write;
 use std::path::{Path, PathBuf};
 
 fn tmp(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("fmb-{name}-{}", std::process::id()));
+    let d = forge_dirs::temp_dir().join(format!("fmb-{name}-{}", forge_dirs::process_id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d
