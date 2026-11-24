@@ -22,6 +22,9 @@ pub struct Piece {
     /// Turns with the spindle (the cutter, neck and shank; not the holder's nut, which turns
     /// too but shows nothing turning).
     pub spins: bool,
+    /// Per vertex, a factor on the colour: the flutes' valleys dark, their lands light, so a
+    /// fluted cutter reads as one at a glance (empty: 1 everywhere).
+    pub shade: Vec<f32>,
 }
 
 /// A tool as drawn.
@@ -37,6 +40,9 @@ pub struct ToolLook {
     /// Where it points: (radius, height) from the tip, on the holder's lower outer edge (or the
     /// shank's top).
     pub note: Option<([f64; 2], String)>,
+    /// A generic holder interface (taper and flange) above the gauge line, drawn see-through and
+    /// labelled "generic shape": no record of the library holds the interface's dimensions.
+    pub ghost: Option<Tris>,
 }
 
 /// The colour a tool's cutting part shows: its coating's, else its material's.
@@ -126,6 +132,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                 tris: crate::machine_mesh::revolve(&o),
                 colour: look::HOLDER,
                 spins: false,
+                shade: vec![],
             });
             continue;
         }
@@ -153,12 +160,21 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                 Kind::Tap if tu.tool.tp > 0.0 => (threaded(&local, lcf, tu.tool.tp), 0.0),
                 // a reamer's and a drill's flutes as the record gives them; a tap's straight
                 Kind::Tap => (local.clone(), 0.0),
-                _ => (local.clone(), helix.unwrap_or(0.0)),
+                _ => (
+                    local.clone(),
+                    helix.unwrap_or_else(|| typical_helix(tu.tool.kind)),
+                ),
             };
+            let (tris, shade) = gashed(
+                lift(crate::library_mesh::fluted(&cut, lcf, tu.tool.nof, h)),
+                &cut,
+                z0,
+            );
             pieces.push(Piece {
-                tris: lift(crate::library_mesh::fluted(&cut, lcf, tu.tool.nof, h)),
+                tris,
                 colour: cutting_colour(tu),
                 spins: true,
+                shade,
             });
             // the cutter body above its flutes (to its top): plain
             let rest: Vec<[f64; 2]> = std::iter::once([lcf, 0.0])
@@ -169,6 +185,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                     tris: lift(crate::machine_mesh::revolve(&rest)),
                     colour: shank_colour(tu),
                     spins: true,
+                    shade: vec![],
                 });
             }
         } else {
@@ -180,6 +197,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                     shank_colour(tu)
                 },
                 spins: true,
+                shade: vec![],
             });
         }
     }
@@ -204,17 +222,39 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
             Some((
                 top,
                 match iface {
-                    Some(i) => format!("{id}: {i} taper and flange not drawn (not in the library)"),
+                    Some(i) => format!("{id}: {i} taper and flange a generic shape (not in the library)"),
                     None => format!("{id}: its interface is not in the library"),
                 },
             ))
         }
     };
+    // a helix the record does not give: drawn at the kind's usual one, and said
+    let note = match (
+        helix,
+        tu.tool.nof > 0 && !tu.probe && !matches!(tu.tool.kind, Kind::Tap | Kind::Reamer),
+    ) {
+        (None, true) => note.map(|(a, t)| {
+            (
+                a,
+                format!(
+                    "{t}\n{}: helix not in its record, drawn at {:.0}°",
+                    tu.tool.id,
+                    typical_helix(tu.tool.kind)
+                ),
+            )
+        }),
+        _ => note,
+    };
+    let ghost = holder_at
+        .and_then(|k| bodies.get(k))
+        .zip(tu.holder.as_deref())
+        .and_then(|(b, id)| interface_ghost(id, b.z1));
     ToolLook {
         pieces,
         tris,
         no_holder: tu.holder.is_none(),
         note,
+        ghost,
     }
 }
 
@@ -244,6 +284,8 @@ pub fn draw(t: &ToolLook, p: [f64; 3], spin: f64, fail: bool, out: &mut Vec<Worl
         for tri in &tr.tri {
             for &k in tri {
                 let (q, n) = (tr.pos[k as usize], tr.nrm[k as usize]);
+                let f = pc.shade.get(k as usize).copied().unwrap_or(1.0);
+                let base = [base[0] * f, base[1] * f, base[2] * f];
                 let at = [
                     (p[0] + q[0] * c - q[1] * s) as f32,
                     (p[1] + q[0] * s + q[1] * c) as f32,
@@ -291,6 +333,119 @@ pub fn edges(t: &ToolLook, p: [f64; 3], spin: f64, eye: &super::draw::Eye, out: 
             for w in e.windows(2) {
                 super::draw::ribbon(eye, at(w[0]), at(w[1]), 2.0, [0.04, 0.04, 0.05, 0.9], out);
             }
+        }
+    }
+}
+
+/// The helix a cutter of this kind usually has, for drawing a record that gives none (said in
+/// the tool's note): end mills and twist drills 30°, taps and reamers straight.
+pub fn typical_helix(k: Kind) -> f64 {
+    match k {
+        Kind::Tap | Kind::Reamer | Kind::Spot | Kind::Countersink | Kind::Counterbore | Kind::Engrave => 0.0,
+        _ => 30.0,
+    }
+}
+
+/// The fluted mesh with its gashes deepened (the builder's groove taken 1.8 times as deep, for
+/// the simulation's distance) and each vertex shaded by how deep it lies: a valley at 0.45, a
+/// land at 1.15 of the colour. Normals are taken again from the moved surface.
+fn gashed(mut t: Tris, outline: &[[f64; 2]], z0: f64) -> (Tris, Vec<f32>) {
+    let r_at = |z: f64| {
+        let mut r = 0.0;
+        for w in outline.windows(2) {
+            if (w[0][0]..=w[1][0]).contains(&z) && w[1][0] > w[0][0] {
+                r = w[0][1] + (w[1][1] - w[0][1]) * (z - w[0][0]) / (w[1][0] - w[0][0]);
+                break;
+            }
+        }
+        r
+    };
+    let mut shade = Vec::with_capacity(t.pos.len());
+    for p in &mut t.pos {
+        let rr = (p[0] * p[0] + p[1] * p[1]).sqrt();
+        let full = r_at(p[2] - z0);
+        if full <= 1e-6 || rr <= 1e-9 {
+            shade.push(1.0);
+            continue;
+        }
+        let deficit = (full - rr).max(0.0) / full;
+        let deep = (deficit * 1.8).min(0.45);
+        let k = (full * (1.0 - deep)) / rr;
+        p[0] *= k;
+        p[1] *= k;
+        // 0 on a land, 1 at the bottom of a valley
+        let u = (deep / 0.4).min(1.0) as f32;
+        shade.push(1.15 - 0.7 * u);
+    }
+    // normals from the moved surface, a triangle's to its corners
+    for tri in &t.tri {
+        let [a, b, c] = tri.map(|k| t.pos[k as usize]);
+        let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        let n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        let l = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+        if l > 0.0 {
+            for &k in tri {
+                t.nrm[k as usize] = [n[0] / l, n[1] / l, n[2] / l];
+            }
+        }
+    }
+    (t, shade)
+}
+
+/// A holder interface's usual outline above the gauge line (z from the gauge line up, radius):
+/// the flange and the 7/24 taper of the 30, 40 and 50 sizes (BT and CAT alike in silhouette),
+/// HSK-63's flange and short taper. A generic shape for display, labelled so, never a record's;
+/// the certified checks never see it. None for an interface it does not know.
+fn interface_ghost(holder: &str, z_gauge: f64) -> Option<Tris> {
+    static LIB: std::sync::OnceLock<forge_tooling::Library> = std::sync::OnceLock::new();
+    let lib = LIB.get_or_init(forge_tooling::Library::builtin);
+    let iface = lib.holder(holder).ok()?.interface.to_ascii_uppercase();
+    // (flange diameter, flange thickness, taper large diameter, taper length)
+    let (fd, ft, td, tl) = if iface.contains("HSK") && iface.contains("63") {
+        (63.0, 10.0, 48.0, 32.0)
+    } else if iface.ends_with("30") || iface.contains("NO.30") {
+        (46.0, 13.0, 31.75, 48.0)
+    } else if iface.ends_with("40") || iface.contains("NO.40") {
+        (63.0, 16.0, 44.45, 65.0)
+    } else if iface.ends_with("50") || iface.contains("NO.50") {
+        (100.0, 25.0, 69.85, 102.0)
+    } else {
+        return None;
+    };
+    // a 7/24 taper narrows by 7 in 24 on the diameter; HSK's is short, about 1:10
+    let small = if iface.contains("HSK") {
+        td - tl / 10.0
+    } else {
+        td - tl * 7.0 / 24.0
+    };
+    let o = [
+        [z_gauge, 0.0],
+        [z_gauge, 0.5 * fd],
+        [z_gauge + ft, 0.5 * fd],
+        [z_gauge + ft, 0.5 * td],
+        [z_gauge + ft + tl, 0.5 * small],
+        [z_gauge + ft + tl, 0.0],
+    ];
+    Some(crate::machine_mesh::revolve(&o))
+}
+
+/// The generic interface, see-through, posed with the tool (it does not turn: nothing on it shows
+/// turning).
+pub fn ghost(t: &ToolLook, p: [f64; 3], out: &mut Vec<WorldVert>) {
+    let Some(g) = &t.ghost else { return };
+    for tri in &g.tri {
+        for &k in tri {
+            let (q, n) = (g.pos[k as usize], g.nrm[k as usize]);
+            let c = shade_pub(look::HOLDER, [n[0] as f32, n[1] as f32, n[2] as f32]);
+            out.push(WorldVert {
+                at: [(p[0] + q[0]) as f32, (p[1] + q[1]) as f32, (p[2] + q[2]) as f32],
+                colour: [c[0], c[1], c[2], 0.3],
+            });
         }
     }
 }

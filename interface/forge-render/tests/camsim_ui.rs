@@ -208,14 +208,21 @@ fn realistic_tools_close_up() {
                 .iter()
                 .find(|g| g.kind != forge_render::camsim::timeline::Kind::Rapid)
                 .map_or(sp.t0, |g| g.t0 + 1e-6);
+            // the simulation's default framing: the stock and the tool together
             h.gui
-                .camsim_command(&format!("t={at};part=hidden;fit=tool"))
+                .camsim_command(&format!("t={at};part=hidden;follow=0;fit=sim"))
                 .unwrap();
             let st = h.gui.shell.camsim.as_ref().unwrap();
             let (tool, _, _) = st.tool_now().unwrap();
             let lk = &st.sim.looks[tool];
             assert!(lk.tris > 1000, "{doc} {op}: a fluted tool");
             shot(&mut h, name);
+            // and the opt-in close-up, following the tool, for the flange's
+            if name.contains("flange") {
+                h.gui.camsim_command("follow=1;fit=tool").unwrap();
+                shot(&mut h, "native-tools-05-flange-close-up");
+                h.gui.camsim_command("follow=0").unwrap();
+            }
         }
     }
 }

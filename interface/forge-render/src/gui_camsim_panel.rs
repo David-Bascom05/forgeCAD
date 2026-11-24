@@ -378,7 +378,12 @@ impl Shell {
             .cam
             .as_ref()
             .and_then(|w| w.run.as_ref())
-            .map(|r| r.ops.iter().filter_map(|o| Some((o.name.clone(), r.cycle([o.name.as_str()])?))).collect())
+            .map(|r| {
+                r.ops
+                    .iter()
+                    .filter_map(|o| Some((o.name.clone(), r.cycle([o.name.as_str()])?)))
+                    .collect()
+            })
             .unwrap_or_default();
         ui.scope_builder(egui::UiBuilder::new().max_rect(r), |ui| {
             ui.set_width(r.width());
@@ -846,6 +851,7 @@ fn verdict(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     };
     for e in &cam.errors[..shown] {
         let (at, what) = problem(e);
+        let what = crate::camsim::tidy(&what);
         ui.horizontal(|ui| {
             if let Some(at) = at {
                 ui.label(egui::RichText::new(at).size(11.0).color(t.ink2));
@@ -1107,9 +1113,18 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                         });
                     });
                     if let Some(r) = &out.refusal {
+                        // in words: the first failed check's sentence, else the refusal tidied;
+                        // the run's own text on hover
+                        let said = out
+                            .checks
+                            .iter()
+                            .find(|c| c.verdict != "pass")
+                            .map(crate::camsim::check_sentence)
+                            .unwrap_or_else(|| crate::camsim::tidy(r));
                         ui.horizontal_wrapped(|ui| {
                             ui.add_space(32.0);
-                            ui.label(egui::RichText::new(r).size(11.0).color(t.error));
+                            ui.add(egui::Label::new(egui::RichText::new(said).size(11.0).color(t.error)).wrap())
+                                .on_hover_text(r);
                         });
                     }
                 }

@@ -346,6 +346,7 @@ pub fn geometry(
             Some(lk) => {
                 crate::camsim::tools::draw(lk, p, st.spin, fail, &mut solid);
                 crate::camsim::tools::edges(lk, p, st.spin, &eye, world);
+                crate::camsim::tools::ghost(lk, p, world);
             }
             None => draw::tool(&tu.shape, p, fail, &mut solid),
         }
@@ -410,6 +411,7 @@ impl Gui {
             .camsim
             .as_deref_mut()
             .ok_or("no machining document is open")?;
+        let mut refit = false;
         for cmd in cmds.split(';').map(str::trim).filter(|c| !c.is_empty()) {
             let (k, v) = cmd.split_once('=').unwrap_or((cmd, ""));
             let num = || {
@@ -472,6 +474,8 @@ impl Gui {
                     st.jump(f * total);
                 }
                 "machine" => st.machine = on()?,
+                // the simulation's own framing: the stock and the tool's tip now (STANDARD §2)
+                "fit" if v == "sim" => refit = true,
                 "fit" => {
                     // the view on the stock, or on the whole machine about it
                     let mut tris = vec![];
@@ -546,6 +550,9 @@ impl Gui {
                 }
                 _ => return Err(format!("`{cmd}`: not a simulation word")),
             }
+        }
+        if refit {
+            self.camsim_fit();
         }
         if let Some(v) = &mut self.view {
             v.dirty = true;

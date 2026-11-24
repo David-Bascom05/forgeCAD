@@ -657,3 +657,58 @@ fn tools_are_drawn_from_their_records() {
         );
     }
 }
+
+/// A failed check and a run's message in words (docs/ux/STANDARD.md §5/§7): rounded, with units,
+/// never a Debug dump.
+#[test]
+fn checks_and_problems_in_words() {
+    use forge_render::camsim::{check_sentence, tidy};
+    let c = forge_cam::ops::CheckOut {
+        rule: "holder_collision",
+        verdict: "fail",
+        value: -2.749999884242636,
+        limit: -0.01,
+        at: [0.0; 3],
+        tool_part: "holder",
+        other: "stock face 2158".into(),
+        phase: "plunge",
+        move_index: 3,
+        path: 0,
+    };
+    assert_eq!(
+        check_sentence(&c),
+        "Holder hits the stock on the plunge at move 3 (2.75 mm into it)"
+    );
+    assert_eq!(
+        tidy("the part's section at z = 29: NotPrism { face: 38 }"),
+        "the part's section at z = 29: isn't a prism (face 38)"
+    );
+    assert_eq!(tidy("-2.749999884242636 vs -0.01"), "-2.750 vs -0.01");
+}
+
+/// A fluted cutter reads as one: its cutting length at least 15 % darker than its shank
+/// (luminance of the colours drawn), its valleys darker than its lands.
+#[test]
+fn a_cutters_flutes_stand_out_from_its_shank() {
+    let sim = flange();
+    let lum = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    let lk = &sim.looks[0];
+    let cut = lk
+        .pieces
+        .iter()
+        .find(|p| !p.shade.is_empty())
+        .expect("a fluted piece");
+    let shank = lk
+        .pieces
+        .iter()
+        .find(|p| p.spins && p.shade.is_empty())
+        .expect("a shank");
+    let mean = cut.shade.iter().sum::<f32>() / cut.shade.len() as f32;
+    let (lc, ls) = (lum(cut.colour) * mean, lum(shank.colour));
+    assert!(lc < 0.85 * ls, "cutting {lc} vs shank {ls}");
+    let (lo, hi) = cut
+        .shade
+        .iter()
+        .fold((f32::MAX, f32::MIN), |a, &x| (a.0.min(x), a.1.max(x)));
+    assert!(hi - lo > 0.4, "valleys {lo} lands {hi}");
+}
