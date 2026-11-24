@@ -2382,19 +2382,38 @@ impl Cam {
         use forge_cam_geom::check::{Surf, TSeg, Trim};
         use forge_cam_geom::ival::Ival;
         let part = &self.parts[self.setups[su].part];
-        if t.tool.kind != Kind::Chamfer || (t.tool.angle - 90.0).abs() > 1e-9 {
-            out.fix = Some("a 90° chamfer mill (chamfer-10-90)".into());
-            return Err(format!("edge_break: `{}` is not a 90° chamfer mill", t.tool.id));
+        if !matches!(t.tool.kind, Kind::Chamfer | Kind::Spot)
+            || !(t.tool.angle >= 30.0 && t.tool.angle <= 150.0)
+        {
+            out.fix = Some("a chamfer mill or spot drill of 30° to 150° (chamfer-10-90)".into());
+            return Err(format!(
+                "edge_break: `{}` is not a chamfer mill or spot drill of 30° to 150°",
+                t.tool.id
+            ));
         }
         let ztop = part.bbox.1[2];
         let z = get_num(a, "at", Some(ztop))?;
-        let s = get_num(a, "size", None)?;
+        let s = match (a.get("size"), a.get("width")) {
+            (Some(_), Some(_)) => return Err("edge_break: give `size:` or `width:`, not both".into()),
+            (None, Some(_)) => get_num(a, "width", None)?,
+            _ => get_num(a, "size", None)?,
+        };
         let (r0, rt) = (0.5 * t.tool.tip_d, 0.5 * t.tool.dc);
-        const E: f64 = 0.2;
-        let c = r0 + E;
+        // the chamfer's angle from the wall: half the tool's; its depth s_v for a width s
+        let beta = 0.5 * t.tool.angle;
+        let (sin_b, cos_b) = forge_math::dmath::sin_cos(beta.to_radians());
+        let tan_b = sin_b / cos_b;
+        // the tip below the chamfer's bottom (default 0.2), and the axis that far times tan β
+        // further out than where the tip's edge would touch
+        let tip_off = get_num(a, "tip_offset", Some(0.2))?;
+        if !(tip_off >= 0.0 && tip_off.is_finite()) {
+            return Err("edge_break: tip_offset: a length, 0 or more".into());
+        }
+        let c = r0 + tip_off * tan_b;
         if s.is_nan() || s <= 0.0 {
             return Err("edge_break: size must be over 0".into());
         }
+        let s_v = s / tan_b;
         if c + s >= rt {
             out.fix = Some(format!("a chamfer mill over {:.3} mm across", 2.0 * (c + s)));
             return Err(format!(
@@ -2407,7 +2426,7 @@ impl Cam {
                 "edge_break: at z = {z} is not the part's top ({ztop}); this phase breaks the top's edges only"
             ));
         }
-        let zc = z - s;
+        let zc = z - s_v;
         let mu = 1e-9;
         // the top's outline R: the union of the flat faces at z
         let mut tops: Option<Region> = None;
@@ -2529,7 +2548,6 @@ impl Cam {
         faces.push(forge_cam::stock::flat(&er, z, mu, id));
         id += 1;
         // the chamfer surfaces, piece by piece of E
-        let rt2 = std::f64::consts::FRAC_1_SQRT_2;
         let dir = |sg: &Seg, at_end: bool| -> [f64; 2] {
             match *sg {
                 Seg::Line { a, b } => {
@@ -2577,7 +2595,8 @@ impl Cam {
                         let u2 = dir(sg, false);
                         let nn = [u2[1], -u2[0]];
                         let len = ((pb.x - pa.x).powi(2) + (pb.y - pa.y).powi(2)).sqrt();
-                        let qb = s * std::f64::consts::SQRT_2;
+                        // the slope's length from the top's edge to the chamfer's bottom
+                        let qb = s / sin_b;
                         // bottom ends: moved out by s, or the corner
                         let ca = junction(prev, sg, *sg)?;
                         let cb = junction(sg, next, *next)?;
@@ -2591,14 +2610,14 @@ impl Cam {
                                 b: poly[(k + 1) % 4],
                             })
                             .collect();
-                        // o + p u + q v: u along the piece, v down the 45° slope outward; the
+                        // o + p u + q v: u along the piece, v down the slope (β from the wall) outward; the
                         // quadrilateral runs anticlockwise in (p, q) when u × v points out of the
                         // part (up and out)
                         faces.push(Face::new(
                             Surf::Plane {
                                 o: [pa.x, pa.y, z],
                                 u: [u2[0], u2[1], 0.0],
-                                v: [nn[0] * rt2, nn[1] * rt2, -rt2],
+                                v: [nn[0] * sin_b, nn[1] * sin_b, -cos_b],
                             },
                             Ival::new(pa_b.min(0.0) - mu, pb_b.max(len) + mu),
                             Ival::new(-mu, qb + mu),
@@ -2652,8 +2671,9 @@ impl Cam {
                             // tan of a quarter of the sweep, widened a little (a superset)
                             let th = forge_math::dmath::sin(0.5 * hh) / forge_math::dmath::cos(0.5 * hh)
                                 * (1.0 + 1e-12);
-                            // ccw (the centre inside): the radius grows going down; cw shrinks
-                            let kk = if ccw { 1.0 } else { -1.0 };
+                            // ccw (the centre inside): the radius grows going down, tan β per
+                            // unit height; cw shrinks
+                            let kk = if ccw { tan_b } else { -tan_b };
                             faces.push(Face::new(
                                 Surf::Cone {
                                     o: [cc.x, cc.y, z],
@@ -2664,7 +2684,7 @@ impl Cam {
                                     k: kk,
                                 },
                                 Ival::new(-th, th),
-                                Ival::new(0.0, s),
+                                Ival::new(0.0, s_v),
                                 None,
                                 mu,
                                 id,
@@ -2677,7 +2697,7 @@ impl Cam {
         }
         out.target = Some(faces);
         out.removals.push(format!(
-            "edge_break {s} x 45° of the top at z {z:.3}: the band within {s} of its edges, from z {zc:.3} up, below the 45° surface"
+            "edge_break {s} x {beta}° of the top at z {z:.3}: the band within {s} of its edges, from z {zc:.3} up, below the {beta}° surface"
         ));
         // the path: the axis on R ⊕ c, the tip at z − s − e
         let (pl, _) = forge_cam_geom::offset::offset(&rg, -c).map_err(|e| format!("edge_break: {e:?}"))?;
@@ -2694,7 +2714,7 @@ impl Cam {
                 rg.loops.len()
             ));
         }
-        let zt = zc - E;
+        let zt = zc - tip_off;
         ops::contour(
             &rg,
             ops::Cut {
