@@ -991,14 +991,23 @@ impl Gui {
         }
         self.agent.turns.start(undo_label(text));
         self.apps.view_set = false;
-        let mut msg = prompt(text, refs);
-        if document.is_some()
+        // a backend's slash command (/compact, a skill) goes as typed, nothing added: Claude Code
+        // takes a message as a command only when it's the whole of it. What it'd be told waits for
+        // the next message.
+        let command = text.starts_with('/');
+        let mut msg = if command {
+            text.to_string()
+        } else {
+            prompt(text, refs)
+        };
+        if !command
+            && document.is_some()
             && self.shell.drawing.is_none()
             && let Some(note) = self.shell.fg.as_ref().and_then(build_note)
         {
             msg.push_str(&format!("\n\n({note})"));
         }
-        if self.agent.told.as_deref() != Some(path.as_str()) {
+        if !command && self.agent.told.as_deref() != Some(path.as_str()) {
             msg = if document.is_some() {
                 format!("(The open file is now {path}.)\n\n{msg}")
             } else {
@@ -1012,7 +1021,7 @@ impl Gui {
         if let Some(t) = &self.agent.app_tools {
             t.set_dir(Path::new(&dir));
         }
-        if self.agent.resumed {
+        if !command && self.agent.resumed {
             msg = format!(
                 "(This conversation was resumed. Inspect the current project before editing; files may have changed. Current context: {path}.)\n\n{msg}"
             );

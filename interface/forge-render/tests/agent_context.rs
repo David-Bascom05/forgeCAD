@@ -88,6 +88,7 @@ fn a_pick_replaces_the_word_typed() {
     let mut tab = AgentTab::default();
     tab.input = "fillet @ext".into();
     tab.mention = Some(Mention {
+        sigil: '@',
         word: "ext".into(),
         items: vec![c("extrude1"), c("base_ext")],
         at: 1,

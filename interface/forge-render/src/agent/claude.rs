@@ -119,6 +119,15 @@ impl Parser {
                 if let Some(m) = d.get("permissionMode").and_then(Json::str) {
                     out.push(Event::Mode(m.to_string()));
                 }
+                // the commands it takes in a message: the person's skills, compact, context...
+                let commands: Vec<String> = arr(get(&d, "slash_commands"))
+                    .iter()
+                    .filter_map(Json::str)
+                    .map(str::to_string)
+                    .collect();
+                if !commands.is_empty() {
+                    out.push(Event::Commands(commands));
+                }
             }
             "system" if str_of(&d, "subtype") == "status" => {
                 if let Some(m) = d.get("permissionMode").and_then(Json::str) {

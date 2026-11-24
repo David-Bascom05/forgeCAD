@@ -66,6 +66,8 @@ pub enum Event {
     },
     /// The backend's permission mode is now this (`Mode::flag`), however it changed.
     Mode(String),
+    /// The slash commands the backend takes in a message (Claude Code's `init` says them).
+    Commands(Vec<String>),
     /// A Forge file in the folder changed or appeared while the agent ran; what it held before.
     FileChanged {
         path: String,
@@ -289,6 +291,8 @@ pub struct AgentTab {
     pub mode_chosen: bool,
     /// The mode chip's menu is open.
     pub mode_menu: bool,
+    /// The backend's own slash commands (Claude Code's: compact, context, skills...).
+    pub commands: Vec<String>,
     /// Scroll the chat to its end next frame ("Jump to latest").
     pub jump: bool,
     /// The waiting question's buttons are in sight (or none waits): Enter may answer it.
@@ -320,11 +324,70 @@ pub struct Candidate {
 /// The `@` list: the word typed after `@`, what matches it, and the one Enter takes.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Mention {
+    /// `@` (a name) or `/` (a command).
+    pub sigil: char,
     pub word: String,
     pub items: Vec<Candidate>,
     pub at: usize,
     /// Everything it can name, gathered once when the list opened.
     pub all: Vec<Candidate>,
+}
+
+/// The `/word` the box is, when it's a command being typed: the word, without its `/`.
+pub fn slash_word(input: &str) -> Option<&str> {
+    let w = input.strip_prefix('/')?;
+    w.chars()
+        .all(|c| c.is_alphanumeric() || "-_:".contains(c))
+        .then_some(w)
+}
+
+/// The app's own commands, before the backend's: (name, what it does).
+pub const COMMANDS: [(&str, &str); 7] = [
+    ("new", "Start a new conversation"),
+    ("clear", "Start a new conversation (as /new)"),
+    ("resume", "Pick a saved conversation"),
+    ("mode", "What may run without asking: ask, edits or plan"),
+    ("model", "Choose the agent and its model"),
+    ("undo", "Take back the last turn's changes"),
+    ("help", "What these commands do"),
+];
+
+/// What a backend command does, where it's known.
+fn backend_says(name: &str) -> String {
+    match name {
+        "compact" => "Summarise the conversation so far, to free context".into(),
+        "context" => "What's using the context".into(),
+        "usage" => "Your Claude plan's usage".into(),
+        "init" => "Write a CLAUDE.md for this project".into(),
+        "effort" => "How hard the model thinks".into(),
+        "review" | "code-review" => "Review the changes".into(),
+        "security-review" => "Review the changes for security".into(),
+        n if n.contains(':') => "Skill (Claude Code)".into(),
+        _ => "Claude Code".into(),
+    }
+}
+
+/// Everything `/` can run: the app's, then the backend's (less those the app does itself).
+pub fn command_candidates(backend: &[String]) -> Vec<Candidate> {
+    let mut all: Vec<Candidate> = COMMANDS
+        .iter()
+        .map(|(n, w)| Candidate {
+            name: n.to_string(),
+            what: w.to_string(),
+            tip: String::new(),
+        })
+        .collect();
+    for n in backend {
+        if n.starts_with("__") || COMMANDS.iter().any(|c| c.0 == n) {
+            continue;
+        }
+        all.push(Candidate {
+            name: n.clone(),
+            what: backend_says(n),
+            tip: String::new(),
+        });
+    }
+    all
 }
 
 /// At most this many in the `@` list.
@@ -451,6 +514,7 @@ impl AgentTab {
                 always,
                 state: Asked::Waiting,
             }),
+            Event::Commands(c) => self.commands = c,
             Event::Mode(m) => match Mode::from_flag(&m) {
                 Some(m) => {
                     self.mode = m;
@@ -512,7 +576,60 @@ impl AgentTab {
     /// The input as a message: sent now or queued behind the active turn.
     pub fn send(&mut self) {
         let text = self.input.trim().to_string();
+        // the mode, any time: `/mode` opens its menu, `/mode plan` sets it
+        if let Some(arg) = text
+            .strip_prefix("/mode")
+            .filter(|r| r.is_empty() || r.starts_with(' '))
+        {
+            self.input.clear();
+            match arg.trim() {
+                "" => self.mode_menu = true,
+                "ask" | "default" => self.set_mode(Mode::Ask),
+                "edits" | "accept" | "acceptEdits" => self.set_mode(Mode::AcceptEdits),
+                "plan" => self.set_mode(Mode::Plan),
+                other => self.entries.push(Entry::Note {
+                    text: format!("/mode {other}: ask, edits or plan"),
+                    error: true,
+                }),
+            }
+            return;
+        }
         if !self.running {
+            if text == "/clear" {
+                self.input.clear();
+                self.new_chat();
+                return;
+            }
+            if text == "/model" {
+                self.input.clear();
+                self.switcher = true;
+                return;
+            }
+            if text == "/undo" {
+                self.input.clear();
+                self.undo_last();
+                return;
+            }
+            if text == "/help" {
+                self.input.clear();
+                let mut said: Vec<String> = COMMANDS.iter().map(|(n, w)| format!("/{n}: {w}")).collect();
+                if !self.commands.is_empty() {
+                    said.push(format!(
+                        "And Claude Code's own: {}",
+                        self.commands
+                            .iter()
+                            .filter(|c| !c.starts_with("__"))
+                            .map(|c| format!("/{c}"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                }
+                self.entries.push(Entry::Note {
+                    text: said.join("\n"),
+                    error: false,
+                });
+                return;
+            }
             if text == "/resume" {
                 self.input.clear();
                 self.out.push(AgentAct::ListConversations);
@@ -601,6 +718,43 @@ impl AgentTab {
     pub fn suggested(&self) -> Option<&str> {
         let s = self.selection.as_deref()?;
         (!self.refs.iter().any(|r| r == s) && self.dismissed.as_deref() != Some(s)).then_some(s)
+    }
+
+    /// The last turn's changes taken back, each file's card's Undo; said when there's none.
+    pub fn undo_last(&mut self) {
+        let last = self
+            .entries
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Diff {
+                    turn, undone: false, ..
+                } => Some(*turn),
+                _ => None,
+            })
+            .max();
+        let Some(turn) = last else {
+            self.entries.push(Entry::Note {
+                text: "Nothing to undo: no change of the agent's is in place".into(),
+                error: false,
+            });
+            return;
+        };
+        let files: Vec<usize> = self
+            .entries
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Diff {
+                    turn: t,
+                    index,
+                    undone: false,
+                    ..
+                } if *t == turn => Some(*index),
+                _ => None,
+            })
+            .collect();
+        for index in files {
+            self.out.push(AgentAct::Undo(turn, index));
+        }
     }
 
     /// The `@` list's pick, in place of the `@word` typed.
@@ -2499,20 +2653,27 @@ impl Shell {
             }
             y += 26.0;
         }
-        // the `@` list: what the word after `@` can name, kept while it's typed
-        let word = mention_word(&self.agent.input).map(str::to_string);
+        // the `/` list (a command, the box's first word) or the `@` list (what the word after
+        // `@` can name), kept while it's typed
+        let word = slash_word(&self.agent.input)
+            .map(|w| ('/', w.to_string()))
+            .or_else(|| mention_word(&self.agent.input).map(|w| ('@', w.to_string())));
         match word {
-            Some(w) if focused && self.agent.mention_off.as_deref() != Some(self.agent.input.as_str()) => {
+            Some((sigil, w))
+                if focused && self.agent.mention_off.as_deref() != Some(self.agent.input.as_str()) =>
+            {
                 // gathered once as the list opens (a listing of the project's files), then filtered
                 let (all, at) = match self.agent.mention.take() {
-                    Some(m) if m.word == w => (m.all, m.at),
-                    Some(m) => (m.all, 0),
-                    None => (self.mention_candidates(), 0),
+                    Some(m) if m.sigil == sigil && m.word == w => (m.all, m.at),
+                    Some(m) if m.sigil == sigil => (m.all, 0),
+                    _ if sigil == '/' => (command_candidates(&self.agent.commands), 0),
+                    _ => (self.mention_candidates(), 0),
                 };
                 let items = matches(&all, &w);
                 let at = at.min(items.len().saturating_sub(1));
                 // kept with nothing to show too, so the next key doesn't gather it all again
                 self.agent.mention = Some(Mention {
+                    sigil,
                     word: w,
                     items,
                     at,
@@ -2526,11 +2687,14 @@ impl Shell {
         }
         let listing = self.agent.mention.as_ref().is_some_and(|m| !m.items.is_empty());
         let mut took = false;
+        // a command picked with Enter runs; with Tab it's only written out (for its argument)
+        let mut run = false;
         if focused
             && let Some(m) = &mut self.agent.mention
             && !m.items.is_empty()
         {
             let n = m.items.len();
+            let command = m.sigil == '/';
             ui.input_mut(|i| {
                 if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
                     m.at = (m.at + 1) % n;
@@ -2538,11 +2702,17 @@ impl Shell {
                 if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
                     m.at = (m.at + n - 1) % n;
                 }
-                took = i.consume_key(Modifiers::NONE, Key::Enter) || i.consume_key(Modifiers::NONE, Key::Tab);
+                let enter = i.consume_key(Modifiers::NONE, Key::Enter);
+                run = enter && command;
+                took = enter || i.consume_key(Modifiers::NONE, Key::Tab);
             });
         }
         if took {
             self.agent.take_mention();
+            if run {
+                self.agent.input = self.agent.input.trim_end().to_string();
+                self.agent.send();
+            }
             // the text changed under the editor: its cursor to the end
             if let Some(mut st) = egui::TextEdit::load_state(ui.ctx(), id) {
                 let end = egui::text::CCursor::new(self.agent.input.chars().count());
@@ -2560,6 +2730,7 @@ impl Shell {
             let m = Mention {
                 items,
                 at: at_row,
+                sigil: self.agent.mention.as_ref().map_or('@', |m| m.sigil),
                 ..Default::default()
             };
             let row = 22.0;
@@ -2582,32 +2753,37 @@ impl Shell {
                         let resp =
                             ui.interact(rr, ui.scope_id().with(("agent-mention-row", k)), Sense::click());
                         resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &c.name));
-                        let resp = if c.tip.is_empty() {
-                            resp
-                        } else {
-                            resp.on_hover_text(&c.tip)
-                        };
+                        // the whole of what it is (the row may cut it), or what a param drives
+                        let resp = resp.on_hover_text(if c.tip.is_empty() { &c.what } else { &c.tip });
                         if k == m.at || resp.hovered() {
                             p.rect_filled(rr, 4.0, if k == m.at { t.on } else { t.hover });
                         }
-                        let what = ui.fonts_mut(|f| f.layout_no_wrap(c.what.clone(), sans(11.0), t.ink2));
-                        let name_room = (rr.width() - what.size().x - 24.0).max(40.0);
-                        p.with_clip_rect(Rect::from_min_size(rr.min, vec2(name_room + 8.0, row)))
-                            .text(
-                                pos2(rr.left() + 8.0, rr.center().y),
-                                Align2::LEFT_CENTER,
-                                format!("@{}", c.name),
-                                mono(12.0),
-                                if k == m.at { t.on_ink } else { t.ink },
-                            );
-                        p.galley(
-                            pos2(
-                                rr.right() - 8.0 - what.size().x,
-                                rr.center().y - what.size().y * 0.5,
-                            ),
-                            what,
-                            t.ink2,
+                        // the name first, whole; what it is in what's left, cut to one line
+                        let ink = if k == m.at { t.on_ink } else { t.ink };
+                        let name = ui.fonts_mut(|f| {
+                            f.layout_no_wrap(format!("{}{}", m.sigil, c.name), mono(12.0), ink)
+                        });
+                        let room = (rr.width() - name.size().x - 28.0).max(0.0);
+                        let mut job = plain_job(&c.what, sans(11.0), t.ink2, room);
+                        job.wrap.max_rows = 1;
+                        job.wrap.break_anywhere = true;
+                        job.wrap.overflow_character = Some('…');
+                        let what = ui.fonts_mut(|f| f.layout_job(job));
+                        p.with_clip_rect(rr).galley(
+                            pos2(rr.left() + 8.0, rr.center().y - name.size().y * 0.5),
+                            name,
+                            ink,
                         );
+                        if room > 24.0 {
+                            p.galley(
+                                pos2(
+                                    rr.right() - 8.0 - what.size().x,
+                                    rr.center().y - what.size().y * 0.5,
+                                ),
+                                what,
+                                t.ink2,
+                            );
+                        }
                         if resp.clicked() {
                             picked = Some(k);
                         }
@@ -2615,10 +2791,16 @@ impl Shell {
                     }
                 });
             if let Some(k) = picked {
+                let command = self.agent.mention.as_ref().is_some_and(|m| m.sigil == '/');
                 if let Some(m) = &mut self.agent.mention {
                     m.at = k;
                 }
                 self.agent.take_mention();
+                // a command clicked runs, as with Enter
+                if command {
+                    self.agent.input = self.agent.input.trim_end().to_string();
+                    self.agent.send();
+                }
             }
         }
         let send = focused && ui.input(|i| i.events.iter().any(|event| {
