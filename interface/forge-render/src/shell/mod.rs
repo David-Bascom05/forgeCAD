@@ -345,6 +345,8 @@ pub struct Shell {
     pub cube_region: Option<[i8; 3]>,
     /// The part's picture, drawn by the renderer this same frame.
     pub view_tex: Option<egui::TextureId>,
+    /// Laid over `view_tex` when an environment draws the view itself: its view cube.
+    pub view_over_tex: Option<egui::TextureId>,
     /// The view cube's words, in the view's device pixels: real type over its picture.
     pub cube_labels: Vec<crate::viewcube::Label>,
     pub cube_place: Option<crate::viewcube::Place>,
@@ -442,6 +444,7 @@ impl Default for Shell {
             cube_menu_fresh: false,
             cube_region: None,
             view_tex: None,
+            view_over_tex: None,
             cube_labels: Vec::new(),
             cube_place: None,
             camera: None,
@@ -767,6 +770,10 @@ impl Shell {
         if let Some(tex) = self.view_tex {
             let whole = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
             p.image(tex, self.view_rect, whole, Color32::WHITE);
+            // what an environment lays over a picture of its own (the Render Studio's view cube)
+            if let Some(over) = self.view_over_tex {
+                p.image(over, self.view_rect, whole, Color32::WHITE);
+            }
         }
         self.view_owned = false;
         self.env_draw(ui);

@@ -360,6 +360,26 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
     true
 }
 
+/// The status bar's line: the live picture's samples, then what a render would make.
+pub(super) fn status(s: &Shell) -> String {
+    let st = &s.studio;
+    let live = if st.samples == 0 {
+        "preparing".to_string()
+    } else {
+        format!(
+            "{} samples{}",
+            st.samples,
+            if st.denoise { " · denoised" } else { "" }
+        )
+    };
+    let queue = if st.queue.is_empty() {
+        String::new()
+    } else {
+        format!(" · {}", st.queue)
+    };
+    format!("{live} · {} × {} output{queue}", st.size.0, st.size.1)
+}
+
 /// The sample count over the view's lower left corner.
 pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
     let st = &s.studio;
