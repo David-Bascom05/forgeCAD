@@ -195,7 +195,9 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         uts,
         ..fb::Options::default()
     };
-    let plan = fb::plan(&model, &tooling, &opts);
+    let mut plan = fb::plan(&model, &tooling, &opts);
+    // the operator's move into each step after the first, checked (a warning if not proven clear)
+    fb::scene::annotate_handling(&model, &tooling, &mut plan);
     let mut answer = answer(sh, &model, &tooling, &plan, &bend_names);
     if let Json::Obj(f) = &mut answer.json {
         f.insert(4, ("tooling_source".into(), tsource));

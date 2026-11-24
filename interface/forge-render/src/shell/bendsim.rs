@@ -756,7 +756,24 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
             egui::Color32::from_gray(200),
         ));
         if stage == Stage::Handle {
-            lines.push(("operator handling: shown, not checked".into(), look::MUTED));
+            let h = s.checks.iter().find(|c| c.rule == fb::Rule::Handling);
+            lines.push(match h {
+                Some(c) if c.pass => (
+                    format!(
+                        "operator handling: lift, pull out, turn, push in, set down; proven clear ({:.2} mm)",
+                        c.value
+                    ),
+                    look::PASS,
+                ),
+                Some(c) => (
+                    format!(
+                        "operator handling: not proven clear{}",
+                        c.tool.as_deref().map_or(String::new(), |t| format!(" of {t}"))
+                    ),
+                    look::WARN,
+                ),
+                None => ("operator handling: the first step, none".into(), look::MUTED),
+            });
         }
         for c in s.failures() {
             lines.push((

@@ -130,6 +130,7 @@ fn a_channel_on_a_trubend_in_3d() {
         (0, 0.3, "01-trubend-approach"),
         (0, 0.6, "02-trubend-bend-1"),
         (1, 0.08, "03-trubend-handling"),
+        (1, 0.075, "03b-trubend-handling-turn"),
         (1, 0.7, "04-trubend-bend-2"),
     ] {
         let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();

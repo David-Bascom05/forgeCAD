@@ -56,6 +56,9 @@ pub enum Rule {
     Tonnage,
     /// The punch cannot come straight back up out of the sprung part (warning).
     Withdraw,
+    /// The operator's move into the step (lift, pull out, turn, push in, set down) is not
+    /// proven clear of the press (warning).
+    Handling,
 }
 
 impl Rule {
@@ -77,10 +80,11 @@ impl Rule {
             Rule::Segments => "segments",
             Rule::Tonnage => "tonnage",
             Rule::Withdraw => "withdraw",
+            Rule::Handling => "handling",
         }
     }
 
-    pub const ALL: [Rule; 16] = [
+    pub const ALL: [Rule; 17] = [
         Rule::ToolCollision,
         Rule::ClosesOnPunch,
         Rule::SelfCollision,
@@ -97,6 +101,7 @@ impl Rule {
         Rule::Segments,
         Rule::Tonnage,
         Rule::Withdraw,
+        Rule::Handling,
     ];
 }
 
@@ -188,7 +193,7 @@ impl Check {
         c
     }
 
-    fn rule(rule: Rule, value: f64, limit: f64, at_most: bool) -> Check {
+    pub fn rule(rule: Rule, value: f64, limit: f64, at_most: bool) -> Check {
         let pass = if at_most { value <= limit } else { value >= limit };
         Check {
             rule,

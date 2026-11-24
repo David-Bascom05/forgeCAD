@@ -9,7 +9,7 @@
 use crate::geo::{Region, Seg};
 use crate::model::Model;
 use crate::plan::Plan;
-use crate::sim::{Kind, Phase, Piece, Step, StepCtx};
+use crate::sim::{Check, Kind, Phase, Piece, Rule, Severity, Step, StepCtx};
 use crate::tooling::Tooling;
 use forge_math::{Point2, dmath};
 use forge_sheet::Strip;
@@ -451,6 +451,93 @@ impl Rigid3 {
     }
 }
 
+/// The operator's move between two steps (see `Scene::handling_path`), applied to a point of the
+/// part as the new step places it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HandlingPath {
+    /// The new pose to the old.
+    pub h: Rigid3,
+    /// The part's centre (new pose) and the radius about it that holds all of it.
+    pub c: [f64; 3],
+    pub radius: f64,
+    /// The lift off the die, and the pulls out towards the operator from the old and new
+    /// places.
+    pub delta: f64,
+    pub d_old: f64,
+    pub d_new: f64,
+    /// How far the true surface may lie off the samples.
+    pub sag: f64,
+}
+
+/// The handling's phases over f in [0, 1]: lift, pull out, turn, push in, set down.
+pub const HANDLING: [f64; 4] = [0.12, 0.32, 0.68, 0.88];
+
+impl HandlingPath {
+    pub fn place(&self, p: [f64; 3], f: f64) -> [f64; 3] {
+        let [a, b, c, d] = HANDLING;
+        let s = |lo: f64, hi: f64| smooth(((f - lo) / (hi - lo)).clamp(0.0, 1.0));
+        let up = [0.0, 0.0, self.delta];
+        if f < b {
+            let q = self.h.apply(p);
+            let lift = s(0.0, a);
+            let pull = s(a, b);
+            return add(q, [-self.d_old * pull, 0.0, self.delta * lift]);
+        }
+        if f < c {
+            // turned about the part's centre, the centre moved straight between the two
+            // pulled-out places
+            let t = s(b, c);
+            let (axis, ang) = self.h.axis_angle();
+            let r = Rigid3::about(axis, ang * (1.0 - t));
+            let ca = add(self.h.apply(self.c), add([-self.d_old, 0.0, 0.0], up));
+            let cb = add(self.c, add([-self.d_new, 0.0, 0.0], up));
+            let q = r.vec(sub(p, self.c));
+            return [0, 1, 2].map(|i| q[i] + ca[i] + (cb[i] - ca[i]) * t);
+        }
+        let push = s(c, d);
+        let down = s(d, 1.0);
+        add(p, [-self.d_new * (1.0 - push), 0.0, self.delta * (1.0 - down)])
+    }
+}
+
+fn add(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+fn bbox(pts: &[[f64; 3]]) -> Option<([f64; 3], [f64; 3])> {
+    let first = *pts.first()?;
+    Some(pts.iter().fold((first, first), |(lo, hi), p| {
+        (
+            [0, 1, 2].map(|i| lo[i].min(p[i])),
+            [0, 1, 2].map(|i| hi[i].max(p[i])),
+        )
+    }))
+}
+
+/// The gap between two boxes: their distance if apart, less than zero (the least overlap
+/// along an axis, negated) if they meet.
+fn box_gap(a: ([f64; 3], [f64; 3]), b: ([f64; 3], [f64; 3])) -> f64 {
+    let gaps: [f64; 3] = [0, 1, 2].map(|i| (b.0[i] - a.1[i]).max(a.0[i] - b.1[i]));
+    if gaps.iter().any(|g| *g > 0.0) {
+        gaps.iter().map(|g| g.max(0.0).powi(2)).sum::<f64>().sqrt()
+    } else {
+        gaps.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+    }
+}
+
+/// Every step after the first gets its handling check (a warning when not proven clear).
+pub fn annotate_handling(m: &Model, tl: &Tooling, plan: &mut Plan) {
+    let checks: Vec<(usize, Check)> = {
+        let mut sc = Scene::new(m, tl, plan);
+        (1..plan.steps.len())
+            .filter_map(|k| sc.handling_check(k).map(|c| (k, c)))
+            .collect()
+    };
+    for (k, c) in checks {
+        plan.steps[k].checks.push(c);
+    }
+}
+
 /// The plan as a scene: one step's meshes kept at a time.
 pub struct Scene<'a> {
     pub m: &'a Model,
@@ -461,6 +548,7 @@ pub struct Scene<'a> {
     /// Chord length for the part's boundaries and zones, mm.
     pub chord: f64,
     kept: Option<(usize, Vec<Option<PieceMesh>>)>,
+    kept_path: Option<(usize, Option<HandlingPath>)>,
 }
 
 impl<'a> Scene<'a> {
@@ -472,6 +560,7 @@ impl<'a> Scene<'a> {
             table_height: 900.0,
             chord: 4.0,
             kept: None,
+            kept_path: None,
         }
     }
 
@@ -509,8 +598,12 @@ impl<'a> Scene<'a> {
         };
         let lerp = |a: f64, b: f64, f: f64| a + (b - a) * smooth(f);
         let gauge = match (stage, g, prev_g) {
-            (Stage::Handle, _, p) => p.or(g),
-            (Stage::Gauge, Some(b), Some(a)) => Some((lerp(a.0, b.0, f), lerp(a.1, b.1, f))),
+            // the backgauge moves to this step's stop while the operator turns the part
+            (Stage::Handle, _, p) if f < HANDLING[1] => p.or(g),
+            (Stage::Handle, Some(b), Some(a)) if f < HANDLING[2] => {
+                let u = (f - HANDLING[1]) / (HANDLING[2] - HANDLING[1]);
+                Some((lerp(a.0, b.0, u), lerp(a.1, b.1, u)))
+            }
             _ => g,
         };
         let (phi, tip) = match stage {
@@ -606,8 +699,219 @@ impl<'a> Scene<'a> {
         None
     }
 
+    /// The part's points in step `k`'s first pose, per piece (both skins, boundary and interior
+    /// samples), and how far the true surface may lie outside the samples' boxes.
+    fn part_samples(&mut self, k: usize) -> (Vec<Vec<[f64; 3]>>, f64) {
+        let ctx = self.ctx(k);
+        let pcs: Vec<Piece> = ctx.pieces.clone();
+        let tess: Vec<Option<Vec<Point2>>> = self
+            .piece_meshes(k, &ctx)
+            .iter()
+            .map(|m| m.as_ref().map(|m| m.pts.clone()))
+            .collect();
+        let mut out = Vec::new();
+        for (pc, pts) in pcs.iter().zip(tess) {
+            let Some(pts) = pts else { continue };
+            let mut v = Vec::with_capacity(2 * pts.len());
+            for w in [0.0, -ctx.t] {
+                for p in &pts {
+                    v.push(part_point(&ctx, pc, *p, w, 0.0));
+                }
+            }
+            out.push(v);
+        }
+        // a zone sampled every 2 mm of its neutral length turns 2 / rn between samples: its
+        // skins (radius at most r + t) sag at most (r + t) (2 / rn)^2 / 8 off the chord; a wall's
+        // outline arcs every 0.12 rad sag at most r (1 - cos 0.06) < 0.0019 r; lines are exact
+        let zone = self
+            .m
+            .bends
+            .iter()
+            .map(|b| (b.r + self.m.t) / (2.0 * b.rn * b.rn))
+            .fold(0.0f64, f64::max);
+        let wall = self
+            .m
+            .pattern
+            .iter()
+            .flatten()
+            .map(|s| match s {
+                Seg::Arc { r, .. } => 0.0019 * r,
+                Seg::Line { .. } => 0.0,
+            })
+            .fold(0.0f64, f64::max);
+        (out, zone.max(wall) + 1e-6)
+    }
+
+    /// The press's bodies (all but the part, the floor and the markers) as boxes, at the instant
+    /// `t` of step `k`, grown by how far their sampled arcs may sag (tool arcs every 0.12 rad).
+    fn body_boxes(&mut self, k: usize, t: f64) -> Vec<(String, [f64; 3], [f64; 3])> {
+        let r_max = self
+            .tl
+            .punches
+            .iter()
+            .map(|p| p.tip_radius)
+            .chain(self.tl.dies.iter().map(|d| d.shoulder_radius))
+            .fold(0.0f64, f64::max);
+        let grow = r_max * (1.0 - dmath::cos(0.06)) + 1e-6;
+        self.bodies_of(k, t, false)
+            .into_iter()
+            .filter(|b| !matches!(b.look, Look::Sheet | Look::Floor | Look::Witness))
+            .filter_map(|b| {
+                let (lo, hi) = b.mesh.bounds()?;
+                Some((
+                    b.name,
+                    [0, 1, 2].map(|i| f64::from(lo[i]) - grow),
+                    [0, 1, 2].map(|i| f64::from(hi[i]) + grow),
+                ))
+            })
+            .collect()
+    }
+
+    /// The operator's path from step `k - 1`'s last pose to step `k`'s first: lift clear of the
+    /// die, pull out towards the operator until the part's sphere is in front of every body,
+    /// turn there, push in, set down.
+    pub fn handling_path(&mut self, k: usize) -> Option<HandlingPath> {
+        if let Some((kk, hp)) = &self.kept_path
+            && *kk == k
+        {
+            return hp.clone();
+        }
+        let hp = self.make_path(k);
+        self.kept_path = Some((k, hp.clone()));
+        hp
+    }
+
+    fn make_path(&mut self, k: usize) -> Option<HandlingPath> {
+        let h = self.handover(k)?;
+        let (pieces, sag) = self.part_samples(k);
+        let all: Vec<[f64; 3]> = pieces.iter().flatten().copied().collect();
+        let (lo, hi) = bbox(&all)?;
+        let c = [0, 1, 2].map(|i| 0.5 * (lo[i] + hi[i]));
+        let radius = all
+            .iter()
+            .map(|p| dot(sub(*p, c), sub(*p, c)).sqrt())
+            .fold(0.0, f64::max)
+            + sag;
+        // the bodies' front: the least x of any body (the beams' fronts)
+        let front = self
+            .body_boxes(k, 0.0)
+            .iter()
+            .map(|b| b.1[0])
+            .fold(f64::INFINITY, f64::min);
+        let clear = 2.0 * self.tl.clearance;
+        let c_old = h.apply(c);
+        let out = |cx: f64| (cx + radius - front + clear).max(0.0);
+        // lifted until the lowest point (a bend sitting down in the V) is above the die's top
+        let low_new = lo[2] - sag;
+        let low_old = all.iter().map(|p| h.apply(*p)[2]).fold(f64::INFINITY, f64::min) - sag;
+        let delta = (clear + 1.0).max(clear - low_new.min(low_old));
+        Some(HandlingPath {
+            h,
+            c,
+            delta,
+            d_old: out(c_old[0]),
+            d_new: out(c[0]),
+            radius,
+            sag,
+        })
+    }
+
+    /// The handling into step `k` checked against the press's bodies: every piece's box swept
+    /// through the lift and the pull out and back (exact for a translation), the part's sphere
+    /// through the turn. A pass is proven (the true surface lies within the grown boxes and the
+    /// sphere); an overlap is not a proven collision: a warning, the operator's move to choose.
+    pub fn handling_check(&mut self, k: usize) -> Option<Check> {
+        let hp = self.handling_path(k)?;
+        let (pieces, _) = self.part_samples(k);
+        // the press without its backgauge; the backgauge at the last step's stop while the part
+        // is lifted and pulled out, at this step's (it moves while the operator turns the part)
+        // while it is pushed in and set down
+        let gauge = |b: &(String, [f64; 3], [f64; 3])| b.0.starts_with("backgauge");
+        let press: Vec<_> = self
+            .body_boxes(k, 0.0)
+            .into_iter()
+            .filter(|b| !gauge(b))
+            .collect();
+        let old_gauge: Vec<_> = self.body_boxes(k - 1, 1.0).into_iter().filter(gauge).collect();
+        let new_gauge: Vec<_> = self.body_boxes(k, 0.3).into_iter().filter(gauge).collect();
+        let g = hp.sag;
+        let grow =
+            |(lo, hi): ([f64; 3], [f64; 3])| ([0, 1, 2].map(|i| lo[i] - g), [0, 1, 2].map(|i| hi[i] + g));
+        let mut worst: (f64, String) = (f64::INFINITY, String::new());
+        let mut note = |gap: f64, name: &str| {
+            if gap < worst.0 {
+                worst = (gap, name.to_string());
+            }
+        };
+        for (old, d) in [(true, hp.d_old), (false, hp.d_new)] {
+            let bodies: Vec<_> = press
+                .iter()
+                .chain(if old { &old_gauge } else { &new_gauge })
+                .cloned()
+                .collect();
+            for pts in &pieces {
+                let placed: Vec<[f64; 3]> = if old {
+                    pts.iter().map(|p| hp.h.apply(*p)).collect()
+                } else {
+                    pts.clone()
+                };
+                let Some(rest) = bbox(&placed).map(grow) else {
+                    continue;
+                };
+                // lifting (or setting down): rest swept up by delta; a body wholly below the
+                // piece at rest cannot be met moving up
+                let lift = (rest.0, [rest.1[0], rest.1[1], rest.1[2] + hp.delta]);
+                // the pull: delta up, swept by d towards the operator (-x)
+                let pull = (
+                    [rest.0[0] - d, rest.0[1], rest.0[2] + hp.delta],
+                    [rest.1[0], rest.1[1], rest.1[2] + hp.delta],
+                );
+                for (name, blo, bhi) in &bodies {
+                    // a straight lift off (or set-down onto) a die or the bed: their sections
+                    // are terrains (a vertical line meets each in one interval running down to
+                    // its foot), and the step's own checks proved the part at rest is not in
+                    // them, so every point of it lies above their surface and stays so moving
+                    // up; any other body below the piece cannot be met either
+                    let die_ok = |n: &str| {
+                        let id = n.rsplit("die:").next().unwrap_or("");
+                        self.tl.die(id).is_some_and(|d| d.profile.is_none())
+                    };
+                    let terrain = name == "bed" || (name.contains("die:") && die_ok(name));
+                    if !terrain && bhi[2] > rest.0[2] + 1e-9 {
+                        note(box_gap(lift, (*blo, *bhi)), name);
+                    }
+                    note(box_gap(pull, (*blo, *bhi)), name);
+                }
+            }
+        }
+        // the turn: the sphere's centre moves from the old pulled-out place to the new one
+        let ca = add(hp.h.apply(hp.c), [-hp.d_old, 0.0, hp.delta]);
+        let cb = add(hp.c, [-hp.d_new, 0.0, hp.delta]);
+        let r = hp.radius;
+        let turn = (
+            [0, 1, 2].map(|i| ca[i].min(cb[i]) - r),
+            [0, 1, 2].map(|i| ca[i].max(cb[i]) + r),
+        );
+        for (name, blo, bhi) in press.iter().chain(&old_gauge).chain(&new_gauge) {
+            note(box_gap(turn, (*blo, *bhi)), name);
+        }
+        let lim = self.tl.clearance;
+        let mut c = Check::rule(Rule::Handling, worst.0, lim, false);
+        c.severity = Severity::Warning;
+        c.certified = c.pass;
+        if !c.pass {
+            c.tool = Some(worst.1);
+        }
+        Some(c)
+    }
+
     /// Every body at instant `t` of step `k`.
     pub fn bodies(&mut self, k: usize, t: f64) -> Vec<Body> {
+        self.bodies_of(k, t, true)
+    }
+
+    /// The bodies, the part's pieces among them only with `part`.
+    fn bodies_of(&mut self, k: usize, t: f64, part: bool) -> Vec<Body> {
         let ctx = self.ctx(k);
         let st: &Step = &self.plan.steps[k];
         let pose = self.pose(k, t);
@@ -619,29 +923,20 @@ impl<'a> Scene<'a> {
             .flatten()
             .collect();
         let mut out = Vec::new();
-        // the part
-        let back = match (pose.stage, self.handover(k)) {
-            (Stage::Handle, Some(h)) => Some(h),
-            _ => None,
+        // the part: during handling it follows the operator's path (`HandlingPath`), the same
+        // one the handling check proves clear
+        let path = if part && pose.stage == Stage::Handle {
+            self.handling_path(k)
+        } else {
+            None
         };
         let phi = pose.phi;
         let t_sheet = ctx.t;
-        // during handling the part moves from where the last step left it (f = 0) to where this
-        // one places it (f = 1): its turn eased about a point near the tools, lifted clear
         let moved = |p: [f64; 3]| -> [f64; 3] {
-            let Some(h) = back else { return p };
-            let f = smooth(pose.handle);
-            let (axis, ang) = h.axis_angle();
-            let c = [0.0, 0.0, 50.0];
-            let r = Rigid3::about(axis, ang * (1.0 - f));
-            let q = r.vec(sub(p, c));
-            let hc = h.apply(c);
-            let lift = 150.0 * dmath::sin(dmath::PI * f);
-            [
-                q[0] + hc[0] + (c[0] - hc[0]) * f,
-                q[1] + hc[1] + (c[1] - hc[1]) * f,
-                q[2] + hc[2] + (c[2] - hc[2]) * f + lift,
-            ]
+            match &path {
+                Some(hp) => hp.place(p, pose.handle),
+                None => p,
+            }
         };
         let pcs: Vec<Piece> = ctx.pieces.clone();
         let meshes: Vec<Option<(Tess, Strip)>> = self
@@ -652,7 +947,7 @@ impl<'a> Scene<'a> {
                     .map(|m| ((m.pts.clone(), m.tris.clone(), m.edges.clone()), m.strip))
             })
             .collect();
-        for (i, (pc, pm)) in pcs.iter().zip(meshes).enumerate() {
+        for (i, (pc, pm)) in pcs.iter().zip(meshes).enumerate().filter(|_| part) {
             let Some(((pts, tris, edges), strip)) = pm else {
                 continue;
             };
@@ -1099,5 +1394,34 @@ mod tests {
                 "{a:?} vs {b:?}"
             );
         }
+    }
+
+    #[test]
+    fn handling_runs_from_pose_to_pose_and_is_checked() {
+        let m = ell();
+        let tl = library::std_eu();
+        let p = plan(&m, &tl, &Options::default());
+        assert!(p.steps.len() > 1);
+        let mut sc = Scene::new(&m, &tl, &p);
+        assert!(sc.handling_path(0).is_none());
+        let hp = sc.handling_path(1).expect("a handover");
+        // the path's ends are the two poses
+        for q in [[0.0, 0.0, 0.0], [30.0, -20.0, 5.0], [-60.0, 40.0, 25.0]] {
+            let a = hp.place(q, 0.0);
+            let b = hp.h.apply(q);
+            let e = hp.place(q, 1.0);
+            for i in 0..3 {
+                assert!((a[i] - b[i]).abs() < 1e-9 && (e[i] - q[i]).abs() < 1e-9);
+            }
+        }
+        // at the turn the part is out in front of every body
+        let c = sc.handling_check(1).expect("checked");
+        assert_eq!(c.rule, Rule::Handling);
+        assert_eq!(c.severity, Severity::Warning);
+        assert!(c.value.is_finite());
+        eprintln!(
+            "handling: {} vs {} pass {} {:?}",
+            c.value, c.limit, c.pass, c.tool
+        );
     }
 }

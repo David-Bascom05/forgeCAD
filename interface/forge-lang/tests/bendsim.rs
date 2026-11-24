@@ -465,6 +465,24 @@ fn a_real_press_bends_with_its_makers_own_tools() {
     assert_eq!(src.get("kind").and_then(Json::str), Some("library"));
     assert_eq!(src.get("real"), Some(&Json::Bool(true)));
     assert_eq!(j.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    // the operator's move into the second step: checked, and here proven clear
+    let steps = arr(j, "steps");
+    let handling: Vec<Json> = arr(&steps[1], "checks")
+        .into_iter()
+        .filter(|c| c.get("rule").and_then(Json::str) == Some("handling"))
+        .collect();
+    assert_eq!(handling.len(), 1);
+    assert_eq!(
+        handling[0].get("verdict").and_then(Json::str),
+        Some("pass"),
+        "{:?}",
+        handling[0]
+    );
+    assert!(
+        arr(&steps[0], "checks")
+            .iter()
+            .all(|c| c.get("rule").and_then(Json::str) != Some("handling"))
+    );
     for st in arr(j, "steps") {
         assert!(
             st.get("punch")
