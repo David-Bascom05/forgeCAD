@@ -4174,7 +4174,7 @@ impl Cam {
         out: &OpOut,
         paths: Vec<OpPath>,
     ) -> Vec<OpPath> {
-        use forge_cam::engage::{HeightMap, Profile, Sched, schedule_samples};
+        use forge_cam::engage::{HeightMap, Profile, Sched, sample_feeds, schedule_samples};
         if !matches!(
             kind,
             "facing" | "pocket" | "clear" | "adaptive" | "contour" | "slot"
@@ -4279,35 +4279,36 @@ impl Cam {
                     Some((n, f)) if n == "rough" && r.slot_chip.is_finite() => Some((r.slot_chip, *f)),
                     _ => None,
                 };
-                let target = |e: &Option<forge_cam::engage::Engage>| match (rough, e) {
-                    // engaged under 90° (ae < D/2 on a straight cut): the peak chip is thinned
-                    (Some((slot, f)), Some(g)) if g.phi < std::f64::consts::FRAC_PI_2 && g.cos_max < 1.0 => {
-                        slot * f
-                    }
-                    (Some((slot, _)), Some(_)) => slot,
-                    _ => sc.fz,
-                };
-                let want = |e: &Option<forge_cam::engage::Engage>| -> (f64, bool) {
-                    let fz0 = target(e);
-                    match e {
-                        Some(g) if g.cos_max * sc.cap > 1.0 => (fz0 / g.cos_max, false),
-                        _ => (sc.cap * fz0, true),
+                // the chip rule has one home, forge_cam::engage::sample_feeds (fz / max cos θ per
+                // sample, at most cap fz, no faster than the next sample, within [f_min, f_max]):
+                // at the op's chip, and for a rough op at its class chip, taken where the sample is
+                // engaged under 90° (ae < D/2 on a straight cut: the peak chip is thinned)
+                let base = sample_feeds(&samples, &sc);
+                let rough_feed = rough.map(|(slot, f)| {
+                    (
+                        sample_feeds(&samples, &Sched { fz: slot * f, ..sc }),
+                        sample_feeds(&samples, &Sched { fz: slot, ..sc }),
+                    )
+                });
+                let chosen = |k: usize| -> f64 {
+                    match (&rough_feed, samples[k].engage) {
+                        (Some((rf, _)), Some(g)) if g.phi < std::f64::consts::FRAC_PI_2 && g.cos_max < 1.0 => rf[k],
+                        (Some((_, sf)), _) => sf[k],
+                        (None, _) => base[k],
                     }
                 };
                 let mut feed: Vec<(f64, bool)> = Vec::with_capacity(n);
-                for k in 0..n {
-                    let (mut fz, mut clamp) = want(&samples[k].engage);
-                    let mut capped = false;
-                    // no faster than the next sample (the engagement it runs into)
-                    if let Some(nx) = samples.get(k + 1) {
-                        let (f2, c2) = want(&nx.engage);
-                        if f2 < fz {
-                            fz = f2;
-                            clamp = c2;
-                        }
+                for (k, smp) in samples.iter().enumerate() {
+                    let mut f = chosen(k);
+                    // across a change of class target: still no faster than the next sample
+                    if k + 1 < n {
+                        f = f.min(chosen(k + 1));
                     }
-                    // power and torque: the feed lowered to the tightest cap, exactly
-                    if let (Some(g), Some(e)) = (kg.as_ref(), samples[k].engage) {
+                    let mut fz = f / (sc.flutes * sc.rpm).max(1e-9);
+                    let mut capped = false;
+                    // power, torque and deflection: the feed lowered (only lowered) to the
+                    // tightest cap, exactly (P ∝ fz^(1 − mc))
+                    if let (Some(g), Some(e)) = (kg.as_ref(), smp.engage) {
                         let cut = feeds::Cut {
                             d,
                             flutes: z,
@@ -4324,25 +4325,20 @@ impl Cam {
                                 let now = feeds::at_contact(g, &cut, fz, r.rpm.v, ct, dr).power;
                                 if now > *cap {
                                     fz *= forge_math::dmath::powf(cap / now, 1.0 / (1.0 - g.mc));
-                                    clamp = true;
                                     capped = true;
                                     lowered += 1;
                                 }
                             }
                         }
                     }
-                    let mut f = fz * sc.flutes * sc.rpm;
-                    if f >= sc.f_max {
-                        f = sc.f_max;
-                        clamp = true;
-                    } else if f <= sc.f_min {
-                        if capped {
+                    if capped {
+                        f = fz * sc.flutes * sc.rpm;
+                        if f <= sc.f_min {
                             short += 1;
+                            f = sc.f_min;
                         }
-                        f = sc.f_min;
-                        clamp = true;
                     }
-                    feed.push((f, clamp));
+                    feed.push((f, capped));
                 }
                 let mut moves = Vec::with_capacity(p.moves.len() + n);
                 let mut k = 0;
