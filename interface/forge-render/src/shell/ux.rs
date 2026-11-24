@@ -499,6 +499,7 @@ pub fn empty_state(
 pub fn loading(ui: &mut Ui, t: &Theme, doing: &str) {
     ui.horizontal(|ui| {
         ui.add(egui::Spinner::new().size(14.0).color(t.ink2));
+        ui.add_space(6.0);
         ui.label(RichText::new(doing).font(theme::small()).color(t.ink2));
     });
 }

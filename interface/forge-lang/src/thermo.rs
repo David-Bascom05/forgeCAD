@@ -1113,8 +1113,7 @@ fn library(ev: &Eval) -> ft::FormShop {
     if ev.root.is_some() {
         return ft::placeholder();
     }
-    crate::deps::materials(ev.dir.as_deref());
-    let libs = forge_material::Libraries::cached(ev.dir.as_deref());
+    let libs = crate::props::libraries(ev);
     ft::shop_of(libs.all().map(|x| x.1))
 }
 
@@ -1590,7 +1589,8 @@ fn thermoform(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
                     .get(before_n.wrapping_sub(1))
                     .and_then(|st| shape_of(&st.solids, shape.idx).map(|s| s.id))
                     .unwrap_or(shape.idx);
-            let density = forge_material::Libraries::cached(ev.dir.as_deref())
+            // as every library read: fenced to ForgeCAD's own in a session kept to its root
+            let density = crate::props::libraries(ev)
                 .find(&m.name)
                 .map(|x| x.1.density)
                 .filter(|d| *d > 0.0);

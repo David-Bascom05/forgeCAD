@@ -60,6 +60,12 @@ fn key(w: &CamWs) -> u64 {
 }
 
 impl CamWs {
+    /// A post or an export refused: when it is the release rule, the plain sentence the
+    /// workspace shows for it (the raw refusal, with its code and syntax, is the hover's).
+    fn refused(&mut self, e: String) {
+        self.said = Some(super::ui::release_words(self).map_or(e, |b| b.sentence));
+    }
+
     /// The run's programs, as forge_cam_lang::export takes them.
     pub fn prog_ins(&self) -> Vec<ProgIn> {
         let Some(r) = &self.run else { return vec![] };
@@ -99,7 +105,7 @@ impl CamWs {
                     self.want_write.push((p, f.text));
                 }
             }
-            Err(e) => self.said = Some(e),
+            Err(e) => self.refused(e),
         }
     }
 
@@ -131,7 +137,7 @@ impl CamWs {
                     zip: format!("{stem}-nc.zip"),
                 });
             }
-            Err(e) => self.said = Some(e),
+            Err(e) => self.refused(e),
         }
     }
 

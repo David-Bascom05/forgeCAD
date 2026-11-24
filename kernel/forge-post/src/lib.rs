@@ -70,6 +70,19 @@ pub const UNAVAILABLE: [(&str, &str); 5] = [
     ),
 ];
 
+/// The most decimals a dialect may give a word: more than any control writes, and 10^k stays
+/// exact in f64 (so a value's scaling is the same bits on every target, whatever powi does).
+pub const MAX_DECIMALS: u32 = 6;
+
+/// A dialect's decimal count `key`: a whole number from 0 to [`MAX_DECIMALS`], else why not.
+pub fn decimals_of(key: &str, v: f64) -> Result<u32, String> {
+    if v.fract() == 0.0 && (0.0..=MAX_DECIMALS as f64).contains(&v) {
+        Ok(v as u32)
+    } else {
+        Err(format!("`{key}` is {v}: a whole number from 0 to {MAX_DECIMALS}"))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum PostError {
     Dialect(String),
@@ -240,7 +253,8 @@ impl Dialect {
         let name = text(&t, "name")
             .ok_or_else(|| PostError::Dialect("no name".into()))?
             .to_string();
-        let decimals = num(&t, "decimals").ok_or_else(|| PostError::Dialect("no decimals".into()))? as u32;
+        let decimals = num(&t, "decimals").ok_or_else(|| PostError::Dialect("no decimals".into()))?;
+        let decimals = decimals_of("decimals", decimals).map_err(PostError::Dialect)?;
         let point = match text(&t, "point").unwrap_or("always") {
             "always" => Point::Always,
             "never" => Point::Never,
@@ -284,7 +298,8 @@ impl Dialect {
             assumes_modes: Vec::new(),
             inch: false,
             extension: text(&t, "extension").unwrap_or("nc").to_string(),
-            feed_decimals: num(&t, "feed_decimals").unwrap_or(1.0) as u32,
+            feed_decimals: decimals_of("feed_decimals", num(&t, "feed_decimals").unwrap_or(1.0))
+                .map_err(PostError::Dialect)?,
             name,
             decimals,
             point,
@@ -311,14 +326,13 @@ impl Dialect {
                 });
             }
             d.inch = true;
-            d.decimals = self
-                .n("inch_decimals")
-                .map(|x| x as u32)
-                .unwrap_or(self.decimals + 1);
-            d.feed_decimals = self
-                .n("inch_feed_decimals")
-                .map(|x| x as u32)
-                .unwrap_or(self.feed_decimals + 1);
+            // as every decimal count, at most MAX_DECIMALS (the default one more than the mm's)
+            let k = |key: &str, mm: u32| match self.n(key) {
+                Some(x) => decimals_of(key, x).map_err(PostError::Dialect),
+                None => Ok((mm + 1).min(MAX_DECIMALS)),
+            };
+            d.decimals = k("inch_decimals", self.decimals)?;
+            d.feed_decimals = k("inch_feed_decimals", self.feed_decimals)?;
         }
         let (dk, fk) = (d.decimals, d.feed_decimals);
         if let Some(k) = o.decimals {

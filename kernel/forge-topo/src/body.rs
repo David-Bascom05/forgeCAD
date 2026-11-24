@@ -25,8 +25,12 @@ id_type!(ShellId);
 pub struct Vertex {
     pub point: Point3,
     pub name: Name,
-    /// The radius of the ball every curve and surface through the vertex meets: LINEAR, or
-    /// more where a boolean could not settle the vertex within LINEAR of all of them.
+    /// The radius of the ball every curve ending at the vertex meets: LINEAR, or more where a
+    /// boolean could not settle the vertex within LINEAR of all of them. Each face through the
+    /// vertex then lies within this and the tolerance of the face's edges at the vertex
+    /// (`Edge::tol`): the bound `check::vertices_off_planes` asks of planes in debug builds. Not
+    /// within this alone: a vertex settled on an edge whose curve is itself near the edge's
+    /// tolerance off its face can sit up to both off it (research/booleans/drift.md §5).
     pub tol: f64,
 }
 
@@ -44,7 +48,9 @@ pub struct Edge {
     pub coedges: Small<CoedgeId, 2>,
     pub name: Name,
     /// How far the edge may lie from its faces: `tol::LINEAR`, or more on an edge read from a
-    /// file, the deviation measured there. Only import sets it; pieces of an edge inherit it.
+    /// file, the deviation measured there, or on an edge a boolean imprinted on a face of the
+    /// other body that it strays from further (`forge_bool`'s `imprint_tols`). Pieces of an edge
+    /// inherit it.
     pub tol: f64,
     /// False once no face uses the edge (after an in-place edit).
     pub alive: bool,
@@ -138,10 +144,15 @@ pub struct Face {
     pub bbox: Cached<Box3>,
     /// A point-in-face index, kept by whoever built it (the booleans) across edits that leave
     /// the face alone or only add loops to it; compaction drops it (coedge ids change there).
-    pub query: Cached<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
+    pub query: Cached<FaceQuery>,
     /// False once the face is removed by an in-place edit.
     pub alive: bool,
 }
+
+/// A face's point-in-face index, of a type its builder knows (forge-bool's `FaceInfo`): named so
+/// that the translation can hold it as an opaque value.
+#[derive(Clone)]
+pub struct FaceQuery(pub std::sync::Arc<dyn std::any::Any + Send + Sync>);
 
 /// Data derived from an entity and kept with it so it is worked out once.
 /// It takes no part in equality.
@@ -369,6 +380,15 @@ impl Body {
         }
     }
 
+    /// Coedge `c` is no longer a use of its edge; an edge left with none dies.
+    fn drop_use(&mut self, c: CoedgeId) {
+        let e = self.coedges[c.index()].edge;
+        self.edges[e.index()].coedges.retain(|&x| x != c);
+        if self.edges[e.index()].coedges.is_empty() {
+            self.edges[e.index()].alive = false;
+        }
+    }
+
     /// Removes a face (and its loops) in place. Edges left with no uses die
     /// with it; vertices are left for `compact` to drop.
     pub fn kill_face(&mut self, f: FaceId) {
@@ -385,12 +405,7 @@ impl Body {
         for li in 0..self.faces[f.index()].loops.len() {
             let l = self.faces[f.index()].loops[li];
             for c in self.loops[l.index()].coedges() {
-                let e = self.coedges[c.index()].edge;
-                let edge = &mut self.edges[e.index()];
-                edge.coedges.retain(|&x| x != c);
-                if edge.coedges.is_empty() {
-                    edge.alive = false;
-                }
+                self.drop_use(c);
             }
         }
     }
@@ -889,9 +904,9 @@ impl Body {
         self.shells[shell.index()].faces.push(id);
         // the new face is the last: so are its chunk and block
         if let Some(h) = self.hulls.get_mut() {
-            h.chunks.resize_with(id.index() / RUN + 1, Cached::default);
+            h.chunks.resize_with(id.index() / RUN + 1, || Cached::default());
             h.blocks
-                .resize_with(id.index() / (RUN * RUN) + 1, Cached::default);
+                .resize_with(id.index() / (RUN * RUN) + 1, || Cached::default());
             h.chunks[id.index() / RUN].clear();
             h.blocks[id.index() / (RUN * RUN)].clear();
         }

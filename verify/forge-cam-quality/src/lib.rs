@@ -475,6 +475,122 @@ pub fn coverage(jobs: &[JobQ]) -> String {
 }
 
 pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
+    measure_cam_unless(cam, file, cfg, &|| false).expect("never stopped")
+}
+
+/// `measure_cam`, given up (None) once `stop` says so, asked before each op and before the
+/// timeline: the app measures a run after showing it, and a measure of a run an edit has
+/// replaced is not wanted (nor should it hold the cores the new run needs). Not stopped, it is
+/// `measure_cam`'s job, exactly.
+/// What measuring reads of a run, all of it (`measure_view` and `timeline` see nothing else):
+/// its `Debug` text is a complete key for a memo of the measure. Borrowed from the `Cam`, by the
+/// names `Cam` gives them, so the measuring code reads it as it read the `Cam`; a read of
+/// anything more fails to compile until it is added here, and with it to the key.
+#[derive(Clone, Debug)]
+pub struct CamView<'a> {
+    pub ok: bool,
+    pub errors: &'a [String],
+    pub ops: Vec<OpView<'a>>,
+    pub programs: Vec<ProgView<'a>>,
+    tools: &'a [forge_cam::ops::ToolUse],
+    setups: Vec<forge_cam_lang::SetupView<'a>>,
+    /// Each setup's material group's cutting data (`cutting_group`), by name.
+    groups: Vec<(&'a str, Option<&'a forge_tooling::feeds::Group>)>,
+}
+
+/// An op as measuring reads it (`Cam::ops`).
+#[derive(Clone, Debug)]
+pub struct OpView<'a> {
+    pub name: &'a str,
+    pub kind: &'a str,
+    pub setup: usize,
+    pub tool: Option<usize>,
+    pub paths: &'a [forge_cam::ops::OpPath],
+    pub feeds: Option<forge_tooling::feeds::Feeds>,
+    pub resolved: Option<&'a forge_tooling::resolve::Resolved>,
+    pub status: &'a str,
+    pub refusal: Option<&'a str>,
+    pub moves: usize,
+}
+
+/// A program as measuring reads it (`Cam::programs`).
+#[derive(Clone, Debug)]
+pub struct ProgView<'a> {
+    pub name: &'a str,
+    pub setups: &'a [usize],
+    pub post: &'a str,
+    pub text: Option<&'a str>,
+    pub error: Option<&'a str>,
+}
+
+impl<'a> CamView<'a> {
+    pub fn of(cam: &'a Cam) -> CamView<'a> {
+        let setups: Vec<_> = (0..).map_while(|i| cam.setup_view(i)).collect();
+        let mut groups: Vec<(&'a str, Option<&'a forge_tooling::feeds::Group>)> = vec![];
+        for sv in &setups {
+            if !groups.iter().any(|(g, _)| *g == sv.group) {
+                groups.push((sv.group, cam.cutting_group(sv.group)));
+            }
+        }
+        CamView {
+            ok: cam.ok,
+            errors: &cam.errors,
+            ops: cam
+                .ops
+                .iter()
+                .map(|o| OpView {
+                    name: &o.name,
+                    kind: o.kind,
+                    setup: o.setup,
+                    tool: o.tool,
+                    paths: &o.paths,
+                    feeds: o.feeds,
+                    resolved: o.resolved.as_ref(),
+                    status: o.status,
+                    refusal: o.refusal.as_deref(),
+                    moves: o.moves,
+                })
+                .collect(),
+            programs: cam
+                .programs
+                .iter()
+                .map(|p| ProgView {
+                    name: &p.name,
+                    setups: &p.setups,
+                    post: &p.post,
+                    text: p.text.as_deref(),
+                    error: p.error.as_deref(),
+                })
+                .collect(),
+            tools: cam.tool_uses(),
+            setups,
+            groups,
+        }
+    }
+
+    pub fn tool_uses(&self) -> &'a [forge_cam::ops::ToolUse] {
+        self.tools
+    }
+
+    pub fn setup_view(&self, i: usize) -> Option<forge_cam_lang::SetupView<'a>> {
+        self.setups.get(i).copied()
+    }
+
+    /// A setup's group's cutting data (only setups' groups are asked: each is kept above).
+    pub fn cutting_group(&self, g: &str) -> Option<&'a forge_tooling::feeds::Group> {
+        let k = self.groups.iter().find(|(n, _)| *n == g);
+        debug_assert!(k.is_some(), "cutting_group({g}): not a setup's group");
+        k.and_then(|(_, x)| *x)
+    }
+}
+
+/// `measure_view` of the run's view.
+pub fn measure_cam_unless(cam: &Cam, file: String, cfg: &Config, stop: &dyn Fn() -> bool) -> Option<JobQ> {
+    measure_view(&CamView::of(cam), file, cfg, stop)
+}
+
+/// `measure_cam_unless` of what it reads of the run (`CamView`): the same answer.
+pub fn measure_view(cam: &CamView, file: String, cfg: &Config, stop: &dyn Fn() -> bool) -> Option<JobQ> {
     let tools = cam.tool_uses();
     let dmin = cam
         .ops
@@ -492,12 +608,15 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
         file,
         ok: cam.ok,
         cell,
-        errors: cam.errors.clone(),
+        errors: cam.errors.to_vec(),
         ..JobQ::default()
     };
     let mlib = forge_machine::library::Library::with_builtin();
     let mut maps: Vec<Option<HeightMap>> = Vec::new();
     for op in &cam.ops {
+        if stop() {
+            return None;
+        }
         let Some(sv) = cam.setup_view(op.setup) else {
             continue;
         };
@@ -515,11 +634,11 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
             .map(|s| s.power.clone())
             .unwrap_or_default();
         let mut q = OpQ {
-            name: op.name.clone(),
+            name: op.name.to_string(),
             setup: op.setup,
             kind: op.kind.to_string(),
             status: op.status.to_string(),
-            refusal: op.refusal.clone(),
+            refusal: op.refusal.map(str::to_string),
             moves: op.moves,
             hex_min: f64::INFINITY,
             ..OpQ::default()
@@ -568,11 +687,15 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
                 moves: mvs,
             })
             .collect();
-        job.ops.push(measure_op(q, &paths, m, group, &curve, cell));
+        job.ops
+            .push(measure_op_unless(q, &paths, m, group, &curve, cell, stop)?);
+    }
+    if stop() {
+        return None;
     }
     timeline(cam, cfg, &mlib, &mut job);
     job.ends = maps;
-    job
+    Some(job)
 }
 
 /// One op's paths as measurement needs them.
@@ -587,13 +710,27 @@ pub struct PathIn<'a> {
 /// Measures one op's paths on the stock `m` (lowered as they cut), `q` holding its name, tool and
 /// target already.
 pub fn measure_op(
-    mut q: OpQ,
+    q: OpQ,
     paths: &[PathIn],
     m: &mut HeightMap,
     group: Option<&forge_tooling::feeds::Group>,
     curve: &[[f64; 2]],
     cell: f64,
 ) -> OpQ {
+    measure_op_unless(q, paths, m, group, curve, cell, &|| false).expect("never stopped")
+}
+
+/// `measure_op`, given up (None, the map left part cut) once `stop` says so, asked every 64
+/// moves. Not stopped, `measure_op`'s answer exactly.
+pub fn measure_op_unless(
+    mut q: OpQ,
+    paths: &[PathIn],
+    m: &mut HeightMap,
+    group: Option<&forge_tooling::feeds::Group>,
+    curve: &[[f64; 2]],
+    cell: f64,
+    stop: &dyn Fn() -> bool,
+) -> Option<OpQ> {
     let mut phi_t = 0.0; // Σ φ dt
     let mut side_t = 0.0; // time of side-engaged cutting
     let mut hex_t = 0.0;
@@ -613,6 +750,9 @@ pub fn measure_op(
         let mut last_dir: Option<[f64; 2]> = None;
         let mut was_descending = false;
         for (mi, mv) in p.moves.iter().enumerate() {
+            if mi % 64 == 63 && stop() {
+                return None;
+            }
             let (f, phase) = match *mv {
                 PMove::Rapid { .. } => (0.0, Phase::Rapid),
                 PMove::Line { f, phase, .. } => (f, phase),
@@ -841,20 +981,24 @@ pub fn measure_op(
     if q.t_cut > 0.0 {
         q.mrr = q.removed / (q.t_cut / 60.0);
     }
-    q
+    Some(q)
 }
 
 /// Each program on the machine: its timeline, the ops' shares by their blocks.
-fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job: &mut JobQ) {
+fn timeline(cam: &CamView, cfg: &Config, mlib: &forge_machine::library::Library, job: &mut JobQ) {
     use forge_machine::sim::{self, Cut, Happening, Setup, SimTool};
     for p in &cam.programs {
         let mut pq = ProgQ {
-            name: p.name.clone(),
-            setups: p.setups.clone(),
+            name: p.name.to_string(),
+            setups: p.setups.to_vec(),
             ..ProgQ::default()
         };
-        let Some(text) = p.text.as_deref() else {
-            pq.error = Some(p.error.clone().unwrap_or_else(|| "no program text".into()));
+        let Some(text) = p.text else {
+            pq.error = Some(
+                p.error
+                    .map(str::to_string)
+                    .unwrap_or_else(|| "no program text".into()),
+            );
             job.progs.push(pq);
             continue;
         };
@@ -868,7 +1012,7 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
         pq.machine = mname.clone();
         let res = (|| -> Result<sim::Timeline, String> {
             let def = mlib.get(&mname).map_err(|e| e.to_string())?;
-            let dsrc = forge_machine::gcode::Control::dialect_src(&p.post)
+            let dsrc = forge_machine::gcode::Control::dialect_src(p.post)
                 .ok_or_else(|| format!("no dialect `{}`", p.post))?;
             let control =
                 forge_machine::gcode::Control::for_machine(def, dsrc, 1).map_err(|e| e.to_string())?;
