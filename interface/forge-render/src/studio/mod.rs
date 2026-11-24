@@ -10,6 +10,7 @@ pub mod bvh;
 pub mod cpu;
 pub mod env;
 pub mod gpu;
+pub mod live;
 pub mod scene;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod shot;

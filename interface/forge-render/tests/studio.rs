@@ -197,3 +197,37 @@ fn the_denoiser_brings_a_few_samples_closer_to_many() {
     eprintln!("16 spp against 1024: raw {r:.2}, denoised {c:.2} (8-bit levels)");
     assert!(c < 0.6 * r, "denoised {c} vs raw {r}");
 }
+
+#[test]
+fn the_queue_writes_a_turntable_frame_by_frame() {
+    use forge_render::studio::live::{Job, Output, Queue};
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let f = fixture();
+    let mut q = Queue::default();
+    let b = f.built.bounds.unwrap();
+    q.push(Job {
+        output: Output::Turntable { stem: "t.png".into(), frames: 3 },
+        size: (32, 24),
+        spp: 12,
+        denoise: true,
+        view: f.view,
+        settings: f.settings,
+        pivot: ((b.min + b.max) * 0.5).arr(),
+    });
+    let mut written = Vec::new();
+    for _ in 0..20 {
+        let scene = || Some((f.built.clone(), f.materials.clone(), Lut::new(64)));
+        q.tick(&device, &queue, scene, &f.env, |path, size, rgba| {
+            assert_eq!(rgba.len() as u32, size.0 * size.1 * 4);
+            written.push((path.to_string(), rgba));
+            Ok(())
+        });
+    }
+    let names: Vec<&str> = written.iter().map(|w| w.0.as_str()).collect();
+    assert_eq!(names, ["t_0000.png", "t_0001.png", "t_0002.png"]);
+    // the part turned: the frames differ
+    assert_ne!(written[0].1, written[1].1);
+    assert!(q.jobs.is_empty() && q.log.iter().all(|l| l.is_ok()));
+}
