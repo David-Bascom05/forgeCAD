@@ -30,8 +30,22 @@ thread_local! {
 
 fn step(h: &mut Headless) {
     let out = h.step();
-    if !out.host.is_empty() {
-        HOST.with(|x| x.borrow_mut().extend(out.host.iter().map(action_word)));
+    // the window's own asks: its file dialogs, its frame (the rest of `host` is the app's)
+    let window: Vec<String> = out
+        .host
+        .iter()
+        .map(|a| format!("{a:?}"))
+        .filter(|w| {
+            [
+                "Open", "SaveAs", "ExportMesh", "Minimize", "Maximize", "Close", "DragWindow", "ResizeWindow",
+                "Sheet(NewPart)",
+            ]
+            .iter()
+            .any(|k| w == k || w.starts_with(&format!("{k}(")))
+        })
+        .collect();
+    if !window.is_empty() {
+        HOST.with(|x| x.borrow_mut().extend(window));
     }
 }
 
@@ -700,6 +714,15 @@ impl Crawl {
             return (rec, Some(h));
         }
         let after = Snap::take(&mut h);
+        if let Click::Menu { item, .. } = how
+            && after.places.contains_key(item)
+        {
+            rec.class = Class::Disabled;
+            rec.detail = "off: the menu stays open".into();
+            rec.ms = t0.elapsed().as_millis();
+            let fresh = restore(h, &before, base_env, tab, self.noisy);
+            return (rec, fresh);
+        }
         let picked = forge_render::plat::PICKERS_ASKED.load(std::sync::atomic::Ordering::Relaxed) > pickers;
         let screen = Rect::from_min_size(pos2(0.0, 0.0), vec2(self.size.0, self.size.1));
         classify(f, &mut rec, &before, &after, &host, picked, screen, self.noisy);
@@ -959,6 +982,13 @@ fn classify(
             rec.detail = format!("\"{}\"", judge::short(&words));
         }
     }
+    if status_new && let Some(why) = judge::debug_text(&after.status) {
+        rec.findings.push(judge::finding(
+            "raw-text",
+            true,
+            format!("status \"{}\" ({why})", judge::short(&after.status)),
+        ));
+    }
     if rec.class == Class::Mode {
         if status_new {
             rec.detail = format!("a mode, prompted: {status}");
@@ -979,10 +1009,6 @@ fn classify(
     }
 }
 
-fn action_word(a: &Action) -> String {
-    let s = format!("{a:?}");
-    s.split(['(', ' ', '{']).next().unwrap_or("").to_string()
-}
 
 /// Hovers an off tool until its tooltip shows: whether it says why (more than its own name).
 fn disabled_tip(h: &mut Headless, group: &str, tool: &str) -> (String, bool) {

@@ -163,6 +163,16 @@ pub fn debug_text(s: &str) -> Option<&'static str> {
     {
         return Some("debug text");
     }
+    // an error's code before its words (`StillRead: plate reads plan`)
+    if t.split(|c: char| c.is_whitespace()).any(|w| {
+        let w = w.strip_suffix(':').unwrap_or("");
+        w.len() > 4
+            && w.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+            && w.chars().all(|c| c.is_ascii_alphanumeric())
+            && w.chars().skip(1).any(|c| c.is_ascii_uppercase())
+    }) {
+        return Some("an error code");
+    }
     if t.contains("/tmp/") || t.contains("fg-") && t.contains(".fg") && t.contains('/') {
         return Some("a temporary path");
     }
