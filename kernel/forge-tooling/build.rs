@@ -11,6 +11,7 @@ fn main() {
         "holders.toml",
         "machines.toml",
         "cutting.toml",
+        "interfaces.toml",
     ]
     .iter()
     .map(|s| s.to_string())
