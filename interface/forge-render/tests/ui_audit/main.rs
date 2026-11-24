@@ -420,7 +420,20 @@ fn park(h: &mut Headless) {
     step(h);
 }
 
-fn tab_names(h: &Headless) -> Vec<String> {
+fn tab_names(h: &mut Headless) -> Vec<String> {
+    // those behind » too: its menu opened to read them, and closed
+    if h.gui.shell.place("tabs:more").is_some() && click_place(h, "tabs:more") {
+        step(h);
+        let names = tab_names_placed(h);
+        h.key(egui::Key::Escape);
+        step(h);
+        step(h);
+        return names;
+    }
+    tab_names_placed(h)
+}
+
+fn tab_names_placed(h: &Headless) -> Vec<String> {
     let mut v: Vec<(f32, String)> = h
         .gui
         .shell
@@ -445,7 +458,12 @@ fn click_place(h: &mut Headless, name: &str) -> bool {
 }
 
 fn go_tab(h: &mut Headless, tab: &str) -> bool {
-    if !click_place(h, &format!("tab:{tab}")) {
+    let name = format!("tab:{tab}");
+    // a narrow window keeps some tabs behind » (shell/mod.rs tabs_row)
+    if h.gui.shell.place(&name).is_none() && click_place(h, "tabs:more") {
+        step(h);
+    }
+    if !click_place(h, &name) {
         return false;
     }
     settled(h, 10.0);
@@ -524,9 +542,15 @@ fn click_tool(h: &mut Headless, group: &str, tool: &str) -> bool {
     if h.gui.shell.place(&format!("tool:{tool}")).is_some() && click_place(h, &format!("tool:{tool}")) {
         return true;
     }
-    if click_place(h, &format!("ribbon:group:{group}")) {
+    // folded: its group's menu, opened (a click may close one left open, so twice at most)
+    for _ in 0..2 {
+        if !click_place(h, &format!("ribbon:group:{group}")) {
+            return false;
+        }
         step(h);
-        return click_place(h, &format!("tool:{tool}"));
+        if h.gui.shell.place(&format!("tool:{tool}")).is_some() {
+            return click_place(h, &format!("tool:{tool}"));
+        }
     }
     false
 }
@@ -542,7 +566,7 @@ impl Crawl {
 
     fn fixture(&mut self, f: &Fixture, only_tab: Option<&str>) {
         let Some(mut h) = start(f, self.size) else { return };
-        let tabs: Vec<String> = tab_names(&h)
+        let tabs: Vec<String> = tab_names(&mut h)
             .into_iter()
             .filter(|t| f.tabs.is_empty() || f.tabs.contains(&t.as_str()))
             .filter(|t| only_tab.is_none_or(|o| o == t))
@@ -815,7 +839,7 @@ impl Crawl {
                 settled(&mut h, 10.0);
                 continue;
             }
-            for tab in tab_names(&h) {
+            for tab in tab_names(&mut h) {
                 if matches!(tab.as_str(), "View" | "Inspect" | "Manage") {
                     continue;
                 }
