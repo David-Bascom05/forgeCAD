@@ -83,7 +83,7 @@ pub fn measure(
             PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
             _ => continue,
         };
-        if !(f > 0.0 && rpm > 0.0) {
+        if !(pos(f) && pos(rpm)) {
             continue;
         }
         let len = move_len(starts[s.mv], mv) / count[s.mv].max(1) as f64;
@@ -112,7 +112,9 @@ pub fn measure(
     let mut cycles = 0;
     for (i, mv) in path.moves.iter().enumerate() {
         match *mv {
-            PMove::Line { to, f, phase } if count[i] == 0 && phase != Phase::Rapid && to[2] < starts[i][2] && f > 0.0 => {
+            PMove::Line { to, f, phase }
+                if count[i] == 0 && phase != Phase::Rapid && to[2] < starts[i][2] && f > 0.0 =>
+            {
                 unsampled += move_len(starts[i], mv) / f;
             }
             PMove::Arc { to, f, .. } if count[i] == 0 && to[2] < starts[i][2] && f > 0.0 => {
@@ -127,6 +129,11 @@ pub fn measure(
         unsampled_minutes: unsampled,
         cycles,
     }
+}
+
+/// x > 0 (false for NaN).
+fn pos(x: f64) -> bool {
+    x > 0.0
 }
 
 #[cfg(test)]
@@ -181,6 +188,10 @@ mod tests {
         assert!((mid.vc - std::f64::consts::PI * 10.0 * 6.0).abs() < 1e-9);
         // a full slot: peak chip = fz, mean chip ≈ 2 fz/π
         assert!((mid.hex - mid.fz).abs() < 0.02 * mid.fz, "hex {}", mid.hex);
-        assert!((mid.hm / mid.fz - 2.0 / std::f64::consts::PI).abs() < 0.05, "hm/fz {}", mid.hm / mid.fz);
+        assert!(
+            (mid.hm / mid.fz - 2.0 / std::f64::consts::PI).abs() < 0.05,
+            "hm/fz {}",
+            mid.hm / mid.fz
+        );
     }
 }
