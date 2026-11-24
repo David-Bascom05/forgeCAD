@@ -56,6 +56,8 @@ impl std::fmt::Debug for Picture {
 
 /// The most a pasted picture may be: the models' own limit is about 5 MB a picture.
 pub const PICTURE_BYTES: usize = 5 << 20;
+/// The most pictures one message takes.
+pub const PICTURES: usize = 20;
 
 impl Picture {
     pub fn png(bytes: Vec<u8>) -> Picture {

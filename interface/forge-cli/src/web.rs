@@ -32,6 +32,8 @@ use std::sync::{Arc, Mutex};
 
 /// The most a request's body may hold.
 const MAX_BODY: usize = 64 << 20;
+/// The most connections served at once.
+const MAX_CONNECTIONS: usize = 128;
 /// The most a request's head may hold.
 const MAX_HEAD: usize = 64 << 10;
 /// The most an agent call's body may hold (a message with a picture).
@@ -204,11 +206,21 @@ pub fn serve(c: Config, ready: impl FnOnce(&Path, &str)) -> Result<(), String> {
 pub fn run(l: TcpListener, c: Arc<Config>) -> Result<(), String> {
     // one writer at a time: a check-then-write is whole
     let lock = Arc::new(Mutex::new(()));
+    // a thread a connection, so a cap on them: past it a new one is closed at once; one left
+    // idle is closed after a while (an agent's event stream is never idle: it's written to)
+    let open = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     for s in l.incoming() {
         let Ok(s) = s else { continue };
-        let (c, lock) = (c.clone(), lock.clone());
+        if open.load(std::sync::atomic::Ordering::SeqCst) >= MAX_CONNECTIONS {
+            drop(s);
+            continue;
+        }
+        let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(120)));
+        open.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let (c, lock, open) = (c.clone(), lock.clone(), open.clone());
         std::thread::spawn(move || {
             let _ = connection(s, &c, &lock);
+            open.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         });
     }
     Ok(())
@@ -277,7 +289,7 @@ fn reason(s: u16) -> &'static str {
     }
 }
 
-fn read_request(r: &mut BufReader<TcpStream>) -> Result<Option<Request>, Response> {
+fn read_request(r: &mut BufReader<TcpStream>, c: &Config) -> Result<Option<Request>, Response> {
     let mut head = Vec::new();
     loop {
         let mut line = Vec::new();
@@ -315,6 +327,29 @@ fn read_request(r: &mut BufReader<TcpStream>) -> Result<Option<Request>, Respons
         .map_err(|_| error(400, "a bad Content-Length"))?;
     if len > MAX_BODY {
         return Err(error(413, "the file is too large"));
+    }
+    // refused before its body is read: a Host that isn't this machine's, an Origin that isn't
+    // this page's, an agent call larger than any it takes
+    let (path, _) = target.split_once('?').unwrap_or((target, ""));
+    let header = |k: &str| {
+        headers
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(k))
+            .map(|(_, v)| v.as_str())
+    };
+    if c.bind.is_loopback() && !header("host").is_some_and(is_loopback_name) {
+        return Err(error(421, "this server answers to localhost only"));
+    }
+    if let Some(o) = header("origin")
+        && !o
+            .split_once("://")
+            .map_or(o, |x| x.1)
+            .eq_ignore_ascii_case(header("host").unwrap_or_default())
+    {
+        return Err(error(403, "a request from another origin"));
+    }
+    if path.starts_with("/api/agent/") && len > MAX_AGENT_BODY {
+        return Err(error(413, "too large"));
     }
     let mut body = vec![0; len];
     r.read_exact(&mut body)
@@ -358,7 +393,7 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
     let mut out = s.try_clone()?;
     let mut r = BufReader::new(s);
     loop {
-        let (resp, keep, head) = match read_request(&mut r) {
+        let (resp, keep, head) = match read_request(&mut r, c) {
             Ok(None) => return Ok(()),
             Ok(Some(q)) => {
                 // the agent's events: a streamed answer, the connection's last
