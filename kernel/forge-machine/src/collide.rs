@@ -109,7 +109,9 @@ pub fn machine_bodies(def: &MachineDef) -> Vec<CBody> {
 pub fn tool_bodies(s: &Setup, t: u32) -> Vec<CBody> {
     let def = s.def;
     let Some(tool) = s.tool(t) else { return Vec::new() };
-    let m = def.mount(&s.tool_mount).unwrap();
+    let Some(m) = s.mount_for(t) else {
+        return Vec::new();
+    };
     let tip = kin::add(m.at, tool.tip);
     let u = kin::scale(m.dir, -1.0);
     tool.body

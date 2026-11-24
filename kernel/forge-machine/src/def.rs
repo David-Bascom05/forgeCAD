@@ -430,6 +430,9 @@ pub struct MachineDef {
     pub chip_lift: Option<f64>,
     /// Forbidden regions of joint space the control enforces.
     pub zones: Vec<Zone>,
+    /// Gang tool posts (`[[machine.gang]]`): each station is a tool mount named `GANG.T<n>`;
+    /// T n selects it (no index, no stop).
+    pub gangs: Vec<String>,
     /// A record of a real maker's model: every value in `cite_paths` must be cited.
     pub real: bool,
     pub cites: Vec<Cite>,
@@ -1147,6 +1150,42 @@ impl MachineDef {
                 name: mn,
             });
         }
+        let mut gangs = Vec::new();
+        for g in tables(t, "gang") {
+            let gn = need_text(g, &format!("{m} gang"), "name", "give `name`")?.to_string();
+            let rec = format!("{m} gang `{gn}`");
+            let link = need_text(g, &rec, "link", "give `link`, the slide the tools ride on")?.to_string();
+            let ts = nums(g, "t").ok_or_else(|| rec_err(&rec, "t", "give `t = [1, 2, ...]`"))?;
+            let at = nums(g, "at")
+                .ok_or_else(|| rec_err(&rec, "at", "give `at = [x, y, z, ...]`, three per tool"))?;
+            let dir = nums(g, "dir")
+                .ok_or_else(|| rec_err(&rec, "dir", "give `dir = [x, y, z, ...]`, three per tool"))?;
+            if ts.is_empty() || at.len() != 3 * ts.len() || dir.len() != 3 * ts.len() {
+                return Err(DefError::Bad {
+                    record: rec,
+                    field: "at",
+                    why: "and dir need three numbers per T".into(),
+                });
+            }
+            for (i, tv) in ts.iter().enumerate() {
+                if *tv < 1.0 || tv.fract() != 0.0 {
+                    return Err(rec_err(&rec, "t", "T numbers are positive whole numbers"));
+                }
+                let d = normalize([dir[3 * i], dir[3 * i + 1], dir[3 * i + 2]])
+                    .ok_or_else(|| rec_err(&rec, "dir", "a tool direction must not be zero"))?;
+                mounts.push(Mount {
+                    name: format!("{gn}.T{}", *tv as u32),
+                    kind: MountKind::Tool,
+                    link: link.clone(),
+                    at: [at[3 * i], at[3 * i + 1], at[3 * i + 2]],
+                    dir: d,
+                    xdir: [1.0, 0.0, 0.0],
+                    max_kg: None,
+                    max_inertia: None,
+                });
+            }
+            gangs.push(gn);
+        }
         let mut bodies = Vec::new();
         for s in tables(t, "body") {
             let bn = need_text(s, &format!("{m} body"), "name", "give `name`")?.to_string();
@@ -1327,6 +1366,7 @@ impl MachineDef {
         }
         let def = MachineDef {
             zones,
+            gangs,
             pallets,
             peck_clear: nonneg("peck_clear")?,
             chip_lift: nonneg("chip_lift")?,
@@ -1415,6 +1455,11 @@ impl MachineDef {
     /// A zone's joints as indexes into `joints` (validated to exist).
     pub fn zone_joints(&self, z: &Zone) -> Vec<usize> {
         z.joints.iter().filter_map(|j| self.joint_index(j)).collect()
+    }
+
+    /// The gang station tool `t` sits in, if any.
+    pub fn gang_mount(&self, t: u32) -> Option<&Mount> {
+        self.gangs.iter().find_map(|g| self.mount(&format!("{g}.T{t}")))
     }
 
     /// The zones q is strictly inside.
@@ -1740,7 +1785,7 @@ impl MachineDef {
                     && rot_h + rot_t == 0
                     && turn >= 1
                     && mill == 0
-                    && !self.turrets.is_empty()
+                    && (!self.turrets.is_empty() || !self.gangs.is_empty())
             }
             Kind::MillTurn => lin >= 3 && turn >= 1 && mill >= 1 && rot_t >= 1,
             Kind::TurnMill => {

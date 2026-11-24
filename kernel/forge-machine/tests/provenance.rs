@@ -785,3 +785,49 @@ fn a_guide_bushing_passes_the_stock_and_keeps_its_own_clearance() {
     assert!(gap(&def("", "clearance = 0.2\n")).is_empty());
     assert!(MachineDef::parse_all(&(vmc3() + &extra("passes = \"chips\"\n", ""))).is_err());
 }
+
+#[test]
+fn a_gang_post_mounts_each_tool_at_its_station() {
+    let src = lathe();
+    let a = src.find("[[machine.turret]]").unwrap();
+    let b = a + src[a..].find("index_axis").unwrap();
+    let b = b + src[b..].find('\n').unwrap() + 1;
+    let src = format!(
+        "{}[[machine.gang]]\nname = \"G\"\nlink = \"X\"\nt = [1, 2, 3]\nat = [120, 0, 0, 120, 40, 0, 120, 80, 0]\ndir = [-1, 0, 0, -1, 0, 0, -1, 0, 0]\n{}",
+        &src[..a],
+        &src[b..]
+    );
+    let m = &MachineDef::parse_all(&src).unwrap_or_else(|e| panic!("{e}"))[0];
+    assert!(m.turrets.is_empty());
+    assert_eq!(m.gang_mount(2).unwrap().at, [120.0, 40.0, 0.0]);
+    assert!(m.gang_mount(4).is_none());
+    let d = "[dialect]\nname = \"t\"\ndecimals = 3\nfeed_decimals = 3\ndwell = \"G04 P{ms}\"\n";
+    let mut s = Setup::new(m, Control::for_machine(m, d, 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![100.0, -120.0])];
+    s.geo = vec![(1, vec![0.0, 0.0]), (3, vec![0.0, 0.0])];
+    let tool = |t: u32| sim::SimTool {
+        t,
+        name: format!("T{t}"),
+        tip: [-10.0, 0.0, 0.0],
+        body: vec![(6.0, 0.0, 30.0)],
+        cut: sim::Cut::Nose {
+            rn: 0.8,
+            centre: [0.8, 0.8],
+        },
+    };
+    s.tools = vec![tool(1), tool(3)];
+    let tl = sim::simulate("T0101\nG0 X80. Z5.\nT0303\nG0 X80. Z6.\n", &s).unwrap();
+    // the same programmed X lands 80 mm apart in Y: the stations' offset (no geometry offsets)
+    let last = |line: usize| tl.segments.iter().rev().find(|sg| sg.line == line).unwrap();
+    let (p1, _) = s.tip_in_part(&last(2).q1, 1).unwrap();
+    let (p3, _) = s.tip_in_part(&last(4).q1, 3).unwrap();
+    assert!(
+        (p3[1] - p1[1]).abs() - 80.0 < 1e-9 && (p3[1] - p1[1]).abs() > 79.999,
+        "{p1:?} {p3:?}"
+    );
+    // no index time or stop for a gang
+    assert!(!tl.marks.iter().any(|mk| matches!(
+        mk.what,
+        sim::Happening::Index { .. } | sim::Happening::Stop { .. }
+    )));
+}

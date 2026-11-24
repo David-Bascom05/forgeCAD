@@ -140,12 +140,19 @@ impl<'a> Setup<'a> {
         self.tools.iter().find(|x| x.t == t)
     }
 
+    /// Where tool t sits: its gang station, else the setup's tool mount.
+    pub fn mount_for(&self, t: u32) -> Option<&crate::def::Mount> {
+        self.def
+            .gang_mount(t)
+            .or_else(|| self.def.mount(&self.tool_mount))
+    }
+
     /// A tool's tip and axis (tip toward the gauge) in the part's frame at joint values q.
     pub fn tip_in_part(&self, q: &[f64], t: u32) -> Option<([f64; 3], [f64; 3])> {
         use crate::kin;
         let tool = self.tool(t)?;
         let p = kin::pose(self.def, q);
-        let m = self.def.mount(&self.tool_mount)?;
+        let m = self.mount_for(t)?;
         let l = kin::link(self.def, &p, &m.link);
         let tip = l.apply(kin::add(m.at, tool.tip));
         let f = kin::part_frame(self.def, &p, &self.part_mount)?.inverse();

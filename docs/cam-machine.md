@@ -87,6 +87,13 @@ changer's). On a machine with pallets, M60 swaps the pallet: the timeline marks 
 time, after the position move (a checked rapid). M60 elsewhere is refused. Kind `hmc` reads as
 `vmc4` (3 linear and a table rotary) and says what the machine is.
 
+## `[[machine.gang]]`
+
+A gang tool post (Swiss and gang lathes): `name`, `link` (the slide), `t = [..]`, and three numbers
+per T in `at` (the station's gauge point, home pose) and `dir` (gauge to tip). Each station is a
+tool mount named `NAME.T<n>`; T n puts the tool there (no index time, no stop: the change is the
+next move). A lathe takes a gang instead of a turret.
+
 ## `[[machine.toolpost]]`
 
 A manual tool post (quick-change holders; a Sherline's or a Tormach 8L's post): `name`, `link`,
