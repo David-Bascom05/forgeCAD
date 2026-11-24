@@ -996,7 +996,7 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         of: Vec::with_capacity(body.edges.len()),
         owner: vec![(u32::MAX, 0.0); vertex_index.len()],
     };
-    let (mut trig, mut pts) = (Vec::new(), Vec::new());
+    let (mut trig, mut pts, mut params) = (Vec::new(), Vec::new(), Vec::new());
     for e in body.edge_ids() {
         let edge = body.edge(e);
         let fine = edge
@@ -1014,8 +1014,15 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         let mut s = Vec::with_capacity(n + 1);
         s.push((edge.range.lo, vertex_index[edge.start.index()]));
         edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts);
+        if let Curve::Hyperbola(_) = edge.curve {
+            edge.curve.sample_params(edge.range, n, &mut params);
+        }
         for (i, &p) in pts.iter().enumerate() {
-            let t = edge.curve.sample_param(edge.range, n, i + 1);
+            let t = if let Curve::Hyperbola(_) = edge.curve {
+                params[i]
+            } else {
+                edge.range.lo + edge.range.width() * ((i + 1) as f64 / n as f64)
+            };
             let id = mesh.add_vertex(p);
             samples.owner.push((e.0, t));
             s.push((t, id));

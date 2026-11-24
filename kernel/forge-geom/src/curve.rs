@@ -582,11 +582,7 @@ impl Curve {
         match self {
             Curve::Circle(c) => conic(&c.frame, c.radius, c.radius, trig, out),
             Curve::Ellipse(e) => conic(&e.frame, e.major, e.minor, trig, out),
-            Curve::Hyperbola(_) => {
-                for k in 1..n {
-                    out.push(self.eval(self.sample_param(range, n, k)));
-                }
-            }
+            Curve::Hyperbola(_) => self.hyperbola_samples(range, n, out),
             _ => {
                 for k in 1..n {
                     out.push(self.eval(range.lo + dt * k as f64));
@@ -600,12 +596,37 @@ impl Curve {
     /// tangent turns at most a / b a unit of u everywhere while t's speeds up as cosh u: equal
     /// steps of t over a wide range put almost all of them where it is nearly straight.
     pub fn sample_param(&self, range: Interval, n: usize, k: usize) -> f64 {
-        let f = k as f64 / n as f64;
+        let mut ts = Vec::with_capacity(n);
+        self.sample_params(range, n, &mut ts);
+        ts[k - 1]
+    }
+
+    /// A hyperbola's interior samples (out of line: sample_interior's other arms stay as they were).
+    #[inline(never)]
+    fn hyperbola_samples(&self, range: Interval, n: usize, out: &mut Vec<Point3>) {
+        let mut ts = Vec::with_capacity(n);
+        self.sample_params(range, n, &mut ts);
+        out.extend(ts.iter().map(|&t| self.eval(t)));
+    }
+
+    /// `sample_param` for k in 1..n, into `out` (a hyperbola's by the addition formula from one
+    /// sinh and cosh of the first point and of the step: sinh(u + h) = sinh u cosh h + cosh u sinh h).
+    #[inline(never)]
+    pub fn sample_params(&self, range: Interval, n: usize, out: &mut Vec<f64>) {
+        out.clear();
         if let Curve::Hyperbola(_) = self {
             let (u0, u1) = (asinh(range.lo), asinh(range.hi));
-            return sinh(u0 + (u1 - u0) * f).clamp(range.lo, range.hi);
+            let h = (u1 - u0) / n as f64;
+            let (sh, ch) = (sinh(h), (1.0 + sinh(h) * sinh(h)).sqrt());
+            let (mut s, mut c) = (range.lo, (1.0 + range.lo * range.lo).sqrt());
+            for _ in 1..n {
+                (s, c) = (s * ch + c * sh, c * ch + s * sh);
+                out.push(s.clamp(range.lo, range.hi));
+            }
+            return;
         }
-        range.lo + range.width() * f
+        let dt = range.width() / n as f64;
+        out.extend((1..n).map(|k| range.lo + dt * k as f64));
     }
 
     /// The whole parameter range, clipped to `bound` where the curve is unbounded.

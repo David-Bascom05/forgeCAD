@@ -102,7 +102,10 @@ fn cases(sources: &[String], seeds: u64, lang: u64) -> Vec<Case> {
         }
     }
     if on("families") {
-        for (f, g) in forge_model::adversarial::families() {
+        for (f, g) in forge_model::adversarial::families()
+            .into_iter()
+            .chain(forge_exact_fuzz::apexfam::families())
+        {
             for s in 0..seeds {
                 if let Ok(p) = forge_exact_fuzz::guarded(|| Ok(g(s))) {
                     let p = forge_exact_fuzz::curved::curved_part(&forge_model::adversarial::canonical(&p));
@@ -162,7 +165,10 @@ fn main() {
     }
     let mut cs = cases(&sources, seeds, lang);
     if !only.is_empty() {
-        cs.retain(|c| only.iter().any(|o| c.name == *o || c.name.starts_with(&format!("{o}/"))));
+        cs.retain(|c| {
+            only.iter()
+                .any(|o| c.name == *o || c.name.starts_with(&format!("{o}/")))
+        });
     }
     eprintln!("{} cases, rule {rule}", cs.len());
     let cs = std::sync::Arc::new(cs);
