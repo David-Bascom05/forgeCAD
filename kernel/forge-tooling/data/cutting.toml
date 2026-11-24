@@ -12,7 +12,7 @@
 group = "P"
 name = "steels"
 real = true
-vc_carbide = 180
+vc_carbide = 83.8
 vc_hss = 30
 fz_d1 = 0.008
 fz_d20 = 0.08
@@ -20,12 +20,17 @@ kc1_1 = 1700
 mc = 0.25
 kc1_1_range = [1368, 1935]
 mc_range = [0.17, 0.51]
+fz_d_rows = [3.175, 4.763, 6.35, 9.525, 12.7]
+fz_rows = [0.01143, 0.01651, 0.02286, 0.03302, 0.04318]
 source = "per value: see the cites"
 note = "verify with the tool maker"
 [[group.cite]]
 path = "vc_carbide"
 status = "estimate"
-basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; mid-range for unalloyed carbon steel, verify with the tool maker"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): 714 cited maker rows"
+taken = "2026-11-24"
+value = "median 83.8 m/min over 714 rows (harvey 104, helical 374, lakeshore 236)"
+basis = "median of the cited maker rows for this ISO group, carbide end mills, every op class (CAM-HAAS's extractions research/cam/tooling/raw/{harvey,helical,lakeshore}.json, each row's URL listed in verify/feeds-vs-makers/rows.tsv); was a forgeCAD placeholder well above every maker median for P K M H (feeds-vs-makers report)"
 [[group.cite]]
 path = "vc_hss"
 status = "estimate"
@@ -60,12 +65,26 @@ source = "https://arxiv.org/abs/2209.04197"
 taken = "2026-11-24"
 value = "Ck45 mc at the same vc: 0.19,0.17,0.51,0.35,0.32,0.28,0.26,0.22,0.22,0.27,0.29"
 note = "Klippel, Suessmaier, Kuffa, Wegener, 'Dry Cutting Experiments Database Ti6Al4V and Ck45', ETH Zurich IWF, arXiv:2209.04197 v1 (2022), CC BY 4.0; read from the authors' TeX source (Kienzle_LtxTabelle_*.inc, the paper's Tables 16/17); orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, fitted per vc by extrapolating kc to h = 1 mm (paper section 3.7). Ck45 only"
+[[group.cite]]
+path = "fz_d_rows"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): maker slot rows, flat carbide end mills"
+taken = "2026-11-24"
+value = "median slot chip (ae >= D/2) at 1/8, 3/16, 1/4, 3/8, 1/2 in: [0.01143, 0.01651, 0.02286, 0.03302, 0.04318] mm/tooth (rows per bin 14, 14, 16, 16, 16)"
+basis = "median of the cited Harvey and Helical slot rows at each diameter (each row cited in rows.tsv); bins with fewer than 10 rows left out; used over the fz_d1-fz_d20 line"
+[[group.cite]]
+path = "fz_rows"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): maker slot rows, flat carbide end mills"
+taken = "2026-11-24"
+value = "median slot chip (ae >= D/2) at 1/8, 3/16, 1/4, 3/8, 1/2 in: [0.01143, 0.01651, 0.02286, 0.03302, 0.04318] mm/tooth (rows per bin 14, 14, 16, 16, 16)"
+basis = "median of the cited Harvey and Helical slot rows at each diameter (each row cited in rows.tsv); bins with fewer than 10 rows left out; used over the fz_d1-fz_d20 line"
 
 [[group]]
 group = "M"
 name = "stainless steels"
 real = true
-vc_carbide = 110
+vc_carbide = 76.2
 vc_hss = 15
 fz_d1 = 0.006
 fz_d20 = 0.06
@@ -76,7 +95,10 @@ note = "verify with the tool maker"
 [[group.cite]]
 path = "vc_carbide"
 status = "estimate"
-basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): 170 cited maker rows"
+taken = "2026-11-24"
+value = "median 76.2 m/min over 170 rows (harvey 52, lakeshore 118)"
+basis = "median of the cited maker rows for this ISO group, carbide end mills, every op class (CAM-HAAS's extractions research/cam/tooling/raw/{harvey,helical,lakeshore}.json, each row's URL listed in verify/feeds-vs-makers/rows.tsv); was a forgeCAD placeholder well above every maker median for P K M H (feeds-vs-makers report)"
 [[group.cite]]
 path = "vc_hss"
 status = "estimate"
@@ -102,7 +124,7 @@ basis = "forgeCAD's own round placeholder (the generic set since the first CAM c
 group = "K"
 name = "cast irons"
 real = true
-vc_carbide = 160
+vc_carbide = 64.0
 vc_hss = 25
 fz_d1 = 0.01
 fz_d20 = 0.1
@@ -113,7 +135,10 @@ note = "verify with the tool maker"
 [[group.cite]]
 path = "vc_carbide"
 status = "estimate"
-basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): 118 cited maker rows"
+taken = "2026-11-24"
+value = "median 64.0 m/min over 118 rows (lakeshore 118)"
+basis = "median of the cited maker rows for this ISO group, carbide end mills, every op class (CAM-HAAS's extractions research/cam/tooling/raw/{harvey,helical,lakeshore}.json, each row's URL listed in verify/feeds-vs-makers/rows.tsv); was a forgeCAD placeholder well above every maker median for P K M H (feeds-vs-makers report)"
 [[group.cite]]
 path = "vc_hss"
 status = "estimate"
@@ -139,19 +164,24 @@ basis = "forgeCAD's own round placeholder (the generic set since the first CAM c
 group = "N"
 name = "non-ferrous (aluminium, copper alloys)"
 real = true
-vc_carbide = 400
+vc_carbide = 213.4
 vc_hss = 90
 fz_d1 = 0.01
 fz_d20 = 0.12
 kc1_1 = 700
 mc = 0.25
 kc1_1_range = [350, 700]
+fz_d_rows = [3.175, 4.763, 6.35, 9.525, 12.7]
+fz_rows = [0.03708, 0.05537, 0.07823, 0.12319, 0.16434]
 source = "per value: see the cites"
 note = "verify with the tool maker"
 [[group.cite]]
 path = "vc_carbide"
 status = "estimate"
-basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; errs slow for wrought aluminium: Helical states 2100 SFM (640 m/min) for its H45AL-3 in wrought aluminium (the helical tool records cite it)"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): 961 cited maker rows"
+taken = "2026-11-24"
+value = "median 213.4 m/min over 961 rows (harvey 468, helical 198, lakeshore 295)"
+basis = "median of the cited maker rows for this ISO group, carbide end mills, every op class (CAM-HAAS's extractions research/cam/tooling/raw/{harvey,helical,lakeshore}.json, each row's URL listed in verify/feeds-vs-makers/rows.tsv); was a forgeCAD placeholder well above every maker median for P K M H (feeds-vs-makers report)"
 [[group.cite]]
 path = "vc_hss"
 status = "estimate"
@@ -176,12 +206,26 @@ basis = "Sandvik's 'typically 0.25' per research/cam/libraries-machines-posts-fe
 path = "kc1_1_range"
 status = "estimate"
 basis = "the Sandvik N-group range per research/cam/libraries-machines-posts-feeds.md section 3.1 (Sandvik Coromant material pages, read by TOOLPATH-RESEARCH in an earlier session; not re-read here)"
+[[group.cite]]
+path = "fz_d_rows"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): maker slot rows, flat carbide end mills"
+taken = "2026-11-24"
+value = "median slot chip (ae >= D/2) at 1/8, 3/16, 1/4, 3/8, 1/2 in: [0.03708, 0.05537, 0.07823, 0.12319, 0.16434] mm/tooth (rows per bin 15, 15, 24, 24, 24)"
+basis = "median of the cited Harvey and Helical slot rows at each diameter (each row cited in rows.tsv); bins with fewer than 10 rows left out; used over the fz_d1-fz_d20 line"
+[[group.cite]]
+path = "fz_rows"
+status = "estimate"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): maker slot rows, flat carbide end mills"
+taken = "2026-11-24"
+value = "median slot chip (ae >= D/2) at 1/8, 3/16, 1/4, 3/8, 1/2 in: [0.03708, 0.05537, 0.07823, 0.12319, 0.16434] mm/tooth (rows per bin 15, 15, 24, 24, 24)"
+basis = "median of the cited Harvey and Helical slot rows at each diameter (each row cited in rows.tsv); bins with fewer than 10 rows left out; used over the fz_d1-fz_d20 line"
 
 [[group]]
 group = "S"
 name = "heat-resistant alloys and titanium"
 real = true
-vc_carbide = 45
+vc_carbide = 53.3
 vc_hss = 8
 fz_d1 = 0.005
 fz_d20 = 0.05
@@ -192,7 +236,10 @@ note = "verify with the tool maker"
 [[group.cite]]
 path = "vc_carbide"
 status = "estimate"
-basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): 229 cited maker rows"
+taken = "2026-11-24"
+value = "median 53.3 m/min over 229 rows (harvey 52, lakeshore 177)"
+basis = "median of the cited maker rows for this ISO group, carbide end mills, every op class (CAM-HAAS's extractions research/cam/tooling/raw/{harvey,helical,lakeshore}.json, each row's URL listed in verify/feeds-vs-makers/rows.tsv); was a forgeCAD placeholder well above every maker median for P K M H (feeds-vs-makers report)"
 [[group.cite]]
 path = "vc_hss"
 status = "estimate"
@@ -218,7 +265,7 @@ basis = "forgeCAD's own round placeholder (the generic set since the first CAM c
 group = "H"
 name = "hardened steels"
 real = true
-vc_carbide = 60
+vc_carbide = 36.6
 vc_hss = 5
 fz_d1 = 0.004
 fz_d20 = 0.04
@@ -229,7 +276,10 @@ note = "verify with the tool maker"
 [[group.cite]]
 path = "vc_carbide"
 status = "estimate"
-basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): 66 cited maker rows"
+taken = "2026-11-24"
+value = "median 36.6 m/min over 66 rows (helical 66)"
+basis = "median of the cited maker rows for this ISO group, carbide end mills, every op class (CAM-HAAS's extractions research/cam/tooling/raw/{harvey,helical,lakeshore}.json, each row's URL listed in verify/feeds-vs-makers/rows.tsv); was a forgeCAD placeholder well above every maker median for P K M H (feeds-vs-makers report)"
 [[group.cite]]
 path = "vc_hss"
 status = "estimate"
@@ -264,45 +314,45 @@ basis = "forgeCAD's own round placeholder (the generic set since the first CAM c
 group = "P"
 substrate = "carbide"
 real = true
-vc = 144.78
-d_rows = [6.35, 9.525]
-f_rows = [0.254, 0.3175]
+vc = 80.8
+d_rows = [3, 4, 5, 6, 8, 10, 12]
+f_rows = [0.13, 0.14, 0.15, 0.17, 0.21, 0.25, 0.27]
 [[drill.cite]]
 path = "vc"
 status = "estimate"
-source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
-taken = "2026-11-23"
-value = "Common structural steels, BHN <= 150: SFM 475; IPR 0.0100 at 1/4 in, 0.0125 at 3/8 in"
-basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median 80.8 m/min over 96 rows (lakeshore 24, guhring 30, yg1 42)"
+basis = "pooled median of the cited maker rows for this group (each row's URL in verify/feeds-vs-makers/rows.tsv); was Guhring Series 5510 alone, the most aggressive of the makers read"
 [[drill.cite]]
 path = "d_rows"
 status = "estimate"
-source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
-taken = "2026-11-23"
-value = "Common structural steels, BHN <= 150: SFM 475; IPR 0.0100 at 1/4 in, 0.0125 at 3/8 in"
-basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median feed per rev at 3, 4, 5, 6, 8, 10, 12 mm: [0.13, 0.14, 0.15, 0.17, 0.21, 0.25, 0.27] mm/rev (6 rows per bin, YG-1; Guhring has one row per bin and is left out)"
+basis = "median of the cited maker rows per diameter bin with at least 5 rows (each row in verify/feeds-vs-makers/rows.tsv)"
 [[drill.cite]]
 path = "f_rows"
 status = "estimate"
-source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
-taken = "2026-11-23"
-value = "Common structural steels, BHN <= 150: SFM 475; IPR 0.0100 at 1/4 in, 0.0125 at 3/8 in"
-basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median feed per rev at 3, 4, 5, 6, 8, 10, 12 mm: [0.13, 0.14, 0.15, 0.17, 0.21, 0.25, 0.27] mm/rev (6 rows per bin, YG-1; Guhring has one row per bin and is left out)"
+basis = "median of the cited maker rows per diameter bin with at least 5 rows (each row in verify/feeds-vs-makers/rows.tsv)"
 
 [[drill]]
 group = "M"
 substrate = "carbide"
 real = true
-vc = 54.86
+vc = 54.9
 d_rows = [6.35, 9.525]
 f_rows = [0.1651, 0.2032]
 [[drill.cite]]
 path = "vc"
 status = "estimate"
-source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
-taken = "2026-11-23"
-value = "Stainless steels, austenitic, HRC <= 36, BHN <= 337: SFM 180; IPR 0.0065 at 1/4 in, 0.0080 at 3/8 in"
-basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median 54.9 m/min over 23 rows (lakeshore 8, guhring 15)"
+basis = "pooled median of the cited maker rows for this group (each row's URL in verify/feeds-vs-makers/rows.tsv); was Guhring Series 5510 alone, the most aggressive of the makers read"
 [[drill.cite]]
 path = "d_rows"
 status = "estimate"
@@ -322,45 +372,45 @@ basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for
 group = "K"
 substrate = "carbide"
 real = true
-vc = 210.31
-d_rows = [6.35, 9.525]
-f_rows = [0.4064, 0.508]
+vc = 88.4
+d_rows = [3, 4, 5, 6, 8, 10, 12]
+f_rows = [0.13, 0.14, 0.15, 0.17, 0.21, 0.25, 0.27]
 [[drill.cite]]
 path = "vc"
 status = "estimate"
-source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
-taken = "2026-11-23"
-value = "Cast iron, HRC <= 23, BHN <= 242: SFM 690; IPR 0.0160 at 1/4 in, 0.0200 at 3/8 in"
-basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median 88.4 m/min over 73 rows (lakeshore 16, guhring 15, yg1 42)"
+basis = "pooled median of the cited maker rows for this group (each row's URL in verify/feeds-vs-makers/rows.tsv); was Guhring Series 5510 alone, the most aggressive of the makers read"
 [[drill.cite]]
 path = "d_rows"
 status = "estimate"
-source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
-taken = "2026-11-23"
-value = "Cast iron, HRC <= 23, BHN <= 242: SFM 690; IPR 0.0160 at 1/4 in, 0.0200 at 3/8 in"
-basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median feed per rev at 3, 4, 5, 6, 8, 10, 12 mm: [0.13, 0.14, 0.15, 0.17, 0.21, 0.25, 0.27] mm/rev (6 rows per bin, YG-1; Guhring has one row per bin and is left out)"
+basis = "median of the cited maker rows per diameter bin with at least 5 rows (each row in verify/feeds-vs-makers/rows.tsv)"
 [[drill.cite]]
 path = "f_rows"
 status = "estimate"
-source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
-taken = "2026-11-23"
-value = "Cast iron, HRC <= 23, BHN <= 242: SFM 690; IPR 0.0160 at 1/4 in, 0.0200 at 3/8 in"
-basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median feed per rev at 3, 4, 5, 6, 8, 10, 12 mm: [0.13, 0.14, 0.15, 0.17, 0.21, 0.25, 0.27] mm/rev (6 rows per bin, YG-1; Guhring has one row per bin and is left out)"
+basis = "median of the cited maker rows per diameter bin with at least 5 rows (each row in verify/feeds-vs-makers/rows.tsv)"
 
 [[drill]]
 group = "N"
 substrate = "carbide"
 real = true
-vc = 309.37
+vc = 137.2
 d_rows = [6.35, 9.525]
 f_rows = [0.4064, 0.508]
 [[drill.cite]]
 path = "vc"
 status = "estimate"
-source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
-taken = "2026-11-23"
-value = "Aluminium and Al-alloys, BHN <= 120: SFM 1015; IPR 0.0160 at 1/4 in, 0.0200 at 3/8 in"
-basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+source = "verify/feeds-vs-makers (cargo run -p feeds-vs-makers): cited maker drill rows, solid carbide"
+taken = "2026-11-24"
+value = "median 137.2 m/min over 39 rows (lakeshore 24, guhring 15)"
+basis = "pooled median of the cited maker rows for this group (each row's URL in verify/feeds-vs-makers/rows.tsv); was Guhring Series 5510 alone, the most aggressive of the makers read"
 [[drill.cite]]
 path = "d_rows"
 status = "estimate"

@@ -43,6 +43,11 @@ pub struct Group {
     /// power rises with kc, so the upper ends bound it within the data: feeds-speeds.md §10.5).
     pub kc1_1_range: Option<[f64; 2]>,
     pub mc_range: Option<[f64; 2]>,
+    /// Feed per tooth (the slot chip) at stated diameters, mm, where cited: used over the
+    /// fz_d1–fz_d20 line (linear between rows; outside, the lesser of the linear and the
+    /// proportional extension).
+    pub fz_d_rows: Vec<f64>,
+    pub fz_rows: Vec<f64>,
     pub source: String,
     pub note: String,
     /// Every value cited (cite.rs): `real = true` records must cite all of them.
@@ -89,10 +94,24 @@ impl Group {
         if mc_range.is_some() {
             required.push("mc_range".into());
         }
+        let (fz_d_rows, fz_rows) = (nums(t, "fz_d_rows").unwrap_or_default(), nums(t, "fz_rows").unwrap_or_default());
+        if fz_d_rows.len() != fz_rows.len() || fz_d_rows.windows(2).any(|w| w[0] >= w[1]) {
+            return Err(LibError::Bad {
+                record: rec.clone(),
+                field: "fz_d_rows",
+                why: "fz_d_rows and fz_rows are the same length, d increasing".into(),
+            });
+        }
+        if !fz_d_rows.is_empty() {
+            required.push("fz_d_rows".into());
+            required.push("fz_rows".into());
+        }
         let (real, cites) = cite::read(t, &rec, &required, &[])?;
         Ok(Group {
             kc1_1_range,
             mc_range,
+            fz_d_rows,
+            fz_rows,
             real,
             cites,
             name: text(t, "name").unwrap_or("").to_string(),
@@ -117,6 +136,19 @@ impl Group {
     }
 
     pub fn fz_at(&self, d: f64) -> f64 {
+        let (ds, fs) = (&self.fz_d_rows, &self.fz_rows);
+        let n = ds.len();
+        if n >= 2 {
+            let lin = |j: usize| fs[j] + (fs[j + 1] - fs[j]) * (d - ds[j]) / (ds[j + 1] - ds[j]);
+            return if d < ds[0] {
+                lin(0).min(fs[0] * d / ds[0]).max(0.0)
+            } else if d > ds[n - 1] {
+                lin(n - 2).min(fs[n - 1] * d / ds[n - 1])
+            } else {
+                let j = ds.iter().position(|&x| x >= d).unwrap_or(n - 1).max(1) - 1;
+                lin(j)
+            };
+        }
         let f = ((d - 1.0) / 19.0).clamp(0.0, 1.0);
         self.fz_d1 + f * (self.fz_d20 - self.fz_d1)
     }

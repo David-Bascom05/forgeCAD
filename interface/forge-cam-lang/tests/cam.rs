@@ -1142,9 +1142,9 @@ fn stock_material_sets_the_cutting_data() {
         .resolved
         .clone()
         .unwrap();
-    assert_eq!(skim.vc.source, Source::MachineClamped);
+    assert_eq!(skim.vc.source, Source::Material);
     assert!(skim.chip.note.contains("group N"), "{}", skim.chip.note);
-    // titanium: group S, and the measured rows at the cut's speed (45 m/min, carbide, group S)
+    // titanium: group S, and the measured rows at the cut's speed (group S carbide speed)
     let cam = forge_cam_lang::run(
         &src.replace(
             "part(\"flange.fg\", group: \"N\")",
@@ -1160,17 +1160,21 @@ fn stock_material_sets_the_cutting_data() {
         .resolved
         .clone()
         .unwrap();
-    assert_eq!((skim.vc.v, skim.vc.source), (45.0, Source::Material));
+    let vc = skim.vc.v;
+    assert_eq!(skim.vc.source, Source::Material);
+    assert!((52.0..60.0).contains(&vc), "{vc}");
     let p = skim.checks.iter().find(|c| c.what == "power").unwrap();
     assert!(
         p.why
-            .contains("Ti-6Al-4V annealed kc1.1/mc between the rows at vc 40 and 50"),
+            .contains("Ti-6Al-4V annealed kc1.1/mc between the rows at vc 52 and 60"),
         "{}",
         p.why
     );
-    // between the rows at 40 (1253, 0.22) and 50 (1061, 0.28), halfway
+    // between the rows at 52 (1156, 0.27) and 60 (1146, 0.27)
+    let u = (vc - 52.0) / 8.0;
+    let (kc1, mc) = (1156.0 + u * (1146.0 - 1156.0), 0.27);
     let hm = skim.feeds.hm.max(1e-4);
-    let kc = 1157.0 * forge_math::dmath::powf(hm, -0.25);
+    let kc = kc1 * forge_math::dmath::powf(hm, -mc);
     let want = skim.ap.v * skim.ae.v * skim.feed.v * kc / 6.0e7;
     assert!(
         (skim.feeds.power - want).abs() < 1e-9 * want,
