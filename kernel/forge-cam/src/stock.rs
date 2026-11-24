@@ -108,6 +108,21 @@ fn arc_pieces(a: [f64; 2], b: [f64; 2], c: [f64; 2], ccw: bool, full: bool) -> V
     out
 }
 
+/// The disk of radius r about c (one full-circle arc).
+pub fn disk(c: forge_cam_geom::region::P2, r: f64) -> Region {
+    let a = p2(c.x + r, c.y);
+    Region {
+        loops: vec![Loop {
+            segs: vec![Seg::Arc {
+                a,
+                b: a,
+                c,
+                ccw: true,
+            }],
+        }],
+    }
+}
+
 impl InProcess {
     pub fn new(min: [f64; 3], max: [f64; 3]) -> InProcess {
         InProcess {
@@ -116,6 +131,20 @@ impl InProcess {
             voids: vec![],
             under: vec![],
         }
+    }
+
+    /// A stock that is a prism along z of section `outline` (a bar, a tube, a sawn plate)
+    /// within the box: the box with what lies outside the outline cleared from the bottom up,
+    /// so every later section, face and leftover band sees the stock's own shape.
+    pub fn shaped(min: [f64; 3], max: [f64; 3], outline: &Region) -> Result<InProcess, String> {
+        let mut ip = InProcess::new(min, max);
+        let g = 1.0;
+        let around = rect([min[0] - g, min[1] - g, 0.0], [max[0] + g, max[1] + g, 0.0]);
+        let out = boolean(&around, outline, Op::Diff).map_err(|e| format!("{e:?}"))?;
+        if !out.is_empty() {
+            ip.voids.push((region_of(&out), min[2]));
+        }
+        Ok(ip)
     }
 
     /// The stock turned over about x like the part (lower::turned): (x, y, z) ↦ (x, −y, h − z).
@@ -201,13 +230,45 @@ impl InProcess {
             let exposed = match (&below, &m) {
                 (None, Some(m)) => vec![m.clone()],
                 (Some(b), Some(m)) => {
+                    // what changes at z0: voids whose floor is z0 start, regions cleared from
+                    // below up to z0 end (`material` takes a void from its floor, an under-region
+                    // below its ceiling; every floor and ceiling is a level)
+                    let new: Vec<&Region> = self
+                        .voids
+                        .iter()
+                        .filter(|(_, f)| *f == z0)
+                        .map(|(r, _)| r)
+                        .collect();
+                    let ended = self.under.iter().any(|(_, c)| *c == z0);
                     let mut v = vec![];
-                    for (x, y) in [(b, m), (m, b)] {
+                    let diff = |x: &Region, y: &Region, v: &mut Vec<Region>| -> Result<(), String> {
                         match boolean(x, y, Op::Diff) {
+                            Ok(d) if d.is_empty() => Ok(()),
+                            Ok(d) => {
+                                v.push(region_of(&d));
+                                Ok(())
+                            }
+                            Err(e) => Err(format!("{e:?}")),
+                        }
+                    };
+                    if !ended && new.len() == 1 {
+                        // only a void starts: above = below ∖ V, so below ∖ above = below ∩ V
+                        // and above ∖ below is empty (the same sets, without comparing the two
+                        // materials' shared edges, every one an exact tie)
+                        match boolean(b, new[0], Op::Inter) {
                             Ok(d) if d.is_empty() => {}
                             Ok(d) => v.push(region_of(&d)),
                             Err(e) => return Err(format!("{e:?}")),
                         }
+                    } else if !ended {
+                        // voids only: above ⊆ below
+                        diff(b, m, &mut v)?;
+                    } else if new.is_empty() {
+                        // under-regions only end: below ⊆ above
+                        diff(m, b, &mut v)?;
+                    } else {
+                        diff(b, m, &mut v)?;
+                        diff(m, b, &mut v)?;
                     }
                     v
                 }

@@ -445,7 +445,7 @@ def camStmt : List Name :=
     "slot", "thread_mill", "edge_break", "soft_jaw", "program"]
 
 /-- forge-cam-lang: `Cam::eval`'s built-ins (nested in an expression). -/
-def camExpr : List Name := ["box", "vise"]
+def camExpr : List Name := ["box", "vise", "cylinder", "tube", "solid"]
 
 /-- forge-turn-lang: `Turn::call`'s arms. -/
 def turnStmt : List Name :=

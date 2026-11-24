@@ -560,8 +560,12 @@ fn arg_lists(rel: &str) -> Option<Vec<(String, Vec<String>)>> {
     let body = &body[..body.find("\n];").expect("];")];
     let mut out = vec![];
     let mut rest = body;
-    while let Some(i) = rest.find("(\"") {
+    // an entry: `(`, maybe a line break (rustfmt splits long ones), the name, its list
+    while let Some(i) = rest.find('(') {
         rest = &rest[i + 1..];
+        if !rest.trim_start().starts_with('"') {
+            continue;
+        }
         let op = quoted(rest).into_iter().next().unwrap_or_default();
         let open = rest.find("&[").expect("&[");
         let close = rest[open..].find(']').expect("]") + open;

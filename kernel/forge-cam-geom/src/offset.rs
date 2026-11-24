@@ -28,6 +28,8 @@ use crate::ival::Ival;
 use crate::real::{Ctx, R};
 use crate::region::{self, Elem, Exact, P2, Region, RegionError, Seg, p2};
 use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 /// One closed loop of the offset, in f64: each end the exact point rounded to the grid `GRID`
 /// (shared bit for bit between neighbours), arcs' centres too. A loop of one zero-length line
@@ -53,8 +55,42 @@ pub struct Stats {
     pub exact_evals: u64,
 }
 
+type Offsets = Result<(Vec<OLoop>, Stats), OffsetError>;
+
+/// Offsets already made in this process, by the region's content and the distance: the offset
+/// is a function of those numbers alone (each decision an exact sign of expressions built from
+/// them), so the same region at the same distance has the same result, counters included. A
+/// pocket's first pass and the opening that records what it cleared are the same offset.
+/// Bounded: emptied when full.
+type Made = HashMap<(u64, u64), Vec<(Region, Offsets)>>;
+static MADE: Mutex<Option<Made>> = Mutex::new(None);
+const MADE_MAX: usize = 512;
+
 /// The offset of a validated region (see the module doc), with its counters.
-pub fn offset(rg: &Region, r: f64) -> Result<(Vec<OLoop>, Stats), OffsetError> {
+pub fn offset(rg: &Region, r: f64) -> Offsets {
+    let key = (region::content_hash(rg), r.to_bits());
+    let known = MADE.lock().ok().and_then(|g| {
+        g.as_ref()?
+            .get(&key)?
+            .iter()
+            .find(|(q, _)| q == rg)
+            .map(|(_, o)| o.clone())
+    });
+    if let Some(o) = known {
+        return o;
+    }
+    let o = offset_anew(rg, r);
+    if let Ok(mut g) = MADE.lock() {
+        let m = g.get_or_insert_with(HashMap::new);
+        if m.len() >= MADE_MAX {
+            m.clear();
+        }
+        m.entry(key).or_default().push((rg.clone(), o.clone()));
+    }
+    o
+}
+
+fn offset_anew(rg: &Region, r: f64) -> Offsets {
     if r < 0.0 {
         let (loops, st) = offset(&rg.reversed(), -r)?;
         let mut out = Vec::with_capacity(loops.len());
@@ -454,14 +490,16 @@ fn elem_far(cx: &mut Ctx, e: &Elem, q: Pt, r: R, r2: R, centre: Option<Pt>) -> b
     // q's distance from an end that is `centre`: exactly r
     let at_r = |x: Pt| centre == Some(x);
     // the cheap reject: the box of the element grown by r misses q
-    let (x0, y0, x1, y1) = arr::piece_box(cx, &e.piece);
     let (qx, qy, rv) = (cx.iv(q.x), cx.iv(q.y), cx.iv(r));
-    // strictly more than r away along an axis: (lower box edge − r) above q, and so on
-    if qx.hi < Ival::pt(x0).sub(rv).lo
-        || qx.lo > Ival::pt(x1).add(rv).hi
-        || qy.hi < Ival::pt(y0).sub(rv).lo
-        || qy.lo > Ival::pt(y1).add(rv).hi
-    {
+    // strictly more than r away along an axis: (lower box edge − r) above q, and so on; the
+    // coarse box first (no interval work for an arc), then the tight one
+    let far = |(x0, y0, x1, y1): (f64, f64, f64, f64)| {
+        qx.hi < Ival::pt(x0).sub(rv).lo
+            || qx.lo > Ival::pt(x1).add(rv).hi
+            || qy.hi < Ival::pt(y0).sub(rv).lo
+            || qy.lo > Ival::pt(y1).add(rv).hi
+    };
+    if far(arr::coarse_box(cx, &e.piece)) || far(arr::piece_box(cx, &e.piece)) {
         return true;
     }
     match e.piece.curve {
@@ -686,6 +724,21 @@ fn curvature_sign_and_rad(p: &Piece) -> (i32, Option<R>) {
 /// separation bound of every sign it takes part in). Coincident points become one literal.
 pub const GRID: f64 = 1.0 / 4294967296.0;
 
+/// `on_grid(cx.approx(a))`, from a's f64 enclosure [lo, hi] where that decides it. on_grid is
+/// non-decreasing, and approx(a) lies in [lo, hi]: it is lo when lo = hi, else the common
+/// nearest f64 of big-float bounds l ≤ a ≤ h, which is between nearest(lo) = lo and
+/// nearest(hi) = hi as rounding is monotone (at the 1024-bit cap, nearest(l) or the
+/// enclosure's midpoint, again in [lo, hi]). So when lo and hi round to one grid point, that
+/// is the result, and the big-float evaluation is not needed; else as before.
+fn grid_of(cx: &Ctx, a: R) -> f64 {
+    let iv = cx.iv(a);
+    let (l, h) = (on_grid(iv.lo), on_grid(iv.hi));
+    if l == h && l.is_finite() {
+        return l;
+    }
+    on_grid(cx.approx(a))
+}
+
 /// x rounded to the grid (exact in f64 for |x| < 2²⁰ mm; ties to even, as IEEE rounds).
 pub fn on_grid(x: f64) -> f64 {
     let k = x / GRID;
@@ -699,7 +752,7 @@ fn to_loop(cx: &mut Ctx, kept: &[Piece], chain: &[usize]) -> OLoop {
     let mut i = 0;
     while i < chain.len() {
         let s = kept[chain[i]].s;
-        verts.push(p2(on_grid(cx.approx(s.x)), on_grid(cx.approx(s.y))));
+        verts.push(p2(grid_of(cx, s.x), grid_of(cx, s.y)));
         i += 1;
     }
     let mut segs = Vec::with_capacity(chain.len());
@@ -713,7 +766,7 @@ fn to_loop(cx: &mut Ctx, kept: &[Piece], chain: &[usize]) -> OLoop {
             Curve::Circle { c, ccw, .. } => Seg::Arc {
                 a,
                 b,
-                c: p2(on_grid(cx.approx(c.x)), on_grid(cx.approx(c.y))),
+                c: p2(grid_of(cx, c.x), grid_of(cx, c.y)),
                 ccw,
             },
         };
