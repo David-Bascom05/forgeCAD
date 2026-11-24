@@ -48,24 +48,28 @@ A threaded hub turned from a Ø66 bar in one chucking.
 
 ## Results (cam/parity)
 
-Measured on cam/parity e11804e6, release build, one run (`forgecad cam F --json`). Native and
+Measured on cam/parity 66d70c79, release build, one run (`forgecad cam F --json`). Native and
 wasm32-wasip1 tests all pass.
 
-### manifold_cam.fg: 146 s in total (p1 145.7 s, almost all certification; p2 3 ms). Refused.
+### manifold_cam.fg: 25.8 s in total (p1 25.4 s, almost all certification; p2 3 ms). Refused.
+
+(At e11804e6: 146 s, with well and crn refused. The section pocket then cut every drilled hole
+of its mid-height section down to `to:`. A dowel's drill point was gouged, and 281k cells went to
+certifying it. Holes that end above the bottom are now left to their own ops: bc164b71.)
 
 | op | result | what blocks it |
 |---|---|---|
 | skim | certified | |
 | rough | not built | the 2.5D section at z = 29 meets the boss's foot fillet: `NotPrism { face: 38 }` (no 3D roughing on this branch) |
 | prof | refused | the holder meets stock (−1.43) on a plunge: stock that `rough` would have removed |
-| well | refused | gouge −0.151 on part face 36 at a plunge (move 17): to investigate |
-| crn | refused | undecided (−inf) on face 38, the torus (the fillet), on a cut |
-| shal | certified | 199,182 cells: the slowest certification |
+| well | certified | 3,519 cells |
+| crn | certified | 23,302 cells |
+| shal | certified | 199,182 cells: most of the time |
 | grv | certified | |
 | bored | refused | NeedTool: no 18.5 mm drill in the library |
 | thr | refused | the library's thread mill has pitch 1; the thread is 1.5 |
 | dwl | refused | NeedTool: no 6 mm drill (the reamer's pilot) |
-| tap | refused | a rapid 0.376 into stock: stock that `rough` would have removed |
+| tap | refused | a rapid 0.088 into stock: stock that `rough` would have removed |
 | brk | certified | |
 | face2, rel | certified | |
 | cbh | refused | NeedTool: no 5.5 mm drill |
