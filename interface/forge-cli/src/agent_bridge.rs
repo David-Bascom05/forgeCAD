@@ -142,12 +142,19 @@ fn fields(body: &[u8], allowed: &[&str]) -> Result<Json, Answer> {
 }
 
 /// A message's pictures, checked: each a type the models read and base64 data, nothing else.
+/// The most pictures a message takes, and the most each may be (decoded), as the models take.
+const MAX_PICTURES: usize = 20;
+const MAX_PICTURE_BYTES: usize = 5 << 20;
+
 fn pictures(j: Option<&Json>) -> Result<Vec<(&'static str, String)>, String> {
     const MEDIA: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
     let Some(j) = j else { return Ok(vec![]) };
     let Json::Arr(all) = j else {
         return Err("pictures: a list".into());
     };
+    if all.len() > MAX_PICTURES {
+        return Err(format!("pictures: at most {MAX_PICTURES} with a message"));
+    }
     all.iter()
         .map(|p| {
             let Json::Obj(kv) = p else {
@@ -161,12 +168,20 @@ fn pictures(j: Option<&Json>) -> Result<Vec<(&'static str, String)>, String> {
                 return Err(format!("pictures: {media:?} isn't PNG, JPEG, GIF or WebP"));
             };
             let data = s(p, "data").unwrap_or("");
-            if data.is_empty()
-                || !data
+            // base64 whole: groups of 4, its alphabet, `=` only as the last one or two
+            let body = data.trim_end_matches('=');
+            let fine = !data.is_empty()
+                && data.len() % 4 == 0
+                && data.len() - body.len() <= 2
+                && body
                     .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b"+/=".contains(&b))
-            {
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/');
+            if !fine {
                 return Err("pictures: data must be base64".into());
+            }
+            // what it decodes to
+            if data.len() / 4 * 3 - (data.len() - body.len()) > MAX_PICTURE_BYTES {
+                return Err("pictures: each up to 5 MB".into());
             }
             Ok((*media, data.to_string()))
         })
@@ -900,6 +915,35 @@ mod tests {
         assert_eq!(a.who(&week, "this page"), Who::Device);
         assert_eq!(a.who("x", "this page"), Who::Nobody);
         assert_eq!(a.forget(None), 1, "the lapsed one already gone");
+    }
+
+    #[test]
+    fn a_messages_pictures_are_twenty_at_most_each_5_mb_and_base64_whole() {
+        let one = |data: &str| Json::obj(vec![("media", "image/png".into()), ("data", data.into())]);
+        let list = |v: Vec<Json>| pictures(Some(&Json::Arr(v)));
+        assert!(list(vec![one("iVBORw0K"); 20]).is_ok());
+        assert!(
+            list(vec![one("iVBORw0K"); 21])
+                .unwrap_err()
+                .contains("at most 20")
+        );
+        for bad in [
+            "iVBORw0",
+            "iVB=Rw0K",
+            "iVBORw==K",
+            "iVBORw0K=",
+            "iV=====",
+            "iVBO\nRw0K",
+            "====",
+        ] {
+            assert!(list(vec![one(bad)]).is_err(), "{bad}");
+        }
+        assert!(list(vec![one("iVBORw==")]).is_ok(), "padding at the end");
+        // 5 MB decoded, and a byte more
+        let five = "A".repeat((5 << 20) / 3 * 4);
+        assert!(list(vec![one(&five)]).is_ok());
+        let more = "A".repeat(((5 << 20) / 3 + 1) * 4);
+        assert!(list(vec![one(&more)]).unwrap_err().contains("5 MB"));
     }
 
     #[test]

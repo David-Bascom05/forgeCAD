@@ -88,6 +88,15 @@ fn the_tab_keeps_pictures_for_the_next_message_and_refuses_what_isnt_one() {
         matches!(tab.entries.last(), Some(Entry::Note { text, .. }) if text.contains("over 5 MB can't be sent: resize it"))
     );
     assert_eq!(tab.pictures.len(), 2);
+    // twenty at most
+    let mut full = AgentTab::default();
+    for _ in 0..forge_render::agent::PICTURES {
+        assert!(full.add_picture(PNG.to_vec()));
+    }
+    assert!(!full.add_picture(PNG.to_vec()));
+    assert!(
+        matches!(full.entries.last(), Some(Entry::Note { text, .. }) if text.contains("20 pictures at most"))
+    );
     tab.entries.clear();
     // a picture alone is a message
     tab.send();

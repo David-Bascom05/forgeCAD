@@ -803,7 +803,12 @@ impl AgentTab {
     /// models read, or too big: said, and left out.
     pub fn add_picture(&mut self, bytes: Vec<u8>) -> bool {
         let size = bytes.len();
-        let refused = if size > crate::agent::PICTURE_BYTES {
+        let refused = if self.pictures.len() >= crate::agent::PICTURES {
+            Some(format!(
+                "A message takes {} pictures at most: send these, then the rest",
+                crate::agent::PICTURES
+            ))
+        } else if size > crate::agent::PICTURE_BYTES {
             Some(format!(
                 "That picture is {:.1} MB · pictures over 5 MB can't be sent: resize it, or send a PNG or JPEG",
                 size as f64 / 1048576.0
@@ -1689,7 +1694,7 @@ impl Shell {
             let r = Rect::from_min_size(pos2(w - 30.0, y + 3.0), vec2(24.0, 24.0));
             // off, and saying why, when there's nothing to start afresh from or a turn runs
             let off = if self.agent.running {
-                Some("Stop the turn to start a new chat")
+                Some("Stop the turn (Esc) to start a new chat")
             } else if self.agent.entries.is_empty()
                 && self.agent.pictures.is_empty()
                 && self.agent.input.trim().is_empty()
