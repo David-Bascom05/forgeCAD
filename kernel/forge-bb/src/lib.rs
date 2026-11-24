@@ -45,15 +45,36 @@ pub struct Policy {
     pub limit: f64,
     /// The resolution: a cell whose bound rests on a size at most half of it is a leaf.
     pub res: f64,
-    /// The most cells popped (a search the budget would end near gets it once more).
+    /// The most cells popped.
     pub budget: usize,
+    /// Whether to stop once the limit is proven, or go on to measure the least distance.
+    pub measure: Measure,
+    /// What a search that would end near does first.
+    pub near: OnNear,
+}
+
+/// When a search may stop past the limit.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Measure {
+    /// As soon as the limit is proven (a decision: Clear, Near, Hit or Undecided).
+    Decide,
     /// Go on past the limit until the least distance itself is known to within `res` (or a fifth
-    /// of its margin over the limit), with a tenth of the budget; else stop once the limit is
-    /// proven.
-    pub measure: bool,
-    /// Measuring, no finer than this: a distance known to be at least `cut` is not measured
-    /// further (another piece is already nearer). Infinite for none.
-    pub cut: f64,
+    /// of its margin over the limit), with a tenth of the budget; no finer than `cut`: a distance
+    /// known to be at least `cut` is not measured further (another piece is already nearer;
+    /// infinite for none).
+    To { cut: f64 },
+}
+
+/// What a search that would end near does before it says so.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum OnNear {
+    /// Report it as found.
+    Report,
+    /// Press it further: a search its budget would end near goes on once with the budget again,
+    /// from where it is (as a search with twice the budget would go, nothing searched again);
+    /// one that ends near with its cells settled at the resolution is searched again `refine`
+    /// times, each at an eighth of the last resolution. Only near searches pay.
+    Press { refine: usize },
 }
 
 /// The answer. `upper` is at least a real point's distance (infinite when none was named).
@@ -70,8 +91,7 @@ pub enum Verdict<W> {
     Undecided { lower: f64 },
 }
 
-/// How many times a near verdict whose cells settled at the resolution is searched again, each
-/// at an eighth of the last resolution.
+/// The press brake's `OnNear::Press { refine }`: twice, to a sixty-fourth of its resolution.
 pub const REFINE: usize = 2;
 
 #[derive(Clone, Copy)]
@@ -119,20 +139,23 @@ fn settle<W>(lower: f64, upper: f64, limit: f64, res: f64) -> Verdict<W> {
     }
 }
 
-/// Searches `roots`, the cells `spent` counted. A search its budget would end near goes on once
-/// with the budget again, from where it is, when `extend` (as a search with twice the budget
-/// would go, nothing searched again). `budget_ended`: set when the budget ended it.
+/// One search of `roots`, the cells `spent` counted: under [`OnNear::Press`], a search its budget
+/// would end near goes on once with the budget again (no finer search: that is [`certify`]'s).
+/// `budget_ended`: set when the budget ended it.
 pub fn search<S: Search>(
     s: &S,
     roots: &[S::Cell],
     p: &Policy,
-    extend: bool,
     spent: &mut usize,
     budget_ended: &mut bool,
 ) -> Verdict<S::Witness> {
-    let (limit, res, measure, cut) = (p.limit, p.res, p.measure, p.cut);
+    let (limit, res) = (p.limit, p.res);
+    let (measure, cut) = match p.measure {
+        Measure::Decide => (false, f64::INFINITY),
+        Measure::To { cut } => (true, cut),
+    };
     let mut budget = p.budget;
-    let mut extended = !extend;
+    let mut extended = p.near == OnNear::Report;
     let mut heap = BinaryHeap::new();
     for c in roots {
         if s.may_hold(c) {
@@ -184,24 +207,26 @@ pub fn search<S: Search>(
     settle(lower, upper, limit, res)
 }
 
-/// The search, its near verdicts pressed further before they are returned (only near pairs pay):
-/// one the budget would end goes on with the budget once more ([`search`]); one whose cells
-/// settled at the resolution is searched again at finer ones ([`REFINE`]). Clear, Hit, or the best
-/// Near proven; and the cells spent.
+/// The search under its policy, a near verdict pressed further as [`OnNear`] says: Clear, Hit, or
+/// the best Near proven; and the cells spent.
 pub fn certify<S: Search>(s: &S, roots: &[S::Cell], p: &Policy) -> (Verdict<S::Witness>, usize) {
     let mut spent = 0usize;
     let mut ended = false;
-    let mut v = search(s, roots, p, true, &mut spent, &mut ended);
+    let mut v = search(s, roots, p, &mut spent, &mut ended);
+    let refine = match p.near {
+        OnNear::Report => 0,
+        OnNear::Press { refine } => refine,
+    };
     // (not one the budget ended, twice: a finer search proves no more there)
     if let Verdict::Near { lower: mut best, .. } = v
         && !ended
     {
         let mut q = *p;
-        for _ in 0..REFINE {
+        for _ in 0..refine {
             q.res *= 0.125;
             // its own budget: the first search may have spent all of its own
             let mut more = 0usize;
-            let w = search(s, roots, &q, true, &mut more, &mut ended);
+            let w = search(s, roots, &q, &mut more, &mut ended);
             spent += more;
             match w {
                 // finer, the budget ran out: what was proven stands
@@ -260,8 +285,12 @@ mod tests {
             limit,
             res,
             budget,
-            measure,
-            cut: f64::INFINITY,
+            measure: if measure {
+                Measure::To { cut: f64::INFINITY }
+            } else {
+                Measure::Decide
+            },
+            near: OnNear::Press { refine: REFINE },
         }
     }
 
@@ -318,14 +347,11 @@ mod tests {
                 x: 1.53,
                 named: false,
             };
-            let v = search(
-                &l,
-                &[(0.0, 1.0)],
-                &p(0.5, 0.05, budget, measure),
-                extend,
-                &mut n,
-                &mut ended,
-            );
+            let mut q = p(0.5, 0.05, budget, measure);
+            if !extend {
+                q.near = OnNear::Report;
+            }
+            let v = search(&l, &[(0.0, 1.0)], &q, &mut n, &mut ended);
             (v, n, ended)
         };
         let (mut went_on, mut cleared) = (0, 0);

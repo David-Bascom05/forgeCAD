@@ -178,8 +178,12 @@ pub fn certify_below<P: Problem>(
         limit,
         res,
         budget,
-        measure,
-        cut,
+        measure: if measure {
+            forge_bb::Measure::To { cut }
+        } else {
+            forge_bb::Measure::Decide
+        },
+        near: forge_bb::OnNear::Press { refine: REFINE },
     };
     let (v, spent) = forge_bb::certify(&Brake(pb), roots, &policy);
     CELLS.fetch_add(spent, std::sync::atomic::Ordering::Relaxed);
@@ -237,10 +241,18 @@ mod tests {
             limit,
             res,
             budget,
-            measure,
-            cut,
+            measure: if measure {
+                forge_bb::Measure::To { cut }
+            } else {
+                forge_bb::Measure::Decide
+            },
+            near: if extend {
+                forge_bb::OnNear::Press { refine: REFINE }
+            } else {
+                forge_bb::OnNear::Report
+            },
         };
-        forge_bb::search(&Brake(pb), roots, &p, extend, spent, ended).into()
+        forge_bb::search(&Brake(pb), roots, &p, spent, ended).into()
     }
 
     /// A unit segment moving along x by s, against a ball of radius 1 at (3, 0, 0).
