@@ -309,8 +309,14 @@ impl<'a> Reader<'a> {
     /// A point that anchors an axis (a line's, a cylinder's): anywhere along it is the same
     /// shape, and files put it far out (TR210: a cylinder's origin 500 m along its axis). It is
     /// slid along `dir` to the foot nearest the world's origin, and only then held to the box.
+    /// Only one outside the box is moved.
     fn point_on_axis(&self, id: u32, dir: UnitVec3) -> R<Point3> {
         let p = self.point_anywhere(id)?;
+        // one inside the box is taken as written: a slide would round it, and move the shape's
+        // parameters with it (HRTA6 #56170's pair with #35491 then refused)
+        if forge_math::tol::in_model_box(p) {
+            return Ok(p);
+        }
         let d = Vec3::from(dir);
         let foot = p - d * (p - Point3::ORIGIN).dot(d);
         if !forge_math::tol::in_model_box(foot) {
@@ -363,7 +369,7 @@ impl<'a> Reader<'a> {
 
     /// `placement`, its origin moved where that changes nothing of the shape on it: along z
     /// for a cylinder's axis, within the x-y plane for a plane (TR210: a plane's origin 500 m out
-    /// on it), to the place nearest the world's origin.
+    /// on it), to the place nearest the world's origin. Only an origin outside the box is moved.
     fn placement_with(&self, id: u32, slide: Slide) -> R<Frame> {
         let a = self.args_of(id, "AXIS2_PLACEMENT_3D")?;
         let z = match a.get(2) {
@@ -378,10 +384,13 @@ impl<'a> Reader<'a> {
                 let n = Vec3::from(z.unwrap_or(UnitVec3::Z));
                 let p = self.point_anywhere(at)?;
                 let foot = Point3::ORIGIN + n * (p - Point3::ORIGIN).dot(n);
-                if !forge_math::tol::in_model_box(foot) {
+                if forge_math::tol::in_model_box(p) {
+                    p // as written, as `point_on_axis` takes one inside the box
+                } else if forge_math::tol::in_model_box(foot) {
+                    foot
+                } else {
                     return refuse(at, "CARTESIAN_POINT", "outside the 1 km model box");
                 }
-                foot
             }
         };
         let x = match a.get(3) {
