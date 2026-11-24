@@ -861,3 +861,44 @@ maximum stay-down distance (fusion-benchmark.md); FreeCAD Adaptive's `IsClearPat
 
 **Verdict: OK to build (engineering, not legal),** with conditions 1–5. Counsel Q10 (liability)
 is unchanged.
+
+## 11. Region planning by start order (question from TOOLPATH-QUALITY and the coordinator, 2026-11-24)
+
+**Two proposals:**
+- (P1) **Start-order rule:** the next start must be reachable at depth through the cleared area;
+  among those, take the lowest band across the sweep. This keeps the cleared area connected and
+  leaves no full-height strips between passes. It is still the single capped target, with no
+  transition areas.
+- (P2) **Opening channel first:** cut a dedicated channel to open the region, then peel.
+
+**Reading** (engineering, not legal advice):
+
+**(P1) avoids, as far as I can read; OK to build.** Ordering by a fixed geometric rule appears in
+no live independent claim read:
+- SolidCAM's "morphing" is marketing for its spiral-loop claims ('224 cl.13, '645/'861/'445),
+  which (P1) avoids because passes stay peels.
+- '224 cl.30/36 (the spiral and trochoid split) and cl.57–75 (channels) need a time comparison,
+  which (P1) does not make.
+- DP '847 sorts offsets by adjacency, but needs blend-arc-smoothed offsets, "trochoidal areas" and
+  trochoidal connecting moves. We have none of these.
+- Celeritive '245/'040 need a (modified) Voronoi decomposition, which we don't use.
+
+Conditions for (P1):
+- (a) It is a fixed rule with no time estimate, and deterministic (exact comparisons, a fixed
+  tie-break).
+- (b) No Voronoi diagram or medial axis is used to split the region.
+- (c) The §9 tests stay the gate. "Grow the cleared area outward from the entry" must not turn
+  into loops around the entry: per-pass turn ≤ 2·PEEL, and the travelled path never completes a
+  revolution about uncut material. If the reachability filter breaks the monotone cross-sweep
+  order, the winding test decides.
+
+**(P2) avoid it as a dedicated construction.** SolidCAM '224 cl.57/63 and cl.69/75, '704 cl.5/6
+and '445 cl.5/7 claim separating channels between boundary points. In what was read, each
+requires a time comparison: clearing whole takes longer than channel plus parts. A channel chosen
+without a time comparison would avoid that element, but it sits next to those claims, and
+Celeritive's region-splitting is nearby too.
+
+The safer form needs no channel: let the first peel pass from the entry simply be the first pass
+of the ordinary sweep. If it happens to open a corridor, that is the step rule's doing, not a
+separately designed channel. Never add a channel pass whose purpose is to divide the region.
+Counsel Q4 covers channels if we ever want them.
