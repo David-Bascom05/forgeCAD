@@ -992,7 +992,9 @@ pub fn rest(
         false
     };
     let rows = raster(area, stepover, 0.0)?;
-    let mut runs = Vec::new();
+    // each row's wanted stretches, in order; then each dropped on its own (on all cores,
+    // forge_math::par), kept in order (the first error in that order is the one returned)
+    let mut spans: Vec<[[f64; 2]; 2]> = Vec::new();
     let mut r = 0;
     while r + 1 < rows.len() {
         let (a, b) = (rows[r], rows[r + 1]);
@@ -1022,10 +1024,16 @@ pub fn rest(
                 ]
             };
             if s1 > s0 {
-                runs.push(sf.drop_polyline(&[at(s0), at(s1)], step)?);
+                spans.push([at(s0), at(s1)]);
             }
         }
         r += 2;
+    }
+    let dropped: Vec<Result<Vec<[f64; 3]>, SurfError>> =
+        forge_math::par::map(spans.len(), |k| sf.drop_polyline(&spans[k], step));
+    let mut runs = Vec::with_capacity(dropped.len());
+    for d in dropped {
+        runs.push(d?);
     }
     as_paths(c, &runs).ok_or(OpError::ToolTooBig {
         tool_d: 2.0 * sf.check.r,
