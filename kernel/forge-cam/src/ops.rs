@@ -778,13 +778,14 @@ fn led(
             first.get_or_insert(s);
             // the loop cut at its tabs' ends: even pieces cut, odd ones lifted
             let tabbed = match tabs {
-                Some(t) => {
+                // a point loop (the tool exactly fits a round hole) has no length to hold a tab
+                Some(t) if body.iter().map(leads::seg_len).sum::<f64>() > 1e-6 => {
                     let iv = tabs::intervals(&body, t, tool_d, ld.overlap.max(0.0) + 1e-6)
                         .map_err(OpError::Region)?;
                     let cuts: Vec<f64> = iv.iter().flat_map(|&(a, b)| [a, b]).collect();
                     Some((tabs::cut(&body, &cuts), sp.bottom + t.height, t.shape))
                 }
-                None => None,
+                _ => None,
             };
             mv.push(PMove::Rapid {
                 to: [s.x, s.y, h.retract],

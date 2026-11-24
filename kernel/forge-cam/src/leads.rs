@@ -294,6 +294,11 @@ pub fn wrap(
     ld: &Leads,
     eps: f64,
 ) -> (Vec<Seg>, Vec<Seg>, Vec<Seg>, Vec<Seg>) {
+    // a loop of no length (the tool exactly fits a round hole: the offset is the centre, a
+    // circle of radius 0) has no direction to lead along: it is plunged as it is
+    if segs.iter().map(seg_len).sum::<f64>() <= eps {
+        return (vec![], segs.to_vec(), vec![], vec![]);
+    }
     let body = match ld.entry {
         Some(q) => rotate_to(segs, q, eps),
         None => segs.to_vec(),
@@ -392,6 +397,37 @@ mod tests {
         // the climb sense mirrors it
         let li = lead_in(s, t, true, &ld);
         assert!(li[1].start().y > 1.9);
+    }
+
+    /// A point loop (a circle of radius 0, the tool exactly fitting a hole) gets no leads and no
+    /// NaN: it is the plunge it was.
+    #[test]
+    fn a_point_loop_has_no_leads() {
+        let c = p2(57.0, 38.0);
+        let pt = [Seg::Arc {
+            a: c,
+            b: c,
+            c,
+            ccw: true,
+        }];
+        let l = Lead {
+            radius: 2.0,
+            sweep_deg: 90.0,
+            length: 1.0,
+        };
+        let (li, body, ov, lo) = wrap(
+            &pt,
+            true,
+            &Leads {
+                lead_in: Some(l),
+                lead_out: Some(l),
+                entry: Some([0.0, 0.0]),
+                overlap: 0.5,
+            },
+            1e-6,
+        );
+        assert!(li.is_empty() && ov.is_empty() && lo.is_empty());
+        assert_eq!(body, pt.to_vec());
     }
 
     #[test]
