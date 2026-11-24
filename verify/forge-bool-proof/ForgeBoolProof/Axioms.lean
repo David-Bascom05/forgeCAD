@@ -37,3 +37,4 @@ import ForgeBoolProof
 #print axioms ForgeBoolProof.oriented_result_of_writes
 #print axioms ForgeBoolProof.compl_preconnected
 #print axioms ForgeBoolProof.seeded_result
+#print axioms ForgeBoolProof.local_formula_of_cone

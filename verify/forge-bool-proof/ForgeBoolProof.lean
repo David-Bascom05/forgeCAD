@@ -10,3 +10,4 @@ import ForgeBoolProof.Bridge
 import ForgeBoolProof.Assembly
 import ForgeBoolProof.Orient
 import ForgeBoolProof.Seeded
+import ForgeBoolProof.Formula
