@@ -38,7 +38,7 @@ CAM (owner, 2026-11-23: "start on cam"):
   - posts for Fanuc, Haas, LinuxCNC and GRBL, with round-trip;
   - setup sheets, a .fg `machining` document, schema forgecad.cam/1, CLI, MCP and a Manufacture workspace;
   - machining from design intent: holes and threads from the history.
-- Later: adaptive (after counsel reviews research/cam/patents.md), 3-axis, 3+2, turning and 5-axis.
+- Later: adaptive, 3-axis, 3+2, turning and 5-axis.
 
 Decisions:
 - Non-manifold boolean results are refused (ZeroThickness, naming where the bodies touch), as

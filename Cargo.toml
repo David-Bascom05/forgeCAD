@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["kernel/*", "interface/*", "verify/fillet-oracle", "verify/forge-bench", "verify/forge-coverage", "verify/forge-mass", "verify/forge-mesh-check", "verify/forge-proof", "verify/forge-refold", "verify/forge-sketch-check", "verify/forge-topo-check", "verify/forge-transform", "verify/forge-exact/fuzz"]
+members = ["kernel/*", "interface/*", "verify/fillet-oracle", "verify/forge-bench", "verify/forge-cam-quality", "verify/forge-certify", "verify/forge-coverage", "verify/forge-mass", "verify/forge-mesh-check", "verify/forge-proof", "verify/forge-read-fuzz", "verify/forge-refold", "verify/forge-sketch-check", "verify/forge-topo-check", "verify/forge-transform", "verify/forge-exact/fuzz"]
 # its own workspace, so wgpu never enters a kernel build or this Cargo.lock
 # verify/ holds Lean packages beside the Rust crates: the Rust ones are named above, so a new Lean
 # package needs no entry here (a new Rust crate under verify/ is added to members)
@@ -43,6 +43,12 @@ opt-level = 3
 
 [profile.dev.package."*"]
 opt-level = 2
+
+# verify/forge-read-fuzz: release speed, with the checks a test build has (an overflow is a finding)
+[profile.fuzz]
+inherits = "release"
+overflow-checks = true
+debug-assertions = true
 
 # the browser build: cargo build --profile wasm --target wasm32-wasip1
 [profile.wasm]

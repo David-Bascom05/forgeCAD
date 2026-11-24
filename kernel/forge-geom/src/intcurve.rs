@@ -447,6 +447,30 @@ impl IntCurve {
                 (out, out_d) = (t, d);
             }
         }
+        // a closed curve's whole turn has its two ends at one point: a search that stopped at one
+        // end may have its foot just past it, before the other end (fuzz_keep 262; a point on the
+        // curve there, at distance 0, has none nearer)
+        if out_d > 0.0 && self.closed && (out == lo || out == hi) && hi - lo >= self.domain_hi() {
+            let (s0, s1) = if out == lo {
+                ((hi - 1.0).max(lo), hi)
+            } else {
+                (lo, (lo + 1.0).min(hi))
+            };
+            let mut t = self.on_cubic(p, s0, s1);
+            for _ in 0..3 {
+                let d1 = self.hermite(t).1;
+                let g = (self.eval(t) - p).dot(d1);
+                let h = d1.dot(d1);
+                if h <= 0.0 {
+                    break;
+                }
+                t = (t - g / h).clamp(s0, s1);
+            }
+            let d = self.eval(t).distance_sq(p);
+            if d < out_d {
+                out = t;
+            }
+        }
         out
     }
 
@@ -531,15 +555,20 @@ impl IntCurve {
 /// Seeds already lying on a traced branch are skipped. None if the surfaces
 /// are tangent somewhere the tracing needs to pass.
 pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
+    #[cfg(feature = "certified_trace")]
+    return crate::certify::traced(a, b, region);
+    #[cfg(not(feature = "certified_trace"))]
+    trace_marched(a, b, region, 1.0)
+}
+
+/// `trace`'s march, uncertified, its cells and steps `scale` times the usual.
+pub fn trace_marched(a: &Surface, b: &Surface, region: Box3, scale: f64) -> Option<Vec<IntCurve>> {
     let size = region.diagonal().max(1e-6);
     let feature = |s: &Surface| match s {
         Surface::Procedural(p) => p.feature(),
         _ => f64::INFINITY,
     };
-    let leaf = (size / 64.0)
-        .min(feature(a))
-        .min(feature(b))
-        .max(10.0 * tol::LINEAR);
+    let leaf = ((size / 64.0).min(feature(a)).min(feature(b)) * scale).max(10.0 * tol::LINEAR);
     let step = leaf * 0.5;
     let mut seeds: Vec<Point3> = Vec::new();
     // cells are cubes, each held as its circumscribed sphere: the root is the cube on the
@@ -959,8 +988,30 @@ fn stalled(pts: Vec<Point3>, p: Point3) -> Option<(Vec<Point3>, bool)> {
 /// `trace`, where a branch that stalls ends there, with the points it stalled at. The branch's other
 /// stretches are seeded and traced by themselves.
 pub fn trace_past_stalls(a: &Surface, b: &Surface, region: Box3) -> Option<(Vec<IntCurve>, Vec<Point3>)> {
+    // certified, a trace is the whole intersection or refused: no stalls to judge
+    // (a certified trace notes no stalls; a pair out of the certificate's scope is traced as
+    // before, its stalls noted)
+    #[cfg(feature = "certified_trace")]
+    if crate::certify::in_scope(a, b) {
+        return Some((trace(a, b, region)?, Vec::new()));
+    }
     let (curves, stalls) = noting(|| trace(a, b, region));
     Some((curves?, stalls))
+}
+
+/// `f` with no stalls noted, whatever the caller was noting (restored after, unwinding too): a
+/// certified trace is the same whoever asks for it.
+#[cfg(feature = "certified_trace")]
+pub(crate) fn not_noting<T>(f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<Vec<Point3>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let was = self.0.take();
+            STALLS.with(|s| *s.borrow_mut() = was);
+        }
+    }
+    let _guard = Restore(STALLS.with(|s| s.borrow_mut().take()));
+    f()
 }
 
 /// `f`, with the stalls of the branches it traces noted: only while it runs, unwinding too, so a
@@ -1066,6 +1117,40 @@ mod tests {
                 c.a.distance(p) <= tol::LINEAR && c.b.distance(p) <= tol::LINEAR,
                 "{t}"
             );
+        }
+    }
+
+    /// An edge round a whole closed curve from a parameter between samples (fuzz_keep 262: a plane
+    /// through a torus, the loop's seam vertex at t = 23.697 of 0..49): a point just before the
+    /// seam was given the seam itself, 1.2e-2 away, as its nearest (the search went on only past
+    /// `lo`, not back from `hi`, the same point), and a line's crossing there was lost.
+    #[test]
+    fn closest_round_a_whole_turn_looks_past_both_ends() {
+        let cyl = Surface::Cylinder(Cylinder {
+            frame: Frame::WORLD,
+            radius: 2.0,
+        });
+        let sph = Surface::Sphere(Sphere {
+            frame: Frame::WORLD.with_origin(Point3::new(0.5, 0.0, 1.0)),
+            radius: 4.0,
+        });
+        let region = Box3::from_points([Point3::new(-6.0, -6.0, -6.0), Point3::new(6.0, 6.0, 8.0)]);
+        for c in trace(&cyl, &sph, region).unwrap() {
+            let d = c.domain_hi();
+            for s in [0.3, 0.7, 5.5] {
+                let range = Interval::new(s, s + d);
+                for back in [0.05, 0.1, 0.2] {
+                    // a point just before the seam: on the turn at s + d - back
+                    let p = CurveGeom::eval(&c, s + d - back);
+                    let t = c.closest(p, range);
+                    let q = CurveGeom::eval(&c, t);
+                    assert!(
+                        q.distance(p) <= 1e-9,
+                        "s {s} back {back}: t {t}, {}",
+                        q.distance(p)
+                    );
+                }
+            }
         }
     }
 

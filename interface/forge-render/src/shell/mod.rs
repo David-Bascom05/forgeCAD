@@ -11,6 +11,8 @@ pub mod asmpart;
 pub mod asmtools;
 mod banner;
 pub mod bendsim;
+mod bendsim_env;
+pub mod cam;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -24,6 +26,8 @@ mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
 mod empty;
+pub mod env;
+pub mod studio_env;
 pub mod fg;
 pub mod fgasm;
 pub mod fgdialog;
@@ -36,6 +40,8 @@ pub mod harness_look;
 pub mod harness_ui;
 pub mod icons;
 pub mod inspect;
+pub mod machine;
+mod machine_parts;
 pub mod markup;
 pub mod materials;
 mod measure_ui;
@@ -52,6 +58,7 @@ pub mod thermo;
 pub mod thermo_material;
 pub mod thermo_ui;
 mod tree;
+pub mod ux;
 pub mod vendorui;
 pub mod versions;
 mod visual_style;
@@ -77,6 +84,8 @@ pub const ASM_TAB: usize = 8;
 pub const HARNESS_TAB: usize = 9;
 /// A part's Weldments tab: structural members, their ends and plates, the cut list.
 pub const WELD_TAB: usize = 10;
+/// A machining document's Manufacture tab: setups, operations, posts (`cam/`).
+pub const CAM_TAB: usize = 11;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
@@ -171,8 +180,19 @@ pub enum Action {
     DialogCancel,
     /// A Forge file's ribbon command.
     Fg(FgCmd),
+    /// Into an environment (`env/`), from its tile, a deep link or the agent; out of the one in
+    /// (its Finish); one of its own ribbon commands.
+    EnterEnv(env::EnvId),
+    ExitEnv,
+    Env(env::EnvId, u16),
+    /// The Manufacture workspace's command.
+    Cam(cam::Ask),
     /// The Manage tab's Versions group: the Versions tab, opened at what was asked.
     Versions(versions::VersionsCmd),
+    /// The Machine Builder workspace (shell/machine.rs), opened or closed.
+    MachineBuilder,
+    /// A Machine Builder command (its ribbon groups, the environment).
+    Machine(machine::MachineCmd),
     /// Measure, Section, iProperties and the centre of gravity.
     Inspect(inspect::InspectCmd),
     /// A sheet metal command, from the Sheet Metal or Flat Pattern tab.
@@ -366,6 +386,13 @@ pub struct Shell {
     pub file_menu: bool,
     /// The sheet metal environment: its tabs, dialogs and flat pattern.
     pub sheet: sheet::SheetUi,
+    /// The environment the document is in (`env/`), if any.
+    pub env: Option<env::EnvId>,
+    /// The Render Studio's choices (`studio_env.rs`): appearances, light, camera, output.
+    pub studio: studio_env::StudioUi,
+    /// This frame, the environment draws the view itself: the view's own chrome (its toolbar,
+    /// the cube's words, the navigation bar) stands down.
+    pub view_owned: bool,
     style_set: Option<bool>,
     /// Measure, the section views, iProperties (`inspect.rs`).
     pub inspect: inspect::Inspect,
@@ -375,12 +402,20 @@ pub struct Shell {
     pub new_drawing: Option<drawing::NewDrawing>,
     /// A DWG file is open: AutoCAD's layout instead of the model's (`dwgdoc.rs`).
     pub dwgdoc: Option<dwgdoc::DwgDoc>,
+    /// A machining document is open: the Manufacture workspace over its part (`cam/`).
+    pub cam: Option<cam::CamWs>,
+    /// A machining document's toolpath and stock simulation (`gui_camsim_panel.rs`).
+    pub camsim: Option<Box<crate::gui_camsim_panel::CamSimUi>>,
+    /// The simulation being made off the window's thread, and the workspace focus it last took.
+    pub camsim_job: crate::gui_camsim_panel::SimJob,
     /// What's set in Settings, and its window.
     pub settings: settings::Settings,
     pub prefs: settings::Window,
     /// The left panel's Agent tab (`agent.rs`).
     pub agent: agent::AgentTab,
     pub versions: versions::Versions,
+    /// The Machine Builder workspace, while it is open.
+    pub machine: Option<machine::MachineUi>,
     /// The open documents' tabs, and which is in the window.
     pub doc_tabs: Vec<docs::DocTab>,
     pub active_doc: usize,
@@ -431,15 +466,22 @@ impl Default for Shell {
             overlays: [PART_OVERLAYS, ASM_OVERLAYS],
             file_menu: false,
             sheet: sheet::SheetUi::new(),
+            env: None,
+            studio: Default::default(),
+            view_owned: false,
             style_set: None,
             inspect: Default::default(),
             drawing: None,
             new_drawing: None,
             dwgdoc: None,
+            cam: None,
+            camsim: None,
+            camsim_job: Default::default(),
             settings: Default::default(),
             prefs: Default::default(),
             agent: Default::default(),
             versions: Default::default(),
+            machine: None,
             doc_tabs: Vec::new(),
             active_doc: 0,
             close_ask: None,
@@ -515,7 +557,7 @@ impl Shell {
 
     /// The view's switches, top left over a Forge file's view: on ones filled.
     fn view_toolbar(&mut self, ctx: &egui::Context) {
-        if self.fg.is_none() || self.view_rect.width() < 200.0 {
+        if self.fg.is_none() || self.view_rect.width() < 200.0 || self.view_owned {
             return;
         }
         let t = self.theme;
@@ -687,6 +729,7 @@ impl Shell {
         }
         self.places.clear();
         self.view_blocks.clear();
+        self.env_sync();
         self.doc_keys(ui);
         self.voice_keys(&ctx);
         let s = ctx.content_rect();
@@ -712,9 +755,11 @@ impl Shell {
         let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
+        // an environment's docked properties take the right of the window
+        let props_w = self.env_properties_width();
         self.view_rect = Rect::from_min_max(
             pos2(snap(side_w + 1.0), snap(top)),
-            pos2(snap(s.width()), snap(bottom)),
+            pos2(snap(s.width() - props_w), snap(bottom)),
         );
 
         p.rect_filled(
@@ -726,7 +771,11 @@ impl Shell {
             let whole = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
             p.image(tex, self.view_rect, whole, Color32::WHITE);
         }
-        self.cube_words(ui, ppp);
+        self.view_owned = false;
+        self.env_draw(ui);
+        if !self.view_owned {
+            self.cube_words(ui, ppp);
+        }
         // nothing open: where to start
         if self.fg.is_none() && self.cube_place.is_none() {
             self.empty_state(ui);
@@ -737,16 +786,25 @@ impl Shell {
         self.tabs_row(ui, s.width());
         self.ribbon(ui, s.width());
         self.side(ui, side);
+        if props_w > 0.0 {
+            let r = Rect::from_min_max(pos2(s.width() - props_w, top), pos2(s.width(), bottom));
+            self.env_properties(ui, r);
+        }
         self.side_splitter(ui, side, s.width());
         self.docs_and_status(ui, s, bottom);
-        self.navbar(&ctx);
+        if !self.view_owned {
+            self.navbar(&ctx);
+        }
         self.window_ui(&ctx);
+        self.camsim_ui(&ctx);
         // a dialog holds its numbers while it's up; a sketch has its own
         if self.fg.as_ref().is_some_and(|p| p.tool.is_none()) && self.sketch.is_none() {
             self.fg_dim_ui(&ctx);
         }
         self.thermo_probes(&ctx);
         self.thermo_ui(&ctx);
+        self.env_panels(&ctx);
+        self.cam_ui(&ctx);
         self.harness_ui(&ctx);
         self.fg_dialog(&ctx);
         self.fg_sketches_ui(&ctx);
@@ -758,6 +816,7 @@ impl Shell {
         self.fg_issues_window(&ctx);
         self.cutlist_window(&ctx);
         self.sheet_ui(&ctx);
+        self.machine_ui(&ctx);
         self.build_banner(ui);
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
@@ -971,7 +1030,9 @@ impl Shell {
                 ASM_TAB => &"Assemble",
                 HARNESS_TAB => &"Harness",
                 WELD_TAB => &"Weldments",
-                k => &TABS[k],
+                CAM_TAB => &"Manufacture",
+                k if k < TABS.len() => &TABS[k],
+                k => &self.env_tab_name(k).unwrap_or("?"),
             };
             let on = k == self.tab;
             let w = ui
@@ -1011,16 +1072,23 @@ impl Shell {
 
     /// The tabs shown, in order: a sheet metal part's Sheet Metal first, the flat pattern's tab
     /// alone with Inspect, View and Manage.
+    /// In an environment, its own tabs then Inspect, View and Manage; else the design's, then
+    /// Environments (Thermoform, Flat Pattern and the rest are entered from there).
     pub fn tab_order(&self) -> Vec<usize> {
+        if let Some(v) = self.env_tabs() {
+            return v;
+        }
         let fg = self.fg.is_some() && !self.is_asm();
-        if fg && self.sheet.flat_env {
+        if self.cam.is_some() {
+            vec![CAM_TAB, 2, 3, 4]
+        } else if fg && self.sheet.flat_env {
             vec![FLAT_TAB, 2, 3, 4]
         } else if fg && self.sheet.env {
-            vec![SHEET_TAB, 0, 1, ASM_TAB, 2, 3, 4]
+            vec![SHEET_TAB, 0, 1, ASM_TAB, 2, 3, 4, env::ENV_TAB]
         } else if self.fg.is_some() {
-            vec![0, 1, ASM_TAB, WELD_TAB, HARNESS_TAB, THERMO_TAB, 2, 3, 4]
+            vec![0, 1, ASM_TAB, WELD_TAB, HARNESS_TAB, 2, 3, 4, env::ENV_TAB]
         } else {
-            vec![0, 1, THERMO_TAB, 2, 3, 4]
+            vec![0, 1, 2, 3, 4, env::ENV_TAB]
         }
     }
 
@@ -1043,6 +1111,7 @@ impl Shell {
             self.agent_ui(ui, tree);
         } else if self.agent.tab == agent::SideTab::Versions {
             self.versions_ui(ui, tree);
+        } else if self.env_browser(ui, tree) {
         } else if self.is_asm() && self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
             self.asm_tree(ui, tree);
         } else if self.fg.is_some() {
@@ -1085,10 +1154,14 @@ impl Shell {
         let st = Rect::from_min_size(pos2(0.0, bottom + DOCS_H), vec2(s.width(), STATUS_H));
         p.rect_filled(st, 0.0, t.bar);
         let x = self.voice_status(ui, 6.0, st);
+        // an environment owns the status bar too
+        let env_line = self.env_status();
         let said = p.text(
             pos2(x + 4.0, st.center().y),
             Align2::LEFT_CENTER,
-            if self.status.is_empty() && self.unshown {
+            if let Some(l) = &env_line {
+                l
+            } else if self.status.is_empty() && self.unshown {
                 "This part built but some of it can't be drawn: fix or delete what the tree marks"
             } else {
                 &self.status
@@ -1224,6 +1297,9 @@ impl Shell {
             self.file_menu = false;
             self.cube_menu = None;
             self.marking = None;
+        } else if let Some(w) = self.cam.as_mut().filter(|w| w.escape_level()) {
+            // the Manufacture workspace: its dialog, else its floating window
+            w.escape();
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.renaming.is_some()) {
             p.renaming = None;
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.tool.is_some()) {

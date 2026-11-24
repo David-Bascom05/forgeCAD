@@ -1,0 +1,13 @@
+# spinner-u5-630 rotary: the published rotary table diameter; thickness an estimate.
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared d = -80
+shared u = 0
+shared v = 0
+shared r = 325
+shared h = 80
+
+sketch plan(on: offset(xy, d)) {
+  outline = circle((u, v), r)
+}
+body = extrude(plan.outline, h)

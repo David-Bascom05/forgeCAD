@@ -59,53 +59,57 @@ pub(crate) fn block(prog: &[Stmt], id: &str) -> R<(usize, usize)> {
 }
 
 /// Every read of a name in an expression, as the `Name` node.
-fn names_expr<'e>(e: &'e Expr, f: &mut dyn FnMut(&'e Expr)) {
+/// `heads`: a call's head is a read (a part); not in a document whose calls are built-ins only
+/// (`edit_ops::calls_closed`), where `drill = drill(..)` binds a name a call only spells.
+fn names_expr<'e>(e: &'e Expr, heads: bool, f: &mut dyn FnMut(&'e Expr)) {
     match &e.kind {
         ExprKind::Name(_) => f(e),
-        ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter().for_each(|x| names_expr(x, f)),
-        ExprKind::Map(xs) => xs.iter().for_each(|x| names_expr(&x.1, f)),
+        ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter().for_each(|x| names_expr(x, heads, f)),
+        ExprKind::Map(xs) => xs.iter().for_each(|x| names_expr(&x.1, heads, f)),
         ExprKind::Comp { item, iter, cond, .. } => {
-            names_expr(item, f);
-            names_expr(iter, f);
+            names_expr(item, heads, f);
+            names_expr(iter, heads, f);
             if let Some(c) = cond {
-                names_expr(c, f);
+                names_expr(c, heads, f);
             }
         }
         ExprKind::Range { lo, hi, .. } | ExprKind::Bin(_, lo, hi) | ExprKind::Index(lo, hi) => {
-            names_expr(lo, f);
-            names_expr(hi, f);
+            names_expr(lo, heads, f);
+            names_expr(hi, heads, f);
         }
-        ExprKind::Neg(a) | ExprKind::Not(a) | ExprKind::Attr(a, _) => names_expr(a, f),
+        ExprKind::Neg(a) | ExprKind::Not(a) | ExprKind::Attr(a, _) => names_expr(a, heads, f),
         ExprKind::Call(g, args) => {
-            names_expr(g, f);
-            args.iter().for_each(|a| names_expr(&a.value, f));
+            if heads || !matches!(g.kind, ExprKind::Name(_)) {
+                names_expr(g, heads, f);
+            }
+            args.iter().for_each(|a| names_expr(&a.value, heads, f));
         }
         ExprKind::If { cond, then, other } => {
-            names_expr(cond, f);
-            names_expr(then, f);
-            names_expr(other, f);
+            names_expr(cond, heads, f);
+            names_expr(then, heads, f);
+            names_expr(other, heads, f);
         }
         _ => {}
     }
 }
 
 /// Every read of a name in statements and the blocks inside them.
-fn names_stmts<'e>(stmts: &'e [Stmt], f: &mut dyn FnMut(&'e Expr)) {
+fn names_stmts<'e>(stmts: &'e [Stmt], heads: bool, f: &mut dyn FnMut(&'e Expr)) {
     syntax::walk(stmts, &mut |st| match &st.kind {
         StmtKind::Shared { value, .. }
         | StmtKind::Param { value, .. }
         | StmtKind::Assign { value, .. }
         | StmtKind::Expr(value)
-        | StmtKind::Return(value) => names_expr(value, f),
-        StmtKind::For { iter, .. } => names_expr(iter, f),
-        StmtKind::If { cond, .. } => names_expr(cond, f),
-        StmtKind::Block { args, .. } => args.iter().for_each(|a| names_expr(&a.value, f)),
+        | StmtKind::Return(value) => names_expr(value, heads, f),
+        StmtKind::For { iter, .. } => names_expr(iter, heads, f),
+        StmtKind::If { cond, .. } => names_expr(cond, heads, f),
+        StmtKind::Block { args, .. } => args.iter().for_each(|a| names_expr(&a.value, heads, f)),
         StmtKind::Expect { args, cmp, at, .. } => {
-            args.iter().for_each(|a| names_expr(a, f));
+            args.iter().for_each(|a| names_expr(a, heads, f));
             if let Some((_, v, _)) = cmp {
-                names_expr(v, f);
+                names_expr(v, heads, f);
             }
-            at.iter().for_each(|(_, v)| names_expr(v, f));
+            at.iter().for_each(|(_, v)| names_expr(v, heads, f));
         }
         StmtKind::Fn { .. } => {}
     });
@@ -113,8 +117,14 @@ fn names_stmts<'e>(stmts: &'e [Stmt], f: &mut dyn FnMut(&'e Expr)) {
 
 /// Every name a statement mentions.
 pub fn mentions(s: &Stmt) -> BTreeSet<String> {
+    mentions_in(s, false)
+}
+
+/// Every name a statement reads, in a document whose calls name built-ins only when `closed`
+/// (`edit_ops::calls_closed`: a call's head is then not a read).
+pub fn mentions_in(s: &Stmt, closed: bool) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    names_stmts(std::slice::from_ref(s), &mut |e| {
+    names_stmts(std::slice::from_ref(s), !closed, &mut |e| {
         if let ExprKind::Name(n) = &e.kind {
             out.insert(n.clone());
         }
@@ -126,7 +136,8 @@ pub fn mentions(s: &Stmt) -> BTreeSet<String> {
 /// keyword argument's name or a part of a token (Respell's span).
 pub fn reads_at(prog: &[Stmt], span: Span) -> bool {
     let mut found = false;
-    names_stmts(prog, &mut |e| found |= e.span == span);
+    let heads = !crate::edit_ops::calls_closed(prog);
+    names_stmts(prog, heads, &mut |e| found |= e.span == span);
     found
 }
 
@@ -176,14 +187,15 @@ pub fn bound(stmts: &[Stmt]) -> BTreeSet<String> {
 /// may be read after the point where they would stop (or start) being bound, nor in any
 /// function body. Returns the first reader as a typed error.
 fn unread(prog: &[Stmt], names: &BTreeSet<String>, from: usize, to: usize) -> R<()> {
+    let closed = crate::edit_ops::calls_closed(prog);
     for (k, s) in prog.iter().enumerate() {
         let in_fn = matches!(s.kind, StmtKind::Fn { .. });
         if !(in_fn || (from..to).contains(&k)) {
             continue;
         }
         let m = match &s.kind {
-            StmtKind::Fn { body, .. } => body.iter().flat_map(mentions).collect(),
-            _ => mentions(s),
+            StmtKind::Fn { body, .. } => body.iter().flat_map(|b| mentions_in(b, closed)).collect(),
+            _ => mentions_in(s, closed),
         };
         if let Some(n) = names.iter().find(|n| m.contains(*n)) {
             return Err(Error::StillRead {
@@ -382,7 +394,9 @@ fn precheck(prog: &[Stmt], op: &Op, dim_of: &dyn Fn(&ParamKey) -> Option<Dim>) -
             } else {
                 // up: it may read nothing that what it passes binds
                 let passed = bound(&prog[to..j]);
-                let reads: BTreeSet<String> = prog[j..=k].iter().flat_map(mentions).collect();
+                let closed = crate::edit_ops::calls_closed(prog);
+                let reads: BTreeSet<String> =
+                    prog[j..=k].iter().flat_map(|s| mentions_in(s, closed)).collect();
                 if let Some(n) = passed.iter().find(|n| reads.contains(*n)) {
                     return Err(Error::StillRead {
                         name: n.clone(),
@@ -408,7 +422,8 @@ fn precheck(prog: &[Stmt], op: &Op, dim_of: &dyn Fn(&ParamKey) -> Option<Dim>) -
                 None => prog.len(),
             };
             // what it reads must be bound above it
-            let reads: BTreeSet<String> = new.iter().flat_map(mentions).collect();
+            let closed = crate::edit_ops::calls_closed(prog);
+            let reads: BTreeSet<String> = new.iter().flat_map(|s| mentions_in(s, closed)).collect();
             let later = bound(&prog[at..]);
             if let Some(n) = reads.iter().find(|n| later.contains(*n) && !names.contains(*n)) {
                 return Err(Error::StillRead {

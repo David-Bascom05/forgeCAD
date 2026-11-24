@@ -88,10 +88,18 @@ pub enum Kind {
     /// a lathe that also mills: a live or milling spindle, C on the main spindle, optional B head,
     /// optional sub-spindle.
     MillTurn,
+    /// a horizontal machining centre: 3 linear and a table rotary (B), usually with pallets.
+    Hmc,
+    /// a gantry router or mill: 3 linear on the head side (a dual-drive gantry axis is one
+    /// joint), up to two head rotaries, no table rotary.
+    Gantry,
+    /// a live-turret lathe: X and Z (Y optional), C on the spindle optional, a turret whose live
+    /// stations a milling spindle drives; no B head.
+    TurnMill,
 }
 
 impl Kind {
-    pub const ALL: [(&'static str, Kind); 7] = [
+    pub const ALL: [(&'static str, Kind); 10] = [
         ("vmc3", Kind::Vmc3),
         ("vmc4", Kind::Vmc4),
         ("table-table", Kind::TableTable),
@@ -99,7 +107,15 @@ impl Kind {
         ("head-head", Kind::HeadHead),
         ("lathe", Kind::Lathe),
         ("mill-turn", Kind::MillTurn),
+        ("turn-mill", Kind::TurnMill),
+        ("hmc", Kind::Hmc),
+        ("gantry", Kind::Gantry),
     ];
+    /// A lathe of some kind: X is a diameter, tools on a turret, plane G18 at the start.
+    pub fn turns(self) -> bool {
+        matches!(self, Kind::Lathe | Kind::MillTurn | Kind::TurnMill)
+    }
+
     pub fn name(self) -> &'static str {
         Kind::ALL.iter().find(|(_, k)| *k == self).unwrap().0
     }
@@ -144,12 +160,13 @@ pub struct Joint {
     /// A point on a rotary's axis, base frame, home pose. [0, 0, 0] for a linear joint.
     pub pivot: [f64; 3],
     /// Travel, mm or deg. A cyclic rotary's range is its output range (no physical stop).
-    pub range: [f64; 2],
+    /// None: omitted, cited `unknown` (overtravel is then not checked).
+    pub range: Option<[f64; 2]>,
     pub home: f64,
-    /// Max rapid rate, mm/min or deg/min.
-    pub rapid: f64,
-    /// Max programmed feed, mm/min or deg/min.
-    pub max_feed: f64,
+    /// Max rapid rate, mm/min or deg/min. None: cited `unknown` (unbounded in t_min).
+    pub rapid: Option<f64>,
+    /// Max programmed feed, mm/min or deg/min. None: cited `unknown` (no feed clamp check).
+    pub max_feed: Option<f64>,
     /// mm/s² or deg/s²; None: time estimates take infinite acceleration and say so.
     pub accel: Option<f64>,
     pub cyclic: bool,
@@ -180,11 +197,13 @@ pub struct Spindle {
     pub axis: [f64; 3],
     /// A point on the spin axis: the nose (gauge line) for milling, the spindle face for turning.
     pub nose: [f64; 3],
-    pub rpm: [f64; 2],
+    /// [min, max]; None: cited `unknown` (no rpm check).
+    pub rpm: Option<[f64; 2]>,
     /// (rpm, kW) piecewise linear; empty: no power data (feeds then cannot check power).
     pub power: Vec<[f64; 2]>,
     /// Max tool length and diameter (milling), or max swing diameter and part length (turning).
-    pub max: [f64; 2],
+    /// None: cited `unknown`.
+    pub max: Option<[f64; 2]>,
     /// Taper or interface, e.g. "BT40", "A2-6"; informational.
     pub interface: String,
     /// A joint whose letter positions this spindle as a C axis (mill-turn), if any.
@@ -195,22 +214,48 @@ pub struct Spindle {
 pub struct Turret {
     pub name: String,
     pub link: String,
-    pub stations: u32,
-    /// Seconds per station index.
-    pub index_s: f64,
+    /// None: cited `unknown` (T numbers not checked).
+    pub stations: Option<u32>,
+    /// Seconds per station index. None: cited `unknown` (0 in t_min).
+    pub index_s: Option<f64>,
     /// Station face centre of station 1 and the turret's index axis (unit), home pose.
     pub center: [f64; 3],
     pub index_axis: [f64; 3],
     /// Live tooling: the milling spindle that drives it, if any.
     pub live: Option<String>,
+    /// A manual tool post (`[[machine.toolpost]]`: quick-change holders, a Sherline's post): one
+    /// station, every T a swap by the operator (a program stop), any T number.
+    pub manual: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Changer {
-    pub pockets: u32,
-    /// Chip-to-chip tool change time, seconds.
-    pub change_s: f64,
-    pub max_tool_kg: f64,
+    /// A manual change (`kind = "manual"`): M6 stops the program and the operator swaps the
+    /// tool; there are no pockets (no pocket check). Automatic otherwise.
+    pub manual: bool,
+    /// None: cited `unknown` (T numbers not checked).
+    pub pockets: Option<u32>,
+    /// Chip-to-chip tool change time, seconds. None: cited `unknown` (0 in t_min).
+    pub change_s: Option<f64>,
+    pub max_tool_kg: Option<f64>,
+    /// Where M6 moves the machine by itself before the swap (a Haas M06 sends Z to machine zero):
+    /// (joint name, joint value), in the order given. Empty: not stated, and the sim says the
+    /// change move was not checked.
+    pub position: Vec<(String, f64)>,
+}
+
+/// An automatic pallet changer (an HMC's APC): M60 swaps the pallet in the machining position.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pallets {
+    pub count: u32,
+    /// Seconds per change. None: cited `unknown` (0 in t_min, reported not checked).
+    pub change_s: Option<f64>,
+    /// Max load per pallet, kg; pallet size [x, y] mm; the largest work [diameter, height] mm.
+    pub max_kg: Option<f64>,
+    pub size: Option<[f64; 2]>,
+    pub max_work: Option<[f64; 2]>,
+    /// Where M60 sends the machine before the swap: (joint, value), as the changer's position.
+    pub position: Vec<(String, f64)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -253,12 +298,69 @@ pub enum Prim {
 pub struct Body {
     pub name: String,
     pub link: String,
+    /// The collision envelope; empty only when `body.NAME` is cited `unknown` (the body is then
+    /// not collision-checked, and replies say so).
     pub prims: Vec<Prim>,
     /// The real part this body models (a `.fg` file beside the definition); its primitives are
     /// its collision envelope, checked to contain it (tests/parts.rs).
     pub part: Option<String>,
     /// Bodies it may touch by construction (neighbours in the chain, ways): not checked pairwise.
     pub ignore: Vec<String>,
+}
+
+/// A region of joint space the control forbids (Fanuc stored stroke check 2/3, an interference
+/// zone): the open box min < q < max over the named joints, every other joint free. Machine data
+/// stated per record (cite `zone.NAME`); the simulation reports a program entering it, and the
+/// self-collision check of the record excludes it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Zone {
+    pub name: String,
+    pub joints: Vec<String>,
+    pub min: Vec<f64>,
+    pub max: Vec<f64>,
+    pub note: String,
+}
+
+impl Zone {
+    /// Strictly inside, for joint values q in def.joints order (`idx`: the joints' indexes).
+    pub fn contains(&self, idx: &[usize], q: &[f64]) -> bool {
+        idx.iter()
+            .enumerate()
+            .all(|(k, &j)| self.min[k] < q[j] && q[j] < self.max[k])
+    }
+}
+
+/// How a cited value stands (docs/cam-machine.md, "Provenance").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CiteStatus {
+    /// Stated by the source.
+    Published,
+    /// Not published: a conservative value derived as `basis` says (larger envelope, lower rate).
+    Estimate,
+    /// Nothing to derive it from: the value is a conservative stand-in, `basis` says which way.
+    Unknown,
+    /// Sources disagree: every value is cited, the record holds the conservative one.
+    Conflict,
+    /// The user's own value (measured or entered); source and taken optional.
+    User,
+}
+
+/// Where one value of a machine record comes from.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Cite {
+    /// The value cited: `joint.X.range`, `spindle.S1.rpm`, `changer.pockets`, `body.table`, ...
+    /// (MachineDef::cite_paths lists those a real record must cite).
+    pub path: String,
+    pub status: CiteStatus,
+    /// A URL or document (published, conflict); may be empty for estimate/unknown.
+    pub source: String,
+    /// When the source was read (YYYY-MM-DD); required with a source.
+    pub taken: String,
+    /// The source's own statement of the value, restated (e.g. "30 in (762 mm)").
+    pub value: String,
+    /// How an estimate was derived or why it is unknown; required for those.
+    pub basis: String,
+    pub note: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -274,6 +376,7 @@ pub struct MachineDef {
     pub spindles: Vec<Spindle>,
     pub turrets: Vec<Turret>,
     pub changer: Option<Changer>,
+    pub pallets: Option<Pallets>,
     pub mounts: Vec<Mount>,
     pub bodies: Vec<Body>,
     /// The joint G43 length compensation moves (a mill's Z). None on a lathe (offsets are X/Z).
@@ -282,6 +385,16 @@ pub struct MachineDef {
     pub coolants: Vec<String>,
     /// Least gap between two bodies the collision check holds, mm.
     pub clearance: f64,
+    /// G83's peck clearance and G73's chip-break lift, mm (the control's parameters: Fanuc
+    /// 5115/5114, Haas settings, ...). None: not stated; the simulation uses forge-post's and says
+    /// so for every peck cycle.
+    pub peck_clear: Option<f64>,
+    pub chip_lift: Option<f64>,
+    /// Forbidden regions of joint space the control enforces.
+    pub zones: Vec<Zone>,
+    /// A record of a real maker's model: every value in `cite_paths` must be cited.
+    pub real: bool,
+    pub cites: Vec<Cite>,
 }
 
 fn rec_err(record: &str, field: &'static str, fix: &str) -> DefError {
@@ -373,6 +486,30 @@ fn positive(rec: &str, k: &'static str, v: f64) -> Result<f64, DefError> {
     }
 }
 
+/// The paths a record cites `unknown`: those numbers may be omitted (docs, "Provenance").
+fn unknown_cited(t: &Table) -> Vec<String> {
+    tables(t, "cite")
+        .iter()
+        .filter(|c| text(c, "status") == Some("unknown"))
+        .filter_map(|c| text(c, "path").map(str::to_string))
+        .collect()
+}
+
+/// A required number, or None when it is absent and its path is cited `unknown`.
+fn opt_num(
+    t: &Table,
+    rec: &str,
+    k: &'static str,
+    fix: &str,
+    path: &str,
+    unk: &[String],
+) -> Result<Option<f64>, DefError> {
+    if !t.contains_key(k) && unk.iter().any(|u| u == path) {
+        return Ok(None);
+    }
+    need_num(t, rec, k, fix).map(Some)
+}
+
 fn range(t: &Table, rec: &str, k: &'static str, fix: &str) -> Result<[f64; 2], DefError> {
     let r = need_vec::<2>(t, rec, k, fix)?;
     if r[0] < r[1] {
@@ -389,7 +526,7 @@ fn range(t: &Table, rec: &str, k: &'static str, fix: &str) -> Result<[f64; 2], D
 const LETTERS: [&str; 9] = ["X", "Y", "Z", "U", "V", "W", "A", "B", "C"];
 
 impl Joint {
-    fn from_table(t: &Table, m: &str) -> Result<Joint, DefError> {
+    fn from_table(t: &Table, m: &str, unk: &[String]) -> Result<Joint, DefError> {
         let name = need_text(t, &format!("{m} joint"), "name", "give `name`")?.to_string();
         let rec = format!("{m} joint `{name}`");
         let ty = pick(
@@ -460,30 +597,49 @@ impl Joint {
                 why: "is for rotary joints only".into(),
             });
         }
-        let range = range(
-            t,
-            &rec,
-            "range",
-            "give `range = [lo, hi]` (mm, or deg for a rotary)",
-        )?;
+        let path = |f: &str| format!("joint.{name}.{f}");
+        let range = if !t.contains_key("range") && unk.contains(&path("range")) {
+            None
+        } else {
+            Some(range(
+                t,
+                &rec,
+                "range",
+                "give `range = [lo, hi]` (mm, or deg for a rotary), or cite it unknown",
+            )?)
+        };
         let home = num(t, "home").unwrap_or(0.0);
-        if !(range[0] <= home && home <= range[1]) {
+        if let Some(range) = range
+            && !(range[0] <= home && home <= range[1])
+        {
             return Err(DefError::Bad {
                 record: rec,
                 field: "home",
                 why: format!("{home} is outside range [{}, {}]", range[0], range[1]),
             });
         }
-        let rapid = positive(
+        let rapid = match opt_num(
+            t,
             &rec,
             "rapid",
-            need_num(t, &rec, "rapid", "give `rapid` (mm/min, deg/min)")?,
-        )?;
-        let max_feed = positive(
+            "give `rapid` (mm/min, deg/min), or cite it unknown",
+            &path("rapid"),
+            unk,
+        )? {
+            Some(v) => Some(positive(&rec, "rapid", v)?),
+            None => None,
+        };
+        let max_feed = match opt_num(
+            t,
             &rec,
             "max_feed",
-            need_num(t, &rec, "max_feed", "give `max_feed` (mm/min, deg/min)")?,
-        )?;
+            "give `max_feed` (mm/min, deg/min), or cite it unknown",
+            &path("max_feed"),
+            unk,
+        )? {
+            Some(v) => Some(positive(&rec, "max_feed", v)?),
+            None => None,
+        };
         let accel = match num(t, "accel") {
             Some(a) => Some(positive(&rec, "accel", a)?),
             None => None,
@@ -602,7 +758,7 @@ impl MachineDef {
             &m,
             "kind",
             &Kind::ALL,
-            "vmc3 | vmc4 | table-table | head-table | head-head | lathe | mill-turn",
+            "vmc3 | vmc4 | table-table | head-table | head-head | lathe | mill-turn | turn-mill | hmc | gantry",
         )?;
         let control = need_text(
             t,
@@ -612,15 +768,26 @@ impl MachineDef {
         )?
         .to_string();
         let source = need_text(t, &m, "source", "say where the numbers come from")?.to_string();
+        let unk = unknown_cited(t);
         let joints = tables(t, "joint")
             .iter()
-            .map(|j| Joint::from_table(j, &m))
+            .map(|j| Joint::from_table(j, &m, &unk))
             .collect::<Result<Vec<_>, _>>()?;
         let mut spindles = Vec::new();
         for s in tables(t, "spindle") {
             let sn = need_text(s, &format!("{m} spindle"), "name", "give `name`")?.to_string();
             let rec = format!("{m} spindle `{sn}`");
-            let rpm = range(s, &rec, "rpm", "give `rpm = [min, max]`")?;
+            let spath = |f: &str| format!("spindle.{sn}.{f}");
+            let rpm = if !s.contains_key("rpm") && unk.contains(&spath("rpm")) {
+                None
+            } else {
+                Some(range(
+                    s,
+                    &rec,
+                    "rpm",
+                    "give `rpm = [min, max]`, or cite it unknown",
+                )?)
+            };
             let cr = nums(s, "curve_rpm").unwrap_or_default();
             let ck = nums(s, "curve_kw").unwrap_or_default();
             if cr.len() != ck.len() || cr.windows(2).any(|w| w[0] >= w[1]) {
@@ -652,12 +819,16 @@ impl MachineDef {
                 )?,
                 rpm,
                 power: cr.iter().zip(&ck).map(|(a, b)| [*a, *b]).collect(),
-                max: need_vec::<2>(
-                    s,
-                    &rec,
-                    "max",
-                    "give `max = [length, diameter]` (milling) or `[swing, length]` (turning)",
-                )?,
+                max: if !s.contains_key("max") && unk.contains(&spath("max")) {
+                    None
+                } else {
+                    Some(need_vec::<2>(
+                        s,
+                        &rec,
+                        "max",
+                        "give `max = [length, diameter]` (milling) or `[swing, length]` (turning), or cite it unknown",
+                    )?)
+                },
                 interface: text(s, "interface").unwrap_or("").to_string(),
                 c_joint: text(s, "c_joint").map(str::to_string),
                 name: sn,
@@ -667,8 +838,16 @@ impl MachineDef {
         for s in tables(t, "turret") {
             let tn = need_text(s, &format!("{m} turret"), "name", "give `name`")?.to_string();
             let rec = format!("{m} turret `{tn}`");
-            let st = need_num(s, &rec, "stations", "give `stations`")?;
-            if st < 1.0 || st.fract() != 0.0 {
+            let tpath = |f: &str| format!("turret.{tn}.{f}");
+            let st = opt_num(
+                s,
+                &rec,
+                "stations",
+                "give `stations`, or cite it unknown",
+                &tpath("stations"),
+                &unk,
+            )?;
+            if st.is_some_and(|st| st < 1.0 || st.fract() != 0.0) {
                 return Err(DefError::Bad {
                     record: rec,
                     field: "stations",
@@ -677,41 +856,175 @@ impl MachineDef {
             }
             turrets.push(Turret {
                 link: need_text(s, &rec, "link", "give `link`")?.to_string(),
-                stations: st as u32,
-                index_s: positive(
+                stations: st.map(|st| st as u32),
+                index_s: match opt_num(
+                    s,
                     &rec,
                     "index_s",
-                    need_num(s, &rec, "index_s", "give `index_s`, seconds per station")?,
-                )?,
+                    "give `index_s`, seconds per station, or cite it unknown",
+                    &tpath("index_s"),
+                    &unk,
+                )? {
+                    Some(v) => Some(positive(&rec, "index_s", v)?),
+                    None => None,
+                },
                 center: need_vec::<3>(s, &rec, "center", "give `center`")?,
                 index_axis: unit(s, &rec, "index_axis", "give `index_axis`")?,
                 live: text(s, "live").map(str::to_string),
+                manual: false,
                 name: tn,
             });
         }
+        for s in tables(t, "toolpost") {
+            let tn = need_text(s, &format!("{m} toolpost"), "name", "give `name`")?.to_string();
+            let rec = format!("{m} toolpost `{tn}`");
+            turrets.push(Turret {
+                link: need_text(s, &rec, "link", "give `link`")?.to_string(),
+                stations: None,
+                // the operator's swap: given, or 0 in t_min (and reported not checked)
+                index_s: match num(s, "change_s") {
+                    Some(v) => Some(positive(&rec, "change_s", v)?),
+                    None => None,
+                },
+                center: need_vec::<3>(s, &rec, "center", "give `center`, the holder's datum")?,
+                index_axis: [0.0, 0.0, 1.0],
+                live: None,
+                manual: true,
+                name: tn,
+            });
+        }
+        let pallets = match tables(t, "pallets") {
+            [] => None,
+            [p] => {
+                let rec = format!("{m} pallets");
+                let count = need_num(p, &rec, "count", "give `count`, the number of pallets")?;
+                if count < 2.0 || count.fract() != 0.0 {
+                    return Err(DefError::Bad {
+                        record: rec,
+                        field: "count",
+                        why: "must be a whole number, at least 2".into(),
+                    });
+                }
+                let pj = texts(p, "position_joints").unwrap_or_default();
+                let pv = nums(p, "position").unwrap_or_default();
+                if pj.len() != pv.len() {
+                    return Err(rec_err(
+                        &rec,
+                        "position",
+                        "give one value per joint of `position_joints`",
+                    ));
+                }
+                Some(Pallets {
+                    count: count as u32,
+                    change_s: match opt_num(
+                        p,
+                        &rec,
+                        "change_s",
+                        "give `change_s`, seconds per pallet change, or cite it unknown",
+                        "pallets.change_s",
+                        &unk,
+                    )? {
+                        Some(v) => Some(positive(&rec, "change_s", v)?),
+                        None => None,
+                    },
+                    max_kg: match num(p, "max_kg") {
+                        Some(v) => Some(positive(&rec, "max_kg", v)?),
+                        None => None,
+                    },
+                    size: vec_n::<2>(p, &rec, "size")?,
+                    max_work: vec_n::<2>(p, &rec, "max_work")?,
+                    position: pj.into_iter().zip(pv).collect(),
+                })
+            }
+            _ => {
+                return Err(DefError::Shape {
+                    machine: name,
+                    why: "more than one [[machine.pallets]]".into(),
+                });
+            }
+        };
         let changer = match tables(t, "changer") {
             [] => None,
             [c] => {
                 let rec = format!("{m} changer");
-                let p = need_num(c, &rec, "pockets", "give `pockets`")?;
-                if p < 1.0 || p.fract() != 0.0 {
+                let manual = match text(c, "kind") {
+                    None | Some("automatic") => false,
+                    Some("manual") => true,
+                    Some(other) => {
+                        return Err(DefError::Bad {
+                            record: rec,
+                            field: "kind",
+                            why: format!("`{other}`: automatic | manual"),
+                        });
+                    }
+                };
+                // a manual change has no pockets and no magazine weight limit
+                let unk_m: Vec<String> = if manual {
+                    let mut u = unk.clone();
+                    u.push("changer.pockets".into());
+                    u.push("changer.max_tool_kg".into());
+                    u
+                } else {
+                    unk.clone()
+                };
+                let unk = &unk_m;
+                let p = opt_num(
+                    c,
+                    &rec,
+                    "pockets",
+                    "give `pockets`, or cite it unknown",
+                    "changer.pockets",
+                    unk,
+                )?;
+                if p.is_some_and(|p| p < 1.0 || p.fract() != 0.0) {
                     return Err(DefError::Bad {
                         record: rec,
                         field: "pockets",
                         why: "must be a positive whole number".into(),
                     });
                 }
+                let pos = |k: &'static str, v: Option<f64>| match v {
+                    Some(v) => positive(&rec, k, v).map(Some),
+                    None => Ok(None),
+                };
+                let pj = texts(c, "position_joints").unwrap_or_default();
+                let pv = nums(c, "position").unwrap_or_default();
+                if pj.len() != pv.len() {
+                    return Err(DefError::Bad {
+                        record: rec,
+                        field: "position",
+                        why: format!(
+                            "needs one value per joint of `position_joints` ({} joints, {} values)",
+                            pj.len(),
+                            pv.len()
+                        ),
+                    });
+                }
                 Some(Changer {
-                    pockets: p as u32,
-                    change_s: positive(
-                        &rec,
+                    manual,
+                    position: pj.into_iter().zip(pv).collect(),
+                    pockets: p.map(|p| p as u32),
+                    change_s: pos(
                         "change_s",
-                        need_num(c, &rec, "change_s", "give `change_s`")?,
+                        opt_num(
+                            c,
+                            &rec,
+                            "change_s",
+                            "give `change_s`, or cite it unknown",
+                            "changer.change_s",
+                            unk,
+                        )?,
                     )?,
-                    max_tool_kg: positive(
-                        &rec,
+                    max_tool_kg: pos(
                         "max_tool_kg",
-                        need_num(c, &rec, "max_tool_kg", "give `max_tool_kg`")?,
+                        opt_num(
+                            c,
+                            &rec,
+                            "max_tool_kg",
+                            "give `max_tool_kg`, or cite it unknown",
+                            "changer.max_tool_kg",
+                            unk,
+                        )?,
                     )?,
                 })
             }
@@ -767,9 +1080,12 @@ impl MachineDef {
         for s in tables(t, "body") {
             let bn = need_text(s, &format!("{m} body"), "name", "give `name`")?.to_string();
             let rec = format!("{m} body `{bn}`");
+            let no_envelope = tables(s, "box").is_empty()
+                && tables(s, "cyl").is_empty()
+                && unk.contains(&format!("body.{bn}"));
             bodies.push(Body {
                 link: need_text(s, &rec, "link", "give `link`")?.to_string(),
-                prims: prims(s, &rec)?,
+                prims: if no_envelope { Vec::new() } else { prims(s, &rec)? },
                 part: text(s, "part").map(str::to_string),
                 ignore: texts(s, "ignore").unwrap_or_default(),
                 name: bn,
@@ -801,7 +1117,128 @@ impl MachineDef {
                 });
             }
         }
+        let mut cites = Vec::new();
+        for c in tables(t, "cite") {
+            let path = need_text(
+                c,
+                &format!("{m} cite"),
+                "path",
+                "give `path`, e.g. \"joint.X.range\"",
+            )?
+            .to_string();
+            let rec = format!("{m} cite `{path}`");
+            let status = pick(
+                c,
+                &rec,
+                "status",
+                &[
+                    ("published", CiteStatus::Published),
+                    ("estimate", CiteStatus::Estimate),
+                    ("unknown", CiteStatus::Unknown),
+                    ("conflict", CiteStatus::Conflict),
+                    ("user", CiteStatus::User),
+                ],
+                "published | estimate | unknown | conflict | user",
+            )?;
+            let source = text(c, "source").unwrap_or("").to_string();
+            let taken = text(c, "taken").unwrap_or("").to_string();
+            let basis = text(c, "basis").unwrap_or("").to_string();
+            let note = text(c, "note").unwrap_or("").to_string();
+            match status {
+                CiteStatus::Published | CiteStatus::Conflict if source.is_empty() => {
+                    return Err(rec_err(
+                        &rec,
+                        "source",
+                        "give `source`, the URL or document the value is from",
+                    ));
+                }
+                CiteStatus::Estimate | CiteStatus::Unknown if basis.is_empty() => {
+                    return Err(rec_err(
+                        &rec,
+                        "basis",
+                        "say how the value was derived (estimate) or which way it errs (unknown)",
+                    ));
+                }
+                CiteStatus::Conflict if note.is_empty() => {
+                    return Err(rec_err(
+                        &rec,
+                        "note",
+                        "say what the sources disagree on and which value the record holds",
+                    ));
+                }
+                _ => {}
+            }
+            if !source.is_empty() && taken.is_empty() {
+                return Err(rec_err(
+                    &rec,
+                    "taken",
+                    "give `taken = \"YYYY-MM-DD\"`, when the source was read",
+                ));
+            }
+            cites.push(Cite {
+                value: text(c, "value").unwrap_or("").to_string(),
+                path,
+                status,
+                source,
+                taken,
+                basis,
+                note,
+            });
+        }
+        let nonneg = |k: &'static str| -> Result<Option<f64>, DefError> {
+            match num(t, k) {
+                Some(v) if v >= 0.0 && v.is_finite() => Ok(Some(v)),
+                Some(v) => Err(DefError::Bad {
+                    record: m.clone(),
+                    field: k,
+                    why: format!("must be >= 0 mm (is {v})"),
+                }),
+                None => Ok(None),
+            }
+        };
+        let mut zones = Vec::new();
+        for z in tables(t, "zone") {
+            let zn = need_text(z, &format!("{m} zone"), "name", "give `name`")?.to_string();
+            let rec = format!("{m} zone `{zn}`");
+            let joints = texts(z, "joints")
+                .ok_or_else(|| rec_err(&rec, "joints", "give `joints = [\"X\", \"Z\"]`"))?;
+            let min =
+                nums(z, "min").ok_or_else(|| rec_err(&rec, "min", "give `min`, one value per joint"))?;
+            let max =
+                nums(z, "max").ok_or_else(|| rec_err(&rec, "max", "give `max`, one value per joint"))?;
+            if joints.is_empty() || min.len() != joints.len() || max.len() != joints.len() {
+                return Err(DefError::Bad {
+                    record: rec,
+                    field: "joints",
+                    why: "needs at least one joint and one min and max per joint".into(),
+                });
+            }
+            if min
+                .iter()
+                .zip(&max)
+                .any(|(a, b)| a >= b || a.is_nan() || b.is_nan())
+            {
+                return Err(DefError::Bad {
+                    record: rec,
+                    field: "min",
+                    why: "needs min < max for every joint".into(),
+                });
+            }
+            zones.push(Zone {
+                joints,
+                min,
+                max,
+                note: text(z, "note").unwrap_or("").to_string(),
+                name: zn,
+            });
+        }
         let def = MachineDef {
+            zones,
+            pallets,
+            peck_clear: nonneg("peck_clear")?,
+            chip_lift: nonneg("chip_lift")?,
+            real: boolean(t, "real").unwrap_or(false),
+            cites,
             kind,
             control,
             source,
@@ -819,7 +1256,157 @@ impl MachineDef {
             name,
         };
         def.validate()?;
+        def.validate_cites()?;
         Ok(def)
+    }
+
+    /// The values a `real = true` record must cite: per joint its range, rapid and max_feed (and
+    /// accel and pivot when given), per spindle rpm, nose and max (and the power curve when
+    /// given), per turret stations, index_s and center, the changer's three numbers, every
+    /// mount's `at` and every body's envelope.
+    pub fn cite_paths(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for j in &self.joints {
+            for f in ["range", "rapid", "max_feed"] {
+                out.push(format!("joint.{}.{f}", j.name));
+            }
+            if j.accel.is_some() {
+                out.push(format!("joint.{}.accel", j.name));
+            }
+            if j.ty == JointType::Rotary {
+                out.push(format!("joint.{}.pivot", j.name));
+            }
+        }
+        for s in &self.spindles {
+            for f in ["rpm", "nose", "max"] {
+                out.push(format!("spindle.{}.{f}", s.name));
+            }
+            if !s.power.is_empty() {
+                out.push(format!("spindle.{}.curve", s.name));
+            }
+        }
+        for t in &self.turrets {
+            let fs: &[&str] = if t.manual {
+                &["center"]
+            } else {
+                &["stations", "index_s", "center"]
+            };
+            for f in fs {
+                out.push(format!("turret.{}.{f}", t.name));
+            }
+        }
+        if let Some(c) = &self.changer {
+            let fs: &[&str] = if c.manual {
+                &["change_s"]
+            } else {
+                &["pockets", "change_s", "max_tool_kg"]
+            };
+            for f in fs {
+                out.push(format!("changer.{f}"));
+            }
+        }
+        if self.pallets.is_some() {
+            for f in ["count", "change_s"] {
+                out.push(format!("pallets.{f}"));
+            }
+        }
+        for mt in &self.mounts {
+            out.push(format!("mount.{}.at", mt.name));
+        }
+        for b in &self.bodies {
+            out.push(format!("body.{}", b.name));
+        }
+        out
+    }
+
+    /// The maker does not publish where this machine's own bodies can meet within travel (the
+    /// record cites `zones` unknown): a contact between them is possible, not checked.
+    pub fn zones_unpublished(&self) -> bool {
+        self.cite_status("zones") == Some(CiteStatus::Unknown)
+    }
+
+    /// A zone's joints as indexes into `joints` (validated to exist).
+    pub fn zone_joints(&self, z: &Zone) -> Vec<usize> {
+        z.joints.iter().filter_map(|j| self.joint_index(j)).collect()
+    }
+
+    /// The zones q is strictly inside.
+    pub fn zones_at(&self, q: &[f64]) -> Vec<&Zone> {
+        self.zones
+            .iter()
+            .filter(|z| z.contains(&self.zone_joints(z), q))
+            .collect()
+    }
+
+    /// How a value stands, from its cites: the weakest of them (unknown, then estimate, then
+    /// conflict, then user, then published); None if uncited.
+    pub fn cite_status(&self, path: &str) -> Option<CiteStatus> {
+        let rank = |s: CiteStatus| match s {
+            CiteStatus::Unknown => 0,
+            CiteStatus::Estimate => 1,
+            CiteStatus::Conflict => 2,
+            CiteStatus::User => 3,
+            CiteStatus::Published => 4,
+        };
+        self.cites
+            .iter()
+            .filter(|c| c.path == path)
+            .map(|c| c.status)
+            .min_by_key(|s| rank(*s))
+    }
+
+    /// Provenance: every cite names a value of this record; a `real` record cites every value
+    /// of `cite_paths`.
+    pub fn validate_cites(&self) -> Result<(), DefError> {
+        let paths = self.cite_paths();
+        // values a record may cite beyond the required ones
+        let extra = |p: &str| -> bool {
+            let mut it = p.splitn(3, '.');
+            match (it.next(), it.next(), it.next()) {
+                (Some("joint"), Some(n), Some(f)) => {
+                    self.joint(n).is_some() && ["axis", "home", "accel", "pivot"].contains(&f)
+                }
+                (Some("spindle"), Some(n), Some(f)) => {
+                    self.spindles.iter().any(|s| s.name == n) && ["axis", "interface", "curve"].contains(&f)
+                }
+                (Some("turret"), Some(n), Some(_)) => self.turrets.iter().any(|t| t.name == n),
+                (Some("mount"), Some(n), Some(_)) => self.mount(n).is_some(),
+                (Some("machine"), Some(_), None) => true,
+                (Some("changer"), Some("position"), None) => self.changer.is_some(),
+                (Some("zone"), Some(n), None) => self.zones.iter().any(|z| z.name == n),
+                (Some("pallets"), Some(_), None) => self.pallets.is_some(),
+                // where the machine's own bodies may meet in travel (crash zones), as a whole:
+                // cited `unknown` when the maker does not publish them
+                (Some("zones"), None, None) => true,
+                _ => false,
+            }
+        };
+        for c in &self.cites {
+            if !paths.contains(&c.path) && !extra(&c.path) {
+                return Err(DefError::Bad {
+                    record: format!("machine `{}` cite `{}`", self.name, c.path),
+                    field: "path",
+                    why: format!("names no value of this record; cite one of: {}", paths.join(", ")),
+                });
+            }
+        }
+        if self.real {
+            let missing: Vec<&String> = paths
+                .iter()
+                .filter(|p| !self.cites.iter().any(|c| &c.path == *p))
+                .collect();
+            if !missing.is_empty() {
+                return Err(DefError::Bad {
+                    record: format!("machine `{}`", self.name),
+                    field: "real",
+                    why: format!(
+                        "a real machine cites every value; uncited: {}",
+                        missing.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                    ),
+                });
+            }
+        }
+        Ok(())
     }
 
     pub fn joint(&self, name: &str) -> Option<&Joint> {
@@ -960,8 +1547,11 @@ impl MachineDef {
         }
         if let Some(l) = &self.length_joint {
             match self.joint(l) {
-                Some(j) if j.ty == JointType::Linear && j.side == Side::Head => {}
-                _ => return Err(self.shape(format!("length_joint `{l}` must be a linear head joint"))),
+                // head side (a VMC's Z) or table side (an HMC moving the table to the column):
+                // the joint's value takes H either way, since a table joint's axis is the
+                // table's motion for +word
+                Some(j) if j.ty == JointType::Linear => {}
+                _ => return Err(self.shape(format!("length_joint `{l}` must be a linear joint"))),
             }
         }
         // sides: every joint on a tool mount's chain is head, on a part mount's chain is table
@@ -1027,9 +1617,35 @@ impl MachineDef {
         };
         let ok = match self.kind {
             Kind::Vmc3 => lin == 3 && rot_h + rot_t == 0 && mill >= 1 && turn == 0,
-            Kind::Vmc4 => lin == 3 && rot_h == 0 && rot_t == 1 && mill >= 1 && turn == 0,
+            Kind::Vmc4 | Kind::Hmc => lin == 3 && rot_h == 0 && rot_t == 1 && mill >= 1 && turn == 0,
+            // a turning spindle on the table's C (a mill that also turns, Brother M140X2): its X
+            // is a radius, the milling spindle holds the stationary tool
             Kind::TableTable => {
-                lin == 3 && rot_h == 0 && rot_t == 2 && carried(Side::Table) && mill >= 1 && turn == 0
+                let turns_on_c = |sp: &Spindle| {
+                    sp.c_joint
+                        .as_ref()
+                        .and_then(|c| self.joint(c))
+                        .is_some_and(|j| j.ty == JointType::Rotary && j.side == Side::Table)
+                };
+                lin == 3
+                    && rot_h == 0
+                    && rot_t == 2
+                    && carried(Side::Table)
+                    && mill >= 1
+                    && self
+                        .spindles
+                        .iter()
+                        .filter(|s| s.kind == SpindleKind::Turning)
+                        .all(turns_on_c)
+                    && turn <= 1
+            }
+            Kind::Gantry => {
+                lin == 3
+                    && rot_t == 0
+                    && rot_h <= 2
+                    && mill >= 1
+                    && turn == 0
+                    && self.joints.iter().all(|j| j.side == Side::Head)
             }
             Kind::HeadTable => lin == 3 && rot_h == 1 && rot_t == 1 && mill >= 1 && turn == 0,
             Kind::HeadHead => {
@@ -1043,6 +1659,13 @@ impl MachineDef {
                     && !self.turrets.is_empty()
             }
             Kind::MillTurn => lin >= 3 && turn >= 1 && mill >= 1 && rot_t >= 1,
+            Kind::TurnMill => {
+                (2..=3).contains(&lin)
+                    && rot_h == 0
+                    && turn >= 1
+                    && mill >= 1
+                    && self.turrets.iter().any(|t| t.live.is_some())
+            }
         };
         if !ok {
             return Err(self.shape(format!(
@@ -1051,17 +1674,62 @@ impl MachineDef {
                 self.turrets.len()
             )));
         }
-        if matches!(self.kind, Kind::Lathe | Kind::MillTurn) {
+        if self.kind.turns() {
             if !self.joints.iter().any(|j| j.diameter) {
                 return Err(self.shape("a lathe's X (diameter = true) is missing".into()));
             }
         } else if self.joints.iter().any(|j| j.diameter) {
             return Err(self.shape("diameter = true is for lathes".into()));
         }
-        if !matches!(self.kind, Kind::Lathe | Kind::MillTurn) && self.length_joint.is_none() {
+        if !self.kind.turns() && self.length_joint.is_none() {
             return Err(self.shape("a mill needs `length_joint` (the joint G43 moves)".into()));
         }
-        let rapids_ok = self.joints.iter().all(|j| j.max_feed <= j.rapid);
+        for z in &self.zones {
+            if let Some(j) = z.joints.iter().find(|j| self.joint(j).is_none()) {
+                return Err(self.shape(format!("zone `{}` names no joint `{j}`", z.name)));
+            }
+        }
+        let positions = self
+            .changer
+            .iter()
+            .flat_map(|c| c.position.iter().map(|p| ("changer", p)))
+            .chain(
+                self.pallets
+                    .iter()
+                    .flat_map(|p| p.position.iter().map(|q| ("pallets", q))),
+            );
+        for (what, (jn, v)) in positions {
+            let Some(j) = self.joint(jn) else {
+                return Err(self.shape(format!("the {what}' position names no joint `{jn}`")));
+            };
+            if let Some(r) = j.range
+                && !(r[0] <= *v && *v <= r[1])
+            {
+                return Err(self.shape(format!(
+                    "the {what}' position {jn} = {v} is outside its range [{}, {}]",
+                    r[0], r[1]
+                )));
+            }
+        }
+        if let Some(c) = &self.changer {
+            for (jn, v) in &c.position {
+                let Some(j) = self.joint(jn) else {
+                    return Err(self.shape(format!("the changer's position names no joint `{jn}`")));
+                };
+                if let Some(r) = j.range
+                    && !(r[0] <= *v && *v <= r[1])
+                {
+                    return Err(self.shape(format!(
+                        "the changer's position {jn} = {v} is outside its range [{}, {}]",
+                        r[0], r[1]
+                    )));
+                }
+            }
+        }
+        let rapids_ok = self.joints.iter().all(|j| match (j.max_feed, j.rapid) {
+            (Some(f), Some(r)) => f <= r,
+            _ => true,
+        });
         if !rapids_ok {
             return Err(self.shape("a joint's max_feed exceeds its rapid".into()));
         }
@@ -1082,17 +1750,18 @@ impl MachineDef {
                 .map(|j| forge_tooling::Joint {
                     name: j.letter.clone(),
                     axis: j.axis,
-                    range: j.range,
-                    rapid: j.rapid,
+                    // stand-ins for unknowns: no travel limit, an unbounded rate
+                    range: j.range.unwrap_or([f64::NEG_INFINITY, f64::INFINITY]),
+                    rapid: j.rapid.unwrap_or(f64::INFINITY),
                 })
                 .collect(),
-            rpm: s.rpm,
+            rpm: s.rpm.unwrap_or([0.0, f64::INFINITY]),
             power: s.power.clone(),
             max_feed: self
                 .joints
                 .iter()
                 .filter(|j| j.ty == JointType::Linear)
-                .map(|j| j.max_feed)
+                .map(|j| j.max_feed.unwrap_or(f64::INFINITY))
                 .fold(f64::INFINITY, f64::min),
             coolants: self.coolants.clone(),
             source: self.source.clone(),

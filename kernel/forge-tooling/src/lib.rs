@@ -9,7 +9,11 @@
 //! `cam/` directory, then the user's, then the built-in set.
 pub mod build;
 pub mod cite;
+pub mod entry;
 pub mod feeds;
+pub mod instances;
+pub mod life;
+pub mod resolve;
 pub mod toml;
 pub mod turning;
 

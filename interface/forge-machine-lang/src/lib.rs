@@ -95,6 +95,37 @@ pub fn check_parts(def: &MachineDef, dir: &Path, tol: f64) -> Result<Vec<PartChe
     Ok(out)
 }
 
+pub type MachineDefRef = MachineDef;
+
+/// `check_parts` as the machine check's envelope findings (forge_machine_builder::check), at
+/// the 0.01 mm tolerance of tests/parts.rs.
+pub fn envelope_checks(
+    def: &MachineDef,
+    dir: &Path,
+) -> Vec<(String, forge_machine_builder::check::EnvelopeCheck)> {
+    use forge_machine_builder::check::EnvelopeCheck;
+    let mut out = Vec::new();
+    for b in &def.bodies {
+        let Some(_) = &b.part else { continue };
+        let mut one = def.clone();
+        one.bodies = vec![b.clone()];
+        let e = match check_parts(&one, dir, 0.01) {
+            Ok(v) => match v.first() {
+                Some(c) if c.outside.is_empty() => EnvelopeCheck::Inside { vertices: c.vertices },
+                Some(c) => EnvelopeCheck::Outside {
+                    vertices: c.vertices,
+                    outside: c.outside.len(),
+                    worst: c.outside.iter().map(|(_, d)| *d).fold(0.0, f64::max),
+                },
+                None => EnvelopeCheck::NotChecked("no part".into()),
+            },
+            Err(e) => EnvelopeCheck::NotChecked(format!("the part does not build: {e}")),
+        };
+        out.push((b.name.clone(), e));
+    }
+    out
+}
+
 /// What `forgecad machine SETUP.toml` answers.
 pub struct Outcome {
     /// No violation, no contact, no rapid into material.
@@ -127,27 +158,16 @@ fn jnum(x: f64) -> String {
     }
 }
 
-/// Machines: the built-in set, under the project's `cam/machines/*.toml` beside the setup.
+/// Machines in the search order (docs/cam-machine.md): the project's `cam/machines/*.toml`
+/// beside the setup, then the user's (`<config>/forgecad/cam/machines/`), then the built-in set.
+/// A file at either level that does not load is an error (it may hold the machine asked for).
 pub fn library(dir: &Path) -> Result<forge_machine::library::Library, String> {
-    let mut lib = forge_machine::library::Library::with_builtin();
-    let mdir = dir.join("cam").join("machines");
-    if let Ok(rd) = std::fs::read_dir(&mdir) {
-        let mut files: Vec<(String, String)> = Vec::new();
-        let mut paths: Vec<_> = rd
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x == "toml"))
-            .collect();
-        paths.sort();
-        for p in paths {
-            files.push((
-                p.display().to_string(),
-                std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?,
-            ));
-        }
-        lib.add_level(&files).map_err(|e| e.to_string())?;
+    let user = forge_machine_builder::catalog::user_dir();
+    let cat = forge_machine_builder::catalog::Catalog::load(Some(dir), user.as_deref());
+    if let Some((_, f, e)) = cat.errors.first() {
+        return Err(format!("{f}: {e}"));
     }
-    Ok(lib)
+    Ok(forge_machine_builder::catalog::library(&cat))
 }
 
 /// Runs a setup file: the program on the machine, its timeline, collisions and removal.
@@ -271,6 +291,23 @@ pub fn run_setup(path: &Path) -> Result<Outcome, String> {
     for v in &tl.violations {
         text.push_str(&format!("violation: {v:?}\n"));
     }
+    // checks made against an unknown or estimated value: never a silent pass
+    let mut unchecked = forge_machine::sim::unchecked(def, &tl);
+    unchecked.extend(forge_machine::sim::unchecked_cycles(def, &prog));
+    unchecked.extend(col.unchecked.iter().cloned());
+    for u in &unchecked {
+        text.push_str(&format!(
+            "not checked: {} {} ({}{})\n",
+            u.path,
+            u.why,
+            u.check,
+            if u.line > 0 {
+                format!(", from line {}", u.line)
+            } else {
+                String::new()
+            }
+        ));
+    }
     for c in &col.contacts {
         let what = match &c.verdict {
             Verdict::Hit { witness, .. } => {
@@ -357,14 +394,27 @@ pub fn run_setup(path: &Path) -> Result<Outcome, String> {
             )
         })
         .collect();
+    let ucs: Vec<String> = unchecked
+        .iter()
+        .map(|u| {
+            format!(
+                "{{\"path\":{},\"why\":{},\"check\":{},\"line\":{}}}",
+                jstr(&u.path),
+                jstr(u.why),
+                jstr(u.check),
+                u.line
+            )
+        })
+        .collect();
     let json = format!(
-        "{{\"format\":\"forgecad.machine/1\",\"ok\":{ok},\"machine\":{},\"program\":{},\"timeline\":{},\"collisions\":[{}],\"rapid_cuts\":[{}],\"holder_hits\":[{}],\"removal\":{rem_json},\"claims\":{}}}",
+        "{{\"format\":\"forgecad.machine/1\",\"ok\":{ok},\"machine\":{},\"program\":{},\"timeline\":{},\"collisions\":[{}],\"rapid_cuts\":[{}],\"holder_hits\":[{}],\"not_checked\":[{}],\"removal\":{rem_json},\"claims\":{}}}",
         jstr(&def.name),
         jstr(&spec.program),
         forge_machine::sim::timeline_json(&tl),
         contacts.join(","),
         rcs.join(","),
         hhs.join(","),
+        ucs.join(","),
         jstr(
             "Proven: every pair of bodies on different links (machine envelopes, the tool's cylinders, the fixture; the stock as first given only where removal is not modelled) keeps the machine's clearance on every reported-clear segment, from interval poses (forge-math's interval contracts). Hits carry a witness point found in floating point. Times: t_min is a lower bound under the feed and axis limits; t_stop an exact-stop estimate. Removal heights, rapids into material and tool pieces into material are floating-point simulation at the grid nodes with the stock as cut so far, not a proof. Not claimed: the control's own interpolation, look-ahead or tolerances; machine fidelity beyond the envelopes."
         )

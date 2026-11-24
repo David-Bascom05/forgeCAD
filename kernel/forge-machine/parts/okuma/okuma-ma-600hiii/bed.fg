@@ -1,0 +1,14 @@
+# okuma-ma-600hiii bed: the bed (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -925
+shared y0 = -770
+shared z0 = -747.3
+shared L = 1850
+shared W = 399
+shared H = 4127.3
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

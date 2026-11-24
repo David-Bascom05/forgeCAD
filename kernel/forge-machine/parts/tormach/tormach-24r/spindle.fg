@@ -1,0 +1,22 @@
+# tormach-24r spindle and its carriage (unpublished sizes)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared ax = 312.5
+shared ay = 707.5
+shared nz = 201
+shared nr = 39
+shared nh = 79
+shared x0 = 243.5
+shared y0 = 638.5
+shared z0 = 280
+shared lx = 138
+shared ly = 138
+shared lz = 159
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+housing = extrude(plan, lz)
+sketch nk(on: offset(xy, nz)) {
+  c = circle((ax, ay), nr)
+}
+nose = extrude(nk.c, nh)

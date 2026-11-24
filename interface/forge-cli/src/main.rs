@@ -9,8 +9,28 @@ use forge_mesh::{Quality, TriMesh, tessellate, to_binary_stl};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment, extrude, revolve};
 use forge_topo::{Body, FaceId, check, genus};
 use std::io::Write;
+use std::path::Path;
 use std::process::ExitCode;
 use std::time::Instant;
+
+/// Today's date in UTC from the system clock.
+fn today() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    // civil from days (H. Hinnant's algorithm)
+    let z = secs.div_euclid(86_400) + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
+}
 
 fn usage() -> ExitCode {
     eprintln!(
@@ -18,7 +38,7 @@ fn usage() -> ExitCode {
          forgecad agent list | send WINDOW MESSAGE | status WINDOW REQUEST\n       \
          forgecad update [INSTALL_ROOT]   (install latest main)\n       \
          forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
-         forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|dxf [SHEET])\n       \
+         forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|urdf|dxf [SHEET])\n       \
          forgecad cam FILE.fg [sheet] [--json] [-o OUT]   (a machining document: certified toolpaths, the program or setup sheet)\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
          forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
@@ -27,8 +47,12 @@ fn usage() -> ExitCode {
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, parts under DIR, default .; edits only if --writable)\n       \
          forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only]   (the browser app on DIR's files)\n       \
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
-         forgecad machine SETUP.toml [--json] | list   (posted G-code on a machine: timeline, collisions, removal)\n       \
+         forgecad machine SETUP.toml [--json]   (posted G-code on a machine: timeline, collisions, removal)\n       \
+         forgecad machine list [--json] | new NAME (--from M | --template T) [--project] | check FILE|NAME [--json]   (your own machines)\n       \
+         forgecad mesh FILE.stl|obj|3mf [--json]        (a mesh read and measured: not a B-rep)\n       \
+         forgecad tool log add|list|observe|worn|chipped|broken|regrind|predict|run|calibrate ..   (physical tools: wear and life)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
+         forgecad workholding list [KIND] | show NAME | schema | new NAME --from X [field=value ..] [--json]   (vises, clamps, plates, chucks, collets)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
     ExitCode::from(2)
@@ -214,11 +238,50 @@ fn main() -> ExitCode {
         Some("web") => web::main(&args[2..]),
         Some("import") if args.len() >= 3 => import(&args[2..]),
         Some("machine") if args.len() >= 3 => machine(&args[2..]),
+        Some("mesh") if args.len() >= 3 => mesh(&args[2..]),
+        Some("tool") if args.get(2).is_some_and(|w| w == "log") => {
+            let env = forge_cam_lang::toollog::Env {
+                project: std::path::PathBuf::from("."),
+                today: today(),
+            };
+            let user = forge_dirs::config().map(|c| c.join("forgecad").join("cam"));
+            let mut store = forge_cam_lang::toolstore::store(
+                &env.project,
+                user.as_deref(),
+                args.iter().any(|a| a == "--project"),
+            );
+            let o = forge_cam_lang::toollog::run(&env, &mut store, &args[3..]);
+            let _ = write!(std::io::stdout(), "{}", o.out);
+            if !o.err.is_empty() {
+                eprintln!("{}", o.err.trim_end());
+            }
+            ExitCode::from(o.code)
+        }
         Some("vendor") => {
             let json = args.iter().any(|a| a == "--json");
             let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
             let here = std::env::current_dir().ok();
             match forge_lang::vendor::tool(&rest, here.as_deref()) {
+                Ok((j, text)) => {
+                    if json {
+                        println!("{j}");
+                    } else {
+                        print!("{text}");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+        Some("workholding") => {
+            let json = args.iter().any(|a| a == "--json");
+            let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
+            let here = std::env::current_dir().ok();
+            let user = forge_dirs::config();
+            match forge_workholding::cli::tool(&rest, user.as_deref(), here.as_deref()) {
                 Ok((j, text)) => {
                     if json {
                         println!("{j}");
@@ -255,8 +318,102 @@ fn quoted(s: &str) -> String {
     o + "\""
 }
 
+/// A mesh file read and measured: triangles, whether it is closed, its volume, area and box. A
+/// mesh is for reference: nothing is built on it.
+fn mesh(argv: &[String]) -> ExitCode {
+    let json = argv.iter().any(|a| a == "--json");
+    let Some(file) = argv.iter().find(|a| !a.starts_with("--")) else {
+        return usage();
+    };
+    let ext = std::path::Path::new(file)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let read = std::fs::read(file).map_err(|e| e.to_string()).and_then(|d| {
+        match ext.as_str() {
+            "stl" => forge_mesh::read::stl(&d),
+            "obj" => forge_mesh::read::obj(&d),
+            "3mf" => forge_import::threemf::read(&d),
+            _ => return Err(format!("{ext:?}: a mesh is .stl, .obj or .3mf")),
+        }
+        .map_err(|e| e.to_string())
+    });
+    let m = match read {
+        Ok(m) => m,
+        Err(e) => {
+            if json {
+                println!("{{\"file\":{},\"error\":{}}}", quoted(file), quoted(&e));
+            } else {
+                eprintln!("{file}: {e}");
+            }
+            return ExitCode::FAILURE;
+        }
+    };
+    let s = forge_mesh::read::summary(&m);
+    let num = |x: f64| {
+        if x.is_finite() {
+            format!("{x}")
+        } else {
+            "null".into()
+        }
+    };
+    if json {
+        println!(
+            "{{\"file\":{},\"kind\":\"mesh\",\"brep\":false,\"triangles\":{},\"vertices\":{},\"closed\":{},\"open_edges\":{},\"volume\":{},\"area\":{},\"box\":[{},{},{},{},{},{}]}}",
+            quoted(file),
+            s.triangles,
+            s.vertices,
+            s.closed,
+            s.open_edges,
+            s.volume.map_or("null".into(), num),
+            num(s.area),
+            num(s.bbox.0[0]),
+            num(s.bbox.0[1]),
+            num(s.bbox.0[2]),
+            num(s.bbox.1[0]),
+            num(s.bbox.1[1]),
+            num(s.bbox.1[2])
+        );
+    } else {
+        println!(
+            "{file}: a mesh (triangles, not a B-rep: for reference and measurement), {} triangles, {} vertices",
+            s.triangles, s.vertices
+        );
+        match s.volume {
+            Some(v) => println!("  closed; volume {v:.6} mm3"),
+            None => println!(
+                "  open ({} edges not shared by two triangles): no volume",
+                s.open_edges
+            ),
+        }
+        println!("  area {:.6} mm2", s.area);
+        println!(
+            "  box ({:.4}, {:.4}, {:.4}) to ({:.4}, {:.4}, {:.4}) mm",
+            s.bbox.0[0], s.bbox.0[1], s.bbox.0[2], s.bbox.1[0], s.bbox.1[1], s.bbox.1[2]
+        );
+    }
+    ExitCode::SUCCESS
+}
+
 /// Posted G-code simulated on a machine (forge-machine): `list` the machines, or run a setup file.
 fn machine(argv: &[String]) -> ExitCode {
+    let envelopes = |def: &forge_machine_lang::MachineDefRef, dir: &std::path::Path| {
+        forge_machine_lang::envelope_checks(def, dir)
+    };
+    let env = forge_machine_builder::cli::Env {
+        project: std::path::PathBuf::from("."),
+        user: forge_machine_builder::catalog::user_dir(),
+        today: forge_machine_builder::cli::today_utc(),
+        envelopes: &envelopes,
+    };
+    if let Some(o) = forge_machine_builder::cli::run(&env, argv) {
+        let _ = write!(std::io::stdout(), "{}", o.out);
+        if !o.err.is_empty() {
+            eprintln!("{}", o.err.trim_end());
+        }
+        return ExitCode::from(o.code);
+    }
     if argv[0] == "list" {
         let lib = match forge_machine_lang::library(std::path::Path::new(".")) {
             Ok(l) => l,
@@ -367,7 +524,7 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
         file: argv[0].clone(),
         ..Args::default()
     };
-    let (mut json, mut out) = (false, None);
+    let (mut json, mut out, mut allow_uncertified) = (false, None, false);
     let mut it = argv[1..].iter();
     while let Some(w) = it.next() {
         match w.as_str() {
@@ -383,15 +540,22 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
                     a.words.push(v.clone());
                 }
             }
+            // `export F urdf`'s opt-in: 0 for unknown effort and velocity, marked as placeholders
+            "--placeholder-limits" => a.words.push("placeholder-limits".into()),
             "-o" => out = it.next().cloned(),
+            "--allow-uncertified" => allow_uncertified = true,
             w if w.starts_with("--") => {
                 eprintln!(
-                    "unknown option {w} (--json --labels --px --at --base -o; bendsim: --vendor --tooling --sequence --sheet --uts)"
+                    "unknown option {w} (--json --labels --px --at --base -o; bendsim: --vendor --tooling --sequence --sheet --uts; urdf: --placeholder-limits; cam post: --allow-uncertified)"
                 );
                 return ExitCode::from(2);
             }
             _ => a.words.push(w.clone()),
         }
+    }
+    // `cam F post [PROGRAM] [-o FILE|DIR] [--allow-uncertified]`: the NC files, as the app exports them
+    if cmd == "cam" && a.words.first().is_some_and(|w| w == "post") {
+        return cam_post(&a, out.as_deref(), allow_uncertified);
     }
     let r = fg::Session::new(None, true).run(cmd, &a, &forge_agent::json::Json::Null);
     let mut text = if json { r.json.to_string() } else { r.text };
@@ -402,12 +566,29 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             "export" if a.words.first().is_some_and(|w| w == "stl") => "stl",
             "export" if a.words.first().is_some_and(|w| w == "3mf") => "3mf",
             "export" if a.words.first().is_some_and(|w| w == "obj") => "obj",
+            "export" if a.words.first().is_some_and(|w| w == "urdf") => "zip",
             "export" => "step",
             "cam" if a.words.first().is_some_and(|w| w == "sheet") => "html",
             "cam" => "nc",
             _ => "png",
         };
         let stem = a.file.trim_end_matches(".fg");
+        // a URDF is a directory (the robot and its meshes), or the ZIP as it is with `-o X.zip`
+        if cmd == "export"
+            && a.words.first().is_some_and(|w| w == "urdf")
+            && !out.as_deref().is_some_and(|o| o.ends_with(".zip"))
+        {
+            let dir = out.unwrap_or_else(|| format!("{stem}_urdf"));
+            if let Err(e) = unpack(png, Path::new(&dir)) {
+                eprintln!("writing {dir}: {e}");
+                return ExitCode::FAILURE;
+            }
+            if !json {
+                text = format!("wrote {dir}/ {text}");
+            }
+            let _ = writeln!(std::io::stdout(), "{text}");
+            return ExitCode::SUCCESS;
+        }
         let path = out.unwrap_or_else(|| format!("{stem}.{ext}"));
         if let Err(e) = std::fs::write(&path, png) {
             eprintln!("writing {path}: {e}");
@@ -419,13 +600,14 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     }
     // a closed pipe (`| head`) is not an error worth a panic
     let _ = writeln!(std::io::stdout(), "{text}");
-    // cam: 0 fully certified, 3 released but certified except G5 (a setup not placed), 1 refused
+    // cam: 0 fully certified, 3 released but certified except a check (G5: a setup not placed;
+    // G4: the leftover not computed), 1 refused
     if cmd == "cam"
         && r.ok
         && let forge_agent::json::Json::Obj(fs) = &r.json
-        && fs
-            .iter()
-            .any(|(k, v)| k == "certification" && *v == forge_agent::json::Json::Str("except G5".into()))
+        && fs.iter().any(|(k, v)| {
+            k == "certification" && matches!(v, forge_agent::json::Json::Str(c) if c.contains("except"))
+        })
     {
         return ExitCode::from(3);
     }
@@ -434,6 +616,65 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     } else {
         ExitCode::FAILURE
     }
+}
+
+/// `cam F post`: each program's file written where its statement says (beside the document), or
+/// under `-o DIR`, or to `-o FILE` when there is one; refused, nothing written, if any is refused.
+fn cam_post(a: &fg::Args, out: Option<&str>, allow_uncertified: bool) -> ExitCode {
+    let doc = std::path::Path::new(&a.file);
+    let files = match fg::Session::cam_post(doc, a.words.get(1).map(String::as_str), allow_uncertified) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("refused: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let base = doc.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+    for f in &files {
+        let path = match out {
+            // one file and a name that is not a folder: that name
+            Some(o) if files.len() == 1 && !o.ends_with('/') && !std::path::Path::new(o).is_dir() => {
+                std::path::PathBuf::from(o)
+            }
+            Some(o) => std::path::Path::new(o).join(f.path.rsplit('/').next().unwrap_or(&f.path)),
+            None => base.join(&f.path),
+        };
+        if let Some(d) = path.parent()
+            && !d.as_os_str().is_empty()
+            && let Err(e) = std::fs::create_dir_all(d)
+        {
+            eprintln!("{}: {e}", d.display());
+            return ExitCode::FAILURE;
+        }
+        if let Err(e) = std::fs::write(&path, &f.text) {
+            eprintln!("writing {}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+        println!("wrote {} ({} lines)", path.display(), f.text.lines().count());
+    }
+    ExitCode::SUCCESS
+}
+
+/// A URDF export's ZIP written out under `dir`.
+fn unpack(zip: &[u8], dir: &Path) -> Result<(), String> {
+    let members = forge_mesh::zip::read(zip, 1 << 31).map_err(|e| format!("{e:?}"))?;
+    for (name, bytes) in members {
+        // only names the exporter writes: no absolute path, no `..`
+        let rel = Path::new(&name);
+        if rel.is_absolute()
+            || rel
+                .components()
+                .any(|c| !matches!(c, std::path::Component::Normal(_)))
+        {
+            return Err(format!("refusing member {name}"));
+        }
+        let p = dir.join(rel);
+        if let Some(parent) = p.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&p, bytes).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 fn demo(args: &[String]) -> ExitCode {

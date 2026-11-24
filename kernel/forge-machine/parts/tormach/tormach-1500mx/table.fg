@@ -1,0 +1,22 @@
+# tormach-1500mx table: 889 x 324 published, thickness estimated; one T-slot
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -443.5
+shared y0 = -161
+shared z0 = -59
+shared lx = 887
+shared ly = 322
+shared lz = 58
+shared cx = 0
+shared cy = 0
+shared cw = 889
+shared cl = 16
+shared cd = 12
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)
+sketch top(on: block.end) {
+  r = rect(center: (cx, cy), size: (cw, cl))
+}
+tslot = cut(top.r, cd)
