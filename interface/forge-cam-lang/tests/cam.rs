@@ -1090,3 +1090,24 @@ fn grbl_tool_changes_stand_at_the_clearance_height() {
         );
     }
 }
+
+/// The on-demand check runs the full checker over what was posted, without generating again:
+/// every op of the flange clear, with the staged stock built for every path; one op by name.
+#[test]
+fn the_posted_paths_check_again_on_demand() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(cam.ok);
+    let all = cam.check(None);
+    assert_eq!(all.len(), cam.ops.len());
+    for (oc, o) in all.iter().zip(&cam.ops) {
+        assert!(oc.clear && oc.checks.is_empty(), "{oc:?}");
+        // at least the pairs the generate checked (the stock is never skipped here)
+        assert!(oc.pairs >= o.pairs, "{} {} {}", oc.op, oc.pairs, o.pairs);
+    }
+    let one = cam.check(Some("bolts"));
+    assert_eq!(one.len(), 1);
+    assert!(one[0].clear);
+    assert!(cam.check(Some("no-such-op")).is_empty());
+}

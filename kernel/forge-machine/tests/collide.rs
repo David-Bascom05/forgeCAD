@@ -1,5 +1,5 @@
 use forge_machine::collide::{self, Role, Verdict};
-use forge_machine::def::Prim;
+use forge_machine::def::{MountKind, Prim};
 use forge_machine::gcode::Control;
 use forge_machine::library::builtin;
 use forge_machine::sim::{self, Cut, Setup, SimTool};
@@ -23,7 +23,7 @@ fn builtin_machines_are_clear_through_their_travel() {
         for j in 0..n {
             for end in 0..2 {
                 let mut q: Vec<f64> = m.joints.iter().map(|j| j.home).collect();
-                q[j] = m.joints[j].range[end];
+                q[j] = m.joints[j].range.unwrap()[end];
                 corners.push(q);
             }
         }
@@ -169,7 +169,7 @@ fn clear_is_never_contradicted_by_samples() {
         let q: Vec<f64> = m
             .joints
             .iter()
-            .map(|j| j.range[0] + rnd() * (j.range[1] - j.range[0]))
+            .map(|j| j.range.unwrap()[0] + rnd() * (j.range.unwrap()[1] - j.range.unwrap()[0]))
             .collect();
         let seg = forge_machine::sim::Segment {
             line: 1,
@@ -222,4 +222,152 @@ fn clear_is_never_contradicted_by_samples() {
         }
     }
     assert!(clear > 1000 && hit > 10, "clear {clear} hit {hit}");
+}
+
+fn rapid(q0: Vec<f64>, q1: Vec<f64>) -> sim::Segment {
+    sim::Segment {
+        line: 0,
+        kind: sim::SegKind::Rapid,
+        q0,
+        q1,
+        path: sim::Path::Line,
+        t0: 0.0,
+        t_min: 0.0,
+        t_stop: 0.0,
+        tool: None,
+        spindle: None,
+    }
+}
+
+/// The pieces [a, b] of the line q0 → q1 outside every zone of the record (zones are open boxes:
+/// their boundaries are travel).
+fn outside_zones(m: &forge_machine::MachineDef, q0: &[f64], q1: &[f64]) -> Vec<(f64, f64)> {
+    let mut inside: Vec<(f64, f64)> = Vec::new();
+    for z in &m.zones {
+        let (mut lo, mut hi) = (0.0f64, 1.0f64);
+        for (k, j) in m.zone_joints(z).into_iter().enumerate() {
+            let (a, d) = (q0[j], q1[j] - q0[j]);
+            if d == 0.0 {
+                if !(z.min[k] < a && a < z.max[k]) {
+                    hi = lo;
+                }
+                continue;
+            }
+            let (t1, t2) = ((z.min[k] - a) / d, (z.max[k] - a) / d);
+            lo = lo.max(t1.min(t2));
+            hi = hi.min(t1.max(t2));
+        }
+        if lo < hi {
+            inside.push((lo, hi));
+        }
+    }
+    inside.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut out = Vec::new();
+    let mut at = 0.0;
+    for (a, b) in inside {
+        if a > at {
+            out.push((at, a));
+        }
+        at = at.max(b);
+    }
+    if at < 1.0 {
+        out.push((at, 1.0));
+    }
+    out
+}
+
+/// Every pair of bodies through the joints that move one relative to the other: each such joint
+/// swept through its whole range with the others at every combination of their ends. A Hit is a
+/// pose inside the declared travel where the machine's own bodies collide (wrong data); a Near is
+/// one not proven clear. Neither may happen in a built-in.
+#[test]
+fn builtin_machines_have_no_self_collision_in_travel() {
+    let mut bad = Vec::new();
+    for m in builtin() {
+        let home: Vec<f64> = m.joints.iter().map(|j| j.home).collect();
+        let chain = |l: &str| m.chain(l).unwrap_or_default();
+        for (ai, a) in m.bodies.iter().enumerate() {
+            for b in &m.bodies[ai + 1..] {
+                if a.link == b.link || a.ignore.contains(&b.name) || b.ignore.contains(&a.name) {
+                    continue;
+                }
+                let (ca, cb) = (chain(&a.link), chain(&b.link));
+                let mut js: Vec<usize> = ca.iter().filter(|j| !cb.contains(j)).copied().collect();
+                js.extend(cb.iter().filter(|j| !ca.contains(j)));
+                js.sort();
+                let mut segs = Vec::new();
+                for (k, &j) in js.iter().enumerate() {
+                    let others: Vec<usize> = js
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, _)| *i != k)
+                        .map(|(_, x)| *x)
+                        .collect();
+                    for c in 0..(1usize << others.len()) {
+                        let mut base = home.clone();
+                        for (bit, &o) in others.iter().enumerate() {
+                            base[o] = m.joints[o].range.unwrap()[(c >> bit) & 1];
+                        }
+                        let (mut q0, mut q1) = (base.clone(), base);
+                        q0[j] = m.joints[j].range.unwrap()[0];
+                        q1[j] = m.joints[j].range.unwrap()[1];
+                        // the record's zones are not travel: only the pieces outside them
+                        for (a, b) in outside_zones(&m, &q0, &q1) {
+                            let at = |t: f64| q0.iter().zip(&q1).map(|(x, y)| x + t * (y - x)).collect();
+                            segs.push(rapid(at(a), at(b)));
+                        }
+                    }
+                }
+                let mut d2 = m.clone();
+                d2.bodies = vec![a.clone(), b.clone()];
+                let mount = |k: MountKind| {
+                    d2.mounts
+                        .iter()
+                        .find(|x| x.kind == k)
+                        .map(|x| x.name.clone())
+                        .unwrap()
+                };
+                let s2 = Setup {
+                    def: &d2,
+                    control: Control::mill3(3, 0, false),
+                    joint_of: Vec::new(),
+                    tool_mount: mount(MountKind::Tool),
+                    part_mount: mount(MountKind::Part),
+                    wcs: Vec::new(),
+                    tools: Vec::new(),
+                    h: Vec::new(),
+                    geo: Vec::new(),
+                    dogleg: false,
+                    feed_combined: true,
+                    start: home.clone(),
+                    start_tool: None,
+                };
+                for seg in segs {
+                    let tl = sim::Timeline {
+                        segments: vec![seg],
+                        marks: Vec::new(),
+                        violations: Vec::new(),
+                        t_min: 0.0,
+                        t_stop: 0.0,
+                        joints: Vec::new(),
+                        accel_missing: false,
+                    };
+                    let rep = collide::check(&s2, &tl, &[]);
+                    if let Some(c) = rep.contacts.first() {
+                        let q = match &c.verdict {
+                            Verdict::Hit { s, .. } => tl.segments[0].at(*s),
+                            Verdict::Near { s0, s1, .. } => tl.segments[0].at(0.5 * (s0 + s1)),
+                            Verdict::Clear => continue,
+                        };
+                        bad.push(format!(
+                            "{}: {} vs {} at {q:?}: {:?}",
+                            m.name, a.name, b.name, c.verdict
+                        ));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
 }

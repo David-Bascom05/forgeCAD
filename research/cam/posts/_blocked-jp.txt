@@ -1,0 +1,9 @@
+# group jp, 2026-11-23
+bilim.my.salesforce-sites.com/download/modelselect (Brother machine-tool download portal, linked from machinetool.global.brother)  HTTP 503 "CatalogInMaintenance" (catalogs only)
+machinetool.global.brother  no programming/instruction manual download; manual ships with machine ("Instruction Manual (1 set)" accessory)
+www.okuma.com/blog/blog-wheres-my-machine-manual  HTTP 403
+www.okuma.com/manuals  HTTP 403
+www.okuma.co.jp/support/  200, only catalog download via form (okuma.satori.site/catalogdownload); no manuals
+www.mazak.com/us-en/support/  HTTP 406
+www.mazak.jp/support/  TLS failure: certificate expired (curl 60)
+Mazak MPower portal  login required (gated)

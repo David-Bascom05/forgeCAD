@@ -47,8 +47,8 @@ pub fn lathe(src: &str, name: &str) -> Result<Lathe, MachineError> {
         machine: name.into(),
         what: what.into(),
     };
-    if toml::text(m, "kind") != Some("lathe") && toml::text(m, "kind") != Some("mill-turn") {
-        return Err(missing("kind = \"lathe\" or \"mill-turn\""));
+    if !matches!(toml::text(m, "kind"), Some("lathe" | "mill-turn" | "turn-mill")) {
+        return Err(missing("kind = \"lathe\", \"mill-turn\" or \"turn-mill\""));
     }
     let control = toml::text(m, "control")
         .ok_or_else(|| missing("control"))?

@@ -101,12 +101,34 @@ fn quantisation_is_exact() {
     assert!(quant(f64::NAN, 3).is_err());
 }
 
+/// The test program without what the dialect refuses by design (a dwell whose units no open
+/// source gives, a coolant whose code is machine-configured): those refusals are tested apart.
+fn prog_for(d: &Dialect, tap: bool) -> Program {
+    let mut p = prog(tap);
+    if d.s("dwell").is_empty() {
+        p.recs.retain(|r| {
+            !matches!(
+                r,
+                Rec::Dwell(_)
+                    | Rec::Cycle {
+                        kind: CycleKind::Dwell,
+                        ..
+                    }
+            )
+        });
+    }
+    if d.s("coolant_flood").is_empty() {
+        p.recs.retain(|r| !matches!(r, Rec::Coolant(_)));
+    }
+    p
+}
+
 #[test]
 fn every_dialect_round_trips() {
     for (name, _) in DIALECTS {
         let d = Dialect::get(name).unwrap();
-        let mut p = prog(false);
-        if name != "grbl" {
+        let mut p = prog_for(&d, false);
+        if !d.lines("retract_home").is_empty() {
             p.recs.push(Rec::Home);
         }
         let q = quantize(&p, &d).unwrap();
@@ -133,9 +155,16 @@ fn refusals_are_typed() {
     let q = quantize(&prog(true), &f).unwrap();
     assert!(round_trip(&q, &f).is_ok());
     assert!(matches!(
-        Dialect::get("heidenhain"),
+        Dialect::get("no-such-control"),
         Err(PostError::UnknownDialect { .. })
     ));
+    // a real control whose manual is not open: refused with the reason
+    for (n, _) in UNAVAILABLE {
+        assert!(
+            matches!(Dialect::get(n), Err(PostError::Unavailable { .. })),
+            "{n}"
+        );
+    }
     // a cycle not started over its first hole
     let mut p = prog(false);
     p.recs.retain(|r| !matches!(r, Rec::Rapid(v) if v[0] == 30.0));
@@ -348,4 +377,188 @@ fn round_trip_compares_what_the_control_executes() {
     };
     let e = round_trip(&q, &d).unwrap_err();
     assert!(e.contains("differs"), "{e}");
+}
+
+/// The data-driven extras a non-Fanuc control needs: an end-of-line comment, a block terminator,
+/// a `%` header, a dwell in another word, G codes that carry no motion; and per-code citations.
+const EXTRAS: &str = r#"
+[dialect]
+name = "extras"
+decimals = 3
+feed_decimals = 0
+point = "always"
+program_open = ["%P{num} G71", "G15 H1"]
+program_close = ["M30"]
+comment = "; {text}"
+comment_eol = ";"
+comment_strip = ";"
+block_end = " *"
+line_numbers = true
+safe_start = ["G90 G17 G94"]
+tool_change = ["T{t} M06"]
+length_comp = "G56 H{h}"
+spindle_cw = "S{rpm} M03"
+spindle_ccw = "S{rpm} M04"
+spindle_stop = "M05"
+wcs = "G15 H{n}"
+wcs_first = 1
+wcs_count = 6
+arc = "ijk"
+retract_home = ["G53 Z0."]
+coolant_flood = "M08"
+coolant_mist = "M07"
+coolant_off = "M09"
+dwell = "G04 F{s}"
+cycle_drill = "expand"
+cycle_dwell = "expand"
+cycle_peck = "expand"
+cycle_chipbreak = "expand"
+cycle_tap = "refuse"
+cycle_ream = "expand"
+read_g_ignore = [15, 71]
+read_g_skip = [56]
+"#;
+
+#[test]
+fn data_driven_extras_round_trip() {
+    let d = Dialect::parse(EXTRAS).unwrap();
+    let mut p = prog(false);
+    p.recs.push(Rec::Home);
+    let q = quantize(&p, &d).unwrap();
+    let (txt, back) = round_trip(&q, &d).unwrap_or_else(|e| panic!("{e}"));
+    assert!(back.len() > 20);
+    assert!(txt.starts_with("%P1001 G71\nN10 G15 H1 *\n"), "{txt}");
+    // a comment runs to the end of its line: no terminator after it
+    assert!(txt.contains("N30 ; op1 (face)\n"), "{txt}");
+    assert!(txt.contains("G04 F0.5 *"), "{txt}");
+    // a comment after a block is dropped by the reader, the terminator too
+    assert!(read("G0 X1. Y1. Z1. ; here *\nG1 X2. F100 *\n", &d).is_ok());
+    // what the dialect does not list is still refused
+    assert!(read("G0 X1. Y1. Z1. *\nG41 D1 *\n", &d).is_err());
+}
+
+#[test]
+fn a_cited_dialect_cites_every_code_it_sets() {
+    let uncited = format!("{EXTRAS}cite_required = true\n");
+    assert!(matches!(Dialect::parse(&uncited), Err(PostError::Dialect(_))));
+    // every key cited: accepted, and the cites are kept
+    let mut cited = uncited.clone();
+    let keys: Vec<&str> = KEYS
+        .iter()
+        .copied()
+        .filter(|k| EXTRAS.contains(&format!("\n{k} =")))
+        .collect();
+    for k in &keys {
+        cited.push_str(&format!(
+            "[[dialect.cite]]\nkey = \"{k}\"\nsource = \"https://example.org/manual.pdf\"\ntaken = \"2026-11-23\"\nwhere = \"p. 1\"\n"
+        ));
+    }
+    let d = Dialect::parse(&cited).unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(d.cites.len(), keys.len());
+    // a published cite without its source is refused
+    let bad = format!("{cited}[[dialect.cite]]\nkey = \"dwell\"\n");
+    assert!(Dialect::parse(&bad).is_err());
+}
+
+#[test]
+fn siemens_iso_program_reads_as_the_manual_says() {
+    let d = Dialect::get("siemens").unwrap();
+    assert!(d.cites.len() >= 25);
+    let mut p = prog(true);
+    p.recs.push(Rec::Home);
+    let q = quantize(&p, &d).unwrap();
+    let (txt, _) = round_trip(&q, &d).unwrap();
+    // ISO mode selected alone in the first block, metric in its own block, G43 under G00
+    assert!(txt.starts_with("N10 G291\nN20 (flange op 1)\nN30 G21\n"), "{txt}");
+    assert!(txt.contains("G00 G43 H1"), "{txt}");
+    assert!(txt.contains("G04 X0.5"), "{txt}");
+    assert!(txt.contains("G98 G82 X0. Y-30. Z-3. R2. P250 F120."), "{txt}");
+    // peck and chip-break retracts are GUD settings: posted as moves
+    assert!(!txt.contains("G83") && !txt.contains("G73"), "{txt}");
+    eprintln!("{txt}");
+}
+
+#[test]
+fn heidenhain_iso_program_reads_as_the_manual_says() {
+    let d = Dialect::get("heidenhain").unwrap();
+    let q = quantize(&prog(false), &d).unwrap();
+    let (txt, _) = round_trip(&q, &d).unwrap();
+    assert!(
+        txt.starts_with("%P1001 G71 *\nN10 G40 G90*\nN20 ;op1 (face)\n"),
+        "{txt}"
+    );
+    assert!(txt.ends_with("M30*\nN99999999 %P1001 G71 *\n"), "{txt}");
+    // tool call by T (no M6), speed in a bare T block, centre-first arcs, signed words
+    assert!(
+        txt.contains("T1 G17*") && txt.contains("T G17 S9549*") && txt.contains("M3*"),
+        "{txt}"
+    );
+    assert!(
+        txt.contains("I+43 J-40*\nN") && txt.contains("G03 X+46 Y-40"),
+        "{txt}"
+    );
+    assert!(txt.contains("G04 F0.25*"), "{txt}");
+    assert!(
+        !txt.contains("G81") && !txt.contains("G83") && !txt.contains("M6"),
+        "{txt}"
+    );
+    // tapping and a machine-home retract are refused, a second work offset too
+    let mut p = prog(true);
+    let qt = quantize(&p, &d).unwrap();
+    assert!(matches!(print(&qt, &d), Err(PostError::Unsupported { .. })));
+    p = prog(false);
+    p.recs.push(Rec::Home);
+    assert!(matches!(
+        print(&quantize(&p, &d).unwrap(), &d),
+        Err(PostError::Unsupported { .. })
+    ));
+    p = prog(false);
+    p.recs.insert(0, Rec::Wcs(1));
+    assert!(matches!(
+        print(&quantize(&p, &d).unwrap(), &d),
+        Err(PostError::Unsupported { .. })
+    ));
+    eprintln!("{txt}");
+}
+
+#[test]
+fn machine_configured_codes_are_refused_not_guessed() {
+    // Mach3: the dwell unit and the flood/mist outputs are settings the program cannot see
+    let d = Dialect::get("mach3").unwrap();
+    let mut p = prog(false);
+    p.recs.retain(|r| !matches!(r, Rec::Coolant(_)));
+    assert!(matches!(
+        print(&quantize(&p, &d).unwrap(), &d),
+        Err(PostError::Unsupported { .. })
+    ));
+    let p = prog_for(&d, false);
+    let mut with_flood = p.clone();
+    with_flood.recs.insert(3, Rec::Coolant(Coolant::Flood));
+    assert!(matches!(
+        print(&quantize(&with_flood, &d).unwrap(), &d),
+        Err(PostError::Unsupported { .. })
+    ));
+    assert!(print(&quantize(&p, &d).unwrap(), &d).is_ok());
+    // PathPilot's G84 dwells by default when P is left out: refused; MASSO has no G84
+    for n in ["pathpilot", "masso"] {
+        let d = Dialect::get(n).unwrap();
+        let q = quantize(&prog_for(&d, true), &d).unwrap();
+        assert!(matches!(print(&q, &d), Err(PostError::Unsupported { .. })), "{n}");
+    }
+    // Centroid: parentheses are expressions there, so no comment is written with them
+    let d = Dialect::get("centroid-cnc12").unwrap();
+    let txt = print(&quantize(&prog(false), &d).unwrap(), &d).unwrap();
+    assert!(!txt.contains('(') && txt.contains("; op1 face"), "{txt}");
+    // every dialect restated from a maker's manual cites every code it sets
+    for n in [
+        "siemens",
+        "heidenhain",
+        "pathpilot",
+        "mach3",
+        "mach4",
+        "centroid-cnc12",
+        "masso",
+    ] {
+        assert!(!Dialect::get(n).unwrap().cites.is_empty(), "{n}");
+    }
 }

@@ -138,12 +138,37 @@ fn random_program(r: &mut Lcg, dialect: &str) -> Program {
     }
 }
 
+/// The program without what the dialect refuses by design (forge-post's typed refusals are tested
+/// in forge-post): a coolant it has no code for, a dwell whose units no open source gives, a
+/// refused tap, a machine-home retract it cannot write, a work offset past its count.
+fn fit(mut p: Program, d: &Dialect) -> Program {
+    let key = |c: &Coolant| match c {
+        Coolant::Flood => "coolant_flood",
+        Coolant::Mist => "coolant_mist",
+        Coolant::Through => "coolant_through",
+        Coolant::Off => "coolant_off",
+    };
+    p.recs.retain(|r| match r {
+        Rec::Coolant(c) => !d.template(key(c)).is_empty(),
+        Rec::Dwell(_) => !d.template("dwell").is_empty(),
+        Rec::Cycle {
+            kind: CycleKind::Dwell,
+            ..
+        } => !d.template("dwell").is_empty() || d.template("cycle_dwell") != "expand",
+        Rec::Cycle {
+            kind: CycleKind::Tap, ..
+        } => !matches!(d.template("cycle_tap"), "refuse" | ""),
+        Rec::Home => d.has_lines("retract_home"),
+        _ => true,
+    });
+    p
+}
+
 /// Our events in forge-post's Motion vocabulary.
 fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
     let ix = |l: char| c.letters.iter().position(|x| *x == l).unwrap();
     let (xi, yi, zi) = (ix('X'), ix('Y'), ix('Z'));
     let mut out = Vec::new();
-    let mut pos: Option<[i64; 3]> = None;
     let mut last_comment = String::new();
     let full3 = |v: &Vec<Option<i64>>| [v[xi].unwrap(), v[yi].unwrap(), v[zi].unwrap()];
     for e in evs {
@@ -151,32 +176,28 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
             Ev::Rapid(v) => {
                 let p = full3(v);
                 out.push(Motion::Rapid(p));
-                pos = Some(p);
             }
             Ev::Feed { to, f, .. } => {
                 let p = full3(to);
                 out.push(Motion::Feed(p, *f));
-                pos = Some(p);
             }
             Ev::Arc {
                 to,
                 plane: 17,
-                centre: Centre::Offset([i, j]),
+                centre: Centre::Abs([i, j]),
                 cw,
                 full,
                 f,
                 ..
             } => {
-                let s = pos.unwrap();
                 let p = full3(to);
                 out.push(Motion::Arc {
                     to: p,
-                    c: [s[0] + i, s[1] + j],
+                    c: [*i, *j],
                     cw: *cw,
                     f: *f,
                     full: *full,
                 });
-                pos = Some(p);
             }
             Ev::Arc { .. } => panic!("an arc forge-post does not write"),
             Ev::Dwell { ms } => out.push(Motion::Dwell(*ms)),
@@ -193,7 +214,6 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
                 if out.last() != Some(&Motion::Home) {
                     out.push(Motion::Home);
                 }
-                pos = None;
             }
             Ev::Comment(c) => last_comment = c.clone(),
             // grbl: the tool is named in the comment before M0
@@ -205,7 +225,13 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
                     .unwrap_or(0);
                 out.push(Motion::Tool(t));
             }
-            Ev::Select(_) | Ev::Length(_) | Ev::Wcs(_) | Ev::Clamp(_) | Ev::Stop { .. } | Ev::End => {}
+            Ev::Select(_)
+            | Ev::Length(_)
+            | Ev::Wcs(_)
+            | Ev::Clamp(_)
+            | Ev::Stop { .. }
+            | Ev::End
+            | Ev::Pallet => {}
         }
     }
     out
@@ -220,7 +246,7 @@ fn interpreter_agrees_with_forge_post_reader() {
         let def = &forge_machine::library::builtin()[0];
         let c = Control::for_machine(def, src, 1).unwrap();
         for _ in 0..60 {
-            let prog = random_program(&mut r, name);
+            let prog = fit(random_program(&mut r, name), &d);
             let q = forge_post::quantize(&prog, &d).unwrap();
             let text = forge_post::print(&q, &d).unwrap();
             let theirs = forge_post::read(&text, &d).unwrap();
@@ -244,5 +270,42 @@ fn interpreter_agrees_with_forge_post_reader() {
             n += 1;
         }
     }
-    assert_eq!(n, 240);
+    assert_eq!(n, 60 * forge_post::DIALECTS.len());
+}
+
+/// CAM-MACHINE review R1/R2: a `%` is skipped only as a tape mark or a `%` header/last block;
+/// an absolute-centre dialect's R arc keeps its R; an absolute-centre arc outside G17 is refused.
+#[test]
+fn dialect_shell_edges() {
+    let def = &forge_machine::library::builtin()[0];
+    let fanuc = Control::for_dialect(def, "fanuc", 1).unwrap();
+    let f = Dialect::get("fanuc").unwrap();
+    // R1: a block with % inside is refused, by both readers; % alone is a tape mark
+    let bad = "%\nG0 X0. Y0. Z5.\nG1 X10. F100. %\n";
+    assert!(gcode::run(bad, &fanuc).is_err());
+    assert!(forge_post::read(bad, &f).is_err());
+    assert!(gcode::run("%\nG0 X0. Y0. Z5.\n%\n", &fanuc).is_ok());
+    // Heidenhain: the header and the numbered last block are skipped
+    let hc = Control::for_dialect(def, "heidenhain", 1).unwrap();
+    let h = Dialect::get("heidenhain").unwrap();
+    let head = "%P1 G71 *\nN10 G00 X+0 Y+0 Z+5*\n";
+    let tail = "N99999999 %P1 G71 *\n";
+    // R2a: G02 with R after a centre block: no I/J added (the core takes the R arc)
+    let r_arc = format!("{head}N20 I+5 J+0*\nN30 G01 Z-1 F100*\nN40 G02 X+10 Y+0 R+5*\n{tail}");
+    let (blocks, _) = gcode::run(&r_arc, &hc).unwrap_or_else(|e| panic!("line {}: {}", e.line, e.what));
+    let r_ev = blocks.iter().find_map(|b| match &b.ev {
+        Ev::Arc { centre, .. } => Some(*centre),
+        _ => None,
+    });
+    assert!(matches!(r_ev, Some(Centre::R(_))), "{r_ev:?}");
+    // the centre form gives the same arc as the R form here (a half circle about (5, 0))
+    let c_arc = format!("{head}N20 I+5 J+0*\nN30 G01 Z-1 F100*\nN40 G02 X+10 Y+0*\n{tail}");
+    assert!(gcode::run(&c_arc, &hc).is_ok());
+    assert!(forge_post::read(&c_arc, &h).is_ok());
+    // R2b: an absolute-centre arc in G18 is refused (I K / J K are not modelled)
+    let g18 = format!("{head}N20 G18*\nN30 I+5 J+0*\nN40 G02 X+10 Z+5*\n{tail}");
+    let e = gcode::run(&g18, &hc).unwrap_err();
+    assert!(e.what.contains("outside G17"), "{}", e.what);
+    // a stray % in a Heidenhain block is refused too
+    assert!(gcode::run(&format!("{head}N20 G01 X+1 % F100*\n"), &hc).is_err());
 }

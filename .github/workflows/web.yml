@@ -188,7 +188,10 @@ jobs:
       - name: end to end
         if: matrix.test == 'e2e'
         working-directory: interface/forge-render
-        run: node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
+        run: |
+          node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/idle.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/cam.cjs "$GITHUB_WORKSPACE/target/web"
       - name: parity (shard ${{ matrix.test }} of 3)
         if: matrix.test != 'e2e'
         working-directory: interface/forge-render
