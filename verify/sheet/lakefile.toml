@@ -26,3 +26,9 @@ root = "OracleMain"
 [[require]]
 name = "ieee754"
 path = "../ieee754"
+
+# The shared signed winding number (verify/winding2d, core Lean, the same toolchain): Region.lean's
+# inPoly is its SoS count mod 2 (Sheet/Winding.lean).
+[[require]]
+name = "winding2d"
+path = "../winding2d"

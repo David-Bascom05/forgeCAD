@@ -12,6 +12,7 @@ pub mod cite;
 pub mod entry;
 pub mod feeds;
 pub mod instances;
+pub mod interface;
 pub mod life;
 pub mod resolve;
 pub mod toml;
@@ -722,6 +723,8 @@ pub struct Library {
     pub collets: Vec<Collet>,
     pub collet_nuts: Vec<ColletNut>,
     pub pull_studs: Vec<PullStud>,
+    /// Spindle interfaces' cited dimension tables (`[[interface]]`, data/interfaces.toml).
+    pub interfaces: Vec<interface::Interface>,
     pub inserts: Vec<turning::Insert>,
     pub turn_holders: Vec<turning::TurnHolder>,
     pub groove_inserts: Vec<turning::GrooveInsert>,
@@ -1102,6 +1105,7 @@ impl Library {
         unique!("collet", collets, Collet, "collet");
         unique!("collet_nut", collet_nuts, ColletNut, "collet nut");
         unique!("pull_stud", pull_studs, PullStud, "pull stud");
+        unique!("interface", interfaces, interface::Interface, "interface");
         unique!("insert", inserts, turning::Insert, "insert");
         unique!("turn_holder", turn_holders, turning::TurnHolder, "turning holder");
         unique!(
@@ -1140,6 +1144,11 @@ impl Library {
                 near: near(id, self.tools.iter().map(|t| t.id.as_str())),
             })
     }
+    /// The interface table a holder's `interface` names (by id or alias), if the library has one.
+    pub fn interface(&self, name: &str) -> Option<&interface::Interface> {
+        self.interfaces.iter().find(|i| i.is(name))
+    }
+
     pub fn holder(&self, id: &str) -> Result<&Holder, LibError> {
         self.holders
             .iter()
@@ -1189,7 +1198,7 @@ impl Library {
     }
     /// The chip factor record of an op class ("rough" | "finish").
     /// The generic class a tool cuts a group in: the narrowest class that has data, opening
-    /// the dimensions in `feeds::GENERIC_LEVELS` order (a dimension the tool does not state is
+    /// the dimensions in `feeds::generic_levels()` order (a dimension the tool does not state is
     /// open from the start).
     pub fn generic(&self, group: &str, op: &str, tc: &feeds::ToolClass) -> Option<&feeds::Generic> {
         feeds::generic_in(&self.generics, group, op, tc)

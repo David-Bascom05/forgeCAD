@@ -6,6 +6,7 @@
 //! Linking is by retract: up to the retract height (above everything the op cuts), across at it,
 //! and down at the plunge feed. Rapids run at the clearance height, above the stock.
 use crate::leads::{self, Leads};
+use crate::movememo::{self, MoveMemo};
 use crate::tabs::{self, TabShape, Tabs};
 use forge_cam_geom::check::{self, Face, Move, Verdict};
 use forge_cam_geom::offset::offset;
@@ -187,6 +188,68 @@ pub struct CheckSummary {
     pub cells: usize,
     pub clear: bool,
     pub least: f64,
+}
+
+/// A level arc (`Move::Arc`) proven clear at `limit` by its chords on the column route, or None:
+/// cut evenly in its parameter t into pieces of sagitta s ≤ tol/8 (a piece spans at most 2h of
+/// angle, so it lies within r h²/2 of its chord); each chord, per face, cleared by the closed
+/// form at limit + s, or by the column grown by s (which holds the body anywhere within s of the
+/// chord, so its vertical gap bounds the arc's) at limit on a small budget. The lower bound: s
+/// under the chords' least.
+fn arc_by_chords(
+    col: &forge_cam_geom::drop::Column,
+    body: &forge_cam_geom::tool::Body,
+    f: &Face,
+    m: &Move,
+    limit: f64,
+    tol: f64,
+) -> Option<f64> {
+    use forge_cam_geom::drop::Gap;
+    use forge_cam_geom::ival::Ival;
+    let Move::Arc { c, x, y, r, t0, t1 } = *m else {
+        return None;
+    };
+    let ok = |v: f64| v.is_finite() && v.abs() <= 1e100;
+    if !(ok(r) && r > 0.0 && ok(t0) && ok(t1) && t0 <= t1 && ok(limit) && ok(tol) && tol > 0.0) {
+        return None;
+    }
+    let h_max = (0.25 * tol / r).sqrt();
+    let n = ((t1 - t0) / h_max).ceil().max(1.0);
+    // (a NaN or an overlong cut: not proven)
+    if n.is_nan() || n > 4096.0 {
+        return None;
+    }
+    let n = n as usize;
+    let h = (t1 - t0) / n as f64;
+    let scale = 1.0 + r + c.iter().fold(0.0f64, |a, v| a.max(v.abs()));
+    let sag = 1.01 * 0.5 * r * h * h + 1e-12 * scale;
+    let grown = col.grow(sag)?;
+    let at = |t: f64| -> [f64; 3] {
+        let d = 1.0 + t * t;
+        let (u, v) = ((1.0 - t * t) / d, 2.0 * t / d);
+        [
+            c[0] + r * (x[0] * u + y[0] * v),
+            c[1] + r * (x[1] * u + y[1] * v),
+            c[2] + r * (x[2] * u + y[2] * v),
+        ]
+    };
+    // outward-rounded, as `contact::clear_arc`
+    let lim = Ival::pt(limit).add(Ival::pt(sag)).hi;
+    let mut least = f64::INFINITY;
+    let mut a = at(t0);
+    for k in 1..=n {
+        let e = if k == n { at(t1) } else { at(t0 + h * k as f64) };
+        let ch = Move::Line { a, b: e };
+        match forge_cam_geom::contact::clear(body, f, &ch, lim) {
+            Some(Verdict::Clear { lower }) => least = least.min(lower),
+            _ => match forge_cam_geom::drop::gap_move(&grown, f, &ch, limit, tol / 4.0, 2_000).0 {
+                Gap::Clear { lower } => least = least.min(lower),
+                _ => return None,
+            },
+        }
+        a = e;
+    }
+    Some(Ival::pt(least).sub(Ival::pt(sag)).lo)
 }
 
 /// The moves of a path as the checker's (arcs cut into pieces of at most a quarter turn, cycles
@@ -435,6 +498,19 @@ pub fn certify_with(
     // cells, a rapid in the clear none) and the costly moves of a pass sit together, so large
     // chunks left one core with all of them (manifold's `shal`: 3 chunks of 64, one with every
     // costly move); a chunk's scratch is reset per move, so the size changes no result
+    // the per-move memo (movememo.rs): the tool's text and each face's, interned once per call
+    let tool_id = if movememo::on() {
+        MOVES.intern(format!("{:?}", (tool, column, tol, clearance, fclear)))
+    } else {
+        None
+    };
+    let lazy = |n: usize| -> Vec<std::sync::OnceLock<Option<u64>>> {
+        (0..n).map(|_| std::sync::OnceLock::new()).collect()
+    };
+    let part_ids = lazy(part.len());
+    let fix_ids = lazy(fixture.len());
+    let stage_ids: Vec<Vec<std::sync::OnceLock<Option<u64>>>> =
+        stages.iter().map(|s| lazy(s.1.len())).collect();
     const CHUNK: usize = 8;
     let nchunks = mv.len().div_ceil(CHUNK);
     let nstock = stages.iter().map(|s| s.1.len()).max().unwrap_or(0);
@@ -483,12 +559,11 @@ pub fn certify_with(
             }
             let stock: &[Face] = &stages[st].1;
             let sgrid = &sgrids[st];
-            for b in &tool.shape.bodies {
-                // on the surfacing route a move that has failed is not checked further (its
-                // failure is reported; the rest of its faces could only add to it)
-                if col.is_some() && !o.fails.is_empty() {
-                    break;
-                }
+            // the plan: for each body, each face set it is checked against, the limit, and the
+            // faces near it in the order they are checked (a pure function of the move, the tool
+            // and the faces; the checks below follow it, and the memo is keyed by it)
+            let mut plan: Vec<(usize, usize, f64, Vec<u32>)> = Vec::new();
+            for (bi, b) in tool.shape.bodies.iter().enumerate() {
                 let sb = check::swept_box_body(m, b);
                 // the part: the cutter may touch it within tol on a cut; nothing else may touch it
                 for (set, (faces, what, grid)) in [
@@ -528,121 +603,238 @@ pub fn certify_with(
                         clearance
                     };
                     grid.near(&sb, &mut cand, &mut seen);
-                    for &fi in &cand {
-                        if col.is_some() && !o.fails.is_empty() {
-                            break;
-                        }
-                        let f = &faces[fi as usize];
-                        if check::apart(&sb, &f.bbox, limit.max(0.0) + f.mu) {
+                    let near: Vec<u32> = cand
+                        .iter()
+                        .copied()
+                        .filter(|&fi| {
+                            !check::apart(
+                                &sb,
+                                &faces[fi as usize].bbox,
+                                limit.max(0.0) + faces[fi as usize].mu,
+                            )
+                        })
+                        .collect();
+                    plan.push((bi, set, limit, near));
+                }
+            }
+            // the memo's key: the move, its phase, the tool, and the plan with each face by its
+            // interned text (and which visits share a face's scratch: the same set and face)
+            let mut slots: Vec<(usize, u32)> = Vec::new();
+            let slot_of = |slots: &mut Vec<(usize, u32)>, set: usize, fi: u32| match slots
+                .iter()
+                .position(|&x| x == (set, fi))
+            {
+                Some(k) => k,
+                None => {
+                    slots.push((set, fi));
+                    slots.len() - 1
+                }
+            };
+            for (_, set, _, near) in &plan {
+                for &fi in near {
+                    slot_of(&mut slots, *set, fi);
+                }
+            }
+            let key = tool_id.and_then(|tid| {
+                let mut visits: Vec<Visit> = Vec::with_capacity(plan.len());
+                for (bi, set, limit, near) in &plan {
+                    let mut v = Vec::with_capacity(near.len());
+                    for &fi in near {
+                        let slot = slots
+                            .iter()
+                            .position(|&x| x == (*set, fi))
+                            .expect("every visit has a slot");
+                        let gid = match set {
+                            0 => face_id(&part_ids, part, fi)?,
+                            1 => face_id(&stage_ids[st], stock, fi)?,
+                            _ => face_id(&fix_ids, fixture, fi)?,
+                        };
+                        v.push((slot, gid));
+                    }
+                    visits.push((*bi, *set, *limit, v));
+                }
+                Some(format!("move/1 {:?} {:?} {tid} {:?}", m, phase, visits))
+            });
+            if let Some(k) = &key
+                && let Some(mut hit) = MOVES.get(k)
+            {
+                for (f, &k) in hit.fails.iter_mut().zip(&hit.fail_slot) {
+                    f.0.move_index = *idx;
+                    // the face's name as this call numbers it
+                    let (set, fi) = slots[k];
+                    f.0.other = match set {
+                        0 => format!("part face {}", part[fi as usize].id),
+                        1 => format!("stock face {}", stock[fi as usize].id),
+                        _ => format!("fixture face {}", fixture[fi as usize].id),
+                    };
+                }
+                outs.push(hit);
+                continue;
+            }
+            let mut last_here = 0usize;
+            'plan: for (bi, set, limit, near) in &plan {
+                let b = &tool.shape.bodies[*bi];
+                let (faces, what) = match set {
+                    0 => (part, "part"),
+                    1 => (stock, "stock"),
+                    _ => (fixture, "fixture"),
+                };
+                let limit = *limit;
+                for &fi in near {
+                    // on the surfacing route a move that has failed is not checked further (its
+                    // failure is reported; the rest of its faces could only add to it)
+                    if col.is_some() && !o.fails.is_empty() {
+                        break 'plan;
+                    }
+                    let f = &faces[fi as usize];
+                    // the checks the last visit failed are that visit's face's
+                    let here = slots
+                        .iter()
+                        .position(|&x| x == (*set, fi))
+                        .expect("every visit has a slot");
+                    while o.fail_slot.len() < o.fails.len() {
+                        o.fail_slot.push(last_here);
+                    }
+                    last_here = here;
+                    o.pairs += 1;
+                    let slot = &mut shared[*set][fi as usize];
+                    if slot.is_none() {
+                        touched.push((*set, fi as usize));
+                    }
+                    if let Some(col) = &col
+                        && what == "part"
+                        && limit <= 0.0
+                        && *phase != Phase::Rapid
+                        && col.holds_or_is(b)
+                    {
+                        // the certifier's closed forms first (contact.rs: a ball's
+                        // line, or level arc by its chords, against a curved or sloped face): a
+                        // Clear there is the body's own signed distance, the certifier's measure
+                        // (prisms too: this route has no slab path for them, and a level arc
+                        // against a prism wall is the search's slowest case)
+                        let cf = match f.surf {
+                            forge_cam_geom::check::Surf::Plane { .. } if m.planar().is_some() => None,
+                            _ => match m {
+                                Move::Arc { .. } => forge_cam_geom::contact::clear_arc(b, f, m, limit),
+                                _ => forge_cam_geom::contact::clear(b, f, m, limit),
+                            },
+                        };
+                        if let Some(Verdict::Clear { lower }) = cf {
+                            if b.part == Part::Cutter {
+                                o.least = o.least.min(lower);
+                            }
                             continue;
                         }
-                        o.pairs += 1;
-                        let slot = &mut shared[set][fi as usize];
-                        if slot.is_none() {
-                            touched.push((set, fi as usize));
-                        }
-                        if let Some(col) = &col
-                            && what == "part"
-                            && limit <= 0.0
-                            && *phase != Phase::Rapid
-                            && col.holds_or_is(b)
-                        {
-                            let (g, n) = forge_cam_geom::drop::gap_move(col, f, m, limit, tol / 4.0, 200_000);
-                            o.cells += n;
-                            match g {
-                                forge_cam_geom::drop::Gap::Clear { lower } => {
-                                    if b.part == Part::Cutter {
-                                        o.least = o.least.min(lower);
-                                    }
-                                    continue;
-                                }
-                                forge_cam_geom::drop::Gap::Over { s, p, q, .. } => {
-                                    // the column's witness: this body's own signed distance there,
-                                    // proven below the limit (by mu more), is a real violation
-                                    let (pi, qi) = (
-                                        forge_cam_geom::ival::Ival::pt(p),
-                                        forge_cam_geom::ival::Ival::pt(q),
-                                    );
-                                    let y = f.surf.eval(pi, qi);
-                                    let t = m.at(forge_cam_geom::ival::Ival::pt(s));
-                                    let sd = b.sd(y[0].sub(t[0]), y[1].sub(t[1]), y[2].sub(t[2]));
-                                    let d = sd.add(forge_cam_geom::ival::Ival::pt(f.mu)).hi;
-                                    if f.holds(pi, qi) == 1 && d < limit {
-                                        let at = [y[0].mid(), y[1].mid(), y[2].mid()];
-                                        o.fails.push((
-                                            CheckOut {
-                                                rule: if b.part == Part::Cutter {
-                                                    "gouge"
-                                                } else {
-                                                    "holder_collision"
-                                                },
-                                                verdict: "fail",
-                                                value: d,
-                                                limit,
-                                                at,
-                                                tool_part: if b.part == Part::Cutter {
-                                                    "cutter"
-                                                } else {
-                                                    "shank/holder"
-                                                },
-                                                other: format!("{what} face {}", f.id),
-                                                phase: phase.name(),
-                                                move_index: *idx,
-                                                path: 0,
-                                            },
-                                            o.pairs,
-                                            o.cells,
-                                            o.least,
-                                        ));
-                                        continue;
-                                    }
-                                }
-                                forge_cam_geom::drop::Gap::Unknown => {}
+                        // a level arc the closed form does not clear (a face's full surface near it): its
+                        // chords, each by the closed form or the column grown by their sagitta (it holds the
+                        // cutter anywhere within that of a chord); undecided, the arc's own search below
+                        if let Some(lower) = arc_by_chords(col, b, f, m, limit, tol) {
+                            if b.part == Part::Cutter {
+                                o.least = o.least.min(lower);
                             }
+                            continue;
                         }
-                        let (v, n) = check::certify_shared(b, f, m, limit, tol / 4.0, 200_000, slot);
+                        let (g, n) = forge_cam_geom::drop::gap_move(col, f, m, limit, tol / 4.0, 200_000);
                         o.cells += n;
-                        let rule = match (b.part, *phase, what) {
-                            (_, _, "fixture") => "fixture_collision",
-                            _ if tool.probe => "probe_clear",
-                            (_, Phase::Rapid, _) => "rapid_clear",
-                            (Part::Cutter, _, "part") => "gouge",
-                            _ => "holder_collision",
-                        };
-                        let tool_part = if b.part == Part::Cutter {
-                            "cutter"
-                        } else {
-                            "shank/holder"
-                        };
-                        let (verdict, value, at) = match v {
-                            Verdict::Clear { lower } => {
-                                if what == "part" && b.part == Part::Cutter {
+                        match g {
+                            forge_cam_geom::drop::Gap::Clear { lower } => {
+                                if b.part == Part::Cutter {
                                     o.least = o.least.min(lower);
                                 }
                                 continue;
                             }
-                            Verdict::Hit { d, at, .. } => ("fail", d, at),
-                            Verdict::Undecided { lower, .. } => ("undecided", lower, [f64::NAN; 3]),
-                        };
-                        o.fails.push((
-                            CheckOut {
-                                rule,
-                                verdict,
-                                value,
-                                limit,
-                                at,
-                                tool_part,
-                                other: format!("{what} face {}", f.id),
-                                phase: phase.name(),
-                                move_index: *idx,
-                                path: 0,
-                            },
-                            o.pairs,
-                            o.cells,
-                            o.least,
-                        ));
+                            forge_cam_geom::drop::Gap::Over { s, p, q, .. } => {
+                                // the column's witness: this body's own signed distance there,
+                                // proven below the limit (by mu more), is a real violation
+                                let (pi, qi) = (
+                                    forge_cam_geom::ival::Ival::pt(p),
+                                    forge_cam_geom::ival::Ival::pt(q),
+                                );
+                                let y = f.surf.eval(pi, qi);
+                                let t = m.at(forge_cam_geom::ival::Ival::pt(s));
+                                let sd = b.sd(y[0].sub(t[0]), y[1].sub(t[1]), y[2].sub(t[2]));
+                                let d = sd.add(forge_cam_geom::ival::Ival::pt(f.mu)).hi;
+                                if f.holds(pi, qi) == 1 && d < limit {
+                                    let at = [y[0].mid(), y[1].mid(), y[2].mid()];
+                                    o.fails.push((
+                                        CheckOut {
+                                            rule: if b.part == Part::Cutter {
+                                                "gouge"
+                                            } else {
+                                                "holder_collision"
+                                            },
+                                            verdict: "fail",
+                                            value: d,
+                                            limit,
+                                            at,
+                                            tool_part: if b.part == Part::Cutter {
+                                                "cutter"
+                                            } else {
+                                                "shank/holder"
+                                            },
+                                            other: format!("{what} face {}", f.id),
+                                            phase: phase.name(),
+                                            move_index: *idx,
+                                            path: 0,
+                                        },
+                                        o.pairs,
+                                        o.cells,
+                                        o.least,
+                                    ));
+                                    continue;
+                                }
+                            }
+                            forge_cam_geom::drop::Gap::Unknown => {}
+                        }
                     }
+                    let (v, n) = check::certify_shared(b, f, m, limit, tol / 4.0, 200_000, slot);
+                    o.cells += n;
+                    let rule = match (b.part, *phase, what) {
+                        (_, _, "fixture") => "fixture_collision",
+                        _ if tool.probe => "probe_clear",
+                        (_, Phase::Rapid, _) => "rapid_clear",
+                        (Part::Cutter, _, "part") => "gouge",
+                        _ => "holder_collision",
+                    };
+                    let tool_part = if b.part == Part::Cutter {
+                        "cutter"
+                    } else {
+                        "shank/holder"
+                    };
+                    let (verdict, value, at) = match v {
+                        Verdict::Clear { lower } => {
+                            if what == "part" && b.part == Part::Cutter {
+                                o.least = o.least.min(lower);
+                            }
+                            continue;
+                        }
+                        Verdict::Hit { d, at, .. } => ("fail", d, at),
+                        Verdict::Undecided { lower, .. } => ("undecided", lower, [f64::NAN; 3]),
+                    };
+                    o.fails.push((
+                        CheckOut {
+                            rule,
+                            verdict,
+                            value,
+                            limit,
+                            at,
+                            tool_part,
+                            other: format!("{what} face {}", f.id),
+                            phase: phase.name(),
+                            move_index: *idx,
+                            path: 0,
+                        },
+                        o.pairs,
+                        o.cells,
+                        o.least,
+                    ));
                 }
+            }
+            while o.fail_slot.len() < o.fails.len() {
+                o.fail_slot.push(last_here);
+            }
+            if let Some(k) = key {
+                MOVES.put(k, o.clone());
             }
             outs.push(o);
         }
@@ -672,13 +864,40 @@ pub fn certify_with(
     sum
 }
 
+/// A move's visits as its memo key holds them: (body, face set, limit, [(the face's scratch slot,
+/// its interned text)]).
+type Visit = (usize, usize, f64, Vec<(usize, u64)>);
+
+/// The moves' checks made by earlier certifications in this process (movememo.rs).
+static MOVES: MoveMemo<MoveOut> = MoveMemo::new();
+
+/// A face's interned text (its `Debug`, every field but its id), once per certification call.
+/// The id is only the name a check's `other` gives it, put back on the way out: an edit that
+/// renumbers the faces leaves the others' checks in the memo.
+fn face_id(ids: &[std::sync::OnceLock<Option<u64>>], faces: &[Face], fi: u32) -> Option<u64> {
+    *ids[fi as usize].get_or_init(|| {
+        let mut f = faces[fi as usize].clone();
+        f.id = 0;
+        MOVES.intern(format!("{f:?}"))
+    })
+}
+
+/// (moves worked out, moves taken from the memo) by this process's certifications (tests).
+#[doc(hidden)]
+pub fn move_memo_counts() -> (u64, u64) {
+    MOVES.counts()
+}
+
 /// One move's checks, as the merge needs them: its counts, its least cutter distance, each
 /// failing check with the counts and least as they stood when it was found.
+#[derive(Clone)]
 struct MoveOut {
     pairs: usize,
     cells: usize,
     least: f64,
     fails: Vec<(CheckOut, usize, usize, f64)>,
+    /// Each failing check's face, by its place in the move's visits (first seen first).
+    fail_slot: Vec<usize>,
     containment: Option<CheckOut>,
 }
 
@@ -689,6 +908,7 @@ impl Default for MoveOut {
             cells: 0,
             least: f64::INFINITY,
             fails: vec![],
+            fail_slot: vec![],
             containment: None,
         }
     }
@@ -2077,5 +2297,184 @@ impl TanDeg for f64 {
     fn to_radians_tan(self) -> f64 {
         let r = self.to_radians();
         dmath::sin(r) / dmath::cos(r)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use forge_cam_geom::check::Surf;
+    use forge_cam_geom::drop::{Column, Gap, gap_move};
+    use forge_cam_geom::ival::Ival;
+    use forge_cam_geom::tool::{Cutter, assemble};
+
+    /// `arc_by_chords` keeps the chords' sagitta: a long shallow arc over a horizontal
+    /// cylinder's ridge whose one chord is clear of the ridge (by about 0.015) while the arc
+    /// itself dips into it (by about 0.015) is not cleared. With the sagitta dropped from the
+    /// closed form's limit, or the column not grown by it, the chord alone would clear it.
+    #[test]
+    fn arc_by_chords_keeps_the_sagitta() {
+        let body = assemble(&Cutter::Ball { d: 6.0 }, 18.0, 6.0, 24.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
+        let col = Column::of(&body).unwrap();
+        let f = Face::new(
+            Surf::Cyl {
+                o: [0.0, 0.0, -5.0],
+                x: [0.0, 1.0, 0.0],
+                y: [0.0, 0.0, 1.0],
+                ax: [1.0, 0.0, 0.0],
+                r: 5.0,
+            },
+            Ival::new(-1.0, 1.0),
+            Ival::new(-20.0, 20.0),
+            None,
+            0.0,
+            1,
+        );
+        // the ball's centre must stay 8 from the cylinder's axis (y, z) = (0, -5); the arc, of
+        // radius 20 about (0, 21), comes to y = 1 at its middle and its chord to y = 21 - 20 cos φ
+        let phi: f64 = 0.15;
+        let y_chord = 21.0 - 20.0 * forge_math::dmath::cos(phi);
+        // the centre's height over the axis where the clearance is 0 halfway between them
+        let ym = 0.5 * (1.0 + y_chord);
+        let zc = (64.0 - ym * ym).sqrt();
+        let clear_at = |y: f64| (y * y + zc * zc).sqrt() - 8.0;
+        assert!(
+            clear_at(1.0) < -1e-3 && clear_at(y_chord) > 1e-3,
+            "{} {}",
+            clear_at(1.0),
+            clear_at(y_chord)
+        );
+        let th = forge_math::dmath::sin(0.5 * phi) / forge_math::dmath::cos(0.5 * phi);
+        let m = Move::Arc {
+            c: [0.0, 21.0, zc - 5.0 - 3.0],
+            x: [0.0, -1.0, 0.0],
+            y: [1.0, 0.0, 0.0],
+            r: 20.0,
+            t0: -th,
+            t1: th,
+        };
+        // one chord (the sagitta bound r h²/2 with h = 2 tan(φ/2) is within tol/8 at tol 2)
+        assert!(arc_by_chords(&col, &body, &f, &m, 0.0, 2.0).is_none());
+        // and the chord alone, as a line, is clear at the limit: only the sagitta refuses the arc
+        let ch = Move::Line {
+            a: [-20.0 * forge_math::dmath::sin(phi), y_chord, zc - 8.0],
+            b: [20.0 * forge_math::dmath::sin(phi), y_chord, zc - 8.0],
+        };
+        let by_form = matches!(
+            forge_cam_geom::contact::clear(&body, &f, &ch, 0.0),
+            Some(Verdict::Clear { .. })
+        );
+        let by_col = matches!(gap_move(&col, &f, &ch, 0.0, 0.002, 200_000).0, Gap::Clear { .. });
+        assert!(by_form || by_col, "the chord itself should be clear at the limit");
+    }
+
+    /// The column route's arc fallback (`arc_by_chords`): where it clears a level arc, the
+    /// column's own search on the whole arc never finds it over the bound; an arc moved into
+    /// the face is not cleared.
+    #[test]
+    fn an_arc_cleared_by_its_chords_is_never_over_by_the_search() {
+        let body = assemble(&Cutter::Ball { d: 6.0 }, 18.0, 6.0, 24.0, None)
+            .unwrap()
+            .bodies[0]
+            .clone();
+        let col = Column::of(&body).unwrap();
+        let mut seed = 0x853c49e6748fea9bu64;
+        let mut rnd = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let (mut cleared, mut k) = (0, 0);
+        while k < 60 {
+            let rc = 3.0 + rnd() * 8.0;
+            let f = Face::new(
+                Surf::Cyl {
+                    o: [0.0, 0.0, -5.0],
+                    x: [0.0, 1.0, 0.0],
+                    y: [0.0, 0.0, 1.0],
+                    ax: [1.0, 0.0, 0.0],
+                    r: rc,
+                },
+                Ival::new(-1.0, 1.0),
+                Ival::new(-20.0, 20.0),
+                None,
+                0.0,
+                1,
+            );
+            let (ux, uy) = (rnd() - 0.5, rnd() - 0.5);
+            let l = (ux * ux + uy * uy).sqrt().max(1e-3);
+            let (cs, sn) = (ux / l, uy / l);
+            // a tip height from just over the cylinder's top to well above it
+            let z = -5.0 + rc + rnd() * 3.0 - 0.2;
+            let m = Move::Arc {
+                c: [rnd() * 16.0 - 8.0, rnd() * 16.0 - 8.0, z],
+                x: [cs, sn, 0.0],
+                y: [-sn, cs, 0.0],
+                r: 0.5 + rnd() * 8.0,
+                t0: -rnd() * 0.9,
+                t1: rnd() * 0.9,
+            };
+            if let Some(lower) = arc_by_chords(&col, &body, &f, &m, -0.01, 0.01) {
+                assert!(lower >= -0.01 - 1e-9, "k={k}: cleared below the limit: {lower}");
+                let (g, _) = gap_move(&col, &f, &m, lower - 1e-6, 0.002, 200_000);
+                assert!(
+                    !matches!(g, Gap::Over { .. }),
+                    "k={k}: chords clear at {lower}, the search is over: {g:?}"
+                );
+                cleared += 1;
+            }
+            k += 1;
+        }
+        assert!(cleared > 10, "{cleared}");
+        // straight through the cylinder's top: never cleared
+        let f = Face::new(
+            Surf::Cyl {
+                o: [0.0, 0.0, -5.0],
+                x: [0.0, 1.0, 0.0],
+                y: [0.0, 0.0, 1.0],
+                ax: [1.0, 0.0, 0.0],
+                r: 5.0,
+            },
+            Ival::new(-1.0, 1.0),
+            Ival::new(-20.0, 20.0),
+            None,
+            0.0,
+            1,
+        );
+        let m = Move::Arc {
+            c: [0.0, 0.0, -0.5],
+            x: [1.0, 0.0, 0.0],
+            y: [0.0, 1.0, 0.0],
+            r: 4.0,
+            t0: -0.8,
+            t1: 0.8,
+        };
+        assert!(arc_by_chords(&col, &body, &f, &m, -0.01, 0.01).is_none());
+        // non-finite data: never cleared (a NaN tolerance once made no chords and a Clear)
+        let clear = Move::Arc {
+            c: [0.0, 0.0, 20.0],
+            x: [1.0, 0.0, 0.0],
+            y: [0.0, 1.0, 0.0],
+            r: 4.0,
+            t0: -0.8,
+            t1: 0.8,
+        };
+        assert!(arc_by_chords(&col, &body, &f, &clear, -0.01, 0.01).is_some());
+        for bad in [f64::NAN, f64::INFINITY, -1.0, 0.0] {
+            assert!(
+                arc_by_chords(&col, &body, &f, &clear, -0.01, bad).is_none(),
+                "tol {bad}"
+            );
+        }
+        for bad in [f64::NAN, f64::INFINITY] {
+            assert!(
+                arc_by_chords(&col, &body, &f, &clear, bad, 0.01).is_none(),
+                "limit {bad}"
+            );
+        }
     }
 }

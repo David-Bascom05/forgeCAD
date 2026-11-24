@@ -43,9 +43,6 @@ extern "C" {
     /// several in one zip. `json`: {name, files: [{path, text}]}.
     #[wasm_bindgen(js_namespace = window, js_name = forge_export)]
     fn page_export(json: &str);
-    /// The page's: a file handed to the browser to save (its downloads).
-    #[wasm_bindgen(js_namespace = window, js_name = forge_download)]
-    fn page_download(name: &str, bytes: Uint8Array);
     #[wasm_bindgen(js_namespace = performance, js_name = now)]
     fn perf_now() -> f64;
     #[wasm_bindgen(js_namespace = Date, js_name = now)]
@@ -70,6 +67,8 @@ enum Ask {
     BendAt(u32, f64),
     /// A file the app wrote that the page's storage refused or lost: (project path, why).
     StoreFailed(String, String),
+    /// The page's word for the status line (a link's file it would not open, say).
+    Say(String),
     /// Words for the toolpath simulation (`app_camsim`).
     CamSim(String),
     /// A click on what the shell noted by this name (`app_click`): the tests' hand. The button
@@ -447,7 +446,7 @@ impl Host {
                     self.gui.shell.status = match crate::fg::mesh_file(&s.src, s.path.as_deref(), &name, f) {
                         Ok((bytes, said)) => {
                             page_download(&name, Uint8Array::from(&bytes[..]));
-                            said
+                            said.replacen("Exported", "Downloaded", 1)
                         }
                         Err(e) => format!("Not exported: {e}"),
                     };
@@ -515,13 +514,7 @@ impl Host {
                         self.gui.shell.status = e;
                     }
                 }
-                Ask::Rebuild => {
-                    if let Some(s) = &mut self.gui.fg {
-                        s.rebuild();
-                    }
-                    // a machining document reads its parts: run again with what arrived
-                    self.gui.camsim_reload();
-                }
+                Ask::Rebuild => self.gui.rebuild_open(),
                 Ask::Apply(op) => {
                     if let Err(e) = self.gui.fg_apply(op) {
                         self.gui.shell.status = e;
@@ -529,6 +522,7 @@ impl Host {
                 }
                 Ask::Pixels(f) => self.pixels(f),
                 Ask::StoreFailed(path, why) => self.gui.store_failed(&path, &why),
+                Ask::Say(text) => self.gui.shell.status = text,
                 Ask::CamSim(c) => {
                     if let Err(e) = self.gui.camsim_command(&c) {
                         self.gui.shell.status = e;
@@ -842,7 +836,7 @@ fn state_json(g: &Gui, canvas: Json) -> String {
             "selected",
             num(g.view.as_ref().map_or(0, |v| v.nav.selected.len()) as f64),
         ),
-        ("status", g.shell.status.clone().into()),
+        ("status", crate::shell::shown(&g.shell.status).into_owned().into()),
         // the environment in (shell/env), its tab, the tabs shown
         ("env", g.shell.env.map_or(Json::Null, |e| e.key().into())),
         ("tab", num(g.shell.tab as f64)),
@@ -874,6 +868,29 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("robot", robot_json(g)),
         // a pick of the view in flight (the host draws on until it is answered)
         ("pick_busy", g.pick_busy().into()),
+        // Inspect > Wall: waiting for its button, working (how far), and its reading
+        (
+            "wall",
+            g.shell
+                .inspect
+                .measure
+                .as_ref()
+                .filter(|m| m.wall)
+                .map_or(Json::Null, |m| {
+                    Json::obj(vec![
+                        ("held", m.wall_held.into()),
+                        ("busy", m.busy.into()),
+                        ("done", num(m.wall_done.into())),
+                        (
+                            "at",
+                            match &m.wall_at {
+                                Some(Ok((t, _))) => num(*t),
+                                _ => Json::Null,
+                            },
+                        ),
+                    ])
+                }),
+        ),
         // where the shell's named things are, for the tests' clicks (`app_click`)
         (
             "places",
@@ -886,6 +903,7 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                             || n.starts_with("tab:")
                             || n.starts_with("tool:")
                             || n.starts_with("robot:")
+                            || n.starts_with("measure:")
                     })
                     .map(|(n, r)| {
                         Json::obj(vec![
@@ -934,6 +952,31 @@ fn cam_words(g: &mut Gui, words: &str) -> Result<(), String> {
         "set" => {
             let (k, v) = rest.split_once(' ').unwrap_or((rest, ""));
             w.op_dlg.as_mut().ok_or("no op dialog")?.set(k, v.into());
+        }
+        // the tool library: narrowed, a tool shown, a new one derived from it or made
+        "tools-find" => w.tools_find.text = rest.into(),
+        "tools-kind" => {
+            w.tools_find.kind = crate::shell::cam::toollib::KIND_CHIPS
+                .iter()
+                .position(|c| c.0.eq_ignore_ascii_case(rest))
+        }
+        "tools-pick" => {
+            w.tools_form = None;
+            w.tools_sel = Some(rest.into());
+        }
+        "tools-derive" => {
+            let x = w
+                .tools_sel
+                .as_ref()
+                .and_then(|id| w.lib.tools.iter().find(|x| &x.id == id))
+                .ok_or("no tool shown")?;
+            w.tools_form = Some(crate::shell::cam::toollib::ToolForm::derived(&w.lib, x));
+        }
+        "tools-new" => {
+            w.tools_form = Some(crate::shell::cam::toollib::ToolForm::blank(
+                &w.lib,
+                forge_tooling::Kind::Flat,
+            ))
         }
         "earlier" => w.command(Cmd::Move(rest.into(), true)),
         "suppress" => w.command(Cmd::Suppress(rest.into())),
@@ -1240,6 +1283,21 @@ pub fn app_type(text: String, enter: bool) {
 #[wasm_bindgen]
 pub fn app_store_failed(path: String, why: String) {
     ask(Ask::StoreFailed(path, why));
+}
+
+/// How many sketches this thread keeps (`forge_keep::kept`): none between frames, as each frame
+/// frees what its runs made (in the single-threaded page, every build's). What the page's tests
+/// hold bounded.
+#[wasm_bindgen]
+pub fn app_sketches_kept() -> usize {
+    forge_keep::kept()
+}
+
+/// Says `text` in the app's status line: what the page refused (a link's file outside the
+/// project, a name to save as that isn't a project path).
+#[wasm_bindgen]
+pub fn app_say(text: String) {
+    ask(Ask::Say(text));
 }
 
 /// The app's next frame as `{width, height, rgba}`, through a callback (see `Host::pixels`).

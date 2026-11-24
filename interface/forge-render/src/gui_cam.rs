@@ -107,7 +107,39 @@ impl Gui {
                 });
             }
         }
+        // an adaptive op selected: clear's time on the same setup, tool and heights, off this
+        // thread, once per op and run (TOOLPATH-QUALITY's alternative_clear)
         let Some(w) = &mut self.shell.cam else { return };
+        if let Some(done) = w.alt_job.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            w.alt = Some(done);
+        }
+        if let (Some(op), Some(r), None) = (w.selected.clone(), w.run.as_ref(), w.running.as_ref())
+            && w.stmt(&op).is_some_and(|s| s.func == "adaptive")
+        {
+            let key = (op.clone(), r.text.clone());
+            if w.alt_asked.as_ref() != Some(&key) {
+                w.alt_asked = Some(key);
+                let (text, dir, slot, waker) = (
+                    r.text.clone(),
+                    w.dir.clone(),
+                    w.alt_job.clone(),
+                    self.waker.clone(),
+                );
+                crate::plat::spawn("forge-cam-alt", move || {
+                    let q = forge_cam_quality::alternative_clear(
+                        &text,
+                        &dir,
+                        &op,
+                        &forge_cam_quality::Config::default(),
+                    );
+                    let got = q
+                        .filter(|q| q.t_min > 0.0)
+                        .map(|q| (q.t_min, q.t_scurve.max(q.t_min)));
+                    *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some((op, text, got));
+                    waker();
+                });
+            }
+        }
         for (path, text) in std::mem::take(&mut w.want_write) {
             w.write_gen += 1;
             // a program's `out:` folder made as it is posted
@@ -251,13 +283,21 @@ impl Gui {
         let vr = self.shell.view_rect;
         let free = self.shell.camsim_free(vr);
         let Some(w) = &mut self.shell.cam else { return };
-        if (w.view_w - vr.width()).abs() < 1.0 {
+        // what covers the view's bottom: the timeline, and the Document Text panel above it
+        let text = if w.text_open {
+            crate::shell::cam::text_panel_h(free.height()) + 4.0
+        } else {
+            0.0
+        };
+        let cover = vr.bottom() - free.bottom() + text;
+        if (w.view_w - vr.width()).abs() < 1.0 && (w.view_cover - cover).abs() < 1.0 {
             return;
         }
         let first = w.view_w == 0.0;
         // the width is taken only with a view to frame (a view made later is framed then)
         let Some(v) = &mut self.view else { return };
         w.view_w = vr.width();
+        w.view_cover = cover;
         // moved since this workspace last framed it (by the user, or another framing): keep
         // that view and pan it so the subject's centre is the new view's (docs/ux/STANDARD.md
         // §2); else frame it whole. The first width seen with a view is framed whole: the view
@@ -280,7 +320,7 @@ impl Gui {
             height: vr.height(),
             // the simulation's panel is in the properties column (outside `vr`) whenever there is
             // one, docked or not yet: only its timeline covers the view
-            covered: [0.0, 0.0, 0.0, vr.bottom() - free.bottom()],
+            covered: [0.0, 0.0, 0.0, cover],
         };
         // from the direction the view is seen from now, the subject at the standard's 70 %
         let (yaw, pitch) = (v.nav.camera.yaw.to_degrees(), v.nav.camera.pitch.to_degrees());

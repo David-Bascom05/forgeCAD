@@ -615,20 +615,25 @@ pub fn schedule_samples(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &
                 let dxy = ((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1])).sqrt();
                 if sched && dxy > 0.0 {
                     let u = [(b[0] - a[0]) / dxy, (b[1] - a[1]) / dxy];
-                    if let Some(e) = map.engage_in(b, u, r, EPS_Z, Some(&tiles)) {
-                        worst = Some(match worst {
-                            Some(w) if w.cos_max > e.cos_max => Engage {
-                                ap: w.ap.max(e.ap),
-                                ae: w.ae.max(e.ae),
-                                ..w
-                            },
-                            Some(w) => Engage {
-                                ap: w.ap.max(e.ap),
-                                ae: w.ae.max(e.ae),
-                                ..e
-                            },
-                            None => e,
-                        });
+                    // the piece's own cut is what lies ahead of its start (read before it is
+                    // swept); its end reads what lies ahead of it: both count, so a sample never
+                    // takes the air feed for a piece that cuts (a short move into material)
+                    for c in [a, b] {
+                        if let Some(e) = map.engage_in(c, u, r, EPS_Z, Some(&tiles)) {
+                            worst = Some(match worst {
+                                Some(w) if w.cos_max > e.cos_max => Engage {
+                                    ap: w.ap.max(e.ap),
+                                    ae: w.ae.max(e.ae),
+                                    ..w
+                                },
+                                Some(w) => Engage {
+                                    ap: w.ap.max(e.ap),
+                                    ae: w.ae.max(e.ae),
+                                    ..e
+                                },
+                                None => e,
+                            });
+                        }
                     }
                 }
                 map.sweep_in(a, b, prof, Some(&mut tiles));
@@ -715,6 +720,52 @@ pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -
                 other => other,
             });
         }
+    }
+    OpPath {
+        tool: path.tool,
+        start: path.start,
+        moves: out,
+        rpm: path.rpm,
+        coolant: path.coolant,
+    }
+}
+
+/// As `schedule`, but each move keeps its own geometry whole and takes ONE feed: the lowest its
+/// samples call for (so the chip stays within fz over all of it). A move that meets no material
+/// in any sample keeps its own feed where that is higher. For paths built of long arcs and lines
+/// (adaptive): no block is split, and F changes only between moves, so the control is not asked
+/// to slow for an F change inside a curve.
+pub fn schedule_per_move(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -> OpPath {
+    let samples = schedule_samples(path, map, prof, s);
+    let feed = sample_feeds(&samples, s);
+    let n = samples.len();
+    let mut out = Vec::with_capacity(path.moves.len());
+    let mut k = 0;
+    for (mi, mv) in path.moves.iter().enumerate() {
+        let start = k;
+        while k < n && samples[k].mv == mi {
+            k += 1;
+        }
+        if start == k {
+            out.push(*mv);
+            continue;
+        }
+        let own = match *mv {
+            PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
+            _ => 0.0,
+        };
+        let air = samples[start..k].iter().all(|sm| sm.engage.is_none());
+        let lo = feed[start..k].iter().copied().fold(f64::INFINITY, f64::min);
+        let f = if air && own > lo {
+            own.min(s.f_max.max(s.f_min))
+        } else {
+            lo
+        };
+        out.push(match *mv {
+            PMove::Line { to, phase, .. } => PMove::Line { to, f, phase },
+            PMove::Arc { to, c, cw, .. } => PMove::Arc { to, c, cw, f },
+            other => other,
+        });
     }
     OpPath {
         tool: path.tool,

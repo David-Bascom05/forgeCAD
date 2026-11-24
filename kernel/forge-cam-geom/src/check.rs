@@ -1148,6 +1148,28 @@ pub fn certify(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: u
     certify_shared(body, f, mv, limit, res, budget, &mut None)
 }
 
+/// The closed forms' Clear, or None (the caller goes on to its other methods): a line move of a
+/// capsule-shaped body (a ball end mill's cutter) against a sphere, a cylinder that is not a
+/// prism, a torus or cone that is not a prism, or a plane that is not a prism on a move that is
+/// not planar (contact.rs); a level arc the same, by its chords (`contact::clear_arc`). Those
+/// pairs are 3D finishing's; the 2.5D ops' pairs (prisms, planar moves on planes) keep their
+/// paths. (An early Clear leaves a caller's shared state as it was.)
+pub fn closed_form(body: &Body, f: &Face, mv: &Move, limit: f64) -> Option<Verdict> {
+    let fast = match f.surf {
+        Surf::Sphere { .. } => true,
+        Surf::Cyl { .. } => f.prism.is_none(),
+        Surf::Plane { .. } => f.prism.is_none() && mv.planar().is_none(),
+        Surf::Torus { .. } | Surf::Cone { .. } => f.prism.is_none(),
+    };
+    if !fast {
+        return None;
+    }
+    match mv {
+        Move::Arc { .. } => crate::contact::clear_arc(body, f, mv, limit),
+        _ => crate::contact::clear(body, f, mv, limit),
+    }
+}
+
 /// `certify` for several bodies of one tool on the same move and face: `shared` carries the
 /// move's distance to the face's section from one body's call to the next (start it at None
 /// for each move and face).
@@ -1161,18 +1183,7 @@ pub fn certify_shared(
     budget: usize,
     shared: &mut Option<(Ival, f64)>,
 ) -> (Verdict, usize) {
-    // a line move of a capsule-shaped body (a ball end mill's cutter) against a sphere, a
-    // cylinder that is not a prism, or a plane that is not a prism on a move that is not
-    // planar: closed form (contact.rs), which proves Clear or passes on. Those pairs are 3D
-    // finishing's; the 2.5D ops' pairs (prisms, planar moves on planes) keep their paths
-    let fast = match f.surf {
-        Surf::Sphere { .. } => true,
-        Surf::Cyl { .. } => f.prism.is_none(),
-        Surf::Plane { .. } => f.prism.is_none() && mv.planar().is_none(),
-        Surf::Torus { .. } | Surf::Cone { .. } => f.prism.is_none(),
-    };
-    // (an early Clear leaves `shared` as it was: the next body's call recomputes what it needs)
-    if fast && let Some(v) = crate::contact::clear(body, f, mv, limit) {
+    if let Some(v) = closed_form(body, f, mv, limit) {
         return (v, 0);
     }
     // a planar move against a face that is a prism along z: closed form (slab.rs)

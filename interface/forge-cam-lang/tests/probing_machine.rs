@@ -41,3 +41,28 @@ fn a_posted_probe_op_runs_on_the_machine_and_its_skips_are_proven() {
     let se = un.iter().find(|u| u.path == "skip.end").unwrap();
     assert!(se.check.contains("collisions proven for every stop"), "{se:?}");
 }
+
+#[test]
+fn on_haas_the_macros_run_on_the_machine() {
+    let src = doc(
+        "p = probe(\"renishaw-omp40-2\", t: 20, ball: 6, length: 50, stem: 3, body: [(20, 0, 69)])\nz0 = probe_wcs(op1, tool: p, kind: \"surface\", at: (25, 25, 20), wcs: 54)\nprog = program(op1, post: \"haas\", number: 10)\n",
+    );
+    let cam = forge_cam_lang::run(&src, &dir());
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    let run = cam.machine_run(0).unwrap();
+    let count = |f: &dyn Fn(&Happening) -> bool| run.tl.marks.iter().filter(|m| f(&m.what)).count();
+    assert_eq!(
+        count(&|h| matches!(h, Happening::Measure { .. })),
+        1,
+        "{}",
+        run.text
+    );
+    assert_eq!(
+        count(&|h| matches!(h, Happening::ProbeSwitch { .. })),
+        2,
+        "{}",
+        run.text
+    );
+    assert_eq!(count(&|h| matches!(h, Happening::Skip { .. })), 0);
+    assert!(run.contacts.contacts.is_empty(), "{:?}", run.contacts.contacts);
+}

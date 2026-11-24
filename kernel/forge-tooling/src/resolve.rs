@@ -2743,6 +2743,7 @@ mod tests {
         let mk = |op: &str, vc: [f64; 5], chip: [f64; 5]| Generic {
             group: "N".into(),
             family: "*".into(),
+            hardness: "*".into(),
             op: op.into(),
             tier: "*".into(),
             flutes: 3,

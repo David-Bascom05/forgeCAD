@@ -36,8 +36,6 @@ pub mod gui_docs;
 mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
-#[path = "gui_record.rs"]
-pub mod gui_record;
 #[path = "gui_fgmarks.rs"]
 mod gui_fgmarks;
 #[path = "gui_inspect.rs"]
@@ -48,6 +46,8 @@ pub mod gui_machine;
 pub mod gui_markup;
 #[path = "gui_overlay.rs"]
 mod gui_overlay;
+#[path = "gui_record.rs"]
+pub mod gui_record;
 #[path = "gui_robot.rs"]
 pub mod gui_robot;
 #[path = "gui_sheet.rs"]
@@ -1563,6 +1563,10 @@ impl Gui {
                     world.extend(local);
                 }
             }
+            // what the bend simulation sees through, outlined
+            if self.bend.showing() {
+                world.extend(self.bend.outline_tris(&v.nav.camera, v.size));
+            }
             let solid = match self.shell.camsim.as_deref_mut() {
                 Some(st) if self.shell.tab == crate::shell::CAM_TAB => {
                     gui_camsim::geometry(st, &v.nav.camera, v.size, &mut world)
@@ -1727,6 +1731,9 @@ impl Gui {
         } else {
             Some(delay)
         };
+        // the sketches of the forge-lang runs this frame made on this thread (a tool's quick run,
+        // and in a page with one thread every build): freed between frames, none in use then
+        crate::plat::release_sketches();
         FrameOut {
             platform: output.platform_output,
             host,

@@ -129,7 +129,10 @@ fn the_op_dialog_edits_the_text_and_marks_it_stale() {
         .as_mut()
         .unwrap()
         .command(forge_render::shell::cam::Cmd::Edit("prof".into()));
-    h.step();
+    // the sheet docks in the column a frame after it opens: its places settle first
+    for _ in 0..4 {
+        h.step();
+    }
     assert!(h.placed("cam:op:ok").is_some(), "the op dialog");
     // the Passes tab: stock to leave
     let tabs =
@@ -139,6 +142,7 @@ fn the_op_dialog_edits_the_text_and_marks_it_stale() {
         .position(|t| *t == forge_render::shell::cam::schema::Tab::Passes)
         .unwrap();
     assert!(h.click(&format!("cam:op:tab:{k}")));
+    h.step();
     h.step();
     assert!(h.click("cam:op:arg:leave"));
     h.text("0.2");
@@ -180,11 +184,10 @@ fn post_process_shows_the_program_and_writes_it() {
     h.gui.shell.cam.as_mut().unwrap().allow_uncertified = true;
     assert!(h.click("cam:post:write"));
     // the write lands a few frames on (sooner or later under a loaded machine)
-    for _ in 0..200 {
+    let t0 = std::time::Instant::now();
+    while !file.with_file_name("prog.nc").exists() && t0.elapsed().as_secs() < 30 {
         h.step();
-        if file.with_file_name("prog.nc").exists() {
-            break;
-        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
     let nc = std::fs::read_to_string(file.with_file_name("prog.nc")).expect("written");
     assert!(nc.lines().count() > 100, "{nc}");
@@ -201,6 +204,16 @@ fn nc_programs_post_export_and_go_stale() {
     assert!(h.click("tool:NC Programs"));
     h.step();
     shot(&mut h, "cam-nc-open");
+    // a tab of the properties column: Quality beside it, back again
+    assert!(h.click("cam:dock:quality"));
+    h.step();
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.quality_open && !w.programs_open);
+    shot(&mut h, "cam-quality-tab");
+    assert!(h.click("cam:dock:programs"));
+    h.step();
+    h.step();
     assert!(h.click("cam:programs:allow"));
     h.step();
     // the file's name and folder, typed: written to the statement when the field is left
@@ -264,6 +277,9 @@ fn the_tool_library_adds_a_tool_to_the_document() {
     assert!(h.click("tool:Tool Library"));
     h.step();
     shot(&mut h, "cam-tools");
+    assert!(h.click("cam:tools:search"));
+    h.text("flat-6");
+    h.step();
     let row = h
         .gui
         .shell
@@ -272,9 +288,82 @@ fn the_tool_library_adds_a_tool_to_the_document() {
         .map(|p| p.0.clone())
         .find(|n| n.starts_with("cam:tools:row:flat-6"))
         .expect("a 6 mm flat in the library");
+    // a row shows the tool (its cross-section); Add to document puts it in
     assert!(h.click(&row));
     h.step();
+    assert!(h.placed("cam:tools:profile").is_some());
+    shot(&mut h, "cam-tools-picked");
+    assert!(!text(&h).contains("flat-6"));
+    assert!(h.click("cam:tools:add"));
+    h.step();
     assert!(text(&h).contains("tool(\"flat-6\", t: 2"), "{}", text(&h));
+    h.step();
+    // the document's tools first, with their numbers; the one just added is recent
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert_eq!(w.tools_recent.first().map(String::as_str), Some("flat-6"));
+    // the type chip and the search narrow the list
+    h.gui.shell.cam.as_mut().unwrap().tools_find = Default::default();
+    h.step();
+    assert!(h.click("cam:tools:kind:ball"));
+    h.step();
+    let rows = |h: &mut Headless| -> Vec<String> {
+        h.step();
+        h.gui.shell.places.iter().filter_map(|p| p.0.strip_prefix("cam:tools:row:").map(str::to_string)).collect()
+    };
+    let kind_of = |h: &Headless, id: &str| h.gui.shell.cam.as_ref().unwrap().lib.tools.iter().find(|t| t.id == id).map(|t| t.kind);
+    let balls = rows(&mut h);
+    assert!(!balls.is_empty() && balls.iter().all(|id| kind_of(&h, id) == Some(forge_tooling::Kind::Ball)), "{balls:?}");
+    assert!(h.click("cam:tools:kind:all"));
+    assert!(h.click("cam:tools:search"));
+    h.text("chamfer");
+    let ch = rows(&mut h);
+    assert!(!ch.is_empty() && ch.iter().all(|id| kind_of(&h, id) == Some(forge_tooling::Kind::Chamfer)), "{ch:?}");
+    h.gui.shell.cam.as_mut().unwrap().tools_find = Default::default();
+    // in the document: its stick-out edited there
+    assert!(h.click("cam:tools:row:flat-10"));
+    h.step();
+    shot(&mut h, "cam-tools-instance");
+    assert!(h.click("cam:tools:inst:t1:stickout"));
+    h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
+    h.text("40");
+    h.step();
+    assert!(h.click("cam:tools:apply"));
+    h.step();
+    assert!(text(&h).contains("stickout: 40"), "{}", text(&h));
+    // derived: a longer flute, saved to the project's cam/tools.toml and shown
+    assert!(h.click("cam:tools:derive"));
+    h.step();
+    shot(&mut h, "cam-tools-derive");
+    assert!(h.click("cam:tools:form:lcf"));
+    h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
+    h.text("40");
+    h.step();
+    assert!(h.click("cam:tools:save"));
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    let saved = std::fs::read_to_string(w.dir.join("cam/tools.toml")).expect("cam/tools.toml written");
+    assert!(saved.contains("id = \"flat-10-custom\"") && saved.contains("lcf = 40"), "{saved}");
+    assert!(w.lib.tools.iter().any(|t| t.id == "flat-10-custom" && t.lcf == 40.0));
+    assert_eq!(w.tools_sel.as_deref(), Some("flat-10-custom"));
+    let _ = std::fs::remove_file(w.dir.join("cam/tools.toml"));
+    // a page in place of the view and the column; Back (or Esc) returns to Manufacture
+    let page = h.placed("cam:tools:page").expect("the library page");
+    let view = h.gui.shell.view_rect;
+    assert!(page.min.x <= view.min.x + 1.0 && page.max.x > view.max.x, "{page:?} over {view:?}");
+    assert!(h.click("cam:tools:back"));
+    h.step();
+    assert!(!h.gui.shell.cam.as_ref().unwrap().tools_open);
+    assert!(h.click("tool:Tool Library"));
+    h.step();
+    assert!(h.click("cam:tools:derive"));
+    h.step();
+    h.key(egui::Key::Escape);
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.tools_open && w.tools_form.is_none(), "Esc leaves the form first");
+    h.key(egui::Key::Escape);
+    h.step();
+    assert!(!h.gui.shell.cam.as_ref().unwrap().tools_open);
 }
 
 /// The dialogs' parity arguments are the language's: a contour with axial stock, conventional
@@ -510,6 +599,29 @@ fn a_narrow_window_tabs_the_sheet_and_the_simulation() {
     }
 }
 
+/// A cycle time is the lower bound and the estimate together (never the estimate alone), and the
+/// estimate counts the tool change the bound counts (the flange changes T1 for T12).
+#[test]
+fn cycle_time_is_the_bound_and_the_estimate_together() {
+    let Some((h, _)) = open("cycle") else { return };
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    let r = w.run.as_ref().unwrap();
+    let q = r.quality.as_ref().expect("measured");
+    let p = q.progs.first().expect("a timed program");
+    assert!(p.error.is_none(), "{:?}", p.error);
+    assert!(p.tool_changes > 0, "the flange changes tools");
+    assert!(p.t_min > 0.0 && p.t_scurve >= p.t_min, "t_min {} t_scurve {}", p.t_min, p.t_scurve);
+    let (lo, est) = r.cycle(r.ops.iter().map(|o| o.name.as_str())).expect("timed");
+    assert!(est >= lo);
+    for o in &q.ops {
+        assert!(o.t_scurve + 1e-9 >= o.t_min, "{}: t_min {} t_scurve {}", o.name, o.t_min, o.t_scurve);
+    }
+    let line = forge_render::shell::cam::status_line(w);
+    assert!(line.contains('\u{2265}') && line.contains("est."), "{line}");
+    let words = forge_render::shell::cam::cycle_words((lo, est));
+    assert!(words.starts_with('\u{2265}') && words.contains(" est. "), "{words}");
+}
+
 /// Adaptive is opt-in: a small button after the 2D group's three big ones (never Clear's place),
 /// and the fields its form writes generate.
 #[test]
@@ -600,4 +712,128 @@ fn the_quality_window_shows_the_measure_on_its_way() {
         "chip load once measured"
     );
     shot(&mut h, "cam-quality-measured");
+}
+
+/// The mould's 3D ops (zlevel, parallel, waterline, pencil, rest) are ops of the workspace: in
+/// the browser with their rows, in the ribbon's 3D group, each form's fields ones the language
+/// takes.
+#[test]
+fn a_mould_lists_its_3d_ops() {
+    let ex = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+    let dir = std::env::temp_dir().join(format!("fg-cam-ui-{}-mould", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for f in ["mold_core.fg", "mold_core_cam.fg"] {
+        std::fs::copy(ex.join(f), dir.join(f)).unwrap();
+    }
+    let text = std::fs::read_to_string(dir.join("mold_core_cam.fg")).unwrap();
+    let w = forge_render::shell::cam::CamWs::open(dir.join("mold_core_cam.fg").to_str().unwrap(), &text);
+    let ops: Vec<(String, String)> = w
+        .stmts
+        .iter()
+        .filter(|s| s.is_op())
+        .map(|s| (s.name.clone(), s.func.clone()))
+        .collect();
+    for (name, func) in [("rough", "zlevel"), ("fin", "parallel"), ("walls", "waterline"), ("corner", "pencil"), ("left", "rest")] {
+        assert!(ops.contains(&(name.into(), func.into())), "{name} ({func}) not an op: {ops:?}");
+        let spec = forge_render::shell::cam::schema::spec(func).unwrap_or_else(|| panic!("no form for {func}"));
+        assert_eq!(spec.group, "3D");
+    }
+    let Some((mut h, _)) = headless_open(&dir.join("mold_core_cam.fg")) else { return };
+    for (name, _) in &ops {
+        assert!(h.placed(&format!("cam:row:{name}")).is_some(), "{name} row");
+    }
+    for tool in ["3D Rough", "Parallel"] {
+        assert!(h.placed(&format!("tool:{tool}")).is_some(), "{tool} in the ribbon");
+    }
+}
+
+fn headless_open(file: &std::path::Path) -> Option<(Headless, std::path::PathBuf)> {
+    let mut h = match Headless::new((1500.0, 1000.0), 1.0) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("skipped: {e}");
+            return None;
+        }
+    };
+    h.step();
+    h.gui.open(file.to_str().unwrap());
+    settle(&mut h);
+    Some((h, file.to_path_buf()))
+}
+
+/// Checks (the ribbon) opens the simulation's own Checks tab, which carries each op's verdict;
+/// no window floats over the part.
+#[test]
+fn checks_open_in_the_simulations_tab() {
+    let Some((mut h, _)) = open("checks") else { return };
+    // the simulation is built after the run
+    let t0 = std::time::Instant::now();
+    while h.gui.shell.camsim.is_none() && t0.elapsed().as_secs() < 120 {
+        h.until(|g| g.shell.camsim.is_some());
+    }
+    assert!(h.gui.shell.camsim.is_some(), "no simulation");
+    assert!(h.click("tool:Checks"));
+    h.step();
+    h.step();
+    let st = h.gui.shell.camsim.as_deref().unwrap();
+    assert_eq!(st.tab, forge_render::gui_camsim_panel::Tab::Checks);
+    let names: Vec<&str> = st.op_checks.iter().map(|o| o.0.as_str()).collect();
+    assert_eq!(st.op_checks.len(), 5, "{names:?}");
+    assert!(st.op_checks.iter().all(|o| o.1 == "certified"), "{:?}", st.op_checks);
+    assert!(!h.gui.shell.cam.as_ref().unwrap().checks_open);
+    shot(&mut h, "cam-checks-tab");
+}
+
+/// Document Text is a panel across the bottom of the view (above the timeline), not a window
+/// over the part; Apply writes what was typed.
+#[test]
+fn document_text_is_a_bottom_panel() {
+    let Some((mut h, _)) = open("text") else { return };
+    assert!(h.click("tool:Document Text"));
+    h.step();
+    h.step();
+    let v = h.gui.shell.view_rect;
+    let e = h.placed("cam:text:edit").expect("the text");
+    assert!(e.min.y > v.center().y - 40.0 && e.width() > v.width() * 0.6, "{e:?} in {v:?}");
+    // the view framed again into what the panel leaves
+    for _ in 0..3 {
+        h.step();
+    }
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.view_cover >= forge_render::shell::cam::text_panel_h(v.height() * 0.5), "cover {}", w.view_cover);
+    shot(&mut h, "cam-text-panel");
+    // typed: the whole text replaced
+    let typed = text(&h).replace("stickout: 32", "stickout: 34");
+    assert!(h.click("cam:text:edit"));
+    h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
+    h.text(&typed);
+    h.step();
+    assert!(h.click("cam:text:apply"));
+    h.step();
+    assert!(text(&h).contains("stickout: 34"), "{}", text(&h));
+}
+
+/// An adaptive op selected: clear's time on the same setup, tool and heights is measured off the
+/// UI thread and shown beside its own (TOOLPATH-QUALITY's alternative_clear).
+#[test]
+fn an_adaptive_op_shows_what_clear_would_take() {
+    use forge_render::shell::cam::Cmd;
+    let Some((mut h, _)) = open("altclear") else { return };
+    let text = text(&h);
+    let top = text.lines().find(|l| l.starts_with("top")).unwrap().to_string();
+    let w = h.gui.shell.cam.as_mut().unwrap();
+    w.set_text(text.replace(&top, "top  = adaptive(op1, tool: t1, from: 18, to: 12, step: 3)"));
+    settle(&mut h);
+    h.gui.shell.cam.as_mut().unwrap().command(Cmd::Select("top".into()));
+    let t0 = std::time::Instant::now();
+    while h.gui.shell.cam.as_ref().unwrap().alt.is_none() && t0.elapsed().as_secs() < 120 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    let (op, _, got) = w.alt.as_ref().expect("clear's time measured");
+    assert_eq!(op, "top");
+    let (lo, est) = got.expect("clear builds on the flange");
+    assert!(lo > 0.0 && est >= lo);
+    shot(&mut h, "cam-adaptive-vs-clear");
 }

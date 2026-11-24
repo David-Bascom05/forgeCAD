@@ -328,7 +328,7 @@ impl BrakeUi {
         };
         let file = forge_library::file_for(&dir, &r.id);
         // punches, dies and presses share the folder: never write over another kind's records
-        if let Ok(old) = std::fs::read_to_string(&file) {
+        if let Ok(old) = forge_dirs::fs::read_to_string(&file) {
             let others = forge_brake_builder::KINDS
                 .iter()
                 .filter(|(w, _)| *w != self.word)

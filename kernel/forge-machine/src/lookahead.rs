@@ -533,7 +533,11 @@ fn scurve_run(run: &[SBlk], p: &SCurve, acc: &[f64], jrk: &[f64]) -> Vec<f64> {
     let mut x = vec![0.0f64; m + 1];
     for k in 0..m {
         let reach = sc_reach(x[k], run[k].len, run[k].acc, run[k].jerk);
-        x[k + 1] = if k + 1 == m { 0.0 } else { e[k + 1].min(reach).min(win_exit(k)) };
+        x[k + 1] = if k + 1 == m {
+            0.0
+        } else {
+            e[k + 1].min(reach).min(win_exit(k))
+        };
     }
     (0..m)
         .map(|k| {

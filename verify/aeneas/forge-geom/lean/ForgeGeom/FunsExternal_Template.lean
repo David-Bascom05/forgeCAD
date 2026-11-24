@@ -29,12 +29,48 @@ axiom core.array.Array.map
   (opsfunctionFnMutFTupleTUInst : core.ops.function.FnMut F T U) :
   Array T N → F → Result (Array U N)
 
+/-- [core::clone::impls::{impl core::clone::Clone for f64}::clone]:
+    Source: '/rustc/library/core/src/clone.rs', lines 715:20-715:43; this code is generated from a macro invocation at: '/rustc/library/core/src/clone.rs', lines 728:4-733:5
+    Name pattern: [core::clone::impls::{core::clone::Clone<f64>}::clone]
+    Visibility: public -/
+@[rust_fun "core::clone::impls::{core::clone::Clone<f64>}::clone"]
+axiom F64.Insts.CoreCloneClone.clone : F64 → Result F64
+
+/-- [core::fmt::float::{impl core::fmt::Display for f64}::fmt]:
+    Source: '/rustc/library/core/src/fmt/float.rs', lines 217:16-217:64; this code is generated from a macro invocation at: '/rustc/library/core/src/fmt/float.rs', lines 239:0-239:21
+    Name pattern: [core::fmt::float::{core::fmt::Display<f64>}::fmt]
+    Visibility: public -/
+@[rust_fun "core::fmt::float::{core::fmt::Display<f64>}::fmt"]
+axiom F64.Insts.CoreFmtDisplay.fmt
+  :
+  F64 → core.fmt.Formatter → Result ((core.result.Result Unit
+    core.fmt.Error) × core.fmt.Formatter)
+
+/-- [core::iter::traits::iterator::Iterator::any]:
+    Source: '/rustc/library/core/src/iter/traits/iterator.rs', lines 2897:4-2900:37
+    Name pattern: [core::iter::traits::iterator::Iterator::any]
+    Visibility: public -/
+@[trait_default, rust_fun "core::iter::traits::iterator::Iterator::any"]
+axiom core.iter.traits.iterator.Iterator.any.default
+  {Self : Type _} {F : Type _} {Clause0_Item : Type _} (IteratorInst :
+  core.iter.traits.iterator.Iterator Self Clause0_Item)
+  (opsfunctionFnMutFTupleClause0_ItemBoolInst : core.ops.function.FnMut F
+  Clause0_Item Bool) :
+  Self → F → Result (Bool × Self)
+
 /-- [core::f64::{f64}::MIN_POSITIVE]
     Source: '/rustc/library/core/src/num/f64.rs', lines 456:4-456:31
     Name pattern: [core::f64::{f64}::MIN_POSITIVE]
     Visibility: public -/
 @[rust_const "core::f64::{f64}::MIN_POSITIVE"]
 axiom core.f64.F64.MIN_POSITIVE : Result F64
+
+/-- [core::f64::{f64}::is_finite]:
+    Source: '/rustc/library/core/src/num/f64.rs', lines 714:4-714:40
+    Name pattern: [core::f64::{f64}::is_finite]
+    Visibility: public -/
+@[rust_fun "core::f64::{f64}::is_finite"]
+axiom core.f64.F64.is_finite : F64 → Result Bool
 
 /-- [core::f64::{f64}::max]:
     Source: '/rustc/library/core/src/num/f64.rs', lines 1058:4-1058:45
@@ -56,6 +92,17 @@ axiom core.f64.F64.max : F64 → F64 → Result F64
 @[rust_fun
   "core::slice::iter::{core::iter::traits::iterator::Iterator<core::slice::iter::Iter<'a, @T>, &'a @T>}::any"]
 axiom core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.any
+  {T : Type _} {F : Type _} (opsfunctionFnMutFTupleSharedATBoolInst :
+  core.ops.function.FnMut F T Bool) :
+  core.slice.iter.Iter T → F → Result (Bool × (core.slice.iter.Iter T))
+
+/-- [core::slice::iter::{impl core::iter::traits::iterator::Iterator<&'a T> for core::slice::iter::Iter<'a, T>}::all]:
+    Source: '/rustc/library/core/src/slice/iter/macros.rs', lines 304:12-307:45; this code is generated from a macro invocation at: '/rustc/library/core/src/slice/iter.rs', lines 140:0-148:2
+    Name pattern: [core::slice::iter::{core::iter::traits::iterator::Iterator<core::slice::iter::Iter<'a, @T>, &'a @T>}::all]
+    Visibility: public -/
+@[rust_fun
+  "core::slice::iter::{core::iter::traits::iterator::Iterator<core::slice::iter::Iter<'a, @T>, &'a @T>}::all"]
+axiom core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.all
   {T : Type _} {F : Type _} (opsfunctionFnMutFTupleSharedATBoolInst :
   core.ops.function.FnMut F T Bool) :
   core.slice.iter.Iter T → F → Result (Bool × (core.slice.iter.Iter T))
@@ -153,6 +200,22 @@ axiom forge_math.tol.ANGULAR : Result F64
     Visibility: public -/
 @[rust_const "forge_math::tol::MIN_LENGTH"]
 axiom forge_math.tol.MIN_LENGTH : Result F64
+
+/-- [forge_math::vec::{impl core::clone::Clone for forge_math::vec::Vec3}::clone]:
+    Source: 'kernel/forge-math/src/vec.rs', lines 15:9-15:14
+    Name pattern: [forge_math::vec::{core::clone::Clone<forge_math::vec::Vec3>}::clone]
+    Visibility: public -/
+@[rust_fun
+  "forge_math::vec::{core::clone::Clone<forge_math::vec::Vec3>}::clone"]
+axiom forge_math.vec.Vec3.Insts.CoreCloneClone.clone
+  : forge_math.vec.Vec3 → Result forge_math.vec.Vec3
+
+/-- [forge_math::vec::{forge_math::vec::Vec3}::ZERO]
+    Source: 'kernel/forge-math/src/vec.rs', lines 81:4-81:24
+    Name pattern: [forge_math::vec::{forge_math::vec::Vec3}::ZERO]
+    Visibility: public -/
+@[rust_const "forge_math::vec::{forge_math::vec::Vec3}::ZERO"]
+axiom forge_math.vec.Vec3.ZERO : Result forge_math.vec.Vec3
 
 /-- [forge_math::vec::{forge_math::vec::Vec3}::Z]
     Source: 'kernel/forge-math/src/vec.rs', lines 96:4-96:21
@@ -277,24 +340,6 @@ axiom forge_math.vec.Vec3.Insts.CoreConvertFromUnitVec3.from
 axiom forge_math.vec.UnitVec3.Insts.CoreOpsArithMulF64Vec3.mul
   : forge_math.vec.UnitVec3 → F64 → Result forge_math.vec.Vec3
 
-/-- [forge_math::vec::{impl core::ops::arith::Mul<f64, forge_math::vec::Vec3> for forge_math::vec::Vec3}::mul]:
-    Source: 'kernel/forge-math/src/vec.rs', lines 244:49-244:75; this code is generated from a macro invocation at: 'kernel/forge-math/src/vec.rs', lines 256:0-256:31
-    Name pattern: [forge_math::vec::{core::ops::arith::Mul<forge_math::vec::Vec3, f64, forge_math::vec::Vec3>}::mul]
-    Visibility: public -/
-@[rust_fun
-  "forge_math::vec::{core::ops::arith::Mul<forge_math::vec::Vec3, f64, forge_math::vec::Vec3>}::mul"]
-axiom forge_math.vec.Vec3.Insts.CoreOpsArithMulF64Vec3.mul
-  : forge_math.vec.Vec3 → F64 → Result forge_math.vec.Vec3
-
-/-- [forge_math::vec::{impl core::ops::arith::Add<forge_math::vec::Vec3, forge_math::vec::Vec3> for forge_math::vec::Vec3}::add]:
-    Source: 'kernel/forge-math/src/vec.rs', lines 241:44-241:69; this code is generated from a macro invocation at: 'kernel/forge-math/src/vec.rs', lines 256:0-256:31
-    Name pattern: [forge_math::vec::{core::ops::arith::Add<forge_math::vec::Vec3, forge_math::vec::Vec3, forge_math::vec::Vec3>}::add]
-    Visibility: public -/
-@[rust_fun
-  "forge_math::vec::{core::ops::arith::Add<forge_math::vec::Vec3, forge_math::vec::Vec3, forge_math::vec::Vec3>}::add"]
-axiom forge_math.vec.Vec3.Insts.CoreOpsArithAddVec3Vec3.add
-  : forge_math.vec.Vec3 → forge_math.vec.Vec3 → Result forge_math.vec.Vec3
-
 /-- [forge_math::vec::{impl core::ops::arith::Div<f64, forge_math::vec::Vec3> for forge_math::vec::Vec3}::div]:
     Source: 'kernel/forge-math/src/vec.rs', lines 246:49-246:75; this code is generated from a macro invocation at: 'kernel/forge-math/src/vec.rs', lines 256:0-256:31
     Name pattern: [forge_math::vec::{core::ops::arith::Div<forge_math::vec::Vec3, f64, forge_math::vec::Vec3>}::div]
@@ -304,6 +349,15 @@ axiom forge_math.vec.Vec3.Insts.CoreOpsArithAddVec3Vec3.add
 axiom forge_math.vec.Vec3.Insts.CoreOpsArithDivF64Vec3.div
   : forge_math.vec.Vec3 → F64 → Result forge_math.vec.Vec3
 
+/-- [forge_math::vec::{impl core::ops::arith::Mul<f64, forge_math::vec::Vec3> for forge_math::vec::Vec3}::mul]:
+    Source: 'kernel/forge-math/src/vec.rs', lines 244:49-244:75; this code is generated from a macro invocation at: 'kernel/forge-math/src/vec.rs', lines 256:0-256:31
+    Name pattern: [forge_math::vec::{core::ops::arith::Mul<forge_math::vec::Vec3, f64, forge_math::vec::Vec3>}::mul]
+    Visibility: public -/
+@[rust_fun
+  "forge_math::vec::{core::ops::arith::Mul<forge_math::vec::Vec3, f64, forge_math::vec::Vec3>}::mul"]
+axiom forge_math.vec.Vec3.Insts.CoreOpsArithMulF64Vec3.mul
+  : forge_math.vec.Vec3 → F64 → Result forge_math.vec.Vec3
+
 /-- [forge_math::vec::{impl core::ops::arith::Sub<forge_math::vec::Vec3, forge_math::vec::Vec3> for forge_math::vec::Vec3}::sub]:
     Source: 'kernel/forge-math/src/vec.rs', lines 242:44-242:69; this code is generated from a macro invocation at: 'kernel/forge-math/src/vec.rs', lines 256:0-256:31
     Name pattern: [forge_math::vec::{core::ops::arith::Sub<forge_math::vec::Vec3, forge_math::vec::Vec3, forge_math::vec::Vec3>}::sub]
@@ -311,6 +365,15 @@ axiom forge_math.vec.Vec3.Insts.CoreOpsArithDivF64Vec3.div
 @[rust_fun
   "forge_math::vec::{core::ops::arith::Sub<forge_math::vec::Vec3, forge_math::vec::Vec3, forge_math::vec::Vec3>}::sub"]
 axiom forge_math.vec.Vec3.Insts.CoreOpsArithSubVec3Vec3.sub
+  : forge_math.vec.Vec3 → forge_math.vec.Vec3 → Result forge_math.vec.Vec3
+
+/-- [forge_math::vec::{impl core::ops::arith::Add<forge_math::vec::Vec3, forge_math::vec::Vec3> for forge_math::vec::Vec3}::add]:
+    Source: 'kernel/forge-math/src/vec.rs', lines 241:44-241:69; this code is generated from a macro invocation at: 'kernel/forge-math/src/vec.rs', lines 256:0-256:31
+    Name pattern: [forge_math::vec::{core::ops::arith::Add<forge_math::vec::Vec3, forge_math::vec::Vec3, forge_math::vec::Vec3>}::add]
+    Visibility: public -/
+@[rust_fun
+  "forge_math::vec::{core::ops::arith::Add<forge_math::vec::Vec3, forge_math::vec::Vec3, forge_math::vec::Vec3>}::add"]
+axiom forge_math.vec.Vec3.Insts.CoreOpsArithAddVec3Vec3.add
   : forge_math.vec.Vec3 → forge_math.vec.Vec3 → Result forge_math.vec.Vec3
 
 /-- [forge_math::vec::{impl core::ops::arith::Neg<forge_math::vec::Vec3> for forge_math::vec::Vec3}::neg]:
