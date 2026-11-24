@@ -62,7 +62,10 @@ fn edge_segments(curve: &Curve, range: forge_math::Interval, q: &Quality, fine: 
         // in u = asinh t (`Curve::sample_param`): P(u) = a cosh u x + b sinh u y, |P''(u)| = |P(u) - o|
         // is largest at the wider end, and the tangent turns at most a / b a unit of u
         Curve::Hyperbola(c) => {
-            let (u0, u1) = (forge_geom::curve::asinh(range.lo), forge_geom::curve::asinh(range.hi));
+            let (u0, u1) = (
+                forge_geom::curve::asinh(range.lo),
+                forge_geom::curve::asinh(range.hi),
+            );
             let t = range.lo.abs().max(range.hi.abs());
             let bend = (c.a * c.a * (1.0 + t * t) + c.b * c.b * t * t).sqrt();
             conic_segments(u1 - u0, bend, c.b / c.a, q)
@@ -2875,14 +2878,8 @@ mod tests {
         use forge_geom::curve::{Hyperbola, Parabola};
         use forge_math::Interval;
         let curves = [
-            Curve::Parabola(Parabola {
-                frame: Frame::WORLD,
-                focal: 0.5,
-            }),
-            Curve::Parabola(Parabola {
-                frame: Frame::WORLD,
-                focal: 40.0,
-            }),
+            Curve::Parabola(Parabola::new(Frame::WORLD, 0.5)),
+            Curve::Parabola(Parabola::new(Frame::WORLD, 40.0)),
             Curve::Hyperbola(Hyperbola {
                 frame: Frame::WORLD,
                 a: 3.0,

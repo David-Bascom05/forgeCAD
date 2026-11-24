@@ -28,18 +28,18 @@ fn tormach_records_are_real_and_cited() {
     }
     let m = builtin_named("tormach-1100mx").unwrap();
     assert_eq!(m.kind, Kind::Vmc3);
-    assert_eq!(m.joint("X").unwrap().range, [-457.0, 0.0]); // 18 in
-    assert_eq!(m.joint("X").unwrap().rapid, 7620.0); // 300 IPM (7.62 m/min)
-    assert_eq!(m.joint("Z").unwrap().rapid, 5840.0); // 230 IPM
-    assert_eq!(m.spindles[0].rpm[1], 10000.0);
+    assert_eq!(m.joint("X").unwrap().range, Some([-457.0, 0.0])); // 18 in
+    assert_eq!(m.joint("X").unwrap().rapid, Some(7620.0)); // 300 IPM (7.62 m/min)
+    assert_eq!(m.joint("Z").unwrap().rapid, Some(5840.0)); // 230 IPM
+    assert_eq!(m.spindles[0].rpm.unwrap()[1], 10000.0);
     assert_eq!(m.spindles[0].nose[2], 438.0); // nose to table max clearance, 17.25 in
     let r = builtin_named("tormach-24r").unwrap();
-    assert_eq!(r.joint("Y").unwrap().range, [-1415.0, 0.0]);
-    assert_eq!(r.spindles[0].rpm, [10000.0, 24000.0]);
+    assert_eq!(r.joint("Y").unwrap().range, Some([-1415.0, 0.0]));
+    assert_eq!(r.spindles[0].rpm, Some([10000.0, 24000.0]));
     let l = builtin_named("tormach-15lx-turret").unwrap();
     assert_eq!(l.kind, Kind::Lathe);
-    assert_eq!(l.turrets[0].stations, 8);
-    assert_eq!(l.spindles[0].rpm[1], 3500.0);
+    assert_eq!(l.turrets[0].stations, Some(8));
+    assert_eq!(l.spindles[0].rpm.unwrap()[1], 3500.0);
 }
 
 #[test]

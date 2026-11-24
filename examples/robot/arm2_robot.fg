@@ -1,0 +1,15 @@
+# The arm as a robot: linked to arm2.fg, with what the URDF needs on top
+# (`forgecad export arm2_robot.fg urdf`; research/export/urdf-editor.md).
+robot
+
+shared eff = 5
+src = source("arm2.fg")
+
+actuation(effort: eff, velocity: 1)
+forearm = link(src.fore)
+freeze(src.grip, at: 0)
+merge(forearm, src.finger)
+collision(src.base, box(size: (80, 80, 20), at: pose(at: (0, 0, 10))))
+joint(src.elbow, limit: (-90deg, 90deg), limit_was: (-135deg, 135deg), damping: 0.1)
+tool0 = frame(on: forearm, at: pose(at: (144, 0, 5)))
+transmission(src.shoulder, actuator: "m1", reduction: 50)

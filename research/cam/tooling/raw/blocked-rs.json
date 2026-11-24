@@ -1,0 +1,14 @@
+{
+ "source": "RS",
+ "blocked": [
+  {
+   "url": "https://us.rs-online.com/",
+   "why": "HTTP 403"
+  },
+  {
+   "url": "https://uk.rs-online.com/web/c/?searchTerm=CNMG120408",
+   "why": "HTTP 403 Access Denied (Akamai) on search; home page loaded but no product page reached"
+  }
+ ],
+ "records": []
+}

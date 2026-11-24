@@ -2488,6 +2488,9 @@ impl<'s> Eval<'s> {
         let last = self.feats.last_mut().expect("pushed");
         last.frame = Some(sk.borrow().frame);
         last.reads.extend(reads);
+        // kept for the app to free between builds (`forge_keep`; a sketch with a named entity is
+        // an Rc cycle, and a run frees nothing)
+        forge_keep::keep(sk.clone());
         Ok(Value::Sketch(sk))
     }
 

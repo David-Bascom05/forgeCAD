@@ -1469,6 +1469,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # DN Solutions NHP 5000: NHP 4000/5000/6300.
 # X 730 Y 730 Z 880; 15000 rpm ISO #40; 40 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "dn-solutions-nhp-5000"
 kind = "vmc4"
@@ -1766,6 +1772,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # DN Solutions Lynx 2100A: Lynx 2100 series.
 # X 205 Z 340; 6000 rpm.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "dn-solutions-lynx-2100a"
 kind = "lathe"
@@ -3284,6 +3296,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # DN Solutions NHP 6300 (2nd generation): NHP.
 # X 1050 Y 900 Z 1000; 12000 rpm ISO #50; 40 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "dn-solutions-nhp-6300-2nd"
 kind = "vmc4"
@@ -3581,6 +3599,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # DN Solutions Lynx 2600: Lynx 2100/2600.
 # X 255 Z 680; 3500 rpm.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "dn-solutions-lynx-2600"
 kind = "lathe"
