@@ -1796,6 +1796,30 @@ pub enum Gap {
 /// untrimmed surface's CL along the piece, by the mean-value form in s); the pieces it cannot
 /// clear go to the branch and bound over the face's parameters and s.
 pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Gap, usize) {
+    gap_search(col, f, mv, limit, res, budget, false)
+}
+
+/// Whether `gap_move` on the same arguments is `Clear`, the same answer, but by a search that
+/// stops once it cannot be: at a cell too small to split (the verdict is then Unknown at best),
+/// or once the cells over the limit still in the heap, each needing a split of two cells, cannot
+/// all be split within the budget. For callers that treat Over and Unknown alike.
+pub fn gap_clear(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> bool {
+    matches!(
+        gap_search(col, f, mv, limit, res, budget, true).0,
+        Gap::Clear { .. }
+    )
+}
+
+/// `gap_move`'s search; `clear_only`: stop at the first sign it cannot end Clear (`gap_clear`).
+fn gap_search(
+    col: &Column,
+    f: &Face,
+    mv: &Move,
+    limit: f64,
+    res: f64,
+    budget: usize,
+    clear_only: bool,
+) -> (Gap, usize) {
     if limit > 0.0 {
         return (Gap::Unknown, 0);
     }
@@ -2040,6 +2064,8 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
     // cells near the limit; a cell too small to split leaves the verdict unknown, but the search
     // goes on for a witness
     let mut heap = Heap { v: Vec::new() };
+    // (the heap's cells over the limit, each of which a Clear verdict must split)
+    let mut over = 0usize;
     let mut i = 0;
     while i < rest.len() {
         let c = Cell {
@@ -2049,6 +2075,9 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
         };
         cells += 1;
         if let Some((u, kk)) = cell_upper_side(col, f, mv, &c, true) {
+            if u > need {
+                over += 1;
+            }
             heap.push(u, 0, c, kk);
         }
         i += 1;
@@ -2061,7 +2090,9 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
             }
             continue;
         }
-        if cells > budget {
+        over -= 1;
+        // each of the others is popped with at most `budget` cells spent and split into two
+        if cells > budget || (clear_only && cells + 2 * over > budget) {
             return (Gap::Unknown, cells);
         }
         // a real point over the limit: proven over, stop
@@ -2085,6 +2116,9 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
         }
         let img = diam2(&f.surf.eval(c.p, c.q)).max(diam2(&mv.at(c.s)));
         if img <= res || (c.p.width() == 0.0 && c.q.width() == 0.0 && c.s.width() == 0.0) {
+            if clear_only {
+                return (Gap::Unknown, cells);
+            }
             unknown = true;
             continue;
         }
@@ -2101,6 +2135,7 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
                         worst = u2;
                     }
                 } else {
+                    over += 1;
                     heap.push(u2, 0, h, k2);
                 }
             }

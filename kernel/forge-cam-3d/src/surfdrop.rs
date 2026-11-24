@@ -11,7 +11,7 @@
 use crate::drop::{Band, DropCutter, seg_band};
 use forge_cam::surf::{Surfacer, XyGrid};
 use forge_cam_geom::check::Move;
-use forge_cam_geom::drop::{Column, Gap, gap_move};
+use forge_cam_geom::drop::{Column, gap_clear};
 use forge_cam_geom::ival::Ival;
 
 /// Cells for one face's gap check in a generator's segment test.
@@ -70,14 +70,11 @@ impl<'s, 'a> SurfDrop<'s, 'a> {
         ) {
             return true;
         }
-        match gap_move(&self.chk, f, mv, limit, self.sf.res, GAP_BUDGET).0 {
-            Gap::Clear { .. } => true,
-            Gap::Over { .. } => false,
-            // undecided by the column: not proven. The generator splits the piece (short
-            // pieces resolve by the closed forms), which is far cheaper than a branch and
-            // bound here; the path's certification is the checker's, after
-            Gap::Unknown => false,
-        }
+        // Over or undecided by the column: not proven. The generator splits the piece (short
+        // pieces resolve by the closed forms), which is far cheaper than a branch and bound
+        // here; the path's certification is the checker's, after. So only "Clear?" is asked
+        // (`gap_clear`: gap_move's answer, its search stopped once it cannot be Clear)
+        gap_clear(&self.chk, f, mv, limit, self.sf.res, GAP_BUDGET)
     }
 }
 
@@ -169,9 +166,8 @@ impl DropCutter for SurfDrop<'_, '_> {
                 ) {
                     continue;
                 }
-                match gap_move(&grown, f, &mv, -slack, self.sf.res, GAP_BUDGET).0 {
-                    Gap::Clear { .. } => {}
-                    _ => return false,
+                if !gap_clear(&grown, f, &mv, -slack, self.sf.res, GAP_BUDGET) {
+                    return false;
                 }
             }
         }
