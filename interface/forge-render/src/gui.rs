@@ -222,7 +222,7 @@ pub struct Gui {
     /// later task: `picks` finishes it).
     window_out: Option<WindowAsk>,
     /// A message with marks, sent once the frame showing them is drawn.
-    markup_job: Option<(String, Vec<String>)>,
+    markup_job: Option<(String, Vec<String>, Vec<crate::agent::Picture>)>,
     /// A message with marks taken, waiting on its names; an assembly's occurrences' own names,
     /// by the text they were found for, and the thread finding them.
     markup_wait: Option<Box<gui_markup::Waiting>>,

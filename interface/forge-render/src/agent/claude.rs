@@ -3,7 +3,7 @@
 // desktop only: a page starts no CLI (std's threads and sleeps never run there)
 #![cfg_attr(target_arch = "wasm32", allow(clippy::disallowed_methods))]
 
-use super::{Backend, Event, Out, Watch, clean_env};
+use super::{Backend, Event, Out, Picture, Watch, clean_env};
 use crate::shell::agent::{Answer, Mode, present, tool_summary};
 use forge_agent::json::Json;
 use std::collections::HashSet;
@@ -525,27 +525,35 @@ impl ClaudeCode {
     }
 }
 
+/// A user message's content: its pictures first, as image blocks the text reads after.
+pub fn content(prompt: String, pictures: &[Picture]) -> Json {
+    if pictures.is_empty() {
+        return prompt.into();
+    }
+    let mut blocks: Vec<Json> = pictures
+        .iter()
+        .map(|p| {
+            Json::obj(vec![
+                ("type", "image".into()),
+                (
+                    "source",
+                    Json::obj(vec![
+                        ("type", "base64".into()),
+                        ("media_type", p.media.into()),
+                        ("data", super::apptools::base64(&p.bytes).into()),
+                    ]),
+                ),
+            ])
+        })
+        .collect();
+    blocks.push(Json::obj(vec![("type", "text".into()), ("text", prompt.into())]));
+    Json::Arr(blocks)
+}
+
 impl Backend for ClaudeCode {
-    fn send(&mut self, prompt: String, picture: Option<Vec<u8>>) {
+    fn send(&mut self, prompt: String, pictures: Vec<Picture>) {
         *self.watch.lock().expect("watch") = Watch::new(&self.root);
-        // a picture goes first, as an image block the message reads after
-        let content = match picture {
-            None => prompt.into(),
-            Some(png) => Json::Arr(vec![
-                Json::obj(vec![
-                    ("type", "image".into()),
-                    (
-                        "source",
-                        Json::obj(vec![
-                            ("type", "base64".into()),
-                            ("media_type", "image/png".into()),
-                            ("data", super::apptools::base64(&png).into()),
-                        ]),
-                    ),
-                ]),
-                Json::obj(vec![("type", "text".into()), ("text", prompt.into())]),
-            ]),
-        };
+        let content = content(prompt, &pictures);
         let msg = Json::obj(vec![
             ("type", "user".into()),
             (

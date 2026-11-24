@@ -59,6 +59,7 @@ fn a_saved_conversation_keeps_its_turns_and_diff_cards() {
             text: "thicker".into(),
             refs: vec![],
             markup: None,
+            pictures: 0,
         },
         Entry::Diff {
             turn: 0,
