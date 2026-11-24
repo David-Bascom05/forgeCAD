@@ -381,8 +381,12 @@ pub fn certify_with(
     // the moves are independent: chunks of them are checked on all cores (forge_math::par),
     // each with its own scratch, and merged in move order with the sequential rules below
     // (stop at a containment failure, or after the 21st failing check, counting what was
-    // counted up to there), so the summary is the same at any thread count
-    const CHUNK: usize = 64;
+    // counted up to there), so the summary is the same at any thread count. Chunks are small:
+    // a move's cost varies by orders of magnitude (a cutter tangent to a torus takes thousands of
+    // cells, a rapid in the clear none) and the costly moves of a pass sit together, so large
+    // chunks left one core with all of them (manifold's `shal`: 3 chunks of 64, one with every
+    // costly move); a chunk's scratch is reset per move, so the size changes no result
+    const CHUNK: usize = 8;
     let nchunks = mv.len().div_ceil(CHUNK);
     let nstock = stages.iter().map(|s| s.1.len()).max().unwrap_or(0);
     let chunks: Vec<Vec<MoveOut>> = forge_math::par::map(nchunks, |c| {

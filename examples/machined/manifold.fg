@@ -112,7 +112,7 @@ sketch hs(on: block.end) {
   t3 = pt(tx0, ty1)
   t4 = pt(hx1, ty1)
 }
-dowels = hole(at: [hs.d1, hs.d2], d: dowel_d, depth: dowel_depth, point: tip)
+dowels = hole(at: [hs.d1, hs.d2], d: dowel_d, depth: dowel_depth, point: tip, fit: "H7")
 taps = hole(at: [hs.t1, hs.t2, hs.t3, hs.t4], screw: "M6", fit: "tap", depth: tap_depth, point: tip)
 
 # the bottom: a relief pocket and two counterbored clearance holes, from below (its sketch's y

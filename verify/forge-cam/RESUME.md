@@ -158,6 +158,13 @@ Shadow.lean proves S1–S4, with `shadow_face` and `certified_clear_gen` assembl
   `g_digits`, `arc = centre_abs` (an absolute I J block, then G02/G03), `tool_word` (the T block is
   the tool change), multi-line spindle templates. G6 for the dialects that use them (siemens,
   heidenhain, pathpilot, mach3, mach4, centroid-cnc12, masso) is UNKNOWN in Lean.
+- The torus about a vertical axis (shadow.rs `Kind::Torus`, CAM-CORE 2026-11-24): the same
+  bound as the cone. `torus_radius` (= `cone_radius` with the radius big + r cos φ) gives the
+  face point's distance from the axis, `axis_gap` the horizontal gap, `cone_factor` the
+  |c x + s y| enclosure. Its cos φ and sin φ over a cell of q are the rational map's interval
+  enclosures (L5). A posted arc whose centre is ε off the axis (rounded words) is covered by the
+  path's own distance range from the axis (`arc_far`, `arc_near`), which already holds every
+  instant within r ± ε.
 
 ## Still to do when asked
 
