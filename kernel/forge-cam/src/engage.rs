@@ -570,6 +570,52 @@ pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -
     }
 }
 
+/// As `schedule`, but each move keeps its own geometry whole and takes ONE feed: the lowest its
+/// samples call for (so the chip stays within fz over all of it). A move that meets no material
+/// in any sample keeps its own feed where that is higher. For paths built of long arcs and lines
+/// (adaptive): no block is split, and F changes only between moves, so the control is not asked
+/// to slow for an F change inside a curve.
+pub fn schedule_per_move(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -> OpPath {
+    let samples = schedule_samples(path, map, prof, s);
+    let feed = sample_feeds(&samples, s);
+    let n = samples.len();
+    let mut out = Vec::with_capacity(path.moves.len());
+    let mut k = 0;
+    for (mi, mv) in path.moves.iter().enumerate() {
+        let start = k;
+        while k < n && samples[k].mv == mi {
+            k += 1;
+        }
+        if start == k {
+            out.push(*mv);
+            continue;
+        }
+        let own = match *mv {
+            PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
+            _ => 0.0,
+        };
+        let air = samples[start..k].iter().all(|sm| sm.engage.is_none());
+        let lo = feed[start..k].iter().copied().fold(f64::INFINITY, f64::min);
+        let f = if air && own > lo {
+            own.min(s.f_max.max(s.f_min))
+        } else {
+            lo
+        };
+        out.push(match *mv {
+            PMove::Line { to, phase, .. } => PMove::Line { to, f, phase },
+            PMove::Arc { to, c, cw, .. } => PMove::Arc { to, c, cw, f },
+            other => other,
+        });
+    }
+    OpPath {
+        tool: path.tool,
+        start: path.start,
+        moves: out,
+        rpm: path.rpm,
+        coolant: path.coolant,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
