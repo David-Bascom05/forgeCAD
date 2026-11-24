@@ -51,11 +51,16 @@ fn the_manifolds_refusals_read_for_a_person() {
     // out, its code first
     assert!(
         cam.errors.iter().any(|e| e.contains(
-            "NotPrism: At z = 29 mm, the part's face 38 is not straight-sided (a wall along z) there, so a 2.5D op cannot cut it: use a 3D op (zlevel) for that height."
+            "At z = 29 mm, the part's face 38 is not straight-sided (a wall along z) there, so a 2.5D op cannot cut it: use a 3D op (zlevel) for that height."
         )),
         "{:?}",
         cam.errors
     );
+    // its code beside it, not in the text
+    let i = cam.errors.iter().position(|e| e.contains("face 38")).unwrap();
+    assert!(!cam.errors[i].contains("NotPrism"), "{}", cam.errors[i]);
+    assert!(cam.error_codes.contains(&(i, "NotPrism".to_string())));
+    assert!(cam.json().to_string().contains("\"error_codes\":["));
 }
 
 #[test]
@@ -86,11 +91,17 @@ fn a_tool_too_short_says_which_lengths() {
     let cam = forge_cam_lang::run(src, &dir());
     assert!(
         cam.errors.iter().any(|e| e.contains(
-            "BadTool: Tool `flat-10`: its stick-out (22 mm) must be longer than its flute length (25 mm)."
+            "Tool `flat-10`: its stick-out (22 mm) must be longer than its flute length (25 mm); lengthen the stick-out to more than 25 mm, or pick a tool with shorter flutes."
         )),
         "{:?}",
         cam.errors
     );
+    assert!(
+        cam.errors.iter().all(|e| !e.contains("BadTool")),
+        "{:?}",
+        cam.errors
+    );
+    assert!(cam.error_codes.iter().any(|(_, c)| c == "BadTool"));
 }
 
 #[test]

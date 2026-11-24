@@ -691,6 +691,9 @@ pub struct Cam {
     pub leftover_done: bool,
     pub ok: bool,
     pub errors: Vec<String>,
+    /// The typed codes of `errors` that have one, by index (`NotPrism`, `BadTool`, ..): the text
+    /// carries none.
+    pub error_codes: Vec<(usize, String)>,
     pub warnings: Vec<String>,
     parts: Vec<PartIn>,
     tools: Vec<ToolUse>,
@@ -1273,6 +1276,7 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
         leftover_done: false,
         ok: true,
         errors: vec![],
+        error_codes: vec![],
         warnings: vec![],
         parts: vec![],
         tools: vec![],
@@ -1384,8 +1388,14 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
                 },
                 _ => String::new(),
             };
-            cam.errors
-                .push(format!("line {}{who}: {e}", line_of(src, st.span.lo as usize)));
+            let (code, words) = split_code(&e);
+            if let Some(c) = code {
+                cam.error_codes.push((cam.errors.len(), c));
+            }
+            cam.errors.push(format!(
+                "line {}{who}: {words}",
+                line_of(src, st.span.lo as usize)
+            ));
         }
     }
     // each op was certified on the stock every earlier op of its setup, and every op of the
@@ -4676,8 +4686,9 @@ fn tool_words(
     use forge_cam_geom::tool::ToolError;
     match e {
         ToolError::Bad("stickout") => format!(
-            "BadTool: Tool `{id}`: its stick-out ({} mm) must be longer than its flute length ({} mm).",
+            "BadTool: Tool `{id}`: its stick-out ({} mm) must be longer than its flute length ({} mm); lengthen the stick-out to more than {} mm, or pick a tool with shorter flutes.",
             mm(stickout),
+            mm(t.lcf),
             mm(t.lcf)
         ),
         ToolError::Bad("lcf") => format!(
@@ -6231,6 +6242,17 @@ impl Cam {
             ("certification", Json::Str(self.certification().into())),
             ("schema", Json::Str("forgecad.cam/1".into())),
             ("errors", Json::Arr(self.errors.iter().map(|e| Json::Str(e.clone())).collect())),
+            (
+                "error_codes",
+                Json::Arr(
+                    (0..self.errors.len())
+                        .map(|i| match self.error_codes.iter().find(|(k, _)| *k == i) {
+                            Some((_, c)) => Json::Str(c.clone()),
+                            None => Json::Null,
+                        })
+                        .collect(),
+                ),
+            ),
             ("warnings", Json::Arr(self.warnings.iter().map(|e| Json::Str(e.clone())).collect())),
             ("setups", Json::Arr(setups)),
             ("ops", Json::Arr(ops)),
