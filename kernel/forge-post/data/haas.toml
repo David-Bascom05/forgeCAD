@@ -45,3 +45,38 @@ cycle_cancel = "G80"
 source = "forgecad, restated from NIST RS274NGC v3 and common Fanuc practice"
 taken = "2026-11-23"
 note = "verify with your control's manual"
+
+# Cutter radius compensation, from Haas's Mill Programming Workbook (read 2026-11-24). Not posted:
+# (1) the workbook does not say what the control does at an outside corner (comp_corner refused),
+# and (2) Haas turns compensation on and off IN the block of the X/Y move ("N106 G41 X-2. D01
+# F12."), which forge-post's standalone comp line does not write. The templates stay unset until
+# a same-block form exists and the corner behaviour is published; the facts are cited here.
+
+[[dialect.cite]]
+key = "comp_left"
+source = "https://www.haascnc.com/content/dam/haascnc/en/service/reference/programming-workbooks/mill---programming-workbook.pdf"
+taken = "2026-11-24"
+where = "Mill - Programming Workbook (Haas Automation, (c) 2015, PDF modified 2023-02-16): Cutter Compensation pp. 60-63; D TOOL DIAMETER OFFSET SELECTION p. 24; G-code list p. 15 (G41/G42 with Setting 43, 44, 58)"
+note = "G41 + Dnn (register 0-200; Setting 40: radius or diameter); geometry and wear 'are added together by the control and used as one value'; written in the block of an X/Y G00/G01 move, e.g. 'N106 G41 X-2. D01 F12.'; only in G17 (G18/G19 need G141). Template not set: the same-block form is not written yet"
+
+[[dialect.cite]]
+key = "comp_right"
+source = "https://www.haascnc.com/content/dam/haascnc/en/service/reference/programming-workbooks/mill---programming-workbook.pdf"
+taken = "2026-11-24"
+where = "Mill - Programming Workbook (Haas Automation): Cutter Compensation p. 60"
+note = "G42 + Dnn, as G41 to the right of the path. Template not set (same-block form)"
+
+[[dialect.cite]]
+key = "comp_off"
+source = "https://www.haascnc.com/content/dam/haascnc/en/service/reference/programming-workbooks/mill---programming-workbook.pdf"
+taken = "2026-11-24"
+where = "Mill - Programming Workbook (Haas Automation): Cutter Compensation pp. 60-61; Some Restrictions with Cutter Compensation p. 67"
+note = "G40 (or D00) cancels; 'must be on the same block with an X and/or Y linear command ... You cannot turn on or off cutter compensation with a Z axis move', nor in G02/G03; e.g. 'N115 G40 G01 X-2.35'; clearance at least half the cutter diameter off the part. Template not set (same-block form)"
+
+[[dialect.cite]]
+key = "comp_corner"
+status = "refused"
+source = "https://www.haascnc.com/content/dam/haascnc/en/service/reference/programming-workbooks/mill---programming-workbook.pdf"
+taken = "2026-11-24"
+where = "Mill - Programming Workbook (Haas Automation): Cutter Compensation pp. 60-68"
+note = "what the control does at an outside corner (arc or intersection) is not stated (Settings 43/44/58 are named with G41/G42 but not explained there): UNKNOWN, so compensation is refused on haas"
