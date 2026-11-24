@@ -27,6 +27,11 @@ pub struct Snap {
     /// Filled rectangles in paint order: a popup's background hides what was painted before it.
     pub fills: Vec<(usize, Rect)>,
     pub status: String,
+    /// The status bar's line as it's drawn (the words a person reads there).
+    pub status_drawn: String,
+    /// The document's own names (its features', its components'): a name the person gave is
+    /// no raw key.
+    pub names: Vec<String>,
     pub tab: usize,
     pub env: Option<forge_render::shell::env::EnvId>,
     pub focus: Option<Id>,
@@ -61,12 +66,20 @@ impl Snap {
             }
         }
         let (w, hh, rgb) = ppm(&h.ppm());
-        Snap {
+        let mut snap = Snap {
             places,
             layers,
             texts,
             fills,
             status: h.gui.shell.status.clone(),
+            status_drawn: String::new(),
+            names: h
+                .gui
+                .shell
+                .fg
+                .as_ref()
+                .map(|f| f.feats.iter().map(|x| x.id.clone()).collect())
+                .unwrap_or_default(),
             tab: h.gui.shell.tab,
             env: h.gui.shell.env,
             focus,
@@ -76,7 +89,20 @@ impl Snap {
             w,
             h: hh,
             rgb,
-        }
+        };
+        // the bar's row: the text drawn in the window's last 26 points, left of its middle
+        let bar = Rect::from_min_max(
+            egui::pos2(0.0, snap.h as f32 - 26.0),
+            egui::pos2(snap.w as f32 * 0.6, snap.h as f32),
+        );
+        let mut words: Vec<&Text> = snap
+            .texts
+            .iter()
+            .filter(|t| bar.contains(t.rect.center()))
+            .collect();
+        words.sort_by(|a, b| a.rect.left().total_cmp(&b.rect.left()));
+        snap.status_drawn = words.iter().map(|t| t.s.as_str()).collect::<Vec<_>>().join(" ");
+        snap
     }
 
     /// Layers shown now that weren't before, tooltips and the debug/background ones aside.
