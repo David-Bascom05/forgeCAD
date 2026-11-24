@@ -231,12 +231,6 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
         });
     s.places.push(("env:bendsim:browser".into(), r));
     s.sheet.bend_sim = Some(b);
-    // the flat pattern, its bend lines shown, the bend named (picking one line out is a gap)
-    if let Some(bend) = flat {
-        s.sheet.bend_lines = true;
-        s.out.push(Action::EnterEnv(EnvId::FlatPattern));
-        s.status = format!("Flat Pattern: bend {bend}");
-    }
     true
 }
 
