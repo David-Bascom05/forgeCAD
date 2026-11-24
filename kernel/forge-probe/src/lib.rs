@@ -17,7 +17,8 @@
 //!
 //! Bodies (`[[probe.cyl]]`, `[[probe.box]]`) are envelopes in that frame for the collision checks.
 use forge_tooling::LibError;
-use forge_tooling::cite::{self, Cite, CiteStatus};
+pub use forge_tooling::cite::CiteStatus;
+use forge_tooling::cite::{self, Cite};
 use forge_tooling::toml::{self, Table, Val, nums, tables, text, texts};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
