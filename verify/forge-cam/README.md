@@ -38,6 +38,7 @@ lake exe cache get && lake build && lake env lean Axioms.lean
 - Cone: `cone_factor` (the |c x + s y|² enclosure), `cone_radius`, `axis_gap`, `line_far`, `arc_far`, and `arc_near` (point–arc less the gap).
 - Search: `shadow_cover`, `shadow_face`.
 - `certified_clear_gen` carries a per-face bound of any face kind into the clearance. |
+| ForgeCam/Halfspace.lean | `sd_ge_of_halfspace`: a tool lying in {D ≤ ⟪N, x⟫ − c} (N unit) has signed distance ≥ D from every point of the plane ⟪N, x⟫ = c, D of either sign: shadow.rs's `halfspace_bound` for plane faces, per piece of the move. |
 | ForgeCam/Heights.lean | `apart_of_heights`, `setDist_of_heights`: a body at least c above a height T is at least c from anything at or under T; why forge-cam-lang skips building the staged stock when every checked body stays the clearance above the stock's top. |
 | ForgeCam/PathEnds.lean | H.pathends, the metric core of `Move::path_gap`: `proj_near` (the stored end's ray meets the circle within 2ε of the true end), `chord_mono` (a circle point in the cone between the true end and that point is no farther from it). The cone decomposition of the whole arc is argued in the code (hyp). |
 | ForgeCam/Machine.lean | G5 for 3-axis. `G5_line_iff`: a line move is within travel iff its ends are. `G5_arc`: an arc or helix is within travel if its circle's box is. `lineOkQ_iff`: the ℚ Bool check equals the ℝ spec. `G5rt_of_check`: the runtime check (posted F words against an outward-rounded lower end of max_feed · 10^k, S words in the rpm range) gives G5's runtime half. |

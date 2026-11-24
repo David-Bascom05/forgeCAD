@@ -91,3 +91,4 @@ import ForgeCam
 #print axioms ForgeCam.PathEnds.chord_mono
 #print axioms ForgeCam.PathEnds.proj_near
 #print axioms ForgeCam.setDist_of_heights
+#print axioms ForgeCam.sd_ge_of_halfspace
