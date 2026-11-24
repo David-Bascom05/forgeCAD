@@ -152,3 +152,33 @@ fn bore_through_a_part_checks() {
         assert!(p.is_empty(), "{op:?}: {p:?}");
     }
 }
+
+/// TRT210 #204568: a file's spline edge (a cylinder-cylinder intersection) whose gap from its faces
+/// peaks between the reader's samples; a boolean that split it left a piece 1.3e-3 over its
+/// tolerance (corpus K029, FLAT-SITES). Every tolerant edge's tolerance covers its gap measured
+/// at 4096 points.
+#[test]
+fn a_tolerant_edges_gap_is_covered_everywhere() {
+    use forge_geom::SurfaceGeom;
+    let b = one("trt210_split_spline_edge.step");
+    let mut n = 0;
+    for e in b.edge_ids() {
+        let x = b.edge(e);
+        if x.tol <= forge_math::tol::LINEAR {
+            continue;
+        }
+        n += 1;
+        let pts = b.edge_points(e, 4096);
+        for &c in &x.coedges {
+            let s = &b.face(b.coedge_face(c)).surface;
+            let mut near = None;
+            for &p in &pts {
+                let uv = near.map_or_else(|| s.project(p), |uv| s.project_near(p, uv));
+                near = Some(uv);
+                let gap = s.eval(uv).distance(p);
+                assert!(gap <= x.tol, "edge {e:?}: gap {gap:e} over tolerance {:e}", x.tol);
+            }
+        }
+    }
+    assert!(n > 0, "the part has tolerant edges");
+}
