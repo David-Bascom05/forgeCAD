@@ -767,6 +767,12 @@ impl Nav {
         self.go_to(to);
     }
 
+    /// Cut to a view (no move from the one before): a subject framed on entering.
+    pub fn cut_to(&mut self, c: Camera) {
+        self.transition = None;
+        self.camera = c;
+    }
+
     /// The opening view of everything.
     pub fn home(&mut self, scene: &Scene) {
         let (c, r) = scene.bounds();

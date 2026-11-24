@@ -12,6 +12,7 @@
 mod bendsim;
 mod builtin;
 mod render;
+mod robot;
 mod workspaces;
 
 use super::ribbon::{Group, Tool};
@@ -25,6 +26,8 @@ pub const BENDSIM_TAB: usize = 21;
 /// The Machine Builder's (Manufacture's is `CAM_TAB`, 11).
 pub const MACHINE_TAB: usize = 12;
 pub const RENDER_TAB: usize = 22;
+/// The Robot environment's (`robot.rs`), in the slot kept for it.
+pub const ROBOT_TAB: usize = 13;
 
 /// Every environment, known or still to land.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

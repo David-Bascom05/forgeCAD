@@ -1416,6 +1416,7 @@ dependencies = [
  "forge-turn",
  "forge-turn-lang",
  "forge-units",
+ "forge-urdf",
  "forge-vendor",
  "forge-workholding",
  "forge-workholding-builder",
@@ -1539,6 +1540,19 @@ dependencies = [
 [[package]]
 name = "forge-units"
 version = "0.1.0"
+
+[[package]]
+name = "forge-urdf"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-asm",
+ "forge-lang",
+ "forge-material",
+ "forge-math",
+ "forge-mesh",
+ "forge-topo",
+]
 
 [[package]]
 name = "forge-vendor"

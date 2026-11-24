@@ -465,6 +465,9 @@ fn import(argv: &[String]) -> ExitCode {
     }
     let Some(file) = file else { return usage() };
     let path = std::path::Path::new(&file);
+    if path.extension().is_some_and(|x| x.eq_ignore_ascii_case("urdf")) {
+        return import_urdf(path, Path::new(&dir), json);
+    }
     let stem = path
         .file_name()
         .and_then(|s| s.to_str())
@@ -623,6 +626,63 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     } else {
         ExitCode::FAILURE
     }
+}
+
+/// `import ROBOT.urdf [-o DIR]`: the URDF as an unlinked robot document, DIR/ROBOT_robot.fg, its
+/// meshes referenced where they are.
+fn import_urdf(path: &Path, dir: &Path, json: bool) -> ExitCode {
+    let stem = path
+        .file_stem()
+        .map_or_else(|| "robot".into(), |s| s.to_string_lossy().into_owned());
+    let out = dir.join(format!("{stem}_robot.fg"));
+    let urdf_dir = path
+        .parent()
+        .map(|p| {
+            std::fs::canonicalize(if p.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                p
+            })
+        })
+        .and_then(Result::ok)
+        .unwrap_or_default();
+    let _ = std::fs::create_dir_all(dir);
+    let doc_dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    let r = std::fs::read_to_string(path)
+        .map_err(|e| e.to_string())
+        .and_then(|x| forge_urdf::import::import(&x, &urdf_dir, &doc_dir));
+    let i = match r {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("{}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(e) = std::fs::write(&out, &i.text) {
+        eprintln!("{}: {e}", out.display());
+        return ExitCode::FAILURE;
+    }
+    if json {
+        println!(
+            "{}",
+            forge_agent::json::Json::obj(vec![
+                ("ok", true.into()),
+                ("file", out.to_string_lossy().as_ref().into()),
+                ("links", i.links.into()),
+                ("joints", i.joints.into()),
+                (
+                    "dropped",
+                    forge_agent::json::Json::Arr(i.dropped.iter().map(|d| d.as_str().into()).collect()),
+                ),
+            ])
+        );
+    } else {
+        println!("wrote {}: {} links, {} joints", out.display(), i.links, i.joints);
+        for d in &i.dropped {
+            println!("not imported: {d}");
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 /// `cam F post`: each program's file written where its statement says (beside the document), or

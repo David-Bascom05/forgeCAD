@@ -16,12 +16,11 @@ pub(super) fn of(id: EnvId) -> &'static dyn Environment {
         EnvId::Drawing => &Drawing,
         EnvId::Manufacture => &super::workspaces::Manufacture,
         EnvId::MachineBuilder => &super::workspaces::MachineBuilder,
-        EnvId::Robot => &Pending(EnvId::Robot, ROBOT),
+        EnvId::Robot => &super::robot::Robot,
         EnvId::Simulation => &Pending(EnvId::Simulation, SIMULATION),
     }
 }
 
-const ROBOT: &str = "coming: the robot (URDF) editor is still on its branch";
 const SIMULATION: &str = "not yet: the kernel has no structural or motion solver";
 
 /// The ribbon's tuples (thermo_ui, harness_ui give theirs so) as groups.
