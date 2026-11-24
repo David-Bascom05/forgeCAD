@@ -95,6 +95,23 @@ fn sweep(a: P2, b: P2, c: P2, ccw: bool) -> f64 {
     d
 }
 
+/// A closed loop's signed area (counter-clockwise positive): the chords' shoelace plus each
+/// arc's circular segment.
+pub fn area(segs: &[Seg]) -> f64 {
+    let mut a2 = 0.0;
+    for sg in segs {
+        let (a, b) = (sg.start(), sg.end());
+        a2 += a.x * b.y - a.y * b.x;
+        if let Seg::Arc { a, b, c, ccw } = *sg {
+            let r = len(sub(a, c));
+            let th = sweep(a, b, c, ccw);
+            let seg = r * r * (th - dmath::sin_cos(th).0);
+            a2 += if ccw { seg } else { -seg };
+        }
+    }
+    0.5 * a2
+}
+
 /// The length of a segment.
 pub fn seg_len(s: &Seg) -> f64 {
     match *s {
@@ -295,8 +312,11 @@ pub fn wrap(
     eps: f64,
 ) -> (Vec<Seg>, Vec<Seg>, Vec<Seg>, Vec<Seg>) {
     // a loop of no length (the tool exactly fits a round hole: the offset is the centre, a
-    // circle of radius 0) has no direction to lead along: it is plunged as it is
-    if segs.iter().map(seg_len).sum::<f64>() <= eps {
+    // circle of radius 0) has no direction to lead along, and one of no width (the tool exactly
+    // fits a slot: the offset runs along its centreline and back) has no air beside it: either
+    // is cut as it is, with no lead or overlap
+    let total: f64 = segs.iter().map(seg_len).sum();
+    if total <= eps || 2.0 * area(segs).abs() / total <= eps {
         return (vec![], segs.to_vec(), vec![], vec![]);
     }
     let body = match ld.entry {
@@ -397,6 +417,39 @@ mod tests {
         // the climb sense mirrors it
         let li = lead_in(s, t, true, &ld);
         assert!(li[1].start().y > 1.9);
+    }
+
+    #[test]
+    fn areas_and_a_collapsed_loop() {
+        assert!((area(&square()) - 100.0).abs() < 1e-12);
+        let a = p2(2.0, 0.0);
+        let circ = [Seg::Arc {
+            a,
+            b: a,
+            c: p2(0.0, 0.0),
+            ccw: true,
+        }];
+        assert!((area(&circ) - 4.0 * std::f64::consts::PI).abs() < 1e-9);
+        // a slot's centreline there and back: no width, so no leads
+        let (p, q) = (p2(60.0, 62.0), p2(102.0, 62.0));
+        let back = [Seg::Line { a: q, b: p }, Seg::Line { a: p, b: q }];
+        let l = Lead {
+            radius: 2.0,
+            sweep_deg: 90.0,
+            length: 0.0,
+        };
+        let (li, body, _, lo) = wrap(
+            &back,
+            true,
+            &Leads {
+                lead_in: Some(l),
+                lead_out: Some(l),
+                ..Default::default()
+            },
+            1e-6,
+        );
+        assert!(li.is_empty() && lo.is_empty());
+        assert_eq!(body, back.to_vec());
     }
 
     /// A point loop (a circle of radius 0, the tool exactly fitting a hole) gets no leads and no
