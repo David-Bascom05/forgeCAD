@@ -196,3 +196,21 @@ fn measure_vertices() {
     println!("smallest gap to a non-incident planar face: {min_gap:e}; curved faces skipped {skipped}");
 }
 
+
+/// The suite's `coplanar` part has vertices where two incident faces lie on exactly one plane (18
+/// when written: the z = 20 face and small faces on it). So the Lean model may not assume distinct
+/// planes at a vertex: D8.formula's `J` counts only carriers with different zero sets, plus the
+/// zone's edge points (verify/forge-bool-proof LEDGER D8.cells).
+#[test]
+fn coplanar_part_has_coplanar_incident_faces() {
+    let b = suite::part("coplanar").expect("the coplanar part").regenerate().expect("it builds");
+    let inc = incident(&b);
+    let exact = inc
+        .iter()
+        .filter(|fs| {
+            let ps: Vec<(forge_math::Vec3, f64)> = fs.iter().filter_map(|&f| plane_of(&b, f)).collect();
+            (0..ps.len()).any(|i| (i + 1..ps.len()).any(|j| same_plane_exact(ps[i], ps[j])))
+        })
+        .count();
+    assert!(exact > 0, "no coplanar incident faces left in the coplanar part: J's refinement can be revisited");
+}
