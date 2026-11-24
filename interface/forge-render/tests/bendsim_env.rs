@@ -295,6 +295,10 @@ fn the_cube_looks_down_the_bend_and_what_hides_it_is_seen_through() {
     c.yaw = 240f32.to_radians();
     c.pitch = 25f32.to_radians();
     v.nav.jump_to(c);
+    // its fade run through (FADE_AFTER frames, then FADE_FRAMES)
+    for _ in 0..16 {
+        h.step();
+    }
     shot(&mut h, "11-seen-through");
     let n = h.gui.bend.ghosts.len();
     assert!(n > 0, "a flange between the eye and the bend is seen through");

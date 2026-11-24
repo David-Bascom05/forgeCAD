@@ -98,8 +98,6 @@ pub struct BendSimUi {
     pub see_through: bool,
     pub opacity: f32,
     pub see_press: bool,
-    /// What is seen through, as points: their outline drawn over the view.
-    pub outlines: Vec<Vec<[f32; 3]>>,
     /// The tool library shows only what fits the press and the part.
     pub fit_only: bool,
     /// The planner's ranked programs asked for (the ribbon's Suggest Order): their list opened.
@@ -211,7 +209,6 @@ impl BendSimUi {
             see_through: true,
             opacity: 0.35,
             see_press: false,
-            outlines: Vec::new(),
             fit_only: true,
             all_checks: false,
             suggest: false,
@@ -274,7 +271,6 @@ impl BendSimUi {
             see_through: true,
             opacity: 0.35,
             see_press: false,
-            outlines: Vec::new(),
             fit_only: true,
             all_checks: false,
             suggest: false,
