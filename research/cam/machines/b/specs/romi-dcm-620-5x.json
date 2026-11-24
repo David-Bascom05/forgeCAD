@@ -1,0 +1,143 @@
+{
+ "vendor": "ROMI",
+ "model": "DCM 620-5X",
+ "family": "ROMI DCM 620 New Generation",
+ "source": [
+  "https://www.romi.com/wp-content/uploads/2023/05/cat_romi_dcm_620_ng_en_rmtl_ac_092025_low.pdf",
+  "https://www.romi.com/en/produtos/romi-dcm-620-series-new-generation/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "Vertical spindle with NC rotary/inclined (trunnion) table: inclined axis B (+110/-50 deg) carries rotary C (360 deg), table supported by a support bearing; angular encoders on B and C. Linear-axis-to-unit assignment not published (X longitudinal 620, Y transversal 520, Z vertical 470).",
+ "control": {
+  "standard": "Siemens SINUMERIK ONE (24in)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 620,
+  "Y": 520,
+  "Z": 470
+ },
+ "rotary": {
+  "A": null,
+  "B": {
+   "range_deg": [
+    -50,
+    110
+   ],
+   "rapid_rpm": 25,
+   "indexing_or_full": "full, simultaneous"
+  },
+  "C": {
+   "range_deg": [
+    0,
+    360
+   ],
+   "rapid_rpm": 25,
+   "indexing_or_full": "full, simultaneous"
+  }
+ },
+ "spindle_nose_to_table_mm": [
+  150,
+  620
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  600,
+  600
+ ],
+ "table_load_kg": 500,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 15000,
+  "rpm_min": 15,
+  "taper_or_interface": "ISO 40 (BT/BBT-40 or DIN-40; CAT opt)",
+  "power_kw": {
+   "cont": 11,
+   "30min": null,
+   "peak/other": "16.5 kW S6-40% 10 min"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 82
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 36,
+  "Y": 36,
+  "Z": 36,
+  "A_or_B_rpm": 25,
+  "C_rpm": 25
+ },
+ "max_cutting_feed_m_min": 36,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": 75,
+  "max_tool_dia_empty_adjacent_mm": 117,
+  "max_tool_len_mm": 250,
+  "max_tool_kg": 7
+ },
+ "coolant": {
+  "through_spindle": false,
+  "notes": "5 bar external std; rotary joint for through-spindle std, TSC pump 7/15/20/70 bar optional"
+ },
+ "overall_mm": {
+  "W": 3559,
+  "D": 4370,
+  "H": 2963
+ },
+ "weight_kg": 9100,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "changer.tool_to_tool_s",
+  "milling_head",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "rotary_table_dia_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "TSC 7/15 bar or 20/70 bar",
+  "CAT-40 30-tool ATC",
+  "linear scales X/Y/Z",
+  "probe, laser tool setter, calibration sphere"
+ ],
+ "notes": "Max part on table dia 675 x 430 high or dia 520 x 330 high. Table 600x600, 5 T-slots 18 mm at 100. Max tool dia with empty adjacent: 127 mm up to 10,000 rpm, 117 mm above (5X has 15k spindle). B/C 25 rpm with table unloaded. Max torque 82 Nm S6-40%. Weight on magazine 150 kg. Floor 3,559 x 4,370 front x side."
+}

@@ -1,0 +1,14 @@
+# makino-a61nx head: the spindle head / ram (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -160
+shared y0 = -60
+shared z0 = 1080
+shared L = 320
+shared W = 320
+shared H = 500
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

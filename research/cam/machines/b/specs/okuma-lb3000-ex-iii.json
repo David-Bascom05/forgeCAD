@@ -1,0 +1,127 @@
+{
+ "vendor": "Okuma",
+ "model": "LB3000 EX III",
+ "family": "LB EX",
+ "source": [
+  "https://www.okuma.co.jp/english/product/2acl/lb-ex3.php",
+  "https://www.okuma.eu/products/by-process/turning/lb-series/lb3000-ex/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe",
+ "architecture": null,
+ "control": {
+  "standard": "OSP (next-generation OSP shown; model not stated)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": null,
+  "Y": null,
+  "Z": null
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 410,
+ "max_turning_length_mm": 500,
+ "chuck_size_in": 8,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 5000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": 15,
+   "30min": 22,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": 6000,
+  "power_kw": 7.1
+ },
+ "milling_head": null,
+ "turret_stations": 12,
+ "turret_index_s": 0.1,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 30,
+  "Y": null,
+  "Z": 30,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 2340,
+  "D": 1899,
+  "H": 1770
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "architecture",
+  "bar_capacity_mm",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "rapid_m_min.Y",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_type",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm",
+  "tailstock",
+  "travel_mm.X",
+  "travel_mm.Z",
+  "weight_kg"
+ ],
+ "options": [
+  "max work length 1000, 1300 mm (EU also 250)",
+  "spindle 4200, 2800 min-1 (EU)",
+  "motor 30/22, 40/30 kW (EU)",
+  "variants M, W, MY, MW, MYW",
+  "machine size 3420x2083x1820 / 4344x2083x1820 mm for longer beds"
+ ],
+ "notes": "Brief asked LB3000 EX II; maker now publishes EX III (EU .../lb3000-ex-ii URL redirects to the EX III page). JP page: spindle bearing ID 120 mm, bore 80 mm; M-spindle 6000 min-1, 7.1 kW, 40.4 N·m; M-spindle start/stop 0.3 s; turret V12 0.1 s/index. EU page gives max turning dia 470 mm vs JP 410 mm (field uses JP). Bar capacity not stated (bore 80 mm). Overall size is for the 500 mm bed."
+}
