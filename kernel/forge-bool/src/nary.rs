@@ -924,6 +924,10 @@ fn nary_body(
             }
         }
     }
+    // each tool's faces' boxes grown to all its faces on their very planes (`plane_boxes`), made the
+    // first time a pair of all but parallel planes needs them, once per tool for every pair
+    let plane_groups: Vec<std::sync::OnceLock<Vec<forge_math::Box3>>> =
+        (0..n).map(|_| Default::default()).collect();
     let outs = par_map(pairs.len(), threads, 2, |pi| -> R<PairOut> {
         let (i, j) = pairs[pi];
         let (a, b) = (tools[i], tools[j]);
@@ -966,7 +970,21 @@ fn nary_body(
                 }
                 // a pair with no closed form is searched, at a cost: not where the tools holding all
                 // of the region (by bounds) say its curves would divide neither face
-                let found = match ssi::closed_or_flush(sa, sb, &region) {
+                let judged = match (sa, sb) {
+                    (forge_geom::Surface::Plane(p), forge_geom::Surface::Plane(q))
+                        if p.normal_vec().dot(q.normal_vec()).abs() > 1.0 - 1e-6
+                            && p.normal_vec().cross(q.normal_vec()) != forge_math::Vec3::ZERO =>
+                    {
+                        // two planes all but parallel are judged flush or crossing over where the
+                        // whole of each plane's faces meet: one verdict for every face pair of them
+                        // (planes parallel to the bit are judged without a region, ssi.rs)
+                        let ga = plane_groups[i].get_or_init(|| plane_boxes(a, ba))[fa.index()];
+                        let gb = plane_groups[j].get_or_init(|| plane_boxes(b, bb))[fb.index()];
+                        overlap(&ga, &gb).grow(tol::LINEAR)
+                    }
+                    _ => region,
+                };
+                let found = match ssi::closed_or_flush(sa, sb, &judged) {
                     SurfaceSurface::NotAnalytic if !meets_matter(&region, i, j) => {
                         out.loose.push(((i, fa), (j, fb)));
                         continue;
@@ -2965,6 +2983,40 @@ fn nary_body(
     Ok(out)
 }
 
+/// Each face's box grown to every face of `body` on its very plane (the one plane, to the bit:
+/// pieces of one face split by a boolean keep its surface), others' their own. Flushness judged
+/// over each face pair's own overlap is not transitive: a tool's face a hair off a wall was flush
+/// with a short face an earlier imprint left on the wall and not with the long one round it, its
+/// edges were imprinted on the short face only, and the crossings split only the short face's
+/// edges, leaving a slit (FaceWrongSide on the next boolean; research/booleans/drift.md §9).
+#[cold]
+#[inline(never)]
+fn plane_boxes(body: &Body, boxes: &[forge_math::Box3]) -> Vec<forge_math::Box3> {
+    // a plane by its normal (pointed one fixed way) and offset, to the bit
+    let key = |f: FaceId| match &body.face(f).surface {
+        forge_geom::Surface::Plane(p) => {
+            let n = p.normal_vec().get();
+            let flip = n.x < 0.0 || n.x == 0.0 && (n.y < 0.0 || n.y == 0.0 && n.z < 0.0);
+            let n = if flip { -n } else { n };
+            let d = n.dot(p.frame.origin.to_vec());
+            Some([n.x, n.y, n.z, d].map(f64::to_bits))
+        }
+        _ => None,
+    };
+    let mut keyed: Vec<([u64; 4], u32)> = body.face_ids().filter_map(|f| key(f).map(|k| (k, f.0))).collect();
+    keyed.sort_unstable();
+    let mut out = boxes.to_vec();
+    for run in keyed.chunk_by(|x, y| x.0 == y.0).filter(|r| r.len() > 1) {
+        let all = run
+            .iter()
+            .fold(forge_math::Box3::EMPTY, |b, &(_, f)| b.hull(&boxes[f as usize]));
+        for &(_, f) in run {
+            out[f as usize] = all;
+        }
+    }
+    out
+}
+
 /// Line edges of the result shorter than two tolerances (`short`), refused where `check` would
 /// find them degenerate (ends within LINEAR of each other: two vertices the pass did not merge) or
 /// off a plane they bound by more than their tolerance (a sliver's piece left bounding a face it
@@ -3258,7 +3310,8 @@ fn spans(
         at[fill[tc.seg]] = (tc.t, v, tc.tool, j);
         fill[tc.seg] += 1;
     }
-    let mut out: Vec<Span> = Vec::with_capacity(segs.len());
+    // (each crossing adds at most one span: room for all, so the list is never moved)
+    let mut out: Vec<Span> = Vec::with_capacity(segs.len() + triple.len());
     let mut first = Vec::with_capacity(segs.len() + 1);
     let mut ms: Vec<(f64, VKey, Side, usize)> = Vec::new();
     let mut bounds: Vec<usize> = Vec::new();
