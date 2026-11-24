@@ -281,9 +281,12 @@ pub fn steep_and_shallow(dc: &dyn DropCutter, p: Params) -> Result<(Vec<Pass>, V
         }
     }
     let [lo, hi] = p.area.unwrap_or(dc.extent());
+    // the chords' dip below the CL surface at most half the tolerance, as every other drape: the
+    // rest is the posted program's room (its coordinates rounded to the control's last digit
+    // move a chord by up to half a digit at each end), so the certified path keeps tol
     let d = Drape {
         step: p.grid,
-        slack: p.tol,
+        slack: 0.5 * p.tol,
         leave: p.leave.min(p.tol),
         zmin: p.bottom,
     };
