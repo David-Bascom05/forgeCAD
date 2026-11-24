@@ -1,5 +1,6 @@
-# Two blind 5 mm holes in a plate, for CAM's drill plan (forge-cam-lang tests/holes.rs): `flat`
-# has a flat floor (no drill point modelled), `pointed` a 118 deg drill point.
+# Holes in a plate for CAM's drill plan (forge-cam-lang tests/holes.rs): two blind 5 mm holes,
+# `flat` with a flat floor (no drill point modelled) and `pointed` with a 118 deg drill point; an
+# M6 clearance hole counterbored (`cbh`) and one countersunk (`csk`).
 shared L = 40
 shared W = 30
 shared t = 10
@@ -10,6 +11,14 @@ param pointed.depth = 6
 param pointed.tip = 118deg
 shared xa = 12
 shared xb = 28
+shared yc = 6
+param cbh.d = 6.6
+param cbh.depth = 8
+param cbh.cd = 11
+param cbh.cdepth = 4
+param csk.d = 6.6
+param csk.cd = 9
+param csk.ang = 90deg
 
 sketch plan(on: xy) {
   outline = rect(corner: (0, 0), size: (L, W))
@@ -18,9 +27,13 @@ plate = extrude(plan, t)
 sketch top(on: plate.end) {
   a = pt(xa, W / 2)
   b = pt(xb, W / 2)
+  c = pt(xa, yc)
+  e = pt(xb, yc)
 }
 flat = hole(at: top.a, d: d, depth: depth)
 pointed = hole(at: top.b, d: d, depth: depth, point: tip)
+cbh = hole(at: top.c, d: d, depth: depth, cbore: (cd, cdepth))
+csk = hole(at: top.e, d: d, depth: thru, csink: (cd, ang))
 
 expect valid
 expect bodies = 1
