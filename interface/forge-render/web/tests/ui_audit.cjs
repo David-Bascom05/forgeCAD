@@ -71,10 +71,16 @@ async function state(p) {
   return p.evaluate(() => window.forgecad.state());
 }
 
-/// A state's frames, and the worker's builds, settled.
-async function settle(p, st0) {
-  const s1 = await t.until(p, (s) => s.frames >= (st0?.frames ?? 0) + 6, "frames", 30000);
-  return t.until(p, (s) => (s.done ?? 0) >= (s.seq ?? 0) && s.frames >= s1.frames + 4, "settled", 60000).catch(() => s1);
+/// Frames drawn (an idle page draws none by itself: asking for its pixels draws one) until the
+/// worker's builds are in; the state then.
+async function settle(p, _st0, n = 8) {
+  let st = null;
+  for (let i = 0; i < 60; i++) {
+    await p.evaluate(() => window.forgecad.pixels().then(() => 0));
+    st = await state(p);
+    if (i >= n && (st.done ?? 0) >= (st.seq ?? 0)) break;
+  }
+  return st;
 }
 
 const layersOf = (s) =>
