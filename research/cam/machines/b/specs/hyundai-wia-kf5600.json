@@ -1,0 +1,125 @@
+{
+ "vendor": "Hyundai WIA",
+ "model": "KF5600 (STD)",
+ "family": "KF5600 series",
+ "source": [],
+ "source_secondary": [
+  "https://www.komachine.com/en/companies/hyundai-wia/products/38038"
+ ],
+ "taken": "2026-11-23",
+ "kind": "vmc3",
+ "architecture": "3-axis VMC, vertical spindle, LM guides; carrying arrangement not stated.",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 1100,
+  "Y": 560,
+  "Z": 520
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  1250,
+  560
+ ],
+ "table_load_kg": 1000,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 8000,
+  "rpm_min": null,
+  "taper_or_interface": "BBT40",
+  "power_kw": {
+   "cont": 11,
+   "30min": null,
+   "peak/other": 15
+  },
+  "torque_nm": {
+   "cont": 143,
+   "max": 286
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 40,
+  "Y": 40,
+  "Z": 36
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": 3.2,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "weight_kg"
+ ],
+ "options": [
+  "OPT1 12000 r/min direct 18.5/11 kW 118/70 N·m",
+  "OPT2 15000 r/min built-in 25/22 kW 167/95 N·m, rapids 48/48/48",
+  "OPT3 20000 r/min built-in 22/18.5 kW 98/80 N·m"
+ ],
+ "notes": "Maker-posted product listing on Komachine (Korean B2B platform; Hyundai WIA company page, product updated 2025-05-20) -> source_secondary; maker site machine.hyundai-wia.com unreachable. KF5600 is not in the current wiamachine.com lineup (current KF5 is in hyundai-wia-kf5.json). Power/torque pairs read as max/cont. Spindle drive: direct (8k/12k), built-in (15k/20k). Not applicable to this machine kind (left null, not listed in unknown): swing_over_bed_mm, max_turning_dia_mm, max_turning_length_mm, chuck_size_in, bar_capacity_mm, spindle_nose_type, sub_spindle, live_tool, turret_stations, turret_index_s, tailstock, milling_head, rotary, pallet, spindle_center_to_column_mm, spindle_center_to_pallet_top_mm, rotary_table_dia_mm."
+}

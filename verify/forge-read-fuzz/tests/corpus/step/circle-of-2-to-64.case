@@ -1,0 +1,7 @@
+# A hole's circle made radius 2^64: the mesh's constraint recovery went on 30 s past its budget,
+# which it looked at every 1024 crossings (each a search of thousands) and its Delaunay rounds never.
+# Every 64, and each round.
+from: examples/rack18u/asm/order/RACK-111_carrier.step
+replace: #680=CIRCLE('',#679,4.375);
+with: #680=CIRCLE('',#679,18446744073709551616.);
+max-ms: 15000

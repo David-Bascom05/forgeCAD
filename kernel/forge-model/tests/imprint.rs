@@ -1,5 +1,8 @@
 //! The local-imprint boolean against the general one: every boolean it takes on these parts is
-//! done both ways and must come out the same, entity for entity.
+//! done both ways and must come out the same, entity for entity. The column path is chosen at run
+//! time only under the `imprint_column` feature (off in shipped builds):
+//! `cargo test -p forge-model --test imprint --features imprint_column`.
+#![cfg(feature = "imprint_column")]
 use forge_bool::imprint::{Mode, set_mode, taken};
 use forge_math::{Frame, Point2, Point3, Vec3};
 use forge_model::{Combine, Extent, Feature, Part, suite, torture};

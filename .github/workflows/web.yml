@@ -12,6 +12,12 @@
 #            three shards that between them test each file once (PARITY_SHARD in parity.cjs)
 # The commands, crates, profiles and flags are ci.sh's. Each Rust job has its own build cache,
 # saved only from main (and manual runs), so a pull request restores main's and never races it.
+#
+# A push to main only refreshes those caches: pull requests merge with current main in their head,
+# so every check below already ran on the tree that lands. On push, parity, wasm and clippy restore
+# their cache and, when it was not an exact hit, build with the same commands and save; cli (whose
+# cache holds no third-party crates), the uploads, browser and the summary do not run. A manual run
+# (workflow_dispatch) runs everything.
 name: web
 
 on:
@@ -31,6 +37,7 @@ env:
 
 jobs:
   cli:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -59,11 +66,14 @@ jobs:
       - name: toolchain (rust-toolchain.toml)
         run: rustup show
       - uses: Swatinem/rust-cache@v2
+        id: rust
         with:
           workspaces: interface/forge-render -> target
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       - run: cargo build --release --locked --bin forge-parity
+        if: ${{ github.event_name != 'push' || steps.rust.outputs.cache-hit != 'true' }}
       - uses: actions/upload-artifact@v4
+        if: ${{ github.event_name != 'push' }}
         with:
           name: forge-parity
           path: interface/forge-render/target/release/forge-parity
@@ -84,17 +94,22 @@ jobs:
       - name: toolchain (rust-toolchain.toml)
         run: rustup show && rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        id: rust
         with:
           workspaces: interface/forge-render -> target
           key: threads-${{ matrix.threads }}
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       # the release binary of the version Cargo.toml pins, not a 1.5 min `cargo install`
       - uses: taiki-e/install-action@v2
+        if: ${{ github.event_name != 'push' || steps.rust.outputs.cache-hit != 'true' }}
         with:
           tool: wasm-bindgen@0.2.130
       - run: wasm-bindgen --version | grep -x 'wasm-bindgen 0.2.130'
+        if: ${{ github.event_name != 'push' }}
       - run: NO_MESHES=1 THREADS=${{ matrix.threads }} sh web/build.sh "$GITHUB_WORKSPACE/target/web"
+        if: ${{ github.event_name != 'push' || steps.rust.outputs.cache-hit != 'true' }}
       - uses: actions/upload-artifact@v4
+        if: ${{ github.event_name != 'push' }}
         with:
           name: web${{ matrix.threads && '-threads' || '' }}
           path: target/web${{ matrix.threads && '/threads' || '' }}
@@ -111,14 +126,18 @@ jobs:
       - name: toolchain (rust-toolchain.toml)
         run: rustup show && rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        id: rust
         with:
           workspaces: interface/forge-render -> target
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       # the browser build stays warning-free (it broke unseen before: a native-only dependency)
-      - run: cargo clippy --lib --locked --target wasm32-unknown-unknown -- -D warnings
+      # on push the same build without the lint gate (-D warnings): the cache is the same
+      - run: cargo clippy --lib --locked --target wasm32-unknown-unknown -- ${{ github.event_name != 'push' && '-D warnings' || '' }}
+        if: ${{ github.event_name != 'push' || steps.rust.outputs.cache-hit != 'true' }}
 
   browser:
     needs: [cli, parity, wasm]
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -169,7 +188,9 @@ jobs:
       - name: end to end
         if: matrix.test == 'e2e'
         working-directory: interface/forge-render
-        run: node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
+        run: |
+          node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/idle.cjs "$GITHUB_WORKSPACE/target/web"
       - name: parity (shard ${{ matrix.test }} of 3)
         if: matrix.test != 'e2e'
         working-directory: interface/forge-render
@@ -186,7 +207,7 @@ jobs:
   web:
     name: web
     needs: [cli, parity, wasm, clippy, browser]
-    if: always()
+    if: ${{ always() && github.event_name != 'push' }}
     runs-on: ubuntu-latest
     steps:
       - run: |

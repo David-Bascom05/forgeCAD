@@ -1,0 +1,8 @@
+# blocked_hosts, group round2-b, taken 2026-11-23 (no user-agent spoofing; no sign-ups)
+www.mazak.com/us-en/products/vcn/   WebFetch HTTP 404 (US VCN family page missing); used /jp-en/ and /uk-en/ pages instead
+www.mazak.com (curl)                not attempted with curl (known 406); all Mazak pages read through WebFetch (HTTP 200)
+# gated, not attempted:
+dn-solutions.com catalogue download  e-mail / personal-info registration form
+okuma.eu "Catalogue download"         sign-up form (data passed to distributors)
+# reachable and used: www.dn-solutions.com (curl 200), www.okuma.eu (curl 200), www.okuma.co.jp (curl 200)
+# not found (not blocked): plain DN Solutions PUMA 3100 2-axis page (us/eu: 302 redirect for guessed slugs; site lists PUMA GT3100 and PUMA 3100 Y variants); Okuma MA-500HIII (only MA-500HII and MA-600HIII listed)

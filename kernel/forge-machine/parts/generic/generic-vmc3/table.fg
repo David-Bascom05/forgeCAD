@@ -1,0 +1,25 @@
+# generic-vmc3 table: the work table on the X slide, top at z = 0, three T-slots along x.
+# frame: the machine's base frame at the home pose (table top centre = origin).
+shared L = 800
+shared W = 400
+shared H = 150
+shared slot_w = 18
+shared slot_d = 20
+shared pitch = 100
+
+sketch plan(on: offset(xy, -H)) {
+  outline = rect(center: (0, 0), size: (L, W))
+}
+slab = extrude(plan, H)
+sketch s0(on: slab.end) {
+  r = rect(center: (0, -pitch), size: (L, slot_w))
+}
+slot0 = cut(s0.r, slot_d)
+sketch s1(on: slab.end) {
+  r = rect(center: (0, 0), size: (L, slot_w))
+}
+slot1 = cut(s1.r, slot_d)
+sketch s2(on: slab.end) {
+  r = rect(center: (0, pitch), size: (L, slot_w))
+}
+slot2 = cut(s2.r, slot_d)

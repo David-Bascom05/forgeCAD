@@ -11,11 +11,12 @@ forge-math = { path = "../../kernel/forge-math" }
 forge-step = { path = "../../kernel/forge-step" }
 forge-topo = { path = "../../kernel/forge-topo" }
 forge-geom = { path = "../../kernel/forge-geom" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-agent = { path = "../forge-agent" }
 forge-lang = { path = "../forge-lang" }
 # a .FCStd is a zip of deflated XML and .brp files
 forge-git = { path = "../../kernel/forge-git" }
-roxmltree = { version = "=0.20.0", default-features = false, features = ["std"] }
+roxmltree = { version = "=0.20.0", default-features = false, features = ["std", "positions"] }
 
 [lints]
 workspace = true

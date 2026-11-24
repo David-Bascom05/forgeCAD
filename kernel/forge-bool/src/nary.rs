@@ -572,19 +572,23 @@ pub fn nary_with(
     threads: usize,
     root: Name,
 ) -> R<Body> {
+    #[cfg(debug_assertions)]
+    crate::size::debug_check(tools);
     // flat faces: the whole history as one pointwise rule, one call of the decide-once core
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::history(tools, ops)? {
+        #[cfg(feature = "certify")]
+        crate::certify::skipped("the decide-once path");
         return Ok(r);
     }
-    crate::boolean::UNDECIDED.with(|u| u.set(None));
+    let mut undecided = None;
     #[cfg(feature = "decisions")]
     let scope = crate::decisions::scope("n-ary", String::from("plain"));
-    let body = nary_body(tools, ops, shapes, batch, threads, root);
+    let body = nary_noted(tools, ops, shapes, batch, threads, root, &mut undecided);
     #[cfg(feature = "decisions")]
     scope.outcome(crate::decisions::Outcome::of(&body));
     let out = body?;
-    crate::boolean::undecided_touch(&out)?;
+    crate::boolean::undecided_touch(&out, undecided)?;
     crate::boolean::refuse_strays(&out, 0)?;
     // pieces left touching at a point pinch (boolean::pinched): where walking round a vertex from
     // one coedge leaving it (back along its loop, across to the partner) misses some of the others
@@ -645,6 +649,42 @@ pub fn nary_with(
     Ok(out)
 }
 
+/// `boolean::apex::sheets_at` for n tools: whether each side's face, at a cone's apex, is kept in
+/// the result, from its sheet's place against every other tool.
+#[cold]
+#[inline(never)]
+fn apex_kept(
+    tools: &[&Body],
+    index: &[Index],
+    ops: &[Op],
+    any_intersect: bool,
+    t: &Touch,
+) -> R<[Option<bool>; 2]> {
+    let n = tools.len();
+    let mut out = [None; 2];
+    for (k, slot) in out.iter_mut().enumerate() {
+        let (sd, f) = (t.sides[k], t.faces[k]);
+        let Some(sheet) = crate::apex::apex_sheet(tools[sd], f, t.at) else {
+            continue;
+        };
+        let refuse = BoolError::ZeroThickness { at: t.at };
+        let sheet = sheet.ok_or(refuse.clone())?;
+        let mut inner = vec![false; n];
+        inner[sd] = true;
+        for j in (0..n).filter(|&j| j != sd) {
+            match crate::apex::where_sheet(tools[j], &index[j], t.at, &sheet) {
+                Some(Where::Inside) => inner[j] = true,
+                Some(_) => {}
+                None => return Err(refuse),
+            }
+        }
+        let mut outer = inner.clone();
+        outer[sd] = false;
+        *slot = Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect));
+    }
+    Ok(out)
+}
+
 fn nary_body(
     tools: &[&Body],
     ops: &[Op],
@@ -652,6 +692,7 @@ fn nary_body(
     batch: Option<&dyn Batch>,
     threads: usize,
     root: Name,
+    undecided: &mut Option<Point3>,
 ) -> R<Body> {
     assert_eq!(ops.len() + 1, tools.len(), "one op per tool after the first");
     let n = tools.len();
@@ -1030,6 +1071,7 @@ fn nary_body(
                         &mut out.imprints,
                         &mut out.touching,
                         None,
+                        &mut crate::boolean::Tried::default(),
                     )?;
                 }
                 if !whole || out.imprints.len() > imprints_before {
@@ -1123,6 +1165,10 @@ fn nary_body(
         outer[side] = false;
         Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect))
     };
+    decided!(crate::decisions::site(
+        "D3 touch listed (n-ary)",
+        touching.len() as u64
+    ));
     for t in &touching {
         if debug {
             let got: Vec<_> = (0..2)
@@ -1136,12 +1182,24 @@ fn nary_body(
                 t.sides, t.faces, t.at
             );
         }
+        // at a cone's apex the face's sheet is its generators, decided in closed form against
+        // every other tool; one that cannot be read there is refused at the point, never guessed
+        let sheets = if t.dir.is_none() && (0..2).any(|k| crate::apex::is_cone(tools[t.sides[k]], t.faces[k]))
+        {
+            apex_kept(tools, &index, ops, any_intersect, t)?
+        } else {
+            [None; 2]
+        };
         let kept = [0, 1].map(|k| {
+            if let Some(w) = sheets[k] {
+                return Some(w);
+            }
             let (sd, f) = (t.sides[k], t.faces[k]);
             local_class(tools[sd], &index[sd], f, t.at, t.dir, |q| kept_at(sd, q))
         });
         if t.dir.is_none() && kept.contains(&None) {
-            crate::boolean::UNDECIDED.with(|u| u.set(Some(t.at)));
+            decided!(crate::decisions::site("G4 UNDECIDED set (n-ary)", 1));
+            *undecided = Some(t.at);
         }
         let both = kept == [Some(true); 2];
         let flipped = |sd: usize| sd > 0 && ops[sd - 1] == Op::Subtract;
@@ -1159,6 +1217,7 @@ fn nary_body(
                 !flipped(t.sides[0]) && !flipped(t.sides[1]),
             )
         {
+            decided!(crate::decisions::site("D3 touch refused (n-ary)", 1));
             return Err(BoolError::ZeroThickness { at: t.at });
         }
     }
@@ -1203,7 +1262,7 @@ fn nary_body(
         };
         for hit in hits
             .into_iter()
-            .flat_map(|x| crossings_near(&sg.curve, sg.range, s, x))
+            .flat_map(|x| crossings_near(&sg.curve, sg.range, s, x, crate::boolean::Rung::PLAIN))
         {
             if index[k].point_in_face(h, hit.point) != Where::Outside {
                 got.push((hit.t, hit.point, tol::LINEAR, k, Some((k, h))));
@@ -2381,7 +2440,10 @@ fn nary_body(
                 Some(0) => Ok(None),
                 Some(1) => Ok(Some(false)),
                 Some(2) => Ok(Some(true)),
-                _ => full(ri, first[ri]),
+                _ => {
+                    decided!(crate::decisions::site("G10 n-ary verdict 3 (or no point)", 1));
+                    full(ri, first[ri])
+                }
             })
         }
     };
@@ -2571,6 +2633,10 @@ fn nary_body(
             let p = canon[p].map_or(p, |c| c.0);
             uses[p] = uses[p].saturating_add(1);
             if uses[p] > 2 {
+                decided!(crate::decisions::site(
+                    "D9 edge of >2 kept faces refused (n-ary)",
+                    1
+                ));
                 let pc = &list[p];
                 return Err(BoolError::ZeroThickness {
                     at: pc.curve.eval(pc.range.mid()),
@@ -3591,4 +3657,24 @@ fn region_points(
         out.extend(step_in(body, f, c, r, fwd, 0.5, step.min(0.05)));
     }
     out
+}
+
+// The certificate's hook (verify/forge-certify), at the end so that with the `certify` feature
+// off every line above is the line it was: off, `nary_noted` is `nary_body`.
+#[cfg(not(feature = "certify"))]
+use self::nary_body as nary_noted;
+
+/// `nary_body`, noting that it gives no certificate.
+#[cfg(feature = "certify")]
+fn nary_noted(
+    tools: &[&Body],
+    ops: &[Op],
+    shapes: Option<&[Shape]>,
+    batch: Option<&dyn Batch>,
+    threads: usize,
+    root: Name,
+    undecided: &mut Option<Point3>,
+) -> R<Body> {
+    crate::certify::skipped("the n-ary boolean");
+    nary_body(tools, ops, shapes, batch, threads, root, undecided)
 }

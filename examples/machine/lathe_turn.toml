@@ -1,0 +1,27 @@
+# Facing and turning a ⌀50 bar on the generic lathe; part z = 0 at the chuck face, the bar's end
+# at 101 (1 mm to face off), G54 Z0 at 100.
+[setup]
+machine = "generic-lathe"
+dialect = "lathe-example"
+program = "lathe_turn.nc"
+step = 0.05
+
+[[setup.wcs]]
+n = 54
+z = 100              # the joint value at word 0: the face 100 mm out
+x = -120             # X0 = the spindle axis for a tool with zero offsets
+
+[[setup.tool]]
+t = 1
+name = "OD turning, 0.8 nose"
+tip = [-120, 0, 10]  # from the turret's gauge point
+body = [6, 0, 30, 12, 30, 110]
+nose = [0.8, 0.8, 0.8]
+
+[[setup.geo]]
+n = 1
+x = 120
+z = -10
+
+[[setup.stock]]
+bar = [25, 0, 101]

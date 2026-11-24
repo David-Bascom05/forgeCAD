@@ -210,3 +210,98 @@ fn tube_square_to_a_torus_axis() {
     let mut worst = 0.0;
     check(&c, &t, &res, 0.5 * region.diagonal() / 64.0, &mut worst).unwrap();
 }
+
+/// A ball 3·LINEAR off tangent inside a cylinder's wall along its equator (the curved reference's
+/// band, cylinder_sphere/tangent_wall_equator moved 3·LINEAR along x): they meet in one thin loop
+/// round the half of the wall the ball pokes through, its two hairpin tips at x = e/2, y = ±10
+/// rounded with a radius of e. The chain dropped one tip as a sliver point, its link ran the curve
+/// backwards and a boolean's volume came out 2 mm³ high (or did not settle). Every link turns less
+/// than 30 degrees by the curve's own tangent, down to TURN_LEAST of the step, and passes both tips.
+#[test]
+fn ball_a_hair_through_a_wall_keeps_both_tips() {
+    let e = 3.0 * forge_math::tol::LINEAR;
+    let cyl = Surface::Cylinder(Cylinder {
+        frame: Frame::from_z(Point3::new(0.0, 0.0, -20.0), UnitVec3::Z),
+        radius: 10.0,
+    });
+    let ball = Surface::Sphere(Sphere {
+        frame: Frame::from_z(Point3::new(e, 0.0, -10.0), UnitVec3::Z),
+        radius: 10.0,
+    });
+    let region = Box3::from_points([Point3::new(-10.0, -10.0, -20.0), Point3::new(10.0, 10.0, 0.0)]);
+    let Some(SurfaceSurface::Curves(cs)) = intersect(&cyl, &ball, region) else {
+        panic!("one loop")
+    };
+    assert_eq!(cs.len(), 1);
+    let Curve::Intersection(k) = &cs[0].0 else {
+        panic!("a traced loop")
+    };
+    let step = 0.5 * region.diagonal() / 64.0;
+    for y in [-10.0, 10.0] {
+        let tip = Point3::new(0.5 * e, y * (1.0 - e * e / 400.0).sqrt(), -10.0);
+        let near = k
+            .pts
+            .iter()
+            .map(|p| p.distance(tip))
+            .fold(f64::INFINITY, f64::min);
+        assert!(near <= 1e-6, "the tip at y = {y} is {near} from the chain");
+    }
+    let n = k.pts.len();
+    for i in 0..k.segments() {
+        let j = (i + 1) % n;
+        let chord = k.pts[i].distance(k.pts[j]);
+        let cos = k.tans[i].dot(k.tans[j]);
+        assert!(
+            cos >= crate::intcurve::TURN_COS || chord <= step * crate::intcurve::TURN_LEAST,
+            "link {i} of {n} turns to cos {cos} over {chord}"
+        );
+    }
+}
+
+/// A thin torus on a wide cylinder (fuzz seed 295, feature 69): the cylinder cuts the tube in two
+/// loops, each about 3° of the cylinder's angle, and the discriminant's 64 samples saw one. The
+/// root count over `thin_window` finds both.
+#[test]
+fn thin_torus_on_a_wide_cylinder_both_loops() {
+    let o = Point3::new(57.513833943223545, 82.64151449414277, 31.529651297690172);
+    let tf = Frame::from_axes(o, Vec3::X, Vec3::new(0.0, -1.0, 0.0), Vec3::new(0.0, 0.0, -1.0)).unwrap();
+    let t = Surface::Torus(Torus {
+        frame: tf,
+        major: 1.018123715855934,
+        minor: 0.22881392007971665,
+    });
+    let z = Vec3::new(-0.04760542051711398, 0.17499343179871532, 0.9834180305265392);
+    let x = Vec3::new(-0.34481495645685883, 0.921132764696941, -0.18060198117801576);
+    let cf = Frame::from_axes(
+        Point3::new(64.28286796892466, 86.4342803264453, 17.574469684406452),
+        x,
+        z.cross(x),
+        z,
+    )
+    .unwrap();
+    let c = Surface::Cylinder(Cylinder {
+        frame: cf,
+        radius: 8.70706734376011,
+    });
+    let region = Box3::from_point(o).grow(1.018123715855934 + 0.22881392007971665 + 1e-6);
+    let res = intersect(&c, &t, region).expect("a closed form");
+    let SurfaceSurface::Curves(cs) = &res else {
+        panic!("curves, not {res:?}")
+    };
+    assert_eq!(cs.len(), 2, "{res:?}");
+    // one loop either side of the ring: torus angles about 42° and 227°
+    let mut at: Vec<f64> = cs
+        .iter()
+        .map(|(k, _)| {
+            let q = k.eval(k.domain().lo) - o;
+            (forge_math::dmath::atan2(-q.y, q.x) * 180.0 / forge_math::dmath::PI).rem_euclid(360.0)
+        })
+        .collect();
+    at.sort_by(f64::total_cmp);
+    assert!(
+        (35.0..50.0).contains(&at[0]) && (220.0..235.0).contains(&at[1]),
+        "{at:?}"
+    );
+    let mut worst = 0.0;
+    check(&c, &t, &res, 0.5 * region.diagonal() / 64.0, &mut worst).unwrap();
+}
