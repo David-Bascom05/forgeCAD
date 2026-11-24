@@ -123,3 +123,47 @@ fn dome_waterline_is_certified() {
         .collect();
     assert!(sum.clear, "{bad:?}");
 }
+
+#[test]
+fn dome_draped_passes_are_certified() {
+    use forge_cam_3d::drape::{Drape, drape};
+    let dc = Analytic {
+        r: 3.0,
+        planes: vec![(0.0, [-50.0, -50.0], [50.0, 50.0])],
+        spheres: vec![([0.0, 0.0, -10.0], 30.0)],
+    };
+    let d = Drape {
+        step: 2.0,
+        slack: 0.005,
+        leave: 0.01,
+        zmin: 0.0,
+    };
+    // one line across the dome's flank (more cost minutes: see the waterline test's note)
+    let ps = drape(&dc, &[[-36.0, 17.0], [36.0, 17.0]], d).unwrap();
+    let e = Emit {
+        tool: 0,
+        h: Heights {
+            clear: 40.0,
+            retract: 25.0,
+        },
+        feed: (1500.0, 500.0),
+        rpm: 12000.0,
+        coolant: forge_post::Coolant::Flood,
+    };
+    let p = path::passes(&ps, e);
+    let t0 = std::time::Instant::now();
+    let sum = ops::certify(&p, &ball6(), &dome_faces(), &[], 0.01, 1.0);
+    eprintln!(
+        "drape: moves {} cells {} secs {:.1}",
+        p.moves.len(),
+        sum.cells,
+        t0.elapsed().as_secs_f64()
+    );
+    let bad: Vec<_> = sum
+        .checks
+        .iter()
+        .filter(|c| c.verdict != "clear")
+        .take(5)
+        .collect();
+    assert!(sum.clear, "{bad:?}");
+}

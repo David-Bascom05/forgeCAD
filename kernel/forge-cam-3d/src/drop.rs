@@ -51,6 +51,10 @@ pub trait DropCutter {
     /// nothing under the tool). The decision form of `drop_seg`, which may stop early: false
     /// means a point above z was found or the proof ran out of budget.
     fn seg_below(&self, a: [f64; 2], b: [f64; 2], z: f64) -> bool;
+    /// Whether the CL height is *proven* at most the chord's height plus `slack` all along the
+    /// 3D segment a → b (z linear in the xy parameter). With slack ≤ the op's inner tolerance this
+    /// is the generator's no-gouge test for a sloped cutting move.
+    fn seg3_below(&self, a: [f64; 3], b: [f64; 3], slack: f64) -> bool;
     /// The xy box the part occupies, grown by the tool radius: outside it `drop` is `None`.
     fn extent(&self) -> [[f64; 2]; 2];
 }
@@ -192,6 +196,35 @@ impl DropCutter for Analytic {
                 continue;
             }
             if h.lo > z || s1 - s0 < 1e-14 {
+                return false;
+            }
+            let m = 0.5 * (s0 + s1);
+            stack.push((s0, m));
+            stack.push((m, s1));
+        }
+        true
+    }
+
+    fn seg3_below(&self, a: [f64; 3], b: [f64; 3], slack: f64) -> bool {
+        let mut stack: Vec<(f64, f64)> = vec![(0.0, 1.0)];
+        let mut n = 0;
+        while let Some((s0, s1)) = stack.pop() {
+            n += 1;
+            if n > 8000 {
+                return false;
+            }
+            let s = Ival::new(s0, s1);
+            let px = Ival::pt(a[0]).add(Ival::pt(b[0]).sub(Ival::pt(a[0])).mul(s));
+            let py = Ival::pt(a[1]).add(Ival::pt(b[1]).sub(Ival::pt(a[1])).mul(s));
+            let pz = Ival::pt(a[2])
+                .add(Ival::pt(b[2]).sub(Ival::pt(a[2])).mul(s))
+                .add(Ival::pt(slack));
+            let Some(h) = self.cl([px, py]) else { continue };
+            // proven below on the piece: the CL's upper end under the chord's lower end
+            if h.hi <= pz.lo {
+                continue;
+            }
+            if h.lo > pz.hi || s1 - s0 < 1e-14 {
                 return false;
             }
             let m = 0.5 * (s0 + s1);
