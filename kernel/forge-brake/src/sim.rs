@@ -942,7 +942,7 @@ impl<'a> StepCtx<'a> {
                     phase,
                 };
                 let c0 = bb::CELLS.load(std::sync::atomic::Ordering::Relaxed);
-                let t0 = std::time::Instant::now();
+                let t0 = trace_clock();
                 let key: Option<MemoKey> = (!el.name.starts_with("backgauge")).then(|| {
                     let (kind, id) = match pc.strip {
                         Strip::Wall(w) => (0u8, w.0),
@@ -1005,7 +1005,7 @@ impl<'a> StepCtx<'a> {
                         pc.strip,
                         quick,
                         bb::CELLS.load(std::sync::atomic::Ordering::Relaxed) - c0,
-                        t0.elapsed(),
+                        t0.map(|t| t.elapsed()),
                         v
                     );
                 }
@@ -1129,7 +1129,7 @@ impl<'a> StepCtx<'a> {
                 };
                 let roots = self.roots(mv, s);
                 let c0 = bb::CELLS.load(std::sync::atomic::Ordering::Relaxed);
-                let t0 = std::time::Instant::now();
+                let t0 = trace_clock();
                 let v = bb::certify(&pb, &roots, limit, res, BUDGET, !quick);
                 if std::env::var_os("BENDSIM_TRACE").is_some() {
                     eprintln!(
@@ -1138,7 +1138,7 @@ impl<'a> StepCtx<'a> {
                         st.strip,
                         quick,
                         bb::CELLS.load(std::sync::atomic::Ordering::Relaxed) - c0,
-                        t0.elapsed(),
+                        t0.map(|t| t.elapsed()),
                         v
                     );
                 }
@@ -1613,6 +1613,15 @@ impl<'a> StepCtx<'a> {
 
 /// A place a backgauge finger may stop on: its x, its span along y and in z, and what it is.
 type Stop = (f64, (f64, f64), (f64, f64), PartRef);
+
+/// The trace's clock: only when tracing, and never on wasm32 (no clock there: Instant panics).
+fn trace_clock() -> Option<std::time::Instant> {
+    #[cfg(not(target_arch = "wasm32"))]
+    if std::env::var_os("BENDSIM_TRACE").is_some() {
+        return Some(std::time::Instant::now());
+    }
+    None
+}
 
 /// A tool section moved by (dx, dz).
 fn shifted(r: &Region, dx: f64, dz: f64) -> Region {
