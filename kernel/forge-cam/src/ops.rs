@@ -2157,7 +2157,10 @@ mod tests {
             if let Some(lower) = arc_by_chords(&col, &body, &f, &m, -0.01, 0.01) {
                 assert!(lower >= -0.01 - 1e-9, "k={k}: cleared below the limit: {lower}");
                 let (g, _) = gap_move(&col, &f, &m, lower - 1e-6, 0.002, 200_000);
-                assert!(!matches!(g, Gap::Over { .. }), "k={k}: chords clear at {lower}, the search is over: {g:?}");
+                assert!(
+                    !matches!(g, Gap::Over { .. }),
+                    "k={k}: chords clear at {lower}, the search is over: {g:?}"
+                );
                 cleared += 1;
             }
             k += 1;
@@ -2198,10 +2201,16 @@ mod tests {
         };
         assert!(arc_by_chords(&col, &body, &f, &clear, -0.01, 0.01).is_some());
         for bad in [f64::NAN, f64::INFINITY, -1.0, 0.0] {
-            assert!(arc_by_chords(&col, &body, &f, &clear, -0.01, bad).is_none(), "tol {bad}");
+            assert!(
+                arc_by_chords(&col, &body, &f, &clear, -0.01, bad).is_none(),
+                "tol {bad}"
+            );
         }
         for bad in [f64::NAN, f64::INFINITY] {
-            assert!(arc_by_chords(&col, &body, &f, &clear, bad, 0.01).is_none(), "limit {bad}");
+            assert!(
+                arc_by_chords(&col, &body, &f, &clear, bad, 0.01).is_none(),
+                "limit {bad}"
+            );
         }
     }
 }
