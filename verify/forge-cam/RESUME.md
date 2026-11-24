@@ -176,3 +176,20 @@ Shadow.lean proves S1–S4, with `shadow_face` and `certified_clear_gen` assembl
 2. An executable ℚ(√d) form of the arc candidates, if the L6 tests want one.
 3. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
    expansion in the G6 model, L5 for the checker's intervals, and L4 (Aeneas).
+
+## Proven (LANG-PROOFS for TOOLPATH-QUALITY, 2026-11-24): dropping pocket pass loops (H.dropLoop)
+
+`ops::pocket_in` (cam/quality) leaves out an outer loop L of pass k (stepover s ≤ r) when
+(L ⊕ B_r) ∩ S ⊆ Rₖ₊₁ ⊕ B_r, decided by exact booleans at run time (S the stock's box, Rₖ₊₁ =
+{depth ≥ r + (k+1)s}). `ForgeCam/PocketDrop.lean`:
+
+- `passes_cover_from m`: if r + m·s ≤ depth p and dist q p ≤ r, some pass j ≥ m has a point
+  within r of q (proved directly: q at least that deep takes the level above it towards its
+  nearest outside point, as `passes_cover` does; a shallower q takes level r + m·s towards p).
+- `drop_cover`: for any sets dropped from any passes (`drops k`), if every dropped point's band
+  within S lies in Rₖ₊₁ ⊕ B_r (the run-time test, closed balls), every point of the opening
+  R ∘ B_r inside S is within r of a kept point. Induction on the passes between the covering one
+  and the deepest within reach (depth is 1-Lipschitz: a pass within r of q has j·s ≤ depth q).
+
+H.dropLoop is a theorem now, about the exact sets; that the run-time booleans decide the
+inclusion on the exact offsets (arcs, not polylines) is the op's own claim, checked where it runs.

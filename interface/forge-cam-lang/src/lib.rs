@@ -218,6 +218,18 @@ pub struct Leftover {
     pub below: Option<f64>,
 }
 
+/// A setup as `Cam::setup_view` shows it.
+#[derive(Clone, Copy, Debug)]
+pub struct SetupView<'a> {
+    pub name: &'a str,
+    pub stock: Stock,
+    pub machine: &'a str,
+    pub group: &'a str,
+    pub at: Option<[f64; 3]>,
+    pub clear: f64,
+    pub retract: f64,
+}
+
 pub struct Cam {
     pub leftover: Vec<Leftover>,
     pub leftover_done: bool,
@@ -506,14 +518,26 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                     }
                     let a = cam.named(args, &local)?;
                     // the kernel's clock: std's Instant panics in a browser
-                    let t0 = std::env::var("FORGE_CAM_TIME").is_ok().then(forge_math::clock::Instant::now);
+                    let t0 = std::env::var("FORGE_CAM_TIME")
+                        .is_ok()
+                        .then(forge_math::clock::Instant::now);
                     let v = cam.call(name, fname, &a, dir)?;
                     if let Some(t0) = t0 {
                         eprintln!("{name}: {:?}", t0.elapsed());
                     }
                     env.insert(name.clone(), v);
                 }
-                StmtKind::Expr(_) => {}
+                // a bare statement after the header did nothing and said nothing: every
+                // statement of a machining document names what it makes
+                StmtKind::Expr(e) => {
+                    return Err(match &e.kind {
+                        ExprKind::Call(f, _) => match &f.kind {
+                            ExprKind::Name(n) => format!("an operation needs a name: `{n}1 = {n}(..)`"),
+                            _ => "a statement needs a name: `NAME = ..`".into(),
+                        },
+                        _ => "a statement needs a name: `NAME = ..`".into(),
+                    });
+                }
                 _ => return Err("a statement a machining document does not take".into()),
             }
             Ok(())
@@ -777,7 +801,8 @@ impl Cam {
             "part" => {
                 let file = get_str(a, "#0", None)?;
                 let path = dir.join(&file);
-                let src = forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let src =
+                    forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
                 let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
                 let holes = holes::hole_view(&src, forge_lang::Options::default());
                 if !run.ok() {
@@ -2056,6 +2081,43 @@ impl Cam {
         .map_err(|e| format!("{e:?}"))
     }
 
+    /// The milling ops' feeds set from the engagement each piece meets (forge_cam::engage): the
+    /// chip held at the cutting data's feed per tooth, the in-process stock as the ops so far
+    /// left it the model. The paths' geometry is unchanged; they are posted and certified after.
+    fn feeds_from_engagement(&self, su: usize, kind: &str, out: &OpOut, paths: Vec<OpPath>) -> Vec<OpPath> {
+        use forge_cam::engage::{HeightMap, Profile, Sched, schedule};
+        if !matches!(kind, "facing" | "pocket" | "clear" | "contour" | "slot") {
+            return paths;
+        }
+        let (Some(fe), Some(ti)) = (out.feeds, out.tool) else {
+            return paths;
+        };
+        let t = &self.tools[ti];
+        let Some(prof) = Profile::of(&t.tool) else {
+            return paths;
+        };
+        let s = &self.setups[su];
+        let Some(g) = self.lib.group(&self.parts[s.part].group) else {
+            return paths;
+        };
+        let f_max = self.lib.machine(&s.machine).map(|m| m.max_feed).unwrap_or(fe.vf);
+        let cell = (t.tool.dc / 30.0).clamp(0.05, 0.25);
+        let sc = Sched {
+            fz: g.fz_at(t.tool.dc),
+            flutes: t.tool.nof.max(1) as f64,
+            rpm: fe.rpm,
+            // just under the machine's limit: G5 checks the posted F against it soundly
+            f_max: 0.999 * f_max,
+            f_min: 0.0,
+            cap: feeds::THIN_CAP,
+            cell,
+            // samples of one diameter, fixed by length (fto-adaptive.md D)
+            sample: t.tool.dc,
+        };
+        let mut map = HeightMap::of_stock(&s.ip, cell);
+        paths.iter().map(|p| schedule(p, &mut map, &prof, &sc)).collect()
+    }
+
     fn feeds_for(&self, su: usize, t: &ToolUse, ae: f64, ap: f64) -> Option<feeds::Feeds> {
         let g = self.lib.group(&self.parts[self.setups[su].part].group)?;
         let m = self.lib.machine(&self.setups[su].machine).ok()?;
@@ -2135,9 +2197,16 @@ impl Cam {
                     Some(V::Num(x)) if *x > 0.0 && *x <= 30.0 => Some(*x),
                     Some(_) => return Err("ramp: an angle in degrees, over 0 and at most 30".into()),
                 };
+                // the radial engagement the feed is set for (chip thinning credits ae < D/2): what
+                // the op cuts at most along its passes, never less (a thinner ae would overload
+                // the tool where the path cuts more: slots and a clear's first pass cut full width)
                 let fd = match kind {
                     "facing" => self.feeds_for(su, t, 0.7 * d, step.min(t.tool.lcf)),
-                    "pocket" => self.feeds_for(su, t, get_num(a, "stepover", Some(0.4 * d))?, step),
+                    "pocket" | "clear" => self.feeds_for(su, t, get_num(a, "stepover", Some(0.4 * d))?, step),
+                    // the whole width
+                    "slot" => self.feeds_for(su, t, d, step),
+                    // what a contour meets is not known here: no thinning credit
+                    "contour" => self.feeds_for(su, t, 0.5 * d, step),
                     _ => self.feeds_for(su, t, 0.1 * d, step),
                 };
                 let (vf, vp) = match fd {
@@ -2203,7 +2272,26 @@ impl Cam {
                         }
                         let rg = Region { loops };
                         let stepover = get_num(a, "stepover", Some(0.4 * d))?;
-                        let p = ops::pocket(
+                        // the in-process stock's box: passes that would cut nothing in it are
+                        // left out
+                        let (b0, b1) = (s.ip.min, s.ip.max);
+                        let q = [
+                            p2(b0[0], b0[1]),
+                            p2(b1[0], b0[1]),
+                            p2(b1[0], b1[1]),
+                            p2(b0[0], b1[1]),
+                        ];
+                        let sbox = Region {
+                            loops: vec![Loop {
+                                segs: (0..4)
+                                    .map(|i| Seg::Line {
+                                        a: q[i],
+                                        b: q[(i + 1) % 4],
+                                    })
+                                    .collect(),
+                            }],
+                        };
+                        let p = ops::pocket_in(
                             &rg,
                             ops::Cut {
                                 tool: t,
@@ -2215,6 +2303,7 @@ impl Cam {
                             stepover,
                             get_num(a, "leave", Some(0.0))?,
                             ramp,
+                            Some(&sbox),
                         )
                         .map_err(|e| format!("{e:?}"))?;
                         if stepover <= r
@@ -2402,6 +2491,7 @@ impl Cam {
                 return Ok(V::Op(self.ops.len() - 1));
             }
         };
+        let paths = self.feeds_from_engagement(su, kind, &out, paths);
         out.paths = paths;
         out.voids = voids.clone();
         for (v, floor) in voids {
@@ -2518,10 +2608,8 @@ impl Cam {
         if let Some(sp) = spot {
             let ti = add(self, sp, base_t)?;
             let t = &self.tools[ti];
-            let f = self
-                .feeds_for(su, t, t.tool.dc, 1.0)
-                .map(|x| 0.3 * x.vf)
-                .unwrap_or(100.0);
+            let fe = self.feeds_for(su, t, t.tool.dc, 1.0);
+            let f = fe.map(|x| 0.3 * x.vf).unwrap_or(100.0);
             // a 90° spot to just under the drill's radius: the chamfer ring the drill centres in
             let (sn, cs) = forge_math::dmath::sin_cos((0.5 * t.tool.angle).to_radians());
             let dspot = 0.45 * drill_d / (sn / cs).max(1e-9);
@@ -2542,18 +2630,18 @@ impl Cam {
                     *z = *r - 2.0 - dspot;
                 }
             }
+            // the speed the feed was set at (unset, the post's fallback S3000 ran it)
+            p.rpm = fe.map(|x| x.rpm).unwrap_or(0.0);
             plan.push(format!("spot {} to {:.2} mm", t.tool.id, dspot));
             paths.push(p);
         }
         let ti = add(self, drill, base_t + 1)?;
         let t = &self.tools[ti];
         let peck = depth > 3.0 * t.tool.dc;
-        let f = self
-            .feeds_for(su, t, t.tool.dc, t.tool.dc)
-            .map(|x| 0.1 * x.vf.min(2000.0))
-            .unwrap_or(100.0);
+        let fe = self.feeds_for(su, t, t.tool.dc, t.tool.dc);
+        let f = fe.map(|x| 0.1 * x.vf.min(2000.0)).unwrap_or(100.0);
         let kind = if peck { CycleKind::Peck } else { CycleKind::Drill };
-        paths.push(ops::holes(
+        let mut dp = ops::holes(
             &hole.places,
             kind,
             ops::Cut {
@@ -2564,7 +2652,9 @@ impl Cam {
             },
             depth,
             if peck { t.tool.dc } else { 0.0 },
-        ));
+        );
+        dp.rpm = fe.map(|x| x.rpm).unwrap_or(0.0);
+        paths.push(dp);
         // each hole's circle is cleared down to where the full diameter reaches
         for p in &hole.places {
             let r = 0.5 * t.tool.dc;
@@ -3177,7 +3267,9 @@ impl Cam {
             .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
         let faces_of = |ip: &forge_cam::stock::InProcess| {
             // a clock only when asked: std's panics in a browser page
-            let t0 = std::env::var("FORGE_CAM_DEBUG").is_ok().then(forge_math::clock::Instant::now);
+            let t0 = std::env::var("FORGE_CAM_DEBUG")
+                .is_ok()
+                .then(forge_math::clock::Instant::now);
             let r = ip.faces();
             if let Some(t0) = t0 {
                 eprintln!(
@@ -4112,6 +4204,37 @@ impl Cam {
         }
         h.push_str("</table>\n<p>Feeds and speeds are starting points from generic data: verify with the tool maker. The certificate covers the geometry only.</p>\n</body></html>\n");
         h
+    }
+
+    /// The program's tools, indexed as `OpOut::tool` and `OpPath::tool` index them (read only,
+    /// for measurement: verify/forge-cam-quality).
+    pub fn tool_uses(&self) -> &[ToolUse] {
+        &self.tools
+    }
+
+    /// Setup `i` as measurement needs it (read only): its stock box, the machine named, the
+    /// part's ISO 513 material group, and the work offset if placed.
+    pub fn setup_view(&self, i: usize) -> Option<SetupView<'_>> {
+        let s = self.setups.get(i)?;
+        Some(SetupView {
+            name: &s.name,
+            stock: s.stock,
+            machine: &s.machine,
+            group: &self.parts[s.part].group,
+            at: s.at,
+            clear: s.heights.clear,
+            retract: s.heights.retract,
+        })
+    }
+
+    /// The cutting data of a material group in the library the job was made with.
+    pub fn cutting_group(&self, g: &str) -> Option<&feeds::Group> {
+        self.lib.group(g)
+    }
+
+    /// The machine's rpm range as the tooling library states it.
+    pub fn machine_rpm(&self, name: &str) -> Option<[f64; 2]> {
+        self.lib.machine(name).ok().map(|m| m.rpm)
     }
 
     /// The first program's text, if released.
