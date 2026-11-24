@@ -638,30 +638,6 @@ impl Curve {
     }
 }
 
-/// asinh by dmath's ln: ln(|x| + sqrt(x² + 1)) with x's sign (the series near 0, where the
-/// sum cancels).
-pub fn asinh(x: f64) -> f64 {
-    let a = x.abs();
-    let r = if a < 1e-4 {
-        a * (1.0 - a * a / 6.0)
-    } else {
-        dmath::ln(a + (a * a + 1.0).sqrt())
-    };
-    if x < 0.0 { -r } else { r }
-}
-
-/// sinh by dmath's exp (the series near 0, where the difference cancels).
-pub fn sinh(x: f64) -> f64 {
-    let a = x.abs();
-    let r = if a < 1e-4 {
-        a * (1.0 + a * a / 6.0)
-    } else {
-        let e = dmath::exp(a);
-        0.5 * (e - 1.0 / e)
-    };
-    if x < 0.0 { -r } else { r }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -761,4 +737,28 @@ mod tests {
             }
         }
     }
+}
+
+/// asinh by dmath's ln: ln(|x| + sqrt(x² + 1)) with x's sign (the series near 0, where the
+/// sum cancels).
+pub fn asinh(x: f64) -> f64 {
+    let a = x.abs();
+    let r = if a < 1e-4 {
+        a * (1.0 - a * a / 6.0)
+    } else {
+        dmath::ln(a + (a * a + 1.0).sqrt())
+    };
+    if x < 0.0 { -r } else { r }
+}
+
+/// sinh by dmath's exp (the series near 0, where the difference cancels).
+pub fn sinh(x: f64) -> f64 {
+    let a = x.abs();
+    let r = if a < 1e-4 {
+        a * (1.0 + a * a / 6.0)
+    } else {
+        let e = dmath::exp(a);
+        0.5 * (e - 1.0 / e)
+    };
+    if x < 0.0 { -r } else { r }
 }
