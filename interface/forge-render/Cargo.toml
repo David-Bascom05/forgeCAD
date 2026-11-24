@@ -75,6 +75,8 @@ forge-machine = { path = "../../kernel/forge-machine" }
 forge-machine-builder = { path = "../forge-machine-builder" }
 forge-machine-lang = { path = "../forge-machine-lang" }
 png = "=0.18.1"
+# GIF's LZW for recordings (record/gif.rs): MIT OR Apache-2.0, already in the lock
+weezl = "=0.1.12"
 # a background image's file (zune: MIT OR Apache-2.0 OR Zlib), already in the lock
 zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std"] }
 zune-core = { version = "=0.5.3", default-features = false, features = ["std"] }
