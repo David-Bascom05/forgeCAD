@@ -597,7 +597,7 @@ pub fn icon_button(ui: &mut Ui, t: &Theme, icon: &str, tip: &str, on: bool) -> R
 }
 
 /// The one transport row for anything that plays (CAM sim, bend sim): first, back, play/pause,
-/// forward, last, then `status` ("Bend 1 of 2 · bending · 51.4°"). Space, ←/→ and Home/End do
+/// forward, last, then `status` ("Bend 1 of 2 · bending · 51.4°"). Space, the arrow keys and Home/End do
 /// the same when the view has focus; the caller routes those keys to `transport_key`.
 pub fn transport(ui: &mut Ui, t: &Theme, playing: bool, status: &str) -> Option<Transport> {
     let mut out = None;
@@ -606,7 +606,7 @@ pub fn transport(ui: &mut Ui, t: &Theme, playing: bool, status: &str) -> Option<
         if icon_button(ui, t, "first", "First (Home)", false).clicked() {
             out = Some(Transport::First);
         }
-        if icon_button(ui, t, "stepback", "Previous step (←)", false).clicked() {
+        if icon_button(ui, t, "stepback", "Previous step (Left arrow)", false).clicked() {
             out = Some(Transport::Back);
         }
         let (icon, tip) = if playing {
@@ -617,7 +617,7 @@ pub fn transport(ui: &mut Ui, t: &Theme, playing: bool, status: &str) -> Option<
         if icon_button(ui, t, icon, tip, playing).clicked() {
             out = Some(Transport::PlayPause);
         }
-        if icon_button(ui, t, "stepfwd", "Next step (→)", false).clicked() {
+        if icon_button(ui, t, "stepfwd", "Next step (Right arrow)", false).clicked() {
             out = Some(Transport::Forward);
         }
         if icon_button(ui, t, "last", "Last (End)", false).clicked() {
