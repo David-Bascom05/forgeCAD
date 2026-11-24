@@ -96,6 +96,21 @@ reached from the page are covered by the twiggy check above, not by the lint.
 - Test: `interface/forge-render/web/tests/shade.cjs` (30, 80 and 400 mm boxes: old build "the
   80 mm box drawn dark: mean 0.0, 1400 of 1400 black"; new: all shaded).
 
+## 7. Thermoform > Check Forming crashes the page (a lock taken twice)
+
+- Symptom: Check Forming on a thermoformed part (examples/thermoform/cover.fg) kills the page:
+  `cannot recursively acquire mutex` (std's single-threaded Mutex), then `unreachable`.
+- Root cause: `thermo_view.rs` `want_heat` (and `want_sim`) held the `made` lock while calling
+  `plat::spawn` with a job that takes the same lock. Natively the job runs on another thread and
+  waits; in the single-threaded page `plat::spawn` runs it before returning, on the same thread.
+  Wasm stack from the panic (V8's `Error.stackTraceLimit` raised in drive.cjs): `want_heat` <-
+  `Gui::apply_fg` <- `Gui::frame`. The same pattern in `gui_thermo.rs`: the re-simulation list
+  (`RESIM`, Check Forming's suggested fixes) and an assembly's thermoformed part (`ASM_PART`).
+- Fix: each guard dropped before `plat::spawn` (re-taken after where it's used again).
+- Test: `nopanic.cjs` opens cover.fg and clicks Thermoform > Check Forming (old: the panic). The
+  two `gui_thermo.rs` paths have no browser test yet (an assembly with a thermoform, and a
+  suggested fix's re-simulation).
+
 ## Open (reported, not fixed here)
 
 - 6. Agent tab in a page defaults to "Claude Code" and offers the microphone, both desktop only

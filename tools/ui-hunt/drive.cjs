@@ -22,8 +22,12 @@ const t = require("../../interface/forge-render/web/tests/lib.cjs");
     if (p) await p.close();
     p = await b.newPage({ viewport: { width: 1280, height: 800 } });
     p.on("console", (m) => log.push(m.text()));
-    p.on("pageerror", (e) => log.push(`PAGEERROR ${e.message}`));
+    p.on("pageerror", (e) => log.push(`PAGEERROR ${e.message}\n${e.stack ?? ""}`));
     p.on("worker", (w) => w.on?.("console", (m) => log.push(`[worker] ${m.text()}`)));
+    // a panic's whole wasm stack, not V8's ten frames
+    await p.addInitScript(() => {
+      Error.stackTraceLimit = 200;
+    });
     await p.goto(url + q);
   }
   await open(query);

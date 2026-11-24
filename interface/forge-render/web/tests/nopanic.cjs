@@ -2,6 +2,10 @@
 // implemented on this platform", then `unreachable` and a dead page), clicked as a person would:
 //   - Versions > Turn on history (forge-git's temp file names read the time of day)
 //   - Agent > Send (a new conversation's id read the time of day)
+// and a lock taken twice on the page's one thread ("cannot recursively acquire mutex"): a job
+// started while its caller held the lock the job takes, which natively runs on another thread
+// but in the single-threaded page runs before `plat::spawn` returns:
+//   - Thermoform > Check Forming (the thickness map's job, thermo_view.rs `want_heat`)
 //   node web/tests/nopanic.cjs OUT   (OUT: web/build.sh's output)
 // The page is 1280x800 (offscreen), so the chrome is where these coordinates say.
 const assert = require("node:assert/strict");
@@ -20,6 +24,9 @@ const at = {
   turnOnHistory: [57, 250],
   agentBox: [130, 690],
   agentSend: [229, 724],
+  // with a thermoformed part open
+  thermoformTab: [465, 55],
+  checkForming: [127, 110],
 };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -27,6 +34,8 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   const app = path.resolve(process.argv[2] ?? "web/out");
   const dir = t.tmpdir("nopanic");
   fs.writeFileSync(path.join(dir, "a.fg"), PART);
+  // the thermoform example, with what it reads beside it
+  fs.cpSync(path.join(t.repo, "examples/thermoform"), path.join(dir, "thermoform"), { recursive: true });
   const { url, proc } = await t.serve(dir, app);
   const b = await t.browser();
   try {
@@ -51,6 +60,15 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     await pause(2000);
     t.check(p);
     console.log("ok - Agent: a message sent without a panic");
+
+    await p.evaluate(() => window.forgecad.fc.app_open("/project/thermoform/cover.fg"));
+    await t.until(p, (s) => /cover\.fg$/.test(s.path ?? "") && s.done >= s.seq && s.built?.checked, "cover.fg built", 120000);
+    await pause(2000);
+    await click(at.thermoformTab);
+    await click(at.checkForming);
+    await pause(8000);
+    t.check(p);
+    console.log("ok - Thermoform: Check Forming without a panic");
   } finally {
     await b.close();
     proc.kill();
