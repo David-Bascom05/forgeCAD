@@ -52,6 +52,7 @@ jobs:
         if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: verify/forge-curved
         run: |
+          set -o pipefail
           for i in 1 2 3; do lake exe cache get && break; [ "$i" = 3 ] && exit 1; sleep 15; done  # Mathlib's server drops downloads now and then
           lake build 2>&1 | tee build.log
           if [ "$GITHUB_EVENT_NAME" = push ]; then exit 0; fi  # main: the build above is what is saved; the checks below ran on the pull request
@@ -60,6 +61,7 @@ jobs:
         if: ${{ github.event_name != 'push' }}
         working-directory: verify/forge-curved
         run: |
+          set -o pipefail
           lake env lean ForgeCurved/Axioms.lean 2>&1 | tee axioms.log
           if grep -q "sorryAx\|declaration uses [\`']sorry" build.log axioms.log; then echo "::error::sorry"; exit 1; fi
           bad=$(grep "depends on axioms" axioms.log | grep -v -E "\[(propext(, Classical\.choice)?(, Quot\.sound)?|propext, Quot\.sound|)\]" || true)

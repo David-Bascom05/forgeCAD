@@ -189,15 +189,15 @@ jobs:
       - name: end to end
         if: matrix.test == 'e2e'
         working-directory: interface/forge-render
-        run: node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
-      # an idle page draws nothing (a pick's answer is waited for without drawing), the paths
-      # that reached std's browser panics (Versions, Agent) are clicked through, and parts of
-      # any size are drawn shaded
-      - name: idle, no panics, shaded
+        run: |
+          node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/idle.cjs "$GITHUB_WORKSPACE/target/web"
+      # the paths that reached std's browser panics (Versions, Agent, Check Forming) are clicked
+      # through, and parts of any size are drawn shaded
+      - name: no panics, shaded
         if: matrix.test == 'e2e'
         working-directory: interface/forge-render
         run: |
-          node web/tests/idle.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/nopanic.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/shade.cjs "$GITHUB_WORKSPACE/target/web"
       - name: parity (shard ${{ matrix.test }} of 3)

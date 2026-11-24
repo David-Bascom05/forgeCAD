@@ -7,7 +7,8 @@ text, read back, and the path the text means is **certified** against the exact 
 - **holder_collision**: the shank and holder keep `clearance` from the part and the stock;
 - **rapid_clear**: rapids keep `clearance` from the part and the stock;
 - **fixture_collision**: every body of the tool, the cutter too, keeps the fixture's clearance
-  (default 1 mm) from the vise, on every move;
+  (default 1 mm) from the vise, on every move; with no workholding declared, from the support
+  under the stock (the plane of the stock's bottom): nothing cuts below the stock;
 - **axis_limit** (G5): every posted position within the machine's travel, joint by joint (the
   spindle's Z is the tip's plus the tool's length: stick-out and holder gauge), for a setup placed
   with `at:` (the work offset in machine coordinates); an unplaced setup has each axis's span
@@ -18,7 +19,9 @@ text, read back, and the path the text means is **certified** against the exact 
   Placed or not.
 
 An operation whose checks are not all proven is **refused**, with the check that failed, where,
-and a fix. A program is written only when every operation in it is certified.
+and a fix. A program is written only when every operation in it is certified. Every tool change is
+preceded by Z to the machine's safe position (the dialect's `retract_home`: `G91 G28 Z0.` on
+Fanuc and Haas, `G53 G0 Z0` on LinuxCNC; GRBL, which changes tools by hand, goes to the setup's clearance height in work coordinates and tells the operator to set Z for the new tool).
 
 ```
 forgecad cam F.fg [--json] [-o PROGRAM]     the reply, and the program if released; exit 0 certified
@@ -52,7 +55,7 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `part(FILE, group:)` | a part file beside the document; `group` (default `N`) picks the cutting data |
 | `machine(NAME)` | from the library (`generic-vmc3`, `generic-router`, or the project's) |
 | `tool(ID, t:, stickout:, holder:)` | a library tool, its T number, stick-out (tip to holder nose), holder |
-| `setup(PART, machine:, stock:, origin:, wcs:, at:, tol:, clearance:, clear:, retract:, fixture:, from:)` | `stock: box(margin: (x, y, z))` or `box(min:, max:)`; `origin: "top-center"`, `"top-corner"` or `(x, y, z)` in the part's frame; heights above the stock top; `from: SETUP`: the part turned over about x, starting from the stock that setup provably left (turned) |
+| `setup(PART, machine:, stock:, origin:, wcs:, at:, tol:, clearance:, clear:, retract:, fixture:, from:)` | `stock: box(margin: (x, y, z), below: b)` (b mm of stock under the part, default 0) or `box(min:, max:)`; `origin: "top-center"`, `"top-corner"` or `(x, y, z)` in the part's frame; heights above the stock top; `from: SETUP`: the part turned over about x, starting from the stock that setup provably left (turned) |
 | `vise(NAME, across:, clamp:, parallel:, clearance:)` | a library vise (`generic-vise-150`, `generic-vise-100`) closed on the stock along `across` (`"x"` or `"y"`), gripping `clamp` mm of it, on parallels `parallel` wide (default 6); `clearance` default 1 |
 | `soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:, relief: "corners", min_contact:)` | soft jaws cut to what `from:` left, turned over, `grip` deep: the pocket is the opening of that outline by `tool`'s radius, grown by `fit` (default 0.02), with a relief of radius r + fit at each corner if asked. Refused unless what `from:` left seats in the pocket (exactly), the seat is at least `min_contact` mm² (default a quarter of the largest section), the blank keeps 3 mm of wall and the part stands more than the fixture clearance above the jaws. The value is a part (the jaws closed, pocketed: `setup(jaws, ..)` cuts them, held by the vise) and a fixture (`setup(f, from: op1, fixture: jaws)`) |
 | `facing(SETUP, tool:, to:, step:)` | zig-zag over the stock down to `to` |
@@ -130,3 +133,26 @@ minus what each op provably cleared (kernel/forge-cam/src/stock.rs), so it conta
 facing, clearing, contours, hole pockets and hole plans, with linking by retract. Not yet:
 adaptive clearing (patents first), 3-axis surfacing, 3+2, turning, 5-axis; chamfer mills,
 threads modelled as helicoidal faces (`thread(hole:)`): the lowering refuses them, so a modelled thread is milled as a declared Δ only when the model records it instead.
+
+## In the app: the Manufacture workspace
+
+Open a machining document in the app (natively or in the browser) and it opens on the
+**Manufacture** tab, with its part in the view. The document's text stays the source of truth:
+the browser, the dialogs and the ribbon make the same edit ops an agent sends (`SetArg`,
+`AddFeature`, `DeleteFeature`, `MoveFeature`, `Suppress`, `Rename`), and what they show is this
+document's run, the reply above.
+
+- **Setup ▸ New Setup**: machine, origin, work offset, placement (`at:`), fixture, stock (the
+  part's box plus offsets, or a fixed box), heights; a new setup comes with its `program(..)`.
+- **2D** and **Drilling**: one dialog per op built-in, with Tool, Geometry, Heights, Passes and
+  Linking tabs; a hole or sketch is chosen from the part's history or picked in the view.
+- **The browser**: setups, their ops and programs, each certified, refused, not posted, stale
+  (edited since it was generated) or suppressed; right-click to edit, move, suppress or delete.
+  The selected op's tool, feeds, path and certificate show below it, and its failed checks:
+  click one to locate its witness in the view.
+- **Generate** (and Auto Generate), **Post Process** (dialect, number, the NC text, Write NC
+  File), **Setup Sheet**, **Checks**, **Tool Library** (add a library tool with its T number),
+  **Document Text** (the text by hand).
+
+Code: interface/forge-render/src/shell/cam/ and src/gui_cam.rs; notes and screenshots in
+research/cam/ui/.

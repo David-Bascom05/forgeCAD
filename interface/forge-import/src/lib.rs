@@ -11,6 +11,8 @@ mod py;
 /// The part a program builds, and the Forge selections that name its edges and faces (also for
 /// tools/find-parts/recreate's importers, through forge-proof's `topo`).
 pub mod state;
+/// 3MF packages as one triangle mesh: a mesh for reference, not a B-rep.
+pub mod threemf;
 mod zip;
 
 /// Why a body did not translate whole.

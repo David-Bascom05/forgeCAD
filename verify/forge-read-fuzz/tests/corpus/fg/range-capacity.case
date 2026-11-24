@@ -1,0 +1,5 @@
+# count(2^63 - 1): a range of that many items, capacity overflow.
+from: examples/rack18u/hw/iso10511_m4.fg
+replace: shared n6 = count(6)
+with: shared n6 = count(9223372036854775807)
+expect: refused

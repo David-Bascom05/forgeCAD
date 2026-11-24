@@ -13,7 +13,10 @@ comment_strip = "()"
 line_numbers = true
 line_start = 10
 line_step = 10
-safe_start = ["G90 G94 G17 G49 G40 G80", "G21", "G187 P2"]
+# no G187: Haas documents it under the high-speed machining option (HFO Mill Programming manual
+# rev 04-2014; Gerotech NGC training), so a control without the option may alarm on it. Machines
+# with the option use the haas-hsm dialect (research/cam/machines/haas-dialect-audit.md #7)
+safe_start = ["G90 G94 G17 G49 G40 G80", "G21"]
 tool_change = ["T{t} M06"]
 length_comp = "G43 H{h}"
 spindle_cw = "S{rpm} M03"
@@ -25,7 +28,9 @@ wcs_count = 6
 arc = "ijk"
 retract_home = ["G91 G28 Z0.", "G90"]
 coolant_flood = "M08"
-coolant_mist = "M07"
+# no coolant_mist: no Haas M-code list shows M07 (HFO Mill Programming manual rev 04-2014: M08/M09,
+# M88/M89, M83/M84; Gerotech NGC training: M73/M74 tool air blast, M83/M84 auto air gun), so mist
+# is refused rather than posted as an unsupported code (research/cam/machines/haas-dialect-audit.md)
 coolant_through = "M88"
 coolant_through_off = "M89"
 coolant_off = "M09"

@@ -1,0 +1,125 @@
+{
+ "vendor": "Mazak",
+ "model": "VCN-530C",
+ "family": "VCN",
+ "source": [
+  "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/",
+  "https://mazak.com/id-en/products/vcn"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "vmc3",
+ "architecture": null,
+ "control": {
+  "standard": "MAZATROL SmoothG (named in the machine-size row only)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 1050,
+  "Y": 530,
+  "Z": 510
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": [
+  150,
+  660
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  1300,
+  550
+ ],
+ "table_load_kg": 1200,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 12000,
+  "rpm_min": null,
+  "taper_or_interface": "BT40",
+  "power_kw": {
+   "cont": 7.5,
+   "30min": null,
+   "peak/other": "18.5 kW (25% ED)"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 42,
+  "Y": 42,
+  "Z": 42,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": 80,
+  "max_tool_dia_empty_adjacent_mm": 125,
+  "max_tool_len_mm": 350,
+  "max_tool_kg": 8
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 2950,
+  "D": 2973,
+  "H": 2808
+ },
+ "weight_kg": 6800,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "architecture",
+  "changer.chip_to_chip_s",
+  "changer.tool_to_tool_s",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_type",
+  "table_height_from_floor_mm"
+ ],
+ "options": [],
+ "notes": "The only maker page found is for 'VCN-530C L' (Mazak China-built variant, page lg-vn530cel on the Malaysia site); the plain VCN-530C/530C HS is no longer listed on mazak.com regional product pages (US lists no VCN; UK/ID list VCN-460/500/535C/600/700/700D). Torque not published on this page. Dealer listings (exapro, surplusrecord) quote 1300x550 table, 1050/530/510 travels, 12000 rpm, but are NOT used. Architecture not published; memory says fixed column, X table on Y saddle, unverified.",
+ "orig": {
+  "rapids": "42000 mm/min",
+  "overall": "Width x Length 2950 x 2973 mm"
+ }
+}

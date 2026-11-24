@@ -10,7 +10,7 @@ HTTP, for exploring by hand).
 - a4dcf98 (forge-git, kernel): callgrind exact band vs main f04c533 on this VM: worst strict
   line +0.0002% (gearbox app), strict total +0.0000%; bits identical.
 
-## 1. An idle page draws every frame for good; frame read-back never answers
+## 1. An idle page draws every frame for good; frame read-back never answers (superseded on main by fb7a67fa, the renderer's pick waker; merged in favour of it)
 
 - Symptom: once a part is open, the page draws ~60 frames a second with nothing changing
   (`forgecad.state().frames` climbs: 1802 frames in 30 s idle), and `forgecad.pixels()` never
