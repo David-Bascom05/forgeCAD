@@ -41,6 +41,18 @@ pub struct Focus {
     pub stock_at: Option<String>,
     /// The toolpaths shown: every op of the setup, or the selected one only.
     pub only_selected: bool,
+    /// The toolpath coloured by a measured value per move (forge-cam-quality's), drawn by the
+    /// simulation view; None: by op as before.
+    pub colour_by: Option<ColourBy>,
+}
+
+/// A per-move value the toolpath can be coloured by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColourBy {
+    /// The chip thickness after thinning against the op's target feed per tooth.
+    ChipLoad,
+    /// The engagement angle.
+    Engagement,
 }
 
 /// What the ribbon asks for (an `Action` is Copy: the browser's asks carry names, `Cmd`).

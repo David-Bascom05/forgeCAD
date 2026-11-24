@@ -802,6 +802,14 @@ fn cam_words(g: &mut Gui, words: &str) -> Result<(), String> {
         "export" => w.command(Cmd::ExportNc((!rest.is_empty()).then(|| rest.to_string()))),
         "export-sheet" => w.command(Cmd::ExportSheet),
         "repost" => w.command(Cmd::RepostStale),
+        "colour" => {
+            use crate::shell::cam::ColourBy;
+            w.focus.colour_by = match rest {
+                "chip" => Some(ColourBy::ChipLoad),
+                "engagement" => Some(ColourBy::Engagement),
+                _ => None,
+            }
+        }
         "allow-uncertified" => w.allow_uncertified = rest != "off",
         "close" => {
             w.op_dlg = None;
@@ -836,6 +844,7 @@ fn cam_json(g: &Gui) -> Json {
         ("text", w.text.clone().into()),
         ("said", w.said.clone().map_or(Json::Null, Json::from)),
         ("exported", (w.exported as f64).into()),
+        ("colour_by", w.focus.colour_by.map_or(Json::Null, |c| format!("{c:?}").into())),
         // each program's file as last read: name, state, path
         (
             "posted",

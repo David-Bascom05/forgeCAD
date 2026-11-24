@@ -2474,6 +2474,7 @@ fn quality_window(
     let mut close = false;
     let width = 720.0;
     let mut select: Option<String> = None;
+    let mut colour = w.focus.colour_by;
     let r = egui::Window::new("cam-quality")
         .id(egui::Id::unique("cam-quality-window"))
         .title_bar(false)
@@ -2485,6 +2486,23 @@ fn quality_window(
         .constrain_to(crate::shell::dialog_area(ctx))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_check", "Toolpath Quality", width, places, "cam:quality");
+            // the toolpath's colouring in the view (the simulation view draws it)
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label(egui::RichText::new("Colour toolpath by").font(sans(13.0)).color(t.ink2));
+                use super::ColourBy;
+                for (label, c, key) in [
+                    ("Op", None, "op"),
+                    ("Chip load", Some(ColourBy::ChipLoad), "chip"),
+                    ("Engagement", Some(ColourBy::Engagement), "engagement"),
+                ] {
+                    let r = ui.selectable_label(colour == c, label);
+                    places.push((format!("cam:quality:colour:{key}"), r.rect));
+                    if r.clicked() {
+                        colour = c;
+                    }
+                }
+            });
             let Some(run) = &w.run else { return };
             let Some(job) = &run.quality else {
                 note(ui, "Not measured (turning runs are not yet).", width, t.ink2);
@@ -2599,6 +2617,7 @@ fn quality_window(
     if let Some(op) = select {
         w.command(Cmd::Select(op));
     }
+    w.focus.colour_by = colour;
     if close {
         w.quality_open = false;
     }
