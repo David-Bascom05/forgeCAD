@@ -526,7 +526,13 @@ impl Shell {
             if st.tool
                 && let Some((tool, p, _)) = st.tool_now()
                 && let Some((at, note)) = st.sim.looks.get(tool).and_then(|l| l.note.as_ref())
-                && let Some(a) = to_px([p[0] - at[0], p[1], p[2] + at[1]])
+                && let Some(a) = st
+                    .sim
+                    .cam
+                    .sim_tools()
+                    .get(tool)
+                    // on the tool where it shows: the top of its cutting length, its left side
+                    .and_then(|tu| to_px([p[0] - 0.5 * tu.tool.dc, p[1], p[2] + tu.tool.lcf.min(at[1])]))
                 && v.contains(a)
             {
                 // leftwards from it, so it never runs under the panel; kept inside the view
@@ -1095,9 +1101,14 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                                     format!("\u{2265} {} \u{b7} est. {}", mmss(lo), mmss(est)),
                                     crate::shell::cam::CYCLE_TIP.to_string(),
                                 ),
+                                // not timed on the machine (its setup's program was not
+                                // posted): one format in the column, the feed time on hover
                                 None => (
-                                    duration(op.t1 - op.t0),
-                                    "Feed time: feeds and rapids at their programmed rates (not a cycle time)".into(),
+                                    "\u{2014}".to_string(),
+                                    format!(
+                                        "Not timed on the machine: this setup's program was not posted (an op is refused). Feed time {}: feeds at their programmed rates, rapids at the machine's",
+                                        duration(op.t1 - op.t0)
+                                    ),
                                 ),
                             };
                             let g = ui.painter().layout_no_wrap(words.clone(), FontId::proportional(12.0), t.ink2);

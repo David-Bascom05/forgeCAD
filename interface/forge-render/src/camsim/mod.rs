@@ -583,6 +583,17 @@ pub fn check_sentence(c: &forge_cam::ops::CheckOut) -> String {
 /// A run's message tidied for a person: a parser's `NotPrism { face: 38 }` said in words and
 /// numbers with long tails rounded to 3 decimals. The message itself stays on hover.
 pub fn tidy(msg: &str) -> String {
+    // a leading op key ("thread_mill: ...") is the run's, not a sentence's
+    let msg = match msg.split_once(": ") {
+        Some((k, rest)) if !k.is_empty() && k.chars().all(|c| c.is_ascii_lowercase() || c == '_') => {
+            let mut r = rest.to_string();
+            if let Some(f) = r.get(0..1) {
+                r = f.to_uppercase() + &r[1..];
+            }
+            r
+        }
+        _ => msg.to_string(),
+    };
     let s = msg
         .replace("NotPrism { face: ", "isn't a prism (face ")
         .replace(" }", ")");

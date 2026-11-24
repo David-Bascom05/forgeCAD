@@ -684,6 +684,11 @@ fn checks_and_problems_in_words() {
         "the part's section at z = 29: isn't a prism (face 38)"
     );
     assert_eq!(tidy("-2.749999884242636 vs -0.01"), "-2.750 vs -0.01");
+    // a run's op key does not lead a sentence
+    assert_eq!(
+        tidy("thread_mill: the tool's pitch 1 is not the thread's 1.5"),
+        "The tool's pitch 1 is not the thread's 1.5"
+    );
 }
 
 /// A fluted cutter reads as one: its cutting length at least 15 % darker than its shank
@@ -711,4 +716,30 @@ fn a_cutters_flutes_stand_out_from_its_shank() {
         .iter()
         .fold((f32::MAX, f32::MIN), |a, &x| (a.0.min(x), a.1.max(x)));
     assert!(hi - lo > 0.4, "valleys {lo} lands {hi}");
+    // the holder drawn from records: its ER nut (bt40-er32 names none: ER32's largest, 50 x 22.5)
+    // and its interface's flange (BT40: 63 mm)
+    use forge_render::camsim::draw::look;
+    let rmax = |p: &forge_render::camsim::tools::Piece| {
+        p.tris
+            .pos
+            .iter()
+            .map(|q| (q[0] * q[0] + q[1] * q[1]).sqrt())
+            .fold(0.0, f64::max)
+    };
+    let nut = lk.pieces.iter().find(|p| p.colour == look::NUT).expect("a nut");
+    assert!((rmax(nut) - 25.0).abs() < 0.1, "nut radius {}", rmax(nut));
+    let flange = lk
+        .pieces
+        .iter()
+        .filter(|p| p.colour == look::HOLDER)
+        .map(rmax)
+        .fold(0.0, f64::max);
+    assert!((flange - 31.5).abs() < 0.1, "flange radius {flange}");
+    assert!(
+        lk.note
+            .as_ref()
+            .is_some_and(|n| n.1.contains("interface table") && n.1.contains("nut ER32 from")),
+        "{:?}",
+        lk.note
+    );
 }

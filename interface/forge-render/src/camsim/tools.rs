@@ -244,9 +244,9 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
         }),
         _ => note,
     };
+    let mut note = note;
     // the holder's interface, from the cited table: a solid where it has one
     let ghost = None;
-    let mut note = note;
     if let Some((body, said)) = holder_at
         .and_then(|k| bodies.get(k))
         .zip(tu.holder.as_deref())
@@ -267,6 +267,36 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                     .collect::<Vec<_>>()
                     .join("\n"),
             )
+        });
+    }
+    // the holder's collet nut, from its record: the holder's own, else its clamp system's largest
+    if let Some((h, nut)) = holder_at
+        .and_then(|k| bodies.get(k))
+        .zip(tu.holder.as_deref())
+        .and_then(|(b, id)| {
+            let n = collet_nut(id)?;
+            Some((b, n))
+        })
+    {
+        let (r, z0, z1) = (0.5 * nut.0, h.z0, h.z0 + nut.1);
+        pieces.push(Piece {
+            tris: crate::machine_mesh::revolve(&[
+                [z0, 0.0],
+                [z0, r - 0.6],
+                [z0 + 0.6, r],
+                [z1, r],
+                [z1, 0.0],
+            ]),
+            colour: look::NUT,
+            spins: true,
+            shade: vec![],
+        });
+        note = note.map(|(a, t)| {
+            let mut lines: Vec<String> = t.lines().map(str::to_string).collect();
+            if let Some(l) = lines.first_mut() {
+                *l = format!("{l}; nut {}", nut.2);
+            }
+            (a, lines.join("\n"))
         });
     }
     let tris = pieces.iter().map(|p| p.tris.tri.len()).sum();
@@ -476,4 +506,26 @@ pub fn ghost(t: &ToolLook, p: [f64; 3], out: &mut Vec<WorldVert>) {
             });
         }
     }
+}
+
+/// A holder's collet nut: (outside diameter, length, its maker and id) from the nut's record,
+/// the holder's own `nut` where it names one, else the largest of its clamp's system.
+fn collet_nut(holder: &str) -> Option<(f64, f64, String)> {
+    static LIB: std::sync::OnceLock<forge_tooling::Library> = std::sync::OnceLock::new();
+    let lib = LIB.get_or_init(forge_tooling::Library::builtin);
+    let h = lib.holder(holder).ok()?;
+    let n = match &h.nut {
+        Some(id) => lib.collet_nuts.iter().find(|n| &n.id == id)?,
+        None => lib
+            .collet_nuts
+            .iter()
+            .filter(|n| n.system.eq_ignore_ascii_case(&h.clamp))
+            .max_by(|a, b| a.od.total_cmp(&b.od))?,
+    };
+    let who = if n.vendor.is_empty() {
+        n.id.clone()
+    } else {
+        format!("{} {}", n.vendor, n.product_id)
+    };
+    Some((n.od, n.length, format!("{} from {who}", n.system)))
 }

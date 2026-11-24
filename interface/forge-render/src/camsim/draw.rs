@@ -45,6 +45,8 @@ pub mod look {
     /// Machined steel: RENDER-STUDIO's "Steel, machined" (F0 [0.53, 0.513, 0.494]) at DIFFUSE
     pub const HOLDER: [f32; 3] = [0.53 * DIFFUSE, 0.513 * DIFFUSE, 0.494 * DIFFUSE];
     pub const FIXTURE: [f32; 3] = HOLDER;
+    /// A collet nut: the holder's steel a shade darker, so it reads apart from the body
+    pub const NUT: [f32; 3] = [HOLDER[0] * 0.7, HOLDER[1] * 0.7, HOLDER[2] * 0.7];
     pub const PART: [f32; 3] = rgb(0x8FA6BF);
     pub const LEFTOVER: [f32; 3] = rgb(0xF08A24);
     pub const FAIL: [f32; 3] = rgb(0xF03A3A);
