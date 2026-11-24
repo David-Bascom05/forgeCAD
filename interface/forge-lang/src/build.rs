@@ -846,7 +846,6 @@ impl std::hash::Hasher for NameMix {
 /// name lives; a new face on a face before's surface, overlapping it, is that face's.
 fn lineage(body: Work<'_>, prev: Option<(Work<'_>, &Lineage)>, i: usize) -> Lineage {
     let mut out = Lineage::with_capacity_and_hasher(body.len(), Default::default());
-    let mut before: Option<Vec<(&Body, FaceId, &forge_topo::Face)>> = None;
     for s in body.0 {
         let b = &s.body;
         let merges = prev
@@ -863,15 +862,16 @@ fn lineage(body: Work<'_>, prev: Option<(Work<'_>, &Lineage)>, i: usize) -> Line
             let o = prev.and_then(|(pb, po)| {
                 po.get(&face.name).cloned().or_else(|| {
                     // (the surfaces first: most differ, and a face's box is worked out only then;
-                    // the faces before gathered once, in their order, for every face that looks)
-                    let before = before.get_or_insert_with(|| {
-                        pb.0.iter()
-                            .flat_map(|ps| ps.body.face_ids().map(move |g| (&ps.body, g, ps.body.face(g))))
-                            .collect()
-                    });
-                    for &(p, g, pf) in before.iter() {
-                        if pf.surface == face.surface && pb.face_box(p, g).overlaps(&body.face_box(b, f)) {
-                            return po.get(&pf.name).cloned();
+                    // the slots read straight, the live ones in order, as `face_ids` gives them)
+                    for ps in pb.0 {
+                        let p = &ps.body;
+                        for (g, pf) in p.faces.iter().enumerate() {
+                            if pf.alive
+                                && pf.surface == face.surface
+                                && pb.face_box(p, FaceId(g as u32)).overlaps(&body.face_box(b, f))
+                            {
+                                return po.get(&pf.name).cloned();
+                            }
                         }
                     }
                     None
