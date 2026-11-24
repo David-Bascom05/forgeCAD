@@ -400,9 +400,37 @@ pub struct StepCtx<'a> {
 }
 
 /// A distance verdict's key: the piece (strip kind and id, the done bends on its path), the tool
-/// element, the phase, the orientation, the moving bend and its overbent turn, the die (where it
-/// moves the punch), and whether it was only decided or measured.
-pub type MemoKey = (u8, u32, u64, String, Phase, bool, usize, u64, usize, bool);
+/// element (with the punch it rides on, for what rides the ram: the ram stands at its height),
+/// the phase, the orientation, the moving bend and its overbent turn, the die (where it places
+/// the tool against the part), whether it was only decided or measured, and the search's own question,
+/// exactly: its limit, its resolution and its start cells (each interval's ends and the tag, as
+/// bits), so a kept verdict only ever answers the search it was found by (FALLBACK's review).
+pub type MemoKey = (
+    u8,
+    u32,
+    u64,
+    String,
+    Phase,
+    bool,
+    usize,
+    u64,
+    usize,
+    bool,
+    Vec<u64>,
+);
+
+/// The search's question as exact bits: limit, resolution, then each start cell.
+fn question(limit: f64, res: f64, roots: &[Cell]) -> Vec<u64> {
+    let mut q = vec![limit.to_bits(), res.to_bits()];
+    for c in roots {
+        for i in &c.p {
+            q.push(i.lo.to_bits());
+            q.push(i.hi.to_bits());
+        }
+        q.push(c.tag as u64);
+    }
+    q
+}
 pub type Memo = std::collections::HashMap<MemoKey, Verdict>;
 
 /// The cells' budget for one piece against one target.
@@ -957,7 +985,11 @@ impl<'a> StepCtx<'a> {
                         Strip::Wall(w) => (0u8, w.0),
                         Strip::Bend(b) => (1u8, b.0),
                     };
-                    // where the punch is placed by the die (approach, return) or the tool is the die
+                    // the die only where it places the tool against the part: what stands on it
+                    // (image's to_die, by ztip, which reads its width and shoulder radius), and
+                    // the punch lifted from it (approach, return). Bending (and static), the punch
+                    // and what rides it see the part as rel(side_point(..)) from the punch tip,
+                    // which read the bend, the thickness and the orientation, never the die
                     let die = if el.attach == Attach::Die || phase != Phase::Bend {
                         self.die_index + 1
                     } else {
@@ -969,7 +1001,11 @@ impl<'a> StepCtx<'a> {
                         pc.path,
                         // with stations, where a tool stands depends on the working station
                         // and its punch: kept apart
-                        if self.tl.stations.is_empty() {
+                        // what rides the ram stands by this step's punch's height (the ram, the
+                        // other stations' punches): kept apart by the punch
+                        if self.tl.stations.is_empty() && el.attach == Attach::Punch {
+                            format!("{}@punch{}", el.name, self.punch_index)
+                        } else if self.tl.stations.is_empty() {
                             el.name.clone()
                         } else {
                             format!("{}@{}/{}", el.name, self.oy.to_bits(), self.punch_index)
@@ -980,6 +1016,7 @@ impl<'a> StepCtx<'a> {
                         self.phimax.to_bits(),
                         die,
                         quick,
+                        question(limit, res, &roots),
                     )
                 });
                 let kept = key

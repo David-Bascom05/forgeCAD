@@ -38,6 +38,22 @@ fn main() {
                 println!("  error: {e}");
             }
         }
+        // each op's cycle time on its program's machine (the planner's lower bound and estimate)
+        if std::env::var("CAM_TIME_CYCLES").is_ok() {
+            let ct = cam.cycle_times(&forge_machine::library::Library::with_builtin(), None);
+            for (o, t) in cam.ops.iter().zip(&ct.ops) {
+                println!(
+                    "  {:<14} {:<14} t_min {:>8.1} s  t_scurve {:>8.1} s",
+                    o.name, o.kind, t.t_min, t.t_scurve
+                );
+            }
+            for p in &ct.progs {
+                println!(
+                    "  program {} t_min {:.1} s  t_scurve {:.1} s",
+                    p.name, p.t_min, p.t_scurve
+                );
+            }
+        }
         if std::env::var("CAM_TIME_OPS").is_ok() {
             for o in ops {
                 println!("{o}");

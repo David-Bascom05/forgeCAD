@@ -9,6 +9,13 @@ pub struct Config {
     pub entries: Vec<(String, String)>,
 }
 
+/// A repository's own settings (`Config::repo_local`).
+pub struct RepoLocal {
+    pub config: Config,
+    /// Whether `extensions.worktreeConfig` is on in the repository's config.
+    pub worktree_config: bool,
+}
+
 impl Config {
     /// The global files then the repo's (later ones win).
     pub fn load(git_common: &Path, git_dir: &Path) -> Config {
@@ -28,10 +35,27 @@ impl Config {
             }
         }
         c.read_file(&git_common.join("config"), 0);
-        if c.bool("extensions.worktreeconfig") == Some(true) {
+        if Config::repo_local(git_common, git_dir).worktree_config {
             c.read_file(&git_dir.join("config.worktree"), 0);
         }
         c
+    }
+
+    /// The repository's own settings alone (its config, and its worktree's when
+    /// `extensions.worktreeConfig` is on there): as git, the repository's format
+    /// (`core.repositoryformatversion`, `extensions.*`) and `core.bare` are read from these only,
+    /// never from a global or system config.
+    pub fn repo_local(git_common: &Path, git_dir: &Path) -> RepoLocal {
+        let mut c = Config::default();
+        c.read_file(&git_common.join("config"), 0);
+        let worktree_config = c.bool("extensions.worktreeconfig") == Some(true);
+        if worktree_config {
+            c.read_file(&git_dir.join("config.worktree"), 0);
+        }
+        RepoLocal {
+            config: c,
+            worktree_config,
+        }
     }
 
     pub fn read_file(&mut self, p: &Path, depth: usize) {

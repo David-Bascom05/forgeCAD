@@ -247,7 +247,7 @@ pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId])
     cs.sort_unstable();
     let face = &mut body.faces[f.index()];
     let Some(q) = face.query.get_mut() else { return };
-    let Some(info) = std::sync::Arc::get_mut(q).and_then(|a| a.downcast_mut::<FaceInfo>()) else {
+    let Some(info) = std::sync::Arc::get_mut(&mut q.0).and_then(|a| a.downcast_mut::<FaceInfo>()) else {
         face.query.clear();
         return;
     };
@@ -277,7 +277,7 @@ pub fn grow_query_reach(body: &mut Body, v: forge_topo::VertexId, tol: f64) {
     for f in faces {
         let face = &mut body.faces[f.index()];
         let Some(q) = face.query.get_mut() else { continue };
-        match std::sync::Arc::get_mut(q).and_then(|a| a.downcast_mut::<FaceInfo>()) {
+        match std::sync::Arc::get_mut(&mut q.0).and_then(|a| a.downcast_mut::<FaceInfo>()) {
             Some(info) => info.reach = info.reach.max(tol),
             // shared with a copy of the body: built afresh when next asked
             None => face.query.clear(),
@@ -295,7 +295,7 @@ pub fn extend_query(body: &mut Body, f: FaceId, lp: forge_topo::LoopId) {
     };
     let face = &mut body.faces[f.index()];
     let Some(q) = face.query.get_mut() else { return };
-    let Some(info) = std::sync::Arc::get_mut(q).and_then(|a| a.downcast_mut::<FaceInfo>()) else {
+    let Some(info) = std::sync::Arc::get_mut(&mut q.0).and_then(|a| a.downcast_mut::<FaceInfo>()) else {
         // shared with a copy of the body: build afresh when next asked
         face.query.clear();
         return;
@@ -451,15 +451,15 @@ fn info(body: &Body, f: FaceId) -> &FaceInfo {
             Surface::Plane(pl) if edges.len() >= 16 => Some(Bands::build(pl, &edges)),
             _ => None,
         };
-        std::sync::Arc::new(FaceInfo {
+        forge_topo::body::FaceQuery(std::sync::Arc::new(FaceInfo {
             edges,
             reach,
             drawn: std::sync::OnceLock::new(),
             bands,
             simple: std::sync::OnceLock::new(),
-        })
+        }))
     });
-    q.downcast_ref::<FaceInfo>()
+    q.0.downcast_ref::<FaceInfo>()
         .expect("a face's query is a FaceInfo")
 }
 
