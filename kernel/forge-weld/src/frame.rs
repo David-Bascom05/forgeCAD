@@ -838,49 +838,28 @@ fn on_arc(a: f64, start: f64, sweep: f64) -> bool {
     (a - lo).rem_euclid(dmath::TAU) <= w
 }
 
-/// Where the line `a0 + au u + av v = 0` meets the circle about `c` of radius `r`.
+/// Where the line `a0 + au u + av v = 0` meets the circle about `c` of radius `r`
+/// (forge-num's `meet2`: crossing, touching or missing decided exactly).
 fn line_circle((a0, au, av): (f64, f64, f64), c: forge_math::Point2, r: f64) -> Vec<(f64, f64)> {
-    let nl = (au * au + av * av).sqrt();
-    if nl == 0.0 {
-        return vec![];
-    }
-    let dist = (a0 + au * c.x + av * c.y) / nl;
-    if dist.abs() > r {
-        return vec![];
-    }
-    let n = Vec2::new(au, av) / nl;
-    let foot = c - n * dist;
-    let half = (r * r - dist * dist).max(0.0).sqrt();
-    [-1.0, 1.0]
-        .into_iter()
-        .map(|k| {
-            let p = foot + n.perp() * (k * half);
-            (p.x, p.y)
-        })
-        .collect()
+    points(forge_num::meet2::line_circle([a0, au, av], [c.x, c.y], r))
 }
 
-/// Where two circles meet.
+/// Where two circles meet (forge-num's `meet2`, decided exactly).
 fn circle_circle(
     (c1, r1): (forge_math::Point2, f64),
     (c2, r2): (forge_math::Point2, f64),
 ) -> Vec<(f64, f64)> {
-    let d = c2 - c1;
-    let dl = d.length();
-    if dl == 0.0 || dl > r1 + r2 || dl < (r1 - r2).abs() {
-        return vec![];
-    }
-    let a = (r1 * r1 - r2 * r2 + dl * dl) / (2.0 * dl);
-    let h = (r1 * r1 - a * a).max(0.0).sqrt();
-    let n = d / dl;
-    let m = c1 + n * a;
-    [-1.0, 1.0]
-        .into_iter()
-        .map(|k| {
-            let p = m + n.perp() * (k * h);
-            (p.x, p.y)
-        })
-        .collect()
+    points(forge_num::meet2::circle_circle(
+        [c1.x, c1.y],
+        r1,
+        [c2.x, c2.y],
+        r2,
+    ))
+}
+
+fn points(m: forge_num::meet2::Meet2) -> Vec<(f64, f64)> {
+    let (p, n) = m.points();
+    p[..n].iter().map(|q| (q[0], q[1])).collect()
 }
 
 #[cfg(test)]

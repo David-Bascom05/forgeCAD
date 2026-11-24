@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+# where lines and circles meet, decided exactly (meet2)
+forge-num = { path = "../forge-num" }
 forge-math = { path = "../forge-math" }
 forge-ops = { path = "../forge-ops" }
 

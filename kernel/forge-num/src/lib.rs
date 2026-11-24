@@ -15,6 +15,7 @@
 
 pub mod dy;
 pub mod int;
+pub mod meet2;
 pub mod nat;
 
 pub use dy::Dy;

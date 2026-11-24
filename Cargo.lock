@@ -631,6 +631,7 @@ name = "forge-weld"
 version = "0.1.0"
 dependencies = [
  "forge-math",
+ "forge-num",
  "forge-ops",
 ]
 
