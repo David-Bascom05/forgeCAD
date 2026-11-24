@@ -31,8 +31,9 @@ const server = http.createServer((q, r) => {
 });
 
 async function picture(p, name) {
-  const st = await p.evaluate(() => window.forgecad.state());
-  await t.frames(p, st, 4);
+  // an idle app draws no frames by itself: reading pixels asks for one (twice: the first
+  // may predate the last change)
+  await t.pixels(p);
   const f = await t.pixels(p);
   console.log(`  ${name}: ${t.shot(name, f)} (${f.colours} colours)`);
   if (f.colours < 8) throw new Error(`${name}: a blank frame`);
