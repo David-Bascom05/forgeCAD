@@ -159,3 +159,37 @@ fn the_manifold_taps_are_certified_against_their_threads() {
             .collect::<Vec<_>>()
     );
 }
+
+/// The ream's feeds and speeds are the group's cited `[[ream]]` row (Hartner's carbide reamer
+/// columns for N), its pre-drill the hole less the published allowance for its diameter
+/// (0.2 mm at Ø10); `allowance:` sets another, and the drill is the library's within 0.1 of it.
+#[test]
+fn the_ream_runs_at_its_cited_data_over_its_allowance() {
+    use forge_tooling::resolve::Source;
+    let cam = forge_cam_lang::run(&doc("h = drill(op1, f.pin, plan: \"auto\")"), &dir());
+    let o = cam.ops.iter().find(|o| o.name == "h").unwrap();
+    assert_eq!(o.status, "built", "{:?}", o.refusal);
+    assert!(
+        o.plan.iter().any(|p| p == "pre-drill 9.8 for a 0.2 allowance"),
+        "{:?}",
+        o.plan
+    );
+    let (_, id, r) = o.drilled.iter().find(|(role, ..)| *role == "ream").unwrap();
+    assert_eq!(id, "reamer-10h7");
+    assert_eq!(r.vc.source, Source::Material, "{}", r.vc.note);
+    assert!(r.vc.note.contains("reaming data"), "{}", r.vc.note);
+    assert!(r.feed.v > 0.0 && r.rpm.v > 0.0);
+    let wide = forge_cam_lang::run(
+        &doc("h = drill(op1, f.pin, plan: \"auto\", allowance: 0.45)"),
+        &dir(),
+    );
+    let o = wide.ops.iter().find(|o| o.name == "h").unwrap();
+    assert_eq!(o.status, "built", "{:?}", o.refusal);
+    let drill = o
+        .plan
+        .iter()
+        .find_map(|p| p.strip_prefix("drill ")?.split(' ').next())
+        .unwrap();
+    let dc = forge_tooling::Library::builtin().tool(drill).unwrap().dc;
+    assert!((dc - 9.55).abs() <= 0.1 + 1e-9, "{drill} {dc}");
+}

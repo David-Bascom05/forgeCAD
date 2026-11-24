@@ -38,7 +38,7 @@ spheres and tori about it. Any other face (a flat, a cross hole) is refused by n
 
 | call | what |
 |---|---|
-| `part("F.fg")` | the part, lowered to its half-profile in (ρ, z) |
+| `part("F.fg", material: "M")` or `part("F.fg", group: "G")` | the part, lowered to its half-profile in (ρ, z); `material:` its stock by forge-material record (its ISO 513 group from the record or its family), `group:` an ISO 513 group alone (P M K N S H). Either is optional; see *Cutting data* |
 | `lathe_tool("ID", t: N)` | a tool of the built-in library (kernel/forge-turn/data/turning.toml) at station N |
 | `lathe_tool(blade: "B", insert: "I", block: "K", t: N)` | a parting or grooving blade and its insert from the tooling library's `[[blade]]` and `[[groove_insert]]` records (makers' data: the insert's width, corner, length and side clearance; the blade's thickness, reach, height; a bar over the blade's largest is refused; `block:` its `[[tool_block]]`, else a generic block) |
 | `lathe_tool(drill: "D", t: N)` | a drill from the tooling library (`[[tool]]` type drill: diameter, point angle, 180 for an indexable drill's flat bottom, usable depth, shank) |
@@ -62,6 +62,20 @@ PDJNR2525M15), `od-profile-vbmt` (VBMT160404 in SVJBR2525M16), `groove-3`, `part
 `thread-60`, `drill-8`, `drill-26`, `drill-26-4d` (110 flute), and for bores `id-bore-ccmt` (CCMT09T304 in S20R-SCLCR09: a Ø20 bar; its body is checked as the cylinder it is), `id-groove-2` (a 2 mm blade reaching 3 above a Ø16 bar) and `id-thread-60` (a 60° insert, pitch 0.5–2, on a Ø16 bar); left hand, `od-profile-vbmt-left` (VBMT160404 in SVJBL2525M16: an L holder is its R twin mirrored across z, tip number 4). Inserts (ISO 1832: C D V T S W R) and holders and bars (ISO 5608, 6261; right or left hand) are decoded from their ISO codes; holder heads are
 generic: verify with the vendor. The built-in machine: `generic-lathe` (CAM-MACHINE's generic
 2-axis lathe; placeholders, not a real machine).
+
+## Cutting data
+
+When the part names its stock, each turning and boring op runs at cited cutting data (vc m/min, f
+mm/rev, ap mm), and the op's reply carries it (`cutting {vc, f, ap, source}`):
+
+- A holder with a library insert (`lathe_tool(holder:, insert:)`) takes the insert's own maker row
+  (forge-tooling `Insert::preset_for`): the row of its grade naming the stock material, else that
+  grade's lead row. With no grade on the record, it takes the slowest grade's row.
+- A built-in tool, or an insert with no row for the group, takes the group's generic class: the
+  10th percentile of the makers' insert rows (`[[turn_generic]]` in forge-tooling's
+  data/generic.toml), keyed on the material family where at least two makers cover it.
+- Grooving, part-off, threading and drilling keep their own data. So does every op on a part that
+  names no stock, and the reply's `cutting` is then null.
 
 ## What is certified
 
