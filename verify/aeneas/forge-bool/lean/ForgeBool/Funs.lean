@@ -667,7 +667,7 @@ def ssi.nearly_flush
   | forge_geom.surface.Surface.Procedural _ => ok none
 
 /-- [forge_bool::ssi::sphere_sphere]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 553:0-581:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 546:0-574:1 -/
 def ssi.sphere_sphere
   (s : forge_geom.surface.Sphere) (t : forge_geom.surface.Sphere) :
   Result forge_geom.intersect.SurfaceSurface
@@ -736,7 +736,7 @@ def ssi.sphere_sphere
           ok (forge_geom.intersect.SurfaceSurface.Curves ret)
 
 /-- [forge_bool::ssi::equal_crossing]: loop body 0:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 536:4-551:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 536:4-544:1 -/
 @[rust_loop_body]
 def ssi.equal_crossing_loop.body
   (r : F64) (a : forge_math.vec.Vec3) (o : forge_math.vec.Point3)
@@ -767,9 +767,9 @@ def ssi.equal_crossing_loop.body
         let v1 ← forge_math.vec.Vec3.cross x a
         let fl ← forge_math.vec.Vec3.length v1
         let major ← lift (F64.Ops.div r fl)
+        let e ← forge_geom.curve.Ellipse.new val1 major r
         let out1 ←
-          alloc.vec.Vec.push out (forge_geom.curve.Curve.Ellipse
-            { frame := val1, major, minor := r },
+          alloc.vec.Vec.push out (forge_geom.curve.Curve.Ellipse e,
             forge_geom.intersect.Contact.Crossing)
         ok (cont (iter1, out1))
       | core.ops.control_flow.ControlFlow.Break residual =>
@@ -784,7 +784,7 @@ def ssi.equal_crossing_loop.body
       ok (done o3)
 
 /-- [forge_bool::ssi::equal_crossing]: loop 0:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 536:4-551:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 536:4-544:1 -/
 @[rust_loop]
 def ssi.equal_crossing_loop
   (iter : core.array.iter.IntoIter forge_math.vec.Vec3 2#usize) (r : F64)
@@ -799,7 +799,7 @@ def ssi.equal_crossing_loop
     (iter, out)
 
 /-- [forge_bool::ssi::equal_crossing]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 524:0-551:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 524:0-544:1 -/
 def ssi.equal_crossing
   (c : forge_geom.surface.Cylinder) (d : forge_geom.surface.Cylinder) :
   Result (Option forge_geom.intersect.SurfaceSurface)

@@ -36,7 +36,7 @@ structure curve.Circle where
   radius : F64
 
 /-- [forge_geom::curve::Ellipse]
-    Source: 'kernel/forge-geom/src/curve.rs', lines 71:0-75:1
+    Source: 'kernel/forge-geom/src/curve.rs', lines 72:0-76:1
     Visibility: public -/
 structure curve.Ellipse where
   frame : forge_math.frame.Frame
@@ -44,14 +44,14 @@ structure curve.Ellipse where
   minor : F64
 
 /-- [forge_geom::curve::Parabola]
-    Source: 'kernel/forge-geom/src/curve.rs', lines 80:0-83:1
+    Source: 'kernel/forge-geom/src/curve.rs', lines 98:0-101:1
     Visibility: public -/
 structure curve.Parabola where
   frame : forge_math.frame.Frame
   focal : F64
 
 /-- [forge_geom::curve::Hyperbola]
-    Source: 'kernel/forge-geom/src/curve.rs', lines 88:0-92:1
+    Source: 'kernel/forge-geom/src/curve.rs', lines 120:0-124:1
     Visibility: public -/
 structure curve.Hyperbola where
   frame : forge_math.frame.Frame
@@ -59,7 +59,7 @@ structure curve.Hyperbola where
   b : F64
 
 /-- [forge_geom::curve::Curve]
-    Source: 'kernel/forge-geom/src/curve.rs', lines 95:0-105:1
+    Source: 'kernel/forge-geom/src/curve.rs', lines 127:0-137:1
     Visibility: public -/
 @[discriminant isize]
 inductive curve.Curve where
