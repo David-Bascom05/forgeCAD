@@ -85,3 +85,47 @@ fn an_op_no_program_names_is_not_certified_and_ops_are_the_programs_own() {
         cam.errors
     );
 }
+
+/// Post options the program carries (CAM-UI's export asks): its number formats and coolant.
+/// The text is quantised, read back and certified at them, as at the dialect's own; a coolant
+/// the machine does not have is refused.
+#[test]
+fn a_program_carries_its_decimals_and_coolant() {
+    let run = |extra: &str| {
+        let cam = forge_cam_lang::run(
+            &doc(&format!(
+                "{OPS}p1 = program(op1, post: \"fanuc\", number: 1{extra})\n"
+            )),
+            &dir(),
+        );
+        assert!(cam.errors.is_empty(), "{extra}: {:?}", cam.errors);
+        assert_eq!(cam.certification(), "full", "{extra}");
+        cam.programs[0].text.clone().unwrap()
+    };
+    let plain = run("");
+    assert!(plain.contains("M08") && !plain.contains("M07"));
+    let fine = run(", decimals: 4, feed_decimals: 2");
+    assert_ne!(fine, plain);
+    // a feed word with two decimals where the dialect writes one
+    assert!(
+        fine.lines().any(|l| l
+            .split_whitespace()
+            .any(|w| w.starts_with('F') && w.split('.').nth(1).is_some_and(|d| d.len() == 2))),
+        "{fine}"
+    );
+    let mist = run(", coolant: \"mist\"");
+    assert!(mist.contains("M07") && !mist.contains("M08"));
+    let cam = forge_cam_lang::run(
+        &doc(&format!(
+            "{OPS}p1 = program(op1, post: \"fanuc\", number: 1, coolant: \"through\")\n"
+        )),
+        &dir(),
+    );
+    assert!(
+        cam.errors
+            .iter()
+            .any(|e| e.contains("the machine `generic-vmc3` has no through coolant")),
+        "{:?}",
+        cam.errors
+    );
+}

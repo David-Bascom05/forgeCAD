@@ -211,6 +211,14 @@ pub struct ProgramOut {
     pub round_trip: bool,
 }
 
+/// A program's own post options (`program(.., decimals:, feed_decimals:, coolant:)`).
+#[derive(Clone, Copy, Debug, Default)]
+struct PostOpts {
+    decimals: Option<u32>,
+    feed_decimals: Option<u32>,
+    coolant: Option<forge_post::Coolant>,
+}
+
 /// A leftover's boxes, why, radius and lowest tip (as `Leftover` holds them).
 type Reason = (Vec<[f64; 4]>, &'static str, Option<f64>, Option<f64>);
 
@@ -1428,7 +1436,46 @@ impl Cam {
                         Some(ids)
                     }
                 };
-                let out = self.post(name, &su, sel.as_deref(), &post, number);
+                let digits = |k: &str, most: f64| -> Result<Option<u32>, String> {
+                    match a.get(k) {
+                        None => Ok(None),
+                        Some(V::Num(x)) if x.fract() == 0.0 && *x >= 0.0 && *x <= most => Ok(Some(*x as u32)),
+                        Some(_) => Err(format!("{k}: a whole number from 0 to {most}")),
+                    }
+                };
+                let coolant = match a.get("coolant") {
+                    None => None,
+                    Some(V::Str(c)) => {
+                        let k = match c.as_str() {
+                            "flood" => forge_post::Coolant::Flood,
+                            "mist" => forge_post::Coolant::Mist,
+                            "through" => forge_post::Coolant::Through,
+                            "off" => forge_post::Coolant::Off,
+                            _ => return Err("coolant: \"flood\", \"mist\", \"through\" or \"off\"".into()),
+                        };
+                        // the machine must have it
+                        for &si in &su {
+                            let m = &self.setups[si].machine;
+                            if let Ok(mr) = self.lib.machine(m)
+                                && c != "off"
+                                && !mr.coolants.iter().any(|x| x == c)
+                            {
+                                return Err(format!(
+                                    "coolant: the machine `{m}` has no {c} coolant (it has: {})",
+                                    mr.coolants.join(", ")
+                                ));
+                            }
+                        }
+                        Some(k)
+                    }
+                    Some(_) => return Err("coolant: \"flood\", \"mist\", \"through\" or \"off\"".into()),
+                };
+                let opts = PostOpts {
+                    decimals: digits("decimals", 6.0)?,
+                    feed_decimals: digits("feed_decimals", 4.0)?,
+                    coolant,
+                };
+                let out = self.post(name, &su, sel.as_deref(), &post, number, &opts);
                 self.programs.push(out);
                 Ok(V::Num(0.0))
             }
@@ -3843,6 +3890,7 @@ impl Cam {
         sel: Option<&[usize]>,
         post: &str,
         number: u32,
+        opts: &PostOpts,
     ) -> ProgramOut {
         let mut po = ProgramOut {
             setups: setups.to_vec(),
@@ -3854,13 +3902,21 @@ impl Cam {
             error: None,
             round_trip: false,
         };
-        let d = match forge_post::Dialect::get(post) {
+        let mut d = match forge_post::Dialect::get(post) {
             Ok(d) => d,
             Err(e) => {
                 po.error = Some(format!("{e:?}"));
                 return po;
             }
         };
+        // the program's own number formats: the text is quantised, read back and certified at
+        // them, as at the dialect's
+        if let Some(k) = opts.decimals {
+            d.decimals = k;
+        }
+        if let Some(k) = opts.feed_decimals {
+            d.feed_decimals = k;
+        }
         let mut recs = vec![];
         let mut current_tool: Option<u32> = None;
         // where the last path left the tool, in the part's frame
@@ -3925,7 +3981,7 @@ impl Cam {
                     op.feeds.map(|f| f.rpm).unwrap_or(3000.0)
                 };
                 recs.push(Rec::Spindle { rpm, cw: true });
-                recs.push(Rec::Coolant(p.coolant));
+                recs.push(Rec::Coolant(opts.coolant.unwrap_or(p.coolant)));
                 recs.push(Rec::Rapid(w(p.start)));
                 for m in &p.moves {
                     recs.push(match *m {
