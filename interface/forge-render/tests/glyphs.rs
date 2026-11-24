@@ -1,6 +1,8 @@
 //! Every character the app's strings show is in the bundled fonts: one missing draws as a box.
 //! Strings and char literals in the sources, outside their test modules; ASCII is in any font.
 
+#[path = "../../../kernel/forge-model/tests/support/cfg_test_items.rs"]
+mod cfg_test_items;
 use forge_render::shell::theme;
 
 /// The text of every string and char literal in a Rust source, roughly: what's between quotes,
@@ -57,9 +59,9 @@ fn every_character_the_app_shows_is_in_its_fonts() {
             continue;
         }
         let text = std::fs::read_to_string(&p).unwrap();
-        // the app's own strings, not its tests'
-        let app = text.split("#[cfg(test)]").next().unwrap_or("");
-        for c in literals(app).chars().filter(|c| !c.is_ascii()) {
+        // the app's own strings, not its tests' (each #[cfg(test)] item skipped, not the rest)
+        let app = cfg_test_items::live_lines(&text).join("\n");
+        for c in literals(&app).chars().filter(|c| !c.is_ascii()) {
             // every family falls back to Public Sans: what's shown in it is what must be there
             let there = ctx.fonts_mut(|f| f.has_glyph(&egui::FontId::proportional(12.0), c));
             if !there && !missing.iter().any(|m| m.0 == c) {

@@ -2003,6 +2003,7 @@ impl Column<'_> {
             flush,
             tols,
             grown: Vec::new(),
+            grown_edges: Vec::new(),
             alias: Vec::new(),
             wholes: Vec::new(),
             involved,

@@ -72,7 +72,10 @@ pub fn profiles(ev: &crate::eval::Eval) -> Arc<Profiles> {
     if let Some(u) = forge_vendor::user_dir() {
         crate::deps::tomls(&u);
     }
-    Profiles::cached(dir)
+    let p = Profiles::cached(dir);
+    let used = Profiles::sources(dir);
+    crate::deps::libraries_used(used.iter().map(|(f, h)| (f, h)));
+    p
 }
 
 fn near<'a>(all: impl Iterator<Item = &'a str>, name: &str) -> Vec<String> {

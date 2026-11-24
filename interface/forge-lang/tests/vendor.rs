@@ -346,3 +346,56 @@ fn dfm_carries_the_press_brakes_findings() {
         .replace("param up.h = 20\n", ""));
     assert!(flat.sheets[0].brake.is_none());
 }
+
+/// A run declares the library files it used (`Run::libraries`): the project's profile with the
+/// hash of its bytes, whether or not anything watches the run; another hash when the file
+/// changes; nothing of a folder a run does not see.
+#[test]
+fn a_run_declares_the_library_files_it_used() {
+    let dir = forge_dirs::temp_dir().join(format!("fg-vendor-declared-{}", forge_dirs::process_id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("vendors")).unwrap();
+    let file = dir.join("vendors/shop.toml");
+    let profile = |radius: u32| {
+        format!(
+            "format = 1\nid = \"sendcutsend\"\nname = \"Our own\"\nunits = \"mm\"\n[[material]]\nname = \"5052\"\n\
+             [[material.stock]]\nt = 2\nradius = [{radius}]\nk = 0.5\n"
+        )
+    };
+    let with_dir = |cache| {
+        let opts = Options {
+            dir: Some(dir.clone()),
+            ..Options::default()
+        };
+        forge_lang::run(&part("sendcutsend", "5052", "2mm", 40.0), opts, cache)
+    };
+    std::fs::write(&file, profile(3)).unwrap();
+    let (r, cache) = with_dir(Default::default());
+    assert!(r.errors.is_empty(), "{:?}", errors(&r));
+    let declared = |r: &Run| {
+        r.libraries
+            .iter()
+            .find(|(p, _)| p.ends_with("vendors/shop.toml"))
+            .cloned()
+    };
+    let (_, h3) = declared(&r).unwrap_or_else(|| panic!("not declared: {:?}", r.libraries));
+    assert_eq!(h3, Some(forge_math::hash::hash128(profile(3).as_bytes())));
+    // and in the build's reply
+    let json = forge_lang::report::json(&r, &part("sendcutsend", "5052", "2mm", 40.0)).to_string();
+    assert!(
+        json.contains("\"libraries\"") && json.contains(&format!("{:032x}", h3.unwrap())),
+        "{json}"
+    );
+    // the same text, the last run's cache: the changed library is seen, not the kept result
+    std::fs::write(&file, profile(4)).unwrap();
+    let (r, _) = with_dir(cache);
+    assert_eq!(r.sheets[0].sheet.gauge.radius, 4.0);
+    assert_eq!(
+        declared(&r).unwrap().1,
+        Some(forge_math::hash::hash128(profile(4).as_bytes()))
+    );
+    // a run that sees no document folder declares nothing of it
+    let r = run(&part("sendcutsend", "5052", "2mm", 40.0));
+    assert!(declared(&r).is_none(), "{:?}", r.libraries);
+    let _ = std::fs::remove_dir_all(&dir);
+}
