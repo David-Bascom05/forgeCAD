@@ -1393,7 +1393,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
     let (per, total) = crate::lookahead::plan(def, &tl, &crate::lookahead::LookAhead::default());
     tl.seg_la = per;
     tl.t_la = total + off_segments;
-    let (per, total) = crate::lookahead::plan_scurve(def, &tl, &crate::lookahead::SCurve::default());
+    let (per, total) = crate::lookahead::plan_scurve(def, &tl, &crate::lookahead::SCurve::for_machine(def));
     tl.seg_scurve = per;
     tl.t_scurve = total + off_segments;
     for sg in &tl.segments {

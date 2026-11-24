@@ -454,6 +454,15 @@ pub struct MachineDef {
     /// so for every peck cycle.
     pub peck_clear: Option<f64>,
     pub chip_lift: Option<f64>,
+    /// The control's block cycle, s: the least time one block takes (SINUMERIK: "each block
+    /// requires at least one interpolation cycle", PGsl 03/2013 11.2, G641; its IPO cycle is
+    /// machine data MD10071). `machine.block_cycle`. None: not published for this machine
+    /// (UNKNOWN): the cycle-time estimate applies no block-rate limit.
+    pub block_cycle: Option<f64>,
+    /// The control's look-ahead depth, blocks: how many blocks ahead the velocity is planned
+    /// (SINUMERIK: set in machine data, PGsl 03/2013 11.2 LookAhead; grbl 1.1h: its planner
+    /// buffer). `machine.lookahead`. None: UNKNOWN: the estimate plans over each whole run.
+    pub lookahead: Option<usize>,
     /// Forbidden regions of joint space the control enforces.
     pub zones: Vec<Zone>,
     /// Gang tool posts (`[[machine.gang]]`): each station is a tool mount named `GANG.T<n>`;
@@ -1481,6 +1490,21 @@ impl MachineDef {
             gangs,
             pallets,
             peck_clear: nonneg("peck_clear")?,
+            block_cycle: match num(t, "block_cycle") {
+                Some(v) => Some(positive(&m, "block_cycle", v)?),
+                None => None,
+            },
+            lookahead: match num(t, "lookahead") {
+                Some(v) if v >= 1.0 && v.fract() == 0.0 && v <= 1e6 => Some(v as usize),
+                Some(v) => {
+                    return Err(DefError::Bad {
+                        record: m.clone(),
+                        field: "lookahead",
+                        why: format!("must be a whole number of blocks >= 1 (is {v})"),
+                    });
+                }
+                None => None,
+            },
             chip_lift: nonneg("chip_lift")?,
             real: boolean(t, "real").unwrap_or(false),
             cites,
