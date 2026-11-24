@@ -60,7 +60,7 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:, relief: "corners", min_contact:)` | soft jaws cut to what `from:` left, turned over, `grip` deep: the pocket is the opening of that outline by `tool`'s radius, grown by `fit` (default 0.02), with a relief of radius r + fit at each corner if asked. Refused unless what `from:` left seats in the pocket (exactly), the seat is at least `min_contact` mm² (default a quarter of the largest section), the blank keeps 3 mm of wall and the part stands more than the fixture clearance above the jaws. The value is a part (the jaws closed, pocketed: `setup(jaws, ..)` cuts them, held by the vise) and a fixture (`setup(f, from: op1, fixture: jaws)`) |
 | `facing(SETUP, tool:, to:, step:, leave_axial:)` | zig-zag over the stock down to `to` |
 | `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:, leave_axial:, ramp:)` | everything between the stock outline and the part's section, as offset passes |
-| `contour(SETUP, tool:, side:, from:, to:, step:, leave:, leave_axial:, direction:, finish:, finish_step:, spring:, lead:, lead_radius:, lead_sweep:, lead_length:, entry:, overlap:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
+| `contour(SETUP, tool:, side:, from:, to:, step:, leave:, leave_axial:, direction:, finish:, finish_step:, spring:, lead:, lead_radius:, lead_sweep:, lead_length:, entry:, overlap:, tabs:, tab_spacing:, tab_at:, tab_width:, tab_height:, tab_shape:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
 | `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:, leave_axial:, ramp:)` | a hole feature's circle, to its depth |
 | `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, leave_axial:, ramp:)` | every hole and slot of the part's section between the heights, each less the part's section there (islands standing in it, a boss in a well, are kept: examples/machined/well_island_cam.fg) |
 | `slot(SETUP, PART.SKETCH, tool:, depth:, step:, from:, ramp:)` | an end mill (flat or bull) along the sketch's lines, arcs and circles (not construction), on a plane facing +z, in levels down to `depth`: the groove the tool's width, modelled in the part (G1 against the part). `ramp: DEG` enters along each curve's first line, back and forth at that angle from the level above; else a plunge. The stock records each curve's band of the tool's radius as cleared (above the corner radius for a bull). examples/machined/slot_plate_cam.fg |
@@ -96,6 +96,15 @@ there split); `overlap:` cuts on past the start by that length before the lead-o
 witness mark. Default `lead: "none"`: the path is the one without these. Every lead is certified as
 any move is; a lead that does not fit (an arc bigger than the hole it is in) is refused with the
 gouge it makes, so make `lead_radius:` smaller. Method: plain tangent arcs and lines.
+
+Holding tabs: `tabs: n` per loop evenly spaced (the first half a spacing from the loop's start),
+or `tab_spacing:` (one every that length along the loop), or `tab_at: [(x, y), ..]` (one at each
+loop's point nearest each point). `tab_width:` is the bridge (default the tool's diameter; the tool
+lifts over the width plus its diameter), `tab_height:` its height above the contour's bottom
+(default 1, under the depth), `tab_shape: "rect"` (straight up and down, default) or `"triangle"`
+(ramped up to the middle and down). Only the levels below the tabs' top lift. Tabs that overlap,
+or reach the loop's start (where it comes down; move them or `entry:`), are refused. The stock
+counts the band an outside contour sweeps as cleared only down to the tabs' top.
 
 Heights (`from:`, `to:`) are numbers in the part's frame, or the model's own: a horizontal face or
 plane of the part named as in the part's text (`f.plate.end`, `f.boss.end`, `f.plate.start`),

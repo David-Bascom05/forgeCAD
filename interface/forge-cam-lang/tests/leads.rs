@@ -104,3 +104,43 @@ fn a_lead_into_the_part_is_refused() {
     assert_eq!(o.status, "refused", "{:?}", o.paths.len());
     eprintln!("{:?} {:?}", o.refusal, o.fix);
 }
+
+/// Holding tabs (Fusion's 2D contour Tabs): on the levels below the tabs' top the tool lifts over
+/// each tab; certified; the stock keeps the bridges (the band counts as cleared only to their top).
+#[test]
+fn tabs_lift_on_the_low_levels() {
+    let lifted = |cam: &forge_cam_lang::Cam, ztab: f64| {
+        let o = built(cam);
+        o.paths[0]
+            .moves
+            .iter()
+            .filter(
+                |m| matches!(m, PMove::Line { to, phase: Phase::Link, .. } if (to[2] - ztab).abs() < 1e-9),
+            )
+            .count()
+    };
+    // bottom -0.5, tabs 2 high: their top at 1.5; levels 12 → -0.5 in 4 steps: two below it? no,
+    // only the last (-0.5) is under 1.5
+    let cam = prof(", tabs: 4, tab_width: 6, tab_height: 2");
+    assert_eq!(lifted(&cam, 1.5), 4);
+    let cam = prof(", tabs: 3, tab_height: 2, tab_shape: \"triangle\", lead: \"arc\"");
+    built(&cam);
+    let cam = prof(", tab_at: [(0, 50), (0, -50)], tab_height: 2");
+    assert_eq!(lifted(&cam, 1.5), 2);
+    for (extra, msg) in [
+        (", tab_width: 3", "needs tabs"),
+        (", tabs: 2, tab_spacing: 9", "one of `tabs:`"),
+        (", tabs: 2, tab_height: 40", "tab_height:"),
+        (", tabs: 200", "tabs: a whole number"),
+        (", tabs: 60, tab_width: 20", "tabs overlap"),
+    ] {
+        let cam = prof(extra);
+        let msgs: Vec<String> = cam
+            .errors
+            .iter()
+            .cloned()
+            .chain(cam.ops.iter().filter_map(|o| o.refusal.clone()))
+            .collect();
+        assert!(msgs.iter().any(|e| e.contains(msg)), "{extra}: {msgs:?}");
+    }
+}

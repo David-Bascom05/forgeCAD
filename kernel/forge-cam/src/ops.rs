@@ -6,6 +6,7 @@
 //! Linking is by retract: up to the retract height (above everything the op cuts), across at it,
 //! and down at the plunge feed. Rapids run at the clearance height, above the stock.
 use crate::leads::{self, Leads};
+use crate::tabs::{self, TabShape, Tabs};
 use forge_cam_geom::check::{self, Face, Move, Verdict};
 use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, P2, Region, Seg};
@@ -638,13 +639,14 @@ pub fn contour_passes(
     outside: bool,
     ps: Passes,
 ) -> Result<OpPath, OpError> {
-    contour_leads(rg, c, sp, leave, outside, ps, &Leads::default())
+    contour_leads(rg, c, sp, leave, outside, ps, &Leads::default(), None)
 }
 
 /// `contour_passes` with each loop's entry position, leads and overlap (leads.rs). With no
 /// leads the path is `contour_passes`' own; with them, each level comes down at the lead-in's
 /// start, runs the lead-in, the loop, the overlap and the lead-out, and goes up at the
-/// lead-out's end.
+/// lead-out's end. With `tabs`, the levels below the tabs' top lift over each tab (tabs.rs).
+#[allow(clippy::too_many_arguments)]
 pub fn contour_leads(
     rg: &Region,
     c: Cut,
@@ -653,6 +655,7 @@ pub fn contour_leads(
     outside: bool,
     ps: Passes,
     ld: &Leads,
+    tabs: Option<&Tabs>,
 ) -> Result<OpPath, OpError> {
     let Cut { tool, tidx, h, feed } = c;
     let Span { top, bottom, step } = sp;
@@ -688,8 +691,8 @@ pub fn contour_leads(
     for _ in 0..ps.spring {
         passes.push(passes[n - 1].clone());
     }
-    if !ld.is_none() {
-        return Ok(led(&passes, tidx, h, sp, feed, ps.climb, ld));
+    if !ld.is_none() || tabs.is_some() {
+        return led(&passes, tidx, tool.tool.dc, h, sp, feed, ps.climb, ld, tabs);
     }
     let mut mv = Vec::new();
     let first = passes[0][0][0].start();
@@ -730,18 +733,22 @@ pub fn contour_leads(
     })
 }
 
-/// The contour's passes with leads: per loop, per level, down at the lead-in's start (in the
-/// air), lead-in, loop, overlap, lead-out, up at the lead-out's end at feed, across at the
-/// retract height to the next start.
+/// The contour's passes with leads and tabs: per loop, per level, down at the lead-in's start
+/// (in the air), lead-in, loop (lifting over each tab on the levels below the tabs' top),
+/// overlap, lead-out, up at the lead-out's end at feed, across at the retract height to the
+/// next start.
+#[allow(clippy::too_many_arguments)]
 fn led(
     passes: &[Vec<Vec<Seg>>],
     tidx: usize,
+    tool_d: f64,
     h: Heights,
     sp: Span,
     feed: (f64, f64),
     climb: bool,
     ld: &Leads,
-) -> OpPath {
+    tabs: Option<&Tabs>,
+) -> Result<OpPath, OpError> {
     let mut mv = Vec::new();
     let mut first = None;
     for loops in passes {
@@ -750,6 +757,16 @@ fn led(
             let s = li.first().unwrap_or(&body[0]).start();
             let e = tail.last().unwrap_or(&body[body.len() - 1]).end();
             first.get_or_insert(s);
+            // the loop cut at its tabs' ends: even pieces cut, odd ones lifted
+            let tabbed = match tabs {
+                Some(t) => {
+                    let iv = tabs::intervals(&body, t, tool_d, ld.overlap.max(0.0) + 1e-6)
+                        .map_err(OpError::Region)?;
+                    let cuts: Vec<f64> = iv.iter().flat_map(|&(a, b)| [a, b]).collect();
+                    Some((tabs::cut(&body, &cuts), sp.bottom + t.height, t.shape))
+                }
+                None => None,
+            };
             for z in levels(sp.top, sp.bottom, sp.step) {
                 mv.push(PMove::Rapid {
                     to: [s.x, s.y, h.retract],
@@ -760,7 +777,18 @@ fn led(
                     phase: Phase::Plunge,
                 });
                 push_loop(&mut mv, &li, z, feed.0);
-                push_loop(&mut mv, &body, z, feed.0);
+                match &tabbed {
+                    Some((pieces, ztab, shape)) if z < *ztab => {
+                        for (k, p) in pieces.iter().enumerate() {
+                            if k % 2 == 0 {
+                                push_loop(&mut mv, p, z, feed.0);
+                            } else {
+                                push_tab(&mut mv, p, z, *ztab, *shape, feed);
+                            }
+                        }
+                    }
+                    _ => push_loop(&mut mv, &body, z, feed.0),
+                }
                 push_loop(&mut mv, &tail, z, feed.0);
                 mv.push(PMove::Line {
                     to: [e.x, e.y, h.retract],
@@ -774,12 +802,71 @@ fn led(
     mv.push(PMove::Rapid {
         to: [first.x, first.y, h.clear],
     });
-    OpPath {
+    Ok(OpPath {
         tool: tidx,
         start: [first.x, first.y, h.clear],
         moves: mv,
         rpm: 0.0,
         coolant: forge_post::Coolant::Flood,
+    })
+}
+
+/// One tab's piece of the loop at level z: a rectangle goes straight up to `ztab` at its start,
+/// along at `ztab`, and straight down at its end (into the uncut level: at the plunge feed); a
+/// triangle ramps up to its middle and down to its end, its height linear in the length along.
+fn push_tab(mv: &mut Vec<PMove>, p: &[Seg], z: f64, ztab: f64, shape: TabShape, feed: (f64, f64)) {
+    let Some(a) = p.first().map(|x| x.start()) else {
+        return;
+    };
+    let b = p[p.len() - 1].end();
+    match shape {
+        TabShape::Rect => {
+            mv.push(PMove::Line {
+                to: [a.x, a.y, ztab],
+                f: feed.0,
+                phase: Phase::Link,
+            });
+            push_loop(mv, p, ztab, feed.0);
+            mv.push(PMove::Line {
+                to: [b.x, b.y, z],
+                f: feed.1,
+                phase: Phase::Plunge,
+            });
+        }
+        TabShape::Triangle => {
+            let total: f64 = p.iter().map(leads::seg_len).sum();
+            let halves = tabs::cut(p, &[0.5 * total]);
+            let mut done = 0.0;
+            for (k, half) in halves.iter().enumerate() {
+                for sg in half {
+                    done += leads::seg_len(sg);
+                    let u = (done / (0.5 * total)).min(2.0);
+                    let zz = if k == 0 {
+                        z + (ztab - z) * u.min(1.0)
+                    } else {
+                        ztab - (ztab - z) * (u - 1.0).max(0.0)
+                    };
+                    let (f, phase) = if k == 0 {
+                        (feed.0, Phase::Cut)
+                    } else {
+                        (feed.1, Phase::Plunge)
+                    };
+                    match *sg {
+                        Seg::Line { b, .. } => mv.push(PMove::Line {
+                            to: [b.x, b.y, zz],
+                            f,
+                            phase,
+                        }),
+                        Seg::Arc { b, c, ccw, .. } => mv.push(PMove::Arc {
+                            to: [b.x, b.y, zz],
+                            c: [c.x, c.y],
+                            cw: !ccw,
+                            f,
+                        }),
+                    }
+                }
+            }
+        }
     }
 }
 

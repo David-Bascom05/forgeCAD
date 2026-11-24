@@ -2755,6 +2755,7 @@ impl Cam {
                         let leave = get_num(a, "leave", Some(0.0))?;
                         let passes = contour_passes(a, d)?;
                         let leads = contour_leads(a, d)?;
+                        let tabs = contour_tabs(a, d, top - bottom)?;
                         let zmid = 0.5 * (top + bottom);
                         let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
                             .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
@@ -2777,7 +2778,10 @@ impl Cam {
                                     &forge_cam_geom::boolean::region_of(&inner),
                                     forge_cam_geom::boolean::Op::Diff,
                                 ) {
-                                    voids.push((Some(forge_cam_geom::boolean::region_of(&band)), bottom));
+                                    // tabs keep a bridge standing: the band counts as cleared only down to their
+                                    // top (less than is cut between them: conservative)
+                                    let floor = bottom + tabs.as_ref().map_or(0.0, |t| t.height);
+                                    voids.push((Some(forge_cam_geom::boolean::region_of(&band)), floor));
                                 }
                             }
                             ops::contour_leads(
@@ -2793,6 +2797,7 @@ impl Cam {
                                 true,
                                 passes,
                                 &leads,
+                                tabs.as_ref(),
                             )
                             .map(|p| vec![p])
                             .map_err(|e| format!("{e:?}"))
@@ -2810,6 +2815,7 @@ impl Cam {
                                 false,
                                 passes,
                                 &leads,
+                                tabs.as_ref(),
                             )
                             .map(|p| vec![p])
                             .map_err(|e| format!("{e:?}"))
@@ -3498,7 +3504,7 @@ fn contour_passes(a: &BTreeMap<String, V>, d: f64) -> Result<ops::Passes, String
 }
 
 /// The arguments only `contour` takes.
-const CONTOUR_ONLY: [&str; 10] = [
+const CONTOUR_ONLY: [&str; 16] = [
     "direction",
     "finish",
     "finish_step",
@@ -3509,6 +3515,12 @@ const CONTOUR_ONLY: [&str; 10] = [
     "lead_length",
     "entry",
     "overlap",
+    "tabs",
+    "tab_spacing",
+    "tab_at",
+    "tab_width",
+    "tab_height",
+    "tab_shape",
 ];
 
 /// A contour's leads from its arguments: `lead: "none" | "arc" | "line"` (default none: the
@@ -3586,6 +3598,93 @@ fn contour_leads(a: &BTreeMap<String, V>, d: f64) -> Result<forge_cam::leads::Le
         entry,
         overlap: len_arg("overlap", 0.0)?,
     })
+}
+
+/// A contour's holding tabs from its arguments: `tabs: n` per loop evenly spaced, or
+/// `tab_spacing:` (one every that length), or `tab_at: [(x, y), ..]` (one at each loop's point
+/// nearest each); `tab_width:` (the bridge, default the tool's diameter), `tab_height:` (above
+/// the contour's bottom, default 1, less than its depth), `tab_shape: "rect" | "triangle"`
+/// (default rect). None of them: no tabs.
+fn contour_tabs(
+    a: &BTreeMap<String, V>,
+    d: f64,
+    depth: f64,
+) -> Result<Option<forge_cam::tabs::Tabs>, String> {
+    use forge_cam::tabs::{TabPlace, TabShape, Tabs};
+    let given: Vec<&str> = ["tabs", "tab_spacing", "tab_at"]
+        .into_iter()
+        .filter(|k| a.contains_key(*k))
+        .collect();
+    let place = match given.as_slice() {
+        [] => {
+            for k in ["tab_width", "tab_height", "tab_shape"] {
+                if a.contains_key(k) {
+                    return Err(format!(
+                        "`{k}:` needs tabs: add `tabs: N`, `tab_spacing:` or `tab_at:`"
+                    ));
+                }
+            }
+            return Ok(None);
+        }
+        ["tabs"] => {
+            let n = get_num(a, "tabs", None)?;
+            if n.fract() != 0.0 || !(1.0..=100.0).contains(&n) {
+                return Err("tabs: a whole number from 1 to 100".into());
+            }
+            TabPlace::Count(n as usize)
+        }
+        ["tab_spacing"] => {
+            let sp = get_num(a, "tab_spacing", None)?;
+            if !(sp > 0.0 && sp.is_finite()) {
+                return Err("tab_spacing: a length over 0".into());
+            }
+            TabPlace::Spacing(sp)
+        }
+        ["tab_at"] => {
+            let vs: Vec<&V> = match a.get("tab_at") {
+                // one point alone
+                Some(v @ V::Tuple(t)) if t.len() == 2 && t.iter().all(|x| matches!(x, V::Num(_))) => vec![v],
+                Some(V::Tuple(t)) => t.iter().collect(),
+                _ => vec![],
+            };
+            let mut ps = vec![];
+            for v in vs {
+                match v {
+                    V::Tuple(t) if t.len() == 2 => match (num(&t[0]), num(&t[1])) {
+                        (Some(x), Some(y)) if x.is_finite() && y.is_finite() => ps.push([x, y]),
+                        _ => return Err("tab_at: points (x, y)".into()),
+                    },
+                    _ => return Err("tab_at: points (x, y)".into()),
+                }
+            }
+            if ps.is_empty() {
+                return Err("tab_at: points (x, y)".into());
+            }
+            TabPlace::At(ps)
+        }
+        _ => return Err("give one of `tabs:`, `tab_spacing:` and `tab_at:`".into()),
+    };
+    let width = get_num(a, "tab_width", Some(d))?;
+    if !(width > 0.0 && width.is_finite()) {
+        return Err("tab_width: a length over 0".into());
+    }
+    let height = get_num(a, "tab_height", Some(1.0))?;
+    if !(height > 0.0 && height < depth) {
+        return Err(format!(
+            "tab_height: a length over 0 and under the contour's depth ({depth})"
+        ));
+    }
+    let shape = match get_str(a, "tab_shape", Some("rect"))?.as_str() {
+        "rect" => TabShape::Rect,
+        "triangle" => TabShape::Triangle,
+        k => return Err(format!("tab_shape: \"rect\" or \"triangle\", not \"{k}\"")),
+    };
+    Ok(Some(Tabs {
+        place,
+        width,
+        height,
+        shape,
+    }))
 }
 
 fn outer_or_inner(sec: &Region, outer: bool) -> Result<Region, String> {
