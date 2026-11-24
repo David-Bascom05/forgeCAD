@@ -1021,6 +1021,28 @@ pub fn pocket(
 /// the kept passes from k inward then still cover (Rₖ ⊕ r) ∩ S (induction), so the opening the
 /// op claims is cleared within S, and outside S there is no stock. (A clear's region reaches
 /// 2r past the stock, so its outer passes run in air.)
+/// The way down from the retract height to `to`, the level above the one being entered. Below
+/// the first level (`cleared`) it is air: the passes are entered in the same order and the same
+/// way at every level, so at the level above the tool stood at this very point at that depth (the
+/// helix ends where it starts; a plunge is at the pass's start), and its body swept the column
+/// above it. A link at the feed, not a plunge. At the first level the stock before the op is
+/// above it: a plunge.
+fn air_down(to: [f64; 3], cleared: bool, feed: (f64, f64)) -> PMove {
+    if cleared {
+        PMove::Line {
+            to,
+            f: feed.0,
+            phase: Phase::Link,
+        }
+    } else {
+        PMove::Line {
+            to,
+            f: feed.1,
+            phase: Phase::Plunge,
+        }
+    }
+}
+
 pub fn pocket_in(
     rg: &Region,
     c: Cut,
@@ -1215,11 +1237,7 @@ pub fn pocket_in(
                 mv.push(PMove::Rapid {
                     to: [p[0], p[1], h.retract],
                 });
-                mv.push(PMove::Line {
-                    to: [p[0], p[1], above],
-                    f: feed.1,
-                    phase: Phase::Plunge,
-                });
+                mv.push(air_down([p[0], p[1], above], above < top, feed));
                 let (sa, ca) = dmath::sin_cos(deg.to_radians());
                 let per_turn = std::f64::consts::TAU * rh * sa / ca;
                 let turns = ((above - z) / per_turn - 1e-9).ceil().max(1.0) as usize;
@@ -1250,6 +1268,9 @@ pub fn pocket_in(
                 mv.push(PMove::Rapid {
                     to: [s.x, s.y, h.retract],
                 });
+                if above < top {
+                    mv.push(air_down([s.x, s.y, above], true, feed));
+                }
                 mv.push(PMove::Line {
                     to: [s.x, s.y, z],
                     f: feed.1,

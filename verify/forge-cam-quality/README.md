@@ -64,12 +64,19 @@ stock box, not from the earlier setup's result.
 | chip p99 / data fz, worst milling op | 1.7 | 1.00 |
 | outside contours, climb | 0% | 100% |
 
+Since (cam/bench-rptu, 2026-11-24): pocket and clear entries below the first level come down
+to the level above at the cutting feed as a link, not at the plunge feed (the tool stood at that
+very point at that depth one level up: ops.rs `air_down`). The 15 programs of latest.txt
+(boss_adaptive and open_step included): 2407.4 → 2335.9 s (−3.0%); plate_break −19.1 s,
+bracket −22.2 s over its three programs; tests/pinned.txt re-pinned for it (well_island 81.0 →
+78.4 s, deep_slot 92.7 → 88.2 s).
+
 Changes (cam/quality): stay-down linking between pocket/clear passes (greedy ready-innermost
 order, links tested exactly against the tool-centre region); feeds from engagement
 (forge_cam::engage, GE US 5,828,574-style, expired); honest planned ae for base feeds; contours
 climb and cut each loop through its levels; feeds held ≥ D/2 per move.
 
-Still to do: comparison against an open-source reference (pending the licence verdict); air in
+Still to do: air in
 `clear` (its outer ring is in air by design: a lemma that air rings may be dropped); retracts at
 the cut feed (G0 would need G3 against the op's own cleared voids); contour lead-in/out arcs;
 rest machining; scallop for 3-axis; engagement-controlled clearing (research/cam/
@@ -94,15 +101,15 @@ ops and the same tool: face 1 mm, the surrounding step (`clear` or `adaptive`), 
 pockets (`pocket`), all certified. Part 1 is refused: its side walls are notched by the through
 slot (`NotPrism`, as open_step; with CAM-CORE). Parts 7–10 have freeform (3-axis finishing).
 
-Whole program, t_stop on generic-vmc3 (2026-11-24):
+Whole program, t_stop on generic-vmc3 (2026-11-24, with `air_down`):
 
 | part | Autodesk | ours, step by `clear` | ours, step by `adaptive` |
 |---|---|---|---|
-| 2 (4 holes) | 315.7 s | 104.9 s | – |
-| 3 (+ rectangular step) | 474.4 s | 153.8 s | 319.2 s |
-| 4 (+ circular step) | 514.7 s | 217.2 s | 197.1 s |
-| 5 (+ mixed step) | 463.8 s | 198.2 s | 192.2 s |
-| 6 (+ circular pocket) | 681.8 s | 256.1 s | 421.2 s |
+| 2 (4 holes) | 315.7 s | 102.6 s | – |
+| 3 (+ rectangular step) | 474.4 s | 150.9 s | 316.3 s |
+| 4 (+ circular step) | 514.7 s | 214.3 s | 194.2 s |
+| 5 (+ mixed step) | 463.8 s | 195.5 s | 189.5 s |
+| 6 (+ circular pocket) | 681.8 s | 252.7 s | 417.9 s |
 
 Read with care: the feeds differ as well as the paths. Theirs: S18000 (generic-vmc3 stops at
 12000: one `Rpm` violation, the timeline runs the programmed F), F2000 side cutting (0.111

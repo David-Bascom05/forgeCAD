@@ -1,36 +1,36 @@
 job/op                 kind       tool     t_stop   t_min   cut_s   air rapid retr plng c>90 phiMx phiAv climb  slot  hexMx  hex99  hexAv  fzTgt  thin thick     MRR   Fc_N  P_kW  f/rev
 rptu2_none_cam/skim    facing     flat-6     87.4    84.1    73.7    8%   133    2    0    0   108   100   52%    0%  0.042  0.039  0.039  0.039    0%    0%    5223     65  0.16      -
-rptu2_none_cam/holes   pocket     flat-6     17.6    15.9     6.9   52%    56   12    8    0   170   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   10917    123  0.48      -
-rptu2_none_cam: program prog on generic-vmc3: t_stop 104.9 s, t_min 100.0 s, 1 tool changes, 0 violations
+rptu2_none_cam/holes   pocket     flat-6     15.2    13.6     6.7   45%    56   12    8    0   170   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   11238    123  0.48      -
+rptu2_none_cam: program prog on generic-vmc3: t_stop 102.6 s, t_min 97.7 s, 1 tool changes, 0 violations
 rptu3_adaptive_cam/skim facing     flat-6     87.4    84.1    73.7    8%   133    2    0    0   108   100   52%    0%  0.042  0.039  0.039  0.039    0%    0%    5223     65  0.16      -
 rptu3_adaptive_cam/step adaptive   flat-6    210.9   192.6    38.0   80%   807  109    1   20    89    54   75%    0%  0.040  0.039  0.035  0.039    9%    0%    9567    250  0.48      -
-rptu3_adaptive_cam/holes pocket     flat-6     21.0    19.3     8.5   52%    56   12    8    0   170   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   15453    215  0.85      -
-rptu3_adaptive_cam: program prog on generic-vmc3: t_stop 319.2 s, t_min 296.0 s, 1 tool changes, 0 violations
+rptu3_adaptive_cam/holes pocket     flat-6     18.1    16.3     8.3   44%    56   12    8    0   170   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   15791    215  0.85      -
+rptu3_adaptive_cam: program prog on generic-vmc3: t_stop 316.3 s, t_min 293.1 s, 1 tool changes, 0 violations
 rptu3_clear_cam/skim   facing     flat-6     87.4    84.1    73.7    8%   133    2    0    0   108   100   52%    0%  0.042  0.039  0.039  0.039    0%    0%    5223     65  0.16      -
 rptu3_clear_cam/step   clear      flat-6     45.7    41.8    33.0   20%   238    3    2    0   127    63   58%    0%  0.041  0.039  0.036  0.039    4%    0%   11033    257  0.75      -
-rptu3_clear_cam/holes  pocket     flat-6     20.8    19.2     8.5   52%    56   12    8    0   170   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   15453    215  0.85      -
-rptu3_clear_cam: program prog on generic-vmc3: t_stop 153.8 s, t_min 145.1 s, 1 tool changes, 0 violations
+rptu3_clear_cam/holes  pocket     flat-6     17.9    16.3     8.3   44%    56   12    8    0   170   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   15791    215  0.85      -
+rptu3_clear_cam: program prog on generic-vmc3: t_stop 150.9 s, t_min 142.2 s, 1 tool changes, 0 violations
 rptu4_adaptive_cam/skim facing     flat-6    106.0   102.0    91.1    7%   148    2    0    0   112   101   52%    0%  0.040  0.039  0.039  0.039    0%    0%    5405     63  0.17      -
 rptu4_adaptive_cam/step adaptive   flat-6     70.4    61.6    37.1   39%   517   12    1    9   178    92   37%   28%  0.040  0.039  0.038  0.039    1%    0%   17357    252  0.99      -
-rptu4_adaptive_cam/holes pocket     flat-6     20.7    19.1     8.4   53%    56   12    8    0   174   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   15693    215  0.86      -
-rptu4_adaptive_cam: program prog on generic-vmc3: t_stop 197.1 s, t_min 182.8 s, 1 tool changes, 0 violations
+rptu4_adaptive_cam/holes pocket     flat-6     17.8    16.2     8.2   45%    56   12    8    0   174   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   16042    215  0.86      -
+rptu4_adaptive_cam: program prog on generic-vmc3: t_stop 194.2 s, t_min 179.8 s, 1 tool changes, 0 violations
 rptu4_clear_cam/skim   facing     flat-6    106.0   102.0    91.1    7%   148    2    0    0   112   101   52%    0%  0.040  0.039  0.039  0.039    0%    0%    5405     63  0.17      -
 rptu4_clear_cam/step   clear      flat-6     90.5    85.2    70.5   17%   318    5    4   25   179    78   81%   10%  0.040  0.039  0.037  0.039    3%    0%   14835    251  0.99      -
-rptu4_clear_cam/holes  pocket     flat-6     20.7    19.1     8.4   53%    56   12    8    0   174   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   15693    215  0.86      -
-rptu4_clear_cam: program prog on generic-vmc3: t_stop 217.2 s, t_min 206.3 s, 1 tool changes, 0 violations
+rptu4_clear_cam/holes  pocket     flat-6     17.8    16.2     8.2   45%    56   12    8    0   174   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   16042    215  0.86      -
+rptu4_clear_cam: program prog on generic-vmc3: t_stop 214.3 s, t_min 203.4 s, 1 tool changes, 0 violations
 rptu5_adaptive_cam/skim facing     flat-6    101.5    97.7    87.2    7%    99    2    0    0   112   100   45%    0%  0.040  0.039  0.039  0.039    0%    0%    5319     63  0.17      -
 rptu5_adaptive_cam/step adaptive   flat-6     71.1    62.3    37.9   38%   498   12    1    9   178    87   45%   22%  0.040  0.039  0.038  0.039    1%    0%   16460    251  0.99      -
-rptu5_adaptive_cam/holes pocket     flat-6     19.6    18.0     7.8   53%    56   12    8    0   175   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   14424    184  0.74      -
-rptu5_adaptive_cam: program prog on generic-vmc3: t_stop 192.2 s, t_min 178.0 s, 1 tool changes, 0 violations
+rptu5_adaptive_cam/holes pocket     flat-6     16.9    15.3     7.6   45%    56   12    8    0   175   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   14776    184  0.74      -
+rptu5_adaptive_cam: program prog on generic-vmc3: t_stop 189.5 s, t_min 175.3 s, 1 tool changes, 0 violations
 rptu5_clear_cam/skim   facing     flat-6    101.5    97.7    87.2    7%    99    2    0    0   112   100   45%    0%  0.040  0.039  0.039  0.039    0%    0%    5319     63  0.17      -
 rptu5_clear_cam/step   clear      flat-6     77.0    71.0    54.0   23%   326    4    3   14   177    78   85%    8%  0.042  0.039  0.037  0.039    3%    0%   14894    258  0.99      -
-rptu5_clear_cam/holes  pocket     flat-6     19.7    18.1     7.8   53%    56   12    8    0   175   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   14424    184  0.74      -
-rptu5_clear_cam: program prog on generic-vmc3: t_stop 198.2 s, t_min 186.8 s, 1 tool changes, 0 violations
+rptu5_clear_cam/holes  pocket     flat-6     17.0    15.4     7.6   45%    56   12    8    0   175   117   77%   23%  0.039  0.039  0.036  0.039    8%    0%   14776    184  0.74      -
+rptu5_clear_cam: program prog on generic-vmc3: t_stop 195.5 s, t_min 184.0 s, 1 tool changes, 0 violations
 rptu6_adaptive_cam/skim facing     flat-6     87.4    84.1    73.7    8%   133    2    0    0   108   100   52%    0%  0.042  0.039  0.039  0.039    0%    0%    5223     65  0.16      -
 rptu6_adaptive_cam/step adaptive   flat-6    210.9   192.6    38.0   80%   807  109    1   20    89    54   75%    0%  0.040  0.039  0.035  0.039    9%    0%    9567    250  0.48      -
-rptu6_adaptive_cam/holes pocket     flat-6    123.0   117.4   104.2   10%   118   14    8    0   180    86   93%    7%  0.040  0.039  0.038  0.039    2%    0%   10857    189  0.73      -
-rptu6_adaptive_cam: program prog on generic-vmc3: t_stop 421.2 s, t_min 394.2 s, 1 tool changes, 0 violations
+rptu6_adaptive_cam/holes pocket     flat-6    119.6   114.0   104.0    7%   118   14    8    0   180    86   93%    7%  0.040  0.039  0.038  0.039    2%    0%   10877    189  0.73      -
+rptu6_adaptive_cam: program prog on generic-vmc3: t_stop 417.9 s, t_min 390.7 s, 1 tool changes, 0 violations
 rptu6_clear_cam/skim   facing     flat-6     87.4    84.1    73.7    8%   133    2    0    0   108   100   52%    0%  0.042  0.039  0.039  0.039    0%    0%    5223     65  0.16      -
 rptu6_clear_cam/step   clear      flat-6     45.7    41.8    33.0   20%   238    3    2    0   127    63   58%    0%  0.041  0.039  0.036  0.039    4%    0%   11033    257  0.75      -
-rptu6_clear_cam/holes  pocket     flat-6    123.0   117.4   104.2   10%   118   14    8    0   180    86   93%    7%  0.040  0.039  0.038  0.039    2%    0%   10857    189  0.73      -
-rptu6_clear_cam: program prog on generic-vmc3: t_stop 256.1 s, t_min 243.3 s, 1 tool changes, 0 violations
+rptu6_clear_cam/holes  pocket     flat-6    119.6   114.0   104.0    7%   118   14    8    0   180    86   93%    7%  0.040  0.039  0.038  0.039    2%    0%   10877    189  0.73      -
+rptu6_clear_cam: program prog on generic-vmc3: t_stop 252.7 s, t_min 239.9 s, 1 tool changes, 0 violations
