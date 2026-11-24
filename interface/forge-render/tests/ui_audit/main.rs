@@ -31,6 +31,8 @@ thread_local! {
 thread_local! {
     /// The tooltip a menu item showed on hover before its click.
     static TIP: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+    /// The window as that tooltip showed it (PNG).
+    static TIP_SHOT: std::cell::RefCell<Option<Vec<u8>>> = const { std::cell::RefCell::new(None) };
 }
 
 /// Rests the pointer on `r` until a tooltip shows (or a while): its words.
@@ -57,6 +59,7 @@ fn hover_tip(h: &mut Headless, r: Rect) -> String {
                 .map(|t| t.s.trim().to_string())
                 .collect();
             if !words.is_empty() {
+                TIP_SHOT.with(|t| *t.borrow_mut() = s.png());
                 return words.join(" / ");
             }
         }
@@ -814,6 +817,9 @@ impl Crawl {
             rec.class = Class::Disabled;
             rec.detail = format!("off: {}", judge::short(&tip));
             rec.findings.retain(|f| f.rule != "nothing");
+            if let Some(png) = TIP_SHOT.with(|t| t.borrow_mut().take()) {
+                rec.thumb = self.write(&format!("{slug}.hover.png"), &png);
+            }
         }
         // the popup itself, judged; then whether Esc takes it away
         let popup: Vec<Rect> = popup_region(&before, &after);
