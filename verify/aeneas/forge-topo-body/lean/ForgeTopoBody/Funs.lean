@@ -768,74 +768,98 @@ def body.Body.add_shell
   let i2 ← i1 - 1#u32
   ok (i2, { self with shells := v })
 
-/-- [forge_topo::body::{forge_topo::body::Body}::add_face]: loop body 0:
-    Source: 'kernel/forge-topo/src/body.rs', lines 857:12-859:13
-    Visibility: public -/
-@[rust_loop_body]
-def body.Body.add_face_loop0.body
-  (i : Std.U32) (h : body.FaceHulls) :
-  Result (ControlFlow body.FaceHulls ((alloc.vec.Vec (body.Cached body.Chunk))
-    × (alloc.vec.Vec (body.Cached forge_math.interval.Box3))))
+/-- [forge_topo::body::{forge_topo::body::Body}::add_face::{impl core::ops::function::FnMut<(), forge_topo::body::Cached<forge_math::interval::Box3>> for forge_topo::body::{forge_topo::body::Body}::add_face::{closure#1}}::call_mut]:
+    Source: 'kernel/forge-topo/src/body.rs', lines 859:59-859:79 -/
+def
+  body.Body.add_face.closure_1.Insts.CoreOpsFunctionFnMutTupleCachedBox3.call_mut
+  (c : body.Body.add_face.closure_1) (_ : Unit) :
+  Result ((body.Cached forge_math.interval.Box3) ×
+    body.Body.add_face.closure_1)
   := do
-  let i1 := alloc.vec.Vec.len h.chunks
-  let i2 ← body.FaceId.index i
-  let i3 ← i2 / body.RUN
-  let i4 ← i3 + 1#usize
-  if i1 < i4
-  then
-    let c ← body.Cached.Insts.CoreDefaultDefault.default body.Chunk
-    let v ← alloc.vec.Vec.push h.chunks c
-    ok (cont { h with chunks := v })
-  else ok (done (h.chunks, h.blocks))
+  let c1 ←
+    body.Cached.Insts.CoreDefaultDefault.default forge_math.interval.Box3
+  ok (c1, c)
 
-/-- [forge_topo::body::{forge_topo::body::Body}::add_face]: loop 0:
-    Source: 'kernel/forge-topo/src/body.rs', lines 857:12-859:13
-    Visibility: public -/
-@[rust_loop]
-def body.Body.add_face_loop0
-  (i : Std.U32) (h : body.FaceHulls) :
-  Result ((alloc.vec.Vec (body.Cached body.Chunk)) × (alloc.vec.Vec
-    (body.Cached forge_math.interval.Box3)))
+/-- [forge_topo::body::{forge_topo::body::Body}::add_face::{impl core::ops::function::FnOnce<(), forge_topo::body::Cached<forge_math::interval::Box3>> for forge_topo::body::{forge_topo::body::Body}::add_face::{closure#1}}::call_once]:
+    Source: 'kernel/forge-topo/src/body.rs', lines 859:59-859:79 -/
+def
+  body.Body.add_face.closure_1.Insts.CoreOpsFunctionFnOnceTupleCachedBox3.call_once
+  (c : body.Body.add_face.closure_1) (_ : Unit) :
+  Result (body.Cached forge_math.interval.Box3)
   := do
-  loop
-    (fun h1 => body.Body.add_face_loop0.body i h1)
-    h
+  let (c1, _) ←
+    body.Body.add_face.closure_1.Insts.CoreOpsFunctionFnMutTupleCachedBox3.call_mut
+      c ()
+  ok c1
 
-/-- [forge_topo::body::{forge_topo::body::Body}::add_face]: loop body 1:
-    Source: 'kernel/forge-topo/src/body.rs', lines 860:12-862:13
-    Visibility: public -/
-@[rust_loop_body]
-def body.Body.add_face_loop1.body
-  (c : body.Cached forge_math.interval.Box3) (i : Std.U32)
-  (v : alloc.vec.Vec (body.Cached forge_math.interval.Box3)) :
-  Result (ControlFlow (alloc.vec.Vec (body.Cached forge_math.interval.Box3))
-    (alloc.vec.Vec (body.Cached forge_math.interval.Box3)))
-  := do
-  let i1 := alloc.vec.Vec.len v
-  let i2 ← body.FaceId.index i
-  let i3 ← body.RUN * body.RUN
-  let i4 ← i2 / i3
-  let i5 ← i4 + 1#usize
-  if i1 < i5
-  then let v1 ← alloc.vec.Vec.push v c
-       ok (cont v1)
-  else ok (done v)
+/-- Trait implementation: [forge_topo::body::{forge_topo::body::Body}::add_face::{impl core::ops::function::FnOnce<(), forge_topo::body::Cached<forge_math::interval::Box3>> for forge_topo::body::{forge_topo::body::Body}::add_face::{closure#1}}]
+    Source: 'kernel/forge-topo/src/body.rs', lines 859:59-859:79 -/
+@[reducible]
+def body.Body.add_face.closure_1.Insts.CoreOpsFunctionFnOnceTupleCachedBox3 :
+  core.ops.function.FnOnce body.Body.add_face.closure_1 Unit (body.Cached
+  forge_math.interval.Box3) := {
+  call_once :=
+    body.Body.add_face.closure_1.Insts.CoreOpsFunctionFnOnceTupleCachedBox3.call_once
+}
 
-/-- [forge_topo::body::{forge_topo::body::Body}::add_face]: loop 1:
-    Source: 'kernel/forge-topo/src/body.rs', lines 860:12-862:13
-    Visibility: public -/
-@[rust_loop]
-def body.Body.add_face_loop1
-  (c : body.Cached forge_math.interval.Box3) (i : Std.U32)
-  (v : alloc.vec.Vec (body.Cached forge_math.interval.Box3)) :
-  Result (alloc.vec.Vec (body.Cached forge_math.interval.Box3))
+/-- Trait implementation: [forge_topo::body::{forge_topo::body::Body}::add_face::{impl core::ops::function::FnMut<(), forge_topo::body::Cached<forge_math::interval::Box3>> for forge_topo::body::{forge_topo::body::Body}::add_face::{closure#1}}]
+    Source: 'kernel/forge-topo/src/body.rs', lines 859:59-859:79 -/
+@[reducible]
+def body.Body.add_face.closure_1.Insts.CoreOpsFunctionFnMutTupleCachedBox3 :
+  core.ops.function.FnMut body.Body.add_face.closure_1 Unit (body.Cached
+  forge_math.interval.Box3) := {
+  FnOnceInst :=
+    body.Body.add_face.closure_1.Insts.CoreOpsFunctionFnOnceTupleCachedBox3
+  call_mut :=
+    body.Body.add_face.closure_1.Insts.CoreOpsFunctionFnMutTupleCachedBox3.call_mut
+}
+
+/-- [forge_topo::body::{forge_topo::body::Body}::add_face::{impl core::ops::function::FnMut<(), forge_topo::body::Cached<forge_topo::body::Chunk>> for forge_topo::body::{forge_topo::body::Body}::add_face::{closure}}::call_mut]:
+    Source: 'kernel/forge-topo/src/body.rs', lines 857:55-857:75 -/
+def
+  body.Body.add_face.closure.Insts.CoreOpsFunctionFnMutTupleCachedChunk.call_mut
+  (c : body.Body.add_face.closure) (_ : Unit) :
+  Result ((body.Cached body.Chunk) × body.Body.add_face.closure)
   := do
-  loop
-    (fun v1 => body.Body.add_face_loop1.body c i v1)
-    v
+  let c1 ← body.Cached.Insts.CoreDefaultDefault.default body.Chunk
+  ok (c1, c)
+
+/-- [forge_topo::body::{forge_topo::body::Body}::add_face::{impl core::ops::function::FnOnce<(), forge_topo::body::Cached<forge_topo::body::Chunk>> for forge_topo::body::{forge_topo::body::Body}::add_face::{closure}}::call_once]:
+    Source: 'kernel/forge-topo/src/body.rs', lines 857:55-857:75 -/
+def
+  body.Body.add_face.closure.Insts.CoreOpsFunctionFnOnceTupleCachedChunk.call_once
+  (c : body.Body.add_face.closure) (_ : Unit) :
+  Result (body.Cached body.Chunk)
+  := do
+  let (c1, _) ←
+    body.Body.add_face.closure.Insts.CoreOpsFunctionFnMutTupleCachedChunk.call_mut
+      c ()
+  ok c1
+
+/-- Trait implementation: [forge_topo::body::{forge_topo::body::Body}::add_face::{impl core::ops::function::FnOnce<(), forge_topo::body::Cached<forge_topo::body::Chunk>> for forge_topo::body::{forge_topo::body::Body}::add_face::{closure}}]
+    Source: 'kernel/forge-topo/src/body.rs', lines 857:55-857:75 -/
+@[reducible]
+def body.Body.add_face.closure.Insts.CoreOpsFunctionFnOnceTupleCachedChunk :
+  core.ops.function.FnOnce body.Body.add_face.closure Unit (body.Cached
+  body.Chunk) := {
+  call_once :=
+    body.Body.add_face.closure.Insts.CoreOpsFunctionFnOnceTupleCachedChunk.call_once
+}
+
+/-- Trait implementation: [forge_topo::body::{forge_topo::body::Body}::add_face::{impl core::ops::function::FnMut<(), forge_topo::body::Cached<forge_topo::body::Chunk>> for forge_topo::body::{forge_topo::body::Body}::add_face::{closure}}]
+    Source: 'kernel/forge-topo/src/body.rs', lines 857:55-857:75 -/
+@[reducible]
+def body.Body.add_face.closure.Insts.CoreOpsFunctionFnMutTupleCachedChunk :
+  core.ops.function.FnMut body.Body.add_face.closure Unit (body.Cached
+  body.Chunk) := {
+  FnOnceInst :=
+    body.Body.add_face.closure.Insts.CoreOpsFunctionFnOnceTupleCachedChunk
+  call_mut :=
+    body.Body.add_face.closure.Insts.CoreOpsFunctionFnMutTupleCachedChunk.call_mut
+}
 
 /-- [forge_topo::body::{forge_topo::body::Body}::add_face]:
-    Source: 'kernel/forge-topo/src/body.rs', lines 842:4-867:5
+    Source: 'kernel/forge-topo/src/body.rs', lines 842:4-864:5
     Visibility: public -/
 def body.Body.add_face
   (self : body.Body) (shell : body.ShellId)
@@ -875,28 +899,38 @@ def body.Body.add_face
     let c2 := get_mut_back none
     ok (i1, { self with faces := v, shells := v2, hulls := c2 })
   | some h =>
-    let v2 := index_mut_back { faces := v1 }
-    let (v3, v4) ← body.Body.add_face_loop0 i1 h
-    let v5 ← body.Body.add_face_loop1 c i1 v4
     let i3 ← body.FaceId.index i1
     let i4 ← i3 / body.RUN
+    let i5 ← i4 + 1#usize
+    let v2 ←
+      alloc.vec.Vec.resize_with alloc.alloc.Global
+        body.Body.add_face.closure.Insts.CoreOpsFunctionFnMutTupleCachedChunk
+        h.chunks i5 ()
+    let i6 ← body.RUN * body.RUN
+    let i7 ← i3 / i6
+    let i8 ← i7 + 1#usize
+    let v3 ←
+      alloc.vec.Vec.resize_with alloc.alloc.Global
+        body.Body.add_face.closure_1.Insts.CoreOpsFunctionFnMutTupleCachedBox3
+        h.blocks i8 ()
+    let i9 ← i3 / body.RUN
     let (c2, index_mut_back1) ←
       alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
-        (body.Cached body.Chunk)) v3 i4
+        (body.Cached body.Chunk)) v2 i9
     let c3 ← body.Cached.clear c2
-    let i5 ← body.RUN * body.RUN
-    let i6 ← i3 / i5
+    let i10 ← i3 / i6
     let (c4, index_mut_back2) ←
       alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
-        (body.Cached forge_math.interval.Box3)) v5 i6
+        (body.Cached forge_math.interval.Box3)) v3 i10
     let c5 ← body.Cached.clear c4
-    let v6 := index_mut_back1 c3
-    let v7 := index_mut_back2 c5
-    let c6 := get_mut_back (some { chunks := v6, blocks := v7 })
-    ok (i1, { self with faces := v, shells := v2, hulls := c6 })
+    let v4 := index_mut_back { faces := v1 }
+    let v5 := index_mut_back1 c3
+    let v6 := index_mut_back2 c5
+    let c6 := get_mut_back (some { chunks := v5, blocks := v6 })
+    ok (i1, { self with faces := v, shells := v4, hulls := c6 })
 
 /-- [forge_topo::body::{forge_topo::body::Body}::remove_loop::{impl core::ops::function::FnMut<(&'_1 forge_topo::body::CoedgeId,), bool> for forge_topo::body::{forge_topo::body::Body}::remove_loop::{closure#1}<'_0>}::call_mut]:
-    Source: 'kernel/forge-topo/src/body.rs', lines 932:32-932:43 -/
+    Source: 'kernel/forge-topo/src/body.rs', lines 929:32-929:43 -/
 def
   body.Body.remove_loop.closure_1.Insts.CoreOpsFunctionFnMutTupleShared1CoedgeIdBool.call_mut
   (c : body.Body.remove_loop.closure_1) (tupled_args : body.CoedgeId) :
@@ -908,7 +942,7 @@ def
   ok (b, c)
 
 /-- [forge_topo::body::{forge_topo::body::Body}::remove_loop::{impl core::ops::function::FnOnce<(&'_1 forge_topo::body::CoedgeId,), bool> for forge_topo::body::{forge_topo::body::Body}::remove_loop::{closure#1}<'_0>}::call_once]:
-    Source: 'kernel/forge-topo/src/body.rs', lines 932:32-932:43 -/
+    Source: 'kernel/forge-topo/src/body.rs', lines 929:32-929:43 -/
 def
   body.Body.remove_loop.closure_1.Insts.CoreOpsFunctionFnOnceTupleShared1CoedgeIdBool.call_once
   (c : body.Body.remove_loop.closure_1) (ci : body.CoedgeId) :
@@ -920,7 +954,7 @@ def
   ok b
 
 /-- Trait implementation: [forge_topo::body::{forge_topo::body::Body}::remove_loop::{impl core::ops::function::FnOnce<(&'_1 forge_topo::body::CoedgeId,), bool> for forge_topo::body::{forge_topo::body::Body}::remove_loop::{closure#1}<'_0>}]
-    Source: 'kernel/forge-topo/src/body.rs', lines 932:32-932:43 -/
+    Source: 'kernel/forge-topo/src/body.rs', lines 929:32-929:43 -/
 @[reducible]
 def
   body.Body.remove_loop.closure_1.Insts.CoreOpsFunctionFnOnceTupleShared1CoedgeIdBool
@@ -931,7 +965,7 @@ def
 }
 
 /-- Trait implementation: [forge_topo::body::{forge_topo::body::Body}::remove_loop::{impl core::ops::function::FnMut<(&'_1 forge_topo::body::CoedgeId,), bool> for forge_topo::body::{forge_topo::body::Body}::remove_loop::{closure#1}<'_0>}]
-    Source: 'kernel/forge-topo/src/body.rs', lines 932:32-932:43 -/
+    Source: 'kernel/forge-topo/src/body.rs', lines 929:32-929:43 -/
 @[reducible]
 def
   body.Body.remove_loop.closure_1.Insts.CoreOpsFunctionFnMutTupleShared1CoedgeIdBool
@@ -944,7 +978,7 @@ def
 }
 
 /-- [forge_topo::body::{forge_topo::body::Body}::remove_loop::{impl core::ops::function::FnMut<(&'_1 forge_topo::body::LoopId,), bool> for forge_topo::body::{forge_topo::body::Body}::remove_loop::{closure}<'_0>}::call_mut]:
-    Source: 'kernel/forge-topo/src/body.rs', lines 929:43-929:55 -/
+    Source: 'kernel/forge-topo/src/body.rs', lines 926:43-926:55 -/
 def
   body.Body.remove_loop.closure.Insts.CoreOpsFunctionFnMutTupleShared1LoopIdBool.call_mut
   (c : body.Body.remove_loop.closure) (tupled_args : body.LoopId) :
@@ -956,7 +990,7 @@ def
   ok (b, c)
 
 /-- [forge_topo::body::{forge_topo::body::Body}::remove_loop::{impl core::ops::function::FnOnce<(&'_1 forge_topo::body::LoopId,), bool> for forge_topo::body::{forge_topo::body::Body}::remove_loop::{closure}<'_0>}::call_once]:
-    Source: 'kernel/forge-topo/src/body.rs', lines 929:43-929:55 -/
+    Source: 'kernel/forge-topo/src/body.rs', lines 926:43-926:55 -/
 def
   body.Body.remove_loop.closure.Insts.CoreOpsFunctionFnOnceTupleShared1LoopIdBool.call_once
   (c : body.Body.remove_loop.closure) (li : body.LoopId) : Result Bool := do
@@ -966,7 +1000,7 @@ def
   ok b
 
 /-- Trait implementation: [forge_topo::body::{forge_topo::body::Body}::remove_loop::{impl core::ops::function::FnOnce<(&'_1 forge_topo::body::LoopId,), bool> for forge_topo::body::{forge_topo::body::Body}::remove_loop::{closure}<'_0>}]
-    Source: 'kernel/forge-topo/src/body.rs', lines 929:43-929:55 -/
+    Source: 'kernel/forge-topo/src/body.rs', lines 926:43-926:55 -/
 @[reducible]
 def
   body.Body.remove_loop.closure.Insts.CoreOpsFunctionFnOnceTupleShared1LoopIdBool
@@ -977,7 +1011,7 @@ def
 }
 
 /-- Trait implementation: [forge_topo::body::{forge_topo::body::Body}::remove_loop::{impl core::ops::function::FnMut<(&'_1 forge_topo::body::LoopId,), bool> for forge_topo::body::{forge_topo::body::Body}::remove_loop::{closure}<'_0>}]
-    Source: 'kernel/forge-topo/src/body.rs', lines 929:43-929:55 -/
+    Source: 'kernel/forge-topo/src/body.rs', lines 926:43-926:55 -/
 @[reducible]
 def
   body.Body.remove_loop.closure.Insts.CoreOpsFunctionFnMutTupleShared1LoopIdBool
@@ -989,7 +1023,7 @@ def
 }
 
 /-- [forge_topo::body::{forge_topo::body::Body}::remove_loop]: loop body 0:
-    Source: 'kernel/forge-topo/src/body.rs', lines 930:8-936:9
+    Source: 'kernel/forge-topo/src/body.rs', lines 927:8-933:9
     Visibility: public -/
 @[rust_loop_body]
 def body.Body.remove_loop_loop.body
@@ -1030,7 +1064,7 @@ def body.Body.remove_loop_loop.body
       ok (cont (iter1, v2))
 
 /-- [forge_topo::body::{forge_topo::body::Body}::remove_loop]: loop 0:
-    Source: 'kernel/forge-topo/src/body.rs', lines 930:8-936:9
+    Source: 'kernel/forge-topo/src/body.rs', lines 927:8-933:9
     Visibility: public -/
 @[rust_loop]
 def body.Body.remove_loop_loop
@@ -1043,7 +1077,7 @@ def body.Body.remove_loop_loop
     (iter, v)
 
 /-- [forge_topo::body::{forge_topo::body::Body}::remove_loop]:
-    Source: 'kernel/forge-topo/src/body.rs', lines 928:4-937:5
+    Source: 'kernel/forge-topo/src/body.rs', lines 925:4-934:5
     Visibility: public -/
 def body.Body.remove_loop
   (self : body.Body) (f : body.FaceId) (lp : body.LoopId) :
@@ -1095,7 +1129,7 @@ def small.Small.push
     ok (small.Small.Heap v1)
 
 /-- [forge_topo::body::{forge_topo::body::Body}::add_loop]: loop body 0:
-    Source: 'kernel/forge-topo/src/body.rs', lines 956:8-961:9
+    Source: 'kernel/forge-topo/src/body.rs', lines 953:8-958:9
     Visibility: public -/
 @[rust_loop_body]
 def body.Body.add_loop_loop.body
@@ -1128,7 +1162,7 @@ def body.Body.add_loop_loop.body
     ok (cont (iter1, v4, v2))
 
 /-- [forge_topo::body::{forge_topo::body::Body}::add_loop]: loop 0:
-    Source: 'kernel/forge-topo/src/body.rs', lines 956:8-961:9
+    Source: 'kernel/forge-topo/src/body.rs', lines 953:8-958:9
     Visibility: public -/
 @[rust_loop]
 def body.Body.add_loop_loop
@@ -1142,7 +1176,7 @@ def body.Body.add_loop_loop
     (iter, v, v1)
 
 /-- [forge_topo::body::{forge_topo::body::Body}::add_loop]:
-    Source: 'kernel/forge-topo/src/body.rs', lines 953:4-969:5
+    Source: 'kernel/forge-topo/src/body.rs', lines 950:4-966:5
     Visibility: public -/
 def body.Body.add_loop
   (self : body.Body) (face : body.FaceId) (uses : Slice (body.EdgeId × Bool))

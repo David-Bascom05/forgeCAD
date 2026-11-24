@@ -10,7 +10,8 @@ import ForgeTopoBody.Types
 std's, each as std's own body:
 - `OnceLock::new`, `get_mut`, `take` on `OnceLock<T>` as `Option<T>` (TypesExternal.lean);
 - `Vec::retain`: the elements the predicate keeps, in order, the predicate called on each in turn;
-- `Iterator::size_hint`'s default: `(0, None)`.
+- `Iterator::size_hint`'s default: `(0, None)`;
+- `Vec::resize_with`: grown by `new_len - len` calls of the closure, in order, or truncated.
 
 `Body::rebuild_shells` is not translated (it regroups the shells; its union-find walks
 `windows` and `map` iterators): a model, the body with only its shells and its faces' shell ids
@@ -61,6 +62,27 @@ def core.iter.traits.iterator.Iterator.size_hint.default {Self : Type _} {Clause
     (_ : core.iter.traits.iterator.Iterator Self Clause0_Item) :
     Self → Result (Std.Usize × (Option Std.Usize)) :=
   fun _ => ok (0#usize, none)
+
+
+/-- `n` values of the closure, called in turn. -/
+def alloc.vec.repeatWith {T F : Type _} (fm : core.ops.function.FnMut F Unit T) :
+    Nat → F → Result (List T × F)
+  | 0, f => ok ([], f)
+  | n + 1, f => do
+    let (x, f) ← fm.call_mut f ()
+    let (xs, f) ← alloc.vec.repeatWith fm n f
+    ok (x :: xs, f)
+
+/-- `Vec::resize_with(new_len, f)`, std's body: `extend_trusted(repeat_with(f).take(new_len - len))`
+when it grows, else `truncate(new_len)`. -/
+def alloc.vec.Vec.resize_with {T : Type _} (A : Type _) {F : Type _}
+    (fm : core.ops.function.FnMut F Unit T) (v : alloc.vec.Vec T) (n : Std.Usize) (f : F) :
+    Result (alloc.vec.Vec T) :=
+  if v.val.length < n.val then do
+    let (xs, _) ← alloc.vec.repeatWith fm (n.val - v.val.length) f
+    if h : (v.val ++ xs).length ≤ Usize.max then ok (alloc.vec.Vec.from (v.val ++ xs) h)
+    else fail .panic
+  else ok (alloc.vec.Vec.from (v.val.take n.val) (by simp <;> scalar_tac))
 
 namespace forge_topo
 

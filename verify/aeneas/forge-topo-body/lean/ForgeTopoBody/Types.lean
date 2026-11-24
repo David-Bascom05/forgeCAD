@@ -188,13 +188,23 @@ structure body.Body where
 @[reducible]
 def body.Body.drop_use.closure := body.CoedgeId
 
+/-- [forge_topo::body::{forge_topo::body::Body}::add_face::{closure#1}]
+    Source: 'kernel/forge-topo/src/body.rs', lines 859:59-859:79 -/
+@[reducible]
+def body.Body.add_face.closure_1 := Unit
+
+/-- [forge_topo::body::{forge_topo::body::Body}::add_face::{closure}]
+    Source: 'kernel/forge-topo/src/body.rs', lines 857:55-857:75 -/
+@[reducible]
+def body.Body.add_face.closure := Unit
+
 /-- [forge_topo::body::{forge_topo::body::Body}::remove_loop::{closure#1}]
-    Source: 'kernel/forge-topo/src/body.rs', lines 932:32-932:43 -/
+    Source: 'kernel/forge-topo/src/body.rs', lines 929:32-929:43 -/
 @[reducible]
 def body.Body.remove_loop.closure_1 := body.CoedgeId
 
 /-- [forge_topo::body::{forge_topo::body::Body}::remove_loop::{closure}]
-    Source: 'kernel/forge-topo/src/body.rs', lines 929:43-929:55 -/
+    Source: 'kernel/forge-topo/src/body.rs', lines 926:43-926:55 -/
 @[reducible]
 def body.Body.remove_loop.closure := body.LoopId
 

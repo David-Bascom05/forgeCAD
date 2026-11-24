@@ -132,6 +132,38 @@ theorem FaceKeep.of_append {b b' : body.Body} {l : List body.Face}
     · rw [List.getElem?_eq_none hge] at hf; cases hf
 
 
+/-- Each face of `b'` is the face of `b` at its index, with the same sense and surface. -/
+def FaceBack (b b' : body.Body) : Prop := FaceKeep b' b
+
+/-- The same faces, up to their loops, liveness and caches. -/
+def FaceSame (b b' : body.Body) : Prop := FaceKeep b b' ∧ FaceBack b b'
+
+theorem FaceSame.refl (b : body.Body) : FaceSame b b := ⟨FaceKeep.refl b, FaceKeep.refl b⟩
+
+theorem FaceSame.trans {b b' b'' : body.Body} (h1 : FaceSame b b') (h2 : FaceSame b' b'') :
+    FaceSame b b'' := ⟨h1.1.trans h2.1, h2.2.trans h1.2⟩
+
+theorem FaceSame.of_faces {b b' : body.Body} (h : b'.faces.val = b.faces.val) : FaceSame b b' :=
+  ⟨FaceKeep.of_faces h, FaceKeep.of_faces h.symm⟩
+
+theorem FaceSame.of_set {b b' : body.Body} {j : Nat} {g f : body.Face}
+    (hj : b.faces.val[j]? = some f) (hg : g.same_sense = f.same_sense ∧ g.surface = f.surface)
+    (h : b'.faces.val = b.faces.val.set j g) : FaceSame b b' := by
+  refine ⟨FaceKeep.of_set hj hg h, ?_⟩
+  intro i f' hf'
+  rw [h] at hf'
+  by_cases hij : i = j
+  · subst hij
+    have hlt : i < b.faces.val.length := by
+      rcases Nat.lt_or_ge i b.faces.val.length with hlt | hge
+      · exact hlt
+      · rw [List.getElem?_eq_none hge] at hj; cases hj
+    simp [List.getElem?_set, hlt] at hf'
+    subst hf'
+    exact ⟨f, hj, hg.1.symm, hg.2.symm⟩
+  · rw [List.getElem?_set_ne (Ne.symm hij)] at hf'
+    exact ⟨f', hf', rfl, rfl⟩
+
 /-! ## The methods that leave the faces as they were -/
 
 /-- Close a goal `okspec m p` whose every `ok` value is a record with the faces of `self`. -/
@@ -139,8 +171,8 @@ macro "faces_steps" : tactic => `(tactic| (
   repeat (first
     | with_reducible exact (okspec_ok _ _).mpr rfl
     | with_reducible exact okspec_fail _ _
-    | with_reducible refine okspec_let2 fun _ _ _ => ?_
-    | with_reducible refine okspec_let fun _ _ => ?_
+    | with_reducible_and_instances refine okspec_let2 fun _ _ _ => ?_
+    | with_reducible_and_instances refine okspec_let fun _ _ => ?_
     | simp only [uncurry_apply_pair]
     | (split <;> try dsimp only [])
     | dsimp only [])))
@@ -188,12 +220,12 @@ theorem kill_outer_faces (it : core.ops.range.Range Usize) (self : body.Body) (f
   | some li =>
     repeat (first
       | exact okspec_bind (kill_inner_faces _ _) fun s' h => (okspec_ok _ _).mpr (h.trans hs)
-      | with_reducible refine okspec_let fun _ _ => ?_
+      | with_reducible_and_instances refine okspec_let fun _ _ => ?_
       | simp only [uncurry_apply_pair])
 
 /-- **`kill_face`** keeps every face's sense and surface. -/
 theorem kill_face_keep (self : body.Body) (f : body.FaceId) :
-    okspec (body.Body.kill_face self f) fun r => FaceKeep self r := by
+    okspec (body.Body.kill_face self f) fun r => FaceSame self r := by
   unfold body.Body.kill_face
   refine okspec_let fun i _ => ?_
   refine okspec_bind (vec_index _ _) fun f1 hf1 => ?_
@@ -212,51 +244,54 @@ theorem kill_face_keep (self : body.Body) (f : body.FaceId) :
       dsimp only at hv ⊢
       faces_steps
       refine okspec_mono (kill_outer_faces _ _ _) fun r hr => ?_
-      refine FaceKeep.of_set (g := { f2 with alive := false }) hf2 ⟨rfl, rfl⟩ ?_
+      refine FaceSame.of_set (g := { f2 with alive := false }) hf2 ⟨rfl, rfl⟩ ?_
       rw [hr]; dsimp only; rw [hv, hback]
-  · exact (okspec_ok _ _).mpr (FaceKeep.refl _)
+  · exact (okspec_ok _ _).mpr (FaceSame.refl _)
 
 
 /-- Step to the final `ok` (each step's equation kept). -/
 macro "go_steps" : tactic => `(tactic| (
-  repeat (first
+  repeat' (first
     | with_reducible exact okspec_fail _ _
-    | with_reducible refine okspec_let2 fun _ _ _ => ?_
-    | with_reducible refine okspec_let fun _ _ => ?_
+    | with_reducible_and_instances refine okspec_let2 fun _ _ _ => ?_
+    | with_reducible_and_instances refine okspec_let fun _ _ => ?_
     | simp only [uncurry_apply_pair]
+    | simp only [uncurry_eta]
+    | ((fail_if_success with_reducible refine (okspec_ok _ _).mpr ?_);
+       (first | refine okspec_let2 fun _ _ _ => ?_ | refine okspec_let fun _ _ => ?_))
     | (split <;> try dsimp only [])
     | dsimp only [])))
 
 /-- A face entry rewritten through `index_mut` with the same sense and surface. -/
-theorem FaceKeep.of_index_mut {self b' : body.Body} {i : Usize} {f : body.Face}
+theorem FaceSame.of_index_mut {self b' : body.Body} {i : Usize} {f : body.Face}
     {back : body.Face → alloc.vec.Vec body.Face}
     (h : alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice body.Face) self.faces i =
       ok (f, back)) (g : body.Face) (hb : b'.faces = back g)
-    (hg : g.same_sense = f.same_sense ∧ g.surface = f.surface) : FaceKeep self b' := by
+    (hg : g.same_sense = f.same_sense ∧ g.surface = f.surface) : FaceSame self b' := by
   obtain ⟨hf, hback⟩ := okspec_of_eq (vec_index_mut self.faces i) h
-  exact FaceKeep.of_set hf hg (by rw [hb, hback])
+  exact FaceSame.of_set hf hg (by rw [hb, hback])
 
 /-- **`remove_loop`** keeps every face's sense and surface. -/
 theorem remove_loop_keep (self : body.Body) (f : body.FaceId) (lp : body.LoopId) :
-    okspec (body.Body.remove_loop self f lp) fun r => FaceKeep self r := by
+    okspec (body.Body.remove_loop self f lp) fun r => FaceSame self r := by
   unfold body.Body.remove_loop
   refine okspec_let fun i _ => ?_
   refine okspec_let2 fun f1 back hb => ?_
   go_steps
   rw [okspec_ok]
-  exact FaceKeep.of_index_mut hb _ rfl ⟨rfl, rfl⟩
+  exact FaceSame.of_index_mut hb _ rfl ⟨rfl, rfl⟩
 
 /-- **`add_loop`** keeps every face's sense and surface. -/
 theorem add_loop_keep (self : body.Body) (face : body.FaceId) (uses : Slice (body.EdgeId × Bool)) :
-    okspec (body.Body.add_loop self face uses) fun r => FaceKeep self r.2 := by
+    okspec (body.Body.add_loop self face uses) fun r => FaceSame self r.2 := by
   unfold body.Body.add_loop
   repeat (first
-    | with_reducible refine okspec_let2 fun f back (hb : alloc.vec.Vec.index_mut _ self.faces _ = _) => ?_
-    | with_reducible refine okspec_let2 fun _ _ _ => ?_
-    | with_reducible refine okspec_let fun _ _ => ?_
+    | with_reducible_and_instances refine okspec_let2 fun f back (hb : alloc.vec.Vec.index_mut _ self.faces _ = _) => ?_
+    | with_reducible_and_instances refine okspec_let2 fun _ _ _ => ?_
+    | with_reducible_and_instances refine okspec_let fun _ _ => ?_
     | simp only [uncurry_apply_pair])
   rw [okspec_ok]
-  exact FaceKeep.of_index_mut hb _ rfl ⟨rfl, rfl⟩
+  exact FaceSame.of_index_mut hb _ rfl ⟨rfl, rfl⟩
 
 /-- **`add_face`** keeps every face's sense and surface (and appends one). -/
 theorem add_face_keep (self : body.Body) (shell : body.ShellId)
@@ -267,38 +302,48 @@ theorem add_face_keep (self : body.Body) (shell : body.ShellId)
 
 /-- The query models write only `query`. -/
 theorem setQuery_keep (b : body.Body) (f : body.FaceId) (q : body.Cached body.FaceQuery) :
-    okspec (forge_bool.setQuery b f q) fun r => FaceKeep b r := by
+    okspec (forge_bool.setQuery b f q) fun r => FaceSame b r := by
   unfold forge_bool.setQuery
   dsimp only []
   split
   · rename_i h
     rw [okspec_ok]
-    exact FaceKeep.of_set (g := { b.faces.val[(f : Std.U32).val] with query := q })
+    exact FaceSame.of_set (g := { b.faces.val[(f : Std.U32).val] with query := q })
       (List.getElem?_eq_getElem h) ⟨rfl, rfl⟩ (alloc.vec.Vec.from_val _ _)
   · exact okspec_fail _ _
 
 theorem extend_query_keep (b : body.Body) (f : body.FaceId) (lp : body.LoopId) :
-    okspec (forge_bool.classify.extend_query b f lp) fun r => FaceKeep b r := by
+    okspec (forge_bool.classify.extend_query b f lp) fun r => FaceSame b r := by
   unfold forge_bool.classify.extend_query
   exact okspec_let fun q _ => setQuery_keep b f q
 
 theorem drop_query_loops_keep (b : body.Body) (f : body.FaceId) (gone : Slice body.LoopId) :
-    okspec (forge_bool.classify.drop_query_loops b f gone) fun r => FaceKeep b r := by
+    okspec (forge_bool.classify.drop_query_loops b f gone) fun r => FaceSame b r := by
   unfold forge_bool.classify.drop_query_loops
   exact okspec_let fun q _ => setQuery_keep b f q
 
 /-- The `rebuild_shells` model changes only shells and the live faces' shell ids. -/
 theorem rebuild_shells_keep (b : body.Body) :
-    okspec (body.Body.rebuild_shells b) fun r => FaceKeep b r := by
+    okspec (body.Body.rebuild_shells b) fun r => FaceSame b r := by
   unfold body.Body.rebuild_shells
   dsimp only []
   split
   · rw [okspec_ok]
-    intro i f hf
-    refine ⟨if f.alive then { f with shell := rebuiltShellOf b i } else f, ?_, ?_, ?_⟩
-    · simp [List.getElem?_mapIdx, hf]
-    · split <;> rfl
-    · split <;> rfl
+    refine ⟨?_, ?_⟩
+    · intro i f hf
+      refine ⟨if f.alive then { f with shell := rebuiltShellOf b i } else f, ?_, ?_, ?_⟩
+      · simp [List.getElem?_mapIdx, hf]
+      · split <;> rfl
+      · split <;> rfl
+    · intro i f' hf'
+      simp only [alloc.vec.Vec.from_val, List.getElem?_mapIdx] at hf'
+      cases hf0 : b.faces.val[i]? with
+      | none => rw [hf0] at hf'; cases hf'
+      | some f =>
+        rw [hf0] at hf'
+        simp only [Option.map_some, Option.some.injEq] at hf'
+        subst hf'
+        refine ⟨f, rfl, ?_, ?_⟩ <;> split <;> rfl
   · exact okspec_fail _ _
 
 end ForgeBoolApply

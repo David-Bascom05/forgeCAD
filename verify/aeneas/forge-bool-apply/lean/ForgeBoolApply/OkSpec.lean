@@ -135,4 +135,9 @@ theorem okspec_let2 {α β γ : Type _} {m : Result (α × β)} {k : α × β �
     (hk : ∀ a b, m = ok (a, b) → okspec (k (a, b)) q) : okspec (Std.bind m k) q :=
   okspec_let fun ⟨a, b⟩ h => hk a b h
 
+/-- A pair pattern on a variable, as its projections. -/
+theorem uncurry_eta {α β γ : Type _} (f : α → β → γ) (p : α × β) :
+    Aeneas.Std.uncurry f p = f p.1 p.2 := by
+  cases p; rfl
+
 end ForgeBoolApply

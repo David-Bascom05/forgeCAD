@@ -19,6 +19,21 @@ set_option maxHeartbeats 1000000
 set_option maxRecDepth 2048
 open forge_bool
 
+/-- [core::iter::adapters::filter::{impl core::iter::traits::iterator::Iterator<Clause0_Item> for core::iter::adapters::filter::Filter<I, P>}::fold]:
+    Source: '/rustc/library/core/src/iter/adapters/filter.rs', lines 161:4-163:44
+    Name pattern: [core::iter::adapters::filter::{core::iter::traits::iterator::Iterator<core::iter::adapters::filter::Filter<@I, @P>, @Clause0_Item>}::fold]
+    Visibility: public -/
+@[rust_fun
+  "core::iter::adapters::filter::{core::iter::traits::iterator::Iterator<core::iter::adapters::filter::Filter<@I, @P>, @Clause0_Item>}::fold"]
+axiom
+  core.iter.adapters.filter.Filter.Insts.CoreIterTraitsIteratorIterator.fold
+  {I : Type _} {P : Type _} {Acc : Type _} {Fold : Type _} {Clause0_Item :
+  Type _} (traitsiteratorIteratorInst : core.iter.traits.iterator.Iterator I
+  Clause0_Item) (opsfunctionFnMutPTupleSharedClause0_ItemBoolInst :
+  core.ops.function.FnMut P Clause0_Item Bool) (opsfunctionFnMutFoldPairAccInst
+  : core.ops.function.FnMut Fold (Acc × Clause0_Item) Acc) :
+  core.iter.adapters.filter.Filter I P → Acc → Fold → Result Acc
+
 /-- [core::iter::traits::iterator::Iterator::any]:
     Source: '/rustc/library/core/src/iter/traits/iterator.rs', lines 2897:4-2900:37
     Name pattern: [core::iter::traits::iterator::Iterator::any]
@@ -66,21 +81,6 @@ axiom core.iter.traits.iterator.Iterator.map.default
   (opsfunctionFnMutFTupleClause0_ItemBInst : core.ops.function.FnMut F
   Clause0_Item B) :
   Self → F → Result (core.iter.adapters.map.Map Self F)
-
-/-- [core::iter::adapters::filter::{impl core::iter::traits::iterator::Iterator<Clause0_Item> for core::iter::adapters::filter::Filter<I, P>}::fold]:
-    Source: '/rustc/library/core/src/iter/adapters/filter.rs', lines 161:4-163:44
-    Name pattern: [core::iter::adapters::filter::{core::iter::traits::iterator::Iterator<core::iter::adapters::filter::Filter<@I, @P>, @Clause0_Item>}::fold]
-    Visibility: public -/
-@[rust_fun
-  "core::iter::adapters::filter::{core::iter::traits::iterator::Iterator<core::iter::adapters::filter::Filter<@I, @P>, @Clause0_Item>}::fold"]
-axiom
-  core.iter.adapters.filter.Filter.Insts.CoreIterTraitsIteratorIterator.fold
-  {I : Type _} {P : Type _} {Acc : Type _} {Fold : Type _} {Clause0_Item :
-  Type _} (traitsiteratorIteratorInst : core.iter.traits.iterator.Iterator I
-  Clause0_Item) (opsfunctionFnMutPTupleSharedClause0_ItemBoolInst :
-  core.ops.function.FnMut P Clause0_Item Bool) (opsfunctionFnMutFoldPairAccInst
-  : core.ops.function.FnMut Fold (Acc × Clause0_Item) Acc) :
-  core.iter.adapters.filter.Filter I P → Acc → Fold → Result Acc
 
 /-- [core::iter::adapters::map::{impl core::iter::traits::iterator::Iterator<B> for core::iter::adapters::map::Map<I, F>}::fold]:
     Source: '/rustc/library/core/src/iter/adapters/map.rs', lines 124:4-126:41
@@ -449,15 +449,6 @@ axiom forge_topo.body.LoopId.Insts.CoreCloneClone.clone
 axiom forge_topo.body.LoopId.Insts.CoreDefaultDefault.default
   : Result forge_topo.body.LoopId
 
-/-- [forge_topo::body::{impl core::cmp::PartialEq<forge_topo::body::LoopId> for forge_topo::body::LoopId}::eq]:
-    Source: 'kernel/forge-topo/src/body.rs', lines 8:46-8:55; this code is generated from a macro invocation at: 'kernel/forge-topo/src/body.rs', lines 20:0-20:16
-    Name pattern: [forge_topo::body::{core::cmp::PartialEq<forge_topo::body::LoopId, forge_topo::body::LoopId>}::eq]
-    Visibility: public -/
-@[rust_fun
-  "forge_topo::body::{core::cmp::PartialEq<forge_topo::body::LoopId, forge_topo::body::LoopId>}::eq"]
-axiom forge_topo.body.LoopId.Insts.CoreCmpPartialEqLoopId.eq
-  : forge_topo.body.LoopId → forge_topo.body.LoopId → Result Bool
-
 /-- [forge_topo::body::{impl core::cmp::Ord for forge_topo::body::FaceId}::cmp]:
     Source: 'kernel/forge-topo/src/body.rs', lines 8:73-8:76; this code is generated from a macro invocation at: 'kernel/forge-topo/src/body.rs', lines 21:0-21:16
     Name pattern: [forge_topo::body::{core::cmp::Ord<forge_topo::body::FaceId>}::cmp]
@@ -600,18 +591,8 @@ axiom forge_topo.body.Body.add_face
     forge_geom.surface.Surface → Bool → forge_topo.name.Name → Result
     (forge_topo.body.FaceId × forge_topo.body.Body)
 
-/-- [forge_topo::body::{forge_topo::body::Body}::remove_loop]:
-    Source: 'kernel/forge-topo/src/body.rs', lines 928:4-928:56
-    Name pattern: [forge_topo::body::{forge_topo::body::Body}::remove_loop]
-    Visibility: public -/
-@[rust_fun "forge_topo::body::{forge_topo::body::Body}::remove_loop"]
-axiom forge_topo.body.Body.remove_loop
-  :
-  forge_topo.body.Body → forge_topo.body.FaceId → forge_topo.body.LoopId
-    → Result forge_topo.body.Body
-
 /-- [forge_topo::body::{forge_topo::body::Body}::add_loop]:
-    Source: 'kernel/forge-topo/src/body.rs', lines 953:4-953:79
+    Source: 'kernel/forge-topo/src/body.rs', lines 950:4-950:79
     Name pattern: [forge_topo::body::{forge_topo::body::Body}::add_loop]
     Visibility: public -/
 @[rust_fun "forge_topo::body::{forge_topo::body::Body}::add_loop"]
@@ -652,11 +633,17 @@ axiom classify.extend_query
   forge_topo.body.Body → forge_topo.body.FaceId → forge_topo.body.LoopId
     → Result forge_topo.body.Body
 
-/-- [forge_bool::classify::drop_query_loops]:
-    Source: 'kernel/forge-bool/src/classify.rs', lines 241:0-262:1
-    Visibility: public -/
-axiom classify.drop_query_loops
+/-- [forge_bool::boolean::drop_replaced_loops]:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2254:0-2269:1 -/
+axiom boolean.drop_replaced_loops
   :
-  forge_topo.body.Body → forge_topo.body.FaceId → Slice
-    forge_topo.body.LoopId → Result forge_topo.body.Body
+  forge_topo.body.Body → Slice boolean.Spec → Slice (Std.Usize × Bool) →
+    Result ((alloc.vec.Vec Std.Usize) × forge_topo.body.Body)
+
+/-- [forge_bool::boolean::staying_faces]:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2230:0-2249:1 -/
+axiom boolean.staying_faces
+  :
+  Slice boolean.Spec → Slice Bool → Slice (Std.Usize × Bool) → Slice
+    forge_topo.body.FaceId → Result (alloc.vec.Vec forge_topo.body.FaceId)
 

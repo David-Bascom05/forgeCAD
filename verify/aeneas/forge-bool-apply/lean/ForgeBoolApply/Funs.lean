@@ -36,9 +36,6 @@ impl_def core.iter.adapters.map.Map.Insts.CoreIterTraitsIteratorIterator {B :
   core.iter.traits.iterator.Iterator (core.iter.adapters.map.Map I F) B := {
   next := core.iter.adapters.map.Map.Insts.CoreIterTraitsIteratorIterator.next
     traitsiteratorIteratorInst opsfunctionFnMutFTupleClause0_ItemBInst
-  enumerate := core.iter.traits.iterator.Iterator.enumerate.trait_default
-    (core.iter.adapters.map.Map.Insts.CoreIterTraitsIteratorIterator
-    traitsiteratorIteratorInst opsfunctionFnMutFTupleClause0_ItemBInst)
 }
 
 /-- Trait implementation: [core::option::{impl core::clone::Clone for core::option::Option<T>}]
@@ -180,74 +177,8 @@ def boolean.VKey.Insts.CoreCmpOrd : core.cmp.Ord boolean.VKey := {
   cmp := boolean.VKey.Insts.CoreCmpOrd.cmp
 }
 
-/-- [forge_bool::boolean::outer_loop]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2294:0-2296:1 -/
-def boolean.outer_loop
-  (a : forge_topo.body.Body) (f : forge_topo.body.FaceId) :
-  Result forge_topo.body.LoopId
-  := do
-  let f1 ← forge_topo.body.Body.face a f
-  let s ←
-    forge_topo.small.Small.Insts.CoreOpsDerefDerefSlice.deref
-      forge_topo.body.LoopId.Insts.CoreMarkerCopy
-      forge_topo.body.LoopId.Insts.CoreDefaultDefault f1.loops
-  Slice.index_usize s 0#usize
-
-/-- [forge_bool::boolean::drop_replaced]: loop body 0:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2305:4-2307:5 -/
-@[rust_loop_body]
-def boolean.drop_replaced_loop.body
-  (fi : forge_topo.body.FaceId)
-  (iter : core.slice.iter.Iter forge_topo.body.LoopId)
-  (a : forge_topo.body.Body) :
-  Result (ControlFlow ((core.slice.iter.Iter forge_topo.body.LoopId) ×
-    forge_topo.body.Body) forge_topo.body.Body)
-  := do
-  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
-  match o with
-  | none => ok (done a)
-  | some l =>
-    let a1 ← forge_topo.body.Body.remove_loop a fi l
-    ok (cont (iter1, a1))
-
-/-- [forge_bool::boolean::drop_replaced]: loop 0:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2305:4-2307:5 -/
-@[rust_loop]
-def boolean.drop_replaced_loop
-  (iter : core.slice.iter.Iter forge_topo.body.LoopId)
-  (a : forge_topo.body.Body) (fi : forge_topo.body.FaceId) :
-  Result forge_topo.body.Body
-  := do
-  loop
-    (fun (iter1, a1) => boolean.drop_replaced_loop.body fi iter1 a1)
-    (iter, a)
-
-/-- [forge_bool::boolean::drop_replaced]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2300:0-2308:1 -/
-def boolean.drop_replaced
-  (a : forge_topo.body.Body) (s : boolean.Spec) (si : Std.Usize)
-  (new_outer : alloc.vec.Vec Std.Usize) :
-  Result (forge_topo.body.Body × (alloc.vec.Vec Std.Usize))
-  := do
-  let s1 := alloc.vec.Vec.deref s.remove
-  let li ← boolean.outer_loop a s.from
-  let b ←
-    core.slice.Slice.contains
-      forge_topo.body.LoopId.Insts.CoreCmpPartialEqLoopId s1 li
-  let new_outer1 ←
-    if b
-    then alloc.vec.Vec.push new_outer si
-    else ok new_outer
-  let s2 := alloc.vec.Vec.deref s.remove
-  let a1 ← classify.drop_query_loops a s.from s2
-  let iter ←
-    SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
-      alloc.alloc.Global s.remove
-  let a2 ← boolean.drop_replaced_loop iter a1 s.from
-  ok (a2, new_outer1)
-
 /-- [forge_bool::boolean::grown_tol::{impl core::ops::function::FnMut<(f64, &'_0 (forge_bool::boolean::VKey, f64)), f64> for forge_bool::boolean::grown_tol::{closure#1}<'_0>}::call_mut]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2312:48-2312:65 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2325:48-2325:65 -/
 def
   boolean.grown_tol.closure_1.Insts.CoreOpsFunctionFnMutPairF64Shared0PairVKeyF64F64.call_mut
   (c : boolean.grown_tol.closure_1)
@@ -259,7 +190,7 @@ def
   ok (fl1, ())
 
 /-- [forge_bool::boolean::grown_tol::{impl core::ops::function::FnOnce<(f64, &'_0 (forge_bool::boolean::VKey, f64)), f64> for forge_bool::boolean::grown_tol::{closure#1}<'_0>}::call_once]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2312:48-2312:65 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2325:48-2325:65 -/
 def
   boolean.grown_tol.closure_1.Insts.CoreOpsFunctionFnOncePairF64Shared0PairVKeyF64F64.call_once
   (c : boolean.grown_tol.closure_1) (p : (F64 × (boolean.VKey × F64))) :
@@ -271,7 +202,7 @@ def
   ok fl
 
 /-- Trait implementation: [forge_bool::boolean::grown_tol::{impl core::ops::function::FnOnce<(f64, &'_0 (forge_bool::boolean::VKey, f64)), f64> for forge_bool::boolean::grown_tol::{closure#1}<'_0>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2312:48-2312:65 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2325:48-2325:65 -/
 @[reducible]
 def
   boolean.grown_tol.closure_1.Insts.CoreOpsFunctionFnOncePairF64Shared0PairVKeyF64F64
@@ -282,7 +213,7 @@ def
 }
 
 /-- Trait implementation: [forge_bool::boolean::grown_tol::{impl core::ops::function::FnMut<(f64, &'_0 (forge_bool::boolean::VKey, f64)), f64> for forge_bool::boolean::grown_tol::{closure#1}<'_0>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2312:48-2312:65 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2325:48-2325:65 -/
 @[reducible]
 def
   boolean.grown_tol.closure_1.Insts.CoreOpsFunctionFnMutPairF64Shared0PairVKeyF64F64
@@ -295,7 +226,7 @@ def
 }
 
 /-- [forge_bool::boolean::grown_tol::{impl core::ops::function::FnMut<(&'_2 &'_0 (forge_bool::boolean::VKey, f64),), bool> for forge_bool::boolean::grown_tol::{closure}<'_0, '_1>}::call_mut]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2312:24-2312:36 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2325:24-2325:36 -/
 def
   boolean.grown_tol.closure.Insts.CoreOpsFunctionFnMutTupleShared2Shared0PairVKeyF64Bool.call_mut
   (c : boolean.grown_tol.closure) (tupled_args : (boolean.VKey × F64)) :
@@ -306,7 +237,7 @@ def
   ok (b, c)
 
 /-- [forge_bool::boolean::grown_tol::{impl core::ops::function::FnOnce<(&'_2 &'_0 (forge_bool::boolean::VKey, f64),), bool> for forge_bool::boolean::grown_tol::{closure}<'_0, '_1>}::call_once]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2312:24-2312:36 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2325:24-2325:36 -/
 def
   boolean.grown_tol.closure.Insts.CoreOpsFunctionFnOnceTupleShared2Shared0PairVKeyF64Bool.call_once
   (c : boolean.grown_tol.closure) (p : (boolean.VKey × F64)) :
@@ -318,7 +249,7 @@ def
   ok b
 
 /-- Trait implementation: [forge_bool::boolean::grown_tol::{impl core::ops::function::FnOnce<(&'_2 &'_0 (forge_bool::boolean::VKey, f64),), bool> for forge_bool::boolean::grown_tol::{closure}<'_0, '_1>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2312:24-2312:36 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2325:24-2325:36 -/
 @[reducible]
 def
   boolean.grown_tol.closure.Insts.CoreOpsFunctionFnOnceTupleShared2Shared0PairVKeyF64Bool
@@ -329,7 +260,7 @@ def
 }
 
 /-- Trait implementation: [forge_bool::boolean::grown_tol::{impl core::ops::function::FnMut<(&'_2 &'_0 (forge_bool::boolean::VKey, f64),), bool> for forge_bool::boolean::grown_tol::{closure}<'_0, '_1>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2312:24-2312:36 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2325:24-2325:36 -/
 @[reducible]
 def
   boolean.grown_tol.closure.Insts.CoreOpsFunctionFnMutTupleShared2Shared0PairVKeyF64Bool
@@ -342,7 +273,7 @@ def
 }
 
 /-- [forge_bool::boolean::grown_tol]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2311:0-2313:1 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2324:0-2326:1 -/
 def boolean.grown_tol
   (grown : Slice (boolean.VKey × F64)) (k : boolean.VKey) (tol : F64) :
   Result F64
@@ -360,7 +291,7 @@ def boolean.grown_tol
     f tol ()
 
 /-- [forge_bool::boolean::renamed::{impl core::ops::function::FnOnce<(usize,), forge_topo::name::Name> for forge_bool::boolean::renamed::{closure#1}<'_0>}::call_once]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2290:54-2290:68 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2320:54-2320:68 -/
 def
   boolean.renamed.closure_1.Insts.CoreOpsFunctionFnOnceTupleUsizeName.call_once
   (c : boolean.renamed.closure_1) (tupled_args : Std.Usize) :
@@ -370,7 +301,7 @@ def
   ok n
 
 /-- Trait implementation: [forge_bool::boolean::renamed::{impl core::ops::function::FnOnce<(usize,), forge_topo::name::Name> for forge_bool::boolean::renamed::{closure#1}<'_0>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2290:54-2290:68 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2320:54-2320:68 -/
 @[reducible]
 def boolean.renamed.closure_1.Insts.CoreOpsFunctionFnOnceTupleUsizeName :
   core.ops.function.FnOnce boolean.renamed.closure_1 Std.Usize
@@ -380,7 +311,7 @@ def boolean.renamed.closure_1.Insts.CoreOpsFunctionFnOnceTupleUsizeName :
 }
 
 /-- [forge_bool::boolean::renamed::{impl core::ops::function::FnMut<(&'_0 (forge_bool::boolean::VKey, forge_topo::name::Name),), forge_bool::boolean::VKey> for forge_bool::boolean::renamed::{closure}<'_0>}::call_mut]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2290:35-2290:42 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2320:35-2320:42 -/
 def
   boolean.renamed.closure.Insts.CoreOpsFunctionFnMutTupleShared0PairVKeyNameVKey.call_mut
   (c : boolean.renamed.closure)
@@ -391,7 +322,7 @@ def
   ok (v, ())
 
 /-- [forge_bool::boolean::renamed::{impl core::ops::function::FnOnce<(&'_0 (forge_bool::boolean::VKey, forge_topo::name::Name),), forge_bool::boolean::VKey> for forge_bool::boolean::renamed::{closure}<'_0>}::call_once]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2290:35-2290:42 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2320:35-2320:42 -/
 def
   boolean.renamed.closure.Insts.CoreOpsFunctionFnOnceTupleShared0PairVKeyNameVKey.call_once
   (c : boolean.renamed.closure) (p : (boolean.VKey × forge_topo.name.Name)) :
@@ -403,7 +334,7 @@ def
   ok v
 
 /-- Trait implementation: [forge_bool::boolean::renamed::{impl core::ops::function::FnOnce<(&'_0 (forge_bool::boolean::VKey, forge_topo::name::Name),), forge_bool::boolean::VKey> for forge_bool::boolean::renamed::{closure}<'_0>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2290:35-2290:42 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2320:35-2320:42 -/
 @[reducible]
 def
   boolean.renamed.closure.Insts.CoreOpsFunctionFnOnceTupleShared0PairVKeyNameVKey
@@ -414,7 +345,7 @@ def
 }
 
 /-- Trait implementation: [forge_bool::boolean::renamed::{impl core::ops::function::FnMut<(&'_0 (forge_bool::boolean::VKey, forge_topo::name::Name),), forge_bool::boolean::VKey> for forge_bool::boolean::renamed::{closure}<'_0>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2290:35-2290:42 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2320:35-2320:42 -/
 @[reducible]
 def
   boolean.renamed.closure.Insts.CoreOpsFunctionFnMutTupleShared0PairVKeyNameVKey
@@ -427,7 +358,7 @@ def
 }
 
 /-- [forge_bool::boolean::renamed]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2289:0-2291:1 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2319:0-2321:1 -/
 def boolean.renamed
   (flush : Slice (boolean.VKey × forge_topo.name.Name)) (v : boolean.VKey)
   (n : forge_topo.name.Name) :
@@ -442,7 +373,7 @@ def boolean.renamed
     flush
 
 /-- [forge_bool::boolean::{forge_bool::boolean::Made}::vertex]: loop body 0:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2253:8-2259:9 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2283:8-2289:9 -/
 @[rust_loop_body]
 def boolean.Made.vertex_loop.body
   (plan : boolean.Plan) (v : boolean.VKey) (k : Std.Usize) :
@@ -468,7 +399,7 @@ def boolean.Made.vertex_loop.body
     ok (done (plan.points, plan.vnames, plan.flush, plan.tols, plan.grown, v))
 
 /-- [forge_bool::boolean::{forge_bool::boolean::Made}::vertex]: loop 0:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2253:8-2259:9 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2283:8-2289:9 -/
 @[rust_loop]
 def boolean.Made.vertex_loop
   (plan : boolean.Plan) (v : boolean.VKey) (k : Std.Usize) :
@@ -482,7 +413,7 @@ def boolean.Made.vertex_loop
     k
 
 /-- [forge_bool::boolean::{forge_bool::boolean::Made}::vertex]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2250:4-2285:5 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2280:4-2315:5 -/
 def boolean.Made.vertex
   {S : Type _} (imprintSrcInst : imprint.Src S) (self : boolean.Made)
   (a : forge_topo.body.Body) (b : S) (plan : boolean.Plan) (v : boolean.VKey) :
@@ -537,7 +468,7 @@ def boolean.Made.vertex
     | some x => ok (x, self, a)
 
 /-- [forge_bool::boolean::apply::{impl core::ops::function::FnMut<(&'_0 (usize, bool),), bool> for forge_bool::boolean::apply::{closure#2}<'_0, '_1, S>}::call_mut]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2236:69-2236:99 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2221:69-2221:99 -/
 def
   boolean.apply.closure_2.Insts.CoreOpsFunctionFnMutTupleShared0PairUsizeBoolBool.call_mut
   {S : Type _} (imprintSrcInst : imprint.Src S) (c : boolean.apply.closure_2 S)
@@ -551,7 +482,7 @@ def
   ok (s.side = 1#usize, c)
 
 /-- [forge_bool::boolean::apply::{impl core::ops::function::FnOnce<(&'_0 (usize, bool),), bool> for forge_bool::boolean::apply::{closure#2}<'_0, '_1, S>}::call_once]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2236:69-2236:99 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2221:69-2221:99 -/
 def
   boolean.apply.closure_2.Insts.CoreOpsFunctionFnOnceTupleShared0PairUsizeBoolBool.call_once
   {S : Type _} (imprintSrcInst : imprint.Src S) (c : boolean.apply.closure_2 S)
@@ -564,7 +495,7 @@ def
   ok b
 
 /-- Trait implementation: [forge_bool::boolean::apply::{impl core::ops::function::FnOnce<(&'_0 (usize, bool),), bool> for forge_bool::boolean::apply::{closure#2}<'_0, '_1, S>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2236:69-2236:99 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2221:69-2221:99 -/
 @[reducible]
 def
   boolean.apply.closure_2.Insts.CoreOpsFunctionFnOnceTupleShared0PairUsizeBoolBool
@@ -576,7 +507,7 @@ def
 }
 
 /-- Trait implementation: [forge_bool::boolean::apply::{impl core::ops::function::FnMut<(&'_0 (usize, bool),), bool> for forge_bool::boolean::apply::{closure#2}<'_0, '_1, S>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2236:69-2236:99 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2221:69-2221:99 -/
 @[reducible]
 def
   boolean.apply.closure_2.Insts.CoreOpsFunctionFnMutTupleShared0PairUsizeBoolBool
@@ -591,7 +522,7 @@ def
 }
 
 /-- [forge_bool::boolean::apply::{impl core::ops::function::FnMut<(&'_0 forge_bool::boolean::Piece,), bool> for forge_bool::boolean::apply::{closure#1}<'_0, S>}::call_mut]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2236:29-2236:48 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2221:29-2221:48 -/
 def
   boolean.apply.closure_1.Insts.CoreOpsFunctionFnMutTupleShared0PieceBool.call_mut
   {S : Type _} (imprintSrcInst : imprint.Src S) (c : boolean.apply.closure_1 S)
@@ -602,7 +533,7 @@ def
   ok (b, ())
 
 /-- [forge_bool::boolean::apply::{impl core::ops::function::FnOnce<(&'_0 forge_bool::boolean::Piece,), bool> for forge_bool::boolean::apply::{closure#1}<'_0, S>}::call_once]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2236:29-2236:48 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2221:29-2221:48 -/
 def
   boolean.apply.closure_1.Insts.CoreOpsFunctionFnOnceTupleShared0PieceBool.call_once
   {S : Type _} (imprintSrcInst : imprint.Src S) (c : boolean.apply.closure_1 S)
@@ -615,7 +546,7 @@ def
   ok b
 
 /-- Trait implementation: [forge_bool::boolean::apply::{impl core::ops::function::FnOnce<(&'_0 forge_bool::boolean::Piece,), bool> for forge_bool::boolean::apply::{closure#1}<'_0, S>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2236:29-2236:48 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2221:29-2221:48 -/
 @[reducible]
 def boolean.apply.closure_1.Insts.CoreOpsFunctionFnOnceTupleShared0PieceBool {S
   : Type _} (imprintSrcInst : imprint.Src S) : core.ops.function.FnOnce
@@ -626,7 +557,7 @@ def boolean.apply.closure_1.Insts.CoreOpsFunctionFnOnceTupleShared0PieceBool {S
 }
 
 /-- Trait implementation: [forge_bool::boolean::apply::{impl core::ops::function::FnMut<(&'_0 forge_bool::boolean::Piece,), bool> for forge_bool::boolean::apply::{closure#1}<'_0, S>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2236:29-2236:48 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2221:29-2221:48 -/
 @[reducible]
 def boolean.apply.closure_1.Insts.CoreOpsFunctionFnMutTupleShared0PieceBool {S
   : Type _} (imprintSrcInst : imprint.Src S) : core.ops.function.FnMut
@@ -640,7 +571,7 @@ def boolean.apply.closure_1.Insts.CoreOpsFunctionFnMutTupleShared0PieceBool {S
 }
 
 /-- [forge_bool::boolean::apply::{impl core::ops::function::FnMut<(&'_0 forge_bool::boolean::Spec,), bool> for forge_bool::boolean::apply::{closure}<'_0, '_1, '_2, S>}::call_mut]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2152:47-2152:95 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2133:47-2133:95 -/
 def
   boolean.apply.closure.Insts.CoreOpsFunctionFnMutTupleShared0SpecBool.call_mut
   {S : Type _} (imprintSrcInst : imprint.Src S) (c : boolean.apply.closure S)
@@ -658,7 +589,7 @@ def
   else ok (false, c)
 
 /-- [forge_bool::boolean::apply::{impl core::ops::function::FnOnce<(&'_0 forge_bool::boolean::Spec,), bool> for forge_bool::boolean::apply::{closure}<'_0, '_1, '_2, S>}::call_once]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2152:47-2152:95 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2133:47-2133:95 -/
 def
   boolean.apply.closure.Insts.CoreOpsFunctionFnOnceTupleShared0SpecBool.call_once
   {S : Type _} (imprintSrcInst : imprint.Src S) (c : boolean.apply.closure S)
@@ -671,7 +602,7 @@ def
   ok b
 
 /-- Trait implementation: [forge_bool::boolean::apply::{impl core::ops::function::FnOnce<(&'_0 forge_bool::boolean::Spec,), bool> for forge_bool::boolean::apply::{closure}<'_0, '_1, '_2, S>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2152:47-2152:95 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2133:47-2133:95 -/
 @[reducible]
 def boolean.apply.closure.Insts.CoreOpsFunctionFnOnceTupleShared0SpecBool {S :
   Type _} (imprintSrcInst : imprint.Src S) : core.ops.function.FnOnce
@@ -682,7 +613,7 @@ def boolean.apply.closure.Insts.CoreOpsFunctionFnOnceTupleShared0SpecBool {S :
 }
 
 /-- Trait implementation: [forge_bool::boolean::apply::{impl core::ops::function::FnMut<(&'_0 forge_bool::boolean::Spec,), bool> for forge_bool::boolean::apply::{closure}<'_0, '_1, '_2, S>}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2152:47-2152:95 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2133:47-2133:95 -/
 @[reducible]
 def boolean.apply.closure.Insts.CoreOpsFunctionFnMutTupleShared0SpecBool {S :
   Type _} (imprintSrcInst : imprint.Src S) : core.ops.function.FnMut
@@ -780,118 +711,9 @@ def boolean.apply_loop1
     (iter, as_is)
 
 /-- [forge_bool::boolean::apply]: loop body 2:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2116:4-2120:5 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2118:4-2122:5 -/
 @[rust_loop_body]
 def boolean.apply_loop2.body
-  (as_is : alloc.vec.Vec Bool)
-  (iter : core.iter.adapters.enumerate.Enumerate (core.slice.iter.Iter
-  boolean.Spec)) (staying : alloc.vec.Vec forge_topo.body.FaceId) :
-  Result (ControlFlow ((core.iter.adapters.enumerate.Enumerate
-    (core.slice.iter.Iter boolean.Spec)) × (alloc.vec.Vec
-    forge_topo.body.FaceId)) (alloc.vec.Vec forge_topo.body.FaceId))
-  := do
-  let (o, iter1) ←
-    core.iter.adapters.enumerate.IteratorEnumerate.next
-      (core.iter.traits.iterator.IteratorSliceIter boolean.Spec) iter
-  match o with
-  | none => ok (done staying)
-  | some p =>
-    let (si, s) := p
-    let b ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) as_is si
-    if b
-    then
-      let staying1 ← alloc.vec.Vec.push staying s.from
-      ok (cont (iter1, staying1))
-    else ok (cont (iter1, staying))
-
-/-- [forge_bool::boolean::apply]: loop 2:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2116:4-2120:5 -/
-@[rust_loop]
-def boolean.apply_loop2
-  (iter : core.iter.adapters.enumerate.Enumerate (core.slice.iter.Iter
-  boolean.Spec)) (as_is : alloc.vec.Vec Bool)
-  (staying : alloc.vec.Vec forge_topo.body.FaceId) :
-  Result (alloc.vec.Vec forge_topo.body.FaceId)
-  := do
-  loop
-    (fun (iter1, staying1) => boolean.apply_loop2.body as_is iter1 staying1)
-    (iter, staying)
-
-/-- [forge_bool::boolean::apply]: loop body 3:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2121:4-2125:5 -/
-@[rust_loop_body]
-def boolean.apply_loop3.body
-  (specs : alloc.vec.Vec boolean.Spec)
-  (iter : core.slice.iter.Iter (Std.Usize × Bool))
-  (staying : alloc.vec.Vec forge_topo.body.FaceId) :
-  Result (ControlFlow ((core.slice.iter.Iter (Std.Usize × Bool)) ×
-    (alloc.vec.Vec forge_topo.body.FaceId)) (alloc.vec.Vec
-    forge_topo.body.FaceId))
-  := do
-  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
-  match o with
-  | none => ok (done staying)
-  | some p =>
-    let (si, flip) := p
-    let s ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice boolean.Spec)
-        specs si
-    if s.extend
-    then
-      if flip
-      then ok (cont (iter1, staying))
-      else
-        let staying1 ← alloc.vec.Vec.push staying s.from
-        ok (cont (iter1, staying1))
-    else ok (cont (iter1, staying))
-
-/-- [forge_bool::boolean::apply]: loop 3:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2121:4-2125:5 -/
-@[rust_loop]
-def boolean.apply_loop3
-  (iter : core.slice.iter.Iter (Std.Usize × Bool))
-  (specs : alloc.vec.Vec boolean.Spec)
-  (staying : alloc.vec.Vec forge_topo.body.FaceId) :
-  Result (alloc.vec.Vec forge_topo.body.FaceId)
-  := do
-  loop
-    (fun (iter1, staying1) => boolean.apply_loop3.body specs iter1 staying1)
-    (iter, staying)
-
-/-- [forge_bool::boolean::apply]: loop body 4:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2126:4-2128:5 -/
-@[rust_loop_body]
-def boolean.apply_loop4.body
-  (iter : core.slice.iter.Iter forge_topo.body.FaceId)
-  (staying : alloc.vec.Vec forge_topo.body.FaceId) :
-  Result (ControlFlow ((core.slice.iter.Iter forge_topo.body.FaceId) ×
-    (alloc.vec.Vec forge_topo.body.FaceId)) (alloc.vec.Vec
-    forge_topo.body.FaceId))
-  := do
-  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
-  match o with
-  | none => ok (done staying)
-  | some f =>
-    let staying1 ← alloc.vec.Vec.push staying f
-    ok (cont (iter1, staying1))
-
-/-- [forge_bool::boolean::apply]: loop 4:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2126:4-2128:5 -/
-@[rust_loop]
-def boolean.apply_loop4
-  (iter : core.slice.iter.Iter forge_topo.body.FaceId)
-  (staying : alloc.vec.Vec forge_topo.body.FaceId) :
-  Result (alloc.vec.Vec forge_topo.body.FaceId)
-  := do
-  loop
-    (fun (iter1, staying1) => boolean.apply_loop4.body iter1 staying1)
-    (iter, staying)
-
-/-- [forge_bool::boolean::apply]: loop body 5:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2131:4-2135:5 -/
-@[rust_loop_body]
-def boolean.apply_loop5.body
   (staying : alloc.vec.Vec forge_topo.body.FaceId)
   (iter : core.slice.iter.Iter forge_topo.body.FaceId)
   (a : forge_topo.body.Body) :
@@ -912,67 +734,22 @@ def boolean.apply_loop5.body
          ok (cont (iter1, a1))
     else ok (cont (iter1, a))
 
-/-- [forge_bool::boolean::apply]: loop 5:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2131:4-2135:5 -/
+/-- [forge_bool::boolean::apply]: loop 2:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2118:4-2122:5 -/
 @[rust_loop]
-def boolean.apply_loop5
+def boolean.apply_loop2
   (iter : core.slice.iter.Iter forge_topo.body.FaceId)
   (a : forge_topo.body.Body) (staying : alloc.vec.Vec forge_topo.body.FaceId) :
   Result forge_topo.body.Body
   := do
   loop
-    (fun (iter1, a1) => boolean.apply_loop5.body staying iter1 a1)
+    (fun (iter1, a1) => boolean.apply_loop2.body staying iter1 a1)
     (iter, a)
 
-/-- [forge_bool::boolean::apply]: loop body 6:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2139:4-2144:5 -/
+/-- [forge_bool::boolean::apply]: loop body 5:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2165:12-2186:13 -/
 @[rust_loop_body]
-def boolean.apply_loop6.body
-  (specs : alloc.vec.Vec boolean.Spec)
-  (iter : core.slice.iter.Iter (Std.Usize × Bool)) (a : forge_topo.body.Body)
-  (new_outer : alloc.vec.Vec Std.Usize) :
-  Result (ControlFlow ((core.slice.iter.Iter (Std.Usize × Bool)) ×
-    forge_topo.body.Body × (alloc.vec.Vec Std.Usize)) (forge_topo.body.Body ×
-    (alloc.vec.Vec Std.Usize)))
-  := do
-  let (o, iter1) ← core.slice.iter.IteratorSliceIter.next iter
-  match o with
-  | none => ok (done (a, new_outer))
-  | some p =>
-    let (si, flip) := p
-    let s ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice boolean.Spec)
-        specs si
-    if s.extend
-    then
-      if flip
-      then ok (cont (iter1, a, new_outer))
-      else
-        let b ← alloc.vec.Vec.is_empty s.remove
-        if b
-        then ok (cont (iter1, a, new_outer))
-        else
-          let (a1, new_outer1) ← boolean.drop_replaced a s si new_outer
-          ok (cont (iter1, a1, new_outer1))
-    else ok (cont (iter1, a, new_outer))
-
-/-- [forge_bool::boolean::apply]: loop 6:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2139:4-2144:5 -/
-@[rust_loop]
-def boolean.apply_loop6
-  (iter : core.slice.iter.Iter (Std.Usize × Bool)) (a : forge_topo.body.Body)
-  (specs : alloc.vec.Vec boolean.Spec) (new_outer : alloc.vec.Vec Std.Usize) :
-  Result (forge_topo.body.Body × (alloc.vec.Vec Std.Usize))
-  := do
-  loop
-    (fun (iter1, a1, new_outer1) => boolean.apply_loop6.body specs iter1 a1
-      new_outer1)
-    (iter, a, new_outer)
-
-/-- [forge_bool::boolean::apply]: loop body 9:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2184:12-2205:13 -/
-@[rust_loop_body]
-def boolean.apply_loop7_loop0_loop0.body
+def boolean.apply_loop3_loop0_loop0.body
   {S : Type _} (imprintSrcInst : imprint.Src S) (b : S)
   (v : alloc.vec.Vec boolean.Piece) (v1 : alloc.vec.Vec forge_topo.name.Name)
   (v2 : alloc.vec.Vec forge_topo.name.Name) (v3 : alloc.vec.Vec boolean.Spec)
@@ -1126,10 +903,10 @@ def boolean.apply_loop7_loop0_loop0.body
     let uses1 ← alloc.vec.Vec.push uses (e, fwd)
     ok (cont (iter2, a1, made1, emap1, uses1))
 
-/-- [forge_bool::boolean::apply]: loop 9:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2184:12-2205:13 -/
+/-- [forge_bool::boolean::apply]: loop 5:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2165:12-2186:13 -/
 @[rust_loop]
-def boolean.apply_loop7_loop0_loop0
+def boolean.apply_loop3_loop0_loop0
   {S : Type _} (imprintSrcInst : imprint.Src S)
   (iter : core.slice.iter.Iter (Std.Usize × Bool)) (a : forge_topo.body.Body)
   (b : S) (v : alloc.vec.Vec boolean.Piece)
@@ -1153,45 +930,60 @@ def boolean.apply_loop7_loop0_loop0
   := do
   loop
     (fun (iter1, a1, made1, emap1, uses1) =>
-      boolean.apply_loop7_loop0_loop0.body imprintSrcInst b v v1 v2 v3 v4 v5 v6
+      boolean.apply_loop3_loop0_loop0.body imprintSrcInst b v v1 v2 v3 v4 v5 v6
       v7 v8 v9 v10 v11 v12 v13 pieces iter1 a1 made1 emap1 uses1)
     (iter, a, made, emap, uses)
 
-/-- [forge_bool::boolean::apply]: loop body 10:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2209:16-2212:17 -/
+/-- [forge_bool::boolean::apply]: loop body 6:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2190:16-2195:17 -/
 @[rust_loop_body]
-def boolean.apply_loop7_loop0_loop1.body
-  (uses : alloc.vec.Vec (forge_topo.body.EdgeId × Bool))
-  (rev : alloc.vec.Vec (forge_topo.body.EdgeId × Bool)) (k : Std.Usize) :
+def boolean.apply_loop3_loop0_loop1.body
+  (n : Std.Usize) (uses : alloc.vec.Vec (forge_topo.body.EdgeId × Bool))
+  (i : Std.Usize) :
   Result (ControlFlow ((alloc.vec.Vec (forge_topo.body.EdgeId × Bool)) ×
     Std.Usize) (alloc.vec.Vec (forge_topo.body.EdgeId × Bool)))
   := do
-  if k > 0#usize
+  let i1 ← n / 2#usize
+  if i < i1
   then
-    let k1 ← k - 1#usize
+    let x ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+        (forge_topo.body.EdgeId × Bool)) uses i
+    let i2 ← n - 1#usize
+    let i3 ← i2 - i
     let (ei, b) ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
-        (forge_topo.body.EdgeId × Bool)) uses k1
-    let rev1 ← alloc.vec.Vec.push rev (ei, ¬ b)
-    ok (cont (rev1, k1))
-  else ok (done rev)
+        (forge_topo.body.EdgeId × Bool)) uses i3
+    let (_, index_mut_back) ←
+      alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+        (forge_topo.body.EdgeId × Bool)) uses i
+    let (ei1, b1) := x
+    let uses1 := index_mut_back (ei, ¬ b)
+    let i4 ← i2 - i
+    let (_, index_mut_back1) ←
+      alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+        (forge_topo.body.EdgeId × Bool)) uses1 i4
+    let i5 ← i + 1#usize
+    let uses2 := index_mut_back1 (ei1, ¬ b1)
+    ok (cont (uses2, i5))
+  else ok (done uses)
 
-/-- [forge_bool::boolean::apply]: loop 10:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2209:16-2212:17 -/
+/-- [forge_bool::boolean::apply]: loop 6:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2190:16-2195:17 -/
 @[rust_loop]
-def boolean.apply_loop7_loop0_loop1
-  (uses : alloc.vec.Vec (forge_topo.body.EdgeId × Bool))
-  (rev : alloc.vec.Vec (forge_topo.body.EdgeId × Bool)) (k : Std.Usize) :
+def boolean.apply_loop3_loop0_loop1
+  (uses : alloc.vec.Vec (forge_topo.body.EdgeId × Bool)) (n : Std.Usize)
+  (i : Std.Usize) :
   Result (alloc.vec.Vec (forge_topo.body.EdgeId × Bool))
   := do
   loop
-    (fun (rev1, k1) => boolean.apply_loop7_loop0_loop1.body uses rev1 k1)
-    (rev, k)
+    (fun (uses1, i1) => boolean.apply_loop3_loop0_loop1.body n uses1 i1)
+    (uses, i)
 
-/-- [forge_bool::boolean::apply]: loop body 8:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2182:8-2219:9 -/
+/-- [forge_bool::boolean::apply]: loop body 4:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2163:8-2204:9 -/
 @[rust_loop_body]
-def boolean.apply_loop7_loop0.body
+def boolean.apply_loop3_loop0.body
   {S : Type _} (imprintSrcInst : imprint.Src S) (b : S)
   (v : alloc.vec.Vec boolean.Piece) (v1 : alloc.vec.Vec forge_topo.name.Name)
   (v2 : alloc.vec.Vec forge_topo.name.Name) (v3 : alloc.vec.Vec boolean.Spec)
@@ -1224,16 +1016,27 @@ def boolean.apply_loop7_loop0.body
       SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
         alloc.alloc.Global lp
     let (a1, made1, emap1, uses1) ←
-      boolean.apply_loop7_loop0_loop0 imprintSrcInst iter2 a b v v1 v2 v3 v4 v5
+      boolean.apply_loop3_loop0_loop0 imprintSrcInst iter2 a b v v1 v2 v3 v4 v5
         v6 v7 v8 v9 v10 v11 v12 v13 pieces made emap uses
     if flip
     then
-      let i1 := alloc.vec.Vec.len uses1
-      let rev :=
-        alloc.vec.Vec.with_capacity (forge_topo.body.EdgeId × Bool) i1
-      let k := alloc.vec.Vec.len uses1
-      let rev1 ← boolean.apply_loop7_loop0_loop1 uses1 rev k
-      let s := alloc.vec.Vec.deref rev1
+      let n := alloc.vec.Vec.len uses1
+      let uses2 ← boolean.apply_loop3_loop0_loop1 uses1 n 0#usize
+      let i1 ← n % 2#usize
+      let uses3 ←
+        if i1 = 1#usize
+        then
+          do
+          let i2 ← n / 2#usize
+          let (_, b2) ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+              (forge_topo.body.EdgeId × Bool)) uses2 i2
+          let ((ei, _), index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              (forge_topo.body.EdgeId × Bool)) uses2 i2
+          ok (index_mut_back (ei, ¬ b2))
+        else ok uses2
+      let s := alloc.vec.Vec.deref uses3
       let (lp1, a2) ← forge_topo.body.Body.add_loop a1 face s
       if b1
       then
@@ -1255,10 +1058,10 @@ def boolean.apply_loop7_loop0.body
           ok (cont (iter1, a3, made1, emap1))
       else ok (cont (iter1, a2, made1, emap1))
 
-/-- [forge_bool::boolean::apply]: loop 8:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2182:8-2219:9 -/
+/-- [forge_bool::boolean::apply]: loop 4:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2163:8-2204:9 -/
 @[rust_loop]
-def boolean.apply_loop7_loop0
+def boolean.apply_loop3_loop0
   {S : Type _} (imprintSrcInst : imprint.Src S)
   (iter : core.slice.iter.Iter (alloc.vec.Vec (Std.Usize × Bool)))
   (a : forge_topo.body.Body) (b : S) (v : alloc.vec.Vec boolean.Piece)
@@ -1280,15 +1083,15 @@ def boolean.apply_loop7_loop0
     forge_topo.body.EdgeId)))
   := do
   loop
-    (fun (iter1, a1, made1, emap1) => boolean.apply_loop7_loop0.body
+    (fun (iter1, a1, made1, emap1) => boolean.apply_loop3_loop0.body
       imprintSrcInst b v v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 pieces flip
       b1 face iter1 a1 made1 emap1)
     (iter, a, made, emap)
 
-/-- [forge_bool::boolean::apply]: loop body 7:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2153:4-2225:5 -/
+/-- [forge_bool::boolean::apply]: loop body 3:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2134:4-2210:5 -/
 @[rust_loop_body]
-def boolean.apply_loop7.body
+def boolean.apply_loop3.body
   {S : Type _} (imprintSrcInst : imprint.Src S) (b : S)
   (v : alloc.vec.Vec boolean.Piece) (v1 : alloc.vec.Vec forge_topo.name.Name)
   (v2 : alloc.vec.Vec forge_topo.name.Name) (v3 : alloc.vec.Vec boolean.Spec)
@@ -1397,7 +1200,7 @@ def boolean.apply_loop7.body
         SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
           alloc.alloc.Global s.loops
       let (a3, made1, emap1) ←
-        boolean.apply_loop7_loop0 imprintSrcInst iter2 a2 b v v1 v2 v3 v4 v5 v6
+        boolean.apply_loop3_loop0 imprintSrcInst iter2 a2 b v v1 v2 v3 v4 v5 v6
           v7 v8 v9 v10 v11 v12 v13 pieces made emap flip s.extend face
       if flip
       then ok (cont (iter1, a3, made1, emap1))
@@ -1432,10 +1235,10 @@ def boolean.apply_loop7.body
           ok (cont (iter1, { a3 with faces := v14 }, made1, emap1))
         else ok (cont (iter1, a3, made1, emap1))
 
-/-- [forge_bool::boolean::apply]: loop 7:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2153:4-2225:5 -/
+/-- [forge_bool::boolean::apply]: loop 3:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2134:4-2210:5 -/
 @[rust_loop]
-def boolean.apply_loop7
+def boolean.apply_loop3
   {S : Type _} (imprintSrcInst : imprint.Src S)
   (iter : core.slice.iter.Iter (Std.Usize × Bool)) (a : forge_topo.body.Body)
   (b : S) (v : alloc.vec.Vec boolean.Piece)
@@ -1457,15 +1260,15 @@ def boolean.apply_loop7
   Result forge_topo.body.Body
   := do
   loop
-    (fun (iter1, a1, made1, emap1) => boolean.apply_loop7.body imprintSrcInst b
+    (fun (iter1, a1, made1, emap1) => boolean.apply_loop3.body imprintSrcInst b
       v v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 pieces specs as_is new_outer
       shell iter1 a1 made1 emap1)
     (iter, a, made, emap)
 
-/-- [forge_bool::boolean::apply]: loop body 11:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2226:4-2231:5 -/
+/-- [forge_bool::boolean::apply]: loop body 7:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2211:4-2216:5 -/
 @[rust_loop_body]
-def boolean.apply_loop8.body
+def boolean.apply_loop4.body
   (iter : core.slice.iter.Iter (boolean.VKey × F64))
   (a : forge_topo.body.Body) :
   Result (ControlFlow ((core.slice.iter.Iter (boolean.VKey × F64)) ×
@@ -1490,20 +1293,20 @@ def boolean.apply_loop8.body
       | _ => ok (cont (iter1, a))
     | boolean.VKey.New _ => ok (cont (iter1, a))
 
-/-- [forge_bool::boolean::apply]: loop 11:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2226:4-2231:5 -/
+/-- [forge_bool::boolean::apply]: loop 7:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2211:4-2216:5 -/
 @[rust_loop]
-def boolean.apply_loop8
+def boolean.apply_loop4
   (iter : core.slice.iter.Iter (boolean.VKey × F64))
   (a : forge_topo.body.Body) :
   Result forge_topo.body.Body
   := do
   loop
-    (fun (iter1, a1) => boolean.apply_loop8.body iter1 a1)
+    (fun (iter1, a1) => boolean.apply_loop4.body iter1 a1)
     (iter, a)
 
 /-- [forge_bool::boolean::apply]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2089:0-2240:1 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2089:0-2225:1 -/
 def boolean.apply
   {S : Type _} (imprintSrcInst : imprint.Src S) (a : forge_topo.body.Body)
   (b : S) (plan : boolean.Plan) :
@@ -1520,48 +1323,36 @@ def boolean.apply
       alloc.alloc.Global plan.kept
   let as_is1 ← boolean.apply_loop1 iter1 plan.specs as_is
   let s := alloc.vec.Vec.deref plan.specs
-  let i1 ← core.slice.Slice.iter s
-  let iter2 ←
-    core.iter.traits.iterator.Iterator.enumerate.trait_default
-      (core.iter.traits.iterator.IteratorSliceIter boolean.Spec) i1
-  let staying ←
-    boolean.apply_loop2 iter2 as_is1 (alloc.vec.Vec.new forge_topo.body.FaceId)
-  let iter3 ←
-    SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
-      alloc.alloc.Global plan.kept
-  let staying1 ← boolean.apply_loop3 iter3 plan.specs staying
-  let iter4 ←
-    SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
-      alloc.alloc.Global plan.untouched_kept
-  let staying2 ← boolean.apply_loop4 iter4 staying1
-  let (s1, deref_mut_back) ← lift (alloc.vec.Vec.deref_mut staying2)
-  let s2 ←
-    core.slice.Slice.sort_unstable forge_topo.body.FaceId.Insts.CoreCmpOrd s1
-  let staying3 := deref_mut_back s2
-  let staying4 ←
+  let s1 := alloc.vec.Vec.deref as_is1
+  let s2 := alloc.vec.Vec.deref plan.kept
+  let s3 := alloc.vec.Vec.deref plan.untouched_kept
+  let staying ← boolean.staying_faces s s1 s2 s3
+  let (s4, deref_mut_back) ← lift (alloc.vec.Vec.deref_mut staying)
+  let s5 ←
+    core.slice.Slice.sort_unstable forge_topo.body.FaceId.Insts.CoreCmpOrd s4
+  let staying1 := deref_mut_back s5
+  let staying2 ←
     alloc.vec.Vec.dedup alloc.alloc.Global
-      forge_topo.body.FaceId.Insts.CoreCmpPartialEqFaceId staying3
-  let iter5 ←
+      forge_topo.body.FaceId.Insts.CoreCmpPartialEqFaceId staying1
+  let iter2 ←
     SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
       alloc.alloc.Global plan.involved
-  let a2 ← boolean.apply_loop5 iter5 a1 staying4
-  let iter6 ←
-    SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
-      alloc.alloc.Global plan.kept
-  let (a3, new_outer) ←
-    boolean.apply_loop6 iter6 a2 plan.specs (alloc.vec.Vec.new Std.Usize)
-  let i2 ← imprintSrcInst.vertex_count b
+  let a2 ← boolean.apply_loop2 iter2 a1 staying2
+  let s6 := alloc.vec.Vec.deref plan.specs
+  let s7 := alloc.vec.Vec.deref plan.kept
+  let (new_outer, a3) ← boolean.drop_replaced_loops a2 s6 s7
+  let i1 ← imprintSrcInst.vertex_count b
   let v ←
     alloc.vec.from_elem (core.option.Option.Insts.CoreCloneClone
-      forge_topo.body.VertexId.Insts.CoreCloneClone) none i2
-  let i3 := alloc.vec.Vec.len plan.points
+      forge_topo.body.VertexId.Insts.CoreCloneClone) none i1
+  let i2 := alloc.vec.Vec.len plan.points
   let v1 ←
     alloc.vec.from_elem (core.option.Option.Insts.CoreCloneClone
-      forge_topo.body.VertexId.Insts.CoreCloneClone) none i3
-  let i4 := alloc.vec.Vec.len plan.pieces
+      forge_topo.body.VertexId.Insts.CoreCloneClone) none i2
+  let i3 := alloc.vec.Vec.len plan.pieces
   let emap ←
     alloc.vec.from_elem (core.option.Option.Insts.CoreCloneClone
-      forge_topo.body.EdgeId.Insts.CoreCloneClone) none i4
+      forge_topo.body.EdgeId.Insts.CoreCloneClone) none i3
   let b1 ← alloc.vec.Vec.is_empty a3.shells
   let (a4, shell) ←
     if b1
@@ -1570,56 +1361,56 @@ def boolean.apply
       let (shell1, a5) ← forge_topo.body.Body.add_shell a3
       ok (a5, shell1)
     else ok (a3, 0#u32)
-  let i5 := alloc.vec.Vec.len a4.shells
+  let i4 := alloc.vec.Vec.len a4.shells
   let other_shell ←
-    if i5 > 1#usize
+    if i4 > 1#usize
     then
       do
-      let s3 := alloc.vec.Vec.deref plan.specs
-      let i6 ← core.slice.Slice.iter s3
+      let s8 := alloc.vec.Vec.deref plan.specs
+      let i5 ← core.slice.Slice.iter s8
       let (other_shell1, _) ←
         core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.any
           (boolean.apply.closure.Insts.CoreOpsFunctionFnMutTupleShared0SpecBool
-          imprintSrcInst) i6 (a4, shell)
+          imprintSrcInst) i5 (a4, shell)
       ok other_shell1
     else ok false
-  let iter7 ←
+  let iter3 ←
     SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
       alloc.alloc.Global plan.kept
   let a5 ←
-    boolean.apply_loop7 imprintSrcInst iter7 a4 b plan.pieces plan.split
+    boolean.apply_loop3 imprintSrcInst iter3 a4 b plan.pieces plan.split
       plan.survivors plan.specs plan.kept plan.points plan.vnames plan.flush
       plan.tols plan.grown plan.alias plan.wholes plan.involved
       plan.untouched_kept plan.pieces plan.specs as_is1 new_outer
-      { b_vertex := v, new_vertex := v1 } emap shell
-  let iter8 ←
+      { new_vertex := v1, b_vertex := v } emap shell
+  let iter4 ←
     SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter
       alloc.alloc.Global plan.grown
-  let a6 ← boolean.apply_loop8 iter8 a5
+  let a6 ← boolean.apply_loop4 iter4 a5
   if other_shell
   then forge_topo.body.Body.rebuild_shells a6
   else
-    let s3 := alloc.vec.Vec.deref plan.pieces
-    let i6 ← core.slice.Slice.iter s3
+    let s8 := alloc.vec.Vec.deref plan.pieces
+    let i5 ← core.slice.Slice.iter s8
     let (b2, _) ←
       core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.all
         (boolean.apply.closure_1.Insts.CoreOpsFunctionFnMutTupleShared0PieceBool
-        imprintSrcInst) i6 ()
+        imprintSrcInst) i5 ()
     if b2
     then
-      let s4 := alloc.vec.Vec.deref plan.kept
-      let i7 ← core.slice.Slice.iter s4
+      let s9 := alloc.vec.Vec.deref plan.kept
+      let i6 ← core.slice.Slice.iter s9
       let (b3, _) ←
         core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.any
           (boolean.apply.closure_2.Insts.CoreOpsFunctionFnMutTupleShared0PairUsizeBoolBool
-          imprintSrcInst) i7 plan.specs
+          imprintSrcInst) i6 plan.specs
       if b3
       then forge_topo.body.Body.rebuild_shells a6
       else ok a6
     else ok a6
 
 /-- [forge_bool::boolean::keep_of]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 6921:0-6929:1 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 6934:0-6942:1 -/
 def boolean.keep_of
   (op : boolean.Op) (side : Std.Usize) (c : boolean.Class) :
   Result (Option Bool)

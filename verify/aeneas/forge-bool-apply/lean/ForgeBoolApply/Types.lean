@@ -134,43 +134,43 @@ structure imprint.Src (Self : Type _) where
     forge_topo.body.Body)
 
 /-- [forge_bool::boolean::grown_tol::{closure#1}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2312:48-2312:65 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2325:48-2325:65 -/
 @[reducible]
 def boolean.grown_tol.closure_1 := Unit
 
 /-- [forge_bool::boolean::grown_tol::{closure}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2312:24-2312:36 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2325:24-2325:36 -/
 @[reducible]
 def boolean.grown_tol.closure := boolean.VKey
 
 /-- [forge_bool::boolean::renamed::{closure#1}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2290:54-2290:68 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2320:54-2320:68 -/
 @[reducible]
 def boolean.renamed.closure_1 := Slice (boolean.VKey × forge_topo.name.Name)
 
 /-- [forge_bool::boolean::renamed::{closure}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2290:35-2290:42 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2320:35-2320:42 -/
 @[reducible]
 def boolean.renamed.closure := Unit
 
 /-- [forge_bool::boolean::Made]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2243:0-2246:1 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2272:0-2276:1 -/
 structure boolean.Made where
-  b_vertex : alloc.vec.Vec (Option forge_topo.body.VertexId)
   new_vertex : alloc.vec.Vec (Option forge_topo.body.VertexId)
+  b_vertex : alloc.vec.Vec (Option forge_topo.body.VertexId)
 
 /-- [forge_bool::boolean::apply::{closure#2}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2236:69-2236:99 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2221:69-2221:99 -/
 @[reducible]
 def boolean.apply.closure_2 (S : Type _) := alloc.vec.Vec boolean.Spec
 
 /-- [forge_bool::boolean::apply::{closure#1}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2236:29-2236:48 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2221:29-2221:48 -/
 @[reducible]
 def boolean.apply.closure_1 (S : Type _) := Unit
 
 /-- [forge_bool::boolean::apply::{closure}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2152:47-2152:95 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2133:47-2133:95 -/
 def boolean.apply.closure (S : Type _) :=
   forge_topo.body.Body × forge_topo.body.ShellId
 

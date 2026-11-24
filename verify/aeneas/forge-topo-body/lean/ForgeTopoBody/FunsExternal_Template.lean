@@ -93,6 +93,16 @@ axiom alloc.vec.Vec.retain
   Bool) :
   alloc.vec.Vec T → F → Result (alloc.vec.Vec T)
 
+/-- [alloc::vec::{alloc::vec::Vec<T>}::resize_with]:
+    Source: '/rustc/library/alloc/src/vec/mod.rs', lines 3255:4-3257:24
+    Name pattern: [alloc::vec::{alloc::vec::Vec<@T>}::resize_with]
+    Visibility: public -/
+@[rust_fun "alloc::vec::{alloc::vec::Vec<@T>}::resize_with"]
+axiom alloc.vec.Vec.resize_with
+  {T : Type _} (A : Type _) {F : Type _} (coreopsfunctionFnMutFTupleTInst :
+  core.ops.function.FnMut F Unit T) :
+  alloc.vec.Vec T → Std.Usize → F → Result (alloc.vec.Vec T)
+
 /-- [forge_math::tol::LINEAR]
     Source: 'kernel/forge-math/src/tol.rs', lines 12:0-12:21
     Name pattern: [forge_math::tol::LINEAR]
