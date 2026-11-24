@@ -55,6 +55,7 @@ pub mod tightbox;
 pub mod undo;
 pub mod units;
 pub mod urdf;
+pub mod urdf_import;
 pub mod uses;
 pub mod validity;
 pub mod values;

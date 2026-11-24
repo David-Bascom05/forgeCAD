@@ -136,8 +136,15 @@ solved anchor apart from its URDF placement so a frozen joint at another value m
 rigidly; model overrides `link`/`merge`/`drop`/`frame`/`visual`/`collision`/`collisions`/
 `inertial`/`joint`/`transmission`/`actuation`; convex hulls; conflicts with keep/reset fixes;
 every override listed with its linked value in the reply), `forgecad build|export ROBOT.fg`.
-Units: mm, angles as written (bare = rad), kg, kg mm². Not yet: `source(none)` and `import`
-(phase 2b), `decimate(n)`, edit ops for robot statements (with the editor).
+Units: mm, angles as written (bare = rad), kg, kg mm².
+Built (phase 2b): unlinked robots (`source(none)`; `NAME = link(mass:, com:, inertia:)`,
+`NAME = joint(parent:, child:, type:, at:, axis:, limit:, effort:, velocity:, damping:,
+friction:, mimic: (J, multiplier, offset))`, checked a tree with one root; point masses allowed,
+impossible inertias refused), `mesh(file, scale:)` (packaged once when a readable STL/OBJ beside
+the document, else referenced as written, said), visual `material:`/`colour:`, and
+`forgecad import ROBOT.urdf [-o DIR]` (`forge_lang::urdf_import`: its own XML reader; inertials
+turned from their rpy into link axes; what the document cannot carry listed as `# not imported`).
+Not yet: `decimate(n)`, edit ops for robot statements (with the editor).
 
 ## 8. Order
 1. Exporter on main (this branch; merge train 3).

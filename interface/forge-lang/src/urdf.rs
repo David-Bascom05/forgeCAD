@@ -801,7 +801,13 @@ struct Wl {
 /// What a visual or collision element is (mm).
 #[derive(Clone, Debug, PartialEq)]
 enum Geo {
-    Mesh(String),
+    /// A mesh file, URDF's scale (its units to metres), and whether it is in the package
+    /// (`meshes/..`) or a reference written as it is (`package://..`, a file not read).
+    Mesh {
+        file: String,
+        scale: [f64; 3],
+        packaged: bool,
+    },
     Box([f64; 3]),
     Cylinder {
         r: f64,
@@ -935,25 +941,50 @@ pub fn export_robot(
             e.text()
         )));
     }
-    let robot = ident(name);
-    let mut ex = Exported {
-        name: robot.clone(),
-        urdf: String::new(),
-        meshes: vec![],
-        zip: vec![],
-        links: vec![],
-        joints: vec![],
-        cut: vec![],
-        notes: vec![],
-        warnings: vec![],
-        residual: 0.0,
-        watertight: true,
-        overrides: vec![],
-    };
-    let mut model = match &run.asm {
+    let mut ex = Exported::new(name);
+    let model = match &run.asm {
         Some(asm) => assembly(run, asm, o, &mut ex)?,
         None => part(run, name, dir, o, &mut ex)?,
     };
+    complete(model, o, doc, ex)
+}
+
+/// An unlinked robot document (`source(none)`): its own links and joints, then its overrides.
+pub fn export_unlinked(name: &str, o: &Options, doc: &crate::robot::Robot) -> Result<Exported, UrdfError> {
+    let mut o = o.clone();
+    doc.shape(&mut o);
+    let mut ex = Exported::new(name);
+    let model = unlinked(doc, &mut o, &mut ex)?;
+    complete(model, &o, Some(doc), ex)
+}
+
+impl Exported {
+    fn new(name: &str) -> Exported {
+        Exported {
+            name: ident(name),
+            urdf: String::new(),
+            meshes: vec![],
+            zip: vec![],
+            links: vec![],
+            joints: vec![],
+            cut: vec![],
+            notes: vec![],
+            warnings: vec![],
+            residual: 0.0,
+            watertight: true,
+            overrides: vec![],
+        }
+    }
+}
+
+/// The model with the document's overrides, made whole and written.
+fn complete(
+    mut model: Model,
+    o: &Options,
+    doc: Option<&crate::robot::Robot>,
+    mut ex: Exported,
+) -> Result<Exported, UrdfError> {
+    let robot = ex.name.clone();
     let mut o = o.clone();
     if let Some(r) = doc {
         apply(&mut model, r, &mut o, &mut ex)?;
@@ -1074,7 +1105,11 @@ fn part(
     let v = Visual {
         name: ident(name),
         body: name.to_string(),
-        geo: Geo::Mesh(mesh_name.clone()),
+        geo: Geo::Mesh {
+            file: mesh_name.clone(),
+            scale: [0.001; 3],
+            packaged: true,
+        },
         at: Frame::WORLD,
         material,
     };
@@ -1439,7 +1474,11 @@ fn assembly(run: &Run, asm: &crate::asm::AsmOut, o: &Options, ex: &mut Exported)
             visuals[g].push(Visual {
                 name: vnames.take(path),
                 body: kin.bodies[*b].name.clone(),
-                geo: Geo::Mesh(file),
+                geo: Geo::Mesh {
+                    file,
+                    scale: [0.001; 3],
+                    packaged: true,
+                },
                 at,
                 material,
             });
@@ -1822,9 +1861,18 @@ fn write(
                 let _ = writeln!(s, "    <{tag} name=\"{}\">", attr(&v.name));
                 let _ = writeln!(s, "      {}", origin(&v.at));
                 let g = match &v.geo {
-                    Geo::Mesh(m) => format!(
-                        "<mesh filename=\"{}\" scale=\"0.001 0.001 0.001\"/>",
-                        attr(&mesh_uri(o, m))
+                    Geo::Mesh {
+                        file,
+                        scale,
+                        packaged,
+                    } => format!(
+                        "<mesh filename=\"{}\" scale=\"{}\"/>",
+                        attr(&if *packaged {
+                            mesh_uri(o, file)
+                        } else {
+                            file.clone()
+                        }),
+                        nums(scale)
                     ),
                     Geo::Box(b) => format!("<box size=\"{}\"/>", nums(&b.map(|x| x / 1000.0))),
                     Geo::Cylinder { r, len } => format!(
@@ -2221,6 +2269,8 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
     for (n, _) in &ex.meshes {
         mnames.take(n);
     }
+    // each mesh file packaged once, however many visuals use it
+    let mut packaged: BTreeMap<String, String> = BTreeMap::new();
     for g in &r.geometry {
         let k = link_of(m, &g.link)?;
         let lname = m.links[k].name.clone();
@@ -2245,19 +2295,68 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
                 ]
             }
             GeoSpec::Hull => vec![base(Geo::Hull, Frame::WORLD)],
-            GeoSpec::Mesh { file, bytes, at } => {
-                let stem = Path::new(file)
-                    .file_stem()
-                    .map_or_else(|| "mesh".into(), |s| s.to_string_lossy().into_owned());
-                let f = format!("meshes/{}.stl", mnames.take(&stem));
-                let (objects, _) = forge_mesh::read_stl(bytes)
-                    .map_err(|e| UrdfError::Mesh(format!("{file}: not an STL: {e:?}")))?;
-                m.points.insert(
-                    f.clone(),
-                    objects.iter().flat_map(|o| o.positions.iter().copied()).collect(),
-                );
-                ex.meshes.push((f.clone(), bytes.clone()));
-                vec![base(Geo::Mesh(f), *at)]
+            GeoSpec::Mesh {
+                file,
+                bytes,
+                at,
+                scale,
+            } => {
+                let p = Path::new(file);
+                let ext = p
+                    .extension()
+                    .map_or_else(String::new, |x| x.to_string_lossy().to_ascii_lowercase());
+                match bytes {
+                    Some(_) if packaged.contains_key(file) => vec![base(
+                        Geo::Mesh {
+                            file: packaged[file].clone(),
+                            scale: *scale,
+                            packaged: true,
+                        },
+                        *at,
+                    )],
+                    Some(bytes) if ext == "stl" || ext == "obj" => {
+                        let stem = p
+                            .file_stem()
+                            .map_or_else(|| "mesh".into(), |s| s.to_string_lossy().into_owned());
+                        let f = format!("meshes/{}.{ext}", mnames.take(&stem));
+                        let objects = if ext == "stl" {
+                            forge_mesh::read_stl(bytes)
+                                .map_err(|e| UrdfError::Mesh(format!("{file}: not an STL: {e:?}")))?
+                                .0
+                        } else {
+                            let text = String::from_utf8_lossy(bytes);
+                            forge_mesh::read_obj(&text)
+                                .map_err(|e| UrdfError::Mesh(format!("{file}: not an OBJ: {e:?}")))?
+                        };
+                        m.points.insert(
+                            f.clone(),
+                            objects.iter().flat_map(|o| o.positions.iter().copied()).collect(),
+                        );
+                        ex.meshes.push((f.clone(), bytes.clone()));
+                        packaged.insert(file.clone(), f.clone());
+                        vec![base(
+                            Geo::Mesh {
+                                file: f,
+                                scale: *scale,
+                                packaged: true,
+                            },
+                            *at,
+                        )]
+                    }
+                    _ => {
+                        ex.warnings.push(format!(
+                            "mesh {file} is referenced as written, not packaged (not a readable STL or OBJ)"
+                        ));
+                        vec![base(
+                            Geo::Mesh {
+                                file: file.clone(),
+                                scale: *scale,
+                                packaged: false,
+                            },
+                            *at,
+                        )]
+                    }
+                }
             }
         };
         let l = &mut m.links[k];
@@ -2270,6 +2369,11 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
             let material = list.iter().find_map(|v| v.material.clone());
             list.clear();
             if !g.collision {
+                let material = g
+                    .material
+                    .as_ref()
+                    .map(|(n, c)| (n.clone(), c.map(|x| (x.clamp(0.0, 1.0) * 255.0).round() as u8)))
+                    .or(material);
                 list.extend(new.into_iter().map(|v| Visual {
                     material: material.clone(),
                     ..v
@@ -2277,7 +2381,14 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
                 continue;
             }
         }
-        list.extend(new);
+        let material = g
+            .material
+            .as_ref()
+            .map(|(n, c)| (n.clone(), c.map(|x| (x.clamp(0.0, 1.0) * 255.0).round() as u8)));
+        list.extend(new.into_iter().map(|v| Visual {
+            material: if g.collision { None } else { material.clone() },
+            ..v
+        }));
         if g.collision {
             explicit_collision.insert(lname);
         }
@@ -2288,7 +2399,7 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
             .iter_mut()
             .filter(|l| !explicit_collision.contains(&l.name))
         {
-            if l.visuals.iter().any(|v| matches!(v.geo, Geo::Mesh(_))) && !replaced_any(&l.collisions) {
+            if l.visuals.iter().any(|v| matches!(v.geo, Geo::Mesh { .. })) && !replaced_any(&l.collisions) {
                 l.collisions = vec![Visual {
                     name: format!("{}_hull", l.name),
                     body: String::new(),
@@ -2540,6 +2651,188 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
     Ok(())
 }
 
+/// An unlinked robot's model from its own links and joints: one root, every link reached, no
+/// link a child twice. Positions are 0 (there is no solved pose).
+fn unlinked(r: &Robot, o: &mut Options, ex: &mut Exported) -> Result<Model, UrdfError> {
+    let at = |line: usize, m: String| UrdfError::Robot(format!("line {line}: {m}"));
+    if r.link_defs.is_empty() {
+        return Err(UrdfError::Robot(
+            "an unlinked robot (source(none)) defines its links: NAME = link(mass: .., com: .., inertia: ..)"
+                .into(),
+        ));
+    }
+    let mut links = vec![];
+    let mut names = BTreeSet::new();
+    for d in &r.link_defs {
+        let n = ident(&d.name);
+        if !names.insert(n.clone()) {
+            return Err(at(d.line, format!("link name {n} is taken")));
+        }
+        let inertial = match d.mass {
+            None => None,
+            Some(mass) => {
+                let v = d.inertia;
+                let i =
+                    [[v[0], v[1], v[2]], [v[1], v[3], v[4]], [v[2], v[4], v[5]]].map(|r| r.map(|x| x / 1e6));
+                if mass.is_nan() || mass <= 0.0 {
+                    return Err(at(d.line, format!("{n}: mass {} is not positive", num(mass))));
+                }
+                // a defined link may be a point mass (zero inertia), never an impossible one
+                let (p, _) = forge_topo::mass::eigen(i);
+                let tol = 1e-12 * p[2].abs().max(1e-300);
+                if p[0] < -tol || p[0] + p[1] < p[2] - tol {
+                    return Err(at(d.line, format!("{n}: the inertia is not one a body can have")));
+                }
+                Some(Inertial {
+                    mass,
+                    com: d.com.map(|x| x / 1000.0),
+                    inertia: i,
+                    err: None,
+                })
+            }
+        };
+        links.push(Wl {
+            name: n,
+            bodies: vec![],
+            visuals: vec![],
+            collisions: vec![],
+            pieces: vec![],
+            inertial,
+            inertial_set: true,
+            dummy: false,
+        });
+    }
+    let link = |t: &Target, line: usize| -> Result<String, UrdfError> {
+        match t {
+            Target::Name(n) if names.contains(&ident(n)) => Ok(ident(n)),
+            Target::Name(n) => Err(at(line, format!("no link {n}"))),
+            Target::Source(x) => Err(at(line, format!("src.{x}: an unlinked robot has no source"))),
+        }
+    };
+    let mut joints: Vec<Wj> = vec![];
+    let mut units = vec![];
+    for d in &r.joint_defs {
+        let n = ident(&d.name);
+        if joints.iter().any(|j| j.name == n) {
+            return Err(at(d.line, format!("joint name {n} is taken")));
+        }
+        let kind: &'static str = match d.kind.as_str() {
+            "revolute" => "revolute",
+            "continuous" => "continuous",
+            "prismatic" => "prismatic",
+            "fixed" => "fixed",
+            "floating" => "floating",
+            "planar" => "planar",
+            other => return Err(at(d.line, format!("type {other}"))),
+        };
+        let unit = if kind == "prismatic" { 1e-3 } else { 1.0 };
+        let axis = match kind {
+            "fixed" | "floating" => None,
+            // URDF's default axis
+            _ => {
+                let a = d.axis.unwrap_or([1.0, 0.0, 0.0]);
+                let l = (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt();
+                if l.is_nan() || l <= 0.0 {
+                    return Err(at(d.line, format!("{n}: axis (0, 0, 0)")));
+                }
+                Some(a.map(|x| x / l))
+            }
+        };
+        let limit = d.limit.map(|(a, b)| (a * unit, b * unit));
+        if matches!(kind, "revolute" | "prismatic") && limit.is_none() {
+            return Err(at(d.line, format!("{n}: a {kind} joint needs a limit")));
+        }
+        if let Some(e) = d.effort {
+            o.effort_of.insert(n.clone(), e);
+        }
+        if let Some(v) = d.velocity {
+            o.velocity_of.insert(n.clone(), v);
+        }
+        joints.push(Wj {
+            name: n.clone(),
+            kind,
+            of: n,
+            parent: link(&d.parent, d.line)?,
+            child: link(&d.child, d.line)?,
+            origin: d.at,
+            axis,
+            limit: if kind == "continuous" { None } else { limit },
+            position: match kind {
+                "fixed" | "floating" => vec![],
+                "planar" => vec![0.0; 3],
+                _ => vec![0.0],
+            },
+            mimic: None,
+            dynamics: (d.damping.is_some() || d.friction.is_some())
+                .then(|| (d.damping.unwrap_or(0.0), d.friction.unwrap_or(0.0))),
+        });
+        units.push(unit);
+    }
+    for (k, d) in r.joint_defs.iter().enumerate() {
+        let Some((t, mult, off)) = &d.mimic else { continue };
+        let Target::Name(leader) = t else {
+            return Err(at(d.line, "mimic: a joint of this robot".into()));
+        };
+        let l = joints
+            .iter()
+            .position(|j| j.name == ident(leader))
+            .ok_or_else(|| at(d.line, format!("mimic: no joint {leader}")))?;
+        let (fu, lu) = (units[k], units[l]);
+        joints[k].mimic = Some((joints[l].name.clone(), mult * fu / lu, off * fu));
+    }
+    // a tree: each link a child once, one root, every link reached from it
+    let mut parent_of: BTreeMap<&str, &str> = BTreeMap::new();
+    for j in &joints {
+        if parent_of.insert(&j.child, &j.name).is_some() {
+            return Err(UrdfError::Robot(format!(
+                "link {} is the child of two joints",
+                j.child
+            )));
+        }
+    }
+    let roots: Vec<&str> = links
+        .iter()
+        .map(|l| l.name.as_str())
+        .filter(|n| !parent_of.contains_key(n))
+        .collect();
+    let [root] = roots.as_slice() else {
+        return Err(UrdfError::Robot(format!(
+            "an unlinked robot has one root link, not {} ({})",
+            roots.len(),
+            roots.join(" ")
+        )));
+    };
+    let mut reached = BTreeSet::from([root.to_string()]);
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for j in &joints {
+            if reached.contains(&j.parent) && reached.insert(j.child.clone()) {
+                grew = true;
+            }
+        }
+    }
+    if reached.len() != links.len() {
+        let lost: Vec<&str> = links
+            .iter()
+            .map(|l| l.name.as_str())
+            .filter(|n| !reached.contains(*n))
+            .collect();
+        return Err(UrdfError::Robot(format!(
+            "links {} are not reached from the root {root} (a loop)",
+            lost.join(" ")
+        )));
+    }
+    let _ = ex;
+    Ok(Model {
+        root: root.to_string(),
+        links,
+        joints,
+        points: BTreeMap::new(),
+        transmissions: vec![],
+    })
+}
+
 fn replaced_any(c: &[Visual]) -> bool {
     c.iter().any(|v| v.body.is_empty())
 }
@@ -2573,10 +2866,14 @@ fn finish(m: &mut Model, ex: &mut Exported) -> Result<(), UrdfError> {
         }
         let mut pts = vec![];
         for v in &l.visuals {
-            if let Geo::Mesh(f) = &v.geo
-                && let Some(p) = m.points.get(f)
+            if let Geo::Mesh { file, scale, .. } = &v.geo
+                && let Some(p) = m.points.get(file)
             {
-                pts.extend(p.iter().map(|x| v.at.point_to_world(*x)));
+                // the file's units to mm
+                let k = scale.map(|x| x * 1000.0);
+                pts.extend(p.iter().map(|x| {
+                    v.at.point_to_world(Point3::new(x.x * k[0], x.y * k[1], x.z * k[2]))
+                }));
             }
         }
         let (positions, triangles) = hull(&pts).ok_or_else(|| {
@@ -2597,7 +2894,11 @@ fn finish(m: &mut Model, ex: &mut Exported) -> Result<(), UrdfError> {
         ex.meshes.push((file.clone(), bytes));
         for c in &mut l.collisions {
             if c.geo == Geo::Hull {
-                c.geo = Geo::Mesh(file.clone());
+                c.geo = Geo::Mesh {
+                    file: file.clone(),
+                    scale: [0.001; 3],
+                    packaged: true,
+                };
                 c.at = Frame::WORLD;
             }
         }

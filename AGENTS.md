@@ -69,7 +69,8 @@ export F urdf effort [J] N velocity [J] V [travel MM] [cut J].. [-o DIR|F.zip]
                             at their values; refused, with fixes: a closed loop (cut J), no
                             effort/velocity (or --placeholder-limits); research/export/urdf.md
                             a `robot` document (`src = source("arm.fg")` + overrides) builds and
-                            exports the same way; research/export/urdf-editor.md
+                            exports the same way (`forgecad import X.urdf` makes an unlinked one);
+                            research/export/urdf-editor.md
 help forge
 ```
 SEL: `faces|edges|verts`, then filters: plane cyl cone .. | line circle | convex concave |

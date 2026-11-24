@@ -183,11 +183,16 @@ pub fn frame_m4(f: &Frame) -> M4 {
 
 /// Every link's world placement at the export's positions.
 pub fn forward(robot: &El, e: &Exported) -> BTreeMap<String, M4> {
-    let pos: BTreeMap<&str, &[f64]> = e
+    let pos: BTreeMap<String, Vec<f64>> = e
         .joints
         .iter()
-        .map(|j| (j.name.as_str(), &j.position[..]))
+        .map(|j| (j.name.clone(), j.position.clone()))
         .collect();
+    forward_at(robot, &pos)
+}
+
+/// Every link's world placement with these joint positions (URDF units; a joint not given: 0).
+pub fn forward_at(robot: &El, pos: &BTreeMap<String, Vec<f64>>) -> BTreeMap<String, M4> {
     let joints: Vec<&El> = robot.all("joint").collect();
     let children: Vec<&str> = joints
         .iter()
@@ -208,7 +213,8 @@ pub fn forward(robot: &El, e: &Exported) -> BTreeMap<String, M4> {
             if world.contains_key(c) || !world.contains_key(p) {
                 continue;
             }
-            let q = pos.get(j.attr("name")).copied().unwrap_or(&[]);
+            let q: Vec<f64> = pos.get(j.attr("name")).cloned().unwrap_or_else(|| vec![0.0; 3]);
+            let q = if q.is_empty() { vec![0.0; 3] } else { q };
             let axis = j.kid("axis").map_or([1.0, 0.0, 0.0], |a| {
                 let v = floats(a.attr("xyz"));
                 [v[0], v[1], v[2]]

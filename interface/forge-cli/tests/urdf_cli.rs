@@ -92,3 +92,45 @@ fn a_robot_document_builds_and_exports() {
     assert!(urdf.contains("<link name=\"tool0\">"));
     assert!(out.join("meshes/upper_hull.stl").is_file());
 }
+
+#[test]
+fn a_urdf_imports_as_a_robot_document_that_builds_and_exports() {
+    let d = scratch("import");
+    let out = d.join("arm");
+    let arm = repo("examples/robot/arm2.fg");
+    let (ok, text) = forgecad(&[
+        "export",
+        arm.to_str().unwrap(),
+        "urdf",
+        "effort",
+        "5",
+        "velocity",
+        "1",
+        "-o",
+        out.to_str().unwrap(),
+    ]);
+    assert!(ok, "{text}");
+    let doc_dir = d.join("doc");
+    let (ok, text) = forgecad(&[
+        "import",
+        out.join("arm2.urdf").to_str().unwrap(),
+        "-o",
+        doc_dir.to_str().unwrap(),
+    ]);
+    assert!(ok, "{text}");
+    let doc = doc_dir.join("arm2_robot.fg");
+    let src = std::fs::read_to_string(&doc).unwrap();
+    assert!(src.starts_with("# Imported from URDF robot arm2"), "{src}");
+    let (ok, text) = forgecad(&["build", doc.to_str().unwrap()]);
+    assert!(ok, "{text}");
+    let again = d.join("again");
+    let (ok, text) = forgecad(&[
+        "export",
+        doc.to_str().unwrap(),
+        "urdf",
+        "-o",
+        again.to_str().unwrap(),
+    ]);
+    assert!(ok, "{text}");
+    assert!(again.join("arm2_robot.urdf").is_file());
+}

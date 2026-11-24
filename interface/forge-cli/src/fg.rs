@@ -887,9 +887,7 @@ impl Session {
                 }
             };
             let Some(sp) = r.source_path.clone() else {
-                return Ok(Err(urdf::UrdfError::Robot(
-                    "source(none): an unlinked robot comes with import (not yet)".into(),
-                )));
+                return Ok(urdf::export_unlinked(name, o, &r));
             };
             let (sp, text) = self.read(&sp.to_string_lossy())?;
             (Some(r), sp, text)

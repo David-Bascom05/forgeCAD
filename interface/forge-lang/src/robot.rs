@@ -70,10 +70,12 @@ pub enum GeoSpec {
         at: Frame,
     },
     Hull,
+    /// A mesh file (`bytes` None: referenced, not read), its scale to metres (mm: 0.001).
     Mesh {
         file: String,
-        bytes: Vec<u8>,
+        bytes: Option<Vec<u8>>,
         at: Frame,
+        scale: [f64; 3],
     },
 }
 
@@ -83,6 +85,8 @@ pub struct GeoOv {
     pub link: Target,
     pub collision: bool,
     pub spec: GeoSpec,
+    /// A visual's material: its name and colour (0..1 each).
+    pub material: Option<(String, [f64; 3])>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -120,6 +124,37 @@ pub struct JointOv {
     pub friction: Option<f64>,
 }
 
+/// A link an unlinked robot defines: its name, and its inertial (kg, mm, kg mm²) when it has
+/// one.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LinkDef {
+    pub line: usize,
+    pub name: String,
+    pub mass: Option<f64>,
+    pub com: [f64; 3],
+    pub inertia: [f64; 6],
+}
+
+/// A joint an unlinked robot defines (`NAME = joint(parent: L, child: L, type: .., at: pose(..))`):
+/// origin in the parent's frame (mm), limits mm or rad, a mimic's leader, multiplier (the
+/// document's units) and offset.
+#[derive(Clone, Debug, PartialEq)]
+pub struct JointDef {
+    pub line: usize,
+    pub name: String,
+    pub parent: Target,
+    pub child: Target,
+    pub kind: String,
+    pub at: Frame,
+    pub axis: Option<[f64; 3]>,
+    pub limit: Option<(f64, f64)>,
+    pub effort: Option<f64>,
+    pub velocity: Option<f64>,
+    pub damping: Option<f64>,
+    pub friction: Option<f64>,
+    pub mimic: Option<(Target, f64, f64)>,
+}
+
 /// A robot document, read.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Robot {
@@ -142,6 +177,9 @@ pub struct Robot {
     pub hull_collisions: bool,
     pub effort: Option<f64>,
     pub velocity: Option<f64>,
+    /// An unlinked robot's own links and joints, in document order.
+    pub link_defs: Vec<LinkDef>,
+    pub joint_defs: Vec<JointDef>,
 }
 
 impl Default for Robot {
@@ -163,6 +201,8 @@ impl Default for Robot {
             hull_collisions: true,
             effort: None,
             velocity: None,
+            link_defs: vec![],
+            joint_defs: vec![],
         }
     }
 }
@@ -439,16 +479,28 @@ impl Reader<'_> {
                 })
             }
             "mesh" => {
-                a.only("mesh", &["#0", "at"])?;
+                a.only("mesh", &["#0", "at", "scale"])?;
                 let V::Str(file) = a.need("#0", "mesh")? else {
                     return Err("mesh(\"FILE.stl\")".into());
                 };
-                let p = self.dir.map_or_else(|| PathBuf::from(file), |d| d.join(file));
-                let bytes = std::fs::read(&p).map_err(|e| format!("mesh {file}: {e}"))?;
+                // a file beside the document is read and packaged; a package:// URI or a file
+                // that is not there is written as it is
+                let bytes = if file.contains("://") {
+                    None
+                } else {
+                    let p = self.dir.map_or_else(|| PathBuf::from(file), |d| d.join(file));
+                    std::fs::read(&p).ok()
+                };
+                let scale = match a.get("scale") {
+                    None => [0.001; 3],
+                    Some(V::Num(x)) => [*x; 3],
+                    Some(v) => nums::<3>(v, "scale")?,
+                };
                 V::Geo(GeoSpec::Mesh {
                     file: file.clone(),
                     bytes,
                     at: frame(a.get("at"))?,
+                    scale,
                 })
             }
             other => {
@@ -507,6 +559,76 @@ pub fn read(src: &str, dir: Option<&Path>) -> Result<Robot, Vec<RobotError>> {
                                             _ => return Err("source(\"FILE.fg\") or source(none)".into()),
                                         }
                                         V::Src
+                                    }
+                                    "link" if a.get("#0").is_none() => {
+                                        a.only("link", &["name", "mass", "com", "inertia"])?;
+                                        if r.source_path.is_some() {
+                                            return Err("a linked robot's links are its source's (frame(..) adds one)".into());
+                                        }
+                                        let n = match a.get("name") {
+                                            Some(V::Str(s)) => s.clone(),
+                                            Some(_) => return Err("name: takes a string".into()),
+                                            None => name.clone(),
+                                        };
+                                        r.link_defs.push(LinkDef {
+                                            line,
+                                            name: n.clone(),
+                                            mass: a.num("mass")?,
+                                            com: a.n3("com")?.unwrap_or([0.0; 3]),
+                                            inertia: match a.get("inertia") {
+                                                Some(v) => nums::<6>(v, "inertia")?,
+                                                None => [0.0; 6],
+                                            },
+                                        });
+                                        V::Target(Target::Name(n))
+                                    }
+                                    "joint" if a.get("parent").is_some() => {
+                                        a.only(
+                                            "joint",
+                                            &[
+                                                "name", "parent", "child", "type", "at", "axis", "limit",
+                                                "effort", "velocity", "damping", "friction", "mimic",
+                                            ],
+                                        )?;
+                                        if r.source_path.is_some() {
+                                            return Err("a linked robot's joints are its source's (joint(src.J, ..) overrides one)".into());
+                                        }
+                                        let n = match a.get("name") {
+                                            Some(V::Str(s)) => s.clone(),
+                                            Some(_) => return Err("name: takes a string".into()),
+                                            None => name.clone(),
+                                        };
+                                        let kind = match a.get("type") {
+                                            Some(V::Str(s)) => s.clone(),
+                                            _ => return Err("a joint needs type: \"revolute\" | \"continuous\" | \"prismatic\" | \"fixed\" | \"floating\" | \"planar\"".into()),
+                                        };
+                                        let mimic = match a.get("mimic") {
+                                            None => None,
+                                            Some(V::Tuple(t)) if t.len() == 3 => Some((
+                                                target(&t[0], "mimic")?,
+                                                num(&t[1], "mimic")?,
+                                                num(&t[2], "mimic")?,
+                                            )),
+                                            Some(_) => {
+                                                return Err("mimic: (JOINT, multiplier, offset)".into());
+                                            }
+                                        };
+                                        r.joint_defs.push(JointDef {
+                                            line,
+                                            name: n.clone(),
+                                            parent: target(a.need("parent", "joint")?, "parent:")?,
+                                            child: target(a.need("child", "joint")?, "child:")?,
+                                            kind,
+                                            at: frame(a.get("at"))?,
+                                            axis: a.n3("axis")?,
+                                            limit: a.pair("limit")?,
+                                            effort: a.num("effort")?,
+                                            velocity: a.num("velocity")?,
+                                            damping: a.num("damping")?,
+                                            friction: a.num("friction")?,
+                                            mimic,
+                                        });
+                                        V::Target(Target::Name(n))
                                     }
                                     "link" => {
                                         a.only("link", &["#0", "name"])?;
@@ -600,7 +722,13 @@ fn statement(r: &mut Robot, f: &str, a: &Args, line: usize) -> Result<(), String
             r.drops.push(target(a.need("#0", "drop")?, "drop")?);
         }
         "visual" | "collision" => {
-            a.only(f, &["#0", "#1"])?;
+            a.only(f, &["#0", "#1", "material", "colour"])?;
+            let material = match (a.get("material"), a.n3("colour")?) {
+                (None, None) => None,
+                (Some(V::Str(n)), c) => Some((n.clone(), c.unwrap_or([0.5; 3]))),
+                (None, Some(c)) => Some(("colour".into(), c)),
+                _ => return Err("material: takes a string, colour: (r, g, b) from 0 to 1".into()),
+            };
             let link = target(a.need("#0", f)?, f)?;
             let V::Geo(spec) = a.need("#1", f)? else {
                 return Err(format!(
@@ -612,6 +740,7 @@ fn statement(r: &mut Robot, f: &str, a: &Args, line: usize) -> Result<(), String
                 link,
                 collision: f == "collision",
                 spec: spec.clone(),
+                material,
             });
         }
         "collisions" => {
