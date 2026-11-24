@@ -1,0 +1,11 @@
+machining
+# Benchmark (verify/forge-cam-quality): clear the open step with a 10 mm end mill.
+shared tol = 0.01
+
+f    = part("open_step.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol)
+skim = facing(op1, tool: t1, to: 20, step: 1)
+stp  = clear(op1, tool: t1, from: 20, to: 10, step: 3, stepover: 4)
+prog = program(op1, post: "fanuc", number: 5004)
