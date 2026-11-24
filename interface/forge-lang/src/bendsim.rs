@@ -831,11 +831,16 @@ fn staged_json(
                     .and_then(Json::str)
                     .map(str::to_string)
                     .unwrap_or_else(|| "the part".into());
-                why.push_str(&format!(
-                    "; {what} clears it by {} mm (limit {} mm)",
-                    r6s(c.bound.unwrap_or(c.value)),
-                    r6s(c.limit)
-                ));
+                let at = c.bound.unwrap_or(c.value);
+                why.push_str(&if c.near.is_some() {
+                    format!(
+                        "; {what} comes within {} mm of it: near the {} mm limit, within the check's resolution (a warning)",
+                        r6s(at),
+                        r6s(c.limit)
+                    )
+                } else {
+                    format!("; {what} clears it by {} mm (limit {} mm)", r6s(at), r6s(c.limit))
+                });
             }
             Json::obj(vec![
                 ("n", (k + 1).into()),

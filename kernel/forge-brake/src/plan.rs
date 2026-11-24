@@ -145,6 +145,7 @@ impl<'a> Search<'a> {
                 }
             }
         }
+        let n_setups = setups.len();
         Search {
             m,
             tl,
@@ -161,7 +162,13 @@ impl<'a> Search<'a> {
             kept: HashMap::new(),
             best: vec![None; m.bends.len()],
             explored: 0,
-            budget: if opts.budget == 0 { 4000 } else { opts.budget },
+            // a set's size scales the search: a whole maker's catalogue holds hundreds of setups
+            // per bend, most decided from what is kept (cheap), so 4000 would stop it short
+            budget: if opts.budget == 0 {
+                4000usize.max(16 * n_setups)
+            } else {
+                opts.budget
+            },
             exhausted: false,
         }
     }
