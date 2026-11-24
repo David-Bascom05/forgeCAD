@@ -681,19 +681,31 @@ fn main() {
             o.oracle("bore_sum", sub + int, vol, vol);
         }
         // a copy beside it, touching its box, and one half over it
-        let beside = translated(b, Vec3::new(w, 0.0, 0.0));
-        // the copy must be as good as the solid, or what follows says nothing of the boolean
-        let (n, why) = problems(&beside);
-        if n > 0 {
-            o.line("copy", 0.0, "harness", "", &why);
+        // copies of it moved along x: beside (touching its box), over (half on it), and half on it
+        // at an ordinary offset. The box is padded by the kernel's tolerance, so beside and over
+        // stand exactly that far off their twins: the tolerance's edge, adversarial on purpose;
+        // over2 (0.4137 of the width) is ordinary use
+        for (tag, k) in [("beside", 1.0), ("over", 0.5), ("over2", 0.4137)] {
+            let copy = translated(b, Vec3::new(k * w, 0.0, 0.0));
+            // the copy must be as good as the solid, or what follows says nothing of the boolean:
+            // its ops are written as the harness's (an import's tolerance), not as wrong
+            let (n, why) = problems(&copy);
+            if n > 0 {
+                for op in ["union", "int"] {
+                    o.line(
+                        &format!("{op}_{tag}"),
+                        0.0,
+                        "harness",
+                        "",
+                        &format!("the copy fails check: {why}"),
+                    );
+                }
+                continue;
+            }
+            let u = o.boolean(&format!("union_{tag}"), b, &copy, Op::Union);
+            let x = o.boolean(&format!("int_{tag}"), b, &copy, Op::Intersect);
+            o.oracle(&format!("{tag}_sum"), u + x, 2.0 * vol, vol);
         }
-        let u = o.boolean("union_beside", b, &beside, Op::Union);
-        let x = o.boolean("int_beside", b, &beside, Op::Intersect);
-        o.oracle("beside_sum", u + x, 2.0 * vol, vol);
-        let over = translated(b, Vec3::new(0.5 * w, 0.0, 0.0));
-        let u = o.boolean("union_over", b, &over, Op::Union);
-        let x = o.boolean("int_over", b, &over, Op::Intersect);
-        o.oracle("over_sum", u + x, 2.0 * vol, vol);
     }
     // two of the file's own solids whose boxes overlap: the first few such pairs among the chosen
     let mut pairs = 0;
