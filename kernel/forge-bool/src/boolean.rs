@@ -2100,17 +2100,13 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
         specs,
         kept,
         points,
-        vnames,
         flush,
-        tols,
         grown,
-        alias,
         involved,
         untouched_kept,
         ..
     } = plan;
     // sorted by vertex (`flush_edges_as_cuts`)
-    let renamed = |v: VKey, n: Name| flush.binary_search_by_key(&v, |f| f.0).map_or(n, |k| flush[k].1);
     for &(v, n) in flush {
         if let VKey::Old(0, id) = v {
             a.vertices[id.index()].name = n;
@@ -2156,30 +2152,14 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
             }
         }
     }
-    let mut b_vertex: Vec<Option<VertexId>> = vec![None; b.vertex_count()];
-    let mut new_vertex: Vec<Option<VertexId>> = vec![None; points.len()];
+    let mut made = Made {
+        b_vertex: vec![None; b.vertex_count()],
+        new_vertex: vec![None; points.len()],
+    };
     let mut emap: Vec<Option<EdgeId>> = vec![None; pieces.len()];
-    let shell = a
-        .shells
-        .first()
-        .map(|_| forge_topo::ShellId(0))
-        .unwrap_or_else(|| a.add_shell());
+    let shell = if a.shells.is_empty() { a.add_shell() } else { forge_topo::ShellId(0) };
     let other_shell =
         a.shells.len() > 1 && specs.iter().any(|s| s.side == 0 && a.face(s.from).shell != shell);
-    let mut vertex = |a: &mut Body, v: VKey| -> VertexId {
-        let v = alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
-        match v {
-            VKey::Old(0, id) => id,
-            VKey::Old(_, id) => *b_vertex[id.index()].get_or_insert_with(|| {
-                let (point, tol, name) = b.vertex(id);
-                a.add_tolerant_vertex(point, grown_tol(grown, v, tol), renamed(v, name))
-            }),
-            VKey::New(i) => *new_vertex[i as usize].get_or_insert_with(|| {
-                let i = i as usize;
-                a.add_tolerant_vertex(points[i], tols[i], vnames[i])
-            }),
-        }
-    };
     for &(si, flip) in kept {
         if as_is[si] {
             continue;
@@ -2220,7 +2200,8 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
                             // an untouched edge of A keeps its identity
                             Some((0, e)) => e,
                             _ => {
-                                let (v0, v1) = (vertex(a, pc.start), vertex(a, pc.end));
+                                let (v0, v1) =
+                                    (made.vertex(a, b, plan, pc.start), made.vertex(a, b, plan, pc.end));
                                 let e = a.add_edge(pc.curve.clone(), pc.range, v0, v1, pc.name);
                                 a.edges[e.index()].tol = pc.tol;
                                 e
@@ -2233,7 +2214,7 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
                 uses.push((e, fwd));
             }
             if flip {
-                uses = uses.into_iter().rev().map(|(e, f)| (e, !f)).collect();
+                uses = reversed(uses);
             }
             let lp = a.add_loop(face, &uses);
             if s.extend && !flip {
@@ -2262,6 +2243,65 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
     {
         a.rebuild_shells();
     }
+}
+
+/// The vertices `apply` adds to A, as it first needs each: B's, and the new ones.
+struct Made {
+    // (declared in this order so they drop as main's locals did: new_vertex, then b_vertex)
+    new_vertex: Vec<Option<VertexId>>,
+    b_vertex: Vec<Option<VertexId>>,
+}
+
+impl Made {
+    /// Vertex `v` of the plan in A (through its alias), added on first use.
+    fn vertex<S: crate::imprint::Src>(&mut self, a: &mut Body, b: &S, plan: &Plan, v: VKey) -> VertexId {
+        let mut v = v;
+        let mut k = 0;
+        while k < plan.alias.len() {
+            if plan.alias[k].0 == v {
+                v = plan.alias[k].1;
+                break;
+            }
+            k += 1;
+        }
+        match v {
+            VKey::Old(0, id) => id,
+            VKey::Old(_, id) => match self.b_vertex[id.index()] {
+                Some(x) => x,
+                None => {
+                    let (point, tol, name) = b.vertex(id);
+                    let x = a.add_tolerant_vertex(
+                        point,
+                        grown_tol(&plan.grown, v, tol),
+                        renamed(&plan.flush, v, name),
+                    );
+                    self.b_vertex[id.index()] = Some(x);
+                    x
+                }
+            },
+            VKey::New(i) => match self.new_vertex[i as usize] {
+                Some(x) => x,
+                None => {
+                    let i = i as usize;
+                    let x = a.add_tolerant_vertex(plan.points[i], plan.tols[i], plan.vnames[i]);
+                    self.new_vertex[i] = Some(x);
+                    x
+                }
+            },
+        }
+    }
+}
+
+/// The name vertex `v` takes: from the flush list (sorted by vertex), else `n`.
+fn renamed(flush: &[(VKey, Name)], v: VKey, n: Name) -> Name {
+    flush.binary_search_by_key(&v, |f| f.0).map_or(n, |k| flush[k].1)
+}
+
+/// A loop's uses run the other way: reversed, each use flipped (in place: the collect reuses
+/// the allocation).
+#[inline(always)]
+fn reversed(uses: Vec<(EdgeId, bool)>) -> Vec<(EdgeId, bool)> {
+    uses.into_iter().rev().map(|(e, f)| (e, !f)).collect()
 }
 
 /// `tol` grown to what `grown` asks of vertex `k`.
