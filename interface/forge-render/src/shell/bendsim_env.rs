@@ -255,8 +255,14 @@ pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
         b.tick(f64::from(ctx.input(|i| i.stable_dt)).min(0.1));
         // playing, or moved from outside (the page, the agent): the view has frames to draw
         let now = (b.step, b.t.to_bits());
-        if b.playing || b.painted != Some(now) {
+        if b.painted != Some(now) {
             b.painted = Some(now);
+            // the new instant's bodies go up this frame; the view's shadows and the panels
+            // settle over the next few
+            b.settle = 6;
+        }
+        if b.playing || b.settle > 0 {
+            b.settle = b.settle.saturating_sub(1);
             ctx.request_repaint();
         }
     }

@@ -78,6 +78,8 @@ pub struct BendSimUi {
     pub as_given: bool,
     /// The step and instant last asked to be drawn.
     pub painted: Option<(usize, u64)>,
+    /// Frames still to draw after a change of instant, for the view to settle.
+    pub settle: u8,
     /// The part's bending document (`<stem>_bend.fg`), when it has one: the program's source of
     /// truth, every edit an op on its text.
     pub doc: Option<DocState>,
@@ -191,6 +193,7 @@ impl BendSimUi {
             doc: None,
             locate: None,
             frame: None,
+            settle: 0,
             pane: Pane::Program,
             fit_only: true,
             all_checks: false,
@@ -247,6 +250,7 @@ impl BendSimUi {
             }),
             locate: None,
             frame: None,
+            settle: 0,
             pane: Pane::Program,
             fit_only: true,
             all_checks: false,
