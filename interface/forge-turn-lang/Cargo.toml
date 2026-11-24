@@ -13,6 +13,7 @@ forge-turn = { path = "../../kernel/forge-turn" }
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 forge-dirs = { path = "../../kernel/forge-dirs" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
+forge-material = { path = "../../kernel/forge-material" }
 
 [lints]
 workspace = true

@@ -30,6 +30,7 @@
 //! (forge_turn::ops::certify). The reply is `forgecad.cam/1` with `"process": "turning"`.
 use forge_agent::json::Json;
 use forge_lang::syntax::{self, Arg, BinOp, Expr, ExprKind, StmtKind};
+use forge_tooling::{feeds, resolve};
 use forge_turn::insert::{self, TurnTool};
 use forge_turn::machine::{self, Place};
 use forge_turn::ops::{self, Chuck, OpPath, Report, Setup};
@@ -70,6 +71,26 @@ pub struct OpOut {
     pub status: String,
     pub moves: usize,
     pub refusal: Option<String>,
+    /// The cutting data the op was planned at, where the part names its stock (`part(..,
+    /// material:)` or `group:`) and the tool turns or bores; None: the tool's own data.
+    pub cutting: Option<Cutting>,
+}
+
+/// An op's cutting data: m/min, mm/rev, mm, and where each came from.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Cutting {
+    pub vc: f64,
+    pub f: f64,
+    pub ap: f64,
+    pub source: String,
+}
+
+/// A part's stock: its ISO 513 group, and the forge-material record where it names one.
+#[derive(Clone, Debug)]
+struct Stock {
+    group: String,
+    material: Option<String>,
+    family: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -97,6 +118,12 @@ pub struct TurnCam {
     setups: Vec<(String, Setup)>,
     paths: Vec<(String, usize, OpPath)>,
     lib: forge_tooling::Library,
+    /// Per part, its stock; per setup, its part; per tool, its library insert's id.
+    stocks: Vec<Option<Stock>>,
+    setup_part: Vec<usize>,
+    tool_insert: Vec<Option<String>>,
+    /// The cutting data of the tool `tool_of` last handed an op.
+    pending_cut: Option<Cutting>,
 }
 
 fn named<'a>(a: &'a BTreeMap<String, V>, k: &str) -> Result<&'a V, String> {
@@ -215,10 +242,109 @@ impl TurnCam {
         }
     }
 
-    fn tool_of(&self, a: &BTreeMap<String, V>) -> Result<(TurnTool, u32), String> {
-        match named(a, "tool")? {
-            V::Tool(i) => Ok(self.tools[*i].clone()),
-            v => Err(format!("`tool:` is a lathe_tool, not {v:?}")),
+    /// The op's tool, at the cutting data for its setup's stock (`cut_for`).
+    fn tool_of(&mut self, a: &BTreeMap<String, V>) -> Result<(TurnTool, u32), String> {
+        let ti = match named(a, "tool")? {
+            V::Tool(i) => *i,
+            v => return Err(format!("`tool:` is a lathe_tool, not {v:?}")),
+        };
+        let (mut t, st) = self.tools[ti].clone();
+        self.pending_cut = None;
+        if let Ok(si) = self.setup_of(a)
+            && let Some(c) = self.cut_for(ti, si)?
+        {
+            t.vc = c.vc;
+            t.f = c.f;
+            t.ap = c.ap;
+            t.source = c.source.clone();
+            self.pending_cut = Some(c);
+        }
+        Ok((t, st))
+    }
+
+    /// A turning or boring tool's cutting data for its setup's stock: its library insert's
+    /// maker row (forge_tooling Insert::preset_for: the grade's row naming the stock material,
+    /// else its lead row; no grade stated, the slowest grade's), else the group's generic class
+    /// (the 10th percentile of the makers' insert rows, data/generic.toml). None where the part
+    /// names no stock, the tool grooves, parts, threads or drills, or no data covers the group.
+    fn cut_for(&self, ti: usize, si: usize) -> Result<Option<Cutting>, String> {
+        let Some(stock) = self.setup_part.get(si).and_then(|&p| self.stocks[p].as_ref()) else {
+            return Ok(None);
+        };
+        let t = &self.tools[ti].0;
+        if !matches!(t.kind, insert::Kind::Turn | insert::Kind::Bore) {
+            return Ok(None);
+        }
+        let generic = || {
+            self.lib
+                .turn_generic(&stock.group, stock.family.as_deref())
+                .map(|g| resolve::TurnData::from_generic(g, None))
+        };
+        let data = match self.tool_insert[ti]
+            .as_deref()
+            .and_then(|id| self.lib.inserts.iter().find(|i| i.id == id))
+        {
+            Some(ins) => {
+                let grade = (!ins.grade.is_empty()).then_some(ins.grade.as_str());
+                match ins.preset_for(&stock.group, grade, stock.material.as_deref()) {
+                    Ok(Some(p)) => Some(resolve::TurnData::from_pick(&p, None)),
+                    Ok(None) => generic(),
+                    Err(gs) => {
+                        return Err(format!(
+                            "insert `{}`: no grade {} rows for group {}; its grades: {}",
+                            ins.id,
+                            grade.unwrap_or("?"),
+                            stock.group,
+                            gs.join(", ")
+                        ));
+                    }
+                }
+            }
+            None => generic(),
+        };
+        Ok(data.map(|d| Cutting {
+            vc: d.vc.unwrap_or(t.vc),
+            f: d.f.unwrap_or(t.f),
+            ap: d.ap.unwrap_or(t.ap),
+            source: d.source,
+        }))
+    }
+
+    /// `part(.., material: M)` or `part(.., group: G)`: the stock, by its forge-material record
+    /// (its `machining.iso513`, else its family's ISO 513 group) or by an ISO 513 group alone.
+    fn stock_of(a: &BTreeMap<String, V>, dir: &Path) -> Result<Option<Stock>, String> {
+        if let Some(V::Str(name)) = a.get("material") {
+            let libs = forge_material::Libraries::cached(Some(dir));
+            let Some((_, m)) = libs.find(name) else {
+                return Err(format!(
+                    "no material `{name}` in the material libraries; near: {}",
+                    libs.near(name).join(", ")
+                ));
+            };
+            let group = match m.extra("machining.iso513") {
+                Some(forge_material::Value::Str(g)) => g.clone(),
+                _ => feeds::iso_group_of_family(&m.family)
+                    .ok_or_else(|| {
+                        format!("{} is family {}, which ISO 513 does not class", m.name, m.family)
+                    })?
+                    .to_string(),
+            };
+            return Ok(Some(Stock {
+                group,
+                material: Some(m.name.clone()),
+                family: Some(m.family.clone()),
+            }));
+        }
+        match a.get("group") {
+            Some(V::Str(g)) if ["P", "M", "K", "N", "S", "H"].contains(&g.as_str()) => Ok(Some(Stock {
+                group: g.clone(),
+                material: None,
+                family: None,
+            })),
+            Some(v) => Err(format!(
+                "`group:` is an ISO 513 group (P, M, K, N, S, H), not {v:?}"
+            )),
+            None => Ok(None),
         }
     }
 
@@ -233,6 +359,7 @@ impl TurnCam {
                     status: "planned".into(),
                     moves: me.paths.last().map_or(0, |p| p.2.steps.len()),
                     refusal: None,
+                    cutting: me.pending_cut.take(),
                 });
                 Ok(V::Op(me.paths.len() - 1))
             };
@@ -252,6 +379,7 @@ impl TurnCam {
                 let body = run.body.ok_or("the part has no body")?;
                 let hp = forge_turn::profile::half_profile(&body)
                     .map_err(|e| format!("the part is not a turned part about its z axis: {e:?}"))?;
+                self.stocks.push(Self::stock_of(a, dir)?);
                 self.parts.push(hp);
                 Ok(V::Part(self.parts.len() - 1))
             }
@@ -267,6 +395,10 @@ impl TurnCam {
                     insert::builtin(&id).map_err(|e| e.to_string())?
                 };
                 let st = num(a, "t", None)? as u32;
+                let lib_insert = (a.contains_key("holder"))
+                    .then(|| text(a, "insert", None).ok())
+                    .flatten();
+                self.tool_insert.push(lib_insert);
                 self.tools.push((t, st));
                 Ok(V::Tool(self.tools.len() - 1))
             }
@@ -317,6 +449,7 @@ impl TurnCam {
                     fixtures: Vec::new(),
                 };
                 s.check().map_err(|e| format!("{e:?}"))?;
+                self.setup_part.push(*pi);
                 self.setups.push((name.to_string(), s));
                 Ok(V::Setup(self.setups.len() - 1))
             }
@@ -673,6 +806,17 @@ impl TurnCam {
                     ("status", Json::Str(o.status.clone())),
                     ("moves", Json::Num(o.moves as f64)),
                     ("refusal", o.refusal.clone().map(Json::Str).unwrap_or(Json::Null)),
+                    (
+                        "cutting",
+                        o.cutting.as_ref().map_or(Json::Null, |c| {
+                            Json::obj(vec![
+                                ("vc", Json::Num(c.vc)),
+                                ("f", Json::Num(c.f)),
+                                ("ap", Json::Num(c.ap)),
+                                ("source", Json::Str(c.source.clone())),
+                            ])
+                        }),
+                    ),
                 ])
             })
             .collect();
@@ -776,6 +920,10 @@ fn run_with(src: &str, dir: &Path, exact: bool, lib: forge_tooling::Library) -> 
         tools: vec![],
         setups: vec![],
         paths: vec![],
+        stocks: vec![],
+        setup_part: vec![],
+        tool_insert: vec![],
+        pending_cut: None,
     };
     let prog = match syntax::parse(src) {
         Ok(p) => p,

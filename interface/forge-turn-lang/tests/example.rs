@@ -200,3 +200,46 @@ fn the_hub_certifies_in_full() {
         cam.errors
     );
 }
+
+/// A part that names its stock turns at cited cutting data: a maker's insert from the library
+/// takes its own row for the stock (Insert::preset_for), a built-in turning tool takes the
+/// group's generic class (the 10th percentile of the makers' insert rows); threading and
+/// part-off keep their own data. A part that names no stock keeps every tool's own data.
+#[test]
+fn a_named_stock_turns_at_cited_cutting_data() {
+    let d = dir();
+    let src = std::fs::read_to_string(d.join("shaft_turn.fg")).unwrap().replace(
+        "lathe_tool(\"od-rough-cnmg\", t: 1)",
+        "lathe_tool(holder: \"korloy-PCLNR2525-M12\", insert: \"sumitomo-CNMG120408N-GU\", t: 1)",
+    );
+    let plain = forge_turn_lang::run(&src, &d);
+    assert!(plain.ok && plain.ops.iter().all(|o| o.cutting.is_none()));
+    let lib = forge_tooling::Library::builtin();
+    let ins = lib
+        .inserts
+        .iter()
+        .find(|i| i.id == "sumitomo-CNMG120408N-GU")
+        .unwrap();
+    for stock in ["material: \"1045 cold drawn\"", "group: \"P\""] {
+        let named = src.replace("part(\"shaft.fg\")", &format!("part(\"shaft.fg\", {stock})"));
+        let cam = forge_turn_lang::run(&named, &d);
+        assert!(cam.ok, "{stock}: {:?} {:?}", cam.errors, cam.ops);
+        let op = |n: &str| cam.ops.iter().find(|o| o.name == n).unwrap();
+        let rough = op("rough").cutting.clone().unwrap();
+        assert!(
+            ins.presets.iter().any(|p| p.group == "P" && p.vc == rough.vc),
+            "{stock}: {rough:?}"
+        );
+        assert_eq!(op("face").cutting, op("rough").cutting);
+        let fin = op("fin").cutting.clone().unwrap();
+        assert!(fin.source.contains("10th percentile"), "{}", fin.source);
+        assert!(op("thr").cutting.is_none() && op("cut").cutting.is_none());
+        assert!(cam.json().to_string().contains("\"cutting\""));
+    }
+    let bad = src.replace(
+        "part(\"shaft.fg\")",
+        "part(\"shaft.fg\", material: \"unobtainium\")",
+    );
+    let cam = forge_turn_lang::run(&bad, &d);
+    assert!(!cam.ok && cam.errors.iter().any(|e| e.contains("unobtainium")));
+}
