@@ -216,3 +216,23 @@ fn a_flange_closing_on_a_straight_punch_shows_in_red() {
         "a body in red"
     );
 }
+
+/// At 1024 x 700 (docs/ux/STANDARD.md §10): the browser, the view and the bend's sheet all in,
+/// nothing cut off.
+#[test]
+fn a_small_window_holds_it_all() {
+    let Ok(mut h) = Headless::new((1024.0, 700.0), 1.0) else { return };
+    h.step();
+    enter(&mut h, CHANNEL, "small", "trumpf-trubend-5130", None);
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.step = 0;
+        b.t = 0.6;
+    }
+    frame(&mut h, Framing::Work);
+    shot(&mut h, "09-small-window-1024x700");
+    let view = h.gui.shell.place("env:bendsim:view").expect("the view");
+    let dock = h.gui.shell.place("env:bendsim:properties").expect("the sheet");
+    assert!(view.right() <= dock.left() + 1.0, "the view stops at the docked sheet");
+    assert!(view.width() > 300.0, "the view keeps room: {view:?}");
+}
