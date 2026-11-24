@@ -4,8 +4,11 @@
 //! - `open_for(source)`: the source's companion robot document (`NAME_robot.fg` beside it),
 //!   opened, or made linked to it;
 //! - `groups(s, act)`: its ribbon, each tool's action made by `act(command)`;
-//! - `Shell::robot_side(ui, r)`: its browser, the tree of links and joints;
-//! - `Shell::robot_ui(ctx)`: its panel (drive, details, checks), once a frame;
+//! - `Shell::robot_browser(ui, r)`: its browser, the tree of links and joints (`browser`);
+//! - `Shell::robot_properties_width()` / `robot_properties(ui, r)`: its sheet, docked right
+//!   (`properties_width`, `properties`);
+//! - `Shell::robot_status()`: its status line (`status`); `robot_draw(ui, view)`: the joints'
+//!   names over the view (`draw`); it keeps no part tree (`keeps_tree` false);
 //! - `command(s, c)`: one of its ribbon commands.
 //!
 //! The host (gui_robot.rs) runs the export when the panel is new or stale and moves the parts.

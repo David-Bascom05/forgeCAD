@@ -7,6 +7,7 @@
 use crate::shell::Shell;
 use crate::shell::icons;
 use crate::shell::theme::{Theme, medium, mono, sans};
+use crate::shell::ux;
 use egui::{Align2, RichText, Sense, Stroke, Ui, pos2, vec2};
 use forge_urdf::robot::Edit;
 use forge_urdf::{Conflict, Exported, RobotView, UrdfError, ViewJoint};
@@ -120,6 +121,9 @@ pub struct RobotPanel {
     pub open: bool,
     /// The view was fitted to the robot since the environment was entered.
     pub framed: bool,
+    /// Each joint's name over the view this frame: (name, where in points from the view's
+    /// corner, selected); the host puts them at the axis arrows' tips.
+    pub labels: Vec<(String, [f32; 2], bool)>,
 }
 
 impl RobotPanel {
@@ -355,58 +359,46 @@ enum Prov {
     Unknown,
 }
 
-/// The badge's colours: blue linked, violet yours, grey unknown.
+/// `from assembly`'s colour.
 const BLUE: egui::Color32 = egui::Color32::from_rgb(59, 130, 246);
-const VIOLET: egui::Color32 = egui::Color32::from_rgb(139, 92, 246);
 
-/// One badge, one column wide, the hover its detail.
+/// One badge, one column wide, the hover its detail: the shared widget (`shell::ux::badge`) for
+/// the robot's own values and unknown ones; `from assembly` (which it has no word for) drawn
+/// the same size, blue.
 fn badge(ui: &mut Ui, t: &Theme, b: &Prov) {
-    let (text, ink, tip) = match b {
-        Prov::Linked => (
-            "from assembly",
-            BLUE,
-            "linked: the source assembly's value".to_string(),
-        ),
-        Prov::Yours(Some(was)) => (
-            "yours",
-            VIOLET,
-            format!("the robot's override; the assembly has {}", pretty(was)),
-        ),
-        Prov::Yours(None) => (
-            "yours",
-            VIOLET,
-            "the robot's own: the assembly has none".to_string(),
-        ),
-        Prov::Unknown => (
-            "unknown",
-            t.ink2,
-            "not given: the export refuses it, or writes a placeholder".to_string(),
-        ),
-    };
-    let font = sans(10.0);
-    let w = ui
-        .fonts_mut(|f| f.layout_no_wrap(text.to_string(), font.clone(), ink))
-        .size()
-        .x
-        + 12.0;
-    let (r, resp) = ui.allocate_exact_size(vec2(w.max(76.0), 16.0), Sense::hover());
-    let pill = egui::Rect::from_center_size(r.center(), vec2(w, 16.0));
-    ui.painter().rect_filled(pill, 8.0, ink.gamma_multiply(0.14));
-    let italic = matches!(b, Prov::Unknown);
-    let mut job = egui::text::LayoutJob::single_section(
-        text.to_string(),
-        egui::TextFormat {
-            font_id: font,
-            color: ink,
-            italics: italic,
-            ..Default::default()
-        },
-    );
-    job.halign = egui::Align::Center;
-    let g = ui.fonts_mut(|f| f.layout_job(job));
-    ui.painter()
-        .galley(pos2(pill.center().x, pill.center().y - g.size().y / 2.0), g, ink);
-    resp.on_hover_text(tip);
+    match b {
+        Prov::Yours(Some(was)) => {
+            ux::badge(
+                ui,
+                t,
+                &ux::Source::User(format!("The robot's override; the assembly has {}.", pretty(was))),
+            );
+        }
+        Prov::Yours(None) => {
+            ux::badge(
+                ui,
+                t,
+                &ux::Source::User("The robot's own value: the assembly has none.".into()),
+            );
+        }
+        Prov::Unknown => {
+            ux::badge(ui, t, &ux::Source::Unknown);
+        }
+        Prov::Linked => {
+            let (r, resp) = ui.allocate_exact_size(vec2(ux::BADGE_W + 26.0, 16.0), Sense::hover());
+            let g = ui
+                .painter()
+                .layout_no_wrap("from assembly".into(), crate::shell::theme::caption(), BLUE);
+            let pill = egui::Rect::from_min_size(r.min + vec2(0.0, 0.5), vec2(g.size().x + 10.0, 15.0));
+            ui.painter().rect_filled(pill, 7.5, BLUE.gamma_multiply(0.14));
+            ui.painter().galley(
+                pos2(pill.left() + 5.0, pill.center().y - g.size().y / 2.0),
+                g,
+                BLUE,
+            );
+            resp.on_hover_text("Linked: the source assembly's value.");
+        }
+    }
 }
 
 /// A value in the document's words made readable: `(-135deg, 135deg)` → `−135…135°`.
@@ -453,10 +445,15 @@ fn num(x: f64, dec: usize) -> String {
 
 /// A length given in mm (the view's frames are the source's, in mm), in the user's unit.
 fn len(mm: f64, inch: bool) -> String {
+    ux::show(mm, ux::Qty::Length, sys(inch))
+}
+
+/// The user's unit system (the status bar's mm / in).
+fn sys(inch: bool) -> ux::System {
     if inch {
-        format!("{} in", num(mm / 25.4, 4))
+        ux::System::Inch
     } else {
-        format!("{} mm", num(mm, 3))
+        ux::System::Metric
     }
 }
 
@@ -551,7 +548,7 @@ struct TreeRow {
 impl Shell {
     /// The environment's browser: the robot's links and joints as a tree from the root, with tree
     /// lines, an icon per kind and each link's mass at the right.
-    pub(in crate::shell) fn robot_side(&mut self, ui: &mut Ui, r: egui::Rect) -> bool {
+    pub(in crate::shell) fn robot_browser(&mut self, ui: &mut Ui, r: egui::Rect) -> bool {
         let Some(mut p) = self.robot.take() else {
             return false;
         };
@@ -702,7 +699,7 @@ impl Shell {
 
     /// The environment's property sheet, docked at the right edge, full height, scrolling: the
     /// robot and its link, the selected link's or joint's sheet, the drive, the checks.
-    pub(in crate::shell) fn robot_dock(&mut self, ui: &mut Ui, r: egui::Rect) {
+    pub(in crate::shell) fn robot_properties(&mut self, ui: &mut Ui, r: egui::Rect) {
         let Some(mut p) = self.robot.take() else { return };
         let t = self.theme;
         let inch = self.units == "in";
@@ -772,6 +769,65 @@ impl Shell {
         self.places.push(("robot:sheet".into(), r));
         p.side_drawn = false;
         self.robot = Some(p);
+    }
+
+    /// Its properties panel's width (the Environment trait's `properties_width`): docked right
+    /// while the environment is up.
+    pub fn robot_properties_width(&self) -> Option<f32> {
+        self.robot_on().then_some(crate::shell::ROBOT_PROPS_W)
+    }
+
+    /// Its line in the status bar (the trait's `status`): what you are in, and the robot.
+    pub fn robot_status(&self) -> Option<String> {
+        let p = self.robot.as_ref().filter(|p| p.open)?;
+        let name = if p.name.is_empty() {
+            "robot"
+        } else {
+            p.name.as_str()
+        };
+        let what = match &p.view {
+            Some(v) => {
+                let links = v.links.iter().filter(|l| !l.dummy).count();
+                let moving = v.joints.iter().filter(|j| j.position.len() == 1).count();
+                format!("{links} links, {moving} moving joints")
+            }
+            None => "building".into(),
+        };
+        let state = if !p.conflicts.is_empty() {
+            format!(" · {} changed in the assembly", p.conflicts.len())
+        } else if p.error.is_some() {
+            " · not exportable: see the sheet".into()
+        } else {
+            String::new()
+        };
+        let src = p
+            .source
+            .as_ref()
+            .map_or_else(|| " · unlinked".to_string(), |s| format!(" · linked to {s}"));
+        Some(format!(
+            "Robot · {name} · {what}{src}{state} · Finish Robot returns to the assembly"
+        ))
+    }
+
+    /// What it draws over the view (the Environment trait's `draw`): the joints' names at their
+    /// axis arrows' tips. It takes none of the view's pointer.
+    pub(in crate::shell) fn robot_draw(&mut self, ui: &mut Ui, view: egui::Rect) -> bool {
+        let Some(p) = &self.robot else { return false };
+        if !p.open || p.labels.is_empty() {
+            return false;
+        }
+        let t = self.theme;
+        let v = view;
+        let pt = ui.painter().with_clip_rect(v);
+        for (name, at, chosen) in &p.labels {
+            let a = v.min + vec2(at[0], at[1]);
+            let ink = if *chosen { t.accent } else { t.ink };
+            let g = pt.layout_no_wrap(name.clone(), sans(11.0), ink);
+            let r = egui::Rect::from_min_size(a + vec2(6.0, -g.size().y - 6.0), g.size() + vec2(8.0, 4.0));
+            pt.rect_filled(r, 3.0, t.surface.gamma_multiply(0.85));
+            pt.galley(r.min + vec2(4.0, 2.0), g, ink);
+        }
+        false
     }
 
     /// The export's refusal, inline: conflicts as sentences each with its two answers, any other
@@ -1036,6 +1092,14 @@ impl Shell {
                 " mm"
             };
             let (lo0, hi0) = j.limit.map_or((-180.0, 180.0), |(a, b)| (a * k, b * k));
+            // a limit as shown: an angle by the shared units, a length in the unit it is in
+            let lim = |x: f64| {
+                if angular {
+                    ux::show(x, ux::Qty::Angle, sys(inch))
+                } else {
+                    format!("{}{unit}", num(x, 3))
+                }
+            };
             let over = p.overridden(&what, "limit").map(str::to_string);
             let prov = match &over {
                 Some(w) if w.is_empty() => Prov::Yours(None),
@@ -1049,22 +1113,8 @@ impl Shell {
                 .spacing(vec2(10.0, 4.0))
                 .show(ui, |ui| match j.limit {
                     Some(_) => {
-                        row(
-                            ui,
-                            t,
-                            "Lower",
-                            &key("limit"),
-                            &format!("{}{unit}", num(lo0, 3)),
-                            Some(&prov),
-                        );
-                        row(
-                            ui,
-                            t,
-                            "Upper",
-                            &key("limit"),
-                            &format!("{}{unit}", num(hi0, 3)),
-                            Some(&prov),
-                        );
+                        row(ui, t, "Lower", &key("limit"), &lim(lo0), Some(&prov));
+                        row(ui, t, "Upper", &key("limit"), &lim(hi0), Some(&prov));
                     }
                     None => row(ui, t, "Range", &key("limit"), "none (turns freely)", Some(&prov)),
                 });
@@ -1291,7 +1341,7 @@ impl Shell {
             .spacing(vec2(10.0, 4.0))
             .show(ui, |ui| {
                 let m = match l.mass {
-                    Some(m) => format!("{} kg", num(m, 4)),
+                    Some(m) => ux::show(m, ux::Qty::Mass, sys(inch)),
                     None if l.dummy => "none (massless)".into(),
                     None => "unknown".into(),
                 };

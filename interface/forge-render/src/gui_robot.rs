@@ -111,17 +111,11 @@ impl Gui {
                     } else {
                         (px * 2.5, [0.98, 0.72, 0.22, 1.0])
                     };
-                    let tip = [
-                        at[0] + d.x as f32 * len,
-                        at[1] + d.y as f32 * len,
-                        at[2] + d.z as f32 * len,
-                    ];
-                    let tail = [
-                        at[0] - d.x as f32 * len,
-                        at[1] - d.y as f32 * len,
-                        at[2] - d.z as f32 * len,
-                    ];
-                    crate::origin::polyline(&[tail, tip], w, c, cam, size, &mut through);
+                    // an arrow along the axis, from the joint's origin: the way positive turns
+                    // or slides (its name at the tip, `robot_labels`)
+                    let (tip, head) = arrow(at, d, len);
+                    crate::origin::polyline(&[at, tip], w, c, cam, size, &mut through);
+                    crate::origin::polyline(&[head[0], tip, head[1]], w, c, cam, size, &mut through);
                 }
             }
         }
@@ -140,6 +134,35 @@ impl Gui {
             });
         }
         out.extend(through);
+    }
+
+    /// Where each joint's name goes over the view this frame: at its axis arrow's tip, in points
+    /// from the view's corner (the shell paints them, `Shell::robot_labels`).
+    fn robot_labels(&mut self) {
+        let ppp = self.pixels_per_point;
+        let (Some(p), Some(v)) = (&mut self.shell.robot, &self.view) else {
+            return;
+        };
+        p.labels.clear();
+        let Some(view) = &p.view else { return };
+        if !p.open || !p.show_axes {
+            return;
+        }
+        let r = v.scene.bounds().1;
+        let frames = view.place(&p.q);
+        for j in &view.joints {
+            let (Some(pf), Some(a)) = (frames.get(&j.parent), j.axis) else {
+                continue;
+            };
+            let jf = pf.compose(&j.origin);
+            let d = jf.vec_to_world(forge_math::Vec3::new(a[0], a[1], a[2]));
+            let chosen = p.sel == Some(crate::shell::robot::Sel::Joint(j.name.clone()));
+            let len = if chosen { r * 0.3 } else { r * 0.15 };
+            let (tip, _) = arrow(f3(jf.origin), d, len);
+            if let Some((x, y)) = v.nav.camera.pixel_of(tip, v.size.0, v.size.1) {
+                p.labels.push((j.name.clone(), [x / ppp, y / ppp], chosen));
+            }
+        }
     }
 
     /// Opens a robot document: its source as the document, its panel beside it.
@@ -269,6 +292,7 @@ impl Gui {
 
     /// Each frame: the parts where the panel's joint values put them. True when the view moved.
     pub(super) fn robot_tick(&mut self) -> bool {
+        self.robot_labels();
         if self.shell.robot.as_ref().is_some_and(|p| !p.out.is_empty()) {
             self.robot_acts();
         }
@@ -293,12 +317,26 @@ impl Gui {
             && v.nav.size == want
         {
             p.framed = true;
-            // the robot's parts filling 70% of the view's shorter side, from the 3/4 view
-            let pts = v.scene.shown_corners();
-            if pts.is_empty() {
-                v.nav.fit_all(&v.scene);
-            } else {
-                v.nav.frame(&pts, 0.7);
+            // the robot at its drive pose framed by the shared helper (docs/ux/STANDARD.md §2):
+            // the view is already what the browser and the sheet leave, so nothing is covered
+            match v.scene.shown_box() {
+                Some((lo, hi)) => {
+                    let (w, h) = (v.nav.size.0 as f32, v.nav.size.1 as f32);
+                    let b = crate::frame::Bounds::new(lo, hi);
+                    let mut c = crate::frame::frame(
+                        b,
+                        crate::frame::ViewRect::full(w, h),
+                        crate::frame::Framing::default(),
+                        &[],
+                    )
+                    .camera;
+                    // the same picture by the user's parallel lens, if theirs is one
+                    if v.nav.camera.parallel {
+                        c.set_parallel(true, b.radius());
+                    }
+                    v.nav.cut_to(c);
+                }
+                None => v.nav.fit_all(&v.scene),
             }
             v.dirty = true;
             return true;
@@ -387,4 +425,23 @@ pub fn robot_write(file: &str) -> String {
         }
     }
     format!("wrote {}", out.display())
+}
+
+/// An axis arrow from `at` along unit `d`, `len` long: its tip, and its head's two barbs.
+fn arrow(at: [f32; 3], d: forge_math::Vec3, len: f32) -> ([f32; 3], [[f32; 3]; 2]) {
+    let d = [d.x as f32, d.y as f32, d.z as f32];
+    let tip = [0, 1, 2].map(|i| at[i] + d[i] * len);
+    // a direction across the axis: world x, or y where the axis is near x
+    let side = if d[0].abs() < 0.9 {
+        [1.0, 0.0, 0.0]
+    } else {
+        [0.0, 1.0, 0.0]
+    };
+    let k = side[0] * d[0] + side[1] * d[1] + side[2] * d[2];
+    let mut n = [0, 1, 2].map(|i| side[i] - d[i] * k);
+    let m = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-6);
+    n = n.map(|x| x / m);
+    let (back, wide) = (len * 0.22, len * 0.1);
+    let barb = |s: f32| [0, 1, 2].map(|i| tip[i] - d[i] * back + n[i] * wide * s);
+    (tip, [barb(1.0), barb(-1.0)])
 }

@@ -756,61 +756,10 @@ impl Nav {
         self.go_to(to);
     }
 
-    /// A subject framed as docs/ux/STANDARD.md §2 asks: from the 3/4 view, centred on its
-    /// points as seen, near enough (or, a parallel view, its field narrow enough) that they fill
-    /// `fill` of the view's shorter side. Cut to, not moved to.
-    pub fn frame(&mut self, pts: &[[f32; 3]], fill: f32) {
-        if pts.is_empty() || self.size.0 == 0 || self.size.1 == 0 {
-            return;
-        }
-        let mut lo = [f32::MAX; 3];
-        let mut hi = [f32::MIN; 3];
-        for p in pts {
-            for i in 0..3 {
-                lo[i] = lo[i].min(p[i]);
-                hi[i] = hi[i].max(p[i]);
-            }
-        }
-        let mid = [0, 1, 2].map(|i| (lo[i] + hi[i]) * 0.5);
-        let r = (0..3)
-            .map(|i| (hi[i] - lo[i]) * 0.5)
-            .map(|h| h * h)
-            .sum::<f32>()
-            .sqrt()
-            .max(1e-3);
-        let mut to = Camera::fit(mid, r);
-        to = region_view_as(to, self.orient.world(HOME_CORNER), &self.orient);
-        let (f, right, up) = to.axes();
-        // the points as seen: their extent across and up, centred
-        let (mut x0, mut x1, mut y0, mut y1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
-        for p in pts {
-            let (x, y) = (dot(*p, right), dot(*p, up));
-            (x0, x1, y0, y1) = (x0.min(x), x1.max(x), y0.min(y), y1.max(y));
-        }
-        let (dx, dy) = ((x0 + x1) * 0.5 - dot(mid, right), (y0 + y1) * 0.5 - dot(mid, up));
-        let c = [0, 1, 2].map(|i| mid[i] + right[i] * dx + up[i] * dy);
-        to.target = c;
-        let aspect = self.size.0 as f32 / self.size.1 as f32;
-        // the view's shorter side is filled to `fill`; the other has room as it has
-        let need_y = ((y1 - y0) * 0.5).max((x1 - x0) * 0.5 / aspect) / fill;
-        if self.camera.parallel {
-            to.parallel = true;
-            to.dist = self.camera.dist.max(r * crate::camera::PARALLEL_BACK);
-            to.fovy = (need_y / to.dist).atan() * 2.0;
-        } else {
-            let ty = (to.fovy * 0.5).tan() * fill;
-            let tx = ty * aspect;
-            let mut d: f32 = 0.0;
-            for p in pts {
-                let q = [0, 1, 2].map(|i| p[i] - c[i]);
-                let z = -dot(q, f);
-                d = d.max(z + dot(q, right).abs() / tx).max(z + dot(q, up).abs() / ty);
-            }
-            // the eye outside every body
-            to.dist = d.max(r * 1.05);
-        }
+    /// Cut to a view (no move from the one before): a subject framed on entering.
+    pub fn cut_to(&mut self, c: Camera) {
         self.transition = None;
-        self.camera = to;
+        self.camera = c;
     }
 
     /// The opening view of everything.

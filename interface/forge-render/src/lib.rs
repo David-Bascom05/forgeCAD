@@ -21,8 +21,8 @@ pub mod parity;
 pub mod plat;
 pub mod render;
 pub mod scene;
-pub mod thumb;
 pub mod shell;
+pub mod thumb;
 pub mod viewcube;
 pub mod viewer;
 

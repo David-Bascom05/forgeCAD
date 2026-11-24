@@ -750,7 +750,7 @@ impl Shell {
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
         // the Robot environment's sheet docked right: the view is what is left
-        let props_w = if self.robot_on() { ROBOT_PROPS_W } else { 0.0 };
+        let props_w = self.robot_properties_width().unwrap_or(0.0);
         self.view_rect = Rect::from_min_max(
             pos2(snap(side_w + 1.0), snap(top)),
             pos2(snap(s.width() - props_w), snap(bottom)),
@@ -779,7 +779,9 @@ impl Shell {
         self.side_splitter(ui, side, s.width());
         if props_w > 0.0 {
             let dock = Rect::from_min_max(pos2(s.width() - props_w, top), pos2(s.width(), bottom));
-            self.robot_dock(ui, dock);
+            self.robot_properties(ui, dock);
+            let view = self.view_rect;
+            self.robot_draw(ui, view);
         }
         self.docs_and_status(ui, s, bottom);
         self.navbar(&ctx);
@@ -1096,7 +1098,7 @@ impl Shell {
         } else if self.agent.tab == agent::SideTab::Versions {
             self.versions_ui(ui, tree);
         } else if self.robot_on() {
-            self.robot_side(ui, tree);
+            self.robot_browser(ui, tree);
         } else if self.cam.is_some() {
             self.cam_side(ui, tree);
         } else if self.is_asm() && self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
@@ -1144,10 +1146,12 @@ impl Shell {
         let said = p.text(
             pos2(x + 4.0, st.center().y),
             Align2::LEFT_CENTER,
-            if self.status.is_empty() && self.unshown {
-                "This part built but some of it can't be drawn: fix or delete what the tree marks"
+            if let Some(line) = self.robot_status() {
+                line
+            } else if self.status.is_empty() && self.unshown {
+                "This part built but some of it can't be drawn: fix or delete what the tree marks".to_string()
             } else {
-                &self.status
+                self.status.clone()
             },
             sans(12.0),
             Color32::WHITE,
