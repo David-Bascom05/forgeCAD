@@ -1016,55 +1016,6 @@ fn nonneg(x: Ival) -> Ival {
     }
 }
 
-/// A binary min-heap of cells by their lower bound: the least bound is searched first, so a
-/// violation is met early and a pass is proven where the bound is tightest last.
-struct Heap {
-    v: Vec<(f64, Cell, Ival)>,
-}
-
-impl Heap {
-    /// `sd` is the cell's signed distance bound, `k` its low end (the key).
-    fn push(&mut self, sd: Ival, c: Cell) {
-        let k = sd.lo;
-        self.v.push((k, c, sd));
-        let mut i = self.v.len() - 1;
-        while i > 0 {
-            let p = (i - 1) / 2;
-            if self.v[p].0 <= self.v[i].0 {
-                break;
-            }
-            self.v.swap(p, i);
-            i = p;
-        }
-    }
-    fn pop(&mut self) -> Option<(f64, Cell, Ival)> {
-        if self.v.is_empty() {
-            return None;
-        }
-        let n = self.v.len() - 1;
-        self.v.swap(0, n);
-        let top = self.v.pop();
-        let len = self.v.len();
-        let mut i = 0;
-        loop {
-            let (l, r) = (2 * i + 1, 2 * i + 2);
-            let mut m = i;
-            if l < len && self.v[l].0 < self.v[m].0 {
-                m = l;
-            }
-            if r < len && self.v[r].0 < self.v[m].0 {
-                m = r;
-            }
-            if m == i {
-                break;
-            }
-            self.v.swap(i, m);
-            i = m;
-        }
-        top
-    }
-}
-
 fn diam(b: &[Ival; 3]) -> f64 {
     let (a, c, d) = (b[0].width(), b[1].width(), b[2].width());
     (a * a + c * c + d * d).sqrt().next_up()
@@ -1169,9 +1120,6 @@ fn certify_rest(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: 
 pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Verdict, usize) {
     // a helical piece is taken as its arc swept over every height it passes (cell_eval): a
     // Clear holds for the helix; a Hit holds too, its bound taken over all those heights
-    let lim_clear = limit + f.mu;
-    let lim_hit = limit - f.mu;
-    let pg = mv.path_gap();
     // the move's planar form, once: every cell of this search asks for it
     let pl = mv.planar();
     let line_or_arc = matches!(pl, Some(Planar::Line { .. } | Planar::Arc { .. }));
@@ -1180,47 +1128,80 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
     } else {
         Ival::new(0.0, 1.0)
     };
+    let search = FaceSearch {
+        body,
+        f,
+        mv,
+        pl,
+        pg: mv.path_gap(),
+        line_or_arc,
+        res,
+        show_cells: std::env::var("FORGE_CAM_CELLS").is_ok(),
+    };
     let root = Cell {
         p: f.p,
         q: f.q,
         s: s0,
     };
-    let mut heap = Heap { v: Vec::new() };
-    heap.push(cell_sd(body, f, mv, pl, &root, pg), root);
-    let mut lower = f64::INFINITY;
-    let mut spent = 0usize;
-    let mut undecided = false;
-    let show_cells = std::env::var("FORGE_CAM_CELLS").is_ok();
-    while let Some((key, c, sd0)) = heap.pop() {
-        if key >= lim_clear {
-            // the least bound left clears: so does every other cell
-            if key < lower {
-                lower = key;
-            }
-            break;
+    // the certified search (forge-bb): Clear only when every bound is proven at least
+    // limit + mu, Hit only at a cell centre surely on the face below limit - mu
+    let policy = forge_bb::Policy {
+        limit,
+        margin: f.mu,
+        budget,
+        resolution: None,
+    };
+    let (v, spent) = forge_bb::certify(&search, root, &policy);
+    let v = match v {
+        forge_bb::Verdict::Clear { lower } => Verdict::Clear { lower },
+        forge_bb::Verdict::Hit {
+            d,
+            witness: (p, q, s, at),
+        } => Verdict::Hit { d, p, q, s, at },
+        forge_bb::Verdict::Undecided { lower, cells } => Verdict::Undecided { lower, cells },
+    };
+    (v, spent)
+}
+
+/// One face against one move, as a forge-bb search over (p, q, s) cells.
+struct FaceSearch<'a> {
+    body: &'a Body,
+    f: &'a Face,
+    mv: &'a Move,
+    pl: Option<Planar>,
+    pg: f64,
+    line_or_arc: bool,
+    res: f64,
+    show_cells: bool,
+}
+
+impl forge_bb::Search for FaceSearch<'_> {
+    type Cell = Cell;
+    type Witness = (f64, f64, f64, V3);
+
+    #[inline]
+    fn bound(&self, c: &Cell) -> Ival {
+        cell_sd(self.body, self.f, self.mv, self.pl, c, self.pg)
+    }
+
+    #[inline]
+    fn holds(&self, c: &Cell) -> forge_bb::Holds {
+        match self.f.holds(c.p, c.q) {
+            h if h < 0 => forge_bb::Holds::Out,
+            0 => forge_bb::Holds::Maybe,
+            _ => forge_bb::Holds::In,
         }
-        spent += 1;
-        if spent > budget {
-            return (
-                Verdict::Undecided {
-                    lower: f64::NEG_INFINITY,
-                    cells: spent,
-                },
-                spent,
-            );
-        }
-        let holds = f.holds(c.p, c.q);
-        if holds < 0 {
-            continue;
-        }
-        // the bound was computed when the cell was pushed (`cell_sd`, the same function of the
-        // same cell); its smear is computed only if the cell is split
-        let mut sd = sd0;
-        if show_cells {
-            let smear = cell_eval(body, f, mv, pl, &c, pg, true).1;
+    }
+
+    #[inline]
+    fn refine(&self, c: &Cell, h: forge_bb::Holds, sd: Ival, clear: f64) -> Ival {
+        let (body, f, mv, pl, pg) = (self.body, self.f, self.mv, self.pl, self.pg);
+        if self.show_cells {
+            let smear = cell_eval(body, f, mv, pl, c, pg, true).1;
             eprintln!("cell p {:?} q {:?} sd {:?} smear {:?}", c.p, c.q, sd, smear);
         }
-        if holds == 0 && sd.lo < lim_clear {
+        let mut sd = sd;
+        if h == forge_bb::Holds::Maybe && sd.lo < clear {
             // the cell crosses the face's trim: its off-face points mean nothing. Every face
             // point of the cell is within the image's diameter of a face point of the cell, and
             // the minimum over the motion of the signed distance is 1-Lipschitz
@@ -1239,75 +1220,69 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                     pg,
                 );
                 let img = f.surf.eval(c.p, c.q);
-                let mvd = if line_or_arc { 0.0 } else { diam(&mv.enclose(c.s)) };
+                let mvd = if self.line_or_arc {
+                    0.0
+                } else {
+                    diam(&mv.enclose(c.s))
+                };
                 let lip = Ival::pt(w.lo).sub(Ival::pt(diam(&img))).sub(Ival::pt(mvd)).lo;
                 if lip > sd.lo {
                     sd = Ival { lo: lip, hi: sd.hi };
                 }
             }
         }
-        if sd.lo >= lim_clear {
-            if sd.lo < lower {
-                lower = sd.lo;
-            }
-            continue;
-        }
-        // a witness: the cell's centre, if it is surely on the face
+        sd
+    }
+
+    #[inline]
+    fn witness(&self, c: &Cell, below: f64) -> Option<(f64, (f64, f64, f64, V3))> {
+        let (body, f, mv, pl, pg) = (self.body, self.f, self.mv, self.pl, self.pg);
+        // the cell's centre, if it is surely on the face
         let (pm, qm, sm) = (c.p.mid(), c.q.mid(), c.s.mid());
-        if f.holds(Ival::pt(pm), Ival::pt(qm)) == 1 {
-            let w = cell_sd(
-                body,
-                f,
-                mv,
-                pl,
-                &Cell {
-                    p: Ival::pt(pm),
-                    q: Ival::pt(qm),
-                    s: Ival::pt(sm),
-                },
-                pg,
-            );
-            if w.hi < lim_hit {
-                let y = f.surf.eval(Ival::pt(pm), Ival::pt(qm));
-                let sm = if line_or_arc {
-                    mv.nearest_s([y[0].mid(), y[1].mid()])
-                } else {
-                    sm
-                };
-                return (
-                    Verdict::Hit {
-                        d: w.hi + f.mu,
-                        p: pm,
-                        q: qm,
-                        s: sm,
-                        at: [y[0].mid(), y[1].mid(), y[2].mid()],
-                    },
-                    spent,
-                );
-            }
+        if f.holds(Ival::pt(pm), Ival::pt(qm)) != 1 {
+            return None;
         }
+        let w = cell_sd(
+            body,
+            f,
+            mv,
+            pl,
+            &Cell {
+                p: Ival::pt(pm),
+                q: Ival::pt(qm),
+                s: Ival::pt(sm),
+            },
+            pg,
+        );
+        if w.hi >= below {
+            return None;
+        }
+        let y = f.surf.eval(Ival::pt(pm), Ival::pt(qm));
+        let sm = if self.line_or_arc {
+            mv.nearest_s([y[0].mid(), y[1].mid()])
+        } else {
+            sm
+        };
+        Some((w.hi, (pm, qm, sm, [y[0].mid(), y[1].mid(), y[2].mid()])))
+    }
+
+    #[inline]
+    fn leaf(&self, c: &Cell) -> bool {
+        // too small to split: the image of the cell (face point plus tool position)
+        let img = self.f.surf.eval(c.p, c.q);
+        let mvb = self.mv.at(c.s);
+        diam(&[img[0].add(mvb[0]), img[1].add(mvb[1]), img[2].add(mvb[2])]) <= self.res
+    }
+
+    #[inline]
+    fn split(&self, c: &Cell) -> (Cell, Cell) {
         // split the parameter that moves the image most
-        let img = f.surf.eval(c.p, c.q);
-        let mvb = mv.at(c.s);
-        let size = diam(&[img[0].add(mvb[0]), img[1].add(mvb[1]), img[2].add(mvb[2])]);
-        if size <= res {
-            undecided = true;
-            if sd.lo < lower {
-                lower = sd.lo;
-            }
-            continue;
-        }
-        let smear = cell_eval(body, f, mv, pl, &c, pg, true).1;
-        let (a, b) = split_by(&c, &smear);
-        heap.push(cell_sd(body, f, mv, pl, &a, pg), a);
-        heap.push(cell_sd(body, f, mv, pl, &b, pg), b);
+        let smear = cell_eval(self.body, self.f, self.mv, self.pl, c, self.pg, true).1;
+        split_by(c, &smear)
     }
-    if undecided {
-        return (Verdict::Undecided { lower, cells: spent }, spent);
-    }
-    (Verdict::Clear { lower: lower - f.mu }, spent)
 }
 
+#[inline]
 fn split_by(c: &Cell, sm: &[f64; 3]) -> (Cell, Cell) {
     let mut k = 0usize;
     let mut best = -1.0f64;

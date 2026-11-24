@@ -9,6 +9,8 @@ repository.workspace = true
 [dependencies]
 # the exact numbers (Nat, the exact reals, Ival): one implementation, shared with forge-math
 forge-num = { path = "../forge-num" }
+# the certified branch and bound (certify_bb)
+forge-bb = { path = "../forge-bb" }
 
 [lints]
 workspace = true

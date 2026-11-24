@@ -132,10 +132,14 @@ impl<C> Heap<C> {
     }
 }
 
-/// The search, least bound first, from `root`; the verdict and the cells popped.
+/// The search, least bound first, from `root`; the verdict and the cells popped. Inlined into
+/// its caller, so each search's loop is compiled with its evaluator, as a hand-written one is.
+#[inline(always)]
 pub fn certify<S: Search>(s: &S, root: S::Cell, p: &Policy) -> (Verdict<S::Witness>, usize) {
     let lim_clear = p.limit + p.margin;
     let lim_hit = p.limit - p.margin;
+    let (budget, margin, resolution) = (p.budget, p.margin, p.resolution);
+    let strict = resolution.is_none();
     let mut heap = Heap { v: Vec::new() };
     let b = s.bound(&root);
     heap.push(b, root);
@@ -151,8 +155,8 @@ pub fn certify<S: Search>(s: &S, root: S::Cell, p: &Policy) -> (Verdict<S::Witne
             break;
         }
         spent += 1;
-        if spent > p.budget {
-            let Some(res) = p.resolution else {
+        if spent > budget {
+            let Some(res) = resolution else {
                 return (
                     Verdict::Undecided {
                         lower: f64::NEG_INFINITY,
@@ -165,7 +169,7 @@ pub fn certify<S: Search>(s: &S, root: S::Cell, p: &Policy) -> (Verdict<S::Witne
             if key < lower {
                 lower = key;
             }
-            return (within(lower, lim_clear, res, p.margin, spent), spent);
+            return (within(lower, lim_clear, res, margin, spent), spent);
         }
         let h = s.holds(&c);
         if h == Holds::Out {
@@ -181,33 +185,34 @@ pub fn certify<S: Search>(s: &S, root: S::Cell, p: &Policy) -> (Verdict<S::Witne
         if let Some((up, w)) = s.witness(&c, lim_hit) {
             return (
                 Verdict::Hit {
-                    d: up + p.margin,
+                    d: up + margin,
                     witness: w,
                 },
                 spent,
             );
         }
         if s.leaf(&c) {
-            undecided |= p.resolution.is_none();
+            undecided |= strict;
             if sd.lo < lower {
                 lower = sd.lo;
             }
             continue;
         }
         let (a, b) = s.split(&c);
-        let (ba, bb) = (s.bound(&a), s.bound(&b));
+        let ba = s.bound(&a);
         heap.push(ba, a);
+        let bb = s.bound(&b);
         heap.push(bb, b);
     }
     if undecided {
         return (Verdict::Undecided { lower, cells: spent }, spent);
     }
-    if let Some(res) = p.resolution {
-        return (within(lower, lim_clear, res, p.margin, spent), spent);
+    if let Some(res) = resolution {
+        return (within(lower, lim_clear, res, margin, spent), spent);
     }
     (
         Verdict::Clear {
-            lower: lower - p.margin,
+            lower: lower - margin,
         },
         spent,
     )
