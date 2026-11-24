@@ -2454,7 +2454,6 @@ impl Cam {
         out: &mut OpOut,
         voids: &mut Vec<(Option<Region>, f64)>,
     ) -> Result<Vec<OpPath>, String> {
-        use forge_cam_geom::check::Surf;
         let (pi, hn) = match a.get("#1") {
             Some(V::Holes(p, n)) if self.holds(su, *p) => (self.setups[su].part, n.clone()),
             Some(V::Holes(..)) => {
@@ -2502,105 +2501,12 @@ impl Cam {
             ));
         }
         // the target: P ∖ Δ's boundary (a superset's), for every place
-        let mut faces: Vec<Face> = vec![];
-        let mut extra: Vec<Face> = vec![];
-        let mut id = 6000u32;
         let bands: Vec<([f64; 2], f64, f64)> = hole
             .places
             .iter()
             .map(|p| ([p[0], p[1]], p[2] - len, p[2]))
             .collect();
-        for f in &part.faces {
-            let mut kept = Some(f.clone());
-            // a flat face at the band's heights (the mouth's, an inner shoulder's): Δ's disk
-            // taken out of it
-            if let Some(forge_cam_geom::slab::Prism::Flat { z, region, .. }) = &f.prism
-                && bands.iter().any(|(_, zb, zt)| *z >= zb - 1e-9 && *z <= zt + 1e-9)
-            {
-                let mut rg = trim_region(region);
-                for (c, zb, zt) in &bands {
-                    if *z < zb - 1e-9 || *z > zt + 1e-9 {
-                        continue;
-                    }
-                    let a0 = p2(c[0] + rm, c[1]);
-                    let disk = Region {
-                        loops: vec![Loop {
-                            segs: vec![Seg::Arc {
-                                a: a0,
-                                b: a0,
-                                c: p2(c[0], c[1]),
-                                ccw: true,
-                            }],
-                        }],
-                    };
-                    rg = match rg.and_then(|r| {
-                        forge_cam_geom::boolean::boolean(&r, &disk, forge_cam_geom::boolean::Op::Diff).ok()
-                    }) {
-                        Some(l) if !l.is_empty() => Some(forge_cam_geom::boolean::region_of(&l)),
-                        _ => None,
-                    };
-                }
-                kept = match rg {
-                    Some(r) => Some(forge_cam::stock::flat(&r, *z, f.mu, f.id)),
-                    // nothing of the face is left, or it could not be cut: the face as it is
-                    // (a superset: never less strict)
-                    None => Some(f.clone()),
-                };
-            }
-            if let Surf::Cyl { o, x, y, ax, r } = f.surf
-                && ax[0] == 0.0
-                && ax[1] == 0.0
-                && (r - rb).abs() <= 1e-6
-            {
-                for (c, zb, zt) in &bands {
-                    if (o[0] - c[0]).abs() > 1e-6 || (o[1] - c[1]).abs() > 1e-6 {
-                        continue;
-                    }
-                    // heights: o.z + ax.z q; the wall kept below the band only
-                    let (q_at_zb, q_at_zt) = ((zb - o[2]) * ax[2], (zt - o[2]) * ax[2]);
-                    let (qlo_band, qhi_band) = (q_at_zb.min(q_at_zt), q_at_zb.max(q_at_zt));
-                    let below = if ax[2] > 0.0 {
-                        forge_cam_geom::ival::Ival::new(f.q.lo, f.q.hi.min(qlo_band))
-                    } else {
-                        forge_cam_geom::ival::Ival::new(f.q.lo.max(qhi_band), f.q.hi)
-                    };
-                    kept = if below.lo < below.hi {
-                        Some(Face::new(f.surf, f.p, below, None, f.mu, f.id))
-                    } else {
-                        None
-                    };
-                    // Δ's outer wall over the band, the same sector at the major radius
-                    let band = forge_cam_geom::ival::Ival::new(qlo_band.max(f.q.lo.min(qlo_band)), qhi_band);
-                    extra.push(Face::new(
-                        Surf::Cyl { o, x, y, ax, r: rm },
-                        f.p,
-                        band,
-                        None,
-                        f.mu,
-                        id,
-                    ));
-                    id += 1;
-                }
-            }
-            if let Some(k) = kept {
-                faces.push(k);
-            }
-        }
-        for (c, zb, zt) in &bands {
-            // Δ's floor: the ring at the band's bottom
-            extra.push(forge_cam::stock::flat(
-                &ring(*c, 0.5 * (rb + rm), 0.5 * (rm - rb)),
-                *zb,
-                1e-9,
-                id,
-            ));
-            id += 1;
-            out.removals.push(format!(
-                "cosmetic_thread M{major}x{pitch} of `{hn}` at ({:.3}, {:.3}): the ring {rb:.3}..{rm:.3} mm from z {zb:.3} to {zt:.3}",
-                c[0], c[1]
-            ));
-        }
-        faces.extend(extra);
+        let faces = thread_target(&part.faces, &bands, rb, rm, &hn, major, pitch, &mut out.removals);
         out.target = Some(faces);
         // the path, each place in turn
         let mut mv = vec![];
@@ -3966,6 +3872,28 @@ impl Cam {
             p.rpm = rpm;
             paths.push(p);
             plan.push(format!("tap {} (pitch {}) at {rpm} rpm", t.tool.id, t.tool.tp));
+            // the thread the tap cuts is not in the model (the hole is its tap drill): declared,
+            // Δ the ring from the bore to the major diameter over the tapped depth, and the op
+            // certified against P ∖ Δ, as thread_mill is
+            if let Some((major, pitch)) = hole.thread {
+                let tdepth = depth.min(hole.depth.unwrap_or(depth));
+                let bands: Vec<([f64; 2], f64, f64)> = hole
+                    .places
+                    .iter()
+                    .map(|q| ([q[0], q[1]], q[2] - tdepth, q[2]))
+                    .collect();
+                let faces = thread_target(
+                    &self.parts[pi].faces,
+                    &bands,
+                    0.5 * hole.d,
+                    0.5 * major,
+                    &hn,
+                    major,
+                    pitch,
+                    &mut out.removals,
+                );
+                out.target = Some(faces);
+            }
         }
         // each cycle's R plane above the stock the earlier ops left over the widest tool's
         // footprint (a rough leaves cusps beside a fillet above a hole's mouth): a rapid down to
@@ -4299,6 +4227,120 @@ fn stock_top_over(ip: &forge_cam::stock::InProcess, c: [f64; 2], r: f64, from: f
         }
     }
     top
+}
+
+/// P ∖ Δ's boundary (a superset's) for a hole's thread Δ at each band (place, bottom, top): the
+/// ring from the bore's radius rb to the major radius rm, declared in `removals`. The part's
+/// faces with Δ taken out (a flat face at the band's heights loses Δ's disk, the bore's wall
+/// above the band's bottom goes), plus Δ's outer wall and floor.
+#[allow(clippy::too_many_arguments)]
+fn thread_target(
+    part_faces: &[Face],
+    bands: &[([f64; 2], f64, f64)],
+    rb: f64,
+    rm: f64,
+    hn: &str,
+    major: f64,
+    pitch: f64,
+    removals: &mut Vec<String>,
+) -> Vec<Face> {
+    use forge_cam_geom::check::Surf;
+    let mut faces: Vec<Face> = vec![];
+    let mut extra: Vec<Face> = vec![];
+    let mut id = 6000u32;
+
+    for f in part_faces {
+        let mut kept = Some(f.clone());
+        // a flat face at the band's heights (the mouth's, an inner shoulder's): Δ's disk
+        // taken out of it
+        if let Some(forge_cam_geom::slab::Prism::Flat { z, region, .. }) = &f.prism
+            && bands.iter().any(|(_, zb, zt)| *z >= zb - 1e-9 && *z <= zt + 1e-9)
+        {
+            let mut rg = trim_region(region);
+            for (c, zb, zt) in bands {
+                if *z < zb - 1e-9 || *z > zt + 1e-9 {
+                    continue;
+                }
+                let a0 = p2(c[0] + rm, c[1]);
+                let disk = Region {
+                    loops: vec![Loop {
+                        segs: vec![Seg::Arc {
+                            a: a0,
+                            b: a0,
+                            c: p2(c[0], c[1]),
+                            ccw: true,
+                        }],
+                    }],
+                };
+                rg = match rg.and_then(|r| {
+                    forge_cam_geom::boolean::boolean(&r, &disk, forge_cam_geom::boolean::Op::Diff).ok()
+                }) {
+                    Some(l) if !l.is_empty() => Some(forge_cam_geom::boolean::region_of(&l)),
+                    _ => None,
+                };
+            }
+            kept = match rg {
+                Some(r) => Some(forge_cam::stock::flat(&r, *z, f.mu, f.id)),
+                // nothing of the face is left, or it could not be cut: the face as it is
+                // (a superset: never less strict)
+                None => Some(f.clone()),
+            };
+        }
+        if let Surf::Cyl { o, x, y, ax, r } = f.surf
+            && ax[0] == 0.0
+            && ax[1] == 0.0
+            && (r - rb).abs() <= 1e-6
+        {
+            for (c, zb, zt) in bands {
+                if (o[0] - c[0]).abs() > 1e-6 || (o[1] - c[1]).abs() > 1e-6 {
+                    continue;
+                }
+                // heights: o.z + ax.z q; the wall kept below the band only
+                let (q_at_zb, q_at_zt) = ((zb - o[2]) * ax[2], (zt - o[2]) * ax[2]);
+                let (qlo_band, qhi_band) = (q_at_zb.min(q_at_zt), q_at_zb.max(q_at_zt));
+                let below = if ax[2] > 0.0 {
+                    forge_cam_geom::ival::Ival::new(f.q.lo, f.q.hi.min(qlo_band))
+                } else {
+                    forge_cam_geom::ival::Ival::new(f.q.lo.max(qhi_band), f.q.hi)
+                };
+                kept = if below.lo < below.hi {
+                    Some(Face::new(f.surf, f.p, below, None, f.mu, f.id))
+                } else {
+                    None
+                };
+                // Δ's outer wall over the band, the same sector at the major radius
+                let band = forge_cam_geom::ival::Ival::new(qlo_band.max(f.q.lo.min(qlo_band)), qhi_band);
+                extra.push(Face::new(
+                    Surf::Cyl { o, x, y, ax, r: rm },
+                    f.p,
+                    band,
+                    None,
+                    f.mu,
+                    id,
+                ));
+                id += 1;
+            }
+        }
+        if let Some(k) = kept {
+            faces.push(k);
+        }
+    }
+    for (c, zb, zt) in bands {
+        // Δ's floor: the ring at the band's bottom
+        extra.push(forge_cam::stock::flat(
+            &ring(*c, 0.5 * (rb + rm), 0.5 * (rm - rb)),
+            *zb,
+            1e-9,
+            id,
+        ));
+        id += 1;
+        removals.push(format!(
+            "cosmetic_thread M{major}x{pitch} of `{hn}` at ({:.3}, {:.3}): the ring {rb:.3}..{rm:.3} mm from z {zb:.3} to {zt:.3}",
+            c[0], c[1]
+        ));
+    }
+    faces.extend(extra);
+    faces
 }
 
 /// A region's box: its segments' ends and each arc's extreme points that lie on it (in f64).
