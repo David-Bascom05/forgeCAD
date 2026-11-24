@@ -52,6 +52,18 @@ pub enum Event {
         text: String,
         fix: Option<String>,
     },
+    /// The agent asks before a tool runs: `id` answers it (`Backend::answer`). `summary` is the
+    /// tool's row ("Edit plate.fg"), `input` the whole of what it would do; `always`, when the
+    /// backend offers it, what "Always" would allow ("Accept edits for this chat").
+    Permission {
+        id: String,
+        tool: String,
+        summary: String,
+        input: String,
+        always: Option<String>,
+    },
+    /// The backend's permission mode is now this (`Mode::flag`), however it changed.
+    Mode(String),
     /// A Forge file in the folder changed or appeared while the agent ran; what it held before.
     FileChanged {
         path: String,
@@ -110,6 +122,84 @@ pub enum Entry {
         text: String,
         error: bool,
     },
+    /// A tool waiting on the person, and then what they said.
+    Permission {
+        id: String,
+        tool: String,
+        summary: String,
+        input: String,
+        always: Option<String>,
+        state: Asked,
+    },
+}
+
+/// A permission's answer, or none yet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Asked {
+    Waiting,
+    Allowed,
+    /// Allowed, and what `always` names from now on.
+    Always,
+    Denied,
+    /// The turn ended (stopped, failed) before an answer.
+    Dropped,
+}
+
+/// How a permission is answered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Answer {
+    Allow,
+    Always,
+    Deny,
+}
+
+/// What may run without asking, as Claude Code's `--permission-mode` names it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Mode {
+    /// Ask before edits and commands the person's settings don't already allow.
+    #[default]
+    Ask,
+    /// Edit files without asking; ask before the rest.
+    AcceptEdits,
+    /// Look and plan, change nothing.
+    Plan,
+}
+
+impl Mode {
+    pub const ALL: [Mode; 3] = [Mode::Ask, Mode::AcceptEdits, Mode::Plan];
+    pub fn flag(self) -> &'static str {
+        match self {
+            Mode::Ask => "default",
+            Mode::AcceptEdits => "acceptEdits",
+            Mode::Plan => "plan",
+        }
+    }
+    pub fn from_flag(s: &str) -> Option<Mode> {
+        Mode::ALL.into_iter().find(|m| m.flag() == s)
+    }
+    pub fn word(self) -> &'static str {
+        match self {
+            Mode::Ask => "Ask first",
+            Mode::AcceptEdits => "Accept edits",
+            Mode::Plan => "Plan only",
+        }
+    }
+    pub fn tip(self) -> &'static str {
+        match self {
+            Mode::Ask => "The agent asks before it edits a file or runs a command (Shift+Tab to change)",
+            Mode::AcceptEdits => {
+                "The agent edits files without asking; it still asks before commands (Shift+Tab to change)"
+            }
+            Mode::Plan => "The agent reads and plans but changes nothing (Shift+Tab to change)",
+        }
+    }
+    pub fn next(self) -> Mode {
+        match self {
+            Mode::Ask => Mode::AcceptEdits,
+            Mode::AcceptEdits => Mode::Plan,
+            Mode::Plan => Mode::Ask,
+        }
+    }
 }
 
 /// What the tab asks of the host.
@@ -131,6 +221,10 @@ pub enum AgentAct {
     Undo(usize, usize),
     Redo(usize, usize),
     Settings(SettingsAct),
+    /// A permission answered.
+    Answer(String, Answer),
+    /// The permission mode changed in the tab.
+    Mode(Mode),
     /// The answer to "Trust this folder for the agent?".
     Trust {
         dir: String,
@@ -177,6 +271,13 @@ pub struct AgentTab {
     thumbs: std::collections::HashMap<usize, egui::TextureHandle>,
     /// Talking instead of typing (`voice.rs`).
     pub voice: super::voice::Voice,
+    /// What may run without asking, this chat, as the backend last said or the person chose.
+    pub mode: Mode,
+    /// The person chose `mode` here (else it's their own settings' default).
+    pub mode_chosen: bool,
+    /// A mode the backend said that the tab has no name for (`bypassPermissions`, `auto`): shown
+    /// as it is, instead of `mode`.
+    pub mode_other: Option<String>,
 }
 
 pub const INPUT_ID: &str = "agent-input";
@@ -234,10 +335,14 @@ impl AgentTab {
                 self.reply_boundary = true;
                 self.running = false;
                 for e in &mut self.entries {
-                    if let Entry::Tool { state, .. } = e
-                        && *state == ToolState::Running
-                    {
-                        *state = ToolState::Failed;
+                    match e {
+                        Entry::Tool { state, .. } if *state == ToolState::Running => {
+                            *state = ToolState::Failed
+                        }
+                        Entry::Permission { state, .. } if *state == Asked::Waiting => {
+                            *state = Asked::Dropped
+                        }
+                        _ => {}
                     }
                 }
                 if stopped {
@@ -254,7 +359,68 @@ impl AgentTab {
                 self.running = false;
                 self.problem = Some(Problem { text, fix });
             }
+            Event::Permission {
+                id,
+                tool,
+                summary,
+                input,
+                always,
+            } => self.entries.push(Entry::Permission {
+                id,
+                tool,
+                summary,
+                input,
+                always,
+                state: Asked::Waiting,
+            }),
+            Event::Mode(m) => match Mode::from_flag(&m) {
+                Some(m) => {
+                    self.mode = m;
+                    self.mode_other = None;
+                }
+                None => self.mode_other = Some(m),
+            },
             Event::FileChanged { .. } => {}
+        }
+    }
+
+    /// The oldest permission still waiting on the person: its id.
+    pub fn waiting(&self) -> Option<&str> {
+        self.entries.iter().find_map(|e| match e {
+            Entry::Permission {
+                id,
+                state: Asked::Waiting,
+                ..
+            } => Some(id.as_str()),
+            _ => None,
+        })
+    }
+
+    /// A permission answered: the card says so and the host tells the backend.
+    pub fn answer(&mut self, want: &str, a: Answer) {
+        for e in &mut self.entries {
+            if let Entry::Permission { id, state, .. } = e
+                && id == want
+                && *state == Asked::Waiting
+            {
+                *state = match a {
+                    Answer::Allow => Asked::Allowed,
+                    Answer::Always => Asked::Always,
+                    Answer::Deny => Asked::Denied,
+                };
+                self.out.push(AgentAct::Answer(want.to_string(), a));
+                return;
+            }
+        }
+    }
+
+    /// The permission mode, set here: the host passes it on.
+    pub fn set_mode(&mut self, m: Mode) {
+        if self.mode != m || self.mode_other.is_some() {
+            self.mode = m;
+            self.mode_other = None;
+            self.mode_chosen = true;
+            self.out.push(AgentAct::Mode(m));
         }
     }
 
@@ -343,6 +509,9 @@ impl AgentTab {
         self.running = false;
         self.problem = None;
         self.open.clear();
+        self.mode = Mode::Ask;
+        self.mode_chosen = false;
+        self.mode_other = None;
         self.out.push(AgentAct::NewChat);
     }
 
@@ -363,6 +532,12 @@ impl AgentTab {
         if self.tab != SideTab::Agent || !(self.running || focused) {
             return false;
         }
+        // a question waiting: Esc says no to it, and the turn goes on
+        if let Some(id) = self.waiting().map(str::to_string) {
+            ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+            self.answer(&id, Answer::Deny);
+            return true;
+        }
         ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
         if self.running {
             self.out.push(AgentAct::Stop);
@@ -380,6 +555,45 @@ pub fn prompt(text: &str, refs: &[String]) -> String {
     }
     let ids: Vec<String> = refs.iter().map(|r| format!("`{r}`")).collect();
     format!("{text}\n\n(Selected in the app: {})", ids.join(", "))
+}
+
+/// A tool row's words as a question asks them: "Edited plate.fg" (what it did) → "Edit plate.fg"
+/// (what it would do).
+pub fn present(summary: &str) -> String {
+    const VERBS: [(&str, &str); 26] = [
+        ("Applied", "Apply"),
+        ("Asked", "Ask"),
+        ("Built", "Build"),
+        ("Compared", "Compare"),
+        ("Created", "Create"),
+        ("Edited", "Edit"),
+        ("Isolated", "Isolate"),
+        ("Kept", "Keep"),
+        ("Listed", "List"),
+        ("Looked", "Look"),
+        ("Made", "Make"),
+        ("Measured", "Measure"),
+        ("Moved", "Move"),
+        ("Put", "Put"),
+        ("Ran", "Run"),
+        ("Read", "Read"),
+        ("Regenerated", "Regenerate"),
+        ("Released", "Release"),
+        ("Restored", "Restore"),
+        ("Searched", "Search"),
+        ("Selected", "Select"),
+        ("Showed", "Show"),
+        ("Took", "Take"),
+        ("Turned", "Turn"),
+        ("Updated", "Update"),
+        ("Wrote", "Write"),
+    ];
+    let (first, rest) = summary.split_once(' ').unwrap_or((summary, ""));
+    match VERBS.iter().find(|(past, _)| *past == first) {
+        Some((_, now)) if rest.is_empty() => now.to_string(),
+        Some((_, now)) => format!("{now} {rest}"),
+        None => summary.to_string(),
+    }
 }
 
 /// "Agent: " and the request's first line, as its undo step reads.
@@ -772,7 +986,12 @@ impl Shell {
                 ink,
             );
             // a running agent shows on its tab from the Model tab
-            if tab == SideTab::Agent && !on && self.agent.running {
+            // a running agent shows on its tab from the Model tab; one waiting on you, louder
+            if tab == SideTab::Agent && !on && self.agent.waiting().is_some() {
+                p.circle_filled(pos2(r.right() - 6.0, r.top() + 7.0), 4.5, t.warn);
+                resp.clone()
+                    .on_hover_text("The agent is waiting for your permission");
+            } else if tab == SideTab::Agent && !on && self.agent.running {
                 p.circle_filled(pos2(r.right() - 6.0, r.top() + 7.0), 3.0, t.focus);
             }
             self.note(format!("side:tab:{word}"), r);
@@ -970,6 +1189,47 @@ impl Shell {
         self.note("agent:resume", chats);
         if response.clicked() && !self.agent.running {
             self.agent.out.push(AgentAct::ListConversations);
+        }
+
+        // what may run without asking (Claude Code's permission mode); click or Shift+Tab to change
+        if self.agent.settings.kind == agent_settings::Kind::ClaudeCode {
+            let m = self.agent.mode;
+            let other = self.agent.mode_other.clone();
+            let word = other.as_deref().unwrap_or(m.word());
+            let g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), sans(11.0), t.ink));
+            let mw = g.size().x + 14.0;
+            let mr = Rect::from_min_size(pos2(chats.left() - 6.0 - mw, bar.top() + 6.0), vec2(mw, 18.0));
+            // only where it doesn't cover the backend's name
+            if mr.left() > br.right() + 4.0 {
+                let tip = match &other {
+                    Some(o) => format!("Your Claude Code settings' mode, {o} (click for Ask first)"),
+                    None => m.tip().to_string(),
+                };
+                let resp = ui
+                    .interact(mr, ui.scope_id().with("agent-mode"), Sense::click())
+                    .on_hover_text(tip);
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, word));
+                let (fill, ink) = match m {
+                    _ if other.is_some() => (t.warn.gamma_multiply(0.25), t.ink),
+                    Mode::Ask => (t.field, t.ink2),
+                    Mode::AcceptEdits => (t.success.gamma_multiply(0.25), t.ink),
+                    Mode::Plan => (t.focus.gamma_multiply(0.25), t.ink),
+                };
+                p.rect_filled(mr, 9.0, if resp.hovered() { t.hover } else { fill });
+                p.galley(pos2(mr.left() + 7.0, mr.center().y - g.size().y * 0.5), g, ink);
+                self.note("agent:mode", mr);
+                if resp.clicked() {
+                    self.agent
+                        .set_mode(if other.is_some() { Mode::Ask } else { m.next() });
+                }
+            }
+        }
+        // a question waiting and nothing with the keys: Enter allows it
+        if let Some(id) = self.agent.waiting().map(str::to_string)
+            && ui.memory(|m| m.focused().is_none())
+            && ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter))
+        {
+            self.agent.answer(&id, Answer::Allow);
         }
         self.agent_resume_picker(ui.ctx());
 
@@ -1596,6 +1856,30 @@ impl Shell {
                             }
                             ui.add_space(4.0);
                         }
+                        Entry::Permission {
+                            id,
+                            summary,
+                            input,
+                            always,
+                            state,
+                            ..
+                        } => {
+                            let first = a.waiting() == Some(id.as_str());
+                            permission_card(
+                                ui,
+                                &t,
+                                Card {
+                                    id,
+                                    summary,
+                                    input,
+                                    always: always.as_deref(),
+                                    state: *state,
+                                    first,
+                                },
+                                w,
+                                &mut places,
+                            );
+                        }
                         Entry::Note { text, error } => {
                             let ink = if *error { t.error } else { t.ink2 };
                             let g = ui.fonts_mut(|f| f.layout_job(plain_job(text, sans(12.0), ink, inner)));
@@ -1638,6 +1922,33 @@ impl Shell {
         {
             ui.ctx().copy_text(cmd);
             self.status = "Copied the command".into();
+        }
+        let mut answers = Vec::new();
+        for e in &self.agent.entries {
+            if let Entry::Permission {
+                id,
+                state: Asked::Waiting,
+                ..
+            } = e
+            {
+                for (word, ans) in [
+                    ("allow", Answer::Allow),
+                    ("always", Answer::Always),
+                    ("deny", Answer::Deny),
+                ] {
+                    let name = format!("agent:perm:{id}:{word}");
+                    if let Some(r) = places.iter().find(|p| p.0 == name).map(|p| p.1)
+                        && ui
+                            .interact(r, ui.scope_id().with(&name), Sense::click())
+                            .clicked()
+                    {
+                        answers.push((id.clone(), ans));
+                    }
+                }
+            }
+        }
+        for (id, ans) in answers {
+            self.agent.answer(&id, ans);
         }
         if let Some(dir) = self.agent.trust_ask.clone() {
             for (name, yes) in [("agent:trust:yes", true), ("agent:trust:no", false)] {
@@ -1762,7 +2073,24 @@ impl Shell {
             resp.request_focus();
         }
         if send {
-            self.agent.send();
+            match self.agent.waiting().map(str::to_string) {
+                // an empty box: Enter answers the agent's question, as in a terminal
+                Some(id) if self.agent.input.trim().is_empty() => self.agent.answer(&id, Answer::Allow),
+                _ => self.agent.send(),
+            }
+        }
+        // Shift+Tab in the box: the permission mode, as in a terminal
+        if focused
+            && self.agent.settings.kind == agent_settings::Kind::ClaudeCode
+            && ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Tab))
+        {
+            let m = if self.agent.mode_other.is_some() {
+                Mode::Ask
+            } else {
+                self.agent.mode.next()
+            };
+            self.agent.set_mode(m);
+            resp.request_focus();
         }
 
         // the row under the text: attach the selection, send or stop
@@ -1943,6 +2271,157 @@ fn trust_card(ui: &mut Ui, t: &Theme, dir: &str, w: f32, places: &mut Vec<(Strin
     places.push(("agent:trust".into(), card));
     places.push(("agent:trust:yes".into(), yes));
     places.push(("agent:trust:no".into(), no));
+}
+
+/// A permission's card, as drawn.
+struct Card<'a> {
+    id: &'a str,
+    summary: &'a str,
+    input: &'a str,
+    always: Option<&'a str>,
+    state: Asked,
+    /// The one Enter and Esc answer.
+    first: bool,
+}
+
+/// Lines of a tool's input shown on its card; the rest is one "… more" line.
+const CARD_LINES: usize = 14;
+
+/// The agent asking before a tool runs: what it would do, and the answers, full width (the panel
+/// is narrow). Answered, it folds to one line saying what was said.
+fn permission_card(ui: &mut Ui, t: &Theme, c: Card, w: f32, places: &mut Vec<(String, Rect)>) {
+    let inner = w - 2.0 * PAD - 16.0;
+    if c.state != Asked::Waiting {
+        let (word, ink) = match c.state {
+            Asked::Allowed => ("Allowed", t.success),
+            Asked::Always => ("Allowed from now on", t.success),
+            Asked::Denied => ("Declined", t.error),
+            _ => ("Not answered", t.ink2),
+        };
+        let g = ui.fonts_mut(|f| {
+            f.layout_job(plain_job(
+                &format!("{word}: {}", c.summary),
+                sans(12.0),
+                t.ink2,
+                inner,
+            ))
+        });
+        let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 8.0), Sense::hover());
+        ui.painter().circle_filled(
+            pos2(PAD + 4.0, r.top() + 4.0 + g.size().y.min(16.0) * 0.5),
+            3.0,
+            ink,
+        );
+        selectable(ui, pos2(PAD + 12.0, r.top() + 4.0), g);
+        // `put` leaves the cursor under the text: back under the row
+        ui.advance_cursor_after_rect(r);
+        places.push((format!("agent:perm:{}", c.id), r));
+        return;
+    }
+    let head = ui.fonts_mut(|f| f.layout_job(plain_job("Permission needed", medium(11.0), t.warn, inner)));
+    let what = ui.fonts_mut(|f| f.layout_job(plain_job(c.summary, medium(13.0), t.ink, inner)));
+    let lines: Vec<&str> = c.input.trim_end().lines().collect();
+    let mut body = lines
+        .iter()
+        .take(CARD_LINES)
+        .copied()
+        .collect::<Vec<_>>()
+        .join("\n");
+    if lines.len() > CARD_LINES {
+        body.push_str(&format!("\n… {} more lines", lines.len() - CARD_LINES));
+    }
+    let code = (!body.trim().is_empty() && body.trim() != c.summary.trim())
+        .then(|| ui.fonts_mut(|f| f.layout_job(plain_job(&body, mono(11.0), t.ink2, inner - 12.0))));
+    let code_h = code.as_ref().map_or(0.0, |g| g.size().y + 14.0);
+    const BTN: f32 = 26.0;
+    let buttons = if c.always.is_some() { 3.0 } else { 2.0 };
+    let h = 10.0 + head.size().y + 2.0 + what.size().y + 8.0 + code_h + buttons * (BTN + 6.0) + 4.0;
+    ui.add_space(4.0);
+    let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
+    let card = Rect::from_min_max(pos2(PAD, r.top()), pos2(w - PAD, r.bottom()));
+    let p = ui.painter().clone();
+    p.rect_filled(card, 6.0, t.raised);
+    p.rect_stroke(card, 6.0, Stroke::new(1.5, t.warn), StrokeKind::Inside);
+    let x = card.left() + 8.0;
+    let mut y = card.top() + 10.0;
+    p.galley(pos2(x, y), head.clone(), t.warn);
+    y += head.size().y + 2.0;
+    selectable(ui, pos2(x, y), what.clone());
+    y += what.size().y + 8.0;
+    if let Some(g) = code {
+        let box_r = Rect::from_min_max(pos2(x, y), pos2(card.right() - 8.0, y + g.size().y + 8.0));
+        p.rect_filled(box_r, 4.0, t.field);
+        selectable(ui, pos2(x + 6.0, y + 4.0), g);
+        y = box_r.bottom() + 6.0;
+    }
+    let mut button = |name: &str, label: String, key: &str, primary: bool, tip: String| {
+        let b = Rect::from_min_max(pos2(x, y), pos2(card.right() - 8.0, y + BTN));
+        let resp = ui.interact(
+            b,
+            ui.scope_id().with(("agent-perm-hover", c.id, name)),
+            Sense::hover(),
+        );
+        resp.clone().on_hover_text(tip);
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
+        if primary {
+            p.rect_filled(
+                b,
+                4.0,
+                if resp.hovered() {
+                    t.focus
+                } else {
+                    t.focus.gamma_multiply(0.85)
+                },
+            );
+        } else {
+            p.rect_filled(b, 4.0, if resp.hovered() { t.hover } else { t.field });
+            p.rect_stroke(b, 4.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+        }
+        let ink = if primary { Color32::WHITE } else { t.ink };
+        let room = if key.is_empty() {
+            b.width() - 16.0
+        } else {
+            b.width() - 56.0
+        };
+        let g = ui.fonts_mut(|f| f.layout_no_wrap(label.clone(), medium(12.0), ink));
+        p.with_clip_rect(Rect::from_min_max(b.min, pos2(b.left() + 8.0 + room, b.bottom())))
+            .galley(pos2(b.left() + 8.0, b.center().y - g.size().y * 0.5), g, ink);
+        if !key.is_empty() && c.first {
+            p.text(
+                pos2(b.right() - 8.0, b.center().y),
+                Align2::RIGHT_CENTER,
+                key,
+                sans(11.0),
+                if primary {
+                    Color32::from_white_alpha(200)
+                } else {
+                    t.ink2
+                },
+            );
+        }
+        places.push((format!("agent:perm:{}:{name}", c.id), b));
+        y += BTN + 6.0;
+    };
+    button("allow", "Allow".into(), "Enter", true, "Run it this once".into());
+    if let Some(a) = c.always {
+        button(
+            "always",
+            format!("Always: {a}"),
+            "",
+            false,
+            format!("Run it, and {a}"),
+        );
+    }
+    button(
+        "deny",
+        "Deny".into(),
+        "Esc",
+        false,
+        "Don't run it; the agent is told and carries on".into(),
+    );
+    // `put` (the selectable text) leaves the cursor under the last text: back under the card
+    ui.advance_cursor_after_rect(r);
+    places.push((format!("agent:perm:{}", c.id), card));
 }
 
 fn problem_card(ui: &mut Ui, t: &Theme, pr: &Problem, w: f32, places: &mut Vec<(String, Rect)>) {

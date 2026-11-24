@@ -1,6 +1,6 @@
 //! Local project conversations. Agent credentials and project files are never stored here.
 use super::Event;
-use crate::shell::agent::{Entry, ToolState};
+use crate::shell::agent::{Asked, Entry, ToolState};
 use crate::shell::agent_settings::AgentSettings;
 use forge_agent::json::Json;
 use std::path::{Path, PathBuf};
@@ -276,6 +276,20 @@ fn entry_json(entry: &Entry) -> Json {
                 }
                 .into(),
             ),
+        ]),
+        Entry::Permission { summary, state, .. } => Json::obj(vec![
+            ("type", "note".into()),
+            (
+                "text",
+                match state {
+                    Asked::Waiting | Asked::Dropped => format!("Asked to {summary}: not answered"),
+                    Asked::Allowed => format!("Allowed: {summary}"),
+                    Asked::Always => format!("Allowed from then on: {summary}"),
+                    Asked::Denied => format!("Declined: {summary}"),
+                }
+                .into(),
+            ),
+            ("error", false.into()),
         ]),
         Entry::Diff {
             file,

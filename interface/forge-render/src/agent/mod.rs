@@ -46,17 +46,32 @@ pub trait Backend: Send {
     fn stop(&mut self);
     /// The document open in the app now, in the same folder.
     fn set_file(&mut self, _file: &Path) {}
+    /// The person's answer to `Event::Permission { id, .. }`.
+    fn answer(&mut self, _id: &str, _a: crate::shell::agent::Answer) {}
+    /// What may run without asking, from now on.
+    fn set_mode(&mut self, _m: crate::shell::agent::Mode) {}
 }
 
 /// The project's source files, read recursively after each tool: changed or new since last
-/// seen, with what it held before (None: it's new).
+/// seen, with what it held before (None: it's new). A file whose size and modified time are as
+/// last seen isn't read again, so a check costs a listing, not the project's bytes.
 pub struct Watch {
     pub dir: PathBuf,
-    seen: std::collections::HashMap<PathBuf, String>,
+    seen: std::collections::HashMap<PathBuf, Seen>,
+}
+
+struct Seen {
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+    text: String,
 }
 
 /// Larger files are not watched. Project traversal also bounds the file count.
 const WATCH_BYTES: u64 = 4 << 20;
+
+/// A modified time this close to now is read anyway: a filesystem with coarse times (one or two
+/// seconds) can give a quick second write of the same size the first write's time.
+const FRESH: std::time::Duration = std::time::Duration::from_secs(3);
 
 impl Watch {
     pub fn new(dir: &Path) -> Watch {
@@ -68,25 +83,47 @@ impl Watch {
         w
     }
 
-    fn scan(&self) -> Vec<(PathBuf, String)> {
-        project::files(&self.dir)
-            .into_iter()
-            .filter(|p| p.metadata().is_ok_and(|m| m.is_file() && m.len() <= WATCH_BYTES))
-            .filter_map(|p| Some((p.clone(), forge_dirs::fs::read_to_string(&p).ok()?)))
-            .collect()
-    }
-
     /// Changes to files that were there come first, then new files, each by name.
     pub fn check(&mut self) -> Vec<Event> {
+        let now = std::time::SystemTime::now();
+        let mut files: Vec<(PathBuf, u64, Option<std::time::SystemTime>)> = project::files(&self.dir)
+            .into_iter()
+            .filter_map(|p| {
+                let m = p
+                    .metadata()
+                    .ok()
+                    .filter(|m| m.is_file() && m.len() <= WATCH_BYTES)?;
+                Some((p, m.len(), m.modified().ok()))
+            })
+            .collect();
+        files.sort_by_key(|(p, ..)| (!self.seen.contains_key(p), p.clone()));
         let mut out = Vec::new();
-        let mut files = self.scan();
-        files.sort_by_key(|(p, _)| (!self.seen.contains_key(p), p.clone()));
-        for (p, text) in files {
-            let before = self.seen.get(&p).cloned();
+        for (p, len, modified) in files {
+            if let Some(s) = self.seen.get(&p)
+                && s.len == len
+                && modified.is_some()
+                && s.modified == modified
+                && modified
+                    .and_then(|m| now.duration_since(m).ok())
+                    .is_some_and(|age| age > FRESH)
+            {
+                continue;
+            }
+            let Ok(text) = forge_dirs::fs::read_to_string(&p) else {
+                continue;
+            };
+            let before = self.seen.insert(
+                p.clone(),
+                Seen {
+                    len,
+                    modified,
+                    text: text.clone(),
+                },
+            );
+            let before = before.map(|s| s.text);
             if before.as_deref() == Some(text.as_str()) {
                 continue;
             }
-            self.seen.insert(p.clone(), text.clone());
             out.push(Event::FileChanged {
                 path: p.display().to_string(),
                 before,

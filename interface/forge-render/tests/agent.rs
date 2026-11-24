@@ -35,9 +35,14 @@ fn fixture(name: &str) -> String {
     .unwrap()
 }
 
+/// The events, less the permission mode each session says (tests/agent_approvals.rs reads it).
 fn parse(name: &str) -> (Vec<Event>, Parser) {
     let mut p = Parser::default();
-    let evs = fixture(name).lines().flat_map(|l| p.line(l)).collect();
+    let evs = fixture(name)
+        .lines()
+        .flat_map(|l| p.line(l))
+        .filter(|e| !matches!(e, Event::Mode(_)))
+        .collect();
     (evs, p)
 }
 
@@ -421,6 +426,7 @@ fn in_the_app_a_turn_reloads_the_part_as_one_undo_step_and_the_tabs_keep_their_s
             Entry::Tool { .. } => "tool",
             Entry::Diff { .. } => "diff",
             Entry::Note { .. } => "note",
+            Entry::Permission { .. } => "permission",
         })
         .collect();
     assert_eq!(kinds, ["user", "tool", "tool", "agent", "diff"]);
