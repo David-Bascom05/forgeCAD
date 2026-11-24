@@ -753,10 +753,11 @@ impl Shell {
         let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
-        let dock_w = self.env_dock_width();
+        // an environment's docked properties take the right of the window
+        let props_w = self.env_properties_width();
         self.view_rect = Rect::from_min_max(
             pos2(snap(side_w + 1.0), snap(top)),
-            pos2(snap(s.width() - dock_w), snap(bottom)),
+            pos2(snap(s.width() - props_w), snap(bottom)),
         );
 
         p.rect_filled(
@@ -783,19 +784,11 @@ impl Shell {
         self.tabs_row(ui, s.width());
         self.ribbon(ui, s.width());
         self.side(ui, side);
-        self.side_splitter(ui, side, s.width());
-        if dock_w > 0.0 {
-            // an environment's properties, docked at the right edge
-            let r = Rect::from_min_max(
-                pos2(snap(s.width() - dock_w), snap(top)),
-                pos2(s.width(), snap(bottom)),
-            );
-            ui.painter().rect_filled(r, 0.0, t.surface);
-            ui.painter()
-                .vline(r.left(), r.y_range(), Stroke::new(1.0, t.line));
-            self.view_blocks.push(r);
-            self.env_dock(ui, r);
+        if props_w > 0.0 {
+            let r = Rect::from_min_max(pos2(s.width() - props_w, top), pos2(s.width(), bottom));
+            self.env_properties(ui, r);
         }
+        self.side_splitter(ui, side, s.width());
         self.docs_and_status(ui, s, bottom);
         if !self.view_owned {
             self.navbar(&ctx);
@@ -1159,10 +1152,14 @@ impl Shell {
         let st = Rect::from_min_size(pos2(0.0, bottom + DOCS_H), vec2(s.width(), STATUS_H));
         p.rect_filled(st, 0.0, t.bar);
         let x = self.voice_status(ui, 6.0, st);
+        // an environment owns the status bar too
+        let env_line = self.env_status();
         let said = p.text(
             pos2(x + 4.0, st.center().y),
             Align2::LEFT_CENTER,
-            if self.status.is_empty() && self.unshown {
+            if let Some(l) = &env_line {
+                l
+            } else if self.status.is_empty() && self.unshown {
                 "This part built but some of it can't be drawn: fix or delete what the tree marks"
             } else {
                 &self.status

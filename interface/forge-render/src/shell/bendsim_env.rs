@@ -193,8 +193,8 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
 }
 
 /// The docked properties panel's width: the selected bend's sheet.
-pub(super) fn dock_width(s: &Shell) -> f32 {
-    if s.sheet.bend_sim.is_some() { 340.0 } else { 0.0 }
+pub(super) fn dock_width(s: &Shell) -> Option<f32> {
+    s.sheet.bend_sim.is_some().then_some(340.0)
 }
 
 /// The selected bend's properties, docked at the right.
@@ -212,7 +212,6 @@ pub(super) fn dock(s: &mut Shell, ui: &mut Ui, r: Rect) {
             ui.set_max_width(r.width() - 40.0);
             flat = super::bendsim::bend_sheet(ui, &t, &mut b);
         });
-    s.places.push(("env:bendsim:properties".into(), r));
     s.sheet.bend_sim = Some(b);
     // the flat pattern, its bend lines shown, the bend named (picking one line out is a gap)
     if let Some(bend) = flat {

@@ -113,7 +113,7 @@ impl EnvId {
         match self {
             EnvId::Manufacture => "hole",
             EnvId::MachineBuilder => "gear",
-            EnvId::Thermoform => "shell",
+            EnvId::Thermoform => "thicken",
             EnvId::FlatPattern => "flatpattern",
             EnvId::BendSim => "bendtable",
             EnvId::Robot => "jrevolute",
@@ -172,19 +172,29 @@ pub(in crate::shell) trait Environment: Sync {
     fn finish_button(&self) -> bool {
         true
     }
-    /// Its browser in the left panel; false: the document's own stays.
+    /// Its browser in the left panel; false: none of its own (see `keeps_tree`).
     fn browser(&self, _s: &mut Shell, _ui: &mut Ui, _r: Rect) -> bool {
         false
     }
+    /// With no browser of its own, the document's feature tree stays in the left panel. Only an
+    /// environment that works on the part itself opts in (Thermoform, Flat Pattern, Render
+    /// Studio); by default an environment owns the window and the part's tree goes.
+    fn keeps_tree(&self) -> bool {
+        false
+    }
+    /// Its line in the status bar. None: the shell's own line if it keeps the tree, else its
+    /// name (or what it last said, a line starting with its name).
+    fn status(&self, _s: &Shell) -> Option<String> {
+        None
+    }
+    /// Its properties panel, docked at the window's right at full height (the view gives up the
+    /// width): the width, or None for none. Use this, not floating windows.
+    fn properties_width(&self, _s: &Shell) -> Option<f32> {
+        None
+    }
+    fn properties(&self, _s: &mut Shell, _ui: &mut Ui, _r: Rect) {}
     /// Its windows and panels, once a frame.
     fn panels(&self, _s: &mut Shell, _ctx: &egui::Context) {}
-    /// The width of its properties panel, docked at the window's right edge from the ribbon to
-    /// the documents bar (docs/ux/STANDARD.md §1); 0: none, the view runs to the edge.
-    fn dock_width(&self, _s: &Shell) -> f32 {
-        0.0
-    }
-    /// Its properties panel, in `r` (the view stops at its left edge).
-    fn dock(&self, _s: &mut Shell, _ui: &mut Ui, _r: Rect) {}
     /// What it draws over the view; true: it takes the view's pointer too (hit-testing is its).
     fn draw(&self, _s: &mut Shell, _ui: &mut Ui, _view: Rect) -> bool {
         false
@@ -301,22 +311,85 @@ impl Shell {
     }
 
     /// The browser, if the environment has its own.
+    /// The left panel in an environment: its browser, else the part's tree if it keeps it, else
+    /// the environment's name and the way out (the part's tree is not its).
     pub(super) fn env_browser(&mut self, ui: &mut Ui, r: Rect) -> bool {
-        match self.env {
-            Some(id) => id.imp().browser(self, ui, r),
-            None => false,
+        let Some(id) = self.env else { return false };
+        let e = id.imp();
+        if e.browser(self, ui, r) {
+            return true;
         }
+        if e.keeps_tree() {
+            return false;
+        }
+        let t = self.theme;
+        let p = ui.painter();
+        p.text(
+            egui::pos2(r.left() + super::theme::S3, r.top() + super::theme::S3),
+            egui::Align2::LEFT_TOP,
+            id.name(),
+            super::theme::semi(13.0),
+            t.ink,
+        );
+        let why = if e.finish_button() {
+            format!(
+                "Its tools are on the ribbon. {} goes back to the design.",
+                finish_word(id)
+            )
+        } else {
+            "Its tools are on the ribbon.".to_string()
+        };
+        let g = p.layout(
+            why,
+            super::theme::small(),
+            t.ink2,
+            r.width() - 2.0 * super::theme::S3,
+        );
+        p.galley(
+            egui::pos2(r.left() + super::theme::S3, r.top() + super::theme::S3 + 22.0),
+            g,
+            t.ink2,
+        );
+        self.places.push((format!("env:{}:browser", id.key()), r));
+        true
     }
 
-    /// The docked properties panel's width (0 outside an environment or with none).
-    pub(super) fn env_dock_width(&self) -> f32 {
-        self.env.map_or(0.0, |id| id.imp().dock_width(self))
+    /// The status bar's line in an environment (None: the shell's own).
+    pub(super) fn env_status(&self) -> Option<String> {
+        let id = self.env?;
+        let e = id.imp();
+        if let Some(s) = e.status(self) {
+            return Some(s);
+        }
+        if e.keeps_tree() {
+            return None;
+        }
+        Some(if self.status.starts_with(id.name()) {
+            self.status.clone()
+        } else {
+            id.name().to_string()
+        })
     }
 
-    pub(super) fn env_dock(&mut self, ui: &mut Ui, r: Rect) {
-        if let Some(id) = self.env {
-            id.imp().dock(self, ui, r);
+    /// The width the environment's docked properties take at the right.
+    pub(super) fn env_properties_width(&self) -> f32 {
+        self.env
+            .and_then(|id| id.imp().properties_width(self))
+            .unwrap_or(0.0)
+    }
+
+    /// The environment's properties, docked at the right of the view at full height.
+    pub(super) fn env_properties(&mut self, ui: &mut Ui, r: Rect) {
+        let Some(id) = self.env else { return };
+        if r.width() <= 0.0 {
+            return;
         }
+        let t = self.theme;
+        ui.painter().rect_filled(r, 0.0, t.surface);
+        ui.painter()
+            .vline(r.left(), r.y_range(), egui::Stroke::new(1.0, t.line));
+        self.places.push((format!("env:{}:properties", id.key()), r));
+        id.imp().properties(self, ui, r);
     }
 
     pub(super) fn env_panels(&mut self, ctx: &egui::Context) {
