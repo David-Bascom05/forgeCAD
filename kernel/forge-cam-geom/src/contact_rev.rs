@@ -404,7 +404,7 @@ mod tests {
             2,
         );
         let faces = [cone, fillet];
-        let (mut cells_fast, mut cells_bb, mut t_fast, mut t_bb) = (0usize, 0usize, 0.0f64, 0.0f64);
+        let (mut cells_fast, mut cells_bb) = (0usize, 0usize);
         let (mut n, mut clear_fast) = (0, 0);
         for row in 0..12 {
             let yy = -40.0 + row as f64 * 7.0;
@@ -421,12 +421,9 @@ mod tests {
                     };
                     for f in &faces {
                         n += 1;
-                        let t0 = std::time::Instant::now();
+                        // (cells, not wall time: the CAM crates keep std's clock out, browser_safe)
                         let (vf, cf) = crate::check::certify(&body, f, &mv, 0.0, 0.01, 50_000);
-                        t_fast += t0.elapsed().as_secs_f64();
-                        let t0 = std::time::Instant::now();
                         let (vb, cb) = certify_bb(&body, f, &mv, 0.0, 0.01, 50_000);
-                        t_bb += t0.elapsed().as_secs_f64();
                         cells_fast += cf;
                         cells_bb += cb;
                         if matches!(vf, Verdict::Clear { .. }) {
@@ -441,8 +438,6 @@ mod tests {
                 }
             }
         }
-        eprintln!(
-            "mould: pairs {n} cleared {clear_fast}; cells fast {cells_fast} vs B&B {cells_bb}; secs fast {t_fast:.3} vs B&B {t_bb:.3}"
-        );
+        eprintln!("mould: pairs {n} cleared {clear_fast}; cells fast {cells_fast} vs B&B {cells_bb}");
     }
 }

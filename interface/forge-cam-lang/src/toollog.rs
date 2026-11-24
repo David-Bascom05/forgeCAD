@@ -244,7 +244,10 @@ fn job(env: &Env, a: &Args, all: &mut [Instance], write_runs: bool) -> Result<St
         limits.insert(*t, Limit { at: 1.0, start });
     }
     let rep = cam.tool_life(&rows, &[], &limits);
-    let work = cam.material().map(|m| crate::life::work_name(&m)).unwrap_or_default();
+    let work = cam
+        .material()
+        .map(|m| crate::life::work_name(&m))
+        .unwrap_or_default();
     let mut o = String::new();
     for r in &rep {
         o += &format!(
@@ -274,7 +277,11 @@ fn job(env: &Env, a: &Args, all: &mut [Instance], write_runs: bool) -> Result<St
         for f in &r.entry {
             let e = by.entry(f.check.name()).or_insert((0, f));
             e.0 += 1;
-            let worse = if f.check.max() { f.value > e.1.value } else { f.value < e.1.value };
+            let worse = if f.check.max() {
+                f.value > e.1.value
+            } else {
+                f.value < e.1.value
+            };
             if worse {
                 e.1 = f;
             }
@@ -355,7 +362,12 @@ pub fn run(env: &Env, store: &mut dyn Store, argv: &[String]) -> Out {
                 .iter_mut()
                 .find(|i| i.label == l)
                 .ok_or(format!("no tool instance `{l}`"))?;
-            i.event(Event::parse(ev).expect("listed"), &date, vb, a.opt("--note").unwrap_or(""));
+            i.event(
+                Event::parse(ev).expect("listed"),
+                &date,
+                vb,
+                a.opt("--note").unwrap_or(""),
+            );
             Ok((format!("{l}: {ev} logged\n"), true))
         })(),
         "predict" => job(env, &a, &mut all, false).map(|o| (o, false)),

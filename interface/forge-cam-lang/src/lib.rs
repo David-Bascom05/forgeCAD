@@ -4044,7 +4044,7 @@ impl Cam {
         use forge_cam_3d::scallop::{Contact, cusp, raster_step, step_for, waterline_step};
         use forge_cam_3d::{link, ramp, steep, strategy, waterline};
         use forge_cam_geom::ival::Ival;
-        let t_start = std::time::Instant::now();
+        let t_start = forge_math::clock::Instant::now();
         let s = &self.setups[su];
         let part = &self.parts[s.part];
         let t = &self.tools[ti];

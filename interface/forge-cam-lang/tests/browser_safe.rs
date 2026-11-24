@@ -22,6 +22,7 @@ fn the_cam_crates_use_no_std_clock_or_file_system() {
         "interface/forge-cam-lang/src",
         "kernel/forge-cam/src",
         "kernel/forge-cam-geom/src",
+        "kernel/forge-cam-3d/src",
         "kernel/forge-post/src",
     ] {
         sources(&root.join(c), &mut files);
