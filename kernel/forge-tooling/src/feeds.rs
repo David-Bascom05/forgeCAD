@@ -180,8 +180,9 @@ pub fn iso_group_of_family(family: &str) -> Option<&'static str> {
 /// kc1.1 and mc at a speed, their spread over the rows ([low, high] each), and how they were read.
 pub type Kienzle = (f64, f64, [f64; 2], [f64; 2], String);
 
-/// Cutting data for one stock material (a forge-material name): its ISO 513 group and, where
-/// measured, kc1.1 and mc against the cutting speed (rows, linear between, held at the ends).
+/// Cutting data for one stock material (a forge-material name; its record's machining.* keys):
+/// its ISO 513 group and, where measured, kc1.1 and mc against the cutting speed (rows, linear
+/// between, held at the ends). `note` holds the rows' source.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Stock {
     pub material: String,
@@ -195,49 +196,33 @@ pub struct Stock {
 }
 
 impl Stock {
-    pub fn from_table(t: &Table) -> Result<Stock, LibError> {
-        let material = text(t, "material")
-            .ok_or_else(|| LibError::Missing {
-                record: "[[stock]]".into(),
-                field: "material",
-                fix: "give the forge-material name".into(),
-            })?
-            .to_string();
-        let rec = format!("stock `{material}`");
-        let group = text(t, "group")
-            .ok_or_else(|| LibError::Missing {
-                record: rec.clone(),
-                field: "group",
-                fix: "give the ISO 513 letter".into(),
-            })?
-            .to_string();
-        let rows = |k: &str| nums(t, k).unwrap_or_default();
-        let (vc_rows, kc1_1_rows, mc_rows) = (rows("vc_rows"), rows("kc1_1_rows"), rows("mc_rows"));
-        if kc1_1_rows.len() != vc_rows.len()
-            || mc_rows.len() != vc_rows.len()
-            || vc_rows.windows(2).any(|w| w[0] >= w[1])
-        {
-            return Err(LibError::Bad {
-                record: rec,
-                field: "vc_rows",
-                why: "vc_rows, kc1_1_rows and mc_rows are the same length, vc increasing".into(),
-            });
-        }
-        let mut required = vec!["group".to_string()];
-        if !vc_rows.is_empty() {
-            required.extend(["vc_rows", "kc1_1_rows", "mc_rows"].map(String::from));
-        }
-        let (real, cites) = cite::read(t, &rec, &required, &[])?;
-        Ok(Stock {
-            note: text(t, "note").unwrap_or("").to_string(),
-            material,
-            group,
+    /// A stock material's data as its material record gives it (forge-material's machining.*
+    /// keys, read by the caller): its class and, where measured, the Kienzle rows and their
+    /// source. Rows of unequal length or a vc not increasing: no rows (said by the caller).
+    pub fn new(
+        material: &str,
+        group: &str,
+        rows: Option<(Vec<f64>, Vec<f64>, Vec<f64>)>,
+        source: &str,
+    ) -> Stock {
+        let (vc_rows, kc1_1_rows, mc_rows) = match rows {
+            Some((v, k, m))
+                if v.len() == k.len() && v.len() == m.len() && v.windows(2).all(|w| w[0] < w[1]) =>
+            {
+                (v, k, m)
+            }
+            _ => (vec![], vec![], vec![]),
+        };
+        Stock {
+            material: material.into(),
+            group: group.into(),
             vc_rows,
             kc1_1_rows,
             mc_rows,
-            real,
-            cites,
-        })
+            note: source.into(),
+            real: true,
+            cites: vec![],
+        }
     }
 
     /// kc1.1 and mc at cutting speed vc (linear between rows; the end row outside them, said

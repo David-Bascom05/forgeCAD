@@ -213,25 +213,34 @@ fn cutting_data_is_cited_per_value() {
     assert_eq!(p.upper(), (1935.0, 0.51));
 }
 
-/// Stock records: Ti-6Al-4V carries Klippel et al.'s Table 16 rows; kc1.1/mc are read between
-/// rows at the cut's speed and held at the end rows outside them.
+/// Kienzle rows (as forge-material's Ti-6Al-4V record holds Klippel et al.'s Table 16) are read
+/// between rows at the cut's speed and held at the end rows outside them.
 #[test]
 fn stock_kienzle_rows() {
-    let lib = Library::builtin();
-    let ti = lib.stock("Ti-6Al-4V annealed").unwrap();
-    assert_eq!(ti.group, "S");
-    assert!(ti.real);
+    let ti = forge_tooling::feeds::Stock::new(
+        "Ti-6Al-4V annealed",
+        "S",
+        Some((
+            vec![40.0, 50.0, 500.0],
+            vec![1253.0, 1061.0, 662.0],
+            vec![0.22, 0.28, 0.41],
+        )),
+        "test rows",
+    );
     let (kc, mc, kr, mr, _) = ti.kienzle_at(45.0).unwrap();
-    // between vc 40 (1253, 0.22) and 50 (1061, 0.28), halfway
     assert!(
         (kc - 1157.0).abs() < 1e-9 && (mc - 0.25).abs() < 1e-12,
         "{kc} {mc}"
     );
-    assert_eq!((kr, mr), ([662.0, 1299.0], [0.21, 0.41]));
+    assert_eq!((kr, mr), ([662.0, 1253.0], [0.22, 0.41]));
     let (kc, _, _, _, how) = ti.kienzle_at(600.0).unwrap();
     assert!(kc == 662.0 && how.contains("over the data"));
-    assert_eq!(lib.stock("C45 bright").unwrap().group, "P");
-    assert_eq!(lib.stock("52100 hardened").unwrap().group, "H");
+    // rows that do not line up are dropped, not guessed
+    assert!(
+        forge_tooling::feeds::Stock::new("x", "P", Some((vec![1.0], vec![], vec![])), "")
+            .kienzle_at(10.0)
+            .is_none()
+    );
     assert_eq!(forge_tooling::feeds::iso_group_of_family("aluminium"), Some("N"));
     assert_eq!(forge_tooling::feeds::iso_group_of_family("plastic"), None);
     use forge_tooling::feeds::Substrate;

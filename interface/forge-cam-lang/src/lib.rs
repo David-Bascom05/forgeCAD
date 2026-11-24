@@ -116,6 +116,8 @@ struct PartIn {
     material: Option<String>,
     /// Where the material and group came from, for the reply and the fixes.
     material_note: String,
+    /// The material's machining data (its record's machining.* keys), read once.
+    stock: Option<feeds::Stock>,
 }
 
 struct SetupIn {
@@ -302,6 +304,7 @@ impl Cam {
             group: p.group.clone(),
             material: p.material.clone(),
             material_note: p.material_note.clone(),
+            stock: p.stock.clone(),
         };
         self.parts.push(turned);
         Ok(self.parts.len() - 1)
@@ -575,6 +578,30 @@ fn drilling_json(role: &str, id: &str, r: &resolve::DrillResolved) -> Json {
             ),
         ),
     ])
+}
+
+/// A material's machining data from its forge-material record: its class (as resolved) and the
+/// measured Kienzle rows where it has them (machining.vc_rows/kc1_1_rows/mc_rows, with their
+/// source).
+fn stock_of(name: &str, group: &str, dir: &Path) -> feeds::Stock {
+    let libs = forge_material::Libraries::cached(Some(dir));
+    let Some((_, m)) = libs.find(name) else {
+        return feeds::Stock::new(name, group, None, "");
+    };
+    let nums = |k: &str| match m.extra(k) {
+        Some(forge_material::Value::Nums(v)) => Some(v.clone()),
+        _ => None,
+    };
+    let rows = match (
+        nums("machining.vc_rows"),
+        nums("machining.kc1_1_rows"),
+        nums("machining.mc_rows"),
+    ) {
+        (Some(v), Some(k), Some(c)) => Some((v, k, c)),
+        _ => None,
+    };
+    let src = m.source_of("machining.kc1_1_rows").to_string();
+    feeds::Stock::new(&m.name, group, rows, &src)
 }
 
 /// A drill op's feeds-and-speeds args: vc|rpm, f (mm/rev)|feed (mm/min), peck (mm; 0: none),
@@ -1075,6 +1102,7 @@ impl Cam {
                     faces,
                     holes,
                     bbox: (lo, hi),
+                    stock: material.as_deref().map(|m| stock_of(m, &group, dir)),
                     group,
                     material,
                     material_note,
@@ -1456,6 +1484,9 @@ impl Cam {
             faces: sj.part.clone(),
             holes: vec![],
             bbox: (b.min, b.max),
+            stock: jaw_material
+                .as_deref()
+                .map(|m| stock_of(m, &jaw_group, Path::new("."))),
             group: jaw_group,
             material: jaw_material,
             material_note: jaw_note,
@@ -2399,11 +2430,9 @@ impl Cam {
         let mut map = HeightMap::of_stock(&s.ip, cell);
         // the cutting force at the actual speed: the stock's rows, else the group's
         let part = &self.parts[s.part];
-        let kg = self.lib.group(&part.group).map(|g| {
-            match part.material.as_deref().and_then(|m| self.lib.stock(m)) {
-                Some(st) => st.apply(g, r.vc.v),
-                None => g.clone(),
-            }
+        let kg = self.lib.group(&part.group).map(|g| match part.stock.as_ref() {
+            Some(st) => st.apply(g, r.vc.v),
+            None => g.clone(),
         });
         let spindle_kw = self
             .lib
@@ -2585,7 +2614,7 @@ impl Cam {
                 preset,
             },
             self.lib.group(&part.group),
-            part.material.as_deref().and_then(|m| self.lib.stock(m)),
+            part.stock.as_ref(),
             row,
             &resolve::Spindle {
                 rpm: m.rpm,
@@ -2659,11 +2688,15 @@ impl Cam {
                 ),
             );
         };
-        if let Some(st) = self.lib.stock(&m.name) {
+        if let Some(forge_material::Value::Str(g)) = m.extra("machining.iso513") {
             return (
                 Some(m.name.clone()),
-                Some(st.group.clone()),
-                format!("{} (group {} from its cutting record)", m.name, st.group),
+                Some(g.clone()),
+                format!(
+                    "{} (ISO 513 group {g} from its record: {})",
+                    m.name,
+                    m.source_of("machining.iso513")
+                ),
             );
         }
         match feeds::iso_group_of_family(&m.family) {
@@ -2695,7 +2728,7 @@ impl Cam {
             (p, t.tool.cites.iter().find(|c| c.path == path))
         });
         let part = &self.parts[self.setups[su].part];
-        let stock = part.material.as_deref().and_then(|m| self.lib.stock(m));
+        let stock = part.stock.as_ref();
         resolve::milling_on(
             &ask.over(self.tool_asks[ti]),
             &resolve::ToolData {

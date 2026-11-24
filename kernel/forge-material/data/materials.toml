@@ -11,6 +11,13 @@
 #   colour    sRGB hex rendering colour (appearance only, not sourced)
 #   source    reference covering every value in the record; source_<key> overrides it for one value
 #   note      condition/temper, test basis, typical vs minimum, and why any key is left out
+#   machining.iso513     ISO 513 machining class P | M | K | N | S | H | O (CAM's cutting data;
+#                        absent: the family's class)
+#   machining.vc_rows, machining.kc1_1_rows, machining.mc_rows
+#                        measured Kienzle data: kc1.1 (N/mm^2) and mc at each cutting speed vc
+#                        (m/min), same length, vc increasing (CAM power and torque)
+#   Every machining.* value has its own source_machining.<key>; kind_ "stand-in" where another
+#   material's measurement is held for this one (the source says which).
 #
 # Every number is taken from (or converted from US units out of) the cited source.
 # A key is absent when it does not apply or no source could be verified; the note says which.
@@ -108,6 +115,8 @@ source = "Henderson Bearings, '15mm Chrome Steel Ball Grade 100 AISI 52100' (0.2
 source_poisson = "SKT GmbH, 'Datasheet steel balls 1.3505 / AISI 52100 acc. to DIN 5401' (2025), https://www.skt-gmbh.de/wp-content/uploads/2025/09/Datasheet_balls_1.3505.pdf"
 source_cte = "SKT GmbH, 'Datasheet steel balls 1.3505 / AISI 52100 acc. to DIN 5401' (2025), https://www.skt-gmbh.de/wp-content/uploads/2025/09/Datasheet_balls_1.3505.pdf"
 note = "Through-hardened bearing balls, 60-67 HRC. Values converted from US units. Poisson (0.27-0.30) and CTE (10.5-11 e-6/K) are midpoints of the SKT ranges. Strength of hardened 52100 depends strongly on tempering; SKT quotes a much lower 1100-1600 MPa tensile range."
+machining.iso513 = "H"
+source_machining.iso513 = "ISO 513 class H: hardened steel; this record note gives 60-67 HRC (through-hardened 52100)"
 
 # ---------------------------------------------------------------- stainless
 
@@ -310,6 +319,14 @@ cte = 8.6
 colour = "#8E8C88"
 source = "ASM Aerospace Specification Metals / MatWeb, 'Titanium Ti-6Al-4V (Grade 5), Annealed', https://www.aerospacemetals.com/wp-content/uploads/2023/07/Titanium-Ti-6Al-4V-Grade-5-Annealed.pdf"
 note = "Annealed, typical values. CTE 20-100 C."
+machining.iso513 = "S"
+source_machining.iso513 = "ISO 513 class S: heat-resistant super alloys and titanium"
+machining.vc_rows = [11, 13, 20, 40, 50, 52, 60, 70, 74, 80, 89, 100, 125, 150, 159, 162, 191, 212, 254, 318, 381, 400, 500]
+source_machining.vc_rows = "Klippel, Suessmaier, Kuffa, Wegener, Dry Cutting Experiments Database Ti6Al4V and Ck45, ETH Zurich IWF, arXiv:2209.04197 (2022), CC BY 4.0, https://arxiv.org/abs/2209.04197; Table 16 (Ti6Al4V), cutting speed vc [m/min]; orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors TeX source"
+machining.kc1_1_rows = [1299, 1264, 1265, 1253, 1061, 1156, 1146, 1156, 941, 1084, 891, 932, 962, 998, 869, 1027, 881, 859, 749, 712, 663, 803, 662]
+source_machining.kc1_1_rows = "Klippel, Suessmaier, Kuffa, Wegener, Dry Cutting Experiments Database Ti6Al4V and Ck45, ETH Zurich IWF, arXiv:2209.04197 (2022), CC BY 4.0, https://arxiv.org/abs/2209.04197; Table 16 (Ti6Al4V), kc1.1 [N/mm2] at each vc; orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors TeX source"
+machining.mc_rows = [0.21, 0.22, 0.22, 0.22, 0.28, 0.27, 0.27, 0.24, 0.32, 0.28, 0.34, 0.33, 0.31, 0.3, 0.31, 0.28, 0.32, 0.32, 0.37, 0.36, 0.38, 0.35, 0.41]
+source_machining.mc_rows = "Klippel, Suessmaier, Kuffa, Wegener, Dry Cutting Experiments Database Ti6Al4V and Ck45, ETH Zurich IWF, arXiv:2209.04197 (2022), CC BY 4.0, https://arxiv.org/abs/2209.04197; Table 16 (Ti6Al4V), mc at each vc; orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors TeX source"
 
 # ---------------------------------------------------------------- rubber
 
@@ -1145,6 +1162,8 @@ source = "ASM Aerospace Specification Metals / MatWeb, 'Allegheny Ludlum Altemp 
 source_yield = "ASM Aerospace Specification Metals / MatWeb, 'Nickelvac A-286 Specialty Steel, Heat Treatment: 982 C (1800 F) + Age', https://www.aerospacemetals.com/wp-content/uploads/2023/08/Nickelvac%C2%AE-A-286-Specialty-Steel-Heat-Treatment-982%C2%B0C-1800%C2%B0F-Age.pdf"
 source_uts = "ASM Aerospace Specification Metals / MatWeb, 'Nickelvac A-286 Specialty Steel, Heat Treatment: 982 C (1800 F) + Age', https://www.aerospacemetals.com/wp-content/uploads/2023/08/Nickelvac%C2%AE-A-286-Specialty-Steel-Heat-Treatment-982%C2%B0C-1800%C2%B0F-Age.pdf"
 note = "Austenitic iron-base superalloy, solution treated at 982 C and aged (32 HRC); non-magnetic. PEM uses 'Age Hardened A286 Stainless' for SP and SMPP nuts and FHP studs (bulletins CL p. CL-9, https://damlite.pemnet.com/CLS-M6-1_pdf_2.pdf, and FH p. FH-17, https://damlite.pemnet.com/FH-M5-12ZC_pdf_1.pdf) for clinching into stainless sheet. yield/uts are the Nickelvac sheet's values (150 / 110 ksi), not stated as typical or minimum. Density, E (dynamic), Poisson and CTE (20-93 C) from the Allegheny sheet (solution treated; solution-treated strength there is only 275 / 620 MPa)."
+machining.iso513 = "S"
+source_machining.iso513 = "ISO 513 class S: heat-resistant super alloys; A286 (UNS S66286) is an iron-base superalloy per this record source (Allegheny Ludlum Altemp A286 datasheet)"
 
 # ---------------------------------------------------------------- standard parts: rings, keys, seals
 
@@ -1177,6 +1196,17 @@ source_youngs = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6)
 source_poisson = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
 source_cte = "Eurocode Applied, 'Steel design properties' (EN 1993-1-1 3.2.6), https://cdn.eurocodeapplied.com/design/en1993/steel-design-properties"
 note = "Cold drawn (+C) bright bar of EN 10083-2 C45 (1.0503, SAE 1045 equivalent per Saarstahl). yield is the EN 10277-2 minimum Rp0.2 and uts the bottom of the Rm range for 10 < t <= 16 mm (500, 710-1030 MPa); 5-10 mm: 565, 750-1050; 16-40 mm: 410, 650-1000; 40-63 mm: 360, 630-900. Intended for DIN 6885 parallel keys and generic bright bar; no public DIN 6885 text was found to confirm the key steel. Density, E, Poisson and CTE are the Eurocode 3 carbon-steel values."
+machining.iso513 = "P"
+source_machining.iso513 = "ISO 513 class P: steel (unalloyed carbon steel)"
+machining.vc_rows = [10, 30, 50, 70, 100, 150, 200, 250, 300, 350, 450]
+source_machining.vc_rows = "Klippel, Suessmaier, Kuffa, Wegener, Dry Cutting Experiments Database Ti6Al4V and Ck45, ETH Zurich IWF, arXiv:2209.04197 (2022), CC BY 4.0, https://arxiv.org/abs/2209.04197; Table 17 (Ck45 = C45E, EN 10083-2), vc [m/min]; held for C45 (same nominal composition, C45E has tighter P and S limits; drawn bar not tested); orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors TeX source"
+machining.kc1_1_rows = [1935, 1803, 1417, 1729, 1672, 1707, 1716, 1794, 1851, 1575, 1368]
+source_machining.kc1_1_rows = "Klippel, Suessmaier, Kuffa, Wegener, Dry Cutting Experiments Database Ti6Al4V and Ck45, ETH Zurich IWF, arXiv:2209.04197 (2022), CC BY 4.0, https://arxiv.org/abs/2209.04197; Table 17 (Ck45), kc1.1 [N/mm2] at each vc; held for C45 as above; orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors TeX source"
+machining.mc_rows = [0.19, 0.17, 0.51, 0.35, 0.32, 0.28, 0.26, 0.22, 0.22, 0.27, 0.29]
+source_machining.mc_rows = "Klippel, Suessmaier, Kuffa, Wegener, Dry Cutting Experiments Database Ti6Al4V and Ck45, ETH Zurich IWF, arXiv:2209.04197 (2022), CC BY 4.0, https://arxiv.org/abs/2209.04197; Table 17 (Ck45), mc at each vc; held for C45 as above; orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors TeX source"
+kind_machining.vc_rows = "stand-in"
+kind_machining.kc1_1_rows = "stand-in"
+kind_machining.mc_rows = "stand-in"
 
 [[material]]
 name = "FKM 75A"
