@@ -78,6 +78,9 @@ fn tool_of(t: u32, d: f64, cr: f64, words: &str, flutes: Option<u32>) -> Tool {
         taken: String::new(),
         note: "from the program's tool comment".into(),
         presets: Vec::new(),
+        // read off a program's comment, not a maker's cited product
+        real: false,
+        cites: Vec::new(),
     }
 }
 

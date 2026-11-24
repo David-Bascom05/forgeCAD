@@ -64,15 +64,14 @@ stock box, not from the earlier setup's result.
 | chip p99 / data fz, worst milling op | 1.7 | 1.00 |
 | outside contours, climb | 0% | 100% |
 
-Since (cam/bench-rptu, 2026-11-24): pocket and clear entries below the first level come down
-to the level above at the cutting feed as a link, not at the plunge feed (the tool stood at that
-very point at that depth one level up: ops.rs `air_down`). The 15 programs of latest.txt
-(boss_adaptive and open_step included): 2407.4 → 2335.9 s (−3.0%); plate_break −19.1 s,
-bracket −22.2 s over its three programs; tests/pinned.txt re-pinned for it (well_island 81.0 →
-78.4 s, deep_slot 92.7 → 88.2 s). Then `clear` enters from beside the stock where it can (rapid
-down clear of the stock's box, the last mm at the plunge feed, then in sideways; ops.rs
-`side_entry`): straight plunges into material in clear ops 55 → 0, 2335.9 → 2327.6 s; the chip
-is unchanged (hex max, p99, 0% overload), φmax rises at those entries (the feed follows it).
+Since (cam/quality-5 on train 4b, 2026-11-24): pocket and clear entries below the first level
+come down to the level above at the cutting feed as a link, not at the plunge feed (the tool
+stood at that very point at that depth one level up: ops.rs `air_down`); `clear` enters from
+beside the stock where it can (rapid down clear of the stock's box, the last mm at the plunge
+feed, then in sideways: ops.rs `side_entry`): straight plunges into material in clear ops → 0,
+chip unchanged (hex max, p99, 0% overload), φmax higher at those entries (the feed follows).
+All programs of latest.txt: 2846.3 → 2763.0 s (−2.9%); manifold refuses the same ops as before.
+tests/pinned.txt re-pinned for it (well_island 81.0 → 78.4 s, deep_slot 92.7 → 88.2 s).
 
 Changes (cam/quality): stay-down linking between pocket/clear passes (greedy ready-innermost
 order, links tested exactly against the tool-centre region); feeds from engagement
@@ -100,19 +99,22 @@ model as our own programs. Tools come from the tool comments (`(T1 D=6. CR=0. ..
 The parts are RPTU's 10-part 3-axis benchmark (verify/cam-parts/rptu-10, CC BY 4.0, NOTICE
 there): STEP models and the Autodesk CAM programs the authors made and machined, one 6 mm flat
 end mill. `parts/rptu/` imports parts 2–6 (`import(file: "N.step")`) and machines them with our
-ops and the same tool: face 1 mm, the surrounding step (`clear` or `adaptive`), the holes and
-pockets (`pocket`), all certified. Part 1 is refused: its side walls are notched by the through
-slot (`NotPrism`, as open_step; with CAM-CORE). Parts 7–10 have freeform (3-axis finishing).
+ops and the same tool: face 1 mm, the surrounding step (`clear`), the holes and
+pockets (`pocket`), all certified; part 1 its through slot by `clear` (a part with no sketch has no
+`slot` op to use). Parts 7–10 have freeform (3-axis finishing).
 
 Whole program, t_stop on generic-vmc3 (2026-11-24, with `air_down` and side entries):
 
-| part | Autodesk | ours, step by `clear` | ours, step by `adaptive` |
+| part | Autodesk | ours, step by `clear` | ours, step by `adaptive` (branch cam/quality, experimental) |
 |---|---|---|---|
+| 1 (through slot) | 194.4 s | 134.8 s (slot by `clear`: 47.5 s vs their 23.0 s) | – |
 | 2 (4 holes) | 315.7 s | 102.6 s | – |
 | 3 (+ rectangular step) | 474.4 s | 149.5 s | 316.3 s |
 | 4 (+ circular step) | 514.7 s | 213.5 s | 194.2 s |
 | 5 (+ mixed step) | 463.8 s | 194.9 s | 189.5 s |
 | 6 (+ circular pocket) | 681.8 s | 251.2 s | 417.9 s |
+
+(`adaptive` is not in this tree; its parts/rptu/*_adaptive_cam.fg are on cam/quality.)
 
 Read with care: the feeds differ as well as the paths. Theirs: S18000 (generic-vmc3 stops at
 12000: one `Rpm` violation, the timeline runs the programmed F), F2000 side cutting (0.111
