@@ -299,7 +299,11 @@ pub fn mill_with(
         }
         // no piece above the cutter can come down to the stock's top on this move: then only the
         // cutter changes cells, and none farther than r (the same results, a smaller window)
-        let reach = if lowest + lowest_from - 1e-6 >= map.top { r } else { reach };
+        let reach = if lowest + lowest_from - 1e-6 >= map.top {
+            r
+        } else {
+            reach
+        };
         let i0 = (((lo[0] - reach - map.x0) / step).floor().max(0.0)) as usize;
         let i1 = (((hi[0] + reach - map.x0) / step).ceil().max(0.0) as usize).min(nx - 1);
         let j0 = (((lo[1] - reach - map.y0) / step).floor().max(0.0)) as usize;
