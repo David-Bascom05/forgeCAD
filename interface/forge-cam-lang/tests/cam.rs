@@ -55,6 +55,68 @@ fn leftover_is_listed() {
     );
 }
 
+/// G4's reasons: below every tool tip (the facing's floor), and tool radius (the notch's inside
+/// corners, which no disk of the chain's smallest radius reaches); the rest says "uncut".
+#[test]
+fn leftover_says_why() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let cam = forge_cam_lang::run(
+        &doc(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\nprog = program(op1, post: \"fanuc\", number: 1)\n",
+        ),
+        &dir,
+    );
+    assert!(cam.leftover_done && !cam.leftover.is_empty());
+    // the facing's lowest tip is its floor, 18: everything under it is below every tool tip
+    for l in &cam.leftover {
+        // (the read-back tip: the posted 18 back in the part's frame, to f64)
+        let d = l.below.expect("the lowest tip");
+        assert!(
+            l.why == "below every tool tip" && (d - 18.0).abs() < 1e-9 && l.z1 <= d,
+            "{l:?}"
+        );
+    }
+    // unposted: no tip is known, so no such claim
+    let cam = forge_cam_lang::run(&doc("skim = facing(op1, tool: t1, to: 18, step: 1)\n"), &dir);
+    assert!(
+        cam.leftover.iter().all(|l| l.below.is_none()),
+        "{:?}",
+        cam.leftover
+    );
+    // and the bolt holes (6.6 mm) and the bore take no disk of the facing tool's radius, 5
+    assert!(
+        cam.leftover
+            .iter()
+            .any(|l| l.why == "tool radius" && l.r == Some(5.0)),
+        "{:?}",
+        cam.leftover
+    );
+    // the bracket: op2 (turned over) clears with the 10 mm tool; the chain's smallest is the
+    // 6 mm (op1's bore). The notch's corners (x 28 and 42, y −38 turned) are out of reach of a
+    // radius-3 disk; the rest of the notch's leftover a 6 mm tool could reach: uncut
+    let cam = bracket(&dir, &|s| s);
+    assert!(cam.ok && cam.leftover_done);
+    let tr: Vec<_> = cam.leftover.iter().filter(|l| l.why == "tool radius").collect();
+    assert!(!tr.is_empty(), "{:?}", cam.leftover);
+    for l in &tr {
+        assert_eq!(l.r, Some(3.0));
+        assert!(l.z0 >= 6.0 - 1e-9, "{l:?}");
+        for b in &l.boxes {
+            // each corner's box (its arc's circle box, a superset) touches a notch corner
+            let near = |x: f64, y: f64| b[0] <= x && x <= b[2] && b[1] <= y && y <= b[3];
+            assert!(near(28.0, -38.0) || near(42.0, -38.0), "{b:?}");
+        }
+    }
+    assert!(
+        cam.leftover
+            .iter()
+            .any(|l| l.why == "uncut" && l.z0 >= 6.0 - 1e-9)
+    );
+    let mut j = String::new();
+    cam.json().write(&mut j);
+    assert!(j.contains("\"why\":\"tool radius\",\"r\":3"), "{j}");
+}
+
 #[test]
 fn refusals_name_the_check_and_a_fix() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
@@ -227,7 +289,11 @@ fn what_the_jaws_hold_is_left_over_by_name() {
             .iter()
             .any(|l| l.why == "held by fixture" && l.z1 <= 5.0)
     );
-    assert!(cam.leftover.iter().all(|l| l.why == "uncut" || l.z1 <= 5.0));
+    assert!(
+        cam.leftover
+            .iter()
+            .all(|l| l.why != "held by fixture" || l.z1 <= 5.0)
+    );
     let mut j = String::new();
     cam.json().write(&mut j);
     assert!(
@@ -587,4 +653,256 @@ fn edge_break_certifies_the_chamfer_and_refuses_what_it_cannot_cut() {
         assert_eq!(b.status, "refused", "{why}");
         assert!(b.fix.is_some(), "{why}: {:?}", b.refusal);
     }
+}
+
+/// A pocket of the section keeps the islands standing in it: well_island.fg's well has a boss in it, to
+/// the plate's top. The pocket's region is the well less the part's section, so the passes go
+/// round the boss (certified: no gouge), and G4 leaves only the well's four corners (a 6 mm
+/// tool) besides the stock outside the plate, which nothing here cuts.
+#[test]
+fn a_pocket_keeps_its_islands() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("well_island_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
+    );
+    let well = cam.ops.iter().find(|o| o.name == "well").unwrap();
+    assert!(well.status == "built" && well.pairs > 0);
+    // the passes run on both sides of the boss (x 25 to 35) at its height
+    let xs: Vec<f64> = well.paths[0]
+        .moves
+        .iter()
+        .filter_map(|m| match m {
+            forge_cam::ops::PMove::Line { to, .. } | forge_cam::ops::PMove::Arc { to, .. }
+                if (to[1] - 20.0).abs() < 4.0 && to[2] < 12.0 =>
+            {
+                Some(to[0])
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(
+        xs.iter().any(|x| *x < 25.0) && xs.iter().any(|x| *x > 35.0),
+        "{xs:?}"
+    );
+    assert!(cam.leftover_done);
+    let corners = [[8.0, 8.0], [52.0, 8.0], [52.0, 32.0], [8.0, 32.0]];
+    for l in cam.leftover.iter().filter(|l| l.z0 >= 6.0 - 1e-9) {
+        for b in &l.boxes {
+            // the stock's ring outside the plate, or a corner of the well (a box an arc's
+            // circle gives: of radius 3, or 3 + 1e-6 for G4's tool-radius piece)
+            let ring = b[0] <= 0.0 && b[2] >= 60.0;
+            let corner = corners.iter().any(|c| {
+                (b[0] - c[0]).abs().min((b[2] - c[0]).abs()) < 1e-5
+                    && (b[1] - c[1]).abs().min((b[3] - c[1]).abs()) < 1e-5
+                    && b[2] - b[0] <= 6.0 + 1e-5
+            });
+            assert!(ring || corner, "{b:?}");
+        }
+    }
+}
+
+/// `slot`: an end mill along a sketch's centrelines, the modelled groove its width, ramped in
+/// along each line; certified (the cutter tangent to both walls within tol), and G4 finds the
+/// grooves cleared. A pointed tool is refused (that is engraving).
+#[test]
+fn slots_follow_their_centrelines() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("slot_plate_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
+    );
+    let op = cam.ops.iter().find(|o| o.name == "slots").unwrap();
+    assert_eq!(op.kind, "slot");
+    // ramped: moves that descend while they travel along the line
+    let mut at = op.paths[0].start;
+    let mut ramps = 0;
+    for m in &op.paths[0].moves {
+        if let forge_cam::ops::PMove::Line { to, .. } = m {
+            if to[2] < at[2] && (to[0] != at[0] || to[1] != at[1]) {
+                ramps += 1;
+            }
+            at = *to;
+        } else if let forge_cam::ops::PMove::Rapid { to } | forge_cam::ops::PMove::Arc { to, .. } = m {
+            at = *to;
+        }
+    }
+    assert!(ramps >= 4, "{ramps}");
+    // the grooves are cleared: in their band nothing is left inside the plate
+    assert!(cam.leftover_done);
+    for l in cam.leftover.iter().filter(|l| l.z1 > 6.0 + 1e-9) {
+        for b in &l.boxes {
+            assert!(b[0] <= 0.0 && b[2] >= 60.0, "inside the plate: {b:?} in {l:?}");
+        }
+    }
+    // a pointed tool engraves; a slot takes an end mill
+    let cam = forge_cam_lang::run(&src.replace("tool(\"flat-6\"", "tool(\"chamfer-10-90\""), &dir);
+    let op = cam.ops.iter().find(|o| o.name == "slots").unwrap();
+    assert!(
+        op.refusal.as_deref().is_some_and(|r| r.contains("an end mill")),
+        "{:?}",
+        op.refusal
+    );
+}
+
+/// G5's runtime half: the posted S and F, as read back, within the machine's spindle range and
+/// feed limit (a machine of the project's own library, slower than the generic one).
+#[test]
+fn posted_speeds_and_feeds_are_within_the_machine() {
+    let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let dir = forge_dirs::temp_dir().join(format!("forge-cam-g5rt-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(dir.join("cam")).unwrap();
+    std::fs::copy(src_dir.join("flange.fg"), dir.join("flange.fg")).unwrap();
+    let machine = |rpm: &str, feed: &str| {
+        let m = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kernel/forge-tooling/data/machines.toml"),
+        )
+        .unwrap();
+        // the generic VMC's record, renamed, with its spindle range and feed limit replaced
+        let vmc = m.split("[[machine]]").nth(1).unwrap();
+        let rec = vmc
+            .replace("\"generic-vmc3\"", "\"slow-vmc\"")
+            .replace("rpm = [100, 12000]", &format!("rpm = {rpm}"))
+            .replace("max_feed = 10000", &format!("max_feed = {feed}"));
+        std::fs::write(dir.join("cam/slow.toml"), format!("[[machine]]{rec}")).unwrap();
+    };
+    let src = std::fs::read_to_string(src_dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace("generic-vmc3", "slow-vmc");
+    // the same limits as the generic VMC: released
+    machine("[100, 12000]", "10000");
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    // a feed limit under the profile's feed: refused by the posted F, with the limit
+    machine("[100, 12000]", "1000");
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(!cam.ok && cam.program_text().is_none());
+    let c = cam
+        .ops
+        .iter()
+        .flat_map(|o| o.checks.iter())
+        .find(|c| c.rule == "machine_limit")
+        .expect("a feed over the limit");
+    assert!(c.value > 1000.0 && c.limit == 1000.0, "{c:?}");
+    // a material group with no cutting data: the ops fall back to S3000, under this
+    // spindle's least speed: refused by the posted S
+    machine("[5000, 24000]", "10000");
+    let cam = forge_cam_lang::run(&src.replace("group: \"N\"", "group: \"X\""), &dir);
+    assert!(!cam.ok && cam.program_text().is_none());
+    let c = cam
+        .ops
+        .iter()
+        .flat_map(|o| o.checks.iter())
+        .find(|c| c.rule == "machine_limit")
+        .expect("a spindle speed under the range");
+    assert!(
+        c.value == 3000.0 && c.limit == 5000.0 && c.other.starts_with("spindle"),
+        "{c:?}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Cycle time counts arcs: each op's time is its moves' lengths at their feeds (rapids at
+/// 10 000 mm/min), arcs by the turn they sweep. Worked out here from the planned path, its own
+/// way; the posted path differs only by the dialect's rounding.
+#[test]
+fn cycle_time_counts_arcs() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(cam.ok);
+    let mut arcs_seen = 0;
+    for op in cam.ops.iter().filter(|o| o.kind != "drill") {
+        let (mut t, mut len) = (0.0, 0.0);
+        for p in &op.paths {
+            let mut at = p.start;
+            for m in &p.moves {
+                match *m {
+                    forge_cam::ops::PMove::Rapid { to } => {
+                        let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2))
+                            .sqrt();
+                        t += l / 10_000.0 * 60.0;
+                        at = to;
+                    }
+                    forge_cam::ops::PMove::Line { to, f, .. } => {
+                        let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2))
+                            .sqrt();
+                        t += l / f * 60.0;
+                        len += l;
+                        at = to;
+                    }
+                    forge_cam::ops::PMove::Arc { to, c, cw, f } => {
+                        arcs_seen += 1;
+                        let (u, v) = ([at[0] - c[0], at[1] - c[1]], [to[0] - c[0], to[1] - c[1]]);
+                        let r = (u[0] * u[0] + u[1] * u[1]).sqrt();
+                        // the turn from u to v in the arc's sense (a whole one if they agree)
+                        let mut a =
+                            forge_math::dmath::atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1]);
+                        if cw {
+                            a = -a;
+                        }
+                        if a <= 1e-12 {
+                            a += std::f64::consts::TAU;
+                        }
+                        let l = ((r * a).powi(2) + (to[2] - at[2]).powi(2)).sqrt();
+                        t += l / f * 60.0;
+                        len += l;
+                        at = to;
+                    }
+                    forge_cam::ops::PMove::Cycle { .. } => {}
+                }
+            }
+        }
+        assert!(
+            (op.time_s - t).abs() <= 0.01 * t + 0.05,
+            "{}: {} vs {t}",
+            op.name,
+            op.time_s
+        );
+        assert!(
+            (op.length_cut - len).abs() <= 0.01 * len + 0.05,
+            "{}: {} vs {len}",
+            op.name,
+            op.length_cut
+        );
+    }
+    assert!(arcs_seen > 0);
+}
+
+/// A statement's `param`s are names its arguments read, and only its own: `param skim.d` is
+/// `skim`'s, `param xskim.d` is not (the owner was once matched by the tail of its debug text,
+/// which matched nothing, so every param was dropped).
+#[test]
+fn a_statements_params_are_its_own() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let own = forge_cam_lang::run(
+        &doc("param skim.d = 18\nskim = facing(op1, tool: t1, to: d, step: 1)\n"),
+        &dir,
+    );
+    assert!(
+        own.errors.iter().all(|e| !e.contains("unknown name")),
+        "{:?}",
+        own.errors
+    );
+    assert!(own.ops.iter().any(|o| o.name == "skim"), "{:?}", own.errors);
+    let other = forge_cam_lang::run(
+        &doc("param xskim.d = 18\nskim = facing(op1, tool: t1, to: d, step: 1)\n"),
+        &dir,
+    );
+    assert!(
+        other.errors.iter().any(|e| e.contains("unknown name `d`")),
+        "{:?}",
+        other.errors
+    );
 }
