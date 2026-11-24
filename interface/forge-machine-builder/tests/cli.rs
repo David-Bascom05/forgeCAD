@@ -212,12 +212,15 @@ fn model_attach_split_check_list_remove() {
                 .iter()
                 .flat_map(|f| [[f[0], f[1], f[2]], [f[0], f[2], f[3]]])
                 .collect(),
+            name: String::new(),
         }
     };
-    // a 36 x 14 x 3.5 in table and a smaller head well above it, in one file
+    // a 36 x 14 x 3.5 in table and a smaller head well above it, in one file, under an
+    // enclosure a whole machine's size (a download's size says its units against the machine's)
     let stl = Piece::join(&[
         cube([0.0; 3], [36.0, 14.0, 3.5]),
         cube([10.0, 4.0, 20.0], [20.0, 10.0, 30.0]),
+        cube([-30.0, -30.0, -36.0], [66.0, 44.0, 64.0]),
     ]);
     let dl = root.join("downloads");
     std::fs::create_dir_all(&dl).unwrap();
@@ -241,7 +244,7 @@ fn model_attach_split_check_list_remove() {
     );
     assert_eq!(o.code, 0, "{}", o.err);
     assert!(
-        o.out.contains("inches") && o.out.contains("2 separate parts"),
+        o.out.contains("inches") && o.out.contains("3 separate parts"),
         "{}",
         o.out
     );
@@ -252,14 +255,15 @@ fn model_attach_split_check_list_remove() {
     // its parts, largest first; then the table's and the head's
     let o = run(&e, &["model", "split", "haas-vf-2", "VF-2.stl"]);
     assert!(
-        o.out.starts_with("part 1: 12 triangles, 36.0 x 14.0 x 3.5"),
+        o.out.starts_with("part 1: 12 triangles, 36.0 x 14.0 x 3.5")
+            && o.out.contains("part 3: 12 triangles, 96.0 x 74.0 x 100.0"),
         "{}",
         o.out
     );
     let o = run(&e, &["model", "split", "haas-vf-2", "VF-2.stl", "table", "nope"]);
     assert_eq!(o.code, 1);
     assert!(o.err.contains("no body `nope`"), "{}", o.err);
-    let o = run(&e, &["model", "split", "haas-vf-2", "VF-2.stl", "table", "head"]);
+    let o = run(&e, &["model", "split", "haas-vf-2", "VF-2.stl", "table", "head", "-"]);
     assert_eq!(o.code, 0, "{}", o.err);
     assert!(!kept.join("VF-2.stl").exists(), "the whole file goes once split");
     let o = run(&e, &["model", "list", "haas-vf-2", "--json"]);
@@ -364,6 +368,7 @@ fn model_split_onto_axes_step_solids_and_display_only() {
                 .iter()
                 .flat_map(|f| [[f[0], f[1], f[2]], [f[0], f[2], f[3]]])
                 .collect(),
+            name: String::new(),
         }
     };
     // four parts, sizes in falling order: bed, saddle, table, head

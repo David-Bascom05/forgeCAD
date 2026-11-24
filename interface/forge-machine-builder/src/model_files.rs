@@ -18,6 +18,9 @@ use std::path::{Path, PathBuf};
 pub struct Piece {
     pub pos: Vec<V3>,
     pub tri: Vec<[u32; 3]>,
+    /// What the file calls it: a STEP part's products from the top assembly down (`A / B / part`),
+    /// or its solid's name; empty for an STL's.
+    pub name: String,
 }
 
 impl Piece {
@@ -117,27 +120,68 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Vec<Piece>, String> {
                     .map(|o| Piece {
                         pos: o.positions.iter().map(|p| [p.x, p.y, p.z]).collect(),
                         tri: o.triangles.clone(),
+                        name: String::new(),
                     })
                     .collect::<Vec<_>>(),
             );
             all.components()
         }
         Format::Step | Format::Iges => {
-            let imp = forge_step::import(bytes, &forge_step::Limits::default())
-                .map_err(|_| format!("{name}: not a model this reads"))?;
-            let mut v = Vec::new();
+            // a display model: sixteen times the evaluations a part's check may spend, which
+            // a machine maker's sheet-metal enclosure needs (Haas's VF-2: three solids more, no
+            // longer to read)
+            let d = forge_step::Limits::default();
+            let lim = forge_step::Limits {
+                max_evals: d.max_evals * 16,
+                ..d
+            };
+            let imp =
+                forge_step::import(bytes, &lim).map_err(|_| format!("{name}: not a model this reads"))?;
+            // each solid meshed once, then placed where the assembly uses it (a solid no use
+            // names stands as the file has it)
+            let mut meshed: std::collections::BTreeMap<u32, Option<Piece>> = Default::default();
             let mut failed = 0;
             for s in &imp.solids {
                 let q = forge_mesh::Quality {
                     chord: 5e-4 * s.body.faces_box().diagonal(),
                     ..forge_mesh::Quality::default()
                 };
-                match forge_mesh::tessellate::tessellate_tolerant(&s.body, &q) {
-                    Ok(m) => v.push(Piece {
+                let m = forge_mesh::tessellate::tessellate_tolerant(&s.body, &q)
+                    .ok()
+                    .map(|m| Piece {
                         pos: m.positions.iter().map(|p| [p.x, p.y, p.z]).collect(),
                         tri: m.triangles.clone(),
-                    }),
-                    Err(_) => failed += 1,
+                        name: s.name.clone(),
+                    });
+                failed += usize::from(m.is_none());
+                meshed.insert(s.entity, m);
+            }
+            let mut v = Vec::new();
+            let mut placed = std::collections::BTreeSet::new();
+            let mut uses: Vec<&forge_step::Occurrence> = imp.occurrences.iter().collect();
+            uses.sort_by(|a, b| a.path.cmp(&b.path).then(a.solid.cmp(&b.solid)));
+            for u in uses {
+                let Some(Some(p)) = meshed.get(&u.solid) else {
+                    continue;
+                };
+                placed.insert(u.solid);
+                let f = u.frame;
+                v.push(Piece {
+                    pos: p
+                        .pos
+                        .iter()
+                        .map(|&[x, y, z]| {
+                            let q = f.point_to_world(forge_math::Point3::new(x, y, z));
+                            [q.x, q.y, q.z]
+                        })
+                        .collect(),
+                    tri: p.tri.clone(),
+                    name: u.path.join(" / "),
+                });
+            }
+            for (e, p) in meshed {
+                if let (false, Some(p)) = (placed.contains(&e), p) {
+                    v.push(p);
                 }
             }
             if v.is_empty() && failed > 0 {
@@ -381,7 +425,11 @@ mod tests {
             .iter()
             .flat_map(|f| [[f[0], f[1], f[2]], [f[0], f[2], f[3]]])
             .collect();
-        Piece { pos, tri }
+        Piece {
+            pos,
+            tri,
+            name: String::new(),
+        }
     }
 
     #[test]

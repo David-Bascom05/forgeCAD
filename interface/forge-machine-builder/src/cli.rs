@@ -41,7 +41,8 @@ forgecad machine check FILE.toml|NAME [--json] [--no-parts]\n       \
 forgecad machine model attach MACHINE FILE --from TEXT [--body BODY] [--scale S] [--rotate X,Y,Z] [--offset X,Y,Z]\n       \
 forgecad machine model list|check MACHINE [--json]\n       \
 forgecad machine model remove MACHINE FILE\n       \
-forgecad machine model split MACHINE FILE BODY|-..   (one per part, largest first; - drops it)";
+forgecad machine model split MACHINE FILE BODY|-..   (one per part, largest first; - drops it)\n       \
+forgecad machine model split MACHINE FILE PART=BODY..   (by name: the first PART in a part's name gives it BODY; - or no rule drops it)";
 
 fn fail(code: u8, err: String) -> Out {
     Out {
@@ -602,7 +603,32 @@ pub fn model(env: &Env, argv: &[String]) -> Out {
             let Some(i) = ms.iter().position(|m| &m.file == file) else {
                 return fail(1, format!("{}: no model `{file}`", def.name));
             };
-            let to: Vec<Option<String>> = argv[3..].iter().map(|b| (b != "-").then(|| b.clone())).collect();
+            let mut to: Vec<Option<String>> =
+                argv[3..].iter().map(|b| (b != "-").then(|| b.clone())).collect();
+            // by name: PART=BODY rules, the first whose PART is in a part's name (any case; `*`
+            // any part) giving it BODY, or dropping it with `-`; a part no rule names is dropped
+            if argv[3..].iter().any(|a| a.contains('=')) {
+                let mut rules = Vec::new();
+                for a in &argv[3..] {
+                    let Some((p, b)) = a.rsplit_once('=') else {
+                        return fail(1, format!("`{a}`: give every part rule as PART=BODY"));
+                    };
+                    rules.push((p.to_lowercase(), (b != "-").then(|| b.to_string())));
+                }
+                to = match mf::read_file(&dir.join(file)) {
+                    Ok(ps) => ps
+                        .iter()
+                        .map(|p| {
+                            let n = p.name.to_lowercase();
+                            rules
+                                .iter()
+                                .find(|(k, _)| k == "*" || n.contains(k.as_str()))
+                                .and_then(|(_, b)| b.clone())
+                        })
+                        .collect(),
+                    Err(e) => return fail(1, e),
+                };
+            }
             if let Some(b) = to
                 .iter()
                 .flatten()
@@ -628,12 +654,17 @@ pub fn model(env: &Env, argv: &[String]) -> Out {
                             .map(|(k, p)| {
                                 let (lo, hi) = p.bounds().unwrap_or(([0.0; 3], [0.0; 3]));
                                 format!(
-                                    "part {}: {} triangles, {:.1} x {:.1} x {:.1} (file units)\n",
+                                    "part {}: {} triangles, {:.1} x {:.1} x {:.1} (file units){}\n",
                                     k + 1,
                                     p.tri.len(),
                                     hi[0] - lo[0],
                                     hi[1] - lo[1],
-                                    hi[2] - lo[2]
+                                    hi[2] - lo[2],
+                                    if p.name.is_empty() {
+                                        String::new()
+                                    } else {
+                                        format!(": {}", p.name)
+                                    }
                                 )
                             })
                             .collect(),
