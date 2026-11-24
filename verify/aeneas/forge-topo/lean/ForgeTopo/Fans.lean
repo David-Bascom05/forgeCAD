@@ -1137,6 +1137,97 @@ theorem arriving_spec (R : FanBase FI t b) (H : Sound b) (W : b.WF) {f : Nat} {D
   · have h0 : (0#usize).val = 0 := rfl
     simp [h0]
 
+theorem pair_spec (R : FanBase FI t b) (H : Sound b) (W : b.WF) {f : Usize} {D : List Nat}
+    (v : Usize) (uses arr : alloc.vec.Vec Usize) (hU : FaceUses b f.val D (uses.val.map (·.val)))
+    (harr : List.Sublist (arr.val.map (·.val)) (uses.val.map (·.val))) (nu : Usize)
+    (hnu : nu.val = uses.val.length) :
+    topo_fans.corners_loop2 FI t f v uses (alloc.vec.Vec.new (Usize × Usize)) arr nu 0#usize ⦃ r =>
+      CornerList b f.val (r.val.map (fun p => (p.1.val, p.2.val))) ⦄ := by
+  have hux := uses.property
+  unfold topo_fans.corners_loop2
+  apply loop.spec_decr_nat (fun (y : alloc.vec.Vec (Usize × Usize) × Usize) => nu.val - y.2.val)
+    (fun y => y.2.val ≤ nu.val ∧ y.1.val.length ≤ y.2.val ∧
+      CornerList b f.val (y.1.val.map (fun p => (p.1.val, p.2.val))) ∧
+      ∀ p ∈ y.1.val.map (fun p => (p.1.val, p.2.val)), p.1 ∈ (uses.val.take y.2.val).map (·.val))
+  · rintro ⟨o, i⟩ ⟨hle, hol, hC, hin⟩
+    simp only at hle hol hC hin ⊢
+    unfold topo_fans.corners_loop2.body
+    split
+    · rename_i hlt
+      have hlt' : i.val < nu.val := by scalar_tac
+      step as ⟨c, hc⟩
+      have hcm : c.val ∈ uses.val.map (·.val) := by
+        rw [hc]; exact List.mem_map_of_mem (List.getElem_mem (by omega))
+      obtain ⟨hcu, hcf, hcn, -⟩ := hU.2 _ hcm
+      obtain ⟨hcn', hce, -, -, -, -⟩ := use_facts H W hcu
+      have htk : (uses.val.take (i.val + 1)).map (·.val) = (uses.val.take i.val).map (·.val) ++ [c.val] := by
+        rw [List.take_succ_eq_append_getElem (by omega), hc, List.map_append]; rfl
+      have hcT : c.val ∉ (uses.val.take i.val).map (·.val) := by
+        have hnd := hU.1
+        rw [← List.take_append_drop i.val uses.val, List.map_append] at hnd
+        rw [List.drop_eq_getElem_cons (by omega), List.map_cons] at hnd
+        intro h
+        exact (List.nodup_append.1 hnd).2.2 _ h _ (by rw [hc]; simp) rfl
+      step with startB_spec FI t R c hcn' hce as ⟨st, hst⟩
+      apply WP.spec_bind (Pₘ := fun o1 : alloc.vec.Vec (Usize × Usize) =>
+        o1.val.length ≤ i.val + 1 ∧ CornerList b f.val (o1.val.map (fun p => (p.1.val, p.2.val))) ∧
+        ∀ p ∈ o1.val.map (fun p => (p.1.val, p.2.val)), p.1 ∈ (uses.val.take (i.val + 1)).map (·.val))
+      · have hold : ∀ p ∈ o.val.map (fun p => (p.1.val, p.2.val)), p.1 ∈ (uses.val.take (i.val + 1)).map (·.val) := by
+          intro p hp; rw [htk]; exact List.mem_append_left _ (hin p hp)
+        split
+        · step with R.closing_ok f v c (alloc.vec.Vec.deref arr) as ⟨x, hx0⟩
+          split
+          · rename_i hx
+            have hxl : x.val < arr.val.length := by simpa using hx
+            step as ⟨a, ha⟩
+            have ham : a.val ∈ uses.val.map (·.val) :=
+              harr.subset (by rw [ha]; exact List.mem_map_of_mem (List.getElem_mem hxl))
+            have hau := (hU.2 _ ham).1
+            have hol' : o.val.length < Usize.max := by
+              have := le_max nu; omega
+            apply WP.spec_mono (alloc.vec.Vec.push_spec o (c, a) hol')
+            intro o1 ho1
+            rw [ho1]
+            have hnd : ((o.val.map (fun p => (p.1.val, p.2.val)) ++ [(c.val, a.val)]).map (·.1)).Nodup := by
+              rw [List.map_append]
+              refine List.nodup_append.2 ⟨hC.1, List.nodup_singleton _, ?_⟩
+              intro x hx y hy hxy
+              simp only [List.map_cons, List.map_nil, List.mem_singleton] at hy
+              subst hy; subst hxy
+              obtain ⟨q, hq, hqx⟩ := List.mem_map.1 hx
+              exact hcT (hqx ▸ hin q hq)
+            simp only [List.length_append, List.length_singleton, List.map_append, List.map_cons, List.map_nil]
+            refine ⟨by omega, ⟨hnd, fun p hp => ?_⟩, fun p hp => ?_⟩
+            · rcases List.mem_append.1 hp with hp | hp
+              · exact hC.2 p hp
+              · simp at hp; subst hp; exact ⟨hcn, hcf, hau⟩
+            · rcases List.mem_append.1 hp with hp | hp
+              · exact hold p hp
+              · simp at hp; subst hp; rw [htk]; simp
+          · simp only [WP.spec_ok]; exact ⟨by omega, hC, hold⟩
+        · simp only [WP.spec_ok]; exact ⟨by omega, hC, hold⟩
+      intro o1 ⟨h1, h2, h3⟩
+      step with usize_add_wspec i 1#usize (succ_le_max i nu hlt') as ⟨i1, hi1⟩
+      have hi1v : i1.val = i.val + 1 := by rw [hi1]; exact succ_val i nu hlt'
+      rw [hi1v]; exact ⟨by omega, h1, h2, h3, by omega⟩
+    · rename_i hlt
+      simp only [WP.spec_ok]; exact hC
+  · have h0 : (0#usize).val = 0 := rfl
+    simp [h0, CornerList]
+
+theorem corners_spec (R : FanBase FI t b) (H : Sound b) (W : b.WF) (f v : Usize) (hf : f.val < b.faces.size) :
+    topo_fans.corners FI t f v ⦃ r => CornerList b f.val (r.val.map (fun p => (p.1.val, p.2.val))) ⦄ := by
+  unfold topo_fans.corners
+  step with R.base.face_n_loops f hf as ⟨nl, hnl⟩
+  step with face_uses_spec FI t R H W f v nl hf hnl as ⟨uses, n, hU, hn⟩
+  split
+  · simp [CornerList]
+  · step with R.frame_ok f v as ⟨fr, hfr0⟩
+    split
+    · step with arriving_spec FI t R H W v uses hU (alloc.vec.Vec.len uses) (by simp) as ⟨arr, harr⟩
+      exact pair_spec FI t R H W v uses arr hU harr _ (by simp)
+    · simp [CornerList]
+
 end cornersS
 
 /-! ## Building the corner table -/
