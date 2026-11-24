@@ -5870,12 +5870,22 @@ impl Cam {
         // index, the heights and feeds, the machine, the stock box, the setup's tolerance), see memo.rs.
         // A generator that starts reading the in-process stock (s.ip, stock_before) must put it
         // in this key: the voids it returns feed later ops' stock stages.
-        // (the machine too: the fitter's smallest arc is its accelerations' at the feed)
+        // (and the fitter's smallest arc, the value it reads from the machine at the feed)
         let key = format!(
             "surfacing/4 {:?}",
             (
                 kind,
-                (a, &part.faces, body, d, ti, h, feed, leave, &s.machine),
+                (
+                    a,
+                    &part.faces,
+                    body,
+                    d,
+                    ti,
+                    h,
+                    feed,
+                    leave,
+                    arc_min_r(&s.machine, feed.0)
+                ),
                 (
                     s.tol,
                     floor,
@@ -5969,13 +5979,13 @@ impl Cam {
             Some(V::Tool(j)) => self.tools.get(*j).map(cutter),
             _ => None,
         };
-        // (the machine too: the fitter's smallest arc is its accelerations' at the feed)
+        // (and the fitter's smallest arc, the value it reads from the machine at the feed)
         let key = format!(
             "finish3d/3 {:?}",
             (
                 kind,
                 (a, &part.faces, part.bbox, &t.tool, cutter(t), after),
-                (s.tol, ti, h, feed, &s.machine)
+                (s.tol, ti, h, feed, arc_min_r(&s.machine, feed.0))
             )
         );
         let (paths, plan, finish) = FINISHED.get_or(key, || {
