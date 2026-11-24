@@ -574,6 +574,13 @@ fn the_quality_window_shows_the_measure_on_its_way() {
     assert!(h.gui.shell.place("cam:quality:measuring").is_some(), "no spinner while measuring");
     assert!(h.gui.shell.place("cam:quality:not-measured").is_none(), "the turning note while measuring");
     assert!(h.gui.shell.place("tool:Quality").is_some() || h.gui.shell.place("cam:quality").is_some());
+    // nothing to colour by yet: chip load and engagement are off until the measure lands
+    let before = h.gui.shell.cam.as_ref().unwrap().focus.colour_by;
+    h.click("cam:quality:colour:chip");
+    for _ in 0..4 {
+        h.step();
+    }
+    assert_eq!(h.gui.shell.cam.as_ref().unwrap().focus.colour_by, before, "coloured by chip load while measuring");
     shot(&mut h, "cam-quality-measuring");
     // the measure lands: the table, and the status line without it
     let w = h.gui.shell.cam.as_mut().unwrap();
@@ -583,5 +590,14 @@ fn the_quality_window_shows_the_measure_on_its_way() {
         h.step();
     }
     assert!(h.gui.shell.place("cam:quality:measuring").is_none(), "the spinner after the measure landed");
+    assert!(h.click("cam:quality:colour:chip"));
+    for _ in 0..4 {
+        h.step();
+    }
+    assert_eq!(
+        h.gui.shell.cam.as_ref().unwrap().focus.colour_by,
+        Some(forge_render::shell::cam::ColourBy::ChipLoad),
+        "chip load once measured"
+    );
     shot(&mut h, "cam-quality-measured");
 }

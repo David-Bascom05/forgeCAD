@@ -2781,12 +2781,18 @@ fn quality_window(
                 ui.add_space(14.0);
                 ui.label(egui::RichText::new("Colour toolpath by").font(sans(13.0)).color(t.ink2));
                 use super::ColourBy;
+                // chip load and engagement come from the quality measure: none to colour by
+                // while a milling run's measure is on its way
+                let measuring = w.run.as_ref().is_some_and(|r| r.cam.is_some() && r.quality.is_none());
                 for (label, c, key) in [
                     ("Op", None, "op"),
                     ("Chip load", Some(ColourBy::ChipLoad), "chip"),
                     ("Engagement", Some(ColourBy::Engagement), "engagement"),
                 ] {
-                    let r = ui.selectable_label(colour == c, label);
+                    let live = c.is_none() || !measuring;
+                    let r = ui
+                        .add_enabled(live, egui::Button::selectable(colour == c, label))
+                        .on_disabled_hover_text("Measuring quality");
                     places.push((format!("cam:quality:colour:{key}"), r.rect));
                     if r.clicked() {
                         colour = c;
