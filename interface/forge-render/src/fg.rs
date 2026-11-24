@@ -137,6 +137,8 @@ pub struct Occ {
     pub placement: Option<usize>,
     /// Its part's thermoform moulds, placed with it, drawn when their row's eye says.
     pub tooling: Option<usize>,
+    /// Its part's own material (the part document's `props(material:)`), for its look.
+    pub material: Option<String>,
 }
 
 /// An assembly's solve for the screen and the panel. Each distinct part is meshed once (by its
@@ -1566,6 +1568,7 @@ fn asm_view(
             file: file.clone(),
             placement,
             tooling,
+            material: out.part_docs.get(file).and_then(|d| d.props.material.clone()),
         });
     }
     let mut harness_placed = vec![];

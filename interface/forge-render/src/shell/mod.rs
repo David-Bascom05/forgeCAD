@@ -60,6 +60,7 @@ pub mod sheet;
 mod sheetui;
 pub mod sketching;
 pub mod studio_env;
+pub mod studio_model;
 pub mod theme;
 pub mod thermo;
 pub mod thermo_material;
@@ -364,6 +365,9 @@ pub struct Shell {
     pub view_tex: Option<egui::TextureId>,
     /// Laid over `view_tex` when an environment draws the view itself: its view cube.
     pub view_over_tex: Option<egui::TextureId>,
+    /// How much of `view_over_tex` shows (1: all): the Render Studio's fade from its raster
+    /// stand-in to the traced picture.
+    pub view_over_alpha: f32,
     /// The view cube's words, in the view's device pixels: real type over its picture.
     pub cube_labels: Vec<crate::viewcube::Label>,
     pub cube_place: Option<crate::viewcube::Place>,
@@ -469,6 +473,7 @@ impl Default for Shell {
             cube_region: None,
             view_tex: None,
             view_over_tex: None,
+            view_over_alpha: 1.0,
             cube_labels: Vec::new(),
             cube_place: None,
             camera: None,
@@ -807,7 +812,8 @@ impl Shell {
             p.image(tex, self.view_rect, whole, Color32::WHITE);
             // what an environment lays over a picture of its own (the Render Studio's view cube)
             if let Some(over) = self.view_over_tex {
-                p.image(over, self.view_rect, whole, Color32::WHITE);
+                let a = (self.view_over_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
+                p.image(over, self.view_rect, whole, Color32::from_white_alpha(a));
             }
         }
         self.view_owned = false;

@@ -1619,8 +1619,19 @@ impl Gui {
             };
             // the build's flags on the faces of what they're of; Compare's colours over them
             let flagged;
+            let studio_lit;
             let colours: &[crate::render::FaceColour] = if self.bend.showing() {
                 &[]
+            } else if self.shell.env == Some(crate::shell::env::EnvId::RenderStudio) {
+                // the Studio's chosen parts in the selection's colour, the row under the pointer
+                // fainter (its occurrences pre-lit, as the browser's are)
+                studio_lit = gui_studio::lit(
+                    &self.shell.studio,
+                    &v.scene,
+                    &v.renderer.cpu_parts,
+                    self.shell.theme.selection,
+                );
+                &studio_lit
             } else if self.vers.colours.is_empty() {
                 flagged = self.fg_marks_was.1.clone();
                 &flagged
