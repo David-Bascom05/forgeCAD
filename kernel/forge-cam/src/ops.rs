@@ -75,6 +75,10 @@ pub struct ToolUse {
     pub holder: Option<String>,
     pub stickout: f64,
     pub shape: Shape,
+    /// A touch probe, not a cutter: every move of it is non-cutting (its bodies keep the rapid
+    /// clearance from part and stock), except its stylus ball (the `Cutter` body) on the contact
+    /// window of a `PMove::Probe`. Decided by the tool, never by a move's phase.
+    pub probe: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,6 +87,11 @@ pub enum Phase {
     Plunge,
     Link,
     Rapid,
+    /// A probe move's approach: from its start to its contact window (nothing may touch).
+    Probe,
+    /// A probe move's contact window: from `entry` before the nominal contact to `over` past it
+    /// (only the stylus ball may meet the part or stock).
+    Touch,
 }
 
 impl Phase {
@@ -92,6 +101,8 @@ impl Phase {
             Phase::Plunge => "plunge",
             Phase::Link => "link",
             Phase::Rapid => "rapid",
+            Phase::Probe => "probe",
+            Phase::Touch => "touch",
         }
     }
 }
@@ -113,6 +124,20 @@ pub enum PMove {
         c: [f64; 2],
         cw: bool,
         f: f64,
+    },
+    /// A probe (skip) move toward `to`, the stylus ball tip's nominal contact with the surface,
+    /// at feed `f`: the machine stops where the probe triggers, so the move is certified as its
+    /// whole segment to `over` past `to` along its direction. The ball may meet the part or
+    /// stock only within the contact window, from `entry` before `to` to `over` past it.
+    /// `back`: after it stops the probe returns along the same line to where the move started
+    /// (a back-off that retraces positions the move's own check covers), so the path goes on
+    /// from there; without it, from `to`.
+    Probe {
+        to: [f64; 3],
+        f: f64,
+        over: f64,
+        entry: f64,
+        back: bool,
     },
     /// A canned hole cycle at each place.
     Cycle {
@@ -236,6 +261,30 @@ pub fn checker_moves(p: &OpPath) -> Vec<(Move, Phase, usize)> {
                     out.push((mv, Phase::Cut, i));
                 }
                 at = to;
+            }
+            PMove::Probe {
+                to,
+                over,
+                entry,
+                back,
+                ..
+            } => {
+                let from = at;
+                let d = [to[0] - at[0], to[1] - at[1], to[2] - at[2]];
+                let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+                if len > 0.0 {
+                    let u = [d[0] / len, d[1] / len, d[2] / len];
+                    let e = entry.min(len);
+                    let w0 = [to[0] - e * u[0], to[1] - e * u[1], to[2] - e * u[2]];
+                    let w1 = [to[0] + over * u[0], to[1] + over * u[1], to[2] + over * u[2]];
+                    if e < len {
+                        out.push((Move::Line { a: at, b: w0 }, Phase::Probe, i));
+                    }
+                    out.push((Move::Line { a: w0, b: w1 }, Phase::Touch, i));
+                }
+                // the machine stops somewhere in the window; the path goes on from the nominal
+                // contact, or from where it started when it backs off along the same line
+                at = if back { from } else { to };
             }
             PMove::Cycle {
                 holes, z, r, clear, ..
@@ -413,7 +462,14 @@ pub fn certify_fixtured(
                     if faces.is_empty() {
                         continue;
                     }
-                    if what == "stock" && !(b.part == Part::NonCutting || *phase == Phase::Rapid) {
+                    // a probe's ball in its contact window may meet the part and the stock
+                    if tool.probe && b.part == Part::Cutter && *phase == Phase::Touch && what != "fixture" {
+                        continue;
+                    }
+                    if !tool.probe
+                        && what == "stock"
+                        && !(b.part == Part::NonCutting || *phase == Phase::Rapid)
+                    {
                         // the cutter cuts the stock: that is the point
                         continue;
                     }
@@ -423,6 +479,9 @@ pub fn certify_fixtured(
                     let narrow = b.part == Part::NonCutting && b.rmax <= cutter_r;
                     let limit = if what == "fixture" {
                         fclear
+                    } else if tool.probe {
+                        // a probe cuts nothing: every body keeps the clearance everywhere else
+                        clearance
                     } else if (b.part == Part::Cutter && what == "part" || narrow) && *phase != Phase::Rapid {
                         -tol
                     } else {
@@ -443,6 +502,7 @@ pub fn certify_fixtured(
                         o.cells += n;
                         let rule = match (b.part, *phase, what) {
                             (_, _, "fixture") => "fixture_collision",
+                            _ if tool.probe => "probe_clear",
                             (_, Phase::Rapid, _) => "rapid_clear",
                             (Part::Cutter, _, "part") => "gouge",
                             _ => "holder_collision",
