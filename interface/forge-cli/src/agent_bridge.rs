@@ -5,7 +5,9 @@
 //!   POST /api/agent/start   {"file"?: REL, "mode"?: M}   starts the session (or finds it running)
 //!   GET  /api/agent/events?from=N                        its stream-json lines from the Nth, as
 //!                                                       they come (a streamed response, a line each)
-//!   POST /api/agent/send    {"text", "picture"?: B64}    a message (a PNG picture, base64)
+//!   POST /api/agent/send    {"text", "pictures"?: [{"media", "data": B64}]}
+//!                                                       a message, and its pictures (PNG, JPEG,
+//!                                                       GIF or WebP, base64)
 //!   POST /api/agent/answer  {"id", "answer"}             a permission: allow | always | deny
 //!   POST /api/agent/mode    {"mode"}                     default | acceptEdits | plan
 //!   POST /api/agent/stop    {}                           interrupt the turn
@@ -100,6 +102,38 @@ fn fields(body: &[u8], allowed: &[&str]) -> Result<Json, Answer> {
         return Err(err(400, &format!("`{k}`: not a field of this call")));
     }
     Ok(j)
+}
+
+/// A message's pictures, checked: each a type the models read and base64 data, nothing else.
+fn pictures(j: Option<&Json>) -> Result<Vec<(&'static str, String)>, String> {
+    const MEDIA: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+    let Some(j) = j else { return Ok(vec![]) };
+    let Json::Arr(all) = j else {
+        return Err("pictures: a list".into());
+    };
+    all.iter()
+        .map(|p| {
+            let Json::Obj(kv) = p else {
+                return Err("pictures: each {\"media\", \"data\"}".to_string());
+            };
+            if kv.iter().any(|(k, _)| k != "media" && k != "data") {
+                return Err("pictures: each {\"media\", \"data\"} only".into());
+            }
+            let media = s(p, "media").unwrap_or("");
+            let Some(media) = MEDIA.iter().find(|m| **m == media) else {
+                return Err(format!("pictures: {media:?} isn't PNG, JPEG, GIF or WebP"));
+            };
+            let data = s(p, "data").unwrap_or("");
+            if data.is_empty()
+                || !data
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"+/=".contains(&b))
+            {
+                return Err("pictures: data must be base64".into());
+            }
+            Ok((*media, data.to_string()))
+        })
+        .collect()
 }
 
 fn s<'a>(j: &'a Json, k: &str) -> Option<&'a str> {
@@ -413,33 +447,43 @@ impl Agent {
     }
 
     fn send(&self, body: &[u8], client: &str) -> Answer {
-        let j = match fields(body, &["text", "picture"]) {
+        let j = match fields(body, &["text", "pictures"]) {
             Ok(j) => j,
             Err(e) => return e,
         };
         let Some(text) = s(&j, "text") else {
             return err(400, "text: the message");
         };
+        let pictures = match pictures(j.get("pictures")) {
+            Ok(p) => p,
+            Err(e) => return err(400, &e),
+        };
         let mut st = self.lock();
         if !self.owns(&mut st, client) {
             return err(409, "another page has this agent");
         }
-        let content = match s(&j, "picture") {
-            None => text.into(),
-            Some(png) => Json::Arr(vec![
-                Json::obj(vec![
-                    ("type", "image".into()),
-                    (
-                        "source",
-                        Json::obj(vec![
-                            ("type", "base64".into()),
-                            ("media_type", "image/png".into()),
-                            ("data", png.into()),
-                        ]),
-                    ),
-                ]),
-                Json::obj(vec![("type", "text".into()), ("text", text.into())]),
-            ]),
+        // the pictures first, as image blocks the text reads after
+        let content = if pictures.is_empty() {
+            text.into()
+        } else {
+            let mut blocks: Vec<Json> = pictures
+                .into_iter()
+                .map(|(media, data)| {
+                    Json::obj(vec![
+                        ("type", "image".into()),
+                        (
+                            "source",
+                            Json::obj(vec![
+                                ("type", "base64".into()),
+                                ("media_type", media.into()),
+                                ("data", data.into()),
+                            ]),
+                        ),
+                    ])
+                })
+                .collect();
+            blocks.push(Json::obj(vec![("type", "text".into()), ("text", text.into())]));
+            Json::Arr(blocks)
         };
         let msg = Json::obj(vec![
             ("type", "user".into()),

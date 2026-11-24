@@ -41,7 +41,7 @@ fn fake(dir: &Path, mode: &str, die: bool) -> PathBuf {
         format!(
             "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{d}/args.txt'\necho \"CLAUDECODE=${{CLAUDECODE:-unset}} PWD=$PWD\" > '{d}/env.txt'\n\
              echo '{{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"s\",\"model\":\"m\",\"permissionMode\":\"{mode}\"}}'\n\
-             while read line; do\n  case \"$line\" in *'\"type\":\"user\"'*) ;; *) echo \"$line\" >> '{d}/heard.jsonl'; continue;; esac\n\
+             while read line; do\n  case \"$line\" in *'\"type\":\"user\"'*) echo \"$line\" >> '{d}/said.jsonl';; *) echo \"$line\" >> '{d}/heard.jsonl'; continue;; esac\n\
                echo '{ask}'\n  read reply\n  echo \"$reply\" >> '{d}/heard.jsonl'\n  {then}\ndone\n"
         ),
     )
@@ -413,6 +413,60 @@ fn a_chosen_mode_goes_on_the_command_line_and_a_bypass_from_the_persons_settings
     assert!(args.contains("--permission-mode\nplan\n"));
     drop(srv);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_messages_pictures_go_to_claude_code_as_image_blocks_and_nothing_else_does() {
+    let dir = scratch("pictures");
+    std::fs::write(dir.join("proj/plate.fg"), PART).unwrap();
+    let srv = serve(&dir, &fake(&dir, "default", false));
+    assert_eq!(post(&srv, "start", "{}", "p").status, 200);
+    // refused: a type the models don't read (an SVG can carry script), data that isn't base64,
+    // a field that isn't one, not a list
+    for bad in [
+        r#"{"text":"x","pictures":[{"media":"image/svg+xml","data":"PHN2Zz4="}]}"#,
+        r#"{"text":"x","pictures":[{"media":"image/png","data":"a\"b"}]}"#,
+        r#"{"text":"x","pictures":[{"media":"image/png","data":"iVBO","url":"file:///etc/passwd"}]}"#,
+        r#"{"text":"x","pictures":{"media":"image/png","data":"iVBO"}}"#,
+        r#"{"text":"x","picture":"iVBO"}"#,
+    ] {
+        let r = post(&srv, "send", bad, "p");
+        assert_eq!(r.status, 400, "{bad}: {}", r.body);
+    }
+    let r = post(
+        &srv,
+        "send",
+        r#"{"text":"what's this?","pictures":[{"media":"image/png","data":"iVBORw0K"},{"media":"image/jpeg","data":"/9j/4A=="}]}"#,
+        "p",
+    );
+    assert_eq!(r.status, 200, "{}", r.body);
+    let said = wait_file(&dir.join("said.jsonl"), |s| !s.is_empty());
+    let msg = Json::parse(said.lines().next().unwrap()).unwrap();
+    let content = msg.get("message").and_then(|m| m.get("content")).unwrap();
+    let Json::Arr(blocks) = content else {
+        panic!("{content:?}")
+    };
+    let shape: Vec<(String, String)> = blocks
+        .iter()
+        .map(|b| {
+            (
+                b.get("type").and_then(Json::str).unwrap().to_string(),
+                b.get("source")
+                    .and_then(|s| s.get("media_type"))
+                    .and_then(Json::str)
+                    .unwrap_or("")
+                    .to_string(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        shape,
+        [
+            ("image".into(), "image/png".into()),
+            ("image".into(), "image/jpeg".into()),
+            ("text".into(), String::new())
+        ]
+    );
 }
 
 #[test]

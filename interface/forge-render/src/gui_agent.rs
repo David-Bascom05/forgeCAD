@@ -17,7 +17,7 @@ struct Followup {
     document: Option<String>,
     text: String,
     refs: Vec<String>,
-    picture: Option<Vec<u8>>,
+    pictures: Vec<crate::agent::Picture>,
     project: Option<PathBuf>,
     model: String,
 }
@@ -257,7 +257,7 @@ impl Gui {
             return;
         }
         self.shell.agent.running = true;
-        self.agent_send(&next.text, &next.refs, next.picture);
+        self.agent_send(&next.text, &next.refs, next.pictures);
     }
 
     fn cancel_followups(&mut self) {
@@ -343,10 +343,11 @@ impl Gui {
             text: text.clone(),
             refs: vec![],
             markup: None,
+            pictures: 0,
         });
         self.shell.agent.problem = None;
         self.shell.agent.running = true;
-        self.agent_send(&text, &[], None);
+        self.agent_send(&text, &[], vec![]);
         self.agent.bridge_active = Some((request.id, self.shell.agent.entries.len()));
         if !self.shell.agent.running {
             self.finish_bridge_request(Some(
@@ -424,6 +425,12 @@ impl Gui {
         if let Some(b) = &mut self.agent.backend {
             b.set_file(Path::new(path));
         }
+    }
+
+    /// A picture pasted or dropped on the window: the Agent tab's, for its next message, when the
+    /// tab is the one showing. False when it isn't (or it's not a picture the models read).
+    pub fn agent_picture(&mut self, bytes: Vec<u8>) -> bool {
+        self.shell.agent.tab == crate::shell::agent::SideTab::Agent && self.shell.agent.add_picture(bytes)
     }
 
     /// An edit the agent asks to make, as its card shows it: the file as it is with the change
@@ -835,8 +842,11 @@ impl Gui {
                     text,
                     refs,
                     markup: true,
-                } => self.markup_job = Some((text, refs)),
-                AgentAct::Send { text, refs, .. } => self.agent_send(&text, &refs, None),
+                    pictures,
+                } => self.markup_job = Some((text, refs, pictures)),
+                AgentAct::Send {
+                    text, refs, pictures, ..
+                } => self.agent_send(&text, &refs, pictures),
                 AgentAct::ShowMarkup(k) => self.markup_show(k),
                 AgentAct::Trust { dir, yes } => {
                     self.shell.agent.trust_ask = None;
@@ -852,8 +862,8 @@ impl Gui {
                     } else if yes {
                         self.shell.agent.settings.trusted.push(dir);
                         self.agent_save_settings();
-                        if let Some((text, refs, picture)) = pending {
-                            self.agent_send(&text, &refs, picture);
+                        if let Some((text, refs, pictures)) = pending {
+                            self.agent_send(&text, &refs, pictures);
                         }
                     } else {
                         self.shell.agent.take(Event::Done {
@@ -944,13 +954,13 @@ impl Gui {
         }
     }
 
-    pub(crate) fn agent_send(&mut self, text: &str, refs: &[String], picture: Option<Vec<u8>>) {
+    pub(crate) fn agent_send(&mut self, text: &str, refs: &[String], pictures: Vec<crate::agent::Picture>) {
         if self.agent.turn_active {
             self.agent.followups.push_back(Followup {
                 document: self.agent_path(),
                 text: text.into(),
                 refs: refs.to_vec(),
-                picture,
+                pictures,
                 project: self.agent_root(),
                 model: self.shell.agent.settings.label(),
             });
@@ -971,7 +981,7 @@ impl Gui {
             && !trusted(&dir, &self.shell.agent.settings.trusted)
         {
             self.shell.agent.trust_ask = Some(dir);
-            self.shell.agent.pending = Some((text.to_string(), refs.to_vec(), picture));
+            self.shell.agent.pending = Some((text.to_string(), refs.to_vec(), pictures));
             return;
         }
         // the agent reads the file: what's on screen is what it gets
@@ -1099,7 +1109,7 @@ impl Gui {
         self.agent.turn_active = true;
         self.shell.agent.running = true;
         if let Some(b) = &mut self.agent.backend {
-            b.send(msg, picture);
+            b.send(msg, pictures);
         }
         self.agent_capture_conversation(true);
     }

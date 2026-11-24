@@ -117,6 +117,8 @@ pub enum Entry {
         refs: Vec<String>,
         /// What was drawn for it, once the host has sent it.
         markup: Option<super::markup::Sent>,
+        /// How many pictures were pasted or dropped with it.
+        pictures: usize,
     },
     Agent {
         text: String,
@@ -242,6 +244,8 @@ pub enum AgentAct {
         text: String,
         refs: Vec<String>,
         markup: bool,
+        /// Pasted or dropped, after the view's picture if there's one.
+        pictures: Vec<crate::agent::Picture>,
     },
     /// A sent message's marks shown again: its entry, the camera they were drawn over put back.
     ShowMarkup(usize),
@@ -299,7 +303,7 @@ pub struct AgentTab {
     pub selection: Option<String>,
     /// A folder outside the projects tree, asked about once; the message waiting on it.
     pub trust_ask: Option<String>,
-    pub pending: Option<(String, Vec<String>, Option<Vec<u8>>)>,
+    pub pending: Option<(String, Vec<String>, Vec<crate::agent::Picture>)>,
     pub markup: super::markup::Markup,
     /// Each sent markup's thumbnail, by its entry.
     thumbs: std::collections::HashMap<usize, egui::TextureHandle>,
@@ -336,6 +340,12 @@ pub struct AgentTab {
     pub api_keyed: bool,
     /// `/new` just started this chat: the empty chat says where the last one went.
     pub started_new: bool,
+    /// A picture of the view goes with the next message (the input's view button).
+    pub attach_view: bool,
+    /// Pictures pasted or dropped for the next message, in order.
+    pub pictures: Vec<crate::agent::Picture>,
+    /// The chat's entries' heights as last drawn, and the width they were drawn at.
+    heights: (f32, Vec<f32>),
     /// The plan's limit, when it's reached or close: (reached, when it resets).
     pub limit: Option<(bool, Option<f64>)>,
     /// A selection the person took off the next message (its chip's ×): not suggested again
@@ -725,24 +735,28 @@ impl AgentTab {
             }
         }
         self.markup.commit_text();
-        let markup = !self.markup.marks.is_empty();
-        if (text.is_empty() && !markup)
+        // the view goes as markup does: a picture of it, its thumbnail on the message
+        let markup = !self.markup.marks.is_empty() || self.attach_view;
+        if (text.is_empty() && !markup && self.pictures.is_empty())
             || self.voice.busy()
             || self.markup.sending
             || self.trust_ask.is_some()
         {
             return;
         }
+        self.attach_view = false;
         // what's selected goes with it unless its chip was taken off
         if let Some(s) = self.suggested().map(str::to_string) {
             self.refs.push(s);
         }
         let refs = std::mem::take(&mut self.refs);
+        let pictures = std::mem::take(&mut self.pictures);
         self.started_new = false;
         self.entries.push(Entry::User {
             text: text.clone(),
             refs: refs.clone(),
             markup: None,
+            pictures: pictures.len(),
         });
         self.input.clear();
         self.problem = None;
@@ -751,7 +765,37 @@ impl AgentTab {
         self.running = true;
         self.markup.shown = None;
         self.markup.sending = markup;
-        self.out.push(AgentAct::Send { text, refs, markup });
+        self.out.push(AgentAct::Send {
+            text,
+            refs,
+            markup,
+            pictures,
+        });
+    }
+
+    /// A picture pasted or dropped on the tab: it goes with the next message. Not a picture the
+    /// models read, or too big: said, and left out.
+    pub fn add_picture(&mut self, bytes: Vec<u8>) -> bool {
+        let size = bytes.len();
+        let refused = if size > crate::agent::PICTURE_BYTES {
+            Some(format!(
+                "That picture is {:.1} MB: the agent takes up to 5 MB a picture",
+                size as f64 / 1048576.0
+            ))
+        } else {
+            match crate::agent::Picture::sniff(bytes) {
+                Some(p) => {
+                    self.pictures.push(p);
+                    None
+                }
+                None => Some("Only a PNG, JPEG, GIF or WebP picture can go to the agent".into()),
+            }
+        };
+        if let Some(text) = refused {
+            self.entries.push(Entry::Note { text, error: true });
+            return false;
+        }
+        true
     }
 
     fn cancel_dictation(&mut self) {
@@ -1802,7 +1846,10 @@ impl Shell {
         p.hline(0.0..=w, top - 0.5, Stroke::new(1.0, t.line));
 
         // Measure wrapped rows at the editor's width, including pasted paragraphs.
-        let chips = if self.agent.refs.is_empty() && self.agent.suggested().is_none() {
+        let chips = if self.agent.refs.is_empty()
+            && self.agent.suggested().is_none()
+            && self.agent.pictures.is_empty()
+        {
             0.0
         } else {
             26.0
@@ -2030,16 +2077,28 @@ impl Shell {
                 _ => None,
             })
             .collect();
+        // each entry's height when last drawn, at this width: an entry out of sight is that much
+        // space, not drawn (a long chat costs what's on screen)
+        let mut heights = std::mem::take(&mut self.agent.heights);
+        if heights.0 != w {
+            heights = (w, Vec::new());
+        }
+        heights.1.truncate(self.agent.entries.len());
         let a = &self.agent;
         let mut fresh = false;
         let shown = egui::ScrollArea::vertical()
             .id_salt("agent-chat")
             .auto_shrink([false, false])
             .stick_to_bottom(true)
-            .show(&mut child, |ui| {
+            .show_viewport(&mut child, |ui, viewport| {
                 ui.spacing_mut().item_spacing.y = 0.0;
+                let origin = ui.min_rect().top();
+                let near = viewport.expand2(vec2(0.0, VIRTUAL_MARGIN));
                 ui.add_space(8.0);
                 let mut tools_seen = 0;
+                let last = a.entries.len().saturating_sub(2);
+                // the entry being drawn, and where it began: its height is taken at the next
+                let mut drawing: Option<(usize, f32)> = None;
                 // each tool call's question, if it was asked one
                 let asked_of: std::collections::HashMap<&str, Asked> = a
                     .entries
@@ -2071,13 +2130,37 @@ impl Shell {
                     ui.painter().galley(pos2(PAD, r.top() + 8.0), g, t.ink2);
                 }
                 for (k, e) in a.entries.iter().enumerate() {
+                    let y = ui.cursor().top();
+                    if let Some((j, top)) = drawing.take() {
+                        set_height(&mut heights.1, j, y - top);
+                    }
+                    // out of sight, and drawn before at this width: its space only (the last two,
+                    // still changing as the turn streams, always drawn)
+                    if k < last
+                        && let Some(h) = heights.1.get(k).copied().filter(|h| *h > 0.0)
+                    {
+                        let at = y - origin;
+                        if at + h < near.top() || at > near.bottom() {
+                            if matches!(e, Entry::Tool { .. }) {
+                                tools_seen += 1;
+                            }
+                            ui.add_space(h);
+                            continue;
+                        }
+                    }
+                    drawing = Some((k, y));
                     if let Some((at, said)) = &a.resumed
                         && *at == k
                     {
                         fresh |= resumed_divider(ui, &t, w, said, &mut places);
                     }
                     match e {
-                        Entry::User { text, refs, markup } => {
+                        Entry::User {
+                            text,
+                            refs,
+                            markup,
+                            pictures,
+                        } => {
                             ui.add_space(6.0);
                             let g = ui.fonts_mut(|f| {
                                 f.layout_job(plain_job(text, sans(13.0), t.ink, inner - 16.0))
@@ -2088,9 +2171,10 @@ impl Shell {
                                 (tex.id(), vec2(m.thumb.w as f32 * s, m.thumb.h as f32 * s))
                             });
                             let thumb_h = thumb.map_or(0.0, |t| t.1.y + 6.0);
+                            let pics_h = if *pictures > 0 { 18.0 } else { 0.0 };
                             let text_h = if text.is_empty() { -4.0 } else { g.size().y };
                             let (r, _) = ui.allocate_exact_size(
-                                vec2(w, text_h + 14.0 + chip_h + thumb_h),
+                                vec2(w, text_h + 14.0 + chip_h + thumb_h + pics_h),
                                 Sense::hover(),
                             );
                             let card = Rect::from_min_max(pos2(PAD, r.top()), pos2(w - PAD, r.bottom()));
@@ -2122,6 +2206,15 @@ impl Shell {
                                     acts.push(AgentAct::ShowMarkup(k));
                                 }
                                 places.push((format!("agent:markup:{k}"), tr));
+                            }
+                            if *pictures > 0 {
+                                ui.painter().text(
+                                    pos2(card.left() + 8.0, card.top() + 7.0 + text_h + thumb_h + 11.0),
+                                    Align2::LEFT_CENTER,
+                                    pictures_word(*pictures),
+                                    sans(11.0),
+                                    t.ink2,
+                                );
                             }
                             if !refs.is_empty() {
                                 let mut x = card.left() + 8.0;
@@ -2538,6 +2631,9 @@ impl Shell {
                         }
                     }
                 }
+                if let Some((j, top)) = drawing.take() {
+                    set_height(&mut heights.1, j, ui.cursor().top() - top);
+                }
                 if let Some((at, said)) = &a.resumed
                     && *at == a.entries.len()
                 {
@@ -2637,6 +2733,7 @@ impl Shell {
         }
         // where the reader is: at the end, or scrolled up (a chip takes them back), and whether a
         // waiting question's buttons are in sight (Enter answers only one that is)
+        self.agent.heights = heights;
         let view = shown.inner_rect;
         let at_end = shown.state.clamped_offset().y + view.height() >= shown.content_size.y - 8.0;
         let waiting = self.agent.waiting().map(str::to_string);
@@ -2993,8 +3090,30 @@ impl Shell {
         let mut y = box_r.top() + 4.0;
         // what's attached, each with its ×; then the selection, offered (outlined) until its ×
         let offered = self.agent.suggested().map(str::to_string);
-        if !self.agent.refs.is_empty() || offered.is_some() {
+        if !self.agent.refs.is_empty() || offered.is_some() || !self.agent.pictures.is_empty() {
             let mut x = box_r.left() + 6.0;
+            // the pictures pasted or dropped, each with its ×
+            let mut unpick = None;
+            for (k, pic) in self.agent.pictures.iter().enumerate() {
+                let label = format!("Picture {} · {}", k + 1, pic.ext().to_uppercase());
+                let cr = picture_chip(ui, &t, pos2(x, y), &label, box_r.right() - 6.0 - x);
+                let xr = Rect::from_min_size(pos2(cr.right() - 16.0, cr.top()), vec2(16.0, cr.height()));
+                let resp = ui
+                    .interact(xr, ui.scope_id().with(("agent-unpicture", k)), Sense::click())
+                    .on_hover_text("Leave this picture out");
+                resp.widget_info(|| {
+                    egui::WidgetInfo::labeled(egui::Role::Button, true, format!("Remove {label}"))
+                });
+                if resp.clicked() {
+                    unpick = Some(k);
+                }
+                self.places.push((format!("agent:picture:{k}"), cr));
+                self.places.push((format!("agent:picture:{k}:x"), xr));
+                x += cr.width() + 4.0;
+            }
+            if let Some(k) = unpick {
+                self.agent.pictures.remove(k);
+            }
             let mut drop = None;
             for (k, r) in self.agent.refs.iter().enumerate() {
                 let cr = chip(ui, &t, pos2(x, y), r, box_r.right() - 6.0 - x, true);
@@ -3396,13 +3515,45 @@ impl Shell {
             self.agent.markup.toggle();
         }
 
+        // the view as it is now, a picture with the message
+        let vr = Rect::from_min_size(pos2(mr.right() + 2.0, row_y), vec2(24.0, 22.0));
+        let on = self.agent.attach_view;
+        let v_resp = ui
+            .interact(vr, ui.scope_id().with("agent-view"), Sense::click())
+            .on_hover_text(if on {
+                "A picture of the view goes with the message (click to leave it off)"
+            } else {
+                "Attach the current view: a picture of it goes with the message"
+            });
+        v_resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, on, "Attach view"));
+        if on {
+            p.rect_filled(vr, 4.0, t.on);
+        } else if v_resp.hovered() {
+            p.rect_filled(vr, 4.0, t.hover);
+        }
+        icons::draw(
+            &p,
+            vr.center() - vec2(8.0, 8.0),
+            16.0,
+            "eye",
+            1.5,
+            if on { t.on_ink } else { t.ink },
+        );
+        self.note("agent:view", vr);
+        if v_resp.clicked() {
+            self.agent.attach_view = !on;
+        }
+
         let running = self.agent.running;
         let word = "Send";
         let sr = Rect::from_min_size(pos2(box_r.right() - 58.0, row_y), vec2(52.0, 22.0));
         let can = self.agent.trust_ask.is_none()
             && !self.agent.voice.busy()
             && !self.agent.markup.sending
-            && (!self.agent.input.trim().is_empty() || marks > 0);
+            && (!self.agent.input.trim().is_empty()
+                || marks > 0
+                || self.agent.attach_view
+                || !self.agent.pictures.is_empty());
         let s_resp = ui.interact(sr, ui.scope_id().with("agent-send"), Sense::click());
         s_resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, can, word));
         let fill = if can {
@@ -3472,6 +3623,25 @@ fn chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, id: &str, room: f32, removable: 
             t.ink2,
         );
     }
+    r
+}
+
+/// A pasted picture's chip: its name, a ×.
+fn picture_chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, label: &str, room: f32) -> Rect {
+    let g = ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), sans(11.0), t.ink));
+    let w = (g.size().x + 26.0).min(room.max(40.0));
+    let r = Rect::from_min_size(at, vec2(w, 20.0));
+    let p = ui.painter().with_clip_rect(r);
+    p.rect_filled(r, 10.0, t.raised);
+    p.rect_stroke(r, 10.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+    p.galley(pos2(r.left() + 7.0, r.center().y - g.size().y * 0.5), g, t.ink);
+    p.text(
+        pos2(r.right() - 9.0, r.center().y),
+        Align2::CENTER_CENTER,
+        "×",
+        sans(12.0),
+        t.ink2,
+    );
     r
 }
 
@@ -3760,6 +3930,22 @@ fn resumed_divider(ui: &mut Ui, t: &Theme, w: f32, said: &str, places: &mut Vec<
     places.push(("agent:resumed".into(), r));
     places.push(("agent:resumed:new".into(), nr));
     hit.clicked()
+}
+
+/// How far beyond the chat's visible part entries are still drawn, in points.
+const VIRTUAL_MARGIN: f32 = 600.0;
+
+/// An entry's height as drawn, kept by its index.
+fn set_height(heights: &mut Vec<f32>, k: usize, h: f32) {
+    if heights.len() <= k {
+        heights.resize(k + 1, 0.0);
+    }
+    heights[k] = h;
+}
+
+/// Pictures sent with a message, said on it: "1 picture", "3 pictures".
+pub fn pictures_word(n: usize) -> String {
+    format!("{n} picture{}", if n == 1 { "" } else { "s" })
 }
 
 /// What the empty chat says after `/new`.
@@ -4123,6 +4309,7 @@ mod tests {
                 text: "make it thicker".into(),
                 refs: vec!["extrude1.end".into()],
                 markup: false,
+                pictures: vec![],
             }]
         );
         a.take(Event::Text("I'll ".into()));
