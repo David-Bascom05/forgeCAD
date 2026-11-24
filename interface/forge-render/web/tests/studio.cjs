@@ -70,8 +70,13 @@ const types = { ".js": "text/javascript", ".wasm": "application/wasm", ".html": 
 (async () => {
   const out = path.resolve(process.argv[2] ?? "web/out");
   const page = `<!doctype html><meta charset="utf-8"><script type="module">
-    import init, { studio_golden } from "./forge_render.js";
+    import init, { app_init, studio_golden } from "./forge_render.js";
+    console.log("studio: loading the wasm");
     await init();
+    // the clock and the panic hook, as the app sets them up; files the page needn't keep
+    window.forge_fs_changed = () => {};
+    app_init();
+    console.log("studio: tracing");
     window.done = studio_golden().then((px) => Array.from(px), (e) => "error: " + e);
   </script>`;
   const server = http.createServer((q, r) => {
@@ -97,11 +102,18 @@ const types = { ".js": "text/javascript", ".wasm": "application/wasm", ".html": 
   try {
     const p = await b.newPage();
     const problems = [];
-    p.on("console", (m) => /panicked/.test(m.text()) && problems.push(m.text()));
+    p.on("console", (m) => {
+      if (process.env.VERBOSE) console.log(`  console: ${m.text().slice(0, 300)}`);
+      if (/panicked/.test(m.text())) problems.push(m.text());
+    });
     p.on("pageerror", (e) => problems.push(e.message));
     await p.goto(url);
     await p.waitForFunction(() => window.done !== undefined, null, { timeout: 120000 });
-    const px = await p.evaluate(() => window.done);
+    const ms = Number(process.env.STUDIO_MS ?? 300000);
+    const px = await Promise.race([
+      p.evaluate(() => window.done),
+      new Promise((_, no) => setTimeout(() => no(new Error(`no picture in ${ms} ms: ${problems.join("\n")}`)), ms)),
+    ]);
     assert.ok(Array.isArray(px), `the studio failed in the browser: ${px} ${problems.join("\n")}`);
     const golden = readPng(path.join(__dirname, "../../tests/fixtures/studio_golden.png"));
     assert.equal(px.length, golden.w * golden.h * 4);

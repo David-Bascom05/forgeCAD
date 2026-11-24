@@ -21,8 +21,36 @@ pub struct Golden {
 pub const SIZE: (u32, u32) = (96, 64);
 pub const SPP: u32 = 128;
 
+/// The crank built from its text and its font, the same in the browser (the page's in-memory
+/// files) as natively (the bench parts' folder).
+fn crank() -> Result<crate::mesh::PartMesh, String> {
+    let src = crate::load::bench_src("crank").ok_or("no bench crank")?;
+    #[cfg(target_arch = "wasm32")]
+    let dir = {
+        let d = std::path::PathBuf::from("/studio-golden");
+        forge_dirs::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+        forge_dirs::fs::write(d.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes())
+            .map_err(|e| e.to_string())?;
+        d
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    let dir = crate::load::bench_dir()?;
+    let opts = forge_lang::Options {
+        dir: Some(dir),
+        checks: false,
+        expects: false,
+        ..forge_lang::Options::default()
+    };
+    let (run, _) = forge_lang::run(src, opts, Default::default());
+    if let Some(e) = run.errors.first() {
+        return Err(format!("crank: {}: {}", e.kind(), e.text()));
+    }
+    let body = run.body.ok_or("crank: nothing built")?;
+    crate::tess::build_part(&body).map_err(|e| format!("crank: {e:?}"))
+}
+
 pub fn scene() -> Result<Golden, String> {
-    let crank = crate::load::open("crank", false)?.0;
+    let crank = crank()?;
     let rows = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]];
     let built = Built::new(&[crank], &[Instance { part: 0, rows, material: 0 }]);
     let b = built.bounds.ok_or("the crank has no triangles")?;
