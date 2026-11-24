@@ -588,6 +588,7 @@ impl Shell {
         }
         // docked only in a frame whose properties column set it (it draws before this)
         w.dock = None;
+        w.dock_aux = None;
         w.sheet_hidden = false;
         self.view_blocks.extend(blocks);
         self.places.extend(places);
@@ -2953,7 +2954,10 @@ fn programs_window(
     use super::nc::Posted;
     let mut close = false;
     // within the view's free part (a small screen narrows it)
-    let width = 620.0_f32.min(v.width() - 32.0).max(360.0);
+    let width = match w.dock_aux {
+        Some(d) => d.width() - 16.0,
+        None => 620.0_f32.min(v.width() - 32.0).max(360.0),
+    };
     let mut edits: Vec<super::doc::Edit> = vec![];
     let mut cmds: Vec<Cmd> = vec![];
     let progs: Vec<super::doc::Stmt> = w
@@ -2968,7 +2972,7 @@ fn programs_window(
     let ops_changed = !w.stale.is_empty();
     let mut field = w.prog_field.take();
     let mut allow = w.allow_uncertified;
-    let r = egui::Window::new("cam-programs")
+    let win = egui::Window::new("cam-programs")
         .id(egui::Id::unique("cam-programs-window"))
         .title_bar(false)
         .collapsible(false)
@@ -2977,8 +2981,12 @@ fn programs_window(
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(below_chips(v))
+        .constrain_to(below_chips(v));
+    // a tab of the properties column (docked) where the environment gives one
+    let r = dialog_host(aux_rect(w.dock_aux), "programs", t, win)
         .show_placed(ctx, places, |ui, places| {
+            // wrapped rows wrap at the column's width (a scroll area's content grows otherwise)
+            ui.set_max_width(width);
             close = head(ui, t, "cam_sheet", "NC Programs", width, places, "cam:programs");
             if progs.is_empty() {
                 note(ui, "No program yet: a new setup comes with one, or add one below.", width, t.ink2);
@@ -3006,7 +3014,7 @@ fn programs_window(
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
-                let r = ui.checkbox(&mut allow, "Allow uncertified (their headers say what was not checked)");
+                let r = ui.checkbox(&mut allow, "Allow uncertified").on_hover_text("Post a program that is not certified in full: its header says what was not checked");
                 places.push(("cam:programs:allow".into(), r.rect));
             });
             ui.add_space(4.0);
@@ -3032,6 +3040,11 @@ fn programs_window(
                 }
                 if any && button(ui, t, "Export All…", false, "cam:programs:export".into(), places) {
                     cmds.push(Cmd::ExportNc(None));
+                }
+                // the column's width: the exports on a line of their own
+                if width < 520.0 {
+                    ui.end_row();
+                    ui.add_space(14.0);
                 }
                 if w.run.is_some() && button(ui, t, "Setup Sheet & Tools…", false, "cam:programs:sheet".into(), places) {
                     cmds.push(Cmd::ExportSheet);
@@ -3121,7 +3134,7 @@ fn program_row(
         .filter(|x| !x.is_empty())
         .collect();
     let mut want = had.clone();
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.add_space(14.0);
         ui.spacing_mut().item_spacing.x = 10.0;
         ui.label(egui::RichText::new("Setups").font(sans(13.0)).color(t.ink2));
@@ -3219,6 +3232,11 @@ fn program_row(
         ui.add_space(14.0);
         prog_field(ui, t, "File", 110.0, p, "file", &p.name, field, edits, places);
         prog_field(ui, t, "Folder", 90.0, p, "out", "beside it", field, edits, places);
+        // the column's width: two fields a line
+        if width < 520.0 {
+            ui.end_row();
+            ui.add_space(14.0);
+        }
         prog_field(ui, t, "Ext.", 44.0, p, "ext", &ext_default, field, edits, places);
         prog_field(ui, t, "Comment", 140.0, p, "comment", "header line", field, edits, places);
     });
@@ -3237,6 +3255,10 @@ fn program_row(
             });
         }
         prog_field(ui, t, "Decimals", 34.0, p, "decimals", "", field, edits, places);
+        if width < 520.0 {
+            ui.end_row();
+            ui.add_space(14.0);
+        }
         prog_field(ui, t, "Feed decimals", 34.0, p, "feed_decimals", "", field, edits, places);
         ui.add_space(6.0);
         ui.label(egui::RichText::new("Coolant").font(sans(12.0)).color(t.ink2));
@@ -3259,7 +3281,7 @@ fn program_row(
             });
         }
     });
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.add_space(14.0);
         let had = p.arg_str("tools").as_deref() == Some("list");
         let mut on = had;
@@ -3354,10 +3376,13 @@ fn quality_window(
 ) -> Option<Rect> {
     let mut close = false;
     // within the view's free part (a small screen narrows it)
-    let width = 720.0_f32.min(v.width() - 32.0).max(360.0);
+    let width = match w.dock_aux {
+        Some(d) => d.width() - 16.0,
+        None => 720.0_f32.min(v.width() - 32.0).max(360.0),
+    };
     let mut select: Option<String> = None;
     let mut colour = w.focus.colour_by;
-    let r = egui::Window::new("cam-quality")
+    let win = egui::Window::new("cam-quality")
         .id(egui::Id::unique("cam-quality-window"))
         .title_bar(false)
         .collapsible(false)
@@ -3366,8 +3391,10 @@ fn quality_window(
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(below_chips(v))
+        .constrain_to(below_chips(v));
+    let r = dialog_host(aux_rect(w.dock_aux), "quality", t, win)
         .show_placed(ctx, places, |ui, places| {
+            ui.set_max_width(width);
             close = head(ui, t, "cam_check", "Toolpath Quality", width, places, "cam:quality");
             // the toolpath's colouring in the view (the simulation view draws it)
             ui.horizontal(|ui| {
@@ -3403,14 +3430,17 @@ fn quality_window(
                 ("MRR cm3/min", 86.0),
                 ("kW", 50.0),
             ];
+            // the table at its own width: sideways in a scroll where the column is narrower
+            let tw = width.max(28.0 + cols.iter().map(|c| c.1).sum::<f32>());
             let header = |ui: &mut Ui| {
-                let (r, _) = ui.allocate_exact_size(vec2(width, 22.0), Sense::hover());
+                let (r, _) = ui.allocate_exact_size(vec2(tw, 22.0), Sense::hover());
                 let mut x = r.left() + 14.0;
                 for (c, wd) in cols {
                     ui.painter().text(pos2(x, r.center().y), Align2::LEFT_CENTER, c, sans(11.0), t.ink2);
                     x += wd;
                 }
             };
+            egui::ScrollArea::horizontal().id_salt("cam-quality-table").show(ui, |ui| {
             for su in w.setups() {
                 let ops: Vec<&forge_cam_quality::OpQ> = job
                     .ops
@@ -3430,7 +3460,7 @@ fn quality_window(
                 );
                 header(ui);
                 for q in ops {
-                    let (r, resp) = ui.allocate_exact_size(vec2(width, 22.0), Sense::click());
+                    let (r, resp) = ui.allocate_exact_size(vec2(tw, 22.0), Sense::click());
                     if resp.hovered() {
                         ui.painter().rect_filled(r, 0.0, t.hover);
                     }
@@ -3470,6 +3500,7 @@ fn quality_window(
                     }
                 }
             }
+            });
             if !job.progs.is_empty() {
                 heading(ui, t, "Programs on the machine's timeline", width);
                 for p in &job.progs {
@@ -3820,6 +3851,12 @@ fn dialog_host<'a>(dock: Option<Rect>, id: &str, t: &Theme, win: egui::Window<'a
         ),
         None => Host::Float(Box::new(win)),
     }
+}
+
+/// A column tab's rect as `dialog_host` takes it (it keeps a sheet's footer height free at the
+/// bottom; a tab has no footer).
+fn aux_rect(r: Option<Rect>) -> Option<Rect> {
+    r.map(|r| Rect::from_min_max(r.min, pos2(r.right(), r.bottom() + FOOT_H)))
 }
 
 /// A docked sheet's footer height: its OK, Cancel and Apply.

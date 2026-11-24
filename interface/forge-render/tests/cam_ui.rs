@@ -201,6 +201,16 @@ fn nc_programs_post_export_and_go_stale() {
     assert!(h.click("tool:NC Programs"));
     h.step();
     shot(&mut h, "cam-nc-open");
+    // a tab of the properties column: Quality beside it, back again
+    assert!(h.click("cam:dock:quality"));
+    h.step();
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.quality_open && !w.programs_open);
+    shot(&mut h, "cam-quality-tab");
+    assert!(h.click("cam:dock:programs"));
+    h.step();
+    h.step();
     assert!(h.click("cam:programs:allow"));
     h.step();
     // the file's name and folder, typed: written to the statement when the field is left

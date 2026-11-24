@@ -294,6 +294,8 @@ pub struct CamWs {
     /// The rect of the environment's properties column the op and setup dialogs dock in (None:
     /// they float); set by the Manufacture environment each frame.
     pub dock: Option<egui::Rect>,
+    /// The column's tab NC Programs or Quality dock in this frame (None: they float).
+    pub dock_aux: Option<egui::Rect>,
     /// The window's width, px (the environment's column narrows below 1280).
     pub screen_w: f32,
     /// A narrow window's column shows the sheet or the simulation, as tabs: the sheet hidden
@@ -364,6 +366,7 @@ impl CamWs {
             exported: 0,
             posted_cache: None,
             dock: None,
+            dock_aux: None,
             screen_w: 0.0,
             sheet_hidden: false,
             sim_tab: false,
