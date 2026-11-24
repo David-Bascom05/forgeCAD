@@ -223,7 +223,7 @@ theorem region_table (hvA : ValidExact Aex) (hvB : ValidExact Bex) (ha : ArrOK A
       pick (!t) (denoteExact Aex) (denoteExact Bex) := fun t => by cases t <;> rfl
   obtain ⟨F, hF, hgF, -⟩ := ha.on_face f hf
   have hgOwn : a.G.facet (a.gf f) ⊆ frontier (pick (a.src f) (denoteExact Aex) (denoteExact Bex)) := by
-    have := ha.on_frontier (a.gf f) (a.src f) hne (hgF.trans fun y hy => mem_iUnion₂.mpr ⟨F, hF, hy⟩)
+    have := ha.on_frontier hvA hvB (a.gf f) (a.src f) hne (hgF.trans fun y hy => mem_iUnion₂.mpr ⟨F, hF, hy⟩)
     rwa [denoteExact_pick] at this
   obtain ⟨cO, rO, fO⟩ := hown (a.src f)
   obtain ⟨cT, rT, fT⟩ := hown (!a.src f)
@@ -287,7 +287,7 @@ theorem keepRuleBd_proof : KeepRuleBd (E := E) := by
         intro fa fb hfa hfb hsa hsb hg hne' hk
         obtain ⟨F, hF, hgF, -⟩ := ha.on_face fa hfa
         rw [hsa] at hF
-        have hfrA := ha.on_frontier (a.gf fa) true hne'
+        have hfrA := ha.on_frontier hvA hvB (a.gf fa) true hne'
           (hgF.trans fun y hy => mem_iUnion₂.mpr ⟨F, hF, hy⟩)
         obtain ⟨y, hy⟩ := hne'
         have hyF : y ∈ frontier (denoteExact Aex) := hfrA hy

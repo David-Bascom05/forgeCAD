@@ -164,6 +164,8 @@ import ForgeCurved
 #print axioms ForgeCurved.VertexScreen.localGood_of_screen
 #print axioms ForgeCurved.VertexScreen.det3_independent
 #print axioms ForgeCurved.BodyModel.mem_denote_zone
+#print axioms ForgeCurved.BodyModel.bounds_of_weak
+#print axioms ForgeCurved.BodyModel.validSolid_of_weak
 #print axioms ForgeCurved.AngleOrder.before_iff_arg
 #print axioms ForgeCurved.G14.kept_iff
 #print axioms ForgeCurved.G14.extra_not_end

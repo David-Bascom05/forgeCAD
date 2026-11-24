@@ -19,8 +19,9 @@ This file is the target of the aeneas session's abstraction function. It maps th
 
 **Exact bodies.**
 * `Bounds b S`: `S` is closed, regular and bounded; its frontier is on the faces, and every face
-  point outside the vertex-cluster zones is on it; each face is oriented at every point where it
-  is alone. One fact about the faces is included (`seeded`):
+  point is on it (inside the vertex-cluster zones too: D5.zone, ruling Z2; `BoundsW` is the form
+  first stated, off the zones only, and `bounds_of_weak` turns it into `Bounds` for an `exactOf`
+  body); each face is oriented at every point where it is alone. One fact about the faces is included (`seeded`):
   every connected open set off the faces is unbounded or reaches a lone face point.
 * **`bounds_unique`**: `Bounds b S → Bounds b S' → S = S'`.
 * `WellFormed b`:
@@ -41,7 +42,9 @@ This file is the target of the aeneas session's abstraction function. It maps th
   clusters). It keeps the carriers and senses. Each f64 vertex becomes its **cluster**, the meet
   of its incident carriers in its δ-ball (`vertCore`), which must be nonempty, connected and of
   diameter at most δ (`ClusterOK`). Otherwise the result is `none`, which happens only for invalid
-  input. Each edge and region is the exact meet near the stored one, cut at the clusters.
+  input. Each edge and region is the exact meet near the stored one, cut at the clusters; inside
+  the zones (the open δ-balls round the vertices) a region keeps only its frontier part
+  (`regionExact`, `zoneFr`).
   `exactOf_refines` gives `Refines δ b (exactOf δ b)`, one-to-one up to clusters.
 * `ValidSolid δ b := ∃ bs, exactOf δ b = some bs ∧` (edges isolated, `EdgeIsolated`) `∧
   ValidExact bs`, and
@@ -139,11 +142,25 @@ structure Bounds (b : BodyModel E) (S : Set E) : Prop where
   bounded : Bornology.IsBounded S
   /-- the solid's boundary is on the faces -/
   frontier_sub : frontier S ⊆ Faces b
-  /-- every face point outside the cluster zones is on the boundary (inside a zone, micro-faces
-  of the near-concurrent carriers need not be) -/
-  faces_sub : Faces b \ Zones b ⊆ frontier S
+  /-- every face point is on the boundary, inside the cluster zones too (D5.zone, ruling Z2:
+  `exactOf` keeps, inside a zone, only the frontier part of the carriers' meet,
+  `bounds_of_weak`) -/
+  faces_sub : Faces b ⊆ frontier S
   /-- **`Φ_u`**: inside vertex `u`'s zone, off its incident carriers, the solid is the local formula
   on the carriers' signs -/
+  local_formula : ∀ u Φ z, b.formulas[u]? = some Φ → b.zones[u]? = some z → ∀ x ∈ z,
+    (∀ f ∈ b.faces, IncV b u f → f.carrier x ≠ 0) → (x ∈ S ↔ Φ.den (carriers b) x)
+  oriented : ∀ f ∈ b.faces, ∀ y, Alone b f y → Oriented f.carrier S f.sense y
+  seeded : Seeded b
+
+/-- **`Bounds` as first stated**: every face point outside the cluster zones on the boundary,
+nothing said inside them. For a body `exactOf` builds, it gives `Bounds` (`bounds_of_weak`). -/
+structure BoundsW (b : BodyModel E) (S : Set E) : Prop where
+  closed : IsClosed S
+  regular : closure (interior S) = S
+  bounded : Bornology.IsBounded S
+  frontier_sub : frontier S ⊆ Faces b
+  faces_sub : Faces b \ Zones b ⊆ frontier S
   local_formula : ∀ u Φ z, b.formulas[u]? = some Φ → b.zones[u]? = some z → ∀ x ∈ z,
     (∀ f ∈ b.faces, IncV b u f → f.carrier x ≠ 0) → (x ∈ S ↔ Φ.den (carriers b) x)
   oriented : ∀ f ∈ b.faces, ∀ y, Alone b f y → Oriented f.carrier S f.sense y
@@ -292,7 +309,8 @@ structure Refines (δ : ℝ) (b bs : BodyModel E) : Prop where
   face : ∀ i (h : i < b.faces.length),
     b.faces[i].loops = (bs.faces[i]'(faces_len ▸ h)).loops ∧
     b.faces[i].sense = (bs.faces[i]'(faces_len ▸ h)).sense ∧
-    WithinH δ b.faces[i].region (bs.faces[i]'(faces_len ▸ h)).region
+    (∀ p ∈ b.faces[i].region, ∃ q ∈ (bs.faces[i]'(faces_len ▸ h)).region ∪ Zones bs, dist p q ≤ δ) ∧
+    ∀ q ∈ (bs.faces[i]'(faces_len ▸ h)).region, ∃ p ∈ b.faces[i].region, dist p q ≤ δ
   edge : ∀ i (h : i < b.edges.length),
     b.edges[i].ends = (bs.edges[i]'(edges_len ▸ h)).ends ∧
     WithinH δ b.edges[i].curve (bs.edges[i]'(edges_len ▸ h)).curve
@@ -327,6 +345,11 @@ condition). -/
 def EdgeIsolated (δ : ℝ) (b : BodyModel E) (i : Nat) (e : EdgeModel E) : Prop :=
   IsPreconnected (edgeMeet δ b i e)
 
+/-- **Each vertex's zone meets only its incident faces** (a validity condition, as
+`EdgeIsolated`; ledger D8.iso): a face point in vertex `u`'s zone is on a face using `u`. -/
+def VertexIsolated (b : BodyModel E) : Prop :=
+  ∀ u z, b.zones[u]? = some z → ∀ f ∈ b.faces, ∀ y ∈ f.region, y ∈ z → IncV b u f
+
 /-- The exact edges a face's loops use. -/
 def faceEdges (δ : ℝ) (b : BodyModel E) (f : FaceModel E) : Set E :=
   ⋃ i, ⋃ (_ : IncE f i), ⋃ e ∈ b.edges[i]?, edgeMeet δ b i e
@@ -351,15 +374,41 @@ theorem regionMeet_on (δ : ℝ) (b : BodyModel E) (f : FaceModel E) :
   simp only [Set.mem_setOf_eq, Set.mem_diff] at hx
   exact hx.1.1
 
+/-- The cluster zones: per vertex, the open δ-ball round it. -/
+def zonesOf (δ : ℝ) (b : BodyModel E) : Set E := ⋃ p ∈ b.verts, Metric.ball p δ
+
+/-- Off vertex `u`'s incident carriers. -/
+def OffInc (b : BodyModel E) (u : Nat) (x : E) : Prop := ∀ f ∈ b.faces, IncV b u f → f.carrier x ≠ 0
+
+/-- **The frontier part of the zones**: the points that, inside some vertex `u`'s zone and off
+its incident carriers, are limits both of points where `Φ_u` holds and of points where it fails.
+Inside a zone the solid is `Φ_u` there (`Bounds.local_formula`), so these are its frontier
+points (`zoneFr_sub`). -/
+def zoneFr (δ : ℝ) (b : BodyModel E) : Set E :=
+  ⋃ u, ⋃ p ∈ b.verts[u]?, ⋃ Φ ∈ b.formulas[u]?,
+    closure {x | x ∈ Metric.ball p δ ∧ OffInc b u x ∧ Φ.den (carriers b) x} ∩
+    closure {x | x ∈ Metric.ball p δ ∧ OffInc b u x ∧ ¬ Φ.den (carriers b) x}
+
+/-- **The exact region** (D5.zone, ruling Z2): the carriers' meet off the zones, and inside them
+only its frontier part. -/
+def regionExact (δ : ℝ) (b : BodyModel E) (f : FaceModel E) : Set E :=
+  (regionMeet δ b f \ zonesOf δ b) ∪ (regionMeet δ b f ∩ zoneFr δ b)
+
+theorem regionExact_sub (δ : ℝ) (b : BodyModel E) (f : FaceModel E) :
+    regionExact δ b f ⊆ regionMeet δ b f := by
+  rintro y (hy | hy)
+  · exact hy.1
+  · exact hy.1
+
 /-- The exact face: the same carrier, sense and loops, the exact region. -/
 def exactFace (δ : ℝ) (b : BodyModel E) (f : FaceModel E) : FaceModel E where
   carrier := f.carrier
-  region := regionMeet δ b f
+  region := regionExact δ b f
   sense := f.sense
   loops := f.loops
   cont := f.cont
   nd := f.nd
-  on_carrier := regionMeet_on δ b f
+  on_carrier := fun y hy => regionMeet_on δ b f y (regionExact_sub δ b f hy)
 
 open Classical in
 /-- **The canonical exact counterpart**: exact faces, edges and vertex clusters (`none` only
@@ -370,7 +419,7 @@ noncomputable def exactOf (δ : ℝ) (b : BodyModel E) : Option (BodyModel E) :=
            edges := b.edges.mapIdx fun i e => { curve := edgeMeet δ b i e, ends := e.ends }
            verts := b.verts
            clusters := b.verts.mapIdx fun u p => vertCore δ b u p
-           zones := b.verts.map fun p => Metric.closedBall p δ
+           zones := b.verts.map fun p => Metric.ball p δ
            formulas := b.formulas }
   else none
 
@@ -386,18 +435,88 @@ theorem exactOf_refines {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some
     cases h
     refine ⟨by simp, by simp, by simp, by simp, rfl, fun i hi => ?_, fun i hi => ?_, fun u hu => ?_⟩
     · simp only [List.getElem_map, exactFace]
-      exact ⟨by simp, by simp, hface _ (List.getElem_mem hi)⟩
+      obtain ⟨h1, h2⟩ := hface _ (List.getElem_mem hi)
+      refine ⟨by simp, by simp, fun p hp => ?_, fun q hq => h2 q (regionExact_sub δ b _ hq)⟩
+      obtain ⟨q, hq, hpq⟩ := h1 p hp
+      refine ⟨q, ?_, hpq⟩
+      by_cases hz : q ∈ zonesOf δ b
+      · right
+        obtain ⟨v, hv, hqv⟩ := mem_iUnion₂.mp hz
+        exact mem_iUnion₂.mpr ⟨Metric.ball v δ, List.mem_map_of_mem hv, hqv⟩
+      · exact Or.inl (Or.inl ⟨hq, hz⟩)
     · simp only [List.getElem_mapIdx]
       exact ⟨by simp, hedge i hi⟩
     · simp only [List.getElem_mapIdx]
       exact ⟨(hall u hu).1, fun p hp => hp.1⟩
   · cases h
 
+/-- **D5.zone, ruling Z2: `exactOf` meets the stronger `Bounds`.** For a body `exactOf` builds,
+`Bounds` as first stated (`BoundsW`: face points on the frontier only off the zones) gives every
+face point on the frontier: off the zones by `BoundsW.faces_sub`, inside one because the exact
+region keeps only the zone's frontier part (`zoneFr`), where `Φ_u` decides the solid. -/
+theorem bounds_of_weak {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some bs) {S : Set E}
+    (hw : BoundsW bs S) : Bounds bs S := by
+  refine ⟨hw.closed, hw.regular, hw.bounded, hw.frontier_sub, ?_, hw.local_formula, hw.oriented,
+    hw.seeded⟩
+  unfold exactOf at h
+  split at h
+  swap
+  · cases h
+  have hb := Option.some.inj h
+  have hfaces : bs.faces = b.faces.map (exactFace δ b) := by rw [← hb]
+  have hedges : bs.edges = b.edges.mapIdx fun i e => { curve := edgeMeet δ b i e, ends := e.ends } := by
+    rw [← hb]
+  have hzones : bs.zones = b.verts.map fun p => Metric.ball p δ := by rw [← hb]
+  have hforms : bs.formulas = b.formulas := by rw [← hb]
+  intro y hy
+  obtain ⟨F, hF, hyF⟩ := mem_iUnion₂.mp hy
+  rw [hfaces] at hF
+  obtain ⟨f, hf, rfl⟩ := List.mem_map.mp hF
+  rcases hyF with ⟨hym, hyz⟩ | ⟨-, hyz⟩
+  · refine hw.faces_sub ⟨hy, fun hZ => hyz ?_⟩
+    obtain ⟨z, hz, hyz'⟩ := mem_iUnion₂.mp hZ
+    rw [hzones] at hz
+    obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hz
+    exact mem_iUnion₂.mpr ⟨p, hp, hyz'⟩
+  · obtain ⟨u, hu⟩ := mem_iUnion.mp hyz
+    obtain ⟨p, hp, hu⟩ := mem_iUnion₂.mp hu
+    obtain ⟨Φ, hΦ, hyA, hyB⟩ := mem_iUnion₂.mp hu
+    -- inside the zone, off the incident carriers, the solid is `Φ_u`
+    have hcar : carriers bs = carriers b := by
+      simp [carriers, hfaces, exactFace]
+    have hoff : ∀ x, OffInc b u x → ∀ f' ∈ bs.faces, IncV bs u f' → f'.carrier x ≠ 0 := by
+      intro x hx f' hf' hinc
+      rw [hfaces] at hf'
+      obtain ⟨g, hg, rfl⟩ := List.mem_map.mp hf'
+      refine hx g hg ?_
+      obtain ⟨l, hl, c, hc, e, he, w, hw'⟩ := hinc
+      rw [hedges] at he
+      simp only [List.getElem?_mapIdx, Option.map_eq_some_iff] at he
+      obtain ⟨e0, he0, rfl⟩ := he
+      exact ⟨l, hl, c, hc, e0, he0, w, hw'⟩
+    have hz : bs.zones[u]? = some (Metric.ball p δ) := by
+      rw [hzones]; simp only [List.getElem?_map, Option.map_eq_some_iff]; exact ⟨p, hp, rfl⟩
+    have hlf := hw.local_formula u Φ _ (by rw [hforms]; exact hΦ) hz
+    rw [hcar] at hlf
+    have hA : {x | x ∈ Metric.ball p δ ∧ OffInc b u x ∧ Φ.den (carriers b) x} ⊆ S :=
+      fun x ⟨hx, ho, hΦx⟩ => (hlf x hx (hoff x ho)).mpr hΦx
+    have hB : {x | x ∈ Metric.ball p δ ∧ OffInc b u x ∧ ¬ Φ.den (carriers b) x} ⊆ Sᶜ :=
+      fun x ⟨hx, ho, hΦx⟩ hxS => hΦx ((hlf x hx (hoff x ho)).mp hxS)
+    rw [frontier_eq_closure_inter_closure]
+    exact ⟨closure_mono hA hyA, closure_mono hB hyB⟩
+
 /-- **(ii) A valid stored body**: its canonical exact counterpart exists, its edges are isolated,
 and it is a valid solid. -/
 def ValidSolid (δ : ℝ) (b : BodyModel E) : Prop :=
   ∃ bs, exactOf δ b = some bs ∧ (∀ i (h : i < b.edges.length), EdgeIsolated δ b i b.edges[i]) ∧
     ValidExact bs
+
+/-- **A valid stored body from `Bounds` as first stated** (D5.zone, Z2): what the weaker
+validity asks of `exactOf`'s counterpart gives the stronger `ValidSolid`. -/
+theorem validSolid_of_weak {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some bs)
+    (hiso : ∀ i (h : i < b.edges.length), EdgeIsolated δ b i b.edges[i]) (hwf : WellFormed bs)
+    {S : Set E} (hw : BoundsW bs S) : ValidSolid δ b :=
+  ⟨bs, h, hiso, hwf, S, bounds_of_weak h hw⟩
 
 /-- **(iii) `⟦b⟧`**: the canonical exact counterpart's solid (no choice). -/
 noncomputable def denote (δ : ℝ) (b : BodyModel E) : Set E :=

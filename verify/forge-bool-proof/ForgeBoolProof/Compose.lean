@@ -146,7 +146,7 @@ theorem apply_correct {A B R : Body} {op : Op} {Aex Bex : BodyModel E} {a : Arr 
     (hvA : ValidExact Aex) (hvB : ValidExact Bex) (ha : ArrOK Aex Bex a)
     (hpost : ApplyPost δ abs Names A B op a (denoteExact Aex) (denoteExact Bex) R) :
     Correct δ abs sc Names A B op (.ok R) := by
-  obtain ⟨Rs, hRs, hiso, hwf, hbf, hfa, hnames⟩ := hpost
+  obtain ⟨Rs, hRs, hiso, -, hwf, hbf, hfa, hnames⟩ := hpost
   have hbd := bounds_of_faces hvA hvB ha op hbf
   refine ⟨⟨Rs, hRs, hiso, hwf, _, hbd⟩, hfa, ?_, hnames⟩
   rw [denote_spec hRs, denoteExact_eq hwf hbd, res_keepRoom hvA hvB ha op, denote_spec hAex,
