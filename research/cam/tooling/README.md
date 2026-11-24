@@ -70,6 +70,15 @@ by the test, not failed.
   source's upper limit, noted.
   Helical's finishing column is a programmed feed at the stated RDOC: the preset sets ae to it
   and notes "programmed at ae".
+- Turning presets (`[[insert.preset]]`, raw/turn-vc/<maker>.json): vc per ISO group and grade
+  from the makers' grade tables (Sumitomo catalogue section A "Recommended Cutting Conditions",
+  with f and ap; Tungaloy GC 2023-2024 insert section p.4; Korloy grade selection tables;
+  Ingersoll 1144_Turning_Tech "Cutting data for ISO turning"). Named "<G> <chipbreaker> <grade>"
+  (the first material the maker prints for the group) and "<...> <material>" for each; `fz` is
+  the feed in mm/rev. A printed optimum/recommended/nominal value is the start value, else the
+  range's low end. Korloy and Ingersoll print vc per grade only: matched to an insert by the
+  grades its catalogue row marks (read from the rendered page), f and ap from the insert's own
+  row, cited as estimates. A vc with no feed is held back. Turning records are now `real`.
 - Inconsistencies found in the sources are kept in the raw facts (e.g. Rego-Fix ER20 nut thread
   M25x1.5 in the catalogue vs M24x1.5 on the pocket sheet; Tormach BT30 "Gage length is 60mm
   (1.97 inches)"; Lakeshore ".0003.0010" chip load); the generator never resolves them silently.

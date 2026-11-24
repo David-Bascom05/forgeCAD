@@ -1,0 +1,1219 @@
+{
+ "maker": "Korloy",
+ "taken": "2026-11-24",
+ "source": "Cutting Tools Turning 25-26 (EM) catalogue, A-section grade selection tables (pdf pages 23, 27, 29) + insert-page grade dots (pages 74, 75, 82, 83)",
+ "rows": [
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "NC3205",
+   "iso_group": "P",
+   "material_stated": "Steel - Continuous cutting",
+   "vc": {
+    "v": [
+     210.0,
+     390.0
+    ],
+    "recommended": 300.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 300 (210~390)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "CNMG 120408-B25",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "NC3215",
+   "iso_group": "P",
+   "material_stated": "Steel - Continuous cutting",
+   "vc": {
+    "v": [
+     180.0,
+     340.0
+    ],
+    "recommended": 260.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 260 (180~340)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-MP",
+    "DNMG 150408-MP",
+    "DNMG 150608-MP",
+    "DNMG 150608-GR"
+   ],
+   "chipbreaker": null,
+   "grade": "NC5320",
+   "iso_group": "P",
+   "material_stated": "Steel - General cutting",
+   "vc": {
+    "v": [
+     170.0,
+     310.0
+    ],
+    "recommended": 240.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 240 (170~310)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 82, 83]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "CNMG 120408-VM",
+    "CNMG 120408-B25",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP",
+    "DNMG 150608-GR"
+   ],
+   "chipbreaker": null,
+   "grade": "NC3225",
+   "iso_group": "P",
+   "material_stated": "Steel - General cutting",
+   "vc": {
+    "v": [
+     160.0,
+     300.0
+    ],
+    "recommended": 230.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 230 (160~300)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 82, 83]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25",
+    "DNMG 150608-GR"
+   ],
+   "chipbreaker": null,
+   "grade": "NC3120",
+   "iso_group": "P",
+   "material_stated": "Steel - General cutting",
+   "vc": {
+    "v": [
+     160.0,
+     300.0
+    ],
+    "recommended": 230.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 230 (160~300)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 83]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-MP",
+    "CNMG 120408-VM",
+    "CNMG 120408-B25",
+    "DNMG 150608-GR"
+   ],
+   "chipbreaker": null,
+   "grade": "NC3030",
+   "iso_group": "P",
+   "material_stated": "Steel - Interrupted cutting",
+   "vc": {
+    "v": [
+     130.0,
+     250.0
+    ],
+    "recommended": 190.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 190 (130~250)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 83]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "CNMG 120408-B25",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP",
+    "DNMG 150608-GR"
+   ],
+   "chipbreaker": null,
+   "grade": "NC3235",
+   "iso_group": "P",
+   "material_stated": "Steel - Interrupted cutting",
+   "vc": {
+    "v": [
+     125.0,
+     235.0
+    ],
+    "recommended": 180.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 180 (125~235)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 82, 83]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "CNMG 120408-VM",
+    "CNMG 120408-B25",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP",
+    "DNMG 150608-GR"
+   ],
+   "chipbreaker": null,
+   "grade": "NC5330",
+   "iso_group": "P",
+   "material_stated": "Steel - Interrupted cutting",
+   "vc": {
+    "v": [
+     120.0,
+     230.0
+    ],
+    "recommended": 175.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 175 (120~230)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 82, 83]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "NC9115",
+   "iso_group": "M",
+   "material_stated": "Stainless steel - Continuous cutting",
+   "vc": {
+    "v": [
+     160.0,
+     200.0
+    ],
+    "recommended": 180.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 180 (160~200)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "NC9125",
+   "iso_group": "M",
+   "material_stated": "Stainless steel - General cutting",
+   "vc": {
+    "v": [
+     155.0,
+     195.0
+    ],
+    "recommended": 175.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 175 (155~195)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "CNMG 120408-VM",
+    "CNMG 120408-B25",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP",
+    "DNMG 150608-GR"
+   ],
+   "chipbreaker": null,
+   "grade": "NC5330",
+   "iso_group": "M",
+   "material_stated": "Stainless steel - General cutting",
+   "vc": {
+    "v": [
+     155.0,
+     195.0
+    ],
+    "recommended": 175.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 175 (155~195)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 82, 83]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "CNMG 120408-B25",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP",
+    "DNMG 150608-GR"
+   ],
+   "chipbreaker": null,
+   "grade": "NC3235",
+   "iso_group": "M",
+   "material_stated": "Stainless steel - Interrupted cutting",
+   "vc": {
+    "v": [
+     155.0,
+     185.0
+    ],
+    "recommended": 170.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 170 (155~185)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 82, 83]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "NC9135",
+   "iso_group": "M",
+   "material_stated": "Stainless steel - Interrupted cutting",
+   "vc": {
+    "v": [
+     145.0,
+     175.0
+    ],
+    "recommended": 160.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 160 (145~175)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP",
+    "DNMG 150608-GR"
+   ],
+   "chipbreaker": null,
+   "grade": "NC6310",
+   "iso_group": "K",
+   "material_stated": "Cast iron - Continuous cutting",
+   "vc": {
+    "v": [
+     255.0,
+     425.0
+    ],
+    "recommended": 340.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 340 (255~425)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 82, 83]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-MP",
+    "DNMG 150408-MP",
+    "DNMG 150608-MP",
+    "DNMG 150608-GR"
+   ],
+   "chipbreaker": null,
+   "grade": "NC5320",
+   "iso_group": "K",
+   "material_stated": "Cast iron - General cutting",
+   "vc": {
+    "v": [
+     165.0,
+     275.0
+    ],
+    "recommended": 220.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 220 (165~275)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 82, 83]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "CNMG 120408-VM",
+    "CNMG 120408-B25",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP",
+    "DNMG 150608-GR"
+   ],
+   "chipbreaker": null,
+   "grade": "NC5330",
+   "iso_group": "K",
+   "material_stated": "Cast iron - Interrupted cutting",
+   "vc": {
+    "v": [
+     110.0,
+     190.0
+    ],
+    "recommended": 150.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 150 (110~190)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 82, 83]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "NC9125",
+   "iso_group": "S",
+   "material_stated": "HRSA - Continuous cutting",
+   "vc": {
+    "v": [
+     30.0,
+     50.0
+    ],
+    "recommended": 40.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 40 (30~50)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "NC9135",
+   "iso_group": "S",
+   "material_stated": "HRSA - Interrupted cutting",
+   "vc": {
+    "v": [
+     25.0,
+     45.0
+    ],
+    "recommended": 35.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 35 (25~45)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=23",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of CVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "PC5300",
+   "iso_group": "P",
+   "material_stated": "Steel - Continuous cutting",
+   "vc": {
+    "v": [
+     105.0,
+     175.0
+    ],
+    "recommended": 140.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 140 (105~175)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM"
+   ],
+   "chipbreaker": null,
+   "grade": "PC5400",
+   "iso_group": "P",
+   "material_stated": "Steel - Interrupted cutting",
+   "vc": {
+    "v": [
+     90.0,
+     160.0
+    ],
+    "recommended": 125.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 125 (90~160)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "PC8105",
+   "iso_group": "M",
+   "material_stated": "Stainless steel - Continuous cutting",
+   "vc": {
+    "v": [
+     130.0,
+     220.0
+    ],
+    "recommended": 175.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 175 (130~220)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "CNMG 120408-VM",
+    "CNMG 120408-B25",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "PC8110",
+   "iso_group": "M",
+   "material_stated": "Stainless steel - Continuous cutting",
+   "vc": {
+    "v": [
+     120.0,
+     200.0
+    ],
+    "recommended": 160.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 160 (120~200)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "PC8115",
+   "iso_group": "M",
+   "material_stated": "Stainless steel - Continuous cutting",
+   "vc": {
+    "v": [
+     110.0,
+     180.0
+    ],
+    "recommended": 145.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 145 (110~180)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "PC5300",
+   "iso_group": "M",
+   "material_stated": "Stainless steel - Interrupted cutting",
+   "vc": {
+    "v": [
+     95.0,
+     165.0
+    ],
+    "recommended": 130.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 130 (95~165)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "PC9030",
+   "iso_group": "M",
+   "material_stated": "Stainless steel - Interrupted cutting",
+   "vc": {
+    "v": [
+     90.0,
+     150.0
+    ],
+    "recommended": 120.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 120 (90~150)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM"
+   ],
+   "chipbreaker": null,
+   "grade": "PC5400",
+   "iso_group": "M",
+   "material_stated": "Stainless steel - Interrupted cutting",
+   "vc": {
+    "v": [
+     80.0,
+     140.0
+    ],
+    "recommended": 110.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 110 (80~140)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "CNMG 120408-VM",
+    "CNMG 120408-B25",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "PC8110",
+   "iso_group": "K",
+   "material_stated": "Cast iron - Continuous cutting",
+   "vc": {
+    "v": [
+     100.0,
+     170.0
+    ],
+    "recommended": 135.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 135 (100~170)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "PC5300",
+   "iso_group": "K",
+   "material_stated": "Cast iron - Interrupted cutting",
+   "vc": {
+    "v": [
+     80.0,
+     130.0
+    ],
+    "recommended": 105.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 105 (80~130)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM"
+   ],
+   "chipbreaker": null,
+   "grade": "PC5400",
+   "iso_group": "K",
+   "material_stated": "Cast iron - Interrupted cutting",
+   "vc": {
+    "v": [
+     65.0,
+     105.0
+    ],
+    "recommended": 85.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 85 (65~105)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "PC8105",
+   "iso_group": "S",
+   "material_stated": "HRSA - Continuous cutting",
+   "vc": {
+    "v": [
+     40.0,
+     70.0
+    ],
+    "recommended": 55.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 55 (40~70)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "CNMG 120408-VM",
+    "CNMG 120408-B25",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "PC8110",
+   "iso_group": "S",
+   "material_stated": "HRSA - Continuous cutting",
+   "vc": {
+    "v": [
+     35.0,
+     65.0
+    ],
+    "recommended": 50.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 50 (35~65)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "PC8115",
+   "iso_group": "S",
+   "material_stated": "HRSA - Continuous cutting",
+   "vc": {
+    "v": [
+     35.0,
+     55.0
+    ],
+    "recommended": 45.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 45 (35~55)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "PC5300",
+   "iso_group": "S",
+   "material_stated": "HRSA - Interrupted cutting",
+   "vc": {
+    "v": [
+     30.0,
+     50.0
+    ],
+    "recommended": 40.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 40 (30~50)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM"
+   ],
+   "chipbreaker": null,
+   "grade": "PC5400",
+   "iso_group": "S",
+   "material_stated": "HRSA - Interrupted cutting",
+   "vc": {
+    "v": [
+     25.0,
+     45.0
+    ],
+    "recommended": 35.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 35 (25~45)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "PC8105",
+   "iso_group": "H",
+   "material_stated": "Hardened - Interrupted cutting",
+   "vc": {
+    "v": [
+     80.0,
+     140.0
+    ],
+    "recommended": 110.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 110 (80~140)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP",
+    "CNMG 120408-VM",
+    "CNMG 120408-B25",
+    "DNMG 150404-MP",
+    "DNMG 150408-MP",
+    "DNMG 150604-MP",
+    "DNMG 150608-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "PC8110",
+   "iso_group": "H",
+   "material_stated": "Hardened - Interrupted cutting",
+   "vc": {
+    "v": [
+     75.0,
+     125.0
+    ],
+    "recommended": 100.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 100 (75~125)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75, 82]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404-MP",
+    "CNMG 120408-MP"
+   ],
+   "chipbreaker": null,
+   "grade": "PC8115",
+   "iso_group": "H",
+   "material_stated": "Hardened - Interrupted cutting",
+   "vc": {
+    "v": [
+     65.0,
+     115.0
+    ],
+    "recommended": 90.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 90 (65~115)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=27",
+   "note": "Turning 25-26 catalogue A-section \"Selection system of PVD coated grade\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "CN1500",
+   "iso_group": "P",
+   "material_stated": "Steel - Continuous cutting",
+   "vc": {
+    "v": [
+     150.0,
+     350.0
+    ],
+    "recommended": 250.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 250 (150 ~ 350)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=29",
+   "note": "Turning 25-26 catalogue A-section \"Cermet Grades - Selection system\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "CN2500",
+   "iso_group": "P",
+   "material_stated": "Steel - Interrupted cutting",
+   "vc": {
+    "v": [
+     130.0,
+     300.0
+    ],
+    "recommended": 220.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 220 (130 ~ 300)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=29",
+   "note": "Turning 25-26 catalogue A-section \"Cermet Grades - Selection system\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "CN1500",
+   "iso_group": "K",
+   "material_stated": "Cast iron - Continuous cutting",
+   "vc": {
+    "v": [
+     100.0,
+     300.0
+    ],
+    "recommended": 200.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 200(100 ~ 300)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=29",
+   "note": "Turning 25-26 catalogue A-section \"Cermet Grades - Selection system\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "CN2500",
+   "iso_group": "K",
+   "material_stated": "Cast iron - Interrupted cutting",
+   "vc": {
+    "v": [
+     80.0,
+     250.0
+    ],
+    "recommended": 165.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) 165(80 ~ 250)"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=29",
+   "note": "Turning 25-26 catalogue A-section \"Cermet Grades - Selection system\" (grade-level table, no chipbreaker column); printed as recommended (min~max): v=[min,max]. Inserts matched by the grade dots on their catalogue rows (pages [74, 75]), read from the rendered page; fn/ap on the insert pages are not printed with this vc (see raw record cutting list)."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "CN1500",
+   "iso_group": null,
+   "material_stated": "Turning - SM10C, SS440",
+   "vc": {
+    "v": [
+     150.0,
+     400.0
+    ],
+    "recommended": 270.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) Minimum 150 Recommended 270 Maximum 400"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=29",
+   "note": "Cermet Grades page (A14), \"Recommended cutting conditions\" table by workpiece (named material, no ISO letter); grade-level, no chipbreaker; inserts matched by grade dots on their catalogue rows."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "CN2500",
+   "iso_group": null,
+   "material_stated": "Turning - SM10C, SS440",
+   "vc": {
+    "v": [
+     130.0,
+     350.0
+    ],
+    "recommended": 240.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) Minimum 130 Recommended 240 Maximum 350"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=29",
+   "note": "Cermet Grades page (A14), \"Recommended cutting conditions\" table by workpiece (named material, no ISO letter); grade-level, no chipbreaker; inserts matched by grade dots on their catalogue rows."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "CN1500",
+   "iso_group": null,
+   "material_stated": "Turning - SM45C",
+   "vc": {
+    "v": [
+     150.0,
+     350.0
+    ],
+    "recommended": 250.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) Minimum 150 Recommended 250 Maximum 350"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=29",
+   "note": "Cermet Grades page (A14), \"Recommended cutting conditions\" table by workpiece (named material, no ISO letter); grade-level, no chipbreaker; inserts matched by grade dots on their catalogue rows."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "CN2500",
+   "iso_group": null,
+   "material_stated": "Turning - SM45C",
+   "vc": {
+    "v": [
+     130.0,
+     300.0
+    ],
+    "recommended": 220.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) Minimum 130 Recommended 220 Maximum 300"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=29",
+   "note": "Cermet Grades page (A14), \"Recommended cutting conditions\" table by workpiece (named material, no ISO letter); grade-level, no chipbreaker; inserts matched by grade dots on their catalogue rows."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "CN1500",
+   "iso_group": null,
+   "material_stated": "Turning - SCM440 Sintered ferrous alloy",
+   "vc": {
+    "v": [
+     120.0,
+     300.0
+    ],
+    "recommended": 220.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) Minimum 120 Recommended 220 Maximum 300"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=29",
+   "note": "Cermet Grades page (A14), \"Recommended cutting conditions\" table by workpiece (named material, no ISO letter); grade-level, no chipbreaker; inserts matched by grade dots on their catalogue rows."
+  },
+  {
+   "insert_ids": [
+    "CNMG 120408-VM",
+    "CNMG 120408-B25"
+   ],
+   "chipbreaker": null,
+   "grade": "CN2500",
+   "iso_group": null,
+   "material_stated": "Turning - SCM440 Sintered ferrous alloy",
+   "vc": {
+    "v": [
+     100.0,
+     250.0
+    ],
+    "recommended": 200.0,
+    "unit": "m/min",
+    "stated": "Recommended cutting speed (m/min) Minimum 100 Recommended 200 Maximum 250"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=29",
+   "note": "Cermet Grades page (A14), \"Recommended cutting conditions\" table by workpiece (named material, no ISO letter); grade-level, no chipbreaker; inserts matched by grade dots on their catalogue rows."
+  }
+ ],
+ "missing": [
+  {
+   "insert_id": "CNMG 120404-MP",
+   "why": "vc only from grade-level tables (no chipbreaker-specific vc for MP in the catalogue; insert page B74 prints fn/ap only). Groups with a vc via offered grades: ['H', 'K', 'M', 'P', 'S']; N and any group not listed have no printed vc for this insert's grades."
+  },
+  {
+   "insert_id": "CNMG 120408-MP",
+   "why": "vc only from grade-level tables (no chipbreaker-specific vc for MP in the catalogue; insert page B74 prints fn/ap only). Groups with a vc via offered grades: ['H', 'K', 'M', 'P', 'S']; N and any group not listed have no printed vc for this insert's grades."
+  },
+  {
+   "insert_id": "CNMG 120408-VM",
+   "why": "vc only from grade-level tables (no chipbreaker-specific vc for VM in the catalogue; insert page B74 prints fn/ap only). Groups with a vc via offered grades: ['H', 'K', 'M', 'P', 'S']; N and any group not listed have no printed vc for this insert's grades."
+  },
+  {
+   "insert_id": "CNMG 120408-B25",
+   "why": "vc only from grade-level tables (no chipbreaker-specific vc for B25 in the catalogue; insert page B75 prints fn/ap only). Groups with a vc via offered grades: ['H', 'K', 'M', 'P', 'S']; N and any group not listed have no printed vc for this insert's grades."
+  },
+  {
+   "insert_id": "DNMG 150404-MP",
+   "why": "vc only from grade-level tables (no chipbreaker-specific vc for MP in the catalogue; insert page B82 prints fn/ap only). Groups with a vc via offered grades: ['H', 'K', 'M', 'P', 'S']; N and any group not listed have no printed vc for this insert's grades."
+  },
+  {
+   "insert_id": "DNMG 150408-MP",
+   "why": "vc only from grade-level tables (no chipbreaker-specific vc for MP in the catalogue; insert page B82 prints fn/ap only). Groups with a vc via offered grades: ['H', 'K', 'M', 'P', 'S']; N and any group not listed have no printed vc for this insert's grades."
+  },
+  {
+   "insert_id": "DNMG 150604-MP",
+   "why": "vc only from grade-level tables (no chipbreaker-specific vc for MP in the catalogue; insert page B82 prints fn/ap only). Groups with a vc via offered grades: ['H', 'K', 'M', 'P', 'S']; N and any group not listed have no printed vc for this insert's grades."
+  },
+  {
+   "insert_id": "DNMG 150608-MP",
+   "why": "vc only from grade-level tables (no chipbreaker-specific vc for MP in the catalogue; insert page B82 prints fn/ap only). Groups with a vc via offered grades: ['H', 'K', 'M', 'P', 'S']; N and any group not listed have no printed vc for this insert's grades."
+  },
+  {
+   "insert_id": "DNMG 150608-GR",
+   "why": "vc only from grade-level tables (no chipbreaker-specific vc for GR in the catalogue; insert page B83 prints fn/ap only). Groups with a vc via offered grades: ['K', 'M', 'P']; N and any group not listed have no printed vc for this insert's grades."
+  }
+ ],
+ "blocked": []
+}

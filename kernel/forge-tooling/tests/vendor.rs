@@ -331,3 +331,39 @@ l1 = 110
     let e = l.add("x.toml", &ok.replace("cdx = 40\n", "")).unwrap_err();
     assert!(matches!(e, LibError::Missing { field: "cdx", .. }), "{e:?}");
 }
+
+/// Turning presets from the makers' grade tables (FEEDS-SPEEDS): Sumitomo's "Recommended
+/// Cutting Conditions" (A13) for GU in AC8115P, mild steel: vc 260-350-500 m/min, f 0.1-0.25-0.4,
+/// ap 1.0-2.5-4.0, the printed optimum kept.
+#[test]
+fn insert_presets_from_grade_tables() {
+    let l = Library::builtin();
+    let i = l
+        .inserts
+        .iter()
+        .find(|i| i.id == "sumitomo-CNMG120408N-GU")
+        .unwrap();
+    let p = i.presets.iter().find(|p| p.name == "P GU AC8115P").unwrap();
+    assert_eq!((p.vc, p.fz, p.ap), (350.0, 0.25, Some(2.5)));
+    let c = i.cites.iter().find(|c| c.path == "preset.P GU AC8115P").unwrap();
+    assert_eq!(c.status, CiteStatus::Published);
+    assert!(c.value.contains("260-350-500"), "{}", c.value);
+    // every insert preset is cited and positive; the makers that print vc per grade only are
+    // estimates (matched by the grades the insert is offered in)
+    let mut n = 0;
+    for i in &l.inserts {
+        for p in &i.presets {
+            n += 1;
+            assert!(p.vc > 0.0 && p.fz > 0.0, "{}: {}", i.id, p.name);
+            let c = i
+                .cites
+                .iter()
+                .find(|c| c.path == format!("preset.{}", p.name))
+                .unwrap();
+            if i.maker == "Ingersoll" || i.maker == "Korloy" {
+                assert_eq!(c.status, CiteStatus::Estimate, "{}: {}", i.id, p.name);
+            }
+        }
+    }
+    assert!(n >= 500, "{n}");
+}

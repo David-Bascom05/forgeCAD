@@ -14,6 +14,7 @@ h = 20
 b = 20
 insert = "CN֎֎1204֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=165"
 taken = "2026-11-24"
 note = "Korloy PCLNR/L lever-lock external holder"
@@ -78,6 +79,7 @@ h = 20
 b = 20
 insert = "CN֎֎1204֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=165"
 taken = "2026-11-24"
 note = "Korloy PCLNR/L lever-lock external holder"
@@ -142,6 +144,7 @@ h = 25
 b = 25
 insert = "CN֎֎1204֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=165"
 taken = "2026-11-24"
 note = "Korloy PCLNR/L lever-lock external holder"
@@ -206,6 +209,7 @@ h = 25
 b = 25
 insert = "CN֎֎1204֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=165"
 taken = "2026-11-24"
 note = "Korloy PCLNR/L lever-lock external holder"
@@ -270,6 +274,7 @@ h = 20
 b = 20
 insert = "CN֎֎1204֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=175"
 taken = "2026-11-24"
 note = "Korloy MCLNR/L external holder"
@@ -334,6 +339,7 @@ h = 20
 b = 20
 insert = "CN֎֎1204֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=175"
 taken = "2026-11-24"
 note = "Korloy MCLNR/L external holder"
@@ -398,6 +404,7 @@ h = 25
 b = 25
 insert = "DN֎֎1506֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=160"
 taken = "2026-11-24"
 note = "Korloy DDJNR/L double-clamp external holder"
@@ -462,6 +469,7 @@ h = 25
 b = 25
 insert = "DN֎֎1506֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=160"
 taken = "2026-11-24"
 note = "Korloy DDJNR/L double-clamp external holder"
@@ -526,6 +534,7 @@ h = 25
 b = 25
 insert = "DN֎֎1506֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=165"
 taken = "2026-11-24"
 note = "Korloy PDJNR/L lever-lock external holder"
@@ -590,6 +599,7 @@ h = 25
 b = 25
 insert = "DN֎֎1506֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=165"
 taken = "2026-11-24"
 note = "Korloy PDJNR/L lever-lock external holder"
@@ -654,6 +664,7 @@ h = 20
 b = 20
 insert = "VB֎T1604֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=187"
 taken = "2026-11-24"
 note = "Korloy SVJBR/L screw-on external holder"
@@ -718,6 +729,7 @@ h = 20
 b = 20
 insert = "VB֎T1604֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=187"
 taken = "2026-11-24"
 note = "Korloy SVJBR/L screw-on external holder"
@@ -782,6 +794,7 @@ dmm = 25
 min_bore = 32
 insert = "CN֎֎1204֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=195"
 taken = "2026-11-24"
 note = "Korloy S-PCLNR/L boring bar (steel shank)"
@@ -846,6 +859,7 @@ dmm = 25
 min_bore = 32
 insert = "CN֎֎1204֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=195"
 taken = "2026-11-24"
 note = "Korloy S-PCLNR/L boring bar (steel shank)"
@@ -910,6 +924,7 @@ dmm = 20
 min_bore = 25
 insert = "CC֎T09T3֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=200"
 taken = "2026-11-24"
 note = "Korloy S-SCLCR/L boring bar (steel shank)"
@@ -974,6 +989,7 @@ dmm = 20
 min_bore = 25
 insert = "CC֎T09T3֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=200"
 taken = "2026-11-24"
 note = "Korloy S-SCLCR/L boring bar (steel shank)"
@@ -1038,6 +1054,7 @@ dmm = 20
 min_bore = 25
 insert = "DC֎T11T3֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=203"
 taken = "2026-11-24"
 note = "Korloy S-SDUCR/L boring bar (steel shank)"
@@ -1102,6 +1119,7 @@ dmm = 20
 min_bore = 25
 insert = "DC֎T11T3֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=203"
 taken = "2026-11-24"
 note = "Korloy S-SDUCR/L boring bar (steel shank)"
@@ -1166,6 +1184,7 @@ dmm = 16
 min_bore = 20
 insert = "DC֎T0702֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=203"
 taken = "2026-11-24"
 note = "Korloy A-SDUCR/L boring bar"
@@ -1230,6 +1249,7 @@ dmm = 16
 min_bore = 20
 insert = "DC֎T0702֎֎"
 maker = "Korloy"
+real = true
 source = "https://www.korloy.com/en/ebook/Cutting%20Tools_Turning%2025-26(EM)/assets/contents/download.pdf#page=203"
 taken = "2026-11-24"
 note = "Korloy A-SDUCR/L boring bar"

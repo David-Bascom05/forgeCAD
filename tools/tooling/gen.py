@@ -554,8 +554,12 @@ def turn_vc_rows(vendor):
 
 
 def nominal_or_low(x):
-    """(value, how): the maker's printed nominal ("start here") when given, else a range's low
+    """(value, how): the maker's printed nominal, optimum or recommended value ("start here")
+    when given, else a range's low
     end, else the single value; how is None for a single printed value."""
+    for k in ("optimum", "recommended"):  # Sumitomo min-optimum-max, Korloy "300 (210~390)"
+        if isinstance((x or {}).get(k), (int, float)):
+            return x[k], None
     v = (x or {}).get("v")
     if isinstance(v, dict):
         if isinstance(v.get("nominal"), (int, float)):
@@ -568,11 +572,13 @@ def nominal_or_low(x):
 
 
 def insert_presets(vendor, r, f, skips):
-    """FEEDS-SPEEDS' turning presets: per printed (ISO group, grade) vc for this insert's
-    chipbreaker, with the feed (mm/rev, in `fz`) and ap printed with it or on the insert's own
-    row; a vc without a feed is held back."""
+    """FEEDS-SPEEDS' turning presets: per printed (ISO group, grade) vc for this insert, with
+    the feed (mm/rev, in `fz`) and ap printed with it or on the insert's own row; a vc without a
+    feed is held back. "<G> <chipbreaker> <grade>" is the first material the maker prints for
+    the group (their table's lead row); every material is also "<... grade> <material>"."""
     out, names = [], set()
     own = (r.get("cutting") or [None])[0]  # Korloy/Ingersoll: f and ap per chipbreaker row
+    cb = f.get("chipbreaker") or ""
     for row in turn_vc_rows(vendor):
         if r["id"] not in row.get("insert_ids", []):
             continue
@@ -587,30 +593,36 @@ def insert_presets(vendor, r, f, skips):
         if not g or not vc or not fz:
             skips["turning vc row held back (no group, vc or feed)"] += 1
             continue
-        cb = f.get("chipbreaker") or row.get("chipbreaker") or ""
-        name = " ".join(x for x in (g, cb, row.get("grade") or "") if x)
-        if name in names:
-            skips["turning vc row repeating a group and grade"] += 1
-            continue
-        names.add(name)
-        basis, notes = [], []
-        if not printed:
-            basis.append(f"the maker's material '{row.get('material_stated')}' mapped to ISO 513 group {g} by its name")
-        for what, how in (("vc", vhow), ("f", fhow), ("ap", ahow)):
-            if how:
-                basis.append(f"{what} is {how}")
-        if src2:
-            notes.append(f"f and ap from the insert's own row ({src2}), vc from the grade table")
-        notes.append("fz holds the feed per revolution, mm/rev")
-        st = lambda x: (x or {}).get("stated", "")
-        value = "; ".join(v for v in (row.get("grade") or "", st(row.get("vc")), st(fx), st(ax)) if v)
-        if re.search(r"\b(SFM|IPR|ipr|inch|in)\b", value):
-            notes.append("metric values are exact conversions (SFM x 0.3048 m/min, IPR x 25.4 mm, in x 25.4 mm)")
-        if row.get("note"):
-            notes.append(row["note"])
-        cite = dict(path=f"preset.{name}", status="estimate" if basis else "published", source=row["url"],
-                    taken=r.get("taken", TAKEN), value=value, basis="; ".join(basis), note="; ".join(notes))
-        out.append(dict(name=name, group=g, vc=vc, fz=fz, ap=ap, cite=cite))
+        head = " ".join(x for x in (g, cb or row.get("chipbreaker") or "", row.get("grade") or "") if x)
+        mat = " ".join(str(row.get("material_stated") or "").split())
+        for name, lead in ((head, True), (f"{head} {mat}" if mat else None, False)):
+            if not name or name in names:
+                continue
+            names.add(name)
+            basis, notes = [], []
+            if not printed:
+                basis.append(f"the maker's material '{mat}' mapped to ISO 513 group {g} by its name")
+            if lead:
+                notes.append("of the maker's materials for this group and grade, the first printed")
+            if not row.get("chipbreaker"):
+                basis.append("the maker prints this vc per grade, not per chipbreaker: matched to the insert "
+                             "by the grades its catalogue row offers")
+            for what, how in (("vc", vhow), ("f", fhow), ("ap", ahow)):
+                if how:
+                    basis.append(f"{what} is {how}")
+            if src2:
+                notes.append(f"f and ap from the insert's own row ({src2}), vc from the grade table")
+            notes.append("fz holds the feed per revolution, mm/rev; a printed optimum, recommended or "
+                         "nominal value is kept as the start value")
+            st = lambda x: (x or {}).get("stated", "")
+            value = "; ".join(v for v in (row.get("grade") or "", mat, st(row.get("vc")), st(fx), st(ax)) if v)
+            if re.search(r"\b(SFM|IPR|ipr|inch|in)\b", value):
+                notes.append("metric values are exact conversions (SFM x 0.3048 m/min, IPR x 25.4 mm, in x 25.4 mm)")
+            if row.get("note"):
+                notes.append(row["note"])
+            cite = dict(path=f"preset.{name}", status="estimate" if basis else "published", source=row["url"],
+                        taken=r.get("taken", TAKEN), value=value, basis="; ".join(basis), note="; ".join(notes))
+            out.append(dict(name=name, group=g, vc=vc, fz=fz, ap=ap, cite=cite))
     order = lambda p: (GROUP_ORDER.index(p["group"]) if p["group"] in GROUP_ORDER else 9, p["name"])
     return sorted(out, key=order)
 
@@ -621,7 +633,7 @@ def turning(vendor, r, out, skips):
     if not code:
         skips["no ISO code (inch/ANSI only)"] += 1
         return
-    base = dict(maker=VENDORS[vendor], source=r["url"], taken=r.get("taken", TAKEN), note=r.get("name", "")[:140])
+    base = dict(maker=VENDORS[vendor], real=True, source=r["url"], taken=r.get("taken", TAKEN), note=r.get("name", "")[:140])
     if r["kind"] == "insert":
         f, cites = {"code": code}, [pub("code", r, r.get("id", code))]
         for k in ("ic", "s", "re"):
