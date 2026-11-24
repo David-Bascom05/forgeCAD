@@ -95,6 +95,23 @@ fn sweep(a: P2, b: P2, c: P2, ccw: bool) -> f64 {
     d
 }
 
+/// A closed loop's signed area (counter-clockwise positive): the chords' shoelace plus each
+/// arc's circular segment.
+pub fn area(segs: &[Seg]) -> f64 {
+    let mut a2 = 0.0;
+    for sg in segs {
+        let (a, b) = (sg.start(), sg.end());
+        a2 += a.x * b.y - a.y * b.x;
+        if let Seg::Arc { a, b, c, ccw } = *sg {
+            let r = len(sub(a, c));
+            let th = sweep(a, b, c, ccw);
+            let seg = r * r * (th - dmath::sin_cos(th).0);
+            a2 += if ccw { seg } else { -seg };
+        }
+    }
+    0.5 * a2
+}
+
 /// The length of a segment.
 pub fn seg_len(s: &Seg) -> f64 {
     match *s {
@@ -294,10 +311,31 @@ pub fn wrap(
     ld: &Leads,
     eps: f64,
 ) -> (Vec<Seg>, Vec<Seg>, Vec<Seg>, Vec<Seg>) {
-    let body = match ld.entry {
+    // a loop of no length (the tool exactly fits a round hole: the offset is the centre, a
+    // circle of radius 0) has no direction to lead along, and one of no width (the tool exactly
+    // fits a slot: the offset runs along its centreline and back) has no air beside it: either
+    // is cut as it is, with no lead or overlap
+    let total: f64 = segs.iter().map(seg_len).sum();
+    if total <= eps || 2.0 * area(segs).abs() / total <= eps {
+        return (vec![], segs.to_vec(), vec![], vec![]);
+    }
+    let mut body = match ld.entry {
         Some(q) => rotate_to(segs, q, eps),
         None => segs.to_vec(),
     };
+    // a lead tangent at a sharp corner swings out past the corner's other side: start a loop
+    // that begins at a corner from the middle of its first piece instead
+    let has_lead = |l: Option<Lead>| l.is_some_and(|l| !l.is_none());
+    if (has_lead(ld.lead_in) || has_lead(ld.lead_out)) && body.len() > 1 {
+        let s0 = body[0].start();
+        let (t0, t1) = (tangent(&body[body.len() - 1], s0), tangent(&body[0], s0));
+        let cross = t0.x * t1.y - t0.y * t1.x;
+        let dot = t0.x * t1.x + t0.y * t1.y;
+        if cross.abs() > 1e-9 || dot < 0.0 {
+            let m = point_at(&body[0], 0.5);
+            body = rotate_to(&body, [m.x, m.y], eps);
+        }
+    }
     let s = body[0].start();
     let t_in = tangent(&body[0], s);
     let li = match ld.lead_in {
@@ -392,6 +430,92 @@ mod tests {
         // the climb sense mirrors it
         let li = lead_in(s, t, true, &ld);
         assert!(li[1].start().y > 1.9);
+    }
+
+    /// A loop starting at a sharp corner is started mid-side when it has leads (a tangent arc at
+    /// the corner would swing out past the other side).
+    #[test]
+    fn a_corner_start_moves_mid_side() {
+        let l = Lead {
+            radius: 1.0,
+            sweep_deg: 90.0,
+            length: 0.0,
+        };
+        let ld = Leads {
+            lead_in: Some(l),
+            lead_out: Some(l),
+            ..Default::default()
+        };
+        let (li, body, _, _) = wrap(&square(), false, &ld, 1e-6);
+        assert!(close(body[0].start(), p2(5.0, 0.0)), "{:?}", body[0]);
+        assert!(close(li[0].end(), p2(5.0, 0.0)));
+        // no leads: the loop as it was
+        let (_, body, _, _) = wrap(&square(), false, &Leads::default(), 1e-6);
+        assert_eq!(body, square());
+    }
+
+    #[test]
+    fn areas_and_a_collapsed_loop() {
+        assert!((area(&square()) - 100.0).abs() < 1e-12);
+        let a = p2(2.0, 0.0);
+        let circ = [Seg::Arc {
+            a,
+            b: a,
+            c: p2(0.0, 0.0),
+            ccw: true,
+        }];
+        assert!((area(&circ) - 4.0 * std::f64::consts::PI).abs() < 1e-9);
+        // a slot's centreline there and back: no width, so no leads
+        let (p, q) = (p2(60.0, 62.0), p2(102.0, 62.0));
+        let back = [Seg::Line { a: q, b: p }, Seg::Line { a: p, b: q }];
+        let l = Lead {
+            radius: 2.0,
+            sweep_deg: 90.0,
+            length: 0.0,
+        };
+        let (li, body, _, lo) = wrap(
+            &back,
+            true,
+            &Leads {
+                lead_in: Some(l),
+                lead_out: Some(l),
+                ..Default::default()
+            },
+            1e-6,
+        );
+        assert!(li.is_empty() && lo.is_empty());
+        assert_eq!(body, back.to_vec());
+    }
+
+    /// A point loop (a circle of radius 0, the tool exactly fitting a hole) gets no leads and no
+    /// NaN: it is the plunge it was.
+    #[test]
+    fn a_point_loop_has_no_leads() {
+        let c = p2(57.0, 38.0);
+        let pt = [Seg::Arc {
+            a: c,
+            b: c,
+            c,
+            ccw: true,
+        }];
+        let l = Lead {
+            radius: 2.0,
+            sweep_deg: 90.0,
+            length: 1.0,
+        };
+        let (li, body, ov, lo) = wrap(
+            &pt,
+            true,
+            &Leads {
+                lead_in: Some(l),
+                lead_out: Some(l),
+                entry: Some([0.0, 0.0]),
+                overlap: 0.5,
+            },
+            1e-6,
+        );
+        assert!(li.is_empty() && ov.is_empty() && lo.is_empty());
+        assert_eq!(body, pt.to_vec());
     }
 
     #[test]

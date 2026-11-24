@@ -1105,7 +1105,9 @@ dependencies = [
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
+ "forge-library",
  "forge-machine",
+ "forge-material",
  "forge-math",
  "forge-model",
  "forge-post",
@@ -1231,9 +1233,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-library"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+]
+
+[[package]]
 name = "forge-machine"
 version = "0.1.0"
 dependencies = [
+ "forge-machine-core",
  "forge-math",
  "forge-post",
  "forge-tooling",
@@ -1244,10 +1254,15 @@ name = "forge-machine-builder"
 version = "0.1.0"
 dependencies = [
  "forge-dirs",
+ "forge-library",
  "forge-machine",
  "forge-math",
  "forge-tooling",
 ]
+
+[[package]]
+name = "forge-machine-core"
+version = "0.1.0"
 
 [[package]]
 name = "forge-machine-lang"
@@ -1366,6 +1381,7 @@ dependencies = [
  "keyring-core",
  "png",
  "rfd",
+ "sha2",
  "ureq",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -1464,6 +1480,7 @@ dependencies = [
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
+ "forge-tooling",
  "forge-turn",
 ]
 

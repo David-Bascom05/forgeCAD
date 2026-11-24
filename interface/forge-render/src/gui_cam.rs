@@ -44,6 +44,9 @@ impl Gui {
             w.ran(r);
             changed = true;
             self.shell.status = crate::shell::cam::status_line(w);
+        } else if self.shell.status.is_empty() && w.run.is_some() && w.running.is_none() {
+            // nothing else to say (a view loaded after the run cleared it): the run's state
+            self.shell.status = crate::shell::cam::status_line(w);
         }
         // a run asked for, none going
         if w.want_run && w.running.is_none() {

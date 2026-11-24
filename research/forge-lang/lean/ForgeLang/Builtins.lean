@@ -103,6 +103,23 @@ theorem extend_conservative {α : Type} (B N : List Name) (binds : List Name) (�
   ⟨shadows_append B N binds h, fun x v hv => bindings_resolve_as_before B N ρ x v hv,
     fun x hx => resolve_append_off B N ρ x hx⟩
 
+/-- A family resolved after every binding but outside the refusal table (an assembly's joints and
+mates, `asm::constant`; a harness block's built-ins, `harness::constant`, in that block only):
+a binding may take such a name and simply wins. Adding one changes no document at all: the
+refusals are those of the table `R`, which does not change, every name a document binds means
+its binding, and every other name not in the family means what it meant. No hypothesis on the
+documents is needed. -/
+theorem extend_unrefused {α : Type} (R B N : List Name) (binds : List Name) (ρ : List (Name × α)) :
+    shadows R binds = shadows R binds ∧
+      (∀ x v, ρ.lookup x = some v → resolve (B ++ N) ρ x = resolve B ρ x) ∧
+      (∀ x, x ∉ N → resolve (B ++ N) ρ x = resolve B ρ x) :=
+  ⟨rfl, fun x v hv => bindings_resolve_as_before B N ρ x v hv, fun x hx => resolve_append_off B N ρ x hx⟩
+
+/-- A name of such a family that a document reads and does not bind was `Unknown` before. -/
+theorem unrefused_new {α : Type} (B N : List Name) (ρ : List (Name × α)) (x : Name) (hN : x ∈ N)
+    (hn : x ∉ B) (hu : ρ.lookup x = none) : resolve B ρ x = .unknown :=
+  (resolve_append_new B N ρ x hN hn hu).1
+
 /-- The weldment built-ins. -/
 def weld : List Name := ["members", "end_trim", "end_cap", "corner_plate"]
 

@@ -18,7 +18,7 @@ fn summary(jobs: &[JobQ]) -> String {
             let _ = writeln!(
                 o,
                 "{stem}/{} {} t_stop={:.1} t_min={:.1} cut={:.1} air={:.1} rapid={:.0} retracts={} plunges={} ramps={} c90={} \
-phi_max={:.0} phi_mean={:.0} climb={:.2} slot={:.2} hex_max={:.4} hex_mean={:.4} thin={:.2} thick={:.2} removed={:.0} fc={:.0}",
+phi_max={:.0} phi_mean={:.0} climb={:.2} slot={:.2} hex_max={:.4} hex_p99={:.4} hex_mean={:.4} thin={:.2} thick={:.2} removed={:.0} fc={:.0}",
                 q.name,
                 q.kind,
                 q.t_stop,
@@ -35,6 +35,7 @@ phi_max={:.0} phi_mean={:.0} climb={:.2} slot={:.2} hex_max={:.4} hex_mean={:.4}
                 q.climb,
                 q.slotting,
                 q.hex_max,
+                q.hex_p99,
                 q.hex_mean,
                 q.thin,
                 q.thick,
@@ -68,6 +69,12 @@ fn pinned_subset() {
         machine: None,
     };
     let jobs: Vec<JobQ> = files.iter().map(|f| measure(f, &cfg)).collect();
+    // every milling op has its per-move values, one per feed move, the chip load within them
+    for q in jobs.iter().flat_map(|j| &j.ops).filter(|q| q.side) {
+        assert!(!q.moves_q.is_empty(), "{}", q.name);
+        let worst = q.moves_q.iter().map(|m| m.hex).fold(0.0, f64::max);
+        assert_eq!(worst, q.hex_max, "{}", q.name);
+    }
     let got = summary(&jobs);
     let pin = root.join("tests/pinned.txt");
     if std::env::var_os("FORGE_BLESS").is_some() {

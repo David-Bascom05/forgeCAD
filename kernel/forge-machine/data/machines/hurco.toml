@@ -3712,6 +3712,12 @@ status = "unknown"
 basis = "slotted-disc turret, size unpublished: r 175 x 110 mm, rim 55 mm behind the reference point (stand-in)"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "hurco-tm8i"
 kind = "lathe"
@@ -3909,6 +3915,12 @@ value = "the card's own figures disagree"
 note = "torque printed '133.83 ft. lbs (100.7 Nm)' and continuous '105.65 ft. lbs (43.2 Nm) @ 1000 rpm' (105.65 ft-lb = 143 Nm, matching 15 kW at 1000 rpm); the curve uses only the continuous power rating"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "hurco-tm10i"
 kind = "lathe"
@@ -4099,6 +4111,12 @@ status = "unknown"
 basis = "slotted-disc turret, size unpublished: r 175 x 110 mm, rim 55 mm behind the reference point (stand-in)"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "hurco-tm12i"
 kind = "lathe"
@@ -4287,3 +4305,9 @@ basis = "length and a 5 mm jaw margin are stand-ins"
 path = "body.turret"
 status = "unknown"
 basis = "slotted-disc turret, size unpublished: r 175 x 110 mm, rim 55 mm behind the reference point (stand-in)"
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+

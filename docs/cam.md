@@ -25,7 +25,7 @@ Fanuc and Haas, `G53 G0 Z0` on LinuxCNC; GRBL, which changes tools by hand, goes
 
 ```
 forgecad cam F.fg [--json] [-o PROGRAM]     the reply, and the program if released; exit 0 certified
-                                             in full, 3 released but certified except G5 (a setup
+                                             in full, 3 released but certified except G5 or G4 (a setup
                                              not placed with `at:`), 1 refused
 forgecad cam F.fg sheet -o SHEET.html        the setup sheet
 ```
@@ -68,7 +68,13 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `thread_mill(SETUP, PART.HOLE, tool:, length:, passes:, spring:, hand:, starts:, lead:)` | a hole's recorded thread (`thread:`, or `screw:` with `fit: "tap"`), the model not carrying it: declares a cosmetic thread Δ per place (the ring from the bore to the major diameter over `length`, default the depth less two pitches), listed in the op's `removals`, and is certified against P ∖ Δ (never a blanket tolerance). Down the bore, in to the radius, up a helix of the pitch (G3: right hand), out. `passes: n` radial passes splitting the depth from the bore to the major evenly (default 1), `spring: n` the last again, `hand: "left"` climbs down from the top (G3), `starts: n` a helix of n pitches per turn once per start, each a pitch higher, `lead: "arc"` in and out on a half circle tangent to the helix (default `"line"`) |
 | `bore(SETUP, PART.HOLE, tool:, pitch:, ramp:, finish_leave:, spring:, leave:, leave_axial:)` | helical bore of a round hole along −z: the tool's centre on the hole's radius less its own, down a helix of `pitch:` per turn (default a 3° ramp; or `ramp:` degrees, at most 30), G3 (climb), a full circle at the bottom, back to the axis, up. `finish_leave:` leaves that much for a second helix at the final radius; `spring: n` repeats it. The tool must be at least half the hole across (no core left), else refused with the fix (`pocket(..)` the hole). Certified against the part |
 | `edge_break(SETUP, tool:, size:, tip_offset:, at:)` | chamfer/deburr of the part's top edges with a chamfer mill or spot drill of 30° to 150°: a chamfer `size` wide at half the tool's angle from the wall (45° for a 90° tool), its tip `tip_offset:` below the chamfer's bottom (default 0.2) so the flank, not the tip, cuts. The removal is declared (Δ, in `removals`) and the op certified against P ∖ Δ. In this phase: the part's top, over vertical walls; sharp corners between lines only |
-| `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), tap for a thread; `plan: "drill"` leaves the thread (to `thread_mill`) |
+| `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), then its counterbore (a counterbore tool of its diameter, else the largest end mill under it pocketing the circle) or countersink (a countersink, chamfer or spot tool of its angle, plunged until the cone is its diameter at the mouth), tap for a thread; `plan: "drill"` leaves the thread (to `thread_mill`). A blind hole with a flat floor is drilled with the drill's point on the floor; the ring that leaves is said |
+| `zlevel(SETUP, tool:, leave:, from:, to:, down:, stepover:, area:, grid:)` | 3-axis roughing, offset clearing (not adaptive): at each level from `from` (the stock's top) down to `to`, `down` apart (and at the part's own top), the tool centres the drop-cutter leaves free on a CL grid `grid` apart, cleared by passes `stepover` apart (at most the tool's radius) from that region's boundary; `area: (x0, y0, x1, y1)` bounds the tool centres. Its flat bottom's sweep is recorded in the in-process stock |
+| `parallel(SETUP, tool:, stepover:, angle:, step:, leave:, area:, floor:)` | 3-axis finishing: zig-zag rows `stepover` apart at `angle` degrees, each dropped onto the part (samples at most `step` apart, split until each move is proven) |
+| `waterline(SETUP, tool:, from:, to:, down:, area:, grid:)` | constant-z contours where the tool's reach crosses each level (marching squares on a CL grid, each crossing by certified bisection) |
+| `pencil(SETUP, tool:, area:, grid:, kink:)` | along the CL surface's creases (where the tool touches two faces): concave corners and fillets smaller than the tool |
+| `scallop(SETUP, tool:, stepover:, area:, grid:)` | passes `stepover` apart measured along the part (level sets of the distance over the CL surface from the area's edge) |
+| `rest(SETUP, tool:, after: TOOL, min:, stepover:, step:, area:, grid:)` | parallel rows only where `after` (a larger earlier tool) left more than `min` (default 0.05) |
 | `program(SETUP or [SETUPS], post:, number:, ops:)` | `fanuc`, `haas`, `linuxcnc`, `grbl` (default: the machine's control); `ops: OP` or `[OPS]` posts only those ops of its setups. Each op is certified on the stock every earlier op of its setup (and of the setup it continues) leaves, so those are posted first, by an earlier program or earlier in this one, or the program is refused with the fix; an op no program posts is not certified (`unposted`). `decimals:` and `feed_decimals:` set the program's number formats (the text is quantised, read back and certified at them), `coolant:` (`"flood"`, `"mist"`, `"through"`, `"off"`) every path's coolant, refused if the machine has none of it. `split: "setup"`: one program per setup, named `PROGRAM/SETUP` and numbered on from `number:` (the reply's program has its `setup`) |
 
 `ramp: DEG` (over 0, at most 30) enters each pass by a helix of half the tool's radius at that angle,
@@ -138,20 +144,20 @@ the document (formats: research/cam/libraries-tools.md §5). A Fusion tool libra
 ## The reply: `forgecad.cam/1`
 
 ```
-ok, schema: "forgecad.cam/1", certification (full | except G5 | refused), errors[], warnings[],
+ok, schema: "forgecad.cam/1", certification (full | except G5 | full except G4 (leftover not computed) | except G4 and G5 (..) | refused), errors[], warnings[],
 setups[]   name, part, machine, wcs {origin, axes, offset}, stock {kind, min, max}, tol, clearance, at,
            heights {clear, retract}, fixture {kind, name, across, jaw_top, clamp, clearance,
            pieces[] {name, min, max}} | null
 ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|slot|thread_mill|edge_break|bore), setup, status (built|refused),
            tool {id, T, H, type, d, holder, stickout} | null, plan[] (hole plans),
-           feeds {rpm, vc, fz, hex, f, power_kw} | null,
+           feeds {rpm, vc, fz, hex, hm, f, power_kw, torque_nm} | null,
            path {moves, length_cut, length_rapid, time_s},
            certificate {verdict (pass|fail), certified, pairs, cells, least_cutter_distance, against},
            checks[] (failures only) {rule, verdict (fail|undecided), certified, value, limit, unit,
                     at, tool_part (cutter|shank/holder), other, phase (cut|plunge|link|rapid), move, path (which of a hole plan's paths `move` counts in)},
            removals[] (declared Δ, e.g. cosmetic threads), leftover {status}, refusal | null
 blocking[] {op, why}      fixes[] {op, fix}      suggestions[] {kind: NeedTool, op, why}
-programs[] {name, post, lines, round_trip, certified (full | except G5 (unchecked: no `at:`) | no),
+programs[] {name, post, lines, round_trip, certified (full | except G5 (unchecked: no `at:`) | full except G4 (leftover not computed) | except G4 and G5 (..) | no),
            error | null}
 leftover   {computed, rule, regions[] {setup, z, boxes, why, r, below}}: decided at the end of each
            chain of setups (a setup another continues with `from:` hands its stock on). `why`, each
@@ -171,11 +177,20 @@ The `scope` line is the contract's honesty: cutting physics, the machine's fidel
 leftover (G4) are not claimed in this phase. The in-process stock used for G2 and G3 is the box
 minus what each op provably cleared (kernel/forge-cam/src/stock.rs), so it contains the true one.
 
+3-axis surfacing (research/cam/phase3.md): a part outside the 2.5D lowering (spheres; cylinders,
+cones and tori of any axis or trimmed by other curves) is lowered with those faces as supersets
+(the whole sphere or torus): sound for every check, stricter, and a concave such face may refuse
+an op. Each surfacing move is certified by the tool's column (drop.rs): its signed distance to the
+part over the move, by closed forms for planes, vertical walls, spheres, cylinders with a
+horizontal axis and tori about a vertical axis, else by branch and bound. G4 (leftover) is not
+computed for such parts (`leftover.computed: false`). examples/machined/mold_core_cam.fg: z-level
+roughing, parallel, waterline, pencil and rest on a filleted core, every move certified.
+
 ## What this phase covers
 
 2.5D on parts whose faces are planes, and cylinders, cones and tori about z (others are refused by kind, typed):
 facing, clearing, contours, hole pockets and hole plans, with linking by retract. Not yet:
-adaptive clearing (patents first), 3-axis surfacing, 3+2, turning, 5-axis; chamfer mills,
+adaptive clearing (patents first), 3+2, turning, 5-axis; chamfer mills,
 threads modelled as helicoidal faces (`thread(hole:)`): the lowering refuses them, so a modelled thread is milled as a declared Δ only when the model records it instead.
 
 ## In the app: the Manufacture workspace
@@ -200,3 +215,15 @@ document's run, the reply above.
 
 Code: interface/forge-render/src/shell/cam/ and src/gui_cam.rs; notes and screenshots in
 research/cam/ui/.
+
+## Tool life (prediction and tracking)
+
+`Cam::tool_life` predicts each loaded tool's life use over the job: Taylor's
+v T^n f^a ap^b = C from cited rows (`kernel/forge-tooling/data/life.toml`), summed per
+fixed-length sample of the posted path (each sample's own speed, chip and depth; Miner's
+rule). The part must name its material (`part("p.fg", group: "S", material: "Ti-6Al-4V")`);
+a tool × material with no cited row is "not estimated". A program that would use more life
+than the loaded tool has left gets a warning with a change point or a sister tool, never an
+error. Physical tools are tracked in `cam/tool-instances.toml` (`forgecad tool log ...`), and
+logged worn tools calibrate the shop's own C (and n), shown beside the cited values.
+Details, sources and the honest validation: research/cam/toollife/model.md, validation.md.

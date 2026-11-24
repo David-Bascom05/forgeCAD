@@ -320,6 +320,35 @@ pub fn certify_fixtured(
     tol: f64,
     clearance: f64,
 ) -> CheckSummary {
+    certify_with(p, tool, part, stages, fixture, fclear, tol, clearance, false)
+}
+
+/// `certify_fixtured`, and with `column` the 3-axis surfacing route for the cutter (and a shank
+/// inside its column) against the part on cuts: the vertical gap of the tool's column
+/// (forge_cam_geom::drop) is tried first, and only what it cannot prove goes to the
+/// branch and bound. A proven gap v ≥ −tol bounds every such body's signed distance by the same
+/// (drop.rs's statement), so the verdict is the check's own.
+#[allow(clippy::too_many_arguments)]
+pub fn certify_with(
+    p: &OpPath,
+    tool: &ToolUse,
+    part: &[Face],
+    stages: &[(usize, Vec<Face>)],
+    fixture: &[Face],
+    fclear: f64,
+    tol: f64,
+    clearance: f64,
+    column: bool,
+) -> CheckSummary {
+    let col = if column {
+        tool.shape
+            .bodies
+            .iter()
+            .find(|b| b.part == Part::Cutter)
+            .and_then(forge_cam_geom::drop::Column::of)
+    } else {
+        None
+    };
     let mut sum = CheckSummary {
         clear: true,
         least: f64::INFINITY,
@@ -402,6 +431,11 @@ pub fn certify_fixtured(
             let stock: &[Face] = &stages[st].1;
             let sgrid = &sgrids[st];
             for b in &tool.shape.bodies {
+                // on the surfacing route a move that has failed is not checked further (its
+                // failure is reported; the rest of its faces could only add to it)
+                if col.is_some() && !o.fails.is_empty() {
+                    break;
+                }
                 let sb = check::swept_box_body(m, b);
                 // the part: the cutter may touch it within tol on a cut; nothing else may touch it
                 for (set, (faces, what, grid)) in [
@@ -432,6 +466,9 @@ pub fn certify_fixtured(
                     };
                     grid.near(&sb, &mut cand, &mut seen);
                     for &fi in &cand {
+                        if col.is_some() && !o.fails.is_empty() {
+                            break;
+                        }
                         let f = &faces[fi as usize];
                         if check::apart(&sb, &f.bbox, limit.max(0.0) + f.mu) {
                             continue;
@@ -440,6 +477,65 @@ pub fn certify_fixtured(
                         let slot = &mut shared[set][fi as usize];
                         if slot.is_none() {
                             touched.push((set, fi as usize));
+                        }
+                        if let Some(col) = &col
+                            && what == "part"
+                            && limit <= 0.0
+                            && *phase != Phase::Rapid
+                            && col.holds_or_is(b)
+                        {
+                            let (g, n) = forge_cam_geom::drop::gap_move(col, f, m, limit, tol / 4.0, 200_000);
+                            o.cells += n;
+                            match g {
+                                forge_cam_geom::drop::Gap::Clear { lower } => {
+                                    if b.part == Part::Cutter {
+                                        o.least = o.least.min(lower);
+                                    }
+                                    continue;
+                                }
+                                forge_cam_geom::drop::Gap::Over { s, p, q, .. } => {
+                                    // the column's witness: this body's own signed distance there,
+                                    // proven below the limit (by mu more), is a real violation
+                                    let (pi, qi) = (
+                                        forge_cam_geom::ival::Ival::pt(p),
+                                        forge_cam_geom::ival::Ival::pt(q),
+                                    );
+                                    let y = f.surf.eval(pi, qi);
+                                    let t = m.at(forge_cam_geom::ival::Ival::pt(s));
+                                    let sd = b.sd(y[0].sub(t[0]), y[1].sub(t[1]), y[2].sub(t[2]));
+                                    let d = sd.add(forge_cam_geom::ival::Ival::pt(f.mu)).hi;
+                                    if f.holds(pi, qi) == 1 && d < limit {
+                                        let at = [y[0].mid(), y[1].mid(), y[2].mid()];
+                                        o.fails.push((
+                                            CheckOut {
+                                                rule: if b.part == Part::Cutter {
+                                                    "gouge"
+                                                } else {
+                                                    "holder_collision"
+                                                },
+                                                verdict: "fail",
+                                                value: d,
+                                                limit,
+                                                at,
+                                                tool_part: if b.part == Part::Cutter {
+                                                    "cutter"
+                                                } else {
+                                                    "shank/holder"
+                                                },
+                                                other: format!("{what} face {}", f.id),
+                                                phase: phase.name(),
+                                                move_index: *idx,
+                                                path: 0,
+                                            },
+                                            o.pairs,
+                                            o.cells,
+                                            o.least,
+                                        ));
+                                        continue;
+                                    }
+                                }
+                                forge_cam_geom::drop::Gap::Unknown => {}
+                            }
                         }
                         let (v, n) = check::certify_shared(b, f, m, limit, tol / 4.0, 200_000, slot);
                         o.cells += n;
@@ -780,14 +876,17 @@ fn led(
             let e = lo.last().or(ov.last()).unwrap_or(&body[body.len() - 1]).end();
             first.get_or_insert(s);
             // the loop cut at its tabs' ends: even pieces cut, odd ones lifted
+            // a loop with no length or width (the tool exactly fits a hole or slot) holds no tab
+            let total: f64 = body.iter().map(leads::seg_len).sum();
+            let solid = total > 1e-6 && 2.0 * leads::area(&body).abs() > 1e-6 * total;
             let tabbed = match tabs {
-                Some(t) => {
+                Some(t) if solid => {
                     let iv = tabs::intervals(&body, t, tool_d, ld.overlap.max(0.0) + 1e-6)
                         .map_err(OpError::Region)?;
                     let cuts: Vec<f64> = iv.iter().flat_map(|&(a, b)| [a, b]).collect();
                     Some((tabs::cut(&body, &cuts), sp.bottom + t.height, t.shape))
                 }
-                None => None,
+                _ => None,
             };
             mv.push(PMove::Rapid {
                 to: [s.x, s.y, h.retract],
@@ -914,6 +1013,26 @@ pub fn pocket(
     leave: f64,
     ramp: Option<f64>,
 ) -> Result<OpPath, OpError> {
+    pocket_in(rg, c, sp, stepover, leave, ramp, None)
+}
+
+/// `pocket`, with the stock's xy box S given: with stepover ≤ r, a pass is left out when all
+/// it could cut in S is cut by the passes inside it. Passes are offsets at r + k·s; Rₖ the region pass k bounds
+/// (islands as holes), the passes from k inward cover Rₖ ⊕ r (passes_cover applied to
+/// rg ⊖ (k·s)), and pass k's swept band lies in Rₖ ⊕ r. Deciding from the innermost pass out,
+/// pass k is left out when (Rₖ ⊕ r) ∩ S ⊆ Rₖ₊₁ ⊕ r (exact booleans), Rₖ₊₁ the next pass in:
+/// the kept passes from k inward then still cover (Rₖ ⊕ r) ∩ S (induction), so the opening the
+/// op claims is cleared within S, and outside S there is no stock. (A clear's region reaches
+/// 2r past the stock, so its outer passes run in air.)
+pub fn pocket_in(
+    rg: &Region,
+    c: Cut,
+    sp: Span,
+    stepover: f64,
+    leave: f64,
+    ramp: Option<f64>,
+    within: Option<&Region>,
+) -> Result<OpPath, OpError> {
     let Cut {
         tool, tidx, h, feed, ..
     } = c;
@@ -944,6 +1063,56 @@ pub fn pocket(
     // plunge
     let rh = 0.25 * tool.tool.dc;
     let c0 = forge_cam_geom::boolean::region_of(&passes[0]);
+    // (only where the passes cover the opening: stepover ≤ r, Pocket.passes_cover)
+    if let Some(sx) = within.filter(|_| stepover <= r) {
+        use forge_cam_geom::boolean::{Op, boolean, region_of};
+        // passes[k] is at r + k s, outermost first here. Only passes whose loops can run
+        // outside the stock are tried: a clear's region reaches 2r past it, so pass k's
+        // centres can be outside S only while k s < 2r (deeper passes cut material).
+        for k in (0..passes.len().saturating_sub(1)).rev() {
+            if k as f64 * stepover >= 2.0 * r {
+                continue;
+            }
+            // R_{k+1} ⊕ r
+            let Some(gin) = offset(&region_of(&passes[k + 1]), -r)
+                .ok()
+                .map(|(g, _)| region_of(&g))
+            else {
+                continue;
+            };
+            let gin = &gin;
+            passes[k].retain(|l| {
+                // only an outer loop (its region alone a bounded one); its swept band is
+                // (L ⊕ r) ∖ (L ⊖ r), L the region it bounds
+                if !loop_ccw_approx(&l.segs) {
+                    return true;
+                }
+                // only a loop round the whole stock box (an air ring) is tried: keeping a loop is
+                // always sound, and the exact test can be slow where boundaries nearly meet
+                let (lo, hi) = loop_box(&l.segs);
+                let (blo, bhi) = region_box(sx);
+                if !(lo[0] <= blo[0] && lo[1] <= blo[1] && hi[0] >= bhi[0] && hi[1] >= bhi[1]) {
+                    return true;
+                }
+                let lr = region_of(std::slice::from_ref(l));
+                let Ok((out, _)) = offset(&lr, -r) else {
+                    return true;
+                };
+                let band = match offset(&lr, r) {
+                    Ok((inn, _)) if !inn.is_empty() => {
+                        boolean(&region_of(&out), &region_of(&inn), Op::Diff).map(|b| region_of(&b))
+                    }
+                    Ok(_) => Ok(region_of(&out)),
+                    Err(e) => Err(e),
+                };
+                let left = band
+                    .and_then(|b| boolean(&b, sx, Op::Inter))
+                    .and_then(|i| boolean(&region_of(&i), gin, Op::Diff));
+                !matches!(left, Ok(d) if d.is_empty())
+            });
+        }
+        passes.retain(|ls| !ls.is_empty());
+    }
     passes.reverse();
     let helix_fits = |s: forge_cam_geom::region::P2| -> bool {
         let a = forge_cam_geom::region::p2(s.x + rh, s.y);
@@ -1115,6 +1284,80 @@ pub fn pocket(
         rpm: 0.0,
         coolant: forge_post::Coolant::Flood,
     })
+}
+
+/// A loop's box from its segments' ends (arcs may bulge past it): for choosing loops only.
+fn loop_box(segs: &[Seg]) -> ([f64; 2], [f64; 2]) {
+    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    let mut add = |x: f64, y: f64| {
+        lo = [lo[0].min(x), lo[1].min(y)];
+        hi = [hi[0].max(x), hi[1].max(y)];
+    };
+    for sg in segs {
+        match *sg {
+            Seg::Line { a, b } => {
+                add(a.x, a.y);
+                add(b.x, b.y);
+            }
+            Seg::Arc { a, b, .. } => {
+                // the ends only: the box is used to choose loops to test, never as a bound
+                add(a.x, a.y);
+                add(b.x, b.y);
+            }
+        }
+    }
+    (lo, hi)
+}
+
+fn region_box(r: &Region) -> ([f64; 2], [f64; 2]) {
+    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    for l in &r.loops {
+        let (a, b) = loop_box(&l.segs);
+        lo = [lo[0].min(a[0]), lo[1].min(a[1])];
+        hi = [hi[0].max(b[0]), hi[1].max(b[1])];
+    }
+    (lo, hi)
+}
+
+/// Whether a closed loop runs counter-clockwise (its signed area, arcs as chords): for choosing
+/// which loops to test, never for a check.
+fn loop_ccw_approx(segs: &[Seg]) -> bool {
+    let mut pts: Vec<(f64, f64)> = Vec::new();
+    for sg in segs {
+        match *sg {
+            Seg::Line { a, .. } => pts.push((a.x, a.y)),
+            Seg::Arc { a, b, c, ccw } => {
+                pts.push((a.x, a.y));
+                // the arc's middle, so a half or whole turn counts
+                let a0 = dmath::atan2(a.y - c.y, a.x - c.x);
+                let a1 = dmath::atan2(b.y - c.y, b.x - c.x);
+                let tau = std::f64::consts::TAU;
+                let mut sw = a1 - a0;
+                if ccw {
+                    while sw <= 0.0 {
+                        sw += tau;
+                    }
+                } else {
+                    while sw >= 0.0 {
+                        sw -= tau;
+                    }
+                }
+                let r = ((a.x - c.x) * (a.x - c.x) + (a.y - c.y) * (a.y - c.y)).sqrt();
+                for q in 1..4 {
+                    let (sn, cs) = dmath::sin_cos(a0 + sw * q as f64 / 4.0);
+                    pts.push((c.x + r * cs, c.y + r * sn));
+                }
+            }
+        }
+    }
+    let n = pts.len();
+    let mut area = 0.0;
+    for i in 0..n {
+        let (x0, y0) = pts[i];
+        let (x1, y1) = pts[(i + 1) % n];
+        area += x0 * y1 - x1 * y0;
+    }
+    area > 0.0
 }
 
 /// Whether q is inside a closed loop (even–odd, arcs as 32 chords a turn): for ordering passes

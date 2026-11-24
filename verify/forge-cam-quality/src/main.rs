@@ -22,6 +22,22 @@ fn main() {
                 }
                 return;
             }
+            "--why" => {
+                // each op's status and refusal
+                let f = PathBuf::from(args.next().expect("--why FILE"));
+                let src = std::fs::read_to_string(&f).expect("read");
+                let cam = forge_cam_lang::run(&src, f.parent().unwrap());
+                for o in &cam.ops {
+                    println!("{} {} {:?}", o.name, o.status, o.refusal);
+                    for c in o.checks.iter().filter(|c| c.verdict != "pass") {
+                        println!(
+                            "  {} {} value {} limit {} {}",
+                            c.rule, c.verdict, c.value, c.limit, c.other
+                        );
+                    }
+                }
+                return;
+            }
             "--cell" => cfg.cell = args.next().and_then(|s| s.parse().ok()),
             _ => files.push(PathBuf::from(a)),
         }

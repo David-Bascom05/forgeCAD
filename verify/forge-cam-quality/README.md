@@ -42,18 +42,35 @@ The stock model is a height map (cells D/60 in [0.02, 0.1] mm by default): a mea
 about a cell, not a certificate. Setups that continue another (`from:`) start from their own
 stock box, not from the earlier setup's result.
 
-## Where we stand (baseline.txt, 2026-11-24)
+## Where we stood (baseline.txt, 2026-11-24, main f04c533)
 
-1. **Pocket rings each re-enter from the retract height with a full helical ramp.** Every
-   concentric ring of a pocket level retracts, rapids, plunges to the top and ramps down again
-   at the plunge feed (30% of the cut feed), with full engagement: thin_wall's pocket spends 355
-   of 522 s of cutting at plunge feed, 70% of its time at a chip under half the target
-   (well_island 74%, pocket_islands 73%, bracket bore 93%).
-2. **clear / contour / slot feeds assume ae = 0.1 D** (chip thinning ×1.67) while those ops run at
-   0.4 D stepover, full slots and corners: the chip is 1.5–1.7× the target for 55–95% of the time
-   (flange top 92%, boss rough 92%, contours 91–95%, slots 13%).
-3. **Straight plunges into material**: `clear` enters every offset loop by plunging (flange top 24,
-   boss rough 40, plate_break side 25); pockets without `ramp` plunge to full step.
-4. **Air**: clear ops cut air 43–54% of their feed time; facing 10–27%.
-5. `clear` refuses parts whose side wall is one L-shaped face (an open step flush with the
-   outline: `NotPrism`, parts/open_step_cam.fg).
+1. **Pocket rings each re-entered from the retract height with a full helical ramp** at the
+   plunge feed (30% of the cut feed), fully engaged: thin_wall's pocket spent 355 of 522 s of
+   cutting at plunge feed; 70–93% of pocket time at a chip under half the target.
+2. **clear / contour / slot feeds assumed ae = 0.1 D** (chip thinning ×1.67) while those ops ran
+   at 0.4 D stepover, full slots and corners: the chip 1.5–1.7× the target for 55–95% of the time.
+3. **Straight plunges into material** at every `clear` loop entry (flange top 24, boss rough 40).
+4. **Outside contours were conventional** (counter-clockwise round the part with M03).
+5. `clear` refuses parts whose side wall is one L-shaped face (open step flush with the outline:
+   `NotPrism`, parts/open_step_cam.fg). Reported to CAM-CORE.
+
+## Where we stand (latest.txt)
+
+| | baseline | latest |
+|---|---|---|
+| all 13 programs, t_stop (generic-vmc3) | 2627.5 s | 1950 s (−25.8%) |
+| side-cutting time with chip > 1.25 fz (overload) | 17.8% | 0.0% |
+| side-cutting time with chip < 0.5 fz (rubbing) | 19.6% | 1.4% |
+| chip p99 / data fz, worst milling op | 1.7 | 1.00 |
+| outside contours, climb | 0% | 100% |
+
+Changes (cam/quality): stay-down linking between pocket/clear passes (greedy ready-innermost
+order, links tested exactly against the tool-centre region); feeds from engagement
+(forge_cam::engage, GE US 5,828,574-style, expired); honest planned ae for base feeds; contours
+climb and cut each loop through its levels; feeds held ≥ D/2 per move.
+
+Still to do: comparison against an open-source reference (pending the licence verdict); air in
+`clear` (its outer ring is in air by design: a lemma that air rings may be dropped); retracts at
+the cut feed (G0 would need G3 against the op's own cleared voids); contour lead-in/out arcs;
+rest machining; scallop for 3-axis; engagement-controlled clearing (research/cam/
+engagement-clearing.md, after counsel).
