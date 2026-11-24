@@ -2065,6 +2065,7 @@ impl Cam {
             f_max,
             cap: feeds::THIN_CAP,
             cell,
+            window: 0.5 * t.tool.dc,
         };
         let mut map = HeightMap::of_stock(&s.ip, cell);
         paths.iter().map(|p| schedule(p, &mut map, &prof, &sc)).collect()

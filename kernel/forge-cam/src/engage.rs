@@ -285,6 +285,8 @@ pub struct Sched {
     pub cap: f64,
     /// Cell size of the model, mm.
     pub cell: f64,
+    /// A feed holds for at least about this length of a move (mm): shorter rises are dropped.
+    pub window: f64,
 }
 
 /// Steps the feed per tooth is quantised to: fz · STEP^k, k = 0, 1, .. (rounded down, so the
@@ -397,6 +399,45 @@ pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -
             fz_of[k] = Some(s.fz * dmath::powf(STEP, steps));
         }
     }
+    // within each move, each piece no faster than any piece within half a window of it: a
+    // short rise in feed is dropped (never a chip above fz), so the feed changes less often
+    let window = 0.5 * s.window;
+    let mut k = 0;
+    let mut from = path.start;
+    for (ends, _) in &plan {
+        let n = ends.len();
+        if n > 1 && window > 0.0 {
+            // the distance along the move to each piece's middle
+            let mut mid = Vec::with_capacity(n);
+            let mut acc = 0.0;
+            let mut a = from;
+            for &b in ends {
+                let d = ((b[0] - a[0]) * (b[0] - a[0])
+                    + (b[1] - a[1]) * (b[1] - a[1])
+                    + (b[2] - a[2]) * (b[2] - a[2]))
+                    .sqrt();
+                mid.push(acc + 0.5 * d);
+                acc += d;
+                a = b;
+            }
+            let orig: Vec<Option<f64>> = fz_of[k..k + n].to_vec();
+            for i in 0..n {
+                let Some(mut f) = orig[i] else { continue };
+                for j in 0..n {
+                    if (mid[j] - mid[i]).abs() <= window
+                        && let Some(g) = orig[j]
+                    {
+                        f = f.min(g);
+                    }
+                }
+                fz_of[k + i] = Some(f);
+            }
+        }
+        if let Some(&e) = ends.last() {
+            from = e;
+        }
+        k += n;
+    }
     let mut out = Vec::with_capacity(path.moves.len());
     let mut k = 0;
     for (mv, (ends, _)) in path.moves.iter().zip(&plan) {
@@ -462,6 +503,7 @@ mod tests {
             f_max: 10_000.0,
             cap: 3.0,
             cell: 0.05,
+            window: 0.0,
         };
         let path = OpPath {
             tool: 0,
