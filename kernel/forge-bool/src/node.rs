@@ -161,23 +161,24 @@ struct Node {
     radius: f64,
 }
 
-/// The edges along which face `f` rolls off a plane face tangentially, with that face.
-fn rolls_off_planes(body: &Body, f: FaceId) -> Vec<(EdgeId, FaceId)> {
+/// The edges of face `f` (a tube) whose neighbour across lies on a plane the tube rolls off: the
+/// spine parallel to it at the radius (`spring`; no normals asked), with that plane's face, its
+/// spring and side.
+fn springs_on(body: &Body, f: FaceId, t: (Spine, f64)) -> Vec<(EdgeId, FaceId, Spine, f64)> {
     let mut out = Vec::new();
     for &l in &body.face(f).loops {
         for c in body.lp(l).coedges() {
             let Some(g) = body.partner(c).map(|o| body.coedge_face(o)) else {
                 continue;
             };
-            if g == f || !matches!(body.face(g).surface, Surface::Plane(_)) {
+            let Surface::Plane(s) = &body.face(g).surface else {
+                continue;
+            };
+            if g == f {
                 continue;
             }
-            let e = body.coedge(c).edge;
-            let edge = body.edge(e);
-            let p = edge.curve.eval(edge.range.mid());
-            let n = |h: FaceId| body.face_normal_at(h, p);
-            if matches!((n(f), n(g)), (Some(x), Some(y)) if x.cross(y).length() <= 1e-6) {
-                out.push((e, g));
+            if let Some((x, side)) = spring(t, s.frame.origin, s.frame.z().get()) {
+                out.push((body.coedge(c).edge, g, x, side));
             }
         }
     }
@@ -193,20 +194,24 @@ fn on_edge(body: &Body, e: EdgeId, p: Point3) -> bool {
 /// The tangent nodes of face `fa` of `a` (surface a tube) and `fb` of `b` (a tube).
 fn nodes(a: &Body, fa: FaceId, b: &Body, fb: FaceId, ta: (Spine, f64), tb: (Spine, f64)) -> Vec<Node> {
     let mut out: Vec<Node> = Vec::new();
-    for (ea, ga) in rolls_off_planes(a, fa) {
-        let Surface::Plane(s) = &a.face(ga).surface else {
-            continue;
-        };
-        for (eb, gb) in rolls_off_planes(b, fb) {
-            if !crate::ssi::coincident(&a.face(ga).surface, &b.face(gb).surface) {
-                continue;
-            }
-            let (o, n) = (s.frame.origin, s.frame.z().get());
-            let (Some((xa, sa)), Some((xb, sb))) = (spring(ta, o, n), spring(tb, o, n)) else {
+    let on_a = springs_on(a, fa, ta);
+    if on_a.is_empty() {
+        return out;
+    }
+    let on_b = springs_on(b, fb, tb);
+    for &(ea, ga, xa, sa) in &on_a {
+        for &(eb, gb, xb, sb) in &on_b {
+            let (Surface::Plane(pa), Surface::Plane(pb)) = (&a.face(ga).surface, &b.face(gb).surface) else {
                 continue;
             };
-            // both tubes under S on the same side: their caps meet there, not one cap and a far side
-            if sa != sb {
+            // both tubes under one plane, on one side (sides read against A's plane's normal):
+            // their caps meet there, not a cap and a far side
+            let sb = if pa.frame.z().dot(pb.frame.z()) < 0.0 {
+                -sb
+            } else {
+                sb
+            };
+            if sa != sb || !crate::ssi::coincident(&a.face(ga).surface, &b.face(gb).surface) {
                 continue;
             }
             let all = crossings(xa, xb);
