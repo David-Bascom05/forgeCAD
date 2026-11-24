@@ -11,6 +11,7 @@
 //! The region is then the set on the left of every piece.
 use crate::arr::{self, Curve, Piece, Pt};
 use crate::real::{Ctx, R};
+use std::cell::Cell;
 use std::cmp::Ordering;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -145,6 +146,12 @@ pub struct Exact {
     pub elems: Vec<Elem>,
     /// For each loop, the range of its elements.
     pub loops: Vec<(usize, usize)>,
+    /// For each arc, inside_loop's split at the circle's top and bottom once decided (it does
+    /// not depend on the query point): 0 not yet; else 1 + bit 0 top a cut, bit 1 bottom a
+    /// cut, bit 2 the bottom before the top along the arc. Only the decisions are kept, not
+    /// the points (their nodes may be released): the points are made again, the same
+    /// expressions, so the same values.
+    ycuts: Vec<Cell<u8>>,
 }
 
 /// Makes a region's pieces exact (no validation).
@@ -234,7 +241,8 @@ pub fn exact(cx: &mut Ctx, rg: &Region) -> Result<Exact, RegionError> {
         loops.push((first, elems.len()));
         l += 1;
     }
-    Ok(Exact { elems, loops })
+    let ycuts = vec![Cell::new(0); elems.len()];
+    Ok(Exact { elems, loops, ycuts })
 }
 
 /// The tangent at the start (`at_end` false) or end of an element, in its direction of travel.
@@ -454,16 +462,41 @@ pub fn inside_loop(cx: &mut Ctx, ex: &Exact, l: usize, q: Pt) -> bool {
                     x: c.x,
                     y: cx.sub(c.y, rad),
                 };
-                let mut cuts: Vec<Pt> = Vec::new();
-                let mut k = 0;
                 let tb = [top, bot];
-                while k < 2 {
-                    if arr::on_span(cx, &e.piece, tb[k]) && !arr::same(cx, tb[k], e.piece.s) {
-                        cuts.push(tb[k]);
+                let mut known = ex.ycuts[i].get();
+                if known == 0 {
+                    let mut cuts: Vec<Pt> = Vec::new();
+                    let mut bits = 0u8;
+                    let mut k = 0;
+                    while k < 2 {
+                        if arr::on_span(cx, &e.piece, tb[k]) && !arr::same(cx, tb[k], e.piece.s) {
+                            cuts.push(tb[k]);
+                            bits |= 1 << k;
+                        }
+                        k += 1;
                     }
-                    k += 1;
+                    arr::sort_along(cx, &e.piece, &mut cuts);
+                    // two cuts are the circle's top and bottom, distinct (ρ > 0): both stay
+                    if cuts.len() == 2 && cuts[0] == bot {
+                        bits |= 4;
+                    }
+                    known = 1 + bits;
+                    ex.ycuts[i].set(known);
                 }
-                arr::sort_along(cx, &e.piece, &mut cuts);
+                let bits = known - 1;
+                let mut cuts: Vec<Pt> = Vec::new();
+                if bits & 4 != 0 {
+                    cuts.push(bot);
+                    cuts.push(top);
+                } else {
+                    let mut k = 0;
+                    while k < 2 {
+                        if bits & (1 << k) != 0 {
+                            cuts.push(tb[k]);
+                        }
+                        k += 1;
+                    }
+                }
                 let mut pts = vec![e.piece.s];
                 let mut k = 0;
                 while k < cuts.len() {
