@@ -246,6 +246,28 @@ p90 74229×, slowest check 307 s. Far over §5's estimate: the checker is all-pa
 rationals with no spatial index and runs three frames. It runs where §5 says (tests, fuzzers, CI,
 an on-demand command), never on the build path.
 
+`certify suite --mutate` and `certify families more plane_plane notched lang --mutate` on 9880fd4a
+(this checker as merged; release; two runs, both exit 0):
+
+| run | accepted | rejected | out of scope | face-dropped mutants | op-changed mutants |
+|---|---|---|---|---|---|
+| suite | 244 | 0 | 0 | 488 rejected | 488 rejected |
+| families, more, plane_plane, notched, lang | 1524 | 0 | 785 | 2976 rejected | 3045 rejected, 3 accepted |
+
+Out of scope in the second run: 342 the kernel refused, 267 an edge not straight, 131 the n-ary
+boolean, 45 a vertex not one point of the planes (and the edge) round it. **Open**: those 45 vertices
+are listed by coordinate in the run's output and are handed to FLAT-SITES, who owns vertex
+placement. Each one is either a tolerance merge (out of scope by design) or a vertex the kernel put
+in the wrong place. Which, case by case, is UNKNOWN.
+
+The 3 accepted mutants are all A op A on equal solids, where union and intersection are the same
+point set (equivalent mutants, not a checker that accepts a wrong certificate):
+`plane_plane/identical/Add` (union claimed as Intersect), `plane_plane/identical/Keep` (inter
+claimed as Union), and `degen_plane_plane/5`. The last is seed 5 of `degenerate("plane", "plane")`:
+tool `5 % 15` = index 5 of `degen_tools("plane", "plane")`, `identical` (the base block,
+(-20,-20,-20) 40×40×20), with op `DEGEN_OPS[(5 / 15) % 3]` = Add (n = 15 tools)
+(kernel/forge-model/src/adversarial.rs).
+
 **Next steps, for resuming** (stopped here by the owner's priorities):
 1. Instrument the n-ary boolean (`nary_with`: its regions as pieces), so its 134 booleans and the
    n-ary lost-face family are certified instead of counted out of scope.
