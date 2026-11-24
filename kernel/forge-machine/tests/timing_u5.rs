@@ -143,3 +143,87 @@ fn the_table() {
         }
     }
 }
+
+/// The calibration grid for the jerk-limited planner: per program, operation and (A, J), the
+/// time (s), written to $TIMING_DUMP/scurve.csv. G642's tolerance: the programs' CYCLE832 0.02 mm.
+#[test]
+fn scurve_grid() {
+    let Ok(dir) = std::env::var("TIMING_DUMP") else {
+        return;
+    };
+    let base = MachineDef::parse_all(include_str!("data/spinner-u5/u5-620-kinematics.toml"))
+        .unwrap()
+        .remove(0);
+    let mut out = String::from("program,a,j,op,kind,t\n");
+    for (name, text, tools, g54) in programs() {
+        let m = base.clone();
+        let mut c = Control::for_dialect(&m, "siemens-840d", 1).unwrap();
+        c.m_no_motion = vec![27, 29, 50, 51, 65];
+        let mut s = Setup::new(&m, c).unwrap();
+        s.wcs = vec![(54, vec![g54[0], g54[1], g54[2], 0.0, 0.0])];
+        s.tools = tools
+            .iter()
+            .enumerate()
+            .map(|(i, (n, _))| tool(i as u32 + 1, n))
+            .collect();
+        s.h = tools
+            .iter()
+            .enumerate()
+            .map(|(i, (_, l))| (i as u32 + 1, *l))
+            .collect();
+        let jx = |n: &str| m.joints.iter().position(|jt| jt.name == n).unwrap();
+        s.start[jx("X")] = -365.0;
+        s.start[jx("Y")] = 224.0;
+        let tl = sim::simulate(text, &s).unwrap();
+        // the operation of each text line (";Operation : NAME")
+        let mut op = vec![String::from("(start)")];
+        let mut cur = String::from("(start)");
+        for l in text.lines() {
+            if let Some(i) = l.find("Operation : ") {
+                cur = l[i + 12..].trim().to_string();
+            }
+            op.push(cur.clone());
+        }
+        let short = name.split(' ').next().unwrap();
+        // rapids, trapezoidal (grbl's planner) at A_rapid: kind "rapid_trap"
+        for ar in [1000.0, 1500.0, 2000.0, 3000.0, 5000.0, 8000.0] {
+            let la = LookAhead {
+                default_accel: [ar, 3600.0],
+                ..Default::default()
+            };
+            let (per, _) = lookahead::plan(&m, &tl, &la);
+            let mut agg: std::collections::BTreeMap<String, f64> = Default::default();
+            for (g, t) in tl.segments.iter().zip(&per) {
+                if matches!(g.kind, sim::SegKind::Rapid) {
+                    *agg.entry(op[g.line].clone()).or_default() += t;
+                }
+            }
+            for (o, t) in agg {
+                out.push_str(&format!("{short},{ar},0,{o},rapid_trap,{t}\n"));
+            }
+        }
+        for a in [250.0, 500.0, 750.0, 1000.0, 1500.0, 2000.0, 3000.0, 5000.0] {
+            for j in [500.0, 1e3, 2e3, 5e3, 1e4, 2e4, 5e4, 1e5, 2e5, 5e5, 1e6] {
+                let p = lookahead::SCurve {
+                    accel: [a, 3600.0],
+                    jerk: [j, 36000.0],
+                    tolerance: 0.02,
+                };
+                let (per, _) = lookahead::plan_scurve(&m, &tl, &p);
+                let mut agg: std::collections::BTreeMap<(String, &str), f64> = Default::default();
+                for (g, t) in tl.segments.iter().zip(&per) {
+                    let kind = if matches!(g.kind, sim::SegKind::Rapid) {
+                        "rapid"
+                    } else {
+                        "cut"
+                    };
+                    *agg.entry((op[g.line].clone(), kind)).or_default() += t;
+                }
+                for ((o, k), t) in agg {
+                    out.push_str(&format!("{short},{a},{j},{o},{k},{t}\n"));
+                }
+            }
+        }
+    }
+    std::fs::write(format!("{dir}/scurve.csv"), out).unwrap();
+}

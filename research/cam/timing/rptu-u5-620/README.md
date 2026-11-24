@@ -91,3 +91,48 @@ speed against the programmed feed of its line:
   used.
 - Zenodo's file differs from the sha256 in tools/bench/manifest.tsv (af0d15b5…): reported to
   TOOLPATH-QUALITY.
+
+## A jerk-limited planner, calibrated cross-validated (2026-11-24)
+
+`lookahead::plan_scurve` (kernel/forge-machine/src/lookahead.rs): per-axis acceleration A and jerk
+J limits along each block; jerk-limited S-curve speed changes; G642 corner smoothing within the
+programs' CYCLE832 tolerance (0.02 mm): grbl's junction-deviation geometry for the blend radius,
+its speed √(A R) and (J R²)^(1/3); arcs held to √(A r) and (J r²)^(1/3); reverse and forward
+passes over each run. Cited: SINUMERIK SOFT (PGAsl 03/2013 10.3.1 p. 457; PGsl 03/2013 11.2
+p. 315), G642 (PGsl 11.2 p. 309), CYCLE832's defaults G642 + SOFT (PGZ 11/2006 3.17); grbl
+v1.1h planner.c for the passes and the blend geometry. Not modelled: the compressor, feed-forward,
+the interpolator's block cycle, per-axis filters (the fitted J absorbs them). Tests against closed
+forms: tests/lookahead.rs.
+
+Calibration (`calib.py`, `calib2.py`; the grid from `TIMING_DUMP=dir cargo test --release -p
+forge-machine --test timing_u5 scurve_grid`): A ∈ 250…5000 mm/s², J ∈ 500…10⁶ mm/s³; fitted on
+one program's per-operation times (operations of at least 5 s, relative rms), then the other two
+predicted. Logged per-operation sums (executions at override 100 %, tool changes and lines
+outside operations apart): Keychain 52.4 s, Bottle opener 209.8 s, Achskreuz 1088.4 s.
+
+| model (parameters fitted on Bottle opener) | Keychain | Bottle opener (fit) | Achskreuz |
+|---|---|---|---|
+| t_min | −46.6 % | −33.8 % | −28.0 % |
+| t_la, grbl, A 2000 (not fitted) | −37.0 % | −26.8 % | −14.6 % |
+| **S-curve, A 750, J 20,000** | **−10.6 %** (per-op rms 17.5 %) | +1.0 % (10.7 %) | **+2.1 %** (36.8 %) |
+| rapids trapezoidal A_r 1000 + cutting S-curve A 2000, J 20,000 | −16.1 % (21.4 %) | −1.6 % (12.3 %) | −4.5 % (26.2 %) |
+
+Fitted on the other programs instead (S-curve): on Keychain A 250, J 10⁶ → Bottle opener +26.6 %,
+Achskreuz +25.1 %; on Achskreuz A 3000, J 50,000 → Keychain −29.5 %, Bottle opener −15.5 %.
+In-sample, the best single (A, J) for all three: totals within 8.2 % (A 500, J 50,000), per-operation
+rms 12-50 %.
+
+What it says:
+- The jerk-limited planner closes most of the cutting gap: fitted on the Bottle opener it predicts
+  the other two programs' totals within 10.6 % (t_la: 15-37 % short).
+- It is not evidence of a calibrated model: (A, J) are not identified (a ridge: fits on other
+  programs land at A 250-3000, J 2×10⁴-10⁶ and predict the rest 15-30 % off), and per-operation
+  errors stay 12-50 %. Two systematic misfits: short operations are over-predicted (their time
+  is mostly rapids, too slow at the low A cutting wants: rapids and cutting do not share one
+  (A, J) on this control: outside CYCLE832 the G0 moves run at BRISK, inside SOFT), and
+  X_ACHSE_SCHRUPPEN (3+2, B90) is under-predicted 25 %: its arcs ran at 40 % of F (≈ 640 of
+  1592 mm/min) throughout, at override 100 %, a reduction no planner parameter here explains
+  (the control's handling of the rotary axes' tolerance under TRAORI is a candidate: CYCLE832
+  writes the tolerance to rotary axes with a factor, PGZ 3.17; not modelled).
+- Fitted values, if kept: "fitted from RPTU logs, U5-620 only" (A 750 mm/s², J 20,000 mm/s³,
+  δ 0.02 mm). The record keeps accel and jerk UNKNOWN.
