@@ -36,6 +36,8 @@ mod gui_env;
 mod gui_explode;
 #[path = "gui_studio.rs"]
 mod gui_studio;
+#[path = "gui_record.rs"]
+pub mod gui_record;
 #[path = "gui_fgmarks.rs"]
 mod gui_fgmarks;
 #[path = "gui_inspect.rs"]
@@ -128,6 +130,8 @@ pub type AsmPlaced = (Vec<crate::fg::Occ>, Vec<(usize, crate::scene::Rows)>);
 pub(crate) type PartAnchors = (String, Result<Vec<String>, String>);
 
 pub struct Gui {
+    /// A photo of the view on its way back from the GPU (`gui_record.rs`).
+    photo: Option<gui_record::PhotoJob>,
     /// The Render Studio's tracer and queue while its environment is open (`gui_studio.rs`).
     studio: Option<gui_studio::StudioHost>,
     pub vers: gui_versions::VersState,
@@ -291,6 +295,7 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            photo: None,
             studio: None,
             vers: Default::default(),
             env_asked: None,
@@ -1624,7 +1629,7 @@ impl Gui {
             .next()
             .map(|v| v.repaint_delay)
             .unwrap_or(std::time::Duration::MAX);
-        let again_in = if animating || studio_busy || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
+        let again_in = if animating || studio_busy || self.photo.is_some() || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
         {
             Some(std::time::Duration::ZERO)
         } else if delay == std::time::Duration::MAX {
