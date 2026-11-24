@@ -25,6 +25,7 @@ node web/tests/history.cjs "$out"
 node web/tests/pace.cjs "$out"
 node web/tests/select.cjs "$out"
 node web/tests/export.cjs "$out"
+node web/tests/chrome.cjs "$out"
 if [ -n "$PARITY_EXAMPLES" ]; then
   node web/tests/parity.cjs "$out" --examples "$PARITY_EXAMPLES"
 else

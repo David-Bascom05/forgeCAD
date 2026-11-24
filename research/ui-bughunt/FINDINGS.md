@@ -293,6 +293,13 @@ list on main: this branch's new strings add none).
 - Still open: about 3.5 s natively (likely 2-3x that in wasm) on the single-threaded page's
   thread. The threaded page and the desktop run it off the UI thread.
 
+## 19. The page drew window controls that did nothing (ui/bughunt-3)
+
+- The desktop's Minimize / Maximize / Close sat at the page's title bar's right end, and the
+  page's edges showed resize cursors; a page has no window of its own, so none of them did
+  anything (the page's host drops those actions). Not drawn in the page now (shell/mod.rs
+  `title_bar`, `resize_edges`). Test: `web/tests/chrome.cjs` (no icon pixels there; fails before).
+
 ## Open (reported, not fixed here)
 
 

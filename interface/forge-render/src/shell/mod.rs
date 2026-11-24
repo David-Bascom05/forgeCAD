@@ -921,12 +921,15 @@ impl Shell {
         );
         self.note("title:name", r);
 
+        // a page has no window of its own to minimize, maximize or close: none drawn there
+        // (they were, and did nothing)
         let wins = [
             ("minimize", "minimize", "Minimize", Action::Minimize),
             ("maximize", "maximize", "Maximize", Action::Maximize),
             ("close", "close", "Close", Action::Close),
         ];
-        for (k, (name, icon, tip, action)) in wins.into_iter().enumerate() {
+        let wins = if cfg!(target_arch = "wasm32") { &[][..] } else { &wins[..] };
+        for (k, &(name, icon, tip, action)) in wins.iter().enumerate() {
             let r = Rect::from_min_size(pos2(w - 110.0 + k as f32 * 36.0, 3.0), vec2(34.0, 30.0));
             if self.icon_button(ui, name, r, icon, tip, Color32::WHITE).clicked() {
                 self.out.push(action);
@@ -1442,7 +1445,8 @@ impl Shell {
     }
 
     fn resize_edges(&mut self, ui: &mut Ui, s: Rect) {
-        if self.view.maximized {
+        // a page's edges are the browser's: no resize cursor there for a resize that never comes
+        if self.view.maximized || cfg!(target_arch = "wasm32") {
             return;
         }
         let Some(at) = ui.ctx().input(|i| i.pointer.hover_pos()) else {
