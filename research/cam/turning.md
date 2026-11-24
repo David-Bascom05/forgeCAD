@@ -39,7 +39,7 @@ What the checks caught while the examples were written (each now a test, tests/r
 
 | gate | result |
 |---|---|
-| tests | 16 (profile 2, check 4, job 2, refuse 7, bits 1) |
+| tests | forge-turn 32, forge-turn-lang 6; all pass native and wasm32-wasip1 |
 | native = wasm32 | tests/bits.rs: one digest over the profile, the paths, the verdicts, the leftover and the three dialects' text, equal on x86-64 and wasm32-wasip1 |
 | clippy | clean; transcendental functions through forge_math::dmath |
 | no third-party crates in kernel/ | none |
@@ -47,13 +47,13 @@ What the checks caught while the examples were written (each now a test, tests/r
 
 ## Levels (PROOF-STANDARD.md)
 
-- L1 (Turn.lean, 16 theorems, standard axioms): π is 1-Lipschitz (`pi_lipschitz`,
+- L1 (Turn.lean, 17 theorems, standard axioms): π is 1-Lipschitz (`pi_lipschitz`,
   `turn_clear3`): a clearance in the half-plane is one in space; the smear bound (`smear_le`,
   `smear_anti`, `abs_le_rho`); the full section (`fold_clear`, `fold_sigma`, `sigma_mem`); the
   checker's one distance bound, a separating axis between hulls (`sep_axis_hull`, `sep_axis`),
   with the swept core a hull of finitely many points (`zono_eq_hull`); the smear vertex by
   vertex (`smear_hull`, Jensen) and a slab shrunk past the nose radius (`eroded_gap`); the
-  assembly through
+  in-process stock as columns (`rect_in_convex`); the assembly through
   `clear_of_frontier` (`turn_clear`, `turn_clear_ball`).
 - Hypotheses, open (not proven, not assumed true elsewhere):
   - **H.arc** (the control): an arc block whose ends lie at unequal radii (quantisation) moves
@@ -79,16 +79,43 @@ What the checks caught while the examples were written (each now a test, tests/r
    oracle for `axis_gap` (L6).
 2. ID work: boring is built (ISO 6261 bars decoded; the bar a cylinder whose σ-image is an
    exact rectangle per move; `bore_rough`, `finish` inside; a bush bored from a Ø26 drilled hole
-   with an S20 bar certifies, a hole too small for the bar is refused). Left: internal grooving
-   and threading, left-hand tools (refused by name today).
+   with an S20 bar certifies, a hole too small for the bar is refused). Internal grooving and
+   threading are built (ID blades and 60° inserts on bars, each bar checked as its cylinder;
+   `id_groove` enters along the axis and plunges outward, `id_thread` feeds out from the minor
+   diameter with Δ = [r1, d/2] declared; examples/machined/nut_turn.fg certifies in full, 58 ms;
+   caught: finishing the bore on through the relief groove, the boring insert's trailing edge
+   runs up through the groove's top wall; an M31 in an M30's bore, G1; an Ø16 bar in an M12's
+   bore, refused). Left-hand tools are built: an L holder decodes to its R twin mirrored across
+   z (`mirrored`: convex cores to convex cores, the nose kept first, tip number 3 ↔ 4), refused by
+   the ops that feed toward the chuck; `finish_up` walks the grown profile up (+z) from z_lo to
+   z_hi (examples/machined/collar_turn.fg: a back chamfer, certified in full; caught: the
+   right-hand VBMT on down the chamfer, and the left-hand one started 1 mm over the shoulder,
+   its insert hanging 9 mm toward the chuck). Left: left-hand boring bars, left-hand roughing.
+   Other workholding: `Setup.fixtures`, named envelopes of revolution (a tailstock's centre and
+   quill, a steady rest), checked as the chuck is (G2); a live centre refuses facing to the
+   centre line and finishing from over it (tests/refuse.rs). The .fg records come from
+   WORKHOLDING (forge-workholding), lowered in forge-turn-lang.
 3. Done: the .fg surface (interface/forge-turn-lang, docs/cam-turning.md; forge-cli sends a
    turning document there by one branch on `is_turning`, no change to forge-cam-lang), and the
-   machine in CAM-MACHINE's format (machine.rs reads it; data/machines-lathe.toml is a copy of
-   its generic-lathe until forge-machine is on main). Left: the setup sheet for turning, more
+   machine from CAM-MACHINE's forge-machine (machine.rs converts its MachineDef; the lathes of
+   its built-in library by name, `machine::builtin`). Left: the setup sheet for turning, more
    than one setup per document.
-5. G4 reasons: "nose radius r" (inside the part grown by the smallest finishing nose, decided by
-   exact booleans) or "uncut"; reach and undercut are not told apart yet.
-6. Speed: certification is dominated by the in-process stock's exact booleans (~73%); next, a
-   local window for the boolean or a coarser stock for the trailing bodies.
+5. G4 reasons: "nose radius r" (an inside corner: the region misses the free region F_r = box ∖
+   (P ⊕ B_r) where a disc's centre can be, and each piece of its boundary is at least r − 2·tol
+   from it by the checker's certified bound; r the smallest finishing corner, a nose or a
+   grooving blade's, that holds it) or "uncut" (a leave's band among them; before, "within r of
+   the part" called a band thinner than r a nose corner). Reach and undercut are not told apart
+   yet.
+6. Speed (David: prove a check unneeded rather than pay for it). Measured on the shaft job:
+   generate 11 ms, post and round trip 0.13 ms, certify 267 ms, of which ~73% the in-process
+   stock's exact booleans. Done: the normal path keeps the stock as columns (stair.rs: it loses
+   only rectangles proven inside a cut's swept outline, `rect_in_convex`, so it stays a superset
+   and G3 against it is sound) with no booleans; the staircase's inside test on its steps (no
+   exact region); a box pre-test per check (the image lies in the core's box grown by r and,
+   along x, by the depth: the smear never exceeds it, `smear_le` at xm = 0; only a positive gap
+   concludes). Certify 267 → 31 ms on the shaft job. The exact stock and the G4 leftover run in `cam F check` and as the test oracle.
+   Next: G1 for the nose disc by construction from the exact offset (the remaining checks are
+   the input-dependent ones: the insert's flanks and the holder against the part and the
+   chuck).
 7. Canned cycles (G71/G70/G76) as posted text (today the cycles are expanded into moves, which
    is what G6 reads back and certifies).

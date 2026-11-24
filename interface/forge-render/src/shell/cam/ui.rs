@@ -119,6 +119,11 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
         let t = of("Turning");
         let (big, small) = t.split_at(3.min(t.len()));
         out.push(("Turning", big.to_vec(), small.to_vec()));
+        out.push((
+            "View",
+            vec![("Section View", "cam_lathe", a(Ask::SectionView), w.turnview.open)],
+            vec![],
+        ));
     } else {
         let two_d = of("2D");
         let (big2, small2) = two_d.split_at(3.min(two_d.len()));
@@ -490,6 +495,9 @@ impl Shell {
         if w.text_open {
             blocks.extend(text_window(ctx, &t, v, &mut w, &mut places));
         }
+        if w.turning() && w.turnview.open {
+            blocks.extend(section_window(ctx, &t, v, &mut w, &mut places));
+        }
         self.view_blocks.extend(blocks);
         self.places.extend(places);
         self.cam = Some(w);
@@ -634,7 +642,7 @@ fn details(
                 ui,
                 t,
                 "Tolerance",
-                &s.arg("tol").unwrap_or("0.002 (default)").to_string(),
+                s.arg("tol").unwrap_or("0.002 (default)"),
                 width,
                 t.ink,
             );
@@ -792,11 +800,10 @@ fn details(
                     ui,
                     t,
                     "Tool",
-                    &format!(
-                        "T{} {tool}, D {}",
-                        o.tool_t.unwrap_or(0),
-                        num(o.tool_d.unwrap_or(0.0))
-                    ),
+                    &match o.tool_d {
+                        Some(d) => format!("T{} {tool}, D {}", o.tool_t.unwrap_or(0), num(d)),
+                        None => format!("T{} {tool}", o.tool_t.unwrap_or(0)),
+                    },
                     width,
                     t.ink,
                 );
@@ -830,19 +837,22 @@ fn details(
                 fact(ui, t, "Power", &format!("{} kW", num(p)), width, t.ink);
             }
             fact(ui, t, "Moves", &o.moves.to_string(), width, t.ink);
-            fact(
-                ui,
-                t,
-                "Cutting · rapid",
-                &format!(
-                    "{} · {} mm",
-                    num(o.length_cut.round()),
-                    num(o.length_rapid.round())
-                ),
-                width,
-                t.ink,
-            );
-            fact(ui, t, "Time", &time(o.time_s), width, t.ink);
+            // lengths and time where the run gives them (turning's reply has none yet)
+            if o.length_cut > 0.0 || o.time_s > 0.0 {
+                fact(
+                    ui,
+                    t,
+                    "Cutting · rapid",
+                    &format!(
+                        "{} · {} mm",
+                        num(o.length_cut.round()),
+                        num(o.length_rapid.round())
+                    ),
+                    width,
+                    t.ink,
+                );
+                fact(ui, t, "Time", &time(o.time_s), width, t.ink);
+            }
             if let Some(l) = o.least {
                 fact(
                     ui,
@@ -1921,6 +1931,44 @@ fn lathe_tools(
         width,
         t.ink2,
     );
+}
+
+/// The turning view's window (turnview.rs), at the view's bottom right.
+fn section_window(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    places: &mut Places,
+) -> Option<Rect> {
+    let mut close = false;
+    let width = 560.0;
+    let r = egui::Window::new("cam-section")
+        .id(egui::Id::unique("cam-section-window"))
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
+        .fixed_size(vec2(width, 0.0))
+        .frame(frame(t))
+        .constrain_to(crate::shell::dialog_area(ctx))
+        .show_placed(ctx, places, |ui, places| {
+            close = head(
+                ui,
+                t,
+                "cam_lathe",
+                "Section · radius up, z along the spindle",
+                width,
+                places,
+                "cam:turn",
+            );
+            super::turnview::body(ui, t, w, width, places);
+            ui.add_space(8.0);
+        });
+    if close {
+        w.turnview.open = false;
+    }
+    r.map(|r| r.response.rect)
 }
 
 fn checks_window(

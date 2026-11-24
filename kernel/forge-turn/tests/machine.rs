@@ -1,19 +1,24 @@
-//! G5 and the machine's limits on CAM-MACHINE's generic lathe (data/machines-lathe.toml).
+//! G5 and the machine's limits on CAM-MACHINE's generic lathe (forge-machine's built-in library).
 mod common;
 use forge_turn::machine::{Place, lathe};
 use forge_turn::ops;
 
-const SRC: &str = forge_turn::machine::BUILTIN;
+const SRC: &str = forge_machine::library::BUILTIN;
 
 #[test]
 fn the_generic_lathe_reads() {
     let m = lathe(SRC, "generic-lathe").unwrap();
     assert_eq!(m.control, "fanuc-lathe");
-    assert_eq!(
-        (m.x, m.z, m.rpm, m.stations),
-        ([-10.0, 250.0], [-60.0, 400.0], [50.0, 4500.0], 12)
-    );
+    assert_eq!((m.x, m.rpm, m.stations), ([-10.0, 250.0], [50.0, 4500.0], 12));
+    // Z's travel as forge-machine defines it (CAM-MACHINE moves its low end for a self-collision)
+    let def = forge_machine::library::builtin()
+        .into_iter()
+        .find(|d| d.name == "generic-lathe")
+        .unwrap();
+    let zj = def.joints.iter().find(|j| j.letter == "Z").unwrap();
+    assert_eq!(m.z, zj.range);
     assert!(forge_turn::post::Dialect::get(&m.control).is_ok());
+    assert_eq!(forge_turn::machine::builtin("generic-lathe").unwrap(), m);
 }
 
 #[test]

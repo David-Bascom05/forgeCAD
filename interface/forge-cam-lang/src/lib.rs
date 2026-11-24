@@ -2120,7 +2120,6 @@ impl Cam {
             stock_before: Some(s.ip.clone()),
             voids: vec![],
             deepest: f64::INFINITY,
-            posted: vec![],
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
         let paths: Result<Vec<OpPath>, String> = match kind {
