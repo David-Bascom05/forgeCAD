@@ -2134,7 +2134,8 @@ impl Cam {
             time_s: 0.0,
             least: f64::INFINITY,
             plan: vec![],
-            leave: get_num(a, "leave", Some(0.0))?,
+            // G4 grows the part by the most stock any op leaves, either way
+            leave: get_num(a, "leave", Some(0.0))?.max(get_num(a, "leave_axial", Some(0.0))?),
             target: None,
             removals: vec![],
             stock_before: Some(s.ip.clone()),
@@ -2143,6 +2144,11 @@ impl Cam {
             posted: vec![],
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
+        if a.contains_key("leave_axial") && !matches!(kind, "facing" | "clear" | "contour" | "pocket") {
+            return Err(format!(
+                "{kind} does not take `leave_axial:` (facing, clear, contour and pocket do)"
+            ));
+        }
         let paths: Result<Vec<OpPath>, String> = match kind {
             "drill" => self.plan_holes(su, a, &mut out, &mut voids),
             _ => {
@@ -2152,6 +2158,13 @@ impl Cam {
                 };
                 out.tool = Some(ti);
                 let t = &self.tools[ti];
+                // the stock left on floors (Fusion's axial stock to leave): each floor raised
+                // by it; `leave` stays the radial stock, on walls
+                let ax = get_num(a, "leave_axial", Some(0.0))?;
+                if !ax.is_finite() {
+                    return Err("leave_axial: a length".into());
+                }
+
                 let d = t.tool.dc;
                 let step = get_num(a, "step", Some(0.5 * d))?;
                 // a helical entry at this angle (degrees) where it fits; else plunges
@@ -2177,7 +2190,7 @@ impl Cam {
                     "thread_mill" => self.thread_mill(su, a, t, ti, h, (vf, vp), &mut out, &mut voids),
                     "edge_break" => self.edge_break(su, a, t, ti, h, (vf, vp), &mut out),
                     "facing" => {
-                        let z = get_num(a, "to", Some(part.bbox.1[2]))?;
+                        let z = get_num(a, "to", Some(part.bbox.1[2]))? + ax;
                         let p = ops::facing(
                             &s.stock,
                             ops::Cut {
@@ -2199,7 +2212,7 @@ impl Cam {
                         // everything between the stock's outline and the part's section, from a
                         // height down to another: a pocket with the part as islands
                         let top = get_num(a, "from", Some(s.stock.max[2]))?;
-                        let bottom = get_num(a, "to", None)?;
+                        let bottom = get_num(a, "to", None)? + ax;
                         let zmid = 0.5 * (top + bottom);
                         let r = 0.5 * d;
                         let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
@@ -2251,7 +2264,7 @@ impl Cam {
                     }
                     "contour" => {
                         let top = get_num(a, "from", Some(part.bbox.1[2]))?;
-                        let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
+                        let bottom = get_num(a, "to", Some(part.bbox.0[2]))? + ax;
                         let side = get_str(a, "side", Some("outside"))?;
                         let leave = get_num(a, "leave", Some(0.0))?;
                         let zmid = 0.5 * (top + bottom);
@@ -2315,7 +2328,7 @@ impl Cam {
                         // two heights (its inner loops, each a pocket; islands inside them kept)
                         if a.get("#1").is_none() {
                             let top = get_num(a, "from", None)?;
-                            let bottom = get_num(a, "to", None)?;
+                            let bottom = get_num(a, "to", None)? + ax;
                             let zmid = 0.5 * (top + bottom);
                             let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
                                 .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
@@ -2385,7 +2398,7 @@ impl Cam {
                                 let bottom = match hole.depth {
                                     Some(dd) => p[2] - dd,
                                     None => self.parts[pi].bbox.0[2] - 0.5,
-                                };
+                                } + ax;
                                 paths.push(
                                     ops::pocket(
                                         &rg,

@@ -1053,3 +1053,36 @@ fn a_project_tool_is_used_through_the_leveled_library() {
     let (txt, _) = cam.program_text().unwrap();
     assert!(txt.contains("T9 M06"), "{txt}");
 }
+
+/// Axial stock to leave raises each floor by it (Fusion's "axial stock to leave"); `leave` stays
+/// the radial stock, on walls. G4 grows the part by the larger of the two. An op without floors
+/// refuses it.
+#[test]
+fn axial_stock_to_leave_raises_the_floors() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let deepest = |extra: &str| {
+        let body = format!(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\ntop = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepover: 4{extra})\nprog = program(op1, post: \"fanuc\", number: 1)\n"
+        );
+        let cam = forge_cam_lang::run(&doc(&body), &dir);
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        let o = cam.ops.iter().find(|o| o.name == "top").unwrap();
+        assert_eq!(o.status, "built", "{:?}", o.refusal);
+        (o.deepest, o.leave)
+    };
+    let (d0, l0) = deepest("");
+    let (d1, l1) = deepest(", leave: 0.2, leave_axial: 0.5");
+    assert!((d1 - d0 - 0.5).abs() < 1e-9, "{d0} {d1}");
+    assert_eq!((l0, l1), (0.0, 0.5));
+    let cam = forge_cam_lang::run(
+        &doc("bolts = drill(op1, f.bolts, plan: \"auto\", leave_axial: 0.5)\n"),
+        &dir,
+    );
+    assert!(
+        cam.errors
+            .iter()
+            .any(|e| e.contains("drill does not take `leave_axial:`")),
+        "{:?}",
+        cam.errors
+    );
+}
