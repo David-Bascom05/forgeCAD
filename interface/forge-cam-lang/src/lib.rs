@@ -59,6 +59,9 @@ static SURFACED: memo::Memo<Surfaced> = memo::Memo::new();
 /// The certifications made by earlier runs of documents in this process (memo.rs).
 static CERTIFIED: memo::Memo<ops::CheckSummary> = memo::Memo::new();
 
+/// 2D ops' paths with their feeds set from the engagement (`feeds_from_engagement`).
+static SCHEDULED: memo::Memo<Vec<OpPath>> = memo::Memo::new();
+
 /// A 3-axis finishing op's paths (or refusal), the lines it adds to the plan, and its finish record.
 type Finished = (Result<Vec<OpPath>, String>, Vec<String>, Option<Finish>);
 static FINISHED: memo::Memo<Finished> = memo::Memo::new();
@@ -3921,8 +3924,14 @@ impl Cam {
             // samples of one diameter, fixed by length
             sample: t.tool.dc,
         };
-        let mut map = HeightMap::of_stock(&s.ip, cell);
-        paths.iter().map(|p| schedule(p, &mut map, &prof, &sc)).collect()
+        // from an earlier run when every input is the same (memo.rs): the schedule is a function
+        // of the paths, the in-process stock it starts from, the tool's profile and the
+        // schedule's numbers (the cell among them) alone
+        let key = format!("engagement/1 {:?} {:?}", (&paths, &s.ip), (prof, sc));
+        SCHEDULED.get_or(key, || {
+            let mut map = HeightMap::of_stock(&s.ip, cell);
+            paths.iter().map(|p| schedule(p, &mut map, &prof, &sc)).collect()
+        })
     }
 
     fn feeds_for(&self, su: usize, t: &ToolUse, ae: f64, ap: f64) -> Option<feeds::Feeds> {
@@ -7729,6 +7738,54 @@ mod certify_memo_tests {
         let before = CERTIFIED.computed();
         assert!(same(&run(&base), &s0));
         assert_eq!(CERTIFIED.computed(), before, "the same arguments certified again");
+    }
+}
+
+#[cfg(test)]
+mod engagement_memo_tests {
+    /// Every input of `feeds_from_engagement` is in its memo key: the op's path (its
+    /// arguments), the stock an earlier op left, the tool, the material's chip load and the
+    /// machine's feed limit each schedule anew; the same text, and edits the schedule does not
+    /// read (the stickout), take it from the memo with the same reply.
+    #[test]
+    fn each_input_class_schedules_anew() {
+        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        // scratch under the workspace's target (wasm32-wasip1 has no temp_dir or pid)
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/engagement_memo_test");
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("slot_plate.fg")).unwrap();
+        forge_dirs::fs::write(dir.join("slot_plate.fg"), &part).unwrap();
+        let doc = "machining\nf = part(\"slot_plate.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nt2 = tool(\"flat-6\", t: 2, stickout: 26, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: \"top-corner\")\nskim = facing(op1, tool: t1, to: 10, step: 1)\nslots = slot(op1, f.lines, tool: t2, depth: 4, step: 2, ramp: 3)\n";
+        let run = |d: &str| {
+            let before = super::SCHEDULED.computed();
+            let cam = super::run(d, &dir);
+            assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+            let reply = format!("{:?}", cam.ops.iter().map(|o| &o.paths).collect::<Vec<_>>());
+            (super::SCHEDULED.computed() - before, reply)
+        };
+        let (n, reply) = run(doc);
+        assert_eq!(n, 2, "facing and slot each scheduled");
+        let again = run(doc);
+        assert_eq!((again.0, &again.1), (0, &reply), "the same text scheduled again");
+        let r = run(&doc.replace("stickout: 26", "stickout: 28"));
+        assert_eq!((r.0, &r.1), (0, &reply), "a stickout edit scheduled again");
+        for (what, d, want) in [
+            (
+                "the slot's path",
+                doc.replace("step: 2, ramp", "step: 1.5, ramp"),
+                1,
+            ),
+            (
+                "the stock the facing left (its depth)",
+                doc.replace("to: 10, step: 1", "to: 9.5, step: 1"),
+                2,
+            ),
+            ("the tool", doc.replace("\"flat-6\"", "\"flat-3\""), 1),
+            ("the material", doc.replace("group: \"N\"", "group: \"P\""), 2),
+        ] {
+            assert!(run(&d).0 >= want, "{what}: not scheduled anew");
+        }
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
     }
 }
 
