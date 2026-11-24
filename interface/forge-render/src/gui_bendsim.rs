@@ -9,7 +9,7 @@ use crate::render::Renderer;
 use crate::scene::{Placement, Scene};
 use crate::shell::bendsim::Framing;
 use crate::shell::env::EnvId;
-use forge_brake::scene::{Body, Look, Mesh};
+use forge_brake::scene::{Body, Look, Mesh, stage_at};
 
 struct Taken {
     renderer: Renderer,
@@ -37,13 +37,27 @@ pub struct BendView {
     cut: Vec<String>,
     /// The step last framed (Follow bend re-frames on a new one).
     step: Option<usize>,
+    /// The part's motion at the tools through that step: (step, lo, hi).
+    envelope: Option<(usize, [f32; 3], [f32; 3])>,
     /// The bodies drawn, in placement order: what see-through tests against.
     bodies: Vec<Body>,
     /// See-through: the eye and the settings it was worked out for, and the faces drawn as
     /// ghosts (bodies between the eye and the bend being made).
     seen: Option<([u32; 3], bool, u32, bool)>,
     pub ghosts: Vec<crate::render::FaceColour>,
+    /// The bodies the last eye found blocking the bend, by name.
+    blocking: Vec<String>,
+    /// Each body's see-through state: frames it has blocked running, and how far it has faded
+    /// (0 solid, 1 at the set opacity).
+    fade: std::collections::HashMap<String, (u8, f32)>,
+    /// A body is fading in or out, or waiting its frames to.
+    fading: bool,
 }
+
+/// Frames a body must block the bend for, running, before it starts to fade (hysteresis).
+pub const FADE_AFTER: u8 = 3;
+/// Frames a fade in or out takes (about 150 ms at 60 frames a second).
+pub const FADE_FRAMES: u32 = 9;
 
 /// The view cube's naming in the simulation: FRONT the operator's side (-x), BACK the
 /// backgauge's, TOP up; LEFT and RIGHT along the bed, so along every bend's line (each is made
@@ -433,27 +447,44 @@ impl Gui {
             sim.tooling.station(st.punch, st.die).map(|x| x.y.to_bits())
         };
         let ask = b.frame;
-        // with Follow bend, each new step is framed afresh; otherwise the eye is the user's
+        // with Follow bend, each new step is framed afresh, and through the operator's handling
+        // the eye widens to keep the part in view, settling back on the working zone as it
+        // returns to the tools; otherwise the eye is the user's
         let moved = self.bend.framed && b.follow && self.bend.step != Some(step);
+        let handling = b.follow && stage_at(b.t).0 == forge_brake::scene::Stage::Handle;
         let first = !self.bend.framed;
         let mut eye = None;
-        if first || ask.is_some() || moved {
+        if first || ask.is_some() || moved || (handling && self.bend.framed) {
             let how = ask.unwrap_or(Framing::Work);
-            // the part's whole motion through the step, from gauging to the ram's return
+            // the part's whole motion through the step at the tools, from gauging to the ram's
+            // return (kept for the step), and where the part is now
             let envelope = match how {
                 Framing::Work => {
-                    let samples: Vec<Vec<Body>> = [0.2, 0.35, 0.5, 0.6, 0.7, 0.78, 0.9]
-                        .iter()
-                        .map(|&tt| sc.bodies(step, tt))
-                        .collect();
-                    bounds(
-                        samples
+                    let kept = self.bend.envelope.filter(|e| e.0 == step).map(|e| (e.1, e.2));
+                    let env = kept.or_else(|| {
+                        let samples: Vec<Vec<Body>> = [0.2, 0.35, 0.5, 0.6, 0.7, 0.78, 0.9]
                             .iter()
-                            .flatten()
-                            .chain(bodies.iter())
-                            .filter(|x| x.look.is_sheet())
-                            .map(|x| &x.mesh),
-                    )
+                            .map(|&tt| sc.bodies(step, tt))
+                            .collect();
+                        bounds(
+                            samples
+                                .iter()
+                                .flatten()
+                                .filter(|x| x.look.is_sheet())
+                                .map(|x| &x.mesh),
+                        )
+                    });
+                    if let Some((a, c)) = env {
+                        self.bend.envelope = Some((step, a, c));
+                    }
+                    let now = bounds(bodies.iter().filter(|x| x.look.is_sheet()).map(|x| &x.mesh));
+                    match (env, now) {
+                        (Some((a, c)), Some((p, q))) => Some((
+                            [0, 1, 2].map(|k| a[k].min(p[k])),
+                            [0, 1, 2].map(|k| c[k].max(q[k])),
+                        )),
+                        (e, n) => e.or(n),
+                    }
                 }
                 Framing::Overview => None,
             };
@@ -462,11 +493,12 @@ impl Gui {
                     Framing::Work => cutaway(&bodies, cam.eye(), lo, hi),
                     Framing::Overview => Vec::new(),
                 };
-                if how == Framing::Work {
+                if how == Framing::Work && !handling {
                     // the cube's home is the working zone
                     v.nav.home_view = Some(cam);
                 }
-                eye = Some((cam, first));
+                // tracking the handling is continuous: placed, not travelled to
+                eye = Some((cam, first || (handling && !moved && ask.is_none())));
             }
             self.bend.framed = true;
             self.bend.station = at;
@@ -564,42 +596,71 @@ impl Gui {
             b.opacity.to_bits(),
             b.see_press,
         );
-        if self.bend.seen == Some(key) {
+        // what blocks the bend, worked out again only when the eye or the instant changed
+        if self.bend.seen != Some(key) {
+            self.bend.seen = Some(key);
+            let found = if b.see_through {
+                see_through(&self.bend.bodies, eye, b.see_press)
+            } else {
+                Vec::new()
+            };
+            self.bend.blocking = found.iter().map(|&k| self.bend.bodies[k].name.clone()).collect();
+        } else if self.bend.fade.values().all(|f| f.1 == 0.0 || f.1 == 1.0) && !self.bend.fading {
             return;
         }
-        self.bend.seen = Some(key);
-        let ghosts = if b.see_through {
-            see_through(&self.bend.bodies, eye, b.see_press)
-        } else {
-            Vec::new()
-        };
+        // hysteresis and a fade, counted in frames (deterministic when recorded): a body must
+        // block for FADE_AFTER frames running before it starts to fade, and fades in or out over
+        // FADE_FRAMES frames, so a body grazing the line of sight does not flicker
+        let mut moving = false;
+        let names: Vec<String> = self.bend.bodies.iter().map(|x| x.name.clone()).collect();
+        self.bend.fade.retain(|n, _| names.contains(n));
+        for n in &names {
+            let e = self.bend.fade.entry(n.clone()).or_insert((0, 0.0));
+            let blocking = self.bend.blocking.contains(n);
+            e.0 = if blocking { e.0.saturating_add(1) } else { 0 };
+            let target = if e.0 >= FADE_AFTER { 1.0 } else { 0.0 };
+            let step = 1.0 / FADE_FRAMES as f32;
+            e.1 = if e.1 < target {
+                (e.1 + step).min(target)
+            } else {
+                (e.1 - step).max(target)
+            };
+            moving |= e.1 != target || (blocking && e.0 < FADE_AFTER);
+        }
+        self.bend.fading = moving;
         self.bend.ghosts.clear();
         let material = b.material.as_deref();
-        // their outlines, for the panel to draw over the view (a ghost must read, not vanish)
-        let outlines: Vec<Vec<[f32; 3]>> = ghosts
-            .iter()
-            .map(|&k| {
-                let m = &self.bend.bodies[k].mesh;
-                let step = (m.pos.len() / 600).max(1);
-                m.pos.iter().step_by(step).copied().collect()
-            })
-            .collect();
-        for k in 0..self.bend.bodies.len() {
-            let on = ghosts.contains(&k);
+        let mut outlines: Vec<Vec<[f32; 3]>> = Vec::new();
+        for (k, body) in self.bend.bodies.iter().enumerate() {
+            let level = self.bend.fade.get(&body.name).map_or(0.0, |f| f.1);
+            let on = level > 0.0;
             v.scene.set_ghost(k, on);
             if on {
-                let c = tint(&self.bend.bodies[k], material);
+                let c = tint(body, material);
                 let to8 = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
+                // from solid (1) down to the opacity set as it fades
+                let alpha = 1.0 - level * (1.0 - b.opacity);
                 self.bend.ghosts.push(crate::render::FaceColour {
                     placement: k as u32,
                     face: 0,
-                    rgba: [to8(c[0]), to8(c[1]), to8(c[2]), to8(b.opacity)],
+                    rgba: [to8(c[0]), to8(c[1]), to8(c[2]), to8(alpha)],
                 });
+                // its outline, for the panel to draw over the view (a ghost must read, not
+                // vanish), once it is mostly faded
+                if level > 0.5 {
+                    let m = &body.mesh;
+                    let step = (m.pos.len() / 600).max(1);
+                    outlines.push(m.pos.iter().step_by(step).copied().collect());
+                }
             }
         }
         v.dirty = true;
         if let Some(b) = self.shell.sheet.bend_sim.as_mut() {
             b.outlines = outlines;
+            if moving {
+                // frames still to draw while a body fades
+                b.settle = b.settle.max(2);
+            }
         }
     }
 
@@ -612,7 +673,11 @@ impl Gui {
         self.bend.bodies.clear();
         self.bend.ghosts.clear();
         self.bend.seen = None;
+        self.bend.blocking.clear();
+        self.bend.fade.clear();
+        self.bend.fading = false;
         self.bend.step = None;
+        self.bend.envelope = None;
         if let (Some(t), Some(v)) = (self.bend.taken.take(), &mut self.view) {
             v.renderer = t.renderer;
             v.scene = t.scene;

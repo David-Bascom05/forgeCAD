@@ -174,15 +174,15 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
             "Play",
             vec![tool(
                 if playing { "Pause" } else { "Play" },
-                "forward",
+                if playing { "pause" } else { "play" },
                 cmd(PLAY),
                 playing,
             )],
             vec![
-                tool("First Bend", "home", cmd(FIRST), false),
-                tool("Previous Bend", "backward", cmd(BACK), false),
-                tool("Next Bend", "forward", cmd(NEXT), false),
-                tool("Last Bend", "end", cmd(LAST), false),
+                tool("First Bend", "first", cmd(FIRST), false),
+                tool("Previous Bend", "stepback", cmd(BACK), false),
+                tool("Next Bend", "stepfwd", cmd(NEXT), false),
+                tool("Last Bend", "last", cmd(LAST), false),
             ],
         ),
         group(
@@ -356,8 +356,14 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
             }
         }
     }
+    // a narrow view: the view's settings on a row of their own, the bar taller for it
+    let bar = super::bendsim::Bar::for_width(view.width());
+    let narrow = bar == super::bendsim::Bar::Narrow;
     let band = Rect::from_min_max(
-        egui::pos2(view.left() + 12.0, view.bottom() - 74.0),
+        egui::pos2(
+            view.left() + 12.0,
+            view.bottom() - if narrow { 104.0 } else { 74.0 },
+        ),
         egui::pos2(view.right() - 12.0, view.bottom() - 8.0),
     );
     egui::Area::new(egui::Id::unique("env-bendsim-timeline"))
@@ -370,7 +376,7 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
                 .inner_margin(6.0)
                 .show(ui, |ui| {
                     ui.set_width(band.width() - 12.0);
-                    super::bendsim::timeline_ui(ui, b);
+                    super::bendsim::timeline_ui(ui, b, bar);
                 });
         });
     s.places.push(("env:bendsim:view".into(), view));
@@ -458,4 +464,84 @@ fn hull(mut p: Vec<egui::Pos2>) -> Vec<egui::Pos2> {
     upper.pop();
     lower.extend(upper);
     lower
+}
+
+/// The program's length in seconds as it plays (`STEP_SECONDS` a step); 0 with nothing simulated.
+pub(super) fn duration(s: &Shell) -> f64 {
+    s.sheet
+        .bend_sim
+        .as_deref()
+        .filter(|b| b.sim.is_ok())
+        .map_or(0.0, |b| b.steps() as f64 * super::bendsim::STEP_SECONDS)
+}
+
+/// The simulation put at `t` seconds into the program: its step and instant, play stopped, Follow
+/// bend on (a recording frames each bend and keeps the handling in view). The instant's pose
+/// (ram, sheet, backgauge) is a function of these alone: no clock is read.
+pub(super) fn seek(s: &mut Shell, t: f64) {
+    if let Some(b) = s.sheet.bend_sim.as_deref_mut() {
+        b.playing = false;
+        // a recording follows the bends: each framed on its station, the handling kept in view
+        b.follow = true;
+        b.set_position(t.max(0.0) / super::bendsim::STEP_SECONDS);
+    }
+}
+
+/// "Bend 2 of 5 · bend" at `t` seconds.
+pub(super) fn label_at(s: &Shell, t: f64) -> Option<String> {
+    let b = s.sheet.bend_sim.as_deref()?;
+    let sim = b.sim.as_ref().ok()?;
+    let n = b.steps();
+    if n == 0 {
+        return None;
+    }
+    let x = (t.max(0.0) / super::bendsim::STEP_SECONDS).min(n as f64);
+    let k = (x.floor() as usize).min(n - 1);
+    let (stage, _) = forge_brake::scene::stage_at((x - k as f64).clamp(0.0, 1.0));
+    Some(format!(
+        "Bend {} of {n} · {} · {}",
+        k + 1,
+        sim.names[sim.plan.steps[k].bend],
+        stage.word()
+    ))
+}
+
+#[cfg(test)]
+mod timeline_tests {
+    use super::*;
+
+    #[test]
+    fn the_recorder_steps_the_program_by_its_clock() {
+        let src = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
+            sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (100, 200))\n}\n\
+            base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+            right = flange(base.edge(plan.outline[1]), height: 30)\n\
+            left = flange(base.edge(plan.outline[3]), height: 30)\n";
+        let mut s = Shell::default();
+        s.sheet.bend_sim = Some(Box::new(BendSimUi::open(src, "c.fg", "std-eu")));
+        let n = s.sheet.bend_sim.as_ref().unwrap().steps();
+        assert_eq!(n, 2);
+        assert_eq!(duration(&s), 2.0 * super::super::bendsim::STEP_SECONDS);
+        // seconds in: the second bend, 60 % through its motion, the same every time
+        let t = super::super::bendsim::STEP_SECONDS * 1.6;
+        seek(&mut s, t);
+        let b = s.sheet.bend_sim.as_ref().unwrap();
+        assert_eq!(b.step, 1);
+        assert!((b.t - 0.6).abs() < 1e-9 && !b.playing);
+        assert!(b.follow, "a recording follows the bends");
+        let pose = b.pose().unwrap();
+        seek(&mut s, 0.0);
+        seek(&mut s, t);
+        assert_eq!(s.sheet.bend_sim.as_ref().unwrap().pose().unwrap(), pose);
+        assert!(
+            label_at(&s, t).unwrap().starts_with("Bend 2 of 2"),
+            "{:?}",
+            label_at(&s, t)
+        );
+        // the end is the last step's end
+        let end = duration(&s) + 5.0;
+        seek(&mut s, end);
+        let b = s.sheet.bend_sim.as_ref().unwrap();
+        assert_eq!((b.step, b.t), (1, 1.0));
+    }
 }
