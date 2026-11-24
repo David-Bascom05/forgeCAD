@@ -1456,6 +1456,9 @@ impl Shell {
             self.file_menu = false;
             self.cube_menu = None;
             self.marking = None;
+        } else if let Some(b) = self.sheet.bend_sim.as_mut().filter(|b| b.pending_replace.is_some()) {
+            // the bend simulation's re-plan question: Esc is Keep mine (UX-LEAD)
+            b.pending_replace = None;
         } else if let Some(w) = self.cam.as_mut().filter(|w| w.escape_level()) {
             // the Manufacture workspace: its dialog, else its floating window
             w.escape();

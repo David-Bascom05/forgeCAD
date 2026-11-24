@@ -173,3 +173,58 @@ fn a_cincinnati_program_is_written() {
             .any(|(_, t)| t.contains("ProgramFormatUnavailable") && t.contains("cincinnati"))
     );
 }
+
+/// Re-planning keeps what the user set (David: "Manual is also good. Don't delete manual to get
+/// automatic"): the stations byte for byte, a locked bend at its station; only the bend
+/// statements are rewritten. A lock the plan cannot pass is refused by name, the document left as
+/// it was.
+#[test]
+fn a_replan_keeps_the_users_stations_and_locks() {
+    let d = dir("replan");
+    let doc = "bending\n\
+# my layout: the gooseneck on the right\n\
+part = part(\"channel.fg\")\n\
+press = tooling(\"std-eu\")\n\
+s1 = station(punch: \"std-eu/P85-R08-H120\", die: \"std-eu/V12-88\", y: -600, length: 200)\n\
+s2 = station(punch: \"std-eu/G88-R08\", die: \"std-eu/V12-88\", y: 600, length: 200)\n\
+b1 = bend(\"right\", at: s1)\n\
+b2 = bend(\"left\", at: s2, lock: true)\n\
+sheet = setup_sheet()\n";
+    let r = read(doc).unwrap();
+    assert!(r.bends[1].lock && !r.bends[0].lock);
+    let (new, sim) = forge_bend_lang::replan(doc, CHANNEL, Some(&d)).expect("a plan");
+    assert!(sim.plan.feasible);
+    // everything but the bend statements as it was
+    let keep = |s: &str| -> Vec<String> {
+        s.lines()
+            .filter(|l| !l.contains("= bend("))
+            .map(String::from)
+            .collect()
+    };
+    assert_eq!(keep(doc), keep(&new), "{new}");
+    let r2 = read(&new).unwrap();
+    let left = r2.bends.iter().find(|b| b.bend == "left").unwrap();
+    assert_eq!((left.station.as_deref(), left.lock), (Some("s2"), true), "{new}");
+    // the planner's own choice for the unlocked bend: the straight punch, station 1
+    let right = r2.bends.iter().find(|b| b.bend == "right").unwrap();
+    assert_eq!(
+        (right.station.as_deref(), right.lock),
+        (Some("s1"), false),
+        "{new}"
+    );
+    // the new document runs as stated, the same plan
+    let b = forge_bend_lang::run(&new, &d);
+    assert!(b.ok, "{:?}", b.errors);
+    // a lock the plan cannot pass: station 2's stacks (50 mm) cannot cover the 200 mm bend
+    let bad = doc.replace("y: 600, length: 200", "y: 600, length: 50");
+    match forge_bend_lang::replan(&bad, CHANNEL, Some(&d)) {
+        Ok((t, s)) => assert!(!s.plan.feasible, "expected a refusal: {t}"),
+        Err(why) => {
+            assert!(
+                why.iter()
+                    .any(|(at, w)| at == "b2" && w.contains("locked to s2") && w.contains("unlock")),
+                "{why:?}"
+            );
+        }
+    }
+}

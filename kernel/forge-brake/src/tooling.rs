@@ -264,6 +264,37 @@ fn closed(id: &str, p: &[Seg]) -> Result<(), ToolingError> {
     Ok(())
 }
 
+/// A closed loop's part at or above height `z0` (Sutherland-Hodgman against the half plane).
+/// Lines are clipped exactly; an arc wholly above is kept, one that crosses is replaced by its
+/// chord's ends there (none of the library's drawn sections has arcs).
+fn clip_above(loop_: &[Seg], z0: f64) -> Vec<Seg> {
+    let pts: Vec<Point2> = loop_.iter().map(|s| s.point(0.0)).collect();
+    if pts.iter().all(|q| q.y >= z0) {
+        return loop_.to_vec();
+    }
+    let n = pts.len();
+    let mut out: Vec<Point2> = Vec::new();
+    for i in 0..n {
+        let (a, b) = (pts[i], pts[(i + 1) % n]);
+        let (ia, ib) = (a.y >= z0, b.y >= z0);
+        if ia {
+            out.push(a);
+        }
+        if ia != ib {
+            let t = (z0 - a.y) / (b.y - a.y);
+            out.push(Point2::new(a.x + t * (b.x - a.x), z0));
+        }
+    }
+    let m = out.len();
+    (0..m)
+        .filter(|i| out[*i].distance(out[(i + 1) % m]) > 1e-9)
+        .map(|i| Seg::Line {
+            a: out[i],
+            b: out[(i + 1) % m],
+        })
+        .collect()
+}
+
 fn tan(x: f64) -> f64 {
     let (s, c) = dmath::sin_cos(x);
     s / c
@@ -354,9 +385,9 @@ impl Punch {
     /// The rest of the punch above `tip_height`, to the clamping face.
     pub fn body_section(&self) -> Region {
         if let Some(p) = &self.profile {
-            // an explicit section: all of it is checked as body above the tip height; the
-            // working part below it is decided by the rules
-            return Region::of(vec![p.clone()]);
+            // an explicit section: what lies above the tip height is body, checked by distance;
+            // the working part below it is decided by the rules (as a generated section's is)
+            return Region::of(vec![clip_above(p, self.tip_height)]);
         }
         let ht = self.tip_height;
         let xf = self.flank_x(ht);
@@ -580,9 +611,29 @@ impl Tooling {
         Ok(())
     }
 
-    /// The station a step with this punch and die works at.
+    /// The first station holding this punch and die.
     pub fn station(&self, punch: usize, die: usize) -> Option<&Station> {
         self.stations.iter().find(|s| s.punch == punch && s.die == die)
+    }
+
+    /// The station a bend works at: of those holding its punch and die, the first whose stacks
+    /// both cover `need` and stand within the room (`room`: the punch's and the die's, each the
+    /// bend's length less the clearance at its ends, or the tool's own shortest cover where that
+    /// is longer), else the first holding them. The same tools may stand at two stations with
+    /// different stack lengths (a box's last sides want shorter ones).
+    pub fn station_for(&self, punch: usize, die: usize, need: f64, room: (f64, f64)) -> Option<usize> {
+        let fits = |x: f64, r: f64| x >= need && x <= r + 1e-9;
+        let mut first = None;
+        for (k, s) in self.stations.iter().enumerate() {
+            if s.punch != punch || s.die != die {
+                continue;
+            }
+            if fits(s.punch_length, room.0) && fits(s.die_length, room.1) {
+                return Some(k);
+            }
+            first.get_or_insert(k);
+        }
+        first
     }
 
     pub fn punch(&self, id: &str) -> Option<&Punch> {
