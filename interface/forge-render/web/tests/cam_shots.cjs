@@ -28,10 +28,13 @@ const SHOTS = [
   ["cam-11-new-pocket.png", ["select bore", "new-op pocket", "tab 1"], (s) => s.cam.dialogs.includes("op")],
   ["cam-35-nc-programs-web.png", ["programs"], (s) => s.cam.dialogs.includes("programs"), TURN],
   ["cam-1-opened.png", [], (s) => true],
+  // opt-in roughing: a small 2D button; its Passes tab (engagement, one/two way, direction)
+  ["cam-45-adaptive.png", ["select top", "new-op adaptive", "tab 2"], (s) => s.cam.dialogs.includes("op")],
   // a small screen (UX-LEAD's 1024 × 700): the windows fit the view, nothing runs under a panel
   ["cam-40-small-op.png", ["select prof"], (s) => s.cam.selected === "prof", undefined, "1024x700"],
   ["cam-41-small-tools.png", ["tools"], (s) => s.cam.dialogs.includes("tools"), undefined, "1024x700"],
   ["cam-42-small-programs.png", ["programs"], (s) => s.cam.dialogs.includes("programs"), undefined, "1024x700"],
+  ["cam-44-small-sheet.png", ["select prof", "edit prof"], (s) => s.cam.dialogs.includes("op"), undefined, "1024x700"],
 ];
 const only = process.argv[3];
 const s = http.createServer((q, r) => { const u = decodeURIComponent(new URL(q.url, "http://x").pathname); const f = path.join(root, u === "/" ? "index.html" : u);

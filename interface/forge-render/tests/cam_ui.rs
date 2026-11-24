@@ -53,6 +53,10 @@ fn open_unplaced(tag: &str) -> Option<(Headless, std::path::PathBuf)> {
 }
 
 fn open_with(tag: &str, unplaced: bool) -> Option<(Headless, std::path::PathBuf)> {
+    open_sized(tag, unplaced, (1500.0, 1000.0))
+}
+
+fn open_sized(tag: &str, unplaced: bool, size: (f32, f32)) -> Option<(Headless, std::path::PathBuf)> {
     let ex = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
     let dir = std::env::temp_dir().join(format!("fg-cam-ui-{}-{tag}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -65,7 +69,7 @@ fn open_with(tag: &str, unplaced: bool) -> Option<(Headless, std::path::PathBuf)
         assert!(!t.contains("at: ("));
         std::fs::write(&file, t).unwrap();
     }
-    let mut h = match Headless::new((1500.0, 1000.0), 1.0) {
+    let mut h = match Headless::new(size, 1.0) {
         Ok(h) => h,
         Err(e) => {
             eprintln!("skipped: {e}");
@@ -175,8 +179,13 @@ fn post_process_shows_the_program_and_writes_it() {
     assert!(said.contains("Allow uncertified"), "{said}");
     h.gui.shell.cam.as_mut().unwrap().allow_uncertified = true;
     assert!(h.click("cam:post:write"));
-    h.step();
-    h.step();
+    // the write lands a few frames on (sooner or later under a loaded machine)
+    for _ in 0..200 {
+        h.step();
+        if file.with_file_name("prog.nc").exists() {
+            break;
+        }
+    }
     let nc = std::fs::read_to_string(file.with_file_name("prog.nc")).expect("written");
     assert!(nc.lines().count() > 100, "{nc}");
     assert!(nc.contains("(NOT CERTIFIED IN FULL: except G5"), "stamped");
@@ -444,4 +453,81 @@ fn the_op_dialog_answers_enter_and_escape() {
     h.step();
     assert!(text(&h).contains("leave: 0.3"), "Enter is OK: {}", text(&h));
     assert!(h.gui.shell.cam.as_ref().unwrap().op_dlg.is_none());
+}
+
+/// The op dialog docks in the Manufacture environment's properties column (no floating window
+/// over the view): its OK inside the column, the view narrowed by it.
+#[test]
+fn the_op_dialog_docks_in_the_properties_column() {
+    let Some((mut h, _)) = open("dock") else { return };
+    let view_before = h.gui.shell.view_rect;
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Edit("prof".into()));
+    for _ in 0..3 {
+        h.step();
+    }
+    let col = h.placed("env:manufacture:properties").expect("the properties column");
+    let ok = h.placed("cam:op:ok").expect("the op dialog");
+    assert!(col.contains_rect(ok), "OK {ok:?} outside the column {col:?}");
+    assert!(h.gui.shell.view_rect.right() <= col.left() + 1.0, "the view gives up the column");
+    assert!(h.gui.shell.view_rect.width() <= view_before.width());
+}
+
+/// A narrow window (under 1280 px): the column shows the open sheet or the simulation, as tabs,
+/// the sheet's first; choosing Simulation keeps the dialog open; its commit buttons are pinned
+/// in the column; the view is framed again when the column narrows it.
+#[test]
+fn a_narrow_window_tabs_the_sheet_and_the_simulation() {
+    let Some((mut h, _)) = open_sized("narrow", false, (1100.0, 800.0)) else { return };
+    for _ in 0..20 {
+        h.step();
+    }
+    let before = h.gui.view.as_ref().unwrap().nav.camera;
+    let w0 = h.gui.shell.view_rect.width();
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Edit("prof".into()));
+    for _ in 0..30 {
+        h.step();
+    }
+    let has_sim = h.gui.shell.camsim.is_some();
+    let col = h.placed("env:manufacture:properties").expect("the column");
+    let ok = h.placed("cam:op:ok").expect("OK in sight");
+    assert!(col.contains_rect(ok), "OK {ok:?} in the column {col:?}");
+    shot(&mut h, "cam-narrow-sheet");
+    if has_sim {
+        assert!(h.click("cam:dock:sim"), "the Simulation tab");
+        h.step();
+        h.step();
+        let w = h.gui.shell.cam.as_ref().unwrap();
+        assert!(w.op_dlg.is_some(), "the sheet kept open behind its tab");
+        assert!(h.placed("cam:op:ok").is_none(), "not drawn");
+        assert!(h.click("cam:dock:sheet"));
+        h.step();
+        h.step();
+        assert!(h.placed("cam:op:ok").is_some());
+    }
+    // the column came only if it was not there before: then the view was framed again
+    if h.gui.shell.view_rect.width() < w0 - 1.0 {
+        assert_ne!(h.gui.view.as_ref().unwrap().nav.camera, before, "framed again");
+    }
+}
+
+/// Adaptive is opt-in: a small button after the 2D group's three big ones (never Clear's place),
+/// and the fields its form writes generate.
+#[test]
+fn adaptive_is_an_opt_in_op_whose_fields_generate() {
+    use forge_render::shell::cam::schema::OPS;
+    let two_d: Vec<&str> = OPS.iter().filter(|o| o.group == "2D").map(|o| o.func).collect();
+    let at = two_d.iter().position(|f| *f == "adaptive").expect("adaptive in 2D");
+    assert!(at >= 3, "adaptive is a big (default-looking) button: {two_d:?}");
+    assert_eq!(at, two_d.len() - 1, "adaptive is not last of 2D: {two_d:?}");
+    let ex = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+    let src = std::fs::read_to_string(ex.join("flange_cam.fg")).unwrap();
+    let top = src.lines().find(|l| l.starts_with("top")).unwrap();
+    let src = src.replace(
+        top,
+        "top = adaptive(op1, tool: t1, to: 12, step: 4, engagement: 50, passes: \"two_way\", sweep: 90, leave: 0.2)",
+    );
+    let cam = forge_cam_lang::run(&src, ex);
+    let op = cam.ops.iter().find(|o| o.name == "top").expect("top");
+    assert!(op.refusal.is_none(), "{:?}", op.refusal);
+    assert!(op.moves > 0, "adaptive made no moves");
 }

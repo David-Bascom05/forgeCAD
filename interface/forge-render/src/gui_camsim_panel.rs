@@ -84,6 +84,11 @@ pub struct CamSimUi {
     scroll_to: Option<usize>,
     /// The panel's width; folded to its tabs.
     pub folded: bool,
+    /// Drawn this frame by the environment's docked properties (`Shell::camsim_properties`):
+    /// the floating panel stands down.
+    pub hosted: bool,
+    /// Docked last frame: the panel is in the environment's properties column, not over the view.
+    pub docked: bool,
     /// The op the workspace selected (its path drawn in the selection's blue).
     pub selected_op: Option<usize>,
     /// Every problem of the document listed, not the first few.
@@ -126,6 +131,8 @@ impl CamSimUi {
             folded: false,
             all_errors: false,
             selected_op: None,
+            hosted: false,
+            docked: false,
             drawn_key: None,
             stock_mesh: vec![],
             stop_at_markers: true,
@@ -327,14 +334,46 @@ fn srgb(c: [f32; 3]) -> Color32 {
 pub(crate) const TIMELINE_H: f32 = 78.0;
 pub(crate) const PANEL_W: f32 = 312.0;
 
+/// How much of the view's right the panel takes: none when docked in the environment's
+/// properties column, a strip when folded.
+fn covered_w(st: &CamSimUi) -> f32 {
+    if st.docked {
+        -8.0
+    } else if st.folded {
+        36.0
+    } else {
+        PANEL_W
+    }
+}
+
 impl Shell {
+    /// The simulation's panel drawn in an environment's docked properties column `r` (the
+    /// Manufacture environment hosts it as its Simulation section): while it is, the panel no
+    /// longer floats over the view. False if there is no simulation to show.
+    pub fn camsim_properties(&mut self, ui: &mut Ui, r: Rect) -> bool {
+        let Some(mut st) = self.camsim.take() else {
+            return false;
+        };
+        let t = self.theme;
+        st.hosted = true;
+        st.folded = false;
+        ui.scope_builder(egui::UiBuilder::new().max_rect(r), |ui| {
+            ui.set_width(r.width());
+            camsim_panel(ui, &mut st, &t, r.width());
+        });
+        self.camsim = Some(st);
+        true
+    }
+
     /// The part of view `v` the simulation's panel (right) and timeline (bottom) leave free, for
     /// the workspace's windows to keep inside.
     pub(crate) fn camsim_free(&self, v: Rect) -> Rect {
         let Some(st) = self.camsim.as_deref() else {
             return v;
         };
-        let panel_w = if st.folded { 36.0 } else { PANEL_W };
+        // a machining document is in Manufacture, whose properties column hosts the panel
+        // (outside `v`), from before the column has first drawn it
+        let panel_w = if self.cam.is_some() { -8.0 } else { covered_w(st) };
         Rect::from_min_max(
             v.min,
             pos2(v.right() - panel_w - 8.0, v.bottom() - TIMELINE_H - 16.0),
@@ -352,9 +391,11 @@ impl Shell {
         };
         let v = self.view_rect;
         let t = self.theme;
+        // hosted by the environment's properties this frame (drawn before this): docked
+        st.docked = std::mem::take(&mut st.hosted);
         st.keys(ctx);
         // the timeline: across the view's bottom, short of the panel
-        let panel_w = if st.folded { 36.0 } else { PANEL_W };
+        let panel_w = covered_w(&st);
         let extra = if st.sim.machine().is_some_and(|m| !m.run.wcs_given) {
             18.0
         } else {
@@ -379,29 +420,32 @@ impl Shell {
                     .show(ui, |ui| timeline(ui, &mut st, &t, bar.width() - 12.0));
             });
         self.view_blocks.push(r.response.rect);
-        // the panel: down the view's right
-        let pr = Rect::from_min_max(
-            pos2(v.right() - panel_w - 8.0, v.top() + 44.0),
-            pos2(v.right() - 8.0, v.bottom() - 8.0),
-        );
-        let r = egui::Area::new(egui::Id::unique("camsim:panel"))
-            .fixed_pos(pr.min)
-            .order(egui::Order::Middle)
-            .fade_in(false)
-            .show(ctx, |ui| {
-                ui.set_width(pr.width());
-                ui.set_max_height(pr.height());
-                egui::Frame::new()
-                    .fill(t.surface)
-                    .stroke(Stroke::new(1.0, t.line))
-                    .corner_radius(6.0)
-                    .inner_margin(8.0)
-                    .show(ui, |ui| {
-                        ui.set_min_height(pr.height() - 18.0);
-                        panel(ui, &mut st, &t, pr.width() - 16.0)
-                    });
-            });
-        self.view_blocks.push(r.response.rect);
+        // the panel: down the view's right, unless the environment docks it
+        if !st.docked {
+            // the panel: down the view's right
+            let pr = Rect::from_min_max(
+                pos2(v.right() - panel_w - 8.0, v.top() + 44.0),
+                pos2(v.right() - 8.0, v.bottom() - 8.0),
+            );
+            let r = egui::Area::new(egui::Id::unique("camsim:panel"))
+                .fixed_pos(pr.min)
+                .order(egui::Order::Middle)
+                .fade_in(false)
+                .show(ctx, |ui| {
+                    ui.set_width(pr.width());
+                    ui.set_max_height(pr.height());
+                    egui::Frame::new()
+                        .fill(t.surface)
+                        .stroke(Stroke::new(1.0, t.line))
+                        .corner_radius(6.0)
+                        .inner_margin(8.0)
+                        .show(ui, |ui| {
+                            ui.set_min_height(pr.height() - 18.0);
+                            camsim_panel(ui, &mut st, &t, pr.width() - 16.0)
+                        });
+                });
+            self.view_blocks.push(r.response.rect);
+        }
         // the markers in the view: a ring at each, clickable
         if let Some((cam, size)) = self.camera {
             let to_px = |p: [f64; 3]| {
@@ -488,13 +532,20 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
             st.jump(total);
         }
         ui.separator();
-        ui.label(
-            egui::RichText::new(format!("{} / {}", clock(st.t), clock(total)))
-                .monospace()
-                .color(t.ink),
-        );
+        // a narrow view (a small window with the properties column open): the time now, the
+        // total on hover, and the speed without its label, so the row stays in the bar
+        let compact = w < 440.0;
+        let now = if compact {
+            clock(st.t)
+        } else {
+            format!("{} / {}", clock(st.t), clock(total))
+        };
+        ui.label(egui::RichText::new(now).monospace().color(t.ink))
+            .on_hover_text(format!("{} of {}", clock(st.t), clock(total)));
         ui.separator();
-        ui.label(egui::RichText::new("Speed").color(t.ink2));
+        if !compact {
+            ui.label(egui::RichText::new("Speed").color(t.ink2));
+        }
         egui::ComboBox::from_id_salt("camsim:speed")
             .width(64.0)
             .selected_text(format!("{}×", st.speed))
@@ -650,8 +701,9 @@ fn heading(ui: &mut Ui, t: &crate::shell::theme::Theme, s: &str) {
     ui.label(egui::RichText::new(s).strong().color(t.ink));
 }
 
-/// The panel: a fold button and the tabs as one control, then the tab's body.
-fn panel(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f32) {
+/// The panel: a fold button and the tabs as one control, then the tab's body. Public for an
+/// environment that docks it (`Shell::camsim_properties`).
+pub fn camsim_panel(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f32) {
     ui.horizontal(|ui| {
         let (tip, g) = if st.folded {
             ("Open the simulation panel", Glyph::ChevronLeft)
