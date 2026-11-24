@@ -5,14 +5,26 @@
 //! - radial chip thinning: for ae < D/2 the mean chip is thinner than fz by
 //!   k = 2 √(ae/D − (ae/D)²), so the feed per tooth that keeps the chip is fz / k (capped);
 //! - feed vf = fz n z (mm/min);
-//! - power Pc = ap ae vf kc / 6e7 kW, kc = kc1.1 hm^(−mc), hm the mean chip thickness.
+//! - engagement angle φ = acos(1 − 2 ae/D) (the chord at radial depth ae; φ = π for a slot);
+//! - peak chip hex = fz sin φ for ae < D/2, fz beyond (the thinning factor k above is sin φ);
+//! - mean chip hm = (1/φ) ∫ fz sin θ dθ over the arc = fz (1 − cos φ)/φ = 2 fz (ae/D)/φ, the same
+//!   for up and down milling (2 fz/π for a slot). This is the chip Kienzle's kc is taken at
+//!   (Sandvik Coromant, "Milling formulas and definitions": Pc uses kc at hm; the integral is
+//!   Martellotti's circular-path chip h(θ) = fz sin θ, derived in
+//!   research/cam/toolpath-quality/feeds-speeds.md §1.1);
+//! - power Pc = ap ae vf kc / 6e7 kW, kc = kc1.1 hm^(−mc) (Kienzle 1952), hm the MEAN chip;
+//! - torque Mc = Pc 30e3 / (π n) N·m (Sandvik, same page).
+//!
+//! kc falls as the chip grows and hm < hex, so taking kc at hex would understate the power by
+//! (hex/hm)^mc: ×1.12 for a slot and ×1.18 at ae = D/10 with mc = 0.25. Tests below check the
+//! worked example of feeds-speeds.md §11 (1/2" 3-flute carbide in 6061).
 //!
 //! The data is per group, in our own numbers restated from public handbook ranges; it is a
 //! starting point. Every value is marked "verify with the tool maker".
-use crate::LibError;
-use crate::toml::{Table, num, text};
+use crate::toml::{Table, num, nums, text};
+use crate::{Cite, LibError, cite};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Group {
     /// P M K N S H.
     pub group: String,
@@ -26,8 +38,16 @@ pub struct Group {
     /// Specific cutting force at 1 mm chip, N/mm², and its exponent.
     pub kc1_1: f64,
     pub mc: f64,
+    /// Measured spread of kc1.1 and mc for the group's cited material, where one is cited: the
+    /// power is also checked at the upper ends (h^(−mc) rises with mc for h < 1 mm, and the
+    /// power rises with kc, so the upper ends bound it within the data: feeds-speeds.md §10.5).
+    pub kc1_1_range: Option<[f64; 2]>,
+    pub mc_range: Option<[f64; 2]>,
     pub source: String,
     pub note: String,
+    /// Every value cited (cite.rs): `real = true` records must cite all of them.
+    pub real: bool,
+    pub cites: Vec<Cite>,
 }
 
 impl Group {
@@ -47,7 +67,34 @@ impl Group {
                 fix: format!("give `{k}`"),
             })
         };
+        let range = |k: &'static str| -> Result<Option<[f64; 2]>, LibError> {
+            match nums(t, k) {
+                None => Ok(None),
+                Some(v) if v.len() == 2 && v[0] <= v[1] => Ok(Some([v[0], v[1]])),
+                Some(_) => Err(LibError::Bad {
+                    record: rec.clone(),
+                    field: k,
+                    why: "is [low, high]".into(),
+                }),
+            }
+        };
+        let (kc1_1_range, mc_range) = (range("kc1_1_range")?, range("mc_range")?);
+        let mut required: Vec<String> = ["vc_carbide", "vc_hss", "fz_d1", "fz_d20", "kc1_1", "mc"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        if kc1_1_range.is_some() {
+            required.push("kc1_1_range".into());
+        }
+        if mc_range.is_some() {
+            required.push("mc_range".into());
+        }
+        let (real, cites) = cite::read(t, &rec, &required, &[])?;
         Ok(Group {
+            kc1_1_range,
+            mc_range,
+            real,
+            cites,
             name: text(t, "name").unwrap_or("").to_string(),
             vc_carbide: n("vc_carbide")?,
             vc_hss: n("vc_hss")?,
@@ -59,6 +106,14 @@ impl Group {
             note: text(t, "note").unwrap_or("").to_string(),
             group: g,
         })
+    }
+
+    /// kc1.1 and mc at the upper ends of their cited ranges (the point values where none).
+    pub fn upper(&self) -> (f64, f64) {
+        (
+            self.kc1_1_range.map_or(self.kc1_1, |r| r[1].max(self.kc1_1)),
+            self.mc_range.map_or(self.mc, |r| r[1].max(self.mc)),
+        )
     }
 
     pub fn fz_at(&self, d: f64) -> f64 {
@@ -83,13 +138,19 @@ pub struct Cut {
 pub struct Feeds {
     pub rpm: f64,
     pub vc: f64,
-    /// Programmed feed per tooth (after thinning) and the chip it gives.
+    /// Programmed feed per tooth (after thinning) and the peak chip it gives.
     pub fz: f64,
     pub hex: f64,
+    /// Mean chip over the engaged arc, mm: the chip kc and the power are taken at.
+    pub hm: f64,
+    /// Engagement angle, radians (π for a slot).
+    pub phi: f64,
     /// mm/min.
     pub vf: f64,
-    /// kW at the spindle.
+    /// kW at the spindle (cutting power, before spindle efficiency).
     pub power: f64,
+    /// N·m at the spindle.
+    pub torque: f64,
     /// The effective diameter the speed was set for.
     pub d_eff: f64,
     /// rpm limited by the machine (the speed is then lower than asked).
@@ -100,41 +161,82 @@ pub struct Feeds {
 pub const THIN_CAP: f64 = 3.0;
 
 pub fn feeds(g: &Group, c: &Cut, rpm_range: [f64; 2]) -> Feeds {
-    let d_eff = if c.ball && c.ap < 0.5 * c.d {
-        2.0 * (c.ap * (c.d - c.ap)).max(0.0).sqrt()
-    } else {
-        c.d
-    };
+    let d_eff = effective_diameter(c.d, c.ball, c.ap);
     let vc0 = if c.carbide { g.vc_carbide } else { g.vc_hss };
     let n0 = 1000.0 * vc0 / (std::f64::consts::PI * d_eff.max(1e-6));
     let rpm = n0.clamp(rpm_range[0], rpm_range[1]);
-    let vc = rpm * std::f64::consts::PI * d_eff / 1000.0;
     let target = g.fz_at(c.d);
-    let r = (c.ae / c.d).clamp(0.0, 1.0);
-    let k = if r < 0.5 {
-        2.0 * (r - r * r).max(0.0).sqrt()
-    } else {
-        1.0
-    };
+    let k = thinning((c.ae / c.d).clamp(0.0, 1.0));
     let fz = if k > 0.0 {
         (target / k).min(THIN_CAP * target)
     } else {
         target
     };
-    let hex = fz * k;
+    let mut f = at(g, c, fz, rpm, d_eff);
+    f.rpm_limited = rpm != n0;
+    f
+}
+
+/// The diameter that cuts: D, or for a ball at depth ap < D/2, 2 √(ap (D − ap)).
+pub fn effective_diameter(d: f64, ball: bool, ap: f64) -> f64 {
+    if ball && ap < 0.5 * d {
+        2.0 * (ap * (d - ap)).max(0.0).sqrt()
+    } else {
+        d
+    }
+}
+
+/// Peak-chip factor hex/fz = sin φ = 2 √(r − r²) for r = ae/D < 1/2, else 1.
+pub fn thinning(r: f64) -> f64 {
+    if r < 0.5 {
+        2.0 * (r - r * r).max(0.0).sqrt()
+    } else {
+        1.0
+    }
+}
+
+/// The numbers of a cut at a given fz and rpm: chips, feed, power, torque.
+pub fn at(g: &Group, c: &Cut, fz: f64, rpm: f64, d_eff: f64) -> Feeds {
+    let r = (c.ae / c.d).clamp(0.0, 1.0);
+    let hex = fz * thinning(r);
     let vf = fz * rpm * c.flutes.max(1) as f64;
-    let hm = hex.max(1e-4);
-    let kc = g.kc1_1 * forge_math::dmath::powf(hm, -g.mc);
+    let phi = engagement_angle(r);
+    let hm = fz * mean_chip_factor(r, phi);
+    // the floor only guards kc's pole at a zero chip (ae → 0, where the power → 0 anyway)
+    let kc = g.kc1_1 * forge_math::dmath::powf(hm.max(1e-4), -g.mc);
     let power = c.ap * c.ae * vf * kc / 6.0e7;
+    let torque = if rpm > 0.0 {
+        power * 30.0e3 / (std::f64::consts::PI * rpm)
+    } else {
+        0.0
+    };
     Feeds {
         rpm,
-        vc,
+        vc: rpm * std::f64::consts::PI * d_eff / 1000.0,
         fz,
         hex,
+        hm,
+        phi,
         vf,
         power,
+        torque,
         d_eff,
-        rpm_limited: rpm != n0,
+        rpm_limited: false,
+    }
+}
+
+/// Engagement angle φ = acos(1 − 2r), r = ae/D clamped to [0, 1]; radians.
+pub fn engagement_angle(r: f64) -> f64 {
+    // dmath: the same bits on native and wasm
+    forge_math::dmath::acos_clamped(1.0 - 2.0 * r.clamp(0.0, 1.0))
+}
+
+/// hm / fz = (1 − cos φ)/φ = 2r/φ; 0 at no engagement.
+pub fn mean_chip_factor(r: f64, phi: f64) -> f64 {
+    if phi > 0.0 {
+        2.0 * r.clamp(0.0, 1.0) / phi
+    } else {
+        0.0
     }
 }
 
@@ -155,6 +257,7 @@ mod tests {
             mc: 0.25,
             source: String::new(),
             note: String::new(),
+            ..Group::default()
         };
         let full = feeds(
             &g,
@@ -197,5 +300,125 @@ mod tests {
             [0.0, 12_000.0],
         );
         assert!((ball.d_eff - 6.0).abs() < 1e-12 && ball.rpm_limited && ball.rpm == 12_000.0);
+    }
+
+    /// The group of feeds-speeds.md §11: 6061 with Helical H45AL-3 data (2100 SFM = 640.08 m/min;
+    /// 1/2" slot IPT 0.0032" = 0.08128 mm, SF_H45AL-3.pdf) and the top of Sandvik's N-group kc1.1
+    /// range (700 N/mm², mc 0.25, libraries-machines-posts-feeds.md §3.1). fz is flat in D so
+    /// the target chip is the cited one at 12.7 mm.
+    fn al6061() -> Group {
+        Group {
+            group: "N".into(),
+            name: "6061".into(),
+            vc_carbide: 640.08,
+            vc_hss: 100.0,
+            fz_d1: 0.08128,
+            fz_d20: 0.08128,
+            kc1_1: 700.0,
+            mc: 0.25,
+            source: String::new(),
+            note: String::new(),
+            ..Group::default()
+        }
+    }
+
+    fn half_inch(ae: f64, ap: f64) -> Cut {
+        Cut {
+            d: 12.7,
+            flutes: 3,
+            ball: false,
+            carbide: true,
+            ap,
+            ae,
+        }
+    }
+
+    /// feeds-speeds.md §11 slot: n clamps 16,043 → 10,000 rpm, hm = 2 fz/π = 0.0517 mm,
+    /// kc = 2.10 kc1.1, Q = 393 cm³/min, Pc = 9.6 kW (at kc1.1 = 700), Mc = 9.2 N·m.
+    #[test]
+    fn handbook_slot() {
+        let f = feeds(&al6061(), &half_inch(12.7, 12.7), [0.0, 10_000.0]);
+        assert!(f.rpm_limited && f.rpm == 10_000.0);
+        assert!((1000.0 * 640.08 / (std::f64::consts::PI * 12.7) - 16_043.0).abs() < 1.0);
+        assert!((f.phi - std::f64::consts::PI).abs() < 1e-12);
+        assert!((f.hex - 0.08128).abs() < 1e-12);
+        assert!((f.hm - 2.0 * 0.08128 / std::f64::consts::PI).abs() < 1e-12);
+        assert!((f.hm - 0.0517).abs() < 5e-5);
+        assert!((f.vf - 2438.4).abs() < 1e-9);
+        let q = 12.7 * 12.7 * f.vf / 1000.0; // cm³/min
+        assert!((q - 393.0).abs() < 1.0);
+        let kc_ratio = forge_math::dmath::powf(f.hm, -0.25);
+        assert!((kc_ratio - 2.10).abs() < 0.005);
+        assert!((f.power - 9.6).abs() < 0.05, "{}", f.power);
+        assert!((f.torque - 9.2).abs() < 0.05, "{}", f.torque);
+    }
+
+    /// feeds-speeds.md §11 adaptive (a): ae = 0.1 D, ap = 2 D, holding the slot chip.
+    /// φ = 36.87°, RCTF 1.667, fz = 0.1355 mm, hm = 0.0421 mm, vf = 4064 mm/min,
+    /// Q = 131 cm³/min, Pc = 3.4 kW, Mc = 3.2 N·m (kc1.1 = 700).
+    #[test]
+    fn handbook_adaptive() {
+        let f = feeds(&al6061(), &half_inch(1.27, 25.4), [0.0, 10_000.0]);
+        assert!((f.phi.to_degrees() - 36.87).abs() < 0.005);
+        assert!((f.fz - 0.08128 / 0.6).abs() < 1e-12);
+        assert!((f.hex - 0.08128).abs() < 1e-12);
+        assert!((f.hm - 0.0421).abs() < 5e-5, "{}", f.hm);
+        assert!((f.vf - 4064.0).abs() < 0.1);
+        assert!((1.27 * 25.4 * f.vf / 1000.0 - 131.0).abs() < 0.5);
+        assert!((f.power - 3.4).abs() < 0.05, "{}", f.power);
+        assert!((f.torque - 3.2).abs() < 0.05, "{}", f.torque);
+    }
+
+    /// The bug this fixes: kc at the peak chip understated the power by (hex/hm)^mc,
+    /// ×1.12 for a slot and ×1.18 at ae = D/10 (feeds-speeds.md §0 finding 1).
+    #[test]
+    fn power_at_mean_not_peak() {
+        let g = al6061();
+        for (ae, want) in [(12.7, 1.12), (1.27, 1.18)] {
+            let f = feeds(&g, &half_inch(ae, 5.0), [0.0, 10_000.0]);
+            let kc_peak = g.kc1_1 * forge_math::dmath::powf(f.hex, -g.mc);
+            let old = 5.0 * ae * f.vf * kc_peak / 6.0e7;
+            assert!((f.power / old - want).abs() < 0.005, "{}", f.power / old);
+        }
+    }
+
+    /// The closed form hm = fz (1 − cos φ)/φ against the arc average of fz sin θ, summed
+    /// numerically, down milling (θ from π − φ to π), for several immersions.
+    #[test]
+    fn mean_chip_is_the_arc_average() {
+        for r in [0.01, 0.1, 0.25, 0.5, 0.7, 1.0] {
+            let phi = engagement_angle(r);
+            let n = 200_000;
+            let mut sum = 0.0;
+            for i in 0..n {
+                let th = std::f64::consts::PI - phi + phi * (i as f64 + 0.5) / n as f64;
+                sum += forge_math::dmath::sin(th);
+            }
+            let avg = sum / n as f64;
+            assert!((avg - mean_chip_factor(r, phi)).abs() < 1e-9, "r {r}");
+            // and the peak factor sin φ (k in the engine) below D/2
+            if r < 0.5 {
+                assert!((forge_math::dmath::sin(phi) - 2.0 * (r - r * r).sqrt()).abs() < 1e-12);
+            }
+        }
+    }
+
+    /// Ball nose effective diameter, CNCCookbook's example: 1/2" ball at 0.040" deep cuts out
+    /// to 0.2713" (feeds-speeds.md §1.2; 2√(0.04·0.46) = 0.27129).
+    #[test]
+    fn ball_deff_cnccookbook() {
+        let f = feeds(
+            &al6061(),
+            &Cut {
+                d: 12.7,
+                flutes: 2,
+                ball: true,
+                carbide: true,
+                ap: 0.04 * 25.4,
+                ae: 1.0,
+            },
+            [0.0, 1e9],
+        );
+        assert!((f.d_eff / 25.4 - 0.27129).abs() < 5e-6, "{}", f.d_eff / 25.4);
     }
 }

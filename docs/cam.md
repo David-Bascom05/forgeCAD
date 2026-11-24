@@ -75,6 +75,35 @@ the pass is plunged. A helix is posted as G2/G3 with Z and checked as its arc sw
 piece's heights (a superset), in closed form against prism faces; next to any other face it is
 refused as undecided.
 
+### Feeds and speeds are params
+
+Every milling op (facing, clear, contour, pocket, slot, engrave, thread_mill, edge_break) and
+every `tool(..)` takes these args; an op's value wins over its tool's (kernel/forge-tooling/src/resolve.rs):
+
+| arg | unit | what |
+|---|---|---|
+| `vc:` or `rpm:` | m/min, rpm | cutting speed (at D_eff for a ball), or the spindle speed (wins) |
+| `chip:`, `fz:` or `feed:` | mm, mm, mm/min | the peak chip to hold (thinned for ae < D/2); a feed per tooth used as given (not thinned); or the feed |
+| `ap:` (= `step:`) | mm | axial depth per level (one of the two) |
+| `ae:` (= `stepover:`) or `max_angle:` | mm, degrees | radial width (clear and pocket cut their stepover wide), or the largest engagement angle |
+| `plunge_feed:`, `ramp_feed:`, `lead_in_feed:` | mm/min | entry feeds (default 30%, 30%, 100% of the feed: labelled "no data behind it"). Posted today: the plunge feed (plunges and helical ramps) and the feed; `ramp_feed` and `lead_in_feed` are resolved and reported but not yet posted on their own (forge-cam's `Cut` carries two feeds) |
+| `max_power:`, `max_torque:` | kW, N·m | limits: the feed (only the feed) is lowered to meet them; P ∝ fz^(1−mc), so exactly |
+| `min_feed:`, `max_feed:` | mm/min | the feed range (engagement feed stays in it) |
+
+Each value is resolved in layers, each over the one before: `default` → `material` (the part's
+group in cutting.toml) → `library` (the tool's `[[tool.preset]]` for the group, with its cite) →
+`user`. Then only two things lower a value, and both are reported with the reason:
+`machine-clamped` (rpm range; max feed, held 1 mm/min under it) and `limited` (the user's own
+limits). A user's value is never changed silently. Formulas (feeds.rs, with sources): chip thinning
+hex = fz sin φ, φ = acos(1 − 2ae/D); the mean chip hm = fz (1 − cos φ)/φ for Kienzle's
+kc = kc1.1 hm^(−mc); Pc = ap ae vf kc / 6e7 kW; Mc = Pc 30e3/(π n) N·m; ball D_eff = 2√(ap(D − ap)).
+
+Checks per op: rpm (a clamp warns), power and torque against the machine's spindle curve at the
+rpm (over: the op is refused, with the numbers), feed against the machine's maximum, the peak chip
+against the tool's own chip (over: warns). Missing data is `not checked`, never a pass: no power
+curve, an rpm outside the curve (no extrapolation), no kc data for the material, no maximum feed,
+no tool data. Drilling feeds are not resolved yet (hole plans keep their fixed fractions).
+
 Holes are read from the part's history (`hole(d:, depth:, thread:, ...)`), never recognised from
 the shape: `f.bolts` is the `bolts` hole feature with its diameter, depth, thread and fit.
 
@@ -100,7 +129,11 @@ setups[]   name, part, machine, wcs {origin, axes, offset}, stock {kind, min, ma
            pieces[] {name, min, max}} | null
 ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|slot|thread_mill|edge_break), setup, status (built|refused),
            tool {id, T, H, type, d, holder, stickout} | null, plan[] (hole plans),
-           feeds {rpm, vc, fz, hex, f, power_kw} | null,
+           feeds {rpm, vc, fz, hex, hm, f, power_kw, torque_nm} | null,
+           feeds_speeds {values {vc, rpm, chip, fz, feed, ap, ae, plunge_feed, ramp_feed, lead_in_feed,
+                    min_feed, max_feed: {v, unit, source (default|material|library|user|machine-clamped|limited), note}},
+                    derived {hex, hm, engagement_deg, d_eff, mrr_cm3_min, power_kw, power_pct, torque_nm, torque_pct},
+                    checks[] {what (rpm|power|torque|feed|chip), verdict (pass|warn|fail|not checked), value, limit, unit, why}} | null,
            path {moves, length_cut, length_rapid, time_s},
            certificate {verdict (pass|fail), certified, pairs, cells, least_cutter_distance, against},
            checks[] (failures only) {rule, verdict (fail|undecided), certified, value, limit, unit,
