@@ -59,6 +59,10 @@ static SURFACED: memo::Memo<Surfaced> = memo::Memo::new();
 /// The certifications made by earlier runs of documents in this process (memo.rs).
 static CERTIFIED: memo::Memo<ops::CheckSummary> = memo::Memo::new();
 
+/// A 3-axis finishing op's paths (or refusal), the lines it adds to the plan, and its finish record.
+type Finished = (Result<Vec<OpPath>, String>, Vec<String>, Option<Finish>);
+static FINISHED: memo::Memo<Finished> = memo::Memo::new();
+
 /// `ops::certify_with`, taken from an earlier run when every argument is the same (each
 /// number the same number): it is a function of these arguments alone (no clock, file or other
 /// state; the kernel's own memos are by content), so the summary is the one it would make. An
@@ -4682,6 +4686,54 @@ impl Cam {
         feed: (f64, f64),
         out: &mut OpOut,
     ) -> Result<Vec<OpPath>, String> {
+        // from an earlier run when every input is the same (memo.rs): `finish3d_made` reads the
+        // kind, its arguments, the part's faces and box, the tool (its cutter, diameter and
+        // body), rest's earlier tool's cutter body (`after:`), the setup's tolerance, the tool's
+        // index, the heights and feeds, and nothing else of the document; what it adds to the
+        // plan and the finish record are kept with the paths
+        let s = &self.setups[su];
+        let part = &self.parts[s.part];
+        let t = &self.tools[ti];
+        let cutter = |u: &ToolUse| {
+            u.shape
+                .bodies
+                .iter()
+                .find(|b| b.part == forge_cam_geom::tool::Part::Cutter)
+                .cloned()
+        };
+        let after = match a.get("after") {
+            Some(V::Tool(j)) => self.tools.get(*j).map(cutter),
+            _ => None,
+        };
+        let key = format!(
+            "finish3d/1 {kind} {:?} {:?}",
+            (a, &part.faces, part.bbox, &t.tool, cutter(t), after),
+            (s.tol, ti, h, feed)
+        );
+        let (paths, plan, finish) = FINISHED.get_or(key, || {
+            let (mut plan, mut finish) = (Vec::new(), None);
+            let r = self.finish3d_made(su, kind, a, ti, h, feed, &mut plan, &mut finish);
+            (r, plan, finish)
+        });
+        out.plan.extend(plan);
+        if finish.is_some() {
+            out.finish = finish;
+        }
+        paths
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn finish3d_made(
+        &self,
+        su: usize,
+        kind: &str,
+        a: &BTreeMap<String, V>,
+        ti: usize,
+        h: Heights,
+        feed: (f64, f64),
+        plan: &mut Vec<String>,
+        finish: &mut Option<Finish>,
+    ) -> Result<Vec<OpPath>, String> {
         use forge_cam::surf::Surfacer;
         use forge_cam_3d::contain::Containment;
         use forge_cam_3d::drape::Drape;
@@ -5025,7 +5077,7 @@ impl Cam {
                     .into_iter()
                     .filter(|z| *z >= bottom - 1e-9 && *z <= top + 1e-9)
                     .collect();
-                out.plan.push(format!("flat heights: {levels:?}"));
+                plan.push(format!("flat heights: {levels:?}"));
                 if std::env::var("FORGE_CAM3D_TIME").is_ok() {
                     eprintln!("flat: levels at {:.1} s", t_start.elapsed().as_secs_f64());
                 }
@@ -5077,18 +5129,18 @@ impl Cam {
             eprintln!("{kind}: linked at {:.1} s", t_start.elapsed().as_secs_f64());
         }
         if let Some(h0) = fin.cusp {
-            out.plan.push(format!(
+            plan.push(format!(
                 "cusp {h0} mm: stepover {:.4} mm, step-down {:.4} mm (proven cusp on a plane at the op's slopes ≤ {:.5} mm)",
                 fin.stepover,
                 fin.stepdown,
                 fin.cusp_bound.unwrap_or(f64::NAN)
             ));
         }
-        out.plan.push(format!(
+        plan.push(format!(
             "links: {} stayed down, {} lifted, {} retracted",
             c.stay, c.lift, c.retract
         ));
-        out.finish = Some(fin);
+        *finish = Some(fin);
         Ok(vec![p])
     }
 
@@ -7677,6 +7729,72 @@ mod certify_memo_tests {
         let before = CERTIFIED.computed();
         assert!(same(&run(&base), &s0));
         assert_eq!(CERTIFIED.computed(), before, "the same arguments certified again");
+    }
+}
+
+#[cfg(test)]
+mod finish3d_memo_tests {
+    /// Every input class of a 3-axis finishing op (forge-cam-3d) is in its memo key: its
+    /// arguments, the cutter, the earlier tool's cutter (rest's `after:`), the part's faces and
+    /// the setup's tolerance each make the paths anew; the same text, and edits it does not read
+    /// (the tools' stickouts, the stock), take them from the memo, with the same reply.
+    #[test]
+    fn each_input_class_makes_the_paths_anew() {
+        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        // scratch under the workspace's target (wasm32-wasip1 has no temp_dir or pid)
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/finish3d_memo_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let part = std::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
+        std::fs::write(dir.join("mold_core.fg"), &part).unwrap();
+        let doc = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nleft = rest(op1, tool: t2, after: t1, stepover: 3, area: (-30, -24, 30, 24), grid: 1.5)\n";
+        let run = |d: &str| {
+            let before = super::FINISHED.computed();
+            let cam = super::run(d, &dir);
+            assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+            let reply = format!("{:?} {:?}", cam.ops[0].paths, cam.ops[0].plan);
+            (
+                super::FINISHED.computed() - before,
+                reply,
+                cam.ops[0].paths.iter().map(|p| p.moves.len()).sum::<usize>(),
+            )
+        };
+        let (n, reply, moves) = run(doc);
+        assert_eq!(n, 1);
+        assert!(moves > 0, "{reply}");
+        let again = run(doc);
+        assert_eq!(
+            (again.0, &again.1),
+            (0, &reply),
+            "the same text made the paths again"
+        );
+        for (what, d) in [
+            ("stickouts", doc.replace("stickout: 40", "stickout: 42")),
+            (
+                "stock beside the part",
+                doc.replace("margin: (0, 0, 2)", "margin: (3, 3, 2)"),
+            ),
+        ] {
+            let r = run(&d);
+            assert_eq!((r.0, &r.1), (0, &reply), "{what}: the paths were made again");
+        }
+        for (what, d) in [
+            ("stepover", doc.replace("stepover: 3", "stepover: 2.5")),
+            ("area", doc.replace("(-30, -24, 30, 24)", "(-30, -24, 30, 23)")),
+            ("cutter", doc.replace("\"ball-6\"", "\"bull-10-r1\"")),
+            ("earlier cutter", doc.replace("\"flat-10\"", "\"flat-12\"")),
+            ("tolerance", doc.replace("tol: 0.01", "tol: 0.02")),
+            (
+                "heights (the stock's top)",
+                doc.replace("margin: (0, 0, 2)", "margin: (0, 0, 3)"),
+            ),
+        ] {
+            assert_eq!(run(&d).0, 1, "{what}: the paths were not made anew");
+        }
+        let edited = part.replacen("shared bw = 40", "shared bw = 38", 1);
+        assert_ne!(edited, part);
+        std::fs::write(dir.join("mold_core.fg"), &edited).unwrap();
+        assert_eq!(run(doc).0, 1, "part: the paths were not made anew");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 
