@@ -6,6 +6,7 @@
 //! axis) shows, which the assembly's solver knows nothing of.
 
 use super::Gui;
+use crate::origin::WorldVert;
 use crate::shell::robot_ui::{RobotAct, RobotPanel};
 use forge_lang::urdf::{self, Exported, UrdfError};
 use std::path::Path;
@@ -43,7 +44,104 @@ pub fn robot_export(file: &str) -> Result<Result<Exported, UrdfError>, String> {
     Ok(e)
 }
 
+fn f3(p: forge_math::Point3) -> [f32; 3] {
+    [p.x as f32, p.y as f32, p.z as f32]
+}
+
+fn v3(v: forge_math::Vec3) -> [f32; 3] {
+    [v.x as f32, v.y as f32, v.z as f32]
+}
+
 impl Gui {
+    /// What the robot's overlays depend on: its joint values, selection and switches.
+    pub(super) fn robot_key(&self) -> u64 {
+        let Some(p) = &self.shell.robot else { return 0 };
+        let mut h: u64 = 0x9E37_79B9_7F4A_7C15;
+        for (k, v) in &p.q {
+            for b in k.bytes() {
+                h = (h ^ b as u64).wrapping_mul(0x100_0000_01B3);
+            }
+            h = (h ^ v.to_bits()).wrapping_mul(0x100_0000_01B3);
+        }
+        let sel = format!("{:?}{}{}", p.sel, p.show_axes, p.show_com);
+        for b in sel.bytes() {
+            h = (h ^ b as u64).wrapping_mul(0x100_0000_01B3);
+        }
+        h
+    }
+
+    /// Each joint's frame (a triad) and axis (a line, the selected joint's longer and in the
+    /// accent), each link's centre of mass (a dot, seen through the parts).
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn robot_overlay(
+        &self,
+        r: f32,
+        cam: &crate::camera::Camera,
+        size: (u32, u32),
+        px: f32,
+        out: &mut Vec<WorldVert>,
+        behind: &mut Vec<WorldVert>,
+    ) {
+        let Some(p) = &self.shell.robot else { return };
+        let Some(view) = &p.view else { return };
+        if !p.open || (!p.show_axes && !p.show_com) {
+            return;
+        }
+        let frames = view.place(&p.q);
+        let mut through = vec![];
+        if p.show_axes {
+            let accent = self.shell.theme.accent;
+            let acc = [
+                accent.r() as f32 / 255.0,
+                accent.g() as f32 / 255.0,
+                accent.b() as f32 / 255.0,
+            ];
+            for j in &view.joints {
+                let Some(pf) = frames.get(&j.parent) else { continue };
+                let jf = pf.compose(&j.origin);
+                let at = f3(jf.origin);
+                let axes = [v3(jf.x().get()), v3(jf.y().get()), v3(jf.z().get())];
+                crate::overlay::triad(at, axes, r * 0.05, cam, size, px, &mut through);
+                if let Some(a) = j.axis {
+                    let d = jf.vec_to_world(forge_math::Vec3::new(a[0], a[1], a[2]));
+                    let chosen = p.sel == Some(crate::shell::robot_ui::Sel::Joint(j.name.clone()));
+                    let len = if chosen { r * 0.3 } else { r * 0.15 };
+                    let (w, c) = if chosen {
+                        (px * 4.0, [acc[0], acc[1], acc[2], 1.0])
+                    } else {
+                        (px * 2.5, [0.98, 0.72, 0.22, 1.0])
+                    };
+                    let tip = [
+                        at[0] + d.x as f32 * len,
+                        at[1] + d.y as f32 * len,
+                        at[2] + d.z as f32 * len,
+                    ];
+                    let tail = [
+                        at[0] - d.x as f32 * len,
+                        at[1] - d.y as f32 * len,
+                        at[2] - d.z as f32 * len,
+                    ];
+                    crate::origin::polyline(&[tail, tip], w, c, cam, size, &mut through);
+                }
+            }
+        }
+        if p.show_com {
+            for l in view.links.iter().filter(|l| l.mass.is_some()) {
+                let Some(f) = frames.get(&l.name) else { continue };
+                let c = f3(f.point_to_world(forge_math::Point3::new(l.com[0], l.com[1], l.com[2])));
+                crate::origin::disc(c, px * 6.0, [0.05, 0.06, 0.08, 1.0], cam, size, &mut through);
+                crate::origin::disc(c, px * 4.0, [0.95, 0.95, 0.95, 1.0], cam, size, &mut through);
+            }
+        }
+        for w in &through {
+            behind.push(WorldVert {
+                at: w.at,
+                colour: [w.colour[0], w.colour[1], w.colour[2], w.colour[3] * 0.6],
+            });
+        }
+        out.extend(through);
+    }
+
     /// Opens a robot document: its source as the document, its panel beside it.
     pub(super) fn open_robot(&mut self, path: &str) -> bool {
         let text = match forge_dirs::fs::read_to_string(path) {

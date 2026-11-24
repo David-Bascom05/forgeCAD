@@ -68,6 +68,9 @@ pub struct RobotPanel {
     pub draft: BTreeMap<String, f64>,
     /// The last thing the host did, said.
     pub said: String,
+    /// The 3D view's overlays: joint frames and axes, centres of mass.
+    pub show_axes: bool,
+    pub show_com: bool,
     pub open: bool,
 }
 
@@ -76,6 +79,8 @@ impl RobotPanel {
         RobotPanel {
             file: file.to_string(),
             open: true,
+            show_axes: true,
+            show_com: true,
             ..RobotPanel::default()
         }
     }
@@ -285,6 +290,10 @@ impl Shell {
                         }
                     });
                 }
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut p.show_axes, "Joint axes");
+                    ui.checkbox(&mut p.show_com, "Centres of mass");
+                });
                 ui.horizontal(|ui| {
                     if ui
                         .add_enabled(!p.undo.is_empty(), egui::Button::new("Undo"))
