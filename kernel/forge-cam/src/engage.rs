@@ -481,7 +481,9 @@ pub fn schedule_samples(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &
 /// The path with each scheduled move's feed set per fixed-length sample from the engagement
 /// it meets in `map` (left as the path cut it): fz / max cos θ over the sample and the start of
 /// the next (the chip never above fz), at most cap · fz, the feed within [f_min, f_max]. A move
-/// is split at its sample boundaries, each sample its own move (never joined). Straight plunges, moves up and rapids keep their feeds. The caller keeps f_max
+/// is split at its sample boundaries, each sample its own move (never joined). Straight plunges, moves up and rapids keep their feeds,
+/// and a sample that meets no material keeps its move's own feed where that is the higher (a
+/// link through cleared air set to run fast). The caller keeps f_max
 /// under the machine's limit (G5 checks the posted F soundly, so the limit itself may fail).
 /// The feed (mm/min) `schedule` gives each sample: the chip rule per sample (fz over the
 /// sample's max cos θ, at most `cap` fz), no faster than the next sample, within the machine's
@@ -523,8 +525,19 @@ pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -
             out.push(*mv);
             continue;
         }
+        // the move's own feed, where it was set above the chip rule's (a link through cleared
+        // air: nothing to cut, so no chip to hold)
+        let own = match *mv {
+            PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
+            _ => 0.0,
+        };
         for i in start..k {
-            let (end, f) = (samples[i].end, feed[i]);
+            let (end, mut f) = (samples[i].end, feed[i]);
+            // (contact narrower than a cell of the model is its rounding: a link along a wall it
+            // just cut touches it at exactly r)
+            if samples[i].engage.is_none_or(|e| e.ae < s.cell) && own > f {
+                f = own.min(s.f_max.max(s.f_min));
+            }
             out.push(match *mv {
                 PMove::Line { phase, .. } => PMove::Line { to: end, f, phase },
                 PMove::Arc { c, cw, .. } => PMove::Arc { to: end, c, cw, f },
