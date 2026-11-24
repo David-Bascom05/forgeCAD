@@ -33,6 +33,9 @@ extern "C" {
     /// The page's: File > Open (the project's files, or one from the computer).
     #[wasm_bindgen(js_namespace = window, js_name = forge_pick)]
     fn page_pick();
+    /// The page's: a file handed to the person as a download (a photo, a recording).
+    #[wasm_bindgen(js_namespace = window, js_name = forge_download)]
+    fn page_download(name: &str, bytes: Uint8Array);
     /// The page's: File > Save As, a name asked for.
     #[wasm_bindgen(js_namespace = window, js_name = forge_save_as)]
     fn page_save_as(name: &str);
@@ -1134,4 +1137,9 @@ pub fn bench_load(dir: &str) -> js_sys::Array {
             name.ends_with(".fg").then(|| JsValue::from_str(&p))
         })
         .collect()
+}
+
+/// A file the browser offers the person to save (a photo, a recording), named `name`.
+pub(crate) fn download(name: &str, bytes: &[u8]) {
+    page_download(name, Uint8Array::from(bytes));
 }

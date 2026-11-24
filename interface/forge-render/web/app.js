@@ -138,6 +138,9 @@ let mirror = null;
 const problems = [];
 // the app's own settings and state (`/home`): kept in this browser, whatever serves the files
 const home = store ? new Mirror(await localBackend("_app"), "/home", fc, (e) => console.error(`forge-app: ${e}`)) : null;
+// a photo or a recording, handed to the person (gui_record.rs)
+window.forge_download = (name, bytes) => download(name, new Blob([bytes.slice()]));
+
 window.forge_fs_changed = (path, bytes) => {
   if (mirror?.owns(path)) mirror.changed(path, bytes);
   else if (home?.owns(path)) home.changed(path, bytes);

@@ -286,8 +286,8 @@ cam,Tool Library,"The library's cutters and holders: add one to the document as 
 cam,Document Text,"The machining document's text, the source of truth: edit it by hand",
 cam,Check Now,"Run the certified checker on the generated paths now: gouge, holder, rapid, fixture and axis checks on the posted path (today it generates again, which checks)",
 tools,Machine Builder,"Machines as real parts: axes, kinematics and limits, and the tool and workholding libraries",
-capture,Photo,"Save the view as a PNG at the photo size (Capture Settings), beside the open file",
-capture,Record,"Record the environment's simulation frame by frame in its own time, as MP4 (or PNG frames)",
-capture,Record Turntable,"Record the camera going once round the model, as MP4 (or PNG frames)",
-capture,Stop Recording,"Stop the recording under way, keeping no video (PNG frames so far are kept)",
+capture,Photo,"Save the view as a PNG at the photo size (Capture Settings), without the view's overlays",photo
+capture,Record,"Record the environment's simulation frame by frame in its own time, as MP4 (or PNG frames)",record
+capture,Record Turntable,"Record the camera going once round the model, as MP4 (or PNG frames)",record
+capture,Stop Recording,"Stop the recording under way (Esc too); no video is kept, PNG frames so far are",record
 capture,Capture Settings,"Photo and video size, frames a second, the turntable's length, MP4 or PNG frames, the folder",

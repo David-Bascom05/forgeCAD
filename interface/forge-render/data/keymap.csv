@@ -16,6 +16,8 @@ explode,Explode or bring together,View,E,
 lines,"Next visual style",View,L,
 ao,Ambient occlusion,View,O,
 markup,Markup for the agent,View,K,
+photo,Photo of the view,View,Ctrl+Shift+P,
+record,Record or stop recording,View,Ctrl+Shift+R,
 escape,Back out one level,Fixed,Escape,fixed
 ok,OK in a dialog,Fixed,Enter,fixed
 sketch_undo,Undo a sketch step (in a sketch),In context,Ctrl+Z,context

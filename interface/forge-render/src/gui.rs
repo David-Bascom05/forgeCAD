@@ -869,7 +869,7 @@ impl Gui {
                 self.fg_save();
                 return None;
             }
-            KeyCmd::Rename | KeyCmd::Delete | KeyCmd::Markup => return None,
+            KeyCmd::Rename | KeyCmd::Delete | KeyCmd::Markup | KeyCmd::Photo | KeyCmd::Record => return None,
             KeyCmd::FitSelected => K::KeyF,
             KeyCmd::Section => K::KeyS,
             KeyCmd::Explode => K::KeyE,

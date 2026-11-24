@@ -71,8 +71,10 @@ fn png_bytes(size: (u32, u32), rgba: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 impl Gui {
-    /// The view drawn offscreen at `size`, coming back.
+    /// The view drawn offscreen at `size`, coming back: the model alone, or with the view cube
+    /// when the capture settings ask for overlays.
     fn draw_view_at(&mut self, size: (u32, u32)) -> Result<Pending, String> {
+        let overlays = self.shell.capture.overlays;
         if size.0 == 0 || size.1 == 0 || size.0 > 8192 || size.1 > 8192 {
             return Err(format!(
                 "a picture is 1 to 8192 pixels a side, not {} x {}",
@@ -85,8 +87,12 @@ impl Gui {
         let was = v.size;
         let target = Offscreen::new(&self.device, size);
         v.renderer.resize(size);
+        let overlay = Overlay {
+            cube: overlays.then(|| (v.nav.cube_place(), None)),
+            ..Overlay::default()
+        };
         v.renderer
-            .frame(&target.view, &mut v.scene, &v.nav.camera, Overlay::default());
+            .frame(&target.view, &mut v.scene, &v.nav.camera, overlay);
         v.renderer.resize(was);
         v.dirty = true;
         Ok(read_texture(&self.device, &self.queue, &target.texture))
@@ -109,7 +115,9 @@ impl Gui {
         let got = job.pending.take(&self.device)?;
         let job = self.photo.take()?;
         Some(got.and_then(|rgba| {
-            crate::studio::save_png(&job.path, job.size, &opaque(rgba)).map(|_| job.path.clone())
+            let bytes = png_bytes(job.size, &opaque(rgba))?;
+            deliver(&job.path, &bytes);
+            Ok(job.path.clone())
         }))
     }
 
@@ -118,29 +126,55 @@ impl Gui {
         self.photo.is_some() || self.recording.is_some()
     }
 
-    /// Where captures go, and the name they start with: the folder set, else the open file's.
+    /// Where captures go, and the name they start with: the folder set, else the open file's;
+    /// `<document>-<environment>` (the View tab's captures say `view`).
     fn capture_place(&self) -> (std::path::PathBuf, String) {
         let file = self.shell.fg.as_ref().map(|f| f.path.clone()).unwrap_or_default();
         let p = std::path::Path::new(&file);
         let stem = p
             .file_stem()
             .map_or_else(|| "forgecad".to_string(), |s| s.to_string_lossy().into_owned());
+        let env = self.shell.env.map_or("view", |e| e.key());
         let dir = if !self.shell.capture.folder.trim().is_empty() {
             std::path::PathBuf::from(self.shell.capture.folder.trim())
         } else {
             p.parent().map(std::path::Path::to_path_buf).unwrap_or_default()
         };
-        (dir, stem)
+        (dir, format!("{stem}-{env}"))
     }
 
-    /// The first `stem-what-N.ext` not already there.
-    fn fresh_name(dir: &std::path::Path, stem: &str, what: &str, ext: &str) -> String {
+    /// `name-yyyymmdd-hhmmss.ext` (UTC), with `-2`, `-3` after it if that's taken.
+    fn fresh_name(dir: &std::path::Path, name: &str, ext: &str) -> String {
+        let secs = forge_math::clock::system_now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let stamp = utc_stamp(secs);
         (1..)
-            .map(|k| dir.join(format!("{stem}-{what}-{k}{ext}")))
+            .map(|k| {
+                let n = if k == 1 {
+                    format!("{name}-{stamp}{ext}")
+                } else {
+                    format!("{name}-{stamp}-{k}{ext}")
+                };
+                dir.join(n)
+            })
             .find(|p| !forge_dirs::fs::exists(p))
             .expect("some number is free")
             .to_string_lossy()
             .into_owned()
+    }
+
+    /// The window's view in device pixels: what Size::Window means.
+    fn window_px(&self) -> (u32, u32) {
+        self.view.as_ref().map_or((1280, 720), |v| v.size)
+    }
+
+    /// A capture's result, said over the view and in the status bar.
+    fn capture_said(&mut self, said: String, file: Option<String>) {
+        self.shell.capture.last = said.clone();
+        self.shell.capture.last_file = file;
+        self.shell.capture.last_at = self.ctx.input(|i| i.time) * 1000.0;
+        self.shell.status = said;
     }
 
     /// Starts a recording at the capture settings' size and rate.
@@ -149,7 +183,7 @@ impl Gui {
             return Err("nothing in view".into());
         }
         let c = &self.shell.capture;
-        let (fps, size, format) = (c.fps.max(1), c.size, c.format);
+        let (fps, size, format) = (c.fps.max(1), c.size.pixels(self.window_px()), c.format);
         let (duration, orbit, what) = match self.shell.env_timeline() {
             Some(t) => (
                 t.duration(&self.shell),
@@ -162,10 +196,11 @@ impl Gui {
                 "turntable",
             ),
         };
+        let _ = what;
         let n = ((duration * fps as f64).round() as u32).max(1);
         let (dir, stem) = self.capture_place();
         let frames_sink = |note: String| {
-            let d = Gui::fresh_name(&dir, &stem, &format!("{what}-frames"), "");
+            let d = Gui::fresh_name(&dir, &format!("{stem}-frames"), "");
             Sink::Frames {
                 dir: d,
                 zip: cfg!(target_arch = "wasm32").then(Vec::new),
@@ -177,10 +212,13 @@ impl Gui {
             #[cfg(not(target_arch = "wasm32"))]
             Format::Mp4 => match crate::record::ffmpeg::locate() {
                 Some(ff) => {
-                    let path = Gui::fresh_name(&dir, &stem, what, ".mp4");
+                    let path = Gui::fresh_name(&dir, &stem, ".mp4");
                     Sink::Video(crate::record::ffmpeg::Video::start(&ff, &path, size, fps)?)
                 }
-                None => frames_sink(crate::record::ffmpeg::no_ffmpeg_note("{frames}", fps)),
+                None => frames_sink(format!(
+                    "Couldn't record MP4: no ffmpeg (forgecad-update installs it); saved PNG frames instead. {}",
+                    crate::record::ffmpeg::no_ffmpeg_note("{frames}", fps)
+                )),
             },
             #[cfg(target_arch = "wasm32")]
             Format::Mp4 => frames_sink("MP4 in the browser is coming: PNG frames meanwhile".into()),
@@ -210,6 +248,7 @@ impl Gui {
             v.nav.camera = cam;
             v.dirty = true;
         }
+        let mut file = None;
         let said = match job.sink.take() {
             #[cfg(not(target_arch = "wasm32"))]
             Some(Sink::Video(video)) if cancelled => {
@@ -220,8 +259,12 @@ impl Gui {
             Some(Sink::Video(video)) => {
                 let enc = video.encoder;
                 match video.finish() {
-                    Ok(p) => format!("Recorded {p} ({} frames, {enc})", job.n),
-                    Err(e) => format!("Recording failed: {e}"),
+                    Ok(p) => {
+                        let name = file_name(&p);
+                        file = Some(p);
+                        format!("Video saved: {name} ({} frames, {enc})", job.n)
+                    }
+                    Err(e) => format!("Couldn't record: {e}"),
                 }
             }
             Some(Sink::Frames { dir, zip, note }) => {
@@ -233,24 +276,35 @@ impl Gui {
                 let mut said = match zip {
                     Some(files) => {
                         let path = format!("{dir}.zip");
-                        match crate::record::zip::store(&files)
-                            .and_then(|z| forge_dirs::fs::write(&path, &z).map_err(|e| e.to_string()))
-                        {
-                            Ok(()) => format!("{base} to {path}"),
-                            Err(e) => format!("Recording failed: {e}"),
+                        match crate::record::zip::store(&files) {
+                            Ok(z) => {
+                                let name = file_name(&path);
+                                deliver(&path, &z);
+                                format!(
+                                    "{base}: {name} {}",
+                                    if cfg!(target_arch = "wasm32") {
+                                        "downloaded"
+                                    } else {
+                                        "saved"
+                                    }
+                                )
+                            }
+                            Err(e) => format!("Couldn't record: {e}"),
                         }
                     }
-                    None => format!("{base} in {dir}"),
+                    None => {
+                        file = Some(format!("{dir}/frame_00000.png"));
+                        format!("{base}: {}", file_name(&dir))
+                    }
                 };
                 if !note.is_empty() {
-                    said = format!("{said}; {}", note.replace("{frames}", &dir));
+                    said = note.replace("{frames}", &dir);
                 }
                 said
             }
             None => String::new(),
         };
-        self.shell.capture.last = said.clone();
-        self.shell.status = said;
+        self.capture_said(said, file);
     }
 
     /// A frame's step of whatever capture is under way, and the asks the ribbon left.
@@ -259,8 +313,14 @@ impl Gui {
             let r = match ask {
                 Capture::Photo => {
                     let (dir, stem) = self.capture_place();
-                    let path = Gui::fresh_name(&dir, &stem, "photo", ".png");
-                    self.photo_start(self.shell.capture.photo_size, &path)
+                    let path = Gui::fresh_name(&dir, &stem, ".png");
+                    self.photo_start(self.shell.capture.photo_size.pixels(self.window_px()), &path)
+                }
+                Capture::Reveal => {
+                    if let Some(f) = self.shell.capture.last_file.clone() {
+                        reveal(&f);
+                    }
+                    Ok(())
                 }
                 Capture::Record => self.record_start(),
                 Capture::Cancel => {
@@ -270,17 +330,22 @@ impl Gui {
                 Capture::Settings => Ok(()),
             };
             if let Err(e) = r {
-                self.shell.capture.last = e.clone();
-                self.shell.status = format!("Capture: {e}");
+                self.capture_said(format!("Couldn't capture: {e}"), None);
             }
         }
         if let Some(done) = self.photo_poll() {
-            let said = match done {
-                Ok(p) => format!("Photo saved: {p}"),
-                Err(e) => format!("Photo failed: {e}"),
-            };
-            self.shell.capture.last = said.clone();
-            self.shell.status = said;
+            match done {
+                Ok(p) => {
+                    let name = file_name(&p);
+                    let how = if cfg!(target_arch = "wasm32") {
+                        "downloaded"
+                    } else {
+                        "saved"
+                    };
+                    self.capture_said(format!("Photo {how}: {name}"), Some(p));
+                }
+                Err(e) => self.capture_said(format!("Couldn't save the photo: {e}"), None),
+            }
         }
         self.record_step();
     }
@@ -314,7 +379,7 @@ impl Gui {
                 Err(e) => {
                     self.recording = Some(job);
                     self.record_end(true);
-                    self.shell.status = format!("Recording failed: {e}");
+                    self.capture_said(format!("Couldn't record: {e}"), None);
                     return;
                 }
             },
@@ -345,7 +410,7 @@ impl Gui {
                 if let Err(e) = pushed {
                     self.recording = Some(job);
                     self.record_end(true);
-                    self.shell.status = format!("Recording failed: {e}");
+                    self.capture_said(format!("Couldn't record: {e}"), None);
                     return;
                 }
                 job.k += 1;
@@ -360,5 +425,75 @@ impl Gui {
         }
         self.shell.capture.recording = Some((job.k, job.n));
         self.recording = Some(job);
+    }
+}
+
+fn file_name(p: &str) -> String {
+    std::path::Path::new(p)
+        .file_name()
+        .map_or_else(|| p.to_string(), |n| n.to_string_lossy().into_owned())
+}
+
+/// Writes a capture: natively a file; in the browser the project's file and a download.
+fn deliver(path: &str, bytes: &[u8]) {
+    if let Some(d) = std::path::Path::new(path).parent()
+        && !d.as_os_str().is_empty()
+    {
+        let _ = forge_dirs::fs::create_dir_all(d);
+    }
+    let _ = forge_dirs::fs::write(path, bytes);
+    #[cfg(target_arch = "wasm32")]
+    crate::webapp::download(&file_name(path), bytes);
+}
+
+/// The file's folder in the system's file manager.
+fn reveal(file: &str) {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let dir = std::path::Path::new(file)
+            .parent()
+            .map_or_else(|| std::path::PathBuf::from("."), std::path::Path::to_path_buf);
+        let opener = if cfg!(target_os = "macos") {
+            "open"
+        } else if cfg!(windows) {
+            "explorer"
+        } else {
+            "xdg-open"
+        };
+        let _ = std::process::Command::new(opener).arg(dir).spawn();
+    }
+    #[cfg(target_arch = "wasm32")]
+    let _ = file;
+}
+
+/// A UNIX time as `yyyymmdd-hhmmss` (UTC; Hinnant's civil-from-days).
+fn utc_stamp(secs: u64) -> String {
+    let days = (secs / 86400) as i64;
+    let rem = secs % 86400;
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{y:04}{m:02}{d:02}-{:02}{:02}{:02}",
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_unix_time_reads_as_its_utc_date() {
+        assert_eq!(super::utc_stamp(0), "19700101-000000");
+        // 2026-11-24 04:45:00 UTC
+        assert_eq!(super::utc_stamp(1_795_495_500), "20261124-044500");
+        assert_eq!(super::utc_stamp(951_782_400), "20000229-000000");
     }
 }
