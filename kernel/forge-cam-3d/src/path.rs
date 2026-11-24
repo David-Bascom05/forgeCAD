@@ -55,10 +55,11 @@ pub fn loops(ls: &[Loop], e: Emit) -> OpPath {
             i += 1;
         }
         // off the wall at feed: a rapid must keep the rapid clearance, a cutting-feed move only
-        // the tolerance, and the pass ends against the material
+        // the tolerance, and the pass ends against the material. At the cut feed, not the plunge
+        // feed: straight up from where the tool stands meets no material (link.rs, `link`)
         moves.push(PMove::Line {
             to: [p0[0], p0[1], e.h.retract],
-            f: e.feed.1,
+            f: e.feed.0,
             phase: Phase::Link,
         });
         k += 1;
@@ -109,9 +110,10 @@ pub fn passes(ps: &[Pass], e: Emit) -> OpPath {
             i += 1;
         }
         let q = p[p.len() - 1];
+        // (straight up at the cut feed: link.rs, `link`)
         moves.push(PMove::Line {
             to: [q[0], q[1], e.h.retract],
-            f: e.feed.1,
+            f: e.feed.0,
             phase: Phase::Link,
         });
     }

@@ -628,7 +628,13 @@ impl Shell {
     pub fn ribbon_tools(&self) -> Vec<(&'static str, &'static str)> {
         groups(self)
             .iter()
-            .flat_map(|g| g.big.iter().chain(&g.small).chain(&g.icons).map(move |x| (g.name, x.name)))
+            .flat_map(|g| {
+                g.big
+                    .iter()
+                    .chain(&g.small)
+                    .chain(&g.icons)
+                    .map(move |x| (g.name, x.name))
+            })
             .collect()
     }
 
@@ -652,7 +658,11 @@ impl Shell {
         // time from the right, only until it fits (docs/ux/STANDARD.md §10: nothing clips):
         // 1, small buttons lose their words; 2, big buttons become icons too; 3, a group folds
         // into one button whose menu holds its tools (never the group with Exit or Finish)
-        let name_w = |ui: &mut Ui, n: &str| ui.fonts_mut(|f| f.layout_no_wrap(n.to_string(), sans(11.0), t.ink2)).size().x;
+        let name_w = |ui: &mut Ui, n: &str| {
+            ui.fonts_mut(|f| f.layout_no_wrap(n.to_string(), sans(11.0), t.ink2))
+                .size()
+                .x
+        };
         let sizes: Vec<[f32; 4]> = gs
             .iter()
             .map(|g| {
@@ -663,11 +673,20 @@ impl Shell {
                 let icons = (g.small.len() + g.icons.len()).div_ceil(3) as f32 * ICON_W;
                 let all = 12.0 + (g.big.len() + g.small.len() + g.icons.len()).div_ceil(3) as f32 * ICON_W;
                 let folded = (name_w(ui, g.name) + 46.0).max(70.0);
-                [(base + words).max(label), (base + icons).max(label), all.max(label), folded]
+                [
+                    (base + words).max(label),
+                    (base + icons).max(label),
+                    all.max(label),
+                    folded,
+                ]
             })
             .collect();
         let keep = |g: &Group| {
-            g.big.iter().chain(&g.small).chain(&g.icons).any(|x| matches!(x.action, Some(super::Action::ExitEnv)))
+            g.big
+                .iter()
+                .chain(&g.small)
+                .chain(&g.icons)
+                .any(|x| matches!(x.action, Some(super::Action::ExitEnv)))
                 || (self.dwgdoc.is_some() && g.name == "Layers")
         };
         let mut level = vec![0usize; gs.len()];
@@ -859,7 +878,13 @@ impl Shell {
         if let Some(f) = first {
             icons::draw(p, pos2(r.center().x - 14.0, y + 8.0), 28.0, f.icon, 1.25, ink);
         }
-        p.text(pos2(r.center().x, y + 50.0), Align2::CENTER_CENTER, g.name, sans(12.0), ink);
+        p.text(
+            pos2(r.center().x, y + 50.0),
+            Align2::CENTER_CENTER,
+            g.name,
+            sans(12.0),
+            ink,
+        );
         // the menu mark, drawn (a small chevron, no glyph)
         let c = pos2(r.center().x, y + 64.0);
         p.line_segment([c + vec2(-4.0, -2.0), c + vec2(0.0, 2.0)], Stroke::new(1.3, ink));
@@ -878,12 +903,16 @@ impl Shell {
         if !open {
             // folded tools are reached through the group's button
             for tool in &tools {
-                self.places.push((format!("ribbon:in:{}:{}", g.name, tool.name), r));
+                self.places
+                    .push((format!("ribbon:in:{}:{}", g.name, tool.name), r));
             }
             return;
         }
         let rows = tools.len() as f32;
-        let mw = tools.iter().map(|x| small_width(ui, std::slice::from_ref(x))).fold(160.0, f32::max);
+        let mw = tools
+            .iter()
+            .map(|x| small_width(ui, std::slice::from_ref(x)))
+            .fold(160.0, f32::max);
         let at = pos2(r.left(), r.bottom() + 4.0);
         let before = self.out.len();
         let menu = egui::Area::new(id.with("menu"))
@@ -905,7 +934,9 @@ impl Shell {
             });
         // a tool chosen, or a press elsewhere: the menu closes
         let pressed = ui.input(|i| i.pointer.any_pressed());
-        let inside = ui.input(|i| i.pointer.interact_pos()).is_some_and(|q| menu.response.rect.contains(q) || r.contains(q));
+        let inside = ui
+            .input(|i| i.pointer.interact_pos())
+            .is_some_and(|q| menu.response.rect.contains(q) || r.contains(q));
         if self.out.len() > before || (pressed && !inside) {
             ui.data_mut(|d| d.remove::<&'static str>(open_id));
         }

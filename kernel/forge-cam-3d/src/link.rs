@@ -277,11 +277,16 @@ fn link(
         Some(band) => band.hi.max(a[2]).max(b[2]),
     };
     let zl = top + r.lift;
+    // the way up: straight up from a, at the cut feed (not the plunge feed). It meets no
+    // material: the stock is a height field, and a is a position the tool stands at clear of it,
+    // so no material is above any body of the tool within that body's radius; going straight up
+    // every body passes only above where it stood. The way down (a plunge, through whatever
+    // stock is left) keeps the plunge feed
     if zl < e.h.retract && dc.seg_below(ab[0], ab[1], zl) {
         count.lift += 1;
         moves.push(PMove::Line {
             to: [a[0], a[1], zl],
-            f: e.feed.1,
+            f: e.feed.0,
             phase: Phase::Link,
         });
         moves.push(PMove::Line {
@@ -297,9 +302,10 @@ fn link(
         return;
     }
     count.retract += 1;
+    // (straight up at the cut feed, as a lift)
     moves.push(PMove::Line {
         to: [a[0], a[1], e.h.retract],
-        f: e.feed.1,
+        f: e.feed.0,
         phase: Phase::Link,
     });
     moves.push(PMove::Rapid {

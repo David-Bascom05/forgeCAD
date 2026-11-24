@@ -281,9 +281,12 @@ pub fn steep_and_shallow(dc: &dyn DropCutter, p: Params) -> Result<(Vec<Pass>, V
         }
     }
     let [lo, hi] = p.area.unwrap_or(dc.extent());
+    // the chords' dip below the CL surface at most half the tolerance, as every other drape: the
+    // rest is the posted program's room (its coordinates rounded to the control's last digit
+    // move a chord by up to half a digit at each end), so the certified path keeps tol
     let d = Drape {
         step: p.grid,
-        slack: p.tol,
+        slack: 0.5 * p.tol,
         leave: p.leave.min(p.tol),
         zmin: p.bottom,
     };
@@ -342,5 +345,48 @@ mod tests {
                 assert!(r <= r45 + 1.0 + 1.5 || r >= 30.33 - 1.0 - 1.5, "shallow at r={r}");
             }
         }
+    }
+
+    /// The shallow rows keep room for the posted program: every chord, its ends rounded to a
+    /// 0.001 mm grid about an origin off that grid (as a control's last digit and a work offset
+    /// taken from a part's box leave them), still dips at most `tol` below the CL surface. A
+    /// drape at the whole `tol` leaves none (the mould core 2% wider was refused that way).
+    #[test]
+    fn the_rows_keep_tol_when_posted() {
+        let dc = Analytic {
+            r: 3.0,
+            planes: vec![(0.0, [-16.0, -16.0], [16.0, 16.0])],
+            spheres: vec![([0.0, 0.0, -5.0], 14.0)],
+        };
+        let h = std::f64::consts::FRAC_1_SQRT_2;
+        let tol = 0.01;
+        let p = Params {
+            sin0: h,
+            cos0: h,
+            overlap: 1.0,
+            dz: 2.0,
+            stepover: 0.5,
+            angle_deg: 0.0,
+            top: 12.0,
+            bottom: 0.0,
+            grid: 1.0,
+            tol,
+            leave: tol,
+            contour: tol,
+            area: None,
+        };
+        let (_, shallow) = steep_and_shallow(&dc, p).unwrap();
+        let o = [0.000_312, -0.000_417, -0.000_037];
+        let post =
+            |q: [f64; 3]| -> [f64; 3] { [0, 1, 2].map(|k| ((q[k] - o[k]) * 1000.0).round() / 1000.0 + o[k]) };
+        let mut n = 0;
+        for pass in &shallow {
+            for w in pass.windows(2) {
+                n += 1;
+                let (a, b) = (post(w[0]), post(w[1]));
+                assert!(dc.seg3_below(a, b, tol), "posted chord {a:?} -> {b:?} under tol");
+            }
+        }
+        assert!(n > 300, "{n} chords");
     }
 }

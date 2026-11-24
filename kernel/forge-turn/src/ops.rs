@@ -41,6 +41,7 @@ pub struct Chuck {
 }
 
 /// A lathe setup: the part's half-profile, the bar, the chuck and the clearances.
+#[derive(Debug)]
 pub struct Setup {
     pub part: HalfProfile,
     /// The bar's radius, its front face (z), the chuck.
