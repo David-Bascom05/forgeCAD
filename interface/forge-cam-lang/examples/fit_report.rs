@@ -277,7 +277,13 @@ fn main() {
         } else {
             "cusp: 0.01, "
         };
-        let a = run(&op.replace("CUSP, ", &format!("{cusp}fit: 0, ")), &dir);
+        // (parallel and waterline take no `fit` here: both runs are the same op)
+        let unfit = if matches!(name, "parallel" | "waterline") {
+            ""
+        } else {
+            "fit: 0, "
+        };
+        let a = run(&op.replace("CUSP, ", &format!("{cusp}{unfit}")), &dir);
         // FIT=<mm> overrides the default fit for the second run
         let fit = std::env::var("FIT")
             .map(|f| format!("fit: {f}, "))
