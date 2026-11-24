@@ -576,7 +576,7 @@ fn a_ghost_is_drawn_at_its_opacity() {
     c.yaw = 240f32.to_radians();
     c.pitch = 25f32.to_radians();
     v.nav.jump_to(c);
-    let mut at = |h: &mut Headless, o: f32| {
+    let at = |h: &mut Headless, o: f32| {
         h.gui.shell.sheet.bend_sim.as_mut().unwrap().opacity = o;
         for _ in 0..20 {
             h.step();
