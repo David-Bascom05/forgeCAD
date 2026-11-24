@@ -1048,6 +1048,15 @@ impl Ctx {
         {
             return s;
         }
+        // one square root: decided exactly in its field Q(√c) first (most of these reach here as
+        // zeros, which the first big-float precision cannot separate anyway)
+        if k == 1 {
+            let node = &self.nodes[a as usize];
+            let need = (node.lu + node.ll).next_up().ceil() + 1.0;
+            if let Some(o) = self.exact_sign(&order, (2.0 * need).max(4096.0) as u64) {
+                return o;
+            }
+        }
         self.sign_refined(a, &order, k, true)
     }
 
@@ -1139,7 +1148,9 @@ impl Ctx {
         );
         let need = bits as i64;
         let mut p = 128u64;
-        let dbg = std::env::var("FORGE_CAM_DEBUG").is_ok();
+        // (read once: this runs for every value the filter cannot sign)
+        static DBG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        let dbg = *DBG.get_or_init(|| std::env::var("FORGE_CAM_DEBUG").is_ok());
         loop {
             if dbg {
                 eprintln!("sign: node {a} radicals {k} bound {need} bits, p {p}");
@@ -1166,13 +1177,13 @@ impl Ctx {
                     return Ordering::Equal;
                 }
             }
-            // past the first precision, an expression with at most one distinct square root is
-            // decided exactly in its field Q(√c) (`exact_sign`), which gives the same sign the
-            // doubling below would reach: most of these are zeros, which the doubling proves only
-            // at the separation bound (thousands of bits, each precision evaluated in turn)
+            // past the first precision, an expression with no square root that `rational_sign` could
+            // not take is decided exactly by `exact_sign` (one root was tried before refinement, in
+            // `sign`): the same sign the doubling below would reach, which proves a zero only at
+            // the separation bound (thousands of bits, each precision evaluated in turn)
             if exact
                 && p == 128
-                && k <= 1
+                && k == 0
                 && let Some(o) = self.exact_sign(&order, (2 * need).max(4096) as u64)
             {
                 return o;
