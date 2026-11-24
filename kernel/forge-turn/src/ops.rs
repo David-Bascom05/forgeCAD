@@ -1038,6 +1038,14 @@ pub fn part_off(s: &Setup, tool: &TurnTool, t: u32, z_back: f64) -> Result<OpPat
         )));
     }
     let (w, rc) = (tool.width, tool.re);
+    if let Some(m) = tool.max_bar
+        && 2.0 * s.bar_r > m
+    {
+        return Err(OpError::Tool(format!(
+            "a Ø{} bar is over the blade's largest (Ø{m}, its maker's)",
+            2.0 * s.bar_r
+        )));
+    }
     if tool.l < s.bar_r + rc {
         // the fix: the library's part-off blades that reach
         let reach: Vec<String> = crate::insert::library(crate::insert::BUILTIN)

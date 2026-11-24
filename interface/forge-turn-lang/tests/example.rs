@@ -189,9 +189,10 @@ fn the_hub_certifies_in_full() {
     );
     // a blade too short for the bar is refused with the library's blades that reach
     let short = src.replace(
-        "lathe_tool(\"part-3-deep\", t: 10)",
+        "lathe_tool(blade: \"tungaloy-CGP32-3D\", insert: \"tungaloy-SGM3-020\", t: 10)",
         "lathe_tool(\"part-3\", t: 10)",
     );
+    assert_ne!(short, src);
     let cam = forge_turn_lang::run(&short, &d);
     assert!(
         cam.errors.iter().any(|e| e.contains("part-3-deep (reach 40)")),

@@ -275,6 +275,9 @@ fn record_cites(r: &build::Record) -> Vec<forge_tooling::Cite> {
         R::PullStud(x) => x.cites.clone(),
         R::Insert(x) => x.cites.clone(),
         R::TurnHolder(x) => x.cites.clone(),
+        R::GrooveInsert(x) => x.cites.clone(),
+        R::Blade(x) => x.cites.clone(),
+        R::ToolBlock(x) => x.cites.clone(),
     }
 }
 

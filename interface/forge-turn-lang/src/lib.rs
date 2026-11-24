@@ -256,7 +256,11 @@ impl TurnCam {
                 Ok(V::Part(self.parts.len() - 1))
             }
             "lathe_tool" => {
-                let t = if a.contains_key("holder") {
+                let t = if a.contains_key("blade") {
+                    self.blade_of_records(a)?
+                } else if a.contains_key("drill") {
+                    self.drill_of_records(a)?
+                } else if a.contains_key("holder") {
                     self.tool_of_records(a)?
                 } else {
                     let id = text(a, "#0", None)?;
@@ -553,6 +557,69 @@ impl TurnCam {
             forge_tooling::turning::HolderKind::Bar => insert::boring_tool(&id, &i.code, &h.code, None),
         };
         t.map_err(|e| e.to_string())
+    }
+
+    /// `lathe_tool(blade: B, insert: I, t: N)`: a parting blade and a grooving insert from the
+    /// tooling library: the insert's width, corner, length and side clearance (2° when not
+    /// stated), the blade's thickness, reach, height and largest bar. Its reach makes it a part-off
+    /// blade when it reaches 20 or more, else a grooving one.
+    fn blade_of_records(&self, a: &BTreeMap<String, V>) -> Result<TurnTool, String> {
+        let bid = text(a, "blade", None)?;
+        let iid = text(a, "insert", None)?;
+        let b = self
+            .lib
+            .blades
+            .iter()
+            .find(|b| b.id == bid)
+            .ok_or_else(|| format!("no blade `{bid}` in the tooling library"))?;
+        let i = self
+            .lib
+            .groove_inserts
+            .iter()
+            .find(|i| i.id == iid)
+            .ok_or_else(|| format!("no grooving insert `{iid}` in the tooling library"))?;
+        let kind = if b.cdx >= 20.0 {
+            insert::Kind::Part
+        } else {
+            insert::Kind::Groove
+        };
+        insert::blade_tool(
+            &format!("{bid} + {iid}"),
+            kind,
+            i.width,
+            i.re,
+            i.head.unwrap_or(6.0),
+            i.clearance.unwrap_or(2.0),
+            b.t_blade,
+            b.cdx,
+            b.h,
+            b.max_bar,
+        )
+        .map_err(|e| e.to_string())
+    }
+
+    /// `lathe_tool(drill: D, t: N)`: a drill from the tooling library on the centre line: its
+    /// diameter, point angle (180: flat-bottomed, an indexable drill), usable depth and shank.
+    fn drill_of_records(&self, a: &BTreeMap<String, V>) -> Result<TurnTool, String> {
+        let did = text(a, "drill", None)?;
+        let d = self
+            .lib
+            .tools
+            .iter()
+            .find(|d| d.id == did)
+            .ok_or_else(|| format!("no drill `{did}` in the tooling library"))?;
+        if d.kind != forge_tooling::Kind::Drill {
+            return Err(format!("`{did}` is not a drill"));
+        }
+        insert::drill_tool_len(
+            &did,
+            d.dc,
+            d.angle,
+            d.lcf,
+            d.dcon.max(d.dc),
+            (d.oal - d.lcf).max(1.0),
+        )
+        .map_err(|e| e.to_string())
     }
 
     /// The parts, each as its exact half-profile in (ρ, z) (read-only: for a view).
