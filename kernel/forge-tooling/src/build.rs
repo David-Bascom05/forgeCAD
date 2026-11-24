@@ -43,6 +43,22 @@ impl Record {
             Record::ToolBlock(x) => &x.id,
         }
     }
+
+    /// The record's cites (so a caller need not match every kind).
+    pub fn cites(&self) -> &[crate::Cite] {
+        match self {
+            Record::Tool(x) => &x.cites,
+            Record::Holder(x) => &x.cites,
+            Record::Collet(x) => &x.cites,
+            Record::ColletNut(x) => &x.cites,
+            Record::PullStud(x) => &x.cites,
+            Record::Insert(x) => &x.cites,
+            Record::TurnHolder(x) => &x.cites,
+            Record::GrooveInsert(x) => &x.cites,
+            Record::Blade(x) => &x.cites,
+            Record::ToolBlock(x) => &x.cites,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

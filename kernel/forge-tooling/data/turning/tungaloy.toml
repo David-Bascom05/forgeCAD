@@ -4232,7 +4232,7 @@ maker = "Tungaloy"
 real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
 taken = "2026-11-24"
-note = "TungCut CGP external deep grooving and parting blade CGP32-3D (General Catalogue 2023-2024, F Parting-Grooving); clamps in tool block CTBF; self-clamping (elastic upper jaw); wrench CRW33 (optional), clamping screw -"
+note = "TungCut CGP external deep grooving and parting blade CGP32-3D (General Catalogue 2023-2024, F Parting-Grooving); clamps in tool blocks CTBU20-32, CTBU25-32, CTBU32-32; self-clamping (elastic upper jaw); wrench CRW33 (optional), clamping screw -"
 [[blade.cite]]
 path = "code"
 status = "published"
@@ -4375,3 +4375,135 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
 taken = "2026-11-24"
 value = "Seat size 3"
+
+[[tool_block]]
+id = "tungaloy-CTBU20-32"
+code = "CTBU20-32"
+h = 20
+b = 19
+l1 = 100
+blade_h = 32
+maker = "Tungaloy"
+real = true
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+note = "CTBU Tool block for CGP blade; HFASSY 20, HBH 13, OAH 50, OAW 38 mm (the block's other printed dimensions)"
+[[tool_block.cite]]
+path = "code"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "CTBU20-32"
+[[tool_block.cite]]
+path = "h"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "H 20 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+[[tool_block.cite]]
+path = "b"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "B 19 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+[[tool_block.cite]]
+path = "l1"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "OAL 100 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+[[tool_block.cite]]
+path = "blade_h"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "Blade (Optional) CGP32..."
+basis = "the block takes CGP32 blades, whose height H is 32 (F229)"
+
+[[tool_block]]
+id = "tungaloy-CTBU25-32"
+code = "CTBU25-32"
+h = 25
+b = 23
+l1 = 110
+blade_h = 32
+maker = "Tungaloy"
+real = true
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+note = "CTBU Tool block for CGP blade; HFASSY 25, HBH 8, OAH 50, OAW 42 mm (the block's other printed dimensions)"
+[[tool_block.cite]]
+path = "code"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "CTBU25-32"
+[[tool_block.cite]]
+path = "h"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "H 25 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+[[tool_block.cite]]
+path = "b"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "B 23 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+[[tool_block.cite]]
+path = "l1"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "OAL 110 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+[[tool_block.cite]]
+path = "blade_h"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "Blade (Optional) CGP32..."
+basis = "the block takes CGP32 blades, whose height H is 32 (F229)"
+
+[[tool_block]]
+id = "tungaloy-CTBU32-32"
+code = "CTBU32-32"
+h = 32
+b = 29
+l1 = 110
+blade_h = 32
+maker = "Tungaloy"
+real = true
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+note = "CTBU Tool block for CGP blade; HFASSY 32, HBH 5, OAH 54, OAW 48 mm (the block's other printed dimensions)"
+[[tool_block.cite]]
+path = "code"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "CTBU32-32"
+[[tool_block.cite]]
+path = "h"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "H 32 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+[[tool_block.cite]]
+path = "b"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "B 29 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+[[tool_block.cite]]
+path = "l1"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "OAL 110 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+[[tool_block.cite]]
+path = "blade_h"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "Blade (Optional) CGP32..."
+basis = "the block takes CGP32 blades, whose height H is 32 (F229)"

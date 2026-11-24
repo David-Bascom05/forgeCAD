@@ -627,6 +627,22 @@ def insert_presets(vendor, r, f, skips):
     return sorted(out, key=order)
 
 
+# ISO 1832: thickness digits (mm) and corner radius digits (tenths of a mm)
+ISO_S = {"01": 1.59, "T1": 1.98, "02": 2.38, "T2": 2.78, "03": 3.18, "T3": 3.97, "04": 4.76, "05": 5.56,
+         "06": 6.35, "07": 7.94, "09": 9.52}
+
+
+def iso_digits(code, k):
+    m = re.match(r"^[A-Z]{4}(\d{2})(\w{2})(\d{2})", code)
+    if not m:
+        return None
+    if k == "s":
+        return ISO_S.get(m.group(2))
+    if k == "re":
+        return int(m.group(3)) / 10
+    return None
+
+
 def turning(vendor, r, out, skips):
     vals = r["values"]
     code = (r.get("iso_code") or "").replace(" ", "")
@@ -639,8 +655,19 @@ def turning(vendor, r, out, skips):
         for k in ("ic", "s", "re"):
             v = num(vals, k)
             if v is None:
-                skips[f"insert without {k}"] += 1
-                return
+                # the maker prints only the size row's range (Korloy): the ISO 1832 code's own
+                # digits give the value, kept only when it lies inside the printed range
+                v, st = iso_digits(code, k), stated(r, "re_range" if k == "re" else k)
+                lo_hi = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", st)[-2:]] if st else []
+                if v is None or len(lo_hi) != 2 or not (lo_hi[0] - 1e-9 <= v <= lo_hi[1] + 1e-9):
+                    skips[f"insert without {k}"] += 1
+                    return
+                f[k] = v
+                cites.append(dict(path=k, status="estimate", source=r["url"], taken=r.get("taken", TAKEN), value=st,
+                                  basis=f"the catalogue prints only the size row's range; {k} = {v:g} from the ISO 1832 "
+                                        f"code {code} (its {'corner-radius' if k == 're' else 'thickness'} digits), "
+                                        "inside the printed range"))
+                continue
             f[k] = v
             cites.append(pub(k, r, stated(r, k)))
             # an inch catalogue's corner radius is the metric one rounded to 3 decimals of an inch
@@ -767,7 +794,7 @@ def shop(vendor, r, outs, skips):
                  E("cdx", "cutdia", "no reach is printed: half the printed max cut-off diameter CUTDIA"),
                  dict(path="hand", status="estimate", source=url, taken=tk, value=S("fig"),
                       basis="the catalogue figure shows a double-ended neutral blade; no R/L is printed")]
-        base["note"] = (base["note"] + f"; clamps in tool block {V('tool_block')}; {V('clamp')}").strip("; ")
+        base["note"] = (base["note"] + f"; clamps in tool blocks {V('tool_block')}; {V('clamp')}").strip("; ")
         outs["turning"].rec("blade", {"id": rid, **f, **base}, cites)
     elif k == "grooving_insert":
         f = dict(code=r["id"], width=V("cw"), re=V("re"), head=V("insl"), seat=str(V("seat_size")))
@@ -821,6 +848,16 @@ def shop(vendor, r, outs, skips):
                 if c.get(kk):
                     out.lines.append(f"{kk} = {tv(c[kk])}")
         out.lines.append("")
+    elif k == "tool_block":
+        f = dict(code=r["id"], h=V("h"), b=V("b"), l1=V("oal"), blade_h=32 if V("blade") == "CGP32..." else None)
+        cites = [dict(path="code", status="published", source=url, taken=tk, value=r["id"]),
+                 P("h", "h"), P("b", "b"), P("l1", "oal")]
+        if f["blade_h"]:
+            cites.append(dict(path="blade_h", status="estimate", source=url, taken=tk, value=S("blade"),
+                              basis="the block takes CGP32 blades, whose height H is 32 (F229)"))
+        base["note"] = (base["note"] + f"; HFASSY {V('hfassy')}, HBH {V('hbh')}, OAH {V('oah')}, OAW {V('oaw')} mm "
+                        "(the block's other printed dimensions)").strip("; ")
+        outs["turning"].rec("tool_block", {"id": rid, **f, **base}, cites)
     else:
         skips[f"shop kind {k}"] += 1
 

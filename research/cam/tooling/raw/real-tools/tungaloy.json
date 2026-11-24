@@ -62,9 +62,9 @@
      "stated": "Reference pages: Inserts F236 - F245 (seat size 3); 'When depth is deeper than (insert length - 1.5mm), 1 corner type is recommended.'"
     },
     "tool_block": {
-     "v": "CTBF",
+     "v": "CTBU20-32, CTBU25-32, CTBU32-32",
      "unit": "text",
-     "stated": "Reference pages: Tool blocks F230 (CTBF Tool block for CGP blade)"
+     "stated": "F230 CTBU \"Tool block for CGP blade\": CTBU20-32, CTBU25-32, CTBU32-32, Blade (Optional) CGP32... (CTBF takes CGP45... only)"
     }
    },
    "cutting": [],
@@ -765,6 +765,162 @@
     "shank length / neck dims not tabulated"
    ],
    "notes": "Feed is per tooth (mm/t), not per rev: f_rev = fz x 3 flutes. Conditions table spans I120 (vc) and I121 (fz by DC). MTEC0807C241.5ISO is the longer (APMX 24.8, LF 76) sibling."
+  },
+  {
+   "kind": "tool_block",
+   "id": "CTBU20-32",
+   "name": "CTBU Tool block for CGP blade",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 20,
+     "unit": "mm",
+     "stated": "H 20 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "b": {
+     "v": 19,
+     "unit": "mm",
+     "stated": "B 19 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "oal": {
+     "v": 100,
+     "unit": "mm",
+     "stated": "OAL 100 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "hfassy": {
+     "v": 20,
+     "unit": "mm",
+     "stated": "HFASSY 20 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "hbh": {
+     "v": 13,
+     "unit": "mm",
+     "stated": "HBH 13 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "oah": {
+     "v": 50,
+     "unit": "mm",
+     "stated": "OAH 50 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "oaw": {
+     "v": 38,
+     "unit": "mm",
+     "stated": "OAW 38 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+    },
+    "blade": {
+     "v": "CGP32...",
+     "unit": "text",
+     "stated": "Blade (Optional) CGP32..."
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "read 2026-11-24 from GC F section page F230 (PDF page 230)"
+  },
+  {
+   "kind": "tool_block",
+   "id": "CTBU25-32",
+   "name": "CTBU Tool block for CGP blade",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 25,
+     "unit": "mm",
+     "stated": "H 25 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "b": {
+     "v": 23,
+     "unit": "mm",
+     "stated": "B 23 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "oal": {
+     "v": 110,
+     "unit": "mm",
+     "stated": "OAL 110 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "hfassy": {
+     "v": 25,
+     "unit": "mm",
+     "stated": "HFASSY 25 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "hbh": {
+     "v": 8,
+     "unit": "mm",
+     "stated": "HBH 8 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "oah": {
+     "v": 50,
+     "unit": "mm",
+     "stated": "OAH 50 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "oaw": {
+     "v": 42,
+     "unit": "mm",
+     "stated": "OAW 42 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+    },
+    "blade": {
+     "v": "CGP32...",
+     "unit": "text",
+     "stated": "Blade (Optional) CGP32..."
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "read 2026-11-24 from GC F section page F230 (PDF page 230)"
+  },
+  {
+   "kind": "tool_block",
+   "id": "CTBU32-32",
+   "name": "CTBU Tool block for CGP blade",
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230",
+   "taken": "2026-11-24",
+   "values": {
+    "h": {
+     "v": 32,
+     "unit": "mm",
+     "stated": "H 32 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "b": {
+     "v": 29,
+     "unit": "mm",
+     "stated": "B 29 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "oal": {
+     "v": 110,
+     "unit": "mm",
+     "stated": "OAL 110 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "hfassy": {
+     "v": 32,
+     "unit": "mm",
+     "stated": "HFASSY 32 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "hbh": {
+     "v": 5,
+     "unit": "mm",
+     "stated": "HBH 5 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "oah": {
+     "v": 54,
+     "unit": "mm",
+     "stated": "OAH 54 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "oaw": {
+     "v": 48,
+     "unit": "mm",
+     "stated": "OAW 48 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+    },
+    "blade": {
+     "v": "CGP32...",
+     "unit": "text",
+     "stated": "Blade (Optional) CGP32..."
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "read 2026-11-24 from GC F section page F230 (PDF page 230)"
   }
  ],
  "blocked": []
