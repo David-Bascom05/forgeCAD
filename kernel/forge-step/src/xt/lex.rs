@@ -63,6 +63,11 @@ impl<'a> Lex<'a> {
         }
     }
 
+    /// The bytes between two positions: an embedded schema's record as the file has it.
+    pub(crate) fn slice(&self, from: usize, to: usize) -> &'a [u8] {
+        self.b.get(from..to).unwrap_or(&[])
+    }
+
     #[cfg(test)]
     pub(crate) fn done(&self) -> bool {
         self.at >= self.b.len()

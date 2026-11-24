@@ -81,6 +81,8 @@ struct Rec {
 pub(crate) struct Store {
     pub header: Header,
     layouts: Vec<Layout>,
+    /// Each type's embedded schema record, when kept (`read_keeping`).
+    pub(crate) records: Vec<(u16, Vec<u8>)>,
     recs: Vec<Rec>,
     /// Node index to position in `recs`, plus one; zero for none.
     by_index: Vec<u32>,
@@ -268,6 +270,11 @@ struct Reader<'a> {
     /// The layout of each node type met, by type.
     declared: HashMap<u16, u16>,
     layouts: Vec<Layout>,
+    /// A file in a schema of its own that it does not carry (written by a modeller for readers
+    /// that have it): the schema's number, its layouts taken from `known`.
+    native: Option<u32>,
+    /// Each type's schema record as an embedded text file has it, kept when asked for.
+    records: Option<Vec<(u16, Vec<u8>)>>,
 }
 
 impl Reader<'_> {
@@ -302,8 +309,39 @@ impl Reader<'_> {
         ))
     }
 
-    /// The first node of a type: its layout, from the file's edits of the base or its own words.
+    /// The first node of a type: its layout, from the file's edits of the base, its own words,
+    /// or for a file in a schema it does not carry, the record files that carry it give.
     fn declare(&mut self, ty: u16) -> Result<u16, XtError> {
+        if !self.embedded
+            && let Some(id) = self.native
+            && let Some(rec) = super::known::record(id, ty)
+        {
+            let file = std::mem::replace(&mut self.lex, Lex::new(rec, Form::Text));
+            self.embedded = true;
+            let r = self.declare_from_file(ty);
+            self.embedded = false;
+            let at = self.lex.at;
+            self.lex = file;
+            return r.map_err(|e| match e {
+                XtError::Bytes { want, .. } => XtError::BadSchema {
+                    ty,
+                    why: format!("the known schema {id}'s record for it does not read: {want} at {at}"),
+                },
+                e => e,
+            });
+        }
+        let from = self.lex.at;
+        let r = self.declare_from_file(ty)?;
+        if self.embedded
+            && self.lex.form == Form::Text
+            && let Some(recs) = &mut self.records
+        {
+            recs.push((ty, self.lex.slice(from, self.lex.at).to_vec()));
+        }
+        Ok(r)
+    }
+
+    fn declare_from_file(&mut self, ty: u16) -> Result<u16, XtError> {
         let at = self.lex.at;
         let lexe = |e: LexError| XtError::Bytes {
             at: e.at,
@@ -442,6 +480,11 @@ impl Reader<'_> {
 
 /// Reads a whole transmit file into its nodes.
 pub(crate) fn read(b: &[u8], lim: &Limits) -> Result<Store, XtError> {
+    read_keeping(b, lim, false)
+}
+
+/// As `read`, keeping each type's embedded schema record (text files) in `Store::records`.
+pub(crate) fn read_keeping(b: &[u8], lim: &Limits, keep_records: bool) -> Result<Store, XtError> {
     if b.len() > lim.max_bytes {
         return Err(XtError::TooBig);
     }
@@ -464,11 +507,18 @@ pub(crate) fn read(b: &[u8], lim: &Limits) -> Result<Store, XtError> {
         embedded: false,
         declared: HashMap::new(),
         layouts: Vec::new(),
+        native: None,
+        records: keep_records.then(Vec::new),
     };
     let version = r.lex.header_string(false, "the modeller version").map_err(lexe)?;
     let schema = r.lex.header_string(true, "the schema name").map_err(lexe)?;
     let schema = String::from_utf8_lossy(&schema).into_owned();
-    r.embedded = schema.split('_').count() >= 4;
+    let parts: Vec<&str> = schema.split('_').collect();
+    r.embedded = parts.len() >= 4;
+    r.native = match parts.get(2).and_then(|x| x.trim().parse::<u32>().ok()) {
+        Some(id) if !r.embedded && id != 13006 => Some(id),
+        _ => None,
+    };
     if r.embedded {
         r.lex.short("the most node types").map_err(lexe)?;
     }
@@ -571,6 +621,7 @@ pub(crate) fn read(b: &[u8], lim: &Limits) -> Result<Store, XtError> {
             binary,
         },
         layouts: r.layouts,
+        records: r.records.unwrap_or_default(),
         recs,
         by_index,
         vals,

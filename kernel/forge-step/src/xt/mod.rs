@@ -4,6 +4,7 @@
 
 mod build;
 mod geom;
+mod known;
 mod lex;
 mod nodes;
 mod schema;
@@ -16,6 +17,16 @@ pub use nodes::{Header, XtError, is_xt};
 pub fn census(b: &[u8], lim: &crate::Limits) -> Result<(Header, Vec<(u16, usize)>), XtError> {
     let s = nodes::read(b, lim)?;
     Ok((s.header.clone(), s.census.clone()))
+}
+
+/// A schema's name and each node type's record.
+pub type SchemaRecords = (String, Vec<(u16, Vec<u8>)>);
+
+/// An embedded-schema text file's schema number and each type's record as it carries it: what
+/// `known.rs` is made from (research/parasolid/known_schemas.py).
+pub fn schema_records(b: &[u8], lim: &crate::Limits) -> Result<SchemaRecords, XtError> {
+    let s = nodes::read_keeping(b, lim, true)?;
+    Ok((s.header.schema.clone(), s.records.clone()))
 }
 
 /// Reads a transmit file's solids, placed as its assemblies place them.

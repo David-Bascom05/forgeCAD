@@ -124,8 +124,10 @@ def parse(data):
     usfld=t.int_()
     schema={}   # type -> (fields, variable)
     nodes={}
-    global DESC, HEAD
+    global DESC, HEAD, DESCPOS, BODY
     DESC={}     # type -> the schema words the file wrote at its first node, raw
+    DESCPOS={}  # type -> where they lie in BODY (the records joined)
+    BODY=b
     HEAD=(ver,sch,maxtypes,usfld)
     while True:
         ty=t.int_()
@@ -158,6 +160,7 @@ def parse(data):
                 cur=base
             schema[ty]=cur
             DESC[ty]=t.b[d0:t.i]
+            DESCPOS[ty]=(d0,t.i)
         cur=schema[ty]
         if ty==1:
             idx=t.int_(); assert idx==0; break

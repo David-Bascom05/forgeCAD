@@ -267,3 +267,59 @@ fn a_nested_assembly_places_through_every_level() {
         }
     }
 }
+
+/// Real Onshape exports (tests/data/xt/onshape/README.md): each reads to its one solid, checked,
+/// named as the Part Studio named it.
+#[test]
+fn onshape_exports_read_and_check() {
+    for (f, name, want) in [
+        // a closed B-spline profile extruded 1 mm: the profile's area by de Boor, 370.94796 mm2
+        ("onshape/extrude.x_t", "Part 2", 370.947963),
+        ("onshape/box.x_t", "box", 995811.209795),
+        ("onshape/housing.x_t", "Part 1", 25385.318609),
+    ] {
+        let imp = import(&data(f), &Limits::default()).unwrap_or_else(|e| panic!("{f}: {e}"));
+        assert!(imp.refusals.is_empty(), "{f}: {:?}", imp.refusals);
+        assert_eq!(imp.solids.len(), 1, "{f}");
+        let s = &imp.solids[0];
+        assert_eq!(s.name, name, "{f}");
+        assert!(s.body.unverified.is_none(), "{f}: {:?}", s.body.unverified);
+        let v = s.mass.as_ref().map(|m| m.volume).expect("measured");
+        assert!(near(v, want, 1e-6), "{f}: {v} against {want}");
+        assert!(imp.system.starts_with("Onshape"), "{}", imp.system);
+    }
+}
+
+/// A file in a schema it names but does not carry (as Onshape's translation service writes):
+/// read by the layouts files that carry that schema gave (src/xt/known.rs), to the same solid as
+/// the export that carries it; a schema number nothing has shown, by the nearest that has.
+#[test]
+fn a_file_in_a_schema_it_does_not_carry_reads_by_the_known_layouts() {
+    for (native, embedded) in [
+        ("onshape/extrude_native.x_t", "onshape/extrude.x_t"),
+        ("onshape/pipe_native.x_t", ""),
+    ] {
+        let imp = import(&data(native), &Limits::default()).unwrap_or_else(|e| panic!("{native}: {e}"));
+        assert!(imp.refusals.is_empty(), "{native}: {:?}", imp.refusals);
+        assert_eq!(imp.schema.split('_').count(), 3, "{}", imp.schema);
+        assert!(imp.solids[0].body.unverified.is_none(), "{native}");
+        if !embedded.is_empty() {
+            let e = import(&data(embedded), &Limits::default()).unwrap();
+            assert_eq!(
+                imp.solids[0].mass.as_ref().unwrap().volume,
+                e.solids[0].mass.as_ref().unwrap().volume
+            );
+        }
+    }
+    // the pipe's schema 32001 renumbered 32050: nothing describes it, 32001 is nearest
+    let d = String::from_utf8(data("onshape/pipe_native.x_t"))
+        .unwrap()
+        .replace("SCH_3300229_32001", "SCH_3300229_32050");
+    let imp = import(d.as_bytes(), &Limits::default()).unwrap();
+    assert_eq!(imp.solids.len(), 1, "{:?}", imp.refusals);
+    assert!(near(
+        imp.solids[0].mass.as_ref().unwrap().volume,
+        50189900.502471,
+        1e-9
+    ));
+}

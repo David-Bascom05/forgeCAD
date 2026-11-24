@@ -1271,7 +1271,17 @@ fn mesh_agrees(body: &Body, m: &forge_topo::mass::MassProps) -> Result<Option<St
             },
         )
     };
-    let diagonal = body.faces_box().diagonal();
+    // the chord from the edges' box: a face's box can be far looser (a closed extrusion's is its
+    // whole sweep, a million mm), and a chord from it draws the face too coarsely to check
+    let edges = body.edge_ids().fold(Box3::EMPTY, |b, e| {
+        let ed = body.edge(e);
+        b.hull(&ed.curve.bbox(ed.range))
+    });
+    let diagonal = if edges.is_empty() || !edges.diagonal().is_finite() {
+        body.faces_box().diagonal()
+    } else {
+        edges.diagonal()
+    };
     let (mesh, chord) = match mesh_at(5e-4 * diagonal) {
         Ok(x) => (x, 5e-4 * diagonal),
         Err(_) => match mesh_at(5e-3 * diagonal) {
