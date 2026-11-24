@@ -130,9 +130,9 @@ fn oring_as_one_closed_nurbs_face_reads() {
 
 /// ST20LY-25LY #140177 (40 faces): a bore along z through the middle, subtracted. The Ok's new
 /// cylinder-cylinder intersection edge (tolerance 1e-5) has a vertex 2.1e-5 off it
-/// (VertexOffEdge); intersect fails alike. FLAT-SITES (drift). 6 such Oks in the first 43 zips.
+/// (VertexOffEdge); intersect failed alike (6 such Oks in the first 43 zips). Fixed by main's
+/// train 6 (drift tolerances).
 #[test]
-#[ignore = "open: a boolean's vertex drifts off its intersection edge"]
 fn bore_through_a_part_checks() {
     use forge_bool::{Op, boolean};
     use forge_math::{Frame, Point2, UnitVec3, Vec3};
